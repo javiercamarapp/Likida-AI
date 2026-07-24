@@ -17,11 +17,13 @@ function csvCell(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function toCsv<T extends Record<string, unknown>>(rows: T[], headers?: Array<keyof T>): string {
+export function toCsv<T extends object>(rows: T[], headers?: Array<keyof T>): string {
   if (!rows.length) return '';
-  const cols = (headers ?? (Object.keys(rows[0]) as Array<keyof T>));
+  const cols = headers ?? (Object.keys(rows[0]) as Array<keyof T>);
   const head = cols.map((c) => csvCell(String(c))).join(',');
-  const body = rows.map((r) => cols.map((c) => csvCell(r[c])).join(',')).join('\n');
+  const body = rows
+    .map((r) => cols.map((c) => csvCell((r as Record<string, unknown>)[c as string])).join(','))
+    .join('\n');
   return `${head}\n${body}\n`;
 }
 
