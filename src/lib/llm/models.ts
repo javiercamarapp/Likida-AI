@@ -6,12 +6,24 @@
 // override-able por env porque los modelos rotan rápido (2026). Los defaults
 // son slugs de OpenRouter; se pueden apuntar a proveedor directo.
 //
-// Fundamento (síntesis de benchmarks jul-2026):
+// Fundamento (2 investigaciones independientes convergen — jul-2026):
 //   OCR      → Gemini Flash: #1 calidad en recibos ruidosos ES + el más barato.
+//              El OCR y el JSON se FUSIONAN en una llamada (generateStructured
+//              con images + response_format) → elimina un paso y su costo.
 //   Cuadre   → Claude Sonnet: élite en tool-use multi-turno bajo política
 //              (τ²-bench), a 1/3 del precio de Opus. Fallback Opus por confianza.
 //   Chat     → Gemini Flash-Lite: mejor español barato + baja latencia.
 //   Router   → Gemini Flash-Lite / clasificación de una línea, centavos.
+//   Costo ≈ $0.03–0.05 / liquidación.
+//
+// ⚖️ SOBERANÍA DE DATOS FISCALES (LFPDPPP, DOF 20-mar-2025): RFC y CFDI son
+//   datos personales. Todo lo que lleve RFC/CFDI va SOLO a proveedores US/EU
+//   con Zero Data Retention. El gateway fuerza ZDR con `data_collection:'deny'`
+//   en cada llamada. NUNCA usar APIs chinas directas (DeepSeek/Qwen/Kimi); si
+//   se usan sus pesos, solo vía host occidental. Fallbacks aquí son US.
+//
+// 🔌 PLAN B DEMO: OpenRouter es punto único de falla (caídas ago-2025, feb-2026).
+//   Para el demo en vivo, tener keys directas de Google/Anthropic como respaldo.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'router';
