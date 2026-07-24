@@ -76,6 +76,20 @@ export async function loadConversation(tenantId: string, telefono: string, viaje
   return { id: (created?.id as string) ?? '', turns: [] };
 }
 
+/**
+ * Reclama un mensaje de WhatsApp de forma atómica (idempotencia).
+ * Devuelve true si es NUEVO (procesar), false si ya se procesó (duplicado/retry).
+ */
+export async function claimMessage(waMessageId: string): Promise<boolean> {
+  if (!waMessageId) return true;
+  const { error } = await supabaseAdmin()
+    .from('wa_mensaje_procesado')
+    .insert({ wa_message_id: waMessageId });
+  // 23505 = unique_violation → ya existía → duplicado.
+  if (error) return error.code !== '23505' ? true : false;
+  return true;
+}
+
 export async function saveConversation(convId: string, turns: ConvTurn[], viajeId: string | null): Promise<void> {
   await supabaseAdmin()
     .from('wa_conversacion')

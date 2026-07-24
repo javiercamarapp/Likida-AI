@@ -11,7 +11,7 @@ import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
 import { addGasto } from '@/lib/cuadra/repo';
 import {
   resolveOperador, getOpenViaje, getTenantContext,
-  loadConversation, saveConversation, type ConvTurn,
+  loadConversation, saveConversation, claimMessage, type ConvTurn,
 } from '@/lib/cuadra/conv';
 import { sendText, sendDocument, downloadMediaAsDataUrl } from '@/lib/meta/client';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -22,11 +22,17 @@ export interface InboundMessage {
   type: 'text' | 'image' | 'document' | 'other';
   text?: string;
   mediaId?: string;           // para image/document
+  waMessageId?: string;       // id de Meta, para idempotencia
 }
 
 const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 
 export async function processInbound(msg: InboundMessage): Promise<void> {
+  // Idempotencia: si Meta reintenta el webhook, no re-procesar (no duplicar gasto).
+  if (msg.waMessageId && !(await claimMessage(msg.waMessageId))) {
+    logger.info('wa.duplicate', { id: msg.waMessageId });
+    return;
+  }
   const op = await resolveOperador(msg.from);
   if (!op) {
     await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Cuadra. 🚛');

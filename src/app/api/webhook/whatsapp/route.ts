@@ -48,6 +48,7 @@ interface WaWebhook {
     changes?: Array<{
       value?: {
         messages?: Array<{
+          id: string;
           from: string;
           type: string;
           text?: { body: string };
@@ -64,10 +65,11 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
   for (const entry of p.entry ?? []) {
     for (const change of entry.changes ?? []) {
       for (const m of change.value?.messages ?? []) {
-        if (m.type === 'text' && m.text) out.push({ from: m.from, type: 'text', text: m.text.body });
-        else if (m.type === 'image' && m.image) out.push({ from: m.from, type: 'image', mediaId: m.image.id });
-        else if (m.type === 'document' && m.document) out.push({ from: m.from, type: 'document', mediaId: m.document.id });
-        else out.push({ from: m.from, type: 'other' });
+        const base = { from: m.from, waMessageId: m.id };
+        if (m.type === 'text' && m.text) out.push({ ...base, type: 'text', text: m.text.body });
+        else if (m.type === 'image' && m.image) out.push({ ...base, type: 'image', mediaId: m.image.id });
+        else if (m.type === 'document' && m.document) out.push({ ...base, type: 'document', mediaId: m.document.id });
+        else out.push({ ...base, type: 'other' });
       }
     }
   }
