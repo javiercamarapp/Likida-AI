@@ -1,0 +1,84 @@
+// Resolución de operador por teléfono + estado de conversación WhatsApp.
+// El estado (últimos turnos + viaje activo) vive en wa_conversacion.estado jsonb.
+
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import type { TenantContext } from '@/lib/agents/types';
+
+export interface ResolvedOperador {
+  tenantId: string;
+  operadorId: string;
+  nombre: string;
+  telefono: string;
+}
+
+export interface ConvTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/** Resuelve el operador (y su flota) por número de WhatsApp. */
+export async function resolveOperador(telefono: string): Promise<ResolvedOperador | null> {
+  const { data, error } = await supabaseAdmin()
+    .from('operador')
+    .select('id, tenant_id, nombre, telefono')
+    .eq('telefono', telefono)
+    .eq('activo', true)
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return { tenantId: data.tenant_id as string, operadorId: data.id as string, nombre: data.nombre as string, telefono: data.telefono as string };
+}
+
+/** Viaje abierto del operador (el que se está liquidando). */
+export async function getOpenViaje(tenantId: string, operadorId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin()
+    .from('viaje')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('operador_id', operadorId)
+    .in('estatus', ['abierto', 'en_cuadre'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.id as string;
+}
+
+export async function getTenantContext(tenantId: string): Promise<TenantContext> {
+  const { data } = await supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).maybeSingle();
+  return {
+    tenantId,
+    nombreFlota: (data?.nombre as string) || 'la flota',
+    agentName: 'Cuadra',
+    timezone: 'America/Mexico_City',
+  };
+}
+
+const MAX_TURNS = 12;
+
+export async function loadConversation(tenantId: string, telefono: string, viajeId: string | null): Promise<{ id: string; turns: ConvTurn[] }> {
+  const admin = supabaseAdmin();
+  const { data } = await admin
+    .from('wa_conversacion')
+    .select('id, estado')
+    .eq('tenant_id', tenantId)
+    .eq('telefono', telefono)
+    .maybeSingle();
+  if (data) {
+    const estado = (data.estado as { turns?: ConvTurn[] }) || {};
+    return { id: data.id as string, turns: (estado.turns ?? []).slice(-MAX_TURNS) };
+  }
+  const { data: created } = await admin
+    .from('wa_conversacion')
+    .insert({ tenant_id: tenantId, telefono, viaje_id: viajeId, estado: { turns: [] } })
+    .select('id')
+    .single();
+  return { id: (created?.id as string) ?? '', turns: [] };
+}
+
+export async function saveConversation(convId: string, turns: ConvTurn[], viajeId: string | null): Promise<void> {
+  await supabaseAdmin()
+    .from('wa_conversacion')
+    .update({ estado: { turns: turns.slice(-MAX_TURNS) }, viaje_id: viajeId, updated_at: new Date().toISOString() })
+    .eq('id', convId);
+}
