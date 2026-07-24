@@ -13,9 +13,12 @@ export const runtime = 'nodejs';
 // Demo determinístico (sin LLM ni DB) — corre el MOTOR DE CUADRE real sobre
 // comprobantes de ejemplo. Robusto para una demo en vivo: nunca depende de red.
 
+// 🔴 INVENTADO: política de fantasía para el demo (misma que seed.sql).
+// Ajústala con la política real de cliente_demo.
 const POLITICA: PoliticaGasto[] = [
-  { concepto: 'diesel', topeMonto: 3000 },
-  { concepto: 'caseta', topeMonto: 1200 },
+  { concepto: 'diesel', topeMonto: 4000 },
+  { concepto: 'caseta', topeMonto: 1500 },
+  { concepto: 'viaticos', topeMonto: 800 },
   { concepto: 'factura', requiereCfdi: true },
 ];
 

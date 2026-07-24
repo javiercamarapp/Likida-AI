@@ -5,13 +5,14 @@ import { useState } from 'react';
 interface Comprobante { concepto: string; monto: number; folio?: string; cfdiUuid?: string; label: string }
 interface Bubble { from: 'op' | 'cuadra'; text: string }
 
-const ANTICIPO = 8000;
+// 🔴 INVENTADO: escenario de demo Silao→Laredo. Anticipo = total comprobado,
+// así la ÚNICA diferencia es el diésel $200 sobre política (luce el diferenciador).
+const ANTICIPO = 10600;
 const PRESETS: Comprobante[] = [
-  { concepto: 'diesel', monto: 2900, folio: 'DS-4471', label: '⛽ Diésel $2,900' },
-  { concepto: 'caseta', monto: 850, folio: 'CA-1180', label: '🛣️ Caseta $850' },
-  { concepto: 'factura', monto: 1500, folio: 'FA-9002', cfdiUuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', label: '🧾 Factura CFDI $1,500' },
-  { concepto: 'diesel', monto: 3400, folio: 'DS-4472', label: '⛽ Diésel $3,400 (sobre tope)' },
-  { concepto: 'factura', monto: 600, folio: 'FA-9003', label: '🧾 Factura $600 (sin CFDI)' },
+  { concepto: 'diesel', monto: 4200, folio: 'DS-8801', label: '⛽ Diésel $4,200 (sobre tope)' },
+  { concepto: 'diesel', monto: 3800, folio: 'DS-8802', label: '⛽ Diésel $3,800' },
+  { concepto: 'caseta', monto: 1400, folio: 'CA-4471', label: '🛣️ Caseta $1,400' },
+  { concepto: 'factura', monto: 1200, folio: 'FA-9007', cfdiUuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', label: '🧾 Factura CFDI $1,200' },
 ];
 
 const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
