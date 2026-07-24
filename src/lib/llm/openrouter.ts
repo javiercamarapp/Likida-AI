@@ -84,7 +84,6 @@ export async function generateResponse(opts: {
       messages: [{ role: 'system', content: opts.system }, ...opts.messages],
       max_tokens: opts.maxTokens ?? 500,
       temperature: opts.temperature ?? 0.4,
-      // @ts-expect-error OpenRouter extension
       ...PROVIDER_OPTS,
     });
     const text = (res.choices[0]?.message?.content ?? '').trim();
@@ -169,7 +168,6 @@ export async function generateStructured<T>(opts: {
         json_schema: { name: opts.schemaName, strict: true, schema: jsonSchema },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
-      // @ts-expect-error OpenRouter extension
       ...PROVIDER_OPTS,
     });
     const raw = res.choices[0]?.message?.content || '';
@@ -253,7 +251,6 @@ export async function generateWithTools(opts: {
           tool_choice: opts.tools.length ? 'auto' : undefined,
           max_tokens: opts.maxTokens ?? 1000,
           temperature: opts.temperature ?? 0.3,
-          // @ts-expect-error OpenRouter extension
           ...PROVIDER_OPTS,
         },
         opts.signal ? { signal: opts.signal } : undefined,

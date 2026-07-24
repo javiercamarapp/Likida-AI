@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Cuadra — Sistema de diseño macOS / Apple premium (monocromo + glass).
+   Neutros fríos, hairlines de 1px, sombras difusas, un solo acento.
+   Ver DESIGN.md. Light + dark automáticos.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+
+  --color-bg: #fbfbfd;
+  --color-surface: #ffffff;
+  --color-ink: #0b0b0f;
+  --color-muted: #6b7280;
+  --color-line: #ececef;
+  --color-accent: #0e7c66;      /* verde-conciliación grafito, sobrio */
+  --color-accent-fg: #ffffff;
+
+  --color-ok: #34c759;          /* semáforo Apple */
+  --color-warn: #ff9f0a;
+  --color-bad: #ff3b30;
+
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px -12px rgba(0,0,0,0.12);
+  --shadow-pop: 0 1px 2px rgba(0,0,0,0.05), 0 12px 32px -8px rgba(0,0,0,0.18);
+}
+
+:root {
+  --bg: var(--color-bg);
+  --surface: var(--color-surface);
+  --ink: var(--color-ink);
+  --muted: var(--color-muted);
+  --line: var(--color-line);
+  --accent: var(--color-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0b0f;
+    --surface: #16161c;
+    --ink: #e8edf5;
+    --muted: #9aa0aa;
+    --line: #242430;
+    --accent: #2dd4bf;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0b0f; --surface: #16161c; --ink: #e8edf5; --muted: #9aa0aa; --line: #242430; --accent: #2dd4bf;
+}
+:root[data-theme="light"] {
+  --bg: #fbfbfd; --surface: #ffffff; --ink: #0b0b0f; --muted: #6b7280; --line: #ececef; --accent: #0e7c66;
+}
+
+* { border-color: var(--line); }
+
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.011em;
+}
+
+/* Material translúcido macOS para barras/overlays */
+.glass {
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.hairline { border: 1px solid var(--line); }
+
+/* Números tabulares para montos y tablas */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Entrada sutil (fade + blur), gesto premium de macOS */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
+}
+.animate-in { animation: fadeSlideIn 0.25s ease-out both; }
