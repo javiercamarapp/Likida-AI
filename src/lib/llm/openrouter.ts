@@ -34,10 +34,10 @@ export function getClient(): OpenAI {
 // Fallback cross-provider por modelo. El primario cae a un proveedor distinto
 // para que un provider caído nunca sea un error visible para el operador.
 const FALLBACK: Record<string, string> = {
-  'google/gemini-3-flash': 'anthropic/claude-haiku-4.5',
-  'google/gemini-3-flash-lite': 'openai/gpt-5-mini',
-  'anthropic/claude-sonnet-4.5': 'openai/gpt-5.2',
-  'anthropic/claude-opus-4.5': 'google/gemini-3-pro',
+  'google/gemini-3.6-flash': 'anthropic/claude-haiku-4.5',
+  'google/gemini-3.5-flash-lite': 'openai/gpt-5.6-luna',
+  'anthropic/claude-sonnet-5': 'openai/gpt-5.6-terra',
+  'anthropic/claude-opus-5': 'anthropic/claude-sonnet-5',
 };
 
 export function isTransientError(err: unknown): boolean {
@@ -50,12 +50,13 @@ export function isTransientError(err: unknown): boolean {
 
 // Precios [in, out] por 1M tokens — safety net; ver models.ts para el stack.
 const PRICES: Record<string, [number, number]> = {
-  'google/gemini-3-flash': [0.5, 3],
-  'google/gemini-3-flash-lite': [0.3, 2.5],
-  'anthropic/claude-sonnet-4.5': [3, 15],
-  'anthropic/claude-opus-4.5': [5, 25],
+  'google/gemini-3.6-flash': [1.5, 7.5],
+  'google/gemini-3.5-flash-lite': [0.3, 2.5],
+  'anthropic/claude-sonnet-5': [3, 15],       // intro $2/$10 hasta 31-ago-2026
+  'anthropic/claude-opus-5': [5, 25],
   'anthropic/claude-haiku-4.5': [1, 5],
-  'openai/gpt-5-mini': [0.125, 1],
+  'openai/gpt-5.6-terra': [2.5, 15],
+  'openai/gpt-5.6-luna': [1, 6],
 };
 
 export function calcCost(model: string, tokIn: number, tokOut: number): number {

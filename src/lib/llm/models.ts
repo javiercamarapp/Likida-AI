@@ -29,17 +29,19 @@
 export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'router';
 
 const DEFAULTS: Record<ModelRole, string> = {
-  // OCR de comprobantes (visión). Provisional: pendiente cerrar el benchmark
-  // full-roster de OCR; la evidencia actual favorece Gemini Flash sobre Claude.
-  ocr: 'google/gemini-3-flash',
-  // Cerebro de conciliación — donde pagamos calidad.
-  cuadre: 'anthropic/claude-sonnet-4.5',
-  // Escalación por baja confianza / monto alto / caso ambiguo.
-  cuadre_fallback: 'anthropic/claude-opus-4.5',
+  // OCR de comprobantes (visión). Gemini 3.6 Flash (21-jul-2026): #1 OCR Arena
+  // en recibos ruidosos ES; visión + JSON en una sola llamada.
+  ocr: 'google/gemini-3.6-flash',
+  // Cerebro de conciliación. Sonnet 5 (30-jun-2026): mejor que 4.5 en todo, con
+  // precio intro $2/$10 hasta 31-ago — justo la ventana del demo.
+  cuadre: 'anthropic/claude-sonnet-5',
+  // Escalación por baja confianza / monto alto / caso ambiguo. Opus 5 (24-jul):
+  // #1 del Intelligence Index. Solo se dispara, no es el default de cada cuadre.
+  cuadre_fallback: 'anthropic/claude-opus-5',
   // Chat de alto volumen con el operador (español MX, latencia baja).
-  chat: 'google/gemini-3-flash-lite',
+  chat: 'google/gemini-3.5-flash-lite',
   // Clasificador de intención por mensaje entrante.
-  router: 'google/gemini-3-flash-lite',
+  router: 'google/gemini-3.5-flash-lite',
 };
 
 const ENV_KEY: Record<ModelRole, string> = {
