@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { cuadrarViaje, type PoliticaGasto } from '@/lib/cuadra/cuadre/engine';
+import { envHealth } from '@/lib/env';
 import type { Gasto } from '@/types/cuadra';
+
+// Health del demo (config detectada, sin exponer valores).
+export async function GET() {
+  return NextResponse.json({ ok: true, config: envHealth() });
+}
 
 export const runtime = 'nodejs';
 
