@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { strip_accents } from './util';
-import type { Gasto, Diferencia, Liquidacion, EstatusLiquidacion } from '@/types/cuadra';
+import type { Gasto, Diferencia, Liquidacion, EstatusLiquidacion, TipoDiferencia } from '@/types/cuadra';
 
 export interface PoliticaGasto {
   concepto: string;       // diesel | caseta | viaticos | factura | otro
@@ -26,6 +26,10 @@ export interface CuadreInput {
   ruta?: string;
   /** Umbral de confianza de OCR bajo el cual se marca "revisar". Default 0.85. */
   umbralConfianza?: number;
+  /** RFC de la empresa: el receptor de cada CFDI debe coincidir (no el chofer). */
+  empresaRfc?: string;
+  /** RFCs adicionales válidos de la flota (razones sociales múltiples). */
+  rfcsAdicionales?: string[];
 }
 
 function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaGasto[]): PoliticaGasto | undefined {
@@ -39,56 +43,65 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   const umbral = input.umbralConfianza ?? 0.85;
   const diferencias: Diferencia[] = [];
 
-  const totalComprobado = input.gastos.reduce((s, g) => s + (g.monto || 0), 0);
+  const norm = (r: string) => strip_accents(r.toUpperCase().replace(/\s/g, ''));
+  const rfcsOk = new Set(
+    [input.empresaRfc, ...(input.rfcsAdicionales ?? [])].filter(Boolean).map((r) => norm(r as string)),
+  );
 
-  // 1) Sobre política + faltante de CFDI
+  // 0) Duplicados: primero por UUID (regla dura), luego por concepto+folio+monto.
+  //    Se EXCLUYEN del total (no lo inflan) — fix del audit.
+  const duplicados = new Set<string>();
+  const vistoUuid = new Map<string, string>();
+  const vistoFolio = new Map<string, string>();
+  for (const g of input.gastos) {
+    if (g.cfdiUuid) {
+      const u = g.cfdiUuid.toLowerCase();
+      if (vistoUuid.has(u)) duplicados.add(g.id);
+      else vistoUuid.set(u, g.id);
+      continue;
+    }
+    if (g.folio) {
+      const key = `${strip_accents(g.concepto.toLowerCase())}|${g.folio}|${g.monto}`;
+      if (vistoFolio.has(key)) duplicados.add(g.id);
+      else vistoFolio.set(key, g.id);
+    }
+  }
+
+  const totalComprobado = input.gastos.reduce((s, g) => (duplicados.has(g.id) ? s : s + (g.monto || 0)), 0);
+
+  // 1) Por gasto: política, CFDI, confianza, RFC receptor, estatus SAT.
   for (const g of input.gastos) {
     const pol = politicaPara(g.concepto, input.ruta, input.politica);
     if (pol?.topeMonto != null && g.monto > pol.topeMonto) {
       diferencias.push({
-        tipo: 'sobre_politica',
-        concepto: g.concepto,
-        esperado: pol.topeMonto,
-        real: g.monto,
+        tipo: 'sobre_politica', concepto: g.concepto, esperado: pol.topeMonto, real: g.monto,
         monto: g.monto - pol.topeMonto,
         nota: `${label(g.concepto)} de ${mxn(g.monto)} excede el tope de política (${mxn(pol.topeMonto)}) por ${mxn(g.monto - pol.topeMonto)}.`,
         gastoId: g.id,
       });
     }
     if (pol?.requiereCfdi && !g.cfdiUuid) {
-      diferencias.push({
-        tipo: 'sin_cfdi',
-        concepto: g.concepto,
-        monto: 0,
-        nota: `${label(g.concepto)} de ${mxn(g.monto)} requiere factura CFDI y no trae UUID válido.`,
-        gastoId: g.id,
-      });
+      diferencias.push({ tipo: 'sin_cfdi', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} de ${mxn(g.monto)} requiere factura CFDI y no trae UUID válido.`, gastoId: g.id });
     }
     if (g.ocrConfianza != null && g.ocrConfianza < umbral) {
-      diferencias.push({
-        tipo: 'ocr_baja_confianza',
-        concepto: g.concepto,
-        monto: 0,
-        nota: `El comprobante de ${label(g.concepto)} se leyó con baja confianza — conviene revisarlo a mano.`,
-        gastoId: g.id,
-      });
+      diferencias.push({ tipo: 'ocr_baja_confianza', concepto: g.concepto, monto: 0, nota: `El comprobante de ${label(g.concepto)} se leyó con baja confianza — conviene revisarlo a mano.`, gastoId: g.id });
+    }
+    if (rfcsOk.size > 0 && g.rfcReceptor && !rfcsOk.has(norm(g.rfcReceptor))) {
+      diferencias.push({ tipo: 'rfc_receptor', concepto: g.concepto, monto: 0, nota: `Factura de ${label(g.concepto)} timbrada al RFC ${g.rfcReceptor} (no es de la empresa) — no deducible.`, gastoId: g.id });
+    }
+    if (g.estadoSat === 'cancelado') {
+      diferencias.push({ tipo: 'cfdi_cancelado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} está CANCELADO ante el SAT — no deducible.`, gastoId: g.id });
+    } else if (g.efos === true) {
+      diferencias.push({ tipo: 'cfdi_efos', concepto: g.concepto, monto: 0, nota: `El emisor del CFDI de ${label(g.concepto)} está en lista negra del SAT (EFOS) — no deducible.`, gastoId: g.id });
+    } else if (g.estadoSat === 'pendiente' && g.cfdiUuid) {
+      diferencias.push({ tipo: 'cfdi_pendiente', concepto: g.concepto, monto: 0, nota: `No se pudo validar el CFDI de ${label(g.concepto)} con el SAT — se revisa después.`, gastoId: g.id });
     }
   }
 
-  // 2) Duplicados (mismo concepto + folio + monto)
-  const vistos = new Map<string, string>();
+  // 2) Duplicados como diferencia (ya excluidos del total).
   for (const g of input.gastos) {
-    const key = `${strip_accents(g.concepto.toLowerCase())}|${g.folio ?? ''}|${g.monto}`;
-    if (g.folio && vistos.has(key)) {
-      diferencias.push({
-        tipo: 'duplicado',
-        concepto: g.concepto,
-        monto: g.monto,
-        nota: `Comprobante duplicado: ${label(g.concepto)} folio ${g.folio} por ${mxn(g.monto)} aparece dos veces.`,
-        gastoId: g.id,
-      });
-    } else if (g.folio) {
-      vistos.set(key, g.id);
+    if (duplicados.has(g.id)) {
+      diferencias.push({ tipo: 'duplicado', concepto: g.concepto, monto: g.monto, nota: `Comprobante duplicado: ${label(g.concepto)}${g.folio ? ` folio ${g.folio}` : ''} por ${mxn(g.monto)} aparece dos veces (excluido del total).`, gastoId: g.id });
     }
   }
 
@@ -109,8 +122,9 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     });
   }
 
-  const hayRevisar = diferencias.some((d) => d.tipo === 'ocr_baja_confianza' || d.tipo === 'sin_cfdi');
-  const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado') || Math.abs(diferencia) >= 0.5;
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_pendiente'];
+  const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
+  const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
 
   return {

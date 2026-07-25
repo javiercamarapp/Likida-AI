@@ -4,6 +4,8 @@
 
 export type ConceptoGasto = 'diesel' | 'caseta' | 'factura' | 'viaticos' | 'otro';
 
+export type EstadoSat = 'vigente' | 'cancelado' | 'no_encontrado' | 'pendiente';
+
 /** Un comprobante extraído por OCR del Módulo 1 (Intake). */
 export interface Gasto {
   id: string;
@@ -12,19 +14,27 @@ export interface Gasto {
   fecha?: string;          // ISO
   folio?: string;
   rfcEmisor?: string;
+  rfcReceptor?: string;    // debe ser el RFC de la empresa (no el chofer)
   cfdiUuid?: string;
   imagenUrl?: string;
   ocrConfianza?: number;   // 0–1
   cfdiValido?: boolean;
+  estadoSat?: EstadoSat;   // resultado de ConsultaCFDIService (o 'pendiente' si SAT no respondió)
+  efos?: boolean | null;   // true = emisor en lista negra 69-B (fraude)
 }
 
 export type TipoDiferencia =
   | 'sobre_politica'       // monto excede el tope de la política
   | 'sin_comprobante'      // gasto esperado del trayecto sin comprobante
-  | 'duplicado'            // mismo folio/monto repetido
+  | 'duplicado'            // mismo UUID/folio/monto repetido
   | 'sin_cfdi'             // requiere CFDI y no lo trae
   | 'anticipo'             // diferencia contra el anticipo entregado
-  | 'ocr_baja_confianza';  // extracción dudosa, revisar a mano
+  | 'ocr_baja_confianza'   // extracción dudosa, revisar a mano
+  | 'rfc_receptor'         // CFDI timbrado a un RFC distinto al de la empresa
+  | 'cfdi_cancelado'       // CFDI cancelado ante el SAT → no deducible
+  | 'cfdi_efos'            // emisor en lista negra 69-B → no deducible
+  | 'cfdi_pendiente'       // no se pudo validar con el SAT (continuar, revisar después)
+  | 'diesel_desviacion';   // consumo de diésel fuera del rango esperado
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */
 export interface Diferencia {
