@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { verifyWebhookChallenge, verifySignature } from '@/lib/meta/client';
 import { processInbound, type InboundMessage } from '@/lib/cuadra/processor';
+import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+
+const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
+const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
 
 export const runtime = 'nodejs';
 // ME-13: el procesamiento (agente 40s + OCR + SAT + PDF + envíos) corre en
@@ -21,7 +25,11 @@ export async function GET(req: NextRequest) {
 
 // POST — mensajes entrantes. Verifica HMAC, responde 200 rápido y procesa en after().
 export async function POST(req: NextRequest) {
+  // CAP DE BODY antes de leer/HMAC: evita DoS por cuerpo enorme sin firma.
+  if (bodyExcede(req, MAX_BODY)) return new NextResponse('Payload too large', { status: 413 });
+
   const raw = await req.text();
+  if (raw.length > MAX_BODY) return new NextResponse('Payload too large', { status: 413 }); // por si falta content-length
   if (!verifySignature(raw, req.headers.get('x-hub-signature-256'))) {
     return new NextResponse('Invalid signature', { status: 401 });
   }
@@ -35,6 +43,11 @@ export async function POST(req: NextRequest) {
 
   const messages = extractMessages(payload);
   for (const m of messages) {
+    // Rate limit por TELÉFONO (no por IP: todo Meta viene de sus IPs).
+    if (!rateLimit(`wa:${m.from}`, MSGS_POR_MIN, 60_000)) {
+      logger.warn('wa.ratelimit', { from: m.from });
+      continue;
+    }
     after(async () => {
       try {
         await processInbound(m);

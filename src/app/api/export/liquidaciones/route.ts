@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
 import { toCsv, toLiquidacionRows } from '@/lib/cuadra/export';
+import { rateLimit, clientIp } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
 // Export de liquidaciones a CSV (ERP/Excel). RLS aplica el scoping por tenant
 // automáticamente vía la sesión del usuario — no se filtra a mano.
-export async function GET() {
+export async function GET(req: Request) {
+  if (!rateLimit(`export:${clientIp(req)}`, 10, 60_000)) return new NextResponse('Demasiadas peticiones', { status: 429 });
   const sb = await supabaseServer();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return new NextResponse('No autorizado', { status: 401 });
