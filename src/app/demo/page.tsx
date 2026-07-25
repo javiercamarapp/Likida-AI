@@ -19,7 +19,7 @@ const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', curren
 
 export default function Demo() {
   const [bubbles, setBubbles] = useState<Bubble[]>([
-    { from: 'cuadra', text: `¡Hola! Soy Cuadra. Ya casi cierras tu viaje Silao → Laredo (anticipo ${mxn(ANTICIPO)}). Mándame las fotos de tus comprobantes. 📸` },
+    { from: 'cuadra', text: `¡Hola! Soy Likida. Ya casi cierras tu viaje Silao → Laredo (anticipo ${mxn(ANTICIPO)}). Mándame las fotos de tus comprobantes.` },
   ]);
   const [added, setAdded] = useState<Comprobante[]>([]);
   const [loading, setLoading] = useState(false);
@@ -73,16 +73,16 @@ export default function Demo() {
   return (
     <div className="min-h-screen flex flex-col items-center py-10 px-4">
       <div className="text-center mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Demo — Cuadra por WhatsApp</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Demo — Likida por WhatsApp</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--muted)' }}>Simula al operador mandando sus comprobantes. El cuadre es real.</p>
       </div>
 
       {/* Teléfono */}
       <div className="w-full max-w-sm card overflow-hidden flex flex-col" style={{ height: 560 }}>
         <div className="glass px-4 py-3 border-b flex items-center gap-3" style={{ borderColor: 'var(--line)' }}>
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>C</div>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>L</div>
           <div>
-            <div className="text-sm font-medium">Cuadra</div>
+            <div className="text-sm font-medium">Likida</div>
             <div className="text-xs" style={{ color: 'var(--muted)' }}>en línea</div>
           </div>
         </div>

@@ -5,7 +5,7 @@ export default function Home() {
     <main className="min-h-screen flex flex-col">
       <header className="glass sticky top-0 z-10 border-b" style={{ borderColor: 'var(--line)' }}>
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-          <span className="font-semibold tracking-tight text-lg">Cuadra</span>
+          <span className="font-semibold tracking-tight text-lg">Likida</span>
           <nav className="flex items-center gap-6 text-sm" style={{ color: 'var(--muted)' }}>
             <Link href="/demo" className="hover:opacity-70">Demo</Link>
             <Link href="/acceso" className="hover:opacity-70">Entrar</Link>
@@ -23,13 +23,13 @@ export default function Home() {
             El cierre diario de tu flota,<br />resuelto por WhatsApp.
           </h1>
           <p className="mt-6 text-lg" style={{ color: 'var(--muted)' }}>
-            El operador manda sus comprobantes por WhatsApp. Cuadra los lee, los cuadra contra el
+            El operador manda sus comprobantes por WhatsApp. Likida los lee, los cuadra contra el
             anticipo y la política, detecta diferencias al instante y entrega la liquidación en PDF.
           </p>
           <div className="mt-10 flex items-center justify-center gap-3">
             <Link href="/demo"
               className="px-5 py-2.5 rounded-xl text-sm font-medium"
-              style={{ background: 'var(--accent)', color: 'var(--color-accent-fg)' }}>
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
               Ver el demo
             </Link>
             <Link href="/acceso"
@@ -42,7 +42,7 @@ export default function Home() {
       </section>
 
       <footer className="border-t py-6 text-center text-sm" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
-        Cuadra · liquidación de operaciones logísticas en México
+        Likida · liquidación de operaciones logísticas en México
       </footer>
     </main>
   );

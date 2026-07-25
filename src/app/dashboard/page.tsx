@@ -46,7 +46,10 @@ export default async function DashboardPage() {
     safe<LiqRow[]>(() => getLiquidaciones(tenantId)),
   ]);
 
-  const sinDatos = (kpis?.viajesLiquidados ?? 0) === 0 && (liqs?.length ?? 0) === 0;
+  // Distinguir un FALLO de carga (todo null) de un cero real: si las 3 consultas
+  // fallaron, es error de datos, no "aún no hay liquidaciones" (frontend #1).
+  const errorCarga = acred === null && kpis === null && liqs === null;
+  const sinDatos = !errorCarga && (kpis?.viajesLiquidados ?? 0) === 0 && (liqs?.length ?? 0) === 0;
 
   return (
     <div className="min-h-screen">
@@ -63,7 +66,14 @@ export default async function DashboardPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-8 py-10 space-y-10">
-        {sinDatos ? (
+        {errorCarga ? (
+          <div className="card p-12 text-center">
+            <p className="text-2xl font-semibold tracking-tight">No se pudieron cargar los datos</p>
+            <p className="mt-3 text-base" style={{ color: 'var(--muted)' }}>
+              Hubo un problema al leer del sistema. Recarga la página en un momento.
+            </p>
+          </div>
+        ) : sinDatos ? (
           <div className="card p-12 text-center">
             <p className="text-2xl font-semibold tracking-tight">Aún no hay liquidaciones</p>
             <p className="mt-3 text-base" style={{ color: 'var(--muted)' }}>

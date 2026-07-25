@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Cuadra — Liquidación de viajes',
+  title: 'Likida — Liquidación de viajes',
   description: 'Automatiza el cierre diario de operaciones logísticas por WhatsApp.',
 };
 
