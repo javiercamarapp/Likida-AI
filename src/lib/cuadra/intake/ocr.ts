@@ -15,6 +15,7 @@ import { logger } from '@/lib/logger';
 import { generateStructured } from '@/lib/llm/openrouter';
 import { decodeCfdiFromImage, bufferFromDataUrl, esRfcValido, esUuidValido } from './cfdi';
 import { normalizarFecha } from './fecha';
+import { sanitizarFolio, sanitizarTexto } from './sanitizar';
 import { consultarCFDI } from './sat';
 import type { Gasto, ConceptoGasto, EstadoSat } from '@/types/cuadra';
 
@@ -126,9 +127,9 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
 
   // Forma de pago leída → c_FormaPago (para la regla de combustible en efectivo).
   const formaPago = data.forma_pago === 'efectivo' ? '01' : data.forma_pago === 'tarjeta' ? '04' : undefined;
-  // Folio: se conserva el CRUDO y el NORMALIZADO sin ceros a la izquierda (los
-  // portales de facturación piden el normalizado).
-  const folioRaw = data.folio ?? undefined;
+  // Folio: SANEADO (dato no confiable de un ticket/CFDI) — charset + cap. Se
+  // conserva el crudo y el normalizado sin ceros a la izquierda (portales).
+  const folioRaw = sanitizarFolio(data.folio);
   const folioNorm = folioRaw ? folioRaw.replace(/^0+(?=\d)/, '') : undefined;
 
   const gasto: Gasto = {
@@ -152,12 +153,12 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
     // Datos ricos del ticket (para el aviso de portal, rendimiento y validación).
     // El IVA/subtotal del TICKET NO alimentan el acreditamiento (eso exige XML).
     ocrExtra: {
-      producto: data.producto ?? undefined,
+      producto: sanitizarTexto(data.producto),
       fechaRaw: data.fecha ?? undefined,
       litros: data.litros ?? undefined,
       precioUnitario: data.precio_unitario ?? undefined,
-      webId: data.web_id ?? undefined,
-      estacion: data.estacion ?? undefined,
+      webId: sanitizarFolio(data.web_id),
+      estacion: sanitizarTexto(data.estacion),
       ivaMonto: data.iva_monto ?? undefined,
       ivaTasa: data.iva_tasa ?? undefined,
     },
