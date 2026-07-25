@@ -101,7 +101,13 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     ocr_extra: g.ocrExtra ?? null,
     img_hash: g.imgHash ?? null,
   });
-  if (error) throw new Error(`addGasto: ${error.message}`);
+  if (error) {
+    // Se preserva el código de Postgres para que el caller distinga un duplicado
+    // (23505, dedup de foto por índice único) de un error real. Ver processor.
+    const e = new Error(`addGasto: ${error.message}`) as Error & { code?: string };
+    e.code = error.code;
+    throw e;
+  }
 }
 
 /** FASE 2: ¿ya existe un gasto para este viaje con el mismo hash de imagen?

@@ -87,7 +87,18 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         const { gasto, legible, costo } = await extraerComprobante(dataUrl);
         await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
         if (!legible) { await say('Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?'); return; }
-        await addGasto(op.tenantId, viajeId, imgHash ? { ...gasto, imgHash } : gasto);
+        try {
+          await addGasto(op.tenantId, viajeId, imgHash ? { ...gasto, imgHash } : gasto);
+        } catch (e) {
+          // R1: dos fotos IDÉNTICAS en el mismo lote pasan el pre-check antes de
+          // que cualquiera inserte; el índice único (mig. 0015) atrapa la 2ª con
+          // 23505 → es un duplicado benigno, no un error. Se ignora en silencio.
+          if (imgHash && (e as { code?: string }).code === '23505') {
+            logger.info('foto.dedup_race', { viaje: viajeId });
+            return;
+          }
+          throw e;
+        }
         // Acuse una sola vez: solo la PRIMERA foto de la ráfaga (la que llevó el
         // contador de 0 a 1). En su propio try: un fallo de envío tras guardar el
         // gasto NO debe disparar reproceso.

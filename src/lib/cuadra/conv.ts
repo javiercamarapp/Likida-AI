@@ -153,7 +153,13 @@ export async function intakeDelta(viajeId: string, delta: number): Promise<numbe
  * operador y cuadra con lo que alcanzó). El decremento vive en el `finally` del
  * intake, así que un OCR que truena igual libera su +1.
  */
-export async function esperarIntake(viajeId: string, timeoutMs?: number): Promise<boolean> {
+export async function esperarIntake(
+  viajeId: string,
+  timeoutMs?: number,
+  // probe inyectable SOLO para test (default = el contador real). No cambia el
+  // comportamiento en runtime; permite probar la gracia anti-carrera sin DB.
+  probe: (id: string) => Promise<number> = (id) => intakeDelta(id, 0),
+): Promise<boolean> {
   const tope = timeoutMs ?? (Number(process.env.CUADRA_INTAKE_ESPERA_MS) || 60_000);
   // AUDIT_V3 orquestación CRÍTICO (carrera de barrera): cuando fotos y "listo"
   // llegan en el MISMO lote, corren en Promise.all; el "listo" puede leer el
@@ -164,11 +170,11 @@ export async function esperarIntake(viajeId: string, timeoutMs?: number): Promis
   // ~2000ms para el demo (ver DECISIONES_PENDIENTES / REPORTE_NOCHE).
   const grace = Number(process.env.CUADRA_INTAKE_GRACE_MS) || 0;
   const start = Date.now();
-  if (grace > 0 && (await intakeDelta(viajeId, 0)) <= 0) {
+  if (grace > 0 && (await probe(viajeId)) <= 0) {
     await sleep(Math.min(grace, tope));
   }
   for (;;) {
-    if (await intakeDelta(viajeId, 0) <= 0) return true;
+    if (await probe(viajeId) <= 0) return true;
     if (Date.now() - start >= tope) return false;
     await sleep(500);
   }
