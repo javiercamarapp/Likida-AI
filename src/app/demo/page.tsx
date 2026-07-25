@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface Comprobante { concepto: string; monto: number; folio?: string; cfdiUuid?: string; label: string }
 interface Bubble { from: 'op' | 'cuadra'; text: string }
@@ -9,10 +9,10 @@ interface Bubble { from: 'op' | 'cuadra'; text: string }
 // así la ÚNICA diferencia es el diésel $200 sobre política (luce el diferenciador).
 const ANTICIPO = 10600;
 const PRESETS: Comprobante[] = [
-  { concepto: 'diesel', monto: 4200, folio: 'DS-8801', label: '⛽ Diésel $4,200 (sobre tope)' },
-  { concepto: 'diesel', monto: 3800, folio: 'DS-8802', label: '⛽ Diésel $3,800' },
-  { concepto: 'caseta', monto: 1400, folio: 'CA-4471', label: '🛣️ Caseta $1,400' },
-  { concepto: 'factura', monto: 1200, folio: 'FA-9007', cfdiUuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', label: '🧾 Factura CFDI $1,200' },
+  { concepto: 'diesel', monto: 4200, folio: 'DS-8801', label: 'Diésel $4,200 (sobre tope)' },
+  { concepto: 'diesel', monto: 3800, folio: 'DS-8802', label: 'Diésel $3,800' },
+  { concepto: 'caseta', monto: 1400, folio: 'CA-4471', label: 'Caseta $1,400' },
+  { concepto: 'factura', monto: 1200, folio: 'FA-9007', cfdiUuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', label: 'Factura CFDI $1,200' },
 ];
 
 const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
@@ -23,6 +23,12 @@ export default function Demo() {
   ]);
   const [added, setAdded] = useState<Comprobante[]>([]);
   const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll al último mensaje cuando entra una burbuja nueva. ME-16.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [bubbles]);
 
   const add = (c: Comprobante) => {
     setAdded((a) => [...a, c]);
@@ -42,6 +48,7 @@ export default function Demo() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comprobantes: added, anticipo: ANTICIPO }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const r = await res.json();
       const lines: string[] = [
         `Listo, cuadré tu viaje 👇`,
@@ -55,6 +62,9 @@ export default function Demo() {
         setBubbles((b) => [...b, { from: 'cuadra', text: 'Ojo con esto:\n' + obs.map((d: { nota: string }) => `• ${d.nota}`).join('\n') }]);
       }
       setBubbles((b) => [...b, { from: 'cuadra', text: '📄 Te mando tu liquidación en PDF. ¡Buen viaje! 🚛' }]);
+    } catch {
+      // ME-16: si el cuadre falla (red/servidor), avisar en vez de colgar el demo.
+      setBubbles((b) => [...b, { from: 'cuadra', text: 'Uy, no pude cerrar el cuadre ahorita. Inténtalo de nuevo en un momento.' }]);
     } finally {
       setLoading(false);
     }
@@ -70,19 +80,19 @@ export default function Demo() {
       {/* Teléfono */}
       <div className="w-full max-w-sm card overflow-hidden flex flex-col" style={{ height: 560 }}>
         <div className="glass px-4 py-3 border-b flex items-center gap-3" style={{ borderColor: 'var(--line)' }}>
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold" style={{ background: 'var(--accent)' }}>C</div>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>C</div>
           <div>
             <div className="text-sm font-medium">Cuadra</div>
             <div className="text-xs" style={{ color: 'var(--muted)' }}>en línea</div>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-2" style={{ background: 'color-mix(in srgb, var(--muted) 6%, transparent)' }}>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2" style={{ background: 'color-mix(in srgb, var(--muted) 6%, transparent)' }}>
           {bubbles.map((b, i) => (
             <div key={i} className={`flex ${b.from === 'op' ? 'justify-end' : 'justify-start'}`}>
               <div className="max-w-[80%] px-3 py-2 rounded-2xl text-sm whitespace-pre-line"
                 style={b.from === 'op'
-                  ? { background: 'var(--accent)', color: '#fff', borderBottomRightRadius: 4 }
+                  ? { background: 'var(--accent)', color: 'var(--accent-fg)', borderBottomRightRadius: 4 }
                   : { background: 'var(--surface)', border: '1px solid var(--line)', borderBottomLeftRadius: 4 }}>
                 {b.text}
               </div>
@@ -100,7 +110,7 @@ export default function Demo() {
       </div>
       <button onClick={cerrar} disabled={loading || !added.length}
         className="mt-4 px-5 py-2.5 rounded-xl text-sm font-medium disabled:opacity-40"
-        style={{ background: 'var(--accent)', color: '#fff' }}>
+        style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
         {loading ? 'Cuadrando…' : 'Ya no tengo más — cerrar liquidación'}
       </button>
     </div>
