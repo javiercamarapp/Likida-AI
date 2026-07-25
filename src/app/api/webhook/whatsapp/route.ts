@@ -5,6 +5,10 @@ import { processInbound, type InboundMessage } from '@/lib/cuadra/processor';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
+// ME-13: el procesamiento (agente 40s + OCR + SAT + PDF + envíos) corre en
+// after(); sin presupuesto explícito puede morir a media liquidación. 60s cubre
+// el peor caso con margen. Ajustar al plan de Vercel (Fluid Compute permite más).
+export const maxDuration = 60;
 
 // GET — verificación del webhook (Meta lo llama una vez al configurar).
 export async function GET(req: NextRequest) {

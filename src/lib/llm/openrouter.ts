@@ -240,6 +240,9 @@ export async function generateWithTools(opts: {
   maxToolRounds?: number;
   maxTokens?: number;
   temperature?: number;
+  /** Esfuerzo de razonamiento (OpenRouter unified reasoning). Si se pasa, se
+   *  omite temperature (los modelos de razonamiento la ignoran/rechazan). */
+  reasoning?: 'low' | 'medium' | 'high';
   signal?: AbortSignal;
 }): Promise<{ finalText: string; toolCalls: ToolCallRecord[]; model: string; tokensIn: number; tokensOut: number; cost: number }> {
   const model = modelFor(opts.role);
@@ -266,7 +269,9 @@ export async function generateWithTools(opts: {
       tools: opts.tools.length ? opts.tools : undefined,
       tool_choice: opts.tools.length ? ('auto' as const) : undefined,
       max_tokens: opts.maxTokens ?? 1000,
-      temperature: opts.temperature ?? 0.3,
+      // reasoning y temperature son mutuamente excluyentes; van por spread para
+      // no chocar con el tipado del SDK (igual que PROVIDER_OPTS).
+      ...(opts.reasoning ? { reasoning: { effort: opts.reasoning } } : { temperature: opts.temperature ?? 0.3 }),
       ...PROVIDER_OPTS,
     });
     const signalOpt = opts.signal ? { signal: opts.signal } : undefined;

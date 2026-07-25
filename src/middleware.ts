@@ -19,9 +19,18 @@ export async function middleware(req: NextRequest) {
 
   if (SKIP_AUTH.some((p) => path.startsWith(p))) return res;
 
+  const isPublic = PUBLIC.includes(path) || path.startsWith('/api/') || path.startsWith('/_next');
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return res; // sin config, no bloquear (dev/demo)
+  if (!url || !key) {
+    // AL-4: sin config de Supabase, fail-CLOSED en producción (una env mal puesta
+    // NO debe dejar rutas protegidas abiertas). En dev se permite para no bloquear.
+    if (process.env.NODE_ENV === 'production' && !isPublic) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+    return res;
+  }
 
   const supabase = createServerClient(url, key, {
     cookies: {
@@ -31,10 +40,10 @@ export async function middleware(req: NextRequest) {
   });
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Rutas protegidas (dashboard/admin/portal) exigen sesión.
-  const isPublic = PUBLIC.includes(path) || path.startsWith('/api/') || path.startsWith('/_next');
+  // Rutas protegidas (dashboard/admin/portal) exigen sesión. Se redirige al
+  // landing (existe) en vez de /login (aún no implementado → evita 404). AL-4.
   if (!user && !isPublic) {
-    return NextResponse.redirect(new URL('/login', req.url));
+    return NextResponse.redirect(new URL('/', req.url));
   }
   return res;
 }

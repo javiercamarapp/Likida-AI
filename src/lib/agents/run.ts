@@ -3,6 +3,7 @@
 
 import type OpenAI from 'openai';
 import { generateWithTools, type ToolCallRecord } from '@/lib/llm/openrouter';
+import { ROLE_PARAMS } from '@/lib/llm/models';
 import { toolSchemas, makeExecutor, type ToolContext } from '@/lib/llm/tool-executor';
 import { AGENT_REGISTRY } from './registry';
 import { getSystemPrompt } from './prompts';
@@ -32,6 +33,9 @@ export async function runAgent(opts: {
   const timer = opts.timeoutMs ? setTimeout(() => controller.abort(), opts.timeoutMs) : null;
   const ctx: ToolContext = { ...opts.ctx, signal: controller.signal };
 
+  // ME-1: aplicar los parámetros por rol (temp 0 + reasoning donde importa), en
+  // vez del default mudo de 0.3. El cuadre orquesta dinero → determinístico.
+  const params = ROLE_PARAMS[config.role];
   try {
     const res = await generateWithTools({
       role: config.role,
@@ -39,6 +43,8 @@ export async function runAgent(opts: {
       messages: opts.history,
       tools,
       toolExecutor: makeExecutor(ctx),
+      temperature: params.temperature,
+      reasoning: params.reasoning,
       signal: controller.signal,
     });
     return {
