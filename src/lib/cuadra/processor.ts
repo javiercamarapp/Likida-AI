@@ -14,7 +14,8 @@ import { addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw } from '@/lib/c
 import {
   resolveOperador, getOpenViaje, getTenantContext,
   loadConversation, saveConversation, claimMessage,
-  acquireViajeLock, releaseViajeLock, releaseMessageClaim, type ConvTurn,
+  acquireViajeLock, releaseViajeLock, releaseMessageClaim,
+  intakeDelta, esperarIntake, type ConvTurn,
 } from '@/lib/cuadra/conv';
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/cuadra/costos';
 import { sendText, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText } from '@/lib/meta/client';
@@ -49,41 +50,37 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       return;
     }
 
-    // AL-1/CR-1: serializar el procesamiento por viaje. Así un "listo" no cierra
-    // antes de que el OCR de la última foto haya guardado su gasto, y dos cierres
-    // concurrentes no corren a la vez. Si no se logra el lease, se procesa igual:
-    // la idempotencia de DB (unique(viaje_id) + guard de estatus) protege el dinero.
-    if (await acquireViajeLock(viajeId)) lockedViaje = viajeId;
-    else logger.warn('viaje.lock_timeout', { viaje: viajeId });
-
     // Helper: enviar + contar el costo (solo mensajes SALIENTES se cobran).
     const say = async (text: string) => {
       await sendText(msg.from, text);
       await registrarCostoWhatsApp(op.tenantId, viajeId);
     };
 
-    // ── IMAGEN: captura SILENCIOSA (acuse consolidado, no por foto) ───────────
-    // Los mensajes entrantes son gratis; para no gastar salientes ni llamadas LLM
-    // por cada foto, se guarda el gasto en silencio y se responde una sola vez en
-    // el turno de texto ("listo").
+    // ── IMAGEN: captura SILENCIOSA en PARALELO (acuse consolidado) ────────────
+    // Las fotos NO toman el mutex: corren en paralelo (rápido). Cada una hace +1
+    // al contador de intake al entrar y -1 al salir; el "listo" espera a que ese
+    // contador llegue a 0 antes de cuadrar → nunca cierra sobre datos parciales.
     if (msg.type === 'image' && msg.mediaId) {
-      const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
-      if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
-      const previos = await getGastos(viajeId, op.tenantId);
-      const { gasto, legible, costo } = await extraerComprobante(dataUrl);
-      await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
-      if (!legible) { await say('Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?'); return; }
-      await addGasto(op.tenantId, viajeId, gasto);
-      // Solo el PRIMER comprobante recibe acuse; el resto, en silencio.
-      // El acuse va en su propio try: si el envío falla DESPUÉS de guardar el
-      // gasto, NO debe disparar el reproceso (evita doble addGasto). El gasto
-      // ya está persistido; a lo mucho el operador no ve el "voy recibiendo".
-      if (previos.length === 0) {
-        try {
-          await say('📸 Voy recibiendo tus comprobantes. Mándalos todos y cuando termines escribe *listo* para cerrar tu liquidación. 🚛');
-        } catch (e) {
-          logger.warn('ack.send', { err: e instanceof Error ? e.message : String(e) });
+      const enVuelo = await intakeDelta(viajeId, 1); // n===1 → soy la primera de la ráfaga
+      try {
+        const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
+        if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
+        const { gasto, legible, costo } = await extraerComprobante(dataUrl);
+        await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
+        if (!legible) { await say('Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?'); return; }
+        await addGasto(op.tenantId, viajeId, gasto);
+        // Acuse una sola vez: solo la PRIMERA foto de la ráfaga (la que llevó el
+        // contador de 0 a 1). En su propio try: un fallo de envío tras guardar el
+        // gasto NO debe disparar reproceso.
+        if (enVuelo === 1) {
+          try {
+            await say('📸 Voy recibiendo tus comprobantes. Mándalos todos y cuando termines escribe *listo* para cerrar tu liquidación. 🚛');
+          } catch (e) {
+            logger.warn('ack.send', { err: e instanceof Error ? e.message : String(e) });
+          }
         }
+      } finally {
+        await intakeDelta(viajeId, -1); // libera el contador pase lo que pase
       }
       return; // no corre el agente por foto
     }
@@ -140,6 +137,13 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       await say('Por ahora solo proceso texto, fotos de comprobantes y el XML del CFDI. Mándame la foto de tu ticket o el XML. 📸');
       return;
     }
+
+    // BARRERA DE RÁFAGA: espera a que terminen los OCR de fotos en vuelo antes de
+    // cuadrar — así "listo" nunca cierra sobre datos parciales. Luego toma el
+    // mutex para serializar cierres concurrentes (dos "listo" a la vez).
+    if (!(await esperarIntake(viajeId))) logger.warn('intake.barrera_timeout', { viaje: viajeId });
+    if (await acquireViajeLock(viajeId)) lockedViaje = viajeId;
+    else logger.warn('viaje.lock_timeout', { viaje: viajeId });
 
     const tenant = await getTenantContext(op.tenantId);
     const conv = await loadConversation(op.tenantId, msg.from, viajeId);

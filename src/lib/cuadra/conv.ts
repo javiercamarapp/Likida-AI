@@ -135,6 +135,30 @@ export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number;
   }
 }
 
+/**
+ * Barrera de ráfaga (contador de OCR en vuelo). Incremento/decremento atómico;
+ * devuelve el nuevo contador. Las fotos hacen +1 al entrar y -1 al terminar.
+ */
+export async function intakeDelta(viajeId: string, delta: number): Promise<number> {
+  const { data, error } = await supabaseAdmin().rpc('intake_delta', { p_viaje: viajeId, p_delta: delta });
+  if (error) { logger.warn('intake.delta', { code: error.code, msg: error.message }); return 0; }
+  return typeof data === 'number' ? data : 0;
+}
+
+/**
+ * Espera a que NO haya OCR de fotos en vuelo para el viaje (contador = 0). Es la
+ * barrera que garantiza que el "listo" cuadre sobre TODOS los gastos, no parciales.
+ * Devuelve true si se vació, false si venció el timeout.
+ */
+export async function esperarIntake(viajeId: string, timeoutMs = 90_000): Promise<boolean> {
+  const start = Date.now();
+  for (;;) {
+    if (await intakeDelta(viajeId, 0) <= 0) return true;
+    if (Date.now() - start >= timeoutMs) return false;
+    await sleep(500);
+  }
+}
+
 /** Libera el mutex del viaje (best-effort; si falla, expira por TTL). */
 export async function releaseViajeLock(viajeId: string): Promise<void> {
   try {
