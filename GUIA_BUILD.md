@@ -133,27 +133,31 @@ WhatsApp (operador manda 12 fotos) → **clasificación de entrada** → OCR sil
 >
 > **Orden de arranque:** 1 (verificando fuente oficial primero) → 2 → 3 → 4 → 5 …
 
-### Bloque 1 — COMPLEMENTO DE HIDROCARBUROS (bloqueante, fiscal) ⏳ VERIFICANDO FUENTE
-Un CFDI de combustible sin el complemento requerido **no es deducible para ISR ni
-acreditable para IVA**. Hoy el motor lo aceptaría → bug de cumplimiento en el corazón
-del producto.
+### Bloque 1 — COMPLEMENTO DE HIDROCARBUROS (bloqueante, fiscal) ✅ HECHO
+Verificado contra **fuente primaria** (RMF 2026, DOF 28-dic-2025; regla **2.7.1.48**;
+regla 2.7.1.8 §2; Transitorio Décimo Tercero; CFF **29-A** último párrafo):
+- **Nombre oficial:** "Complemento Concepto para la facturación de Hidrocarburos y
+  Petrolíferos" v1.0, **a nivel concepto**, nodo `HidrocarburosPetroliferos`.
+- **Vigencia 24-abr-2026** = publicación en Portal (25-mar-2026) + 30 días naturales
+  (regla 2.7.1.8 §2). No es fecha dura en la RMF; es consecuencia del mecanismo.
+- **Claves confirmadas:** 15101505 diésel, 15101514 magna, 15101515 premium (la 15101506
+  quedó obsoleta). **Solo tipos I y E.**
+- **Unidad LTR: NO es requisito legal** (la regla solo obliga `ClaveProdServ`) → NO se
+  usa como gate duro (era falso negativo).
+- **A quién obliga:** emisor **permisionario CNE** que enajena gasolina/diésel (2.6.1.1
+  fr.II / 2.6.1.2), no "todo CFDI con combustible". Las **estaciones de servicio SÍ son
+  permisionarias** → el ticket de la flota sí cae. **Excluidos: monedero electrónico
+  (ECC) y Carta Porte** (esquemas distintos) → el parser los detecta y el motor no aplica.
+- **No deducibilidad:** CFF 29-A último párrafo (el complemento es requisito fiscal del CFDI).
 
-**Regla determinística a implementar** (en `cuadre/engine.ts`, nunca LLM):
-- Si la clave de producto SAT del concepto es de combustible (**⏳ confirmar claves:
-  15101505 diésel / 15101514 magna / 15101515 premium**), unidad **LTR**, tipo de
-  comprobante **Ingreso (I) o Egreso (E)**, y el CFDI **NO trae el complemento de
-  hidrocarburos** → diferencia dura `tipo: 'complemento_hidrocarburos'`, **NO DEDUCIBLE**.
-- Parametrizable: la lista de claves de combustible y la fecha de vigencia viven en config.
-
-**⚠️ GATE: verificar contra fuente oficial ANTES de codificar** (research en curso):
-nombre exacto del complemento, fecha real de entrada en vigor (¿24-abr-2026?), claves
-de producto exactas, unidad, y — lo más importante — **a quién obliga** (¿toda gasolinera
-en cada venta, o solo contribuyentes con permiso CNE en la cadena de hidrocarburos?).
-Reportar hallazgos con etiqueta [confirmado en fuente primaria] antes de hardcodear.
-Requiere extraer el QR/XML el `c_ClaveProdServ`, `ClaveUnidad`, `TipoDeComprobante` y la
-presencia del nodo de complemento — hoy `cfdi.ts` solo saca re/rr/tt/id del QR, así que
-el complemento exige el **XML** del CFDI, no solo el QR (definir de dónde se obtiene: el
-QR no lleva el complemento).
+**Implementado (modelo de dos niveles, el QR NO trae el complemento → requiere el XML):**
+- **NIVEL 1** (foto/QR): factura de combustible con UUID sin XML → `complemento_no_verificable`
+  → bandeja del liquidador. **Nunca no deducible sin verificar** (criterio EFOS).
+- **NIVEL 2** (XML reenviado por WhatsApp, sin e.firma): `cfdi_xml.ts` parsea claves/unidad/
+  tipo/complemento/esquema-alterno; el motor emite `complemento_hidrocarburos` (DURA, no
+  deducible) si falta el complemento en un CFDI de combustible I/E vigente y no-alterno.
+- Archivos: `intake/cfdi_xml.ts`, `engine.ts` (regla), `config.ts` (catálogo), `processor.ts`
+  (rama documento acepta XML), migración `0006`. Config parametrizable por tenant. +13 tests.
 
 ### Bloque 2 — CIERRE DE CONVERSACIÓN ROBUSTO (bloqueante)
 Hoy todo depende de que el operador escriba exactamente "listo". **Tres vías, cualquiera
