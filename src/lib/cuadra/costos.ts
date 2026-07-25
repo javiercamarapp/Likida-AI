@@ -4,7 +4,18 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 
-export type FaseCosto = 'ocr' | 'cuadre' | 'escalacion' | 'chat' | 'router';
+export type FaseCosto = 'ocr' | 'cuadre' | 'escalacion' | 'chat' | 'router' | 'whatsapp';
+
+// Costo por mensaje SALIENTE de WhatsApp (los entrantes son GRATIS).
+// Dentro de la ventana de servicio de 24h son gratis hasta el 1-oct-2026; después
+// Meta cobra utility/servicio (~USD 0.0080 base MX). Override por env.
+// ⚠️ Verificar rate card vigente de Meta antes de proyectar.
+export const WHATSAPP_MSG_USD = Number(process.env.CUADRA_WHATSAPP_MSG_USD ?? '0.008');
+
+/** Registra el costo de UN mensaje saliente de WhatsApp (best-effort). */
+export async function registrarCostoWhatsApp(tenantId: string, viajeId: string | null): Promise<void> {
+  await registrarCosto({ tenantId, viajeId, fase: 'whatsapp', modelo: 'whatsapp-utility', tokensIn: 0, tokensOut: 0, costoUsd: WHATSAPP_MSG_USD });
+}
 
 export interface CostoLLM {
   tenantId: string;
