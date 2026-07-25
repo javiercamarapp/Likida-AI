@@ -106,6 +106,61 @@ export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
   return anomalias;
 }
 
+export interface Acreditables { ieps: number; iva: number; peaje: number; }
+
+/** Suma de estímulos acreditables del periodo (IEPS diésel + IVA + peaje 50%). */
+export async function getAcreditables(tenantId: string): Promise<Acreditables> {
+  const { data } = await supabaseAdmin()
+    .from('liquidacion')
+    .select('ieps_acreditable, iva_acreditable, peaje_acreditable')
+    .eq('tenant_id', tenantId);
+  const rows = data ?? [];
+  return {
+    ieps: round2(rows.reduce((s, r) => s + Number(r.ieps_acreditable ?? 0), 0)),
+    iva: round2(rows.reduce((s, r) => s + Number(r.iva_acreditable ?? 0), 0)),
+    peaje: round2(rows.reduce((s, r) => s + Number(r.peaje_acreditable ?? 0), 0)),
+  };
+}
+
+export interface LiquidacionDetalle {
+  id: string; folio: string; estatus: string; fecha: string;
+  totalComprobado: number; totalAnticipo: number; diferencia: number;
+  ieps: number; iva: number; peaje: number;
+  diferencias: Array<{ tipo: string; nota: string; monto: number }>;
+  gastos: Array<{ concepto: string; monto: number; folio?: string }>;
+}
+
+/** Detalle de una liquidación (read-only) — para la vista de proyector. */
+export async function getLiquidacionDetalle(id: string, tenantId: string): Promise<LiquidacionDetalle | null> {
+  const admin = supabaseAdmin();
+  const { data } = await admin
+    .from('liquidacion')
+    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, iva_acreditable, peaje_acreditable, created_at, viaje:viaje_id(folio)')
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  if (!data) return null;
+  const { data: gastos } = await admin
+    .from('gasto')
+    .select('concepto, monto, folio')
+    .eq('tenant_id', tenantId)
+    .eq('viaje_id', data.viaje_id as string);
+  return {
+    id: data.id as string,
+    folio: ((data.viaje as { folio?: string } | null)?.folio) ?? (data.id as string).slice(0, 8),
+    estatus: data.estatus as string,
+    fecha: (data.created_at as string).slice(0, 10),
+    totalComprobado: Number(data.total_comprobado ?? 0),
+    totalAnticipo: Number(data.total_anticipo ?? 0),
+    diferencia: Number(data.diferencia ?? 0),
+    ieps: Number(data.ieps_acreditable ?? 0),
+    iva: Number(data.iva_acreditable ?? 0),
+    peaje: Number(data.peaje_acreditable ?? 0),
+    diferencias: ((data.diferencias as Array<{ tipo: string; nota: string; monto: number }>) ?? []),
+    gastos: (gastos ?? []).map((g) => ({ concepto: g.concepto as string, monto: Number(g.monto), folio: (g.folio as string) || undefined })),
+  };
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

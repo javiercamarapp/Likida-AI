@@ -8,7 +8,7 @@ export default function Home() {
           <span className="font-semibold tracking-tight text-lg">Cuadra</span>
           <nav className="flex items-center gap-6 text-sm" style={{ color: 'var(--muted)' }}>
             <Link href="/demo" className="hover:opacity-70">Demo</Link>
-            <Link href="/login" className="hover:opacity-70">Entrar</Link>
+            <Link href="/acceso" className="hover:opacity-70">Entrar</Link>
           </nav>
         </div>
       </header>
@@ -32,7 +32,7 @@ export default function Home() {
               style={{ background: 'var(--accent)', color: 'var(--color-accent-fg)' }}>
               Ver el demo
             </Link>
-            <Link href="/login"
+            <Link href="/acceso"
               className="px-5 py-2.5 rounded-xl text-sm font-medium hairline"
               style={{ color: 'var(--ink)' }}>
               Entrar al panel

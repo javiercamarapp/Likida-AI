@@ -1,49 +1,29 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { ACCESS_COOKIE, expectedAccessToken } from '@/lib/auth/passcode';
 
-// Refresca la sesión de Supabase en cada request + endurece cabeceras.
-// Los webhooks/cron/api-públicas se saltan el refresh (no tienen sesión).
+// Cabeceras de seguridad + gate de passcode del dashboard (demo). Sin Supabase
+// Auth: el dashboard es read-only y va detrás de un passcode simple.
 
-const PUBLIC = ['/', '/demo', '/login', '/register'];
-const SKIP_AUTH = ['/api/webhook', '/api/demo'];
-
-export async function middleware(req: NextRequest) {
+export function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });
   const path = req.nextUrl.pathname;
 
-  // Cabeceras de seguridad (defensa en profundidad).
   res.headers.set('X-Content-Type-Options', 'nosniff');
   res.headers.set('X-Frame-Options', 'DENY');
   res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
 
-  if (SKIP_AUTH.some((p) => path.startsWith(p))) return res;
-
-  const isPublic = PUBLIC.includes(path) || path.startsWith('/api/') || path.startsWith('/_next');
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    // AL-4: sin config de Supabase, fail-CLOSED en producción (una env mal puesta
-    // NO debe dejar rutas protegidas abiertas). En dev se permite para no bloquear.
-    if (process.env.NODE_ENV === 'production' && !isPublic) {
-      return NextResponse.redirect(new URL('/', req.url));
+  // Gate: /dashboard exige la cookie del passcode. Si falta o no coincide → /acceso.
+  if (path.startsWith('/dashboard')) {
+    const expected = expectedAccessToken();
+    const cookie = req.cookies.get(ACCESS_COOKIE)?.value;
+    // Si no hay passcode configurado (dev), no bloquear. Con passcode, exigir match.
+    if (expected && cookie !== expected) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/acceso';
+      url.searchParams.set('next', path);
+      return NextResponse.redirect(url);
     }
-    return res;
-  }
-
-  const supabase = createServerClient(url, key, {
-    cookies: {
-      getAll: () => req.cookies.getAll(),
-      setAll: (list) => list.forEach(({ name, value, options }) => res.cookies.set(name, value, options)),
-    },
-  });
-  const { data: { user } } = await supabase.auth.getUser();
-
-  // Rutas protegidas (dashboard/admin/portal) exigen sesión. Se redirige al
-  // landing (existe) en vez de /login (aún no implementado → evita 404). AL-4.
-  if (!user && !isPublic) {
-    return NextResponse.redirect(new URL('/', req.url));
   }
   return res;
 }
