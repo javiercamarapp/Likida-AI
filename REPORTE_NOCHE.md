@@ -1,6 +1,6 @@
 # Reporte de la noche — trabajo autónomo
 
-_Última actualización: en progreso. Master verde en cada push._
+_Última actualización: AUDITORÍA 1 cerrada; entrando a FASE 2. Master verde en cada push._
 
 ## Fases
 
@@ -18,7 +18,23 @@ Los 6 fixes que salieron de la auditoría del código real:
 
 Extra: `vitest.config.ts` con alias `@`→src (desbloquea testear módulos con imports `@/` en runtime). **68 tests, typecheck 0, build verde.**
 
-**AUDITORÍA 1:** 6 subagentes (seguridad, money-path, frontend, agéntico, orquestación, LLM/costos) en curso. Consolidación → `AUDIT_V3.md`. Los críticos se arreglan antes de FASE 2.
+### ✅ AUDITORÍA 1 — CERRADA (master verde)
+6 categorías de subagente consolidadas en `AUDIT_V3.md`. **8 críticos + 7 altos resueltos**, 2 diferidos (a `DECISIONES_PENDIENTES.md`, no los adiviné). Lo más grave que encontré y arreglé:
 
-### ⏳ FASE 2–5 — pendientes
-Ver el plan. Se abordan tras cerrar la auditoría de FASE 1.
+| Área | Lo que estaba mal | Fix | Commit |
+|------|-------------------|-----|--------|
+| Money-path | Cierre **no atómico**: se guardaba la liquidacion pero el error al marcar el viaje 'liquidado' se **ignoraba** → viaje abierto, re-cuadre posible. | RPC transaccional `guardar_liquidacion_tx` (mig. 0013), verificada en la DB. | `6583d00` |
+| Seguridad | Los RPC quedaban ejecutables por `anon`/`authenticated` (Supabase los concede **explícitamente**; `revoke from public` no basta). | Revoke explícito + verificación `{postgres,service_role}`. | `6583d00` |
+| Orquestación | Presupuesto de tiempo real ~112s > `maxDuration=60` → moría a media liquidación. | `maxDuration→120`. | `49c8d03` |
+| Orquestación | Carrera de barrera y huérfano de cierre parcial. | Fixes **detrás de flag** (default off = camino actual). **Recomiendo encenderlos para el demo** — ver DECISIONES §1. | `49c8d03` |
+| Guardia f/g | Números mal transcritos por el LLM tras `cuadrar_viaje` pasaban; enteros redondos sin `$` pasaban; fail-open. | Reemplazo siempre por el motor + regex ampliada + fail-**closed**. +6 tests. | `2ed5bdc` |
+| Seguridad | Login del passcode sin límite → fuerza bruta. | 10 intentos/5 min por IP. | `5ab6d65` |
+| LLM/costo | Costo atribuido al modelo primario aunque cayera al fallback; precio intro de Sonnet desactualizado. | `activeModel` + `[2,10]`. | `171c10d` |
+| Frontend | Fallo de backend se veía como "no hay liquidaciones"; contraste del CTA en dark; marca Cuadra/Likida mezclada. | error≠vacío + `--accent-fg` + marca unificada. | `edcdf6e` |
+
+**`engine.ts` intacto. 75 tests, typecheck 0, build verde.** Migraciones nuevas: **0013** (aplicada y verificada en la DB de Likida).
+
+> ⚠️ **Antes del demo, dos cosas mías que requieren tu OK:** (1) encender los 2 flags de orquestación; (2) verificar los slugs de fallback de OpenRouter. Ambas en `DECISIONES_PENDIENTES.md`.
+
+### ⏳ FASE 2–5 — siguientes
+FASE 2 (NIVEL 2 sin flujo) arranca ahora que AUDITORÍA 1 quedó cerrada.
