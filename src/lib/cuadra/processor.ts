@@ -139,11 +139,21 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     }
 
     // BARRERA DE RÁFAGA: espera a que terminen los OCR de fotos en vuelo antes de
-    // cuadrar — así "listo" nunca cierra sobre datos parciales. Luego toma el
-    // mutex para serializar cierres concurrentes (dos "listo" a la vez).
-    if (!(await esperarIntake(viajeId))) logger.warn('intake.barrera_timeout', { viaje: viajeId });
+    // cuadrar — así "listo" nunca cierra sobre datos parciales. NUNCA es infinito
+    // (tope 60s): si vence, se cuadra con lo que haya y se avisa al operador.
+    const intakeOk = await esperarIntake(viajeId);
+    if (!intakeOk) logger.warn('intake.barrera_timeout', { viaje: viajeId });
+
+    // Mutex para serializar cierres concurrentes (dos "listo" a la vez).
     if (await acquireViajeLock(viajeId)) lockedViaje = viajeId;
     else logger.warn('viaje.lock_timeout', { viaje: viajeId });
+
+    // Doble "listo": tras tomar el lock, re-verifica que el viaje SIGA abierto. Si
+    // otro "listo" ya lo cerró, no re-corras el agente (evita doble cuadre/costo).
+    if ((await getOpenViaje(op.tenantId, op.operadorId)) !== viajeId) {
+      await say('Ese viaje ya quedó cerrado 👍. Si te falta algo, tu flota te abre el siguiente.');
+      return;
+    }
 
     const tenant = await getTenantContext(op.tenantId);
     const conv = await loadConversation(op.tenantId, msg.from, viajeId);
@@ -175,6 +185,17 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     }
 
     await say(reply);
+
+    // Si la barrera de intake venció (un OCR tardó demasiado), avisa que se
+    // cuadró con lo que alcanzó — falla visible, no silenciosa.
+    if (!intakeOk) {
+      const n = (await getGastos(viajeId, op.tenantId)).length;
+      try {
+        await say(`⚠️ Ojo: cuadré con los ${n} comprobantes que alcancé a procesar. Si te faltó alguno, reenvíalo y escribe *listo* otra vez.`);
+      } catch (e) {
+        logger.warn('intake.aviso', { err: e instanceof Error ? e.message : String(e) });
+      }
+    }
 
     if (closed) {
       try {

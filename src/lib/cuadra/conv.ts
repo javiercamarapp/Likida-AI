@@ -148,13 +148,17 @@ export async function intakeDelta(viajeId: string, delta: number): Promise<numbe
 /**
  * Espera a que NO haya OCR de fotos en vuelo para el viaje (contador = 0). Es la
  * barrera que garantiza que el "listo" cuadre sobre TODOS los gastos, no parciales.
- * Devuelve true si se vació, false si venció el timeout.
+ * NUNCA espera indefinido: tope configurable (env CUADRA_INTAKE_ESPERA_MS, default
+ * 60s). Devuelve true si se vació, false si venció el tope (→ el caller avisa al
+ * operador y cuadra con lo que alcanzó). El decremento vive en el `finally` del
+ * intake, así que un OCR que truena igual libera su +1.
  */
-export async function esperarIntake(viajeId: string, timeoutMs = 90_000): Promise<boolean> {
+export async function esperarIntake(viajeId: string, timeoutMs?: number): Promise<boolean> {
+  const tope = timeoutMs ?? (Number(process.env.CUADRA_INTAKE_ESPERA_MS) || 60_000);
   const start = Date.now();
   for (;;) {
     if (await intakeDelta(viajeId, 0) <= 0) return true;
-    if (Date.now() - start >= timeoutMs) return false;
+    if (Date.now() - start >= tope) return false;
     await sleep(500);
   }
 }
