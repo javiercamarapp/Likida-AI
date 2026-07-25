@@ -121,7 +121,14 @@ export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number;
   for (;;) {
     const { data, error } = await admin.rpc('try_lock_viaje', { p_viaje: viajeId, p_ttl_ms: ttlMs });
     if (!error && data === true) return true;
-    if (error) { logger.warn('viaje.lock_error', { code: error.code, msg: error.message }); return true; } // RPC ausente → no bloquear el demo
+    if (error) {
+      // 2.1: RPC ausente/caído = la migración 0005 no está aplicada → se cae el
+      // mutex Y el unique(viaje_id) juntos. Es GRAVE (protección de doble cierre):
+      // logger.ERROR, no warn. Se procede (la idempotencia de DB, si existe, cubre),
+      // pero el arranque debe fallar ruidoso si 0005 falta (ver instrumentation.ts).
+      logger.error('viaje.lock_error', { code: error.code, msg: error.message });
+      return true;
+    }
     if (Date.now() - start >= maxWaitMs) return false;
     await sleep(delay);
     delay = Math.min(delay * 2, 1500);

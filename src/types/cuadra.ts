@@ -21,6 +21,7 @@ export interface Gasto {
   cfdiValido?: boolean;
   estadoSat?: EstadoSat;   // resultado de ConsultaCFDIService (o 'pendiente' si SAT no respondió)
   efos?: boolean | null;   // true = emisor en lista negra 69-B (fraude)
+  efosRevisar?: boolean;   // SAT devolvió un código EFOS no concluyente → a bandeja (1.9)
   // ── Complemento de hidrocarburos (Bloque 1, NIVEL 2 — solo del XML) ─────────
   claveProdServ?: string;          // c_ClaveProdServ del concepto (del XML)
   claveUnidad?: string;            // c_ClaveUnidad (LTR para combustible)
@@ -45,6 +46,7 @@ export type TipoDiferencia =
   | 'rfc_receptor'         // CFDI timbrado a un RFC distinto al de la empresa
   | 'cfdi_cancelado'       // CFDI cancelado ante el SAT → no deducible
   | 'cfdi_efos'            // emisor en lista negra 69-B → no deducible
+  | 'cfdi_efos_indeterminado' // SAT devolvió código EFOS no concluyente → a bandeja (no fraude)
   | 'cfdi_no_encontrado'   // el SAT no reconoce el UUID (fabricado/inexistente) → no deducible
   | 'cfdi_pendiente'       // no se pudo validar con el SAT (continuar, revisar después)
   | 'monto_invalido'       // monto ≤ 0 (OCR erróneo / nota de crédito) → revisar a mano

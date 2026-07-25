@@ -10,7 +10,7 @@ import '@/lib/cuadra/tools'; // side-effect: registra las tools en el registry
 import { runAgent } from '@/lib/agents/run';
 import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
-import { addGasto, getGastos, updateGastoCfdiXml } from '@/lib/cuadra/repo';
+import { addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw } from '@/lib/cuadra/repo';
 import {
   resolveOperador, getOpenViaje, getTenantContext,
   loadConversation, saveConversation, claimMessage,
@@ -101,14 +101,17 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       }
       const gastos = await getGastos(viajeId, op.tenantId);
       const match = gastos.find((x) => x.cfdiUuid && x.cfdiUuid.toLowerCase() === xml.uuid);
+      let gastoId: string;
       if (match) {
         // Ya existía el gasto (de la foto): se enriquece con el XML.
         await updateGastoCfdiXml(op.tenantId, match.id, xml);
+        gastoId = match.id;
       } else {
         // El XML llegó sin foto previa: se crea el gasto desde el XML.
         const esFuel = (xml.claveProdServ ?? '').startsWith('15101');
+        gastoId = randomUUID();
         await addGasto(op.tenantId, viajeId, {
-          id: randomUUID(),
+          id: gastoId,
           concepto: esFuel ? 'diesel' : 'factura',
           monto: xml.total ?? 0,
           fecha: xml.fecha,
@@ -127,6 +130,8 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           xmlVerificado: true,
         });
       }
+      // 1.8: conservar el XML crudo (CFF 30). Best-effort.
+      await saveCfdiXmlRaw(op.tenantId, xml.uuid, gastoId, xmlText!);
       return; // silencioso
     }
 

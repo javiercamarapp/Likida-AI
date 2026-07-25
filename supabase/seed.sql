@@ -67,12 +67,24 @@ insert into viaje (id, tenant_id, operador_id, terminal_id, folio, origen, desti
    current_date, 'abierto')
 on conflict (id) do nothing;
 
-insert into gasto (id, tenant_id, viaje_id, concepto, monto, folio, cfdi_uuid, ocr_confianza, cfdi_valido) values
-  ('55555555-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'diesel',  4200, 'DS-8801', null, 0.97, null),                                   -- 🔴 INVENTADO ($200 sobre tope → la diferencia visible)
-  ('55555555-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'diesel',  3800, 'DS-8802', null, 0.98, null),                                   -- 🔴 INVENTADO
-  ('55555555-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'caseta',  1400, 'CA-4471', null, 0.96, null),                                   -- 🔴 INVENTADO
-  ('55555555-0000-0000-0000-000000000004', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'factura', 1200, 'FA-9007', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 0.99, true)  -- 🔴 INVENTADO (CFDI válido)
+-- 🔴 DEMO: diésel con CFDI de estación completo (IEPS/IVA desglosados +
+-- complemento HidroYPetro) → deducible y ACREDITABLE, y aún $200 sobre tope.
+insert into gasto (id, tenant_id, viaje_id, concepto, monto, folio, cfdi_uuid, rfc_emisor, rfc_receptor,
+  estado_sat, efos, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos,
+  cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, ieps_traslado, iva_traslado, fecha, ocr_confianza) values
+  ('55555555-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001',
+   'diesel', 4200, 'DS-8801', 'b7e3f1a2-1c4d-4e6f-8a90-1234567890ab', 'ENE160518AB1', 'TIN010101AAA',
+   'vigente', false, '15101505', 'LTR', 'I', true, false, true, '03', 3210.00, 408.62, 581.38, '2026-05-15', 0.97),
+  ('55555555-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001',
+   'caseta', 1400, 'CA-4471', 'c8f4a2b3-2d5e-4f70-9b01-234567890abc', null, 'TIN010101AAA',
+   'vigente', null, null, null, 'I', null, null, true, '04', 1206.90, null, 193.10, '2026-05-15', 0.96)
 on conflict (id) do nothing;
+
+-- 🔴 DEMO: XML crudo del diésel (CFF 30) — con complemento HidroYPetro real.
+insert into cfdi_xml (tenant_id, gasto_id, cfdi_uuid, xml) values (
+  '11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'b7e3f1a2-1c4d-4e6f-8a90-1234567890ab',
+  '<?xml version="1.0" encoding="UTF-8"?><cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:hidrocarburospetroliferos="http://www.sat.gob.mx/hidrocarburospetroliferos" Version="4.0" Serie="DS" Folio="8801" Fecha="2026-05-15T09:14:00" FormaPago="03" SubTotal="3210.00" Moneda="MXN" Total="4200.00" TipoDeComprobante="I" MetodoPago="PUE" LugarExpedicion="36100"><cfdi:Emisor Rfc="ENE160518AB1" Nombre="Estacion de Servicio Demo SA de CV" RegimenFiscal="601"/><cfdi:Receptor Rfc="TIN010101AAA" Nombre="Cliente demo" DomicilioFiscalReceptor="36100" RegimenFiscalReceptor="601" UsoCFDI="G03"/><cfdi:Conceptos><cfdi:Concepto ClaveProdServ="15101505" ClaveUnidad="LTR" Cantidad="113.00" Descripcion="Diesel" ValorUnitario="28.41" Importe="3210.00" ObjetoImp="02"><cfdi:ComplementoConcepto><hidrocarburospetroliferos:HidroYPetro Version="1.0" TipoPermiso="PER20" NumeroPermiso="PL/12345/EXP/ES/2020" ClaveHYP="PR07" SubProductoHYP="SP14"/></cfdi:ComplementoConcepto></cfdi:Concepto></cfdi:Conceptos><cfdi:Impuestos TotalImpuestosTrasladados="990.00"><cfdi:Traslados><cfdi:Traslado Base="3210.00" Impuesto="003" TipoFactor="Cuota" TasaOCuota="6.1740" Importe="408.62"/><cfdi:Traslado Base="3618.62" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="581.38"/></cfdi:Traslados></cfdi:Impuestos><cfdi:Complemento><tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="b7e3f1a2-1c4d-4e6f-8a90-1234567890ab" FechaTimbrado="2026-05-15T09:14:05"/></cfdi:Complemento></cfdi:Comprobante>'
+) on conflict (tenant_id, cfdi_uuid) do nothing;
 
 -- ── Historial para que el dashboard no salga vacío 🔴 INVENTADO ─────────────
 insert into viaje (id, tenant_id, operador_id, terminal_id, folio, origen, destino, anticipo, fecha_inicio, estatus) values

@@ -2,8 +2,20 @@
 // Mapea filas de Postgres ↔ tipos del dominio.
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/cuadra';
 import type { PoliticaGasto } from './cuadre/engine';
+
+/**
+ * Conserva el XML CRUDO del CFDI (CFF art. 30). Best-effort: un fallo aquí NO
+ * tumba la liquidación (el gasto ya está capturado). 1.8.
+ */
+export async function saveCfdiXmlRaw(tenantId: string, cfdiUuid: string, gastoId: string | null, xml: string): Promise<void> {
+  const { error } = await supabaseAdmin()
+    .from('cfdi_xml')
+    .upsert({ tenant_id: tenantId, cfdi_uuid: cfdiUuid, gasto_id: gastoId, xml }, { onConflict: 'tenant_id,cfdi_uuid' });
+  if (error) logger.warn('cfdi_xml.save', { err: error.message });
+}
 
 export async function getPolitica(tenantId: string): Promise<PoliticaGasto[]> {
   const { data, error } = await supabaseAdmin()
@@ -74,6 +86,7 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     cfdi_valido: g.cfdiValido ?? null,
     estado_sat: g.estadoSat ?? null,
     efos: g.efos ?? null,
+    efos_revisar: g.efosRevisar ?? null,
     clave_prod_serv: g.claveProdServ ?? null,
     clave_unidad: g.claveUnidad ?? null,
     tipo_comprobante: g.tipoComprobante ?? null,
@@ -112,7 +125,7 @@ export async function updateGastoCfdiXml(
 export async function getGastos(viajeId: string, tenantId: string): Promise<Gasto[]> {
   const { data, error } = await supabaseAdmin()
     .from('gasto')
-    .select('id, concepto, monto, fecha, folio, rfc_emisor, rfc_receptor, cfdi_uuid, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, ieps_traslado, iva_traslado')
+    .select('id, concepto, monto, fecha, folio, rfc_emisor, rfc_receptor, cfdi_uuid, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, efos_revisar, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, ieps_traslado, iva_traslado')
     .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId);
   if (error) throw new Error(`getGastos: ${error.message}`);
@@ -130,6 +143,7 @@ export async function getGastos(viajeId: string, tenantId: string): Promise<Gast
     cfdiValido: r.cfdi_valido != null ? Boolean(r.cfdi_valido) : undefined,
     estadoSat: (r.estado_sat as Gasto['estadoSat']) || undefined,
     efos: r.efos != null ? Boolean(r.efos) : undefined,
+    efosRevisar: r.efos_revisar != null ? Boolean(r.efos_revisar) : undefined,
     claveProdServ: (r.clave_prod_serv as string) || undefined,
     claveUnidad: (r.clave_unidad as string) || undefined,
     tipoComprobante: (r.tipo_comprobante as string) || undefined,

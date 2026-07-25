@@ -78,10 +78,12 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
   // Consulta al SAT (grácil: si no responde → 'pendiente', nunca lanza).
   let estadoSat: EstadoSat | undefined;
   let efos: boolean | null | undefined;
+  let efosRevisar: boolean | undefined;
   if (uuid) {
     const sat = await consultarCFDI({ re: rfc, rr: rfcReceptor, tt: monto, id: uuid });
     estadoSat = sat.estado;
     efos = sat.efos;
+    efosRevisar = sat.efosDesconocido;
   }
 
   const gasto: Gasto = {
@@ -98,6 +100,7 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
     cfdiValido,
     estadoSat,
     efos,
+    efosRevisar,
   };
 
   return {

@@ -105,6 +105,17 @@ describe('cuadrarViaje', () => {
     expect(r.estatus).toBe('revisar');
   });
 
+  // 1.9: EFOS con código no concluyente → bandeja, NUNCA fraude.
+  it('1.9: EFOS no concluyente → cfdi_efos_indeterminado (revisar, no fraude)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'e1', anticipo: 1000, politica,
+      gastos: [g({ concepto: 'factura', monto: 1000, cfdiUuid: 'u', estadoSat: 'vigente', efosRevisar: true })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'cfdi_efos_indeterminado')).toBe(true);
+    expect(r.diferencias.some((d) => d.tipo === 'cfdi_efos')).toBe(false);
+    expect(r.estatus).toBe('revisar');
+  });
+
   // CR-3: un CFDI que el SAT NO reconoce (fabricado) no debe pasar como cuadrado.
   it('CR-3: CFDI no_encontrado se marca no deducible y manda a revisar', () => {
     const r = cuadrarViaje({

@@ -21,6 +21,9 @@ export interface ResultadoSat {
   estado: EstadoSat;
   /** true = emisor en lista negra EFOS (art. 69-B) → fraude. null = no evaluable. */
   efos: boolean | null;
+  /** SAT devolvió un código de ValidacionEFOS presente pero NO concluyente
+   *  (≠ 200/201 y ≠ conocido) → escalar a bandeja, sin declarar fraude. 1.9. */
+  efosDesconocido?: boolean;
 }
 
 export interface QrCfdi {
@@ -70,8 +73,10 @@ export async function consultarCFDI(q: QrCfdi, timeoutMs = 4000): Promise<Result
       : EFOS_EN_LISTA.has(efosCode)
       ? true
       : null;
-    if (efosCode && efos === null) logger.warn('sat.efos_desconocido', { code: efosCode });
-    return { estado, efos };
+    // Código presente pero no mapeado → no concluyente → a bandeja (1.9), sin fraude.
+    const efosDesconocido = !!efosCode && !EFOS_LIMPIO.has(efosCode) && !EFOS_EN_LISTA.has(efosCode);
+    if (efosDesconocido) logger.warn('sat.efos_desconocido', { code: efosCode });
+    return { estado, efos, efosDesconocido };
   } catch (e) {
     logger.warn('sat.consulta', { err: e instanceof Error ? e.message : String(e) });
     return { estado: 'pendiente', efos: null }; // SAT caído/timeout → continuar
