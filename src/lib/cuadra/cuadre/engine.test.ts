@@ -333,6 +333,20 @@ describe('cuadrarViaje', () => {
     expect(r.diferencias.some((d) => d.tipo === 'folio_verificar')).toBe(true);
   });
 
+  // Bonus 0.6: CFDI real de FERRETERÍA (no combustible, tarjeta, IVA 16% exacto,
+  // tipo I). El motor NO acredita IEPS donde no aplica, no marca falsos positivos.
+  it('0.6 ferretería: no-combustible con IVA 16% → IVA acredita, IEPS no, sin falsos positivos', () => {
+    const r = cuadrarViaje({
+      viajeId: 'fer1', anticipo: 114.82, politica, hidrocarburos: HC, estimulos: EST,
+      gastos: [g({ concepto: 'factura', monto: 114.82, cfdiUuid: '38a50290-59f1-4a48-b886-0a31f938837c', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '31162800', claveUnidad: 'H87', tipoComprobante: 'I', formaPago: '04', subTotal: 98.98, ivaTraslado: 15.84, estadoSat: 'vigente', efos: false })],
+    });
+    expect(r.iepsAcreditable).toBe(0);       // NO combustible → sin estímulo de IEPS
+    expect(r.ivaAcreditable).toBe(15.84);    // IVA sí es acreditable
+    expect(r.diferencias.some((d) => d.tipo.startsWith('complemento'))).toBe(false);
+    expect(r.diferencias.some((d) => d.tipo === 'combustible_efectivo' || d.tipo === 'ieps_no_desglosado')).toBe(false);
+    expect(r.estatus).toBe('cuadrada');       // anticipo = comprobado, sin diferencias
+  });
+
   // Un ticket sin factura (sin xmlVerificado) NO acredita, aunque traiga montos.
   it('ticket sin CFDI verificado no acredita (necesita timbrarse)', () => {
     const r = cuadrarViaje({
