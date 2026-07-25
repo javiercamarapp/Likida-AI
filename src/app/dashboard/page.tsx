@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { getSessionTenant } from '@/lib/auth/session';
 import { getKpis, detectarAnomalias, type DashboardKpis, type Anomalia } from '@/lib/cuadra/analytics';
+import { getResumenCosto, type ResumenCosto } from '@/lib/cuadra/costos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { mxn } from '@/lib/utils';
+import { mxn, usd } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,12 +18,13 @@ export default async function DashboardPage() {
   const tenantId = session?.tenantId ?? null;
 
   let kpis: DashboardKpis | null = null;
+  let costo: ResumenCosto | null = null;
   let anomalias: Anomalia[] = [];
   let liquidaciones: Array<{ id: string; estatus: string; total_comprobado: number; diferencia: number; created_at: string; folio: string }> = [];
 
   if (tenantId) {
     try {
-      [kpis, anomalias] = await Promise.all([getKpis(tenantId), detectarAnomalias(tenantId)]);
+      [kpis, anomalias, costo] = await Promise.all([getKpis(tenantId), detectarAnomalias(tenantId), getResumenCosto(tenantId)]);
       const { data } = await supabaseAdmin()
         .from('liquidacion')
         .select('id, estatus, total_comprobado, diferencia, created_at, viaje:viaje_id(folio)')
@@ -69,6 +71,16 @@ export default async function DashboardPage() {
               <Kpi label="Diferencias detectadas" value={mxn(kpis.diferenciaDetectada)} accent />
               <Kpi label="Tasa de cuadre" value={`${kpis.tasaCuadre}%`} />
             </div>
+
+            {costo && costo.liquidaciones > 0 && (
+              <div className="card p-4 mt-4 flex items-center justify-between text-sm">
+                <span style={{ color: 'var(--muted)' }}>Costo de AI acumulado (margen real)</span>
+                <span className="tabular">
+                  <span className="font-semibold">{usd(costo.totalUsd)}</span>
+                  <span style={{ color: 'var(--muted)' }}> · {usd(costo.costoPromedioPorLiquidacion)} / liquidación</span>
+                </span>
+              </div>
+            )}
 
             {anomalias.length > 0 && (
               <div className="card p-5 mt-6" style={{ borderColor: 'var(--color-warn)' }}>

@@ -8,3 +8,7 @@ export function cn(...inputs: ClassValue[]): string {
 export function mxn(n: number): string {
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
+
+export function usd(n: number): string {
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: n < 1 ? 3 : 2 });
+}

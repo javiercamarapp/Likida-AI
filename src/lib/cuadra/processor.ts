@@ -13,6 +13,7 @@ import {
   resolveOperador, getOpenViaje, getTenantContext,
   loadConversation, saveConversation, claimMessage, type ConvTurn,
 } from '@/lib/cuadra/conv';
+import { registrarCosto, faseDeModelo, vincularCostosALiquidacion } from '@/lib/cuadra/costos';
 import { sendText, sendDocument, downloadMediaAsDataUrl } from '@/lib/meta/client';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
@@ -55,7 +56,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       return;
     }
     try {
-      const { gasto, legible } = await extraerComprobante(dataUrl);
+      const { gasto, legible, costo } = await extraerComprobante(dataUrl);
+      // Costo real de la llamada de visión, por liquidación (viaje) y tenant.
+      await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
       if (!legible) {
         await sendText(msg.from, 'Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y que se vea completo el ticket?');
         return;
@@ -90,6 +93,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     });
     reply = res.finalText || 'Listo. 👍';
     closed = res.toolCalls.some((t) => t.toolName === 'guardar_liquidacion' && !t.error);
+    // Costo real del turno del agente (cuadre, o escalación si usó Opus).
+    await registrarCosto({ tenantId: op.tenantId, viajeId, fase: faseDeModelo(res.model, 'cuadre'), modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.costUsd });
+    // Al cerrar, vincular todos los costos del viaje a la liquidación creada.
+    if (closed) {
+      const call = res.toolCalls.find((t) => t.toolName === 'guardar_liquidacion' && !t.error);
+      const liqId = (call?.result as { liquidacion_id?: string } | undefined)?.liquidacion_id;
+      if (liqId) await vincularCostosALiquidacion(op.tenantId, viajeId, liqId);
+    }
     logger.info('agent.run', { tenant: op.tenantId, viaje: viajeId, tools: res.toolCalls.map((t) => t.toolName), costUsd: res.costUsd });
   } catch (e) {
     logger.error('agent.fail', { err: e instanceof Error ? e.message : String(e) });

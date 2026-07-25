@@ -38,11 +38,13 @@ REGLAS DURAS:
 export interface ExtraerResultado {
   gasto: Gasto;
   legible: boolean;
+  // Costo de la llamada de visión (para el contador por liquidación).
+  costo: { modelo: string; tokensIn: number; tokensOut: number; costoUsd: number };
 }
 
 /** Extrae un comprobante de una imagen (data-URL). Cruza OCR + QR CFDI. */
 export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerResultado> {
-  const { data } = await generateStructured({
+  const res = await generateStructured({
     role: 'ocr',
     system: SYSTEM,
     messages: [{ role: 'user', content: 'Extrae los datos de este comprobante.' }],
@@ -50,6 +52,7 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
     schema: ExtraccionSchema,
     schemaName: 'comprobante',
   });
+  const { data } = res;
 
   // Cruce con el QR del CFDI (gana sobre el OCR para campos fiscales).
   let uuid = data.cfdi_uuid && esUuidValido(data.cfdi_uuid) ? data.cfdi_uuid.toLowerCase() : undefined;
@@ -82,5 +85,9 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
     cfdiValido,
   };
 
-  return { gasto, legible: data.legible && monto > 0 };
+  return {
+    gasto,
+    legible: data.legible && monto > 0,
+    costo: { modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.cost },
+  };
 }
