@@ -44,8 +44,14 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   const diferencias: Diferencia[] = [];
 
   const norm = (r: string) => strip_accents(r.toUpperCase().replace(/\s/g, ''));
+  // RFC genérico del SAT: si el tenant no capturó su RFC real, NO se valida el
+  // receptor (evita marcar toda factura como "no es de la empresa"). AL-6.
+  const RFC_GENERICO = 'XAXX010101000';
   const rfcsOk = new Set(
-    [input.empresaRfc, ...(input.rfcsAdicionales ?? [])].filter(Boolean).map((r) => norm(r as string)),
+    [input.empresaRfc, ...(input.rfcsAdicionales ?? [])]
+      .filter(Boolean)
+      .map((r) => norm(r as string))
+      .filter((r) => r !== RFC_GENERICO),
   );
 
   // 0) Duplicados: primero por UUID (regla dura), luego por concepto+folio+monto.
@@ -67,10 +73,21 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     }
   }
 
-  const totalComprobado = input.gastos.reduce((s, g) => (duplicados.has(g.id) ? s : s + (g.monto || 0)), 0);
+  // Sólo montos > 0 suman al total: un monto negativo/cero (OCR erróneo, nota de
+  // crédito) NO debe reducir el comprobado ni sesgar la diferencia. ME-5.
+  const totalComprobado = input.gastos.reduce(
+    (s, g) => (duplicados.has(g.id) || !(g.monto > 0) ? s : s + g.monto),
+    0,
+  );
 
   // 1) Por gasto: política, CFDI, confianza, RFC receptor, estatus SAT.
   for (const g of input.gastos) {
+    if (duplicados.has(g.id)) continue; // los duplicados se reportan aparte (paso 2)
+    // Monto inválido: no se evalúa política sobre él, se manda a revisión. ME-5.
+    if (!(g.monto > 0)) {
+      diferencias.push({ tipo: 'monto_invalido', concepto: g.concepto, monto: 0, nota: `El comprobante de ${label(g.concepto)} tiene un monto inválido (${mxn(g.monto)}) — revisar a mano.`, gastoId: g.id });
+      continue;
+    }
     const pol = politicaPara(g.concepto, input.ruta, input.politica);
     if (pol?.topeMonto != null && g.monto > pol.topeMonto) {
       diferencias.push({
@@ -91,6 +108,8 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     }
     if (g.estadoSat === 'cancelado') {
       diferencias.push({ tipo: 'cfdi_cancelado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} está CANCELADO ante el SAT — no deducible.`, gastoId: g.id });
+    } else if (g.estadoSat === 'no_encontrado' && g.cfdiUuid) {
+      diferencias.push({ tipo: 'cfdi_no_encontrado', concepto: g.concepto, monto: 0, nota: `El SAT NO reconoce el CFDI de ${label(g.concepto)} (UUID inexistente o fabricado) — no deducible.`, gastoId: g.id });
     } else if (g.efos === true) {
       diferencias.push({ tipo: 'cfdi_efos', concepto: g.concepto, monto: 0, nota: `El emisor del CFDI de ${label(g.concepto)} está en lista negra del SAT (EFOS) — no deducible.`, gastoId: g.id });
     } else if (g.estadoSat === 'pendiente' && g.cfdiUuid) {
@@ -122,7 +141,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     });
   }
 
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_pendiente'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

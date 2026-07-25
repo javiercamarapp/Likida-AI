@@ -2,6 +2,7 @@
 // El estado (últimos turnos + viaje activo) vive en wa_conversacion.estado jsonb.
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import type { TenantContext } from '@/lib/agents/types';
 
 export interface ResolvedOperador {
@@ -85,9 +86,15 @@ export async function claimMessage(waMessageId: string): Promise<boolean> {
   const { error } = await supabaseAdmin()
     .from('wa_mensaje_procesado')
     .insert({ wa_message_id: waMessageId });
-  // 23505 = unique_violation → ya existía → duplicado.
-  if (error) return error.code !== '23505' ? true : false;
-  return true;
+  if (!error) return true;
+  // 23505 = unique_violation → ya existía → duplicado (no reprocesar).
+  if (error.code === '23505') return false;
+  // AL-3: fail-CLOSED. Ante cualquier otro error de DB (timeout, conexión) NO
+  // asumimos "nuevo" — eso bypassa la idempotencia y puede duplicar el gasto si
+  // Meta reintenta. Tratamos como ya-reclamado; el retry de Meta lo reprocesará
+  // cuando la DB responda. Con dinero, preferir no-duplicar sobre no-perder.
+  logger.warn('wa.claim_error', { code: error.code, msg: error.message });
+  return false;
 }
 
 export async function saveConversation(convId: string, turns: ConvTurn[], viajeId: string | null): Promise<void> {

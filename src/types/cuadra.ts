@@ -33,7 +33,9 @@ export type TipoDiferencia =
   | 'rfc_receptor'         // CFDI timbrado a un RFC distinto al de la empresa
   | 'cfdi_cancelado'       // CFDI cancelado ante el SAT → no deducible
   | 'cfdi_efos'            // emisor en lista negra 69-B → no deducible
+  | 'cfdi_no_encontrado'   // el SAT no reconoce el UUID (fabricado/inexistente) → no deducible
   | 'cfdi_pendiente'       // no se pudo validar con el SAT (continuar, revisar después)
+  | 'monto_invalido'       // monto ≤ 0 (OCR erróneo / nota de crédito) → revisar a mano
   | 'diesel_desviacion';   // consumo de diésel fuera del rango esperado
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */

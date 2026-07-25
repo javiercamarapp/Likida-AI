@@ -104,4 +104,47 @@ describe('cuadrarViaje', () => {
     expect(r.diferencias.some((d) => d.tipo === 'cfdi_pendiente')).toBe(true);
     expect(r.estatus).toBe('revisar');
   });
+
+  // CR-3: un CFDI que el SAT NO reconoce (fabricado) no debe pasar como cuadrado.
+  it('CR-3: CFDI no_encontrado se marca no deducible y manda a revisar', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v9', anticipo: 1000, politica,
+      gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F4', cfdiUuid: 'u4', estadoSat: 'no_encontrado' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'cfdi_no_encontrado')).toBe(true);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  // ME-5: un monto ≤ 0 no debe reducir el total ni sesgar la diferencia.
+  it('ME-5: monto negativo no reduce el total y se marca monto_invalido', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v10', anticipo: 2000, politica,
+      gastos: [
+        g({ concepto: 'diesel', monto: 2000, folio: 'D2' }),
+        g({ concepto: 'caseta', monto: -500, folio: 'C2' }), // OCR erróneo / nota de crédito
+      ],
+    });
+    expect(r.totalComprobado).toBe(2000); // NO 1500
+    expect(r.diferencia).toBe(0);
+    expect(r.diferencias.some((d) => d.tipo === 'monto_invalido')).toBe(true);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  // AL-6: con el RFC genérico del SAT NO se valida el receptor (evita falsos positivos).
+  it('AL-6: RFC de empresa genérico no marca facturas como no-deducibles', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v11', anticipo: 1000, politica, empresaRfc: 'XAXX010101000',
+      gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F5', cfdiUuid: 'u5', rfcReceptor: 'CUALQUIER800101XY1' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(false);
+  });
+
+  // AL-6 (contraparte): un RFC real SÍ valida el receptor.
+  it('AL-6: RFC real de empresa sí valida el receptor', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v12', anticipo: 1000, politica, empresaRfc: 'TIN950101ABC',
+      gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F6', cfdiUuid: 'u6', rfcReceptor: 'TIN950101ABC' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(false); // coincide → OK
+  });
 });

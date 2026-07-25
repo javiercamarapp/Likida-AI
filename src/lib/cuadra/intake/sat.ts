@@ -55,8 +55,22 @@ export async function consultarCFDI(q: QrCfdi, timeoutMs = 4000): Promise<Result
       : estadoRaw.includes('no encontrado')
       ? 'no_encontrado'
       : 'pendiente';
-    // 200/201 = fuera de lista EFOS (limpio); cualquier otro código = EFOS.
-    const efos = efosRaw ? !(efosRaw.trim() === '200' || efosRaw.trim() === '201') : null;
+    // ValidacionEFOS del SAT. 200/201 = emisor LIMPIO (fuera de lista 69-B).
+    // ME-2: NO marcamos fraude por descarte. Sólo declaramos EFOS=true ante un
+    // código de "presunto/definitivo" conocido; cualquier valor inesperado (o
+    // cambio de formato del SAT) → null (no evaluable), nunca true sobre un CFDI
+    // legítimo. Un falso positivo de "fraude" es peor que un falso negativo.
+    const efosCode = efosRaw.trim();
+    const EFOS_LIMPIO = new Set(['200', '201']);
+    const EFOS_EN_LISTA = new Set(['100']); // presunto/definitivo 69-B (documentado)
+    const efos = !efosCode
+      ? null
+      : EFOS_LIMPIO.has(efosCode)
+      ? false
+      : EFOS_EN_LISTA.has(efosCode)
+      ? true
+      : null;
+    if (efosCode && efos === null) logger.warn('sat.efos_desconocido', { code: efosCode });
     return { estado, efos };
   } catch (e) {
     logger.warn('sat.consulta', { err: e instanceof Error ? e.message : String(e) });

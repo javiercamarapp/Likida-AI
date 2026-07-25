@@ -10,7 +10,12 @@ function redact(v: unknown): unknown {
     return v.replace(RFC, '[RFC]').replace(UUID, '[UUID]').replace(PHONE, '[TEL]');
   }
   if (v && typeof v === 'object') {
-    return JSON.parse(redact(JSON.stringify(v)) as string);
+    // try/catch: objetos circulares o no-serializables NO deben romper el log. ME-10.
+    try {
+      return JSON.parse(redact(JSON.stringify(v)) as string);
+    } catch {
+      return '[unserializable]';
+    }
   }
   return v;
 }
