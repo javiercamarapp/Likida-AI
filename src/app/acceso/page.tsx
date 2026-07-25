@@ -15,7 +15,7 @@ export default async function Acceso({ searchParams }: { searchParams: Promise<{
     const dest = String(formData.get('next') ?? '/dashboard');
     const expected = process.env.DASHBOARD_PASSCODE ?? '';
     if (expected && code === expected) {
-      (await cookies()).set(ACCESS_COOKIE, accessToken(expected), {
+      (await cookies()).set(ACCESS_COOKIE, await accessToken(expected), {
         httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 60 * 60 * 8,
       });
       redirect(dest.startsWith('/dashboard') ? dest : '/dashboard');

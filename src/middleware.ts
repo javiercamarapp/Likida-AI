@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { ACCESS_COOKIE, expectedAccessToken } from '@/lib/auth/passcode';
+import { ACCESS_COOKIE, expectedAccessToken, tokenMatches } from '@/lib/auth/passcode';
 
 // Cabeceras de seguridad + gate de passcode del dashboard (demo). Sin Supabase
 // Auth: el dashboard es read-only y va detrás de un passcode simple.
+// El matcher EXCLUYE /api (webhook, demo, export manejan lo suyo y no deben pasar
+// por el gate ni cargar cabeceras de página).
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const res = NextResponse.next({ request: req });
   const path = req.nextUrl.pathname;
 
@@ -13,12 +15,10 @@ export function middleware(req: NextRequest) {
   res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
 
-  // Gate: /dashboard exige la cookie del passcode. Si falta o no coincide → /acceso.
   if (path.startsWith('/dashboard')) {
-    const expected = expectedAccessToken();
     const cookie = req.cookies.get(ACCESS_COOKIE)?.value;
     // Si no hay passcode configurado (dev), no bloquear. Con passcode, exigir match.
-    if (expected && cookie !== expected) {
+    if ((await expectedAccessToken()) && !(await tokenMatches(cookie))) {
       const url = req.nextUrl.clone();
       url.pathname = '/acceso';
       url.searchParams.set('next', path);
@@ -29,5 +29,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };
