@@ -52,7 +52,7 @@ export function isTransientError(err: unknown): boolean {
 const PRICES: Record<string, [number, number]> = {
   'google/gemini-3.6-flash': [1.5, 7.5],
   'google/gemini-3.5-flash-lite': [0.3, 2.5],
-  'anthropic/claude-sonnet-5': [3, 15],       // intro $2/$10 hasta 31-ago-2026
+  'anthropic/claude-sonnet-5': [2, 10],       // intro VIGENTE hasta 31-ago-2026; revertir a [3,15] después
   'anthropic/claude-opus-5': [5, 25],
   'anthropic/claude-haiku-4.5': [1, 5],
   'openai/gpt-5.6-terra': [2.5, 15],
@@ -309,7 +309,10 @@ export async function generateWithTools(opts: {
       const calls = choice?.message?.tool_calls;
 
       if (!calls || calls.length === 0) {
-        return { finalText: choice?.message?.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: calcCost(model, tokIn, tokOut) };
+        // AUDIT_V3 LLM: atribuir el costo al modelo REALMENTE usado (activeModel),
+        // no al primario: si el ciclo cayó al fallback, calcCost(model,...) cobraba
+        // al precio equivocado. activeModel es siempre un slug limpio de PRICES.
+        return { finalText: choice?.message?.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: calcCost(activeModel, tokIn, tokOut) };
       }
 
       convo.push({ role: 'assistant', content: choice.message.content ?? null, tool_calls: calls });
