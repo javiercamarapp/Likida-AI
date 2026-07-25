@@ -103,3 +103,49 @@ export async function saveConversation(convId: string, turns: ConvTurn[], viajeI
     .update({ estado: { turns: turns.slice(-MAX_TURNS) }, viaje_id: viajeId, updated_at: new Date().toISOString() })
     .eq('id', convId);
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Mutex por viaje (AL-1/CR-1): serializa el procesamiento de mensajes del mismo
+ * viaje para que un "listo" no cierre la liquidación antes de que el OCR de la
+ * última foto haya guardado su gasto. Reintenta con backoff hasta maxWaitMs;
+ * devuelve false si no logró el lease (otro after() lo tiene vigente).
+ */
+export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number; maxWaitMs?: number }): Promise<boolean> {
+  const ttlMs = opts?.ttlMs ?? 60_000;
+  const maxWaitMs = opts?.maxWaitMs ?? 12_000;
+  const admin = supabaseAdmin();
+  const start = Date.now();
+  let delay = 150;
+  for (;;) {
+    const { data, error } = await admin.rpc('try_lock_viaje', { p_viaje: viajeId, p_ttl_ms: ttlMs });
+    if (!error && data === true) return true;
+    if (error) { logger.warn('viaje.lock_error', { code: error.code, msg: error.message }); return true; } // RPC ausente → no bloquear el demo
+    if (Date.now() - start >= maxWaitMs) return false;
+    await sleep(delay);
+    delay = Math.min(delay * 2, 1500);
+  }
+}
+
+/** Libera el mutex del viaje (best-effort; si falla, expira por TTL). */
+export async function releaseViajeLock(viajeId: string): Promise<void> {
+  try {
+    await supabaseAdmin().rpc('unlock_viaje', { p_viaje: viajeId });
+  } catch (e) {
+    logger.warn('viaje.unlock', { err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * Libera el claim de idempotencia de un mensaje (CR-2): si el procesamiento
+ * crashea, se borra la marca para que el retry de Meta lo reprocese (at-least-once).
+ */
+export async function releaseMessageClaim(waMessageId: string): Promise<void> {
+  if (!waMessageId) return;
+  try {
+    await supabaseAdmin().from('wa_mensaje_procesado').delete().eq('wa_message_id', waMessageId);
+  } catch (e) {
+    logger.warn('wa.release_claim', { err: e instanceof Error ? e.message : String(e) });
+  }
+}

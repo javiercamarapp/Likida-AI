@@ -126,6 +126,7 @@ export async function generateStructured<T>(opts: {
   temperature?: number;
 }): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number }> {
   const model = modelFor(opts.role);
+  const fallback = FALLBACK[model] ?? null;
   const jsonSchema = z.toJSONSchema(opts.schema, { target: 'draft-7' }) as Record<string, unknown>;
 
   // OpenRouter/OpenAI json_schema exige additionalProperties:false en cada objeto.
@@ -155,12 +156,12 @@ export async function generateStructured<T>(opts: {
     else built.push({ role: 'user', content: parts });
   }
 
-  const attempt = async (note?: string): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number }> => {
+  const attempt = async (m: string, note?: string): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number }> => {
     const msgs = note
       ? [{ role: 'system' as const, content: `${opts.system}\n\n${note}` }, ...built.slice(1)]
       : built;
     const res = await getClient().chat.completions.create({
-      model,
+      model: m,
       messages: msgs,
       max_tokens: opts.maxTokens ?? 1200,
       temperature: opts.temperature ?? 0,
@@ -182,16 +183,27 @@ export async function generateStructured<T>(opts: {
     if (!v.success) throw new StructuredError(`Validación falló: ${v.error.message}`, v.error, raw);
     const tokIn = res.usage?.prompt_tokens ?? 0;
     const tokOut = res.usage?.completion_tokens ?? 0;
-    return { data: v.data, raw, model: res.model || model, tokensIn: tokIn, tokensOut: tokOut, cost: calcCost(model, tokIn, tokOut) };
+    return { data: v.data, raw, model: res.model || m, tokensIn: tokIn, tokensOut: tokOut, cost: calcCost(m, tokIn, tokOut) };
   };
 
   const note = 'IMPORTANTE: responde EXCLUSIVAMENTE con JSON válido que cumpla el schema, sin markdown ni texto extra.';
   try {
-    return await attempt();
+    return await attempt(model);
   } catch (e1) {
+    // Reintento con el MISMO modelo + nota (típicamente errores de formato JSON).
     try {
-      return await attempt(note);
+      return await attempt(model, note);
     } catch (e2) {
+      // CR-5: si el fallo es transient (provider caído/429/timeout) y hay
+      // fallback cross-provider, intentar con OTRO proveedor antes de rendirse.
+      if (fallback && (isTransientError(e1) || isTransientError(e2))) {
+        logger.warn('llm.fallback', { fn: 'generateStructured', from: model, to: fallback });
+        try {
+          return await attempt(fallback, note);
+        } catch (e3) {
+          throw e3 instanceof StructuredError ? e3 : new StructuredError('Falló generación estructurada (fallback)', e3);
+        }
+      }
       throw e2 instanceof StructuredError ? e2 : new StructuredError('Falló generación estructurada', e2);
     }
   }
@@ -231,10 +243,12 @@ export async function generateWithTools(opts: {
   signal?: AbortSignal;
 }): Promise<{ finalText: string; toolCalls: ToolCallRecord[]; model: string; tokensIn: number; tokensOut: number; cost: number }> {
   const model = modelFor(opts.role);
+  const fallback = FALLBACK[model] ?? null;
   const maxRounds = opts.maxToolRounds ?? 6;
   const client = getClient();
   const executed: ToolCallRecord[] = [];
   let tokIn = 0, tokOut = 0, used = model;
+  let activeModel = model; // cambia a fallback si el primario cae (persiste el resto del ciclo)
 
   const convo: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: opts.system },
@@ -242,23 +256,38 @@ export async function generateWithTools(opts: {
   ];
   const crossRound = new Map<string, ToolExecResult>();
 
+  // CR-5: completado con fallback cross-provider. Reintentar SÓLO la llamada de
+  // completado (las tools se ejecutan DESPUÉS, en nuestro código) es seguro: una
+  // caída del provider nunca re-ejecuta una mutación ni duplica una liquidación.
+  const complete = async (msgs: OpenAI.Chat.ChatCompletionMessageParam[]) => {
+    const body = () => ({
+      model: activeModel,
+      messages: msgs,
+      tools: opts.tools.length ? opts.tools : undefined,
+      tool_choice: opts.tools.length ? ('auto' as const) : undefined,
+      max_tokens: opts.maxTokens ?? 1000,
+      temperature: opts.temperature ?? 0.3,
+      ...PROVIDER_OPTS,
+    });
+    const signalOpt = opts.signal ? { signal: opts.signal } : undefined;
+    try {
+      return await client.chat.completions.create(body(), signalOpt);
+    } catch (err) {
+      if (fallback && activeModel === model && isTransientError(err)) {
+        logger.warn('llm.fallback', { fn: 'generateWithTools', from: model, to: fallback });
+        activeModel = fallback;
+        return await client.chat.completions.create(body(), signalOpt);
+      }
+      throw err;
+    }
+  };
+
   try {
     for (let round = 0; round < maxRounds; round++) {
-      const res = await client.chat.completions.create(
-        {
-          model,
-          messages: convo,
-          tools: opts.tools.length ? opts.tools : undefined,
-          tool_choice: opts.tools.length ? 'auto' : undefined,
-          max_tokens: opts.maxTokens ?? 1000,
-          temperature: opts.temperature ?? 0.3,
-          ...PROVIDER_OPTS,
-        },
-        opts.signal ? { signal: opts.signal } : undefined,
-      );
+      const res = await complete(convo);
       tokIn += res.usage?.prompt_tokens ?? 0;
       tokOut += res.usage?.completion_tokens ?? 0;
-      used = res.model || model;
+      used = res.model || activeModel;
       const choice = res.choices[0];
       const calls = choice?.message?.tool_calls;
 

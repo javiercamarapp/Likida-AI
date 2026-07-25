@@ -108,18 +108,24 @@ export async function saveLiquidacion(
   pdfUrl?: string,
 ): Promise<string> {
   const admin = supabaseAdmin();
+  // CR-1: cierre idempotente. Con unique(viaje_id) + upsert, dos cierres
+  // concurrentes producen UN solo registro (el motor es determinístico → el
+  // segundo escribe los mismos números). Nunca dos liquidaciones/dos PDFs.
   const { data, error } = await admin
     .from('liquidacion')
-    .insert({
-      tenant_id: tenantId,
-      viaje_id: liq.viajeId,
-      total_comprobado: liq.totalComprobado,
-      total_anticipo: liq.totalAnticipo,
-      diferencia: liq.diferencia,
-      estatus: liq.estatus,
-      diferencias: liq.diferencias,
-      pdf_url: pdfUrl ?? null,
-    })
+    .upsert(
+      {
+        tenant_id: tenantId,
+        viaje_id: liq.viajeId,
+        total_comprobado: liq.totalComprobado,
+        total_anticipo: liq.totalAnticipo,
+        diferencia: liq.diferencia,
+        estatus: liq.estatus,
+        diferencias: liq.diferencias,
+        pdf_url: pdfUrl ?? null,
+      },
+      { onConflict: 'viaje_id' },
+    )
     .select('id')
     .single();
   if (error) throw new Error(`saveLiquidacion: ${error.message}`);
