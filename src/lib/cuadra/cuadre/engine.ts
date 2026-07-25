@@ -30,6 +30,9 @@ export interface CuadreInput {
   empresaRfc?: string;
   /** RFCs adicionales válidos de la flota (razones sociales múltiples). */
   rfcsAdicionales?: string[];
+  /** Complemento de hidrocarburos (Bloque 1): claves de combustible, unidad,
+   *  y fecha de vigencia. Sin esto, la regla no corre. */
+  hidrocarburos?: { claves: string[]; unidad: string; vigenteDesde: string };
 }
 
 function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaGasto[]): PoliticaGasto | undefined {
@@ -115,6 +118,29 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     } else if (g.estadoSat === 'pendiente' && g.cfdiUuid) {
       diferencias.push({ tipo: 'cfdi_pendiente', concepto: g.concepto, monto: 0, nota: `No se pudo validar el CFDI de ${label(g.concepto)} con el SAT — se revisa después.`, gastoId: g.id });
     }
+
+    // Complemento de hidrocarburos (Bloque 1). Regla determinística en DOS
+    // NIVELES. Mismo criterio que EFOS: NUNCA se declara no deducible sin
+    // verificar — un falso positivo de fraude es peor que un falso negativo.
+    const h = input.hidrocarburos;
+    const esCombustible = g.concepto === 'diesel' || (h != null && h.claves.includes(g.claveProdServ ?? ''));
+    if (h && esCombustible) {
+      const aplicaPorFecha = !g.fecha || g.fecha >= h.vigenteDesde; // solo CFDI vigentes
+      if (g.xmlVerificado) {
+        // NIVEL 2: tenemos el XML → regla DURA. Combustible fiscal (clave + unidad),
+        // tipo I/E, vigente, y SIN el nodo del complemento → NO deducible.
+        const combustibleFiscal = h.claves.includes(g.claveProdServ ?? '') && g.claveUnidad === h.unidad;
+        const tipoAplica = g.tipoComprobante === 'I' || g.tipoComprobante === 'E';
+        if (combustibleFiscal && tipoAplica && aplicaPorFecha && !g.complementoHidrocarburos) {
+          diferencias.push({ tipo: 'complemento_hidrocarburos', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} es de combustible y NO trae el complemento de hidrocarburos requerido (obligatorio desde 24-abr-2026) — no deducible.`, gastoId: g.id });
+        }
+      } else if (g.cfdiUuid && aplicaPorFecha) {
+        // NIVEL 1: es una FACTURA de combustible (tiene UUID) pero sin el XML →
+        // no se puede verificar el complemento. A la bandeja del liquidador, NO
+        // se declara no deducible. Se resuelve cuando reenvíen el XML.
+        diferencias.push({ tipo: 'complemento_no_verificable', concepto: g.concepto, monto: 0, nota: `La factura de ${label(g.concepto)} es de combustible: reenvía el XML (el que te manda la gasolinera por correo) para verificar el complemento de hidrocarburos.`, gastoId: g.id });
+      }
+    }
   }
 
   // 2) Duplicados como diferencia (ya excluidos del total).
@@ -141,7 +167,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     });
   }
 
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

@@ -21,6 +21,12 @@ export interface Gasto {
   cfdiValido?: boolean;
   estadoSat?: EstadoSat;   // resultado de ConsultaCFDIService (o 'pendiente' si SAT no respondió)
   efos?: boolean | null;   // true = emisor en lista negra 69-B (fraude)
+  // ── Complemento de hidrocarburos (Bloque 1, NIVEL 2 — solo del XML) ─────────
+  claveProdServ?: string;          // c_ClaveProdServ del concepto (del XML)
+  claveUnidad?: string;            // c_ClaveUnidad (LTR para combustible)
+  tipoComprobante?: string;        // I | E | P | N | T (del XML)
+  complementoHidrocarburos?: boolean; // el XML trae el nodo del complemento
+  xmlVerificado?: boolean;         // true = se recibió y parseó el XML del CFDI
 }
 
 export type TipoDiferencia =
@@ -36,6 +42,8 @@ export type TipoDiferencia =
   | 'cfdi_no_encontrado'   // el SAT no reconoce el UUID (fabricado/inexistente) → no deducible
   | 'cfdi_pendiente'       // no se pudo validar con el SAT (continuar, revisar después)
   | 'monto_invalido'       // monto ≤ 0 (OCR erróneo / nota de crédito) → revisar a mano
+  | 'complemento_hidrocarburos'  // CFDI de combustible SIN el complemento requerido → NO deducible (NIVEL 2, del XML)
+  | 'complemento_no_verificable' // factura de combustible sin XML → no se puede verificar el complemento (NIVEL 1, a bandeja)
   | 'diesel_desviacion';   // consumo de diésel fuera del rango esperado
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */

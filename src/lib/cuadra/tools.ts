@@ -48,6 +48,7 @@ async function computeCuadre(tenantId: string, viajeId: string): Promise<Omit<Li
     ruta: viaje.destino,
     empresaRfc: config.empresa.rfc,
     rfcsAdicionales: config.empresa.rfcsAdicionales,
+    hidrocarburos: config.hidrocarburos,
   });
 }
 

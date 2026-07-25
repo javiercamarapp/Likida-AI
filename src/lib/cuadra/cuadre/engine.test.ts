@@ -147,4 +147,66 @@ describe('cuadrarViaje', () => {
     });
     expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(false); // coincide → OK
   });
+
+  // ═══ Bloque 1: complemento de hidrocarburos (dos niveles) ═══
+  const HC = { claves: ['15101505', '15101514', '15101515'], unidad: 'LTR', vigenteDesde: '2026-04-24' };
+
+  // NIVEL 1: factura de combustible (con UUID) SIN XML → no verificable, a bandeja,
+  // NUNCA no deducible.
+  it('B1 NIVEL 1: combustible con UUID sin XML → complemento_no_verificable (no no-deducible)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h1', anticipo: 4200, politica, hidrocarburos: HC,
+      gastos: [g({ concepto: 'diesel', monto: 4200, folio: 'D1', cfdiUuid: 'uuid-diesel', fecha: '2026-05-01' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'complemento_no_verificable')).toBe(true);
+    expect(r.diferencias.some((d) => d.tipo === 'complemento_hidrocarburos')).toBe(false);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  // NIVEL 1: ticket de diésel SIN UUID (no es factura) → NO se marca complemento.
+  it('B1 NIVEL 1: diésel sin UUID no dispara complemento (no es CFDI)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h2', anticipo: 3800, politica, hidrocarburos: HC,
+      gastos: [g({ concepto: 'diesel', monto: 3800, folio: 'D2', fecha: '2026-05-01' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo.startsWith('complemento'))).toBe(false);
+  });
+
+  // NIVEL 2: XML de combustible SIN el nodo del complemento → DURA, no deducible.
+  it('B1 NIVEL 2: XML de combustible sin complemento → complemento_hidrocarburos (no deducible)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h3', anticipo: 4200, politica, hidrocarburos: HC,
+      gastos: [g({ concepto: 'diesel', monto: 4200, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: false })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'complemento_hidrocarburos')).toBe(true);
+    expect(r.diferencias.some((d) => d.tipo === 'complemento_no_verificable')).toBe(false);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  // NIVEL 2: XML CON el complemento → sin diferencia.
+  it('B1 NIVEL 2: XML de combustible CON complemento → sin diferencia', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h4', anticipo: 4200, politica, hidrocarburos: HC,
+      gastos: [g({ concepto: 'diesel', monto: 4200, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true })],
+    });
+    expect(r.diferencias.some((d) => d.tipo.startsWith('complemento'))).toBe(false);
+  });
+
+  // Vigencia: un CFDI ANTERIOR al 24-abr-2026 no exige complemento.
+  it('B1 vigencia: CFDI antes del 24-abr-2026 no exige complemento', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h5', anticipo: 4200, politica, hidrocarburos: HC,
+      gastos: [g({ concepto: 'diesel', monto: 4200, cfdiUuid: 'u', fecha: '2026-03-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: false })],
+    });
+    expect(r.diferencias.some((d) => d.tipo.startsWith('complemento'))).toBe(false);
+  });
+
+  // Sin config de hidrocarburos, la regla NO corre (retrocompat).
+  it('B1: sin config de hidrocarburos la regla no corre', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h6', anticipo: 4200, politica,
+      gastos: [g({ concepto: 'diesel', monto: 4200, cfdiUuid: 'u', fecha: '2026-05-01' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo.startsWith('complemento'))).toBe(false);
+  });
 });

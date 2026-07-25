@@ -28,6 +28,13 @@ export interface CuadraConfig {
   unidades: Record<string, UnidadConfig>; // placa → params
   catalogoCuentas: Record<string, string>;// concepto → cuenta contable
   salida: 'csv' | 'contpaqi_txt' | 'aspel_xls';
+  // Complemento de hidrocarburos (Bloque 1): claves de producto de combustible,
+  // unidad esperada y fecha de entrada en vigor de la obligación.
+  hidrocarburos: {
+    claves: string[];       // c_ClaveProdServ de combustible (15101505/14/15)
+    unidad: string;         // c_ClaveUnidad esperada (LTR)
+    vigenteDesde: string;   // ISO: obligación aplica a CFDI con Fecha >= este día
+  };
 }
 
 // ── DEFAULTS DE DEMO (🔴 genéricos, NO de un cliente — reemplazables en la sala) ─
@@ -50,6 +57,12 @@ export const DEMO_CONFIG: CuadraConfig = {
     diesel: '600-001', caseta: '600-002', viaticos: '600-003', factura: '600-004', otro: '600-099',
   },
   salida: 'csv',
+  hidrocarburos: {
+    // Claves SAT confirmadas: 15101505 diésel, 15101514 magna, 15101515 premium.
+    claves: ['15101505', '15101514', '15101515'],
+    unidad: 'LTR',
+    vigenteDesde: '2026-04-24', // vigencia del complemento v1.0 (DOF, RMF 2.7.1.8)
+  },
 };
 
 /** Devuelve la config del tenant (override en DB) o los defaults de demo. */
