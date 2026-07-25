@@ -13,9 +13,16 @@ const base = (conceptoInner: string) => `<?xml version="1.0" encoding="UTF-8"?>
   </cfdi:Complemento>
 </cfdi:Comprobante>`;
 
+// Nodo raíz REAL del estándar CC_HYP_10: HidroYPetro (ns hidrocarburospetroliferos).
 const CON_COMPLEMENTO = base(`
   <cfdi:ComplementoConcepto>
-    <hidrocarburosPetroliferos:HidrocarburosPetroliferos xmlns:hidrocarburosPetroliferos="http://www.sat.gob.mx/hidrocarburos10" Version="1.0" TipoHidrocarburo="D06"/>
+    <hidrocarburospetroliferos:HidroYPetro xmlns:hidrocarburospetroliferos="http://www.sat.gob.mx/hidrocarburospetroliferos" Version="1.0" TipoPermiso="PER15" NumeroPermiso="H/36212/EXP/ES/2015" ClaveHYP="PR03" SubProductoHYP="SP18"/>
+  </cfdi:ComplementoConcepto>`);
+
+// Nombre alterno (fuente secundaria previa) — la detección debe ser tolerante.
+const CON_COMPLEMENTO_ALT = base(`
+  <cfdi:ComplementoConcepto>
+    <hidrocarburosPetroliferos:HidrocarburosPetroliferos xmlns:hidrocarburosPetroliferos="http://www.sat.gob.mx/hidrocarburos10" Version="1.0"/>
   </cfdi:ComplementoConcepto>`);
 
 const SIN_COMPLEMENTO = base('');
@@ -39,8 +46,13 @@ describe('parseCfdiXml', () => {
     expect(r.complementoHidrocarburos).toBe(false);
   });
 
-  it('detecta PRESENCIA del complemento de hidrocarburos', () => {
+  it('detecta PRESENCIA del complemento (nodo real HidroYPetro)', () => {
     const r = parseCfdiXml(CON_COMPLEMENTO)!;
+    expect(r.complementoHidrocarburos).toBe(true);
+  });
+
+  it('detección tolerante al nombre alterno del nodo', () => {
+    const r = parseCfdiXml(CON_COMPLEMENTO_ALT)!;
     expect(r.complementoHidrocarburos).toBe(true);
   });
 

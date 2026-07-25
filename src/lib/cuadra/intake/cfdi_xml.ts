@@ -5,9 +5,9 @@
 // manda por correo. NO requiere e.firma ni portales.
 //
 // Extrae, a nivel concepto: ClaveProdServ, ClaveUnidad, y la PRESENCIA del nodo
-// `hidrocarburosPetroliferos:HidrocarburosPetroliferos` v1.0 (Complemento
-// Concepto para la facturación de Hidrocarburos y Petrolíferos, vigente
-// 24-abr-2026; CFF 29 y 29-A fr.V inc.f, regla 2.7.1.8 RMF). La DECISIÓN de
+// raíz `HidroYPetro` v1.0 (estándar CC_HYP_10, ns hidrocarburospetroliferos) del
+// "Complemento Concepto para la facturación de Hidrocarburos y Petrolíferos",
+// vigente 24-abr-2026 (regla 2.7.1.48 RMF; CFF 29 y 29-A). La DECISIÓN de
 // deducibilidad la toma el motor determinístico, no este parser.
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -68,10 +68,17 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
 
     const conceptos: CfdiConceptoXml[] = conceptosRaw.map((c) => {
       const cc = (c.ComplementoConcepto ?? {}) as Record<string, unknown>;
+      // El nodo raíz del complemento es `HidroYPetro` (estándar CC_HYP_10,
+      // ns hidrocarburospetroliferos). Detección TOLERANTE al nombre (con
+      // removeNSPrefix el prefijo se va): cualquier hijo cuyo local-name aluda a
+      // hidrocarburos/petrolíferos. Un nombre mal asumido = falso positivo de
+      // "no deducible" sobre CFDIs válidos, así que se prefiere tolerar.
+      const tieneComplemento =
+        cc != null && typeof cc === 'object' && Object.keys(cc).some((k) => /hidro|petro/i.test(k));
       return {
         claveProdServ: (c['@_ClaveProdServ'] as string) || undefined,
         claveUnidad: (c['@_ClaveUnidad'] as string) || undefined,
-        complemento: cc != null && typeof cc === 'object' && 'HidrocarburosPetroliferos' in cc,
+        complemento: tieneComplemento,
       };
     });
 
