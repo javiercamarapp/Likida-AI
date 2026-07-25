@@ -1,141 +1,159 @@
-# DOCUMENTO MAESTRO — Cuadra (guía de dominio + build para Claude Code)
-
-> Este documento transfiere TODO el conocimiento de dominio (proceso + ley + endpoints,
-> vigente al 24-jul-2026) para que Claude Code entienda la liquidación de viajes de
-> transporte de carga en México y construya el sistema. Sintetiza 6 investigaciones
-> profundas. **Lee esto antes de tocar código nuevo.**
+# DOCUMENTO MAESTRO DE INGENIERÍA — SISTEMA "CUADRA"
+### Liquidación de viajes de flota en México vía agente de IA por WhatsApp
+*Vigencia de la investigación: 24 de julio de 2026 · Redactado para Claude Code · Español mexicano*
 
 ---
 
-## 0. Estado actual del repo (qué YA existe)
-- ✅ Ingesta WhatsApp (webhook HMAC + idempotencia) · OCR de comprobantes (Gemini visión) · decode QR CFDI (`cfdi.ts`, solo formato/regex, aún sin consulta al SAT).
-- ✅ Motor de cuadre **determinístico** (`cuadre/engine.ts`): sobre-política, faltante CFDI, duplicados, diferencia de anticipo. 4 tests.
-- ✅ PDF de liquidación · export CSV · contador de costo AI (`llm_costo`) · dashboard · simulador `/demo`.
-- **La decisión de dinero es determinística (código), no del LLM.** Mantener ese principio en todo lo nuevo.
+## 0. MAPA AL REPO (dónde vive cada cosa — leer junto con la PARTE B)
+Estado actual y a dónde va cada paso de la FASE 1:
+| Paso | Archivo en el repo | Estado |
+|---|---|---|
+| 2.1 Webhook + HMAC + idempotencia | `src/app/api/webhook/whatsapp/route.ts`, `src/lib/meta/client.ts`, `conv.ts:claimMessage` | ✅ |
+| 2.2 OCR visión | `src/lib/cuadra/intake/ocr.ts` | ✅ |
+| 2.3 Parser QR CFDI | `src/lib/cuadra/intake/cfdi.ts` | ✅ (solo formato) |
+| 2.4 Consulta SAT (ConsultaCFDIService) | **NUEVO `src/lib/cuadra/intake/sat.ts`** + wire en `ocr.ts` | ❌ construir |
+| 2.5 RFC receptor = empresa | `cfdi.ts` / motor | ❌ construir (1 día) |
+| 3.1-3.6 cuadre determinístico | `src/lib/cuadra/cuadre/engine.ts` | ✅ (ver AUDIT.md: fix duplicados) |
+| 3.5 Conciliación diésel | **NUEVO `src/lib/cuadra/cuadre/diesel.ts`** | ❌ construir |
+| 3.7 Anomalías (precios CRE) | `analytics.ts` + `diesel.ts` | ⚠️ parcial |
+| 3.10 PDF | `src/lib/cuadra/liquidacion/pdf.ts` | ✅ |
+| 4.x export CSV / póliza | `src/lib/cuadra/export.ts` (CSV ✅); póliza Contpaqi ❌ pend. ERP |
+| Costo | `src/lib/cuadra/costos.ts` (LLM ✅; **falta costo WhatsApp** — ver KEY FINDING 2) |
 
-## 1. El dominio en una frase
-Un viaje de carga genera comprobantes de gasto (diésel, casetas, viáticos) que hoy un
-**liquidador** revisa a mano, cuadra contra el anticipo y la política, y captura en el ERP.
-Cuadra automatiza ese cierre por WhatsApp. El valor está en **validar fiscalmente cada
-comprobante + cuadrar + detectar anomalías** — no en mover dinero (eso es de terceros).
+**Regla de oro (respetar en todo lo nuevo):** el motor de cuadre es determinístico (código), el LLM solo extrae/redacta — NUNCA cuadra, decide deducibilidad ni aprueba.
 
 ---
 
-## 2. Los 40 pasos — conocimiento, ley y FACTIBILIDAD
+## TL;DR
 
-Leyenda: ✅ demo-able el 6-ago (determinístico/API, sin credenciales sensibles) ·
-⚠️ alcanzable con esfuerzo (semanas) · ❌ fase 2+ (computer-use frágil / e.firma / regulado).
-
-### Fase 1 — Antes del viaje
-| Paso | Qué + ley/endpoint | Factib. |
-|---|---|---|
-| 1.1 Crear viaje | Por WhatsApp (LLM → JSON estricto → validación determinística → confirmación humana). Requiere **catálogos maestros** cargados 1 vez (unidades, operadores, rutas, política). | ⚠️ |
-| 1.2 Tabulador diésel | `litros_esp = km / rendimiento_unidad`; tractocamión **2.5-4 km/L**, cargado consume **+20-30%**; diésel **~$27/L** (Profeco). | ✅ |
-| 1.3 Casetas esperadas | "Traza tu Ruta" SICT (`app.sct.gob.mx/sibuac_internet`) **NO tiene API** (HTML frágil). Estrategia: **tabla cacheada ruta×casetas×tarifa-por-ejes** (sembrada 1 vez). | ✅ (cacheada) |
-| 1.4 Dispersar anticipo | SPEI vía **STP** (IFPE). **NO es de Cuadra** — el cliente tiene la relación regulada y el fondeo. | ❌ (no es tuyo) |
-| 1.5 Emitir Carta Porte | CFDI 4.0 + **complemento 3.1** (vigente desde 17-jul-2024) vía **PAC** (Facturama/SW/Finkok). Requiere **CSD**. Multa por mal hecho: hasta ~$97k/CFDI + no deducible. | ⚠️ (3-5 sem) |
-| 1.6 Kit al operador | Mensaje WhatsApp con anticipo, topes, casetas esperadas, QR de CP. | ✅ |
-
-### Fase 2 — En ruta
-| Paso | Qué + ley/endpoint | Factib. |
-|---|---|---|
-| 2.1 Foto del comprobante | Webhook WhatsApp. | ✅ (hecho) |
-| 2.2 OCR del comprobante | Gemini visión → JSON. | ✅ (hecho) |
-| 2.3 Decode QR CFDI | `id`=UUID, `re`=RFC emisor, `rr`=RFC receptor, `tt`=total, `fe`=sello. | ✅ (hecho) |
-| 2.4 Validar CFDI vs SAT | **ConsultaCFDIService (SOAP público, SIN credenciales):** `https://consultaqr.facturaelectronica.sat.gob.mx/ConsultaCFDIService.svc?wsdl`, método `Consulta`, input `expresionImpresa` (los 5 campos del QR). Devuelve **Estado (Vigente/Cancelado)** + **ValidacionEFOS** (lista negra 69-B). Serializar/cachear (throttling). | ✅ **quick win 3-5 días** |
-| 2.5 RFC receptor ≠ chofer | Comparar `rr` (del QR) vs RFC de la empresa. Antifraude gratis. | ✅ **1 día** |
-| 2.6 Auto-facturar ticket gasolinera | **Sin API — solo computer-use por portal de franquicia** (cientos de combinaciones). Ventana dura (fin de mes/72h). **Bloqueante 2026: Complemento Hidrocarburos** obligatorio (24-abr-2026) o no deduce. Es el producto de **Zumma/Fotofacturas**. | ❌ fase 2+ (¿integrar Zumma?) |
-| 2.7 CFDI de cruces TAG | IAVE/PASE/TeleVía **sin API**. Palanca robusta: **ingesta por correo** del CFDI mensual (TeleVía postpago lo manda por email), no scraping. | ❌ fase 2 (email) |
-| 2.8 POD (evidencia entrega) | Foto sello/firma → Visión. | ✅ |
-| 2.9 Odómetro/litros | Foto tablero/bomba → Visión (o telemetría). | ⚠️ |
-| 2.10-2.11 Efectivo reparto / incidencias | Conversacional. **Reparto NO se construye para el 6** (blueprint). | ❌ |
-
-### Fase 3 — Liquidación
-| Paso | Qué | Factib. |
-|---|---|---|
-| 3.1 Cerrar viaje + agrupar | Código. | ✅ (hecho) |
-| 3.2 Clasificar por concepto/CC | Visión + Código. | ✅ (hecho) |
-| 3.3 Duplicados | Mismo UUID/monto/fecha. | ✅ (hecho, ver bug en AUDIT.md: no infle total) |
-| 3.4 Cuadrar vs política | Código. | ✅ (hecho) |
-| 3.5 Conciliar diésel | litros vs km vs baseline; **alerta si desviación >15%**. Reglas: carga>capacidad tanque, sobreprecio vs zona, suma>esperado. | ✅ **construir para el 6** |
-| 3.6 Saldo | anticipo − comprobado. | ✅ (hecho) |
-| 3.7 Anomalías | caseta esperada faltante (usa 1.3 cacheado), ticket fuera de ruta, horario imposible. | ✅ (parcial, para el 6) |
-| 3.8 Escribir al operador | Conversacional. | ✅ (hecho) |
-| 3.9 Aprobar/rechazar | Humano en interfaz + niveles de autorización. | ⚠️ |
-| 3.10 PDF | Código. | ✅ (hecho) |
-
-### Fase 4 — Fiscal y contable
-| Paso | Qué + ley | Factib. |
-|---|---|---|
-| 4.1 Validar Carta Porte | API SAT (igual que 2.4). | ✅ |
-| 4.2 Descarga masiva CFDI | Web service SAT, **requiere e.firma del cliente** (identidad fiscal completa → riesgo legal/seguridad). **Async: 72h-2 semanas** desde 2025 (no tiempo real). | ❌ fase 3 |
-| 4.3 Deducibilidad/IVA | Motor de validación (ver §3). Diésel en efectivo = **NO deducible sin importar monto**; requiere **Complemento Hidrocarburos**. | ⚠️ (motor, para el 6 versión básica) |
-| 4.4 Póliza contable | Cargos/abonos cuadrados + código agrupador SAT + centro de costo. | ✅ (construir) |
-| 4.5 Subir al ERP | **Escalón 0 = archivo:** CONTPAQi TXT posicional / XLSX; Aspel COI Excel con `FIN_PARTIDAS`. **NO API (fricción TI 3-6 meses).** ⚠️ **Confirmar qué ERP usa cliente_demo ANTES de escribir el layout.** | ⚠️ (archivo, pend. ERP) |
-
-### Fase 5 — Tesorería
-| Paso | Qué | Factib. |
-|---|---|---|
-| 5.1 Dispersar saldo | STP API. **No es de Cuadra.** | ❌ |
-| 5.2 Descuento a nómina | **PELIGRO LEGAL (LFT art. 110):** solo con convenio firmado, ≤1 mes salario, ≤30% del excedente del mínimo, nunca sobre el mínimo. **Cuadra calcula/documenta/propone; NUNCA ejecuta el descuento.** | ⚠️ (solo cálculo+guardarraíles) |
-| 5.3 Reponer anticipo | API. No es tuyo. | ❌ |
-| 5.4 Conciliación bancaria | **Open banking NO existe regulado en MX (2026).** Usar ledger nativo de STP, o computer-use (frágil). | ❌ fase 2 |
-
-### Fase 6 — Inteligencia
-| Paso | Qué | Factib. |
-|---|---|---|
-| 6.1-6.5 km/L, costo/km, ranking operadores, patrones, tabulador recalibrado | Código + LLM. Base en `analytics.ts`. | ⚠️ (incremental) |
-| 6.6 Reporte al director por WhatsApp | Conversacional. **Quick win alto impacto.** | ✅ |
+- **El complemento Carta Porte vigente al 24 de julio de 2026 es la versión 3.1** (obligatoria desde julio 2024; el SAT actualizó sus catálogos el 13 de enero de 2026), la **RMF 2026 se publicó en el DOF el 28 de diciembre de 2025**, y **WhatsApp cobra por mensaje desde el 1 de julio de 2025**. Estos tres hechos anclan el alcance del demo del 6 de agosto.
+- **La FASE 1 debe ser quirúrgica:** WhatsApp (webhook + HMAC) → OCR con Gemini → parser de QR + validación de CFDI contra el SAT (`ConsultaCFDIService` SOAP) → motor determinístico de cuadre → PDF + CSV. **NO** autofacturación de gasolineras, descarga masiva con e.firma, ni dispersión bancaria: roadmap por riesgo legal/técnico.
+- **El mayor riesgo legal es el uso de la e.firma del cliente por un tercero y el RPA sobre portales del SAT/gasolineras/bancos.** Se resuelven con figura de tercero autorizado vía PAC y con tarjetas de flotilla que emiten CFDI consolidado (Clara, Mendel, Edenred), nunca con scraping.
 
 ---
 
-## 3. Motor de validación fiscal (el diferenciador — §4.3)
-Por cada CFDI, validar y marcar lo NO deducible / IVA no acreditable:
-- **Vigencia:** UUID no cancelado + emisor no EFOS (ConsultaCFDIService).
-- **RFC receptor** == empresa (no el chofer).
-- **Diésel:** pagado con medio bancarizado/monedero (efectivo = NO deducible, sin importar monto) + **Complemento Hidrocarburos** presente + permiso CNE válido. Monedero: requiere Complemento ECC.
-- **Casetas:** CFDI con IVA 16% desglosado; marcar cruces con TAG para el **estímulo 50% peaje** (requiere pago electrónico).
-- **Viáticos:** topes 2026 (alimentación $750/día nacional, hospedaje sin límite nacional con CFDI, auto $850/día); alimentación pagada con tarjeta; fuera de 50 km.
-- **IEPS diésel:** contemplar acreditamiento (estímulo LIF 2026) como cuenta separada en la póliza.
+## KEY FINDINGS (lo que ancla las decisiones de arquitectura)
+
+1. **Carta Porte 3.1 sigue siendo el único esquema válido.** El 13 de enero de 2026 el SAT liberó actualización de **catálogos** (no del XSD) para 2026; sin catálogos actualizados los PAC rechazan el timbrado. Multa por CFDI sin Carta Porte: **$19,700 a $112,650 MXN por comprobante** (CFF art. 84 fr. IV).
+
+2. **WhatsApp tiene un cambio de precio que afecta el modelo de costos.** Desde el 1-jul-2025 se cobra por mensaje. Las plantillas *utility* y mensajes de servicio dentro de la ventana de 24h **son gratis solo hasta el 30-sep-2026**; Meta cobra desde el **1-oct-2026**. Tarifa base México: *utility* **USD 0.0080**, *authentication* USD 0.0207, *marketing* USD 0.0436 por mensaje. **→ El costo por liquidación debe incluir mensajes de WhatsApp, no solo LLM.**
+
+3. **El motor de cuadre debe ser 100% determinístico.** La LFPDPPP 2025 da al trabajador derecho a oponerse a decisiones únicamente automatizadas que afecten su economía/rendimiento; la deducibilidad exige reglas auditables.
+
+4. **Tres integraciones legalmente delicadas, fuera de FASE 1:** (a) autofacturación de gasolineras (sin API, CAPTCHA, franquicias), (b) descarga masiva con e.firma (personalísima), (c) dispersión SPEI (requiere IFPE). El open banking regulado **no existe operativamente** a julio 2026.
 
 ---
 
-## 4. 🚩 Banderas rojas (verificar antes de construir)
-1. **Complemento Hidrocarburos** obligatorio desde 24-abr-2026 — el CFDI de combustible sin él NO deduce. Verificar versión vigente.
-2. **Carta Porte 3.1** — instructivos cambian; el portal del SAT es la fuente de verdad (rechazó conexión en la investigación; revalidar).
-3. **Descuento a nómina** — campo minado LFT art. 110. Cuadra documenta, NO ejecuta. Confirmar con abogado laboralista.
-4. **e.firma (descarga masiva)** — custodia de la identidad fiscal completa del cliente. No tocar sin política de seguridad + consentimiento explícito.
-5. **Portales sin API** (gasolineras, TAG, SICT, banco) cambian HTML sin aviso → computer-use es deuda de mantenimiento perpetua. Preferir tabla cacheada (casetas) e ingesta por correo (TAG).
-6. **ERP de cliente_demo: DESCONOCIDO.** No escribir un layout de póliza sin confirmar CONTPAQi vs Aspel vs otro (construir para el ERP equivocado = 3 días tirados).
+## DETAILS
+
+### PARTE A — MARCO NORMATIVO Y DE VIGENCIA
+
+**A.1 RMF 2026.** DOF **28-dic-2025**, vigente todo 2026. Novedad al giro: nueva obligación de CFDI para enajenación de gasolinas/diésel/hidrocarburos. *Verificar redacción de reglas 2.7.x antes de codificar.*
+
+**A.2 Carta Porte 3.1.** Obligatoria desde jul-2024; único esquema. Catálogos `c_` actualizados 13-ene-2026. Autotransporte federal (permiso SICT). Infracciones: CFF 84-IV ($19,700–$112,650/CFDI) y 103 (presunción de contrabando).
+
+**A.3 WhatsApp Business Platform.** Cobro por mensaje desde 1-jul-2025 (API on-premise deprecada oct-2025; todo Cloud API). Categorías: marketing, utility, authentication, service. **Fin de gratuidad de utility/servicio: 1-oct-2026** (junto al Meta Business Agent, 1-ago-2026). *Verificar rate card MX en developers.facebook.com.*
+
+**A.4 Deducibilidad de combustible — LISR 27-III.** Combustible **debe** pagarse con transferencia/cheque nominativo/tarjeta/monedero autorizado, **aun si no excede $2,000**. Efectivo = **NO deducible en ningún monto**. Reglas RMF 3.3.1.7 y 3.3.1.10 (monederos). **→ marcar NO deducible toda carga en efectivo.**
+
+**A.5 Descuentos a nómina — LFT 110/111/517.** 110-I (lista taxativa): deudas con el patrón (anticipos, errores, pérdidas, averías) con topes **acumulativos**: ≤ un mes de salario y descuento periódico ≤ **30% del excedente del salario mínimo**, con convenio. 111 prohíbe intereses. 517: prescripción **un mes**. **→ Cuadra calcula el tope legal y exige aprobación humana + convenio; nunca automático.**
+
+**A.6 LFPDPPP 2025.** DOF 20-mar-2025, vigente 21-mar-2025. Desaparece el INAI; autoridad: Secretaría Anticorrupción y Buen Gobierno. Derecho a **oponerse a tratamientos automatizados** y a **revisión humana**. **→ ranking de operadores/fraude requiere aviso de privacidad + revisión humana, no puede ser única base de una decisión que afecte al trabajador.**
+
+**A.7 Open banking.** Ley Fintech 2018 art. 76 obliga APIs, pero a jul-2026 solo hay regulación de datos abiertos (cajeros/sucursales). Datos transaccionales **sin regulación operativa** (amparo ene-2026). **→ conciliación bancaria vía agregadores privados, no APIs reguladas.**
+
+**A.8 Conservación — CFF 30.** Contabilidad y comprobantes 5 años; conservar Carta Porte y soporte.
 
 ---
 
-## 5. PLAN DE BUILD PARA EL 6 DE AGOSTO (13 días) — solo lo ✅, en orden
-Todo determinístico/API, sin computer-use ni e.firma. Cada uno súbele valor al demo:
+### PARTE B — LOS 40 PASOS
 
-1. **Validación de CFDI vs SAT** (`cfdi.ts` + nuevo `sat.ts`): consultar ConsultaCFDIService → Vigente/Cancelado + EFOS. Cachear. Integrar al flujo OCR (marcar factura cancelada/EFOS). *(3-5 días)*
-2. **Verificación RFC receptor** == empresa. *(1 día)*
-3. **Conciliación de diésel** (`cuadre/diesel.ts`): catálogo de unidades (placa→rendimiento base→capacidad tanque); `litros_esp = km/rendimiento`; alerta >15%; reglas carga>tanque, sobreprecio, suma>esperado. Añadir sus diferencias al motor. *(3-4 días)*
-4. **Casetas esperadas** (tabla cacheada Silao–Laredo) → detección "caseta esperada sin comprobante" (3.7). *(2 días)*
-5. **Motor de validación fiscal básico** (§3): forma de pago, complemento hidrocarburos presente, topes viáticos. Marcar no-deducible. *(2-3 días)*
-6. **Póliza + export CONTPAQi/Aspel** — SOLO tras confirmar el ERP de cliente_demo (paso de campo). Si no se confirma a tiempo, dejar el CSV actual. *(2-3 días)*
-7. **Fix del bug de duplicados** (AUDIT.md) + **fallback real de modelos** (AUDIT.md) — bloqueantes del demo. *(2 días)*
-8. **Reporte al director por WhatsApp** (6.6) — quick win. *(1 día)*
-9. Endurecer el **simulador `/demo`** con el escenario guionado (una diferencia clara + diésel + caseta faltante).
+#### FASE 1 — ANTES DEL VIAJE
+**1.1 Creación del viaje.** Maestros: unidad (placas, config, rendimiento), operador (RFC/CURP/licencia), origen-destino (**CP + coordenadas** exige CP 3.1), cliente, mercancía (clave producto SAT). TMS MX: Kepler, Drivin, SimpliRoute, Beetrack, Anceti. **Construir tabla propia; NO integrar TMS en FASE 1.**
+**1.2 Tabulador.** km × rendimiento; usar **histórico por unidad** (configurable). Banda inicial: CANACAR/ANTP/SICT.
+**1.3 Casetas esperadas.** "Traza tu Ruta" SICT/CAPUFE **sin API pública**. **Tabla de tarifas propia; NO scraping.**
+**1.4 Anticipo.** STP (IFPE, dispersión SPEI REST `/ordenPago/registra`, RSA-SHA256, sandbox `demo.stpmex.com`). Tarjetas de flotilla: Edenred, Pluxee, **Mendel**, **Clara** (CFDI consolidado + complemento hidrocarburos), Solvento. **FASE 1: solo registrar; no dispersar.**
+**1.5 Emisión Carta Porte 3.1.** PACs con API: Facturama (sandbox `apisandbox.facturama.mx`), Facturapi (~$299/mes, playground), Finkok, SW/Sapien, Factura.com, Fiscalapi (SDKs), FacturoPorTi. Requiere CSD. **FASE 1: solo validar; emisión = roadmap.**
+**1.6 Kit por WhatsApp.** Requiere **plantillas utility aprobadas** + verificación de negocio.
 
-**Resultado el 6:** WhatsApp → OCR → **validación fiscal SAT** → cuadre (política + **diésel** + **casetas**) → liquidación → PDF → **póliza ERP**. Es un salto grande sobre las 5 promesas, todo demo-able sin piezas frágiles.
+#### FASE 2 — EN RUTA
+**2.1 Webhook.** HMAC `X-Hub-Signature-256` con App Secret + idempotencia por message id. ✅ hecho.
+**2.2 OCR.** Gemini (extraer a JSON). Modelo: **Gemini 2.5 Flash deprecado 16-oct-2026** → usar **3 Flash / 3.1 Flash-Lite** (ya migrado a 3.6 Flash en el repo). El LLM **solo extrae**.
+**2.3 QR CFDI.** Anexo 20: `re`,`rr`,`tt`,`id`. ✅ hecho.
+**2.4 Consulta SAT.** SOAP **`ConsultaCFDIService`**, WSDL `https://consultaqr.facturaelectronica.sat.gob.mx/ConsultaCFDIService.svc?WSDL`, método `Consulta(expresionImpresa)`, **público sin auth**. Devuelve `Estado` (Vigente/Cancelado), `ValidacionEFOS` (200/201=limpio), `EstatusCancelacion`. Códigos: `S`=ok, `N-601`=expresión inválida, `N-602`=no encontrado, `100`=EFOS. **Aceptar solo si Vigente + EFOS limpio.**
+**2.5 RFC receptor = empresa.** `rr` debe ser el RFC de la empresa (no el chofer). Regla dura.
+**2.6 Autofacturación gasolineras.** Sin portal único (cada estación = franquicia, emisor real ≠ Pemex/G500; URL en ticket). Sistemas: GORM/Brentec, FacturacionEstacion, FacturaGAS. Plazo seguro: **mismo mes calendario**. Requiere complemento **Hidrocarburos**. Sin API, con CAPTCHA. Agregadores: **Mendel, Clara**. **FASE 1 fuera; recomendar tarjeta de flotilla. Roadmap: integrar agregador.**
+**2.7 TAG casetas.** IAVE/PASE/TeleVía/ViaPass/EasyTrip/SITAG. CFDI lo emite el **proveedor del TAG** (mensual consolidado desde el 5º día hábil). Efectivo en caseta: facturar en **30 días**. IVA 16% acreditable. **FASE 1: capturar CFDI que descargue el cliente.**
+**2.8 POD.** Foto sello/firma, evidencia auditable.
+**2.9 Odómetro/litros.** Foto o telemetría (Geotab/Samsara/Wialon/Ituran/Detektor). FASE 1: foto.
+**2.10 Efectivo COD (reparto).** CFDI + complemento REP si PPD. **Construir registro + conciliación — clave para Nadro.**
+**2.11 Incidencias.** NOM-087-SCT-2-2017 (tiempos de conducción). Captura tipificada.
 
-## 6. Roadmap fase 2/3 (post-demo)
-- **Fase 2:** emitir Carta Porte (PAC+CSD) · ingesta de CFDI de TAG por correo · conectores ERP por SDK/API (CONTPAQi Nube, Odoo) · telemetría (Wialon/Geotab) para odómetro real · cálculo+guardarraíles de descuento a nómina · reparto/CEDIS (otro flujo).
-- **Fase 3:** descarga masiva SAT con e.firma (conciliación batch) · auto-facturación de gasolineras (construir catálogo de portales o **integrar Zumma/Fotofacturas** — decisión producto vs plataforma) · conciliación bancaria.
+#### FASE 3 — LIQUIDACIÓN (corazón determinístico)
+- 3.1 cierre+agrupación · 3.2 clasificación (LLM sugiere) · 3.3 duplicados (UUID dura) · 3.4 cuadre vs política (100% código) · 3.5 conciliación diésel (litros vs km vs histórico) · 3.6 saldo · **3.7 anomalías**: carga>tanque, fuera de ruta, horario imposible, **sobreprecio vs precio de zona (datos abiertos CRE/CNE en `datos.gob.mx`/`cne.gob.mx`, XML/CSV/JSON diario ~18:00, Acuerdo A/041/2018)**; agregadores PetroIntelligence/GasMapa · 3.8 aclaración (LLM redacta, reglas deciden) · 3.9 aprobación con niveles (segregación de funciones) · 3.10 PDF.
 
-## 7. Especificaciones técnicas (para implementar)
-- **ConsultaCFDIService:** WSDL `https://consultaqr.facturaelectronica.sat.gob.mx/ConsultaCFDIService.svc?wsdl` · SOAPAction `http://tempuri.org/IConsultaCFDIService/Consulta` · input string `expresionImpresa` con `?re=..&rr=..&tt=..&id=..&fe=..` · respuesta: `Estado`, `EsCancelable`, `ValidacionEFOS`. Sin auth. (Ref: phpcfdi/sat-estado-cfdi.)
-- **Diésel:** rendimiento base por unidad (config); `factor_carga ~0.75-0.80` cargado; umbral desviación 15% (amarillo) / 30% (rojo); precio zona (Profeco QQP).
-- **CONTPAQi TXT:** registro `P` (encabezado: tipo, fecha yyyyMMdd, tipo póliza 1-4, folio, concepto, sistema "11") + registros `M` (cuenta sin guiones, tipo mov **0=cargo/1=abono**, importe 2 dec, centro de costo). También XLSX.
-- **Aspel COI Excel:** datos desde A3; fila 3 encabezado (tipo, número en blanco, concepto, día); fila 4+ partidas (cuenta, depto, concepto, TC, cargo, abono, CC, proyecto); cerrar con `FIN_PARTIDAS`. Fecha DD/MM/AAAA; cuentas deben existir en el catálogo.
-- **Casetas:** tabla `ruta → [caseta, clase_ejes, tarifa]` sembrada de Traza tu Ruta + tarifas CAPUFE.
+#### FASE 4 — FISCAL Y CONTABLE
+- **4.1** Validar Carta Porte vs SAT.
+- **4.2 Descarga masiva.** e.firma (`.cer`+`.key`+pass, regla RMF 2.7.2.4). Flujo Autenticación→Solicitud→Verificación→Descarga (ZIP ≤200k CFDI), **v1.5** (29-may-2025), `cfdidescargamasivasolicitud.clouda.sat.gob.mx`. Libs `phpcfdi/sat-ws-descarga-masiva`. **RIESGO: e.firma personalísima → FASE 1 fuera; roadmap vía PAC o consentimiento cifrado.**
+- **4.3 Deducibilidad/IVA.** LISR 27/28, LIVA 5. Motor determinístico marca deducible/no + IVA acreditable/no.
+- **4.4 Póliza — Contabilidad electrónica Anexo 24** (DOF 13-ene-2026; CFF 28-IV). XML: catálogo (código agrupador SAT), balanza (1_3), pólizas (1_3, UUID por mov). Pólizas solo **a requerimiento**. RESICO PM sí, PF no.
+- **4.5 ERP.** SAP (OData/BAPI/IDoc → proyecto TI, fuera). Odoo (XML/JSON-RPC, `account.move`). **Contpaqi (v14.2.7+)**: TXT (`P` encabezado + `M` movimientos + `AD` UUID) o **SDK** (genera GUID → ADD/SQL Server). `P`: tipo, fecha yyyyMMdd, TipoPol (1 Ingreso/2 Egreso/3 Diario/4 Orden), folio, SisOrig, impresa, ajuste, concepto. `M`: cuenta, tipoMov, importe, idDiario, importeME, concepto, idSegNeg. **Aspel COI** (10 vigente, 11 en 2026): Integración de pólizas, layout con `FIN_PARTIDAS`, fecha DD/MM/AAAA. **FASE 1: CSV/PDF; roadmap Contpaqi TXT.**
 
-> Fuentes completas y detalle en los 6 reportes de investigación (resumidos aquí).
-> Reconfirmar montos de viáticos, cuota IEPS diésel y versión de complementos contra
-> RMF/LIF 2026 antes de producción.
+#### FASE 5 — TESORERÍA
+- 5.1 Dispersión SPEI (STP) — roadmap. · **5.2** saldo en contra a nómina (LFT 110/111/517, ver A.5): calcular tope, exigir convenio, nunca automático. · 5.3 reposición anticipo. · 5.4 conciliación bancaria: agregadores **Belvo** (IFPE CNBV), Prometeo, Finerio, Paybook/Syncfy — roadmap.
+
+#### FASE 6 — INTELIGENCIA
+- 6.1 km/L · 6.2 costo/km (metodología CANACAR) · **6.3 ranking operadores (LFPDPPP: aviso + revisión humana)** · 6.4 patrones de fraude · 6.5 tabulador recalibrado · 6.6 reporte al director por WhatsApp.
+
+---
+
+### PARTE C — TRANSVERSALES
+- **C.1 RPA** sobre portales de terceros: alto riesgo ToS + frágil (CAPTCHA). Preferir APIs oficiales/agregadores + tarjetas de flotilla. **Sin scraping en FASE 1.**
+- **C.2 Datos:** Cuadra es **encargado del tratamiento**; aviso de privacidad, contrato de encargado, cifrado, ARCO (LFPDPPP 2025).
+- **C.3 Conservación:** CFF 30.
+- **C.4 Costos LLM:** Gemini Flash + batching + prompt caching. Verificar deprecación (2.5 Flash 16-oct-2026).
+- **C.5 Panorama competitivo (jul-2026):**
+  - **Solvento** — fintech de pagos/liquidez para autotransporte, integrada al SAT, motor de auditoría con IA ("Solvento Audita", con API); **USD 25M con BBVA Spark, 13-feb-2026** (Series B). "78% del carga en México va por carretera."
+  - **Mendel** — tarjeta flotilla + IA que recupera/valida CFDI ante el SAT.
+  - **Clara** — Clara Fleet Card (monedero SAT, CFDI consolidado).
+  - **Edenred** — Ticket Car. · **Nowports** — freight forwarding. · **Kepler/Anceti** — TMS/ERP. · Zumma, Trato.
+  - **Qué NO cubren:** nadie hace la **liquidación conversacional por WhatsApp** (foto → cuadre determinístico → PDF + póliza) reemplazando al liquidador/cajero. **Ese es el hueco de Cuadra.**
+
+---
+
+## RECOMMENDATIONS
+
+### Plan FASE 1 quirúrgica — 12 días, demo Cliente demo 6-ago-2026
+Construir en este orden:
+1. Webhook WhatsApp + HMAC + idempotencia (2.1). ✅
+2. OCR Gemini → JSON (2.2); el LLM solo extrae. ✅
+3. Parser QR (2.3) ✅ + **`ConsultaCFDIService` SOAP (2.4)** + validación RFC receptor y EFOS (2.5). ❌
+4. Motor determinístico: agrupación (3.1)✅, duplicados por UUID (3.3)✅, cuadre vs política (3.4)✅, **conciliación diésel litros/km (3.5)**❌, saldo (3.6)✅, **anomalías con precios CRE (3.7)**❌.
+5. PDF (3.10)✅ + CSV para ERP.
+6. Validación de Carta Porte vs SAT (4.1).
+
+**Para Nadro (reparto):** priorizar registro de efectivo cobrado (2.10) + conciliación contra entregas.
+
+**Fuera de FASE 1 (con razón):** autofacturación gasolineras (RPA/CAPTCHA), descarga masiva (e.firma personalísima), dispersión SPEI (IFPE), ERP nativo (proyecto TI → empezar CSV), telemetría/open banking (sin APIs estándar).
+
+**Reglas de oro:** validaciones en código; el LLM nunca cuadra/decide/aprueba; manejar errores (`N-601`/`N-602`, foto ilegible, CFDI cancelado/EFOS, combustible en efectivo→no deducible); probar con tickets reales de **Silao, Guadalajara, Nuevo Laredo**.
+
+### Benchmarks que cambian el plan
+- Meta cobra utility desde 1-oct-2026 → maximizar la ventana de servicio de 24h, minimizar plantillas iniciadas por el negocio.
+- Nueva versión de esquema Carta Porte (>3.1) → congelar validación hasta actualizar catálogos.
+- Cliente exige póliza automática → empezar por Contpaqi TXT (no SAP).
+
+---
+
+## CAVEATS (verificar antes de codificar)
+1. Catálogos Carta Porte 3.1 vigentes (última: 13-ene-2026).
+2. Modelo Gemini vigente/no deprecado (2.5 Flash → 16-oct-2026).
+3. Rate card WhatsApp MX y fecha de fin de gratuidad utility/servicio (1-oct-2026).
+4. Endpoint/WSDL de `ConsultaCFDIService` (el SAT cambia rutas sin aviso).
+5. Reglas RMF 2026 citadas (2.7.x, 2.8.1.x, 3.3.1.x) — confirmar en DOF.
+6. Versiones XSD de contabilidad electrónica (catálogo 1_1 vs balanza/pólizas 1_3).
+7. Layout TXT exacto de Contpaqi por versión (usar el **SDK** por robustez).
+8. Firma RSA-SHA256 de STP (`/ordenPago/registra`) — confirmar en onboarding.
+9. Figura legal para descarga masiva con e.firma de terceros — validar con fiscalista; preferir vía PAC.
+
+**Fuentes conflictivas:** plazo de autofacturación de gasolineras varía (48h–30 días) → usar "mismo mes calendario". Rendimientos km/L de industria varían → usar histórico por unidad como verdad.
