@@ -30,6 +30,21 @@
 | Contador de costo (LLM + **fase whatsapp**) | `cuadra/costos.ts` | ✅ (falta wire whatsapp) |
 | Dashboard / demo simulador | `app/dashboard`, `app/demo` | ✅ |
 
+> ⚠️ **ESTADO DE EJECUCIÓN REAL (25-jul-2026) — el ✅ significa "código escrito", NO "corrió".**
+> Hasta el 24-jul los tests solo cubrían el **motor determinístico** (funciones puras). El
+> webhook, el repositorio, el mutex, RLS, el acuse consolidado y la persistencia **NUNCA se
+> habían ejecutado**. La auditoría de 5 agentes **leyó código, no observó un sistema corriendo.**
+> Por eso la etiqueta "FASE 1 completa" era engañosa: **FASE 1 está CODIFICADA y con tests de
+> motor verdes, pero no probada de punta a punta.**
+>
+> **Lo que YA se ejecutó contra la base real** (proyecto Supabase `Likida` creado 25-jul, nube):
+> migraciones 0001–0006 aplicadas y verificadas; **CR-1** (`unique(viaje_id)` + upsert → 1 sola
+> liquidación); **AL-1** (mutex `try_lock_viaje`: true→false→true); **RLS** (lectura anónima →
+> `[]`). **Lo que sigue SIN correr end-to-end:** el flujo de la app (webhook → OCR → cuadre →
+> `guardar_liquidacion` → PDF) — bloqueado por `SUPABASE_SERVICE_ROLE_KEY` + `OPENROUTER_API_KEY`
+> + credenciales de WhatsApp (pendientes de pegar). El **ensayo** (NIVEL 4) con red degradada es
+> la primera vez que el sistema completo se ejerce.
+
 ---
 
 ## 2. FASE 1 — ORDEN EXACTO DE BUILD (el del founder)
