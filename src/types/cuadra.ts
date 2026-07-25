@@ -58,6 +58,8 @@ export type TipoDiferencia =
   | 'efectivo_sobre_tope'  // gasto no-combustible en efectivo > $2,000 → NO deducible (LISR 27-III)
   | 'ieps_no_desglosado'   // CFDI de diésel sin IEPS desglosado → no acreditable (se pierde el estímulo)
   | 'viatico_excede_fiscal' // viático de alimentación > tope fiscal $750/día (LISR 28-V) → porción no deducible
+  | 'fecha_sospechosa'     // fecha futura o muy anterior al viaje → periodo/plazo/complemento en riesgo
+  | 'folio_verificar'      // folio leído con baja confianza en ticket con portal → verificar antes de facturar
   | 'diesel_desviacion';   // consumo de diésel fuera del rango esperado
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */

@@ -14,6 +14,7 @@ import { randomUUID } from 'crypto';
 import { logger } from '@/lib/logger';
 import { generateStructured } from '@/lib/llm/openrouter';
 import { decodeCfdiFromImage, bufferFromDataUrl, esRfcValido, esUuidValido } from './cfdi';
+import { normalizarFecha } from './fecha';
 import { consultarCFDI } from './sat';
 import type { Gasto, ConceptoGasto, EstadoSat } from '@/types/cuadra';
 
@@ -134,7 +135,7 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
     id: randomUUID(),
     concepto: data.concepto as ConceptoGasto,
     monto,
-    fecha: data.fecha ?? undefined,
+    fecha: normalizarFecha(data.fecha),
     folio: folioRaw,
     folioNorm,
     rfcEmisor: rfc,
@@ -152,6 +153,7 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
     // El IVA/subtotal del TICKET NO alimentan el acreditamiento (eso exige XML).
     ocrExtra: {
       producto: data.producto ?? undefined,
+      fechaRaw: data.fecha ?? undefined,
       litros: data.litros ?? undefined,
       precioUnitario: data.precio_unitario ?? undefined,
       webId: data.web_id ?? undefined,

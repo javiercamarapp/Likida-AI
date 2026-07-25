@@ -298,6 +298,41 @@ describe('cuadrarViaje', () => {
     expect(r.diferencias.some((d) => d.tipo === 'ieps_no_desglosado')).toBe(false);
   });
 
+  // #1: validación de cordura de la fecha (periodo fiscal / plazo / complemento).
+  it('#1 fecha muy anterior al viaje → fecha_sospechosa (bandeja)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'f1', anticipo: 1000, politica, fechaMin: '2026-07-01', fechaMax: '2026-07-25',
+      gastos: [g({ concepto: 'caseta', monto: 1000, folio: 'C1', fecha: '2026-05-15' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(true);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  it('#1 fecha FUTURA → fecha_sospechosa (caso del mes mal leído del ticket 4)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'f2', anticipo: 1000, politica, fechaMin: '2026-07-01', fechaMax: '2026-07-25',
+      gastos: [g({ concepto: 'caseta', monto: 1000, folio: 'C1', fecha: '2026-09-15' })], // futura
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(true);
+  });
+
+  it('#1 fecha dentro de rango NO dispara', () => {
+    const r = cuadrarViaje({
+      viajeId: 'f3', anticipo: 1000, politica, fechaMin: '2026-07-01', fechaMax: '2026-07-25',
+      gastos: [g({ concepto: 'caseta', monto: 1000, folio: 'C1', fecha: '2026-07-10' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
+  });
+
+  // #3: folio de combustible con baja confianza (ticket 3 borroso) → avisar, no bloquear.
+  it('#3 folio_verificar: folio de combustible con baja confianza avisa', () => {
+    const r = cuadrarViaje({
+      viajeId: 'f4', anticipo: 1000, politica,
+      gastos: [g({ concepto: 'diesel', monto: 1000, folio: '841067', ocrConfianza: 0.6 })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'folio_verificar')).toBe(true);
+  });
+
   // Un ticket sin factura (sin xmlVerificado) NO acredita, aunque traiga montos.
   it('ticket sin CFDI verificado no acredita (necesita timbrarse)', () => {
     const r = cuadrarViaje({

@@ -40,6 +40,11 @@ async function computeCuadre(tenantId: string, viajeId: string): Promise<Omit<Li
     getConfig(tenantId),
   ]);
   if (!viaje) throw new Error('viaje no encontrado');
+  // Rango de fecha válido: no futura (hoy) y no anterior a (inicio − N días).
+  const hoy = new Date();
+  const fechaMax = hoy.toISOString().slice(0, 10);
+  const inicio = viaje.fechaInicio ? new Date(`${viaje.fechaInicio.slice(0, 10)}T00:00:00Z`) : hoy;
+  const fechaMin = new Date(inicio.getTime() - config.validacion.fechaToleranciaDiasAntes * 86_400_000).toISOString().slice(0, 10);
   return cuadrarViaje({
     viajeId,
     anticipo: viaje.anticipo,
@@ -50,6 +55,8 @@ async function computeCuadre(tenantId: string, viajeId: string): Promise<Omit<Li
     rfcsAdicionales: config.empresa.rfcsAdicionales,
     hidrocarburos: config.hidrocarburos,
     estimulos: config.estimulos,
+    fechaMin,
+    fechaMax,
   });
 }
 

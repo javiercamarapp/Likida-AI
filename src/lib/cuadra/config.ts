@@ -46,6 +46,10 @@ export interface CuadraConfig {
   // Un ticket de estación NO es factura; el operador debe timbrarlo en el portal
   // de su marca dentro del plazo. NO hay automatización de portales — solo avisar.
   portales: PortalFacturacion[];
+  // Validaciones de cordura.
+  validacion: {
+    fechaToleranciaDiasAntes: number; // la fecha del gasto no puede ser anterior a (inicio del viaje − N días)
+  };
 }
 
 export interface PortalFacturacion {
@@ -98,6 +102,7 @@ export const DEMO_CONFIG: CuadraConfig = {
     { marca: 'Enerser', match: ['enerser'], portal: '', plazoHoras: 72, campos: [] },
     { marca: 'GORM / Brentec', match: ['gorm', 'brentec'], portal: '', plazoHoras: 72, campos: [] },
   ],
+  validacion: { fechaToleranciaDiasAntes: 30 },
 };
 
 /** Reconoce el portal de facturación de un ticket por palabras clave (estación/

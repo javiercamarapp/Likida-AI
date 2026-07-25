@@ -35,6 +35,9 @@ export interface CuadreInput {
   hidrocarburos?: { claves: string[]; unidad: string; vigenteDesde: string };
   /** Estímulos y topes fiscales (LIF 2026 Art. 20 / LISR). */
   estimulos?: { peajeFactor: number; viaticosTopeFiscalDiarioMxn: number; efectivoTopeMxn: number; clavesDieselIeps?: string[] };
+  /** Rango de fecha válido para los comprobantes (ISO YYYY-MM-DD). Fuera → sospechosa. */
+  fechaMin?: string;
+  fechaMax?: string;
 }
 
 function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaGasto[]): PoliticaGasto | undefined {
@@ -111,6 +114,22 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     const topeViaticoFiscal = input.estimulos?.viaticosTopeFiscalDiarioMxn;
     if (g.concepto === 'viaticos' && topeViaticoFiscal != null && g.monto > topeViaticoFiscal) {
       diferencias.push({ tipo: 'viatico_excede_fiscal', concepto: g.concepto, esperado: topeViaticoFiscal, real: g.monto, monto: round2(g.monto - topeViaticoFiscal), nota: `Viático de ${mxn(g.monto)} excede el tope fiscal de alimentación (${mxn(topeViaticoFiscal)}/día, LISR 28-V) — el excedente de ${mxn(g.monto - topeViaticoFiscal)} no es deducible.`, gastoId: g.id });
+    }
+
+    // #1: cordura de la FECHA. Una fecha futura o muy anterior al viaje mete el
+    // gasto en el periodo fiscal equivocado, rompe el plazo de facturación y
+    // puede cruzar la frontera del complemento (24-abr-2026). Fuera de rango → bandeja.
+    if (g.fecha) {
+      const f = g.fecha.slice(0, 10);
+      if ((input.fechaMax != null && f > input.fechaMax) || (input.fechaMin != null && f < input.fechaMin)) {
+        diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `La fecha del comprobante de ${label(g.concepto)} (${f}) está fuera del rango esperado del viaje — verifícala (afecta periodo fiscal y plazo de facturación).`, gastoId: g.id });
+      }
+    }
+
+    // #3: folio leído con BAJA CONFIANZA en un ticket de combustible (que se
+    // factura en portal) → avisar que lo verifique. NO bloquea, solo advierte.
+    if (g.folio && g.concepto === 'diesel' && g.ocrConfianza != null && g.ocrConfianza < umbral) {
+      diferencias.push({ tipo: 'folio_verificar', concepto: g.concepto, monto: 0, nota: `El folio del ticket de ${label(g.concepto)} (${g.folio}) se leyó con baja confianza — verifícalo antes de facturarlo en el portal de la gasolinera.`, gastoId: g.id });
     }
 
     const pol = politicaPara(g.concepto, input.ruta, input.politica);
@@ -221,7 +240,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     }
   }
 
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'ieps_no_desglosado', 'viatico_excede_fiscal'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'ieps_no_desglosado', 'viatico_excede_fiscal', 'fecha_sospechosa', 'folio_verificar'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
