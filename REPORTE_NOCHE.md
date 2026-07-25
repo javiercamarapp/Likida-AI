@@ -1,6 +1,6 @@
 # Reporte de la noche — trabajo autónomo
 
-_Última actualización: AUDITORÍA 1 cerrada; entrando a FASE 2. Master verde en cada push._
+_Última actualización: AUDITORÍA 1 + FASE 2 cerradas. Ver **`ESTADO_FINAL.md`** para el resumen al despertar. Master verde en cada push._
 
 ## Fases
 
@@ -36,5 +36,10 @@ Extra: `vitest.config.ts` con alias `@`→src (desbloquea testear módulos con i
 
 > ⚠️ **Antes del demo, dos cosas mías que requieren tu OK:** (1) encender los 2 flags de orquestación; (2) verificar los slugs de fallback de OpenRouter. Ambas en `DECISIONES_PENDIENTES.md`.
 
-### ⏳ FASE 2–5 — siguientes
-FASE 2 (NIVEL 2 sin flujo) arranca ahora que AUDITORÍA 1 quedó cerrada.
+### ✅ FASE 2 — CERRADA (una feature, bien hecha)
+Acoté FASE 2 a **una** feature sólida en vez de barrer los 8 ítems a medias (tu regla: "2 fases bien cerradas > 5 a medias"):
+
+- **Dedup de fotos por contenido (SHA-256)** — cierra un hueco de dinero real: la idempotencia por `waMessageId` cubre reintentos de Meta, pero no el reenvío MANUAL de la misma foto. Flag `CUADRA_DEDUP_FOTOS`, migración 0014, +5 tests. `AUDITORÍA 2` en `AUDIT_V3.md` (con 1 limitación conocida documentada, no regresión). Commit `a4bc50c`.
+
+### ⏳ FASE 3–5 — NO alcanzadas (siguiente sesión)
+Preferí dejar 2 fases sólidas y auditadas. FASE 4 son **reglas del motor** → cada una entra a `engine.ts` como regla nueva **con test** (HARD RULE 2), no de madrugada. Detalle y hand-off en `ESTADO_FINAL.md`.

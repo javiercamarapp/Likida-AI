@@ -17,6 +17,7 @@ encender ambos.**
 |-----|---------|------------------|----------|
 | `CUADRA_INTAKE_GRACE_MS` | `0` (off) | `2000` | Gracia inicial en la barrera de ráfaga: si fotos y "listo" llegan en el mismo lote, evita que el "listo" lea el contador antes de que una foto registre su `+1` y cuadre sobre parciales. |
 | `CUADRA_RECUPERAR_CIERRE_PARCIAL` | vacío (off) | `1` | Recupera el "huérfano de cierre": si `guardar_liquidacion` ya persistió pero el ciclo del agente murió después (timeout), trata el cierre como válido, vincula costos y manda el PDF en vez de decir "se trabó". |
+| `CUADRA_DEDUP_FOTOS` | vacío (off) | `1` | Dedup de fotos por contenido (SHA-256): si el operador reenvía a mano la misma foto (otro waMessageId), no se duplica el gasto. Pre-check antes del OCR (ahorra costo). |
 
 **Recomendación:** encender ambos en el entorno del demo. Con OFF, el sistema
 queda **exactamente** como el camino verificado actual (sin regresión), pero

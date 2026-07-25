@@ -51,7 +51,21 @@ cuando están OFF. `engine.ts` **intacto** (HARD RULE 2). 75 tests verdes, typec
 
 ---
 
-## AUDITORÍA 2 (post-FASE 2) — pendiente
+## AUDITORÍA 2 (post-FASE 2)
+
+FASE 2 la acoté a **una** feature bien cerrada (dedup de fotos), priorizando
+profundidad sobre barrer los 8 ítems del plan a medias (indicación explícita de
+Javier). Revisión adversarial de esa feature:
+
+| # | Cat. | Hallazgo | Estado |
+|---|------|----------|--------|
+| R1 | money/agéntico | **Race same-burst**: dos fotos IDÉNTICAS en el mismo lote (Promise.all) hacen pre-check antes de que cualquiera inserte → ambas pasan → duplicado. El índice es no-único, no lo atrapa. | ⚠️ **limitación conocida y documentada**. El caso común (reenvío tras el acuse, segundos/min después) SÍ se atrapa. Con el flag OFF no hay dedup en absoluto, así que encenderlo **nunca regresiona**; solo no cierra el caso raro de adjuntar el mismo archivo dos veces en un envío. Cierre airtight (índice único + manejo de 23505) queda como follow-up. |
+| R2 | orquest. | ¿El `return` de dedup desbalancea el contador de intake? | ✅ no: el `return` está dentro del `try`, el `finally { intakeDelta(-1) }` corre igual. Contador balanceado. |
+| R3 | resiliencia | `gastoExistePorHash` ante error de lectura. | ✅ devuelve `false` → procede (preferimos un raro duplicado a **perder** un gasto). |
+| R4 | seguridad | ¿Lecturas nuevas scopeadas por tenant? | ✅ `gastoExistePorHash` filtra `tenant_id` + `viaje_id` explícitos (service-role). |
+
+**Resumen AUDITORÍA 2:** feature sólida, 1 limitación conocida documentada (no es
+regresión). 80 tests verdes. Migración **0014** aplicada. `engine.ts` intacto.
 ## AUDITORÍA 3 (post-FASE 3) — pendiente
 ## AUDITORÍA 4 (post-FASE 4) — pendiente
 ## SÚPER-AUDITORÍA final — pendiente
