@@ -261,6 +261,16 @@ resuelve (p. ej. tras N intentos → queda `pendiente_definitivo` visible para e
   requieren plantilla aprobada.
 - **Nombre del producto: Likida.ai** — solo en documentos nuevos; **NO renombrar código** aún.
 
+### ✅ DECISIÓN CERRADA — NO van colas (QStash) antes del 6-ago
+El hallazgo de la ráfaga cerró el debate. Se temía que 12 fotos × ~6.8s de OCR =
+~82s serializados excedieran el presupuesto de la función y forzaran una cola.
+**Ese escenario nunca existió:** cada foto es su **propia invocación del webhook**
+con su **propio presupuesto de 60s** (`maxDuration`), y con la barrera de intake las
+fotos corren en **PARALELO**, no serializadas. Medido contra la base real: 8 fotos
++ "listo" → **3.5s en paralelo vs 24s serializados**, "listo" esperó a que el
+contador llegara a 0 y vio los 8 gastos. La cola (QStash) queda como deuda técnica
+post-piloto (at-least-once con estado durable), **no** como bloqueante del demo.
+
 ### Bloque 10 — DEUDA TÉCNICA (documentar, NO construir ahora)
 - **Observabilidad:** `correlation-id` por comprobante que una foto entrante → clasificación
   → OCR → validación SAT → cuadre → línea del PDF.
