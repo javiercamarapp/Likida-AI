@@ -85,15 +85,19 @@ export interface CuadraConfig {
 - Migrar `getPolitica` (repo) y la política hardcodeada de `/api/demo` a leer de `getConfig`.
 - El día 6: se captura la config real de cliente_demo en la sala → se guarda como override del tenant. Cero código nuevo.
 
-## 3.2 Fixes del audit (bloqueantes del demo)
-- **Duplicado que no infle total** (§2 paso 3).
-- **Fallback real de modelos** en `generateStructured`/`generateWithTools` (hoy solo `generateResponse`, que está muerto) — para que un hipo de OpenRouter no tumbe el OCR/agente en vivo. Plan B: llaves directas Google/Anthropic.
-- **Reads del dashboard vía `supabaseServer` (RLS)**, no service-role.
+## 3.2 Fixes del audit (bloqueantes del demo) — ✅ HECHO (ver `AUDIT_V2.md`)
+Auditoría de 5 expertos (frontend, agentificación, seguridad, backend, arquitectura)
+consolidada en `AUDIT_V2.md`. Bloque "antes del 6-ago" resuelto en 4 oleadas:
+- ✅ **Duplicado que no infla total** + `no_encontrado` no deducible + `monto≤0` + RFC genérico no falsea receptor + EFOS whitelist (oleada 1).
+- ✅ **Fallback cross-provider REAL** en `generateStructured` y `generateWithTools` (antes solo en `generateResponse`, muerto). El fallback nunca re-ejecuta mutaciones (oleada 2).
+- ✅ **Concurrencia:** `unique(viaje_id)` + upsert idempotente + mutex por viaje + at-least-once (release del claim si crashea) — migración `0005` (oleada 2). **Requiere aplicar `0005_concurrencia.sql` antes de probar el cierre por WhatsApp.**
+- ✅ **Prompt sin tools fantasma**, `ROLE_PARAMS` aplicado (cuadre a temp 0), `maxDuration`, middleware fail-closed, pulido de UI del demo (oleadas 1/3/4).
+- ⏳ **Reads del dashboard vía RLS** (no service-role) → movido a FASE 2 / post-demo (AL-5).
 
 ---
 
 ## 4. LO QUE SÍ SUMA AL DEMO (además de FASE 1)
-- **Conciliación de diésel** (`cuadre/diesel.ts`): `litros_esp = km/rendimiento` (config), alerta >15%, reglas carga>tanque / sobreprecio vs zona (precios CRE `datos.gob.mx`) / suma>esperado. Determinístico.
+- **Conciliación de diésel** (`cuadre/diesel.ts`): `litros_esp = km/rendimiento` (config), alerta >15%, reglas carga>tanque / sobreprecio vs zona (precios **CNE** —ex-CRE, ver §8 bloque 6— desde snapshot cacheado, nunca red) / suma>esperado. Determinístico.
 - **Casetas esperadas** (tabla cacheada, parametrizable por ruta) → detección "caseta esperada sin comprobante".
 - **Reporte al director por WhatsApp** (6.6) — quick win.
 
@@ -111,4 +115,140 @@ Autofacturación de gasolineras (RPA/CAPTCHA/sin API → recomendar tarjeta de f
 - Verificar antes de producción (§CAVEATS de DOCUMENTO_MAESTRO): rate card WhatsApp, modelo Gemini vigente, endpoint SAT, catálogos Carta Porte, layout Contpaqi.
 
 ## 7. RESULTADO ESPERADO EL 6
-WhatsApp (operador manda 12 fotos) → OCR silencioso → **validación fiscal (RFC + UUID + SAT con fallback)** → operador escribe "listo" → cuadre determinístico (política + **diésel** + **casetas** + diferencias fiscales) → **un** mensaje consolidado + PDF + CSV/póliza. Todo parametrizable, demo-safe, sin datos de campo previos.
+WhatsApp (operador manda 12 fotos) → **clasificación de entrada** → OCR silencioso → **validación fiscal (RFC + UUID + SAT + complemento hidrocarburos, con fallback)** → cierre por **intención/timeout/manual** → cuadre determinístico (política + **diésel** + **casetas** + diferencias fiscales) → **un** mensaje consolidado + PDF + CSV/póliza. Todo parametrizable, demo-safe, sin datos de campo previos.
+
+---
+
+## 8. FASE 2 — PLAN ACTUALIZADO (post-auditoría, orden nuevo)
+
+> Actualización del founder (24-jul-2026). El orden cambió: apareció un hueco de
+> **cumplimiento fiscal** más grave que los anteriores. Producto se llamará
+> **Likida.ai** (solo en docs nuevos; NO renombrar código todavía).
+>
+> **Reglas vigentes (recordatorio):** nada hardcodeado a un cliente (todo por
+> `getConfig(tenantId)`); el LLM **clasifica intención y extrae datos, NUNCA cuadra,
+> decide deducibilidad ni aprueba**; todo I/O de red con timeout + fallback, nunca
+> tumbar la liquidación; typecheck 0 + tests verdes antes de cada push; commit
+> atómico por incremento.
+>
+> **Orden de arranque:** 1 (verificando fuente oficial primero) → 2 → 3 → 4 → 5 …
+
+### Bloque 1 — COMPLEMENTO DE HIDROCARBUROS (bloqueante, fiscal) ⏳ VERIFICANDO FUENTE
+Un CFDI de combustible sin el complemento requerido **no es deducible para ISR ni
+acreditable para IVA**. Hoy el motor lo aceptaría → bug de cumplimiento en el corazón
+del producto.
+
+**Regla determinística a implementar** (en `cuadre/engine.ts`, nunca LLM):
+- Si la clave de producto SAT del concepto es de combustible (**⏳ confirmar claves:
+  15101505 diésel / 15101514 magna / 15101515 premium**), unidad **LTR**, tipo de
+  comprobante **Ingreso (I) o Egreso (E)**, y el CFDI **NO trae el complemento de
+  hidrocarburos** → diferencia dura `tipo: 'complemento_hidrocarburos'`, **NO DEDUCIBLE**.
+- Parametrizable: la lista de claves de combustible y la fecha de vigencia viven en config.
+
+**⚠️ GATE: verificar contra fuente oficial ANTES de codificar** (research en curso):
+nombre exacto del complemento, fecha real de entrada en vigor (¿24-abr-2026?), claves
+de producto exactas, unidad, y — lo más importante — **a quién obliga** (¿toda gasolinera
+en cada venta, o solo contribuyentes con permiso CNE en la cadena de hidrocarburos?).
+Reportar hallazgos con etiqueta [confirmado en fuente primaria] antes de hardcodear.
+Requiere extraer el QR/XML el `c_ClaveProdServ`, `ClaveUnidad`, `TipoDeComprobante` y la
+presencia del nodo de complemento — hoy `cfdi.ts` solo saca re/rr/tt/id del QR, así que
+el complemento exige el **XML** del CFDI, no solo el QR (definir de dónde se obtiene: el
+QR no lleva el complemento).
+
+### Bloque 2 — CIERRE DE CONVERSACIÓN ROBUSTO (bloqueante)
+Hoy todo depende de que el operador escriba exactamente "listo". **Tres vías, cualquiera
+dispara el cuadre:**
+- **(a) Por intención, no por string.** Clasificar el texto entrante como
+  `CERRAR | SEGUIR | PREGUNTA`. Reconocer "ya", "terminé", "ya está jefe", "eso es todo",
+  "ya quedó", "acabé". **Aquí SÍ puede usar LLM** (clasificar intención ≠ decidir dinero);
+  barato, con **fallback a keywords** si el LLM no responde.
+- **(b) Por timeout.** N minutos sin comprobantes nuevos (`cierreTimeoutMin`, default **45**,
+  configurable) → cierra y notifica.
+- **(c) Manual.** Botón en el dashboard para que el liquidador fuerce el cierre.
+
+**Casos límite obligatorios (con test):** comprobante que llega justo al dispararse el
+timeout; operador que corrige un dato tras el acuse; foto que llega mientras se genera el
+PDF; mensajes fuera de orden. (El mutex por viaje de la migración 0005 ya serializa parte
+de esto.)
+
+**Feature flag:** el refactor del acuse consolidado (`processInbound`) va **detrás de un
+flag** que permita volver al modo mensaje-por-mensaje si algo rompe en vivo (ver bloque 8).
+
+### Bloque 3 — RESOLUCIÓN DE `viaje_id` (bloqueante)
+`addGasto` asume que el viaje es obvio; no lo es. **Regla determinística (test por caso):**
+- **Cero viajes abiertos** → crear viaje o pedir número al operador.
+- **Exactamente uno** → asignar a ese.
+- **Varios abiertos** → preguntar al operador con opciones.
+- **Comprobante tardío a un viaje cerrado → DECISIÓN DE PRODUCTO VALIDADA (founder):**
+  **ventana de reapertura configurable.** Si el cierre fue hace **menos de `reaperturaMin`
+  (default 60, configurable) Y la liquidación NO se ha exportado al ERP ni aprobado** →
+  **reabrir**, re-cuadrar y re-emitir el PDF (con nota de corrección / versión). Pasada la
+  ventana o ya exportada → registrar como **`extemporáneo`** en la bandeja del dashboard
+  para el liquidador; **NO tocar la liquidación ya emitida.**
+
+### Bloque 4 — CLASIFICADOR DE ENTRADA ANTES DEL OCR
+En campo llegan audios, stickers, selfies, capturas. Hoy el OCR intentaría sacar litros de
+la foto de un perro. **Clasificar antes de procesar:** `COMPROBANTE | NO_COMPROBANTE | ILEGIBLE`.
+- `NO_COMPROBANTE` → **ignorar en silencio**, sin gastar OCR ni contar costo.
+- `ILEGIBLE` → pedir reenvío **una sola vez**, sin spam (marca en `wa_conversacion`).
+
+### Bloque 5 — DEDUP POR HASH DE IMAGEN (nuevo)
+El dedup por UUID no cubre los tickets **sin factura** (no traen UUID). Si el operador
+reenvía la misma foto por mala señal → gasto duplicado. Agregar:
+- **Hash** (perceptual o criptográfico) de la imagen entrante.
+- **Dedup secundario** por tupla `(monto, fecha, emisor/estación)`.
+- Igual que con UUID: el duplicado **NO suma** a `totalComprobado`.
+
+### Bloque 6 — PRECIOS DE COMBUSTIBLE CACHEADOS (corrige violación de §0.4)
+**OJO: la CRE ya no existe. La sustituyó la Comisión Nacional de Energía (CNE) en marzo
+2025.** Usar la fuente vigente de la **CNE**, no la CRE.
+- **Snapshot persistido** (DB o archivo en repo) con **fecha de corte**.
+- Un **job separado** lo actualiza; el motor **SOLO lee del snapshot** — **nunca** hace red
+  para calcular una diferencia.
+- Mostrar la **fecha de corte del snapshot en el PDF** de liquidación.
+- **Mismo criterio para el catálogo de casetas esperadas por ruta.**
+
+### Bloque 7 — CICLO DE VIDA DEL ESTADO `PENDIENTE` (nuevo)
+El fallback que marca `pendiente de validación SAT` está bien, pero hoy el gasto se queda
+pendiente **para siempre**. Agregar **job de reintento con backoff** que reconsulte el SAT
+y actualice el estado. Definir: cuántos reintentos, ventana de backoff, y qué pasa si nunca
+resuelve (p. ej. tras N intentos → queda `pendiente_definitivo` visible para el liquidador).
+
+### Bloque 8 — CALENDARIO, FEATURE FLAG Y ENSAYO
+- **Refactor del acuse consolidado va TEMPRANO**, no al final: toca el corazón del flujo.
+  Detrás de **feature flag** (`CUADRA_ACUSE_CONSOLIDADO`) que permita volver a
+  mensaje-por-mensaje si rompe en vivo.
+- **El último día NO se programa: se ENSAYA** el demo completo de punta a punta, varias
+  veces. **Congelamiento de código 24 h antes.**
+- El ensayo **DEBE incluir red degradada:** tumbar a propósito el **SAT, WhatsApp y el LLM**,
+  uno por uno y en combinación. *La regla demo-safe solo se prueba forzando fallos: si nunca
+  forzaste el fallback, no sabes si funciona.*
+
+**Calendario (borrador, ajustar):**
+| Día | Foco |
+|---|---|
+| D-N … | Bloque 1 (tras verificación) → 2 → 3 (acuse consolidado detrás de flag, temprano) |
+| … | Bloques 4, 5, 6, 7 |
+| D-2 | **Congelamiento de código** |
+| D-1 | **Ensayo E2E ×N con red degradada** (SAT/WhatsApp/LLM caídos, solos y combinados) |
+| D-0 | Demo (no se programa) |
+
+### Bloque 9 — MENORES
+- **`casetasEsperadas`** se menciona en §4 pero **no está en la interfaz `CuadraConfig`** de §3
+  → agregarlo (catálogo por ruta, parametrizable).
+- **Plantillas de WhatsApp aprobadas por Meta:** para el demo por simulador no estorban, pero
+  el trámite tarda. **Documentar** cuáles harían falta el día que el sistema **inicie** la
+  conversación (kit del viaje, reporte al director) — son mensajes *business-initiated* que
+  requieren plantilla aprobada.
+- **Nombre del producto: Likida.ai** — solo en documentos nuevos; **NO renombrar código** aún.
+
+### Bloque 10 — DEUDA TÉCNICA (documentar, NO construir ahora)
+- **Observabilidad:** `correlation-id` por comprobante que una foto entrante → clasificación
+  → OCR → validación SAT → cuadre → línea del PDF.
+- **Concurrencia (más allá del mutex 0005):** bloqueo optimista si dos comprobantes llegan
+  casi simultáneos al mismo viaje, o si llega uno mientras el viaje se cierra.
+- **Bóveda de secretos:** el día que existan credenciales (e.firma, contraseñas de portales)
+  **NUNCA** van en el config del tenant. Requieren cifrado con **claves separadas por tenant**.
+  El config es solo para parámetros de negocio.
+- **AL-5:** reads del dashboard/analytics vía RLS (hoy service-role con `.eq('tenant_id')` a mano).
+- **CR-2 completo:** cola QStash para el procesamiento (at-least-once con estado, no solo release del claim).
