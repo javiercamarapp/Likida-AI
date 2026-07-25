@@ -9,7 +9,9 @@ import type OpenAI from 'openai';
 import '@/lib/cuadra/tools'; // side-effect: registra las tools en el registry
 import { runAgent } from '@/lib/agents/run';
 import { guardiaCifras } from '@/lib/cuadra/cuadre/guardia';
-import type { ToolCallRecord } from '@/lib/llm/openrouter';
+import { cuadrarDesdeDB } from '@/lib/cuadra/cuadre/desde_db';
+import { resumenCuadre } from '@/lib/cuadra/cuadre/resumen';
+import { PartialExecutionError, type ToolCallRecord } from '@/lib/llm/openrouter';
 import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import { addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw } from '@/lib/cuadra/repo';
@@ -184,8 +186,37 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       }
       logger.info('agent.run', { tenant: op.tenantId, viaje: viajeId, tools: res.toolCalls.map((t) => t.toolName), costUsd: res.costUsd });
     } catch (e) {
-      logger.error('agent.fail', { err: e instanceof Error ? e.message : String(e) });
-      reply = 'Perdón, se me trabó el sistema tantito. ¿Me reenvías tu último mensaje?';
+      // AUDIT_V3 orquestación CRÍTICO (huérfano de cierre parcial): si el agente
+      // YA guardó la liquidación (guardar_liquidacion OK) pero una ronda posterior
+      // o el timeout tiró el ciclo, PartialExecutionError trae esas tools en
+      // partialToolCalls. Sin recuperación: liquidacion persistida en DB pero el
+      // operador recibe "se trabó" y NUNCA su PDF → huérfano. Se recupera tratando
+      // el cierre como válido, vinculando costos y armando el resumen REAL del motor.
+      // FLAG (HARD RULE 3): default off = comportamiento actual EXACTO (mensaje de
+      // error, sin cierre). Se recomienda ON para el demo (ver REPORTE_NOCHE).
+      const recuperar = process.env.CUADRA_RECUPERAR_CIERRE_PARCIAL === '1';
+      const parcial = e instanceof PartialExecutionError ? e.partialToolCalls : null;
+      const cierreParcial =
+        recuperar && parcial?.find((t) => t.toolName === 'guardar_liquidacion' && !t.error);
+      if (cierreParcial) {
+        agentTools = parcial!;
+        closed = true;
+        const liqId = (cierreParcial.result as { liquidacion_id?: string } | undefined)?.liquidacion_id;
+        if (liqId) {
+          try { await vincularCostosALiquidacion(op.tenantId, viajeId, liqId); } catch { /* best-effort */ }
+        }
+        // Resumen determinístico del motor (nunca cifras del modelo). Fail-closed:
+        // si no se puede recalcular, se avisa el cierre sin números (el PDF va abajo).
+        try {
+          reply = resumenCuadre(await cuadrarDesdeDB(op.tenantId, viajeId));
+        } catch {
+          reply = 'Ya cerré tu liquidación ✅. Te mando el PDF.';
+        }
+        logger.warn('agent.cierre_parcial_recuperado', { viaje: viajeId, liqId });
+      } else {
+        logger.error('agent.fail', { err: e instanceof Error ? e.message : String(e) });
+        reply = 'Perdón, se me trabó el sistema tantito. ¿Me reenvías tu último mensaje?';
+      }
     }
 
     // GUARDIA DETERMINÍSTICA (código, no prompt): el LLM NUNCA reporta cifras que

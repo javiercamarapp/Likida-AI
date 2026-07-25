@@ -9,10 +9,12 @@ const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
 const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
 
 export const runtime = 'nodejs';
-// ME-13: el procesamiento (agente 40s + OCR + SAT + PDF + envíos) corre en
-// after(); sin presupuesto explícito puede morir a media liquidación. 60s cubre
-// el peor caso con margen. Ajustar al plan de Vercel (Fluid Compute permite más).
-export const maxDuration = 60;
+// ME-13 / AUDIT_V3 orquestación CRÍTICO: el procesamiento corre en after() y su
+// PRESUPUESTO real en el peor caso es acquireViajeLock(≤12s) + esperarIntake(≤60s)
+// + cuadre del agente(~40s) ≈ 112s. Con maxDuration=60 la función moría a media
+// liquidación (guardar_liquidacion podía quedar huérfano). 120s cubre el peor caso
+// con margen (Fluid Compute/planes actuales permiten hasta 300s).
+export const maxDuration = 120;
 
 // GET — verificación del webhook (Meta lo llama una vez al configurar).
 export async function GET(req: NextRequest) {

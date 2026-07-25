@@ -155,7 +155,18 @@ export async function intakeDelta(viajeId: string, delta: number): Promise<numbe
  */
 export async function esperarIntake(viajeId: string, timeoutMs?: number): Promise<boolean> {
   const tope = timeoutMs ?? (Number(process.env.CUADRA_INTAKE_ESPERA_MS) || 60_000);
+  // AUDIT_V3 orquestación CRÍTICO (carrera de barrera): cuando fotos y "listo"
+  // llegan en el MISMO lote, corren en Promise.all; el "listo" puede leer el
+  // contador ANTES de que una foto registre su +1 → ve 0 → cuadra sobre parciales.
+  // GRACIA inicial: si el contador arranca en 0, se espera una ventana corta para
+  // dar tiempo a que las fotos de la ráfaga incrementen antes de confiar en el 0.
+  // FLAG (HARD RULE 3): default 0 = comportamiento actual EXACTO. Se recomienda
+  // ~2000ms para el demo (ver DECISIONES_PENDIENTES / REPORTE_NOCHE).
+  const grace = Number(process.env.CUADRA_INTAKE_GRACE_MS) || 0;
   const start = Date.now();
+  if (grace > 0 && (await intakeDelta(viajeId, 0)) <= 0) {
+    await sleep(Math.min(grace, tope));
+  }
   for (;;) {
     if (await intakeDelta(viajeId, 0) <= 0) return true;
     if (Date.now() - start >= tope) return false;
