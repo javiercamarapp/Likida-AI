@@ -14,4 +14,12 @@ describe('tieneCifrasDeDinero', () => {
     expect(tieneCifrasDeDinero('folio 7318052')).toBe(false);
     expect(tieneCifrasDeDinero('¿ya terminaste de mandar?')).toBe(false);
   });
+
+  // No-regresión: mensajes legítimos que NO deben forzar el cuadre (founder).
+  it('NO se dispara con mensajes legítimos sin monto', () => {
+    expect(tieneCifrasDeDinero('Recibí tus 8 comprobantes')).toBe(false);
+    expect(tieneCifrasDeDinero('Llevas 3 tickets de caseta')).toBe(false);
+    expect(tieneCifrasDeDinero('Tu viaje V-2841 sigue abierto')).toBe(false);
+    expect(tieneCifrasDeDinero('Mándalos todos y escribe listo')).toBe(false);
+  });
 });

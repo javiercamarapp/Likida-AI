@@ -243,14 +243,28 @@ resuelve (p. ej. tras N intentos → queda `pendiente_definitivo` visible para e
   uno por uno y en combinación. *La regla demo-safe solo se prueba forzando fallos: si nunca
   forzaste el fallback, no sabes si funciona.*
 
-**Calendario (borrador, ajustar):**
-| Día | Foco |
-|---|---|
-| D-N … | Bloque 1 (tras verificación) → 2 → 3 (acuse consolidado detrás de flag, temprano) |
-| … | Bloques 4, 5, 6, 7 |
-| D-2 | **Congelamiento de código** |
-| D-1 | **Ensayo E2E ×N con red degradada** (SAT/WhatsApp/LLM caídos, solos y combinados) |
-| D-0 | Demo (no se programa) |
+**CALENDARIO CON FECHAS REALES (hoy 25-jul-2026 · demo 6-ago-2026 · 12 días).**
+Demo es **WhatsApp REAL** → las credenciales de Meta son dependencia de camino crítico.
+
+| Fecha | Fase | Foco |
+|---|---|---|
+| **25–27 jul** | Build | Cerrar NIVEL 0: **0.3 rate limiting**, 0.6 SAT (al llegar UUID). **Dependencia dura: dar de alta el número de Meta / WhatsApp Cloud API** (token, webhook, plantillas). Sin esto no hay demo WhatsApp. |
+| **28–30 jul** | Integración | Cablear el flujo E2E por WhatsApp real (número de prueba). Primeros runs completos. Verificar que el agente **cierra confiable** (llama las tools) en el canal real. Plantillas Meta aprobadas si se inicia conversación. |
+| **31 jul–2 ago** | Hardening + dry-runs | Corridas E2E completas por WhatsApp; arreglar lo que truene. Dashboard read-only pulido. Contador/ráfaga con fotos reales entrando. |
+| **3–4 ago** | Ensayo (subir el ritmo) | E2E completo ×varias. **Empezar los drills de red degradada.** Congelar features nuevas (solo fixes). |
+| **5 ago (D-1)** | 🧊 **CONGELAMIENTO DE CÓDIGO** (24 h antes) + **ENSAYO FORMAL** | Ver checklist ↓. Después de este día NO se programa. |
+| **6 ago (D-0)** | 🎤 **DEMO** | No se programa. Solo correr. **PASO 1 del día: migraciones aplicadas + base despierta.** |
+
+**Checklist del ensayo (5-ago, en orden):**
+1. **PASO 1 — migraciones aplicadas y base despierta.** Si el proyecto Supabase se pausó por inactividad, **despertarlo** (una consulta lo reactiva). Confirmar las 12 migraciones + seed cargado + `envHealth` en verde.
+2. **Flujo completo por WhatsApp real ×3 seguidas sin fallo:** operador manda fotos (ráfaga) → "listo" → cuadre → PDF entregado → dashboard lo muestra.
+3. **Prueba con la red del lugar / WiFi** (no solo la de la oficina).
+4. **Drills de red degradada — forzar los fallos, uno por uno y combinados:**
+   - **SAT caído/timeout** → los CFDI deben quedar `pendiente` y la liquidación CONTINÚA (nunca tumba). Se avisa "se revisa después".
+   - **Meta/WhatsApp caído** → el envío saliente falla; el claim se libera (at-least-once) y Meta reintenta; el operador reenvía. Verificar que no se pierde la liquidación (ya está en la DB).
+   - **LLM/OpenRouter caído** → el fallback cross-provider entra; si todo cae, el agente responde "se me trabó, reenvía" sin inventar nada (la guardia de cifras protege el número).
+   - **Combinados** (SAT + LLM, Meta + SAT): la regla demo-safe SOLO se valida forzando fallos. *Si no forzaste el fallback, no sabes si funciona.*
+5. **Plan B en la sala:** si Meta se cae en vivo y no vuelve, tener el **simulador `/demo`** listo como respaldo visual (motor determinístico, sin red).
 
 ### Bloque 9 — MENORES
 - **`casetasEsperadas`** se menciona en §4 pero **no está en la interfaz `CuadraConfig`** de §3
