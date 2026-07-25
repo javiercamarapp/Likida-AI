@@ -201,6 +201,11 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   for (const g of input.gastos) {
     if (duplicados.has(g.id)) continue;
     if (diferencias.some((d) => d.gastoId === g.id && NO_DEDUCIBLE.includes(d.tipo))) continue;
+    // El acreditamiento exige un CFDI VERIFICADO (XML): un ticket de gasolinera
+    // sin factura NO es deducible ni acreditable hasta timbrarse. Además, así el
+    // IVA/IEPS son SIEMPRE los importes LEÍDOS del XML (nunca recomputados con una
+    // tasa asumida: 16% u 8% fronterizo salen tal cual del comprobante).
+    if (!g.xmlVerificado) continue;
     if ((g.ivaTraslado ?? 0) > 0) ivaAcreditable += g.ivaTraslado as number;
     // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas.
     if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0) peajeAcreditable += (g.subTotal as number) * peajeFactor;

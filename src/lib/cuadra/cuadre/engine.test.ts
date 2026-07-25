@@ -266,10 +266,33 @@ describe('cuadrarViaje', () => {
   it('1.6: peaje acreditable = 50% del SubTotal de casetas', () => {
     const r = cuadrarViaje({
       viajeId: 'a3', anticipo: 1160, politica, estimulos: EST,
-      gastos: [g({ concepto: 'caseta', monto: 1160, cfdiUuid: 'u', formaPago: '04', subTotal: 1000, ivaTraslado: 160 })],
+      gastos: [g({ concepto: 'caseta', monto: 1160, cfdiUuid: 'u', xmlVerificado: true, formaPago: '04', subTotal: 1000, ivaTraslado: 160 })],
     });
     expect(r.peajeAcreditable).toBe(500); // 1000 * 0.5
     expect(r.ivaAcreditable).toBe(160);
+  });
+
+  // Ticket 5 (Cd. Juárez, franja fronteriza): IVA al 8%. El acreditable es el
+  // importe LEÍDO del comprobante, NUNCA recomputado con 16%.
+  it('IVA 8% fronterizo: se acredita el importe leído, no se recomputa al 16%', () => {
+    const r = cuadrarViaje({
+      viajeId: 'a7', anticipo: 200, politica, hidrocarburos: HC, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 200, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true,
+        claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true,
+        formaPago: '03', subTotal: 185.65, ivaTraslado: 14.35, iepsTraslado: 120.00 })],
+    });
+    expect(r.ivaAcreditable).toBe(14.35);  // leído (8%), NO 29.70 (16%)
+    expect(r.iepsAcreditable).toBe(120.00);
+  });
+
+  // Un ticket sin factura (sin xmlVerificado) NO acredita, aunque traiga montos.
+  it('ticket sin CFDI verificado no acredita (necesita timbrarse)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'a8', anticipo: 400, politica, hidrocarburos: HC, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 400, folio: 'T1', subTotal: 345, ivaTraslado: 55, formaPago: '04' })],
+    });
+    expect(r.ivaAcreditable).toBe(0);
+    expect(r.iepsAcreditable).toBe(0);
   });
 
   it('7: diésel con XML pero SIN IEPS desglosado → ieps_no_desglosado', () => {

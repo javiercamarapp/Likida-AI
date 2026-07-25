@@ -97,6 +97,8 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     sub_total: g.subTotal ?? null,
     ieps_traslado: g.iepsTraslado ?? null,
     iva_traslado: g.ivaTraslado ?? null,
+    folio_norm: g.folioNorm ?? null,
+    ocr_extra: g.ocrExtra ?? null,
   });
   if (error) throw new Error(`addGasto: ${error.message}`);
 }
@@ -125,7 +127,7 @@ export async function updateGastoCfdiXml(
 export async function getGastos(viajeId: string, tenantId: string): Promise<Gasto[]> {
   const { data, error } = await supabaseAdmin()
     .from('gasto')
-    .select('id, concepto, monto, fecha, folio, rfc_emisor, rfc_receptor, cfdi_uuid, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, efos_revisar, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, ieps_traslado, iva_traslado')
+    .select('id, concepto, monto, fecha, folio, folio_norm, ocr_extra, rfc_emisor, rfc_receptor, cfdi_uuid, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, efos_revisar, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, ieps_traslado, iva_traslado')
     .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId);
   if (error) throw new Error(`getGastos: ${error.message}`);
@@ -135,6 +137,8 @@ export async function getGastos(viajeId: string, tenantId: string): Promise<Gast
     monto: Number(r.monto),
     fecha: (r.fecha as string) || undefined,
     folio: (r.folio as string) || undefined,
+    folioNorm: (r.folio_norm as string) || undefined,
+    ocrExtra: (r.ocr_extra as Record<string, unknown>) || undefined,
     rfcEmisor: (r.rfc_emisor as string) || undefined,
     rfcReceptor: (r.rfc_receptor as string) || undefined,
     cfdiUuid: (r.cfdi_uuid as string) || undefined,

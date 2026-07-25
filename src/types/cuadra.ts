@@ -12,7 +12,9 @@ export interface Gasto {
   concepto: ConceptoGasto;
   monto: number;
   fecha?: string;          // ISO
-  folio?: string;
+  folio?: string;          // crudo, tal cual del ticket (con ceros a la izquierda)
+  folioNorm?: string;      // normalizado sin padding (lo que piden los portales)
+  ocrExtra?: Record<string, unknown>; // datos ricos del ticket (litros, webId, estación, iva leído…)
   rfcEmisor?: string;
   rfcReceptor?: string;    // debe ser el RFC de la empresa (no el chofer)
   cfdiUuid?: string;
