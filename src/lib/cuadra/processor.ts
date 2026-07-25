@@ -120,6 +120,10 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           tipoComprobante: xml.tipoComprobante,
           complementoHidrocarburos: xml.complementoHidrocarburos,
           cfdiEsquemaAlterno: xml.esquemaAlterno,
+          formaPago: xml.formaPago,
+          subTotal: xml.subTotal,
+          iepsTraslado: xml.iepsTraslado,
+          ivaTraslado: xml.ivaTraslado,
           xmlVerificado: true,
         });
       }

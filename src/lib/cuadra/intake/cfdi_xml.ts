@@ -23,9 +23,13 @@ export interface CfdiXmlData {
   version?: string;
   tipoComprobante?: string; // I | E | P | N | T
   fecha?: string;           // ISO del atributo Fecha del Comprobante
+  formaPago?: string;       // c_FormaPago (01=efectivo, 03=transferencia, 04/28=tarjeta…)
+  subTotal?: number;        // @SubTotal (sin impuestos) — base del estímulo de peaje
   rfcEmisor?: string;
   rfcReceptor?: string;
   total?: number;
+  iepsTraslado: number;     // Σ Traslado[Impuesto=003] Importe → IEPS acreditable
+  ivaTraslado: number;      // Σ Traslado[Impuesto=002] Importe → IVA acreditable
   uuid?: string;
   conceptos: CfdiConceptoXml[];
   // Concepto REPRESENTATIVO (el de combustible si existe, si no el primero):
@@ -45,7 +49,7 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   removeNSPrefix: true, // cfdi:Comprobante → Comprobante, etc.
-  isArray: (name) => name === 'Concepto',
+  isArray: (name) => name === 'Concepto' || name === 'Traslado',
   parseAttributeValue: false, // conservar strings (claves con ceros a la izq.)
 });
 
@@ -96,16 +100,37 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
     // Representativo: el primer concepto de combustible; si no hay, el primero.
     const rep = conceptos.find((c) => c.claveProdServ?.startsWith(PREFIJO_COMBUSTIBLE)) ?? conceptos[0];
 
-    const totalRaw = comp['@_Total'] as string | undefined;
-    const total = totalRaw != null ? parseFloat(totalRaw) : undefined;
+    const num = (v: unknown): number | undefined => {
+      if (v == null) return undefined;
+      const n = parseFloat(v as string);
+      return Number.isNaN(n) ? undefined : n;
+    };
+
+    // Impuestos trasladados a nivel comprobante: 002=IVA, 003=IEPS.
+    const impuestos = (comp.Impuestos ?? {}) as Record<string, unknown>;
+    const traslados = toArr(
+      (impuestos.Traslados as Record<string, unknown> | undefined)?.Traslado as Record<string, string>[] | undefined,
+    );
+    let iepsTraslado = 0;
+    let ivaTraslado = 0;
+    for (const t of traslados) {
+      const imp = t['@_Impuesto'];
+      const importe = num(t['@_Importe']) ?? 0;
+      if (imp === '003') iepsTraslado += importe;
+      else if (imp === '002') ivaTraslado += importe;
+    }
 
     return {
       version: (comp['@_Version'] as string) || undefined,
       tipoComprobante: (comp['@_TipoDeComprobante'] as string) || undefined,
       fecha: (comp['@_Fecha'] as string) || undefined,
+      formaPago: (comp['@_FormaPago'] as string) || undefined,
+      subTotal: num(comp['@_SubTotal']),
       rfcEmisor: (emisor['@_Rfc'] as string)?.toUpperCase() || undefined,
       rfcReceptor: (receptor['@_Rfc'] as string)?.toUpperCase() || undefined,
-      total: total != null && !Number.isNaN(total) ? total : undefined,
+      total: num(comp['@_Total']),
+      iepsTraslado,
+      ivaTraslado,
       uuid: uuidRaw ? uuidRaw.toLowerCase() : undefined,
       conceptos,
       claveProdServ: rep?.claveProdServ,

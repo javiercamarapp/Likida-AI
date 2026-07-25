@@ -80,6 +80,10 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     complemento_hidrocarburos: g.complementoHidrocarburos ?? null,
     cfdi_esquema_alterno: g.cfdiEsquemaAlterno ?? null,
     xml_verificado: g.xmlVerificado ?? null,
+    forma_pago: g.formaPago ?? null,
+    sub_total: g.subTotal ?? null,
+    ieps_traslado: g.iepsTraslado ?? null,
+    iva_traslado: g.ivaTraslado ?? null,
   });
   if (error) throw new Error(`addGasto: ${error.message}`);
 }
@@ -88,7 +92,7 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
 export async function updateGastoCfdiXml(
   tenantId: string,
   gastoId: string,
-  x: { claveProdServ?: string; claveUnidad?: string; tipoComprobante?: string; complementoHidrocarburos?: boolean; esquemaAlterno?: boolean },
+  x: { claveProdServ?: string; claveUnidad?: string; tipoComprobante?: string; complementoHidrocarburos?: boolean; esquemaAlterno?: boolean; formaPago?: string; subTotal?: number; iepsTraslado?: number; ivaTraslado?: number },
 ): Promise<void> {
   const { error } = await supabaseAdmin().from('gasto').update({
     clave_prod_serv: x.claveProdServ ?? null,
@@ -96,6 +100,10 @@ export async function updateGastoCfdiXml(
     tipo_comprobante: x.tipoComprobante ?? null,
     complemento_hidrocarburos: x.complementoHidrocarburos ?? null,
     cfdi_esquema_alterno: x.esquemaAlterno ?? null,
+    forma_pago: x.formaPago ?? null,
+    sub_total: x.subTotal ?? null,
+    ieps_traslado: x.iepsTraslado ?? null,
+    iva_traslado: x.ivaTraslado ?? null,
     xml_verificado: true,
   }).eq('id', gastoId).eq('tenant_id', tenantId);
   if (error) throw new Error(`updateGastoCfdiXml: ${error.message}`);
@@ -104,7 +112,7 @@ export async function updateGastoCfdiXml(
 export async function getGastos(viajeId: string, tenantId: string): Promise<Gasto[]> {
   const { data, error } = await supabaseAdmin()
     .from('gasto')
-    .select('id, concepto, monto, fecha, folio, rfc_emisor, rfc_receptor, cfdi_uuid, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado')
+    .select('id, concepto, monto, fecha, folio, rfc_emisor, rfc_receptor, cfdi_uuid, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, ieps_traslado, iva_traslado')
     .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId);
   if (error) throw new Error(`getGastos: ${error.message}`);
@@ -128,6 +136,10 @@ export async function getGastos(viajeId: string, tenantId: string): Promise<Gast
     complementoHidrocarburos: r.complemento_hidrocarburos != null ? Boolean(r.complemento_hidrocarburos) : undefined,
     cfdiEsquemaAlterno: r.cfdi_esquema_alterno != null ? Boolean(r.cfdi_esquema_alterno) : undefined,
     xmlVerificado: r.xml_verificado != null ? Boolean(r.xml_verificado) : undefined,
+    formaPago: (r.forma_pago as string) || undefined,
+    subTotal: r.sub_total != null ? Number(r.sub_total) : undefined,
+    iepsTraslado: r.ieps_traslado != null ? Number(r.ieps_traslado) : undefined,
+    ivaTraslado: r.iva_traslado != null ? Number(r.iva_traslado) : undefined,
   }));
 }
 
@@ -151,6 +163,9 @@ export async function saveLiquidacion(
         diferencia: liq.diferencia,
         estatus: liq.estatus,
         diferencias: liq.diferencias,
+        ieps_acreditable: liq.iepsAcreditable,
+        iva_acreditable: liq.ivaAcreditable,
+        peaje_acreditable: liq.peajeAcreditable,
         pdf_url: pdfUrl ?? null,
       },
       { onConflict: 'viaje_id' },

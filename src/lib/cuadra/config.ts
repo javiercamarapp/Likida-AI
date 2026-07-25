@@ -35,6 +35,12 @@ export interface CuadraConfig {
     unidad: string;         // c_ClaveUnidad esperada (LTR) — consistencia, NO requisito legal
     vigenteDesde: string;   // ISO: obligación aplica a CFDI con Fecha >= este día (24-abr-2026)
   };
+  // Estímulos fiscales y topes de deducibilidad (LIF 2026 Art. 20 / LISR).
+  estimulos: {
+    peajeFactor: number;              // 0.5 = 50% del gasto de peaje (LIF 2026 Art. 20-A)
+    viaticosTopeFiscalDiarioMxn: number; // $750/día alimentación nacional (LISR 28-V)
+    efectivoTopeMxn: number;          // $2,000 (LISR 27-III) para gasto no-combustible en efectivo
+  };
 }
 
 // ── DEFAULTS DE DEMO (🔴 genéricos, NO de un cliente — reemplazables en la sala) ─
@@ -62,6 +68,11 @@ export const DEMO_CONFIG: CuadraConfig = {
     claves: ['15101505', '15101514', '15101515'],
     unidad: 'LTR',
     vigenteDesde: '2026-04-24', // vigencia del complemento v1.0 (DOF, RMF 2.7.1.8)
+  },
+  estimulos: {
+    peajeFactor: 0.5,                 // LIF 2026 Art. 20-A (ingresos < $300M)
+    viaticosTopeFiscalDiarioMxn: 750, // LISR 28-V, alimentación nacional
+    efectivoTopeMxn: 2000,            // LISR 27-III
   },
 };
 

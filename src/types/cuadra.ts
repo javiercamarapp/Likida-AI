@@ -28,6 +28,11 @@ export interface Gasto {
   complementoHidrocarburos?: boolean; // el XML trae el nodo del complemento
   cfdiEsquemaAlterno?: boolean;    // ECC (monedero) o Carta Porte → la regla 2.7.1.48 NO aplica
   xmlVerificado?: boolean;         // true = se recibió y parseó el XML del CFDI
+  // ── Acreditamiento (del XML) ────────────────────────────────────────────────
+  formaPago?: string;              // c_FormaPago (01=efectivo…) — deducibilidad por medio de pago
+  subTotal?: number;               // @SubTotal (base del estímulo de peaje 50%)
+  iepsTraslado?: number;           // IEPS desglosado (Traslado 003) → acreditable vs ISR
+  ivaTraslado?: number;            // IVA desglosado (Traslado 002) → acreditable
 }
 
 export type TipoDiferencia =
@@ -45,6 +50,10 @@ export type TipoDiferencia =
   | 'monto_invalido'       // monto ≤ 0 (OCR erróneo / nota de crédito) → revisar a mano
   | 'complemento_hidrocarburos'  // CFDI de combustible SIN el complemento requerido → NO deducible (NIVEL 2, del XML)
   | 'complemento_no_verificable' // factura de combustible sin XML → no se puede verificar el complemento (NIVEL 1, a bandeja)
+  | 'combustible_efectivo' // combustible pagado en efectivo → NO deducible (LISR 27-III, sin importar monto)
+  | 'efectivo_sobre_tope'  // gasto no-combustible en efectivo > $2,000 → NO deducible (LISR 27-III)
+  | 'ieps_no_desglosado'   // CFDI de diésel sin IEPS desglosado → no acreditable (se pierde el estímulo)
+  | 'viatico_excede_fiscal' // viático de alimentación > tope fiscal $750/día (LISR 28-V) → porción no deducible
   | 'diesel_desviacion';   // consumo de diésel fuera del rango esperado
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */
@@ -70,6 +79,9 @@ export interface Liquidacion {
   estatus: EstatusLiquidacion;
   diferencias: Diferencia[];
   gastos: Gasto[];
+  iepsAcreditable: number; // Σ IEPS de diésel de CFDI deducibles → estímulo vs ISR (LIF 2026 Art. 20)
+  ivaAcreditable: number;  // Σ IVA de CFDI deducibles (LIVA art. 5)
+  peajeAcreditable: number; // Σ SubTotal de casetas × factor (0.5) → estímulo de peaje (LIF 2026 Art. 20-A)
   creadaEn: string;        // ISO
 }
 

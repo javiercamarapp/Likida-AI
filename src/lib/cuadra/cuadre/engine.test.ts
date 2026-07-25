@@ -228,4 +228,63 @@ describe('cuadrarViaje', () => {
     });
     expect(r.diferencias.some((d) => d.tipo.startsWith('complemento'))).toBe(false);
   });
+
+  // ═══ NIVEL 1: acreditamiento fiscal ═══
+  const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000 };
+
+  it('7/9: IEPS y IVA acreditables de un CFDI de diésel deducible', () => {
+    const r = cuadrarViaje({
+      viajeId: 'a1', anticipo: 5000, politica, hidrocarburos: HC, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 5000, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true, formaPago: '03', iepsTraslado: 900, ivaTraslado: 640 })],
+    });
+    expect(r.iepsAcreditable).toBe(900);
+    expect(r.ivaAcreditable).toBe(640);
+  });
+
+  it('5: combustible en efectivo → no deducible NI acreditable', () => {
+    const r = cuadrarViaje({
+      viajeId: 'a2', anticipo: 5000, politica, hidrocarburos: HC, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 5000, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true, formaPago: '01', iepsTraslado: 900, ivaTraslado: 640 })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'combustible_efectivo')).toBe(true);
+    expect(r.iepsAcreditable).toBe(0); // bloqueado → no acredita
+    expect(r.ivaAcreditable).toBe(0);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  it('1.6: peaje acreditable = 50% del SubTotal de casetas', () => {
+    const r = cuadrarViaje({
+      viajeId: 'a3', anticipo: 1160, politica, estimulos: EST,
+      gastos: [g({ concepto: 'caseta', monto: 1160, cfdiUuid: 'u', formaPago: '04', subTotal: 1000, ivaTraslado: 160 })],
+    });
+    expect(r.peajeAcreditable).toBe(500); // 1000 * 0.5
+    expect(r.ivaAcreditable).toBe(160);
+  });
+
+  it('7: diésel con XML pero SIN IEPS desglosado → ieps_no_desglosado', () => {
+    const r = cuadrarViaje({
+      viajeId: 'a4', anticipo: 4000, politica, hidrocarburos: HC, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 4000, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true, formaPago: '03', iepsTraslado: 0 })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'ieps_no_desglosado')).toBe(true);
+    expect(r.iepsAcreditable).toBe(0);
+  });
+
+  it('6: gasto no-combustible en efectivo > $2,000 → no deducible', () => {
+    const r = cuadrarViaje({
+      viajeId: 'a5', anticipo: 2500, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'otro', monto: 2500, formaPago: '01' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'efectivo_sobre_tope')).toBe(true);
+  });
+
+  it('1.10: viático > tope fiscal $750/día → excedente no deducible', () => {
+    const r = cuadrarViaje({
+      viajeId: 'a6', anticipo: 900, politica, estimulos: EST,
+      gastos: [g({ concepto: 'viaticos', monto: 900, folio: 'V1' })],
+    });
+    const d = r.diferencias.find((x) => x.tipo === 'viatico_excede_fiscal');
+    expect(d).toBeTruthy();
+    expect(d!.monto).toBe(150); // 900 - 750
+  });
 });

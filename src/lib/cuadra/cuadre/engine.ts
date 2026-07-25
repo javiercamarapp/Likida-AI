@@ -33,6 +33,8 @@ export interface CuadreInput {
   /** Complemento de hidrocarburos (Bloque 1): claves de combustible, unidad,
    *  y fecha de vigencia. Sin esto, la regla no corre. */
   hidrocarburos?: { claves: string[]; unidad: string; vigenteDesde: string };
+  /** Estímulos y topes fiscales (LIF 2026 Art. 20 / LISR). */
+  estimulos?: { peajeFactor: number; viaticosTopeFiscalDiarioMxn: number; efectivoTopeMxn: number };
 }
 
 function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaGasto[]): PoliticaGasto | undefined {
@@ -91,6 +93,26 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       diferencias.push({ tipo: 'monto_invalido', concepto: g.concepto, monto: 0, nota: `El comprobante de ${label(g.concepto)} tiene un monto inválido (${mxn(g.monto)}) — revisar a mano.`, gastoId: g.id });
       continue;
     }
+    const h = input.hidrocarburos;
+    const esCombustible = g.concepto === 'diesel' || (!!h && h.claves.includes(g.claveProdServ ?? ''));
+
+    // Regla 5 (LISR 27-III): el combustible EXIGE pago electrónico sin importar el
+    // monto; pagado en efectivo (FormaPago 01) → no deducible.
+    const topeEfectivo = input.estimulos?.efectivoTopeMxn ?? 2000;
+    if (g.formaPago === '01' && esCombustible) {
+      diferencias.push({ tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} pagado en EFECTIVO — el combustible exige pago electrónico (LISR 27-III), no deducible.`, gastoId: g.id });
+    } else if (g.formaPago === '01' && !esCombustible && g.monto > topeEfectivo) {
+      // Regla 6: gasto no-combustible en efectivo > tope → no deducible.
+      diferencias.push({ tipo: 'efectivo_sobre_tope', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} de ${mxn(g.monto)} en efectivo excede el tope de ${mxn(topeEfectivo)} (LISR 27-III) — no deducible.`, gastoId: g.id });
+    }
+
+    // Regla 1.10: tope FISCAL de alimentación $750/día (LISR 28-V), distinto del
+    // tope de POLÍTICA interna. Manda el menor; aquí se marca el excedente fiscal.
+    const topeViaticoFiscal = input.estimulos?.viaticosTopeFiscalDiarioMxn;
+    if (g.concepto === 'viaticos' && topeViaticoFiscal != null && g.monto > topeViaticoFiscal) {
+      diferencias.push({ tipo: 'viatico_excede_fiscal', concepto: g.concepto, esperado: topeViaticoFiscal, real: g.monto, monto: round2(g.monto - topeViaticoFiscal), nota: `Viático de ${mxn(g.monto)} excede el tope fiscal de alimentación (${mxn(topeViaticoFiscal)}/día, LISR 28-V) — el excedente de ${mxn(g.monto - topeViaticoFiscal)} no es deducible.`, gastoId: g.id });
+    }
+
     const pol = politicaPara(g.concepto, input.ruta, input.politica);
     if (pol?.topeMonto != null && g.monto > pol.topeMonto) {
       diferencias.push({
@@ -122,8 +144,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // Complemento de hidrocarburos (Bloque 1). Regla determinística en DOS
     // NIVELES. Mismo criterio que EFOS: NUNCA se declara no deducible sin
     // verificar — un falso positivo de fraude es peor que un falso negativo.
-    const h = input.hidrocarburos;
-    const esCombustible = g.concepto === 'diesel' || (h != null && h.claves.includes(g.claveProdServ ?? ''));
+    // (h y esCombustible se hoistearon arriba del loop.)
     if (h && esCombustible) {
       const aplicaPorFecha = !g.fecha || g.fecha >= h.vigenteDesde; // solo CFDI vigentes
       if (g.xmlVerificado) {
@@ -170,7 +191,28 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     });
   }
 
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable'];
+  // ── Acreditamiento (reglas 7, 9, 1.6): IEPS/IVA/peaje de CFDI DEDUCIBLES ──────
+  // Un traslado solo suma si el gasto NO cayó en una diferencia de no-deducible.
+  const NO_DEDUCIBLE: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido'];
+  const peajeFactor = input.estimulos?.peajeFactor ?? 0.5;
+  let iepsAcreditable = 0, ivaAcreditable = 0, peajeAcreditable = 0;
+  for (const g of input.gastos) {
+    if (duplicados.has(g.id)) continue;
+    if (diferencias.some((d) => d.gastoId === g.id && NO_DEDUCIBLE.includes(d.tipo))) continue;
+    if ((g.ivaTraslado ?? 0) > 0) ivaAcreditable += g.ivaTraslado as number;
+    // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas.
+    if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0) peajeAcreditable += (g.subTotal as number) * peajeFactor;
+    // IEPS de diésel (7): del desglose 003; si es diésel con XML y no lo trae → se pierde.
+    const combustible = g.concepto === 'diesel' || (!!input.hidrocarburos && input.hidrocarburos.claves.includes(g.claveProdServ ?? ''));
+    if (combustible) {
+      if ((g.iepsTraslado ?? 0) > 0) iepsAcreditable += g.iepsTraslado as number;
+      else if (g.xmlVerificado) {
+        diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} no desglosa el IEPS — es deducible, pero sin ese desglose se pierde el acreditamiento del estímulo (LIF 2026 Art. 20).`, gastoId: g.id });
+      }
+    }
+  }
+
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'ieps_no_desglosado', 'viatico_excede_fiscal'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
@@ -183,6 +225,9 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     estatus,
     diferencias,
     gastos: input.gastos,
+    iepsAcreditable: round2(iepsAcreditable),
+    ivaAcreditable: round2(ivaAcreditable),
+    peajeAcreditable: round2(peajeAcreditable),
   };
 }
 
