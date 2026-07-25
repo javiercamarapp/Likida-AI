@@ -8,6 +8,8 @@ import { randomUUID } from 'crypto';
 import type OpenAI from 'openai';
 import '@/lib/cuadra/tools'; // side-effect: registra las tools en el registry
 import { runAgent } from '@/lib/agents/run';
+import { guardiaCifras } from '@/lib/cuadra/cuadre/guardia';
+import type { ToolCallRecord } from '@/lib/llm/openrouter';
 import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import { addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw } from '@/lib/cuadra/repo';
@@ -162,6 +164,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
 
     let reply = '';
     let closed = false;
+    let agentTools: ToolCallRecord[] = [];
     try {
       const res = await runAgent({
         agent: 'liquidacion',
@@ -171,6 +174,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         timeoutMs: 40_000,
       });
       reply = res.finalText || 'Listo. 👍';
+      agentTools = res.toolCalls;
       closed = res.toolCalls.some((t) => t.toolName === 'guardar_liquidacion' && !t.error);
       await registrarCosto({ tenantId: op.tenantId, viajeId, fase: faseDeModelo(res.model, 'cuadre'), modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.costUsd });
       if (closed) {
@@ -182,6 +186,16 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     } catch (e) {
       logger.error('agent.fail', { err: e instanceof Error ? e.message : String(e) });
       reply = 'Perdón, se me trabó el sistema tantito. ¿Me reenvías tu último mensaje?';
+    }
+
+    // GUARDIA DETERMINÍSTICA (código, no prompt): el LLM NUNCA reporta cifras que
+    // no vengan de una tool. Si la respuesta trae dinero y no hubo cuadrar_viaje,
+    // se descarta el texto del modelo y se responde con el cuadre REAL. (f/g)
+    try {
+      const g = await guardiaCifras(reply, agentTools, op.tenantId, viajeId);
+      if (g.forzado) { logger.warn('agent.cifras_forzadas', { viaje: viajeId }); reply = g.reply; }
+    } catch (e) {
+      logger.warn('guardia.fail', { err: e instanceof Error ? e.message : String(e) });
     }
 
     await say(reply);

@@ -8,8 +8,8 @@
 
 import { randomUUID } from 'crypto';
 import { registerTool } from '@/lib/llm/tool-executor';
-import { cuadrarViaje } from './cuadre/engine';
-import { getViaje, getGastos, getOperador, saveLiquidacion } from './repo';
+import { cuadrarDesdeDB } from './cuadre/desde_db';
+import { getViaje, getOperador, saveLiquidacion } from './repo';
 import { getConfig } from './config';
 import { generarLiquidacionPDF } from './liquidacion/pdf';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -33,32 +33,7 @@ registerTool('consultar_politica', {
 });
 
 // ── cuadrar_viaje ───────────────────────────────────────────────────────────
-async function computeCuadre(tenantId: string, viajeId: string): Promise<Omit<Liquidacion, 'id' | 'creadaEn'>> {
-  const [viaje, gastos, config] = await Promise.all([
-    getViaje(viajeId, tenantId),
-    getGastos(viajeId, tenantId),
-    getConfig(tenantId),
-  ]);
-  if (!viaje) throw new Error('viaje no encontrado');
-  // Rango de fecha válido: no futura (hoy) y no anterior a (inicio − N días).
-  const hoy = new Date();
-  const fechaMax = hoy.toISOString().slice(0, 10);
-  const inicio = viaje.fechaInicio ? new Date(`${viaje.fechaInicio.slice(0, 10)}T00:00:00Z`) : hoy;
-  const fechaMin = new Date(inicio.getTime() - config.validacion.fechaToleranciaDiasAntes * 86_400_000).toISOString().slice(0, 10);
-  return cuadrarViaje({
-    viajeId,
-    anticipo: viaje.anticipo,
-    gastos,
-    politica: config.politica,
-    ruta: viaje.destino,
-    empresaRfc: config.empresa.rfc,
-    rfcsAdicionales: config.empresa.rfcsAdicionales,
-    hidrocarburos: config.hidrocarburos,
-    estimulos: config.estimulos,
-    fechaMin,
-    fechaMax,
-  });
-}
+const computeCuadre = cuadrarDesdeDB; // alias local (fuente compartida)
 
 registerTool('cuadrar_viaje', {
   schema: {
