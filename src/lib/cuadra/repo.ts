@@ -167,30 +167,25 @@ export async function saveLiquidacion(
   pdfUrl?: string,
 ): Promise<string> {
   const admin = supabaseAdmin();
-  // CR-1: cierre idempotente. Con unique(viaje_id) + upsert, dos cierres
-  // concurrentes producen UN solo registro (el motor es determinístico → el
-  // segundo escribe los mismos números). Nunca dos liquidaciones/dos PDFs.
-  const { data, error } = await admin
-    .from('liquidacion')
-    .upsert(
-      {
-        tenant_id: tenantId,
-        viaje_id: liq.viajeId,
-        total_comprobado: liq.totalComprobado,
-        total_anticipo: liq.totalAnticipo,
-        diferencia: liq.diferencia,
-        estatus: liq.estatus,
-        diferencias: liq.diferencias,
-        ieps_acreditable: liq.iepsAcreditable,
-        iva_acreditable: liq.ivaAcreditable,
-        peaje_acreditable: liq.peajeAcreditable,
-        pdf_url: pdfUrl ?? null,
-      },
-      { onConflict: 'viaje_id' },
-    )
-    .select('id')
-    .single();
+  // CR-1 / AUDIT_V3 money-path CRÍTICO: cierre ATÓMICO e idempotente. Antes eran
+  // dos statements (upsert liquidacion + update viaje) y el error del segundo se
+  // IGNORABA → liquidacion sin cerrar el viaje. Ahora una sola función plpgsql
+  // (guardar_liquidacion_tx, migración 0013) hace ambos en UNA transacción: si el
+  // update de viaje falla, la liquidacion hace rollback. Con unique(viaje_id) dos
+  // cierres concurrentes producen UN registro (el motor es determinístico).
+  const { data, error } = await admin.rpc('guardar_liquidacion_tx', {
+    p_tenant: tenantId,
+    p_viaje: liq.viajeId,
+    p_total_comprobado: liq.totalComprobado,
+    p_total_anticipo: liq.totalAnticipo,
+    p_diferencia: liq.diferencia,
+    p_estatus: liq.estatus,
+    p_diferencias: liq.diferencias,
+    p_ieps: liq.iepsAcreditable,
+    p_iva: liq.ivaAcreditable,
+    p_peaje: liq.peajeAcreditable,
+    p_pdf_url: pdfUrl ?? null,
+  });
   if (error) throw new Error(`saveLiquidacion: ${error.message}`);
-  await admin.from('viaje').update({ estatus: 'liquidado' }).eq('id', liq.viajeId).eq('tenant_id', tenantId);
-  return data.id as string;
+  return data as string;
 }
