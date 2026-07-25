@@ -99,8 +99,24 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     iva_traslado: g.ivaTraslado ?? null,
     folio_norm: g.folioNorm ?? null,
     ocr_extra: g.ocrExtra ?? null,
+    img_hash: g.imgHash ?? null,
   });
   if (error) throw new Error(`addGasto: ${error.message}`);
+}
+
+/** FASE 2: ¿ya existe un gasto para este viaje con el mismo hash de imagen?
+ *  Best-effort para dedup de fotos reenviadas; ante error de lectura devuelve
+ *  false (no bloquea el intake — preferimos un raro duplicado a perder un gasto). */
+export async function gastoExistePorHash(viajeId: string, imgHash: string, tenantId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin()
+    .from('gasto')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('viaje_id', viajeId)
+    .eq('img_hash', imgHash)
+    .limit(1);
+  if (error) return false;
+  return (data?.length ?? 0) > 0;
 }
 
 /** NIVEL 2: actualiza un gasto con los datos del XML del CFDI (por id). */

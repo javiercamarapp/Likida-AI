@@ -19,6 +19,7 @@ export interface Gasto {
   rfcReceptor?: string;    // debe ser el RFC de la empresa (no el chofer)
   cfdiUuid?: string;
   imagenUrl?: string;
+  imgHash?: string;        // SHA-256 del contenido de la foto (dedup de reenvíos)
   ocrConfianza?: number;   // 0–1
   cfdiValido?: boolean;
   estadoSat?: EstadoSat;   // resultado de ConsultaCFDIService (o 'pendiente' si SAT no respondió)

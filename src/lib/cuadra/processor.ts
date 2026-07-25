@@ -13,8 +13,9 @@ import { cuadrarDesdeDB } from '@/lib/cuadra/cuadre/desde_db';
 import { resumenCuadre } from '@/lib/cuadra/cuadre/resumen';
 import { PartialExecutionError, type ToolCallRecord } from '@/lib/llm/openrouter';
 import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
+import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
-import { addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw } from '@/lib/cuadra/repo';
+import { addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash } from '@/lib/cuadra/repo';
 import {
   resolveOperador, getOpenViaje, getTenantContext,
   loadConversation, saveConversation, claimMessage,
@@ -69,10 +70,24 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       try {
         const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
         if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
+
+        // FASE 2 (FLAG default-off): dedup por contenido. La idempotencia por
+        // waMessageId cubre reintentos de Meta; esto cubre el reenvío MANUAL de la
+        // misma foto (otro waMessageId). Pre-check antes del OCR → ahorra ese costo.
+        // Camino actual intacto con CUADRA_DEDUP_FOTOS sin setear (HARD RULE 3).
+        let imgHash: string | undefined;
+        if (process.env.CUADRA_DEDUP_FOTOS === '1') {
+          imgHash = await hashImagen(dataUrl);
+          if (await gastoExistePorHash(viajeId, imgHash, op.tenantId)) {
+            logger.info('foto.dedup', { viaje: viajeId });
+            return; // ya la teníamos: no re-OCR, no duplicar gasto, sin acuse extra
+          }
+        }
+
         const { gasto, legible, costo } = await extraerComprobante(dataUrl);
         await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
         if (!legible) { await say('Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?'); return; }
-        await addGasto(op.tenantId, viajeId, gasto);
+        await addGasto(op.tenantId, viajeId, imgHash ? { ...gasto, imgHash } : gasto);
         // Acuse una sola vez: solo la PRIMERA foto de la ráfaga (la que llevó el
         // contador de 0 a 1). En su propio try: un fallo de envío tras guardar el
         // gasto NO debe disparar reproceso.
