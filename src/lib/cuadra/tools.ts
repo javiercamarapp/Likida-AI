@@ -9,7 +9,8 @@
 import { randomUUID } from 'crypto';
 import { registerTool } from '@/lib/llm/tool-executor';
 import { cuadrarViaje } from './cuadre/engine';
-import { getPolitica, getViaje, getGastos, getOperador, saveLiquidacion } from './repo';
+import { getViaje, getGastos, getOperador, saveLiquidacion } from './repo';
+import { getConfig } from './config';
 import { generarLiquidacionPDF } from './liquidacion/pdf';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
@@ -26,20 +27,28 @@ registerTool('consultar_politica', {
     },
   },
   handler: async (_args, ctx) => {
-    const politica = await getPolitica(ctx.tenantId);
-    return { politica };
+    const config = await getConfig(ctx.tenantId);
+    return { politica: config.politica };
   },
 });
 
 // ── cuadrar_viaje ───────────────────────────────────────────────────────────
 async function computeCuadre(tenantId: string, viajeId: string): Promise<Omit<Liquidacion, 'id' | 'creadaEn'>> {
-  const [viaje, gastos, politica] = await Promise.all([
+  const [viaje, gastos, config] = await Promise.all([
     getViaje(viajeId, tenantId),
     getGastos(viajeId, tenantId),
-    getPolitica(tenantId),
+    getConfig(tenantId),
   ]);
   if (!viaje) throw new Error('viaje no encontrado');
-  return cuadrarViaje({ viajeId, anticipo: viaje.anticipo, gastos, politica, ruta: viaje.destino });
+  return cuadrarViaje({
+    viajeId,
+    anticipo: viaje.anticipo,
+    gastos,
+    politica: config.politica,
+    ruta: viaje.destino,
+    empresaRfc: config.empresa.rfc,
+    rfcsAdicionales: config.empresa.rfcsAdicionales,
+  });
 }
 
 registerTool('cuadrar_viaje', {

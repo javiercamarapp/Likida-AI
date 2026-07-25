@@ -8,12 +8,12 @@ import type OpenAI from 'openai';
 import '@/lib/cuadra/tools'; // side-effect: registra las tools en el registry
 import { runAgent } from '@/lib/agents/run';
 import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
-import { addGasto } from '@/lib/cuadra/repo';
+import { addGasto, getGastos } from '@/lib/cuadra/repo';
 import {
   resolveOperador, getOpenViaje, getTenantContext,
   loadConversation, saveConversation, claimMessage, type ConvTurn,
 } from '@/lib/cuadra/conv';
-import { registrarCosto, faseDeModelo, vincularCostosALiquidacion } from '@/lib/cuadra/costos';
+import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/cuadra/costos';
 import { sendText, sendDocument, downloadMediaAsDataUrl } from '@/lib/meta/client';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
@@ -25,8 +25,6 @@ export interface InboundMessage {
   mediaId?: string;           // para image/document
   waMessageId?: string;       // id de Meta, para idempotencia
 }
-
-const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 
 export async function processInbound(msg: InboundMessage): Promise<void> {
   // Idempotencia: si Meta reintenta el webhook, no re-procesar (no duplicar gasto).
@@ -44,43 +42,47 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     await sendText(msg.from, 'No tienes un viaje abierto para liquidar ahorita. Cuando tu flota te asigne uno, aquí lo cerramos. 👍');
     return;
   }
-  const tenant = await getTenantContext(op.tenantId);
-  const conv = await loadConversation(op.tenantId, msg.from, viajeId);
+  // Helper: enviar + contar el costo (solo mensajes SALIENTES se cobran).
+  const say = async (text: string) => {
+    await sendText(msg.from, text);
+    await registrarCostoWhatsApp(op.tenantId, viajeId);
+  };
 
-  // ── Construir el turno del usuario ─────────────────────────────────────────
-  let userContent: string;
+  // ── IMAGEN: captura SILENCIOSA (acuse consolidado, no por foto) ─────────────
+  // Los mensajes entrantes son gratis; para no gastar salientes ni llamadas LLM
+  // por cada foto, se guarda el gasto en silencio y se responde una sola vez en
+  // el turno de texto ("listo").
   if (msg.type === 'image' && msg.mediaId) {
     const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
-    if (!dataUrl) {
-      await sendText(msg.from, 'No pude descargar tu foto 😕. ¿Me la reenvías?');
-      return;
-    }
+    if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
     try {
+      const previos = await getGastos(viajeId, op.tenantId);
       const { gasto, legible, costo } = await extraerComprobante(dataUrl);
-      // Costo real de la llamada de visión, por liquidación (viaje) y tenant.
       await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
-      if (!legible) {
-        await sendText(msg.from, 'Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y que se vea completo el ticket?');
-        return;
-      }
+      if (!legible) { await say('Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?'); return; }
       await addGasto(op.tenantId, viajeId, gasto);
-      userContent = `[Comprobante recibido y guardado — concepto: ${gasto.concepto}, monto: ${mxn(gasto.monto)}${gasto.folio ? `, folio: ${gasto.folio}` : ''}${gasto.cfdiUuid ? ', CFDI validado por QR' : ''}, confianza OCR: ${Math.round((gasto.ocrConfianza ?? 0) * 100)}%]. Confirma al operador brevemente que lo recibiste y pregunta si tiene más comprobantes o si ya cerramos.`;
+      // Solo el PRIMER comprobante recibe acuse; el resto, en silencio.
+      if (previos.length === 0) {
+        await say('📸 Voy recibiendo tus comprobantes. Mándalos todos y cuando termines escribe *listo* para cerrar tu liquidación. 🚛');
+      }
     } catch (e) {
       logger.error('ocr.fail', { err: e instanceof Error ? e.message : String(e) });
-      await sendText(msg.from, 'Tuve un problema leyendo tu comprobante 😕. ¿Me lo reenvías?');
-      return;
+      await say('Tuve un problema leyendo tu comprobante 😕. ¿Me lo reenvías?');
     }
-  } else if (msg.type === 'text' && msg.text) {
-    userContent = msg.text;
-  } else {
-    await sendText(msg.from, 'Por ahora solo proceso texto y fotos de comprobantes. Mándame la foto de tu ticket. 📸');
+    return; // no corre el agente por foto
+  }
+
+  // ── TEXTO: corre el agente UNA vez → respuesta consolidada ──────────────────
+  if (!(msg.type === 'text' && msg.text)) {
+    await say('Por ahora solo proceso texto y fotos de comprobantes. Mándame la foto de tu ticket. 📸');
     return;
   }
 
-  const turns: ConvTurn[] = [...conv.turns, { role: 'user', content: userContent }];
+  const tenant = await getTenantContext(op.tenantId);
+  const conv = await loadConversation(op.tenantId, msg.from, viajeId);
+  const turns: ConvTurn[] = [...conv.turns, { role: 'user', content: msg.text }];
   const history: OpenAI.Chat.ChatCompletionMessageParam[] = turns.map((t) => ({ role: t.role, content: t.content }));
 
-  // ── Correr el agente ───────────────────────────────────────────────────────
   let reply = '';
   let closed = false;
   try {
@@ -93,9 +95,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     });
     reply = res.finalText || 'Listo. 👍';
     closed = res.toolCalls.some((t) => t.toolName === 'guardar_liquidacion' && !t.error);
-    // Costo real del turno del agente (cuadre, o escalación si usó Opus).
     await registrarCosto({ tenantId: op.tenantId, viajeId, fase: faseDeModelo(res.model, 'cuadre'), modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.costUsd });
-    // Al cerrar, vincular todos los costos del viaje a la liquidación creada.
     if (closed) {
       const call = res.toolCalls.find((t) => t.toolName === 'guardar_liquidacion' && !t.error);
       const liqId = (call?.result as { liquidacion_id?: string } | undefined)?.liquidacion_id;
@@ -107,14 +107,16 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     reply = 'Perdón, se me trabó el sistema tantito. ¿Me reenvías tu último mensaje?';
   }
 
-  await sendText(msg.from, reply);
+  await say(reply);
 
-  // ── Si se cerró la liquidación, mandar el PDF ──────────────────────────────
   if (closed) {
     try {
       const path = `${op.tenantId}/${viajeId}.pdf`;
       const { data } = await supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 3600);
-      if (data?.signedUrl) await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
+      if (data?.signedUrl) {
+        await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
+        await registrarCostoWhatsApp(op.tenantId, viajeId);
+      }
     } catch (e) {
       logger.warn('pdf.send', { err: e instanceof Error ? e.message : String(e) });
     }

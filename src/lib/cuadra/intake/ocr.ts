@@ -13,7 +13,8 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { generateStructured } from '@/lib/llm/openrouter';
 import { decodeCfdiFromImage, bufferFromDataUrl, esRfcValido, esUuidValido } from './cfdi';
-import type { Gasto, ConceptoGasto } from '@/types/cuadra';
+import { consultarCFDI } from './sat';
+import type { Gasto, ConceptoGasto, EstadoSat } from '@/types/cuadra';
 
 const ExtraccionSchema = z.object({
   concepto: z.enum(['diesel', 'caseta', 'factura', 'viaticos', 'otro']),
@@ -57,6 +58,7 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
   // Cruce con el QR del CFDI (gana sobre el OCR para campos fiscales).
   let uuid = data.cfdi_uuid && esUuidValido(data.cfdi_uuid) ? data.cfdi_uuid.toLowerCase() : undefined;
   let rfc = data.rfc_emisor && esRfcValido(data.rfc_emisor) ? data.rfc_emisor.toUpperCase() : undefined;
+  let rfcReceptor: string | undefined;
   let monto = data.monto ?? 0;
   let cfdiValido: boolean | undefined;
 
@@ -65,11 +67,21 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
     if (qr) {
       if (qr.uuid) uuid = qr.uuid;
       if (qr.rfcEmisor) rfc = qr.rfcEmisor;
+      if (qr.rfcReceptor) rfcReceptor = qr.rfcReceptor; // para validar RFC=empresa
       if (qr.total != null) monto = qr.total; // el total del QR es autoritativo
       cfdiValido = true; // QR presente y parseado = CFDI verificable
     }
   } catch {
     // sin QR — se queda con lo del OCR
+  }
+
+  // Consulta al SAT (grácil: si no responde → 'pendiente', nunca lanza).
+  let estadoSat: EstadoSat | undefined;
+  let efos: boolean | null | undefined;
+  if (uuid) {
+    const sat = await consultarCFDI({ re: rfc, rr: rfcReceptor, tt: monto, id: uuid });
+    estadoSat = sat.estado;
+    efos = sat.efos;
   }
 
   const gasto: Gasto = {
@@ -79,10 +91,13 @@ export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerR
     fecha: data.fecha ?? undefined,
     folio: data.folio ?? undefined,
     rfcEmisor: rfc,
+    rfcReceptor,
     cfdiUuid: uuid,
     imagenUrl: undefined,
     ocrConfianza: data.confianza,
     cfdiValido,
+    estadoSat,
+    efos,
   };
 
   return {

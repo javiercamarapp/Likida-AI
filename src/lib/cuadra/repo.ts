@@ -67,10 +67,13 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     fecha: g.fecha ?? null,
     folio: g.folio ?? null,
     rfc_emisor: g.rfcEmisor ?? null,
+    rfc_receptor: g.rfcReceptor ?? null,
     cfdi_uuid: g.cfdiUuid ?? null,
     imagen_url: g.imagenUrl ?? null,
     ocr_confianza: g.ocrConfianza ?? null,
     cfdi_valido: g.cfdiValido ?? null,
+    estado_sat: g.estadoSat ?? null,
+    efos: g.efos ?? null,
   });
   if (error) throw new Error(`addGasto: ${error.message}`);
 }
@@ -78,7 +81,7 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
 export async function getGastos(viajeId: string, tenantId: string): Promise<Gasto[]> {
   const { data, error } = await supabaseAdmin()
     .from('gasto')
-    .select('id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, imagen_url, ocr_confianza, cfdi_valido')
+    .select('id, concepto, monto, fecha, folio, rfc_emisor, rfc_receptor, cfdi_uuid, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos')
     .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId);
   if (error) throw new Error(`getGastos: ${error.message}`);
@@ -89,10 +92,13 @@ export async function getGastos(viajeId: string, tenantId: string): Promise<Gast
     fecha: (r.fecha as string) || undefined,
     folio: (r.folio as string) || undefined,
     rfcEmisor: (r.rfc_emisor as string) || undefined,
+    rfcReceptor: (r.rfc_receptor as string) || undefined,
     cfdiUuid: (r.cfdi_uuid as string) || undefined,
     imagenUrl: (r.imagen_url as string) || undefined,
     ocrConfianza: r.ocr_confianza != null ? Number(r.ocr_confianza) : undefined,
     cfdiValido: r.cfdi_valido != null ? Boolean(r.cfdi_valido) : undefined,
+    estadoSat: (r.estado_sat as Gasto['estadoSat']) || undefined,
+    efos: r.efos != null ? Boolean(r.efos) : undefined,
   }));
 }
 
