@@ -241,7 +241,7 @@ describe('cuadrarViaje', () => {
   });
 
   // ═══ NIVEL 1: acreditamiento fiscal ═══
-  const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000 };
+  const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: ['15101505'] };
 
   it('7/9: IEPS y IVA acreditables de un CFDI de diésel deducible', () => {
     const r = cuadrarViaje({
@@ -283,6 +283,19 @@ describe('cuadrarViaje', () => {
     });
     expect(r.ivaAcreditable).toBe(14.35);  // leído (8%), NO 29.70 (16%)
     expect(r.iepsAcreditable).toBe(120.00);
+  });
+
+  // La GASOLINA no tiene el estímulo de IEPS (solo diésel, LIF Art. 20-A fr. IV).
+  it('gasolina (15101514) con IEPS desglosado NO acredita IEPS (solo diésel)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'a9', anticipo: 500, politica, hidrocarburos: HC, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 500, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true,
+        claveProdServ: '15101514', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true,
+        formaPago: '04', iepsTraslado: 90, ivaTraslado: 65 })],
+    });
+    expect(r.iepsAcreditable).toBe(0);   // gasolina → sin estímulo IEPS
+    expect(r.ivaAcreditable).toBe(65);   // el IVA sí es acreditable
+    expect(r.diferencias.some((d) => d.tipo === 'ieps_no_desglosado')).toBe(false);
   });
 
   // Un ticket sin factura (sin xmlVerificado) NO acredita, aunque traiga montos.

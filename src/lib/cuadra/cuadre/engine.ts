@@ -34,7 +34,7 @@ export interface CuadreInput {
    *  y fecha de vigencia. Sin esto, la regla no corre. */
   hidrocarburos?: { claves: string[]; unidad: string; vigenteDesde: string };
   /** Estímulos y topes fiscales (LIF 2026 Art. 20 / LISR). */
-  estimulos?: { peajeFactor: number; viaticosTopeFiscalDiarioMxn: number; efectivoTopeMxn: number };
+  estimulos?: { peajeFactor: number; viaticosTopeFiscalDiarioMxn: number; efectivoTopeMxn: number; clavesDieselIeps?: string[] };
 }
 
 function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaGasto[]): PoliticaGasto | undefined {
@@ -209,9 +209,11 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     if ((g.ivaTraslado ?? 0) > 0) ivaAcreditable += g.ivaTraslado as number;
     // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas.
     if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0) peajeAcreditable += (g.subTotal as number) * peajeFactor;
-    // IEPS de diésel (7): del desglose 003; si es diésel con XML y no lo trae → se pierde.
-    const combustible = g.concepto === 'diesel' || (!!input.hidrocarburos && input.hidrocarburos.claves.includes(g.claveProdServ ?? ''));
-    if (combustible) {
+    // IEPS de DIÉSEL (7): el estímulo (LIF Art. 20-A fr. IV) es SOLO diésel — NO
+    // gasolina. Se identifica por la clave de producto del SAT (15101505).
+    const clavesDiesel = input.estimulos?.clavesDieselIeps ?? [];
+    const esDieselIeps = clavesDiesel.includes(g.claveProdServ ?? '');
+    if (esDieselIeps) {
       if ((g.iepsTraslado ?? 0) > 0) iepsAcreditable += g.iepsTraslado as number;
       else if (g.xmlVerificado) {
         diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} no desglosa el IEPS — es deducible, pero sin ese desglose se pierde el acreditamiento del estímulo (LIF 2026 Art. 20).`, gastoId: g.id });

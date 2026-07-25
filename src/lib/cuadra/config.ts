@@ -40,6 +40,7 @@ export interface CuadraConfig {
     peajeFactor: number;              // 0.5 = 50% del gasto de peaje (LIF 2026 Art. 20-A)
     viaticosTopeFiscalDiarioMxn: number; // $750/día alimentación nacional (LISR 28-V)
     efectivoTopeMxn: number;          // $2,000 (LISR 27-III) para gasto no-combustible en efectivo
+    clavesDieselIeps: string[];       // el estímulo de IEPS (LIF Art. 20-A fr. IV) es SOLO diésel
   };
   // Catálogo de portales de facturación de gasolineras (capa 1: tabla + aviso).
   // Un ticket de estación NO es factura; el operador debe timbrarlo en el portal
@@ -85,6 +86,7 @@ export const DEMO_CONFIG: CuadraConfig = {
     peajeFactor: 0.5,                 // LIF 2026 Art. 20-A (ingresos < $300M)
     viaticosTopeFiscalDiarioMxn: 750, // LISR 28-V, alimentación nacional
     efectivoTopeMxn: 2000,            // LISR 27-III
+    clavesDieselIeps: ['15101505'],   // solo diésel (la gasolina 15101514/15 NO tiene el estímulo IEPS)
   },
   // Portales de facturación por marca (capa 1). Plazos y URLs de los tickets reales.
   portales: [
