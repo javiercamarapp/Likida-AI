@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
+import { logger } from '@/lib/logger';
 import { generateStructured } from '@/lib/llm/openrouter';
 import { decodeCfdiFromImage, bufferFromDataUrl, esRfcValido, esUuidValido } from './cfdi';
 import { consultarCFDI } from './sat';
@@ -69,14 +70,26 @@ export interface ExtraerResultado {
 
 /** Extrae un comprobante de una imagen (data-URL). Cruza OCR + QR CFDI. */
 export async function extraerComprobante(imageDataUrl: string): Promise<ExtraerResultado> {
-  const res = await generateStructured({
-    role: 'ocr',
-    system: SYSTEM,
-    messages: [{ role: 'user', content: 'Extrae los datos de este comprobante.' }],
-    images: [imageDataUrl],
-    schema: ExtraccionSchema,
-    schemaName: 'comprobante',
-  });
+  let res: Awaited<ReturnType<typeof generateStructured<z.infer<typeof ExtraccionSchema>>>>;
+  try {
+    res = await generateStructured({
+      role: 'ocr',
+      system: SYSTEM,
+      messages: [{ role: 'user', content: 'Extrae los datos de este comprobante.' }],
+      images: [imageDataUrl],
+      schema: ExtraccionSchema,
+      schemaName: 'comprobante',
+    });
+  } catch (e) {
+    // Ticket ilegible/cortado/ladeado: el modelo no produjo JSON válido. Degrada
+    // elegante → 'no legible' para pedir reenvío, en vez de tumbar el flujo.
+    logger.warn('ocr.ilegible', { err: e instanceof Error ? e.message : String(e) });
+    return {
+      gasto: { id: randomUUID(), concepto: 'otro', monto: 0, ocrConfianza: 0 },
+      legible: false,
+      costo: { modelo: 'ocr', tokensIn: 0, tokensOut: 0, costoUsd: 0 },
+    };
+  }
   const { data } = res;
 
   // Cruce con el QR del CFDI (gana sobre el OCR para campos fiscales).

@@ -106,6 +106,18 @@ export async function generateResponse(opts: {
   }
 }
 
+// Extrae el objeto JSON de una respuesta: quita fences markdown (```json) y
+// recorta prosa alrededor, tolerando modelos que no respetan response_format.
+function extractJson(raw: string): string {
+  let s = raw.trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+  const a = s.indexOf('{');
+  const b = s.lastIndexOf('}');
+  if (a >= 0 && b > a) s = s.slice(a, b + 1);
+  return s;
+}
+
 // ── generateStructured: JSON garantizado por schema, con VISIÓN opcional ─────
 export class StructuredError extends Error {
   constructor(message: string, public cause?: unknown, public raw?: string) {
@@ -175,7 +187,7 @@ export async function generateStructured<T>(opts: {
     const raw = res.choices[0]?.message?.content || '';
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(extractJson(raw));
     } catch (e) {
       throw new StructuredError('JSON parse falló', e, raw);
     }
