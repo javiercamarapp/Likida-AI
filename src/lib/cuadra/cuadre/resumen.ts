@@ -6,9 +6,11 @@ import type { Liquidacion } from '@/types/cuadra';
 
 const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 
-export function resumenCuadre(liq: Omit<Liquidacion, 'id' | 'creadaEn'>): string {
+export function resumenCuadre(liq: Omit<Liquidacion, 'id' | 'creadaEn'>, cerrado = true): string {
   const lines = [
-    'Listo, cuadré tu viaje 👇',
+    // Si el viaje quedó cerrado en este turno, se afirma el cierre; si la guardia
+    // solo está mostrando el cuadre (sin cierre confirmado), encabezado neutral.
+    cerrado ? 'Listo, cuadré tu viaje 👇' : 'Este es el cuadre de tu viaje 👇',
     `• Comprobado: ${mxn(liq.totalComprobado)}`,
     `• Anticipo: ${mxn(liq.totalAnticipo)}`,
     liq.diferencia > 0

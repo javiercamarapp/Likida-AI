@@ -8,6 +8,16 @@ describe('tieneCifrasDeDinero', () => {
     expect(tieneCifrasDeDinero('5700.00 pesos')).toBe(true);
     expect(tieneCifrasDeDinero('anticipo 10,600')).toBe(true);
   });
+
+  // Enteros redondos SIN $ ni coma: el LLM alucina "sobraron 500 pesos" y antes
+  // pasaba la guardia. Ahora se detectan por la palabra-moneda adyacente.
+  it('detecta enteros redondos pegados a palabra de dinero', () => {
+    expect(tieneCifrasDeDinero('sobraron 500 pesos')).toBe(true);
+    expect(tieneCifrasDeDinero('comprobaste 8000')).toBe(true);
+    expect(tieneCifrasDeDinero('sobró 500 del anticipo')).toBe(true);
+    expect(tieneCifrasDeDinero('te quedan 1500 a favor')).toBe(true);
+    expect(tieneCifrasDeDinero('faltan 300 por comprobar')).toBe(true);
+  });
   it('NO marca conteos, folios ni años', () => {
     expect(tieneCifrasDeDinero('Recibí 2 comprobantes')).toBe(false);
     expect(tieneCifrasDeDinero('viaje VJ-2026-0847')).toBe(false);
