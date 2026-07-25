@@ -6,52 +6,50 @@ recomendación. (HARD RULE 4 y 5.)
 
 ---
 
-## 1. Flags de las correcciones de orquestación (recomiendo ENCENDER para el demo)
+## 1. Flags del demo — ✅ YA ENCENDIDOS (por tu indicación)
 
-Dos CRÍTICOS de la auditoría los dejé **detrás de flag, default OFF** (HARD RULE
-3: el camino actual queda intacto como fallback). Funcionan y están probados,
-pero para que apliquen hay que poner las envs. **Para el demo del 6-ago recomiendo
-encender ambos.**
+Los encendí en `.env.local` (entorno local del demo). El camino "verificado"
+ahora corre **con los flags ON**.
 
-| Env | Default | Recomendado demo | Qué hace |
-|-----|---------|------------------|----------|
-| `CUADRA_INTAKE_GRACE_MS` | `0` (off) | `2000` | Gracia inicial en la barrera de ráfaga: si fotos y "listo" llegan en el mismo lote, evita que el "listo" lea el contador antes de que una foto registre su `+1` y cuadre sobre parciales. |
-| `CUADRA_RECUPERAR_CIERRE_PARCIAL` | vacío (off) | `1` | Recupera el "huérfano de cierre": si `guardar_liquidacion` ya persistió pero el ciclo del agente murió después (timeout), trata el cierre como válido, vincula costos y manda el PDF en vez de decir "se trabó". |
-| `CUADRA_DEDUP_FOTOS` | vacío (off) | `1` | Dedup de fotos por contenido (SHA-256): si el operador reenvía a mano la misma foto (otro waMessageId), no se duplica el gasto. Pre-check antes del OCR (ahorra costo). |
+| Env | Valor puesto | Qué hace |
+|-----|--------------|----------|
+| `CUADRA_INTAKE_GRACE_MS` | `2000` | Gracia anti-carrera fotos+"listo" en el mismo lote. |
+| `CUADRA_RECUPERAR_CIERRE_PARCIAL` | `1` | Recupera el "huérfano de cierre" (guarda OK pero el ciclo murió). |
+| `CUADRA_DEDUP_FOTOS` | `1` | Dedup de fotos por SHA-256 (reenvíos manuales). |
+| `CUADRA_INTAKE_ESPERA_MS` | `20000` | Acota el peor caso de la barrera bajo el tope de Vercel. |
 
-**Recomendación:** encender ambos en el entorno del demo. Con OFF, el sistema
-queda **exactamente** como el camino verificado actual (sin regresión), pero
-expuesto a esos dos casos borde. Riesgo de encenderlos: bajo (código nuevo y
-probado); por eso el default OFF es conservador, no porque dude del fix.
+**Pendiente cuando despliegues:** replicar estas 4 envs en el entorno de Vercel
+(hoy no hay proyecto de este repo en Vercel; el demo corre local). Validación
+offline hecha: `barrera.test.ts` (ráfaga) + `injeccion.test.ts` (12 casos) + 97
+tests verdes. Falta la corrida **en vivo** (LLM+WhatsApp) del flujo completo ×3
+→ va al checklist manual pre-demo (no es reproducible headless).
 
 ---
 
-## 2. Verificar los slugs de modelos de fallback (requiere API/credenciales)
+## 1b. ⚠️ RIESGO ABIERTO — `maxDuration` vs plan de Vercel
 
-`src/lib/llm/openrouter.ts` → `FALLBACK` mapea cada modelo primario a uno de otro
-proveedor para que una caída no sea error visible:
+Subí `maxDuration` a 120 y tú advertiste bien: en **Hobby** el tope duro es 60s y
+Vercel **ignora** valores mayores; 120/300 solo en **Pro con Fluid Compute**. No
+pude confirmar el plan por API (la cuenta es un team personal → default Hobby).
+**Revertí a 60** para no asumir margen inexistente.
 
-```
-google/gemini-3.6-flash        → anthropic/claude-haiku-4.5
-google/gemini-3.5-flash-lite   → openai/gpt-5.6-luna
-anthropic/claude-sonnet-5      → openai/gpt-5.6-terra
-anthropic/claude-opus-5        → anthropic/claude-sonnet-5
-```
+- **Si confirmas Pro + Fluid Compute** (Vercel → Project → Settings → Functions →
+  Fluid Compute ON): sube `maxDuration` a 120 en `route.ts`.
+- **Si es Hobby:** queda en 60. El peor caso teórico (lock+barrera+cuadre >60s) NO
+  cabe → el camino fiable es el común (~30s: OCR rápido + cuadre). El fix real del
+  peor caso es mover el procesamiento pesado a **QStash** (ya es dependencia) en
+  FASE 3. Mientras, `CUADRA_INTAKE_ESPERA_MS=20000` acota la barrera.
 
-El primario (`claude-sonnet-5`) está verificado. Los **fallbacks NO** los pude
-verificar: requiere una llamada autenticada a OpenRouter y no quise gastar tus
-créditos/clave de madrugada (HARD RULE 5). Riesgo: si un slug de fallback está
-mal, un error *transitorio* del primario se vuelve error *duro* (peor que
-reintentar el primario).
+**Acción tuya:** confirmar el plan (2 clics en Vercel) y avisarme para subir o no
+`maxDuration`, o decidir si priorizamos el offload a QStash en FASE 3.
 
-**Opciones:**
-- **A (recomendada):** antes del demo, correr un ping a cada slug de fallback
-  (`GET /models` de OpenRouter o un completion mínimo) y corregir los que no
-  existan. 10 min de trabajo con la clave.
-- **B:** desactivar el fallback cross-provider para el cuadre (dejar que el
-  primario reintente). Menos resiliencia, cero riesgo de slug malo.
+---
 
-**Mi recomendación:** A. El fallback vale, solo hay que confirmar los nombres.
+## 2. ✅ RESUELTO — Slugs de fallback de OpenRouter verificados
+
+Los verifiqué contra el catálogo (`GET /api/v1/models` con tu clave, lectura sin
+costo): **los 7 existen** (primarios + fallbacks). El fallback cross-provider es
+válido. Nada que hacer.
 
 ---
 

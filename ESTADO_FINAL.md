@@ -10,7 +10,7 @@ _Para leer al despertar. Honesto sobre lo que alcancé y lo que no._
 - Cerré **FASE 2** con **una** feature bien hecha y auditada (dedup de fotos), en
   vez de barrer los 8 ítems a medias — tu indicación explícita.
 - **No** llegué a FASE 3, 4 ni 5. Preferí dejar 2 fases sólidas y auditadas.
-- Tests: **68 → 80**. Migraciones nuevas aplicadas y verificadas en la DB: **0013, 0014**.
+- Tests: **68 → 97**. Migraciones nuevas aplicadas y verificadas en la DB: **0013, 0014, 0015**.
 
 ## Lo que sí quedó (todo en master)
 Ver `AUDIT_V3.md` (tabla acumulada) y `REPORTE_NOCHE.md` (resumen por área). En corto:
@@ -36,13 +36,21 @@ Ver `AUDIT_V3.md` (tabla acumulada) y `REPORTE_NOCHE.md` (resumen por área). En
 - Costo atribuido al modelo realmente usado (fallback); precio intro de Sonnet.
 - Error de backend ya no se disfraza de "sin datos"; contraste del CTA; marca Likida.
 
-## ⚠️ Necesito tu OK antes del demo (en `DECISIONES_PENDIENTES.md`)
-1. **Encender 3 flags** (`CUADRA_INTAKE_GRACE_MS=2000`, `CUADRA_RECUPERAR_CIERRE_PARCIAL=1`,
-   `CUADRA_DEDUP_FOTOS=1`). Con OFF, el sistema queda idéntico al camino verificado;
-   ON activa los fixes de casos borde. Recomiendo ON.
-2. **Verificar los slugs de fallback de OpenRouter** (no gasté tu clave de noche).
-3. `cuadre_fallback`→Opus: decidir si se cablea o se borra (recomiendo dejarlo por ahora).
-4. Recordatorio: revertir precio de Sonnet a `[3,15]` tras el 31-ago-2026.
+## Post-feedback de Javier (hecho)
+1. ✅ **3 flags encendidos** en `.env.local` (+ `CUADRA_INTAKE_ESPERA_MS=20000`). El
+   camino verificado ahora corre CON los flags ON.
+2. ✅ **Slugs de fallback verificados** contra el catálogo de OpenRouter: los 7 existen.
+3. ✅ **R1 cerrado airtight** (mig. 0015: índice único + 23505). Ya no arrastramos la limitación.
+4. ✅ **`maxDuration` revertido a 60** (no pude confirmar Pro+Fluid; Hobby ignora >60).
+5. ✅ **Suites nuevas**: `barrera.test.ts` (ráfaga) + `injeccion.test.ts` (12 casos).
+
+## ⚠️ Necesito tu OK / acción (en `DECISIONES_PENDIENTES.md`)
+1. **Confirmar plan de Vercel** (2 clics: Settings → Functions → Fluid Compute). Si Pro+Fluid,
+   subir `maxDuration` a 120; si Hobby, priorizar offload a QStash en FASE 3. **Riesgo abierto.**
+2. Al **desplegar en Vercel**, replicar las 4 envs de flags (hoy el demo corre local).
+3. Correr el **flujo completo ×3 en vivo** (LLM+WhatsApp) — no es reproducible headless.
+4. `cuadre_fallback`→Opus: cablear o borrar (recomiendo dejarlo por ahora).
+5. Recordatorio: revertir precio de Sonnet a `[3,15]` tras el 31-ago-2026.
 
 ## Lo que NO alcancé (siguiente sesión)
 - **FASE 3** (flujo detrás de flag: cierre robusto, resolución de `viaje_id`).
@@ -56,10 +64,10 @@ Ver `AUDIT_V3.md` (tabla acumulada) y `REPORTE_NOCHE.md` (resumen por área). En
   cancelación agéntica, folio warning): no eran críticos; los dejé para no barrer
   a medias.
 
-## Limitación conocida que quiero que sepas
-- El dedup de fotos atrapa el reenvío **después** del acuse (caso común), pero NO
-  dos fotos idénticas en el **mismo** envío-lote (race; índice no-único). No es
-  regresión (hoy no hay dedup). Cierre airtight = follow-up. Detalle en `AUDIT_V3.md` R1.
+## Limitación conocida — ✅ ya cerrada tras tu feedback
+- El race de fotos idénticas en el mismo lote (R1) quedó **airtight**: índice único
+  `(tenant_id, viaje_id, img_hash)` + manejo de 23505 (mig. 0015). Ya no hay
+  limitación conocida que arrastrar al piloto.
 
 ## Verificación
 Última corrida antes de dormir: `npx tsc --noEmit` (0) · `npx vitest run` (80/80) ·

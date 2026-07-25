@@ -59,13 +59,24 @@ Javier). Revisión adversarial de esa feature:
 
 | # | Cat. | Hallazgo | Estado |
 |---|------|----------|--------|
-| R1 | money/agéntico | **Race same-burst**: dos fotos IDÉNTICAS en el mismo lote (Promise.all) hacen pre-check antes de que cualquiera inserte → ambas pasan → duplicado. El índice es no-único, no lo atrapa. | ⚠️ **limitación conocida y documentada**. El caso común (reenvío tras el acuse, segundos/min después) SÍ se atrapa. Con el flag OFF no hay dedup en absoluto, así que encenderlo **nunca regresiona**; solo no cierra el caso raro de adjuntar el mismo archivo dos veces en un envío. Cierre airtight (índice único + manejo de 23505) queda como follow-up. |
+| R1 | money/agéntico | **Race same-burst**: dos fotos IDÉNTICAS en el mismo lote (Promise.all) hacen pre-check antes de que cualquiera inserte → ambas pasan → duplicado. | ✅ **CERRADO** (feedback de Javier): mig. 0015 hace ÚNICO `(tenant_id, viaje_id, img_hash)`; la 2ª inserción choca con 23505 y el processor la trata como duplicado benigno. NULLs distintos → camino sin flag intacto. `f19a270` |
 | R2 | orquest. | ¿El `return` de dedup desbalancea el contador de intake? | ✅ no: el `return` está dentro del `try`, el `finally { intakeDelta(-1) }` corre igual. Contador balanceado. |
 | R3 | resiliencia | `gastoExistePorHash` ante error de lectura. | ✅ devuelve `false` → procede (preferimos un raro duplicado a **perder** un gasto). |
 | R4 | seguridad | ¿Lecturas nuevas scopeadas por tenant? | ✅ `gastoExistePorHash` filtra `tenant_id` + `viaje_id` explícitos (service-role). |
 
-**Resumen AUDITORÍA 2:** feature sólida, 1 limitación conocida documentada (no es
-regresión). 80 tests verdes. Migración **0014** aplicada. `engine.ts` intacto.
+**Resumen AUDITORÍA 2:** feature sólida; R1 (race same-burst) **cerrado airtight**
+tras el feedback (mig. 0015, índice único + 23505). 97 tests verdes. Migraciones
+**0014 + 0015** aplicadas. `engine.ts` intacto.
+
+### Post-feedback de Javier (verificaciones y correcciones)
+
+| Tema | Resultado |
+|------|-----------|
+| **Plan de Vercel / `maxDuration`** | No se pudo confirmar Pro+Fluid por API (cuenta = team personal, default Hobby, tope duro 60s). **Revertido 120→60** para no asumir margen inexistente. ⚠️ **RIESGO ABIERTO**: el peor caso teórico (>60s) no cabe en Hobby; camino fiable = común (~30s); fix real = offload a QStash (FASE 3). Confirmar plan en Vercel → Settings → Functions → Fluid Compute. |
+| **Flags del demo** | Encendidos **desde ya** en el entorno local (`.env.local`): `CUADRA_INTAKE_GRACE_MS=2000`, `CUADRA_RECUPERAR_CIERRE_PARCIAL=1`, `CUADRA_DEDUP_FOTOS=1` (+ `CUADRA_INTAKE_ESPERA_MS=20000`). El camino "verificado" ahora es CON los flags ON. Al desplegar en Vercel, replicar en su env. |
+| **Slugs de fallback OpenRouter** | ✅ **VERIFICADOS** contra el catálogo (`/api/v1/models`): los 7 (primarios + fallbacks) existen. |
+| **Suites nuevas** | `barrera.test.ts` (ráfaga, 5) + `injeccion.test.ts` (12 casos). |
+| **`flujo completo 3 veces`** | ⏳ requiere corrida **en vivo** (LLM + WhatsApp/Meta) → checklist manual pre-demo; no es reproducible headless. |
 ## AUDITORÍA 3 (post-FASE 3) — pendiente
 ## AUDITORÍA 4 (post-FASE 4) — pendiente
 ## SÚPER-AUDITORÍA final — pendiente
