@@ -4,18 +4,20 @@
 // + manda el PDF si se cerró la liquidación.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { randomUUID } from 'crypto';
 import type OpenAI from 'openai';
 import '@/lib/cuadra/tools'; // side-effect: registra las tools en el registry
 import { runAgent } from '@/lib/agents/run';
 import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
-import { addGasto, getGastos } from '@/lib/cuadra/repo';
+import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
+import { addGasto, getGastos, updateGastoCfdiXml } from '@/lib/cuadra/repo';
 import {
   resolveOperador, getOpenViaje, getTenantContext,
   loadConversation, saveConversation, claimMessage,
   acquireViajeLock, releaseViajeLock, releaseMessageClaim, type ConvTurn,
 } from '@/lib/cuadra/conv';
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/cuadra/costos';
-import { sendText, sendDocument, downloadMediaAsDataUrl } from '@/lib/meta/client';
+import { sendText, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText } from '@/lib/meta/client';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 
@@ -86,9 +88,47 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       return; // no corre el agente por foto
     }
 
+    // ── DOCUMENTO: XML del CFDI (NIVEL 2 del complemento de hidrocarburos) ────
+    // El operador/oficina reenvía el XML que la gasolinera manda por correo. NO
+    // requiere e.firma ni portales. Silencioso (acuse consolidado): la validación
+    // se refleja en el cuadre al cerrar.
+    if (msg.type === 'document' && msg.mediaId) {
+      const xmlText = await downloadMediaAsText(msg.mediaId);
+      const xml = xmlText ? parseCfdiXml(xmlText) : null;
+      if (!xml || !xml.uuid) {
+        await say('Recibí un documento, pero necesito el *XML* del CFDI (el archivo .xml que te manda la gasolinera por correo), no el PDF. ¿Me lo reenvías? 📎');
+        return;
+      }
+      const gastos = await getGastos(viajeId, op.tenantId);
+      const match = gastos.find((x) => x.cfdiUuid && x.cfdiUuid.toLowerCase() === xml.uuid);
+      if (match) {
+        // Ya existía el gasto (de la foto): se enriquece con el XML.
+        await updateGastoCfdiXml(op.tenantId, match.id, xml);
+      } else {
+        // El XML llegó sin foto previa: se crea el gasto desde el XML.
+        const esFuel = (xml.claveProdServ ?? '').startsWith('15101');
+        await addGasto(op.tenantId, viajeId, {
+          id: randomUUID(),
+          concepto: esFuel ? 'diesel' : 'factura',
+          monto: xml.total ?? 0,
+          fecha: xml.fecha,
+          rfcEmisor: xml.rfcEmisor,
+          rfcReceptor: xml.rfcReceptor,
+          cfdiUuid: xml.uuid,
+          claveProdServ: xml.claveProdServ,
+          claveUnidad: xml.claveUnidad,
+          tipoComprobante: xml.tipoComprobante,
+          complementoHidrocarburos: xml.complementoHidrocarburos,
+          cfdiEsquemaAlterno: xml.esquemaAlterno,
+          xmlVerificado: true,
+        });
+      }
+      return; // silencioso
+    }
+
     // ── TEXTO: corre el agente UNA vez → respuesta consolidada ───────────────
     if (!(msg.type === 'text' && msg.text)) {
-      await say('Por ahora solo proceso texto y fotos de comprobantes. Mándame la foto de tu ticket. 📸');
+      await say('Por ahora solo proceso texto, fotos de comprobantes y el XML del CFDI. Mándame la foto de tu ticket o el XML. 📸');
       return;
     }
 

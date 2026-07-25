@@ -26,6 +26,7 @@ export interface Gasto {
   claveUnidad?: string;            // c_ClaveUnidad (LTR para combustible)
   tipoComprobante?: string;        // I | E | P | N | T (del XML)
   complementoHidrocarburos?: boolean; // el XML trae el nodo del complemento
+  cfdiEsquemaAlterno?: boolean;    // ECC (monedero) o Carta Porte → la regla 2.7.1.48 NO aplica
   xmlVerificado?: boolean;         // true = se recibió y parseó el XML del CFDI
 }
 

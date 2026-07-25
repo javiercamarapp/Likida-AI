@@ -63,6 +63,27 @@ export async function sendDocument(to: string, link: string, filename: string, c
   if (!res.ok) logger.error('wa.sendDocument', { status: res.status });
 }
 
+/** Descarga un media entrante de Meta como TEXTO (para el XML del CFDI). */
+export async function downloadMediaAsText(mediaId: string): Promise<string | null> {
+  try {
+    const meta = await fetch(`${GRAPH}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${token()}` },
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    });
+    if (!meta.ok) return null;
+    const { url } = (await meta.json()) as { url: string };
+    const bin = await fetch(url, {
+      headers: { Authorization: `Bearer ${token()}` },
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    });
+    if (!bin.ok) return null;
+    return await bin.text();
+  } catch (e) {
+    logger.warn('wa.downloadMediaText', { err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
 /** Descarga un media entrante de Meta y lo devuelve como data-URL para el OCR. */
 export async function downloadMediaAsDataUrl(mediaId: string): Promise<string | null> {
   try {

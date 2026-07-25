@@ -74,14 +74,37 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     cfdi_valido: g.cfdiValido ?? null,
     estado_sat: g.estadoSat ?? null,
     efos: g.efos ?? null,
+    clave_prod_serv: g.claveProdServ ?? null,
+    clave_unidad: g.claveUnidad ?? null,
+    tipo_comprobante: g.tipoComprobante ?? null,
+    complemento_hidrocarburos: g.complementoHidrocarburos ?? null,
+    cfdi_esquema_alterno: g.cfdiEsquemaAlterno ?? null,
+    xml_verificado: g.xmlVerificado ?? null,
   });
   if (error) throw new Error(`addGasto: ${error.message}`);
+}
+
+/** NIVEL 2: actualiza un gasto con los datos del XML del CFDI (por id). */
+export async function updateGastoCfdiXml(
+  tenantId: string,
+  gastoId: string,
+  x: { claveProdServ?: string; claveUnidad?: string; tipoComprobante?: string; complementoHidrocarburos?: boolean; esquemaAlterno?: boolean },
+): Promise<void> {
+  const { error } = await supabaseAdmin().from('gasto').update({
+    clave_prod_serv: x.claveProdServ ?? null,
+    clave_unidad: x.claveUnidad ?? null,
+    tipo_comprobante: x.tipoComprobante ?? null,
+    complemento_hidrocarburos: x.complementoHidrocarburos ?? null,
+    cfdi_esquema_alterno: x.esquemaAlterno ?? null,
+    xml_verificado: true,
+  }).eq('id', gastoId).eq('tenant_id', tenantId);
+  if (error) throw new Error(`updateGastoCfdiXml: ${error.message}`);
 }
 
 export async function getGastos(viajeId: string, tenantId: string): Promise<Gasto[]> {
   const { data, error } = await supabaseAdmin()
     .from('gasto')
-    .select('id, concepto, monto, fecha, folio, rfc_emisor, rfc_receptor, cfdi_uuid, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos')
+    .select('id, concepto, monto, fecha, folio, rfc_emisor, rfc_receptor, cfdi_uuid, imagen_url, ocr_confianza, cfdi_valido, estado_sat, efos, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos, cfdi_esquema_alterno, xml_verificado')
     .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId);
   if (error) throw new Error(`getGastos: ${error.message}`);
@@ -99,6 +122,12 @@ export async function getGastos(viajeId: string, tenantId: string): Promise<Gast
     cfdiValido: r.cfdi_valido != null ? Boolean(r.cfdi_valido) : undefined,
     estadoSat: (r.estado_sat as Gasto['estadoSat']) || undefined,
     efos: r.efos != null ? Boolean(r.efos) : undefined,
+    claveProdServ: (r.clave_prod_serv as string) || undefined,
+    claveUnidad: (r.clave_unidad as string) || undefined,
+    tipoComprobante: (r.tipo_comprobante as string) || undefined,
+    complementoHidrocarburos: r.complemento_hidrocarburos != null ? Boolean(r.complemento_hidrocarburos) : undefined,
+    cfdiEsquemaAlterno: r.cfdi_esquema_alterno != null ? Boolean(r.cfdi_esquema_alterno) : undefined,
+    xmlVerificado: r.xml_verificado != null ? Boolean(r.xml_verificado) : undefined,
   }));
 }
 

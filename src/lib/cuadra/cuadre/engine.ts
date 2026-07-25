@@ -127,12 +127,15 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     if (h && esCombustible) {
       const aplicaPorFecha = !g.fecha || g.fecha >= h.vigenteDesde; // solo CFDI vigentes
       if (g.xmlVerificado) {
-        // NIVEL 2: tenemos el XML → regla DURA. Combustible fiscal (clave + unidad),
-        // tipo I/E, vigente, y SIN el nodo del complemento → NO deducible.
-        const combustibleFiscal = h.claves.includes(g.claveProdServ ?? '') && g.claveUnidad === h.unidad;
+        // NIVEL 2: tenemos el XML → regla DURA (regla 2.7.1.48 RMF 2026). La ley
+        // obliga solo el ClaveProdServ de combustible en CFDI tipo I/E de un
+        // permisionario; la unidad LTR es consistencia esperada, NO requisito de
+        // la regla (por eso NO se exige aquí — evita falsos negativos). Se EXCLUYEN
+        // los esquemas alternos (monedero ECC / Carta Porte), que no caen en 2.7.1.48.
+        const combustibleFiscal = h.claves.includes(g.claveProdServ ?? '');
         const tipoAplica = g.tipoComprobante === 'I' || g.tipoComprobante === 'E';
-        if (combustibleFiscal && tipoAplica && aplicaPorFecha && !g.complementoHidrocarburos) {
-          diferencias.push({ tipo: 'complemento_hidrocarburos', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} es de combustible y NO trae el complemento de hidrocarburos requerido (obligatorio desde 24-abr-2026) — no deducible.`, gastoId: g.id });
+        if (combustibleFiscal && tipoAplica && aplicaPorFecha && !g.cfdiEsquemaAlterno && !g.complementoHidrocarburos) {
+          diferencias.push({ tipo: 'complemento_hidrocarburos', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} es de combustible y NO trae el complemento de hidrocarburos requerido (obligatorio desde 24-abr-2026, regla 2.7.1.48 RMF) — no deducible (CFF 29-A).`, gastoId: g.id });
         }
       } else if (g.cfdiUuid && aplicaPorFecha) {
         // NIVEL 1: es una FACTURA de combustible (tiene UUID) pero sin el XML →

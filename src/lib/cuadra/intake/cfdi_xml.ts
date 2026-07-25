@@ -32,6 +32,9 @@ export interface CfdiXmlData {
   claveProdServ?: string;
   claveUnidad?: string;
   complementoHidrocarburos: boolean; // el representativo trae el complemento
+  // Esquema ALTERNO (monedero electrónico ECC o Carta Porte): la regla 2.7.1.48
+  // NO aplica a estos; el motor NO debe declararlos no deducibles por complemento.
+  esquemaAlterno: boolean;
 }
 
 // Familia SAT de petrolíferos (pista del parser para elegir el concepto de
@@ -78,6 +81,11 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       ?? (complemento.TimbreFiscalDigital as Record<string, string> | undefined);
     const uuidRaw = tfd?.['@_UUID'];
 
+    // Esquemas alternos que la regla 2.7.1.48 excluye: Carta Porte (transporte)
+    // y Estado de Cuenta de Combustibles / monedero electrónico (ECC).
+    const compKeys = complemento && typeof complemento === 'object' ? Object.keys(complemento) : [];
+    const esquemaAlterno = compKeys.some((k) => /cartaporte|estadodecuentacombustible|consumodecombustibles/i.test(k));
+
     // Representativo: el primer concepto de combustible; si no hay, el primero.
     const rep = conceptos.find((c) => c.claveProdServ?.startsWith(PREFIJO_COMBUSTIBLE)) ?? conceptos[0];
 
@@ -96,6 +104,7 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       claveProdServ: rep?.claveProdServ,
       claveUnidad: rep?.claveUnidad,
       complementoHidrocarburos: rep?.complemento ?? false,
+      esquemaAlterno,
     };
   } catch {
     return null;

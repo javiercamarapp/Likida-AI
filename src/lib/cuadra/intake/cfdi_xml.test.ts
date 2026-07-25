@@ -44,6 +44,26 @@ describe('parseCfdiXml', () => {
     expect(r.complementoHidrocarburos).toBe(true);
   });
 
+  it('marca esquemaAlterno=false en un CFDI normal', () => {
+    expect(parseCfdiXml(SIN_COMPLEMENTO)!.esquemaAlterno).toBe(false);
+  });
+
+  it('detecta esquema alterno: Carta Porte', () => {
+    const conCartaPorte = SIN_COMPLEMENTO.replace(
+      '</cfdi:Complemento>',
+      '<cartaporte31:CartaPorte xmlns:cartaporte31="http://www.sat.gob.mx/CartaPorte31" Version="3.1"/></cfdi:Complemento>',
+    );
+    expect(parseCfdiXml(conCartaPorte)!.esquemaAlterno).toBe(true);
+  });
+
+  it('detecta esquema alterno: Estado de Cuenta de Combustibles (monedero ECC)', () => {
+    const conEcc = SIN_COMPLEMENTO.replace(
+      '</cfdi:Complemento>',
+      '<ecc12:EstadoDeCuentaCombustible xmlns:ecc12="http://www.sat.gob.mx/ecc12" Version="1.2"/></cfdi:Complemento>',
+    );
+    expect(parseCfdiXml(conEcc)!.esquemaAlterno).toBe(true);
+  });
+
   it('preserva las claves con ceros (no las castea a número)', () => {
     const r = parseCfdiXml(SIN_COMPLEMENTO)!;
     expect(typeof r.claveProdServ).toBe('string');

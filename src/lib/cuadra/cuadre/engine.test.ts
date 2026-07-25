@@ -209,4 +209,23 @@ describe('cuadrarViaje', () => {
     });
     expect(r.diferencias.some((d) => d.tipo.startsWith('complemento'))).toBe(false);
   });
+
+  // Verificación oficial: LTR NO es requisito de la regla → sin complemento, la
+  // regla dura corre AUNQUE la unidad no sea LTR (evita falso negativo).
+  it('B1 NIVEL 2: sin complemento aplica aunque la unidad no sea LTR', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h7', anticipo: 4200, politica, hidrocarburos: HC,
+      gastos: [g({ concepto: 'diesel', monto: 4200, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'E48', tipoComprobante: 'I', complementoHidrocarburos: false })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'complemento_hidrocarburos')).toBe(true);
+  });
+
+  // Verificación oficial: ECC/Carta Porte quedan EXCLUIDOS de la regla 2.7.1.48.
+  it('B1 NIVEL 2: esquema alterno (ECC/Carta Porte) NO dispara la regla', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h8', anticipo: 4200, politica, hidrocarburos: HC,
+      gastos: [g({ concepto: 'diesel', monto: 4200, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: false, cfdiEsquemaAlterno: true })],
+    });
+    expect(r.diferencias.some((d) => d.tipo.startsWith('complemento'))).toBe(false);
+  });
 });

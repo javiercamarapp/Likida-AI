@@ -31,9 +31,9 @@ export interface CuadraConfig {
   // Complemento de hidrocarburos (Bloque 1): claves de producto de combustible,
   // unidad esperada y fecha de entrada en vigor de la obligación.
   hidrocarburos: {
-    claves: string[];       // c_ClaveProdServ de combustible (15101505/14/15)
-    unidad: string;         // c_ClaveUnidad esperada (LTR)
-    vigenteDesde: string;   // ISO: obligación aplica a CFDI con Fecha >= este día
+    claves: string[];       // c_ClaveProdServ de combustible (15101505/14/15) — lo ÚNICO que la regla 2.7.1.48 exige
+    unidad: string;         // c_ClaveUnidad esperada (LTR) — consistencia, NO requisito legal
+    vigenteDesde: string;   // ISO: obligación aplica a CFDI con Fecha >= este día (24-abr-2026)
   };
 }
 
