@@ -63,7 +63,25 @@ export async function executeTool(
   }
 }
 
-/** Fabrica un ToolExecutor cerrado sobre un ToolContext (para generateWithTools). */
+/**
+ * Fabrica un ToolExecutor cerrado sobre un ToolContext (para generateWithTools).
+ * IDEMPOTENCIA DE MUTACIONES: una tool marcada `isMutation` no se re-ejecuta si el
+ * agente la llama otra vez en el MISMO run — se devuelve el resultado cacheado.
+ * Evita, p. ej., un doble guardar_liquidacion (doble PDF/costo). Solo se cachea el
+ * éxito (un fallo sí puede reintentarse). El backstop de dinero sigue siendo la
+ * DB (unique(viaje_id) + upsert).
+ */
 export function makeExecutor(ctx: ToolContext) {
-  return (name: string, args: Record<string, unknown>) => executeTool(name, args, ctx);
+  const mutacionesHechas = new Map<string, ToolExecResult>();
+  return async (name: string, args: Record<string, unknown>): Promise<ToolExecResult> => {
+    if (REGISTRY.get(name)?.isMutation) {
+      const key = `${name}:${JSON.stringify(args)}`;
+      const cache = mutacionesHechas.get(key);
+      if (cache) { logger.warn('tool.mutation_dedup', { name }); return cache; }
+      const res = await executeTool(name, args, ctx);
+      if (res.success) mutacionesHechas.set(key, res);
+      return res;
+    }
+    return executeTool(name, args, ctx);
+  };
 }

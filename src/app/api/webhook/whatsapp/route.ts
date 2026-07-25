@@ -42,21 +42,28 @@ export async function POST(req: NextRequest) {
   }
 
   const messages = extractMessages(payload);
-  for (const m of messages) {
-    // Rate limit por TELÉFONO (no por IP: todo Meta viene de sus IPs).
-    if (!rateLimit(`wa:${m.from}`, MSGS_POR_MIN, 60_000)) {
-      logger.warn('wa.ratelimit', { from: m.from });
-      continue;
-    }
+  // Rate limit por TELÉFONO (no por IP: todo Meta viene de sus IPs).
+  const permitidos = messages.filter((m) => {
+    const ok = rateLimit(`wa:${m.from}`, MSGS_POR_MIN, 60_000);
+    if (!ok) logger.warn('wa.ratelimit', { from: m.from });
+    return ok;
+  });
+
+  // 1.3: Meta PUEDE entregar varios mensajes (fotos) en UN POST → comparten los
+  // 60s de UNA invocación. Se procesan en UN solo after() con Promise.all para
+  // GARANTIZAR concurrencia (no depender de si Next corre N after() en serie).
+  // Con la barrera de intake las fotos ya corren en paralelo → un lote de 8 cabe
+  // holgado en 60s (medido: 8 en paralelo ≈ 3.5s vs 24s en serie).
+  if (permitidos.length) {
     after(async () => {
-      try {
-        await processInbound(m);
-      } catch (e) {
-        logger.error('processInbound', { err: e instanceof Error ? e.message : String(e) });
-      }
+      await Promise.all(
+        permitidos.map((m) =>
+          processInbound(m).catch((e) => logger.error('processInbound', { err: e instanceof Error ? e.message : String(e) })),
+        ),
+      );
     });
   }
-  return NextResponse.json({ received: messages.length });
+  return NextResponse.json({ received: permitidos.length });
 }
 
 // ── parsing del payload de WhatsApp Cloud API ───────────────────────────────
