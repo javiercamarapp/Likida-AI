@@ -5,3 +5,7 @@ node_modules/
 *.log
 /tmp/
 .tickets_calibracion/
+
+# Artefactos de build de TS
+tsconfig.tsbuildinfo
+.vercel
