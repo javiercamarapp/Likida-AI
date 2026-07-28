@@ -61,6 +61,16 @@ export interface Norma {
 }
 
 export const NORMAS: Record<string, Norma> = {
+  'cff-69-B': {
+    id: 'cff-69-B',
+    instrumento: "Código Fiscal de la Federación",
+    articulo: "69-B",
+    titulo: "EFOS — comprobantes que amparan operaciones inexistentes",
+    citas: ["CFF 69-B"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    ficha: "normas/cff-69-B.yaml",
+  },
   'cff-29-A': {
     id: 'cff-29-A',
     instrumento: "Código Fiscal de la Federación",
@@ -172,7 +182,7 @@ export const NORMAS: Record<string, Norma> = {
     titulo: "Requisitos del acreditamiento del IVA",
     citas: ["LIVA art. 5"],
     jerarquia: 1,
-    estado: "sin_verificar",
+    estado: "verificado_fuente_primaria",
     ficha: "normas/liva-5.yaml",
   },
   'politica-portales-plazos-facturacion': {

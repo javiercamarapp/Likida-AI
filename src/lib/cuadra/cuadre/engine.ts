@@ -261,67 +261,6 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     });
   }
 
-  // ── Acreditamiento (reglas 7, 9, 1.6): IEPS/IVA/peaje ────────────────────────
-  // OJO CON EL NOMBRE: esta lista NO dice qué gasto es deducible para ISR. Dice
-  // qué gasto no puede ACREDITAR impuestos, que es otra cosa. Se llamaba
-  // NO_DEDUCIBLE y esa confusión casi cuesta un bug caro: `combustible_efectivo`
-  // SÍ es deducible hasta el 15% (RFA 2026 regla 2.9), pero NO acredita IEPS —
-  // la facilidad salva un beneficio, no los dos. Sacarlo de aquí acreditaría un
-  // IEPS que la facilidad no concede.
-  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido'];
-  const peajeFactor = input.estimulos?.peajeFactor ?? 0.5;
-  // `iepsAcreditable` se queda en 0 a propósito y por eso es const: el estímulo
-  // del LIF 20-A no es una cifra que este motor pueda calcular (necesita la cuota
-  // semanal del DOF). Se conserva el campo para no romper los consumidores y la
-  // columna de la BD; el dato útil es `litrosDieselAcreditables`.
-  const iepsAcreditable = 0;
-  let ivaAcreditable = 0, peajeAcreditable = 0;
-  let litrosDieselAcreditables = 0;
-  for (const g of input.gastos) {
-    if (duplicados.has(g.id)) continue;
-    if (diferencias.some((d) => d.gastoId === g.id && SIN_ACREDITAMIENTO.includes(d.tipo))) continue;
-    // El acreditamiento exige un CFDI VERIFICADO (XML): un ticket de gasolinera
-    // sin factura NO es deducible ni acreditable hasta timbrarse. Además, así el
-    // IVA/IEPS son SIEMPRE los importes LEÍDOS del XML (nunca recomputados con una
-    // tasa asumida: 16% u 8% fronterizo salen tal cual del comprobante).
-    if (!g.xmlVerificado) continue;
-    if ((g.ivaTraslado ?? 0) > 0) ivaAcreditable += g.ivaTraslado as number;
-    // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas.
-    if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0) peajeAcreditable += (g.subTotal as number) * peajeFactor;
-    // IEPS de DIÉSEL (7): el estímulo (LIF 2026 art. 20, ap. A) es SOLO diésel — NO
-    // gasolina. Se identifica por la clave de producto del SAT (15101505).
-    const clavesDiesel = input.estimulos?.clavesDieselIeps ?? [];
-    const esDieselIeps = clavesDiesel.includes(g.claveProdServ ?? '');
-    if (esDieselIeps) {
-      // EL ESTÍMULO NO ES EL IEPS TRASLADADO. `normas/lif-2026-20-A.yaml`
-      // (verificado_fuente_primaria) dice literal: "cuota IEPS vigente al momento
-      // de la compra × LITROS. No es el IEPS trasladado en el CFDI."
-      //
-      // Antes se sumaba el trasladado y el PDF lo imprimía en verde citando ese
-      // artículo. Dos errores encima: la fórmula equivocada, y una cifra en pesos
-      // que la decisión D2 del roadmap prohibió enseñar "sin discusión" —la cuota
-      // pasó de $7.3634 a $2.0925 en cinco meses, y el estímulo es ingreso
-      // acumulable, así que en bruto infla la propuesta ~30%.
-      //
-      // Sin el acuerdo semanal del DOF no se puede calcular. Lo que sí se puede
-      // es contar los LITROS elegibles: es el dato duro que el contador
-      // multiplica por la cuota que él tenga fechada.
-      //
-      // El medio de pago es requisito del 4º párrafo de la LIF 20-A-IV (monedero,
-      // tarjeta, cheque nominativo o transferencia) y NO tiene la válvula del 15%
-      // que la RFA 2.9 sí concede para ISR: la facilidad salva la deducción, no
-      // el acreditamiento.
-      // Los litros los lee el OCR del ticket y viven en `ocrExtra` (el XML del
-      // CFDI no siempre trae la cantidad desglosada por concepto).
-      const litros = Number((g.ocrExtra as Record<string, unknown> | undefined)?.litros ?? 0);
-      const pagoElectronico = !!g.formaPago && g.formaPago !== '01';
-      if (pagoElectronico && Number.isFinite(litros) && litros > 0) litrosDieselAcreditables += litros;
-      if (!(g.iepsTraslado ?? 0) && g.xmlVerificado) {
-        diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} no desglosa el IEPS — es deducible, pero sin ese desglose se complica documentar el estímulo (LIF 2026 art. 20, ap. A).`, gastoId: g.id });
-      }
-    }
-  }
-
   // ── Tickets de portal que se van a quedar sin factura ────────────────────────
   //
   // Un ticket de gasolinera NO es factura: hay que timbrarlo en el portal del
@@ -419,6 +358,92 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       });
     }
   }
+
+
+
+  // ── Acreditamiento ─────────────────────────────────────────────────────────
+  // ESTE BLOQUE VA AL FINAL A PROPÓSITO. Corría antes del tope de alimentación,
+  // que es lo que genera `viatico_excede_fiscal`, así que cuando calculaba la
+  // proporción deducible de LIVA 5-I esa diferencia todavía no existía y el IVA
+  // se acreditaba entero. Mover el bloque es el arreglo: aquí ya están TODAS las
+  // diferencias.
+  // OJO CON EL NOMBRE: esta lista NO dice qué gasto es deducible para ISR. Dice
+  // qué gasto no puede ACREDITAR impuestos, que es otra cosa. Se llamaba
+  // NO_DEDUCIBLE y esa confusión casi cuesta un bug caro: `combustible_efectivo`
+  // SÍ es deducible hasta el 15% (RFA 2026 regla 2.9), pero NO acredita IEPS —
+  // la facilidad salva un beneficio, no los dos. Sacarlo de aquí acreditaría un
+  // IEPS que la facilidad no concede.
+  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido'];
+  const peajeFactor = input.estimulos?.peajeFactor ?? 0.5;
+  // `iepsAcreditable` se queda en 0 a propósito y por eso es const: el estímulo
+  // del LIF 20-A no es una cifra que este motor pueda calcular (necesita la cuota
+  // semanal del DOF). Se conserva el campo para no romper los consumidores y la
+  // columna de la BD; el dato útil es `litrosDieselAcreditables`.
+  const iepsAcreditable = 0;
+  let ivaAcreditable = 0, peajeAcreditable = 0;
+  let litrosDieselAcreditables = 0;
+  for (const g of input.gastos) {
+    if (duplicados.has(g.id)) continue;
+    if (diferencias.some((d) => d.gastoId === g.id && SIN_ACREDITAMIENTO.includes(d.tipo))) continue;
+    // El acreditamiento exige un CFDI VERIFICADO (XML): un ticket de gasolinera
+    // sin factura NO es deducible ni acreditable hasta timbrarse. Además, así el
+    // IVA/IEPS son SIEMPRE los importes LEÍDOS del XML (nunca recomputados con una
+    // tasa asumida: 16% u 8% fronterizo salen tal cual del comprobante).
+    if (!g.xmlVerificado) continue;
+
+    // EN PROPORCIÓN A LO DEDUCIBLE. LIVA art. 5 fr. I, verificado contra fuente
+    // primaria: "Tratándose de erogaciones PARCIALMENTE DEDUCIBLES para los
+    // fines del impuesto sobre la renta, únicamente se considerará para los
+    // efectos del acreditamiento... EN LA PROPORCIÓN en la que dichas
+    // erogaciones sean deducibles".
+    //
+    // El caso que ocurre a diario: un viático de alimentación que excede el
+    // tope de LISR 28-V es deducible solo hasta el tope, así que su IVA se
+    // acredita solo en esa misma proporción. Antes se acreditaba el traslado
+    // completo, y acreditar de más es del lado caro: es el cliente quien
+    // responde ante una revisión, y el papel se lo dio Likida.
+    const noDeducibleDeEste = diferencias
+      .filter((d) => d.gastoId === g.id && d.tipo === 'viatico_excede_fiscal')
+      .reduce((s2, d) => s2 + (d.monto ?? 0), 0);
+    const proporcion = g.monto > 0 ? Math.max(0, Math.min(1, (g.monto - noDeducibleDeEste) / g.monto)) : 1;
+
+    if ((g.ivaTraslado ?? 0) > 0) ivaAcreditable += (g.ivaTraslado as number) * proporcion;
+    // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas.
+    if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0) peajeAcreditable += (g.subTotal as number) * peajeFactor;
+    // IEPS de DIÉSEL (7): el estímulo (LIF 2026 art. 20, ap. A) es SOLO diésel — NO
+    // gasolina. Se identifica por la clave de producto del SAT (15101505).
+    const clavesDiesel = input.estimulos?.clavesDieselIeps ?? [];
+    const esDieselIeps = clavesDiesel.includes(g.claveProdServ ?? '');
+    if (esDieselIeps) {
+      // EL ESTÍMULO NO ES EL IEPS TRASLADADO. `normas/lif-2026-20-A.yaml`
+      // (verificado_fuente_primaria) dice literal: "cuota IEPS vigente al momento
+      // de la compra × LITROS. No es el IEPS trasladado en el CFDI."
+      //
+      // Antes se sumaba el trasladado y el PDF lo imprimía en verde citando ese
+      // artículo. Dos errores encima: la fórmula equivocada, y una cifra en pesos
+      // que la decisión D2 del roadmap prohibió enseñar "sin discusión" —la cuota
+      // pasó de $7.3634 a $2.0925 en cinco meses, y el estímulo es ingreso
+      // acumulable, así que en bruto infla la propuesta ~30%.
+      //
+      // Sin el acuerdo semanal del DOF no se puede calcular. Lo que sí se puede
+      // es contar los LITROS elegibles: es el dato duro que el contador
+      // multiplica por la cuota que él tenga fechada.
+      //
+      // El medio de pago es requisito del 4º párrafo de la LIF 20-A-IV (monedero,
+      // tarjeta, cheque nominativo o transferencia) y NO tiene la válvula del 15%
+      // que la RFA 2.9 sí concede para ISR: la facilidad salva la deducción, no
+      // el acreditamiento.
+      // Los litros los lee el OCR del ticket y viven en `ocrExtra` (el XML del
+      // CFDI no siempre trae la cantidad desglosada por concepto).
+      const litros = Number((g.ocrExtra as Record<string, unknown> | undefined)?.litros ?? 0);
+      const pagoElectronico = !!g.formaPago && g.formaPago !== '01';
+      if (pagoElectronico && Number.isFinite(litros) && litros > 0) litrosDieselAcreditables += litros;
+      if (!(g.iepsTraslado ?? 0) && g.xmlVerificado) {
+        diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} no desglosa el IEPS — es deducible, pero sin ese desglose se complica documentar el estímulo (LIF 2026 art. 20, ap. A).`, gastoId: g.id });
+      }
+    }
+  }
+
 
   // ── Totales de deducibilidad (la cifra que compra el contralor) ──────────────
   // El motor ya detectaba todo lo necesario y no lo sumaba: el contralor tenía que

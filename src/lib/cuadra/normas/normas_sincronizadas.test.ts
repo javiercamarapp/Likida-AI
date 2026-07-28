@@ -63,6 +63,20 @@ describe('índice de normas vs fichas', () => {
     }
   });
 
+  it('las CITAS coinciden con las de la ficha, no solo su cantidad', () => {
+    // Este test solo comprobaba que el arreglo no estuviera vacío, y por eso
+    // `rlisr-57` pudo estar con `citas_en_codigo: []` en la ficha mientras el
+    // índice decía ["RLISR 57"] sin que nada fallara. Las citas SON el patrón
+    // con el que la guardia reconoce una norma en un mensaje: si se separan, la
+    // guardia le quita al agente una cita legítima o le deja pasar una que no.
+    for (const f of fichas) {
+      const enFicha = campo(f.txt, 'citas_en_codigo') ?? '[]';
+      let lista: string[] = [];
+      try { lista = JSON.parse(enFicha.replace(/'/g, '"')); } catch { /* mal formada → [] */ }
+      expect(NORMAS[f.id!].citas, `citas distintas en ${f.archivo}`).toEqual(lista);
+    }
+  });
+
   it('la ruta de la ficha existe de verdad', () => {
     for (const id of IDS_NORMA) {
       expect(archivos, `${NORMAS[id].ficha} no existe`).toContain(NORMAS[id].ficha.replace('normas/', ''));
