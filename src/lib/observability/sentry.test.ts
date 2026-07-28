@@ -32,19 +32,24 @@ describe('sentry — opcional y silencioso', () => {
 describe('logger — lo que sale va redactado', () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
-  it('redacta RFC, UUID y teléfono antes de emitir', async () => {
-    const { logger } = await import('@/lib/logger');
+  it('redacta RFC y teléfono, y huella el UUID, antes de emitir', async () => {
+    // El UUID ya no sale como `[UUID]`: eso borraba también las llaves primarias
+    // del camino del dinero y dejaba los logs sin forma de reconstruir un fallo
+    // (auditoría 5). Sale como huella derivable — ver el bloque de logger.ts.
+    const { logger, huellaId } = await import('@/lib/logger');
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const uuid = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
     logger.error('prueba', {
       rfc: 'XAXX010101000',
-      uuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+      uuid,
       tel: '+525512345678',
     });
     const salida = spy.mock.calls[0][0] as string;
     expect(salida).toContain('[RFC]');
-    expect(salida).toContain('[UUID]');
     expect(salida).toContain('[TEL]');
+    expect(salida).toContain(huellaId(uuid));
     expect(salida).not.toContain('XAXX010101000');
     expect(salida).not.toContain('525512345678');
+    expect(salida).not.toContain(uuid);
   });
 });
