@@ -17,6 +17,7 @@ import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
 import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
+import { violaIndice } from '@/lib/cuadra/pg_errores';
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
 import { getConfig } from '@/lib/cuadra/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/cuadra/intake/emparejar';
@@ -289,8 +290,16 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           // R1: dos fotos IDÉNTICAS en el mismo lote pasan el pre-check antes de
           // que cualquiera inserte; el índice único (mig. 0015) atrapa la 2ª con
           // 23505 → es un duplicado benigno, no un error. Se ignora en silencio.
-          if (imgHash && (e as { code?: string }).code === '23505') {
+          if (imgHash && violaIndice(e, 'uq_gasto_img_hash')) {
             logger.info('foto.dedup_race', { viaje: viajeId });
+            return;
+          }
+          // Mismo CFDI llegando dos veces (mig. 0019). También benigno: el gasto
+          // ya está registrado con ese UUID, así que el comprobante no se pierde
+          // — lo que se evita es contarlo dos veces. Dejarlo salir tumbaría el
+          // procesamiento y Meta reintentaría el webhook en bucle.
+          if (violaIndice(e, 'uq_gasto_cfdi_uuid')) {
+            logger.info('foto.cfdi_ya_registrado', { viaje: viajeId, uuid: gasto.cfdiUuid });
             return;
           }
           throw e;

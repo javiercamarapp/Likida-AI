@@ -123,12 +123,52 @@ export function portalParaTicket(texto: string, cfg: CuadraConfig): PortalFactur
   return cfg.portales.find((p) => p.match.some((m) => t.includes(m))) ?? null;
 }
 
+/**
+ * Mezcla el override del tenant sobre la config base, RECURSIVAMENTE.
+ *
+ * `{ ...base, ...override }` era shallow, y eso borraba hermanos: un tenant que
+ * guardaba `config: { estimulos: { efectivoTopeMxn: 3000 } }` se llevaba por
+ * delante el tope de alimentación, el factor de peaje y las claves del IEPS de
+ * diésel — todo el objeto `estimulos` se reemplazaba.
+ *
+ * Y no tronaba. El motor lee el tope con `if (topeAlimentacion != null)`, así
+ * que al quedar undefined el bloque se SALTABA: el tope de $750/día de LISR 28-V
+ * dejaba de aplicarse sin un error en el log, y la liquidación salía diciendo
+ * que todo era deducible. Personalizar un tope tiraba los otros tres.
+ *
+ * Reglas:
+ *  - objetos → se mezclan por llave, a cualquier profundidad;
+ *  - arrays → REEMPLAZAN. Si la flota define su política de gastos quiere la
+ *    suya; concatenarla con la de demo le dejaría topes que nadie autorizó, y un
+ *    array vacío es una decisión, no un hueco;
+ *  - primitivos y null → reemplazan.
+ *
+ * No muta nada: `DEMO_CONFIG` es un módulo compartido, y mutarlo le aplicaría el
+ * override de un tenant al siguiente que pida config.
+ */
+export function fusionarConfig<T>(base: T, override: unknown): T {
+  if (override == null) return base;
+  if (Array.isArray(override) || Array.isArray(base)) return override as T;
+  if (typeof override !== 'object' || typeof base !== 'object' || base === null) return override as T;
+
+  const salida: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  for (const [k, v] of Object.entries(override as Record<string, unknown>)) {
+    const previo = (base as Record<string, unknown>)[k];
+    salida[k] =
+      previo !== null && typeof previo === 'object' && !Array.isArray(previo) &&
+      v !== null && typeof v === 'object' && !Array.isArray(v)
+        ? fusionarConfig(previo, v)
+        : v;
+  }
+  return salida as T;
+}
+
 /** Devuelve la config del tenant (override en DB) o los defaults de demo. */
 export async function getConfig(tenantId: string): Promise<CuadraConfig> {
   try {
     const { data } = await supabaseAdmin().from('tenant').select('rfc, config').eq('id', tenantId).maybeSingle();
     const override = (data?.config as Partial<CuadraConfig> | null) ?? null;
-    const cfg: CuadraConfig = override ? { ...DEMO_CONFIG, ...override } : { ...DEMO_CONFIG };
+    const cfg: CuadraConfig = fusionarConfig(DEMO_CONFIG, override);
     // El RFC de la empresa puede venir en la columna `tenant.rfc`.
     if (data?.rfc) cfg.empresa = { ...cfg.empresa, rfc: data.rfc as string };
     return cfg;
