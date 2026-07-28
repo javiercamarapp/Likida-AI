@@ -1,30 +1,94 @@
 id: lif-2026-art-20-A
 tipo: ley
 jerarquia: 1
-instrumento: "Ley de Ingresos de la Federación para 2026"
-articulo_o_regla: "20, apartado A"
-titulo: "Estímulos fiscales: IEPS de diésel (fr. IV) y peaje 50% (fr. V)"
+instrumento: "Ley de Ingresos de la Federación para el Ejercicio Fiscal de 2026"
+articulo_o_regla: "20, apartado A (estímulos fiscales)"
+titulo: "Estímulo de IEPS de diésel para transporte, y estímulo del 50% de peaje"
 citas_en_codigo: ["LIF 2026 Art. 20", "LIF 2026 Art. 20-A", "LIF Art. 20-A fr. IV"]
-texto_vigente: null
-estado_verificacion: sin_verificar
+fecha_publicacion: 2025-11-07
+fuente_url: "http://www.diputados.gob.mx/LeyesBiblio/pdf/LIF_2026.pdf"
+fuente_tipo: diputados_oficial
+estado_verificacion: verificado_fuente_primaria
 nota_verificacion: >
-  El código cita "LIF 2026 Art. 20" y "Art. 20-A" en diez lugares y aplica un factor
-  de 0.5 al peaje. NINGUNA de las dos cosas se leyó en la fuente en esta
-  investigación. Además la ola 2 detectó que el material comercial cita "LIF
-  artículo 16", que es una cita muerta (hoy es el artículo 20).
-  PARA CERRAR: bajar la LIF 2026 del DOF y transcribir las fracciones de los dos
-  estímulos, con sus condiciones (tope de ingresos, obligación de bitácora,
-  acreditamiento contra qué impuesto y en qué plazo).
-contenido_asumido_en_el_codigo:
-  - "Estímulo de IEPS: SOLO diésel (clave 15101505), no gasolina"
-  - "Estímulo de peaje: 50% del SubTotal de casetas, para ingresos < $300M"
-advertencia: >
-  Ver también criterio-1-LIF-PI: el estímulo del diésel se calcula con la cuota
-  SEMANAL DISMINUIDA, y usar la entera es práctica indebida que alcanza a quien
-  presta el servicio. Mientras esta ficha siga sin verificar, el producto NO debe
-  imprimir cifras de estímulo de diésel en pesos.
-verificado_por: null
+  Texto obtenido de dos reproducciones del articulado (leyes-mx.com y mley.mx) y
+  corroborado con el documento de Reducciones y Estímulos Fiscales 2026 de PRODECON.
+
+estimulo_diesel_transporte:
+  texto_vigente: >
+    Se otorga un estímulo fiscal a las personas contribuyentes que importen o
+    adquieran diésel o biodiésel y sus mezclas para su consumo final y que sea para
+    uso automotriz en vehículos que se destinen exclusivamente al transporte público
+    y privado, de personas o de carga, así como el turístico, consistente en permitir
+    el acreditamiento de un monto equivalente al impuesto especial sobre producción y
+    servicios que las personas que enajenen diésel o biodiésel y sus mezclas en
+    territorio nacional hayan causado por la enajenación de estos combustibles...
+    ---
+    el monto que se podrá acreditar será el que resulte de multiplicar la cuota del
+    impuesto especial sobre producción y servicios que corresponda según el tipo de
+    combustible... con los ajustes que, en su caso, correspondan, vigente en el
+    momento en que se haya realizado la importación o adquisición del diésel..., por
+    el número de litros importados o adquiridos.
+  como_se_calcula: "cuota IEPS vigente al momento de la compra × LITROS. No es el IEPS trasladado en el CFDI."
+  advertencia_critica: >
+    "con los ajustes que, en su caso, correspondan" es la cuota DISMINUIDA, y la
+    cuota cambia SEMANALMENTE. Ver criterio-1-LIF-PI: usar la cuota entera es
+    práctica indebida que alcanza a quien presta el servicio.
+
+estimulo_peaje:
+  texto_vigente: >
+    Se otorga un estímulo fiscal a las personas contribuyentes que se dediquen
+    exclusivamente al transporte terrestre público y privado, de carga o pasaje, así
+    como el turístico, que utilizan la Red Nacional de Autopistas de Cuota, que
+    obtengan en el ejercicio fiscal en el que hagan uso de la infraestructura
+    carretera de cuota, ingresos totales anuales para los efectos del impuesto sobre
+    la renta menores a 300 millones de pesos, consistente en permitir un
+    acreditamiento de los gastos realizados en el pago de los servicios por el uso de
+    la infraestructura mencionada hasta en un 50 por ciento del gasto total erogado
+    por este concepto. El estímulo será aplicable únicamente cuando se cumplan con
+    los requisitos que mediante reglas de carácter general establezca el Servicio de
+    Administración Tributaria. El estímulo no podrá ser aplicable por las personas
+    morales que se consideran partes relacionadas de acuerdo con el artículo 179 de
+    la Ley del Impuesto sobre la Renta.
+  condiciones:
+    - "Dedicarse EXCLUSIVAMENTE al transporte terrestre de carga, pasaje o turístico"
+    - "Usar la RED NACIONAL DE AUTOPISTAS DE CUOTA (no cualquier caseta)"
+    - "Ingresos totales anuales del ejercicio MENORES a $300,000,000"
+    - "No ser parte relacionada (LISR art. 179)"
+
+hallazgos_que_el_codigo_tiene_MAL:
+  - id: H4
+    que_dice_la_ley: "hasta en un 50 por ciento del GASTO TOTAL EROGADO por este concepto"
+    que_hace_el_motor: "peajeAcreditable += g.subTotal * 0.5 — usa el SubTotal SIN IVA."
+    por_que_importa: >
+      "Gasto total erogado" es lo pagado, no la base sin impuesto. Con IVA al 16%, la
+      diferencia es ~13.8% menos de estímulo del que corresponde. CONFLICTO: usar el
+      total podría duplicar el beneficio del IVA, que ya se acredita por separado
+      (LIVA art. 5). Esta es una pregunta para un contador, NO para resolverse sola.
+    severidad: alta
+    estado: SIN RESOLVER
+  - id: H5
+    que_dice_la_ley: "que utilizan la Red Nacional de Autopistas de Cuota"
+    que_hace_el_motor: "Aplica el 50% a TODO gasto con concepto 'caseta'."
+    por_que_importa: >
+      Una caseta estatal o municipal fuera de la Red Nacional no da el estímulo. El
+      motor lo estaría acreditando de más.
+    severidad: media
+  - id: H6
+    que_dice_la_ley: "ingresos totales anuales menores a 300 millones; no partes relacionadas"
+    que_hace_el_motor: "No conoce los ingresos de la flota ni su relación de partes."
+    por_que_importa: "El estímulo se aplica sin verificar si el cliente califica."
+    severidad: media
+  - id: H7
+    que_dice_la_ley: >
+      El estímulo de la fracción I (diésel para maquinaria, ingresos < $60M) NO
+      aplica: "Los derechos previstos en esta fracción y en la fracción II de este
+      apartado no serán aplicables a las personas contribuyentes que utilicen el
+      diésel... en bienes destinados al autotransporte de personas o efectos a través
+      de carreteras o caminos".
+    que_hace_el_motor: "No los confunde hoy, pero el material comercial sí puede."
+    severidad: baja
+verificado_el: 2026-07-27
 usado_en_codigo:
-  - "config.ts — estimulos.peajeFactor, estimulos.clavesDieselIeps"
+  - "config.ts — estimulos.peajeFactor (0.5), estimulos.clavesDieselIeps"
   - "cuadre/engine.ts — iepsAcreditable, peajeAcreditable"
   - "liquidacion/pdf.ts — sección ACREDITABLE / RECUPERABLE"
