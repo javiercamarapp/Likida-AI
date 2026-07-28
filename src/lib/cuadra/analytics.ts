@@ -99,19 +99,24 @@ export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
   );
 }
 
-export interface Acreditables { ieps: number; iva: number; peaje: number; }
+export interface Acreditables {
+  /** Litros de diésel elegibles. El estímulo en pesos lo calcula el contador. */
+  litrosDiesel: number; ieps: number; iva: number; peaje: number; }
 
 /** Suma de estímulos acreditables del periodo (IEPS diésel + IVA + peaje 50%). */
 export async function getAcreditables(tenantId: string): Promise<Acreditables> {
   const { data } = await supabaseAdmin()
     .from('liquidacion')
-    .select('ieps_acreditable, iva_acreditable, peaje_acreditable')
+    .select('ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables')
     .eq('tenant_id', tenantId);
   const rows = data ?? [];
   return {
     ieps: round2(rows.reduce((s, r) => s + Number(r.ieps_acreditable ?? 0), 0)),
     iva: round2(rows.reduce((s, r) => s + Number(r.iva_acreditable ?? 0), 0)),
     peaje: round2(rows.reduce((s, r) => s + Number(r.peaje_acreditable ?? 0), 0)),
+    // El IEPS ya no se presenta en pesos —el estímulo es cuota semanal × litros
+    // y esa cuota no la tenemos—, así que lo que se entrega es el dato duro.
+    litrosDiesel: round2(rows.reduce((s, r) => s + Number(r.litros_diesel_acreditables ?? 0), 0)),
   };
 }
 

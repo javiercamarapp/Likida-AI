@@ -35,7 +35,11 @@ export async function getPolitica(tenantId: string): Promise<PoliticaGasto[]> {
 export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje | null> {
   const { data, error } = await supabaseAdmin()
     .from('viaje')
-    .select('id, folio, origen, destino, anticipo, fecha_inicio, fecha_fin')
+    // `demora_no_imputable` NO es opcional aquí: el PDF tiene una sección que
+    // depende de él (LFT 263-I) y sin traerlo esa sección no se activa NUNCA.
+    // Es el mismo patrón que ya costó dos rondas: el dato existe, el consumidor
+    // existe, y nadie los conectó.
+    .select('id, folio, origen, destino, anticipo, fecha_inicio, fecha_fin, demora_no_imputable')
     .eq('id', viajeId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -44,6 +48,9 @@ export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje
   return {
     id: data.id as string,
     folio: (data.folio as string) || undefined,
+    // `?? undefined` y no `|| false`: NULL significa "sin determinar", que no es
+    // lo mismo que "la demora sí era imputable al operador".
+    demoraNoImputable: (data.demora_no_imputable as boolean | null) ?? undefined,
     origen: (data.origen as string) || undefined,
     destino: (data.destino as string) || undefined,
     anticipo: Number(data.anticipo ?? 0),
@@ -325,6 +332,7 @@ export async function saveLiquidacion(
     p_estatus: liq.estatus,
     p_diferencias: liq.diferencias,
     p_ieps: liq.iepsAcreditable,
+    p_litros_diesel: liq.litrosDieselAcreditables ?? 0,
     p_iva: liq.ivaAcreditable,
     p_peaje: liq.peajeAcreditable,
     p_pdf_url: pdfUrl ?? null,
@@ -384,4 +392,47 @@ export async function reclamarEnvioAviso(
   });
   if (error) throw new Error(`reclamarEnvioAviso: ${error.message}`);
   return data === true;
+}
+
+// ── Acumulados del ejercicio (Fase 1: la capa de periodo) ────────────────────
+
+/**
+ * Pagos de combustible del ejercicio, separando efectivo del total.
+ *
+ * Es el denominador del 15% de la RFA 2026 regla 2.9, y por eso cuenta SOLO
+ * combustible: la base es combustible contra combustible, no contra el gasto
+ * total de la flota. Ese denominador equivocado haría parecer holgada a una
+ * flota que ya se pasó.
+ *
+ * Se calcula desde `gasto` sin tabla nueva: `forma_pago` y `concepto` ya
+ * existen. Los duplicados y los montos no positivos quedan fuera por el mismo
+ * criterio que usa el motor — si no cuentan para el cuadre, tampoco para el
+ * contador.
+ *
+ * `formaPago` '01' es efectivo en el catálogo del SAT. Un gasto SIN forma de
+ * pago no se cuenta como efectivo: no se sabe, y suponerlo inflaría el
+ * numerador contra la flota.
+ */
+export async function getAcumuladoCombustible(
+  tenantId: string,
+  ejercicio: number,
+): Promise<{ efectivo: number; totalCombustible: number }> {
+  const { data, error } = await supabaseAdmin()
+    .from('gasto')
+    .select('monto, forma_pago')
+    .eq('tenant_id', tenantId)
+    .eq('concepto', 'diesel')
+    .gte('fecha', `${ejercicio}-01-01`)
+    .lte('fecha', `${ejercicio}-12-31`);
+  if (error) throw new Error(`getAcumuladoCombustible: ${error.message}`);
+
+  let efectivo = 0;
+  let totalCombustible = 0;
+  for (const g of data ?? []) {
+    const monto = Number(g.monto);
+    if (!Number.isFinite(monto) || monto <= 0) continue;
+    totalCombustible += monto;
+    if (g.forma_pago === '01') efectivo += monto;
+  }
+  return { efectivo: Math.round(efectivo * 100) / 100, totalCombustible: Math.round(totalCombustible * 100) / 100 };
 }
