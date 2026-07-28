@@ -198,3 +198,65 @@ describe('guardiaFundamento — la puntuación natural del español', () => {
     ]) expect(citasEnTexto(t), t).toContain('lisr-27-fr-III');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 4 · CRÍTICO — el arreglo de la coma abrió un agujero peor.
+//
+// Al ensanchar los patrones para cazar "artículo 27, fracción III" se añadió un
+// patrón SIN instrumento, con el argumento de que "la fracción ya identifica la
+// norma sin ambigüedad". Identifica el NÚMERO, no la LEY. Y los patrones nunca
+// tuvieron frontera al final del número, así que "2.9" calza dentro de "2.9.1".
+//
+// La diferencia con el hueco anterior es de grado, no de tipo: antes la guardia
+// se quedaba callada ante una cita inventada; aquí la CERTIFICA como si una tool
+// la hubiera autorizado. Un fiscalista que busque "RFA 2026 regla 2.9.1" no
+// encuentra nada, y el producto queda como que inventa fundamentos.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('una cita no se aprueba por el número: tiene que ser la misma LEY', () => {
+  it('artículo y fracción correctos, pero de OTRO instrumento, no son la norma permitida', () => {
+    // CFF 27-III es el registro del RFC: nada que ver con pagos en efectivo.
+    const t = 'Ese diésel no es deducible por el artículo 27, fracción III del Código Fiscal de la Federación.';
+    expect(citasEnTexto(t)).not.toContain('lisr-27-fr-III');
+  });
+
+  it('y la guardia NO la deja pasar intacta aunque la tool haya autorizado la de la LISR', () => {
+    const t = 'No es deducible por el artículo 27, fracción III de la Ley del IVA.';
+    const r = guardiaFundamento(t, ['lisr-27-fr-III']);
+    expect(r.forzado).toBe(true);
+  });
+});
+
+describe('el número de la norma termina donde termina: sin frontera se aprueban subreglas inventadas', () => {
+  it('"regla 2.9.1" no es la regla 2.9', () => {
+    const t = 'Esto lo permite conforme a la RFA 2026 regla 2.9.1 para el autotransporte.';
+    expect(citasEnTexto(t)).not.toContain('rfa-2026-2.9');
+  });
+
+  it('"artículo 570" no es el artículo 57', () => {
+    expect(citasEnTexto('el artículo 570 del RLISR')).not.toContain('rlisr-57');
+  });
+
+  it('"artículo 29-A9" no es el artículo 29-A', () => {
+    expect(citasEnTexto('el artículo 29-A9 del CFF')).not.toContain('cff-29-A');
+  });
+
+  it('la guardia fuerza cuando el texto trae la subregla inventada', () => {
+    const t = 'Esto lo permite la RFA 2026 regla 2.9.1.';
+    expect(guardiaFundamento(t, ['rfa-2026-2.9']).forzado).toBe(true);
+  });
+});
+
+describe('lo que el arreglo NO debe romper (regresión de la ronda 3)', () => {
+  it('la cita legítima con coma sigue reconociéndose y conservándose entera', () => {
+    const t = 'No es deducible según el artículo 27, fracción III de la LISR.';
+    expect(citasEnTexto(t)).toContain('lisr-27-fr-III');
+    const r = guardiaFundamento(t, ['lisr-27-fr-III']);
+    expect(r.forzado).toBe(false);
+    expect(r.reply).toBe(t);
+  });
+
+  it('la regla 2.9 de verdad sigue reconociéndose', () => {
+    expect(citasEnTexto('conforme a la RFA 2026 regla 2.9')).toContain('rfa-2026-2.9');
+  });
+});
