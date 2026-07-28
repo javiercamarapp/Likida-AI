@@ -1,0 +1,58 @@
+# Las cuatro puertas que hoy se corren a mano antes de cada commit.
+#
+# Nada de esto llama a un modelo ni toca Supabase: la suite de `npm test` es
+# offline y reproducible a propósito (los arneses que sí gastan dinero se llaman
+# `*.prueba.ts` y viven fuera del include de vitest). Por eso CI no necesita
+# secretos, y por eso puede correr en cada push sin costo.
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+# Un push nuevo cancela la corrida anterior de la misma rama: no sirve de nada
+# esperar el resultado de un commit que ya quedó atrás.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` y no `npm install`: instala exactamente el lockfile y falla si
+      # se desincronizó del package.json, que es justo lo que se quiere saber.
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      # El build va al final porque es el más lento, y porque los tres de arriba
+      # atrapan casi todo lo que lo haría fallar. Ya cazó un fallo real que solo
+      # aparecía aquí: Turbopack no resolvía el .wasm del lector de códigos.
+      - name: Build
+        run: npm run build
+        env:
+          # El build no llama a nadie, pero Next evalúa los módulos y algunos
+          # leen el entorno al importarse. Valores de relleno: si alguno se usara
+          # de verdad, el fallo sería ruidoso en vez de silencioso.
+          OPENROUTER_API_KEY: ci-placeholder
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
