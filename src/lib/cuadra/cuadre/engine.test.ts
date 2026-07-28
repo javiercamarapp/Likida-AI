@@ -432,7 +432,7 @@ describe('cuadrarViaje — totales de deducibilidad', () => {
   it('todo limpio → todo deducible', () => {
     const r = cuadrarViaje({
       viajeId: 't1', anticipo: 3000, politica, estimulos: EST,
-      gastos: [g({ concepto: 'diesel', monto: 2000, folio: 'A1', formaPago: '04' }), g({ concepto: 'caseta', monto: 1000, folio: 'C1', formaPago: '04' })],
+      gastos: [g({ concepto: 'diesel', monto: 2000, folio: 'A1', formaPago: '04', cfdiUuid: 'f1' }), g({ concepto: 'caseta', monto: 1000, folio: 'C1', formaPago: '04', cfdiUuid: 'f2' })],
     });
     expect(r.totalDeducible).toBe(3000);
     expect(r.totalNoDeducible).toBe(0);
@@ -443,7 +443,7 @@ describe('cuadrarViaje — totales de deducibilidad', () => {
     const r = cuadrarViaje({
       viajeId: 't2', anticipo: 3000, politica, estimulos: EST,
       gastos: [
-        g({ concepto: 'caseta', monto: 1000, folio: 'C1', formaPago: '04' }),
+        g({ concepto: 'caseta', monto: 1000, folio: 'C1', formaPago: '04', cfdiUuid: 'f3' }),
         g({ concepto: 'factura', monto: 2000, cfdiUuid: 'u1', estadoSat: 'cancelado', formaPago: '04' }),
       ],
     });
@@ -457,7 +457,7 @@ describe('cuadrarViaje — totales de deducibilidad', () => {
     // más dinero le cuesta al cliente en esta lista.
     const r = cuadrarViaje({
       viajeId: 't3', anticipo: 900, politica: [], estimulos: EST,
-      gastos: [g({ concepto: 'viaticos', monto: 900, folio: 'V1', formaPago: '04' })],
+      gastos: [g({ concepto: 'viaticos', monto: 900, folio: 'V1', formaPago: '04', cfdiUuid: 'f4' })],
     });
     expect(r.totalNoDeducible).toBe(150);
     expect(r.totalDeducible).toBe(750);
@@ -477,7 +477,7 @@ describe('cuadrarViaje — totales de deducibilidad', () => {
     // Aquí no hay facilidad que valga: LISR 27-III sin excepción para el sector.
     const r = cuadrarViaje({
       viajeId: 't5', anticipo: 2500, politica: [], estimulos: EST,
-      gastos: [g({ concepto: 'otro', monto: 2500, folio: 'O1', formaPago: '01' })],
+      gastos: [g({ concepto: 'otro', monto: 2500, folio: 'O1', formaPago: '01', cfdiUuid: 'f5' })],
     });
     expect(r.totalNoDeducible).toBe(2500);
     expect(r.totalPorConfirmar).toBe(0);
@@ -489,11 +489,11 @@ describe('cuadrarViaje — totales de deducibilidad', () => {
     const r = cuadrarViaje({
       viajeId: 't6', anticipo: 9000, politica, estimulos: EST,
       gastos: [
-        g({ concepto: 'diesel', monto: 2000, folio: 'D1', formaPago: '04' }),
-        g({ concepto: 'diesel', monto: 1500, folio: 'D2', formaPago: '01' }),         // por confirmar
-        g({ concepto: 'viaticos', monto: 900, folio: 'V1', formaPago: '04' }),        // 150 fuera
+        g({ concepto: 'diesel', monto: 2000, folio: 'D1', formaPago: '04', cfdiUuid: 'f6' }),
+        g({ concepto: 'diesel', monto: 1500, folio: 'D2', formaPago: '01', cfdiUuid: 'f7' }), // por confirmar
+        g({ concepto: 'viaticos', monto: 900, folio: 'V1', formaPago: '04', cfdiUuid: 'f8' }),  // 150 fuera
         g({ concepto: 'factura', monto: 2000, cfdiUuid: 'u1', estadoSat: 'cancelado', formaPago: '04' }),
-        g({ concepto: 'caseta', monto: 1000, folio: 'C1', formaPago: '04' }),
+        g({ concepto: 'caseta', monto: 1000, folio: 'C1', formaPago: '04', cfdiUuid: 'f9' }),
       ],
     });
     const suma = r.totalDeducible + r.totalNoDeducible + r.totalPorConfirmar;
@@ -711,7 +711,7 @@ describe('cuadrarViaje — soporte de la alimentación (LISR 28-V) y RFC del vi�
     // error al revés — quitarle una deducción que quizá sí tiene.
     const r = cuadrarViaje({
       viajeId: 'h1d', anticipo: 400, politica: [], estimulos: EST,
-      gastos: [g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' })],
+      gastos: [g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'fa' })],
     });
     expect(r.estatus).toBe('revisar');
     expect(r.totalNoDeducible).toBe(0);
@@ -760,5 +760,74 @@ describe('cuadrarViaje — soporte de la alimentación (LISR 28-V) y RFC del vi�
       gastos: [g({ concepto: 'hospedaje', monto: 1000, formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'OTRO900101ZZ9' })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UN TICKET NO ES UNA FACTURA.
+//
+// LISR 27-III exige que la deducción esté "amparada con un comprobante fiscal".
+// Un ticket de gasolinera NO lo es: hay que timbrarlo. Contarlo como deducible
+// le promete al contralor una deducción que todavía no existe — y si nadie
+// factura a tiempo, nunca existirá.
+//
+// Tampoco es una pérdida: se puede timbrar. Va a POR CONFIRMAR, como el efectivo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuadrarViaje — sin CFDI no hay deducción todavía', () => {
+  const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: ['15101505'] };
+
+  it('un ticket sin CFDI va a POR CONFIRMAR, no a deducible', () => {
+    const r = cuadrarViaje({
+      viajeId: 'sc1', anticipo: 2000, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 2000, folio: 'T1', formaPago: '04' })],
+    });
+    expect(r.totalPorConfirmar).toBe(2000);
+    expect(r.totalDeducible).toBe(0);
+    expect(r.totalNoDeducible).toBe(0);
+  });
+
+  it('con CFDI válido sí es deducible', () => {
+    const r = cuadrarViaje({
+      viajeId: 'sc2', anticipo: 2000, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 2000, cfdiUuid: 'u', estadoSat: 'vigente', formaPago: '04' })],
+    });
+    expect(r.totalDeducible).toBe(2000);
+    expect(r.totalPorConfirmar).toBe(0);
+  });
+
+  it('las tres cubetas siguen sumando el total', () => {
+    const r = cuadrarViaje({
+      viajeId: 'sc3', anticipo: 3000, politica: [], estimulos: EST,
+      gastos: [
+        g({ concepto: 'diesel', monto: 2000, folio: 'T1', formaPago: '04' }),          // sin CFDI
+        g({ concepto: 'caseta', monto: 1000, cfdiUuid: 'u2', estadoSat: 'vigente', formaPago: '04' }),
+      ],
+    });
+    expect(r.totalDeducible + r.totalNoDeducible + r.totalPorConfirmar).toBeCloseTo(3000, 2);
+  });
+});
+
+// B5: el OCR ya detecta que el total del código y el del texto no coinciden y lo
+// guarda en ocrExtra.montoDiscrepante — pero nadie lo miraba. Se quedaba en la
+// base sin llegar jamás a la bandeja del contralor.
+describe('cuadrarViaje — discrepancia entre el código y el OCR', () => {
+  const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: ['15101505'] };
+
+  it('la discrepancia detectada en el intake SÍ llega a la bandeja', () => {
+    const r = cuadrarViaje({
+      viajeId: 'd1', anticipo: 4027, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 4027.1, cfdiUuid: 'u', estadoSat: 'vigente', formaPago: '04',
+        ocrExtra: { montoDiscrepante: true, montoOcr: 4000 } })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'monto_discrepante')).toBe(true);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  it('sin discrepancia no inventa el aviso', () => {
+    const r = cuadrarViaje({
+      viajeId: 'd2', anticipo: 4027, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 4027.1, cfdiUuid: 'u', estadoSat: 'vigente', formaPago: '04' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'monto_discrepante')).toBe(false);
   });
 });
