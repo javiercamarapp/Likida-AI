@@ -1,0 +1,230 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// REGISTRO DE COMERCIOS — qué pide cada portal para emitir el CFDI.
+//
+// Es DATOS, no código, a propósito: son cientos de comercios y cada uno cambia
+// su portal cuando se le antoja. Un comercio nuevo debe ser una entrada en esta
+// lista, nunca una función nueva.
+//
+// De dónde salen estos datos (27-jul-2026): 60 guías paso-a-paso publicadas por
+// Zumma Financial, más el HTML del portal de Office Depot leído directamente.
+// Lo que se midió al cosecharlas cambió el diseño del módulo entero:
+//
+//   - Los portales piden sobre todo datos del RECEPTOR (RFC 29 veces, código
+//     postal 22, razón social 17, régimen 17, uso de CFDI 14). Todo eso Likida
+//     YA lo tiene por flota y es constante: NO se lee del ticket.
+//   - Del ticket solo salen 2–4 campos: número de ticket, folio, sucursal,
+//     fecha, monto, Web ID. Por eso el extractor va dirigido por comercio en
+//     vez de intentar leer el ticket entero bien.
+//   - Solo 7 de 60 guías mencionan un QR en el ticket. El QR es la EXCEPCIÓN;
+//     el camino normal es OCR + validación contra la restricción del campo.
+//   - 42 de 60 exigen crear cuenta en el portal.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import type { Plazo } from './caducidad';
+
+/**
+ * Restricción del campo EN EL PORTAL. No es cosmética: es un validador gratis y
+ * determinista sobre lo que leyó la visión. Verificado en Office Depot, cuyo
+ * campo de ITU es `maxlength="30"`: una lectura de 31 caracteres es
+ * demostrablemente inválida sin necesidad de volver a mirar la foto.
+ */
+export interface RestriccionCampo {
+  largoMin?: number;
+  largoMax?: number;
+  /** Regex como string, para que el registro siga siendo datos serializables. */
+  patron?: string;
+  mayusculas?: boolean;
+  soloDigitos?: boolean;
+}
+
+/** Los datos que SÍ hay que sacar del ticket (el resto los pone la flota). */
+export type ClaveCampo =
+  | 'numeroTicket' | 'folio' | 'webId' | 'sucursal' | 'fecha'
+  | 'monto' | 'caja' | 'transaccion' | 'referencia' | 'codigo';
+
+export interface CampoTicket {
+  clave: ClaveCampo;
+  /** Cómo lo llama el portal, literal. Va en el prompt del extractor. */
+  etiquetaPortal: string;
+  requerido: boolean;
+  restriccion?: RestriccionCampo;
+}
+
+export interface Comercio {
+  clave: string;
+  nombre: string;
+  portal: string;
+  requiereCuenta: boolean;
+  /**
+   * PLAZO SIN VERIFICAR POR COMERCIO. Lo documentado de forma general es:
+   * gasolineras 7–15 días y "dentro del mes natural" para la mayoría. Aquí se
+   * asienta el default conservador —'mes_natural'— y se marca `plazoVerificado`
+   * en falso hasta comprobarlo contra el portal. Un plazo inventado por comercio
+   * sería peor que ninguno: haría que el sistema jure que un ticket está vigente.
+   */
+  plazo: Plazo;
+  plazoVerificado: boolean;
+  campos: CampoTicket[];
+  reconocer: {
+    /** Dominio de la liga de facturación: la señal más fuerte (viene del QR). */
+    dominios?: string[];
+    rfc?: string[];
+    /** Cadenas que aparecen impresas en el ticket, en mayúsculas. */
+    texto?: string[];
+  };
+}
+
+export const COMERCIOS: Comercio[] = [
+  {
+    clave: 'capufe',
+    nombre: 'CAPUFE (casetas federales)',
+    portal: 'https://facturacioncapufe.com.mx/Capufe/',
+    requiereCuenta: false, // "Facturación sin registro"
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      // El portal trae botón "Validar código": un oráculo gratis para saber si
+      // se leyó bien ANTES de intentar facturar.
+      { clave: 'codigo', etiquetaPortal: 'código del ticket', requerido: true },
+    ],
+    reconocer: {
+      dominios: ['facturacioncapufe.com.mx'],
+      rfc: ['CPU970326PZ4'],
+      texto: ['CAPUFE', 'CAMINOS Y PUENTES FEDERALES'],
+    },
+  },
+  {
+    clave: 'enerser',
+    nombre: 'Enerser (gasolineras: Efigas, Palmira, Bahía Asunción…)',
+    portal: 'http://facturacion.enerser.com.mx/',
+    requiereCuenta: false, // permite "continuar sin registro"
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [{ clave: 'referencia', etiquetaPortal: 'número de referencia', requerido: true }],
+    reconocer: { dominios: ['facturacion.enerser.com.mx', 'enerser.com.mx'], texto: ['ENERSER'] },
+  },
+  {
+    clave: 'gogas',
+    nombre: 'Gogas',
+    portal: 'https://facturasgas.com/facturacion/autofactura.php',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [{ clave: 'referencia', etiquetaPortal: 'No. de rastreo del ticket', requerido: true }],
+    reconocer: { dominios: ['facturasgas.com'], texto: ['GOGAS'] },
+  },
+  {
+    clave: 'libramientos_meta',
+    nombre: 'Libramientos META',
+    portal: 'https://facturacionquadrum.com.mx/valoran/#/sinregistro',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [{ clave: 'codigo', etiquetaPortal: 'código del ticket', requerido: true }],
+    reconocer: { dominios: ['facturacionquadrum.com.mx'], texto: ['LIBRAMIENTO'] },
+  },
+  {
+    clave: 'oxxo_gas',
+    nombre: 'OXXO Gas',
+    portal: 'https://facturacion.oxxogas.com/',
+    requiereCuenta: true,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'sucursal', etiquetaPortal: 'Estación', requerido: true },
+      { clave: 'folio', etiquetaPortal: 'Folio', requerido: true },
+      { clave: 'monto', etiquetaPortal: 'Monto', requerido: true },
+    ],
+    reconocer: { dominios: ['facturacion.oxxogas.com', 'oxxogas.com'], texto: ['OXXO GAS'] },
+  },
+  {
+    clave: 'g500',
+    nombre: 'G500',
+    portal: 'https://g500network.com/facturacion-en-linea/',
+    requiereCuenta: true,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      // El caso que rompe un extractor genérico: DOS identificadores distintos
+      // del mismo ticket, y el portal no acepta uno solo.
+      { clave: 'folio', etiquetaPortal: 'Folio', requerido: true },
+      { clave: 'webId', etiquetaPortal: 'Web ID', requerido: true },
+      { clave: 'sucursal', etiquetaPortal: 'Permiso CRE o Nombre de la Estación', requerido: true },
+    ],
+    reconocer: { dominios: ['g500network.com'], texto: ['G500'] },
+  },
+  {
+    clave: 'petromax',
+    nombre: 'Petromax',
+    portal: 'https://facturacion.petromax.mx/',
+    requiereCuenta: true,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'sucursal', etiquetaPortal: 'número de estación', requerido: true },
+      { clave: 'folio', etiquetaPortal: 'Folio', requerido: true },
+      { clave: 'webId', etiquetaPortal: 'Web ID', requerido: true },
+      { clave: 'fecha', etiquetaPortal: 'Fecha de compra', requerido: true },
+    ],
+    reconocer: { texto: ['PETROMAX'] },
+  },
+  {
+    clave: 'red_estatal_autopistas',
+    nombre: 'Red Estatal de Autopistas',
+    portal: 'https://facturacion.rea.com.mx/',
+    requiereCuenta: true,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'webId', etiquetaPortal: 'WEB ID', requerido: true },
+      { clave: 'folio', etiquetaPortal: 'folio', requerido: true },
+      { clave: 'sucursal', etiquetaPortal: 'caseta', requerido: true },
+      { clave: 'fecha', etiquetaPortal: 'fecha', requerido: true },
+    ],
+    reconocer: { texto: ['RED ESTATAL DE AUTOPISTAS'] },
+  },
+  {
+    clave: 'oxxo',
+    nombre: 'OXXO (tienda)',
+    portal: 'https://www4.oxxo.com:9443/facturacionElectronica-web/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'fecha', etiquetaPortal: 'Fecha del ticket', requerido: true },
+      { clave: 'folio', etiquetaPortal: 'Folio de venta', requerido: true },
+      { clave: 'transaccion', etiquetaPortal: 'ID de venta', requerido: true },
+      { clave: 'monto', etiquetaPortal: 'Monto total con IVA', requerido: true },
+    ],
+    reconocer: { dominios: ['oxxo.com'], texto: ['CADENA COMERCIAL OXXO'] },
+  },
+  {
+    clave: 'office_depot',
+    nombre: 'Office Depot',
+    portal: 'https://facturacion.officedepot.com.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      {
+        clave: 'numeroTicket',
+        etiquetaPortal: 'Número de ticket (ITU)',
+        requerido: true,
+        // VERIFICADO en el HTML del portal: <input formcontrolname="itu"
+        // maxlength="30" uppercase>. No es una suposición.
+        restriccion: { largoMax: 30, mayusculas: true },
+      },
+      { clave: 'sucursal', etiquetaPortal: 'Tienda', requerido: true },
+      { clave: 'monto', etiquetaPortal: 'Monto', requerido: true },
+    ],
+    reconocer: {
+      dominios: ['facturacion.officedepot.com.mx', 'officedepot.com.mx'],
+      rfc: ['ODM950324V2A'],
+      texto: ['OFFICE DEPOT'],
+    },
+  },
+];
+
+export function comercio(clave: string): Comercio | undefined {
+  return COMERCIOS.find((c) => c.clave === clave);
+}
