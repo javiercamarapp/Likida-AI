@@ -26,6 +26,7 @@ const runAgent = vi.fn();
 const acquireViajeLock = vi.fn();
 const sendText = vi.fn();
 const getOpenViaje = vi.fn();
+const claimMessage = vi.fn<(id: string) => Promise<'nuevo' | 'duplicado' | 'indeterminado'>>(async () => 'nuevo');
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
 vi.mock('@/lib/cuadra/tools', () => ({}));
@@ -38,7 +39,7 @@ vi.mock('@/lib/cuadra/conv', () => ({
   getOpenViaje: (...a: unknown[]) => getOpenViaje(...a),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
-  saveConversation: vi.fn(), claimMessage: vi.fn(async () => true),
+  saveConversation: vi.fn(), claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
   acquireViajeLock: (...a: unknown[]) => acquireViajeLock(...a),
   releaseViajeLock: vi.fn(), releaseMessageClaim: vi.fn(),
   intakeDelta: vi.fn(async () => 0), esperarIntake: vi.fn(async () => true),

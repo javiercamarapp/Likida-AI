@@ -24,6 +24,7 @@ const createSignedUrl = vi.fn();
 const getOpenViaje = vi.fn<(tenantId: string, operadorId: string) => Promise<string | null>>(async () => 'v1');
 const saveCfdiXmlRaw = vi.fn();
 const downloadMediaAsText = vi.fn();
+const claimMessage = vi.fn<(id: string) => Promise<'nuevo' | 'duplicado' | 'indeterminado'>>(async () => 'nuevo');
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
@@ -38,7 +39,7 @@ vi.mock('@/lib/cuadra/conv', () => ({
   getOpenViaje: (t: string, o: string) => getOpenViaje(t, o),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
-  saveConversation: vi.fn(), claimMessage: vi.fn(async () => true),
+  saveConversation: vi.fn(), claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
   acquireViajeLock: vi.fn(async () => true),
   releaseViajeLock: vi.fn(), releaseMessageClaim: vi.fn(),
   intakeDelta: vi.fn(async () => 0), esperarIntake: vi.fn(async () => true),
@@ -154,5 +155,47 @@ describe('el XML que llega después del cierre no se pierde', () => {
     await processInbound({ from: '+521111111101', type: 'text', text: 'hola', waMessageId: 'wa10' });
     expect(sendText.mock.calls.map((c) => String(c[1])).join('\n')).toMatch(/No tienes un viaje abierto/i);
     expect(saveCfdiXmlRaw).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 4 · ALTO — el fail-closed del claim se apoyaba en un retry inexistente.
+//
+// `claimMessage` trataba CUALQUIER error de DB como duplicado, con el argumento
+// escrito de que "el retry de Meta lo reprocesará cuando la DB responda". Ese
+// retry no existe: `route.ts` responde 200 y trabaja en `after()`, así que Meta
+// ya tiene su acuse y no reintenta nunca.
+//
+// Un blip de Supabase en el insert —pool agotado, 503, timeout— y el "listo" del
+// operador desaparecía para siempre: cero mensajes salientes, y un log de nivel
+// info que encima mentía llamándolo duplicado. A las 3 a.m. nadie encuentra eso.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('un claim que no se pudo determinar no puede tragarse el mensaje', () => {
+  beforeEach(() => {
+    runAgent.mockReset(); sendText.mockReset(); claimMessage.mockReset(); getOpenViaje.mockReset();
+    logger.info.mockReset(); logger.warn.mockReset();
+    getOpenViaje.mockResolvedValue('v1');
+    runAgent.mockResolvedValue({ finalText: 'Listo', toolCalls: [], model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0 });
+  });
+
+  it('un DUPLICADO de verdad se sigue descartando', async () => {
+    claimMessage.mockResolvedValue('duplicado');
+    await processInbound(listo);
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it('un INDETERMINADO se procesa: perder el mensaje es peor que reprocesarlo', async () => {
+    claimMessage.mockResolvedValue('indeterminado');
+    await processInbound(listo);
+    expect(runAgent).toHaveBeenCalledTimes(1);
+    expect(sendText).toHaveBeenCalled();
+  });
+
+  it('y queda anotado como lo que es, no como un duplicado', async () => {
+    claimMessage.mockResolvedValue('indeterminado');
+    await processInbound(listo);
+    expect(logger.warn).toHaveBeenCalledWith('wa.claim_indeterminado', expect.objectContaining({ id: 'wa1' }));
+    expect(logger.info).not.toHaveBeenCalledWith('wa.duplicate', expect.anything());
   });
 });
