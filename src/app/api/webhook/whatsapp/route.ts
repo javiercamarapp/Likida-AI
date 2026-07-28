@@ -10,18 +10,21 @@ const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe h
 
 export const runtime = 'nodejs';
 // ME-13 / AUDIT_V3 orquestación: el procesamiento corre en after() y su presupuesto
-// en el PEOR caso es acquireViajeLock(≤12s)+esperarIntake+cuadre(~40s).
+// en el PEOR caso es acquireViajeLock(≤12s) + esperarIntake (CUADRA_INTAKE_ESPERA_MS,
+// hoy 20s) + cuadre (~40s) ≈ 72s. Eso NO cabía en los 60s que había aquí: una
+// ráfaga de fotos lenta se cortaba a media liquidación, y Meta ya tiene su 200 —
+// no reintenta. El operador se queda esperando un PDF que nadie va a mandar.
 //
-// ⚠️ RIESGO ABIERTO (verificar plan de Vercel): en Hobby el tope duro es 60s y
-// Vercel IGNORA valores mayores; 120/300 solo aplican en Pro CON Fluid Compute.
-// No pude confirmar plan+Fluid por API (cuenta = team personal, default Hobby).
-// Se DEJA en 60 para no asumir un margen inexistente. Si se confirma Pro+Fluid
-// (Vercel → Settings → Functions → Fluid Compute ON), subir a 120. Mientras tanto,
-// el peor caso teórico (>60s) NO cabe en Hobby → el camino real fiable es el común
-// (~30s: OCR rápido + cuadre); el fix definitivo para el peor caso es mover el
-// procesamiento pesado a QStash (ya es dependencia) en FASE 3. Ver ESTADO_FINAL.
-// El demo acota el cap de intake vía CUADRA_INTAKE_ESPERA_MS (.env de demo).
-export const maxDuration = 60;
+// El riesgo estaba abierto porque una sesión anterior no pudo confirmar el plan y
+// dejó 60 por prudencia, suponiendo Hobby. VERIFICADO el 28-jul-2026 contra la API
+// de Vercel: el equipo `likida` (team_uelpa362Txivu…) está en plan **pro**, donde
+// el tope es 300s. Aquella nota miraba otra cuenta.
+//
+// Se sube a 120, que es lo que aquella misma nota recomendaba para el caso de que
+// el plan lo permitiera: cubre el peor caso con casi el doble de margen sin dejar
+// una petición colgada cinco minutos. El techo de 300 queda disponible si hiciera
+// falta. Mover el procesamiento pesado a QStash sigue siendo el arreglo de fondo.
+export const maxDuration = 120;
 
 // GET — verificación del webhook (Meta lo llama una vez al configurar).
 export async function GET(req: NextRequest) {
