@@ -42,7 +42,7 @@ async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
 
 export default async function DashboardPage() {
   // Segunda capa: la autorización viaja con la página, no solo con el matcher
-  // del middleware. Las dos tienen que fallar a la vez para que esto se sirva.
+  // del proxy. Las dos tienen que fallar a la vez para que esto se sirva.
   await exigirAcceso('/dashboard');
   const tenantId = TENANT();
   const [acred, kpis, liqs, anomalias] = await Promise.all([

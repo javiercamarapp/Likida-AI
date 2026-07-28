@@ -200,7 +200,17 @@ function rutaDelWasm(): string {
   } catch {
     // Si el `exports` del paquete no deja resolver el subpath, se cae a la ruta
     // física dentro de node_modules del proyecto.
-    return join(process.cwd(), 'node_modules', partes[0], 'dist', partes[1], partes[2]);
+    //
+    // La ruta va LITERAL, no armada desde `partes`. Con segmentos variables el
+    // tracer no puede saber a dónde apunta, asume que bajo `process.cwd()` se
+    // puede leer cualquier cosa y se lleva el proyecto entero al bundle de la
+    // función — medido: 348 archivos fuera de node_modules, incluidos `.env.local`
+    // y 76 .md. Escrita entera, el destino es un solo archivo conocido.
+    //
+    // Esto NO reintroduce el problema que documenta el comentario de arriba: allá
+    // lo que había que ocultarle al bundler era el ESPECIFICADOR de un módulo;
+    // aquí es una ruta de disco, y `join` no es un import.
+    return join(process.cwd(), 'node_modules', 'zxing-wasm', 'dist', 'reader', 'zxing_reader.wasm');
   }
 }
 
