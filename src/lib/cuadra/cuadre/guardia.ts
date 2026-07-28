@@ -19,7 +19,7 @@
 
 import { cuadrarDesdeDB } from './desde_db';
 import { resumenCuadre } from './resumen';
-import { tieneCifrasDeDinero, cifrasSinRespaldo } from './cifras';
+import { tieneCifrasDeDinero, cifrasSinRespaldo, hablaDeDineroSinCifraVerificable } from './cifras';
 import { logger } from '@/lib/logger';
 import type { ToolCallRecord } from '@/lib/llm/openrouter';
 
@@ -29,7 +29,14 @@ export async function guardiaCifras(
   tenantId: string,
   viajeId: string,
 ): Promise<{ reply: string; forzado: boolean }> {
-  const cuadro = toolCalls.some((t) => t.toolName === 'cuadrar_viaje' && !t.error);
+  // `guardar_liquidacion` TAMBIÉN es un cierre. Antes solo se miraba
+  // `cuadrar_viaje`, así que un turno que cerró de verdad —y al que le sigue el
+  // PDF— encabezaba "Este es el cuadre de tu viaje" en vez de "Listo, cuadré tu
+  // viaje". Las cifras salían bien; lo que quedaba mal era si el operador
+  // entendía que su viaje ya estaba cerrado.
+  const cuadro = toolCalls.some(
+    (t) => (t.toolName === 'cuadrar_viaje' || t.toolName === 'guardar_liquidacion') && !t.error,
+  );
   const consultoPolitica = toolCalls.some((t) => t.toolName === 'consultar_politica' && !t.error);
 
   // El detector NO decide sobre un cuadre. Antes esta función salía en la primera
@@ -47,10 +54,17 @@ export async function guardiaCifras(
   // salieron de la tool. Basta una cifra sin respaldo para no confiar en el
   // texto completo — no se puede tachar el número malo y mandar el resto.
   if (!cuadro && consultoPolitica) {
-    const respaldos = toolCalls.filter((t) => !t.error).map((t) => t.result);
-    const fuera = cifrasSinRespaldo(reply, respaldos);
-    if (fuera.length === 0) return { reply, forzado: false };
-    logger.warn('guardia_cifras_sin_respaldo', { tenantId, viajeId, cifras: fuera });
+    // Cantidad en palabras: se detecta que habla de dinero pero no hay número que
+    // cotejar. Lista vacía significaría "todo respaldado", así que hay que
+    // distinguir "verificado y correcto" de "no se pudo verificar".
+    if (hablaDeDineroSinCifraVerificable(reply)) {
+      logger.warn('guardia_cifra_no_verificable', { tenantId, viajeId });
+    } else {
+      const respaldos = toolCalls.filter((t) => !t.error).map((t) => t.result);
+      const fuera = cifrasSinRespaldo(reply, respaldos);
+      if (fuera.length === 0) return { reply, forzado: false };
+      logger.warn('guardia_cifras_sin_respaldo', { tenantId, viajeId, cifras: fuera });
+    }
   }
 
   try {

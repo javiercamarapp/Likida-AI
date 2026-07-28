@@ -190,3 +190,53 @@ describe('guardiaCifras — cuando SÍ se cuadró, no se consulta al detector', 
     expect(cuadrarDesdeDB).not.toHaveBeenCalled();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// `guardar_liquidacion` TAMBIÉN ES UN CIERRE.
+//
+// La guardia solo miraba `cuadrar_viaje` para decidir el encabezado. Si el
+// agente cerró de verdad —llamó `guardar_liquidacion`— pero llegó ahí por otro
+// camino, el mensaje decía "Este es el cuadre de tu viaje" en vez de "Listo,
+// cuadré tu viaje", justo cuando el PDF ya viene detrás.
+//
+// Las cifras salían bien: esto es el encabezado, no los números. Pero el
+// operador lee "este es el cuadre" y luego le llega un PDF de cierre, y no sabe
+// si su viaje quedó cerrado o no.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('guardiaCifras — el encabezado afirma el cierre cuando de verdad se cerró', () => {
+  beforeEach(() => {
+    cuadrarDesdeDB.mockReset();
+    cuadrarDesdeDB.mockResolvedValue(LIQ);
+  });
+
+  it('con guardar_liquidacion, afirma el cierre', async () => {
+    const r = await guardiaCifras('Ya quedó, te paso el resumen: 8000', [tc('guardar_liquidacion')], 't', 'v');
+    expect(r.forzado).toBe(true);
+    expect(r.reply).toMatch(/cuadré tu viaje/i);
+  });
+
+  it('sin cierre, encabezado neutral', async () => {
+    const r = await guardiaCifras('Llevas 8000 comprobados', [tc('consultar_politica')], 't', 'v');
+    expect(r.reply).toMatch(/Este es el cuadre/i);
+  });
+});
+
+describe('guardiaCifras — "no pude verificar" no es "está bien"', () => {
+  beforeEach(() => {
+    cuadrarDesdeDB.mockReset();
+    cuadrarDesdeDB.mockResolvedValue(LIQ);
+  });
+
+  it('una cantidad en PALABRAS con la política consultada no pasa por respaldada', async () => {
+    // El portón la detecta, pero el extractor no puede sacar un número que
+    // cotejar contra el resultado de la tool. Lista vacía significaba "todo
+    // respaldado", y eso es leer un fallo de verificación como una aprobación.
+    const r = await guardiaCifras(
+      'Te sobraron como ocho mil pesos',
+      [{ toolName: 'consultar_politica', args: {}, result: { topeEfectivo: 2000 } } as never],
+      't', 'v',
+    );
+    expect(r.forzado).toBe(true);
+    expect(r.reply).not.toMatch(/ocho mil/i);
+  });
+});

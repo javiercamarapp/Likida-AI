@@ -61,3 +61,49 @@ describe('etiquetas de concepto — las tres fuentes dicen lo mismo', () => {
     for (const c of conceptos) expect(motor[c], `falta etiqueta para "${c}"`).toBeTruthy();
   });
 });
+
+// El MISMO patrón, en el otro mapa duplicado del panel. `ESTATUS` vive en las dos
+// páginas del dashboard con el mismo contenido copiado; el auditor lo señaló como
+// "latente para el próximo estatus nuevo". Es exactamente lo que pasó con
+// CONCEPTO dos veces, así que se cierra antes de que pase una tercera.
+/**
+ * Igual que `etiquetas`, para mapas cuyo valor es un objeto:
+ *   clave: { label: '…', color: '…' }
+ * El extractor simple corta en el primer `}` y aquí eso caía dentro del primer
+ * valor anidado.
+ */
+function etiquetasAnidadas(ruta: string, ancla: string): Record<string, Record<string, string>> {
+  const src = readFileSync(new URL(ruta, import.meta.url), 'utf8');
+  const i = src.indexOf(ancla);
+  expect(i, `no se encontró el ancla "${ancla}" en ${ruta}`).toBeGreaterThanOrEqual(0);
+  const bloque = src.slice(i, src.indexOf('\n};', i) >= 0 ? src.indexOf('\n};', i) : src.indexOf('} as const', i));
+  const out: Record<string, Record<string, string>> = {};
+  for (const m of bloque.matchAll(/(\w+):\s*\{([^}]*)\}/g)) {
+    const campos: Record<string, string> = {};
+    for (const f of m[2].matchAll(/(\w+):\s*'([^']*)'/g)) campos[f[1]] = f[2];
+    out[m[1]] = campos;
+  }
+  return out;
+}
+
+describe('etiquetas de estatus — las dos páginas del panel dicen lo mismo', () => {
+  const lista = etiquetasAnidadas('../../app/dashboard/page.tsx', 'const ESTATUS');
+  const detalle = etiquetasAnidadas('../../app/dashboard/[id]/page.tsx', 'const ESTATUS');
+
+  it('cubren los mismos estatus', () => {
+    expect(Object.keys(lista).sort()).toEqual(Object.keys(detalle).sort());
+  });
+
+  it('con las mismas etiquetas y los mismos colores', () => {
+    expect(lista).toEqual(detalle);
+  });
+
+  it('cubren todos los estatus que el tipo permite', () => {
+    const tipos = readFileSync(new URL('../../types/cuadra.ts', import.meta.url), 'utf8');
+    const i = tipos.indexOf('export type EstatusLiquidacion');
+    const decl = tipos.slice(i, tipos.indexOf(';', i));
+    const estatus = [...decl.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    expect(estatus.length, 'no se pudo leer EstatusLiquidacion').toBeGreaterThan(1);
+    for (const e of estatus) expect(lista[e], `falta etiqueta para el estatus "${e}"`).toBeTruthy();
+  });
+});

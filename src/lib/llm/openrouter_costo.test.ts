@@ -18,7 +18,7 @@ vi.mock('openai', () => ({
 }));
 
 process.env.OPENROUTER_API_KEY = 'test-key';
-const { generateStructured } = await import('./openrouter');
+const { generateStructured, calcCost: calcCostReal } = await import('./openrouter');
 
 const schema = z.object({ monto: z.number() });
 const R = (finish: string, content: string, tokIn = 100, tokOut = 50) => ({
@@ -138,5 +138,35 @@ describe('generateStructured — respeta el presupuesto de quien llama', () => {
       schema, schemaName: 'x', signal: ac.signal,
     })).rejects.toThrow();
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UN MODELO SIN PRECIO NO CUESTA $0.
+//
+// `calcCost` devolvía 0 en silencio para cualquier slug que no estuviera en
+// PRICES. Eso pasa de verdad: OpenRouter devuelve a veces el slug con sufijo de
+// proveedor, y sobre todo pasa cada vez que se cambia de modelo y nadie se
+// acuerda de la tabla. El resultado es una liquidación que parece gratis.
+//
+// Para un negocio que va a cobrar POR LIQUIDACIÓN, un costo unitario que se
+// subestima en silencio es peor que uno que se equivoca ruidosamente.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('calcCost — modelos sin precio', () => {
+  it('los modelos conocidos cuestan lo que dice la tabla', () => {
+    expect(calcCostReal('google/gemini-3.6-flash', 1_000_000, 0)).toBeGreaterThan(0);
+  });
+
+  it('un modelo DESCONOCIDO no devuelve 0 en silencio', () => {
+    // Devuelve una estimación conservadora (la tarifa más cara conocida) para que
+    // el costo se vea alto y alguien lo mire, en vez de invisible.
+    const c = calcCostReal('proveedor/modelo-que-nadie-registró', 1_000_000, 1_000_000);
+    expect(c).toBeGreaterThan(0);
+  });
+
+  it('tolera el sufijo de proveedor que a veces devuelve OpenRouter', () => {
+    // "google/gemini-3.6-flash:nitro" es el mismo modelo y el mismo precio.
+    const base = calcCostReal('google/gemini-3.6-flash', 500_000, 100_000);
+    expect(calcCostReal('google/gemini-3.6-flash:nitro', 500_000, 100_000)).toBe(base);
   });
 });
