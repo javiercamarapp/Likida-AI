@@ -58,6 +58,9 @@ export const DEMO_CONFIG: CuadraConfig = {
     { concepto: 'alimentacion', topeMonto: 800 },
     { concepto: 'hospedaje', topeMonto: 2500 },
     { concepto: 'transporte', topeMonto: 800 },
+    // El flete NO lleva el tope del viático: es costo de operación, no gasto
+    // personal del operador, y $800 lo levantaría en casi todo envío de carga.
+    { concepto: 'flete' },
     { concepto: 'factura', requiereCfdi: true },
   ],
   tabulador: {
@@ -72,6 +75,8 @@ export const DEMO_CONFIG: CuadraConfig = {
     // Los tres conceptos que sustituyen a 'viaticos'. Comparten la 600-003 por
     // ahora: la cuenta contable la define el contador de cada flota, no nosotros.
     alimentacion: '600-003', hospedaje: '600-003', transporte: '600-003',
+    // Cuenta propia: el flete no es viático y el contador no lo quiere ahí.
+    flete: '600-005',
   },
   salida: 'csv',
   hidrocarburos: {

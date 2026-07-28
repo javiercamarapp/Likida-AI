@@ -13,7 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Cuánto tiempo da el comercio para facturar. */
-export type Plazo = { dias: number } | 'mes_natural';
+export type Plazo = { dias: number } | 'mes_natural' | 'mes_siguiente';
 
 export interface Caducidad {
   /** Último día en que el comercio acepta facturar (ISO, inclusive). */
@@ -54,11 +54,19 @@ export function calcularCaducidad(args: {
   }
 
   const compra = aUtc(args.fechaTicket);
+  const c = new Date(compra);
   const limite =
     args.plazo === 'mes_natural'
       ? // Día 0 del mes siguiente = último día de este mes; cubre 28, 30 y 31.
-        Date.UTC(new Date(compra).getUTCFullYear(), new Date(compra).getUTCMonth() + 1, 0)
-      : compra + args.plazo.dias * DIA_MS;
+        Date.UTC(c.getUTCFullYear(), c.getUTCMonth() + 1, 0)
+      : args.plazo === 'mes_siguiente'
+        ? // Último día del mes SIGUIENTE al de la compra. No es lo mismo que el
+          // mes natural y la diferencia es de semanas: el ticket de Office Depot
+          // del 25-jul dice "solicitarla a más tardar dentro del mes siguiente a
+          // la fecha de emisión", así que vence el 31-AGO, no el 31-jul.
+          // Avisarle "te quedan 3 días" habría sido falso.
+          Date.UTC(c.getUTCFullYear(), c.getUTCMonth() + 2, 0)
+        : compra + args.plazo.dias * DIA_MS;
 
   const hoyMs = aUtc(args.hoy);
   // El plazo vence al FINAL del día límite: el mismo día todavía se puede facturar.

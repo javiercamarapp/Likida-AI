@@ -7,9 +7,20 @@
 // operador tampoco. 'viaticos' se conserva como genérico HEREDADO —es lo que
 // emitía el OCR viejo y esos gastos ya guardados no se reclasifican solos—;
 // para gastos nuevos hay que usar el concepto específico.
+// `flete` existe separado de `transporte` por una razón fiscal, no de orden.
+// LISR 28-V condiciona la deducción del viático de alimentos a que un
+// comprobante de hospedaje o de transporte lo ampare, y ahí "transporte" es el
+// traslado DE LA PERSONA. Una guía de paquetería es el traslado de una caja.
+//
+// Con los dos en el mismo concepto, tres guías de Paquetexpress silenciaban la
+// advertencia sobre una comida de $1,050 —medido el 28-jul-2026 sobre tickets
+// reales—: el motor daba por amparado un viático que la ley no ampara, y lo
+// hacía callando. Encima trataba un flete de $1,370 como viático, sujeto a
+// reglas (RLISR 57, nombre en el comprobante) que no le tocan.
 export type ConceptoGasto =
   | 'diesel' | 'caseta' | 'factura'
   | 'alimentacion' | 'hospedaje' | 'transporte'
+  | 'flete'     // paquetería y carga: NO es viático, no ampara alimentos
   | 'viaticos'  // heredado: genérico, se le aplica el tope por precaución
   | 'otro';
 

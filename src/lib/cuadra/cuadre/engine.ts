@@ -353,10 +353,18 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // inventado haría que el sistema jure que un ticket sigue vigente.
       const plazo = comercio?.plazoVerificado ? comercio.plazo : 'mes_natural';
       const c = calcularCaducidad({ fechaTicket: g.fecha.slice(0, 10), plazo, hoy: input.hoy });
-      if (c.desconocido || (!c.urgente && !c.vencido)) continue;
+      // NO se espera a que sea urgente. El umbral de 2 días viene de un panel que
+      // alguien mira a diario; la liquidación es un documento de UNA sola vez, y
+      // si al generarla quedaban 3 días, el PDF calla y nadie vuelve a abrirlo.
+      // Medido el 28-jul-2026 sobre ocho tickets reales: $9,070 sin timbrar, con
+      // portal reconocido, a tres días del cierre, y la liquidación en silencio.
+      // Ahora se dice siempre, y lo que cambia con la urgencia es el TONO.
+      if (c.desconocido) continue;
       const cuerpo = c.vencido
-        ? `se pasó el mes de la compra. El comercio ya no suele facturarlo en su portal, pero legalmente puedes exigirlo dentro del ejercicio (Conciliación de Factura del SAT)`
-        : `quedan ${c.diasRestantes} día(s) del mes para timbrarlo en el portal — y la ventana del comercio puede ser menor, así que hazlo antes`;
+        ? `se pasó el plazo de facturación. El comercio ya no suele facturarlo en su portal, pero legalmente puedes exigirlo dentro del ejercicio (Conciliación de Factura del SAT)`
+        : c.urgente
+          ? `quedan ${c.diasRestantes} día(s) para timbrarlo${comercio?.plazoVerificado ? '' : ' — y la ventana del comercio puede ser menor, así que hazlo antes'}`
+          : `puedes timbrarlo hasta el ${c.fechaLimite} (${c.diasRestantes} días)${comercio?.plazoVerificado ? '' : ', y la ventana del comercio puede ser menor'}`;
       // Con comercio reconocido el aviso deja de ser genérico: dice a qué portal
       // ir y qué datos hay que teclear, que es la diferencia entre un recordatorio
       // y una instrucción que alguien puede ejecutar.
@@ -387,6 +395,11 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // esta liquidación. Declararlo perdido sería el mismo error al revés.
   {
     const vivos = input.gastos.filter((g) => !duplicados.has(g.id) && g.monto > 0);
+    // `flete` NO cuenta, y por eso existe como concepto aparte. LISR 28-V pide el
+    // comprobante que ampare "el hospedaje o transporte" — de la PERSONA. Medido
+    // el 28-jul-2026 sobre tickets reales: tres guías de Paquetexpress bastaban
+    // para que esta advertencia desapareciera sobre una comida de $1,050. El
+    // motor daba por amparado lo que la ley no ampara, y callando.
     const haySoporte = vivos.some((g) => g.concepto === 'hospedaje' || g.concepto === 'transporte');
     if (!haySoporte) {
       for (const g of vivos.filter((g) => g.concepto === 'alimentacion')) {
@@ -656,6 +669,6 @@ export function etiquetaConcepto(c: string, ocrExtra?: Record<string, unknown>):
 }
 
 function label(c: string): string {
-  const m: Record<string, string> = { diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte', viaticos: 'Viáticos', otro: 'Otro' };   // 'Otro' y no 'Gasto': tiene que decir lo MISMO que pdf.ts y el dashboard
+  const m: Record<string, string> = { diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte', flete: 'Flete', viaticos: 'Viáticos', otro: 'Otro' };   // 'Otro' y no 'Gasto': tiene que decir lo MISMO que pdf.ts y el dashboard
   return m[strip_accents(c.toLowerCase())] ?? c;
 }
