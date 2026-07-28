@@ -2,7 +2,7 @@
   "name": "cuadra",
   "version": "0.1.0",
   "private": true,
-  "description": "Agente de IA por WhatsApp que automatiza el cierre diario de operaciones logísticas en México.",
+  "description": "Agente de IA por WhatsApp que automatiza el cierre diario de operaciones log\u00edsticas en M\u00e9xico.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "seed": "bash scripts/seed.sh",
-    "setup": "npm install && npm run seed"
+    "setup": "npm install && npm run seed",
+    "ticket": "vitest run arnes_ticket_real"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.0.0",
