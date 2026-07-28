@@ -90,3 +90,41 @@ describe('guardiaFundamento', () => {
     expect(r.reply).not.toMatch(/obligad/i);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS REGEX SE CONSTRUYEN EN CALIENTE, ASÍ QUE HAY QUE MEDIRLOS.
+//
+// `patronesDe` compila expresiones a partir de datos del índice, y `citasEnTexto`
+// las corre contra un texto que viene de un LLM — o sea, entrada que no
+// controlamos, dentro de un webhook con 60s de presupuesto. Un backtracking
+// catastrófico ahí no se ve como un bug: se ve como un mensaje que nunca llegó.
+//
+// Medido: 0.065 ms por llamada con texto normal, 2 ms con entradas
+// adversariales de 4,800 caracteres. Los cuantificadores acotados (`[^.]{0,45}`)
+// son lo que lo sostiene — si alguien los cambia por `.*`, esto lo caza.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('coste y resistencia de la detección', () => {
+  it('no explota con entradas diseñadas para maximizar caminos', () => {
+    const adversariales = [
+      'LISR ' + 'a'.repeat(2000) + ' artículo 27 fracción III',
+      'artículo '.repeat(500) + '27 fracción III LISR',
+      'LISR 27-III '.repeat(400),
+      'art. ' + '1'.repeat(3000),
+    ];
+    for (const t of adversariales) {
+      const t0 = Date.now();
+      citasEnTexto(t);
+      guardiaFundamento(t, []);
+      expect(Date.now() - t0, `posible ReDoS con ${t.length} chars`).toBeLessThan(500);
+    }
+  });
+
+  it('un mensaje normal cuesta una fracción de milisegundo', () => {
+    const t = 'El diésel en efectivo se limita al 15% por RFA 2026 regla 2.9, y el resto no es deducible por LISR 27-III.';
+    const t0 = Date.now();
+    for (let i = 0; i < 100; i++) citasEnTexto(t);
+    // 100 llamadas en menos de 100ms. Holgado a propósito: esto corre en CI, en
+    // máquinas de las que no controlamos la carga.
+    expect(Date.now() - t0).toBeLessThan(100);
+  });
+});

@@ -81,3 +81,44 @@ describe('evaluarTope15', () => {
     expect(Number.isInteger(r.excedente * 100)).toBe(true);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL LÍMITE EXACTO. Señalado en la auditoría 3 como el hueco de estos tests:
+// se verificaba "por debajo" y "por encima", nunca el punto donde la ley cambia
+// de opinión — que es justo donde un `>` mal puesto cuesta dinero.
+//
+// La regla dice "siempre que estos NO EXCEDAN el 15 por ciento". Exactamente el
+// 15% NO excede: está permitido. Un `>=` ahí le quitaría la deducción a una
+// flota que cumple.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('evaluarTope15 — el límite exacto', () => {
+  it('exactamente el 15% NO excede: la regla dice "no excedan"', () => {
+    const r = evaluarTope15({ efectivo: 15_000, totalCombustible: 100_000 });
+    expect(r.estado).not.toBe('excedido');
+    expect(r.excedente).toBe(0);
+    expect(r.margen).toBe(0);
+  });
+
+  it('un centavo por encima SÍ excede', () => {
+    const r = evaluarTope15({ efectivo: 15_000.01, totalCombustible: 100_000 });
+    expect(r.estado).toBe('excedido');
+    expect(r.excedente).toBeCloseTo(0.01, 2);
+  });
+
+  it('un centavo por debajo no excede, y deja margen', () => {
+    const r = evaluarTope15({ efectivo: 14_999.99, totalCombustible: 100_000 });
+    expect(r.estado).not.toBe('excedido');
+    expect(r.margen).toBeCloseTo(0.01, 2);
+  });
+
+  it('exactamente en el umbral de aviso ya avisa', () => {
+    // El umbral de alerta es de producto, no legal: ahí conviene el `>=` para
+    // avisar antes y no después.
+    const r = evaluarTope15({ efectivo: 12_000, totalCombustible: 100_000 });
+    expect(r.estado).toBe('cerca');
+  });
+
+  it('un centavo por debajo del umbral de aviso todavía está holgado', () => {
+    expect(evaluarTope15({ efectivo: 11_999.99, totalCombustible: 100_000 }).estado).toBe('holgado');
+  });
+});
