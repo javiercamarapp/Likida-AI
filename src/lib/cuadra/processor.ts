@@ -16,6 +16,8 @@ import type { Gasto } from '@/types/cuadra';
 import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
 import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
+import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
+import { getConfig } from '@/lib/cuadra/config';
 import { emparejarPendiente } from '@/lib/cuadra/intake/emparejar';
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import {
@@ -242,11 +244,15 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         gastoId = match.id;
       } else {
         // El XML llegó sin foto previa: se crea el gasto desde el XML.
-        const esFuel = (xml.claveProdServ ?? '').startsWith('15101');
+        // El concepto sale de la CLAVE del SAT, no de un prefijo. Antes esto era
+        // `startsWith('15101') ? 'diesel' : 'factura'`, así que toda caseta
+        // timbrada entraba como 'factura' y perdía el estímulo del 50% de peaje
+        // (LIF 2026 Art. 20-A), que el motor sólo aplica a `concepto === 'caseta'`.
         gastoId = randomUUID();
+        const cfg = await getConfig(op.tenantId);
         await addGasto(op.tenantId, viajeId, {
           id: gastoId,
-          concepto: esFuel ? 'diesel' : 'factura',
+          concepto: conceptoDesdeClave(xml.claveProdServ, cfg.hidrocarburos.claves, cfg.estimulos.clavesPeaje),
           monto: xml.total ?? 0,
           fecha: xml.fecha,
           rfcEmisor: xml.rfcEmisor,

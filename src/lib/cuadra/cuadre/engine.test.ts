@@ -415,3 +415,100 @@ describe('cuadrarViaje', () => {
     expect(d!.monto).toBe(150); // 900 - 750
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOTALES DE DEDUCIBILIDAD — la cifra que el contralor de verdad compra.
+//
+// El motor ya detectaba todo lo necesario y NO lo sumaba: el contralor tenía que
+// leer la lista de diferencias y hacer la cuenta a mano. Son tres cubetas, no
+// dos, porque el combustible en efectivo NO cae en ninguna de las dos clásicas:
+// es deducible hasta el 15% del ejercicio (RFA 2026 regla 2.9) y ese contador
+// todavía no existe. Meterlo en "no deducible" le quita dinero al cliente;
+// meterlo en "deducible" le promete algo que quizá no tenga.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuadrarViaje — totales de deducibilidad', () => {
+  const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: ['15101505'] };
+
+  it('todo limpio → todo deducible', () => {
+    const r = cuadrarViaje({
+      viajeId: 't1', anticipo: 3000, politica, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 2000, folio: 'A1', formaPago: '04' }), g({ concepto: 'caseta', monto: 1000, folio: 'C1', formaPago: '04' })],
+    });
+    expect(r.totalDeducible).toBe(3000);
+    expect(r.totalNoDeducible).toBe(0);
+    expect(r.totalPorConfirmar).toBe(0);
+  });
+
+  it('un CFDI cancelado se va entero a no deducible', () => {
+    const r = cuadrarViaje({
+      viajeId: 't2', anticipo: 3000, politica, estimulos: EST,
+      gastos: [
+        g({ concepto: 'caseta', monto: 1000, folio: 'C1', formaPago: '04' }),
+        g({ concepto: 'factura', monto: 2000, cfdiUuid: 'u1', estadoSat: 'cancelado', formaPago: '04' }),
+      ],
+    });
+    expect(r.totalNoDeducible).toBe(2000);
+    expect(r.totalDeducible).toBe(1000);
+  });
+
+  it('del viático solo el EXCEDENTE es no deducible, no el gasto entero', () => {
+    // LISR 28-V topa la alimentación en $750/día. Un viático de $900 no se pierde
+    // completo: se pierden $150. Mandar los $900 a no deducible es el error que
+    // más dinero le cuesta al cliente en esta lista.
+    const r = cuadrarViaje({
+      viajeId: 't3', anticipo: 900, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'viaticos', monto: 900, folio: 'V1', formaPago: '04' })],
+    });
+    expect(r.totalNoDeducible).toBe(150);
+    expect(r.totalDeducible).toBe(750);
+  });
+
+  it('el combustible en efectivo va a POR CONFIRMAR, ni deducible ni perdido', () => {
+    const r = cuadrarViaje({
+      viajeId: 't4', anticipo: 1500, politica, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 1500, folio: 'D1', formaPago: '01' })],
+    });
+    expect(r.totalPorConfirmar).toBe(1500);
+    expect(r.totalNoDeducible).toBe(0);
+    expect(r.totalDeducible).toBe(0);
+  });
+
+  it('un gasto no-combustible en efectivo sobre el tope SÍ es no deducible', () => {
+    // Aquí no hay facilidad que valga: LISR 27-III sin excepción para el sector.
+    const r = cuadrarViaje({
+      viajeId: 't5', anticipo: 2500, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'otro', monto: 2500, folio: 'O1', formaPago: '01' })],
+    });
+    expect(r.totalNoDeducible).toBe(2500);
+    expect(r.totalPorConfirmar).toBe(0);
+  });
+
+  it('las tres cubetas SIEMPRE suman el total comprobado', () => {
+    // La invariante que hace confiable la cifra: si no cuadra, el contralor lo
+    // nota con una calculadora y pierde la confianza en todo lo demás.
+    const r = cuadrarViaje({
+      viajeId: 't6', anticipo: 9000, politica, estimulos: EST,
+      gastos: [
+        g({ concepto: 'diesel', monto: 2000, folio: 'D1', formaPago: '04' }),
+        g({ concepto: 'diesel', monto: 1500, folio: 'D2', formaPago: '01' }),         // por confirmar
+        g({ concepto: 'viaticos', monto: 900, folio: 'V1', formaPago: '04' }),        // 150 fuera
+        g({ concepto: 'factura', monto: 2000, cfdiUuid: 'u1', estadoSat: 'cancelado', formaPago: '04' }),
+        g({ concepto: 'caseta', monto: 1000, folio: 'C1', formaPago: '04' }),
+      ],
+    });
+    const suma = r.totalDeducible + r.totalNoDeducible + r.totalPorConfirmar;
+    expect(suma).toBeCloseTo(r.totalComprobado, 2);
+  });
+
+  it('un duplicado no cuenta en ninguna cubeta', () => {
+    const r = cuadrarViaje({
+      viajeId: 't7', anticipo: 2000, politica, estimulos: EST,
+      gastos: [
+        g({ concepto: 'caseta', monto: 1000, cfdiUuid: 'dup', formaPago: '04' }),
+        g({ concepto: 'caseta', monto: 1000, cfdiUuid: 'dup', formaPago: '04' }),
+      ],
+    });
+    expect(r.totalComprobado).toBe(1000);
+    expect(r.totalDeducible + r.totalNoDeducible + r.totalPorConfirmar).toBe(1000);
+  });
+});
