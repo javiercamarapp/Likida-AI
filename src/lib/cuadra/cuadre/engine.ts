@@ -11,6 +11,7 @@
 import { strip_accents } from './util';
 import { sanitizarFolio } from '../intake/sanitizar';
 import { calcularCaducidad } from '../facturacion/caducidad';
+import { identificarComercio } from '../facturacion/identificar';
 import type { Gasto, Diferencia, Liquidacion, EstatusLiquidacion, TipoDiferencia } from '@/types/cuadra';
 
 export interface PoliticaGasto {
@@ -324,20 +325,47 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // Se avisa con la regla GENERAL (dentro del mes natural de la operación). Los
   // plazos por cadena que circulan (5-15 días) están SIN VERIFICAR contra los
   // portales, así que NO se afirman: se dice que la ventana puede ser menor.
+  //
+  // LA LIGA IMPRESA NO PUEDE SER EL ÚNICO DISPARADOR. Lo era, y sobre un ticket
+  // real de OXXO ($41.50, 16-jul, tres días de ventana) el aviso no salió: ese
+  // papel no trae QR ni URL de facturación, solo el ID de venta. El comercio se
+  // reconoce además por RFC —respaldado por dígito verificador— y por la razón
+  // social impresa, que es justo para lo que existe `identificarComercio`. Estaba
+  // escrito, probado y sin llamar desde ningún lado.
   if (input.hoy) {
     for (const g of input.gastos) {
       if (duplicados.has(g.id) || !(g.monto > 0)) continue;
       if (g.cfdiUuid) continue; // ya timbrado
-      const liga = (g.ocrExtra as Record<string, unknown> | undefined)?.urlFacturacion;
-      if (!liga || !g.fecha) continue; // sin liga no aplica; sin fecha no se afirma nada
-      const c = calcularCaducidad({ fechaTicket: g.fecha.slice(0, 10), plazo: 'mes_natural', hoy: input.hoy });
+      const extra = g.ocrExtra as Record<string, unknown> | undefined;
+      const liga = extra?.urlFacturacion as string | undefined;
+      const comercio = identificarComercio({
+        urlFacturacion: liga,
+        rfcEmisor: g.rfcEmisor,
+        textoTicket: [extra?.emisor, extra?.estacion].filter(Boolean).join(' '),
+      });
+      // Sin comercio Y sin liga no hay nada que afirmar: no todo ticket es
+      // facturable, y prometerle un portal a quien compró en una fonda sin RFC
+      // manda a la oficina a buscar algo que no existe.
+      if (!liga && !comercio) continue;
+      if (!g.fecha) continue; // sin fecha no se afirma nada
+      // El plazo del comercio se usa SOLO si está verificado contra su portal.
+      // `plazoVerificado: false` es el default del catálogo a propósito: un plazo
+      // inventado haría que el sistema jure que un ticket sigue vigente.
+      const plazo = comercio?.plazoVerificado ? comercio.plazo : 'mes_natural';
+      const c = calcularCaducidad({ fechaTicket: g.fecha.slice(0, 10), plazo, hoy: input.hoy });
       if (c.desconocido || (!c.urgente && !c.vencido)) continue;
       const cuerpo = c.vencido
         ? `se pasó el mes de la compra. El comercio ya no suele facturarlo en su portal, pero legalmente puedes exigirlo dentro del ejercicio (Conciliación de Factura del SAT)`
         : `quedan ${c.diasRestantes} día(s) del mes para timbrarlo en el portal — y la ventana del comercio puede ser menor, así que hazlo antes`;
+      // Con comercio reconocido el aviso deja de ser genérico: dice a qué portal
+      // ir y qué datos hay que teclear, que es la diferencia entre un recordatorio
+      // y una instrucción que alguien puede ejecutar.
+      const donde = comercio
+        ? ` Portal de ${comercio.nombre}: ${comercio.portal} — te pedirá ${comercio.campos.filter((k) => k.requerido).map((k) => k.etiquetaPortal).join(', ')}.`
+        : '';
       diferencias.push({
         tipo: 'factura_por_vencer', concepto: g.concepto, monto: 0,
-        nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} sigue sin factura: ${cuerpo}.`,
+        nota: `${etiquetaConcepto(g.concepto, extra)} de ${mxn(g.monto)} sigue sin factura: ${cuerpo}.${donde}`,
         gastoId: g.id,
       });
     }

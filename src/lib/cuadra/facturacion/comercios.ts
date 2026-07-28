@@ -196,7 +196,10 @@ export const COMERCIOS: Comercio[] = [
       { clave: 'transaccion', etiquetaPortal: 'ID de venta', requerido: true },
       { clave: 'monto', etiquetaPortal: 'Monto total con IVA', requerido: true },
     ],
-    reconocer: { dominios: ['oxxo.com'], texto: ['CADENA COMERCIAL OXXO'] },
+    // RFC leído de un ticket real (Itzaes, Mérida, 16-jul-2026) y COMPROBADO con
+    // el dígito verificador: el papel se lee "CCO-8605?3-1N4" y de los diez
+    // candidatos solo este cierra. No es una transcripción, es una verificación.
+    reconocer: { dominios: ['oxxo.com'], rfc: ['CCO8605231N4'], texto: ['CADENA COMERCIAL OXXO'] },
   },
   {
     clave: 'office_depot',
