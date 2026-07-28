@@ -1,0 +1,38 @@
+id: criterio-1-CFF-PI
+tipo: criterio_no_vinculativo
+jerarquia: 5
+instrumento: "Anexo 3 de la Resolución Miscelánea Fiscal para 2026 (criterios no vinculativos)"
+articulo_o_regla: "1/CFF/PI"
+titulo: >
+  Entrega o puesta a disposición del CFDI. No se cumple con la obligación cuando el
+  emisor únicamente remite a una página de Internet.
+citas_en_codigo: ["1/CFF/PI", "CFF art. 89", "artículo 52 del Código Fiscal"]
+texto_vigente: null
+fecha_publicacion: 2026-01-09
+fuente_url: "https://www.sat.gob.mx/"
+fuente_tipo: dof_oficial
+estado_verificacion: evidencia_corroborante
+nota_verificacion: >
+  El título, el fundamento (CFF 33 fr. I inciso h) y la existencia de la fracción IV
+  fueron verificados por el verificador adversarial de la ola 1. NO se transcribió el
+  texto completo. PARA CERRAR: bajar el Anexo 3 del DOF del 09-01-2026 y pegar el
+  texto de las fracciones II, III y IV.
+por_que_nos_toca: >
+  La fracción IV alcanza a "Quien asesore, aconseje, PRESTE SERVICIOS o participe en
+  la realización o la implementación de cualquiera de las prácticas anteriores".
+  Esa es la posición de Likida, no la del cliente: si el producto implementa una
+  práctica indebida, el criterio nos alcanza a nosotros.
+  Las fracciones II y III sancionan no permitir que el cliente dé sus datos en el
+  mismo acto y lugar, y trasladarle la obligación de generar el CFDI desde un portal
+  — que es exactamente el flujo que la autofacturación impone.
+dato_verificado_adicional: >
+  El Anexo 3 de la RMF 2026 contiene ~74 criterios (4 del CFF), no uno. Casi todos
+  cierran con la misma cláusula de "quien preste servicios".
+  En 2026 se ELIMINÓ del 1/CFF/PI la fracción que castigaba condicionar el CFDI a la
+  exhibición de la constancia de situación fiscal: esa conducta pasó a ser infracción
+  tipificada.
+mitigacion: "Leyenda de descargo (arts. 52 y 89 CFF) — ver cuadre/leyendas.ts"
+verificado_por: "verificador adversarial ola1 (refutación 3)"
+verificado_el: 2026-07-27
+usado_en_codigo:
+  - "cuadre/leyendas.ts — LEYENDA_CORTA y leyendaPdf()"

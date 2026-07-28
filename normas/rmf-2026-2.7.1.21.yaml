@@ -1,0 +1,31 @@
+id: rmf-2026-2.7.1.21
+tipo: regla_general
+jerarquia: 3
+instrumento: "Resolución Miscelánea Fiscal para 2026"
+articulo_o_regla: "2.7.1.21"
+titulo: "Expedición de comprobantes en operaciones con el público en general (factura global)"
+citas_en_codigo: ["RMF 2.7.1.21"]
+texto_vigente: null
+fecha_publicacion: null
+fuente_tipo: sat_oficial
+estado_verificacion: evidencia_corroborante
+nota_verificacion: >
+  Número confirmado por la ola 1 (01-cfdi-cff.md) contra el listado de reglas de la
+  RMF 2026. Texto NO transcrito. PARA CERRAR: pegar el texto de la regla desde la RMF.
+cambio_de_numero: true
+version_anterior: rmf-2021-2.7.1.24
+nota_renumeracion: >
+  Era la 2.7.1.24 hasta la RMF 2021; se renumeró a 2.7.1.21 desde la RMF 2022.
+  ATENCIÓN: hoy la 2.7.1.24 existe pero trata OTRA COSA (devolución de IVA a
+  turistas). Citar "2.7.1.24" para la factura global es una cita muerta, y es
+  exactamente el error que se cometió en FISCAL_LEGAL.md §1.6.
+por_que_importa_al_producto: >
+  Explica por qué los comercios cierran su ventana de facturación a fin de mes: una
+  vez que el ticket entró en la factura global (RFC genérico XAXX010101000), sacarlo
+  obliga a cancelarla con motivo "04" y reexpedirla, o a emitir un CFDI de egreso.
+  Para hidrocarburos es peor: el SAT PROHÍBE cancelar la factura global, y la única
+  salida es el CFDI de egreso.
+verificado_por: "ola1 / 01-cfdi-cff.md; ola2 / 10-contradicciones.md"
+verificado_el: 2026-07-27
+usado_en_codigo:
+  - "FISCAL_LEGAL.md §1.6 (documentación, no código)"

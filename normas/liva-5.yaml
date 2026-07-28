@@ -1,0 +1,24 @@
+id: liva-art-5
+tipo: ley
+jerarquia: 1
+instrumento: "Ley del Impuesto al Valor Agregado"
+articulo_o_regla: "5"
+titulo: "Requisitos del acreditamiento del IVA"
+citas_en_codigo: ["LIVA art. 5"]
+texto_vigente: null
+estado_verificacion: sin_verificar
+nota_verificacion: >
+  El motor suma `ivaAcreditable` y el PDF lo imprime como "IVA acreditable (LIVA
+  art. 5)". El artículo NO se leyó en esta investigación. PARA CERRAR: bajar la LIVA
+  de diputados.gob.mx y transcribir los requisitos del acreditamiento —en especial
+  que el IVA esté trasladado EXPRESAMENTE y POR SEPARADO en el comprobante, y que
+  el gasto sea deducible para ISR—, porque de ahí depende que la cifra impresa sea
+  correcta.
+riesgo_actual: >
+  El motor acredita el IVA leído del XML de todo gasto que no cayó en
+  SIN_ACREDITAMIENTO. Si el artículo exige alguna condición adicional que hoy no se
+  valida, la cifra impresa está de más. Es una cifra que el contralor usa.
+verificado_por: null
+usado_en_codigo:
+  - "cuadre/engine.ts — ivaAcreditable"
+  - "liquidacion/pdf.ts — sección ACREDITABLE / RECUPERABLE"

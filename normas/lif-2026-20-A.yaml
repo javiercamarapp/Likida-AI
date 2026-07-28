@@ -1,0 +1,30 @@
+id: lif-2026-art-20-A
+tipo: ley
+jerarquia: 1
+instrumento: "Ley de Ingresos de la Federación para 2026"
+articulo_o_regla: "20, apartado A"
+titulo: "Estímulos fiscales: IEPS de diésel (fr. IV) y peaje 50% (fr. V)"
+citas_en_codigo: ["LIF 2026 Art. 20", "LIF 2026 Art. 20-A", "LIF Art. 20-A fr. IV"]
+texto_vigente: null
+estado_verificacion: sin_verificar
+nota_verificacion: >
+  El código cita "LIF 2026 Art. 20" y "Art. 20-A" en diez lugares y aplica un factor
+  de 0.5 al peaje. NINGUNA de las dos cosas se leyó en la fuente en esta
+  investigación. Además la ola 2 detectó que el material comercial cita "LIF
+  artículo 16", que es una cita muerta (hoy es el artículo 20).
+  PARA CERRAR: bajar la LIF 2026 del DOF y transcribir las fracciones de los dos
+  estímulos, con sus condiciones (tope de ingresos, obligación de bitácora,
+  acreditamiento contra qué impuesto y en qué plazo).
+contenido_asumido_en_el_codigo:
+  - "Estímulo de IEPS: SOLO diésel (clave 15101505), no gasolina"
+  - "Estímulo de peaje: 50% del SubTotal de casetas, para ingresos < $300M"
+advertencia: >
+  Ver también criterio-1-LIF-PI: el estímulo del diésel se calcula con la cuota
+  SEMANAL DISMINUIDA, y usar la entera es práctica indebida que alcanza a quien
+  presta el servicio. Mientras esta ficha siga sin verificar, el producto NO debe
+  imprimir cifras de estímulo de diésel en pesos.
+verificado_por: null
+usado_en_codigo:
+  - "config.ts — estimulos.peajeFactor, estimulos.clavesDieselIeps"
+  - "cuadre/engine.ts — iepsAcreditable, peajeAcreditable"
+  - "liquidacion/pdf.ts — sección ACREDITABLE / RECUPERABLE"

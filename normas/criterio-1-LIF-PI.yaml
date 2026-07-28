@@ -1,0 +1,31 @@
+id: criterio-1-LIF-PI
+tipo: criterio_no_vinculativo
+jerarquia: 5
+instrumento: "Anexo 3 de la Resolución Miscelánea Fiscal para 2026"
+articulo_o_regla: "1/LIF/PI"
+titulo: "Estímulo del IEPS de diésel calculado con la cuota disminuida"
+citas_en_codigo: ["1/LIF/PI"]
+texto_vigente: null
+fecha_publicacion: 2026-01-09
+fuente_tipo: dof_oficial
+estado_verificacion: evidencia_corroborante
+nota_verificacion: >
+  El reconciliador de la ola 2 lo leyó completo y dictaminó con él el conflicto CN-1.
+  NO está transcrito aquí. PARA CERRAR: pegar el texto del criterio desde el Anexo 3.
+contenido_esencial: >
+  El estímulo del IEPS de diésel se calcula con la CUOTA SEMANAL DISMINUIDA, no con
+  la cuota entera. Calcularlo con la entera es práctica indebida — de quien lo hace
+  Y de quien le presta el servicio.
+por_que_nos_toca: >
+  Un motor de reglas que use una cuota constante NO comete un error del cliente:
+  implementa una práctica indebida propia. Por eso el motor de cuotas semanales
+  subió a Fase 1 del roadmap.
+riesgo_cuantificado: >
+  La cuota es SEMANAL y varió ~3.5x durante 2026. Para una flota de 200,000 litros
+  al mes, usar una cuota fija es del orden de $1 millón de pesos de error mensual.
+verificado_por: "ola2 / 10-contradicciones.md (dictamen CN-1)"
+verificado_el: 2026-07-27
+usado_en_codigo: []
+pendiente_en_producto: >
+  El motor de cuotas semanales NO existe. Hasta que exista, el producto NO debe
+  imprimir una cifra de estímulo de diésel en pesos: solo litros, cuota fechada y rango.

@@ -1,0 +1,26 @@
+id: politica-portales-plazos-facturacion
+tipo: politica_comercio
+jerarquia: 6
+instrumento: "Portales de autofacturación de comercios (varios)"
+titulo: "Ventanas de facturación por cadena"
+citas_en_codigo: ["plazoVerificado"]
+texto_vigente: null
+estado_verificacion: sin_verificar
+nota_verificacion: >
+  Los plazos que circulan (gasolineras 5-15 días, Oxxo 15, supermercados fin de mes,
+  casetas ~7) vienen del BLOG DE UN COMPETIDOR (Clara Intelligence), no de los
+  portales. PARA CERRAR: entrar a cada portal y leer sus términos.
+advertencia_de_jerarquia: >
+  ESTO NO ES UNA NORMA FISCAL. Es la política interna de un tercero y tiene CERO
+  fuerza legal. El plazo LEGAL para pedir factura es todo el ejercicio (el SAT lo
+  dice expresamente), y negarla porque "ya pasó el mes" es una práctica indebida
+  listada por el propio SAT, con remedio en la Conciliación de Factura.
+  El producto NUNCA debe presentar estos plazos como una obligación fiscal.
+uso_permitido_hoy: >
+  Solo como advertencia genérica: "la ventana del comercio puede ser menor".
+  El aviso del motor usa la regla general del mes natural, no estos números.
+verificado_por: "ola1 / 08-competencia.md (fuente secundaria)"
+verificado_el: 2026-07-27
+usado_en_codigo:
+  - "facturacion/comercios.ts — campo `plazoVerificado: false` en cada entrada"
+  - "cuadre/engine.ts — regla factura_por_vencer (NO usa estos plazos)"
