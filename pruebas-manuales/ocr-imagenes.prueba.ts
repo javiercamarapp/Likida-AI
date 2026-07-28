@@ -158,6 +158,12 @@ test('OCR sobre imágenes reales + cuadre del lote', async () => {
     const kb = (bytes / 1024).toFixed(0);
     console.log(`\n[${i + 1}/${imagenes.length}] ${basename(ruta)}  (${kb} KB${nota ? `, ${nota}` : ''})`);
 
+    // Se decodifica aparte SOLO para el informe: es lo único que distingue "el
+    // lector no vio nada" de "vio un código que no era de CFDI". Sin esto, el
+    // arnés decía "sin QR" sobre tickets cuyo QR se había leído perfectamente.
+    const { decodeCodigosFromImage, bufferFromDataUrl } = await import('@/lib/cuadra/intake/cfdi');
+    const codigos = await decodeCodigosFromImage(bufferFromDataUrl(url)).catch(() => []);
+
     const t0 = Date.now();
     let r: Awaited<ReturnType<typeof extraerComprobante>>;
     try {
@@ -193,7 +199,11 @@ test('OCR sobre imágenes reales + cuadre del lote', async () => {
     }
     console.log(
       `   fiscal   : RFC emisor ${g.rfcEmisor ?? (extra.rfcEmisorDudoso ? `⚠️ ${String(extra.rfcEmisorDudoso)} RECHAZADO (dígito verificador)` : '—')}  ·  receptor ${g.rfcReceptor ?? '—'}\n` +
-        `              UUID ${g.cfdiUuid ?? '—'}  ·  CFDI ${g.cfdiValido === true ? 'con QR ✅' : 'sin QR'}` +
+        // "sin QR" a secas engañaba: los tickets de este lote SÍ traen QR, pero de
+        // FACTURACIÓN (mefacturo.mx), no de CFDI — y el lector los leyó bien. El
+        // arnés hacía parecer que el decodificador había fallado cuando no.
+        `   códigos  : ${codigos.length ? codigos.map((c) => `[${c.formato}] ${String(c.texto).slice(0, 62)}`).join('\n              ') : '— ninguno leído'}\n` +
+        `              UUID ${g.cfdiUuid ?? '—'}  ·  QR de CFDI ${g.cfdiValido === true ? 'sí ✅' : 'no'}` +
         `  ·  SAT ${g.estadoSat ?? '—'}  ·  EFOS ${g.efos === true ? '🚨 EN LISTA 69-B' : g.efos === false ? 'limpio' : '—'}`,
     );
     console.log(`   costo    : ${r.costo.modelo}  ${r.costo.tokensIn}→${r.costo.tokensOut} tok  $${r.costo.costoUsd.toFixed(4)} USD`);
