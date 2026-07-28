@@ -587,3 +587,82 @@ describe('cuadrarViaje — tope de viáticos', () => {
     expect(r.diferencias.some((x) => x.tipo === 'viatico_excede_fiscal')).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL TICKET QUE SE VA A QUEDAR SIN FACTURA.
+//
+// Un ticket de gasolinera NO es factura: hay que timbrarlo en el portal del
+// emisor, y ese portal cierra su ventana. Si nadie lo hace a tiempo, el gasto
+// deja de ser deducible — el dinero ya salió y el IVA se pierde.
+//
+// Se avisa con la regla GENERAL (dentro del mes natural de la operación), que
+// es la documentada. Los plazos por cadena (5-15 días) siguen SIN VERIFICAR y
+// por eso no se afirman: se dice que la ventana del comercio puede ser menor.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuadrarViaje — aviso de ticket por facturar', () => {
+  const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: ['15101505'] };
+  const conPortal = (over: Partial<Gasto> = {}) => g({
+    concepto: 'diesel', monto: 1000, folio: 'T1', formaPago: '04',
+    ocrExtra: { urlFacturacion: 'https://facturacion.oxxogas.com/' }, ...over,
+  });
+
+  it('avisa cuando el mes está por cerrarse', () => {
+    const r = cuadrarViaje({
+      viajeId: 'p1', anticipo: 1000, politica: [], estimulos: EST, hoy: '2026-05-30',
+      gastos: [conPortal({ fecha: '2026-05-02' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'factura_por_vencer')).toBe(true);
+  });
+
+  it('no molesta a principio de mes', () => {
+    const r = cuadrarViaje({
+      viajeId: 'p2', anticipo: 1000, politica: [], estimulos: EST, hoy: '2026-05-05',
+      gastos: [conPortal({ fecha: '2026-05-02' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'factura_por_vencer')).toBe(false);
+  });
+
+  it('si ya se timbró, no hay nada que avisar', () => {
+    const r = cuadrarViaje({
+      viajeId: 'p3', anticipo: 1000, politica: [], estimulos: EST, hoy: '2026-05-30',
+      gastos: [conPortal({ fecha: '2026-05-02', cfdiUuid: 'ya-timbrado' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'factura_por_vencer')).toBe(false);
+  });
+
+  it('sin liga de portal no aplica: no todo ticket se factura en línea', () => {
+    const r = cuadrarViaje({
+      viajeId: 'p4', anticipo: 1000, politica: [], estimulos: EST, hoy: '2026-05-30',
+      gastos: [g({ concepto: 'diesel', monto: 1000, folio: 'T2', fecha: '2026-05-02', formaPago: '04' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'factura_por_vencer')).toBe(false);
+  });
+
+  it('sin fecha confiable NO se afirma un plazo', () => {
+    // El OCR ya devolvió 2023 en un ticket de 2026. Decirle a alguien "te
+    // quedan 2 días" con una fecha inventada es peor que no decir nada.
+    const r = cuadrarViaje({
+      viajeId: 'p5', anticipo: 1000, politica: [], estimulos: EST, hoy: '2026-05-30',
+      gastos: [conPortal({ fecha: undefined })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'factura_por_vencer')).toBe(false);
+  });
+
+  it('el aviso NO afirma un plazo por comercio: dice que puede ser menor', () => {
+    const r = cuadrarViaje({
+      viajeId: 'p6', anticipo: 1000, politica: [], estimulos: EST, hoy: '2026-05-30',
+      gastos: [conPortal({ fecha: '2026-05-02' })],
+    });
+    const nota = r.diferencias.find((d) => d.tipo === 'factura_por_vencer')!.nota;
+    expect(nota).toMatch(/puede ser menor|antes/i);
+    expect(nota).not.toMatch(/\b(5|7|15) días\b/); // no inventa el plazo de la cadena
+  });
+
+  it('sin `hoy` la regla no corre: no se asume la fecha del servidor', () => {
+    const r = cuadrarViaje({
+      viajeId: 'p7', anticipo: 1000, politica: [], estimulos: EST,
+      gastos: [conPortal({ fecha: '2026-05-02' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'factura_por_vencer')).toBe(false);
+  });
+});

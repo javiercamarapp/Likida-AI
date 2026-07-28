@@ -4,6 +4,7 @@
 // DE ANOMALÍAS/FRAUDE (mismo CFDI usado en dos viajes, folios duplicados).
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { detectarDuplicadosEntreViajes, type Anomalia } from './duplicados';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export interface DashboardKpis {
@@ -73,37 +74,29 @@ export async function getStatsPorOperador(tenantId: string): Promise<OperadorSta
   }));
 }
 
-export interface Anomalia {
-  tipo: 'cfdi_duplicado' | 'folio_duplicado';
-  detalle: string;
-  monto: number;
-  viajes: string[];
-}
+export type { Anomalia } from './duplicados';
 
-/** Detección de fraude: mismo CFDI/folio usado en 2+ viajes distintos. */
+/**
+ * Detección de fraude entre viajes. La lógica vive en `duplicados.ts` (pura y
+ * probada); aquí solo se traen las filas.
+ *
+ * La versión anterior tenía esta lógica pegada a Supabase, y por eso nunca se
+ * probó: declaraba detectar `folio_duplicado` y solo producía `cfdi_duplicado`.
+ */
 export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
   const { data } = await supabaseAdmin()
     .from('gasto')
     .select('viaje_id, concepto, monto, folio, cfdi_uuid')
     .eq('tenant_id', tenantId);
-  const rows = data ?? [];
-  const anomalias: Anomalia[] = [];
-
-  const porUuid = new Map<string, Set<string>>();
-  const montoUuid = new Map<string, number>();
-  for (const r of rows) {
-    if (!r.cfdi_uuid) continue;
-    const k = r.cfdi_uuid as string;
-    if (!porUuid.has(k)) porUuid.set(k, new Set());
-    porUuid.get(k)!.add(r.viaje_id as string);
-    montoUuid.set(k, Number(r.monto));
-  }
-  for (const [uuid, viajes] of porUuid) {
-    if (viajes.size > 1) {
-      anomalias.push({ tipo: 'cfdi_duplicado', detalle: `CFDI ${uuid.slice(0, 8)}… usado en ${viajes.size} viajes`, monto: montoUuid.get(uuid) ?? 0, viajes: [...viajes] });
-    }
-  }
-  return anomalias;
+  return detectarDuplicadosEntreViajes(
+    (data ?? []).map((r) => ({
+      viajeId: r.viaje_id as string,
+      concepto: (r.concepto as string) ?? 'otro',
+      monto: Number(r.monto),
+      folio: (r.folio as string) || undefined,
+      cfdiUuid: (r.cfdi_uuid as string) || undefined,
+    })),
+  );
 }
 
 export interface Acreditables { ieps: number; iva: number; peaje: number; }

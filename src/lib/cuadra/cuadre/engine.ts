@@ -10,6 +10,7 @@
 
 import { strip_accents } from './util';
 import { sanitizarFolio } from '../intake/sanitizar';
+import { calcularCaducidad } from '../facturacion/caducidad';
 import type { Gasto, Diferencia, Liquidacion, EstatusLiquidacion, TipoDiferencia } from '@/types/cuadra';
 
 export interface PoliticaGasto {
@@ -36,6 +37,9 @@ export interface CuadreInput {
   hidrocarburos?: { claves: string[]; unidad: string; vigenteDesde: string };
   /** Estímulos y topes fiscales (LIF 2026 Art. 20 / LISR). */
   estimulos?: { peajeFactor: number; viaticosTopeFiscalDiarioMxn: number; efectivoTopeMxn: number; clavesDieselIeps?: string[] };
+  /** Hoy (ISO YYYY-MM-DD), para el aviso de tickets por facturar. Se INYECTA:
+   *  el motor es puro y no lee el reloj del servidor. Sin esto, esa regla no corre. */
+  hoy?: string;
   /** Rango de fecha válido para los comprobantes (ISO YYYY-MM-DD). Fuera → sospechosa. */
   fechaMin?: string;
   fechaMax?: string;
@@ -247,6 +251,34 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     }
   }
 
+  // ── Tickets de portal que se van a quedar sin factura ────────────────────────
+  //
+  // Un ticket de gasolinera NO es factura: hay que timbrarlo en el portal del
+  // emisor. Si nadie lo hace a tiempo, el gasto deja de ser deducible — el
+  // dinero ya salió y el IVA se pierde.
+  //
+  // Se avisa con la regla GENERAL (dentro del mes natural de la operación). Los
+  // plazos por cadena que circulan (5-15 días) están SIN VERIFICAR contra los
+  // portales, así que NO se afirman: se dice que la ventana puede ser menor.
+  if (input.hoy) {
+    for (const g of input.gastos) {
+      if (duplicados.has(g.id) || !(g.monto > 0)) continue;
+      if (g.cfdiUuid) continue; // ya timbrado
+      const liga = (g.ocrExtra as Record<string, unknown> | undefined)?.urlFacturacion;
+      if (!liga || !g.fecha) continue; // sin liga no aplica; sin fecha no se afirma nada
+      const c = calcularCaducidad({ fechaTicket: g.fecha.slice(0, 10), plazo: 'mes_natural', hoy: input.hoy });
+      if (c.desconocido || (!c.urgente && !c.vencido)) continue;
+      const cuerpo = c.vencido
+        ? `se pasó el mes de la compra. El comercio ya no suele facturarlo en su portal, pero legalmente puedes exigirlo dentro del ejercicio (Conciliación de Factura del SAT)`
+        : `quedan ${c.diasRestantes} día(s) del mes para timbrarlo en el portal — y la ventana del comercio puede ser menor, así que hazlo antes`;
+      diferencias.push({
+        tipo: 'factura_por_vencer', concepto: g.concepto, monto: 0,
+        nota: `${label(g.concepto)} de ${mxn(g.monto)} sigue sin factura: ${cuerpo}.`,
+        gastoId: g.id,
+      });
+    }
+  }
+
   // ── Tope fiscal de ALIMENTACIÓN: $750 POR DÍA y por beneficiario (LISR 28-V) ──
   //
   // Dos correcciones sobre cómo estaba:
@@ -330,7 +362,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
   // mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
   // Se sigue avisando en `diferencias`; ya no bloquea.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'fecha_sospechosa', 'folio_verificar'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'fecha_sospechosa', 'folio_verificar'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

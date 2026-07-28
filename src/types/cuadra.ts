@@ -70,6 +70,7 @@ export type TipoDiferencia =
   | 'viatico_excede_fiscal' // viático de alimentación > tope fiscal $750/día (LISR 28-V) → porción no deducible
   | 'fecha_sospechosa'     // fecha futura o muy anterior al viaje → periodo/plazo/complemento en riesgo
   | 'folio_verificar'      // folio leído con baja confianza en ticket con portal → verificar antes de facturar
+  | 'factura_por_vencer'   // ticket de portal sin timbrar y con la ventana cerrándose
   | 'diesel_desviacion';   // consumo de diésel fuera del rango esperado
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */
