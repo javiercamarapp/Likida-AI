@@ -156,9 +156,19 @@ async function ponerAvisoADisposicion(
 
 export async function processInbound(msg: InboundMessage): Promise<void> {
   // Idempotencia: si Meta reintenta el webhook, no re-procesar (no duplicar gasto).
-  if (msg.waMessageId && !(await claimMessage(msg.waMessageId))) {
+  const claim = msg.waMessageId ? await claimMessage(msg.waMessageId) : 'nuevo';
+  if (claim === 'duplicado') {
     logger.info('wa.duplicate', { id: msg.waMessageId });
     return;
+  }
+  if (claim === 'indeterminado') {
+    // NO se abandona el turno. Meta ya recibió su 200 en `route.ts` y no
+    // reintenta, así que abandonar aquí no aplaza el mensaje: lo pierde, para
+    // siempre y en silencio. Se sigue, aceptando el riesgo de reprocesar: los
+    // efectos con dinero tienen sus propios candados —hash de comprobante para el
+    // gasto, `on conflict (viaje_id)` para la liquidación— y ninguno depende de
+    // esta rejilla. Perder el "listo" del operador no tiene candado ninguno.
+    logger.warn('wa.claim_indeterminado', { id: msg.waMessageId });
   }
 
   // ── RELOJ COMPARTIDO, desde la primera línea ─────────────────────────────
