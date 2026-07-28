@@ -107,6 +107,29 @@ export async function sendDocument(to: string, link: string, filename: string, c
   logger.info('wa.sendDocument.ok', { id: await idDeRespuesta(res), filename });
 }
 
+/**
+ * Un `!res.ok` de la descarga de media, dicho en voz alta.
+ *
+ * Los cuatro `if (!res.ok) return null` de las dos descargas estaban FUERA del
+ * `catch`, así que devolvían `null` sin una sola línea. Con el token de WhatsApp
+ * vencido —que fue exactamente lo que pasó el 28-jul a las 12:00— TODAS las
+ * fotos de TODOS los operadores fallan en silencio absoluto, y el producto le
+ * responde al operador que reenvíe la foto: un remedio que no puede funcionar
+ * nunca, porque el problema no está en su foto.
+ *
+ * Es la misma lección que `fc760c3` (el éxito también deja rastro), viva treinta
+ * líneas más abajo del comentario que la documenta.
+ */
+async function avisarFalloMedia(paso: string, mediaId: string, res: Response): Promise<void> {
+  logger.error('wa.media_no_descargada', {
+    paso, mediaId, status: res.status,
+    // El cuerpo de Meta es lo que distingue un token vencido (401/190) de un
+    // media caducado (404): sin él, los dos se ven igual y llevan a arreglos
+    // distintos.
+    body: await res.text().catch(() => ''),
+  });
+}
+
 /** Descarga un media entrante de Meta como TEXTO (para el XML del CFDI). */
 export async function downloadMediaAsText(mediaId: string): Promise<string | null> {
   try {
@@ -114,13 +137,13 @@ export async function downloadMediaAsText(mediaId: string): Promise<string | nul
       headers: { Authorization: `Bearer ${token()}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
-    if (!meta.ok) return null;
+    if (!meta.ok) { await avisarFalloMedia('metadatos', mediaId, meta); return null; }
     const { url } = (await meta.json()) as { url: string };
     const bin = await fetch(url, {
       headers: { Authorization: `Bearer ${token()}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
-    if (!bin.ok) return null;
+    if (!bin.ok) { await avisarFalloMedia('contenido', mediaId, bin); return null; }
     return await bin.text();
   } catch (e) {
     logger.warn('wa.downloadMediaText', { err: e instanceof Error ? e.message : String(e) });
@@ -135,13 +158,13 @@ export async function downloadMediaAsDataUrl(mediaId: string): Promise<string | 
       headers: { Authorization: `Bearer ${token()}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
-    if (!meta.ok) return null;
+    if (!meta.ok) { await avisarFalloMedia('metadatos', mediaId, meta); return null; }
     const { url, mime_type } = (await meta.json()) as { url: string; mime_type: string };
     const bin = await fetch(url, {
       headers: { Authorization: `Bearer ${token()}` },
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
-    if (!bin.ok) return null;
+    if (!bin.ok) { await avisarFalloMedia('contenido', mediaId, bin); return null; }
     const buf = Buffer.from(await bin.arrayBuffer());
     return `data:${mime_type || 'image/jpeg'};base64,${buf.toString('base64')}`;
   } catch (e) {

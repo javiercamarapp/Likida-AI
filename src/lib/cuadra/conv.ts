@@ -62,10 +62,61 @@ export async function resolveOperador(telefono: string): Promise<ResolvedOperado
     .select('id, tenant_id, nombre, telefono')
     .in('telefono', variantesTelefono(telefono))
     .eq('activo', true)
-    .limit(1)
-    .maybeSingle();
-  if (error || !data) return null;
-  return { tenantId: data.tenant_id as string, operadorId: data.id as string, nombre: data.nombre as string, telefono: data.telefono as string };
+    // DOS, no una. `.limit(1)` recortaba ANTES de que `maybeSingle()` mirara, así
+    // que ante dos filas no fallaba: devolvía una arbitraria —sin `order by`— y
+    // con ella se decidía el `tenant_id` con el que se escriben el gasto y la
+    // liquidación. En un producto multi-tenant eso es dinero de una flota
+    // anotado en la de otra, y en silencio.
+    //
+    // Esta función es la que DETERMINA el tenant, así que no puede filtrar por
+    // él: lo único correcto ante la ambigüedad es negarse.
+    .limit(2);
+  // "No está dado de alta" y "no pude preguntar" NO son lo mismo, y `error || !data`
+  // los volvía la misma cosa. Con un fallo transitorio de Supabase, un operador que
+  // SÍ existe recibía "no te tengo registrado" —una frase que suena a dato mal
+  // capturado— y no quedaba una sola línea en el log. Es la misma confusión que ya
+  // se corrigió en el diagnóstico de migraciones el 28-jul; vivía aquí también.
+  //
+  // Sin respuesta no se afirma nada: se lanza, y el llamador decide qué decirle al
+  // operador. `null` queda reservado para lo que de verdad significa: no existe.
+  if (error) throw new ConsultaFallida(`operador por teléfono: ${error.message}`);
+  const filas = data ?? [];
+  if (filas.length === 0) return null;
+  if (filas.length > 1) {
+    // Se registra con los tenants implicados: es lo único que permite arreglar el
+    // dato. No se elige uno "por si acaso" — adivinar aquí escribe dinero en la
+    // flota equivocada y nadie lo nota hasta la conciliación.
+    logger.error('operador.ambiguo', {
+      telefono,
+      tenants: [...new Set(filas.map((f) => f.tenant_id as string))],
+      operadores: filas.map((f) => f.id as string),
+    });
+    throw new OperadorAmbiguo(`el teléfono ${telefono} corresponde a más de un operador activo`);
+  }
+  const fila = filas[0];
+  return { tenantId: fila.tenant_id as string, operadorId: fila.id as string, nombre: fila.nombre as string, telefono: fila.telefono as string };
+}
+
+/**
+ * La base no contestó. NO es "no existe": es que no se sabe.
+ *
+ * Existe como tipo propio para que el llamador pueda distinguirla de cualquier
+ * otro error y decirle al operador algo cierto —"no pude consultar, inténtalo de
+ * nuevo"— en vez de una negación inventada.
+ */
+export class ConsultaFallida extends Error {
+  constructor(mensaje: string) { super(mensaje); this.name = 'ConsultaFallida'; }
+}
+
+/**
+ * El mismo teléfono resuelve a más de un operador activo.
+ *
+ * No se puede decidir de quién es el dinero, así que no se decide. Es un dato
+ * que hay que corregir en la base, no una situación que el código deba salvar
+ * eligiendo uno.
+ */
+export class OperadorAmbiguo extends Error {
+  constructor(mensaje: string) { super(mensaje); this.name = 'OperadorAmbiguo'; }
 }
 
 /** Viaje abierto del operador (el que se está liquidando). */
@@ -79,7 +130,12 @@ export async function getOpenViaje(tenantId: string, operadorId: string): Promis
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error || !data) return null;
+  // Misma distinción que en `resolveOperador`, y aquí es peor: un error de red en
+  // la RE-VERIFICACIÓN posterior al mutex hacía que el operador recibiera "ese
+  // viaje ya quedó cerrado 👍" sobre un viaje que sigue `abierto`, sin liquidación,
+  // sin PDF y sin log. El producto afirmaba un hecho falso sobre su dinero.
+  if (error) throw new ConsultaFallida(`viaje abierto: ${error.message}`);
+  if (!data) return null;
   return data.id as string;
 }
 

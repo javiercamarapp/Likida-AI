@@ -75,10 +75,50 @@ export async function POST(req: NextRequest) {
       );
     });
   }
-  return NextResponse.json({ received: permitidos.length });
+  // ── ACUSES DE ENTREGA ──────────────────────────────────────────────────────
+  //
+  // El 200 de Meta al enviar significa ACEPTADO, no ENTREGADO. La entrega ocurre
+  // después y Meta la reporta por este mismo webhook, en `value.statuses`. Este
+  // arreglo NO SE LEÍA: `extractMessages` solo miraba `value.messages`, así que
+  // un `failed` entraba, devolvía `{"received":0}` y se tiraba sin log.
+  //
+  // Eso es exactamente lo que pasó el 28-jul-2026: una liquidación cerró, el PDF
+  // se generó y subió a storage —comprobado en la base y en el bucket— y el
+  // operador no lo recibió. No hubo `pdf.no_entregado` ni error de envío, porque
+  // el fallo llegó por aquí y aquí no había nadie escuchando. Se perdieron veinte
+  // minutos reconstruyendo a mano lo que este log habría dicho en una línea.
+  //
+  // Con el wamid que `sendText`/`sendDocument` ya registran al enviar, estas dos
+  // líneas cierran el circuito: se sabe qué mensaje concreto no llegó y por qué.
+  const estados = extractStatuses(payload);
+  for (const e of estados) {
+    if (e.status === 'failed') {
+      logger.error('wa.no_entregado', {
+        id: e.id, para: e.recipient_id,
+        codigo: e.errors?.[0]?.code,
+        err: e.errors?.[0]?.title ?? e.errors?.[0]?.message,
+        detalle: e.errors?.[0]?.error_data?.details,
+      });
+    } else {
+      logger.info('wa.estado', { id: e.id, estado: e.status });
+    }
+  }
+
+  return NextResponse.json({ received: permitidos.length, estados: estados.length });
 }
 
 // ── parsing del payload de WhatsApp Cloud API ───────────────────────────────
+
+/** Acuse de entrega de un mensaje que NOSOTROS enviamos. `id` es el wamid que
+ *  devolvió el envío, que es lo que permite atarlo a la línea de `wa.sendText.ok`
+ *  o `wa.sendDocument.ok` correspondiente. */
+interface WaEstado {
+  id: string;
+  status: string;            // sent | delivered | read | failed
+  recipient_id?: string;
+  errors?: Array<{ code?: number; title?: string; message?: string; error_data?: { details?: string } }>;
+}
+
 interface WaWebhook {
   entry?: Array<{
     changes?: Array<{
@@ -91,9 +131,23 @@ interface WaWebhook {
           image?: { id: string };
           document?: { id: string };
         }>;
+        // Acuses de ENTREGA. Meta los manda por el mismo webhook y con el mismo
+        // `field: 'messages'`, en un arreglo aparte. Ver `extractStatuses`.
+        statuses?: WaEstado[];
       };
     }>;
   }>;
+}
+
+/** Los acuses de entrega, que viven en `value.statuses` y no en `value.messages`. */
+function extractStatuses(p: WaWebhook): WaEstado[] {
+  const out: WaEstado[] = [];
+  for (const entry of p.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      for (const s of change.value?.statuses ?? []) out.push(s);
+    }
+  }
+  return out;
 }
 
 function extractMessages(p: WaWebhook): InboundMessage[] {

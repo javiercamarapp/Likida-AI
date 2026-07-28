@@ -33,7 +33,7 @@ import {
   resolveOperador, getOpenViaje, getTenantContext,
   loadConversation, saveConversation, claimMessage,
   acquireViajeLock, releaseViajeLock, releaseMessageClaim,
-  intakeDelta, esperarIntake, type ConvTurn,
+  intakeDelta, esperarIntake, ConsultaFallida, OperadorAmbiguo, type ConvTurn,
 } from '@/lib/cuadra/conv';
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/cuadra/costos';
 import { sendText, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText } from '@/lib/meta/client';
@@ -700,9 +700,31 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // CR-2: si el procesamiento crashea, liberar el claim para que el retry de
     // Meta lo reprocese (at-least-once). El OCR/agente ya tienen sus propios
     // catch; esto atrapa lo inesperado (descarga, DB, red) antes de perder dinero.
-    logger.error('processInbound.fail', { id: msg.waMessageId, err: e instanceof Error ? e.message : String(e) });
+    //
+    // `ConsultaFallida` se distingue a propósito: significa que la BASE NO
+    // CONTESTÓ, no que el operador o su viaje no existan. Antes esa misma
+    // situación devolvía `null` y el producto afirmaba un hecho falso —"no te
+    // tengo registrado", "ese viaje ya quedó cerrado 👍"— sobre un operador dado
+    // de alta y un viaje abierto. Aquí no se afirma nada: se dice que no se pudo
+    // consultar, que es lo único cierto, y se le pide reintentar.
+    const noSePudoConsultar = e instanceof ConsultaFallida;
+    const ambiguo = e instanceof OperadorAmbiguo;
+    logger.error(
+      ambiguo ? 'processInbound.operador_ambiguo'
+        : noSePudoConsultar ? 'processInbound.consulta_fallida'
+        : 'processInbound.fail',
+      { id: msg.waMessageId, de: msg.from, err: e instanceof Error ? e.message : String(e) },
+    );
     if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
-    try { await sendText(msg.from, 'Perdón, se me trabó tantito. ¿Me reenvías tu último mensaje? 🙏'); } catch { /* best-effort */ }
+    // Al operador se le dice lo que es cierto en cada caso. Reintentar sirve
+    // cuando falló la red; NO sirve cuando su número está duplicado en la base,
+    // y decirle "inténtalo de nuevo" ahí lo deja en un bucle.
+    const aviso = ambiguo
+      ? 'Tu número aparece dado de alta más de una vez y no puedo saber a qué viaje pertenece 😕 Avísale a tu flota para que lo corrija; ya lo reporté.'
+      : noSePudoConsultar
+        ? 'No pude consultar tus datos en este momento 😕 No es que no estés registrado: es que la conexión falló. Vuelve a intentarlo en un minuto.'
+        : 'Perdón, se me trabó tantito. ¿Me reenvías tu último mensaje? 🙏';
+    try { await sendText(msg.from, aviso); } catch { /* best-effort */ }
   } finally {
     if (lockedViaje) await releaseViajeLock(lockedViaje);
   }
