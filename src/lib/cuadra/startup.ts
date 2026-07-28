@@ -27,17 +27,48 @@ export function verificarEntornoCritico(): void {
   }
 }
 
+/**
+ * ¿El error dice "eso no existe", o dice "no pude preguntar"?
+ *
+ * NO es una distinción cosmética. En producción, el 28-jul-2026, este chequeo
+ * gritó «FALTA la migración 0005: la protección de doble liquidación NO está
+ * activa» — y las cuatro migraciones estaban aplicadas. El error real era
+ * `TypeError: fetch failed`: la base nunca contestó.
+ *
+ * Un diagnóstico falso cuesta dos veces. Primero manda a alguien a correr
+ * `supabase db push` contra un problema que no existe. Y después, cuando el
+ * aviso resulta ser mentira una vez, se aprende a ignorarlo — justo el aviso que
+ * avisa de que el dinero se puede liquidar dos veces.
+ *
+ * Cómo se distinguen: PostgREST contesta a una función inexistente con un código
+ * ('PGRST202', '42883'). Hubo respuesta, y dice que no está. Un fallo de red no
+ * trae código: supabase-js envuelve el `TypeError` del fetch y `code` viene
+ * vacío. Sin respuesta no se afirma nada sobre el esquema.
+ */
+function sinRespuesta(error: { code?: string; message?: string }): boolean {
+  if (error.code) return false;
+  return /fetch failed|network|timeout|abort|ECONN|EAI_AGAIN|socket/i.test(error.message ?? '');
+}
+
+/** Un solo sitio donde se decide qué se dice ante un error de probe. */
+function reportarProbe(error: { code?: string; message?: string }, faltaMsg: string): void {
+  if (sinRespuesta(error)) {
+    logger.warn('startup.migraciones_sin_verificar', {
+      msg: 'NO se pudo verificar el esquema: la base no respondió. Esto NO dice que falte ninguna migración — dice que no se pudo preguntar. Revisa conectividad con Supabase.',
+      err: error.message,
+    });
+    return;
+  }
+  logger.error('startup.migraciones', { msg: faltaMsg, code: error.code, err: error.message });
+}
+
 export async function verificarMigracionesCriticas(): Promise<void> {
   verificarEntornoCritico();
   try {
     const admin = supabaseAdmin();
     const { error } = await admin.rpc('try_lock_viaje', { p_viaje: ZERO, p_ttl_ms: 1 });
     if (error) {
-      logger.error('startup.migraciones', {
-        msg: 'FALTA la migración 0005 (try_lock_viaje / unique(viaje_id)): la protección de doble liquidación NO está activa. Corre `supabase db push`.',
-        code: error.code,
-        err: error.message,
-      });
+      reportarProbe(error, 'FALTA la migración 0005 (try_lock_viaje / unique(viaje_id)): la protección de doble liquidación NO está activa. Corre `supabase db push`.');
       return;
     }
     await admin.rpc('unlock_viaje', { p_viaje: ZERO }); // liberar el lock de prueba
@@ -47,11 +78,7 @@ export async function verificarMigracionesCriticas(): Promise<void> {
     // y el "listo" cuadra sobre gastos PARCIALES (fotos aún en OCR). Probe explícito.
     const { error: e11 } = await admin.rpc('intake_delta', { p_viaje: ZERO, p_delta: 0 });
     if (e11) {
-      logger.error('startup.migraciones', {
-        msg: 'FALTA la migración 0011 (intake_delta / viaje.intake_pendientes): la barrera de ráfaga NO está activa y un "listo" puede cuadrar sobre gastos parciales. Corre `supabase db push`.',
-        code: e11.code,
-        err: e11.message,
-      });
+      reportarProbe(e11, 'FALTA la migración 0011 (intake_delta / viaje.intake_pendientes): la barrera de ráfaga NO está activa y un "listo" puede cuadrar sobre gastos parciales. Corre `supabase db push`.');
       return;
     }
     // Migración 0016 (bandeja de códigos pendientes). Si falta, el acercamiento
@@ -60,11 +87,7 @@ export async function verificarMigracionesCriticas(): Promise<void> {
     // camino sigue "funcionando". Probe de lectura: no escribe nada.
     const { error: e16 } = await admin.from('codigo_pendiente').select('id').limit(1);
     if (e16) {
-      logger.error('startup.migraciones', {
-        msg: 'FALTA la migración 0016 (codigo_pendiente): el acercamiento que llegue antes que su ticket pierde el folio exacto y el gasto se queda con el folio del OCR. Corre `supabase db push`.',
-        code: e16.code,
-        err: e16.message,
-      });
+      reportarProbe(e16, 'FALTA la migración 0016 (codigo_pendiente): el acercamiento que llegue antes que su ticket pierde el folio exacto y el gasto se queda con el folio del OCR. Corre `supabase db push`.');
       return;
     }
     // Las dos migraciones nuevas del camino del dinero. La 0017 hace el merge de
@@ -74,10 +97,7 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       p_gasto: ZERO, p_tenant: ZERO, p_extra: {}, p_cfdi_uuid: null,
     });
     if (e17) {
-      logger.error('startup.migraciones', {
-        msg: 'FALTA la migración 0017 (enriquecer_gasto_codigo): el folio del portal que trae un acercamiento no se pega y se pierde. Corre `supabase db push`.',
-        code: e17.code, err: e17.message,
-      });
+      reportarProbe(e17, 'FALTA la migración 0017 (enriquecer_gasto_codigo): el folio del portal que trae un acercamiento no se pega y se pierde. Corre `supabase db push`.');
       return;
     }
     logger.info('startup.migraciones', { ok: true });
