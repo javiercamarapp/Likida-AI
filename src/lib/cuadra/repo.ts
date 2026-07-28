@@ -332,3 +332,56 @@ export async function saveLiquidacion(
   if (error) throw new Error(`saveLiquidacion: ${error.message}`);
   return data as string;
 }
+
+// ── Aviso de privacidad (mig. 0018) ──────────────────────────────────────────
+// El obligado es el RESPONSABLE, o sea la FLOTA (LFPDPPP art. 14). Likida es
+// persona encargada y solo pone el mecanismo: sin él, la flota no puede cumplir
+// aunque quiera. Detalle verificado en normas/lfpdppp-15-16.yaml.
+
+/**
+ * Datos de responsable de la flota, para armar el aviso. `null` en cualquiera
+ * significa que el tenant no está configurado — y ahí NO se envía nada, porque
+ * un aviso sin responsable no dice a quién reclamarle, que es para lo que sirve.
+ */
+export async function getDatosResponsable(
+  tenantId: string,
+): Promise<{ razonSocial: string; domicilio: string; urlAvisoIntegral: string } | null> {
+  const { data, error } = await supabaseAdmin()
+    .from('tenant')
+    .select('razon_social, domicilio_fiscal, url_aviso_privacidad')
+    .eq('id', tenantId)
+    .maybeSingle();
+  if (error) throw new Error(`getDatosResponsable: ${error.message}`);
+  if (!data) return null;
+  const r = {
+    razonSocial: (data.razon_social as string) ?? '',
+    domicilio: (data.domicilio_fiscal as string) ?? '',
+    urlAvisoIntegral: (data.url_aviso_privacidad as string) ?? '',
+  };
+  return r.razonSocial && r.domicilio && r.urlAvisoIntegral ? r : null;
+}
+
+/**
+ * Deja constancia de que se puso el aviso a disposición. Devuelve `true` si ESTE
+ * llamado fue el que la puso — o sea, si toca enviarlo.
+ *
+ * El claim vive en SQL (igual que en la 0017): el primer mensaje puede llegar
+ * por dos caminos a la vez y sin claim el operador recibiría el aviso dos o tres
+ * veces seguidas.
+ *
+ * Se reenvía cuando la versión cambia: el art. 15 fr. VI obliga a comunicar los
+ * cambios al aviso.
+ */
+export async function reclamarEnvioAviso(
+  tenantId: string,
+  operadorId: string,
+  version: string,
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin().rpc('marcar_aviso_privacidad', {
+    p_operador: operadorId,
+    p_tenant: tenantId,
+    p_version: version,
+  });
+  if (error) throw new Error(`reclamarEnvioAviso: ${error.message}`);
+  return data === true;
+}

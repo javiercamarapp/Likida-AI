@@ -4,25 +4,58 @@ jerarquia: 1
 instrumento: "Ley Federal de Protección de Datos Personales en Posesión de los Particulares"
 articulo_o_regla: "26"
 fraccion: "II"
-titulo: "Decisiones automatizadas — el humano en el circuito"
+titulo: "Derecho de OPOSICIÓN al tratamiento automatizado sin intervención humana"
 citas_en_codigo: ["LFPDPPP 26-II"]
-texto_vigente: null
+texto_vigente: >
+  Artículo 26. La persona titular tendrá derecho en todo momento y por causa
+  legítima a oponerse al tratamiento de sus datos o exigir que se cese en el
+  mismo cuando:
+
+  I. Exista causa legítima y su situación específica así lo requiera, lo cual
+  debe justificar que aun siendo lícito el tratamiento, el mismo debe cesar para
+  evitar que su persistencia le cause un daño o perjuicio, o
+
+  II. Sus datos personales sean objeto de un tratamiento automatizado, el cual le
+  produzca efectos jurídicos no deseados o afecte de manera significativa sus
+  intereses, derechos o libertades, y estén destinados a evaluar, sin
+  intervención humana, determinados aspectos personales de la misma o analizar o
+  predecir, en particular, su rendimiento profesional, situación económica,
+  estado de salud, preferencias sexuales, fiabilidad o comportamiento.
+
+  No procederá el ejercicio del derecho de oposición en aquellos casos en los que
+  el tratamiento sea necesario para el cumplimiento de una obligación legal
+  impuesta al responsable.
 fecha_publicacion: 2025-03-20
 fecha_vigencia_desde: 2025-03-21
-estado_verificacion: sin_verificar
+ultima_reforma: 2025-11-14
+estado_verificacion: verificado_fuente_primaria
+fuente: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf (texto vigente, última reforma DOF 14-11-2025)"
 nota_verificacion: >
-  La síntesis de la ola 1 concluye que obliga a intervención humana en decisiones
-  automatizadas que afecten al titular. El texto NO se transcribió. PARA CERRAR:
-  bajar la LFPDPPP vigente (DOF 20-mar-2025) de diputados.gob.mx y transcribir el
-  artículo 26 completo, confirmando el alcance de la fracción II.
+  CORRIGE la conclusión de la ola 1, que decía que el artículo "obliga a
+  intervención humana en decisiones automatizadas". No dice eso: es un derecho de
+  OPOSICIÓN del titular, no una obligación proactiva del responsable. La
+  diferencia importa para no venderle a la flota un requisito que la ley no le
+  impone.
+
+  Lo que sí se sigue del texto, y a favor del diseño actual: el supuesto de la
+  fracción II exige que la evaluación ocurra "sin intervención humana". Mientras
+  el contralor sea quien decide sobre la liquidación, el supuesto no se activa.
+
+  Se detectó además una reforma POSTERIOR a la que registraba el proyecto: DOF
+  14-nov-2025, no solo la publicación del 20-mar-2025.
 contexto_verificado: >
-  La nueva LFPDPPP entró en vigor el 21-mar-2025. El INAI desapareció y sus
-  funciones pasaron a la Secretaría de Anticorrupción y Buen Gobierno. Los datos
-  financieros y patrimoniales exigen consentimiento EXPRESO, y ya no valen las
-  "finalidades análogas o compatibles".
+  Ley NUEVA publicada en el DOF el 20-mar-2025, texto vigente con última reforma
+  DOF 14-nov-2025. La autoridad es la Secretaría Anticorrupción y Buen Gobierno
+  (art. 2 fr. XV); el INAI no aparece en la ley vigente.
 impacto_en_producto: >
-  Si aplica, el contralor no puede ser sustituido por el motor en la decisión final:
-  la bandeja de excepciones deja de ser una comodidad y pasa a ser un requisito.
-verificado_por: "ola1 / 11-datos-personales.md (contexto); artículo 26 sin transcribir"
-verificado_el: 2026-07-27
+  La bandeja del contralor deja de ser solo una comodidad: es lo que mantiene el
+  cuadre fuera del supuesto de la fracción II. Un modo "cierra solo, sin que
+  nadie mire" sí metería a la flota en ese supuesto, porque el cuadre evalúa
+  gastos del operador y de ahí puede salir un descuento de nómina — "rendimiento
+  profesional", "situación económica" y "fiabilidad" están literalmente en la
+  lista del artículo.
+
+  No construir cierre automático sin revisión humana sin volver aquí.
+verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito literal"
+verificado_el: 2026-07-28
 usado_en_codigo: []

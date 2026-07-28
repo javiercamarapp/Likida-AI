@@ -286,11 +286,22 @@ Flota / transportista  ──────────── RESPONSABLE
    ▼
 Likida  ─────────────────────────── PERSONA ENCARGADA (art. 2 fr. XII)
    │  subcontrata (con autorización de la flota, Regl. arts. 54-55)
-   ├─► Proveedor de WhatsApp Business API ─── subencargado
-   ├─► Nube (AWS / GCP / etc.) ────────────── subencargado
-   ├─► Proveedor de modelo (Anthropic / OpenAI) ── subencargado, SI se cumplen las condiciones
-   └─► OCR / almacenamiento de imágenes ───── subencargado
+   ├─► Meta (WhatsApp Cloud API) ─────────── subencargado
+   ├─► Supabase (base de datos) ──────────── subencargado
+   ├─► Vercel (hosting) ──────────────────── subencargado
+   └─► OpenRouter (IA, OCR incluido) ─────── subencargado
+         ├─► Google (Gemini)      ─────────── sub-subencargado
+         ├─► Anthropic (Claude)   ─────────── sub-subencargado
+         └─► OpenAI (solo fallback) ───────── sub-subencargado
 ```
+
+> **CORREGIDO el 28-jul-2026 (B20).** Este mapa ponía a *"Proveedor de modelo
+> (Anthropic / OpenAI)"* como subencargado DIRECTO. El código dice otra cosa:
+> Likida contrata con **OpenRouter** y con nadie más para IA
+> (`openrouter.ts:24`), y los proveedores de modelo cuelgan de él. Cambia qué se
+> puede exigir y a quién: a OpenRouter sí, por contrato; a Google no, porque no
+> hay contrato. Cadena completa y verificable en
+> `52-anexo-subencargados.md`.
 
 **Likida usa dos sombreros y hay que separarlos en el contrato y en los avisos:**
 

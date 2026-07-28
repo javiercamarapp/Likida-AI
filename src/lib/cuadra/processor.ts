@@ -16,6 +16,7 @@ import type { Gasto } from '@/types/cuadra';
 import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
 import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
+import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
 import { getConfig } from '@/lib/cuadra/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/cuadra/intake/emparejar';
@@ -23,6 +24,7 @@ import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import {
   addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash,
   enriquecerGastoConCodigo, guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente,
+  getDatosResponsable, reclamarEnvioAviso,
 } from '@/lib/cuadra/repo';
 import {
   resolveOperador, getOpenViaje, getTenantContext,
@@ -89,6 +91,41 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
   }
 }
 
+/**
+ * Pone el aviso simplificado a disposición del operador la primera vez que
+ * manda algo — y otra vez si la flota cambió su aviso (art. 15 fr. VI).
+ *
+ * No lanza: un fallo aquí NO puede tumbar la liquidación del operador. Pero se
+ * registra como ERROR y no como warn, porque el silencio deja a la flota sin
+ * poder cumplir y sin enterarse.
+ */
+async function ponerAvisoADisposicion(
+  tenantId: string,
+  operadorId: string,
+  say: (t: string) => Promise<void>,
+): Promise<void> {
+  try {
+    const datos = await getDatosResponsable(tenantId);
+    if (!datos) {
+      // El tenant no tiene razón social, domicilio o liga del aviso integral.
+      // NO se manda un aviso a medias: uno con el responsable equivocado —o sin
+      // él— no dice a quién reclamarle, que es justo para lo que sirve.
+      logger.error('privacidad.tenant_sin_datos_responsable', { tenantId });
+      return;
+    }
+    const texto = avisoSimplificado(datos);
+    if (!texto) return;
+    // El claim vive en SQL: el primer mensaje puede llegar por dos caminos a la
+    // vez, y sin él el operador recibiría el aviso dos o tres veces seguidas.
+    if (!(await reclamarEnvioAviso(tenantId, operadorId, versionAviso(texto)))) return;
+    await say(texto);
+    logger.info('privacidad.aviso_enviado', { tenantId, operadorId });
+  } catch (e) {
+    // Si la 0018 no está aplicada, las columnas no existen y esto truena.
+    logger.error('privacidad.aviso_error', { err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 export async function processInbound(msg: InboundMessage): Promise<void> {
   // Idempotencia: si Meta reintenta el webhook, no re-procesar (no duplicar gasto).
   if (msg.waMessageId && !(await claimMessage(msg.waMessageId))) {
@@ -114,6 +151,39 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       await sendText(msg.from, text);
       await registrarCostoWhatsApp(op.tenantId, viajeId);
     };
+
+    // ── Aviso de privacidad, una vez por operador (LFPDPPP art. 16 fr. II) ────
+    // Va aquí y no antes: es donde empieza el tratamiento que el aviso describe
+    // —fotos de comprobantes, montos, fechas—. El teléfono ya lo tenía la flota
+    // desde el alta, y ese tratamiento previo es suyo, fuera de este canal.
+    //
+    // El obligado es el RESPONSABLE, o sea la flota. Likida solo pone el
+    // mecanismo: sin él la flota no puede cumplir aunque quiera.
+    await ponerAvisoADisposicion(op.tenantId, op.operadorId, say);
+
+    // ── El medio ARCO que el aviso prometió ──────────────────────────────────
+    // Determinístico y ANTES del agente. Si el aviso dice que escribiendo
+    // PRIVACIDAD se le atiende, tiene que atenderse SIEMPRE — no casi siempre,
+    // que es lo único que puede garantizar un LLM. Un medio del art. 15 fr. IV
+    // que a veces no responde no se ofreció: se anunció.
+    if (msg.type === 'text' && msg.text && pideAtencionPrivacidad(msg.text)) {
+      try {
+        const datos = await getDatosResponsable(op.tenantId);
+        if (datos) {
+          await say(respuestaPrivacidad(datos));
+          // Rastro para la flota: es ELLA quien tiene que resolver el ARCO.
+          logger.info('privacidad.solicitud_operador', { tenantId: op.tenantId, operadorId: op.operadorId });
+          return;
+        }
+        // Sin datos del responsable no se puede decir a quién reclamarle, y
+        // mandarlo al agente lo dejaría sin respuesta. Se le dice la verdad.
+        logger.error('privacidad.solicitud_sin_datos_responsable', { tenantId: op.tenantId });
+        await say('Déjame checarlo con la empresa y te confirmo por aquí. 🙏');
+        return;
+      } catch (e) {
+        logger.error('privacidad.solicitud_error', { err: e instanceof Error ? e.message : String(e) });
+      }
+    }
 
     // ── IMAGEN: captura SILENCIOSA en PARALELO (acuse consolidado) ────────────
     // Las fotos NO toman el mutex: corren en paralelo (rápido). Cada una hace +1
