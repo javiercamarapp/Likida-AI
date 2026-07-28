@@ -166,23 +166,46 @@ export async function updateGastoCfdiXml(
  * NO toca el monto: el emparejamiento se hizo justamente por total, así que ya
  * coinciden. Tocar dinero aquí solo abriría la puerta a moverlo por error.
  */
+/**
+ * Le pega a un gasto lo que salió del código: folio de portal, código de barras,
+ * liga de facturación y —si no tenía— el UUID.
+ *
+ * Devuelve `true` si de verdad lo enriqueció, `false` si alguien llegó antes.
+ * Que devuelva false NO es un error: es la respuesta a "ese gasto ya tiene su
+ * acercamiento".
+ *
+ * El merge y el claim viven en SQL (mig. 0017), no aquí. Haciéndolo desde la
+ * app era read-modify-write: las fotos de una ráfaga de WhatsApp corren en
+ * paralelo, así que se mezclaba contra el `ocr_extra` que se había leído, no
+ * contra el que está en la tabla, y la última escritura borraba lo que otra foto
+ * hubiera añadido en medio (montoDiscrepante, textoSospechoso, rfcEmisorDudoso).
+ * Y sin claim, el segundo acercamiento del mismo total pisaba el folio del
+ * primero — el folio que la oficina teclea en el portal para timbrar.
+ *
+ * NO se toca `folio`: el impreso en el ticket y el que viaja dentro del QR son
+ * cadenas DISTINTAS (comprobado contra el papel — 31 chars contra 30), no dos
+ * lecturas del mismo dato. El impreso es el que una persona teclea; el del QR es
+ * la llave del deep-link del portal y vive en `ocrExtra.folioPortal`.
+ */
 export async function enriquecerGastoConCodigo(
   tenantId: string,
   gasto: Gasto,
   datos: { folioPortal?: string; codigoBarras?: string; urlFacturacion?: string; cfdiUuid?: string },
-): Promise<void> {
-  const extra: Record<string, unknown> = { ...(gasto.ocrExtra ?? {}) };
+): Promise<boolean> {
+  // Solo lo que trae el código. El resto de ocr_extra lo conserva el `||` de SQL.
+  const extra: Record<string, unknown> = {};
   if (datos.folioPortal) extra.folioPortal = datos.folioPortal;
   if (datos.codigoBarras) extra.codigoBarras = datos.codigoBarras;
   if (datos.urlFacturacion) extra.urlFacturacion = datos.urlFacturacion;
-  const patch: Record<string, unknown> = { ocr_extra: extra };
-  if (datos.cfdiUuid) patch.cfdi_uuid = datos.cfdiUuid;
-  // NO se toca `folio`: el impreso en el ticket y el que viaja dentro del QR son
-  // cadenas DISTINTAS (comprobado contra el papel — 31 chars contra 30), no dos
-  // lecturas del mismo dato. El impreso es el que una persona teclea; el del QR
-  // es la llave del deep-link del portal y vive en `ocrExtra.folioPortal`.
-  const { error } = await supabaseAdmin().from('gasto').update(patch).eq('id', gasto.id).eq('tenant_id', tenantId);
+
+  const { data, error } = await supabaseAdmin().rpc('enriquecer_gasto_codigo', {
+    p_gasto: gasto.id,
+    p_tenant: tenantId,
+    p_extra: extra,
+    p_cfdi_uuid: datos.cfdiUuid ?? null,
+  });
   if (error) throw new Error(`enriquecerGastoConCodigo: ${error.message}`);
+  return data === true;
 }
 
 // ── Bandeja de códigos pendientes (mig. 0016) ────────────────────────────────

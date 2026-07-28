@@ -69,12 +69,20 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
       logger.info('foto.pendiente_ya_tomado', { viaje: viajeId, gasto: gasto.id });
       return;
     }
-    await enriquecerGastoConCodigo(tenantId, gasto, {
+    const pegado = await enriquecerGastoConCodigo(tenantId, gasto, {
       folioPortal: cod.folioPortal,
       codigoBarras: cod.codigoBarras,
       urlFacturacion: cod.urlFacturacion,
       cfdiUuid: cod.cfdiUuid,
     });
+    if (!pegado) {
+      // El código pendiente YA quedó reclamado y el gasto resultó tener folio: en
+      // el hueco entre la lectura de arriba y este UPDATE, otra foto de la misma
+      // ráfaga se lo puso. El folio de este código se pierde, y ese folio es el
+      // que la oficina teclea en el portal — por eso es ERROR, no info.
+      logger.error('foto.pendiente_reclamado_sin_pegar', { viaje: viajeId, gasto: gasto.id, codigo: cod.id });
+      return;
+    }
     logger.info('foto.pendiente_pegado', { viaje: viajeId, gasto: gasto.id });
   } catch (e) {
     logger.warn('foto.pendiente_error', { err: e instanceof Error ? e.message : String(e) });
@@ -183,13 +191,25 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           const destino = yaRegistrados.find((g) => g.id === decision.gastoId);
           if (destino) {
             const extra = (gasto.ocrExtra ?? {}) as Record<string, unknown>;
-            await enriquecerGastoConCodigo(op.tenantId, destino, {
-              folioPortal: extra.folioPortal as string | undefined,
-              codigoBarras: extra.codigoBarras as string | undefined,
-              urlFacturacion: extra.urlFacturacion as string | undefined,
-              cfdiUuid: gasto.cfdiUuid,
-            });
-            logger.info('foto.acercamiento_pegado', { viaje: viajeId, gasto: destino.id });
+            try {
+              const pegado = await enriquecerGastoConCodigo(op.tenantId, destino, {
+                folioPortal: extra.folioPortal as string | undefined,
+                codigoBarras: extra.codigoBarras as string | undefined,
+                urlFacturacion: extra.urlFacturacion as string | undefined,
+                cfdiUuid: gasto.cfdiUuid,
+              });
+              // false = ese gasto ya tenía su acercamiento. No es un error: es
+              // el claim haciendo su trabajo (dos acercamientos del mismo total,
+              // o el mismo reenviado). El primero se queda, que es lo correcto.
+              logger.info(pegado ? 'foto.acercamiento_pegado' : 'foto.acercamiento_ya_tenia',
+                { viaje: viajeId, gasto: destino.id });
+            } catch (e) {
+              // Si la 0017 no está aplicada, el RPC no existe. Dejarlo salir
+              // tumbaría el procesamiento y Meta reintentaría el webhook en
+              // bucle. Se pierde el folio del acercamiento (grave, por eso
+              // ERROR) pero el gasto ya está registrado con su monto.
+              logger.error('foto.acercamiento_error', { err: e instanceof Error ? e.message : String(e) });
+            }
           }
           return; // silencioso: el acuse de la ráfaga ya se dio con la 1ª foto
         }
