@@ -14,17 +14,12 @@
     "setup": "npm install && npm run seed"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
     "@sentry/nextjs": "^10.0.0",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.0",
-    "@upstash/qstash": "^2.10.1",
-    "@upstash/redis": "^1.37.0",
-    "axios": "^1.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
-    "facturapi": "^4.15.0",
     "fast-xml-parser": "^5.10.1",
     "lucide-react": "^1.7.0",
     "next": "^16.2.4",
