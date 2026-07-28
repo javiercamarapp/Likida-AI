@@ -10,6 +10,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
 import { resumenOmitidos, filasImprimibles } from './omitidos';
 import { filasDeducibilidad } from './deducibilidad';
 import { resumenLaboral } from '../laboral/pagadero';
+import { etiquetaConcepto } from '../cuadre/engine';
 import type { TipoDiferencia } from '@/types/cuadra';
 
 /** Los que dejan un gasto fuera de la deducción de forma definitiva. */
@@ -28,12 +29,10 @@ const GREEN = rgb(0.2, 0.78, 0.35);
 const RED = rgb(1.0, 0.23, 0.19);
 const AMBER = rgb(1.0, 0.62, 0.04);
 
-const CONCEPTO_LABEL: Record<string, string> = {
-  diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura',
-  alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte',
-  viaticos: 'Viáticos', // heredado
-  otro: 'Otro',
-};
+// (Aquí vivía CONCEPTO_LABEL, un mapa gemelo del que tiene el motor. Se borró
+// al pasar a `etiquetaConcepto`: dos mapas que alguien tiene que mantener
+// sincronizados ya se desincronizaron dos veces en este repo. Una función
+// importada no puede desincronizarse.)
 
 const mxn = (n: number) =>
   n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
@@ -193,7 +192,8 @@ export async function generarLiquidacionPDF(
     // encabezado repetido para que las columnas no queden huérfanas.
     if (asegurar(18)) { text('COMPROBANTES (cont.)', M, y, 8, bold, MUTED); y -= 6; rule(y); y -= 18; cabeceraTabla(); }
     const flagged = gastoConDif.has(g.id);
-    text(CONCEPTO_LABEL[g.concepto] ?? g.concepto, cConcepto, y, 10, font, INK);
+    // El producto impreso manda: un ticket de PLUS no puede decir "Diésel".
+    text(cortar(etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined), 140, font, 10), cConcepto, y, 10, font, INK);
     text(g.folio ?? '—', cFolio, y, 9, font, MUTED);
     text(fecha(g.fecha), cFecha, y, 9, font, MUTED);
     if (flagged) text('● revisar', cEstado, y, 9, font, RED);

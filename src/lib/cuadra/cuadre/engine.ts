@@ -105,7 +105,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     if (duplicados.has(g.id)) continue; // los duplicados se reportan aparte (paso 2)
     // Monto inválido: no se evalúa política sobre él, se manda a revisión. ME-5.
     if (!(g.monto > 0)) {
-      diferencias.push({ tipo: 'monto_invalido', concepto: g.concepto, monto: 0, nota: `El comprobante de ${label(g.concepto)} tiene un monto inválido (${mxn(g.monto)}) — revisar a mano.`, gastoId: g.id });
+      diferencias.push({ tipo: 'monto_invalido', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} tiene un monto inválido (${mxn(g.monto)}) — revisar a mano.`, gastoId: g.id });
       continue;
     }
     const h = input.hidrocarburos;
@@ -121,10 +121,10 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // concede. (El contador del 15% por ejercicio todavía no existe: ver roadmap.)
     const topeEfectivo = input.estimulos?.efectivoTopeMxn ?? 2000;
     if (g.formaPago === '01' && esCombustible) {
-      diferencias.push({ tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} pagado en EFECTIVO — cuenta contra el tope del 15% del combustible del ejercicio (RFA 2026 regla 2.9). Dentro del 15% sigue siendo deducible; el excedente no. No acredita IEPS en ningún caso.`, gastoId: g.id });
+      diferencias.push({ tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0, nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} pagado en EFECTIVO — cuenta contra el tope del 15% del combustible del ejercicio (RFA 2026 regla 2.9). Dentro del 15% sigue siendo deducible; el excedente no. No acredita IEPS en ningún caso.`, gastoId: g.id });
     } else if (g.formaPago === '01' && !esCombustible && g.monto > topeEfectivo) {
       // Regla 6: gasto no-combustible en efectivo > tope → no deducible.
-      diferencias.push({ tipo: 'efectivo_sobre_tope', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} de ${mxn(g.monto)} en efectivo excede el tope de ${mxn(topeEfectivo)} (LISR 27-III) — no deducible.`, gastoId: g.id });
+      diferencias.push({ tipo: 'efectivo_sobre_tope', concepto: g.concepto, monto: 0, nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} en efectivo excede el tope de ${mxn(topeEfectivo)} (LISR 27-III) — no deducible.`, gastoId: g.id });
     }
 
     // B5: el intake ya detectó que el total del CÓDIGO y el del OCR no coinciden
@@ -134,7 +134,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     const extraOcr = g.ocrExtra as Record<string, unknown> | undefined;
     if (extraOcr?.montoDiscrepante) {
       const leido = extraOcr.montoOcr;
-      diferencias.push({ tipo: 'monto_discrepante', concepto: g.concepto, monto: 0, nota: `El total del comprobante de ${label(g.concepto)} no coincide entre el código (${mxn(g.monto)}) y lo leído por visión${typeof leido === 'number' ? ` (${mxn(leido)})` : ''} — se tomó el del código, pero conviene verificarlo.`, gastoId: g.id });
+      diferencias.push({ tipo: 'monto_discrepante', concepto: g.concepto, monto: 0, nota: `El total del comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} no coincide entre el código (${mxn(g.monto)}) y lo leído por visión${typeof leido === 'number' ? ` (${mxn(leido)})` : ''} — se tomó el del código, pero conviene verificarlo.`, gastoId: g.id });
     }
 
     // El comprobante traía texto hablándole al extractor ("ignora las reglas",
@@ -143,7 +143,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // ese gasto merece saberlo. Va SOLO al contralor: avisarle al operador, que
     // es quien pudo haberlo intentado, únicamente le enseña a hacerlo mejor.
     if (extraOcr?.textoSospechoso) {
-      diferencias.push({ tipo: 'texto_sospechoso', concepto: g.concepto, monto: 0, nota: `El comprobante de ${label(g.concepto)} de ${mxn(g.monto)} traía texto dirigido al lector automático. Se capturó el total impreso, pero conviene ver el papel original.`, gastoId: g.id });
+      diferencias.push({ tipo: 'texto_sospechoso', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} traía texto dirigido al lector automático. Se capturó el total impreso, pero conviene ver el papel original.`, gastoId: g.id });
     }
 
     // (El tope fiscal de alimentación se evalúa POR DÍA, después del bucle.)
@@ -153,15 +153,36 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // puede cruzar la frontera del complemento (24-abr-2026). Fuera de rango → bandeja.
     if (g.fecha) {
       const f = g.fecha.slice(0, 10);
-      if ((input.fechaMax != null && f > input.fechaMax) || (input.fechaMin != null && f < input.fechaMin)) {
-        diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `La fecha del comprobante de ${label(g.concepto)} (${f}) está fuera del rango esperado del viaje — verifícala (afecta periodo fiscal y plazo de facturación).`, gastoId: g.id });
+      // DE OTRO EJERCICIO, con o sin rango del viaje. Encontrado con tickets
+      // reales: el OCR leyó "2024-07-27" en un ticket que decía "2026 07 27" —
+      // dos años de error, confianza 95%, y nada lo marcaba porque esto dependía
+      // de que el viaje trajera rango.
+      //
+      // Importa por dinero: un gasto de un ejercicio anterior NO se deduce en
+      // este. Si nadie lo mira, entra al total comprobado de un año al que no
+      // pertenece.
+      //
+      // Se tolera el ejercicio inmediato anterior durante enero: un viaje a
+      // caballo entre años es normal en la última semana de diciembre, y
+      // marcarlo sería ruido justo cuando más comprobantes hay.
+      const ejercicioHoy = input.hoy ? Number(input.hoy.slice(0, 4)) : null;
+      const ejercicioGasto = Number(f.slice(0, 4));
+      const enero = input.hoy?.slice(5, 7) === '01';
+      const deOtroEjercicio =
+        ejercicioHoy != null && Number.isFinite(ejercicioGasto) &&
+        ejercicioGasto < ejercicioHoy - (enero ? 1 : 0);
+
+      if (deOtroEjercicio) {
+        diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está fechado en ${ejercicioGasto} y estamos en ${ejercicioHoy}: un gasto de otro ejercicio no se deduce en este. Puede ser un error de lectura — verifica la fecha impresa.`, gastoId: g.id });
+      } else if ((input.fechaMax != null && f > input.fechaMax) || (input.fechaMin != null && f < input.fechaMin)) {
+        diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `La fecha del comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} (${f}) está fuera del rango esperado del viaje — verifícala (afecta periodo fiscal y plazo de facturación).`, gastoId: g.id });
       }
     }
 
     // #3: folio leído con BAJA CONFIANZA en un ticket de combustible (que se
     // factura en portal) → avisar que lo verifique. NO bloquea, solo advierte.
     if (g.folio && g.concepto === 'diesel' && g.ocrConfianza != null && g.ocrConfianza < umbral) {
-      diferencias.push({ tipo: 'folio_verificar', concepto: g.concepto, monto: 0, nota: `El folio del ticket de ${label(g.concepto)} (${sanitizarFolio(g.folio)}) se leyó con baja confianza — verifícalo antes de facturarlo en el portal de la gasolinera.`, gastoId: g.id });
+      diferencias.push({ tipo: 'folio_verificar', concepto: g.concepto, monto: 0, nota: `El folio del ticket de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} (${sanitizarFolio(g.folio)}) se leyó con baja confianza — verifícalo antes de facturarlo en el portal de la gasolinera.`, gastoId: g.id });
     }
 
     const pol = politicaPara(g.concepto, input.ruta, input.politica);
@@ -169,15 +190,15 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       diferencias.push({
         tipo: 'sobre_politica', concepto: g.concepto, esperado: pol.topeMonto, real: g.monto,
         monto: g.monto - pol.topeMonto,
-        nota: `${label(g.concepto)} de ${mxn(g.monto)} excede el tope de política (${mxn(pol.topeMonto)}) por ${mxn(g.monto - pol.topeMonto)}.`,
+        nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} excede el tope de política (${mxn(pol.topeMonto)}) por ${mxn(g.monto - pol.topeMonto)}.`,
         gastoId: g.id,
       });
     }
     if (pol?.requiereCfdi && !g.cfdiUuid) {
-      diferencias.push({ tipo: 'sin_cfdi', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} de ${mxn(g.monto)} requiere factura CFDI y no trae UUID válido.`, gastoId: g.id });
+      diferencias.push({ tipo: 'sin_cfdi', concepto: g.concepto, monto: 0, nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} requiere factura CFDI y no trae UUID válido.`, gastoId: g.id });
     }
     if (g.ocrConfianza != null && g.ocrConfianza < umbral) {
-      diferencias.push({ tipo: 'ocr_baja_confianza', concepto: g.concepto, monto: 0, nota: `El comprobante de ${label(g.concepto)} se leyó con baja confianza — conviene revisarlo a mano.`, gastoId: g.id });
+      diferencias.push({ tipo: 'ocr_baja_confianza', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} se leyó con baja confianza — conviene revisarlo a mano.`, gastoId: g.id });
     }
     if (rfcsOk.size > 0 && g.rfcReceptor && !rfcsOk.has(norm(g.rfcReceptor))) {
       // RLISR 57: "Si benefician a personas que le prestan servicios personales
@@ -194,21 +215,21 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       } else if (esViatico && !rfcOperador) {
         // Sin el RFC del operador no se puede confirmar NI descartar. Se revisa,
         // pero no se le quita la deducción por una duda nuestra.
-        diferencias.push({ tipo: 'viatico_rfc_operador', concepto: g.concepto, monto: 0, nota: `Viático de ${label(g.concepto)} timbrado al RFC ${g.rfcReceptor}. Si es el del operador es válido (RLISR 57, trabajador subordinado) — captura su RFC para confirmarlo.`, gastoId: g.id });
+        diferencias.push({ tipo: 'viatico_rfc_operador', concepto: g.concepto, monto: 0, nota: `Viático de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} timbrado al RFC ${g.rfcReceptor}. Si es el del operador es válido (RLISR 57, trabajador subordinado) — captura su RFC para confirmarlo.`, gastoId: g.id });
       } else {
-        diferencias.push({ tipo: 'rfc_receptor', concepto: g.concepto, monto: 0, nota: `Factura de ${label(g.concepto)} timbrada al RFC ${g.rfcReceptor} (no es de la empresa) — no deducible.`, gastoId: g.id });
+        diferencias.push({ tipo: 'rfc_receptor', concepto: g.concepto, monto: 0, nota: `Factura de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} timbrada al RFC ${g.rfcReceptor} (no es de la empresa) — no deducible.`, gastoId: g.id });
       }
     }
     if (g.estadoSat === 'cancelado') {
-      diferencias.push({ tipo: 'cfdi_cancelado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} está CANCELADO ante el SAT — no deducible.`, gastoId: g.id });
+      diferencias.push({ tipo: 'cfdi_cancelado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está CANCELADO ante el SAT — no deducible.`, gastoId: g.id });
     } else if (g.estadoSat === 'no_encontrado' && g.cfdiUuid) {
-      diferencias.push({ tipo: 'cfdi_no_encontrado', concepto: g.concepto, monto: 0, nota: `El SAT NO reconoce el CFDI de ${label(g.concepto)} (UUID inexistente o fabricado) — no deducible.`, gastoId: g.id });
+      diferencias.push({ tipo: 'cfdi_no_encontrado', concepto: g.concepto, monto: 0, nota: `El SAT NO reconoce el CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} (UUID inexistente o fabricado) — no deducible.`, gastoId: g.id });
     } else if (g.efos === true) {
-      diferencias.push({ tipo: 'cfdi_efos', concepto: g.concepto, monto: 0, nota: `El emisor del CFDI de ${label(g.concepto)} está en lista negra del SAT (EFOS) — no deducible.`, gastoId: g.id });
+      diferencias.push({ tipo: 'cfdi_efos', concepto: g.concepto, monto: 0, nota: `El emisor del CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está en lista negra del SAT (EFOS) — no deducible.`, gastoId: g.id });
     } else if (g.efosRevisar) {
-      diferencias.push({ tipo: 'cfdi_efos_indeterminado', concepto: g.concepto, monto: 0, nota: `La validación EFOS del CFDI de ${label(g.concepto)} no fue concluyente — conviene revisarlo a mano.`, gastoId: g.id });
+      diferencias.push({ tipo: 'cfdi_efos_indeterminado', concepto: g.concepto, monto: 0, nota: `La validación EFOS del CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} no fue concluyente — conviene revisarlo a mano.`, gastoId: g.id });
     } else if (g.estadoSat === 'pendiente' && g.cfdiUuid) {
-      diferencias.push({ tipo: 'cfdi_pendiente', concepto: g.concepto, monto: 0, nota: `No se pudo validar el CFDI de ${label(g.concepto)} con el SAT — se revisa después.`, gastoId: g.id });
+      diferencias.push({ tipo: 'cfdi_pendiente', concepto: g.concepto, monto: 0, nota: `No se pudo validar el CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} con el SAT — se revisa después.`, gastoId: g.id });
     }
 
     // Complemento de hidrocarburos (Bloque 1). Regla determinística en DOS
@@ -226,13 +247,13 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         const combustibleFiscal = h.claves.includes(g.claveProdServ ?? '');
         const tipoAplica = g.tipoComprobante === 'I' || g.tipoComprobante === 'E';
         if (combustibleFiscal && tipoAplica && aplicaPorFecha && !g.cfdiEsquemaAlterno && !g.complementoHidrocarburos) {
-          diferencias.push({ tipo: 'complemento_hidrocarburos', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} es de combustible y NO trae el complemento de hidrocarburos requerido (obligatorio desde 24-abr-2026, regla 2.7.1.48 RMF) — no deducible (CFF 29-A).`, gastoId: g.id });
+          diferencias.push({ tipo: 'complemento_hidrocarburos', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} es de combustible y NO trae el complemento de hidrocarburos requerido (obligatorio desde 24-abr-2026, regla 2.7.1.48 RMF) — no deducible (CFF 29-A).`, gastoId: g.id });
         }
       } else if (g.cfdiUuid && aplicaPorFecha) {
         // NIVEL 1: es una FACTURA de combustible (tiene UUID) pero sin el XML →
         // no se puede verificar el complemento. A la bandeja del liquidador, NO
         // se declara no deducible. Se resuelve cuando reenvíen el XML.
-        diferencias.push({ tipo: 'complemento_no_verificable', concepto: g.concepto, monto: 0, nota: `La factura de ${label(g.concepto)} es de combustible: reenvía el XML (el que te manda la gasolinera por correo) para verificar el complemento de hidrocarburos.`, gastoId: g.id });
+        diferencias.push({ tipo: 'complemento_no_verificable', concepto: g.concepto, monto: 0, nota: `La factura de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} es de combustible: reenvía el XML (el que te manda la gasolinera por correo) para verificar el complemento de hidrocarburos.`, gastoId: g.id });
       }
     }
   }
@@ -240,7 +261,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // 2) Duplicados como diferencia (ya excluidos del total).
   for (const g of input.gastos) {
     if (duplicados.has(g.id)) {
-      diferencias.push({ tipo: 'duplicado', concepto: g.concepto, monto: g.monto, nota: `Comprobante duplicado: ${label(g.concepto)}${g.folio ? ` folio ${sanitizarFolio(g.folio)}` : ''} por ${mxn(g.monto)} aparece dos veces (excluido del total).`, gastoId: g.id });
+      diferencias.push({ tipo: 'duplicado', concepto: g.concepto, monto: g.monto, nota: `Comprobante duplicado: ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)}${g.folio ? ` folio ${sanitizarFolio(g.folio)}` : ''} por ${mxn(g.monto)} aparece dos veces (excluido del total).`, gastoId: g.id });
     }
   }
 
@@ -283,7 +304,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         : `quedan ${c.diasRestantes} día(s) del mes para timbrarlo en el portal — y la ventana del comercio puede ser menor, así que hazlo antes`;
       diferencias.push({
         tipo: 'factura_por_vencer', concepto: g.concepto, monto: 0,
-        nota: `${label(g.concepto)} de ${mxn(g.monto)} sigue sin factura: ${cuerpo}.`,
+        nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} sigue sin factura: ${cuerpo}.`,
         gastoId: g.id,
       });
     }
@@ -465,7 +486,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       const pagoElectronico = !!g.formaPago && g.formaPago !== '01';
       if (pagoElectronico && Number.isFinite(litros) && litros > 0) litrosDieselAcreditables += litros;
       if (!(g.iepsTraslado ?? 0) && g.xmlVerificado) {
-        diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} no desglosa el IEPS — es deducible, pero sin ese desglose se complica documentar el estímulo (LIF 2026 art. 20, ap. A).`, gastoId: g.id });
+        diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} no desglosa el IEPS — es deducible, pero sin ese desglose se complica documentar el estímulo (LIF 2026 art. 20, ap. A).`, gastoId: g.id });
       }
     }
   }
@@ -553,6 +574,27 @@ function round2(n: number): number {
 function mxn(n: number): string {
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
+/**
+ * Cómo se llama un concepto en el papel que ve el contralor.
+ *
+ * `diesel` es un cajón que el OCR usa para TODA la gasolinera —el prompt se lo
+ * pide, y para el 15% de la RFA 2.9 está bien porque la regla habla de
+ * "combustible"—. Pero un ticket real de PLUS (gasolina premium) salía
+ * etiquetado "Diésel", y eso invita a reclamar un estímulo que NO aplica: el de
+ * IEPS es solo diésel (LIF 20-A fr. IV).
+ *
+ * El producto impreso ya lo captura el OCR; aquí solo se usa. Sin él se dice
+ * "Combustible", que es cierto siempre.
+ */
+export function etiquetaConcepto(c: string, ocrExtra?: Record<string, unknown>): string {
+  if (c !== 'diesel') return label(c);
+  const producto = typeof ocrExtra?.producto === 'string' ? ocrExtra.producto.trim() : '';
+  if (!producto) return 'Combustible';
+  // Se respeta lo impreso, con la primera en mayúscula: "PLUS" → "Plus".
+  const bonito = producto.charAt(0).toUpperCase() + producto.slice(1).toLowerCase();
+  return /diesel|diésel/i.test(producto) ? 'Diésel' : `Combustible ${bonito}`;
+}
+
 function label(c: string): string {
   const m: Record<string, string> = { diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte', viaticos: 'Viáticos', otro: 'Otro' };   // 'Otro' y no 'Gasto': tiene que decir lo MISMO que pdf.ts y el dashboard
   return m[strip_accents(c.toLowerCase())] ?? c;
