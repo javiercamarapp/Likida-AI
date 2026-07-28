@@ -14,11 +14,30 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- ── Tenant (la flota) ───────────────────────────────────────────────────────
-insert into tenant (id, nombre, rfc, ciudad, plan) values
+--
+-- Los tres campos de RESPONSABLE (razón social, domicilio, liga del aviso) no
+-- son adorno: sin ellos el aviso de privacidad NO se envía. Es a propósito —un
+-- aviso sin responsable no dice a quién reclamarle, que es justo para lo que
+-- sirve— pero significa que con estos campos vacíos el flujo se ve incompleto.
+-- Detalle en normas/lfpdppp-15-16.yaml.
+insert into tenant (id, nombre, rfc, ciudad, plan,
+                    razon_social, domicilio_fiscal, url_aviso_privacidad) values
   ('11111111-1111-1111-1111-111111111111', 'Transportes Innovativos',
    'TIN010101AAA',                 -- 🔴 INVENTADO: RFC real de Innovativos
-   'Silao, Guanajuato', 'demo')
-on conflict (id) do nothing;
+   'Silao, Guanajuato', 'demo',
+   -- 🔴 INVENTADO los tres. La razón social va TAL CUAL esté en el RFC, el
+   -- domicilio es el FISCAL (la ciudad de arriba no sirve: no es un domicilio),
+   -- y la liga tiene que APUNTAR A ALGO REAL antes de enseñarle esto a nadie:
+   -- el operador la va a poder abrir desde WhatsApp.
+   'TRANSPORTES INNOVATIVOS SA DE CV',
+   'Carretera Silao-Romita Km 4.5, Parque Industrial, 36100 Silao, Guanajuato',
+   'https://transportesinnovativos.mx/aviso-de-privacidad')
+on conflict (id) do update set
+  -- Se actualiza aunque el tenant ya exista: el `do nothing` de antes dejaba a
+  -- las flotas ya sembradas sin los campos nuevos para siempre.
+  razon_social         = excluded.razon_social,
+  domicilio_fiscal     = excluded.domicilio_fiscal,
+  url_aviso_privacidad = excluded.url_aviso_privacidad;
 
 -- ── Terminales (✅ REALES: su operación es multi-terminal en este corredor) ──
 insert into terminal (id, tenant_id, nombre, ciudad) values
