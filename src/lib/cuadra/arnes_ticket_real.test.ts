@@ -56,9 +56,13 @@ describe.skipIf(GRUPOS.length === 0)('arnés: tickets reales', () => {
       console.log(`\n══════ OCR · ${grupo.map((g) => g.split('/').pop()).join(' + ')} ══════`);
       console.log('legible:', r.legible, r.motivo ? `(motivo: ${r.motivo})` : '', `· $${r.costo.costoUsd.toFixed(4)} · ${Date.now() - t0} ms`);
       console.log(JSON.stringify(r.gasto, null, 2));
-      // El acercamiento del protocolo de dos fotos NO es un gasto: si entrara
-      // solo, el mismo dinero se contaría dos veces.
-      if (r.motivo === 'solo_codigo') { console.log('→ acercamiento, no se da de alta como gasto'); continue; }
+      // Se replica lo que decide `decidirFoto` en el processor. El arnés daba de
+      // alta TODO lo que no fuera un acercamiento, así que una foto borrosa del
+      // mismo ticket entraba como un gasto de $0 y el informe acusaba al producto
+      // de un fantasma que había inventado el arnés. Un arnés que no imita la
+      // decisión real produce hallazgos falsos, que cuestan más que no probar.
+      if (r.motivo === 'solo_codigo') { console.log('→ acercamiento: se pega a su ticket, no se da de alta'); continue; }
+      if (!r.legible) { console.log(`→ ilegible (${r.motivo}): el processor pide reenvío, no da de alta`); continue; }
       gastos.push(r.gasto);
     }
 

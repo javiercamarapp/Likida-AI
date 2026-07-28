@@ -217,8 +217,14 @@ export const COMERCIOS: Comercio[] = [
     nombre: 'Office Depot',
     portal: 'https://facturacion.officedepot.com.mx/',
     requiereCuenta: false,
-    plazo: 'mes_natural',
-    plazoVerificado: false,
+    // VERIFICADO en el papel (ticket del 25-jul-2026, foto de campo). Impreso al
+    // pie: "ESTIMADO CLIENTE, DE REQUERIR FACTURA DEBERÁ SOLICITARLA A MÁS
+    // TARDAR DENTRO DEL MES SIGUIENTE A LA FECHA DE EMISIÓN DEL TICKET".
+    // No es el mes natural, y la diferencia son semanas: ese ticket vence el
+    // 31-AGO. Con el default habríamos avisado "te quedan 3 días" — falso, y
+    // exactamente el tipo de afirmación que `plazoVerificado` existe para evitar.
+    plazo: 'mes_siguiente',
+    plazoVerificado: true,
     campos: [
       {
         clave: 'numeroTicket',

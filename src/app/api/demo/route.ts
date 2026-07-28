@@ -22,6 +22,7 @@ const POLITICA: PoliticaGasto[] = [
   { concepto: 'alimentacion', topeMonto: 800 },
   { concepto: 'hospedaje', topeMonto: 2500 },
   { concepto: 'transporte', topeMonto: 800 },
+  { concepto: 'flete' },
   { concepto: 'factura', requiereCfdi: true },
 ];
 

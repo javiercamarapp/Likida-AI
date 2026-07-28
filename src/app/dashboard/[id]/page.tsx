@@ -14,7 +14,7 @@ const TENANT = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-1111
 // contralor veía "hospedaje" en minúscula cruda en su tabla.
 const CONCEPTO: Record<string, string> = {
   diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura',
-  alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte',
+  alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte', flete: 'Flete',
   viaticos: 'Viáticos', otro: 'Otro',
 };
 const ESTATUS: Record<string, { label: string; color: string }> = {

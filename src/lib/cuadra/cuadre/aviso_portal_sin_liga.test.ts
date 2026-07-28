@@ -13,8 +13,9 @@ import type { Gasto } from '@/types/cuadra';
 // portal, plazo y los campos que pide cada uno— estaba escrito, probado y sin
 // llamar desde ningún lado. Aquí queda conectado.
 
-// El umbral de urgencia del módulo es de 2 días: el aviso NO sale antes. Se fija
-// aquí en pruebas para que el día que alguien lo mueva se vea qué cambia.
+// El aviso sale siempre que haya portal y el ticket siga sin timbrar. Lo que
+// cambia con la cercanía del vencimiento es el TONO: aquí se usa una fecha
+// dentro del umbral de urgencia (2 días) para ejercer la redacción apremiante.
 const HOY_URGENTE = '2026-07-30'; // el mes cierra el 31 → 1 día
 
 const base = (over: Partial<Gasto> = {}): Gasto => ({
@@ -41,12 +42,12 @@ describe('aviso de facturación sin liga impresa', () => {
     expect(a[0].nota).toContain('OXXO (tienda)');
   });
 
-  // EL TICKET REAL, tal cual se comportó el 28-jul-2026. Queda escrito que a tres
-  // días del cierre el sistema todavía calla: es el umbral de urgencia, no la
-  // falta de cableado. Antes de este cambio no avisaba NUNCA, ni el día 31.
-  it('a 3 días del cierre todavía no avisa (umbral de urgencia = 2)', () => {
-    expect(avisos(base({ rfcEmisor: 'CCO8605231N4' }), '2026-07-28')).toHaveLength(0);
-    expect(avisos(base({ rfcEmisor: 'CCO8605231N4' }), '2026-07-29')).toHaveLength(1);
+  // Esta prueba documentaba que a tres días del cierre el sistema CALLABA, por el
+  // umbral de urgencia. Ese comportamiento se eliminó el mismo día, al medir que
+  // dejaba $9,070 sin avisar. Queda lo contrario, que es lo que ahora es cierto.
+  it('avisa a tres días del cierre, y también mucho antes', () => {
+    expect(avisos(base({ rfcEmisor: 'CCO8605231N4' }), '2026-07-28')).toHaveLength(1);
+    expect(avisos(base({ rfcEmisor: 'CCO8605231N4' }), '2026-07-17')).toHaveLength(1);
   });
 
   it('dice a qué portal ir y qué datos va a pedir', () => {
@@ -80,15 +81,20 @@ describe('aviso de facturación sin liga impresa', () => {
   // portal: todas las entradas traen `plazoVerificado: false` a propósito, así
   // que el cálculo cae al mes natural, que es la regla general defendible.
   it('usa el mes natural mientras el plazo del comercio no esté verificado', () => {
-    // Compra del 2-jul mirada el 5-jul. Con el mes natural quedan 29 días: no hay
-    // nada que decir. Si el catálogo afirmara un plazo de 72 h sin haberlo
-    // comprobado, aquí saldría "vencido" — y sería mentira.
-    expect(avisos(base({ rfcEmisor: 'CCO8605231N4', fecha: '2026-07-02' }), '2026-07-05')).toHaveLength(0);
+    // Compra del 2-jul mirada el 5-jul. Con el mes natural el límite es el 31.
+    // Si el catálogo afirmara los 72 h que traía la tabla vieja sin haberlos
+    // comprobado, aquí diría "vencido" — y sería mentira.
+    const a = avisos(base({ rfcEmisor: 'CCO8605231N4', fecha: '2026-07-02' }), '2026-07-05');
+    expect(a).toHaveLength(1);
+    expect(a[0].nota).toContain('2026-07-31');
+    expect(a[0].nota).not.toContain('se pasó');
   });
 
-  it('avisa como vencido cuando ya se pasó el mes de la compra', () => {
+  it('avisa como vencido cuando ya se pasó el plazo', () => {
     const a = avisos(base({ rfcEmisor: 'CCO8605231N4', fecha: '2026-06-16' }));
     expect(a).toHaveLength(1);
-    expect(a[0].nota).toContain('se pasó el mes de la compra');
+    // Dice "el plazo" y no "el mes de la compra": con `mes_siguiente` en el
+    // catálogo, hablar del mes de la compra sería incorrecto para ese comercio.
+    expect(a[0].nota).toContain('se pasó el plazo');
   });
 });

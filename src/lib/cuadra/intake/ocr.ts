@@ -19,8 +19,20 @@ import { sanitizarFolio, sanitizarTexto } from './sanitizar';
 import { consultarCFDI } from './sat';
 import type { Gasto, ConceptoGasto, EstadoSat } from '@/types/cuadra';
 
+/**
+ * Los conceptos que el extractor puede emitir. Exportado para que un test lo
+ * compare contra `ConceptoGasto` y contra el texto del prompt.
+ */
+export const CONCEPTOS_OCR = ['diesel', 'caseta', 'factura', 'alimentacion', 'hospedaje', 'transporte', 'flete', 'otro'] as const;
+
 const ExtraccionSchema = z.object({
-  concepto: z.enum(['diesel', 'caseta', 'factura', 'alimentacion', 'hospedaje', 'transporte', 'otro']),
+  // 'viaticos' queda FUERA a propósito (es heredado, ver types/cuadra.ts). El
+  // resto tiene que coincidir con `ConceptoGasto`: pedirle al modelo en el prompt
+  // un concepto que el esquema no acepta no da un error — da una respuesta
+  // silenciosamente peor. Al añadir 'flete' solo al prompt, tres guías de
+  // paquetería salieron como 'otro', 'otro' y 'factura', y esa última levantó un
+  // `sin_cfdi` que no existía. Hay un test que compara las dos listas.
+  concepto: z.enum(CONCEPTOS_OCR),
   producto: z.string().nullable(),        // "Diesel", "Regular", "Premium", "GSuper", "Magna"
   monto: z.number().nullable(),           // TOTAL
   subtotal: z.number().nullable(),        // si viene desglosado
@@ -63,7 +75,8 @@ REGLAS DURAS:
 - Si un campo NO es claramente legible, devuélvelo null. NUNCA inventes ni CALCULES: montos, folios, RFC, UUID, IVA ni tasas. Lee lo que está impreso.
 - "confianza" = qué tan seguro estás de haber leído bien el monto y el folio (0 a 1).
 - "legible": false si la foto está tan borrosa/cortada que no confías en el monto.
-- concepto: diesel (combustible/gasolinera, sea diésel o gasolina), caseta (peaje/autopista), factura (CFDI fiscal), alimentacion (comida, restaurante, fonda, abarrotes de consumo), hospedaje (hotel, motel, cuarto), transporte (taxi, autobús, casetas urbanas del operador, estacionamiento), otro.
+- concepto: diesel (combustible/gasolinera, sea diésel o gasolina), caseta (peaje/autopista), factura (CFDI fiscal), alimentacion (comida, restaurante, fonda, abarrotes de consumo), hospedaje (hotel, motel, cuarto), transporte (taxi, autobús, casetas urbanas del operador, estacionamiento), flete, otro.
+- DISTINGUE transporte DE flete, que es lo que más se confunde: "transporte" es el traslado DE LA PERSONA (taxi, autobús, estacionamiento); "flete" es el traslado DE MERCANCÍA — guías de paquetería (Paquetexpress, Estafeta, DHL, FedEx, Tres Guerras), fletes, envíos, cartas porte. Si el ticket habla de GUÍA, RASTREO, REMITENTE, DESTINATARIO, PAQUETE o KILOS de carga, es flete, no transporte. La diferencia cambia la deducción: solo el transporte de la persona ampara un viático de alimentos (LISR 28-V).
 - IMPORTANTE: NO uses "viaticos" como concepto. Separa alimentacion, hospedaje y transporte: el tope fiscal de $750 por día aplica SOLO a alimentacion, y marcar un hotel como alimentacion le quita una deducción legítima a la empresa.
 - monto: el TOTAL del comprobante, solo el número.
 

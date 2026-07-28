@@ -617,12 +617,20 @@ describe('cuadrarViaje — aviso de ticket por facturar', () => {
     expect(r.diferencias.some((d) => d.tipo === 'factura_por_vencer')).toBe(true);
   });
 
-  it('no molesta a principio de mes', () => {
+  // Esta prueba decía "no molesta a principio de mes" y exigía SILENCIO. Cambió
+  // a propósito el 28-jul-2026: sobre ocho tickets de campo, $9,070 sin timbrar
+  // con portal reconocido pasaron a tres días del cierre sin una palabra en la
+  // liquidación, que es un documento de una sola vez. Ahora se informa siempre;
+  // lo que se reserva para el final es el TONO de urgencia.
+  it('a principio de mes informa, pero sin urgencia', () => {
     const r = cuadrarViaje({
       viajeId: 'p2', anticipo: 1000, politica: [], estimulos: EST, hoy: '2026-05-05',
       gastos: [conPortal({ fecha: '2026-05-02' })],
     });
-    expect(r.diferencias.some((d) => d.tipo === 'factura_por_vencer')).toBe(false);
+    const a = r.diferencias.filter((d) => d.tipo === 'factura_por_vencer');
+    expect(a).toHaveLength(1);
+    expect(a[0].nota).toContain('2026-05-31');       // dice hasta cuándo
+    expect(a[0].nota).not.toContain('para timbrarlo'); // pero no mete prisa
   });
 
   it('si ya se timbró, no hay nada que avisar', () => {
