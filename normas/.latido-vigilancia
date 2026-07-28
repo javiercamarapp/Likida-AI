@@ -1,0 +1,28 @@
+fecha_corrida: 2026-07-28
+ultimo_dia_barrido: null
+rango_intentado: 2026-07-21..2026-07-27
+notas_revisadas: 0
+notas_por_edicion: {matutina: null, vespertina: null, extraordinaria: null}
+fichas_disparadas: 0
+etag_sat: null
+etag_sat_check: no_aplica_no_es_lunes
+deriva_ley_check: no_aplica_no_es_dia_1_trimestre
+estado: "INFRA egress_bloqueado"
+detalle: >
+  El proxy de salida de esta sesión (127.0.0.1:45095) respondió 403 a todo CONNECT
+  hacia sidofqa.segob.gob.mx, www.sat.gob.mx, www.diputados.gob.mx, dof.gob.mx y
+  dof-monitor.com — y también a www.google.com, confirmando que es un bloqueo de
+  política de egreso de la sesión (allowlist limitada a paquetería: npm, pypi,
+  jsr, crates, proxy.golang.org, y dominios de anthropic.com), no una caída puntual
+  de SIDOF ni de las rutas específicas. WebFetch dio el mismo 403. No se pudo
+  golpear NINGÚN endpoint de references/fuentes.md: ni el barrido del DOF (notas
+  ni diarios/porFecha), ni el ETag del SAT, ni los PDFs de diputados.
+  __agentproxy/status confirma "gateway answered 403 to CONNECT (policy denial)"
+  para sidofqa.segob.gob.mx. No se reintentó (403/407 de política no se reintenta,
+  por instrucción del entorno) ni se buscó ruta alterna.
+sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible.
+accion_requerida: >
+  Habilitar en la política de egreso de esta sesión/entorno los hosts:
+  sidofqa.segob.gob.mx, www.sat.gob.mx, www.diputados.gob.mx (o su alternativa
+  api.tlaloc.sh si se prefiere la vía comercial). Sin eso, esta rutina no puede
+  correr en este entorno bajo ninguna cadencia.
