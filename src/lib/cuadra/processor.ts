@@ -641,7 +641,8 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       const pdfGenerado = Boolean((guardado?.result as { pdf_generado?: boolean } | undefined)?.pdf_generado);
       try {
         if (!pdfGenerado) throw new Error('la tool reportó pdf_generado=false');
-        const path = `${op.tenantId}/${viajeId}.pdf`;
+        // El ejemplar del OPERADOR, no el completo: ver `tools.ts`.
+        const path = `${op.tenantId}/${viajeId}-operador.pdf`;
         const { data, error } = await supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 3600);
         if (error || !data?.signedUrl) throw new Error(error?.message ?? 'storage no devolvió URL firmada');
         await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');

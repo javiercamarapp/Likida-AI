@@ -115,21 +115,28 @@ registerTool('guardar_liquidacion', {
       getViaje(ctx.viajeId, ctx.tenantId),
       ctx.operadorId ? getOperador(ctx.operadorId, ctx.tenantId) : Promise.resolve(null),
     ]);
-    // Generar PDF (determinístico, sin LLM).
+    // Generar PDF (determinístico, sin LLM). DOS ejemplares, y no es redundancia:
+    // el completo es el registro de la liquidación —lo que el contralor archiva y
+    // lo que queda en `liquidacion.pdf_path`— y el del operador lleva el mismo
+    // filtro que su mensaje de WhatsApp. Sin esta separación, la defensa de
+    // `SOLO_CONTRALOR` en el texto no servía de nada: al chofer le llegaban los
+    // veredictos por el adjunto, en un documento que además puede reenviar.
     let pdfPath: string | undefined;
+    let pdfOperadorPath: string | undefined;
     try {
       const full: Liquidacion = { ...liq, id: randomUUID(), creadaEn: new Date().toISOString() };
-      const bytes = await generarLiquidacionPDF(
-        full,
-        viaje ?? { id: ctx.viajeId, anticipo: liq.totalAnticipo },
-        operador ?? { id: ctx.operadorId ?? '', nombre: 'Operador', telefono: ctx.telefono ?? '' },
-      );
-      pdfPath = `${ctx.tenantId}/${ctx.viajeId}.pdf`;
-      const up = await supabaseAdmin().storage.from('liquidaciones').upload(pdfPath, Buffer.from(bytes), {
-        contentType: 'application/pdf',
-        upsert: true,
-      });
-      if (up.error) { logger.warn('pdf.upload', { err: up.error.message }); pdfPath = undefined; }
+      const v = viaje ?? { id: ctx.viajeId, anticipo: liq.totalAnticipo };
+      const o = operador ?? { id: ctx.operadorId ?? '', nombre: 'Operador', telefono: ctx.telefono ?? '' };
+      const subir = async (bytes: Uint8Array, path: string) => {
+        const up = await supabaseAdmin().storage.from('liquidaciones').upload(path, Buffer.from(bytes), {
+          contentType: 'application/pdf',
+          upsert: true,
+        });
+        if (up.error) { logger.warn('pdf.upload', { path, err: up.error.message }); return undefined; }
+        return path;
+      };
+      pdfPath = await subir(await generarLiquidacionPDF(full, v, o, undefined, 'contralor'), `${ctx.tenantId}/${ctx.viajeId}.pdf`);
+      pdfOperadorPath = await subir(await generarLiquidacionPDF(full, v, o, undefined, 'operador'), `${ctx.tenantId}/${ctx.viajeId}-operador.pdf`);
     } catch (e) {
       logger.error('pdf.gen', { err: e instanceof Error ? e.message : String(e) });
     }
@@ -138,7 +145,7 @@ registerTool('guardar_liquidacion', {
       liquidacion_id: liquidacionId,
       estatus: liq.estatus,
       diferencia: liq.diferencia,
-      pdf_generado: Boolean(pdfPath),
+      pdf_generado: Boolean(pdfOperadorPath),
     };
   },
 });

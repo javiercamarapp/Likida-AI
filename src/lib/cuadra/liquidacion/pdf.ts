@@ -11,6 +11,7 @@ import { resumenOmitidos, filasImprimibles } from './omitidos';
 import { filasDeducibilidad } from './deducibilidad';
 import { resumenLaboral } from '../laboral/pagadero';
 import { cubetaDe } from '../cuadre/engine';
+import { SOLO_CONTRALOR, type Destinatario } from '../cuadre/resumen';
 
 import { leyendaPdf } from '../cuadre/leyendas';
 import type { Liquidacion, Viaje, Operador } from '@/types/cuadra';
@@ -60,6 +61,15 @@ export async function generarLiquidacionPDF(
   /** Razón social del cliente, para el descargo del pie. Sin ella dice
    *  "el contribuyente" — nunca se inventa un nombre. */
   razonSocial?: string,
+  /**
+   * A QUIÉN se le entrega ESTE ejemplar. `resumen.ts` ya filtra del mensaje al
+   * operador los veredictos que él no puede arreglar y que además lo señalan
+   * (EFOS, CFDI cancelado, RFC receptor…), y `processor.ts` pasa 'operador' con
+   * cuidado en los tres sitios. Y acto seguido se le mandaba, al mismo teléfono,
+   * un PDF que los imprimía todos. La defensa del texto no valía nada: el mismo
+   * destinatario recibía todo, en un documento que además puede reenviar.
+   */
+  destinatario: Destinatario = 'contralor',
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(`Liquidación ${viaje.folio ?? liq.id.slice(0, 8)}`);
@@ -333,7 +343,9 @@ export async function generarLiquidacionPDF(
   // ─── Diferencias detectadas ─────────────────────────────────────────────────
   // El 'anticipo' ya se imprime arriba en Totales: repetirlo aquí lo mostraba dos
   // veces con distinto formato. Se filtra ANTES de decidir si hay sección.
-  const obsPdf = liq.diferencias.filter((d) => d.tipo !== 'anticipo');
+  const obsPdf = liq.diferencias
+    .filter((d) => d.tipo !== 'anticipo')
+    .filter((d) => destinatario === 'contralor' || !SOLO_CONTRALOR.includes(d.tipo));
   if (obsPdf.length) {
     y -= 12;
     // El encabezado no se queda solo al pie de una hoja: se lleva su primera
