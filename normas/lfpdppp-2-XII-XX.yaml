@@ -1,0 +1,57 @@
+id: lfpdppp-2025-art-2-fr-XII-XX
+tipo: ley
+jerarquia: 1
+instrumento: "Ley Federal de Protección de Datos Personales en Posesión de los Particulares"
+articulo_o_regla: "2"
+fraccion: "XII y XX"
+titulo: "Persona encargada, y por qué mandarle datos NO es una transferencia"
+citas_en_codigo: ["LFPDPPP 2-XII", "LFPDPPP 2-XX", "LFPDPPP 35"]
+texto_vigente: >
+  Artículo 2. [...]
+  XII. Persona encargada: Persona física o jurídica que sola o conjuntamente con
+  otras trate datos personales por cuenta del responsable;
+  [...]
+  XV. Secretaría: Secretaría Anticorrupción y Buen Gobierno;
+  [...]
+  XX. Transferencia: Toda comunicación de datos personales dentro o fuera del
+  territorio mexicano, realizada a persona distinta de la titular, del
+  responsable o de la persona encargada del tratamiento.
+
+  Artículo 35. Cuando el responsable pretenda transferir los datos personales a
+  terceros nacionales o extranjeros, distintos de la persona encargada deberá
+  comunicar a éstos el aviso de privacidad y las finalidades a las que la persona
+  titular sujetó su tratamiento.
+fecha_publicacion: 2025-03-20
+fecha_vigencia_desde: 2025-03-21
+ultima_reforma: 2025-11-14
+estado_verificacion: verificado_fuente_primaria
+fuente: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf (texto vigente, última reforma DOF 14-11-2025)"
+nota_verificacion: >
+  CORRIGE el análisis previo, que apoyaba la conclusión en la figura de
+  "REMISIÓN". Esa palabra NO aparece ni una vez en la ley vigente: venía del
+  Reglamento de la ley abrogada. Citarla ante un cliente es citar derecho
+  derogado.
+
+  La conclusión sobrevive, pero por otra vía y más fuerte: la definición misma de
+  transferencia (fr. XX) EXCLUYE a la persona encargada. Mandarle datos a quien
+  los trata por cuenta del responsable no es transferencia por definición legal,
+  no por una figura reglamentaria. El art. 35 lo confirma al hablar de terceros
+  "distintos de la persona encargada".
+
+  Ojo también con la terminología: la ley vigente dice "persona encargada", no
+  "encargado".
+contexto_verificado: >
+  Cadena real del proyecto: la FLOTA es responsable. LIKIDA es persona encargada.
+  OPENROUTER es a quien Likida contrata, y Google/Anthropic/OpenAI están debajo
+  de OpenRouter — Likida no contrata con ellos directamente.
+impacto_en_producto: >
+  Que no sea transferencia quita el requisito de consentimiento por esa vía, pero
+  NO quita el pendiente contractual: hace falta que el contrato con la flota
+  autorice la subcontratación y que el de OpenRouter cubra su propia cadena.
+
+  Y el volumen de dato personal es menor de lo que parece: un ticket de diésel o
+  de caseta trae datos fiscales de la EMPRESA. La exposición personal se
+  concentra en los viáticos timbrados al RFC del operador.
+verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito literal"
+verificado_el: 2026-07-28
+usado_en_codigo: []

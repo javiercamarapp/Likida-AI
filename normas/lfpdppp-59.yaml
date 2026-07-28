@@ -1,0 +1,46 @@
+id: lfpdppp-2025-art-59
+tipo: ley
+jerarquia: 1
+instrumento: "Ley Federal de Protección de Datos Personales en Posesión de los Particulares"
+articulo_o_regla: "59"
+titulo: "Sanciones — los rangos reales de multa"
+citas_en_codigo: ["LFPDPPP 59"]
+texto_vigente: >
+  Artículo 59. Las infracciones a la presente Ley serán sancionadas por la
+  Secretaría con:
+  I. El apercibimiento para que el responsable lleve a cabo los actos solicitados
+  por la persona titular, en los términos previstos por esta Ley, tratándose de
+  los supuestos previstos en la fracción I del artículo anterior;
+  II. Multa de 100 a 160,000 veces la Unidad de Medida y Actualización, en los
+  casos previstos en las fracciones II a VII del artículo anterior;
+  III. Multa de 200 a 320,000 veces la Unidad de Medida y Actualización, en los
+  casos previstos en las fracciones VIII a XVIII del artículo anterior, y
+  IV. En caso de que de manera reiterada persistan las infracciones citadas en
+  los incisos anteriores, se impondrá una multa adicional que irá de 100 a
+  320,000 veces la Unidad de Medida y Actualización. En tratándose de
+  infracciones cometidas en el tratamiento de datos sensibles, las sanciones
+  podrán incrementarse hasta por dos veces, los montos establecidos.
+fecha_publicacion: 2025-03-20
+fecha_vigencia_desde: 2025-03-21
+ultima_reforma: 2025-11-14
+estado_verificacion: verificado_fuente_primaria
+fuente: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf (texto vigente, última reforma DOF 14-11-2025)"
+nota_verificacion: >
+  CORRIGE la cifra que circulaba en el proyecto. Se decía "200,000–320,000 UMA".
+  El rango real de la fracción III es de 200 A 320,000 UMA — el piso son
+  doscientas UMA, no doscientas mil. El "hasta por dos veces" de la fracción IV
+  aplica a datos SENSIBLES, y los datos financieros no son sensibles: exigen
+  consentimiento expreso, que es otra cosa.
+
+  Es una cifra que multiplica por mil el piso. No repetirla frente a un cliente.
+contexto_verificado: >
+  Quien sanciona es la Secretaría Anticorrupción y Buen Gobierno (art. 2 fr. XV),
+  no el INAI. El art. 60 manda considerar la naturaleza del dato, la
+  intencionalidad, la capacidad económica del responsable y la reincidencia.
+impacto_en_producto: >
+  Sirve para dimensionar el argumento de venta sin inflarlo. La sanción recae
+  sobre el RESPONSABLE —la flota— así que es un riesgo del cliente que Likida
+  ayuda a bajar, no un riesgo propio que se le traslade.
+verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito literal"
+verificado_el: 2026-07-28
+usado_en_codigo: []

@@ -1,0 +1,65 @@
+id: lfpdppp-2025-art-15-16
+tipo: ley
+jerarquia: 1
+instrumento: "Ley Federal de Protección de Datos Personales en Posesión de los Particulares"
+articulo_o_regla: "15 y 16"
+titulo: "Contenido del aviso de privacidad y cómo ponerlo a disposición"
+citas_en_codigo: ["LFPDPPP 15", "LFPDPPP 16-II"]
+texto_vigente: >
+  Artículo 14. El responsable tendrá la obligación de informar a la persona
+  titular, a través del aviso de privacidad, la existencia y características
+  principales del tratamiento al que serán sometidos sus datos personales, a fin
+  de que pueda tomar decisiones informadas al respecto.
+
+  Artículo 15. El aviso de privacidad deberá contener, al menos, la siguiente
+  información:
+  I. La identidad y domicilio del responsable;
+  II. Los datos personales que serán sometidos a tratamiento, identificando
+  aquéllos que son sensibles;
+  III. Las finalidades del tratamiento de datos personales, distinguiendo
+  aquéllas que requieren el consentimiento de la persona titular;
+  IV. Las opciones y medios que el responsable ofrezca a las personas titulares
+  para limitar el uso o divulgación de los datos;
+  V. Los mecanismos, medios y procedimientos para ejercer los derechos ARCO, de
+  conformidad con lo dispuesto en esta Ley, y
+  VI. El procedimiento y medio por el cual el responsable comunicará a las
+  personas titulares de cambios al aviso de privacidad, de conformidad con lo
+  previsto en esta Ley.
+
+  Artículo 16. El responsable debe poner a disposición de las personas titulares
+  el aviso de privacidad, a través de formatos impresos, digitales, visuales,
+  sonoros o cualquier otra tecnología de la siguiente manera:
+  I. Cuando los datos personales sean obtenidos personalmente a través de
+  formatos impresos, deberá ser dado a conocer en ese momento, salvo que se
+  hubiera facilitado el aviso con anterioridad, y
+  II. Cuando los datos personales sean obtenidos por cualquier medio electrónico,
+  óptico, sonoro, visual, o a través de cualquier otra tecnología, deberá ser
+  proporcionado en su modalidad simplificada la que deberá contener al menos la
+  información a que se refieren las fracciones I a IV del artículo anterior, y
+  señalar el sitio donde se podrá consultar el aviso de privacidad integral.
+fecha_publicacion: 2025-03-20
+fecha_vigencia_desde: 2025-03-21
+ultima_reforma: 2025-11-14
+estado_verificacion: verificado_fuente_primaria
+fuente: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf (texto vigente, última reforma DOF 14-11-2025)"
+nota_verificacion: >
+  Transcrito literal del texto vigente. QUIÉN debe cumplirlo: el RESPONSABLE, que
+  es la flota — no Likida. Likida es persona encargada (art. 2 fr. XII) y trata
+  los datos por cuenta de la flota.
+
+  Decir "esto expone a Likida por omitir el aviso" es incorrecto e invierte quién
+  lo redacta. Likida responde por contrato y por tratar datos fuera de las
+  instrucciones de la flota, no por la omisión del aviso.
+contexto_verificado: >
+  El art. 16 fr. II es el que aplica al flujo de WhatsApp: los datos entran por
+  medio electrónico, así que lo exigible en el canal es la modalidad
+  SIMPLIFICADA — fracciones I a IV del art. 15 — más la ruta al aviso integral.
+  No hay que meter el aviso completo en un mensaje de WhatsApp.
+impacto_en_producto: >
+  Likida no redacta el aviso de la flota, pero sí tiene que darle el mecanismo
+  para ponerlo a disposición en el primer contacto por WhatsApp, y guardar
+  constancia de que se puso. Sin el mecanismo, la flota no puede cumplir aunque
+  quiera, y ese es un hueco de producto — no de Likida ante la autoridad.
+verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito literal"
+verificado_el: 2026-07-28
+usado_en_codigo: ["src/lib/cuadra/privacidad.ts"]
