@@ -666,3 +666,99 @@ describe('cuadrarViaje — aviso de ticket por facturar', () => {
     expect(r.diferencias.some((d) => d.tipo === 'factura_por_vencer')).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// H1 y RLISR 57 — las dos reglas que le quitaban deducciones legítimas.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuadrarViaje — soporte de la alimentación (LISR 28-V) y RFC del viático (RLISR 57)', () => {
+  const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: ['15101505'] };
+
+  it('H1: alimentación sin hospedaje ni transporte en el viaje se marca', () => {
+    // LISR 28-V: el tope de $750 procede "y el contribuyente acompañe el comprobante
+    // fiscal... que ampare el hospedaje o transporte". Una comida sola no lo cumple.
+    const r = cuadrarViaje({
+      viajeId: 'h1a', anticipo: 400, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'alimentacion_sin_soporte')).toBe(true);
+  });
+
+  it('H1: con hospedaje en el viaje, la alimentación queda soportada', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h1b', anticipo: 1400, politica: [], estimulos: EST,
+      gastos: [
+        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' }),
+        g({ concepto: 'hospedaje', monto: 1000, fecha: '2026-05-01', formaPago: '04' }),
+      ],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'alimentacion_sin_soporte')).toBe(false);
+  });
+
+  it('H1: el transporte también sirve de soporte', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h1c', anticipo: 700, politica: [], estimulos: EST,
+      gastos: [
+        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' }),
+        g({ concepto: 'transporte', monto: 300, fecha: '2026-05-01', formaPago: '04' }),
+      ],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'alimentacion_sin_soporte')).toBe(false);
+  });
+
+  it('H1: se marca para revisión, NO se declara no deducible', () => {
+    // No vemos toda la contabilidad de la flota: el comprobante de hospedaje puede
+    // existir fuera de esta liquidación. Declararlo no deducible sería el mismo
+    // error al revés — quitarle una deducción que quizá sí tiene.
+    const r = cuadrarViaje({
+      viajeId: 'h1d', anticipo: 400, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' })],
+    });
+    expect(r.estatus).toBe('revisar');
+    expect(r.totalNoDeducible).toBe(0);
+    expect(r.totalDeducible).toBe(400);
+  });
+
+  it('RLISR 57: el viático a nombre del OPERADOR es válido', () => {
+    // "Si benefician a personas que le prestan servicios personales subordinados,
+    // los comprobantes fiscales podrán ser expedidos a nombre de dichas personas."
+    const r = cuadrarViaje({
+      viajeId: 'r57a', anticipo: 1000, politica: [], estimulos: EST,
+      empresaRfc: 'TIN950101ABC', operadorRfc: 'PEJJ800101XY1',
+      gastos: [g({ concepto: 'hospedaje', monto: 1000, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'PEJJ800101XY1' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(false);
+    expect(r.totalNoDeducible).toBe(0);
+  });
+
+  it('RLISR 57: sin saber el RFC del operador, se REVISA en vez de rechazar', () => {
+    const r = cuadrarViaje({
+      viajeId: 'r57b', anticipo: 1000, politica: [], estimulos: EST,
+      empresaRfc: 'TIN950101ABC',
+      gastos: [g({ concepto: 'hospedaje', monto: 1000, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'PEJJ800101XY1' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(false);
+    expect(r.diferencias.some((d) => d.tipo === 'viatico_rfc_operador')).toBe(true);
+    expect(r.totalNoDeducible).toBe(0); // NO se le quita la deducción
+  });
+
+  it('RLISR 57 NO cubre el diésel: ese sí debe ir a nombre de la empresa', () => {
+    // El reglamento habla de VIÁTICOS. Una factura de combustible a nombre del
+    // chofer sigue siendo un problema.
+    const r = cuadrarViaje({
+      viajeId: 'r57c', anticipo: 2000, politica: [], estimulos: EST,
+      empresaRfc: 'TIN950101ABC', operadorRfc: 'PEJJ800101XY1',
+      gastos: [g({ concepto: 'diesel', monto: 2000, formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'PEJJ800101XY1' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(true);
+    expect(r.totalNoDeducible).toBe(2000);
+  });
+
+  it('un viático a un RFC que no es ni la empresa ni el operador SÍ se rechaza', () => {
+    const r = cuadrarViaje({
+      viajeId: 'r57d', anticipo: 1000, politica: [], estimulos: EST,
+      empresaRfc: 'TIN950101ABC', operadorRfc: 'PEJJ800101XY1',
+      gastos: [g({ concepto: 'hospedaje', monto: 1000, formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'OTRO900101ZZ9' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(true);
+  });
+});
