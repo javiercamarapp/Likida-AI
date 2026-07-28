@@ -107,6 +107,19 @@ export async function saveConversation(convId: string, turns: ConvTurn[], viajeI
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * ¿El error dice que la función NO EXISTE? Eso es una migración sin aplicar, no
+ * un tropiezo de red: reintentarlo no cambia nada.
+ *
+ * PGRST202 es el código de PostgREST para "no encontré esa función"; el texto se
+ * revisa además por si la capa de error cambia de forma.
+ */
+function rpcAusente(error: { code?: string; message?: string }): boolean {
+  if (error.code === 'PGRST202' || error.code === '42883') return true;
+  const m = (error.message ?? '').toLowerCase();
+  return m.includes('could not find the function') || m.includes('does not exist');
+}
+
+/**
  * Mutex por viaje (AL-1/CR-1): serializa el procesamiento de mensajes del mismo
  * viaje para que un "listo" no cierre la liquidación antes de que el OCR de la
  * última foto haya guardado su gasto. Reintenta con backoff hasta maxWaitMs;
@@ -118,18 +131,43 @@ export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number;
   const admin = supabaseAdmin();
   const start = Date.now();
   let delay = 150;
+  let ultimoError: { code?: string; message?: string } | null = null;
   for (;;) {
     const { data, error } = await admin.rpc('try_lock_viaje', { p_viaje: viajeId, p_ttl_ms: ttlMs });
     if (!error && data === true) return true;
     if (error) {
-      // 2.1: RPC ausente/caído = la migración 0005 no está aplicada → se cae el
-      // mutex Y el unique(viaje_id) juntos. Es GRAVE (protección de doble cierre):
-      // logger.ERROR, no warn. Se procede (la idempotencia de DB, si existe, cubre),
-      // pero el arranque debe fallar ruidoso si 0005 falta (ver instrumentation.ts).
-      logger.error('viaje.lock_error', { code: error.code, msg: error.message });
-      return true;
+      ultimoError = error;
+      // Se distingue el error PERMANENTE del TRANSITORIO. Antes los dos abrían
+      // el mutex de inmediato, y solo uno de los dos lo merece.
+      //
+      // AUSENTE (la migración 0005 no está aplicada): se cae el mutex Y el
+      // unique(viaje_id) juntos. Reintentar no va a hacer aparecer la función, y
+      // bloquear dejaría al operador sin respuesta por un problema de
+      // despliegue. Se abre — con ERROR, no warn, porque es la protección de
+      // doble cierre — y el arranque ya falla ruidoso por esto
+      // (ver instrumentation.ts).
+      if (rpcAusente(error)) {
+        logger.error('viaje.lock_rpc_ausente', { code: error.code, msg: error.message });
+        return true;
+      }
+      // TRANSITORIO (timeout, pool agotado, 503): un error no significa que el
+      // lock esté libre, significa que no se supo. Abrir de golpe deja correr
+      // dos "listo" completos sobre el mismo viaje — dos ciclos de agente, dos
+      // cierres. Se reintenta como si estuviera ocupado; abajo decide qué hacer
+      // si la ventana se agota.
+      logger.warn('viaje.lock_error_transitorio', { code: error.code, msg: error.message });
     }
-    if (Date.now() - start >= maxWaitMs) return false;
+    if (Date.now() - start >= maxWaitMs) {
+      // Se agotó la ventana. Ocupado de verdad → false (otro lo tiene, y ese
+      // otro va a responder). Fallando todo el rato → se abre para no dejar al
+      // operador colgado, pero después de haberlo intentado, no al primer
+      // tropiezo, y queda como ERROR.
+      if (ultimoError) {
+        logger.error('viaje.lock_error_persistente', { code: ultimoError.code, msg: ultimoError.message });
+        return true;
+      }
+      return false;
+    }
     await sleep(delay);
     delay = Math.min(delay * 2, 1500);
   }
