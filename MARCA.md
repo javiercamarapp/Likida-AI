@@ -53,7 +53,7 @@ Nunca "Cada solución", "Cada proceso", "Cada dato" — abstracto mata el device
 | Cierre | La liquidación, lista. |
 
 ### 2.3 Los dolores (usar textual, son del oficio)
-- El diesel en efectivo no es deducible.
+- El diesel en efectivo **te lo topan al 15%**. Pasado eso, no es deducible.
 - Si el emisor está en lista negra, tu factura no sirve.
 - ¿Quién revisa el XML de cada factura de diesel?
 - ¿Tus facturas de diesel traen el complemento?
@@ -74,9 +74,34 @@ Los números concretos son el activo #1 del copy. Úsalos con contexto, nunca so
 | 0 | liquidaciones alteradas | |
 
 **Regla dura:** toda cifra en un anuncio debe ser reproducible en el demo.
+
+> ⚠️ **REVISADO 27-jul-2026 — no usar la tabla de arriba hasta recalcularla.**
+>
+> Las tres cifras que suman los $1,786.55 descansan en cálculos que la
+> investigación fiscal encontró mal:
+>
+> - **$408.62 de IEPS.** El estímulo se calcula **cuota IEPS × litros**, no con el
+>   IEPS trasladado en el CFDI, que es lo que el motor suma hoy. Y la cuota es
+>   **semanal**: varió 3.5× durante 2026. Una cifra en pesos sin fecha de cuota no
+>   se puede defender.
+> - **$603.45 de casetas al 50%.** La ley dice 50% del **gasto total erogado**; el
+>   motor usa el subtotal sin IVA. Además el estímulo es solo para la **Red Nacional
+>   de Autopistas de Cuota** y exige ingresos anuales menores a $300M.
+> - **$774.48 de IVA.** LIVA art. 5 sigue sin leerse (`normas/liva-5.yaml`).
+>
+> Fundamentos y detalle en `normas/lif-2026-20-A.yaml` (hallazgos H4–H7).
+>
+> **Para el demo del 6-ago:** enseñar **litros, la cuota con su fecha y un rango**,
+> no una cifra cerrada en pesos. Frente al fiscalista de un contralor, un peso mal
+> calculado desarma todo lo demás.
 Si no la puedes enseñar en pantalla, no va en el anuncio.
 
 ### 2.5 Prohibido decir
+- ❌ **"El diesel en efectivo no es deducible."** Dicho así es **falso para nuestro
+  cliente**: el autotransporte de carga federal lo tiene por deducible hasta el 15%
+  del combustible del ejercicio (RFA 2026 regla 2.9, DOF 17-feb-2026). Decirlo en
+  absoluto asusta con una regla que no le aplica del todo, y el contralor que sí
+  sabe nos descubre en la primera junta. Decir: *"te lo topan al 15%"*.
 - ❌ **"90% de precisión."** Para un contralor, 90% = 1 de cada 10 mal. Es una
   cifra que asusta, no que vende. Sustituir por precisión *verificable*:
   "Cada cifra con su comprobante al lado." / "Lo que no puede leer, lo dice."
