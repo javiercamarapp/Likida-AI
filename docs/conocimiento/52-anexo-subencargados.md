@@ -59,6 +59,14 @@ Verificado contra el texto vigente en `normas/lfpdppp-2-XII-XX.yaml`.
 | 2c | └ OpenAI | Solo si cae el fallback cross-provider | tabla `FALLBACK` en `openrouter.ts:50` |
 | 3 | **Supabase** | Todo lo que se guarda: gastos, montos, folios, RFC, liquidaciones | `src/lib/supabase/admin.ts` |
 | 4 | **Vercel** | Hosting: los datos pasan por su cómputo en tránsito | `scripts/deploy-vercel.sh` |
+| 5 | **Sentry** | Solo `warn` y `error`, **ya redactados** | `src/lib/observability/sentry.ts` |
+
+**Sobre Sentry (cableado el 28-jul-2026).** Es el único de la tabla que recibe
+datos *filtrados*: se alimenta del `logger`, que redacta RFC, UUID de CFDI y
+teléfonos antes de emitir, y se inicializa con `sendDefaultPii: false` para que
+el enriquecimiento automático no adjunte IP ni cabeceras —que el pipeline del
+logger no ha visto y por tanto no ha podido redactar—. Sin `SENTRY_DSN` no se
+carga el paquete siquiera.
 
 ### El SAT no es subencargado
 
@@ -71,13 +79,10 @@ categoría.
 ### Lo que el `package.json` dice y el código desmiente
 
 Había seis dependencias declaradas con **cero** archivos que las usen en `src/`.
-Ninguna recibe un solo byte, y ninguna debe aparecer en un anexo de
-subencargados. Cinco se quitaron el 28-jul-2026 (`@upstash/redis`,
-`@upstash/qstash`, `facturapi`, `@anthropic-ai/sdk`, `axios`); queda
-`@sentry/nextjs`, declarada y sin cablear.
-
-**Si algún día se cablea Sentry, entra a la tabla de arriba**: recibiría datos
-personales dentro de los stack traces y el contexto de error.
+Ninguna recibía un solo byte. Cinco se quitaron el 28-jul-2026
+(`@upstash/redis`, `@upstash/qstash`, `facturapi`, `@anthropic-ai/sdk`,
+`axios`). La sexta, `@sentry/nextjs`, **se cableó ese mismo día** y por eso ya
+figura en la tabla de arriba.
 
 Comprobable con `command grep -rl "<paquete>" src/ | wc -l` — con `command`
 delante: en esta máquina `grep` es una función de shell que envuelve `ugrep -I` y

@@ -16,14 +16,24 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Tiempo que se aparta para CERRAR: mandar el mensaje al operador, soltar el
- * mutex, escribir el log.
+ * Tiempo que se aparta para CERRAR, o sea para todo lo que va DESPUÉS del
+ * agente. Sin este margen se gasta hasta el último milisegundo y no queda
+ * tiempo ni de responder — que es el fallo que esto viene a evitar.
  *
- * Sin este margen se gasta hasta el último milisegundo y no queda tiempo ni de
- * responder — que es exactamente el fallo que esto viene a evitar. 8s cubre un
- * envío de WhatsApp lento más el unlock.
+ * Se subió de 8s a 12s tras contar los pasos de red que hay ahí, que son seis y
+ * ninguno instantáneo:
+ *
+ *   1. `guardiaCifras`, que puede recalcular el cuadre desde la BD  ~0.3s
+ *   2. el mensaje de respuesta al operador                          ~1.5s
+ *   3. el aviso de barrera vencida, cuando toca                     ~1.5s
+ *   4. la URL firmada del PDF en storage                            ~0.5s
+ *   5. el envío del documento                                       ~2.5s
+ *   6. guardar la conversación y soltar el mutex                    ~0.5s
+ *
+ * Suman ~7s en un día malo, y 8 no dejaba holgura para ninguno lento. El coste
+ * es que el agente pasa de 52s a 48s de techo, y el turno típico usa ~20s.
  */
-export const MARGEN_CIERRE_MS = 8_000;
+export const MARGEN_CIERRE_MS = 12_000;
 
 /**
  * Presupuesto de la invocación del webhook, en ms.
