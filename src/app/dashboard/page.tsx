@@ -99,7 +99,8 @@ export default async function DashboardPage() {
                 <div className="card p-8" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  <Acred titulo="IEPS de diésel" valor={acred.ieps} base="Acreditable vs ISR · LIF 2026, Art. 20" destacar />
+                  <Acred titulo="Diésel elegible para el estímulo" valor={acred.litrosDiesel} unidad="litros"
+                    base="LIF 2026, Art. 20-A — su contador aplica la cuota semanal vigente" destacar />
                   <Acred titulo="IVA acreditable" valor={acred.iva} base="LIVA, Art. 5 — CFDI con IVA desglosado" />
                   <Acred titulo="Peaje (50%)" valor={acred.peaje} base="Estímulo de autopistas · LIF 2026, Art. 20-A" />
                 </div>
@@ -200,12 +201,18 @@ export default async function DashboardPage() {
   );
 }
 
-function Acred({ titulo, valor, base, destacar }: { titulo: string; valor: number; base: string; destacar?: boolean }) {
+function Acred({ titulo, valor, base, destacar, unidad }: { titulo: string; valor: number; base: string; destacar?: boolean; unidad?: 'litros' }) {
+  // `unidad` existe porque no todo lo acreditable son pesos. El estímulo de
+  // diésel es cuota semanal disminuida × litros (LIF 2026 art. 20-A), y esa
+  // cuota no la tenemos: entregar los litros es honesto, inventar los pesos no.
+  const texto = unidad === 'litros'
+    ? `${valor.toLocaleString('es-MX', { maximumFractionDigits: 0 })} L`
+    : mxn(valor);
   return (
     <div className="card p-7" style={destacar ? { borderColor: 'var(--accent)' } : undefined}>
       <div className="text-sm font-medium" style={{ color: 'var(--muted)' }}>{titulo}</div>
       <div className="text-4xl md:text-5xl font-semibold tracking-tight tabular mt-2"
-        style={{ color: destacar ? 'var(--accent)' : 'var(--ink)' }}>{mxn(valor)}</div>
+        style={{ color: destacar ? 'var(--accent)' : 'var(--ink)' }}>{texto}</div>
       <div className="text-xs mt-3" style={{ color: 'var(--muted)' }}>{base}</div>
     </div>
   );

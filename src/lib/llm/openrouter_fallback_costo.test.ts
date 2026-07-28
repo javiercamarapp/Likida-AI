@@ -100,3 +100,37 @@ describe('generateWithTools — el error carga lo que ya se pagó', () => {
     expect(err.cost).toBe(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// `cuadrar_viaje` CAÍA ENTRE DOS REJILLAS DE CACHÉ.
+//
+// No matcheaba ningún prefijo de `READ_PREFIXES` ni estaba marcada `isMutation`,
+// así que si el modelo la llamaba dos veces en un turno —escenario plausible:
+// "cómo voy, y ciérralo si está bien" en un solo mensaje— se repetían las tres
+// lecturas del cuadre MÁS `getAcumuladoCombustible`, que barre el ejercicio
+// entero del tenant. Dentro de un turno con 60s de presupuesto.
+//
+// Solo lee y no escribe, así que cachearla dentro del turno es correcto.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('caché de tools de solo lectura', () => {
+  beforeEach(() => { create.mockReset(); });
+
+  it('`cuadrar_viaje` llamada dos veces se ejecuta UNA', async () => {
+    const dosLlamadas = {
+      choices: [{ message: { content: null, tool_calls: [
+        { id: 'c1', type: 'function', function: { name: 'cuadrar_viaje', arguments: '{}' } },
+        { id: 'c2', type: 'function', function: { name: 'cuadrar_viaje', arguments: '{}' } },
+      ] } }],
+      usage: { prompt_tokens: 100, completion_tokens: 20 }, model: PRIM,
+    };
+    create.mockResolvedValueOnce(dosLlamadas).mockResolvedValueOnce(final(PRIM, 50, 10));
+
+    let ejecuciones = 0;
+    await generateWithTools({
+      role: 'chat', system: 's', messages: [{ role: 'user', content: 'cómo voy, y ciérralo si está bien' }],
+      tools: [{ type: 'function', function: { name: 'cuadrar_viaje', description: 'd', parameters: { type: 'object', properties: {} } } }],
+      toolExecutor: async () => { ejecuciones++; return { success: true, result: { total: 1 }, durationMs: 1 }; },
+    });
+    expect(ejecuciones, 'se ejecutó más de una vez pese a ser solo lectura').toBe(1);
+  });
+});

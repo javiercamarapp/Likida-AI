@@ -1,0 +1,62 @@
+id: lft-110-111-263
+tipo: ley
+jerarquia: 1
+instrumento: "Ley Federal del Trabajo"
+articulo_o_regla: "110 fr. I, 111 y 263 fr. I"
+titulo: "Qué se le puede descontar a un operador, y qué se le debe pagar aunque no sea deducible"
+citas_en_codigo: ["LFT 110-I", "LFT 111", "LFT 263-I"]
+texto_vigente: >
+  Artículo 110.- Los descuentos en los salarios de los trabajadores, están
+  prohibidos salvo en los casos y con los requisitos siguientes:
+
+  I. Pago de deudas contraídas con el patrón por anticipo de salarios, pagos
+  hechos con exceso al trabajador, errores, pérdidas, averías o adquisición de
+  artículos producidos por la empresa o establecimiento. La cantidad exigible en
+  ningún caso podrá ser mayor del importe de los salarios de un mes y el
+  descuento será al que convengan el trabajador y el patrón, sin que pueda ser
+  mayor del treinta por ciento del excedente del salario mínimo;
+
+  Artículo 111.- Las deudas contraídas por los trabajadores con sus patrones en
+  ningún caso devengarán intereses.
+
+  Artículo 263.- Los patrones tienen las obligaciones especiales siguientes:
+
+  I. En los transportes foráneos pagar los gastos de hospedaje y alimentación de
+  los trabajadores, cuando se prolongue o retarde el viaje por causa que no sea
+  imputable a éstos;
+fecha_publicacion: 1970-04-01
+ultima_reforma: 2026-05-14
+estado_verificacion: verificado_fuente_primaria
+fuente: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LFT.pdf (texto vigente, última reforma 14-05-2026)"
+nota_verificacion: >
+  Creada el 28-jul-2026. Hasta hoy TODO lo laboral del proyecto descansaba en un
+  documento de investigación (`docs/conocimiento/11-huecos.md`) sin el
+  `estado_verificacion` que el resto del sistema exige — un hueco del propio
+  catálogo de normas, señalado por la auditoría de Fase 1.
+
+  Los tres artículos van juntos porque resuelven la misma pregunta: qué puede
+  aparecer como descuento en la liquidación de un operador.
+
+  El 263 fr. I es el que choca de frente con la lógica del producto: cuando el
+  viaje se prolonga por causa NO imputable al operador, el hospedaje y la
+  alimentación SE DEBEN — aunque rompan la política de la flota y aunque parte
+  no sea deducible para ISR. Son dos veredictos distintos.
+contexto_verificado: >
+  El art. 110 fr. I pone DOS topes distintos y conviene no confundirlos: uno al
+  saldo exigible (nunca más que el salario de un mes) y otro al descuento
+  periódico (nunca más del 30% del EXCEDENTE del salario mínimo, no del salario).
+  El 111 cierra la puerta a cualquier "cargo por anticipo no comprobado" con
+  intereses.
+impacto_en_producto: >
+  Que un gasto no sea deducible NO autoriza descontárselo al operador. El motor
+  solo emitía `deducible`, y de ahí a un descuento de nómina hay un paso que la
+  ley no permite dar: sin esta separación, una liquidación puede imprimir un
+  neto ilegal.
+
+  SIN CRITERIO, y va a la bandeja del contralor: cómo traducir "el importe de
+  los salarios de un mes" a un operador que cobra por viaje o por kilómetro
+  —esquema que el propio art. 257 reconoce como válido—. Ninguna fuente de este
+  repo lo resuelve, y el producto no lo va a inventar.
+verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito literal"
+verificado_el: 2026-07-28
+usado_en_codigo: ["src/lib/cuadra/laboral/pagadero.ts"]

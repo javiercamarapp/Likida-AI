@@ -18,6 +18,7 @@ import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { violaIndice } from '@/lib/cuadra/pg_errores';
+import { guardiaFundamento, normasDeToolCalls } from '@/lib/cuadra/normas/fundamento';
 import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS } from '@/lib/cuadra/presupuesto';
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
 import { getConfig } from '@/lib/cuadra/config';
@@ -101,6 +102,31 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
  * registra como ERROR y no como warn, porque el silencio deja a la flota sin
  * poder cumplir y sin enterarse.
  */
+/**
+ * Atiende el ejercicio del medio ARCO. Se llama ANTES del corte por "sin viaje
+ * abierto": el derecho no depende de que la flota le haya asignado uno.
+ *
+ * Nunca lanza: dejar sin respuesta a quien ejerce un derecho es peor que
+ * cualquier fallo que se pueda registrar.
+ */
+async function atenderPrivacidad(tenantId: string, operadorId: string, telefono: string): Promise<void> {
+  try {
+    const datos = await getDatosResponsable(tenantId);
+    if (datos) {
+      await sendText(telefono, respuestaPrivacidad(datos));
+      // Rastro para la flota: es ELLA quien tiene que resolver el ARCO.
+      logger.info('privacidad.solicitud_operador', { tenantId, operadorId });
+      return;
+    }
+    // Sin datos del responsable no se puede decir a quién reclamarle. Se le dice
+    // la verdad en vez de dejarlo sin respuesta.
+    logger.error('privacidad.solicitud_sin_datos_responsable', { tenantId });
+    await sendText(telefono, 'Déjame checarlo con la empresa y te confirmo por aquí. 🙏');
+  } catch (e) {
+    logger.error('privacidad.solicitud_error', { tenantId, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 async function ponerAvisoADisposicion(
   tenantId: string,
   operadorId: string,
@@ -153,6 +179,19 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Cuadra. 🚛');
       return;
     }
+    // ── El medio ARCO responde SIEMPRE, haya viaje o no ──────────────────────
+    // Va ANTES del corte por "sin viaje abierto". El aviso de privacidad le
+    // promete al operador que escribiendo PRIVACIDAD se le atiende, y un derecho
+    // ARCO no depende de que su flota le haya asignado un viaje — de hecho, quien
+    // quiere que dejen de tratar sus datos es probable que YA no tenga viajes.
+    //
+    // Estaba después del corte, así que la promesa del aviso era falsa en el caso
+    // más probable de ejercerla. Lo cazó la auditoría 3.
+    if (msg.type === 'text' && msg.text && pideAtencionPrivacidad(msg.text)) {
+      await atenderPrivacidad(op.tenantId, op.operadorId, msg.from);
+      return;
+    }
+
     const viajeId = await getOpenViaje(op.tenantId, op.operadorId);
     if (!viajeId) {
       await sendText(msg.from, 'No tienes un viaje abierto para liquidar ahorita. Cuando tu flota te asigne uno, aquí lo cerramos. 👍');
@@ -174,29 +213,6 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // mecanismo: sin él la flota no puede cumplir aunque quiera.
     await ponerAvisoADisposicion(op.tenantId, op.operadorId, say);
 
-    // ── El medio ARCO que el aviso prometió ──────────────────────────────────
-    // Determinístico y ANTES del agente. Si el aviso dice que escribiendo
-    // PRIVACIDAD se le atiende, tiene que atenderse SIEMPRE — no casi siempre,
-    // que es lo único que puede garantizar un LLM. Un medio del art. 15 fr. IV
-    // que a veces no responde no se ofreció: se anunció.
-    if (msg.type === 'text' && msg.text && pideAtencionPrivacidad(msg.text)) {
-      try {
-        const datos = await getDatosResponsable(op.tenantId);
-        if (datos) {
-          await say(respuestaPrivacidad(datos));
-          // Rastro para la flota: es ELLA quien tiene que resolver el ARCO.
-          logger.info('privacidad.solicitud_operador', { tenantId: op.tenantId, operadorId: op.operadorId });
-          return;
-        }
-        // Sin datos del responsable no se puede decir a quién reclamarle, y
-        // mandarlo al agente lo dejaría sin respuesta. Se le dice la verdad.
-        logger.error('privacidad.solicitud_sin_datos_responsable', { tenantId: op.tenantId });
-        await say('Déjame checarlo con la empresa y te confirmo por aquí. 🙏');
-        return;
-      } catch (e) {
-        logger.error('privacidad.solicitud_error', { err: e instanceof Error ? e.message : String(e) });
-      }
-    }
 
     // ── IMAGEN: captura SILENCIOSA en PARALELO (acuse consolidado) ────────────
     // Las fotos NO toman el mutex: corren en paralelo (rápido). Cada una hace +1
@@ -552,11 +568,45 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // GUARDIA DETERMINÍSTICA (código, no prompt): el LLM NUNCA reporta cifras que
     // no vengan de una tool. Si la respuesta trae dinero y no hubo cuadrar_viaje,
     // se descarta el texto del modelo y se responde con el cuadre REAL. (f/g)
+    let textoDeterminista = false;
     try {
       const g = await guardiaCifras(reply, agentTools, op.tenantId, viajeId);
-      if (g.forzado) { logger.warn('agent.cifras_forzadas', { viaje: viajeId }); reply = g.reply; }
+      if (g.forzado) {
+        logger.warn('agent.cifras_forzadas', { viaje: viajeId });
+        reply = g.reply;
+        textoDeterminista = true;
+      }
     } catch (e) {
       logger.warn('guardia.fail', { err: e instanceof Error ? e.message : String(e) });
+    }
+
+    // GUARDIA DE FUNDAMENTO: el modelo solo puede citar una norma que una tool le
+    // devolvió EN ESTE TURNO. Lo demás se le quita del mensaje.
+    //
+    // Va DESPUÉS de la guardia de cifras a propósito: si aquella sustituyó el
+    // texto por el resumen determinístico, este ya no trae citas y esto no hace
+    // nada. Al revés se estaría limpiando un texto que iba a descartarse.
+    //
+    // Se lee de lo que las tools DEVOLVIERON, no de lo que el modelo diga que le
+    // devolvieron: leerlo del texto sería preguntarle a la guardia por sí misma.
+    //
+    // NO CORRE SI EL TEXTO YA ES DETERMINÍSTICO. Cuando `guardiaCifras` sustituye
+    // la respuesta por `resumenCuadre`, ese texto lo escribió el MOTOR y sus
+    // citas salen de `engine.ts`, no del modelo. Correr esta guardia encima con
+    // `permitidas` vacío se las quitaba: la guardia corrompiendo justamente la
+    // fuente autoritativa que existe para no depender del modelo.
+    //
+    // (Aquí había un comentario que afirmaba que ese texto "ya no trae citas".
+    // Era falso, y lo demostró la auditoría 3.)
+    if (!textoDeterminista) try {
+      const permitidas = normasDeToolCalls(agentTools.filter((t) => !t.error).map((t) => t.result));
+      const f = guardiaFundamento(reply, permitidas);
+      if (f.forzado) {
+        logger.warn('agent.fundamento_forzado', { viaje: viajeId, tenant: op.tenantId, quitadas: f.quitadas });
+        reply = f.reply;
+      }
+    } catch (e) {
+      logger.warn('guardia_fundamento.fail', { err: e instanceof Error ? e.message : String(e) });
     }
 
     await say(reply);

@@ -9,6 +9,14 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
 import { resumenOmitidos, filasImprimibles } from './omitidos';
 import { filasDeducibilidad } from './deducibilidad';
+import { resumenLaboral } from '../laboral/pagadero';
+import type { TipoDiferencia } from '@/types/cuadra';
+
+/** Los que dejan un gasto fuera de la deducción de forma definitiva. */
+const NO_DEDUCIBLES_PDF = new Set<TipoDiferencia>([
+  'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado',
+  'complemento_hidrocarburos', 'efectivo_sobre_tope',
+]);
 import { leyendaPdf } from '../cuadre/leyendas';
 import type { Liquidacion, Viaje, Operador } from '@/types/cuadra';
 
@@ -295,6 +303,31 @@ export async function generarLiquidacionPDF(
       y -= 9;
     }
     y -= 5;
+  }
+
+  // ─── Lo que se le debe al operador aunque no sea deducible ──────────────────
+  // DEDUCIBLE ≠ PAGADERO. Sin esta sección, quien lee "no deducible" en el papel
+  // puede concluir que se le descuenta al operador, y la ley no lo permite: es un
+  // problema de papeleo entre la flota y el SAT, no una deuda del chofer.
+  const lab = resumenLaboral({
+    gastos: liq.gastos,
+    idsNoDeducibles: new Set(liq.diferencias.filter((d) => NO_DEDUCIBLES_PDF.has(d.tipo)).map((d) => d.gastoId!).filter(Boolean)),
+    idsPorConfirmar: new Set(liq.diferencias.filter((d) => d.tipo === 'sin_cfdi' || d.tipo === 'combustible_efectivo').map((d) => d.gastoId!).filter(Boolean)),
+    sobrePolitica: new Set(liq.diferencias.filter((d) => d.tipo === 'sobre_politica').map((d) => d.gastoId!).filter(Boolean)),
+    demoraNoImputable: viaje.demoraNoImputable,
+  });
+  if (lab) {
+    asegurar(64);
+    text('LO QUE SE LE REEMBOLSA AL OPERADOR', M, y, 8, bold, MUTED);
+    y -= 6;
+    rule(y);
+    y -= 16;
+    for (const linea of envolver(lab.texto, 105)) {
+      if (asegurar(13)) { text('LO QUE SE LE REEMBOLSA AL OPERADOR (cont.)', M, y, 8, bold, MUTED); y -= 6; rule(y); y -= 16; }
+      text(linea, M + 14, y, 8.5, font, INK);
+      y -= 11;
+    }
+    y -= 6;
   }
 
   // ─── Diferencias detectadas ─────────────────────────────────────────────────
