@@ -9,11 +9,30 @@ v21.0**.
 
 ---
 
+## Los seis links, en el orden en que se usan
+
+| # | Para qué | Link |
+|---|---|---|
+| 1 | Crear la app y verla | https://developers.facebook.com/apps/ |
+| 2 | Guía oficial de Cloud API | https://developers.facebook.com/docs/whatsapp/cloud-api/get-started |
+| 3 | Token permanente (System User) | https://business.facebook.com/settings/system-users |
+| 4 | Guía oficial de webhooks | https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks |
+| 5 | API Setup de tu app | `https://developers.facebook.com/apps/TU_APP_ID/whatsapp-business/wa-dev-console/` |
+| 6 | App secret | `https://developers.facebook.com/apps/TU_APP_ID/settings/basic/` |
+
+Los dos últimos llevan tu `APP_ID`, que sale de la URL en cuanto abras la app en
+el link 1. Comprobado el 28-jul-2026: los cuatro fijos responden 200.
+
+---
+
 ## 1. La app en Meta
 
-1. Entra a **developers.facebook.com** con tu cuenta de Facebook y crea una app.
-2. Tipo: **Business**.
-3. Dentro de la app: **Add product → WhatsApp → Set up**.
+1. Entra a **https://developers.facebook.com/apps/** y pulsa **Create App**.
+   Si es tu primera vez te pedirá verificar la cuenta con teléfono.
+2. Tipo: **Business**. Nombre: el que quieras (no lo ve nadie más).
+3. Ya dentro, mira la URL: `.../apps/`**`1234567890`**`/...` — ese número es tu
+   `APP_ID`, y lo vas a necesitar para los links 5 y 6.
+4. **Add product → WhatsApp → Set up**.
 
 Al terminar tienes un **número de prueba** de Meta y un **WhatsApp Business
 Account** de prueba. Eso alcanza para el demo.
@@ -27,8 +46,11 @@ Account** de prueba. Eso alcanza para el demo.
 
 ## 2. Los cinco valores
 
-Todos salen de **WhatsApp → API Setup** salvo el `APP_SECRET` y el
-`VERIFY_TOKEN`.
+Todos salen de **WhatsApp → API Setup**
+(`https://developers.facebook.com/apps/TU_APP_ID/whatsapp-business/wa-dev-console/`)
+salvo el `APP_SECRET`, que está en **Settings → Basic**
+(`https://developers.facebook.com/apps/TU_APP_ID/settings/basic/`), y el
+`VERIFY_TOKEN`, que te lo inventas tú.
 
 | Variable | Dónde | Nota |
 |---|---|---|
@@ -59,7 +81,8 @@ WHATSAPP_VERIFY_TOKEN=lo-que-tu-quieras-largo-y-aleatorio
 El token de API Setup **caduca en 24 horas**. Si lo pones el 5 de agosto, el
 6 no funciona. Para uno que no expira:
 
-1. **business.facebook.com** → Business Settings → **Users → System Users**.
+1. Abre **https://business.facebook.com/settings/system-users**
+   (Business Settings → Users → System Users).
 2. *Add* → nombre cualquiera → rol **Admin**.
 3. En ese usuario: **Add Assets** → *Apps* → tu app → permiso *Full control*.
 4. **Generate new token** → elige tu app → marca `whatsapp_business_messaging`
@@ -83,7 +106,11 @@ desplegar — `.env.local` no viaja al despliegue.
 
 ## 5. Dar de alta el webhook
 
-En la app: **WhatsApp → Configuration → Webhook → Edit**.
+En la app: **WhatsApp → Configuration → Webhook → Edit**. Link directo:
+`https://developers.facebook.com/apps/TU_APP_ID/whatsapp-business/wa-settings/`
+
+Guía oficial por si algo no coincide:
+https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks
 
 - **Callback URL**: `https://TU-URL/api/webhook/whatsapp`
 - **Verify token**: exactamente el mismo `WHATSAPP_VERIFY_TOKEN`
