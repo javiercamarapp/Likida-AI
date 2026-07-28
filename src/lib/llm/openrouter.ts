@@ -440,7 +440,7 @@ export async function generateWithTools(opts: {
           let args: Record<string, unknown> = {};
           try {
             args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
-          } catch (e) {
+          } catch {
             executed.push({ toolName: call.function.name, args: {}, result: null, durationMs: 0, error: 'args_parse' });
             return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify({ error: 'argumentos JSON inválidos' }) };
           }
