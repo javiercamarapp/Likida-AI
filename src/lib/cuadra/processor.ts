@@ -18,6 +18,7 @@ import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { violaIndice } from '@/lib/cuadra/pg_errores';
+import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS } from '@/lib/cuadra/presupuesto';
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
 import { getConfig } from '@/lib/cuadra/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/cuadra/intake/emparejar';
@@ -133,6 +134,17 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     logger.info('wa.duplicate', { id: msg.waMessageId });
     return;
   }
+
+  // ── RELOJ COMPARTIDO, desde la primera línea ─────────────────────────────
+  // Las etapas de abajo pedían su tope fijo sin saber que comparten UNA
+  // invocación: 20s de barrera + 12s de mutex + 40s de agente = 72s contra un
+  // presupuesto de 60. Y como el webhook ya respondió 200, Meta no reintenta:
+  // cuando Vercel mata la función, el operador se queda sin nada y sin rastro.
+  //
+  // Arranca AQUÍ y no más abajo: resolver al operador, buscar el viaje abierto y
+  // mandar el aviso de privacidad también gastan, y son llamadas de red. Un
+  // reloj que arranca a media función cree tener 60s cuando ya se fueron varios.
+  const reloj = crearPresupuesto(PRESUPUESTO_WEBHOOK_MS);
 
   let lockedViaje: string | null = null;
   try {
@@ -396,14 +408,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     }
 
     // BARRERA DE RÁFAGA: espera a que terminen los OCR de fotos en vuelo antes de
-    // cuadrar — así "listo" nunca cierra sobre datos parciales. NUNCA es infinito
-    // (tope 60s): si vence, se cuadra con lo que haya y se avisa al operador.
-    const intakeOk = await esperarIntake(viajeId);
-    if (!intakeOk) logger.warn('intake.barrera_timeout', { viaje: viajeId });
+    // cuadrar — así "listo" nunca cierra sobre datos parciales. NUNCA es infinito:
+    // si vence, se cuadra con lo que haya y se avisa al operador.
+    const intakeOk = await esperarIntake(viajeId, reloj.acotar(20_000));
+    if (!intakeOk) logger.warn('intake.barrera_timeout', { viaje: viajeId, restanteMs: reloj.restante() });
 
     // Mutex para serializar cierres concurrentes (dos "listo" a la vez).
-    if (await acquireViajeLock(viajeId)) lockedViaje = viajeId;
-    else logger.warn('viaje.lock_timeout', { viaje: viajeId });
+    if (await acquireViajeLock(viajeId, { maxWaitMs: reloj.acotar(12_000) })) lockedViaje = viajeId;
+    else logger.warn('viaje.lock_timeout', { viaje: viajeId, restanteMs: reloj.restante() });
 
     // Doble "listo": tras tomar el lock, re-verifica que el viaje SIGA abierto. Si
     // otro "listo" ya lo cerró, no re-corras el agente (evita doble cuadre/costo).
@@ -420,13 +432,35 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     let reply = '';
     let closed = false;
     let agentTools: ToolCallRecord[] = [];
+
+    // ── ¿ALCANZA PARA EL AGENTE? ─────────────────────────────────────────────
+    // El agente es lo caro y lo último: si la barrera y el mutex se comieron el
+    // presupuesto, lanzarlo garantiza que Vercel corte a media ejecución y el
+    // operador no reciba NADA.
+    //
+    // El motor no necesita al LLM para cuadrar. Se manda el resumen
+    // determinístico —los mismos números, calculados en milisegundos— y el
+    // operador se queda con una respuesta correcta en vez de con silencio.
+    const COSTO_AGENTE_MS = 15_000;   // mínimo realista de un turno con tools
+    if (!reloj.alcanza(COSTO_AGENTE_MS)) {
+      logger.error('agente.sin_presupuesto', { viaje: viajeId, gastadoMs: reloj.gastado(), restanteMs: reloj.restante() });
+      try {
+        const liq = await cuadrarDesdeDB(op.tenantId, viajeId);
+        await say(resumenCuadre(liq, false, 'operador'));
+      } catch (e) {
+        logger.error('agente.sin_presupuesto_fallback', { err: e instanceof Error ? e.message : String(e) });
+        await say('Ya tengo tus comprobantes 👍. Dame un momento y te paso el cuadre.');
+      }
+      return;
+    }
+
     try {
       const res = await runAgent({
         agent: 'liquidacion',
         tenant,
         ctx: { tenantId: op.tenantId, operadorId: op.operadorId, viajeId, telefono: msg.from, conversationId: conv.id },
         history,
-        timeoutMs: 40_000,
+        timeoutMs: reloj.acotar(40_000),
       });
       reply = res.finalText || 'Listo. 👍';
       agentTools = res.toolCalls;
