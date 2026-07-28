@@ -1,3 +1,4 @@
+import { exigirAcceso } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { getKpis, getAcreditables, detectarAnomalias, type DashboardKpis, type Acreditables, type Anomalia } from '@/lib/cuadra/analytics';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -40,6 +41,9 @@ async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
 }
 
 export default async function DashboardPage() {
+  // Segunda capa: la autorización viaja con la página, no solo con el matcher
+  // del middleware. Las dos tienen que fallar a la vez para que esto se sirva.
+  await exigirAcceso('/dashboard');
   const tenantId = TENANT();
   const [acred, kpis, liqs, anomalias] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId)),
@@ -57,10 +61,10 @@ export default async function DashboardPage() {
     <div className="min-h-screen">
       <header className="glass sticky top-0 z-10 border-b" style={{ borderColor: 'var(--line)' }}>
         <div className="max-w-6xl mx-auto px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <h1 className="flex items-center gap-3 m-0 font-normal">
             <span className="font-semibold tracking-tight text-xl">Likida</span>
             <span className="text-base" style={{ color: 'var(--muted)' }}>· Panel de liquidación</span>
-          </div>
+          </h1>
           <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: 'var(--muted)', background: 'color-mix(in srgb, var(--muted) 10%, transparent)' }}>
             datos de demostración
           </span>
@@ -152,7 +156,7 @@ export default async function DashboardPage() {
               {liqs === null ? (
                 <div className="card p-8" style={{ color: 'var(--muted)' }}>No se pudo cargar el listado.</div>
               ) : (
-                <div className="card overflow-hidden">
+                <div className="card overflow-x-auto">
                   <table className="w-full text-base">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }} className="text-left text-sm">
