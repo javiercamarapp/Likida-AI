@@ -612,6 +612,7 @@ function mxn(n: number): string {
  * El producto impreso ya lo captura el OCR; aquí solo se usa. Sin él se dice
  * "Combustible", que es cierto siempre.
  */
+
 export function etiquetaConcepto(c: string, ocrExtra?: Record<string, unknown>): string {
   if (c !== 'diesel') return label(c);
   const producto = typeof ocrExtra?.producto === 'string' ? ocrExtra.producto.trim() : '';

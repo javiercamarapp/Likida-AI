@@ -312,3 +312,43 @@ describe('el detector ensanchado no puede confundir un folio ni una fecha con un
     ]) expect(citasEnTexto(t), t).toEqual([]);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA CITA SIN NINGUNA PALABRA CLAVE.
+//
+// Hallazgo REINCIDENTE: viene de la ronda 3, la ronda 4 comprobó que nunca se
+// atacó, y de sus tres formas quedaba una viva — "conforme al 27-III", que no
+// lleva "artículo", ni "fracción", ni sigla delante del número. Salía [NADA]:
+// ni siquiera llegaba a DESCONOCIDA, así que pasaba entera y sin log.
+//
+// `27-III` es la forma más corta de escribir una cita fiscal en español y la que
+// un modelo usa cuando ya nombró la ley en la frase anterior.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('guardiaFundamento — la cita desnuda', () => {
+  it('"conforme al 27-III" se detecta como cita', () => {
+    expect(citasEnTexto('No es deducible conforme al 27-III.')).not.toEqual([]);
+  });
+
+  it('y se quita si ninguna tool la autorizó', () => {
+    const r = guardiaFundamento('No es deducible conforme al 27-III.', []);
+    expect(r.forzado).toBe(true);
+    expect(r.reply).not.toMatch(/27-III/);
+  });
+
+  it('otras formas desnudas también', () => {
+    for (const t of ['aplica el 28-V', 'según 2.9 de la RFA', 'por el 20-A']) {
+      expect(citasEnTexto(t), t).not.toEqual([]);
+    }
+  });
+
+  it('NO marca números que no son citas', () => {
+    // Falso positivo caro: si "3095" o "2026-05-01" contaran como cita, la
+    // guardia mutilaría folios y fechas del mensaje.
+    for (const t of [
+      'Tu folio es 3095',
+      'Comprobaste $4,812.00 de 5 tickets',
+      'El viaje va del 2026-05-01 al 2026-05-03',
+      'Son 25 litros a 28.59',
+    ]) expect(citasEnTexto(t), t).toEqual([]);
+  });
+});
