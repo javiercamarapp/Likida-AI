@@ -143,6 +143,16 @@ export const NORMAS: Record<string, Norma> = {
     estado: "verificado_fuente_primaria",
     ficha: "normas/lfpdppp-59.yaml",
   },
+  'lft-110-111-263': {
+    id: 'lft-110-111-263',
+    instrumento: "Ley Federal del Trabajo",
+    articulo: "110 fr. I, 111 y 263 fr. I",
+    titulo: "Qué se le puede descontar a un operador, y qué se le debe pagar aunque no sea deducible",
+    citas: ["LFT 110-I", "LFT 111", "LFT 263-I"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    ficha: "normas/lft-110-111-263.yaml",
+  },
   'lif-2026-art-20-A': {
     id: 'lif-2026-art-20-A',
     instrumento: "Ley de Ingresos de la Federación para el Ejercicio Fiscal de 2026",
