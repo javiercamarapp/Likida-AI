@@ -16,6 +16,10 @@ const politica: PoliticaGasto[] = [
   { concepto: 'factura', requiereCfdi: true },
 ];
 
+// Los RFC de estos fixtures pasan el DÍGITO VERIFICADOR a propósito. Desde el
+// 28-jul-2026 el motor ignora un RFC de empresa mal formado —lo trata como dato
+// que falta, no como algo contra lo que rechazar facturas—, así que un fixture
+// inventado apagaba en silencio la validación que la prueba quería ejercer.
 describe('cuadrarViaje', () => {
   it('cuadra exacto cuando comprobado = anticipo y todo dentro de política', () => {
     const r = cuadrarViaje({
@@ -81,7 +85,7 @@ describe('cuadrarViaje', () => {
 
   it('detecta RFC receptor distinto al de la empresa', () => {
     const r = cuadrarViaje({
-      viajeId: 'v6', anticipo: 1000, politica, empresaRfc: 'EMP010101AAA',
+      viajeId: 'v6', anticipo: 1000, politica, empresaRfc: 'EMP010101AA2',
       gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F1', cfdiUuid: 'u', rfcReceptor: 'CHOFER800101XY1' })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(true);
@@ -153,8 +157,8 @@ describe('cuadrarViaje', () => {
   // AL-6 (contraparte): un RFC real SÍ valida el receptor.
   it('AL-6: RFC real de empresa sí valida el receptor', () => {
     const r = cuadrarViaje({
-      viajeId: 'v12', anticipo: 1000, politica, empresaRfc: 'TIN950101ABC',
-      gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F6', cfdiUuid: 'u6', rfcReceptor: 'TIN950101ABC' })],
+      viajeId: 'v12', anticipo: 1000, politica, empresaRfc: 'TIN950101AB0',
+      gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F6', cfdiUuid: 'u6', rfcReceptor: 'TIN950101AB0' })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(false); // coincide → OK
   });
@@ -734,8 +738,8 @@ describe('cuadrarViaje — soporte de la alimentación (LISR 28-V) y RFC del vi�
     // los comprobantes fiscales podrán ser expedidos a nombre de dichas personas."
     const r = cuadrarViaje({
       viajeId: 'r57a', anticipo: 1000, politica: [], estimulos: EST,
-      empresaRfc: 'TIN950101ABC', operadorRfc: 'PEJJ800101XY1',
-      gastos: [g({ concepto: 'hospedaje', monto: 1000, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'PEJJ800101XY1' })],
+      empresaRfc: 'TIN950101AB0', operadorRfc: 'PEJJ800101XY7',
+      gastos: [g({ concepto: 'hospedaje', monto: 1000, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'PEJJ800101XY7' })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(false);
     expect(r.totalNoDeducible).toBe(0);
@@ -744,8 +748,8 @@ describe('cuadrarViaje — soporte de la alimentación (LISR 28-V) y RFC del vi�
   it('RLISR 57: sin saber el RFC del operador, se REVISA en vez de rechazar', () => {
     const r = cuadrarViaje({
       viajeId: 'r57b', anticipo: 1000, politica: [], estimulos: EST,
-      empresaRfc: 'TIN950101ABC',
-      gastos: [g({ concepto: 'hospedaje', monto: 1000, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'PEJJ800101XY1' })],
+      empresaRfc: 'TIN950101AB0',
+      gastos: [g({ concepto: 'hospedaje', monto: 1000, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'PEJJ800101XY7' })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(false);
     expect(r.diferencias.some((d) => d.tipo === 'viatico_rfc_operador')).toBe(true);
@@ -757,8 +761,8 @@ describe('cuadrarViaje — soporte de la alimentación (LISR 28-V) y RFC del vi�
     // chofer sigue siendo un problema.
     const r = cuadrarViaje({
       viajeId: 'r57c', anticipo: 2000, politica: [], estimulos: EST,
-      empresaRfc: 'TIN950101ABC', operadorRfc: 'PEJJ800101XY1',
-      gastos: [g({ concepto: 'diesel', monto: 2000, formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'PEJJ800101XY1' })],
+      empresaRfc: 'TIN950101AB0', operadorRfc: 'PEJJ800101XY7',
+      gastos: [g({ concepto: 'diesel', monto: 2000, formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'PEJJ800101XY7' })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(true);
     expect(r.totalNoDeducible).toBe(2000);
@@ -767,7 +771,7 @@ describe('cuadrarViaje — soporte de la alimentación (LISR 28-V) y RFC del vi�
   it('un viático a un RFC que no es ni la empresa ni el operador SÍ se rechaza', () => {
     const r = cuadrarViaje({
       viajeId: 'r57d', anticipo: 1000, politica: [], estimulos: EST,
-      empresaRfc: 'TIN950101ABC', operadorRfc: 'PEJJ800101XY1',
+      empresaRfc: 'TIN950101AB0', operadorRfc: 'PEJJ800101XY7',
       gastos: [g({ concepto: 'hospedaje', monto: 1000, formaPago: '04', cfdiUuid: 'u', rfcReceptor: 'OTRO900101ZZ9' })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'rfc_receptor')).toBe(true);
