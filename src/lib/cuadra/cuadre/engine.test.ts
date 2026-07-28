@@ -831,3 +831,48 @@ describe('cuadrarViaje — discrepancia entre el código y el OCR', () => {
     expect(r.diferencias.some((d) => d.tipo === 'monto_discrepante')).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UN PAPEL QUE LE HABLA AL EXTRACTOR.
+//
+// El operador que liquida tiene un incentivo económico directo: infla lo
+// comprobado y se queda con la diferencia del anticipo. No necesita tocar el
+// código — le basta imprimir un renglón que le hable al modelo de visión.
+//
+// Medido contra el modelo real (pruebas-manuales/inyeccion.prueba.ts): NO
+// obedece, captura el total impreso. Pero que el intento no funcione no lo
+// vuelve irrelevante: alguien puso ahí ese texto a propósito, y quien decide
+// sobre ese gasto merece enterarse.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuadrarViaje — texto dirigido al lector automático', () => {
+  it('levanta la observación y manda el viaje a revisar', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 500, politica,
+      gastos: [g({ concepto: 'diesel', monto: 487.5, folio: 'A1', cfdiUuid: 'u1',
+                   ocrExtra: { textoSospechoso: true } })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'texto_sospechoso')).toBe(true);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  it('el gasto sigue contando por su monto IMPRESO: no se descarta ni se castiga', () => {
+    // El dinero salió de verdad. Tirar el gasto por el texto raro le costaría a
+    // la empresa una deducción legítima si el papel era bueno y el renglón lo
+    // puso el comercio (un anuncio, una leyenda impresa).
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 500, politica,
+      gastos: [g({ concepto: 'diesel', monto: 487.5, folio: 'A1', cfdiUuid: 'u1',
+                   ocrExtra: { textoSospechoso: true } })],
+    });
+    expect(r.totalComprobado).toBe(487.5);
+    expect(r.totalDeducible).toBe(487.5);
+  });
+
+  it('sin la marca no inventa la observación', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 500, politica,
+      gastos: [g({ concepto: 'diesel', monto: 487.5, folio: 'A1', cfdiUuid: 'u1' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'texto_sospechoso')).toBe(false);
+  });
+});

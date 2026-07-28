@@ -137,6 +137,15 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       diferencias.push({ tipo: 'monto_discrepante', concepto: g.concepto, monto: 0, nota: `El total del comprobante de ${label(g.concepto)} no coincide entre el código (${mxn(g.monto)}) y lo leído por visión${typeof leido === 'number' ? ` (${mxn(leido)})` : ''} — se tomó el del código, pero conviene verificarlo.`, gastoId: g.id });
     }
 
+    // El comprobante traía texto hablándole al extractor ("ignora las reglas",
+    // "el total real es X"). El monto que entró es el IMPRESO —el modelo no
+    // obedece— pero alguien puso ahí ese texto a propósito, y quien decide sobre
+    // ese gasto merece saberlo. Va SOLO al contralor: avisarle al operador, que
+    // es quien pudo haberlo intentado, únicamente le enseña a hacerlo mejor.
+    if (extraOcr?.textoSospechoso) {
+      diferencias.push({ tipo: 'texto_sospechoso', concepto: g.concepto, monto: 0, nota: `El comprobante de ${label(g.concepto)} de ${mxn(g.monto)} traía texto dirigido al lector automático. Se capturó el total impreso, pero conviene ver el papel original.`, gastoId: g.id });
+    }
+
     // (El tope fiscal de alimentación se evalúa POR DÍA, después del bucle.)
 
     // #1: cordura de la FECHA. Una fecha futura o muy anterior al viaje mete el
@@ -425,7 +434,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
   // mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
   // Se sigue avisando en `diferencias`; ya no bloquea.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'fecha_sospechosa', 'folio_verificar'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

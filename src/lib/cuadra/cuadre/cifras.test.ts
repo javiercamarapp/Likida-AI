@@ -1,35 +1,70 @@
 import { describe, it, expect } from 'vitest';
-import { tieneCifrasDeDinero } from './cifras';
+import { tieneCifrasDeDinero, cifrasSinRespaldo } from './cifras';
 
 describe('tieneCifrasDeDinero', () => {
-  it('detecta cifras de dinero', () => {
-    expect(tieneCifrasDeDinero('Comprobado: $6,850')).toBe(true);
-    expect(tieneCifrasDeDinero('Diferencia $650 a favor')).toBe(true);
-    expect(tieneCifrasDeDinero('5700.00 pesos')).toBe(true);
-    expect(tieneCifrasDeDinero('anticipo 10,600')).toBe(true);
+  it('marca las formas de dinero que sí escribe el agente', () => {
+    for (const t of ['$500', '$ 6,850', '10,600', '5700.00', '500 pesos', 'sobró 500', '1500 a favor'])
+      expect(tieneCifrasDeDinero(t), t).toBe(true);
+  });
+  it('no marca enteros sueltos sin contexto de dinero', () => {
+    for (const t of ['son 3 comprobantes', 'folio 1042', 'en 2026'])
+      expect(tieneCifrasDeDinero(t), t).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA PUERTA TRASERA DE `consultar_politica`.
+//
+// La guardia dejaba pasar CUALQUIER cifra en cuanto el modelo hubiera llamado
+// consultar_politica, razonando que entonces las cifras eran topes de política.
+// Pero la tool no ata al texto: el modelo puede consultar la política (una tool
+// barata) y luego narrar "comprobaste $8,340 y sobró $500" — cifras que nadie
+// calculó. Llamar una tool irrelevante desbloqueaba narrar dinero inventado,
+// que es exactamente lo que la regla fundacional prohíbe.
+//
+// Grounded tiene que significar que la cifra ESTÁ en lo que devolvió la tool,
+// no que hubo una tool.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cifrasSinRespaldo', () => {
+  const politica = [{ topeAlimentacionDia: 750, topeEfectivo: 2000 }];
+
+  it('una cifra que sí devolvió la tool está respaldada', () => {
+    expect(cifrasSinRespaldo('El tope de alimentación es de $750 por día.', politica)).toEqual([]);
   });
 
-  // Enteros redondos SIN $ ni coma: el LLM alucina "sobraron 500 pesos" y antes
-  // pasaba la guardia. Ahora se detectan por la palabra-moneda adyacente.
-  it('detecta enteros redondos pegados a palabra de dinero', () => {
-    expect(tieneCifrasDeDinero('sobraron 500 pesos')).toBe(true);
-    expect(tieneCifrasDeDinero('comprobaste 8000')).toBe(true);
-    expect(tieneCifrasDeDinero('sobró 500 del anticipo')).toBe(true);
-    expect(tieneCifrasDeDinero('te quedan 1500 a favor')).toBe(true);
-    expect(tieneCifrasDeDinero('faltan 300 por comprobar')).toBe(true);
-  });
-  it('NO marca conteos, folios ni años', () => {
-    expect(tieneCifrasDeDinero('Recibí 2 comprobantes')).toBe(false);
-    expect(tieneCifrasDeDinero('viaje VJ-2026-0847')).toBe(false);
-    expect(tieneCifrasDeDinero('folio 7318052')).toBe(false);
-    expect(tieneCifrasDeDinero('¿ya terminaste de mandar?')).toBe(false);
+  it('acepta el formato del modelo aunque la tool devuelva el número pelón', () => {
+    // La tool devuelve 2000; el modelo escribe "$2,000.00". Es la misma cifra.
+    expect(cifrasSinRespaldo('Puedes pagar hasta $2,000.00 en efectivo.', politica)).toEqual([]);
   });
 
-  // No-regresión: mensajes legítimos que NO deben forzar el cuadre (founder).
-  it('NO se dispara con mensajes legítimos sin monto', () => {
-    expect(tieneCifrasDeDinero('Recibí tus 8 comprobantes')).toBe(false);
-    expect(tieneCifrasDeDinero('Llevas 3 tickets de caseta')).toBe(false);
-    expect(tieneCifrasDeDinero('Tu viaje V-2841 sigue abierto')).toBe(false);
-    expect(tieneCifrasDeDinero('Mándalos todos y escribe listo')).toBe(false);
+  it('DELATA la cifra que ninguna tool devolvió', () => {
+    const fuera = cifrasSinRespaldo('El tope es $750, y tu viaje comprobó $8,340.', politica);
+    expect(fuera).toEqual([8340]);
+  });
+
+  it('un total derivado por el modelo tampoco está respaldado', () => {
+    // 8840 - 8340 = 500. Aritmética del modelo, no del motor. El motor es quien
+    // calcula diferencias; si el número no salió de él, no se manda.
+    expect(cifrasSinRespaldo('Sobró $500 del anticipo.', [{ comprobado: 8340, anticipo: 8840 }])).toEqual([500]);
+  });
+
+  it('busca dentro de estructuras anidadas, no solo en el primer nivel', () => {
+    expect(cifrasSinRespaldo('El tope es $750.', [{ politica: { topes: [{ monto: 750 }] } }])).toEqual([]);
+  });
+
+  it('acepta números que la tool devolvió como texto', () => {
+    expect(cifrasSinRespaldo('Son $750.', [{ tope: '750.00' }])).toEqual([]);
+  });
+
+  it('sin resultados de tool, toda cifra queda sin respaldo', () => {
+    expect(cifrasSinRespaldo('Comprobaste $8,340.', [])).toEqual([8340]);
+  });
+
+  it('un texto sin cifras no reporta nada', () => {
+    expect(cifrasSinRespaldo('Mándame la foto del ticket, porfa.', politica)).toEqual([]);
+  });
+
+  it('tolera el centavo entre lo que calculó la tool y lo que escribió el modelo', () => {
+    expect(cifrasSinRespaldo('Son $1,234.57.', [{ total: 1234.567 }])).toEqual([]);
   });
 });

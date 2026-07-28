@@ -71,6 +71,7 @@ export type TipoDiferencia =
   | 'fecha_sospechosa'     // fecha futura o muy anterior al viaje → periodo/plazo/complemento en riesgo
   | 'folio_verificar'      // folio leído con baja confianza en ticket con portal → verificar antes de facturar
   | 'monto_discrepante'    // el total del código y el del OCR no coinciden
+  | 'texto_sospechoso'     // el papel traía texto dirigido al extractor
   | 'alimentacion_sin_soporte' // comida sin hospedaje ni transporte que la ampare (LISR 28-V)
   | 'viatico_rfc_operador'  // viático a nombre de una persona: válido si es el operador (RLISR 57)
   | 'factura_por_vencer'   // ticket de portal sin timbrar y con la ventana cerrándose
