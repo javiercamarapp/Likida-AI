@@ -500,7 +500,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         history,
         timeoutMs: reloj.acotar(40_000),
       });
-      reply = res.finalText || 'Listo. 👍';
+      // "Listo. 👍" SOLO si de verdad se hizo algo. Un turno sin texto y sin
+      // ninguna tool no es un turno exitoso y callado: es un turno en el que no
+      // pasó nada, y confirmarlo hace que el chofer deje de mandar comprobantes
+      // creyendo que su viaje cerró. Cuando sí corrieron tools, el silencio del
+      // modelo sí es benigno: el efecto ya ocurrió.
+      reply = res.finalText || (res.toolCalls.length > 0
+        ? 'Listo. 👍'
+        : 'Perdón, no alcancé a procesar eso. ¿Me lo repites?');
       agentTools = res.toolCalls;
       closed = res.toolCalls.some((t) => t.toolName === 'guardar_liquidacion' && !t.error);
       await registrarCosto({ tenantId: op.tenantId, viajeId, fase: faseDeModelo(res.model, 'cuadre'), modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.costUsd });

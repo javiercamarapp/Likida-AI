@@ -461,7 +461,12 @@ export async function generateWithTools(opts: {
       messages: msgs,
       tools: opts.tools.length ? opts.tools : undefined,
       tool_choice: opts.tools.length ? ('auto' as const) : undefined,
-      max_tokens: opts.maxTokens ?? 1000,
+      // El MISMO techo que las respuestas estructuradas, y por la misma razón
+      // (ver DEFAULT_MAX_TOKENS): con `reasoning: 'high'` —que es como corre el
+      // rol `cuadre`— el razonamiento invisible y la respuesta comparten este
+      // presupuesto. Estaba en 1000: el modelo se quedaba sin techo pensando y
+      // devolvía content vacío. `max_tokens` es un TECHO, no un cargo.
+      max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
       // reasoning y temperature son mutuamente excluyentes; van por spread para
       // no chocar con el tipado del SDK (igual que PROVIDER_OPTS).
       ...(opts.reasoning ? { reasoning: { effort: opts.reasoning } } : { temperature: opts.temperature ?? 0.3 }),
@@ -495,6 +500,21 @@ export async function generateWithTools(opts: {
       const calls = choice?.message?.tool_calls;
 
       if (!calls || calls.length === 0) {
+        // SE CORTÓ ≠ TERMINÓ. Sin esta comprobación una respuesta a medias se
+        // enviaba como completa, y —peor— una respuesta VACÍA por truncamiento
+        // llegaba a `processor.ts` como finalText '' y se convertía en
+        // "Listo. 👍": una confirmación afirmativa de un turno en el que no se
+        // cuadró nada ni se cerró nada. El chofer deja de mandar comprobantes y
+        // el viaje se queda abierto sin que nadie vea un error.
+        if (choice?.finish_reason === 'length') {
+          throw new TruncatedError(
+            `Respuesta truncada en el ciclo de tools: se agotaron los ${opts.maxTokens ?? DEFAULT_MAX_TOKENS} tokens de salida (usó ${tokOut})`,
+            tokOut,
+            opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+            choice?.message?.content ?? undefined,
+            { model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo },
+          );
+        }
         // El costo ya viene sumado ronda a ronda, cada una al precio del modelo
         // que la respondió. (Antes se precificaba aquí, de una vez, con el
         // modelo activo al final: correcto solo si el ciclo entero corrió en el
