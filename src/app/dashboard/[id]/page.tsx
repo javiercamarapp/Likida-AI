@@ -3,15 +3,19 @@ import Link from 'next/link';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { notFound } from 'next/navigation';
 import { getLiquidacionDetalle } from '@/lib/cuadra/analytics';
+import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
+import { filasDeducibilidad } from '@/lib/cuadra/liquidacion/deducibilidad';
 import { mxn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
 const TENANT = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-111111111111';
 
-// Mantener en sintonía con CONCEPTO_LABEL de liquidacion/pdf.ts y label() de
-// cuadre/engine.ts. Se desincronizó una vez al partir 'viaticos' en tres: el
-// contralor veía "hospedaje" en minúscula cruda en su tabla.
+// Este mapa YA NO pinta el renglón: lo pinta `etiquetaGasto` (abajo), que
+// delega en el motor. Se queda como traducción de respaldo y como el mapa que
+// `etiquetas_sincronizadas.test.ts` mantiene a la par de `label()` del motor.
+// Se desincronizó una vez al partir 'viaticos' en tres: el contralor veía
+// "hospedaje" en minúscula cruda en su tabla.
 const CONCEPTO: Record<string, string> = {
   diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura',
   alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte', flete: 'Flete',
@@ -33,6 +37,14 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
   if (!d) notFound();
   const e = ESTATUS[d.estatus] ?? { label: d.estatus, color: 'var(--muted)' };
   const hayAcred = d.litrosDiesel > 0 || d.ieps > 0 || d.iva > 0 || d.peaje > 0;
+  // Las tres cubetas SIEMPRE suman totalComprobado (types/cuadra.ts). Se le
+  // pasa el total PERSISTIDO junto a las cubetas RECONSTRUIDAS a propósito: si
+  // los dos no cuadran, `filasDeducibilidad` devuelve null y no se pinta nada.
+  // Un desglose que contradice al total que tiene tres centímetros arriba es
+  // peor que no tener desglose.
+  const deducibilidad = d.deducibilidad
+    ? filasDeducibilidad({ ...d.deducibilidad, totalComprobado: d.totalComprobado })
+    : null;
 
   return (
     <div className="min-h-screen">
@@ -64,6 +76,36 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
             accent={d.diferencia !== 0}
           />
         </div>
+
+        {/* ── De lo comprobado, cuánto sobrevive al SAT ──
+            Este reparto es la razón por la que el contralor compra, y hasta hoy
+            solo existía en el PDF: quien revisaba desde el navegador veía
+            "Comprobado $47,300" y ahí terminaba (auditoría 5, frontend, ALTO 2).
+            Los montos van en tinta normal salvo lo no deducible: `--color-ok`
+            mide 2.22:1 sobre blanco y es la cifra que se proyecta en una sala
+            iluminada. */}
+        {deducibilidad && (
+          <section>
+            <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
+              De lo comprobado, cuánto es deducible
+            </h2>
+            <div className="card divide-y" style={{ borderColor: 'var(--line)' }}>
+              {deducibilidad.map((f) => (
+                <div key={f.label} className="px-6 py-4 flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-base font-medium">{f.label}</div>
+                    {f.pie && <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{f.pie}</div>}
+                  </div>
+                  <span className="tabular font-semibold whitespace-nowrap"
+                    style={{ color: f.tono === 'malo' ? 'var(--color-bad)' : 'var(--ink)' }}>{mxn(f.monto)}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+              Estimación con la información capturada; la determinación final es de su contador.
+            </p>
+          </section>
+        )}
 
         {/* Acreditables */}
         {hayAcred && (
@@ -104,7 +146,7 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
               <tbody>
                 {d.gastos.map((g, i) => (
                   <tr key={i} className="border-t first:border-t-0" style={{ borderColor: 'var(--line)' }}>
-                    <td className="px-6 py-3.5 font-medium">{CONCEPTO[g.concepto] ?? g.concepto}</td>
+                    <td className="px-6 py-3.5 font-medium">{etiquetaGasto(g)}</td>
                     <td className="px-6 py-3.5" style={{ color: 'var(--muted)' }}>{g.folio ?? '—'}</td>
                     <td className="px-6 py-3.5 text-right tabular">{mxn(g.monto)}</td>
                   </tr>
@@ -119,6 +161,24 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
       </main>
     </div>
   );
+}
+
+/**
+ * La etiqueta del renglón tiene que decir lo MISMO que el renglón del PDF.
+ *
+ * El PDF imprime `etiquetaConcepto`, que para combustible se salta el mapa y
+ * respeta el producto impreso en el ticket: "Combustible Magna". El panel usaba
+ * su copia literal y del mismo comprobante decía "Diésel" (auditoría 5,
+ * arquitectura, ALTO 1). No es cosmética: el estímulo de IEPS es SOLO diésel
+ * (LIF 20-A fr. IV), así que etiquetar gasolina como diésel invita a acreditar
+ * algo que no aplica — exactamente lo que el motor documenta querer evitar.
+ *
+ * `etiquetaConcepto` devuelve la clave cruda cuando su mapa no conoce el
+ * concepto; ahí —y solo ahí— entra el mapa local como red.
+ */
+function etiquetaGasto(g: { concepto: string; ocrExtra?: Record<string, unknown> }): string {
+  const delMotor = etiquetaConcepto(g.concepto, g.ocrExtra);
+  return delMotor === g.concepto ? (CONCEPTO[g.concepto] ?? g.concepto) : delMotor;
 }
 
 function Tot({ label, value, accent, ok }: { label: string; value: string; accent?: boolean; ok?: boolean }) {
