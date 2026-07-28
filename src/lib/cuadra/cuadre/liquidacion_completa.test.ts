@@ -96,8 +96,14 @@ describe('liquidación completa de 20 comprobantes', () => {
     expect(r.peajeAcreditable).toBe(500); // 1000 × 0.5, solo la que trae XML
   });
 
-  it('el IEPS acreditable suma las dos cargas timbradas', () => {
-    expect(r.iepsAcreditable).toBe(1520); // 800 + 720
+  it('el IEPS trasladado NO se presenta como estímulo acreditable', () => {
+    // Fijaba 1520 = 800 + 720, la suma de los IEPS TRASLADADOS de los CFDI.
+    // `normas/lif-2026-20-A.yaml` (verificado_fuente_primaria) dice literal:
+    // "cuota IEPS vigente al momento de la compra × LITROS. No es el IEPS
+    // trasladado en el CFDI". Y la decisión D2 del roadmap prohíbe enseñar la
+    // cifra en pesos "sin discusión": la cuota pasó de $7.3634 a $2.0925 en
+    // cinco meses y el estímulo es ingreso acumulable.
+    expect(r.iepsAcreditable).toBe(0);
   });
 
   it('el IVA acreditable suma los tres CFDI con XML', () => {

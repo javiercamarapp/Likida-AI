@@ -259,7 +259,8 @@ export async function generarLiquidacionPDF(
   totalRow(difLabel, mxn(Math.abs(liq.diferencia)), bold, difColor, 13);
 
   // ─── Estímulos acreditables (IEPS diésel + IVA + peaje) — "lo que vende" ────
-  if (liq.iepsAcreditable > 0 || liq.ivaAcreditable > 0 || liq.peajeAcreditable > 0) {
+  const hayLitros = (liq.litrosDieselAcreditables ?? 0) > 0;
+  if (liq.ivaAcreditable > 0 || liq.peajeAcreditable > 0 || hayLitros) {
     y -= 10;
     asegurar(90);
     text('ACREDITABLE / RECUPERABLE', M, y, 8, bold, MUTED);
@@ -271,7 +272,16 @@ export async function generarLiquidacionPDF(
       right(mxn(value), cMonto, y, 9.5, bold, GREEN);
       y -= 16;
     };
-    if (liq.iepsAcreditable > 0) acred('IEPS de diésel acreditable vs ISR (LIF 2026 art. 20, ap. A)', liq.iepsAcreditable);
+    // El IEPS de diésel NO se imprime en pesos, y es a propósito. El estímulo del
+    // LIF 2026 art. 20-A es cuota semanal disminuida × litros, no el IEPS
+    // trasladado del CFDI, y sin el acuerdo del DOF no se puede calcular aquí.
+    // Se entrega el dato duro —los litros elegibles— para que el contador lo
+    // multiplique por la cuota que él tenga fechada. Decisión D2 del roadmap.
+    if (hayLitros) {
+      text('Diésel elegible para el estímulo de IEPS (LIF 2026 art. 20, ap. A)', M + 14, y, 9.5, font, INK);
+      right(`${liq.litrosDieselAcreditables.toLocaleString('es-MX')} L`, cMonto, y, 9.5, bold, INK);
+      y -= 16;
+    }
     if (liq.ivaAcreditable > 0) acred('IVA acreditable (LIVA art. 5)', liq.ivaAcreditable);
     if (liq.peajeAcreditable > 0) acred('Estímulo de peaje 50% (LIF 2026 art. 20, ap. A)', liq.peajeAcreditable);
     // Los estímulos del apartado A son INGRESO ACUMULABLE para ISR: el beneficio
@@ -279,7 +289,12 @@ export async function generarLiquidacionPDF(
     // sobrepromesa frente al contralor.
     y -= 2;
     text('Los estímulos del art. 20 ap. A son ingreso acumulable para ISR: el beneficio neto es menor.', M + 14, y, 7, font, MUTED);
-    y -= 14;
+    y -= 9;
+    if (hayLitros) {
+      text('El estímulo de diésel se calcula con la cuota SEMANAL vigente al momento de cada compra; se entregan los litros para que su contador aplique la cuota fechada.', M + 14, y, 7, font, MUTED);
+      y -= 9;
+    }
+    y -= 5;
   }
 
   // ─── Diferencias detectadas ─────────────────────────────────────────────────

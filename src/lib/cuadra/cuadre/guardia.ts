@@ -29,10 +29,19 @@ export async function guardiaCifras(
   tenantId: string,
   viajeId: string,
 ): Promise<{ reply: string; forzado: boolean }> {
-  if (!tieneCifrasDeDinero(reply)) return { reply, forzado: false };
-
   const cuadro = toolCalls.some((t) => t.toolName === 'cuadrar_viaje' && !t.error);
   const consultoPolitica = toolCalls.some((t) => t.toolName === 'consultar_politica' && !t.error);
+
+  // El detector NO decide sobre un cuadre. Antes esta función salía en la primera
+  // línea si `tieneCifrasDeDinero` decía que no, lo que ponía a un regex —que por
+  // definición tiene falsos negativos— a decidir sobre el caso más importante: el
+  // turno en que SÍ se calculó el cuadre. Si el modelo cuadraba y narraba el
+  // resultado de una forma que el detector no reconocía, el texto salía sin
+  // verificar. Y ese es el camino feliz de la demo: foto → "listo" → el agente
+  // narra.
+  //
+  // Cuando hubo cuadre, la respuesta ES sobre el cuadre y se sustituye siempre.
+  if (!cuadro && !tieneCifrasDeDinero(reply)) return { reply, forzado: false };
 
   // Cifras de política sin ser un cuadre: se respetan SOLO las que de verdad
   // salieron de la tool. Basta una cifra sin respaldo para no confiar en el
