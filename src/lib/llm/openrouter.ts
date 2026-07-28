@@ -366,6 +366,11 @@ export async function generateWithTools(opts: {
   const client = getClient();
   const executed: ToolCallRecord[] = [];
   let tokIn = 0, tokOut = 0, used = model;
+  // B23: el costo se acumula POR RONDA, con el modelo que de verdad respondió
+  // esa ronda. Acumulando solo tokens y precificando una vez al final, un ciclo
+  // que corre tres rondas en el primario y cae al fallback en la cuarta cobraba
+  // las cuatro al precio del fallback.
+  let costo = 0;
   let activeModel = model; // cambia a fallback si el primario cae (persiste el resto del ciclo)
 
   const convo: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -405,17 +410,23 @@ export async function generateWithTools(opts: {
   try {
     for (let round = 0; round < maxRounds; round++) {
       const res = await complete(convo);
-      tokIn += res.usage?.prompt_tokens ?? 0;
-      tokOut += res.usage?.completion_tokens ?? 0;
+      const rIn = res.usage?.prompt_tokens ?? 0;
+      const rOut = res.usage?.completion_tokens ?? 0;
+      tokIn += rIn;
+      tokOut += rOut;
+      // `activeModel` ya refleja quién respondió ESTA ronda: `complete` lo mueve
+      // al fallback antes de devolver.
+      costo += calcCost(activeModel, rIn, rOut);
       used = res.model || activeModel;
       const choice = res.choices[0];
       const calls = choice?.message?.tool_calls;
 
       if (!calls || calls.length === 0) {
-        // AUDIT_V3 LLM: atribuir el costo al modelo REALMENTE usado (activeModel),
-        // no al primario: si el ciclo cayó al fallback, calcCost(model,...) cobraba
-        // al precio equivocado. activeModel es siempre un slug limpio de PRICES.
-        return { finalText: choice?.message?.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: calcCost(activeModel, tokIn, tokOut) };
+        // El costo ya viene sumado ronda a ronda, cada una al precio del modelo
+        // que la respondió. (Antes se precificaba aquí, de una vez, con el
+        // modelo activo al final: correcto solo si el ciclo entero corrió en el
+        // mismo modelo.)
+        return { finalText: choice?.message?.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo };
       }
 
       convo.push({ role: 'assistant', content: choice.message.content ?? null, tool_calls: calls });
