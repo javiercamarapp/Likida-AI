@@ -33,7 +33,7 @@ test('PDF con 25 comprobantes: anuncia lo que no cupo y trae el descargo', async
       { tipo: 'sin_cfdi', concepto: 'diesel', monto: 0, nota: 'Diésel de $340 requiere factura CFDI y no trae UUID válido.', gastoId: 'g3' },
       { tipo: 'viatico_excede_fiscal', concepto: 'alimentacion', monto: 150, nota: 'Alimentación del 2026-05-01: $900 (3 comprobantes del día) excede el tope fiscal de $750 por día (LISR 28-V).', gastoId: 'g5' },
     ],
-    totalDeducible: total - 150, totalNoDeducible: 150, totalPorConfirmar: 0,
+    totalDeducible: total - 150 - 1200, totalNoDeducible: 150, totalPorConfirmar: 1200,
     iepsAcreditable: 320.5, ivaAcreditable: 210.75, peajeAcreditable: 480,
     creadaEn: '2026-07-27T12:00:00.000Z',
   };

@@ -127,6 +127,16 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       diferencias.push({ tipo: 'efectivo_sobre_tope', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} de ${mxn(g.monto)} en efectivo excede el tope de ${mxn(topeEfectivo)} (LISR 27-III) — no deducible.`, gastoId: g.id });
     }
 
+    // B5: el intake ya detectó que el total del CÓDIGO y el del OCR no coinciden
+    // y lo dejó en ocrExtra — pero nadie lo miraba, así que se quedaba en la base
+    // sin llegar nunca a la bandeja. Que no cuadren significa que algo se leyó
+    // mal (otra foto, una propina, un renglón perdido) y eso lo ve una persona.
+    const extraOcr = g.ocrExtra as Record<string, unknown> | undefined;
+    if (extraOcr?.montoDiscrepante) {
+      const leido = extraOcr.montoOcr;
+      diferencias.push({ tipo: 'monto_discrepante', concepto: g.concepto, monto: 0, nota: `El total del comprobante de ${label(g.concepto)} no coincide entre el código (${mxn(g.monto)}) y lo leído por visión${typeof leido === 'number' ? ` (${mxn(leido)})` : ''} — se tomó el del código, pero conviene verificarlo.`, gastoId: g.id });
+    }
+
     // (El tope fiscal de alimentación se evalúa POR DÍA, después del bucle.)
 
     // #1: cordura de la FECHA. Una fecha futura o muy anterior al viaje mete el
@@ -396,6 +406,12 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     const suyas = diferencias.filter((d) => d.gastoId === g.id);
     if (suyas.some((d) => NO_DEDUCIBLE_ISR.includes(d.tipo))) { totalNoDeducible += g.monto; continue; }
     if (suyas.some((d) => POR_CONFIRMAR.includes(d.tipo))) { totalPorConfirmar += g.monto; continue; }
+    // UN TICKET NO ES UNA FACTURA. LISR 27-III exige que la deducción esté
+    // "amparada con un comprobante fiscal", y un ticket de gasolinera no lo es:
+    // hay que timbrarlo. Contarlo como deducible le promete al contralor una
+    // deducción que todavía no existe — y si nadie factura a tiempo, nunca
+    // existirá. Tampoco es pérdida: se puede timbrar. Por eso POR CONFIRMAR.
+    if (!g.cfdiUuid) { totalPorConfirmar += g.monto; continue; }
     // Parcial: del viático solo se pierde el EXCEDENTE sobre el tope fiscal
     // (LISR 28-V), no el gasto entero. Mandar los $900 completos a no deducible
     // por $150 de exceso es el error que más dinero le cuesta al cliente.
@@ -409,7 +425,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
   // mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
   // Se sigue avisando en `diferencias`; ya no bloquea.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'fecha_sospechosa', 'folio_verificar'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'fecha_sospechosa', 'folio_verificar'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
