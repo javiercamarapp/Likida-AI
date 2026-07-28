@@ -252,15 +252,33 @@ describe('cuadrarViaje', () => {
     expect(r.ivaAcreditable).toBe(640);
   });
 
-  it('5: combustible en efectivo → no deducible NI acreditable', () => {
+  it('5: combustible en efectivo NO acredita IEPS/IVA', () => {
+    // La facilidad del 15% (RFA 2026 regla 2.9) salva la DEDUCCIÓN de ISR, pero NO
+    // habilita el acreditamiento del IEPS. Son dos beneficios distintos, y el
+    // efectivo solo conserva uno: el acreditamiento sigue bloqueado.
     const r = cuadrarViaje({
       viajeId: 'a2', anticipo: 5000, politica, hidrocarburos: HC, estimulos: EST,
       gastos: [g({ concepto: 'diesel', monto: 5000, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true, formaPago: '01', iepsTraslado: 900, ivaTraslado: 640 })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'combustible_efectivo')).toBe(true);
-    expect(r.iepsAcreditable).toBe(0); // bloqueado → no acredita
+    expect(r.iepsAcreditable).toBe(0);
     expect(r.ivaAcreditable).toBe(0);
-    expect(r.estatus).toBe('revisar');
+    expect(r.estatus).toBe('revisar'); // sí se revisa: hay que contarlo contra el 15%
+  });
+
+  it('5b: el aviso de combustible en efectivo NO afirma que sea no deducible', () => {
+    // Decía "no deducible" a secas. Para el autotransporte de carga federal es
+    // FALSO: la RFA 2026 regla 2.9 lo tiene por deducible hasta el 15% del total
+    // pagado por combustible en el ejercicio. Un motor que lo declare no deducible
+    // le está quitando dinero real a la flota.
+    const r = cuadrarViaje({
+      viajeId: 'a2b', anticipo: 5000, politica, hidrocarburos: HC, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 5000, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true, formaPago: '01' })],
+    });
+    const nota = r.diferencias.find((d) => d.tipo === 'combustible_efectivo')!.nota;
+    expect(nota).not.toMatch(/no deducible/i);
+    expect(nota).toMatch(/15\s*%/);      // dice contra qué se compara
+    expect(nota).toMatch(/2\.9/);        // y con qué fundamento
   });
 
   it('1.6: peaje acreditable = 50% del SubTotal de casetas', () => {
@@ -364,6 +382,19 @@ describe('cuadrarViaje', () => {
     });
     expect(r.diferencias.some((d) => d.tipo === 'ieps_no_desglosado')).toBe(true);
     expect(r.iepsAcreditable).toBe(0);
+  });
+
+  it('7b: el IEPS sin desglosar NO manda la liquidación a revisar', () => {
+    // El gasto SÍ es deducible: lo único que se pierde es el acreditamiento del
+    // estímulo. Mandarlo a `revisar` tumbaba TODA liquidación con diésel —y casi
+    // ningún CFDI de gasolinera desglosa el IEPS al consumidor final—, con lo que
+    // la bandeja de excepciones dejaba de significar algo.
+    const r = cuadrarViaje({
+      viajeId: 'a4b', anticipo: 4000, politica, hidrocarburos: HC, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 4000, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true, formaPago: '03', iepsTraslado: 0 })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'ieps_no_desglosado')).toBe(true); // se sigue avisando
+    expect(r.estatus).not.toBe('revisar');                                         // pero no manda a la bandeja
   });
 
   it('6: gasto no-combustible en efectivo > $2,000 → no deducible', () => {

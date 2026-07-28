@@ -100,11 +100,17 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     const h = input.hidrocarburos;
     const esCombustible = g.concepto === 'diesel' || (!!h && h.claves.includes(g.claveProdServ ?? ''));
 
-    // Regla 5 (LISR 27-III): el combustible EXIGE pago electrónico sin importar el
-    // monto; pagado en efectivo (FormaPago 01) → no deducible.
+    // Regla 5: el combustible exige pago electrónico (LISR 27-III, 2º párrafo) sin
+    // importar el monto. PERO para el autotransporte de carga federal —que es a
+    // quien le vendemos— la RFA 2026 regla 2.9 lo tiene por CUMPLIDO hasta el 15%
+    // del total pagado por combustible en el ejercicio.
+    //
+    // Por eso aquí NO se declara "no deducible": se marca para contarlo contra ese
+    // 15%. Declararlo no deducible le quita al cliente una deducción que la ley le
+    // concede. (El contador del 15% por ejercicio todavía no existe: ver roadmap.)
     const topeEfectivo = input.estimulos?.efectivoTopeMxn ?? 2000;
     if (g.formaPago === '01' && esCombustible) {
-      diferencias.push({ tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} pagado en EFECTIVO — el combustible exige pago electrónico (LISR 27-III), no deducible.`, gastoId: g.id });
+      diferencias.push({ tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} pagado en EFECTIVO — cuenta contra el tope del 15% del combustible del ejercicio (RFA 2026 regla 2.9). Dentro del 15% sigue siendo deducible; el excedente no. No acredita IEPS en ningún caso.`, gastoId: g.id });
     } else if (g.formaPago === '01' && !esCombustible && g.monto > topeEfectivo) {
       // Regla 6: gasto no-combustible en efectivo > tope → no deducible.
       diferencias.push({ tipo: 'efectivo_sobre_tope', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} de ${mxn(g.monto)} en efectivo excede el tope de ${mxn(topeEfectivo)} (LISR 27-III) — no deducible.`, gastoId: g.id });
@@ -213,14 +219,19 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     });
   }
 
-  // ── Acreditamiento (reglas 7, 9, 1.6): IEPS/IVA/peaje de CFDI DEDUCIBLES ──────
-  // Un traslado solo suma si el gasto NO cayó en una diferencia de no-deducible.
-  const NO_DEDUCIBLE: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido'];
+  // ── Acreditamiento (reglas 7, 9, 1.6): IEPS/IVA/peaje ────────────────────────
+  // OJO CON EL NOMBRE: esta lista NO dice qué gasto es deducible para ISR. Dice
+  // qué gasto no puede ACREDITAR impuestos, que es otra cosa. Se llamaba
+  // NO_DEDUCIBLE y esa confusión casi cuesta un bug caro: `combustible_efectivo`
+  // SÍ es deducible hasta el 15% (RFA 2026 regla 2.9), pero NO acredita IEPS —
+  // la facilidad salva un beneficio, no los dos. Sacarlo de aquí acreditaría un
+  // IEPS que la facilidad no concede.
+  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido'];
   const peajeFactor = input.estimulos?.peajeFactor ?? 0.5;
   let iepsAcreditable = 0, ivaAcreditable = 0, peajeAcreditable = 0;
   for (const g of input.gastos) {
     if (duplicados.has(g.id)) continue;
-    if (diferencias.some((d) => d.gastoId === g.id && NO_DEDUCIBLE.includes(d.tipo))) continue;
+    if (diferencias.some((d) => d.gastoId === g.id && SIN_ACREDITAMIENTO.includes(d.tipo))) continue;
     // El acreditamiento exige un CFDI VERIFICADO (XML): un ticket de gasolinera
     // sin factura NO es deducible ni acreditable hasta timbrarse. Además, así el
     // IVA/IEPS son SIEMPRE los importes LEÍDOS del XML (nunca recomputados con una
@@ -241,7 +252,12 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     }
   }
 
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'ieps_no_desglosado', 'viatico_excede_fiscal', 'fecha_sospechosa', 'folio_verificar'];
+  // `ieps_no_desglosado` NO va aquí a propósito: el gasto es deducible y lo único
+  // que se pierde es el acreditamiento del estímulo. Casi ningún CFDI de
+  // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
+  // mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
+  // Se sigue avisando en `diferencias`; ya no bloquea.
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'fecha_sospechosa', 'folio_verificar'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
