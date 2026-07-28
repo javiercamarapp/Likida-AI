@@ -72,7 +72,20 @@ export async function sendText(to: string, body: string): Promise<void> {
     headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } }),
   });
-  if (!res.ok) logger.error('wa.sendText', { status: res.status, body: await res.text().catch(() => '') });
+  if (!res.ok) { logger.error('wa.sendText', { status: res.status, body: await res.text().catch(() => '') }); return; }
+  // El ÉXITO también deja rastro. Sin esta línea, "se envió" y "nunca se llamó"
+  // se ven igual en los logs —los dos, en blanco— y distinguirlos costó veinte
+  // minutos de la primera prueba real. El id del mensaje es lo que permite
+  // rastrearlo después en Meta.
+  logger.info('wa.sendText.ok', { id: await idDeRespuesta(res) });
+}
+
+/** El wamid que devuelve Meta, para poder seguir el mensaje del lado de ellos. */
+async function idDeRespuesta(res: Response): Promise<string | undefined> {
+  try {
+    const j = (await res.json()) as { messages?: { id?: string }[] };
+    return j.messages?.[0]?.id;
+  } catch { return undefined; }
 }
 
 /** Envía un documento (PDF de liquidación) por link público o media id. */
@@ -87,7 +100,11 @@ export async function sendDocument(to: string, link: string, filename: string, c
       document: { link, filename, caption },
     }),
   });
-  if (!res.ok) logger.error('wa.sendDocument', { status: res.status });
+  if (!res.ok) { logger.error('wa.sendDocument', { status: res.status, body: await res.text().catch(() => '') }); return; }
+  // Igual que en `sendText`: el envío del PDF es EL entregable, y su éxito no
+  // dejaba ninguna huella. Meta acepta el mensaje y descarga el `link` después,
+  // por su cuenta; sin el wamid no hay forma de preguntarle qué pasó con él.
+  logger.info('wa.sendDocument.ok', { id: await idDeRespuesta(res), filename });
 }
 
 /** Descarga un media entrante de Meta como TEXTO (para el XML del CFDI). */
