@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getKpis, getAcreditables, type DashboardKpis, type Acreditables } from '@/lib/cuadra/analytics';
+import { getKpis, getAcreditables, detectarAnomalias, type DashboardKpis, type Acreditables, type Anomalia } from '@/lib/cuadra/analytics';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mxn } from '@/lib/utils';
 
@@ -40,10 +40,11 @@ async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
 
 export default async function DashboardPage() {
   const tenantId = TENANT();
-  const [acred, kpis, liqs] = await Promise.all([
+  const [acred, kpis, liqs, anomalias] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
     safe<LiqRow[]>(() => getLiquidaciones(tenantId)),
+    safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
   ]);
 
   // Distinguir un FALLO de carga (todo null) de un cero real: si las 3 consultas
@@ -116,6 +117,34 @@ export default async function DashboardPage() {
                 </div>
               )}
             </section>
+
+            {/* ── Mismo comprobante en dos viajes ──
+                Cada liquidación se ve impecable por separado: esto solo se ve
+                mirando TODAS juntas. Se muestra únicamente si hay algo — una
+                sección vacía que dice "0 anomalías" entrena a ignorarla. */}
+            {anomalias !== null && anomalias.length > 0 && (
+              <section>
+                <h2 className="text-sm font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
+                  Revisar · mismo comprobante en varios viajes
+                </h2>
+                <div className="card divide-y" style={{ borderColor: 'var(--line)' }}>
+                  {anomalias.map((a, i) => (
+                    <div key={i} className="flex items-center justify-between gap-4 p-4">
+                      <div>
+                        <div className="text-sm">{a.detalle}</div>
+                        <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+                          Viajes: {a.viajes.join(' · ')}
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold tabular-nums whitespace-nowrap">{mxn(a.monto)}</div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                  Coincidencia detectada, no un veredicto: verifica antes de conversarlo con el operador.
+                </p>
+              </section>
+            )}
 
             {/* ── Tabla (cada fila abre el detalle) ── */}
             <section>

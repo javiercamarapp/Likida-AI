@@ -30,5 +30,9 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     estimulos: config.estimulos,
     fechaMin,
     fechaMax,
+    // El motor es puro y no lee el reloj: la fecha se le inyecta aquí, que es
+    // el borde con el mundo. Sin esto el aviso de "ticket por facturar" nunca
+    // correría en producción aunque sus pruebas estén verdes.
+    hoy: new Date().toISOString().slice(0, 10),
   });
 }
