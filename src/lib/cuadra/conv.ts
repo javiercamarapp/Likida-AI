@@ -17,12 +17,50 @@ export interface ConvTurn {
   content: string;
 }
 
+/**
+ * Las formas en que el MISMO número mexicano puede llegar desde WhatsApp.
+ *
+ * México arrastra el "1" que Telmex metió entre la lada de país y el número de
+ * celular. WhatsApp lo dejó de usar en 2020 para los `wa_id` nuevos, pero sigue
+ * apareciendo: el mismo teléfono llega como `529993700779` o como
+ * `5219993700779` según por dónde entre, y la búsqueda del operador es una
+ * igualdad exacta contra la columna.
+ *
+ * El modo de fallo es el peor de todos para depurar: el sistema contesta
+ * "no te tengo registrado" —una frase que suena a dato mal capturado— cuando el
+ * operador SÍ está dado de alta y lo único que sobra es un dígito. Y como el
+ * mensaje es amable y el webhook devolvió 200, nada en los logs dice "error".
+ *
+ * Se generan las variantes en vez de normalizar a una sola forma porque la
+ * columna ya puede tener cualquiera de las dos: hay flotas capturadas a mano.
+ * Aquí no se decide cuál es la buena, se aceptan las dos.
+ *
+ * Y el "+" es el mismo problema con otra cara, encontrado en la propia semilla
+ * del demo: los operadores están guardados como `+521111111101` mientras que
+ * Meta manda el `wa_id` sin signo (`521111111101`). Con la igualdad exacta que
+ * había, NINGUNO de los operadores de demostración habría resuelto nunca.
+ */
+export function variantesTelefono(telefono: string): string[] {
+  const limpio = telefono.replace(/[^\d]/g, '');
+  const nums = new Set<string>([limpio]);
+  // 52 + 1 + 10 dígitos → también sin el 1.
+  const con1 = /^521(\d{10})$/.exec(limpio);
+  if (con1) nums.add(`52${con1[1]}`);
+  // 52 + 10 dígitos → también con el 1.
+  const sin1 = /^52(\d{10})$/.exec(limpio);
+  if (sin1) nums.add(`521${sin1[1]}`);
+  // Cada forma, con y sin "+": la columna tiene una y el webhook trae la otra.
+  const vistas = new Set<string>([telefono]);
+  for (const n of nums) { vistas.add(n); vistas.add(`+${n}`); }
+  return [...vistas];
+}
+
 /** Resuelve el operador (y su flota) por número de WhatsApp. */
 export async function resolveOperador(telefono: string): Promise<ResolvedOperador | null> {
   const { data, error } = await supabaseAdmin()
     .from('operador')
     .select('id, tenant_id, nombre, telefono')
-    .eq('telefono', telefono)
+    .in('telefono', variantesTelefono(telefono))
     .eq('activo', true)
     .limit(1)
     .maybeSingle();
