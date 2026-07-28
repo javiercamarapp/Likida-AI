@@ -100,6 +100,28 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       reportarProbe(e17, 'FALTA la migración 0017 (enriquecer_gasto_codigo): el folio del portal que trae un acercamiento no se pega y se pierde. Corre `supabase db push`.');
       return;
     }
+    // Migración 0022 (sobrecarga ambigua de guardar_liquidacion_tx). Es la única
+    // que se detecta por el ERROR de una llamada, no por su ausencia: si 0013 y
+    // 0021 conviven, la función existe DOS veces y Postgres responde
+    // `is not unique` (SQLSTATE 42725) ante una llamada de 11 argumentos.
+    //
+    // Va aquí porque este chequeo ya dijo `ok: true` sobre una base que no podía
+    // cerrar una sola liquidación: la 0022 se aplicó a mano en producción y
+    // nunca entró al repo, así que cualquier proyecto nuevo nace con las dos.
+    // Se sonda con argumentos deliberadamente inválidos —un tenant que no
+    // existe— porque lo que importa es CUÁL error responde, no que funcione.
+    const { error: e22 } = await admin.rpc('guardar_liquidacion_tx', {
+      p_tenant: ZERO, p_viaje: ZERO, p_total_comprobado: 0, p_total_anticipo: 0,
+      p_diferencia: 0, p_estatus: 'sonda', p_diferencias: [], p_ieps: 0,
+      p_iva: 0, p_peaje: 0, p_pdf_url: null,
+    });
+    if (e22 && (e22.code === '42725' || /is not unique|no es única/i.test(e22.message ?? ''))) {
+      logger.error('startup.migraciones', {
+        msg: 'FALTA la migración 0022: `guardar_liquidacion_tx` existe con DOS firmas (la de 0013 y la de 0021) y toda llamada de 11 argumentos falla con "is not unique". NINGUNA liquidación puede cerrar. Corre `supabase db push`.',
+        code: e22.code, err: e22.message,
+      });
+      return;
+    }
     logger.info('startup.migraciones', { ok: true });
   } catch (e) {
     // Sin env/DB (p. ej. durante el build) → no romper, solo avisar.
