@@ -23,8 +23,38 @@ Superficies web (estilo macOS premium, ver `DESIGN.md`): **dashboard** (liquidac
 **admin** (política de gastos, flota, usuarios), **portal del cliente** (la flota ve lo suyo) y una **pantalla de demo**.
 
 ## Stack
-Next.js · Supabase · @anthropic-ai/sdk (Claude) · pdf-lib · facturapi (CFDI/Carta Porte) ·
-Upstash (colas) · Sentry · Tailwind + Radix.
+
+Lo que el código usa de verdad, verificable con `grep -rl <paquete> src/`:
+
+| Para qué | Qué |
+|---|---|
+| App | Next.js 16 (App Router) · React 19 · TypeScript estricto |
+| Estilos | Tailwind v4 |
+| Datos | Supabase (Postgres + RLS + RPCs) |
+| IA | **OpenRouter** — Gemini 3.6 Flash para visión, Sonnet 5 para el cuadre, con fallback cross-provider |
+| Canal | WhatsApp Cloud API (Meta) |
+| Comprobantes | zxing-wasm (QR y código de barras) · sharp · fast-xml-parser |
+| Salida | pdf-lib · export CSV/JSON a ERP |
+| Pruebas | Vitest (offline) + arneses `*.prueba.ts` que sí llaman a los modelos |
+
+Se **quitaron** de `package.json` cinco dependencias con cero uso en el código:
+`@anthropic-ai/sdk` (se habla con OpenRouter, no con Anthropic directo),
+`facturapi`, `@upstash/redis`, `@upstash/qstash` y `axios`. Radix nunca estuvo.
+
+Siguen declaradas y **sin usar todavía**: `@sentry/nextjs` (a cablear: hoy no hay
+observabilidad de errores en producción), `class-variance-authority`, `date-fns`
+y `lucide-react`.
+
+> Esta sección describía un stack que no existe, y no salió gratis: una revisión
+> externa calificó cuatro tecnologías que el proyecto no usa —leyó el README, no
+> el código— y hubo que gastar tiempo en desmentirla. Las colas están hechas con
+> Postgres (`intake_delta`, mig. 0011) y el timbrado se va a construir aquí, no
+> con Facturapi.
+>
+> Para comprobar cualquiera de estas afirmaciones hay que usar `command grep`, no
+> `grep`: en esta máquina `grep` es una función de shell que envuelve `ugrep -I`
+> y **salta los archivos que parezcan binarios en silencio**, devolviendo "no
+> encontrado" sobre archivos que sí contienen el patrón.
 
 ## Correr el demo
 ```bash

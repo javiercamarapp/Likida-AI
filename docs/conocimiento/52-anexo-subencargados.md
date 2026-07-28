@@ -70,20 +70,18 @@ categoría.
 
 ### Lo que el `package.json` dice y el código desmiente
 
-Seis dependencias declaradas con **cero** archivos que las usen en `src/`.
+Había seis dependencias declaradas con **cero** archivos que las usen en `src/`.
 Ninguna recibe un solo byte, y ninguna debe aparecer en un anexo de
-subencargados:
+subencargados. Cinco se quitaron el 28-jul-2026 (`@upstash/redis`,
+`@upstash/qstash`, `facturapi`, `@anthropic-ai/sdk`, `axios`); queda
+`@sentry/nextjs`, declarada y sin cablear.
 
-| Paquete | Archivos en `src/` |
-|---|---|
-| `@upstash/redis` | 0 |
-| `@upstash/qstash` | 0 |
-| `@sentry/nextjs` | 0 |
-| `facturapi` | 0 |
-| `@anthropic-ai/sdk` | 0 |
-| `axios` | 0 |
+**Si algún día se cablea Sentry, entra a la tabla de arriba**: recibiría datos
+personales dentro de los stack traces y el contexto de error.
 
-Comprobable con `grep -rl "<paquete>" src/ | wc -l`.
+Comprobable con `command grep -rl "<paquete>" src/ | wc -l` — con `command`
+delante: en esta máquina `grep` es una función de shell que envuelve `ugrep -I` y
+salta en silencio los archivos que parecen binarios.
 
 **Trampa a evitar:** quien arme el anexo leyendo el `package.json` va a listar
 seis proveedores que no existen en la operación. Ya pasó una vez en una revisión
