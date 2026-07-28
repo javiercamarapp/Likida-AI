@@ -503,6 +503,6 @@ function mxn(n: number): string {
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
 function label(c: string): string {
-  const m: Record<string, string> = { diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte', viaticos: 'Viáticos', otro: 'Gasto' };
+  const m: Record<string, string> = { diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte', viaticos: 'Viáticos', otro: 'Otro' };   // 'Otro' y no 'Gasto': tiene que decir lo MISMO que pdf.ts y el dashboard
   return m[strip_accents(c.toLowerCase())] ?? c;
 }

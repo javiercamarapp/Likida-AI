@@ -505,6 +505,23 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // error, sin cierre). Se recomienda ON para el demo (ver REPORTE_NOCHE).
       const recuperar = process.env.CUADRA_RECUPERAR_CIERRE_PARCIAL === '1';
       const parcial = e instanceof PartialExecutionError ? e.partialToolCalls : null;
+
+      // LO QUE SE GASTÓ ANTES DE CAERSE TAMBIÉN SE PAGÓ. Esta rama nunca llamaba
+      // a `registrarCosto`, así que una liquidación recuperada por cierre parcial
+      // salía con su PDF y su costo real quedaba invisible. En un negocio que
+      // cobra POR LIQUIDACIÓN, el costo unitario se subestima justo en el caso
+      // que más consume. Va antes del `if` para que se registre igual aunque el
+      // cierre no se pueda recuperar: el dinero se fue de todos modos.
+      if (e instanceof PartialExecutionError && (e.tokensIn > 0 || e.tokensOut > 0)) {
+        try {
+          await registrarCosto({
+            tenantId: op.tenantId, viajeId, fase: faseDeModelo('', 'cuadre'),
+            modelo: 'parcial', tokensIn: e.tokensIn, tokensOut: e.tokensOut, costoUsd: e.cost,
+          });
+        } catch (err2) {
+          logger.error('agent.costo_parcial_no_registrado', { viaje: viajeId, err: err2 instanceof Error ? err2.message : String(err2) });
+        }
+      }
       const cierreParcial =
         recuperar && parcial?.find((t) => t.toolName === 'guardar_liquidacion' && !t.error);
       if (cierreParcial) {
@@ -525,7 +542,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         }
         logger.warn('agent.cierre_parcial_recuperado', { viaje: viajeId, liqId });
       } else {
-        logger.error('agent.fail', { err: e instanceof Error ? e.message : String(e) });
+        // Con tenant y viaje: sin ellos, a las 3am el log dice que algo falló
+        // pero no qué liquidación, y hay que cruzarlo a mano con la hora.
+        logger.error('agent.fail', { tenant: op.tenantId, viaje: viajeId, operador: op.operadorId, err: e instanceof Error ? e.message : String(e) });
         reply = 'Perdón, se me trabó el sistema tantito. ¿Me reenvías tu último mensaje?';
       }
     }

@@ -24,8 +24,17 @@ export type Destinatario = 'operador' | 'contralor';
 const SOLO_CONTRALOR: TipoDiferencia[] = [
   'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_cancelado', 'cfdi_no_encontrado',
   'cfdi_pendiente', 'rfc_receptor', 'complemento_hidrocarburos',
-  'complemento_no_verificable', 'ieps_no_desglosado', 'texto_sospechoso',
+  'ieps_no_desglosado', 'texto_sospechoso',
 ];
+
+// `complemento_no_verificable` NO va en esa lista, y estuvo. Su propia nota le
+// dice al operador "reenvía el XML (el que te manda la gasolinera por correo)":
+// filtrarla hacía que la petición nunca llegara a quien tiene el correo, y sin
+// ese XML la flota pierde el acreditamiento de IVA y el estímulo de diésel.
+//
+// La regla de SOLO_CONTRALOR es "veredictos que el operador no puede arreglar y
+// que además lo señalan". Este es justo lo contrario: es lo único que él sí
+// puede arreglar.
 
 export function resumenCuadre(
   liq: Omit<Liquidacion, 'id' | 'creadaEn'>,
