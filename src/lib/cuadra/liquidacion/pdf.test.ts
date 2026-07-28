@@ -61,3 +61,57 @@ describe('generarLiquidacionPDF — saneado de texto', () => {
     expect(malos, 'hay bytes de control en pdf.ts').toHaveLength(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 4 · ALTO — la sección que protege al operador desaparecía según un
+// flag de configuración de la flota, no según la ley.
+//
+// `pdf.ts` reconstruía las cubetas del motor desde `diferencias` con UN criterio
+// (el tipo) y se saltaba el segundo (la ausencia de UUID). Como `sin_cfdi` solo
+// se emite si la política del tenant trae `requiereCfdi` —y DEMO_CONFIG solo lo
+// pone en `factura`— un hospedaje sin timbrar no entraba en ninguna cubeta del
+// PDF, y "LO QUE SE LE REEMBOLSA AL OPERADOR" no se imprimía.
+//
+// Esa sección existe para impedir la lectura "no deducible ⇒ se lo descuento",
+// que la LFT no permite. Con la configuración por defecto del demo, faltaba.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Texto imprimible del PDF: infla los streams y junta lo que va a `Tj`. */
+async function textoDelPdf(bytes: Uint8Array): Promise<string> {
+  const { inflateSync } = await import('node:zlib');
+  const buf = Buffer.from(bytes);
+  let out = '';
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x73 && buf.subarray(i, i + 6).toString('latin1') === 'stream') {
+      let ini = i + 6;
+      while (buf[ini] === 0x0d || buf[ini] === 0x0a) ini++;
+      const fin = buf.indexOf(Buffer.from('endstream'), ini);
+      if (fin < 0) continue;
+      try { out += inflateSync(buf.subarray(ini, fin)).toString('latin1'); } catch { /* no comprimido */ }
+      i = fin;
+    }
+  }
+  // pdf-lib escribe las cadenas en HEX (`<466F6C696F> Tj`), no entre paréntesis.
+  return out.replace(/<([0-9A-Fa-f]+)>\s*Tj/g, (_m, hex: string) =>
+    Buffer.from(hex, 'hex').toString('latin1'));
+}
+
+describe('el PDF clasifica con el motor, no por su cuenta', () => {
+  // Hospedaje de $2,000 SIN timbrar. Con la política del demo (tope, sin
+  // requiereCfdi) el motor lo manda a POR CONFIRMAR y no emite `sin_cfdi`.
+  const sinTimbrar = liq({
+    totalComprobado: 2000, totalAnticipo: 2000, totalDeducible: 0, totalPorConfirmar: 2000,
+    diferencias: [],
+    gastos: [{ id: 'g1', concepto: 'hospedaje', monto: 2000, fecha: '2026-05-01' }],
+  });
+
+  it('imprime la sección de reembolso al operador aunque no exista la diferencia `sin_cfdi`', async () => {
+    const bytes = await generarLiquidacionPDF(sinTimbrar, viaje, { ...operador, terminal: 'Mérida' });
+    expect(await textoDelPdf(bytes)).toMatch(/REEMBOLSA AL OPERADOR/);
+  });
+
+  it('el extractor de texto de esta prueba de verdad lee el PDF (si no, la de arriba no prueba nada)', async () => {
+    const bytes = await generarLiquidacionPDF(sinTimbrar, viaje, operador);
+    expect(await textoDelPdf(bytes)).toMatch(/Juan/);
+  });
+});

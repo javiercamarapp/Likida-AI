@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { cuadrarViaje, type PoliticaGasto } from './engine';
-import type { Gasto } from '@/types/cuadra';
+import { cuadrarViaje, cubetaDe, type PoliticaGasto } from './engine';
+import type { Gasto, Diferencia } from '@/types/cuadra';
 
 const g = (p: Partial<Gasto>): Gasto => ({
   id: Math.random().toString(36).slice(2),
@@ -1085,5 +1085,52 @@ describe('cuadrarViaje — el excedente diario se reparte, no se cuelga de uno',
     });
     expect(r.ivaAcreditable).toBeCloseTo(144 * (750 / 900), 2);
     expect(r.totalNoDeducible).toBe(150);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 4 · ALTO — la clasificación de dinero vivía en DOS archivos.
+//
+// `pdf.ts` reconstruía las cubetas desde `diferencias` con UN criterio (el tipo)
+// y se saltaba el segundo (la ausencia de UUID). Como `sin_cfdi` solo se emite si
+// la política del tenant trae `requiereCfdi`, y DEMO_CONFIG solo lo pone en
+// `factura`, un hospedaje sin timbrar caía en `por_confirmar` para el motor y en
+// NINGUNA cubeta para el PDF.
+//
+// Consecuencia: la sección "LO QUE SE LE REEMBOLSA AL OPERADOR" —que existe para
+// impedir la lectura "no deducible ⇒ se lo descuento", que la LFT no permite—
+// aparecía o desaparecía según un flag de configuración de la flota, no según la
+// ley. Con la config del demo, desaparecía.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cubetaDe — la clasificación no depende de la política del tenant', () => {
+  const gasto = (over: Partial<Gasto> = {}): Gasto => ({
+    id: 'g1', concepto: 'hospedaje', monto: 2000, fecha: '2026-07-20', ...over,
+  } as Gasto);
+
+  it('un gasto sin CFDI es POR CONFIRMAR aunque no exista la diferencia `sin_cfdi`', () => {
+    // Ese es exactamente el caso del demo: la política no pide CFDI para
+    // hospedaje, así que no hay `sin_cfdi` que mirar. El ticket sigue sin timbrar.
+    expect(cubetaDe(gasto({ cfdiUuid: undefined }), [])).toBe('por_confirmar');
+  });
+
+  it('con CFDI y sin diferencias es DEDUCIBLE', () => {
+    expect(cubetaDe(gasto({ cfdiUuid: 'uuid-1' }), [])).toBe('deducible');
+  });
+
+  it('un veredicto definitivo manda a NO DEDUCIBLE', () => {
+    const d = { tipo: 'cfdi_efos', concepto: 'diesel', monto: 0, nota: 'n', gastoId: 'g1' } as Diferencia;
+    expect(cubetaDe(gasto({ cfdiUuid: 'uuid-1' }), [d])).toBe('no_deducible');
+  });
+
+  it('el motor y la cubeta cuentan lo mismo: hospedaje de $2,000 sin timbrar', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v', anticipo: 2000, gastos: [gasto({ cfdiUuid: undefined })],
+      politica: [{ concepto: 'hospedaje', topeMonto: 2500 }],   // como DEMO_CONFIG: sin requiereCfdi
+    } as Parameters<typeof cuadrarViaje>[0]);
+    expect(r.totalPorConfirmar).toBe(2000);
+    expect(r.totalDeducible).toBe(0);
+    expect(r.totalNoDeducible).toBe(0);
+    // Y no hay ninguna diferencia `sin_cfdi` de la que el PDF pudiera enterarse.
+    expect(r.diferencias.some((x) => x.tipo === 'sin_cfdi')).toBe(false);
   });
 });
