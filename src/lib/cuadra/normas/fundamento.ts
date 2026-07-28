@@ -116,6 +116,19 @@ const ALIAS_DE_INSTRUMENTO = [...new Set(
 const FORMA_DE_CITA = new RegExp(
   `\\b(?:art[íi]culo|art\\.|arts\\.|regla|fracci[oó]n|fr\\.)\\s*\\d+` +
   `|\\b(?:${SIGLAS.join('|')})\\s+\\d+` +
+  // LA CITA DESNUDA: "conforme al 27-III", sin la palabra "artículo" ni sigla
+  // alguna. Es la forma más corta de citar en español y la que usa un modelo
+  // cuando ya nombró la ley en la frase anterior. Salía [NADA] —ni siquiera
+  // DESCONOCIDA— así que pasaba entera y sin log. Hallazgo reincidente de las
+  // rondas 3 y 4.
+  //
+  // El patrón exige NÚMERO + guion + ROMANO, o número + apartado en letra
+  // (20-A). Eso lo distingue de un folio ("A-4501" empieza por letra), de una
+  // fecha ("2026-07-28" tiene cuatro dígitos y termina en número) y de un rango
+  // ("del 1-3"): los romanos y los apartados no aparecen en esos.
+  `|(?<![\\w-])\\d{1,3}\\s*-\\s*(?:[IVXLC]{1,6}|[A-D])(?![\\w-])` +
+  // "el 2.9 de la RFA": regla con punto decimal citada sin la palabra "regla".
+  `|(?<![\\w.-])\\d\\.\\d{1,3}(?:\\.\\d{1,3})*\\s+(?:de\\s+la\\s+)?(?:${SIGLAS.join('|')})\\b` +
   // La sigla DESPUÉS del número: "27-III LISR". Es tan natural en español
   // hablado como la forma directa, y sin esto no llegaba ni a DESCONOCIDA.
   `|\\b\\d+\\s*-\\s*[IVXLC]+\\s*(?:${SIGLAS.join('|')})\\b` +
@@ -223,7 +236,12 @@ export function guardiaFundamento(reply: string, permitidas: string[]): Resultad
   if (sobran.includes(CITA_DESCONOCIDA)) {
     texto = texto
       .replace(/\b(?:art[íi]culo|art\.|arts\.|regla)\s*[\d.]+(?:[\s,;:—–-]*(?:fracci[oó]n|fr\.?)[\s,;:—–-]*[IVXLC]+)?/gi, '')
-      .replace(new RegExp(`\\b(?:${SIGLAS.join('|')})\\s+[\\d.]+(?:-[IVXLC]+)?`, 'gi'), '');
+      .replace(new RegExp(`\\b(?:${SIGLAS.join('|')})\\s+[\\d.]+(?:-[IVXLC]+)?`, 'gi'), '')
+      // La cita DESNUDA ("conforme al 27-III"). Se detectaba y no se borraba:
+      // media guardia es peor que ninguna, porque el log dice "forzado" y el
+      // texto sale igual.
+      .replace(/(?<![\w-])\d{1,3}\s*-\s*(?:[IVXLC]{1,6}|[A-D])(?![\w-])/g, '')
+      .replace(new RegExp(`(?<![\\w.-])\\d\\.\\d{1,3}(?:\\.\\d{1,3})*\\s+(?:de\\s+la\\s+)?(?:${SIGLAS.join('|')})\\b`, 'gi'), '');
   }
 
   // ── 4. Lo que no obliga, no se dice como si obligara ──────────────────────
