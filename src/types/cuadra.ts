@@ -106,7 +106,14 @@ export interface Liquidacion {
   /** Combustible en efectivo: deducible hasta el 15% del ejercicio (RFA 2026
    *  regla 2.9). No es deducible ni perdido hasta que el contador del 15% exista. */
   totalPorConfirmar: number;
-  iepsAcreditable: number; // Σ IEPS de diésel de CFDI deducibles → estímulo vs ISR (LIF 2026 Art. 20)
+  /**
+   * DEPRECADO como cifra de venta: se deja en 0. El estímulo del LIF 2026 art.
+   * 20-A es cuota semanal disminuida × litros, y sin el acuerdo del DOF no se
+   * puede calcular. Ver `litrosDieselAcreditables`.
+   */
+  iepsAcreditable: number;
+  /** Litros de diésel que cumplen clave de producto Y medio de pago (LIF 20-A-IV). */
+  litrosDieselAcreditables: number; // Σ IEPS de diésel de CFDI deducibles → estímulo vs ISR (LIF 2026 Art. 20)
   ivaAcreditable: number;  // Σ IVA de CFDI deducibles (LIVA art. 5)
   peajeAcreditable: number; // Σ SubTotal de casetas × factor (0.5) → estímulo de peaje (LIF 2026 Art. 20-A)
   creadaEn: string;        // ISO

@@ -243,12 +243,14 @@ describe('cuadrarViaje', () => {
   // ═══ NIVEL 1: acreditamiento fiscal ═══
   const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: ['15101505'] };
 
-  it('7/9: IEPS y IVA acreditables de un CFDI de diésel deducible', () => {
+  it('7/9: IVA acreditable de un CFDI de diésel deducible (el IEPS ya NO sale en pesos)', () => {
     const r = cuadrarViaje({
       viajeId: 'a1', anticipo: 5000, politica, hidrocarburos: HC, estimulos: EST,
       gastos: [g({ concepto: 'diesel', monto: 5000, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true, formaPago: '03', iepsTraslado: 900, ivaTraslado: 640 })],
     });
-    expect(r.iepsAcreditable).toBe(900);
+    // El IEPS trasladado (900) NO es el estímulo: `normas/lif-2026-20-A.yaml`
+    // dice "cuota vigente × LITROS. No es el IEPS trasladado en el CFDI".
+    expect(r.iepsAcreditable).toBe(0);
     expect(r.ivaAcreditable).toBe(640);
   });
 
@@ -300,7 +302,8 @@ describe('cuadrarViaje', () => {
         formaPago: '03', subTotal: 185.65, ivaTraslado: 14.35, iepsTraslado: 120.00 })],
     });
     expect(r.ivaAcreditable).toBe(14.35);  // leído (8%), NO 29.70 (16%)
-    expect(r.iepsAcreditable).toBe(120.00);
+    // El IEPS trasladado ya no se acredita como estímulo (ver LIF 20-A).
+    expect(r.iepsAcreditable).toBe(0);
   });
 
   // La GASOLINA no tiene el estímulo de IEPS (solo diésel, LIF Art. 20-A fr. IV).
@@ -874,5 +877,66 @@ describe('cuadrarViaje — texto dirigido al lector automático', () => {
       gastos: [g({ concepto: 'diesel', monto: 487.5, folio: 'A1', cfdiUuid: 'u1' })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'texto_sospechoso')).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL ESTÍMULO DE IEPS NO ES EL IEPS TRASLADADO.
+//
+// `normas/lif-2026-20-A.yaml`, verificada contra fuente primaria, dice literal:
+//   "cuota IEPS vigente al momento de la compra × LITROS.
+//    No es el IEPS trasladado en el CFDI."
+//
+// El motor sumaba el trasladado y el PDF lo imprimía en verde citando ese
+// artículo. Dos errores encima del otro: la fórmula equivocada, y una cifra en
+// pesos que la decisión D2 del roadmap ya había prohibido enseñar —"sin
+// discusión"— porque la cuota pasó de $7.3634 a $2.0925 en cinco meses y el
+// estímulo es ingreso acumulable (infla la propuesta ~30%).
+//
+// Sin el acuerdo semanal del DOF no se puede calcular. Lo que SÍ se puede es
+// contar los litros elegibles, que es el dato duro que el contador multiplica
+// por la cuota que él tenga.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuadrarViaje — estímulo de IEPS de diésel', () => {
+  const conIeps = politica;
+  const est = { clavesDieselIeps: ['15101514'], peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000 };
+
+  it('NO acredita pesos a partir del IEPS trasladado del CFDI', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est,
+      gastos: [g({ concepto: 'diesel', monto: 4812, cfdiUuid: 'u1', claveProdServ: '15101514',
+                   iepsTraslado: 1200, ocrExtra: { litros: 180 }, xmlVerificado: true, formaPago: '04' })],
+    });
+    expect(r.iepsAcreditable).toBe(0);
+  });
+
+  it('cuenta los LITROS elegibles, que es el dato que el contador sí puede usar', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est,
+      gastos: [
+        g({ concepto: 'diesel', monto: 4812, cfdiUuid: 'u1', claveProdServ: '15101514', ocrExtra: { litros: 180 }, xmlVerificado: true, formaPago: '04' }),
+        g({ concepto: 'diesel', monto: 2000, cfdiUuid: 'u2', claveProdServ: '15101514', ocrExtra: { litros: 75 }, xmlVerificado: true, formaPago: '04' }),
+      ],
+    });
+    expect(r.litrosDieselAcreditables).toBe(255);
+  });
+
+  it('sin litros leídos no inventa el dato', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est,
+      gastos: [g({ concepto: 'diesel', monto: 4812, cfdiUuid: 'u1', claveProdServ: '15101514', xmlVerificado: true, formaPago: '04' })],
+    });
+    expect(r.litrosDieselAcreditables).toBe(0);
+  });
+
+  it('el diésel que no cumple el medio de pago NO suma litros', () => {
+    // LIF 20-A-IV exige monedero, tarjeta, cheque nominativo o transferencia —
+    // SIN la válvula del 15% que sí existe para ISR (RFA 2.9).
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est,
+      gastos: [g({ concepto: 'diesel', monto: 4812, cfdiUuid: 'u1', claveProdServ: '15101514',
+                   ocrExtra: { litros: 180 }, xmlVerificado: true, formaPago: '01' })],   // 01 = efectivo
+    });
+    expect(r.litrosDieselAcreditables).toBe(0);
   });
 });

@@ -1,16 +1,66 @@
-// Detección de cifras de DINERO en un texto. Marca:
-//  - $ (con o sin espacio):            "$500", "$ 6,850"
-//  - miles con coma:                    "10,600"
-//  - decimales .XX:                     "5700.00"
-//  - entero ≥2 dígitos + palabra-moneda: "500 pesos", "8000 MXN"
-//  - palabra-cuadre + entero ≥2 dígitos: "comprobaste 8000", "sobró 500"
-//  - entero ≥2 dígitos + marcador:       "1500 a favor", "500 del anticipo"
-// NO marca enteros sueltos sin contexto de dinero (conteos, folios, años).
-const MONEY =
-  /\$\s?\d|\d{1,3}(?:,\d{3})+|\d+\.\d{2}(?!\d)|\b\d{2,}\s*(?:pesos?|mxn|m\.?\s?n\.?)\b|\b(?:anticipo|comprob\w*|sobr\w*|falt\w*|diferencia|acredit\w*|reembols\w*|adeud\w*)\b[^.\d]{0,14}\d{2,}|\b\d{2,}\s*(?:a favor|del anticipo|de tu bolsa)\b/i;
+// ═══════════════════════════════════════════════════════════════════════════
+// ¿ESTE TEXTO HABLA DE DINERO?
+//
+// Es el portón de la guardia: si dice que no, el texto del modelo va tal cual al
+// WhatsApp del operador. Un falso negativo aquí es una cifra que nadie calculó
+// en el teléfono de quien liquida.
+//
+// La versión anterior exigía $, coma de miles, .XX, "pesos/mxn" o una de ocho
+// palabras clave PEGADA al número. Se colaban frases que un modelo escribe con
+// toda naturalidad — medido: "Tu resultado final: 8000", "Tu saldo: 500 a tu
+// favor", "Te sobraron ocho mil pesos".
+//
+// LA ASIMETRÍA MANDA. Un falso positivo cuesta que se reemplace el texto por el
+// resumen determinístico del motor, que es correcto y hasta más útil. Un falso
+// negativo cuesta la garantía sobre la que se vende el producto. Así que ante la
+// duda se marca, y por eso el criterio es ancho: cualquier número de 2+ dígitos
+// que NO sea claramente otra cosa.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Formas explícitas de dinero: no dependen del contexto. */
+const DINERO_EXPLICITO =
+  /\$\s?\d|\d{1,3}(?:,\d{3})+|\d+\.\d{2}(?!\d)|\b\d+(?:[.,]\d+)?\s*(?:pesos?|mxn|m\.?\s?n\.?)\b/i;
+
+/**
+ * Cantidades escritas en PALABRAS. El regex viejo miraba dígitos, así que "ocho
+ * mil pesos" ni le aparecía.
+ */
+const DINERO_EN_PALABRAS =
+  /\b(?:un|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos)\s+(?:mil|millones?|pesos?)\b/i;
+
+/**
+ * Contextos donde un número de 2+ dígitos NO es dinero. Sin esto, "van 8 fotos"
+ * o un folio dispararían el reemplazo y el operador recibiría el cuadre en
+ * respuesta a un "¿ya llegaron mis fotos?".
+ */
+const NO_ES_DINERO =
+  /\b(?:folio|uuid|rfc|ticket|comprobantes?|fotos?|litros?|lts?|km|kil[oó]metros?|placas?|a[nñ]o|d[ií]as?|horas?|minutos?|%|por\s?ciento|art[ií]culo|regla|migraci[oó]n|viaje\s*#)\b/i;
+
+/**
+ * Un número suelto de 2+ dígitos que NO forma parte de un identificador.
+ *
+ * Los lookarounds por `[\w-]` son los que salvan a los folios: en
+ * "VJ-2026-0847" el 2026 lleva un guion pegado, así que no cuenta. Sin ellos, un
+ * folio de viaje disparaba el reemplazo y el operador recibía el cuadre entero
+ * en respuesta a "¿sigue abierto mi viaje?".
+ */
+const NUMERO_SUELTO = /(?<![\w-])\d{2,}(?:[.,]\d+)?(?![\w-])/;
+
+/**
+ * Años. Un "2026" suelto casi nunca es dinero, y aparece en fechas, folios y
+ * referencias a normas. Un monto de $2,026 sí se distingue: lleva símbolo o coma
+ * de miles, y esos ya los atrapa DINERO_EXPLICITO antes de llegar aquí.
+ */
+const ANIO = /(?<![\w-])(?:19|20)\d{2}(?![\w-])/g;
 
 export function tieneCifrasDeDinero(texto: string): boolean {
-  return MONEY.test(texto);
+  if (DINERO_EXPLICITO.test(texto) || DINERO_EN_PALABRAS.test(texto)) return true;
+  // Un número suelto SOLO cuenta si nada en la frase lo explica como otra cosa.
+  // Se mira la frase entera y no la vecindad del número: el modelo escribe
+  // "Ya recibí tus 3 comprobantes" y "Tu saldo: 500" con la misma estructura, y
+  // lo que las distingue es el sustantivo, esté donde esté.
+  if (NO_ES_DINERO.test(texto)) return false;
+  return NUMERO_SUELTO.test(texto.replace(ANIO, ' '));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

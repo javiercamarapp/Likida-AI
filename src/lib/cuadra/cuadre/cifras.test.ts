@@ -68,3 +68,45 @@ describe('cifrasSinRespaldo', () => {
     expect(cifrasSinRespaldo('Son $1,234.57.', [{ total: 1234.567 }])).toEqual([]);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PORTÓN TENÍA FALSOS NEGATIVOS, Y UN FALSO NEGATIVO AQUÍ ES UNA CIFRA
+// INVENTADA EN EL WHATSAPP DEL OPERADOR.
+//
+// `tieneCifrasDeDinero` exigía $, coma de miles, .XX, "pesos/mxn" o una de 8
+// palabras clave pegada al número. Frases que un modelo escribe con toda
+// naturalidad lo evadían — medido contra el regex real.
+//
+// La asimetría manda: un falso POSITIVO cuesta que se reemplace el texto por el
+// resumen del motor, que es correcto. Un falso NEGATIVO cuesta una cifra que
+// nadie calculó, en el teléfono de quien liquida. Ante la duda, se verifica.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('tieneCifrasDeDinero — las evasiones que se colaban', () => {
+  it('atrapa cifras sin símbolo ni palabra-moneda', () => {
+    for (const t of [
+      'Tu resultado final: 8000',
+      'El total quedó en 8000 y ya cerré tu viaje',
+      'Quedó así: 8000 contra 8500',
+      'Tu saldo: 500 a tu favor',
+      'Te quedan 1500 por comprobar',
+    ]) expect(tieneCifrasDeDinero(t), t).toBe(true);
+  });
+
+  it('atrapa cantidades escritas en palabras', () => {
+    // "ocho mil pesos" no tiene un solo dígito: el regex viejo ni la veía.
+    for (const t of ['Te sobraron ocho mil pesos', 'Son como quinientos pesos', 'Cerca de dos mil'])
+      expect(tieneCifrasDeDinero(t), t).toBe(true);
+  });
+
+  it('sigue sin marcar lo que NO es dinero', () => {
+    // Un falso positivo aquí sustituiría un mensaje conversacional por el
+    // resumen del cuadre, y eso se ve mal en la demo.
+    for (const t of [
+      'Mándame la foto del ticket, porfa',
+      'Ya recibí tus 3 comprobantes',
+      'Van 8 fotos, ¿te falta alguna?',
+      'Listo 👍',
+      '¿Cerramos el viaje?',
+    ]) expect(tieneCifrasDeDinero(t), t).toBe(false);
+  });
+});

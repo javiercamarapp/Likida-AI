@@ -10,7 +10,7 @@ const LIQ: Omit<Liquidacion, 'id' | 'creadaEn'> = {
   viajeId: 'v', totalComprobado: 10600, totalAnticipo: 10600, diferencia: 0,
   estatus: 'cuadrada', diferencias: [], gastos: [],
   totalDeducible: 10600, totalNoDeducible: 0, totalPorConfirmar: 0,
-  iepsAcreditable: 0, ivaAcreditable: 0, peajeAcreditable: 0,
+  iepsAcreditable: 0, litrosDieselAcreditables: 0, ivaAcreditable: 0, peajeAcreditable: 0,
 };
 const cuadrarDesdeDB = vi.fn();
 vi.mock('./desde_db', () => ({ cuadrarDesdeDB: (...a: unknown[]) => cuadrarDesdeDB(...a) }));

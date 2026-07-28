@@ -7,7 +7,7 @@ const liq = (diferencias: Diferencia[]): Omit<Liquidacion, 'id' | 'creadaEn'> =>
   viajeId: 'v', totalComprobado: 1000, totalAnticipo: 1000, diferencia: 0,
   estatus: 'revisar', diferencias, gastos: [],
   totalDeducible: 1000, totalNoDeducible: 0, totalPorConfirmar: 0,
-  iepsAcreditable: 0, ivaAcreditable: 0, peajeAcreditable: 0,
+  iepsAcreditable: 0, litrosDieselAcreditables: 0, ivaAcreditable: 0, peajeAcreditable: 0,
 });
 
 const d = (tipo: Diferencia['tipo'], nota: string): Diferencia => ({ tipo, concepto: 'diesel', monto: 0, nota });
@@ -84,7 +84,7 @@ describe('resumenCuadre — el texto sospechoso no viaja al operador', () => {
   const liqTexto = {
     viajeId: 'v1', totalComprobado: 487.5, totalAnticipo: 500, diferencia: 12.5,
     estatus: 'revisar' as const, totalDeducible: 487.5, totalNoDeducible: 0, totalPorConfirmar: 0,
-    gastos: [], iepsAcreditable: 0, ivaAcreditable: 0, peajeAcreditable: 0,
+    gastos: [], iepsAcreditable: 0, litrosDieselAcreditables: 0, ivaAcreditable: 0, peajeAcreditable: 0,
     diferencias: [{ tipo: 'texto_sospechoso' as const, concepto: 'diesel' as const, monto: 0,
                     nota: 'El comprobante traía texto dirigido al lector automático.' }],
   };

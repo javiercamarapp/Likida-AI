@@ -14,7 +14,7 @@ const LIQ: Omit<Liquidacion, 'id' | 'creadaEn'> = {
   totalPorConfirmar: 0,
   diferencias: [],
   gastos: [],
-  iepsAcreditable: 0,
+  iepsAcreditable: 0, litrosDieselAcreditables: 0,
   ivaAcreditable: 0,
   peajeAcreditable: 0,
 };
@@ -148,5 +148,45 @@ describe('guardiaCifras — política consultada', () => {
       't', 'v',
     );
     expect(r.forzado).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PORTÓN NO PUEDE DECIDIR SI SE REEMPLAZA UN CUADRE.
+//
+// `guardiaCifras` salía en la primera línea si `tieneCifrasDeDinero` decía que
+// no. Eso ponía un regex —que por definición tiene falsos negativos— a decidir
+// sobre el caso MÁS importante: el turno en que SÍ se llamó `cuadrar_viaje`.
+//
+// Si el modelo cuadró y luego narró el resultado de una forma que el detector no
+// reconoce, el texto salía sin verificar. Y ese es justo el camino feliz de la
+// demo: foto → "listo" → el agente narra.
+//
+// Cuando hubo cuadre, la respuesta ES sobre el cuadre: se sustituye por el
+// resumen del motor SIEMPRE, sin preguntarle a un regex si le pareció ver dinero.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('guardiaCifras — cuando SÍ se cuadró, no se consulta al detector', () => {
+  beforeEach(() => {
+    cuadrarDesdeDB.mockReset();
+    cuadrarDesdeDB.mockResolvedValue(LIQ);
+  });
+
+  it('reemplaza aunque el texto no parezca traer cifras', async () => {
+    const r = await guardiaCifras('Listo, ya cerré tu viaje 👍', [tc('cuadrar_viaje')], 't', 'v');
+    expect(r.forzado).toBe(true);
+    expect(r.reply).toContain('Comprobado');
+  });
+
+  it('reemplaza una narración con la cifra escondida en palabras', async () => {
+    const r = await guardiaCifras('Te sobraron como ocho mil pesos', [tc('cuadrar_viaje')], 't', 'v');
+    expect(r.forzado).toBe(true);
+    expect(r.reply).not.toMatch(/ocho mil/i);
+  });
+
+  it('sin cuadre y sin cifras, el texto conversacional pasa intacto', async () => {
+    // La guardia no debe secuestrar un "mándame la foto".
+    const r = await guardiaCifras('Mándame la foto del ticket, porfa', [], 't', 'v');
+    expect(r.forzado).toBe(false);
+    expect(cuadrarDesdeDB).not.toHaveBeenCalled();
   });
 });

@@ -271,6 +271,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido'];
   const peajeFactor = input.estimulos?.peajeFactor ?? 0.5;
   let iepsAcreditable = 0, ivaAcreditable = 0, peajeAcreditable = 0;
+  let litrosDieselAcreditables = 0;
   for (const g of input.gastos) {
     if (duplicados.has(g.id)) continue;
     if (diferencias.some((d) => d.gastoId === g.id && SIN_ACREDITAMIENTO.includes(d.tipo))) continue;
@@ -287,9 +288,31 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     const clavesDiesel = input.estimulos?.clavesDieselIeps ?? [];
     const esDieselIeps = clavesDiesel.includes(g.claveProdServ ?? '');
     if (esDieselIeps) {
-      if ((g.iepsTraslado ?? 0) > 0) iepsAcreditable += g.iepsTraslado as number;
-      else if (g.xmlVerificado) {
-        diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} no desglosa el IEPS — es deducible, pero sin ese desglose se pierde el acreditamiento del estímulo (LIF 2026 art. 20, ap. A).`, gastoId: g.id });
+      // EL ESTÍMULO NO ES EL IEPS TRASLADADO. `normas/lif-2026-20-A.yaml`
+      // (verificado_fuente_primaria) dice literal: "cuota IEPS vigente al momento
+      // de la compra × LITROS. No es el IEPS trasladado en el CFDI."
+      //
+      // Antes se sumaba el trasladado y el PDF lo imprimía en verde citando ese
+      // artículo. Dos errores encima: la fórmula equivocada, y una cifra en pesos
+      // que la decisión D2 del roadmap prohibió enseñar "sin discusión" —la cuota
+      // pasó de $7.3634 a $2.0925 en cinco meses, y el estímulo es ingreso
+      // acumulable, así que en bruto infla la propuesta ~30%.
+      //
+      // Sin el acuerdo semanal del DOF no se puede calcular. Lo que sí se puede
+      // es contar los LITROS elegibles: es el dato duro que el contador
+      // multiplica por la cuota que él tenga fechada.
+      //
+      // El medio de pago es requisito del 4º párrafo de la LIF 20-A-IV (monedero,
+      // tarjeta, cheque nominativo o transferencia) y NO tiene la válvula del 15%
+      // que la RFA 2.9 sí concede para ISR: la facilidad salva la deducción, no
+      // el acreditamiento.
+      // Los litros los lee el OCR del ticket y viven en `ocrExtra` (el XML del
+      // CFDI no siempre trae la cantidad desglosada por concepto).
+      const litros = Number((g.ocrExtra as Record<string, unknown> | undefined)?.litros ?? 0);
+      const pagoElectronico = !!g.formaPago && g.formaPago !== '01';
+      if (pagoElectronico && Number.isFinite(litros) && litros > 0) litrosDieselAcreditables += litros;
+      if (!(g.iepsTraslado ?? 0) && g.xmlVerificado) {
+        diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} no desglosa el IEPS — es deducible, pero sin ese desglose se complica documentar el estímulo (LIF 2026 art. 20, ap. A).`, gastoId: g.id });
       }
     }
   }
@@ -451,6 +474,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     totalNoDeducible: round2(totalNoDeducible),
     totalPorConfirmar: round2(totalPorConfirmar),
     iepsAcreditable: round2(iepsAcreditable),
+    litrosDieselAcreditables: round2(litrosDieselAcreditables),
     ivaAcreditable: round2(ivaAcreditable),
     peajeAcreditable: round2(peajeAcreditable),
   };

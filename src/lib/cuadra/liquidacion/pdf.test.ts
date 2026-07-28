@@ -24,7 +24,7 @@ const liq = (extra: Partial<Liquidacion> = {}): Liquidacion => ({
   id: 'l1', viajeId: 'v1', creadaEn: '2026-05-02T10:00:00Z',
   totalComprobado: 1000, totalAnticipo: 1000, diferencia: 0, estatus: 'cuadrada',
   totalDeducible: 1000, totalNoDeducible: 0, totalPorConfirmar: 0,
-  iepsAcreditable: 0, ivaAcreditable: 0, peajeAcreditable: 0,
+  iepsAcreditable: 0, litrosDieselAcreditables: 0, ivaAcreditable: 0, peajeAcreditable: 0,
   diferencias: [], gastos: [{ id: 'g1', concepto: 'diesel', monto: 1000, folio: 'A1', fecha: '2026-05-01' }],
   ...extra,
 });
