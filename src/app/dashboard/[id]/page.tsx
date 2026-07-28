@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { notFound } from 'next/navigation';
 import { getLiquidacionDetalle } from '@/lib/cuadra/analytics';
 import { mxn } from '@/lib/utils';
@@ -7,7 +8,14 @@ export const dynamic = 'force-dynamic';
 
 const TENANT = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-111111111111';
 
-const CONCEPTO: Record<string, string> = { diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', viaticos: 'Viáticos', otro: 'Otro' };
+// Mantener en sintonía con CONCEPTO_LABEL de liquidacion/pdf.ts y label() de
+// cuadre/engine.ts. Se desincronizó una vez al partir 'viaticos' en tres: el
+// contralor veía "hospedaje" en minúscula cruda en su tabla.
+const CONCEPTO: Record<string, string> = {
+  diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura',
+  alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte',
+  viaticos: 'Viáticos', otro: 'Otro',
+};
 const ESTATUS: Record<string, { label: string; color: string }> = {
   cuadrada: { label: 'Cuadrada', color: 'var(--color-ok)' },
   con_diferencias: { label: 'Con diferencias', color: 'var(--color-warn)' },
@@ -96,6 +104,9 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
             </table>
           </div>
         </section>
+        <p className="text-xs mt-10 pt-6 border-t" style={{ color: 'var(--muted)', borderColor: 'var(--line)' }}>
+          {LEYENDA_CORTA}
+        </p>
       </main>
     </div>
   );

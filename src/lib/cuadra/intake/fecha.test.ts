@@ -17,3 +17,30 @@ describe('normalizarFecha', () => {
     expect(normalizarFecha('sin fecha')).toBeUndefined();
   });
 });
+
+// B14: `new Date('2026-04-31')` NO truena — rueda al 1 de mayo. Una fecha así
+// entraba como válida y corría el plazo de facturación un mes entero, arrastrando
+// el tope diario de alimentación y el aviso de caducidad con ella.
+describe('normalizarFecha — días que no existen', () => {
+  it('rechaza el 31 de abril en vez de rodarlo a mayo', () => {
+    expect(normalizarFecha('31/04/2026')).toBeUndefined();
+    expect(normalizarFecha('2026-04-31')).toBeUndefined();
+  });
+
+  it('rechaza el 30 de febrero', () => {
+    expect(normalizarFecha('30/02/2026')).toBeUndefined();
+  });
+
+  it('el 29 de febrero de un año bisiesto SÍ existe', () => {
+    expect(normalizarFecha('29/02/2024')).toBe('2024-02-29');
+  });
+
+  it('el 29 de febrero de un año NO bisiesto no existe', () => {
+    expect(normalizarFecha('29/02/2026')).toBeUndefined();
+  });
+
+  it('las fechas válidas siguen pasando', () => {
+    expect(normalizarFecha('30/04/2026')).toBe('2026-04-30');
+    expect(normalizarFecha('31/05/2026')).toBe('2026-05-31');
+  });
+});

@@ -160,7 +160,12 @@ export async function esperarIntake(
   // comportamiento en runtime; permite probar la gracia anti-carrera sin DB.
   probe: (id: string) => Promise<number> = (id) => intakeDelta(id, 0),
 ): Promise<boolean> {
-  const tope = timeoutMs ?? (Number(process.env.CUADRA_INTAKE_ESPERA_MS) || 60_000);
+  // Default 20s, NO 60s. El presupuesto de la función es maxDuration=60 y por
+  // debajo de esta barrera todavía corren el lock (12s) y el agente (40s): con
+  // 60s aquí el peor caso son 112s, y cuando revienta Meta YA recibió su 200 OK
+  // y el mensaje quedó marcado como procesado. Ese "listo" se pierde sin
+  // reintento y sin que nadie se entere. El env puede subirlo si el plan aguanta.
+  const tope = timeoutMs ?? (Number(process.env.CUADRA_INTAKE_ESPERA_MS) || 20_000);
   // AUDIT_V3 orquestación CRÍTICO (carrera de barrera): cuando fotos y "listo"
   // llegan en el MISMO lote, corren en Promise.all; el "listo" puede leer el
   // contador ANTES de que una foto registre su +1 → ve 0 → cuadra sobre parciales.
@@ -168,7 +173,9 @@ export async function esperarIntake(
   // dar tiempo a que las fotos de la ráfaga incrementen antes de confiar en el 0.
   // FLAG (HARD RULE 3): default 0 = comportamiento actual EXACTO. Se recomienda
   // ~2000ms para el demo (ver DECISIONES_PENDIENTES / REPORTE_NOCHE).
-  const grace = Number(process.env.CUADRA_INTAKE_GRACE_MS) || 0;
+  // Default 2s. Con 0 la carrera fotos+"listo" cierra sobre datos parciales, y es
+  // el ÚNICO camino que no le avisa nada al operador: su liquidación sale corta.
+  const grace = Number(process.env.CUADRA_INTAKE_GRACE_MS) || 2_000;
   const start = Date.now();
   if (grace > 0 && (await probe(viajeId)) <= 0) {
     await sleep(Math.min(grace, tope));

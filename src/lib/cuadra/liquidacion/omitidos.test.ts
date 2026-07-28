@@ -46,3 +46,50 @@ describe('resumenOmitidos', () => {
     expect(r.monto).toBe(200);   // pero solo suma el positivo
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA INVARIANTE DEL PAPEL: los renglones impresos DEBEN sumar el total impreso.
+//
+// El PDF recorría `liq.gastos` completo e imprimía cada uno con su monto —
+// incluidos los DUPLICADOS. Pero `totalComprobado` los excluye. Resultado: el
+// documento no cuadraba consigo mismo, y es el que se archiva.
+// ═══════════════════════════════════════════════════════════════════════════
+import { filasImprimibles } from './omitidos';
+import type { Liquidacion } from '@/types/cuadra';
+
+const liq = (gastos: Gasto[], diferencias: Liquidacion['diferencias'], total: number) => ({
+  viajeId: 'v', totalComprobado: total, totalAnticipo: total, diferencia: 0,
+  estatus: 'cuadrada' as const, gastos, diferencias,
+  totalDeducible: total, totalNoDeducible: 0, totalPorConfirmar: 0,
+  iepsAcreditable: 0, ivaAcreditable: 0, peajeAcreditable: 0,
+});
+
+describe('filasImprimibles', () => {
+  const a = { id: 'a', concepto: 'caseta' as const, monto: 300 };
+  const b = { id: 'b', concepto: 'caseta' as const, monto: 300 }; // el duplicado
+  const c = { id: 'c', concepto: 'diesel' as const, monto: 1000 };
+
+  it('el duplicado NO se imprime como renglón con monto', () => {
+    const r = filasImprimibles(liq([a, b, c], [{ tipo: 'duplicado', concepto: 'caseta', monto: 300, nota: 'x', gastoId: 'b' }], 1300));
+    expect(r.filas.map((f) => f.id)).toEqual(['a', 'c']);
+    expect(r.duplicados).toBe(1);
+  });
+
+  it('los renglones suman EXACTAMENTE el total comprobado', () => {
+    const r = filasImprimibles(liq([a, b, c], [{ tipo: 'duplicado', concepto: 'caseta', monto: 300, nota: 'x', gastoId: 'b' }], 1300));
+    expect(r.filas.reduce((s, f) => s + f.monto, 0)).toBe(1300);
+  });
+
+  it('sin duplicados, se imprime todo', () => {
+    const r = filasImprimibles(liq([a, c], [], 1300));
+    expect(r.filas).toHaveLength(2);
+    expect(r.duplicados).toBe(0);
+  });
+
+  it('los montos inválidos tampoco se imprimen: no suman al total', () => {
+    const malo = { id: 'm', concepto: 'otro' as const, monto: -50 };
+    const r = filasImprimibles(liq([a, malo], [], 300));
+    expect(r.filas.map((f) => f.id)).toEqual(['a']);
+    expect(r.filas.reduce((s, f) => s + f.monto, 0)).toBe(300);
+  });
+});

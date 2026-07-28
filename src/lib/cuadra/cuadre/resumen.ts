@@ -54,6 +54,9 @@ export function resumenCuadre(
   if (obs.length) {
     lines.push('', 'Ojo con esto:');
     for (const d of obs.slice(0, 6)) lines.push(`• ${d.nota}`);
+    // Truncar en silencio hace que quien lo lee crea que vio todo. El conteo va
+    // sobre `obs` YA filtrada por destinatario, no sobre la lista completa.
+    if (obs.length > 6) lines.push(`• …y ${obs.length - 6} observación(es) más en el panel.`);
   }
 
   if (liq.iepsAcreditable > 0 || liq.ivaAcreditable > 0 || liq.peajeAcreditable > 0) {
