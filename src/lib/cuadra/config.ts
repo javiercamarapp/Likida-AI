@@ -67,7 +67,9 @@ export const DEMO_CONFIG: CuadraConfig = {
   politica: [
     { concepto: 'diesel', topeMonto: 4000 },
     { concepto: 'caseta', topeMonto: 1500 },
-    { concepto: 'viaticos', topeMonto: 800 },
+    { concepto: 'alimentacion', topeMonto: 800 },
+    { concepto: 'hospedaje', topeMonto: 2500 },
+    { concepto: 'transporte', topeMonto: 800 },
     { concepto: 'factura', requiereCfdi: true },
   ],
   tabulador: {
@@ -79,6 +81,9 @@ export const DEMO_CONFIG: CuadraConfig = {
   unidades: {},                            // 🔴 demo: sin catálogo → usa rendimientoPorDefecto
   catalogoCuentas: {
     diesel: '600-001', caseta: '600-002', viaticos: '600-003', factura: '600-004', otro: '600-099',
+    // Los tres conceptos que sustituyen a 'viaticos'. Comparten la 600-003 por
+    // ahora: la cuenta contable la define el contador de cada flota, no nosotros.
+    alimentacion: '600-003', hospedaje: '600-003', transporte: '600-003',
   },
   salida: 'csv',
   hidrocarburos: {

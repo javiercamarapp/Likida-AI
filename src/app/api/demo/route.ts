@@ -19,7 +19,9 @@ export const runtime = 'nodejs';
 const POLITICA: PoliticaGasto[] = [
   { concepto: 'diesel', topeMonto: 4000 },
   { concepto: 'caseta', topeMonto: 1500 },
-  { concepto: 'viaticos', topeMonto: 800 },
+  { concepto: 'alimentacion', topeMonto: 800 },
+  { concepto: 'hospedaje', topeMonto: 2500 },
+  { concepto: 'transporte', topeMonto: 800 },
   { concepto: 'factura', requiereCfdi: true },
 ];
 

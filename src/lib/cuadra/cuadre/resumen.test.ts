@@ -1,0 +1,81 @@
+import { describe, it, expect } from 'vitest';
+import { resumenCuadre } from './resumen';
+import { LEYENDA_CORTA } from './leyendas';
+import type { Liquidacion, Diferencia } from '@/types/cuadra';
+
+const liq = (diferencias: Diferencia[]): Omit<Liquidacion, 'id' | 'creadaEn'> => ({
+  viajeId: 'v', totalComprobado: 1000, totalAnticipo: 1000, diferencia: 0,
+  estatus: 'revisar', diferencias, gastos: [],
+  totalDeducible: 1000, totalNoDeducible: 0, totalPorConfirmar: 0,
+  iepsAcreditable: 0, ivaAcreditable: 0, peajeAcreditable: 0,
+});
+
+const d = (tipo: Diferencia['tipo'], nota: string): Diferencia => ({ tipo, concepto: 'diesel', monto: 0, nota });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A QUIÉN SE LE DICE QUÉ.
+//
+// El mismo resumen se le mandaba al OPERADOR y servía de respuesta autoritativa.
+// Ahí iban veredictos que él no puede arreglar y que además lo señalan: que su
+// proveedor está en la lista negra del SAT, que el CFDI está cancelado, que el
+// RFC receptor no es el de la empresa. Eso es trabajo del contralor.
+//
+// Al operador se le pide lo que falta; no se le juzga.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('resumenCuadre — qué ve el operador y qué el contralor', () => {
+  const FISCALES: Diferencia[] = [
+    d('cfdi_efos', 'El emisor aparece en la lista 69-B del SAT.'),
+    d('cfdi_cancelado', 'El CFDI fue cancelado ante el SAT.'),
+    d('rfc_receptor', 'El CFDI está a un RFC distinto al de la empresa.'),
+    d('ieps_no_desglosado', 'El CFDI no desglosa el IEPS.'),
+  ];
+  const OPERABLES: Diferencia[] = [
+    d('sin_cfdi', 'Diésel de $1,000 requiere factura CFDI y no trae UUID válido.'),
+    d('ocr_baja_confianza', 'La foto salió difícil de leer.'),
+  ];
+
+  it('al operador NO se le manda el veredicto fiscal', () => {
+    const texto = resumenCuadre(liq([...FISCALES, ...OPERABLES]), true, 'operador');
+    expect(texto).not.toMatch(/69-B/);
+    expect(texto).not.toMatch(/cancelado/i);
+    expect(texto).not.toMatch(/RFC distinto/i);
+    expect(texto).not.toMatch(/IEPS/);
+  });
+
+  it('al operador SÍ se le pide lo que puede arreglar', () => {
+    const texto = resumenCuadre(liq([...FISCALES, ...OPERABLES]), true, 'operador');
+    expect(texto).toMatch(/requiere factura CFDI/);
+    expect(texto).toMatch(/difícil de leer/);
+  });
+
+  it('el contralor ve todo, incluido lo fiscal', () => {
+    const texto = resumenCuadre(liq([...FISCALES, ...OPERABLES]), true, 'contralor');
+    expect(texto).toMatch(/69-B/);
+    expect(texto).toMatch(/cancelado/i);
+    expect(texto).toMatch(/requiere factura CFDI/);
+  });
+
+  it('si al operador no le queda nada que arreglar, no se inventa una sección vacía', () => {
+    const texto = resumenCuadre(liq(FISCALES), true, 'operador');
+    expect(texto).not.toMatch(/Ojo con esto/);
+  });
+
+  it('por omisión el destinatario es el contralor (no filtra de más por accidente)', () => {
+    expect(resumenCuadre(liq(FISCALES), true)).toMatch(/69-B/);
+  });
+});
+
+// El descargo del art. 89 del CFF: los criterios del Anexo 3 alcanzan a "quien
+// asesore, aconseje, PRESTE SERVICIOS o participe". Esa es la posición de
+// Likida, no la del cliente. La leyenda es la mitigación que la propia ley ofrece.
+describe('resumenCuadre — descargo de responsabilidad', () => {
+  it('el resumen del contralor lleva la leyenda', () => {
+    expect(resumenCuadre(liq([]), true, 'contralor')).toContain(LEYENDA_CORTA);
+  });
+
+  it('el del operador NO la lleva: no toma decisiones fiscales', () => {
+    // Al operador se le dice qué falta, no cómo tributa. Meterle un descargo
+    // legal a un mensaje de WhatsApp que dice "mándame la factura" solo estorba.
+    expect(resumenCuadre(liq([]), true, 'operador')).not.toContain(LEYENDA_CORTA);
+  });
+});

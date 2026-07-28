@@ -347,7 +347,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // Resumen determinístico del motor (nunca cifras del modelo). Fail-closed:
         // si no se puede recalcular, se avisa el cierre sin números (el PDF va abajo).
         try {
-          reply = resumenCuadre(await cuadrarDesdeDB(op.tenantId, viajeId));
+          // Va por WhatsApp AL OPERADOR: sin veredicto fiscal (EFOS, cancelado,
+          // RFC receptor). Eso es del contralor; al operador se le pide lo que falta.
+          reply = resumenCuadre(await cuadrarDesdeDB(op.tenantId, viajeId), true, 'operador');
         } catch {
           reply = 'Ya cerré tu liquidación ✅. Te mando el PDF.';
         }
