@@ -71,7 +71,11 @@ describe('generateStructured — respuesta truncada', () => {
     try { await llamar(); } catch (x) { e = x; }
     expect(e).toBeInstanceOf(TruncatedError);
     const err = e as InstanceType<typeof TruncatedError>;
-    expect(err.usage?.tokensOut).toBe(1184);
+    // ACUMULADO de los dos intentos (el original y el del doble de presupuesto),
+    // no solo el último: las dos llamadas se cobraron. Antes reportaba 1184 —el
+    // del segundo— y descontaba de menos justo en el caso más caro.
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(err.usage?.tokensOut).toBe(1184 * 2);
     expect(err.usage?.cost).toBeGreaterThan(0);
   });
 

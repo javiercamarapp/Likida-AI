@@ -208,6 +208,18 @@ export async function generateStructured<T>(opts: {
     else built.push({ role: 'user', content: parts });
   }
 
+  // OpenRouter cobra la llamada aunque el JSON venga truncado o no valide. El
+  // `usage` ya viajaba dentro del error para eso, pero cuando el reintento salía
+  // bien ese error se descartaba y su consumo con él: se reportaba UN intento
+  // habiendo pagado dos, tres o cuatro. Likida va a cobrar por liquidación, así
+  // que un costo unitario subestimado se propaga directo al precio.
+  const gastado = { tokensIn: 0, tokensOut: 0, cost: 0 };
+  const cobrar = (u: { tokensIn: number; tokensOut: number; cost: number }) => {
+    gastado.tokensIn += u.tokensIn;
+    gastado.tokensOut += u.tokensOut;
+    gastado.cost += u.cost;
+  };
+
   const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number }> => {
     const msgs = note
       ? [{ role: 'system' as const, content: `${opts.system}\n\n${note}` }, ...built.slice(1)]
@@ -231,6 +243,9 @@ export async function generateStructured<T>(opts: {
     const tokIn = res.usage?.prompt_tokens ?? 0;
     const tokOut = res.usage?.completion_tokens ?? 0;
     const usage = { model: res.model || m, tokensIn: tokIn, tokensOut: tokOut, cost: calcCost(m, tokIn, tokOut) };
+    // Se cobra AQUÍ, antes de cualquier salida: pase lo que pase debajo —
+    // truncado, JSON roto, schema inválido— esta llamada ya se pagó.
+    cobrar(usage);
 
     // Se cortó por presupuesto: NO es JSON malformado ni una foto mala. Se
     // detecta ANTES de parsear, porque el parseo también falla y confunde el
@@ -253,7 +268,21 @@ export async function generateStructured<T>(opts: {
     }
     const v = opts.schema.safeParse(parsed);
     if (!v.success) throw new StructuredError(`Validación falló: ${v.error.message}`, v.error, raw, usage);
-    return { data: v.data, raw, model: usage.model, tokensIn: tokIn, tokensOut: tokOut, cost: usage.cost };
+    // Se devuelve el ACUMULADO del turno, no el de este intento: el llamador
+    // quiere saber qué costó extraer este comprobante, no qué costó el último
+    // reintento.
+    return { data: v.data, raw, model: usage.model, ...gastado };
+  };
+
+  /**
+   * Deja el consumo ACUMULADO del turno en el error que sale a la superficie.
+   * Sin esto el llamador solo veía el del último intento y descontaba de menos
+   * justo en el caso más caro: el que falló varias veces antes de rendirse.
+   */
+  const conGastado = (e: unknown, msg: string): StructuredError => {
+    const err = e instanceof StructuredError ? e : new StructuredError(msg, e);
+    err.usage = { model, ...gastado };
+    return err;
   };
 
   const note = 'IMPORTANTE: responde EXCLUSIVAMENTE con JSON válido que cumpla el schema, sin markdown ni texto extra.';
@@ -270,8 +299,10 @@ export async function generateStructured<T>(opts: {
         return await attempt(model, undefined, tope * 2);
       } catch (eT) {
         // Si el doble tampoco alcanza, el problema es real: no lo disfraces
-        // pasándolo por la escalera de "formato malo".
-        if (eT instanceof TruncatedError) throw eT;
+        // pasándolo por la escalera de "formato malo". Se relanza tal cual para
+        // conservar el diagnóstico, pero con el consumo de AMBOS intentos: el
+        // error trae el suyo, y el del primero se perdía.
+        if (eT instanceof TruncatedError) { eT.usage = { model, ...gastado }; throw eT; }
       }
     }
     // Reintento con el MISMO modelo + nota (típicamente errores de formato JSON).
@@ -285,10 +316,10 @@ export async function generateStructured<T>(opts: {
         try {
           return await attempt(fallback, note);
         } catch (e3) {
-          throw e3 instanceof StructuredError ? e3 : new StructuredError('Falló generación estructurada (fallback)', e3);
+          throw conGastado(e3, 'Falló generación estructurada (fallback)');
         }
       }
-      throw e2 instanceof StructuredError ? e2 : new StructuredError('Falló generación estructurada', e2);
+      throw conGastado(e2, 'Falló generación estructurada');
     }
   }
 }
