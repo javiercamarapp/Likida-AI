@@ -396,7 +396,13 @@ export class PartialExecutionError extends Error {
   }
 }
 
-const READ_PREFIXES = ['get_', 'check_', 'list_', 'find_', 'consultar_', 'validar_'];
+// Prefijos de tools que SOLO LEEN, para poder cachear su resultado dentro de un
+// turno. `cuadrar_` está aquí porque `cuadrar_viaje` calcula y no escribe nada —
+// caía entre dos rejillas: no matcheaba ningún prefijo y tampoco es `isMutation`,
+// así que si el modelo la llamaba dos veces en un turno ("cómo voy, y ciérralo
+// si está bien") repetía las tres lecturas del cuadre MÁS el acumulado del
+// ejercicio, que barre el año entero del tenant.
+const READ_PREFIXES = ['get_', 'check_', 'list_', 'find_', 'consultar_', 'validar_', 'cuadrar_'];
 const isReadOnly = (n: string) => READ_PREFIXES.some((p) => n.startsWith(p));
 
 export async function generateWithTools(opts: {

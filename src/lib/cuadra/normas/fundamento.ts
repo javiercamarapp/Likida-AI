@@ -40,11 +40,20 @@ function patronesDe(id: string): RegExp[] {
   const alias = [siglas, n.instrumento, aliasCorto(n.instrumento)].filter(Boolean) as string[];
   if (alias.length && n.articulo) {
     const art = esc(n.articulo);
-    const fr = n.fraccion ? `\\s*(?:fracci[oó]n|fr\\.?)\\s*${esc(n.fraccion)}` : '';
+    // SEPARADOR, no solo espacios. "artículo 27, fracción III" es la puntuación
+    // más natural del español y la que un modelo escribe sin pensar; con `\s*`
+    // esa forma no se detectaba y la cita pasaba entera. Peor aún al revés: una
+    // cita legítima escrita así no se reconocía, no se protegía, y la limpieza
+    // genérica se la comía a medias dejando el texto mutilado.
+    const sep = '[\\s,;:—–-]*';
+    const fr = n.fraccion ? `${sep}(?:fracci[oó]n|fr\\.?)${sep}${esc(n.fraccion)}` : '';
     const quien = `(?:${alias.map(esc).join('|')})`;
     // "artículo 27 fracción III ... LISR"  y  "LISR ... artículo 27 fracción III"
     out.push(new RegExp(`(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}[^.]{0,45}${quien}`, 'i'));
     out.push(new RegExp(`${quien}[^.]{0,45}(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}`, 'i'));
+    // Sin instrumento cerca: "conforme al artículo 27, fracción III" a secas.
+    // Se acepta porque la fracción ya identifica la norma sin ambigüedad.
+    if (n.fraccion) out.push(new RegExp(`(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}`, 'i'));
   }
   return out;
 }
@@ -97,13 +106,26 @@ export function citasEnTexto(texto: string): string[] {
   return encontradas;
 }
 
-/** Deja el texto legible tras quitar una cita: sin paréntesis vacíos ni dobles espacios. */
+/**
+ * Deja el texto legible tras quitar una cita: sin paréntesis vacíos ni dobles
+ * espacios, PERO conservando los saltos de línea.
+ *
+ * `\s{2,}` incluye `\n`, así que la versión anterior convertía en un párrafo
+ * corrido cualquier mensaje multilínea cada vez que la guardia actuaba — y el
+ * resumen de WhatsApp es multilínea: viñetas, secciones, párrafos. Se limpia
+ * RENGLÓN A RENGLÓN para no tocar la estructura.
+ */
 function limpiar(texto: string): string {
   return texto
-    .replace(/\(\s*[,;]?\s*\)/g, '')       // "( )" o "(,)" que quedan al vaciar
-    .replace(/\s+([,.;:])/g, '$1')          // espacio antes de puntuación
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\s+$/gm, '')
+    .split('\n')
+    .map((linea) =>
+      linea
+        .replace(/\(\s*[,;]?\s*\)/g, '')   // "( )" o "(,)" que quedan al vaciar
+        .replace(/[ \t]+([,.;:])/g, '$1')    // espacio antes de puntuación
+        .replace(/[ \t]{2,}/g, ' ')          // solo espacios horizontales
+        .replace(/[ \t]+$/, ''),
+    )
+    .join('\n')
     .trim();
 }
 
@@ -159,7 +181,7 @@ export function guardiaFundamento(reply: string, permitidas: string[]): Resultad
   }
   if (sobran.includes(CITA_DESCONOCIDA)) {
     texto = texto
-      .replace(/\b(?:art[íi]culo|art\.|arts\.|regla)\s*[\d.]+(?:\s*(?:fracci[oó]n|fr\.?)\s*[IVXLC]+)?/gi, '')
+      .replace(/\b(?:art[íi]culo|art\.|arts\.|regla)\s*[\d.]+(?:[\s,;:—–-]*(?:fracci[oó]n|fr\.?)[\s,;:—–-]*[IVXLC]+)?/gi, '')
       .replace(new RegExp(`\\b(?:${SIGLAS.join('|')})\\s+[\\d.]+(?:-[IVXLC]+)?`, 'gi'), '');
   }
 

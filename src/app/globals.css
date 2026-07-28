@@ -51,13 +51,19 @@
     --line: #242430;
     --accent: #2dd4bf;
     --accent-fg: #06231e;
+    /* #d70015 da 5.38:1 sobre blanco pero solo 3.35:1 sobre el fondo oscuro, y
+       AA pide 4.5:1. Este tono llega a 5.29:1 en oscuro. Medido con la fórmula
+       de WCAG, no a ojo: el mensaje de error del login se lee en los dos modos. */
+    --color-bad: #ff453a;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0b0b0f; --surface: #16161c; --ink: #e8edf5; --muted: #9aa0aa; --line: #242430; --accent: #2dd4bf; --accent-fg: #06231e;
+  --color-bad: #ff453a;   /* ver la nota de contraste arriba */
 }
 :root[data-theme="light"] {
   --bg: #fbfbfd; --surface: #ffffff; --ink: #0b0b0f; --muted: #6b7280; --line: #ececef; --accent: #0e7c66; --accent-fg: #ffffff;
+  --color-bad: #d70015;   /* 5.38:1 sobre blanco */
 }
 
 * { border-color: var(--line); }
