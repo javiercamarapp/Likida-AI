@@ -10,6 +10,7 @@
 
 import { strip_accents } from './util';
 import { sanitizarFolio } from '../intake/sanitizar';
+import { esRfcValido, rfcChecksumOk } from '../intake/cfdi';
 import { calcularCaducidad } from '../facturacion/caducidad';
 import { identificarComercio } from '../facturacion/identificar';
 import type { Gasto, Diferencia, Liquidacion, EstatusLiquidacion, TipoDiferencia } from '@/types/cuadra';
@@ -101,11 +102,20 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // RFC genérico del SAT: si el tenant no capturó su RFC real, NO se valida el
   // receptor (evita marcar toda factura como "no es de la empresa"). AL-6.
   const RFC_GENERICO = 'XAXX010101000';
+  // Un RFC de empresa MAL FORMADO es un dato que falta, no un dato contra el que
+  // comparar. El tenant de demo traía 'TIN010101AAA' —falla el dígito
+  // verificador, lo rechaza nuestro propio validador— y `getConfig` lo mete en
+  // `empresa.rfc` desde la columna del tenant. Como aquí solo se descartaba el
+  // genérico del SAT, ese RFC inventado SÍ se usaba: toda factura legítima cuyo
+  // receptor no fuera él salía `rfc_receptor` → NO DEDUCIBLE. Enseñar un CFDI
+  // real en una demostración y que el sistema lo declare no deducible es peor
+  // que no validar. Se descartan igual que el genérico.
   const rfcsOk = new Set(
     [input.empresaRfc, ...(input.rfcsAdicionales ?? [])]
       .filter(Boolean)
       .map((r) => norm(r as string))
-      .filter((r) => r !== RFC_GENERICO),
+      .filter((r) => r !== RFC_GENERICO)
+      .filter((r) => esRfcValido(r) && rfcChecksumOk(r)),
   );
 
   // 0) Duplicados: primero por UUID (regla dura), luego por concepto+folio+monto.

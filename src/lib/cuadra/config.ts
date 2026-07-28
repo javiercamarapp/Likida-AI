@@ -9,6 +9,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
+import { esRfcValido, rfcChecksumOk } from './intake/cfdi';
 import type { PoliticaGasto } from './cuadre/engine';
 
 export interface UnidadConfig {
@@ -146,7 +148,20 @@ export async function getConfig(tenantId: string): Promise<CuadraConfig> {
     const override = (data?.config as Partial<CuadraConfig> | null) ?? null;
     const cfg: CuadraConfig = fusionarConfig(DEMO_CONFIG, override);
     // El RFC de la empresa puede venir en la columna `tenant.rfc`.
-    if (data?.rfc) cfg.empresa = { ...cfg.empresa, rfc: data.rfc as string };
+    if (data?.rfc) {
+      const rfc = String(data.rfc).toUpperCase().replace(/[^A-ZÑ&0-9]/g, '');
+      // El motor ignora un RFC mal formado en vez de rechazar facturas contra él
+      // (ver `rfcsOk` en engine.ts). Pero ignorarlo EN SILENCIO deja la
+      // validación de receptor apagada sin que nadie se entere: la flota cree
+      // que el sistema comprueba a nombre de quién vienen sus facturas, y no.
+      if (!esRfcValido(rfc) || !rfcChecksumOk(rfc)) {
+        logger.error('config.rfc_empresa_invalido', {
+          tenantId,
+          msg: `El RFC de la flota (${rfc}) no pasa el dígito verificador. La validación de receptor de CFDI queda APAGADA para este tenant: ninguna factura se rechazará por estar a nombre de otro. Corrige la columna tenant.rfc.`,
+        });
+      }
+      cfg.empresa = { ...cfg.empresa, rfc };
+    }
     return cfg;
   } catch {
     return DEMO_CONFIG; // demo-safe: si la DB no está, usa defaults
