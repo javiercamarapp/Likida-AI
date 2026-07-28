@@ -18,7 +18,7 @@ import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
 import { getConfig } from '@/lib/cuadra/config';
-import { emparejarPendiente } from '@/lib/cuadra/intake/emparejar';
+import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/cuadra/intake/emparejar';
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import {
   addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash,
@@ -236,11 +236,26 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         return;
       }
       const gastos = await getGastos(viajeId, op.tenantId);
-      const match = gastos.find((x) => x.cfdiUuid && x.cfdiUuid.toLowerCase() === xml.uuid);
+      // 1) Por UUID: el gasto ya venía de un CFDI (foto con QR fiscal legible).
+      let match = gastos.find((x) => x.cfdiUuid && x.cfdiUuid.toLowerCase() === xml.uuid);
+      let eraTicket = false;
+      if (!match) {
+        // 2) Por monto y fecha, contra los TICKETS sin timbrar. Es el caso normal:
+        // un ticket de gasolinera NO trae UUID, así que buscar solo por UUID no
+        // encontraba nada y se creaba un SEGUNDO gasto — el mismo consumo contado
+        // dos veces, con su IVA y su IEPS encima. Un unique(cfdi_uuid) no lo
+        // arregla: el del ticket es NULL y NULL no colisiona.
+        const porTicket = emparejarXmlConTicket({ total: xml.total, fecha: xml.fecha }, gastos);
+        if (porTicket) { match = porTicket; eraTicket = true; }
+      }
       let gastoId: string;
       if (match) {
-        // Ya existía el gasto (de la foto): se enriquece con el XML.
-        await updateGastoCfdiXml(op.tenantId, match.id, xml);
+        // Ya existía el gasto: se enriquece con el XML. Si era un ticket, el XML
+        // además le aporta UUID, RFC, monto y fecha, que son autoritativos.
+        await updateGastoCfdiXml(op.tenantId, match.id, eraTicket
+          ? { ...xml, uuid: xml.uuid, rfcEmisor: xml.rfcEmisor, rfcReceptor: xml.rfcReceptor, total: xml.total, fecha: xml.fecha }
+          : xml);
+        if (eraTicket) logger.info('xml.pegado_a_ticket', { viaje: viajeId, gasto: match.id });
         gastoId = match.id;
       } else {
         // El XML llegó sin foto previa: se crea el gasto desde el XML.
