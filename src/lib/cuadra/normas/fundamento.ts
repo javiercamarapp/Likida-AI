@@ -49,8 +49,21 @@ function patronesDe(id: string): RegExp[] {
     const fr = n.fraccion ? `${sep}(?:fracci[oó]n|fr\\.?)${sep}${esc(n.fraccion)}` : '';
     const quien = `(?:${alias.map(esc).join('|')})`;
     // "artículo 27 fracción III ... LISR"  y  "LISR ... artículo 27 fracción III"
-    out.push(new RegExp(`(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}${FIN_DE_NUMERO}[^.]{0,45}${quien}`, 'i'));
-    out.push(new RegExp(`${quien}[^.]{0,45}(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}${FIN_DE_NUMERO}`, 'i'));
+    // La ventana va LAZY (`{0,45}?`), no codiciosa, y eso decide un CRÍTICO.
+    //
+    // Con `{0,45}` el motor estira la ventana todo lo que puede antes de buscar
+    // el nombre de la ley, así que en "artículo 27, fracción III de la LISR, y
+    // además el 45-Z de la Ley del ISR" el patrón de la cita PERMITIDA casaba
+    // hasta el ÚLTIMO "ISR" y se tragaba la inventada dentro de su propio match.
+    // Al borrarse del texto para buscar lo que sobra, la inventada desaparecía
+    // con ella: `citasEnTexto` devolvía solo ["lisr-27-fr-III"], `forzado` salía
+    // false, y la cita que nadie autorizó llegaba íntegra al operador.
+    //
+    // Lazy liga la cita al instrumento MÁS CERCANO, que es además lo que
+    // significa en español: "el artículo 27 de la LISR" habla de esa ley, no de
+    // la que se nombre cuarenta caracteres después.
+    out.push(new RegExp(`(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}${FIN_DE_NUMERO}[^.]{0,45}?${quien}`, 'i'));
+    out.push(new RegExp(`${quien}[^.]{0,45}?(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}${FIN_DE_NUMERO}`, 'i'));
     // Sin instrumento cerca: "conforme al artículo 27, fracción III" a secas.
     //
     // El número por sí solo NO identifica la norma. CFF 27-III es el registro
@@ -234,14 +247,21 @@ export function guardiaFundamento(reply: string, permitidas: string[]): Resultad
     for (const p of patronesDe(id)) texto = texto.replace(new RegExp(p.source, 'gi'), '');
   }
   if (sobran.includes(CITA_DESCONOCIDA)) {
-    texto = texto
-      .replace(/\b(?:art[íi]culo|art\.|arts\.|regla)\s*[\d.]+(?:[\s,;:—–-]*(?:fracci[oó]n|fr\.?)[\s,;:—–-]*[IVXLC]+)?/gi, '')
-      .replace(new RegExp(`\\b(?:${SIGLAS.join('|')})\\s+[\\d.]+(?:-[IVXLC]+)?`, 'gi'), '')
-      // La cita DESNUDA ("conforme al 27-III"). Se detectaba y no se borraba:
-      // media guardia es peor que ninguna, porque el log dice "forzado" y el
-      // texto sale igual.
-      .replace(/(?<![\w-])\d{1,3}\s*-\s*(?:[IVXLC]{1,6}|[A-D])(?![\w-])/g, '')
-      .replace(new RegExp(`(?<![\\w.-])\\d\\.\\d{1,3}(?:\\.\\d{1,3})*\\s+(?:de\\s+la\\s+)?(?:${SIGLAS.join('|')})\\b`, 'gi'), '');
+    // SE LIMPIA CON EL MISMO PATRÓN QUE DETECTÓ, no con una copia a mano.
+    //
+    // Aquí vivían cuatro `replace` escritos aparte, y `FORMA_DE_CITA` se fue
+    // ensanchando sin ellos: en la ronda 5 quedaban al menos tres formas que la
+    // guardia DETECTABA y no borraba —"el 45-Z de la Ley del ISR", "el artículo
+    // veintisiete fracción tres", "la regla dos punto nueve"—. El resultado era
+    // peor que no tener guardia: el log decía `quitadas: [DESCONOCIDA]` y el
+    // texto salía idéntico, así que quien leyera el log creería que la cita
+    // inventada nunca llegó al operador. Media guardia que además miente.
+    //
+    // Es el mismo modo de falla que este proyecto ya pagó con los conceptos y
+    // con los dos catálogos de portales: dos listas que hay que mantener iguales
+    // a mano divergen siempre. Con una sola fuente no hay nada que sincronizar,
+    // y ensanchar la detección mañana ensancha la limpieza sola.
+    texto = texto.replace(new RegExp(FORMA_DE_CITA.source, 'gi'), '');
   }
 
   // ── 4. Lo que no obliga, no se dice como si obligara ──────────────────────
