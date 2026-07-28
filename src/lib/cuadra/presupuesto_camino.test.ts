@@ -42,9 +42,18 @@ describe('camino del "listo" — peor caso', () => {
     expect(r.sobraParaResponder).toBeGreaterThanOrEqual(MARGEN_CIERRE_MS);
   });
 
-  it('sin el reloj compartido NO cabría — esta es la regresión', () => {
-    // Los topes fijos sumados, que es lo que había antes.
-    expect(TOPE_BARRERA + TOPE_MUTEX + TOPE_AGENTE).toBeGreaterThan(PRESUPUESTO_WEBHOOK_MS);
+  // Este test decía «sin el reloj compartido NO cabría», comparando los topes
+  // fijos (72s) contra el presupuesto. Era cierto con 60s. Al verificarse que el
+  // plan es Pro y subir a 120s dejó de serlo: los topes fijos ahora CABEN.
+  //
+  // Bajarle el listón para que siguiera pasando habría sido mentir. Lo que queda
+  // escrito es lo que hoy es verdad, incluido cuánta holgura hay — porque si
+  // alguien vuelve a bajar el presupuesto, esto vuelve a apretar.
+  it('los topes fijos ya caben en el presupuesto, y sobra margen', () => {
+    const fijos = TOPE_BARRERA + TOPE_MUTEX + TOPE_AGENTE;   // 72s
+    expect(fijos).toBeLessThanOrEqual(PRESUPUESTO_WEBHOOK_MS - MARGEN_CIERRE_MS);
+    // Holgura real sobre el peor caso de topes fijos. Con 60s era negativa.
+    expect(PRESUPUESTO_WEBHOOK_MS - MARGEN_CIERRE_MS - fijos).toBeGreaterThanOrEqual(30_000);
   });
 
   it('si lo previo y las esperas se comen el presupuesto, el agente NO se lanza', () => {
@@ -52,11 +61,13 @@ describe('camino del "listo" — peor caso', () => {
     // queda sin nada y Meta no reintenta. Se responde con el motor, que no
     // necesita al LLM para cuadrar.
     //
-    // Con SOLO barrera+mutex al máximo (32s) siempre sobrarían 20s y el agente
-    // cabría: la guarda existe para cuando ADEMÁS hubo lentitud antes —Supabase
-    // lento, el envío del aviso de privacidad— que es cuando de verdad se pierde
-    // el mensaje.
-    const r = simular({ previo: 12_000, barrera: 99_000, mutex: 99_000, agente: 1_000 });
+    // La guarda ya no salta con barrera+mutex al máximo: con 120s sobra sitio de
+    // sobra. Salta cuando ADEMÁS hubo lentitud antes —Supabase lento, el envío
+    // del aviso de privacidad— y por eso `previo` se calcula contra el
+    // presupuesto en vez de escribirse a mano: si el presupuesto cambia, este
+    // caso sigue describiendo "llegó tarde", no un número que se quedó viejo.
+    const previo = PRESUPUESTO_WEBHOOK_MS - MARGEN_CIERRE_MS - TOPE_BARRERA - TOPE_MUTEX - (COSTO_AGENTE_MS - 1_000);
+    const r = simular({ previo, barrera: 99_000, mutex: 99_000, agente: 1_000 });
     expect(r.corrioAgente).toBe(false);
     expect(r.sobraParaResponder).toBeGreaterThanOrEqual(MARGEN_CIERRE_MS);
   });
@@ -79,8 +90,21 @@ describe('camino del "listo" — peor caso', () => {
   it('el agente recibe MENOS tiempo cuando llega tarde, no su tope completo', () => {
     let ahora = 0;
     const p = crearPresupuesto(PRESUPUESTO_WEBHOOK_MS, () => ahora);
-    ahora = 30_000;                        // barrera + mutex tardaron 30s
-    expect(p.acotar(TOPE_AGENTE)).toBe(PRESUPUESTO_WEBHOOK_MS - MARGEN_CIERRE_MS - 30_000);
+    // "Tarde" es relativo al presupuesto, no un número fijo: con 60s bastaban
+    // 30s de retraso para recortar al agente; con 120s hace falta más. Se coloca
+    // el reloj justo donde queda MENOS que el tope del agente.
+    const tarde = PRESUPUESTO_WEBHOOK_MS - MARGEN_CIERRE_MS - TOPE_AGENTE + 5_000;
+    ahora = tarde;
+    expect(p.acotar(TOPE_AGENTE)).toBe(PRESUPUESTO_WEBHOOK_MS - MARGEN_CIERRE_MS - tarde);
     expect(p.acotar(TOPE_AGENTE)).toBeLessThan(TOPE_AGENTE);
+  });
+
+  // Y el complemento: cuando NO llega tarde, recibe su tope entero y no menos.
+  // Sin esto, un `acotar` que recortara siempre pasaría los dos test de arriba.
+  it('en horario, el agente recibe su tope completo', () => {
+    let ahora = 0;
+    const p = crearPresupuesto(PRESUPUESTO_WEBHOOK_MS, () => ahora);
+    ahora = 5_000;
+    expect(p.acotar(TOPE_AGENTE)).toBe(TOPE_AGENTE);
   });
 });

@@ -44,10 +44,15 @@ export const MARGEN_CIERRE_MS = 12_000;
  * falla si se desincronizan. Sin él, subir uno y olvidar el otro deja el
  * presupuesto mintiendo y vuelve el fallo silencioso.
  *
- * 60s es el tope duro del plan Hobby; Vercel IGNORA valores mayores. Solo sube a
- * 120 si se confirma Pro CON Fluid Compute.
+ * 120s desde el 28-jul-2026. El plan del equipo `likida` se verificó contra la
+ * API de Vercel —es **pro**, tope 300s—, y el peor caso de la ruta son ~72s:
+ * lock (≤12s) + espera de intake (20s) + cuadre (~40s). Con 60 se cortaba a
+ * media liquidación, y como Meta ya recibió su 200 no reintenta.
+ *
+ * El comentario anterior decía "60s es el tope de Hobby, solo sube si se
+ * confirma Pro": la condición se cumplió y quedó comprobada, no supuesta.
  */
-export const PRESUPUESTO_WEBHOOK_MS = 60_000;
+export const PRESUPUESTO_WEBHOOK_MS = 120_000;
 
 export interface Presupuesto {
   /** Milisegundos utilizables que quedan, ya descontado el margen de cierre. */
