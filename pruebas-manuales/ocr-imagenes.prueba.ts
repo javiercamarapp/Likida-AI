@@ -207,12 +207,24 @@ test('OCR sobre imágenes reales + cuadre del lote', async () => {
 
   // ── Cuadre del lote, como si fuera un viaje ────────────────────────────────
   const anticipo = Number(process.env.ANTICIPO ?? 0);
+  // El arnés pasaba SOLO la política, así que el motor corría a media máquina:
+  // sin `estimulos` no se evalúa el tope de alimentación de LISR 28-V ni el de
+  // efectivo, y sin `hoy` no se evalúan la fecha ni el plazo de facturación.
+  //
+  // Con tickets reales eso engaña: un ticket de $1,050 de comida pasaba sin que
+  // nadie notara que excede el tope de $750/día. Probar con fotos de verdad no
+  // sirve de nada si el motor no está entero.
+  const { DEMO_CONFIG } = await import('@/lib/cuadra/config');
+  const hoy = new Date().toISOString().slice(0, 10);
   const liq = cuadrarViaje({
     viajeId: 'prueba-manual',
     anticipo,
     gastos,
     politica: POLITICA,
     ruta: 'prueba',
+    hoy,
+    estimulos: DEMO_CONFIG.estimulos,
+    hidrocarburos: DEMO_CONFIG.hidrocarburos,
   });
 
   console.log(`\n${'═'.repeat(78)}\nCUADRE DEL LOTE  (anticipo ${money(anticipo)}${process.env.ANTICIPO ? '' : ' — pásalo con ANTICIPO=…'})\n${'═'.repeat(78)}`);

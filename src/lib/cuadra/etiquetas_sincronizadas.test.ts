@@ -30,12 +30,17 @@ function etiquetas(ruta: string, ancla: string): Record<string, string> {
 }
 
 describe('etiquetas de concepto — las tres fuentes dicen lo mismo', () => {
+  // El PDF ya NO tiene mapa propio: importa `etiquetaConcepto` del motor. Una
+  // función importada no puede desincronizarse, que es mejor que un test que
+  // avisa cuando ya pasó. Queda el del panel, que sigue siendo una copia.
   const motor = etiquetas('./cuadre/engine.ts', 'const m: Record<string, string> = {');
-  const pdf = etiquetas('./liquidacion/pdf.ts', 'const CONCEPTO_LABEL: Record<string, string> = {');
   const panel = etiquetas('../../app/dashboard/[id]/page.tsx', 'const CONCEPTO');
 
-  it('el motor y el PDF cubren los mismos conceptos', () => {
-    expect(Object.keys(motor).sort()).toEqual(Object.keys(pdf).sort());
+  it('el PDF ya no tiene mapa propio: usa la función del motor', () => {
+    // Si alguien vuelve a meter un mapa gemelo en el PDF, este test lo caza.
+    const src = readFileSync(new URL('./liquidacion/pdf.ts', import.meta.url), 'utf8');
+    expect(src).toContain('etiquetaConcepto');
+    expect(src, 'volvió a aparecer un mapa de etiquetas en el PDF').not.toMatch(/const CONCEPTO_LABEL/);
   });
 
   it('el motor y el panel cubren los mismos conceptos', () => {
@@ -45,7 +50,6 @@ describe('etiquetas de concepto — las tres fuentes dicen lo mismo', () => {
   it('y les ponen la MISMA etiqueta', () => {
     // Aquí es donde se cazó `otro: 'Gasto'` contra `otro: 'Otro'`.
     for (const k of Object.keys(motor)) {
-      expect(pdf[k], `"${k}" difiere entre el motor y el PDF`).toBe(motor[k]);
       expect(panel[k], `"${k}" difiere entre el motor y el panel`).toBe(motor[k]);
     }
   });
