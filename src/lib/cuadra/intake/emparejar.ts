@@ -57,3 +57,36 @@ export function emparejarPendiente(monto: number, bandeja: CodigoPendiente[]): C
   const candidatos = bandeja.filter((c) => Math.abs(c.monto - monto) <= TOLERANCIA);
   return candidatos.length === 1 ? candidatos[0] : null;
 }
+
+/**
+ * El XML timbrado que llega DESPUÉS de la foto del ticket.
+ *
+ * Un ticket de gasolinera no es factura y NO trae UUID. La secuencia normal es:
+ * el operador fotografía el ticket (gasto sin UUID) y luego la oficina reenvía el
+ * XML. Emparejando solo por UUID no se encuentra nada y se crea un SEGUNDO gasto:
+ * el mismo consumo contado dos veces, con su IVA y su IEPS encima.
+ *
+ * Un `unique(tenant_id, cfdi_uuid)` NO lo arregla: el del ticket es NULL, y NULL
+ * no colisiona con nada. Tiene que resolverse aquí, por monto y fecha.
+ *
+ * Misma regla dura que sus hermanas: sin candidato ÚNICO no se toca nada. Pegarle
+ * el XML al ticket equivocado le cambia el emisor, el IVA y el IEPS a un gasto que
+ * no era — y encima deja el otro sin factura.
+ */
+export function emparejarXmlConTicket(
+  xml: { total?: number; fecha?: string },
+  gastos: Gasto[],
+): Gasto | null {
+  if (!(xml.total != null && xml.total > 0)) return null; // sin monto no se adivina
+  // Solo tickets SIN timbrar: los que ya tienen UUID son facturas y se emparejan
+  // por UUID antes de llegar aquí.
+  const candidatos = gastos.filter((g) => !g.cfdiUuid && Math.abs(g.monto - xml.total!) <= TOLERANCIA);
+  if (candidatos.length === 1) return candidatos[0];
+  if (candidatos.length === 0) return null;
+  // Varios del mismo monto: la fecha desempata (dos cargas iguales en días
+  // distintos es plausible en un viaje largo).
+  if (!xml.fecha) return null;
+  const dia = xml.fecha.slice(0, 10);
+  const mismoDia = candidatos.filter((g) => g.fecha?.slice(0, 10) === dia);
+  return mismoDia.length === 1 ? mismoDia[0] : null;
+}

@@ -130,9 +130,20 @@ export async function gastoExistePorHash(viajeId: string, imgHash: string, tenan
 export async function updateGastoCfdiXml(
   tenantId: string,
   gastoId: string,
-  x: { claveProdServ?: string; claveUnidad?: string; tipoComprobante?: string; complementoHidrocarburos?: boolean; esquemaAlterno?: boolean; formaPago?: string; subTotal?: number; iepsTraslado?: number; ivaTraslado?: number },
+  x: { claveProdServ?: string; claveUnidad?: string; tipoComprobante?: string; complementoHidrocarburos?: boolean; esquemaAlterno?: boolean; formaPago?: string; subTotal?: number; iepsTraslado?: number; ivaTraslado?: number;
+       // Cuando el XML se pega a un TICKET (que no traía UUID), estos tres campos
+       // pasan a ser autoritativos: vienen del comprobante timbrado, no del OCR.
+       uuid?: string; rfcEmisor?: string; rfcReceptor?: string; total?: number; fecha?: string },
 ): Promise<void> {
+  const extra: Record<string, unknown> = {};
+  if (x.uuid) extra.cfdi_uuid = x.uuid;
+  if (x.rfcEmisor) extra.rfc_emisor = x.rfcEmisor;
+  if (x.rfcReceptor) extra.rfc_receptor = x.rfcReceptor;
+  // El monto del CFDI gana sobre el que leyó la visión: no pasó por OCR.
+  if (x.total != null && x.total > 0) extra.monto = x.total;
+  if (x.fecha) extra.fecha = x.fecha;
   const { error } = await supabaseAdmin().from('gasto').update({
+    ...extra,
     clave_prod_serv: x.claveProdServ ?? null,
     clave_unidad: x.claveUnidad ?? null,
     tipo_comprobante: x.tipoComprobante ?? null,
