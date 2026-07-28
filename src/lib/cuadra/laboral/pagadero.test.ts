@@ -108,3 +108,66 @@ describe('topeDescuento — art. 110 fr. I', () => {
     expect(r.exigible).toBeLessThanOrEqual(5_000);   // nunca MÁS que lo propuesto
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL VEREDICTO LABORAL TIENE QUE LLEGAR A ALGUIEN.
+//
+// `veredictoLaboral` y `topeDescuento` se escribieron y quedaron con CERO
+// consumidores — el mismo patrón que ya había pasado con las tres cubetas de
+// deducibilidad: cálculo correcto que no llega a quien decide, y por tanto no
+// arregla nada.
+//
+// `resumenLaboral` es la pieza que lo cruza: dado un cuadre, dice qué hay que
+// reembolsarle al operador aunque no sea deducible, que es justo el error que
+// esto viene a impedir.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('resumenLaboral', () => {
+  const gasto = (p: Partial<Gasto>): Gasto => ({ id: Math.random().toString(36).slice(2), concepto: 'diesel', monto: 0, ...p });
+
+  it('avisa cuando hay dinero NO deducible que igual se le debe al operador', async () => {
+    const { resumenLaboral } = await import('./pagadero');
+    // Un ticket sin timbrar: no deducible todavía, pero el operador puso el
+    // dinero. Es el caso donde alguien podría leer "no deducible" y descontarlo.
+    const g1 = gasto({ concepto: 'diesel', monto: 1_500, folio: 'T1' });
+    const r = resumenLaboral({
+      gastos: [g1],
+      idsNoDeducibles: new Set<string>(),
+      idsPorConfirmar: new Set([g1.id]),
+      sobrePolitica: new Set<string>(),
+    })!;
+    expect(r).toBeTruthy();
+    expect(r.montoPagadero).toBe(1_500);
+    expect(r.texto).toMatch(/no autoriza descont/i);
+  });
+
+  it('cuando todo es deducible no dice nada: un aviso que sale siempre no se lee', async () => {
+    const { resumenLaboral } = await import('./pagadero');
+    const g1 = gasto({ concepto: 'diesel', monto: 1_500 });
+    const r = resumenLaboral({
+      gastos: [g1], idsNoDeducibles: new Set(), idsPorConfirmar: new Set(), sobrePolitica: new Set(),
+    });
+    expect(r).toBeNull();
+  });
+
+  it('el hospedaje por demora ajena sale como OBLIGACIÓN, no como discutible', async () => {
+    const { resumenLaboral } = await import('./pagadero');
+    const g1 = gasto({ concepto: 'hospedaje', monto: 1_800 });
+    const r = resumenLaboral({
+      gastos: [g1], idsNoDeducibles: new Set([g1.id]),
+      idsPorConfirmar: new Set(), sobrePolitica: new Set([g1.id]), demoraNoImputable: true,
+    })!;
+    expect(r.texto).toMatch(/se debe|obligaci/i);
+    expect(r.fundamento).toContain('lft-110-111-263');
+    expect(r.montoPagadero).toBe(1_800);
+  });
+
+  it('sobre política sin demora determinada va a revisión, no a descuento', async () => {
+    const { resumenLaboral } = await import('./pagadero');
+    const g1 = gasto({ concepto: 'alimentacion', monto: 900 });
+    const r = resumenLaboral({
+      gastos: [g1], idsNoDeducibles: new Set(), idsPorConfirmar: new Set(), sobrePolitica: new Set([g1.id]),
+    })!;
+    expect(r.texto).toMatch(/revis|contralor|acuerdo/i);
+    expect(r.texto).not.toMatch(/se le descuenta/i);
+  });
+});

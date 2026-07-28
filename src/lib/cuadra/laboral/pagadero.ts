@@ -148,3 +148,71 @@ export function topeDescuento(input: TopeDescuentoInput): TopeDescuento {
       : `Se le puede exigir hasta ${exigible.toFixed(2)} en total y descontar hasta ${descuentoPeriodo.toFixed(2)} por periodo (LFT 110-I). Sin intereses, nunca (LFT 111).`,
   };
 }
+
+// ── Lo que de verdad llega al contralor ──────────────────────────────────────
+
+export interface ResumenLaboral {
+  texto: string;
+  /** Cuánto hay que reembolsarle al operador pese a no ser deducible. */
+  montoPagadero: number;
+  fundamento: string[];
+}
+
+/**
+ * Cruza el veredicto fiscal con el laboral y devuelve lo que hay que decirle al
+ * contralor — o `null` si no hay nada.
+ *
+ * Existe porque `veredictoLaboral` por sí solo no llegaba a nadie: se quedó con
+ * cero consumidores, que es el mismo patrón que ya había pasado con las tres
+ * cubetas de deducibilidad. Un cálculo correcto que no llega a quien decide no
+ * arregla nada.
+ *
+ * En `null` cuando todo es deducible: un aviso que sale siempre deja de leerse.
+ */
+export function resumenLaboral(input: {
+  gastos: Gasto[];
+  /** ids de gasto que el motor dejó fuera de la deducción, por lo que sea. */
+  idsNoDeducibles: Set<string>;
+  idsPorConfirmar: Set<string>;
+  sobrePolitica: Set<string>;
+  demoraNoImputable?: boolean;
+}): ResumenLaboral | null {
+  const obligados: Gasto[] = [];
+  const aRevisar: Gasto[] = [];
+  const reembolsables: Gasto[] = [];
+
+  for (const g of input.gastos) {
+    const deducible = !input.idsNoDeducibles.has(g.id) && !input.idsPorConfirmar.has(g.id);
+    const v = veredictoLaboral(g, {
+      deducible,
+      sobrePolitica: input.sobrePolitica.has(g.id),
+      demoraNoImputable: input.demoraNoImputable,
+    });
+    if (v.pagadero === 'sin_criterio') aRevisar.push(g);
+    else if (v.fundamento.includes(NORMA_LABORAL)) obligados.push(g);
+    else if (!deducible) reembolsables.push(g);
+  }
+
+  if (!obligados.length && !aRevisar.length && !reembolsables.length) return null;
+
+  const suma = (xs: Gasto[]) => xs.reduce((s, g) => s + g.monto, 0);
+  const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+  const lineas: string[] = [];
+
+  if (obligados.length) {
+    lineas.push(`${mxn(suma(obligados))} de hospedaje/alimentación SE DEBEN al operador: el viaje se prolongó por causa no imputable a él, y eso es obligación del patrón (LFT 263-I) aunque rompa la política.`);
+  }
+  if (reembolsables.length) {
+    // El error que esto viene a impedir: leer "no deducible" y descontarlo.
+    lineas.push(`${mxn(suma(reembolsables))} no son deducibles todavía, pero el operador puso el dinero: se le reembolsan igual. Que no sea deducible no autoriza descontárselo.`);
+  }
+  if (aRevisar.length) {
+    lineas.push(`${mxn(suma(aRevisar))} exceden la política y no consta que la demora fuera ajena al operador. Descontarlo exige acuerdo con él (LFT 110-I): lo revisa el contralor, no se descuenta solo.`);
+  }
+
+  return {
+    texto: lineas.join(' '),
+    montoPagadero: suma([...obligados, ...reembolsables]),
+    fundamento: obligados.length || aRevisar.length ? [NORMA_LABORAL] : [],
+  };
+}
