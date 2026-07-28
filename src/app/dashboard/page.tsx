@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getKpis, getAcreditables, detectarAnomalias, type DashboardKpis, type Acreditables, type Anomalia } from '@/lib/cuadra/analytics';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mxn } from '@/lib/utils';
+import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 
 export const dynamic = 'force-dynamic';
 
@@ -187,6 +188,9 @@ export default async function DashboardPage() {
             </section>
           </>
         )}
+        <p className="text-xs mt-10 pt-6 border-t" style={{ color: 'var(--muted)', borderColor: 'var(--line)' }}>
+          {LEYENDA_CORTA}
+        </p>
       </main>
     </div>
   );

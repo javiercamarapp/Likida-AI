@@ -39,7 +39,7 @@ export interface CuadreInput {
   /** Complemento de hidrocarburos (Bloque 1): claves de combustible, unidad,
    *  y fecha de vigencia. Sin esto, la regla no corre. */
   hidrocarburos?: { claves: string[]; unidad: string; vigenteDesde: string };
-  /** Estímulos y topes fiscales (LIF 2026 Art. 20 / LISR). */
+  /** Estímulos y topes fiscales (LIF 2026 art. 20, ap. A / LISR). */
   estimulos?: { peajeFactor: number; viaticosTopeFiscalDiarioMxn: number; efectivoTopeMxn: number; clavesDieselIeps?: string[] };
   /** Hoy (ISO YYYY-MM-DD), para el aviso de tickets por facturar. Se INYECTA:
    *  el motor es puro y no lee el reloj del servidor. Sin esto, esa regla no corre. */
@@ -263,14 +263,14 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     if ((g.ivaTraslado ?? 0) > 0) ivaAcreditable += g.ivaTraslado as number;
     // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas.
     if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0) peajeAcreditable += (g.subTotal as number) * peajeFactor;
-    // IEPS de DIÉSEL (7): el estímulo (LIF Art. 20-A fr. IV) es SOLO diésel — NO
+    // IEPS de DIÉSEL (7): el estímulo (LIF 2026 art. 20, ap. A) es SOLO diésel — NO
     // gasolina. Se identifica por la clave de producto del SAT (15101505).
     const clavesDiesel = input.estimulos?.clavesDieselIeps ?? [];
     const esDieselIeps = clavesDiesel.includes(g.claveProdServ ?? '');
     if (esDieselIeps) {
       if ((g.iepsTraslado ?? 0) > 0) iepsAcreditable += g.iepsTraslado as number;
       else if (g.xmlVerificado) {
-        diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} no desglosa el IEPS — es deducible, pero sin ese desglose se pierde el acreditamiento del estímulo (LIF 2026 Art. 20).`, gastoId: g.id });
+        diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} no desglosa el IEPS — es deducible, pero sin ese desglose se pierde el acreditamiento del estímulo (LIF 2026 art. 20, ap. A).`, gastoId: g.id });
       }
     }
   }
