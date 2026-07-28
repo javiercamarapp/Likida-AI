@@ -55,10 +55,24 @@ const FALLBACK: Record<string, string> = {
 };
 
 export function isTransientError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+  // POR TIPO ANTES QUE POR TEXTO. El SDK de OpenAI aplasta CUALQUIER fallo de
+  // conexión —DNS, TCP rechazado, TLS, `fetch failed` de undici— en un
+  // `APIConnectionError` con el mensaje literal "Connection error."; el detalle
+  // real vive en `err.cause`. Clasificar solo por el mensaje dejaba fuera justo
+  // el caso para el que existe el fallback: el proveedor caído. Los 503 sí
+  // pasaban, y por eso los tests no lo vieron.
+  const e = err as { name?: unknown; status?: unknown; cause?: unknown } | null;
+  if (e && typeof e === 'object') {
+    if (typeof e.name === 'string' && /^APIConnection(Timeout)?Error$/.test(e.name)) return true;
+    if (typeof e.status === 'number' && (e.status >= 500 || e.status === 429 || e.status === 408)) return true;
+  }
+  const texto = [err, e?.cause]
+    .map((x) => (x instanceof Error ? x.message : typeof x === 'string' ? x : ''))
+    .join(' ')
+    .toLowerCase();
   return (
-    /\b(5\d\d|429|408|502|503|504)\b/.test(msg) ||
-    /timeout|timed out|fetch failed|network|econnreset|enotfound|rate.?limit|overloaded|capacity/i.test(msg)
+    /\b(5\d\d|429|408|502|503|504)\b/.test(texto) ||
+    /timeout|timed out|connection error|fetch failed|network|econnreset|enotfound|rate.?limit|overloaded|capacity/i.test(texto)
   );
 }
 
