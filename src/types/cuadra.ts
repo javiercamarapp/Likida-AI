@@ -120,6 +120,11 @@ export interface Liquidacion {
 }
 
 export interface Viaje {
+  /**
+   * LFT 263 fr. I: el viaje se prolongó por causa NO imputable al operador.
+   * `undefined` = sin determinar, que NO es lo mismo que `false`.
+   */
+  demoraNoImputable?: boolean;
   id: string;
   folio?: string;
   origen?: string;

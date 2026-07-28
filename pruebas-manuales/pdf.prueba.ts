@@ -38,7 +38,7 @@ test('PDF con 25 comprobantes: anuncia lo que no cupo y trae el descargo', async
     iepsAcreditable: 320.5, ivaAcreditable: 210.75, peajeAcreditable: 480,
     creadaEn: '2026-07-27T12:00:00.000Z',
   };
-  const viaje: Viaje = { id: 'v1', folio: 'VJ-0042', origen: 'Mérida', destino: 'Cancún' } as Viaje;
+  const viaje: Viaje = { id: 'v1', folio: 'VJ-0042', demoraNoImputable: true, origen: 'Mérida', destino: 'Cancún' } as Viaje;
   const operador: Operador = { id: 'o1', nombre: 'Juan Pérez', terminal: 'Mérida' } as Operador;
 
   const bytes = await generarLiquidacionPDF(liq, viaje, operador, 'TRANSPORTES DEL SURESTE SA DE CV');
