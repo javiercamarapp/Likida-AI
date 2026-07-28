@@ -12,10 +12,16 @@ import { guardiaCifras } from '@/lib/cuadra/cuadre/guardia';
 import { cuadrarDesdeDB } from '@/lib/cuadra/cuadre/desde_db';
 import { resumenCuadre } from '@/lib/cuadra/cuadre/resumen';
 import { PartialExecutionError, type ToolCallRecord } from '@/lib/llm/openrouter';
+import type { Gasto } from '@/types/cuadra';
 import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
 import { hashImagen } from '@/lib/cuadra/intake/hash';
+import { decidirFoto } from '@/lib/cuadra/intake/decidir';
+import { emparejarPendiente } from '@/lib/cuadra/intake/emparejar';
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
-import { addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash } from '@/lib/cuadra/repo';
+import {
+  addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash,
+  enriquecerGastoConCodigo, guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente,
+} from '@/lib/cuadra/repo';
 import {
   resolveOperador, getOpenViaje, getTenantContext,
   loadConversation, saveConversation, claimMessage,
@@ -33,6 +39,44 @@ export interface InboundMessage {
   text?: string;
   mediaId?: string;           // para image/document
   waMessageId?: string;       // id de Meta, para idempotencia
+}
+
+/**
+ * Cierra el protocolo de dos fotos por el lado contrario: acaba de entrar un
+ * comprobante, y en la bandeja puede haber un acercamiento que llegó antes y
+ * estaba esperando por ese total.
+ *
+ * BEST-EFFORT a propósito: el gasto YA está insertado. Si la bandeja falla, se
+ * pierde el folio exacto —malo— pero tumbar aquí perdería el gasto entero, que
+ * es peor, y encima dispararía el reproceso del webhook.
+ */
+async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gasto): Promise<void> {
+  try {
+    const extra = (gasto.ocrExtra ?? {}) as Record<string, unknown>;
+    // Si esta misma foto ya traía su código no hay nada que buscar. Además
+    // ahorra la consulta en el camino de siempre.
+    if (extra.folioPortal || extra.codigoBarras) return;
+    const bandeja = await getCodigosPendientes(viajeId, tenantId);
+    if (!bandeja.length) return;
+    const cod = emparejarPendiente(gasto.monto, bandeja);
+    if (!cod) return;
+    // Claim atómico: las fotos de una ráfaga corren en paralelo y NO toman el
+    // mutex del viaje, así que dos comprobantes del mismo total pueden ir por el
+    // mismo código a la vez. El que pierde no pega nada.
+    if (!(await reclamarCodigoPendiente(tenantId, cod.id))) {
+      logger.info('foto.pendiente_ya_tomado', { viaje: viajeId, gasto: gasto.id });
+      return;
+    }
+    await enriquecerGastoConCodigo(tenantId, gasto, {
+      folioPortal: cod.folioPortal,
+      codigoBarras: cod.codigoBarras,
+      urlFacturacion: cod.urlFacturacion,
+      cfdiUuid: cod.cfdiUuid,
+    });
+    logger.info('foto.pendiente_pegado', { viaje: viajeId, gasto: gasto.id });
+  } catch (e) {
+    logger.warn('foto.pendiente_error', { err: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 export async function processInbound(msg: InboundMessage): Promise<void> {
@@ -84,9 +128,69 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           }
         }
 
-        const { gasto, legible, costo } = await extraerComprobante(dataUrl);
+        const extraccion = await extraerComprobante(dataUrl);
+        const { gasto, costo } = extraccion;
         await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
-        if (!legible) { await say('Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?'); return; }
+
+        // Los gastos ya registrados solo se leen cuando hay que emparejar un
+        // acercamiento: en el camino normal esa consulta no se paga.
+        const yaRegistrados = extraccion.motivo === 'solo_codigo' ? await getGastos(viajeId, op.tenantId) : [];
+        const decision = decidirFoto(extraccion, yaRegistrados);
+
+        // Pedir reenvío SOLO cuando reenviar arregla algo. Si el fallo fue
+        // nuestro (truncamiento, provider caído), la misma foto falla igual:
+        // decirle "mándala con mejor luz" lo manda a un bucle y le echa la culpa
+        // de un bug nuestro.
+        if (decision.accion === 'avisar_falla') {
+          await say('Tuve un problema de mi lado al procesar ese comprobante ⚙️ — no es tu foto. Guarda el ticket: ese gasto NO quedó registrado y hay que capturarlo aparte.');
+          return;
+        }
+        if (decision.accion === 'pedir_reenvio') {
+          await say('Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?');
+          return;
+        }
+        // Acercamiento del protocolo de dos fotos: hizo lo correcto, no se le
+        // regaña. Pero un código por su cuenta NO se da de alta como gasto —
+        // vale el mismo dinero que el ticket que le toca, y sumar los dos
+        // inflaría la liquidación.
+        if (decision.accion === 'pedir_ticket') {
+          // A la BANDEJA (mig. 0016): el acercamiento llegó antes que su ticket.
+          // Sin esto, el folio exacto que trae el código se perdía y el gasto se
+          // quedaba con el que leyó la visión — que es justo el que baila.
+          const extra = (gasto.ocrExtra ?? {}) as Record<string, unknown>;
+          try {
+            await guardarCodigoPendiente(op.tenantId, viajeId, {
+              monto: gasto.monto,
+              folioPortal: extra.folioPortal as string | undefined,
+              codigoBarras: extra.codigoBarras as string | undefined,
+              urlFacturacion: extra.urlFacturacion as string | undefined,
+              cfdiUuid: gasto.cfdiUuid,
+            });
+            logger.info('foto.codigo_en_espera', { viaje: viajeId, monto: gasto.monto });
+          } catch (e) {
+            // Si la 0016 no está aplicada esto truena. Dejarlo salir tumbaría el
+            // procesamiento de la foto y Meta reintentaría el webhook en bucle.
+            // Se pierde el folio exacto (grave, por eso ERROR) pero el operador
+            // igual recibe la instrucción y el gasto entra con la foto del ticket.
+            logger.error('foto.codigo_en_espera_error', { err: e instanceof Error ? e.message : String(e) });
+          }
+          await say('Ya tengo el código de ese ticket 👍. Mándame también la foto del *ticket completo* para registrar el gasto.');
+          return;
+        }
+        if (decision.accion === 'enriquecer') {
+          const destino = yaRegistrados.find((g) => g.id === decision.gastoId);
+          if (destino) {
+            const extra = (gasto.ocrExtra ?? {}) as Record<string, unknown>;
+            await enriquecerGastoConCodigo(op.tenantId, destino, {
+              folioPortal: extra.folioPortal as string | undefined,
+              codigoBarras: extra.codigoBarras as string | undefined,
+              urlFacturacion: extra.urlFacturacion as string | undefined,
+              cfdiUuid: gasto.cfdiUuid,
+            });
+            logger.info('foto.acercamiento_pegado', { viaje: viajeId, gasto: destino.id });
+          }
+          return; // silencioso: el acuse de la ráfaga ya se dio con la 1ª foto
+        }
         try {
           await addGasto(op.tenantId, viajeId, imgHash ? { ...gasto, imgHash } : gasto);
         } catch (e) {
@@ -99,6 +203,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           }
           throw e;
         }
+        // ¿Había un acercamiento esperando por este comprobante? (el caso en que
+        // el operador mandó primero el código y después el ticket).
+        await pegarCodigoEnEspera(op.tenantId, viajeId, gasto);
         // Acuse una sola vez: solo la PRIMERA foto de la ráfaga (la que llevó el
         // contador de 0 a 1). En su propio try: un fallo de envío tras guardar el
         // gasto NO debe disparar reproceso.

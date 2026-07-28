@@ -31,6 +31,20 @@ export function getClient(): OpenAI {
   return _client;
 }
 
+/**
+ * Tope de salida por defecto para respuestas estructuradas.
+ *
+ * Estaba en 1200 y truncaba comprobantes REALES: Gemini Flash gasta 1,000–1,800
+ * tokens de razonamiento invisible antes de escribir la primera llave, así que
+ * el JSON (≈100 tokens) se cortaba a media línea y el ticket se reportaba como
+ * "foto ilegible". Medido con 5 tickets de campo (27-jul-2026): 3 de 5 cortados
+ * con `finish_reason: 'length'`; los 5 pasan con holgura arriba de 2,000.
+ *
+ * `max_tokens` es un TECHO, no un cargo: subirlo no cuesta nada si el modelo no
+ * lo usa. Se paga lo generado.
+ */
+const DEFAULT_MAX_TOKENS = 4000;
+
 // Fallback cross-provider por modelo. El primario cae a un proveedor distinto
 // para que un provider caído nunca sea un error visible para el operador.
 const FALLBACK: Record<string, string> = {
@@ -120,9 +134,35 @@ function extractJson(raw: string): string {
 
 // ── generateStructured: JSON garantizado por schema, con VISIÓN opcional ─────
 export class StructuredError extends Error {
-  constructor(message: string, public cause?: unknown, public raw?: string) {
+  constructor(
+    message: string,
+    public cause?: unknown,
+    public raw?: string,
+    /** Consumo de la llamada que falló: se cobra igual, hay que contabilizarlo. */
+    public usage?: { model: string; tokensIn: number; tokensOut: number; cost: number },
+  ) {
     super(message);
     this.name = 'StructuredError';
+  }
+}
+
+/**
+ * La respuesta se CORTÓ por presupuesto (`finish_reason: 'length'`), no vino
+ * malformada. Distinguirlo importa: un JSON truncado no se arregla pidiéndole
+ * al modelo que "responda solo JSON" (ya lo hacía), ni es culpa de la imagen.
+ * Los modelos con razonamiento gastan cientos de tokens invisibles antes de
+ * escribir la primera llave, así que el tope se agota sin producir salida.
+ */
+export class TruncatedError extends StructuredError {
+  constructor(
+    message: string,
+    public tokensUsados: number,
+    public tope: number,
+    raw?: string,
+    usage?: { model: string; tokensIn: number; tokensOut: number; cost: number },
+  ) {
+    super(message, undefined, raw, usage);
+    this.name = 'TruncatedError';
   }
 }
 
@@ -168,14 +208,15 @@ export async function generateStructured<T>(opts: {
     else built.push({ role: 'user', content: parts });
   }
 
-  const attempt = async (m: string, note?: string): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number }> => {
+  const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number }> => {
     const msgs = note
       ? [{ role: 'system' as const, content: `${opts.system}\n\n${note}` }, ...built.slice(1)]
       : built;
+    const maxTokens = tope ?? opts.maxTokens ?? DEFAULT_MAX_TOKENS;
     const res = await getClient().chat.completions.create({
       model: m,
       messages: msgs,
-      max_tokens: opts.maxTokens ?? 1200,
+      max_tokens: maxTokens,
       temperature: opts.temperature ?? 0,
       response_format: {
         type: 'json_schema',
@@ -185,23 +226,54 @@ export async function generateStructured<T>(opts: {
       ...PROVIDER_OPTS,
     });
     const raw = res.choices[0]?.message?.content || '';
+    // La llamada se cobra aunque falle: el consumo viaja EN el error para que el
+    // contador por liquidación no reporte $0 en los intentos fallidos.
+    const tokIn = res.usage?.prompt_tokens ?? 0;
+    const tokOut = res.usage?.completion_tokens ?? 0;
+    const usage = { model: res.model || m, tokensIn: tokIn, tokensOut: tokOut, cost: calcCost(m, tokIn, tokOut) };
+
+    // Se cortó por presupuesto: NO es JSON malformado ni una foto mala. Se
+    // detecta ANTES de parsear, porque el parseo también falla y confunde el
+    // diagnóstico (era el bug: truncamiento disfrazado de "ilegible").
+    if (res.choices[0]?.finish_reason === 'length') {
+      throw new TruncatedError(
+        `Respuesta truncada: se agotaron los ${maxTokens} tokens de salida (usó ${tokOut}) antes de cerrar el JSON`,
+        tokOut,
+        maxTokens,
+        raw,
+        usage,
+      );
+    }
+
     let parsed: unknown;
     try {
       parsed = JSON.parse(extractJson(raw));
     } catch (e) {
-      throw new StructuredError('JSON parse falló', e, raw);
+      throw new StructuredError('JSON parse falló', e, raw, usage);
     }
     const v = opts.schema.safeParse(parsed);
-    if (!v.success) throw new StructuredError(`Validación falló: ${v.error.message}`, v.error, raw);
-    const tokIn = res.usage?.prompt_tokens ?? 0;
-    const tokOut = res.usage?.completion_tokens ?? 0;
-    return { data: v.data, raw, model: res.model || m, tokensIn: tokIn, tokensOut: tokOut, cost: calcCost(m, tokIn, tokOut) };
+    if (!v.success) throw new StructuredError(`Validación falló: ${v.error.message}`, v.error, raw, usage);
+    return { data: v.data, raw, model: usage.model, tokensIn: tokIn, tokensOut: tokOut, cost: usage.cost };
   };
 
   const note = 'IMPORTANTE: responde EXCLUSIVAMENTE con JSON válido que cumpla el schema, sin markdown ni texto extra.';
+  const tope = opts.maxTokens ?? DEFAULT_MAX_TOKENS;
   try {
     return await attempt(model);
   } catch (e1) {
+    // Truncamiento: reintentar con la nota NO sirve — el modelo ya estaba
+    // respondiendo JSON, se quedó sin presupuesto a media escritura. Lo único
+    // que falta es techo, así que el reintento sube el tope en vez de regañarlo.
+    if (e1 instanceof TruncatedError) {
+      logger.warn('llm.truncado', { fn: 'generateStructured', model, tope: e1.tope, usados: e1.tokensUsados, reintentoCon: tope * 2 });
+      try {
+        return await attempt(model, undefined, tope * 2);
+      } catch (eT) {
+        // Si el doble tampoco alcanza, el problema es real: no lo disfraces
+        // pasándolo por la escalera de "formato malo".
+        if (eT instanceof TruncatedError) throw eT;
+      }
+    }
     // Reintento con el MISMO modelo + nota (típicamente errores de formato JSON).
     try {
       return await attempt(model, note);

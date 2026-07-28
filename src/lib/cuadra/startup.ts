@@ -35,6 +35,19 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       });
       return;
     }
+    // Migración 0016 (bandeja de códigos pendientes). Si falta, el acercamiento
+    // que llega ANTES que su ticket no se puede guardar: el gasto se queda con
+    // el folio que leyó la visión —el que baila— y nadie se entera, porque el
+    // camino sigue "funcionando". Probe de lectura: no escribe nada.
+    const { error: e16 } = await admin.from('codigo_pendiente').select('id').limit(1);
+    if (e16) {
+      logger.error('startup.migraciones', {
+        msg: 'FALTA la migración 0016 (codigo_pendiente): el acercamiento que llegue antes que su ticket pierde el folio exacto y el gasto se queda con el folio del OCR. Corre `supabase db push`.',
+        code: e16.code,
+        err: e16.message,
+      });
+      return;
+    }
     logger.info('startup.migraciones', { ok: true });
   } catch (e) {
     // Sin env/DB (p. ej. durante el build) → no romper, solo avisar.

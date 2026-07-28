@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/cuadra';
 import type { PoliticaGasto } from './cuadre/engine';
+import type { CodigoPendiente } from './intake/emparejar';
 
 /**
  * Conserva el XML CRUDO del CFDI (CFF art. 30). Best-effort: un fallo aquí NO
@@ -144,6 +145,92 @@ export async function updateGastoCfdiXml(
     xml_verificado: true,
   }).eq('id', gastoId).eq('tenant_id', tenantId);
   if (error) throw new Error(`updateGastoCfdiXml: ${error.message}`);
+}
+
+/**
+ * Le pega a un gasto ya registrado los identificadores que trajo el
+ * ACERCAMIENTO (segunda foto, solo del código): folio del portal, código de
+ * barras, liga de facturación y UUID.
+ *
+ * NO toca el monto: el emparejamiento se hizo justamente por total, así que ya
+ * coinciden. Tocar dinero aquí solo abriría la puerta a moverlo por error.
+ */
+export async function enriquecerGastoConCodigo(
+  tenantId: string,
+  gasto: Gasto,
+  datos: { folioPortal?: string; codigoBarras?: string; urlFacturacion?: string; cfdiUuid?: string },
+): Promise<void> {
+  const extra: Record<string, unknown> = { ...(gasto.ocrExtra ?? {}) };
+  if (datos.folioPortal) extra.folioPortal = datos.folioPortal;
+  if (datos.codigoBarras) extra.codigoBarras = datos.codigoBarras;
+  if (datos.urlFacturacion) extra.urlFacturacion = datos.urlFacturacion;
+  const patch: Record<string, unknown> = { ocr_extra: extra };
+  if (datos.cfdiUuid) patch.cfdi_uuid = datos.cfdiUuid;
+  // NO se toca `folio`: el impreso en el ticket y el que viaja dentro del QR son
+  // cadenas DISTINTAS (comprobado contra el papel — 31 chars contra 30), no dos
+  // lecturas del mismo dato. El impreso es el que una persona teclea; el del QR
+  // es la llave del deep-link del portal y vive en `ocrExtra.folioPortal`.
+  const { error } = await supabaseAdmin().from('gasto').update(patch).eq('id', gasto.id).eq('tenant_id', tenantId);
+  if (error) throw new Error(`enriquecerGastoConCodigo: ${error.message}`);
+}
+
+// ── Bandeja de códigos pendientes (mig. 0016) ────────────────────────────────
+// El acercamiento que llegó antes que su ticket. Espera aquí hasta que entre un
+// comprobante de su mismo total.
+
+/** Guarda un código que todavía no tiene comprobante al cual pegarse. */
+export async function guardarCodigoPendiente(
+  tenantId: string,
+  viajeId: string,
+  c: Omit<CodigoPendiente, 'id'>,
+): Promise<void> {
+  const { error } = await supabaseAdmin().from('codigo_pendiente').insert({
+    tenant_id: tenantId,
+    viaje_id: viajeId,
+    monto: c.monto,
+    folio_portal: c.folioPortal ?? null,
+    codigo_barras: c.codigoBarras ?? null,
+    url_facturacion: c.urlFacturacion ?? null,
+    cfdi_uuid: c.cfdiUuid ?? null,
+  });
+  if (error) throw new Error(`guardarCodigoPendiente: ${error.message}`);
+}
+
+export async function getCodigosPendientes(viajeId: string, tenantId: string): Promise<CodigoPendiente[]> {
+  const { data, error } = await supabaseAdmin()
+    .from('codigo_pendiente')
+    .select('id, monto, folio_portal, codigo_barras, url_facturacion, cfdi_uuid')
+    .eq('tenant_id', tenantId)
+    .eq('viaje_id', viajeId);
+  if (error) throw new Error(`getCodigosPendientes: ${error.message}`);
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    monto: Number(r.monto),
+    folioPortal: (r.folio_portal as string) || undefined,
+    codigoBarras: (r.codigo_barras as string) || undefined,
+    urlFacturacion: (r.url_facturacion as string) || undefined,
+    cfdiUuid: (r.cfdi_uuid as string) || undefined,
+  }));
+}
+
+/**
+ * Toma un código de la bandeja para usarlo, y devuelve si lo consiguió.
+ *
+ * Es un CLAIM, no un borrado: las fotos de una ráfaga corren en paralelo y no
+ * toman el mutex del viaje, así que dos comprobantes del mismo total pueden ir
+ * por el mismo código a la vez. El borrado con `.select()` es atómico — solo uno
+ * recibe la fila — y el otro se entera de que llegó tarde en vez de pegar el
+ * mismo folio dos veces.
+ */
+export async function reclamarCodigoPendiente(tenantId: string, id: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin()
+    .from('codigo_pendiente')
+    .delete()
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .select('id');
+  if (error) throw new Error(`reclamarCodigoPendiente: ${error.message}`);
+  return (data?.length ?? 0) > 0;
 }
 
 export async function getGastos(viajeId: string, tenantId: string): Promise<Gasto[]> {

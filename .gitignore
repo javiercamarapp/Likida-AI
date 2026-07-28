@@ -9,3 +9,16 @@ node_modules/
 # Artefactos de build de TS
 tsconfig.tsbuildinfo
 .vercel
+
+# Assets de marca (revisión, no van al repo)
+_brand/
+
+# Comprobantes reales para probar el OCR: traen RFC, folios y datos fiscales.
+# El arnés sí va al repo; las fotos no.
+pruebas-manuales/imagenes/
+#
+# EXCEPCIÓN consciente: `src/lib/cuadra/intake/__fixtures__/ticket-codigos.jpg`
+# SÍ está versionado. Es el acercamiento a un ticket de papelería (sin datos de
+# persona) y es la evidencia del test de regresión del lector de códigos: sin
+# él, nadie puede comprobar que zxing lee donde jsQR no. Repo privado.
+# Cualquier OTRA foto de comprobante sigue fuera.
