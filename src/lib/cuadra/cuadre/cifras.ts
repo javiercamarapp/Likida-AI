@@ -74,9 +74,16 @@ export function tieneCifrasDeDinero(texto: string): boolean {
 // Grounded tiene que significar que la cifra está en lo que la tool devolvió.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Las mismas formas que detecta MONEY, pero capturando el número. */
-const MONEY_G =
-  /\$\s?(\d[\d,]*(?:\.\d+)?)|(\d{1,3}(?:,\d{3})+(?:\.\d+)?)|(\d+\.\d{2})(?!\d)|(\d{2,})\s*(?:pesos?|mxn|m\.?\s?n\.?)\b|\b(?:anticipo|comprob\w*|sobr\w*|falt\w*|diferencia|acredit\w*|reembols\w*|adeud\w*)\b[^.\d]{0,14}(\d[\d,]*(?:\.\d+)?)|(\d{2,})\s*(?:a favor|del anticipo|de tu bolsa)\b/gi;
+/**
+ * Las mismas formas que detecta el portón, pero capturando el número.
+ *
+ * TIENE que ver al menos lo mismo que `tieneCifrasDeDinero`. Si el portón dice
+ * "aquí hay dinero" y este extractor no encuentra la cifra, `cifrasSinRespaldo`
+ * devuelve lista vacía y la guardia concluye que TODO está respaldado — o sea,
+ * la deja pasar justo por haberla detectado. Pasó: al ensanchar el portón para
+ * cerrar el bypass, este se quedó con el criterio viejo.
+ */
+const MONEY_G = /\$\s?(\d[\d,]*(?:\.\d+)?)|((?<![\w-])\d[\d,]*(?:\.\d+)?(?![\w-]))/g;
 
 /** Centavo de tolerancia: el motor redondea y el modelo formatea. */
 const TOL = 0.011;
@@ -108,10 +115,26 @@ function numerosDe(valor: unknown, acc: number[], profundidad = 0): number[] {
  * estén. Quien calcula diferencias es el motor; si el número no salió de él,
  * no se manda por WhatsApp.
  */
+/**
+ * `true` si el texto habla de dinero pero NO se puede extraer ninguna cifra
+ * numérica que cotejar — típicamente porque va escrita en palabras ("ocho mil
+ * pesos").
+ *
+ * Existe porque `cifrasSinRespaldo` devuelve lista vacía en ese caso, y una
+ * lista vacía significa "todo respaldado". Leer un fallo de verificación como
+ * una aprobación es justo el error que la guardia viene a impedir.
+ */
+export function hablaDeDineroSinCifraVerificable(texto: string): boolean {
+  if (!tieneCifrasDeDinero(texto)) return false;
+  return [...texto.replace(ANIO, ' ').matchAll(MONEY_G)].length === 0;
+}
+
 export function cifrasSinRespaldo(texto: string, resultados: unknown[]): number[] {
   const respaldo = numerosDe(resultados, []);
   const fuera: number[] = [];
-  for (const m of texto.matchAll(MONEY_G)) {
+  // Los años se quitan antes: aparecen en fechas y referencias a normas, y no
+  // son cifras que el modelo tenga que justificar contra una tool.
+  for (const m of texto.replace(ANIO, ' ').matchAll(MONEY_G)) {
     const crudo = m.slice(1).find((g) => g != null);
     if (!crudo) continue;
     const n = Number(crudo.replace(/,/g, ''));

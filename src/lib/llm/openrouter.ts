@@ -73,10 +73,32 @@ const PRICES: Record<string, [number, number]> = {
   'openai/gpt-5.6-luna': [1, 6],
 };
 
+/**
+ * Costo en USD de una llamada.
+ *
+ * Un modelo sin precio NO cuesta $0. Antes devolvía 0 en silencio, y eso pasa de
+ * verdad: OpenRouter a veces devuelve el slug con sufijo de proveedor
+ * (`:nitro`, `:floor`), y sobre todo pasa cada vez que alguien cambia de modelo
+ * y no toca la tabla. El resultado era una liquidación que parecía gratis.
+ *
+ * Para un negocio que va a cobrar POR LIQUIDACIÓN, un costo que se subestima en
+ * silencio es peor que uno que se equivoca ruidosamente: nadie mira lo que
+ * parece correcto.
+ */
 export function calcCost(model: string, tokIn: number, tokOut: number): number {
-  const r = PRICES[model];
-  if (!r) return 0;
-  return (tokIn * r[0] + tokOut * r[1]) / 1_000_000;
+  // El sufijo de proveedor no cambia el precio del modelo.
+  const limpio = model.split(':')[0];
+  const r = PRICES[model] ?? PRICES[limpio];
+  if (r) return (tokIn * r[0] + tokOut * r[1]) / 1_000_000;
+
+  // Desconocido: se estima con la tarifa MÁS CARA de la tabla y se avisa. Que
+  // salga alto es justo lo que hace que alguien lo mire.
+  const caro = Object.values(PRICES).reduce(
+    (max, p) => [Math.max(max[0], p[0]), Math.max(max[1], p[1])] as [number, number],
+    [0, 0] as [number, number],
+  );
+  logger.warn('llm.modelo_sin_precio', { model, estimadoCon: 'tarifa más cara de la tabla' });
+  return (tokIn * caro[0] + tokOut * caro[1]) / 1_000_000;
 }
 
 // OpenRouter: no retener input (compliance de datos fiscales).
