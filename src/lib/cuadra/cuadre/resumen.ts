@@ -21,7 +21,7 @@ export type Destinatario = 'operador' | 'contralor';
  *
  * Al operador se le pide lo que falta; no se le juzga.
  */
-const SOLO_CONTRALOR: TipoDiferencia[] = [
+export const SOLO_CONTRALOR: TipoDiferencia[] = [
   'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_cancelado', 'cfdi_no_encontrado',
   'cfdi_pendiente', 'rfc_receptor', 'complemento_hidrocarburos',
   'ieps_no_desglosado', 'texto_sospechoso',

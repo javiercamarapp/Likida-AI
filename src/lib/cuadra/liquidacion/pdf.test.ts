@@ -115,3 +115,44 @@ describe('el PDF clasifica con el motor, no por su cuenta', () => {
     expect(await textoDelPdf(bytes)).toMatch(/Juan/);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 4 · ALTO — el PDF le entregaba al chofer lo que el mensaje le ocultaba.
+//
+// `resumen.ts` filtra del texto al operador los veredictos que él no puede
+// arreglar y que además lo señalan (EFOS, CFDI cancelado, RFC receptor), con el
+// argumento escrito de que "al operador se le pide lo que falta; no se le juzga".
+// `processor.ts` pasa 'operador' con cuidado en los tres sitios.
+//
+// Y acto seguido `sendDocument(msg.from, ...)` —el MISMO teléfono del chofer—
+// mandaba el PDF, que imprimía `liq.diferencias` completo. La defensa del texto
+// no valía nada, y encima en un documento que se puede reenviar.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el PDF respeta el mismo destinatario que el mensaje', () => {
+  const conEfos = liq({
+    diferencias: [
+      { tipo: 'cfdi_efos', concepto: 'diesel', monto: 8000, nota: 'El emisor del CFDI de Diésel está en lista negra del SAT (EFOS) — no deducible.', gastoId: 'g1' },
+      { tipo: 'complemento_no_verificable', concepto: 'diesel', monto: 0, nota: 'La factura de Diésel es de combustible: reenvía el XML para verificar el complemento.', gastoId: 'g1' },
+    ],
+  });
+
+  it('el ejemplar del CONTRALOR trae el veredicto completo', async () => {
+    const t = await textoDelPdf(await generarLiquidacionPDF(conEfos, viaje, operador, undefined, 'contralor'));
+    expect(t).toMatch(/lista negra|EFOS/);
+  });
+
+  it('el ejemplar del OPERADOR no lo trae', async () => {
+    const t = await textoDelPdf(await generarLiquidacionPDF(conEfos, viaje, operador, undefined, 'operador'));
+    expect(t).not.toMatch(/lista negra|EFOS/);
+  });
+
+  it('pero sí trae lo que él SÍ puede arreglar: el XML que se le pide', async () => {
+    const t = await textoDelPdf(await generarLiquidacionPDF(conEfos, viaje, operador, undefined, 'operador'));
+    expect(t).toMatch(/XML/);
+  });
+
+  it('sin destinatario explícito se comporta como contralor: enseñar de más a quien ya podía ver, nunca ocultar', async () => {
+    const t = await textoDelPdf(await generarLiquidacionPDF(conEfos, viaje, operador));
+    expect(t).toMatch(/lista negra|EFOS/);
+  });
+});
