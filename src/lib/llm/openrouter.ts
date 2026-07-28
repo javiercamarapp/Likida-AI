@@ -55,10 +55,24 @@ const FALLBACK: Record<string, string> = {
 };
 
 export function isTransientError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+  // POR TIPO ANTES QUE POR TEXTO. El SDK de OpenAI aplasta CUALQUIER fallo de
+  // conexión —DNS, TCP rechazado, TLS, `fetch failed` de undici— en un
+  // `APIConnectionError` con el mensaje literal "Connection error."; el detalle
+  // real vive en `err.cause`. Clasificar solo por el mensaje dejaba fuera justo
+  // el caso para el que existe el fallback: el proveedor caído. Los 503 sí
+  // pasaban, y por eso los tests no lo vieron.
+  const e = err as { name?: unknown; status?: unknown; cause?: unknown } | null;
+  if (e && typeof e === 'object') {
+    if (typeof e.name === 'string' && /^APIConnection(Timeout)?Error$/.test(e.name)) return true;
+    if (typeof e.status === 'number' && (e.status >= 500 || e.status === 429 || e.status === 408)) return true;
+  }
+  const texto = [err, e?.cause]
+    .map((x) => (x instanceof Error ? x.message : typeof x === 'string' ? x : ''))
+    .join(' ')
+    .toLowerCase();
   return (
-    /\b(5\d\d|429|408|502|503|504)\b/.test(msg) ||
-    /timeout|timed out|fetch failed|network|econnreset|enotfound|rate.?limit|overloaded|capacity/i.test(msg)
+    /\b(5\d\d|429|408|502|503|504)\b/.test(texto) ||
+    /timeout|timed out|connection error|fetch failed|network|econnreset|enotfound|rate.?limit|overloaded|capacity/i.test(texto)
   );
 }
 
@@ -447,7 +461,12 @@ export async function generateWithTools(opts: {
       messages: msgs,
       tools: opts.tools.length ? opts.tools : undefined,
       tool_choice: opts.tools.length ? ('auto' as const) : undefined,
-      max_tokens: opts.maxTokens ?? 1000,
+      // El MISMO techo que las respuestas estructuradas, y por la misma razón
+      // (ver DEFAULT_MAX_TOKENS): con `reasoning: 'high'` —que es como corre el
+      // rol `cuadre`— el razonamiento invisible y la respuesta comparten este
+      // presupuesto. Estaba en 1000: el modelo se quedaba sin techo pensando y
+      // devolvía content vacío. `max_tokens` es un TECHO, no un cargo.
+      max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
       // reasoning y temperature son mutuamente excluyentes; van por spread para
       // no chocar con el tipado del SDK (igual que PROVIDER_OPTS).
       ...(opts.reasoning ? { reasoning: { effort: opts.reasoning } } : { temperature: opts.temperature ?? 0.3 }),
@@ -481,6 +500,21 @@ export async function generateWithTools(opts: {
       const calls = choice?.message?.tool_calls;
 
       if (!calls || calls.length === 0) {
+        // SE CORTÓ ≠ TERMINÓ. Sin esta comprobación una respuesta a medias se
+        // enviaba como completa, y —peor— una respuesta VACÍA por truncamiento
+        // llegaba a `processor.ts` como finalText '' y se convertía en
+        // "Listo. 👍": una confirmación afirmativa de un turno en el que no se
+        // cuadró nada ni se cerró nada. El chofer deja de mandar comprobantes y
+        // el viaje se queda abierto sin que nadie vea un error.
+        if (choice?.finish_reason === 'length') {
+          throw new TruncatedError(
+            `Respuesta truncada en el ciclo de tools: se agotaron los ${opts.maxTokens ?? DEFAULT_MAX_TOKENS} tokens de salida (usó ${tokOut})`,
+            tokOut,
+            opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+            choice?.message?.content ?? undefined,
+            { model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo },
+          );
+        }
         // El costo ya viene sumado ronda a ronda, cada una al precio del modelo
         // que la respondió. (Antes se precificaba aquí, de una vez, con el
         // modelo activo al final: correcto solo si el ciclo entero corrió en el

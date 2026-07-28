@@ -21,7 +21,7 @@ export type Destinatario = 'operador' | 'contralor';
  *
  * Al operador se le pide lo que falta; no se le juzga.
  */
-const SOLO_CONTRALOR: TipoDiferencia[] = [
+export const SOLO_CONTRALOR: TipoDiferencia[] = [
   'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_cancelado', 'cfdi_no_encontrado',
   'cfdi_pendiente', 'rfc_receptor', 'complemento_hidrocarburos',
   'ieps_no_desglosado', 'texto_sospechoso',
@@ -68,9 +68,16 @@ export function resumenCuadre(
     if (obs.length > 6) lines.push(`• …y ${obs.length - 6} observación(es) más en el panel.`);
   }
 
-  if (liq.iepsAcreditable > 0 || liq.ivaAcreditable > 0 || liq.peajeAcreditable > 0) {
+  // LITROS, NO PESOS. `engine.ts` fija `iepsAcreditable = 0` a propósito: el
+  // estímulo del LIF 20-A es cuota semanal del DOF × litros y el motor no puede
+  // calcularlo. Entregar los litros es honesto; inventar los pesos, no. La línea
+  // del IEPS que vivía aquí era código muerto —ninguna ruta puede producir
+  // `iepsAcreditable > 0`, porque `desde_db.ts` recalcula con `cuadrarViaje` en
+  // vez de leer la columna— y los litros, que son el beneficio más grande que
+  // Likida le enseña a una flota, no aparecían en el canal por el que se vende.
+  if (liq.litrosDieselAcreditables > 0 || liq.ivaAcreditable > 0 || liq.peajeAcreditable > 0) {
     lines.push('', 'Acreditable (recuperable):');
-    if (liq.iepsAcreditable > 0) lines.push(`• IEPS diésel: ${mxn(liq.iepsAcreditable)}`);
+    if (liq.litrosDieselAcreditables > 0) lines.push(`• Diésel elegible para el estímulo de IEPS: ${liq.litrosDieselAcreditables} L`);
     if (liq.ivaAcreditable > 0) lines.push(`• IVA: ${mxn(liq.ivaAcreditable)}`);
     if (liq.peajeAcreditable > 0) lines.push(`• Peaje 50%: ${mxn(liq.peajeAcreditable)}`);
   }

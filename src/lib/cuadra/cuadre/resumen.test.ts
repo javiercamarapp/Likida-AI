@@ -129,3 +129,41 @@ describe('resumenCuadre — lo que el operador SÍ puede arreglar le llega', () 
     expect(resumenCuadre(liqXml, true, 'contralor')).toMatch(/XML/i);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 4 · ALTO — el estímulo de diésel no llegaba al canal donde se vende.
+//
+// `engine.ts` fija `const iepsAcreditable = 0` a propósito: el estímulo del LIF
+// 20-A es cuota semanal del DOF × litros, y el motor no puede calcularlo. El dato
+// útil pasó a ser `litrosDieselAcreditables` — y ese cambio llegó al PDF y al hero
+// del panel, pero no aquí.
+//
+// Resultado: la condición `liq.iepsAcreditable > 0` ya no puede ser verdadera
+// nunca (verificado: `desde_db.ts` RECALCULA con cuadrarViaje, no lee la columna),
+// así que la línea del IEPS era código muerto y los litros no aparecían en
+// ningún lado del mensaje. El beneficio más grande que Likida le enseña a una
+// flota no existía en WhatsApp, que es el canal sobre el que se vende.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('resumenCuadre — el estímulo de diésel llega al mensaje', () => {
+  it('los litros elegibles aparecen en el bloque de acreditables', () => {
+    const l = { ...liq([]), litrosDieselAcreditables: 300, ivaAcreditable: 1116 };
+    const texto = resumenCuadre(l, true, 'operador');
+    expect(texto).toMatch(/300/);
+    expect(texto).toMatch(/litros|L\b/i);
+    expect(texto).toMatch(/IVA: \$1,116\.00/);
+  });
+
+  it('el bloque aparece aunque los litros sean lo ÚNICO acreditable', () => {
+    const l = { ...liq([]), litrosDieselAcreditables: 300 };
+    expect(resumenCuadre(l, true, 'operador')).toMatch(/Acreditable/);
+  });
+
+  it('sin nada acreditable no se inventa el bloque (regresión)', () => {
+    expect(resumenCuadre(liq([]), true, 'operador')).not.toMatch(/Acreditable/);
+  });
+
+  it('los litros NO se presentan en pesos: la cuota del DOF no la tenemos', () => {
+    const l = { ...liq([]), litrosDieselAcreditables: 300 };
+    expect(resumenCuadre(l, true, 'operador')).not.toMatch(/IEPS diésel: \$/);
+  });
+});

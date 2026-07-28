@@ -59,6 +59,39 @@ function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaG
 /** Conceptos que la ley trata como viático (LISR 28-V / RLISR 57). */
 const ES_VIATICO = ['alimentacion', 'hospedaje', 'transporte', 'viaticos'];
 
+/** En cuál de las tres cubetas de deducibilidad cae un gasto. */
+export type Cubeta = 'deducible' | 'no_deducible' | 'por_confirmar';
+
+const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope'];
+const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo'];
+
+/**
+ * LA ÚNICA definición de en qué cubeta cae un gasto. Vive aquí, exportada, para
+ * que nadie la reconstruya.
+ *
+ * `pdf.ts` la reconstruía por su cuenta desde `diferencias` con UN solo criterio
+ * —el tipo de diferencia— y se saltaba el segundo, la ausencia de UUID. Como
+ * `sin_cfdi` solo se emite si la política del tenant trae `requiereCfdi`, y
+ * `DEMO_CONFIG` solo lo pone en `factura`, un hospedaje sin timbrar caía en
+ * `por_confirmar` para el motor y en ninguna cubeta para el PDF: la sección
+ * "LO QUE SE LE REEMBOLSA AL OPERADOR" desaparecía según un flag de
+ * configuración, no según la ley. Es la misma contradicción que el comentario de
+ * abajo documenta haber eliminado del lado fiscal, resucitada en otro archivo.
+ *
+ * `diferencias` es una vista PARCIAL de la decisión; esta función es la decisión.
+ */
+export function cubetaDe(g: Gasto, suyas: Diferencia[]): Cubeta {
+  if (suyas.some((d) => NO_DEDUCIBLE_ISR.includes(d.tipo))) return 'no_deducible';
+  if (suyas.some((d) => POR_CONFIRMAR.includes(d.tipo))) return 'por_confirmar';
+  // UN TICKET NO ES UNA FACTURA. LISR 27-III exige que la deducción esté
+  // "amparada con un comprobante fiscal", y un ticket de gasolinera no lo es:
+  // hay que timbrarlo. Contarlo como deducible le promete al contralor una
+  // deducción que todavía no existe — y si nadie factura a tiempo, nunca
+  // existirá. Tampoco es pérdida: se puede timbrar. Por eso POR CONFIRMAR.
+  if (!g.cfdiUuid) return 'por_confirmar';
+  return 'deducible';
+}
+
 export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'creadaEn'> {
   const umbral = input.umbralConfianza ?? 0.85;
   const diferencias: Diferencia[] = [];
@@ -514,8 +547,6 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // TODAVÍA se puede timbrar: no es deducción perdida, es pendiente. Pintarla de
   // rojo le dice al contralor que dé por perdido un dinero que recupera con una
   // llamada al portal. Se sigue avisando por `diferencias`, que para eso está.
-  const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope'];
-  const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo'];
 
   let totalDeducible = 0, totalNoDeducible = 0, totalPorConfirmar = 0;
   for (const g of input.gastos) {
@@ -523,14 +554,9 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // ese total. Si no cuadra, el contralor lo nota con una calculadora.
     if (duplicados.has(g.id) || !(g.monto > 0)) continue;
     const suyas = diferencias.filter((d) => d.gastoId === g.id);
-    if (suyas.some((d) => NO_DEDUCIBLE_ISR.includes(d.tipo))) { totalNoDeducible += g.monto; continue; }
-    if (suyas.some((d) => POR_CONFIRMAR.includes(d.tipo))) { totalPorConfirmar += g.monto; continue; }
-    // UN TICKET NO ES UNA FACTURA. LISR 27-III exige que la deducción esté
-    // "amparada con un comprobante fiscal", y un ticket de gasolinera no lo es:
-    // hay que timbrarlo. Contarlo como deducible le promete al contralor una
-    // deducción que todavía no existe — y si nadie factura a tiempo, nunca
-    // existirá. Tampoco es pérdida: se puede timbrar. Por eso POR CONFIRMAR.
-    if (!g.cfdiUuid) { totalPorConfirmar += g.monto; continue; }
+    const cubeta = cubetaDe(g, suyas);
+    if (cubeta === 'no_deducible') { totalNoDeducible += g.monto; continue; }
+    if (cubeta === 'por_confirmar') { totalPorConfirmar += g.monto; continue; }
     // Parcial: del viático solo se pierde el EXCEDENTE sobre el tope fiscal
     // (LISR 28-V), no el gasto entero. Mandar los $900 completos a no deducible
     // por $150 de exceso es el error que más dinero le cuesta al cliente.

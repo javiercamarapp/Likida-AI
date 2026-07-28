@@ -57,17 +57,37 @@ export async function getTenantContext(tenantId: string): Promise<TenantContext>
 
 const MAX_TURNS = 12;
 
+/**
+ * Carga la conversación del teléfono, con los turnos DE ESTE VIAJE.
+ *
+ * `viaje_id` se guardaba en la fila y no se usaba nunca como condición de
+ * lectura: la conversación estaba modelada por (tenant, teléfono) y arrastraba
+ * los turnos del viaje anterior al prompt del siguiente. `saveConversation` pone
+ * `viaje_id = null` al cerrar pero CONSERVA los turnos, así que el último
+ * "Listo, cuadré tu viaje 👇 • Comprobado: $5,000.00 • Anticipo: $6,000.00" del
+ * viaje A entraba como contexto del viaje B, que tiene otro anticipo.
+ *
+ * Si el modelo repite una cifra, `guardiaCifras` lo tapa. Si concluye "eso ya lo
+ * cerré", no lo tapa nada — es munición para la afirmación de estado falsa. Y
+ * encima se pagan tokens de un viaje ajeno en cada turno.
+ */
 export async function loadConversation(tenantId: string, telefono: string, viajeId: string | null): Promise<{ id: string; turns: ConvTurn[] }> {
   const admin = supabaseAdmin();
   const { data } = await admin
     .from('wa_conversacion')
-    .select('id, estado')
+    .select('id, estado, viaje_id')
     .eq('tenant_id', tenantId)
     .eq('telefono', telefono)
     .maybeSingle();
   if (data) {
     const estado = (data.estado as { turns?: ConvTurn[] }) || {};
-    return { id: data.id as string, turns: (estado.turns ?? []).slice(-MAX_TURNS) };
+    // El historial pertenece al viaje en el que se dijo. Si la fila viene de otro
+    // viaje —o de ninguno, porque el anterior ya cerró— se empieza limpio.
+    const mismoViaje = viajeId !== null && data.viaje_id === viajeId;
+    if (!mismoViaje && (estado.turns?.length ?? 0) > 0) {
+      logger.info('conv.historial_descartado', { telefono, de: data.viaje_id ?? null, a: viajeId });
+    }
+    return { id: data.id as string, turns: mismoViaje ? (estado.turns ?? []).slice(-MAX_TURNS) : [] };
   }
   const { data: created } = await admin
     .from('wa_conversacion')
@@ -78,23 +98,36 @@ export async function loadConversation(tenantId: string, telefono: string, viaje
 }
 
 /**
- * Reclama un mensaje de WhatsApp de forma atómica (idempotencia).
- * Devuelve true si es NUEVO (procesar), false si ya se procesó (duplicado/retry).
+ * Resultado de reclamar un mensaje. Son TRES estados, no dos: la diferencia entre
+ * "ya lo procesamos" y "no pude averiguarlo" decide si el operador recibe
+ * respuesta o se queda sin nada.
  */
-export async function claimMessage(waMessageId: string): Promise<boolean> {
-  if (!waMessageId) return true;
+export type Claim = 'nuevo' | 'duplicado' | 'indeterminado';
+
+/**
+ * Reclama un mensaje de WhatsApp de forma atómica (idempotencia).
+ *
+ * ANTES devolvía un booleano y trataba cualquier error de DB como "duplicado",
+ * con el argumento de que "el retry de Meta lo reprocesará cuando la DB
+ * responda". Ese retry NO EXISTE: `route.ts` responde 200 y hace el trabajo en
+ * `after()`, así que Meta ya recibió su acuse y no reintenta nunca —lo dice el
+ * propio comentario de `presupuesto.ts`—. Un blip de Supabase en el insert hacía
+ * que el "listo" del operador desapareciera para siempre, con un log de nivel
+ * info que además mentía llamándolo duplicado.
+ *
+ * Ahora el caso indeterminado se distingue y lo decide el llamador, que es quien
+ * sabe si lo que está en juego es dinero o una respuesta.
+ */
+export async function claimMessage(waMessageId: string): Promise<Claim> {
+  if (!waMessageId) return 'nuevo';
   const { error } = await supabaseAdmin()
     .from('wa_mensaje_procesado')
     .insert({ wa_message_id: waMessageId });
-  if (!error) return true;
-  // 23505 = unique_violation → ya existía → duplicado (no reprocesar).
-  if (error.code === '23505') return false;
-  // AL-3: fail-CLOSED. Ante cualquier otro error de DB (timeout, conexión) NO
-  // asumimos "nuevo" — eso bypassa la idempotencia y puede duplicar el gasto si
-  // Meta reintenta. Tratamos como ya-reclamado; el retry de Meta lo reprocesará
-  // cuando la DB responda. Con dinero, preferir no-duplicar sobre no-perder.
-  logger.warn('wa.claim_error', { code: error.code, msg: error.message });
-  return false;
+  if (!error) return 'nuevo';
+  // 23505 = unique_violation → ya existía → duplicado de verdad (no reprocesar).
+  if (error.code === '23505') return 'duplicado';
+  logger.error('wa.claim_error', { code: error.code, msg: error.message });
+  return 'indeterminado';
 }
 
 export async function saveConversation(convId: string, turns: ConvTurn[], viajeId: string | null): Promise<void> {
