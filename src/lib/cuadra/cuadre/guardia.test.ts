@@ -70,3 +70,26 @@ describe('guardiaCifras', () => {
     expect(r.reply).not.toMatch(/\$|\d{2,}/);
   });
 });
+
+// La guardia responde AL OPERADOR por WhatsApp: es el camino feliz del demo
+// (foto → "listo" → el agente narra → la guardia reemplaza con el cuadre real).
+// Sin el destinatario, caía al default 'contralor' y le mandaba al chofer los
+// veredictos fiscales reservados a la oficina —proveedor en lista 69-B, CFDI
+// cancelado, RFC receptor— más el descargo legal completo, delante del comprador.
+describe('guardiaCifras — el destinatario es el OPERADOR', () => {
+  const conVeredictos: Omit<Liquidacion, 'id' | 'creadaEn'> = {
+    ...LIQ,
+    diferencias: [
+      { tipo: 'cfdi_efos', concepto: 'diesel', monto: 0, nota: 'El emisor aparece en la lista 69-B del SAT.' },
+      { tipo: 'sin_cfdi', concepto: 'diesel', monto: 0, nota: 'Diésel de $1,000 requiere factura CFDI.' },
+    ],
+  };
+
+  it('no le manda al chofer el veredicto fiscal', async () => {
+    cuadrarDesdeDB.mockResolvedValue(conVeredictos);
+    const r = await guardiaCifras('Ya quedó, son $9,999.00', [tc('cuadrar_viaje')], 't', 'v');
+    expect(r.reply).not.toMatch(/69-B/);
+    expect(r.reply).not.toMatch(/no sustituye|dictamen/i); // ni el descargo legal
+    expect(r.reply).toMatch(/requiere factura CFDI/);      // sí lo que puede arreglar
+  });
+});

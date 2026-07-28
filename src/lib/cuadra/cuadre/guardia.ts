@@ -37,7 +37,13 @@ export async function guardiaCifras(
   try {
     const liq = await cuadrarDesdeDB(tenantId, viajeId);
     // cerrado=cuadro: encabezado afirma el cierre solo si de verdad se cuadró.
-    return { reply: resumenCuadre(liq, cuadro), forzado: true };
+    //
+    // 'operador' NO es opcional aquí: esta respuesta va por WhatsApp AL CHOFER, y
+    // sin el destinatario caía al default 'contralor' — mandándole veredictos que
+    // él no puede arreglar (proveedor en lista 69-B, CFDI cancelado, RFC receptor)
+    // más el descargo legal. Y pasa en el CAMINO FELIZ: foto → "listo" → el agente
+    // narra → la guardia reemplaza. O sea, delante del comprador en el demo.
+    return { reply: resumenCuadre(liq, cuadro, 'operador'), forzado: true };
   } catch (err) {
     logger.error('guardia_cifras_fail_closed', { tenantId, viajeId, err: String(err) });
     return {
