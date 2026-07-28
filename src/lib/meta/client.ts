@@ -39,11 +39,38 @@ export function verifySignature(rawBody: string, signature: string | null): bool
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * El número al que WhatsApp acepta que le escribas, que NO es el que te manda.
+ *
+ * Medido contra la Graph API el 28-jul-2026, mismo destinatario, mismo token:
+ *
+ *   to: 5219993700779  →  (#131030) Recipient phone number not in allowed list
+ *   to: 529993700779   →  aceptado, y contesta wa_id 5219993700779
+ *
+ * O sea: Meta ENTREGA los mensajes entrantes con el "1" mexicano en el `wa_id`,
+ * y RECHAZA los salientes que lo lleven. Como el código contestaba al mismo
+ * `from` que recibía, la respuesta rebotaba SIEMPRE — a todos los operadores
+ * mexicanos, que son todo el mercado.
+ *
+ * Y rebotaba callando: `sendText` solo escribe en el log y no lanza, así que la
+ * liquidación se daba por terminada con éxito mientras el operador no recibía
+ * nada. El 200 del webhook y el `agent.run` en verde decían que todo iba bien.
+ *
+ * El "1" es una herencia de la numeración mexicana que WhatsApp dejó de usar
+ * para enviar en 2020 pero sigue emitiendo en los `wa_id`. Se quita solo cuando
+ * la forma es exactamente 52 + 1 + diez dígitos: ninguna otra lada se toca.
+ */
+export function destinatarioWhatsApp(telefono: string): string {
+  const d = telefono.replace(/[^\d]/g, '');
+  const mx = /^521(\d{10})$/.exec(d);
+  return mx ? `52${mx[1]}` : d;
+}
+
 export async function sendText(to: string, body: string): Promise<void> {
   const res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body } }),
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } }),
   });
   if (!res.ok) logger.error('wa.sendText', { status: res.status, body: await res.text().catch(() => '') });
 }
@@ -55,7 +82,7 @@ export async function sendDocument(to: string, link: string, filename: string, c
     headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       messaging_product: 'whatsapp',
-      to,
+      to: destinatarioWhatsApp(to),   // el PDF rebotaba igual que el texto
       type: 'document',
       document: { link, filename, caption },
     }),
