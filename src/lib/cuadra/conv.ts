@@ -57,17 +57,37 @@ export async function getTenantContext(tenantId: string): Promise<TenantContext>
 
 const MAX_TURNS = 12;
 
+/**
+ * Carga la conversación del teléfono, con los turnos DE ESTE VIAJE.
+ *
+ * `viaje_id` se guardaba en la fila y no se usaba nunca como condición de
+ * lectura: la conversación estaba modelada por (tenant, teléfono) y arrastraba
+ * los turnos del viaje anterior al prompt del siguiente. `saveConversation` pone
+ * `viaje_id = null` al cerrar pero CONSERVA los turnos, así que el último
+ * "Listo, cuadré tu viaje 👇 • Comprobado: $5,000.00 • Anticipo: $6,000.00" del
+ * viaje A entraba como contexto del viaje B, que tiene otro anticipo.
+ *
+ * Si el modelo repite una cifra, `guardiaCifras` lo tapa. Si concluye "eso ya lo
+ * cerré", no lo tapa nada — es munición para la afirmación de estado falsa. Y
+ * encima se pagan tokens de un viaje ajeno en cada turno.
+ */
 export async function loadConversation(tenantId: string, telefono: string, viajeId: string | null): Promise<{ id: string; turns: ConvTurn[] }> {
   const admin = supabaseAdmin();
   const { data } = await admin
     .from('wa_conversacion')
-    .select('id, estado')
+    .select('id, estado, viaje_id')
     .eq('tenant_id', tenantId)
     .eq('telefono', telefono)
     .maybeSingle();
   if (data) {
     const estado = (data.estado as { turns?: ConvTurn[] }) || {};
-    return { id: data.id as string, turns: (estado.turns ?? []).slice(-MAX_TURNS) };
+    // El historial pertenece al viaje en el que se dijo. Si la fila viene de otro
+    // viaje —o de ninguno, porque el anterior ya cerró— se empieza limpio.
+    const mismoViaje = viajeId !== null && data.viaje_id === viajeId;
+    if (!mismoViaje && (estado.turns?.length ?? 0) > 0) {
+      logger.info('conv.historial_descartado', { telefono, de: data.viaje_id ?? null, a: viajeId });
+    }
+    return { id: data.id as string, turns: mismoViaje ? (estado.turns ?? []).slice(-MAX_TURNS) : [] };
   }
   const { data: created } = await admin
     .from('wa_conversacion')
