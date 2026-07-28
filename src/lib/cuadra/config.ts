@@ -43,22 +43,10 @@ export interface CuadraConfig {
     clavesDieselIeps: string[];       // el estímulo de IEPS (LIF Art. 20-A fr. IV) es SOLO diésel
     clavesPeaje: string[];            // c_ClaveProdServ de peaje → estímulo del 50% (LIF 2026 Art. 20-A)
   };
-  // Catálogo de portales de facturación de gasolineras (capa 1: tabla + aviso).
-  // Un ticket de estación NO es factura; el operador debe timbrarlo en el portal
-  // de su marca dentro del plazo. NO hay automatización de portales — solo avisar.
-  portales: PortalFacturacion[];
   // Validaciones de cordura.
   validacion: {
     fechaToleranciaDiasAntes: number; // la fecha del gasto no puede ser anterior a (inicio del viaje − N días)
   };
-}
-
-export interface PortalFacturacion {
-  marca: string;        // etiqueta legible para el operador
-  match: string[];      // palabras clave para reconocer el ticket (estación/emisor/URL)
-  portal: string;       // URL de facturación
-  plazoHoras: number;   // plazo para facturar el ticket
-  campos: string[];     // datos que pide el portal (folio_norm, web_id, etc.)
 }
 
 // ── DEFAULTS DE DEMO (🔴 genéricos, NO de un cliente — reemplazables en la sala) ─
@@ -103,25 +91,8 @@ export const DEMO_CONFIG: CuadraConfig = {
     // y acreditaría peaje sobre gastos que no lo son. Ver intake/concepto.ts.
     clavesPeaje: ['95111602', '95111603'],
   },
-  // Portales de facturación por marca (capa 1). Plazos y URLs de los tickets reales.
-  portales: [
-    { marca: 'G500', match: ['g500'], portal: 'https://www.g500network.com', plazoHoras: 72, campos: ['folio_norm', 'web_id', 'rfc'] },
-    { marca: 'Pemex (franquicia / FACTURAGAS)', match: ['la joya', 'cargogas', 'facturagas', 'hidrolitro'], portal: 'https://www.cargogas.com', plazoHoras: 72, campos: ['folio_norm', 'web_id', 'fecha', 'rfc'] },
-    { marca: 'ARCO (Chihuahua)', match: ['arco', 'petrol.com'], portal: 'https://www.petrol.com.mx', plazoHoras: 72, campos: ['folio_norm', 'web_id', 'rfc'] },
-    { marca: 'Petromax / Petro7', match: ['petromax', 'petro7', 'duropetro'], portal: 'https://petro7.com/facturacion', plazoHoras: 72, campos: ['estacion', 'folio_norm', 'web_id', 'rfc'] },
-    { marca: 'ARCO (Sonora) / Buzón', match: ['bellas artes', 'buzonfacturas'], portal: 'https://www.buzonfacturas.com', plazoHoras: 48, campos: ['num_venta', 'rfc'] },
-    { marca: 'Enerser', match: ['enerser'], portal: '', plazoHoras: 72, campos: [] },
-    { marca: 'GORM / Brentec', match: ['gorm', 'brentec'], portal: '', plazoHoras: 72, campos: [] },
-  ],
   validacion: { fechaToleranciaDiasAntes: 30 },
 };
-
-/** Reconoce el portal de facturación de un ticket por palabras clave (estación/
- *  emisor/URL leídos por OCR). Devuelve null si no hay match. Capa 1: solo aviso. */
-export function portalParaTicket(texto: string, cfg: CuadraConfig): PortalFacturacion | null {
-  const t = texto.toLowerCase();
-  return cfg.portales.find((p) => p.match.some((m) => t.includes(m))) ?? null;
-}
 
 /**
  * Mezcla el override del tenant sobre la config base, RECURSIVAMENTE.
