@@ -1,3 +1,4 @@
+import { exigirAcceso } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { notFound } from 'next/navigation';
@@ -23,6 +24,10 @@ const ESTATUS: Record<string, { label: string; color: string }> = {
 };
 
 export default async function Detalle({ params }: { params: Promise<{ id: string }> }) {
+  // Segunda capa (ver dashboard/page.tsx). El id va en la ruta de vuelta para
+  // que tras el passcode aterrice en la liquidación que pidió.
+  const { id: idParaVolver } = await params;
+  await exigirAcceso(`/dashboard/${idParaVolver}`);
   const { id } = await params;
   const d = await getLiquidacionDetalle(id, TENANT());
   if (!d) notFound();

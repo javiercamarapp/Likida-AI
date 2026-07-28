@@ -19,7 +19,9 @@
 
   --color-ok: #34c759;          /* semáforo Apple */
   --color-warn: #ff9f0a;
-  --color-bad: #ff3b30;
+  /* #ff3b30 daba ~3.6:1 sobre blanco y AA pide 4.5:1 para texto normal. Este
+     tono llega a 4.6:1 y se sigue leyendo como el rojo de sistema. */
+  --color-bad: #d70015;
 
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
