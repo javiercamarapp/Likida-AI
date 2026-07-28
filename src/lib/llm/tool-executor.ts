@@ -75,7 +75,15 @@ export function makeExecutor(ctx: ToolContext) {
   const mutacionesHechas = new Map<string, ToolExecResult>();
   return async (name: string, args: Record<string, unknown>): Promise<ToolExecResult> => {
     if (REGISTRY.get(name)?.isMutation) {
-      const key = `${name}:${JSON.stringify(args)}`;
+      // LA LLAVE ES EL NOMBRE, no los args. Ninguna tool de Likida tiene
+      // parámetros a propósito —el modelo decide CUÁNDO, nunca CON QUÉ DATOS, y
+      // el efecto sale de ctx.tenantId/ctx.viajeId—, así que meter `args` en la
+      // llave describía la llamada y no el efecto: un byte de diferencia, o las
+      // mismas claves en otro orden, y la mutación corría dos veces sin que
+      // `tool.mutation_dedup` se disparara. Si algún día una tool sí decide sobre
+      // datos, esta llave tiene que volver a incluirlos — y ese día habrá que
+      // revisar la regla de `properties: {}` antes que esta línea.
+      const key = name;
       const cache = mutacionesHechas.get(key);
       if (cache) { logger.warn('tool.mutation_dedup', { name }); return cache; }
       const res = await executeTool(name, args, ctx);
