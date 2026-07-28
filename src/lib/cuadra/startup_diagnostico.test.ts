@@ -87,3 +87,31 @@ describe('diagnóstico de migraciones', () => {
     expect(error).toHaveBeenCalled();
   });
 });
+
+// CRÍTICO de la auditoría 5 (modelo de datos): la migración 0022 estaba aplicada
+// en producción y NO existía en el repo — `git log --all --diff-filter=A` sobre
+// `supabase/migrations/0022*` sale vacío. Cualquier `supabase db push` sobre un
+// proyecto limpio nace con las dos firmas de `guardar_liquidacion_tx` y ninguna
+// liquidación cierra. Y este chequeo no la sondeaba: decía `ok: true`.
+describe('la sobrecarga ambigua de guardar_liquidacion_tx', () => {
+  it('con DOS firmas vivas, el arranque lo grita en vez de decir ok', async () => {
+    rpc.mockResolvedValueOnce({ error: null })   // 0005
+       .mockResolvedValueOnce({ error: null })   // unlock
+       .mockResolvedValueOnce({ error: null })   // 0011
+       .mockResolvedValueOnce({ error: null })   // 0017
+       .mockResolvedValueOnce({ error: { code: '42725', message: 'function guardar_liquidacion_tx(...) is not unique' } });
+    await verificarMigracionesCriticas();
+
+    expect(info).not.toHaveBeenCalledWith('startup.migraciones', { ok: true });
+    expect(error).toHaveBeenCalledWith('startup.migraciones', expect.objectContaining({ code: '42725' }));
+    const [, meta] = error.mock.calls[0] as [string, { msg: string }];
+    expect(meta.msg).toContain('0022');
+    expect(meta.msg).toContain('NINGUNA liquidación puede cerrar');
+  });
+
+  it('un error NORMAL de esa sonda (tenant inexistente) no se confunde con la ambigüedad', async () => {
+    rpc.mockResolvedValue({ error: null });
+    await verificarMigracionesCriticas();
+    expect(info).toHaveBeenCalledWith('startup.migraciones', { ok: true });
+  });
+});
