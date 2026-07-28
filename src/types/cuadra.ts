@@ -67,6 +67,7 @@ export type TipoDiferencia =
   | 'anticipo'             // diferencia contra el anticipo entregado
   | 'ocr_baja_confianza'   // extracción dudosa, revisar a mano
   | 'rfc_receptor'         // CFDI timbrado a un RFC distinto al de la empresa
+  | 'rfc_receptor_no_verificable' // el RFC de la flota no sirve: no se puede confirmar NI descartar
   | 'cfdi_cancelado'       // CFDI cancelado ante el SAT → no deducible
   | 'cfdi_efos'            // emisor en lista negra 69-B → no deducible
   | 'cfdi_efos_indeterminado' // SAT devolvió código EFOS no concluyente → a bandeja (no fraude)

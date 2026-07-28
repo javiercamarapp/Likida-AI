@@ -65,7 +65,7 @@ const ES_VIATICO = ['alimentacion', 'hospedaje', 'transporte', 'viaticos'];
 export type Cubeta = 'deducible' | 'no_deducible' | 'por_confirmar';
 
 const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope'];
-const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo'];
+const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable'];
 
 /**
  * LA ÚNICA definición de en qué cubeta cae un gasto. Vive aquí, exportada, para
@@ -117,6 +117,20 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       .filter((r) => r !== RFC_GENERICO)
       .filter((r) => esRfcValido(r) && rfcChecksumOk(r)),
   );
+  // "No hay RFC configurado" y "hay uno y no sirve" NO son lo mismo, y tratarlos
+  // igual fue una regresión mía del 28-jul: al descartar el RFC mal formado,
+  // `rfcsOk` quedaba vacía, la comprobación entera se saltaba, y un CFDI de
+  // $11,600 timbrado a un TERCERO salía deducible con $1,600 de IVA acreditable,
+  // estatus `cuadrada` y cero diferencias. Cambié "rechaza todo" por "aprueba
+  // todo", y la segunda dirección es peor: el producto AFIRMA una deducción que
+  // no existe, en verde, y el único rastro es un log de servidor.
+  //
+  // El estado correcto es el tercero: no se puede confirmar NI descartar → a
+  // revisión. Nunca deducible, nunca acreditable, y dicho en el informe.
+  const rfcEmpresaInservible =
+    rfcsOk.size === 0 &&
+    !!input.empresaRfc &&
+    norm(input.empresaRfc) !== RFC_GENERICO;
 
   // 0) Duplicados: primero por UUID (regla dura), luego por concepto+folio+monto.
   //    Se EXCLUYEN del total (no lo inflan) — fix del audit.
@@ -243,6 +257,13 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     }
     if (g.ocrConfianza != null && g.ocrConfianza < umbral) {
       diferencias.push({ tipo: 'ocr_baja_confianza', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} se leyó con baja confianza — conviene revisarlo a mano.`, gastoId: g.id });
+    }
+    if (rfcEmpresaInservible && g.rfcReceptor) {
+      diferencias.push({
+        tipo: 'rfc_receptor_no_verificable', concepto: g.concepto, monto: 0,
+        nota: `No se puede verificar a nombre de quién está la factura de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)}: el RFC de la flota está mal capturado. Queda a revisión — corrige el RFC de la empresa y vuelve a cuadrar.`,
+        gastoId: g.id,
+      });
     }
     if (rfcsOk.size > 0 && g.rfcReceptor && !rfcsOk.has(norm(g.rfcReceptor))) {
       // RLISR 57: "Si benefician a personas que le prestan servicios personales
@@ -517,7 +538,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // SÍ es deducible hasta el 15% (RFA 2026 regla 2.9), pero NO acredita IEPS —
   // la facilidad salva un beneficio, no los dos. Sacarlo de aquí acreditaría un
   // IEPS que la facilidad no concede.
-  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido'];
+  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido'];
   const peajeFactor = input.estimulos?.peajeFactor ?? 0.5;
   // `iepsAcreditable` se queda en 0 a propósito y por eso es const: el estímulo
   // del LIF 20-A no es una cifra que este motor pueda calcular (necesita la cuota
@@ -624,9 +645,24 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // Parcial: del viático solo se pierde el EXCEDENTE sobre el tope fiscal
     // (LISR 28-V), no el gasto entero. Mandar los $900 completos a no deducible
     // por $150 de exceso es el error que más dinero le cuesta al cliente.
-    const excedente = suyas.filter((d) => d.tipo === 'viatico_excede_fiscal').reduce((s, d) => s + (d.monto ?? 0), 0);
-    totalNoDeducible += excedente;
-    totalDeducible += g.monto - excedente;
+    //
+    // El reparto va por PROPORCIÓN del día, la misma que el bloque de
+    // acreditamiento usa para el IVA — y por la misma razón que allá se dejó de
+    // anclar el exceso a un comprobante. Aquí se seguía anclando, y producía un
+    // deducible NEGATIVO: dos comidas del mismo día, $2,000 sin CFDI y $100 con
+    // CFDI, tope $750. El exceso del día ($1,350) se colgaba del ancla —el de
+    // $100, que es el único en la cubeta deducible— y salía
+    // `totalDeducible = -1250` bajo un comprobado de $2,100. Eso se imprime.
+    //
+    // Con la proporción, cada comprobante del día es deducible en su parte del
+    // tope ($750/$2,100 = 35.7%) y no deducible en el resto. Nunca es negativo,
+    // no depende del ORDEN del arreglo, y las tres cubetas siguen sumando el
+    // comprobado. Los gastos que ya cayeron en `por_confirmar` no arrastran su
+    // exceso hasta acá: mientras no estén timbrados no son deducción de nadie.
+    const proporcion = Math.max(0, Math.min(1, proporcionDeducible.get(g.id) ?? 1));
+    const deducibleDelGasto = round2(g.monto * proporcion);
+    totalDeducible += deducibleDelGasto;
+    totalNoDeducible += round2(g.monto - deducibleDelGasto);
   }
 
   // `ieps_no_desglosado` NO va aquí a propósito: el gasto es deducible y lo único
