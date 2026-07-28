@@ -18,6 +18,7 @@ import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { violaIndice } from '@/lib/cuadra/pg_errores';
+import { guardiaFundamento, normasDeToolCalls } from '@/lib/cuadra/normas/fundamento';
 import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS } from '@/lib/cuadra/presupuesto';
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
 import { getConfig } from '@/lib/cuadra/config';
@@ -557,6 +558,26 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       if (g.forzado) { logger.warn('agent.cifras_forzadas', { viaje: viajeId }); reply = g.reply; }
     } catch (e) {
       logger.warn('guardia.fail', { err: e instanceof Error ? e.message : String(e) });
+    }
+
+    // GUARDIA DE FUNDAMENTO: el modelo solo puede citar una norma que una tool le
+    // devolvió EN ESTE TURNO. Lo demás se le quita del mensaje.
+    //
+    // Va DESPUÉS de la guardia de cifras a propósito: si aquella sustituyó el
+    // texto por el resumen determinístico, este ya no trae citas y esto no hace
+    // nada. Al revés se estaría limpiando un texto que iba a descartarse.
+    //
+    // Se lee de lo que las tools DEVOLVIERON, no de lo que el modelo diga que le
+    // devolvieron: leerlo del texto sería preguntarle a la guardia por sí misma.
+    try {
+      const permitidas = normasDeToolCalls(agentTools.filter((t) => !t.error).map((t) => t.result));
+      const f = guardiaFundamento(reply, permitidas);
+      if (f.forzado) {
+        logger.warn('agent.fundamento_forzado', { viaje: viajeId, tenant: op.tenantId, quitadas: f.quitadas });
+        reply = f.reply;
+      }
+    } catch (e) {
+      logger.warn('guardia_fundamento.fail', { err: e instanceof Error ? e.message : String(e) });
     }
 
     await say(reply);

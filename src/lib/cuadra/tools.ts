@@ -15,6 +15,8 @@ import { generarLiquidacionPDF } from './liquidacion/pdf';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { Liquidacion } from '@/types/cuadra';
+import { normasDe } from './normas/por_diferencia';
+import { NORMAS, esVinculante } from './normas/indice';
 
 // ── consultar_politica ──────────────────────────────────────────────────────
 registerTool('consultar_politica', {
@@ -47,12 +49,26 @@ registerTool('cuadrar_viaje', {
   handler: async (_args, ctx) => {
     if (!ctx.viajeId) throw new Error('sin viaje activo');
     const liq = await computeCuadre(ctx.tenantId, ctx.viajeId);
+    // `fundamentos` es el permiso de citar. `guardiaFundamento` le quita al
+    // mensaje cualquier norma que no salga de aquí, así que esta lista es lo
+    // único que el agente puede mencionar en este turno. Sin ella no puede
+    // citar NADA, que es la posición segura.
+    const fundamentos = normasDe(liq.diferencias.map((d) => d.tipo));
     return {
       total_comprobado: liq.totalComprobado,
       total_anticipo: liq.totalAnticipo,
       diferencia: liq.diferencia,
       estatus: liq.estatus,
       diferencias: liq.diferencias.map((d) => ({ tipo: d.tipo, monto: d.monto, nota: d.nota })),
+      fundamentos: fundamentos.map((id) => ({
+        norma_id: id,
+        cita: NORMAS[id].citas[0],
+        jerarquia: NORMAS[id].jerarquia,
+        // Que el agente sepa si puede AFIRMAR o tiene que condicionar. Una ficha
+        // sin verificar no sostiene una afirmación tajante.
+        verificada: NORMAS[id].estado !== 'sin_verificar',
+        vinculante: esVinculante(NORMAS[id].jerarquia),
+      })),
     };
   },
 });
