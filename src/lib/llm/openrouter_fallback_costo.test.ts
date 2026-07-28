@@ -66,3 +66,37 @@ describe('generateWithTools — precio por ronda, con el modelo de esa ronda', (
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL COSTO DEL CICLO QUE SE CAYÓ TAMBIÉN SE PAGÓ.
+//
+// `PartialExecutionError` llevaba las tools ejecutadas pero NO el costo de las
+// rondas que sí corrieron. Y el processor, en su rama de recuperación de cierre
+// parcial —flag ya activo por default—, nunca llamaba `registrarCosto`.
+//
+// Resultado: la liquidación que cae por ahí sale con su PDF, pero lo que se
+// gastó en OpenRouter para producirla es invisible. Para un negocio que va a
+// cobrar POR LIQUIDACIÓN, el costo unitario queda subestimado justo en el caso
+// de más presión, que es el que más consume.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('generateWithTools — el error carga lo que ya se pagó', () => {
+  beforeEach(() => { create.mockReset(); });
+
+  it('PartialExecutionError trae los tokens y el costo de las rondas que corrieron', async () => {
+    create
+      .mockResolvedValueOnce(conTool(PRIM, 100, 20))       // ronda 1: se pagó
+      .mockRejectedValueOnce(new Error('boom irrecuperable')); // ronda 2: revienta
+    const err = await correr().catch((e) => e);
+    expect(err.name).toBe('PartialExecutionError');
+    expect(err.tokensIn, 'la ronda 1 se cobró y tiene que viajar en el error').toBe(100);
+    expect(err.tokensOut).toBe(20);
+    expect(err.cost).toBeCloseTo(calcCost(PRIM, 100, 20), 12);
+  });
+
+  it('si revienta la primera ronda, el costo es 0 pero los campos existen', async () => {
+    create.mockRejectedValueOnce(new Error('provider caído del todo'));
+    const err = await correr().catch((e) => e);
+    expect(err.tokensIn).toBe(0);
+    expect(err.cost).toBe(0);
+  });
+});

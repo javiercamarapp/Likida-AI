@@ -99,3 +99,33 @@ describe('resumenCuadre — el texto sospechoso no viaja al operador', () => {
     expect(resumenCuadre(liqTexto, true, 'contralor')).toMatch(/lector autom/i);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNA PETICIÓN AL OPERADOR NO PUEDE ESTAR EN LA LISTA "SOLO CONTRALOR".
+//
+// `complemento_no_verificable` le dice textualmente al operador "reenvía el XML
+// (el que te manda la gasolinera por correo)". Pero el tipo estaba en
+// SOLO_CONTRALOR, así que esa petición se filtraba y nunca le llegaba a quien
+// tiene el correo.
+//
+// La regla de SOLO_CONTRALOR es "veredictos que el operador no puede arreglar y
+// que además lo señalan". Este es lo contrario: es lo ÚNICO que él puede
+// arreglar, y sin el XML la flota pierde el acreditamiento de IVA y el estímulo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('resumenCuadre — lo que el operador SÍ puede arreglar le llega', () => {
+  const liqXml = {
+    viajeId: 'v1', totalComprobado: 4812, totalAnticipo: 5000, diferencia: 188,
+    estatus: 'revisar' as const, totalDeducible: 4812, totalNoDeducible: 0, totalPorConfirmar: 0,
+    gastos: [], iepsAcreditable: 0, litrosDieselAcreditables: 0, ivaAcreditable: 0, peajeAcreditable: 0,
+    diferencias: [{ tipo: 'complemento_no_verificable' as const, concepto: 'diesel' as const, monto: 0,
+                    nota: 'La factura de Diésel es de combustible: reenvía el XML (el que te manda la gasolinera por correo) para verificar el complemento de hidrocarburos.' }],
+  };
+
+  it('al operador le llega la petición del XML', () => {
+    expect(resumenCuadre(liqXml, true, 'operador')).toMatch(/reenv[íi]a el XML/i);
+  });
+
+  it('al contralor también: él puede pedírselo a la gasolinera', () => {
+    expect(resumenCuadre(liqXml, true, 'contralor')).toMatch(/XML/i);
+  });
+});

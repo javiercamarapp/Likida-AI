@@ -352,7 +352,23 @@ export class LoopGuardError extends Error {
 }
 
 export class PartialExecutionError extends Error {
-  constructor(message: string, public cause: unknown, public partialToolCalls: ToolCallRecord[]) {
+  constructor(
+    message: string,
+    public cause: unknown,
+    public partialToolCalls: ToolCallRecord[],
+    /**
+     * Lo que YA se pagó en las rondas que sí corrieron.
+     *
+     * Antes no viajaba, y el processor —en su rama de recuperación de cierre
+     * parcial, con el flag activo por default— tampoco llamaba `registrarCosto`.
+     * La liquidación salía con su PDF y lo gastado en OpenRouter para producirla
+     * quedaba invisible. En un negocio que cobra POR LIQUIDACIÓN, el costo
+     * unitario se subestima justo en el caso que más consume.
+     */
+    public tokensIn = 0,
+    public tokensOut = 0,
+    public cost = 0,
+  ) {
     super(message);
     this.name = 'PartialExecutionError';
   }
@@ -478,6 +494,6 @@ export async function generateWithTools(opts: {
     throw new LoopGuardError(maxRounds);
   } catch (err) {
     if (err instanceof PartialExecutionError) throw err;
-    throw new PartialExecutionError(err instanceof Error ? err.message : String(err), err, executed);
+    throw new PartialExecutionError(err instanceof Error ? err.message : String(err), err, executed, tokIn, tokOut, costo);
   }
 }

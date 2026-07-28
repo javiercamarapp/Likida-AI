@@ -1,6 +1,6 @@
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ACCESS_COOKIE, accessToken } from '@/lib/auth/passcode';
+import { ACCESS_COOKIE, constTimeEq, accessToken } from '@/lib/auth/passcode';
 import { rateLimit } from '@/lib/ratelimit';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +22,10 @@ export default async function Acceso({ searchParams }: { searchParams: Promise<{
     }
     const code = String(formData.get('code') ?? '').trim();
     const expected = process.env.DASHBOARD_PASSCODE ?? '';
-    if (expected && code === expected) {
+    // Tiempo constante, no `===`: aquel sale al primer carácter distinto y filtra
+    // cuántos acertó quien prueba. El rate-limit ya lo hace difícil de explotar,
+    // pero el helper está al lado y no cuesta nada.
+    if (expected && constTimeEq(code, expected)) {
       (await cookies()).set(ACCESS_COOKIE, await accessToken(expected), {
         httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 60 * 60 * 8,
       });

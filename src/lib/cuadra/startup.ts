@@ -9,7 +9,26 @@ const ZERO = '00000000-0000-0000-0000-000000000000';
  * caía en SILENCIO — aquí se deja un error ruidoso. Best-effort: no tumba el
  * arranque (demo-safe; sin env/DB en build no rompe). 2.1.
  */
+/**
+ * Variables de entorno sin las cuales algo falla EN SILENCIO o, peor, parece
+ * funcionar sin hacerlo.
+ *
+ * `DASHBOARD_SECRET` es el caso claro: sin él, el HMAC de la cookie del panel se
+ * derivaba del propio passcode y una cookie capturada permitía crackearlo
+ * offline. Ahora `passcode.ts` lanza en producción — este check hace que el aviso
+ * salga al ARRANCAR y no la primera vez que alguien intente entrar al panel.
+ */
+export function verificarEntornoCritico(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  if (!process.env.DASHBOARD_SECRET) {
+    logger.error('startup.entorno', {
+      msg: 'FALTA DASHBOARD_SECRET: el panel va a fallar al intentar entrar. Sin él, el HMAC de la cookie se deriva del propio passcode y una cookie capturada permite crackearlo offline. Ponlo en las variables de entorno del despliegue.',
+    });
+  }
+}
+
 export async function verificarMigracionesCriticas(): Promise<void> {
+  verificarEntornoCritico();
   try {
     const admin = supabaseAdmin();
     const { error } = await admin.rpc('try_lock_viaje', { p_viaje: ZERO, p_ttl_ms: 1 });
@@ -45,6 +64,19 @@ export async function verificarMigracionesCriticas(): Promise<void> {
         msg: 'FALTA la migración 0016 (codigo_pendiente): el acercamiento que llegue antes que su ticket pierde el folio exacto y el gasto se queda con el folio del OCR. Corre `supabase db push`.',
         code: e16.code,
         err: e16.message,
+      });
+      return;
+    }
+    // Las dos migraciones nuevas del camino del dinero. La 0017 hace el merge de
+    // ocr_extra con claim (sin ella se pisan los folios de portal entre fotos de
+    // una misma ráfaga); la 0019 impide que el mismo CFDI se liquide dos veces.
+    const { error: e17 } = await admin.rpc('enriquecer_gasto_codigo', {
+      p_gasto: ZERO, p_tenant: ZERO, p_extra: {}, p_cfdi_uuid: null,
+    });
+    if (e17) {
+      logger.error('startup.migraciones', {
+        msg: 'FALTA la migración 0017 (enriquecer_gasto_codigo): el folio del portal que trae un acercamiento no se pega y se pierde. Corre `supabase db push`.',
+        code: e17.code, err: e17.message,
       });
       return;
     }

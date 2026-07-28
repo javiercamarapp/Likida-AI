@@ -10,8 +10,25 @@
 export const ACCESS_COOKIE = 'likida_access';
 
 function secret(): string {
-  // En producción debe ponerse DASHBOARD_SECRET; si falta, cae al passcode.
-  return process.env.DASHBOARD_SECRET || `likida:${process.env.DASHBOARD_PASSCODE || 'dev'}`;
+  const s = process.env.DASHBOARD_SECRET;
+  if (s) return s;
+
+  // EN PRODUCCIÓN NO HAY FALLBACK, Y ES A PROPÓSITO.
+  //
+  // Antes caía a `likida:${DASHBOARD_PASSCODE}`: la cookie era HMAC(passcode) con
+  // una clave DERIVADA del propio passcode. Quien capture UNA cookie puede probar
+  // candidatos offline —sin tocar /acceso, sin su rate-limit— hasta dar con el
+  // passcode, y entrar por el formulario normal indefinidamente. Un passcode de
+  // demo tiene poca entropía: eso son minutos de cómputo.
+  //
+  // Un candado que parece cerrado y no lo está es peor que uno que avisa que no
+  // está puesto.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'DASHBOARD_SECRET es obligatorio en producción: sin él el HMAC de la cookie se deriva del propio passcode, y una cookie capturada permite crackearlo offline.',
+    );
+  }
+  return `likida:${process.env.DASHBOARD_PASSCODE || 'dev'}`;
 }
 
 async function hmacHex(msg: string): Promise<string> {
@@ -32,8 +49,14 @@ export async function expectedAccessToken(): Promise<string | null> {
   return p ? accessToken(p) : null;
 }
 
-/** Comparación en tiempo constante (evita fuga por timing). */
-function constTimeEq(a: string, b: string): boolean {
+/**
+ * Comparación en tiempo constante (evita fuga por timing).
+ *
+ * Se exporta para que `/acceso` la use también: comparaba el passcode con `===`,
+ * que sale al primer carácter distinto. El rate-limit hace la explotación
+ * difícil, pero teniendo el helper al lado no hay razón para no usarlo.
+ */
+export function constTimeEq(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let r = 0;
   for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
