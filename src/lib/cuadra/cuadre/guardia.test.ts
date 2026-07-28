@@ -52,7 +52,15 @@ describe('guardiaCifras', () => {
   });
 
   it('solo consultar_politica + cifras (topes): respeta el texto', async () => {
-    const r = await guardiaCifras('El tope de efectivo es $2,000', [tc('consultar_politica')], 't', 'v');
+    // El resultado de la tool tiene que TRAER el tope. Antes este caso pasaba
+    // con `result: {}` —una tool que no devolvió nada— porque la guardia solo
+    // miraba si la llamada existía. Con `{}` de resultado, "$2,000" es una
+    // cifra que nadie calculó, y hoy la guardia lo dice.
+    const r = await guardiaCifras(
+      'El tope de efectivo es $2,000',
+      [{ toolName: 'consultar_politica', args: {}, result: { topeEfectivo: 2000 } } as never],
+      't', 'v',
+    );
     expect(r.forzado).toBe(false);
     expect(cuadrarDesdeDB).not.toHaveBeenCalled();
   });
@@ -91,5 +99,54 @@ describe('guardiaCifras — el destinatario es el OPERADOR', () => {
     expect(r.reply).not.toMatch(/69-B/);
     expect(r.reply).not.toMatch(/no sustituye|dictamen/i); // ni el descargo legal
     expect(r.reply).toMatch(/requiere factura CFDI/);      // sí lo que puede arreglar
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// B11 — LA PUERTA TRASERA DE `consultar_politica`.
+//
+// La guardia dejaba pasar el texto entero en cuanto hubiera una llamada exitosa
+// a consultar_politica, razonando "entonces las cifras son topes". Pero la tool
+// no ata al texto. El modelo podía consultar la política —barata, y siempre
+// disponible— y en el mismo turno narrar un cuadre inventado. Una tool
+// irrelevante desbloqueaba narrar dinero que nadie calculó.
+// ═══════════════════════════════════════════════════════════════════════════
+const tcRes = (toolName: string, result: unknown) => ({ toolName, args: {}, result }) as never;
+
+describe('guardiaCifras — política consultada', () => {
+  beforeEach(() => {
+    cuadrarDesdeDB.mockReset();
+    cuadrarDesdeDB.mockResolvedValue(LIQ);
+  });
+
+  it('deja pasar los topes que la política SÍ devolvió', async () => {
+    const r = await guardiaCifras(
+      'El tope de alimentación son $750 por día.',
+      [tcRes('consultar_politica', { topeAlimentacionDia: 750 })],
+      't', 'v',
+    );
+    expect(r.forzado).toBe(false);
+    expect(r.reply).toContain('$750');
+    expect(cuadrarDesdeDB).not.toHaveBeenCalled();
+  });
+
+  it('NO deja pasar un cuadre inventado colado junto a un tope real', async () => {
+    const r = await guardiaCifras(
+      'El tope son $750 por día. Por cierto, comprobaste $8,340 y sobró $500.',
+      [tcRes('consultar_politica', { topeAlimentacionDia: 750 })],
+      't', 'v',
+    );
+    expect(r.forzado).toBe(true);
+    expect(r.reply).not.toContain('8,340');
+    expect(cuadrarDesdeDB).toHaveBeenCalled();
+  });
+
+  it('si la política falla y aun así hay cifras, no se confía en ella', async () => {
+    const r = await guardiaCifras(
+      'El tope son $750.',
+      [{ toolName: 'consultar_politica', args: {}, result: { topeAlimentacionDia: 750 }, error: 'timeout' } as never],
+      't', 'v',
+    );
+    expect(r.forzado).toBe(true);
   });
 });

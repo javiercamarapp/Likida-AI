@@ -79,3 +79,23 @@ describe('resumenCuadre — descargo de responsabilidad', () => {
     expect(resumenCuadre(liq([]), true, 'operador')).not.toContain(LEYENDA_CORTA);
   });
 });
+
+describe('resumenCuadre — el texto sospechoso no viaja al operador', () => {
+  const liqTexto = {
+    viajeId: 'v1', totalComprobado: 487.5, totalAnticipo: 500, diferencia: 12.5,
+    estatus: 'revisar' as const, totalDeducible: 487.5, totalNoDeducible: 0, totalPorConfirmar: 0,
+    gastos: [], iepsAcreditable: 0, ivaAcreditable: 0, peajeAcreditable: 0,
+    diferencias: [{ tipo: 'texto_sospechoso' as const, concepto: 'diesel' as const, monto: 0,
+                    nota: 'El comprobante traía texto dirigido al lector automático.' }],
+  };
+
+  it('al operador no se le menciona', () => {
+    // Es quien pudo haberlo intentado. Decírselo solo le enseña a hacerlo mejor
+    // la próxima; y si el renglón lo imprimió el comercio, lo acusa de nada.
+    expect(resumenCuadre(liqTexto, true, 'operador')).not.toMatch(/lector autom/i);
+  });
+
+  it('al contralor sí, que es quien decide sobre ese gasto', () => {
+    expect(resumenCuadre(liqTexto, true, 'contralor')).toMatch(/lector autom/i);
+  });
+});

@@ -24,7 +24,7 @@ export type Destinatario = 'operador' | 'contralor';
 const SOLO_CONTRALOR: TipoDiferencia[] = [
   'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_cancelado', 'cfdi_no_encontrado',
   'cfdi_pendiente', 'rfc_receptor', 'complemento_hidrocarburos',
-  'complemento_no_verificable', 'ieps_no_desglosado',
+  'complemento_no_verificable', 'ieps_no_desglosado', 'texto_sospechoso',
 ];
 
 export function resumenCuadre(
