@@ -260,3 +260,55 @@ describe('lo que el arreglo NO debe romper (regresión de la ronda 3)', () => {
     expect(citasEnTexto('conforme a la RFA 2026 regla 2.9')).toContain('rfa-2026-2.9');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 4 · CRÍTICO REINCIDENTE — formas de cita que el detector no veía.
+//
+// `FORMA_DE_CITA` era una lista de formas CONOCIDAS, no un detector de "esto
+// tiene pinta de referencia legal". Si el modelo no pegaba la palabra
+// "artículo"/"regla"/"fracción" a un dígito, o ponía la sigla DESPUÉS del
+// número, la cita inventada ni siquiera llegaba a CITA_DESCONOCIDA: salía
+// intacta hacia el contralor.
+//
+// La ronda 3 lo reportó, se declaró arreglado y el commit no tocó el regex.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('una cita inventada se detecta aunque no traiga la palabra "artículo"', () => {
+  it('sigla DESPUÉS del número: "27-III LISR"', () => {
+    expect(citasEnTexto('No es deducible: 27-III LISR.')).toContain('DESCONOCIDA');
+  });
+
+  it('número con sufijo junto al nombre de la ley: "45-Z de la Ley del ISR"', () => {
+    const t = 'Ese gasto no aplica conforme al 45-Z de la Ley del ISR, así que te lo dejo como no deducible.';
+    expect(citasEnTexto(t)).toContain('DESCONOCIDA');
+  });
+
+  it('el número escrito en palabras: "artículo veintisiete fracción tres"', () => {
+    const t = 'No es deducible por el artículo veintisiete fracción tres de la LISR.';
+    expect(citasEnTexto(t)).toContain('DESCONOCIDA');
+  });
+
+  it('y la guardia fuerza el texto en los tres casos', () => {
+    for (const t of [
+      'No es deducible: 27-III LISR.',
+      'Ese gasto no aplica conforme al 45-Z de la Ley del ISR.',
+      'No es deducible por el artículo veintisiete fracción tres de la LISR.',
+    ]) expect(guardiaFundamento(t, []).forzado, t).toBe(true);
+  });
+});
+
+describe('el detector ensanchado no puede confundir un folio ni una fecha con una cita', () => {
+  it('deja en paz el cuadre normal, que es la mayoría de los mensajes', () => {
+    const t = 'Listo, cuadré tu viaje 👇\n• Comprobado: $5,000.00\n• Anticipo: $6,000.00\n• Sobró $1,000.00 del anticipo';
+    expect(citasEnTexto(t)).toEqual([]);
+    expect(guardiaFundamento(t, []).forzado).toBe(false);
+  });
+
+  it('deja en paz folios, fechas y RFC', () => {
+    for (const t of [
+      'Tu folio es A-4501 y el ticket es del 2026-07-28.',
+      'La factura F-129 está timbrada al RFC XAXX010101000.',
+      'El viaje 2026-014 ya quedó.',
+    ]) expect(citasEnTexto(t), t).toEqual([]);
+  });
+});
