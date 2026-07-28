@@ -34,13 +34,13 @@ function viajeReal(): Gasto[] {
     // Dos cargas de diésel TIMBRADAS (el camino bueno: XML completo)
     g({ concepto: 'diesel', monto: 5800, fecha: '2026-05-01', cfdiUuid: 'uuid-d1', xmlVerificado: true,
         claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true,
-        rfcReceptor: 'TIN950101ABC', subTotal: 4310, ivaTraslado: 690, iepsTraslado: 800, estadoSat: 'vigente' }),
+        rfcReceptor: 'TIN950101AB0', subTotal: 4310, ivaTraslado: 690, iepsTraslado: 800, estadoSat: 'vigente' }),
     g({ concepto: 'diesel', monto: 5200, fecha: '2026-05-02', cfdiUuid: 'uuid-d2', xmlVerificado: true,
         claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true,
-        rfcReceptor: 'TIN950101ABC', subTotal: 3862, ivaTraslado: 618, iepsTraslado: 720, estadoSat: 'vigente' }),
+        rfcReceptor: 'TIN950101AB0', subTotal: 3862, ivaTraslado: 618, iepsTraslado: 720, estadoSat: 'vigente' }),
     // Una caseta timbrada (para que el estímulo de peaje entre)
     g({ concepto: 'caseta', monto: 1160, fecha: '2026-05-01', cfdiUuid: 'uuid-c1', xmlVerificado: true,
-        rfcReceptor: 'TIN950101ABC', subTotal: 1000, ivaTraslado: 160, estadoSat: 'vigente' }),
+        rfcReceptor: 'TIN950101AB0', subTotal: 1000, ivaTraslado: 160, estadoSat: 'vigente' }),
   ];
   // Once casetas sueltas (lo normal: tickets sin timbrar)
   for (let i = 0; i < 11; i++) {
@@ -66,7 +66,10 @@ describe('liquidación completa de 20 comprobantes', () => {
   const esperado = gastos.filter((x) => x.folio !== 'CAS-100' || x.id === 'g4').reduce((s, x) => s + x.monto, 0);
   const r = cuadrarViaje({
     viajeId: 'VJ-REAL', anticipo: esperado, politica, estimulos: EST, hidrocarburos: HC,
-    empresaRfc: 'TIN950101ABC', fechaMin: '2026-04-28', fechaMax: '2026-05-05',
+    // RFC con DÍGITO VERIFICADOR válido a propósito: desde el 28-jul un RFC de
+    // empresa mal formado deja el receptor SIN VERIFICAR (ni deducible ni
+    // rechazado), y con el fixture inventado esta prueba medía otra cosa.
+    empresaRfc: 'TIN950101AB0', fechaMin: '2026-04-28', fechaMax: '2026-05-05',
     gastos,
   });
 

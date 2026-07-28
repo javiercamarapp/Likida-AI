@@ -59,6 +59,11 @@ export const SIN_NORMA: Partial<Record<TipoDiferencia, string>> = {
   duplicado: 'Calidad del dato: el mismo comprobante dos veces.',
   anticipo: 'Aritmética del viaje, no una regla fiscal.',
   ocr_baja_confianza: 'Calidad de la lectura.',
+  // No es que la ley diga nada: es que NO PODEMOS aplicarla. El RFC de la flota
+  // está mal capturado, así que el receptor del CFDI no se puede confirmar ni
+  // descartar. Citar LISR 27-III aquí sería fingir un veredicto legal sobre un
+  // problema de captura.
+  rfc_receptor_no_verificable: 'Calidad del dato de la flota: sin RFC válido no se puede verificar el receptor.',
   monto_invalido: 'Calidad del dato.',
   monto_discrepante: 'Calidad del dato: el código y el OCR no coinciden.',
   fecha_sospechosa: 'Calidad del dato.',
