@@ -27,6 +27,16 @@ por_que_importa: >
   comprobante que no vaya a nombre de la flota le tira deducciones legítimas.
   El operador de una flota es trabajador subordinado.
 verificado_el: 2026-07-27
+estado_implementacion: >
+  IMPLEMENTADO. `rfc_receptor` ya no marca como no deducible un viático a nombre de
+  una persona: si coincide con `operadorRfc` no se reporta nada, y si ese dato falta
+  se emite `viatico_rfc_operador` (revisión, sin quitar la deducción). Para diésel y
+  facturas el comportamiento anterior se conserva.
+pendiente: >
+  La tabla `operador` NO tiene columna `rfc`, así que `operadorRfc` no se puede
+  poblar todavía y toda liquidación con viático a nombre de persona cae en el aviso.
+  Para cerrarlo hace falta migración + captura del RFC del operador. NO se creó la
+  columna: vacía no cambiaría el comportamiento y sí sumaría esquema muerto.
 impacto_en_el_motor: >
   La regla `rfc_receptor` marca como no deducible cualquier CFDI cuyo receptor no sea
   el RFC de la empresa. Para viáticos de alimentación, hospedaje y transporte de un

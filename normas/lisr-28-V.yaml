@@ -43,6 +43,11 @@ confirmado_del_codigo:
   - "Solo alimentación; el hospedaje nacional no tiene tope: CORRECTO"
 hallazgos_que_el_codigo_NO_implementa:
   - id: H1
+    estado: IMPLEMENTADO_COMO_AVISO
+    implementacion: >
+      `alimentacion_sin_soporte` en cuadre/engine.ts. Se marca para REVISIÓN, no se
+      declara no deducible: no vemos toda la contabilidad de la flota y el
+      comprobante de hospedaje puede existir fuera de esta liquidación.
     que_dice_la_ley: >
       El tope de $750 procede solo "y el contribuyente acompañe el comprobante fiscal
       o la documentación comprobatoria que ampare el hospedaje o transporte".

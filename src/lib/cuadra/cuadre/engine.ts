@@ -32,6 +32,10 @@ export interface CuadreInput {
   empresaRfc?: string;
   /** RFCs adicionales válidos de la flota (razones sociales múltiples). */
   rfcsAdicionales?: string[];
+  /** RFC del operador del viaje. Un viático a SU nombre es válido (RLISR 57):
+   *  los comprobantes de quien presta servicios subordinados pueden expedirse a
+   *  nombre de esa persona. Sin este dato no se rechaza — se manda a revisar. */
+  operadorRfc?: string;
   /** Complemento de hidrocarburos (Bloque 1): claves de combustible, unidad,
    *  y fecha de vigencia. Sin esto, la regla no corre. */
   hidrocarburos?: { claves: string[]; unidad: string; vigenteDesde: string };
@@ -51,6 +55,9 @@ function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaG
   const dela = pol.filter((p) => strip_accents(p.concepto.toLowerCase()) === c);
   return dela.find((p) => p.ruta && ruta && p.ruta === ruta) ?? dela.find((p) => !p.ruta);
 }
+
+/** Conceptos que la ley trata como viático (LISR 28-V / RLISR 57). */
+const ES_VIATICO = ['alimentacion', 'hospedaje', 'transporte', 'viaticos'];
 
 export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'creadaEn'> {
   const umbral = input.umbralConfianza ?? 0.85;
@@ -154,7 +161,24 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       diferencias.push({ tipo: 'ocr_baja_confianza', concepto: g.concepto, monto: 0, nota: `El comprobante de ${label(g.concepto)} se leyó con baja confianza — conviene revisarlo a mano.`, gastoId: g.id });
     }
     if (rfcsOk.size > 0 && g.rfcReceptor && !rfcsOk.has(norm(g.rfcReceptor))) {
-      diferencias.push({ tipo: 'rfc_receptor', concepto: g.concepto, monto: 0, nota: `Factura de ${label(g.concepto)} timbrada al RFC ${g.rfcReceptor} (no es de la empresa) — no deducible.`, gastoId: g.id });
+      // RLISR 57: "Si benefician a personas que le prestan servicios personales
+      // subordinados, los comprobantes fiscales PODRÁN ser expedidos a nombre de
+      // dichas personas". El operador de una flota es trabajador subordinado, así
+      // que su viático a su propio nombre es VÁLIDO. Rechazarlo le tira al cliente
+      // una deducción que el reglamento le concede.
+      //
+      // No aplica al diésel ni a las facturas: eso sí va a nombre de la empresa.
+      const esViatico = ES_VIATICO.includes(g.concepto);
+      const rfcOperador = input.operadorRfc ? norm(input.operadorRfc) : null;
+      if (esViatico && rfcOperador && norm(g.rfcReceptor) === rfcOperador) {
+        // Es del operador: correcto por RLISR 57, no se reporta nada.
+      } else if (esViatico && !rfcOperador) {
+        // Sin el RFC del operador no se puede confirmar NI descartar. Se revisa,
+        // pero no se le quita la deducción por una duda nuestra.
+        diferencias.push({ tipo: 'viatico_rfc_operador', concepto: g.concepto, monto: 0, nota: `Viático de ${label(g.concepto)} timbrado al RFC ${g.rfcReceptor}. Si es el del operador es válido (RLISR 57, trabajador subordinado) — captura su RFC para confirmarlo.`, gastoId: g.id });
+      } else {
+        diferencias.push({ tipo: 'rfc_receptor', concepto: g.concepto, monto: 0, nota: `Factura de ${label(g.concepto)} timbrada al RFC ${g.rfcReceptor} (no es de la empresa) — no deducible.`, gastoId: g.id });
+      }
     }
     if (g.estadoSat === 'cancelado') {
       diferencias.push({ tipo: 'cfdi_cancelado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${label(g.concepto)} está CANCELADO ante el SAT — no deducible.`, gastoId: g.id });
@@ -279,6 +303,29 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     }
   }
 
+  // ── H1: la alimentación necesita hospedaje o transporte que la ampare ────────
+  //
+  // LISR 28-V: el tope de $750 procede "y el contribuyente acompañe el comprobante
+  // fiscal o la documentación comprobatoria que ampare el hospedaje o transporte".
+  // Una comida sola no cumple ese párrafo.
+  //
+  // Se marca para REVISIÓN, no se declara no deducible: no vemos toda la
+  // contabilidad de la flota y el comprobante de hospedaje puede existir fuera de
+  // esta liquidación. Declararlo perdido sería el mismo error al revés.
+  {
+    const vivos = input.gastos.filter((g) => !duplicados.has(g.id) && g.monto > 0);
+    const haySoporte = vivos.some((g) => g.concepto === 'hospedaje' || g.concepto === 'transporte');
+    if (!haySoporte) {
+      for (const g of vivos.filter((g) => g.concepto === 'alimentacion')) {
+        diferencias.push({
+          tipo: 'alimentacion_sin_soporte', concepto: g.concepto, monto: 0,
+          nota: `Alimentación de ${mxn(g.monto)} sin comprobante de hospedaje ni de transporte del mismo viaje: LISR 28-V condiciona la deducción a que uno de los dos la ampare. Adjúntalo o confírmalo con tu contador.`,
+          gastoId: g.id,
+        });
+      }
+    }
+  }
+
   // ── Tope fiscal de ALIMENTACIÓN: $750 POR DÍA y por beneficiario (LISR 28-V) ──
   //
   // Dos correcciones sobre cómo estaba:
@@ -362,7 +409,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
   // mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
   // Se sigue avisando en `diferencias`; ya no bloquea.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'fecha_sospechosa', 'folio_verificar'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'fecha_sospechosa', 'folio_verificar'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
