@@ -58,9 +58,20 @@ describe('registro de comercios', () => {
     }
   });
 
-  it('todo comercio declara qué campos del ticket necesita su portal', () => {
+  // El invariante se mantiene, pero "todavía no lo sé" pasa a ser una declaración
+  // explícita en vez de un array vacío indistinguible de un descuido. Un comercio
+  // con `camposPendientes` avisa a qué portal ir y NO enumera campos: las
+  // etiquetas se le enseñan a un contralor y de memoria saldrían inventadas.
+  it('todo comercio declara sus campos, o declara que están pendientes', () => {
     for (const c of COMERCIOS) {
-      expect(c.campos.length, `${c.clave} no declara campos`).toBeGreaterThan(0);
+      const declara = c.campos.length > 0;
+      expect(declara !== !!c.camposPendientes, `${c.clave}: campos y camposPendientes se contradicen`).toBe(true);
+    }
+  });
+
+  it('ningún comercio se anuncia sin portal a dónde mandar al operador', () => {
+    for (const c of COMERCIOS) {
+      expect(c.portal, `${c.clave} no tiene portal`).toMatch(/^https?:\/\//);
     }
   });
 

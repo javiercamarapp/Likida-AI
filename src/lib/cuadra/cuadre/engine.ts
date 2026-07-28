@@ -360,8 +360,13 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // Con comercio reconocido el aviso deja de ser genérico: dice a qué portal
       // ir y qué datos hay que teclear, que es la diferencia entre un recordatorio
       // y una instrucción que alguien puede ejecutar.
+      // Los campos solo se enumeran si el catálogo los tiene: hay comercios
+      // portados de la tabla vieja cuyo portal se conoce pero cuyas etiquetas no
+      // están verificadas, y listar nombres inventados en un documento que lee un
+      // contralor es el mismo error que citar una ley que no dice lo que se cita.
+      const pide = comercio?.campos.filter((k) => k.requerido).map((k) => k.etiquetaPortal) ?? [];
       const donde = comercio
-        ? ` Portal de ${comercio.nombre}: ${comercio.portal} — te pedirá ${comercio.campos.filter((k) => k.requerido).map((k) => k.etiquetaPortal).join(', ')}.`
+        ? ` Portal de ${comercio.nombre}: ${comercio.portal}${pide.length ? ` — te pedirá ${pide.join(', ')}.` : '.'}`
         : '';
       diferencias.push({
         tipo: 'factura_por_vencer', concepto: g.concepto, monto: 0,

@@ -65,6 +65,17 @@ export interface Comercio {
   plazo: Plazo;
   plazoVerificado: boolean;
   campos: CampoTicket[];
+  /**
+   * El portal se conoce; sus etiquetas de campo NO se han leído todavía.
+   *
+   * Existe para que "no sabemos" sea un dato explícito y no un array vacío que
+   * parece un descuido. Lo que se le enseña al contralor sale de `etiquetaPortal`
+   * literal, así que rellenarlas de memoria pondría nombres inventados en un
+   * documento que alguien va a teclear. Con esta marca el aviso dice a dónde ir
+   * y se calla sobre qué pide; al leerlas en el portal, se llenan `campos` y se
+   * quita la marca.
+   */
+  camposPendientes?: true;
   reconocer: {
     /** Dominio de la liga de facturación: la señal más fuerte (viene del QR). */
     dominios?: string[];
@@ -225,6 +236,53 @@ export const COMERCIOS: Comercio[] = [
       rfc: ['ODM950324V2A'],
       texto: ['OFFICE DEPOT'],
     },
+  },
+
+  // ── Portadas de la tabla `portales` de config.ts, que era un SEGUNDO catálogo
+  // en paralelo y no lo leía nadie. De aquella tabla se conserva lo verificable
+  // —marca y dominio del portal— y se descarta lo que no:
+  //
+  //  · `campos` queda VACÍO. La tabla vieja guardaba llaves nuestras
+  //    ('folio_norm', 'web_id', 'rfc'), no cómo llama el portal a cada casilla, y
+  //    esas etiquetas se le enseñan a un contralor. Inventarlas es el mismo error
+  //    que citar mal una ley. Se llenan cuando alguien abra el portal y las lea.
+  //  · el reconocimiento es SOLO por dominio. La tabla vieja hacía `includes`
+  //    sobre el texto del ticket con cadenas como 'arco', que casa con "MARCO" y
+  //    con cualquier "ARCOS" impreso en la publicidad del papel.
+  //  · `plazoHoras: 72` se descarta: venía sin verificar contra ningún portal, y
+  //    el default honesto del módulo es el mes natural.
+  {
+    clave: 'pemex_franquicia',
+    nombre: 'Pemex (franquicia / FACTURAGAS)',
+    portal: 'https://www.cargogas.com',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['cargogas.com', 'facturagas.com', 'hidrolitro.com'] },
+  },
+  {
+    clave: 'arco_chihuahua',
+    nombre: 'ARCO (Chihuahua)',
+    portal: 'https://www.petrol.com.mx',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['petrol.com.mx'] },
+  },
+  {
+    clave: 'arco_sonora',
+    nombre: 'ARCO (Sonora) / Buzón de Facturas',
+    portal: 'https://www.buzonfacturas.com',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['buzonfacturas.com'] },
   },
 ];
 
