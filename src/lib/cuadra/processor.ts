@@ -194,6 +194,29 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
 
     const viajeId = await getOpenViaje(op.tenantId, op.operadorId);
     if (!viajeId) {
+      // ── EL XML QUE PEDIMOS NO SE TIRA, aunque el viaje ya haya cerrado ──────
+      // `complemento_no_verificable` NO está en SOLO_CONTRALOR a propósito: su
+      // nota le dice al operador "reenvía el XML (el que te manda la gasolinera
+      // por correo)". Y ese texto llega en el MISMO mensaje de cierre, cuando
+      // `guardar_liquidacion` ya puso el viaje en 'liquidado'. Así que el
+      // operador obedecía, el corte de arriba lo mandaba de vuelta con "no tienes
+      // viaje abierto", y el XML se descartaba sin guardarse en ningún lado: el
+      // producto pedía un documento y luego se negaba a recibirlo.
+      //
+      // Se conserva por UUID (CFF 30 lo exige igual) con `gasto_id` nulo. Volver
+      // a cuadrar una liquidación ya cerrada es otra decisión —de producto, no de
+      // este corte— y por eso aquí solo se garantiza que el dato no se pierda y
+      // que al operador se le diga la verdad.
+      if (msg.type === 'document' && msg.mediaId) {
+        const xmlText = await downloadMediaAsText(msg.mediaId);
+        const xml = xmlText ? parseCfdiXml(xmlText) : null;
+        if (xml?.uuid) {
+          await saveCfdiXmlRaw(op.tenantId, xml.uuid, null, xmlText!);
+          logger.info('xml.sin_viaje_abierto', { tenant: op.tenantId, operador: op.operadorId, uuid: xml.uuid });
+          await sendText(msg.from, 'Recibí tu XML y ya quedó guardado ✅. Tu viaje ya estaba cerrado, así que tu contralor lo aplica desde el panel. 🙏');
+          return;
+        }
+      }
       await sendText(msg.from, 'No tienes un viaje abierto para liquidar ahorita. Cuando tu flota te asigne uno, aquí lo cerramos. 👍');
       return;
     }
