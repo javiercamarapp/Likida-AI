@@ -52,3 +52,26 @@ describe('el aviso de facturación no espera a la urgencia', () => {
     expect(avisos(base({ cfdiUuid: '5f0e1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b' }), '2026-07-28')).toHaveLength(0);
   });
 });
+
+// Añadido tras correr ocho tickets de campo, cinco de ejercicios pasados: el
+// aviso permanente empezó a ofrecer "exigirlo dentro del ejercicio" sobre
+// comprobantes de 2019, 2020 y 2012 — y a la vez `fecha_sospechosa` decía que no
+// se deducen en este año. Dos frases contradictorias sobre el mismo papel.
+describe('un comprobante de otro ejercicio no recibe aviso de facturación', () => {
+  const viejo = (fecha: string) =>
+    (cuadrarViaje({
+      viajeId: 'v', anticipo: 5000, politica: [], hoy: '2026-07-28',
+      gastos: [{ id: 'g', concepto: 'otro', monto: 656.26, fecha, rfcEmisor: OXXO }],
+    }).diferencias ?? []);
+
+  it('un ticket de 2019 mirado en 2026 no promete un remedio que no existe', () => {
+    const d = viejo('2019-08-26');
+    expect(d.filter((x) => x.tipo === 'factura_por_vencer')).toHaveLength(0);
+    // Y lo que SÍ sale es lo cierto: es de otro ejercicio.
+    expect(d.filter((x) => x.tipo === 'fecha_sospechosa')).toHaveLength(1);
+  });
+
+  it('pero uno de este año sigue recibiéndolo', () => {
+    expect(viejo('2026-07-16').filter((x) => x.tipo === 'factura_por_vencer')).toHaveLength(1);
+  });
+});

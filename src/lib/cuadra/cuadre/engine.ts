@@ -348,6 +348,14 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // manda a la oficina a buscar algo que no existe.
       if (!liga && !comercio) continue;
       if (!g.fecha) continue; // sin fecha no se afirma nada
+      // Un comprobante de otro EJERCICIO ya lleva su `fecha_sospechosa`, que dice
+      // que no se deduce en este año. Añadirle el aviso de facturación produce
+      // dos frases que se contradicen sobre el mismo ticket: una dice que no se
+      // deduce, y la otra ofrece "exigirlo dentro del ejercicio" — un remedio que
+      // para un ticket de 2019 mirado en 2026 no existe. Salió sobre cinco
+      // tickets viejos el 28-jul-2026, al hacer permanente el aviso.
+      const ejercicioHoy = Number(input.hoy.slice(0, 4));
+      if (Number(g.fecha.slice(0, 4)) < ejercicioHoy) continue;
       // El plazo del comercio se usa SOLO si está verificado contra su portal.
       // `plazoVerificado: false` es el default del catálogo a propósito: un plazo
       // inventado haría que el sistema jure que un ticket sigue vigente.
