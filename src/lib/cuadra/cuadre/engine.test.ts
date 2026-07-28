@@ -982,3 +982,57 @@ describe('cuadrarViaje — sin_cfdi no puede significar dos cosas', () => {
     expect(r.estatus).toBe('revisar');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL IVA DE UN GASTO PARCIALMENTE DEDUCIBLE SE ACREDITA EN PROPORCIÓN.
+//
+// LIVA art. 5 fr. I, texto verificado contra fuente primaria el 28-jul-2026:
+//
+//   "Tratándose de erogaciones PARCIALMENTE DEDUCIBLES para los fines del
+//    impuesto sobre la renta, únicamente se considerará para los efectos del
+//    acreditamiento... EN LA PROPORCIÓN en la que dichas erogaciones sean
+//    deducibles para los fines del impuesto sobre la renta."
+//
+// El motor acreditaba el traslado COMPLETO. El caso que ocurre a diario: un
+// viático de alimentación que excede el tope de LISR 28-V es deducible solo
+// hasta el tope, así que su IVA solo se acredita en esa misma proporción.
+//
+// Acreditar de más es del lado caro: es el cliente quien responde ante una
+// revisión, y el papel se lo dio Likida.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuadrarViaje — IVA de gastos parcialmente deducibles (LIVA 5-I)', () => {
+  const est = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: [] };
+  const pol: PoliticaGasto[] = [{ concepto: 'alimentacion', topeMonto: 5000 }];
+
+  it('el viático que excede el tope acredita su IVA EN PROPORCIÓN', () => {
+    // $900 con tope $750 → deducible 83.33% → IVA acreditable 83.33% de $144.
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 1000, politica: pol, estimulos: est,
+      gastos: [g({ concepto: 'alimentacion', monto: 900, fecha: '2026-05-01', cfdiUuid: 'u1',
+                   xmlVerificado: true, ivaTraslado: 144, formaPago: '04' })],
+    });
+    expect(r.ivaAcreditable).toBeCloseTo(144 * (750 / 900), 2);
+    expect(r.ivaAcreditable).toBeLessThan(144);
+  });
+
+  it('un gasto totalmente deducible acredita su IVA completo', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 1000, politica: pol, estimulos: est,
+      gastos: [g({ concepto: 'alimentacion', monto: 700, fecha: '2026-05-01', cfdiUuid: 'u1',
+                   xmlVerificado: true, ivaTraslado: 112, formaPago: '04' })],
+    });
+    expect(r.ivaAcreditable).toBe(112);
+  });
+
+  it('la proporción se calcula por gasto, no sobre el total del viaje', () => {
+    // Uno excede y otro no: el que no excede conserva su IVA íntegro.
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 2000, politica: pol, estimulos: est,
+      gastos: [
+        g({ concepto: 'alimentacion', monto: 900, fecha: '2026-05-01', cfdiUuid: 'u1', xmlVerificado: true, ivaTraslado: 144, formaPago: '04' }),
+        g({ concepto: 'alimentacion', monto: 700, fecha: '2026-05-02', cfdiUuid: 'u2', xmlVerificado: true, ivaTraslado: 112, formaPago: '04' }),
+      ],
+    });
+    expect(r.ivaAcreditable).toBeCloseTo(144 * (750 / 900) + 112, 2);
+  });
+});

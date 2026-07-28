@@ -5,15 +5,45 @@ instrumento: "Ley del Impuesto al Valor Agregado"
 articulo_o_regla: "5"
 titulo: "Requisitos del acreditamiento del IVA"
 citas_en_codigo: ["LIVA art. 5"]
-texto_vigente: null
-estado_verificacion: sin_verificar
+texto_vigente: >
+  Artículo 5o.- Para que sea acreditable el impuesto al valor agregado deberán
+  reunirse los siguientes requisitos:
+
+  I. Que el impuesto al valor agregado corresponda a bienes, servicios o al uso o
+  goce temporal de bienes, estrictamente indispensables para la realización de
+  actividades distintas de la importación, por las que se deba pagar el impuesto
+  establecido en esta Ley o a las que se les aplique la tasa de 0%. Para los
+  efectos de esta Ley, se consideran estrictamente indispensables las erogaciones
+  efectuadas por el contribuyente que sean deducibles para los fines del impuesto
+  sobre la renta, aun cuando no se esté obligado al pago de este último impuesto.
+  Tratándose de erogaciones parcialmente deducibles para los fines del impuesto
+  sobre la renta, únicamente se considerará para los efectos del acreditamiento a
+  que se refiere esta Ley, el monto equivalente al impuesto al valor agregado que
+  haya sido trasladado al contribuyente y el propio impuesto al valor agregado que
+  haya pagado con motivo de la importación, en la proporción en la que dichas
+  erogaciones sean deducibles para los fines del impuesto sobre la renta.
+
+  II. Que el impuesto al valor agregado haya sido trasladado expresamente al
+  contribuyente y que conste por separado en los comprobantes fiscales a que se
+  refiere la fracción III del artículo 32 de esta Ley.
+estado_verificacion: verificado_fuente_primaria
 nota_verificacion: >
-  El motor suma `ivaAcreditable` y el PDF lo imprime como "IVA acreditable (LIVA
-  art. 5)". El artículo NO se leyó en esta investigación. PARA CERRAR: bajar la LIVA
-  de diputados.gob.mx y transcribir los requisitos del acreditamiento —en especial
-  que el IVA esté trasladado EXPRESAMENTE y POR SEPARADO en el comprobante, y que
-  el gasto sea deducible para ISR—, porque de ahí depende que la cifra impresa sea
-  correcta.
+  Cerrada el 28-jul-2026 contra el texto vigente. Estaba `sin_verificar` mientras
+  el motor YA calculaba `ivaAcreditable` con ella y el PDF lo imprimía en verde
+  como dinero recuperable — decidir dinero sobre una ficha sin verificar.
+
+  Dos consecuencias que el código NO estaba aplicando, ambas de la fracción I:
+
+  1. El IVA solo es acreditable si la erogación es DEDUCIBLE para ISR. No es un
+     requisito aparte: la ley DEFINE "estrictamente indispensable" como
+     "deducible para los fines del ISR".
+  2. En erogaciones PARCIALMENTE deducibles, el IVA se acredita "en la proporción
+     en la que dichas erogaciones sean deducibles". El motor acreditaba el
+     traslado completo — acreditar de más es del lado caro para el cliente.
+
+  El caso concreto en este producto es el viático que excede el tope de LISR
+  28-V: si $900 de alimentación con tope de $750, solo el 83.3% es deducible y
+  solo ese 83.3% del IVA se acredita.
 riesgo_actual: >
   El motor acredita el IVA leído del XML de todo gasto que no cayó en
   SIN_ACREDITAMIENTO. Si el artículo exige alguna condición adicional que hoy no se
@@ -22,3 +52,5 @@ verificado_por: null
 usado_en_codigo:
   - "cuadre/engine.ts — ivaAcreditable"
   - "liquidacion/pdf.ts — sección ACREDITABLE / RECUPERABLE"
+
+fuente: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LIVA.pdf (texto vigente, última reforma DOF 12-11-2021)"

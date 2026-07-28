@@ -31,6 +31,10 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   alimentacion_sin_soporte: ['lisr-28-fr-V'],
   viatico_rfc_operador: ['rlisr-57'],
   rfc_receptor: ['cff-29-A'],
+  // El veredicto más severo que emite el motor. Hasta hoy no tenía ficha: se
+  // tiraba una deducción entera sobre una norma que nadie había transcrito.
+  cfdi_efos: ['cff-69-B'],
+  cfdi_efos_indeterminado: ['cff-69-B'],
   cfdi_cancelado: ['cff-29-A'],
   cfdi_no_encontrado: ['cff-29-A'],
   cfdi_pendiente: ['cff-29-A'],
@@ -61,8 +65,6 @@ export const SIN_NORMA: Partial<Record<TipoDiferencia, string>> = {
   folio_verificar: 'Calidad del dato.',
   texto_sospechoso: 'Seguridad, no fiscalidad.',
   diesel_desviacion: 'Señal operativa contra el rendimiento esperado.',
-  cfdi_efos: 'El veredicto viene del listado del SAT, no de un artículo que el agente deba citar.',
-  cfdi_efos_indeterminado: 'Ídem: es el estado del listado.',
 };
 
 /**

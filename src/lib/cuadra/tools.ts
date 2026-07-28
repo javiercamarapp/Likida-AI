@@ -16,6 +16,9 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { Liquidacion } from '@/types/cuadra';
 import { normasDe } from './normas/por_diferencia';
+import { getAcumuladoCombustible } from './repo';
+import { evaluarTope15 } from './periodo/combustible';
+import { avisoTope15 } from './periodo/aviso';
 import { NORMAS, esVinculante } from './normas/indice';
 
 // ── consultar_politica ──────────────────────────────────────────────────────
@@ -49,17 +52,38 @@ registerTool('cuadrar_viaje', {
   handler: async (_args, ctx) => {
     if (!ctx.viajeId) throw new Error('sin viaje activo');
     const liq = await computeCuadre(ctx.tenantId, ctx.viajeId);
+
+    // LA CAPA DE PERIODO. El motor es puro y evalúa UN viaje, así que marca el
+    // diésel en efectivo como "por confirmar" a ciegas: sin saber si la flota va
+    // por el 3% del ejercicio —tranquila— o por el 14.8% —a punto de perder la
+    // deducción de todo lo que pague en efectivo el resto del año—. Es la misma
+    // información con dos valores completamente distintos para quien decide.
+    //
+    // Best-effort: si la consulta falla, el cuadre sale igual. El contador es
+    // contexto valioso, no un requisito para cerrar un viaje.
+    let periodo: { estado: string; razon: number; margen: number; excedente: number; aviso: string | null } | undefined;
+    try {
+      const ejercicio = new Date().getUTCFullYear();
+      const acum = await getAcumuladoCombustible(ctx.tenantId, ejercicio);
+      const t = evaluarTope15(acum);
+      periodo = { estado: t.estado, razon: Number(t.razon.toFixed(4)), margen: t.margen, excedente: t.excedente, aviso: avisoTope15(t, ejercicio) };
+    } catch (e) {
+      logger.warn('periodo.combustible_no_disponible', { err: e instanceof Error ? e.message : String(e) });
+    }
     // `fundamentos` es el permiso de citar. `guardiaFundamento` le quita al
     // mensaje cualquier norma que no salga de aquí, así que esta lista es lo
     // único que el agente puede mencionar en este turno. Sin ella no puede
     // citar NADA, que es la posición segura.
     const fundamentos = normasDe(liq.diferencias.map((d) => d.tipo));
+    // Si hay algo que decir del ejercicio, el agente puede citar la regla 2.9.
+    if (periodo && periodo.estado !== 'holgado' && !fundamentos.includes('rfa-2026-2.9')) fundamentos.push('rfa-2026-2.9');
     return {
       total_comprobado: liq.totalComprobado,
       total_anticipo: liq.totalAnticipo,
       diferencia: liq.diferencia,
       estatus: liq.estatus,
       diferencias: liq.diferencias.map((d) => ({ tipo: d.tipo, monto: d.monto, nota: d.nota })),
+      ...(periodo ? { combustible_efectivo_ejercicio: periodo } : {}),
       fundamentos: fundamentos.map((id) => ({
         norma_id: id,
         cita: NORMAS[id].citas[0],
