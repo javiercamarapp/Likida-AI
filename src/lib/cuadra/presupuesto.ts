@@ -50,6 +50,12 @@ export interface Presupuesto {
   alcanza(costoMs: number): boolean;
   /** Milisegundos transcurridos desde el inicio. Para el log. */
   gastado(): number;
+  /**
+   * Señal que se aborta cuando se acaba lo que queda (o antes, si `topeMs` es
+   * menor). Para pasarla a los SDK que aceptan `AbortSignal` y que si no caen a
+   * sus defaults —el de OpenAI son 10 minutos contra un webhook de 60s.
+   */
+  senal(topeMs?: number): AbortSignal;
 }
 
 /**
@@ -65,5 +71,13 @@ export function crearPresupuesto(totalMs: number, reloj: () => number = Date.now
     acotar: (topeDeseado: number) => Math.min(topeDeseado, restante()),
     alcanza: (costoMs: number) => restante() >= costoMs,
     gastado: () => reloj() - inicio,
+    senal: (topeMs?: number) => {
+      const ms = Math.min(topeMs ?? Number.POSITIVE_INFINITY, restante());
+      // `AbortSignal.timeout(0)` no aborta de inmediato: se agenda. Cuando ya no
+      // queda nada se devuelve una señal YA abortada, para que la llamada ni
+      // salga.
+      if (!(ms > 0)) { const ac = new AbortController(); ac.abort(); return ac.signal; }
+      return AbortSignal.timeout(ms);
+    },
   };
 }

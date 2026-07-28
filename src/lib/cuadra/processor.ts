@@ -221,7 +221,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           }
         }
 
-        const extraccion = await extraerComprobante(dataUrl);
+        // La foto también respeta el reloj: 25s de tope propio, o menos si ya se
+        // gastó el presupuesto. Sin esto caía al default del SDK (10 min).
+        const extraccion = await extraerComprobante(dataUrl, reloj.senal(25_000));
         const { gasto, costo } = extraccion;
         await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
 
@@ -414,8 +416,28 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     if (!intakeOk) logger.warn('intake.barrera_timeout', { viaje: viajeId, restanteMs: reloj.restante() });
 
     // Mutex para serializar cierres concurrentes (dos "listo" a la vez).
-    if (await acquireViajeLock(viajeId, { maxWaitMs: reloj.acotar(12_000) })) lockedViaje = viajeId;
-    else logger.warn('viaje.lock_timeout', { viaje: viajeId, restanteMs: reloj.restante() });
+    //
+    // Si NO se consigue, se ABANDONA el turno. Antes solo se dejaba un warn y se
+    // seguía de largo sin mutex, que es justo lo que el mutex viene a impedir:
+    // dos "listo" seguidos y el segundo corre el agente completo también. La BD
+    // impide la doble fila (upsert), pero como el upsert no lanza, ambas
+    // ejecuciones reportan éxito → el operador recibe el cierre y el PDF DOS
+    // veces, y se paga el LLM dos veces.
+    //
+    // Abandonar es seguro porque `false` significa una sola cosa: otro turno
+    // tiene el lease vigente y ESE va a responder. Los errores de la RPC no
+    // llegan aquí — `acquireViajeLock` es fail-open ante RPC ausente o fallo
+    // persistente, y devuelve `true`.
+    //
+    // Y se abandona EN SILENCIO: mandar "espérame tantito" sería un segundo
+    // mensaje que el operador no pidió, justo cuando el otro turno ya le está
+    // escribiendo.
+    if (await acquireViajeLock(viajeId, { maxWaitMs: reloj.acotar(12_000) })) {
+      lockedViaje = viajeId;
+    } else {
+      logger.warn('viaje.lock_ocupado_abandona', { viaje: viajeId, tenant: op.tenantId, restanteMs: reloj.restante() });
+      return;
+    }
 
     // Doble "listo": tras tomar el lock, re-verifica que el viaje SIGA abierto. Si
     // otro "listo" ya lo cerró, no re-corras el agente (evita doble cuadre/costo).

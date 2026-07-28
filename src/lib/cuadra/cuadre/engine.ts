@@ -270,7 +270,12 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // IEPS que la facilidad no concede.
   const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido'];
   const peajeFactor = input.estimulos?.peajeFactor ?? 0.5;
-  let iepsAcreditable = 0, ivaAcreditable = 0, peajeAcreditable = 0;
+  // `iepsAcreditable` se queda en 0 a propósito y por eso es const: el estímulo
+  // del LIF 20-A no es una cifra que este motor pueda calcular (necesita la cuota
+  // semanal del DOF). Se conserva el campo para no romper los consumidores y la
+  // columna de la BD; el dato útil es `litrosDieselAcreditables`.
+  const iepsAcreditable = 0;
+  let ivaAcreditable = 0, peajeAcreditable = 0;
   let litrosDieselAcreditables = 0;
   for (const g of input.gastos) {
     if (duplicados.has(g.id)) continue;
@@ -427,7 +432,17 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   //
   // OJO: `sobre_politica` NO entra aquí. Exceder la política INTERNA de la flota
   // no vuelve el gasto no deducible ante el SAT: son dos juicios distintos.
-  const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'sin_cfdi'];
+  // `sin_cfdi` NO va aquí, y es a propósito. Estuvo, y creaba una contradicción:
+  // esta lista se evalúa ANTES que la regla de "sin cfdiUuid → POR CONFIRMAR", así
+  // que el mismo hecho —un ticket sin timbrar— salía ROJO si el tenant tenía
+  // `requiereCfdi` en su política y ÁMBAR si no. El veredicto dependía de un flag
+  // de configuración, no de la ley.
+  //
+  // El correcto es ámbar. LISR 27-III exige comprobante fiscal, pero el ticket
+  // TODAVÍA se puede timbrar: no es deducción perdida, es pendiente. Pintarla de
+  // rojo le dice al contralor que dé por perdido un dinero que recupera con una
+  // llamada al portal. Se sigue avisando por `diferencias`, que para eso está.
+  const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope'];
   const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo'];
 
   let totalDeducible = 0, totalNoDeducible = 0, totalPorConfirmar = 0;

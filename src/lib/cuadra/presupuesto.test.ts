@@ -82,3 +82,27 @@ describe('PRESUPUESTO_WEBHOOK_MS', () => {
     expect(Number(m![1]) * 1000).toBe(PRESUPUESTO_WEBHOOK_MS);
   });
 });
+
+describe('presupuesto.senal', () => {
+  it('devuelve una señal YA abortada cuando no queda nada', () => {
+    // `AbortSignal.timeout(0)` no aborta de inmediato: lo agenda. Si se usara
+    // eso, la llamada saldría igual y se pagaría una respuesta que nadie va a
+    // leer porque Vercel ya mató la función.
+    let ahora = 0;
+    const p = crearPresupuesto(60_000, () => ahora);
+    ahora = 99_000;
+    expect(p.senal().aborted).toBe(true);
+  });
+
+  it('con presupuesto de sobra, la señal empieza viva', () => {
+    const p = crearPresupuesto(60_000, () => 0);
+    expect(p.senal(25_000).aborted).toBe(false);
+  });
+
+  it('respeta el tope propio de la etapa cuando es menor que el restante', () => {
+    // Una foto no debe poder comerse los 52s disponibles: tiene su propio techo.
+    const p = crearPresupuesto(60_000, () => 0);
+    expect(p.senal(25_000).aborted).toBe(false);
+    expect(p.restante()).toBeGreaterThan(25_000);
+  });
+});
