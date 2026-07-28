@@ -34,6 +34,10 @@ const ExtraccionSchema = z.object({
   web_id: z.string().nullable(),          // string (numérico o alfanumérico)
   estacion: z.string().nullable(),        // nombre/# de estación
   rfc_emisor: z.string().nullable(),
+  // Razón social del emisor. Es la señal de RESPALDO para reconocer el comercio
+  // cuando el RFC no se lee: el catálogo de facturación reconoce por dominio,
+  // por RFC y por texto impreso, y sin este campo el tercer camino no existía.
+  emisor: z.string().nullable(),
   cfdi_uuid: z.string().nullable(),
   // Liga de autofacturación impresa en el ticket. Un ticket de estación NO es
   // factura: hay que timbrarlo en el portal del emisor dentro del plazo, y cada
@@ -71,6 +75,8 @@ MAPEO DE ETIQUETAS (mapea el CONCEPTO, no la etiqueta literal; varían por estac
 - litros ← "LITROS" / "CANTIDAD" / "CANT-LTS" / "CANT/LTS" / "U.M." (la cantidad en litros).
 - forma_pago ← "FORMA DE PAGO" / "TIPO OPER" / "TIPO DE OPERACION" → 'efectivo' o 'tarjeta'.
 - precio_unitario ← "PRECIO" (por litro).
+- rfc_emisor ← el RFC de QUIEN EXPIDE el ticket. Casi nunca viene etiquetado "RFC": suele ir pegado a la razón social del encabezado y CON GUIONES o entre paréntesis ("Cadena Comercial Ejemplo, S.A. de C.V. (AAA-860523-1N4)", "RFC: AAA8605231N4"). Cópialo tal cual lo veas —los guiones se quitan después—; si hay varios RFC impresos, el del EMISOR es el del encabezado, no el del cliente.
+- emisor ← la RAZÓN SOCIAL completa del encabezado, tal cual ("Cadena Comercial Ejemplo, S.A. de C.V."). Es el nombre legal, no el de la sucursal ni el eslogan.
 - url_facturacion ← la dirección web impresa para FACTURAR el ticket ("INSTRUCCIONES PARA FACTURAR: Ingrese a www.ejemplo.com.mx", "Factura en: portal.ejemplo.mx", "DATOS PARA REIMPRESION DE FACTURA: www.ejemplo.com.mx"). Cópiala TAL CUAL, sin agregarle protocolo ni completarla. Si el ticket no trae ninguna, null. NO pongas aquí la web de publicidad ni el correo.
 
 IMPUESTOS (crítico):
@@ -218,7 +224,12 @@ export async function extraerComprobante(
   // asienta como emisor —saldríamos a consultar al SAT contra un contribuyente
   // que no existe, o a revisar EFOS del equivocado— pero se conserva aparte
   // para que la oficina vea qué se leyó en vez de un hueco sin explicación.
-  const rfcLeido = data.rfc_emisor?.toUpperCase();
+  // Los tickets imprimen el RFC con guiones y entre paréntesis, pegado a la
+  // razón social ("Cadena Comercial Oxxo, S.A. de C.V.(CCO-860523-1N4)"). Con la
+  // puntuación adentro `esRfcValido` decía que no y el emisor se perdía entero:
+  // sin él no corre el dígito verificador, no se consulta EFOS y el ticket no se
+  // puede atribuir a ningún comercio del catálogo de facturación.
+  const rfcLeido = data.rfc_emisor?.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '') || undefined;
   const rfcFormaOk = esRfcValido(rfcLeido);
   const rfcDvOk = rfcFormaOk && rfcChecksumOk(rfcLeido);
   let rfc = rfcDvOk ? rfcLeido : undefined;
@@ -318,6 +329,10 @@ export async function extraerComprobante(
       precioUnitario: data.precio_unitario ?? undefined,
       webId: sanitizarFolio(data.web_id),
       estacion: sanitizarTexto(data.estacion),
+      // Razón social: tercera señal para reconocer el comercio, detrás del
+      // dominio y del RFC. Pasa por `sanitizarTexto` como todo lo que viene de
+      // visión: es texto de una foto que puede traer cualquier cosa.
+      emisor: sanitizarTexto(data.emisor),
       ivaMonto: data.iva_monto ?? undefined,
       ivaTasa: data.iva_tasa ?? undefined,
       // Para el aviso de portal: con qué liga y con qué folio se timbra.
