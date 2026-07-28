@@ -1,0 +1,35 @@
+id: rlisr-57
+tipo: reglamento
+jerarquia: 2
+instrumento: "Reglamento de la Ley del Impuesto sobre la Renta"
+articulo_o_regla: "57"
+titulo: "Establecimiento del contribuyente y viáticos a nombre del trabajador"
+citas_en_codigo: []
+texto_vigente: >
+  Artículo 57. Para efectos del artículo 28, fracción V de la Ley, se entenderá por
+  establecimiento del contribuyente aquél en el que presta normalmente sus servicios
+  la persona a favor de la cual se realice la erogación.
+  ---
+  Cuando los viáticos y gastos a que se refiere este artículo, beneficien a personas
+  que presten al contribuyente servicios profesionales, los comprobantes fiscales
+  deberán ser expedidos a nombre del propio contribuyente. Si benefician a personas
+  que le prestan servicios personales subordinados, los comprobantes fiscales podrán
+  ser expedidos a nombre de dichas personas, en cuyo caso y para efectos del artículo
+  18, fracción VIII de la Ley, se tendrá por cumplido el requisito de respaldar
+  dichos gastos con el comprobante fiscal a nombre de aquél por cuenta de quién se
+  efectuó el gasto.
+fuente_url: "https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LISR.pdf"
+fuente_tipo: diputados_oficial
+estado_verificacion: verificado_fuente_primaria
+por_que_importa: >
+  Confirma con el texto el dictamen de la ola 2: el comprobante de un viático de un
+  trabajador SUBORDINADO PUEDE ir a nombre del trabajador. Un motor que rechace todo
+  comprobante que no vaya a nombre de la flota le tira deducciones legítimas.
+  El operador de una flota es trabajador subordinado.
+verificado_el: 2026-07-27
+impacto_en_el_motor: >
+  La regla `rfc_receptor` marca como no deducible cualquier CFDI cuyo receptor no sea
+  el RFC de la empresa. Para viáticos de alimentación, hospedaje y transporte de un
+  operador subordinado, eso es INCORRECTO por este artículo.
+usado_en_codigo:
+  - "cuadre/engine.ts — regla rfc_receptor (necesita excepción para viáticos)"

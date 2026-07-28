@@ -4,25 +4,67 @@ jerarquia: 1
 instrumento: "Ley del Impuesto sobre la Renta"
 articulo_o_regla: "28"
 fraccion: "V"
-titulo: "Viáticos y gastos de viaje — tope de alimentación"
+titulo: "Viáticos y gastos de viaje — no deducibles y tope de alimentación"
 citas_en_codigo: ["LISR 28-V"]
-texto_vigente: null
-estado_verificacion: sin_verificar
+texto_vigente: >
+  V. Los viáticos o gastos de viaje, en el país o en el extranjero, cuando no se
+  destinen al hospedaje, alimentación, transporte, uso o goce temporal de
+  automóviles y pago de kilometraje, de la persona beneficiaria del viático o cuando
+  se apliquen dentro de una faja de 50 kilómetros que circunde al establecimiento del
+  contribuyente. Las personas a favor de las cuales se realice la erogación, deben
+  tener relación de trabajo con el contribuyente en los términos del Capítulo I del
+  Título IV de esta Ley o deben estar prestando servicios profesionales. Los gastos a
+  que se refiere esta fracción deberán estar amparados con un comprobante fiscal
+  cuando éstos se realicen en territorio nacional o con la documentación
+  comprobatoria correspondiente, cuando los mismos se efectúen en el extranjero.
+  ---
+  Tratándose de gastos de viaje destinados a la alimentación, éstos sólo serán
+  deducibles hasta por un monto que no exceda de $750.00 diarios por cada
+  beneficiario, cuando los mismos se eroguen en territorio nacional, o $1,500.00
+  cuando se eroguen en el extranjero, y el contribuyente acompañe el comprobante
+  fiscal o la documentación comprobatoria que ampare el hospedaje o transporte.
+  Cuando a la documentación que ampare el gasto de alimentación el contribuyente
+  únicamente acompañe el comprobante fiscal relativo al transporte, la deducción a
+  que se refiere este párrafo sólo procederá cuando el pago se efectúe mediante
+  tarjeta de crédito de la persona que realiza el viaje.
+fuente_url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/LISR.pdf"
+fuente_tipo: diputados_oficial
+estado_verificacion: verificado_fuente_primaria
 nota_verificacion: >
-  El tope de $750 diarios en territorio nacional para ALIMENTACIÓN circula en todo
-  el material del sector, pero NO se leyó el texto del artículo en esta
-  investigación. PARA CERRAR: bajar la LISR de diputados.gob.mx, transcribir la
-  fracción V y confirmar (a) el importe vigente 2026, (b) que el tope es por
-  beneficiario y por día, (c) que el hospedaje NACIONAL efectivamente no tiene tope,
-  y (d) la condición de la faja de 50 km del RLISR 57.
-contenido_asumido_en_el_codigo: >
-  Tope de $750 por día y por beneficiario, SOLO para alimentación en territorio
-  nacional. El hospedaje nacional NO tiene tope. El transporte tampoco.
-advertencia: >
-  El motor YA aplica este tope y marca el excedente como no deducible. Es una cifra
-  que el producto imprime sostenida por una ficha SIN VERIFICAR: es el pendiente
-  más urgente de esta carpeta.
-verificado_por: null
+  Texto idéntico en cuatro reproducciones independientes (apta.com.mx, leyesmx,
+  mley.mx, tax.com.mx). Confirma el importe de $750 diarios POR BENEFICIARIO en
+  territorio nacional y que el tope es SOLO de alimentación.
+norma_relacionada: rlisr-57
+verificado_por: "cierre de ficha, 27-jul-2026"
+verificado_el: 2026-07-27
+confirmado_del_codigo:
+  - "$750.00 diarios en territorio nacional: CORRECTO"
+  - "Por beneficiario y por día: CORRECTO (el motor agrupa por día)"
+  - "Solo alimentación; el hospedaje nacional no tiene tope: CORRECTO"
+hallazgos_que_el_codigo_NO_implementa:
+  - id: H1
+    que_dice_la_ley: >
+      El tope de $750 procede solo "y el contribuyente acompañe el comprobante fiscal
+      o la documentación comprobatoria que ampare el hospedaje o transporte".
+    que_hace_el_motor: >
+      Aplica el tope sin exigir comprobante de hospedaje ni de transporte del mismo
+      viaje. Una comida SOLA, sin hotel ni transporte que la acompañe, hoy se cuenta
+      deducible hasta $750 — y por este párrafo NO lo sería.
+    severidad: alta
+  - id: H2
+    que_dice_la_ley: >
+      Si lo único que acompaña es el comprobante de TRANSPORTE, la deducción "sólo
+      procederá cuando el pago se efectúe mediante tarjeta de crédito de la persona
+      que realiza el viaje".
+    que_hace_el_motor: "No valida el medio de pago en ese supuesto."
+    severidad: media
+  - id: H3
+    que_dice_la_ley: >
+      No son deducibles los viáticos aplicados "dentro de una faja de 50 kilómetros
+      que circunde al establecimiento del contribuyente" (RLISR 57: donde la persona
+      presta normalmente sus servicios).
+    que_hace_el_motor: "No existe esa regla. Requiere la base del operador, que hoy no se captura."
+    severidad: media
 usado_en_codigo:
   - "config.ts — estimulos.viaticosTopeFiscalDiarioMxn"
   - "cuadre/engine.ts — regla viatico_excede_fiscal (agrupada por día)"
