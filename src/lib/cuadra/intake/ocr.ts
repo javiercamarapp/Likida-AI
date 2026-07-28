@@ -20,7 +20,7 @@ import { consultarCFDI } from './sat';
 import type { Gasto, ConceptoGasto, EstadoSat } from '@/types/cuadra';
 
 const ExtraccionSchema = z.object({
-  concepto: z.enum(['diesel', 'caseta', 'factura', 'viaticos', 'otro']),
+  concepto: z.enum(['diesel', 'caseta', 'factura', 'alimentacion', 'hospedaje', 'transporte', 'otro']),
   producto: z.string().nullable(),        // "Diesel", "Regular", "Premium", "GSuper", "Magna"
   monto: z.number().nullable(),           // TOTAL
   subtotal: z.number().nullable(),        // si viene desglosado
@@ -50,7 +50,8 @@ REGLAS DURAS:
 - Si un campo NO es claramente legible, devuélvelo null. NUNCA inventes ni CALCULES: montos, folios, RFC, UUID, IVA ni tasas. Lee lo que está impreso.
 - "confianza" = qué tan seguro estás de haber leído bien el monto y el folio (0 a 1).
 - "legible": false si la foto está tan borrosa/cortada que no confías en el monto.
-- concepto: diesel (combustible/gasolinera, sea diésel o gasolina), caseta (peaje/autopista), factura (CFDI fiscal), viaticos (comida/hospedaje), otro.
+- concepto: diesel (combustible/gasolinera, sea diésel o gasolina), caseta (peaje/autopista), factura (CFDI fiscal), alimentacion (comida, restaurante, fonda, abarrotes de consumo), hospedaje (hotel, motel, cuarto), transporte (taxi, autobús, casetas urbanas del operador, estacionamiento), otro.
+- IMPORTANTE: NO uses "viaticos" como concepto. Separa alimentacion, hospedaje y transporte: el tope fiscal de $750 por día aplica SOLO a alimentacion, y marcar un hotel como alimentacion le quita una deducción legítima a la empresa.
 - monto: el TOTAL del comprobante, solo el número.
 
 MAPEO DE ETIQUETAS (mapea el CONCEPTO, no la etiqueta literal; varían por estación):

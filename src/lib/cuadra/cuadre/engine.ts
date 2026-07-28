@@ -116,12 +116,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       diferencias.push({ tipo: 'efectivo_sobre_tope', concepto: g.concepto, monto: 0, nota: `${label(g.concepto)} de ${mxn(g.monto)} en efectivo excede el tope de ${mxn(topeEfectivo)} (LISR 27-III) — no deducible.`, gastoId: g.id });
     }
 
-    // Regla 1.10: tope FISCAL de alimentación $750/día (LISR 28-V), distinto del
-    // tope de POLÍTICA interna. Manda el menor; aquí se marca el excedente fiscal.
-    const topeViaticoFiscal = input.estimulos?.viaticosTopeFiscalDiarioMxn;
-    if (g.concepto === 'viaticos' && topeViaticoFiscal != null && g.monto > topeViaticoFiscal) {
-      diferencias.push({ tipo: 'viatico_excede_fiscal', concepto: g.concepto, esperado: topeViaticoFiscal, real: g.monto, monto: round2(g.monto - topeViaticoFiscal), nota: `Viático de ${mxn(g.monto)} excede el tope fiscal de alimentación (${mxn(topeViaticoFiscal)}/día, LISR 28-V) — el excedente de ${mxn(g.monto - topeViaticoFiscal)} no es deducible.`, gastoId: g.id });
-    }
+    // (El tope fiscal de alimentación se evalúa POR DÍA, después del bucle.)
 
     // #1: cordura de la FECHA. Una fecha futura o muy anterior al viaje mete el
     // gasto en el periodo fiscal equivocado, rompe el plazo de facturación y
@@ -252,6 +247,53 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     }
   }
 
+  // ── Tope fiscal de ALIMENTACIÓN: $750 POR DÍA y por beneficiario (LISR 28-V) ──
+  //
+  // Dos correcciones sobre cómo estaba:
+  //
+  // 1. Solo aplica a ALIMENTACIÓN. El hospedaje nacional NO tiene tope, y el
+  //    transporte del operador tampoco. Antes todo lo etiquetado "viaticos"
+  //    cargaba el tope, así que una noche de hotel de $2,000 salía con $1,250
+  //    "no deducibles" que sí lo eran.
+  //
+  // 2. Es POR DÍA, no por comprobante. Antes, tres comidas de $400 el mismo día
+  //    pasaban limpias mientras una sola de $800 se marcaba — el hueco por el que
+  //    se cuela el gasto real, y encima castigaba a quien comprobaba de una vez.
+  //
+  // El beneficiario es el operador del viaje: la liquidación es de un solo
+  // operador, así que agrupar por día dentro del viaje es la unidad correcta.
+  const topeAlimentacion = input.estimulos?.viaticosTopeFiscalDiarioMxn;
+  if (topeAlimentacion != null) {
+    // 'viaticos' a secas entra por compatibilidad: es lo que emitía el OCR viejo
+    // y esos gastos ya guardados no se pueden reclasificar solos. Criterio
+    // conservador: se le sigue aplicando el tope.
+    const conTope = (c: string) => c === 'alimentacion' || c === 'viaticos';
+    const porDia = new Map<string, Gasto[]>();
+    for (const g of input.gastos) {
+      if (duplicados.has(g.id) || !(g.monto > 0) || !conTope(g.concepto)) continue;
+      // Sin fecha no se puede agrupar: cada comprobante cuenta como su propio día
+      // (su id como llave). No inventamos una fecha para poder sumar.
+      const dia = g.fecha ? g.fecha.slice(0, 10) : `sin-fecha:${g.id}`;
+      porDia.set(dia, [...(porDia.get(dia) ?? []), g]);
+    }
+    for (const [dia, delDia] of porDia) {
+      const total = delDia.reduce((s, x) => s + x.monto, 0);
+      if (total <= topeAlimentacion) continue;
+      const exceso = round2(total - topeAlimentacion);
+      // El excedente se cuelga del ÚLTIMO comprobante del día: los totales de
+      // deducibilidad suman por gastoId, así que tiene que vivir en alguno.
+      const ancla = delDia[delDia.length - 1];
+      const cuantos = delDia.length > 1 ? ` (${delDia.length} comprobantes del día)` : '';
+      const cuando = dia.startsWith('sin-fecha') ? 'sin fecha' : dia;
+      diferencias.push({
+        tipo: 'viatico_excede_fiscal', concepto: ancla.concepto,
+        esperado: topeAlimentacion, real: round2(total), monto: exceso,
+        nota: `Alimentación del ${cuando}: ${mxn(total)}${cuantos} excede el tope fiscal de ${mxn(topeAlimentacion)} por día (LISR 28-V) — el excedente de ${mxn(exceso)} no es deducible.`,
+        gastoId: ancla.id,
+      });
+    }
+  }
+
   // ── Totales de deducibilidad (la cifra que compra el contralor) ──────────────
   // El motor ya detectaba todo lo necesario y no lo sumaba: el contralor tenía que
   // leer la lista de diferencias y hacer la cuenta a mano.
@@ -318,6 +360,6 @@ function mxn(n: number): string {
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
 function label(c: string): string {
-  const m: Record<string, string> = { diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', viaticos: 'Viáticos', otro: 'Gasto' };
+  const m: Record<string, string> = { diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte', viaticos: 'Viáticos', otro: 'Gasto' };
   return m[strip_accents(c.toLowerCase())] ?? c;
 }

@@ -512,3 +512,78 @@ describe('cuadrarViaje — totales de deducibilidad', () => {
     expect(r.totalDeducible + r.totalNoDeducible + r.totalPorConfirmar).toBe(1000);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VIÁTICOS: el tope de $750 es SOLO de alimentación, y es POR DÍA.
+//
+// LISR 28-V topa la alimentación nacional en $750 por día y por beneficiario.
+// Antes el motor lo aplicaba (a) a todo lo etiquetado "viaticos", incluido el
+// hospedaje —que NO tiene tope nacional—, y (b) por COMPROBANTE, así que tres
+// comidas de $400 el mismo día pasaban limpias mientras una sola de $800 se
+// marcaba. Las dos cosas dan cifras falsas al contralor.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuadrarViaje — tope de viáticos', () => {
+  const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: ['15101505'] };
+
+  it('el hospedaje NO tiene tope nacional: $2,000 pasa limpio', () => {
+    const r = cuadrarViaje({
+      viajeId: 'w1', anticipo: 2000, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'hospedaje', monto: 2000, fecha: '2026-05-01', formaPago: '04' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'viatico_excede_fiscal')).toBe(false);
+    expect(r.totalNoDeducible).toBe(0);
+  });
+
+  it('la alimentación sí: $900 en un día marca $150', () => {
+    const r = cuadrarViaje({
+      viajeId: 'w2', anticipo: 900, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'alimentacion', monto: 900, fecha: '2026-05-01', formaPago: '04' })],
+    });
+    const d = r.diferencias.find((x) => x.tipo === 'viatico_excede_fiscal')!;
+    expect(d.monto).toBe(150);
+  });
+
+  it('el tope es POR DÍA, no por comprobante: tres comidas de $400 el mismo día exceden', () => {
+    // Es el hueco que dejaba pasar el gasto real: partir la cuenta en tres
+    // tickets del mismo día burlaba un tope aplicado comprobante por comprobante.
+    const r = cuadrarViaje({
+      viajeId: 'w3', anticipo: 1200, politica: [], estimulos: EST,
+      gastos: [
+        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' }),
+        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' }),
+        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' }),
+      ],
+    });
+    const total = r.diferencias.filter((x) => x.tipo === 'viatico_excede_fiscal').reduce((s, x) => s + (x.monto ?? 0), 0);
+    expect(total).toBe(450); // 1200 - 750
+  });
+
+  it('comidas de días distintos NO se suman entre sí', () => {
+    const r = cuadrarViaje({
+      viajeId: 'w4', anticipo: 1200, politica: [], estimulos: EST,
+      gastos: [
+        g({ concepto: 'alimentacion', monto: 600, fecha: '2026-05-01', formaPago: '04' }),
+        g({ concepto: 'alimentacion', monto: 600, fecha: '2026-05-02', formaPago: '04' }),
+      ],
+    });
+    expect(r.diferencias.some((x) => x.tipo === 'viatico_excede_fiscal')).toBe(false);
+  });
+
+  it('"viaticos" a secas sigue topado: es lo que emitía el OCR viejo', () => {
+    // Compatibilidad: los gastos ya guardados con el concepto genérico no se
+    // pueden reclasificar solos. Se mantiene el criterio conservador.
+    const r = cuadrarViaje({
+      viajeId: 'w5', anticipo: 900, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'viaticos', monto: 900, fecha: '2026-05-01', formaPago: '04' })],
+    });
+    expect(r.diferencias.some((x) => x.tipo === 'viatico_excede_fiscal')).toBe(true);
+  });
+
+  it('el transporte del operador no lleva tope de alimentación', () => {
+    const r = cuadrarViaje({
+      viajeId: 'w6', anticipo: 1500, politica: [], estimulos: EST,
+      gastos: [g({ concepto: 'transporte', monto: 1500, fecha: '2026-05-01', formaPago: '04' })],
+    });
+    expect(r.diferencias.some((x) => x.tipo === 'viatico_excede_fiscal')).toBe(false);
+  });
+});

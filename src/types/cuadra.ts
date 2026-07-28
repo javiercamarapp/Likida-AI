@@ -2,7 +2,16 @@
 // Tipos del dominio de Cuadra (compartidos por los 3 módulos y el frontend)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type ConceptoGasto = 'diesel' | 'caseta' | 'factura' | 'viaticos' | 'otro';
+// El viático se parte en tres porque el TOPE FISCAL de $750/día (LISR 28-V) es
+// SOLO de alimentación: el hospedaje nacional no tiene tope y el transporte del
+// operador tampoco. 'viaticos' se conserva como genérico HEREDADO —es lo que
+// emitía el OCR viejo y esos gastos ya guardados no se reclasifican solos—;
+// para gastos nuevos hay que usar el concepto específico.
+export type ConceptoGasto =
+  | 'diesel' | 'caseta' | 'factura'
+  | 'alimentacion' | 'hospedaje' | 'transporte'
+  | 'viaticos'  // heredado: genérico, se le aplica el tope por precaución
+  | 'otro';
 
 export type EstadoSat = 'vigente' | 'cancelado' | 'no_encontrado' | 'pendiente';
 
