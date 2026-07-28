@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad, type DatosResponsable } from './privacidad';
+import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad, revisarAvisoIntegral, sondearAvisoIntegral, type DatosResponsable } from './privacidad';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // B19 — El aviso de privacidad no existía en ningún punto del flujo.
@@ -49,18 +49,159 @@ describe('avisoSimplificado', () => {
     expect(avisoSimplificado(flota)).toMatch(/Likida/);
   });
 
-  it('SIN los datos de la flota devuelve null: no se inventa un responsable', () => {
+  it('SIN la identidad del responsable devuelve null: no se inventa uno', () => {
     // Un aviso con el nombre equivocado es peor que no tenerlo: sale mal el dato
     // de a quién reclamarle, que es justo para lo que sirve el aviso.
     expect(avisoSimplificado({ ...flota, razonSocial: '' })).toBeNull();
     expect(avisoSimplificado({ ...flota, domicilio: '' })).toBeNull();
-    expect(avisoSimplificado({ ...flota, urlAvisoIntegral: '' })).toBeNull();
+  });
+
+  it('advierte del tratamiento automatizado y del derecho a oponerse', () => {
+    // Art. 26 fr. II: la revisión de comprobantes evalúa fiabilidad SIN
+    // intervención humana y tiene efecto económico. El elemento 11 del checklist
+    // (§5.4 de 11-datos-personales.md) vive en el integral — que hoy no existe —,
+    // así que un derecho que solo se anuncia allá no se ejerce nunca.
+    const a = avisoSimplificado(flota)!;
+    expect(a).toMatch(/programa|automátic/i);
+    expect(a).toMatch(/oponerte/i);
+  });
+
+  it('enumera la revisión entre viajes en vez de cerrar con "nada más"', () => {
+    // Art. 11 vigente: perdió las palabras "compatible o análogo" de la ley
+    // abrogada. Una finalidad que el aviso no enuncia requiere consentimiento
+    // NUEVO, y `detectarAnomalias` correlaciona gastos ENTRE viajes y le entrega
+    // el resultado al contralor. Decir "nada más" volvía falso el aviso.
+    const a = avisoSimplificado(flota)!;
+    expect(a).not.toMatch(/nada más/i);
+    expect(a).toMatch(/viajes anteriores|repetido|alterado/i);
   });
 
   it('cabe en un mensaje de WhatsApp', () => {
     // El límite de Meta para texto es 4096. Un aviso que se parte en varios
     // mensajes se lee a medias y la constancia queda coja.
-    expect(avisoSimplificado(flota)!.length).toBeLessThan(1024);
+    expect(avisoSimplificado(flota)!.length).toBeLessThan(1400);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// La liga muerta. El aviso que salió a producción apuntaba a un dominio sin
+// zona DNS (NXDOMAIN) y esa misma liga era la ÚNICA respuesta al ejercicio de
+// un derecho ARCO. El art. 16 obliga a poner el aviso a disposición; una liga
+// que no abre no lo pone, y la constancia en la base afirma que sí.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('revisarAvisoIntegral', () => {
+  it('acepta una dirección pública bien formada', () => {
+    expect(revisarAvisoIntegral('https://transportesdelsureste.mx/privacidad')).toBe('ok');
+    expect(revisarAvisoIntegral('  http://flota.com.mx/aviso  ')).toBe('ok');
+  });
+
+  it('vacía es "ausente", no "inservible": son dos huecos distintos', () => {
+    // Ausente = la flota no la capturó. Inservible = capturó algo que no abre.
+    // Se distinguen porque quien tiene que arreglarlos hace cosas distintas.
+    expect(revisarAvisoIntegral('')).toBe('ausente');
+    expect(revisarAvisoIntegral('   ')).toBe('ausente');
+    expect(revisarAvisoIntegral(null)).toBe('ausente');
+    expect(revisarAvisoIntegral(undefined)).toBe('ausente');
+  });
+
+  it('rechaza lo que no es un sitio consultable', () => {
+    for (const u of [
+      'pendiente',                       // no parsea
+      'transportes.mx/aviso',            // sin esquema: no parsea
+      'mailto:datos@flota.mx',           // no es un sitio
+      'ftp://flota.mx/aviso.pdf',
+      'https://localhost/aviso',         // no es público
+      'https://intranet/aviso',          // host sin dominio de primer nivel
+      'https://127.0.0.1/aviso',         // IP desnuda: último tramo numérico
+      'https://www.ejemplo.com/aviso',   // relleno
+      'https://example.com/privacidad',
+      'https://tudominio.mx/aviso',
+    ]) expect(revisarAvisoIntegral(u), u).toBe('inservible');
+  });
+
+  it('NO promete que el sitio exista — y esto es el límite de la revisión', () => {
+    // El dominio del incidente real está bien escrito y no está registrado. Esta
+    // función lo deja pasar a propósito: mentir sobre su alcance sería repetir
+    // el error de fondo. Lo que prueba existencia es `sondearAvisoIntegral`.
+    expect(revisarAvisoIntegral('https://transportesinnovativos.mx/aviso-de-privacidad')).toBe('ok');
+  });
+});
+
+describe('sondearAvisoIntegral', () => {
+  it('un dominio que no resuelve NO abre, y el motivo queda para el log', async () => {
+    const nxdomain = async () => { throw new Error('getaddrinfo ENOTFOUND transportesinnovativos.mx'); };
+    const r = await sondearAvisoIntegral('https://transportesinnovativos.mx/aviso-de-privacidad', {
+      fetchImpl: nxdomain as unknown as typeof fetch,
+    });
+    expect(r.abre).toBe(false);
+    expect(r).toHaveProperty('motivo', expect.stringContaining('ENOTFOUND'));
+  });
+
+  it('un 404 tampoco abre: el sitio existe pero el aviso no', async () => {
+    const f = async () => new Response(null, { status: 404 });
+    const r = await sondearAvisoIntegral('https://flota.mx/aviso', { fetchImpl: f as unknown as typeof fetch });
+    expect(r).toEqual({ abre: false, motivo: 'http 404' });
+  });
+
+  it('reintenta con GET si el servidor no implementa HEAD', async () => {
+    // Un 405 al HEAD no significa que la página no exista. Declararla muerta por
+    // eso mandaría a la flota a arreglar una liga que estaba bien.
+    const vistos: string[] = [];
+    const f = async (_u: string, init?: RequestInit) => {
+      vistos.push(init?.method ?? 'GET');
+      return new Response(null, { status: init?.method === 'HEAD' ? 405 : 200 });
+    };
+    const r = await sondearAvisoIntegral('https://flota.mx/aviso', { fetchImpl: f as unknown as typeof fetch });
+    expect(r).toEqual({ abre: true });
+    expect(vistos).toEqual(['HEAD', 'GET']);
+  });
+
+  it('no sale a la red si la liga ya era inservible', async () => {
+    let llamadas = 0;
+    const f = async () => { llamadas++; return new Response(null, { status: 200 }); };
+    const r = await sondearAvisoIntegral('pendiente', { fetchImpl: f as unknown as typeof fetch });
+    expect(r).toEqual({ abre: false, motivo: 'liga inservible' });
+    expect(llamadas).toBe(0);
+  });
+});
+
+describe('avisoSimplificado con la liga rota', () => {
+  const sinLiga: DatosResponsable[] = [
+    { ...flota, urlAvisoIntegral: '' },
+    { ...flota, urlAvisoIntegral: 'pendiente' },
+    { ...flota, urlAvisoIntegral: 'https://www.ejemplo.com/aviso' },
+  ];
+
+  it('sigue mandando el aviso: las fr. I a IV caben enteras en el mensaje', () => {
+    // Callarse dejaría al titular sin nada cuando puede quedarse con casi todo.
+    // Lo que falta es el puntero al integral, no el aviso (art. 16 fr. II).
+    for (const r of sinLiga) {
+      const a = avisoSimplificado(r);
+      expect(a, JSON.stringify(r.urlAvisoIntegral)).not.toBeNull();
+      expect(a!).toContain(flota.razonSocial);
+      expect(a!).toContain(flota.domicilio);
+      expect(a!).toMatch(/PRIVACIDAD/);
+    }
+  });
+
+  it('NO pega la liga que no abre', () => {
+    // Es lo que convirtió el aviso en una constancia de algo que no ocurrió.
+    expect(avisoSimplificado({ ...flota, urlAvisoIntegral: 'https://www.ejemplo.com/aviso' })!)
+      .not.toContain('ejemplo.com');
+  });
+
+  it('dice la verdad: que la empresa aún no lo publica', () => {
+    const a = avisoSimplificado({ ...flota, urlAvisoIntegral: '' })!;
+    expect(a).toMatch(/aún no lo publica|todavía no/i);
+  });
+
+  it('cuando la flota publique el integral, el aviso bueno se reenvía solo', () => {
+    // Art. 15 fr. VI, gratis: los dos textos son distintos, así que el hash
+    // cambia y `marcar_aviso_privacidad` dispara el reenvío sin que nadie mueva
+    // un contador. El hueco se cierra sin intervención manual.
+    const roto = versionAviso(avisoSimplificado({ ...flota, urlAvisoIntegral: '' })!);
+    const bueno = versionAviso(avisoSimplificado(flota)!);
+    expect(roto).not.toBe(bueno);
   });
 });
 
@@ -124,5 +265,29 @@ describe('respuestaPrivacidad', () => {
 
   it('tranquiliza sobre la liquidación: preguntar no le cuesta nada', () => {
     expect(respuestaPrivacidad(flota)).toMatch(/no la afecta|sigue igual/i);
+  });
+
+  it('con la liga rota NO la manda: sería dejarlo sin ejercer y creyendo que sí', () => {
+    // Este es el único camino que el producto ofrece para ejercer un derecho.
+    // Contestarlo con un dominio que no abre es peor que reconocer el hueco.
+    const r = respuestaPrivacidad({ ...flota, urlAvisoIntegral: 'https://www.ejemplo.com/aviso' });
+    expect(r).not.toContain('ejemplo.com');
+    expect(r).toMatch(/no publica la liga|no tengo a dónde/i);
+  });
+
+  it('con la liga rota igual dice a quién reclamarle y dónde emplazarlo', () => {
+    // Art. 15 fr. I: identidad Y domicilio. Es lo que sí se tiene y es
+    // exactamente lo que la fracción persigue.
+    const r = respuestaPrivacidad({ ...flota, urlAvisoIntegral: '' });
+    expect(r).toContain(flota.razonSocial);
+    expect(r).toContain(flota.domicilio);
+  });
+
+  it('no afirma que le avisó a la empresa: solo registra', () => {
+    // Lo que ocurre es una línea de log que la empresa consulta, no una
+    // notificación que salga hacia ella. Afirmar lo segundo es afirmar un
+    // estado que el producto no produce.
+    expect(respuestaPrivacidad(flota)).not.toMatch(/ya le avis/i);
+    expect(respuestaPrivacidad(flota)).toMatch(/queda registrada/i);
   });
 });

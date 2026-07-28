@@ -366,7 +366,12 @@ export async function getDatosResponsable(
     domicilio: (data.domicilio_fiscal as string) ?? '',
     urlAvisoIntegral: (data.url_aviso_privacidad as string) ?? '',
   };
-  return r.razonSocial && r.domicilio && r.urlAvisoIntegral ? r : null;
+  // La URL del integral NO se exige aquí. Devolver `null` por su ausencia hacía
+  // que el operador no recibiera NADA: el aviso simplificado sí se puede armar
+  // sin ella —las fracciones I a IV del art. 15 caben enteras en el mensaje— y
+  // callarse cumple menos que mandarlo diciendo que la empresa aún no lo publica.
+  // Razón social y domicilio sí se exigen: son la fr. I y no se pueden fingir.
+  return r.razonSocial && r.domicilio ? r : null;
 }
 
 /**

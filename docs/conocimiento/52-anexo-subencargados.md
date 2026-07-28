@@ -62,11 +62,32 @@ Verificado contra el texto vigente en `normas/lfpdppp-2-XII-XX.yaml`.
 | 5 | **Sentry** | Solo `warn` y `error`, **ya redactados** | `src/lib/observability/sentry.ts` |
 
 **Sobre Sentry (cableado el 28-jul-2026).** Es el único de la tabla que recibe
-datos *filtrados*: se alimenta del `logger`, que redacta RFC, UUID de CFDI y
-teléfonos antes de emitir, y se inicializa con `sendDefaultPii: false` para que
-el enriquecimiento automático no adjunte IP ni cabeceras —que el pipeline del
-logger no ha visto y por tanto no ha podido redactar—. Sin `SENTRY_DSN` no se
-carga el paquete siquiera.
+datos *filtrados*: se alimenta del `logger`, que redacta RFC y UUID de CFDI antes
+de emitir, y se inicializa con `sendDefaultPii: false` para que el
+enriquecimiento automático no adjunte IP ni cabeceras —que el pipeline del logger
+no ha visto y por tanto no ha podido redactar—. Sin `SENTRY_DSN` no se carga el
+paquete siquiera.
+
+> ⚠️ **Los teléfonos NO están redactados hoy, y este documento afirmaba que sí.**
+> Corregido el 28-jul-2026. La regex de `src/lib/logger.ts:11` es
+> `/\b\+?52\d{10}\b|\b\d{10}\b/g`, y el formato que Meta entrega de verdad en el
+> `wa_id` de todo operador mexicano lleva el "1": `5219993700779`, trece dígitos.
+> Medido:
+>
+> ```
+> "5219993700779"  ->  "5219993700779"   ← NO redacta
+> "+5219993700779" ->  "+5219993700779"  ← NO redacta
+> "529993700779"   ->  "[TEL]"
+> "9993700779"     ->  "[TEL]"
+> ```
+>
+> El camino real es `src/app/api/webhook/whatsapp/route.ts:60`
+> (`logger.warn('wa.ratelimit', { from: m.from })`, sin normalizar), y `warn` se
+> replica a Sentry. Mientras no se arregle la regex, la frase correcta ante un
+> auditor es *"redacta RFC y UUID"*, no *"y teléfonos"*: una medida de seguridad
+> que no hace lo que su documentación dice es peor que no tenerla, porque este
+> documento es justo el que se firma (art. 18, segundo párrafo).
+> **Arreglo pendiente en archivo ajeno:** `src/lib/logger.ts`.
 
 ### El SAT no es subencargado
 
@@ -103,9 +124,30 @@ un cliente:
   no del operador.
 - La exposición personal se concentra en **los viáticos timbrados al RFC del
   operador** (el caso de RLISR 57) y en su **teléfono y nombre** en el canal.
-- Ningún dato **sensible** en el sentido de la ley. Los datos financieros exigen
-  consentimiento expreso, que es otra cosa: **no** activan el incremento "hasta
-  por dos veces" del art. 59 fr. IV.
+- Los datos financieros exigen consentimiento expreso, que es otra cosa que
+  "sensible": **no** activan por sí solos el incremento "hasta por dos veces" del
+  art. 59 fr. IV.
+
+> ⚠️ **"Ningún dato sensible" no es cierto por diseño, solo por suerte.**
+> Corregido el 28-jul-2026. El esquema de extracción pide `producto`
+> (`src/lib/cuadra/intake/ocr.ts:36`) y se persiste en `gasto.ocr_extra`
+> (`repo.ts:109`). Un ticket de farmacia metido a gastos escribe
+> `producto: "METFORMINA 850MG 30 TABS"` — dato de **salud** del titular
+> (art. 2 fr. VI) en una base sin justificación (art. 8, párrafo segundo), con el
+> incremento del art. 59 fr. IV disponible. Nadie decidió guardar salud; nadie
+> decidió no guardarla.
+>
+> Ya existe el filtro: `sanitizarProducto` en
+> `src/lib/cuadra/intake/sanitizar.ts` descarta el valor completo cuando revela
+> salud o vida sexual, y deja intactos los productos de combustible, que es para
+> lo único que el campo se usa (`etiquetaConcepto`, `cuadre/engine.ts:718`).
+> **Queda inerte hasta que `ocr.ts:340` cambie `sanitizarTexto(data.producto)`
+> por `sanitizarProducto(data.producto)`** — un renglón, en archivo ajeno.
+>
+> Y el límite honesto: eso reduce lo que se **persiste**, no lo que se **remite**.
+> La foto entera ya viajó a Gemini vía OpenRouter antes de llegar al filtro, y
+> una imagen no se puede enmascarar de antemano. `11-datos-personales.md` §8.6
+> pide las dos cosas; hoy se cubre una.
 
 ---
 
@@ -121,11 +163,79 @@ un cliente:
    encargada. El mecanismo del canal (`src/lib/cuadra/privacidad.ts`) cubre el
    otro sombrero: el de la flota frente a sus operadores.
 
+### 5. Lo que tiene que dar la flota, y sin lo cual no hay aviso válido
+
+Ningún renglón de esta lista se puede resolver escribiendo código. Van con el
+nombre exacto de la columna de `tenant` que llenan, para que se capturen una vez
+y no se vuelvan a inventar.
+
+| Dato | Columna | Por qué no se puede inventar |
+|---|---|---|
+| URL del aviso integral, **publicada y abierta** | `url_aviso_privacidad` | Art. 16 fr. II obliga a señalar el sitio; y ahí viven las fr. V (procedimiento ARCO), VI (cómo se comunican cambios), el art. 35 (cláusula de transferencias) y el art. 7 último párrafo (revocación). Sin ella el titular no puede ejercer nada. |
+| Razón social exacta del responsable | `razon_social` | Art. 15 fr. I. Hoy dice *TRANSPORTES INNOVATIVOS SA DE CV*, un prospecto sin contrato al que se le está atribuyendo una calidad jurídica que no aceptó. |
+| Domicilio del responsable | `domicilio_fiscal` | Art. 15 fr. I. La fracción existe para que el titular sepa **dónde emplazar**; un domicilio inventado cumple la forma y falla en lo único que persigue. |
+| Nombre y correo de la persona o departamento de datos personales | (no hay columna) | Art. 29. Va en el integral. |
+
+Mientras falten, el producto **no finge**: manda el aviso simplificado completo
+sin la liga y le dice al operador que la empresa aún no la publica. Eso es lo
+mejor que el código puede hacer; no es cumplimiento, es honestidad mientras
+llega el dato.
+
 ## Lo que ya quedó cerrado
 
 - Mecanismo del aviso simplificado en WhatsApp — art. 16 fr. II
-  (`src/lib/cuadra/privacidad.ts`, mig. 0018).
-- Constancia por operador, con reenvío automático si la flota cambia su aviso —
-  art. 15 fr. VI.
+  (`src/lib/cuadra/privacidad.ts`, mig. 0018). El **mecanismo**: el contenido
+  depende de datos que la flota tiene que dar (ver el bloque de abajo).
+- Reenvío automático cuando cambia el aviso — art. 15 fr. VI. Es estructural: la
+  versión sale de un hash del texto, no de un contador que alguien suba.
 - Medio ARCO que de verdad responde: la palabra *PRIVACIDAD* se atiende de forma
   determinística, antes del agente.
+- Enunciado honesto de las finalidades — art. 11 y art. 15 fr. III. El aviso
+  decía *"liquidar los viajes y comprobar los gastos ante el SAT. Nada más"* y el
+  producto además correlaciona gastos **entre viajes** para marcar duplicados y
+  se los entrega al contralor (`analytics.ts:86`, `dashboard/page.tsx:52`). El
+  art. 11 vigente perdió las palabras *"compatible o análogo"*: una finalidad que
+  el aviso no enuncia exige consentimiento nuevo. Ahora se enuncia.
+- Advertencia de tratamiento automatizado y derecho de oposición — art. 26 fr. II
+  (elemento 11 del checklist de `11-datos-personales.md` §5.4). La tabla lo ubica
+  en el integral; se puso también en el simplificado porque la revisión que lo
+  activa ya corre y un derecho que solo vive en un documento que el titular no ha
+  visto no se ejerce nunca. **Esto informa la oposición, no la resuelve**: el
+  humano en el loop del punto 6 de "Hay que construir" sigue abierto
+  (`tools.ts:100-150` cierra la liquidación en el mismo turno, sin que nadie
+  mire).
+
+## Lo que NO está cerrado y este documento llegó a dar por cerrado
+
+- **El aviso integral no existe.** `url_aviso_privacidad` del tenant de
+  producción apunta a `https://transportesinnovativos.mx/aviso-de-privacidad`, un
+  dominio **sin zona DNS** (NXDOMAIN, comprobado con `host`). El art. 16 obliga a
+  *poner a disposición* el aviso; una liga que no abre no lo pone, y esa misma
+  liga era la única respuesta al ejercicio de un derecho ARCO.
+  - **Lo que el código ya hace:** `revisarAvisoIntegral` rechaza lo que no tiene
+    forma de sitio consultable, y cuando la liga no sirve el aviso **se manda
+    igual** —las fr. I a IV del art. 15 caben enteras en el mensaje— pero sin
+    pegar la dirección muerta y diciéndole al operador que la empresa aún no la
+    publica. Lo mismo en la respuesta ARCO.
+  - **Lo que el código NO puede hacer:** saber que un dominio bien escrito no
+    está registrado. Eso solo lo prueba `sondearAvisoIntegral`, que sale a la
+    red y por eso no va en el camino de cada mensaje: **necesita un llamador en
+    un preflight de despliegue, un arranque o un cron** (archivo ajeno).
+  - **Lo que hace falta del dueño del negocio:** una URL real y publicada. No hay
+    arreglo de código para esto.
+- **La constancia de puesta a disposición se escribe ANTES del envío.**
+  `processor.ts:148` reclama el envío y `meta/client.ts:69-81` no lanza nunca, así
+  que un 400, un 401 o un `#131030` producen lo mismo que un éxito: la base
+  afirma que se informó. El Reglamento art. 31 pone la carga de la prueba en el
+  responsable, y el artefacto que la satisface es demostrablemente independiente
+  del hecho que dice probar. Archivos ajenos: `processor.ts`, `meta/client.ts`,
+  `supabase/migrations/0018_aviso_privacidad.sql`.
+- **Los datos del responsable son inventados.** `seed.sql:26-34` los marca
+  `🔴 INVENTADO` y los reescribe con `on conflict do update`, así que revierte en
+  silencio cualquier captura real. Archivo ajeno: `supabase/seed.sql`.
+- **Sin datos del responsable el pipeline sigue.** `processor.ts:136-142` registra
+  un error y retorna de `ponerAvisoADisposicion`, no del procesamiento: la foto
+  se descarga y se manda a Gemini igual (`:254`). Y `repo.ts:369` devuelve `null`
+  cuando falta la URL, así que la degradación honesta del párrafo anterior **no
+  se alcanza** por ese camino: hay que quitar `&& r.urlAvisoIntegral` de esa
+  condición. Archivos ajenos: `processor.ts`, `repo.ts`.

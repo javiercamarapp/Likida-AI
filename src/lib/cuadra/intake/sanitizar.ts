@@ -24,3 +24,72 @@ export function sanitizarTexto(s: string | null | undefined, maxLen = 80): strin
     .slice(0, maxLen);
   return limpio || undefined;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DATOS SENSIBLES COLADOS POR EL TICKET
+//
+// `sanitizarTexto` es defensa contra INYECCIÓN: corta y quita delimitadores.
+// No mira el contenido, y no fue escrita para eso. El campo `producto` sí trae
+// contenido: un operador que compra su medicamento en el camino y lo mete a
+// gastos produce "METFORMINA 850MG 30 TABS" — un dato de SALUD del titular
+// (art. 2 fr. VI), escrito en `gasto.ocr_extra`.
+//
+// Por qué no basta con "es poco probable": el art. 8 párrafo segundo prohíbe
+// crear bases con datos sensibles sin justificación, y el consentimiento para
+// sensibles tiene que ser expreso Y POR ESCRITO con firma o mecanismo de
+// autenticación — que por este canal no existe en ninguna forma. Además el
+// art. 59 fr. IV permite incrementar la sanción "hasta por dos veces" cuando
+// hay sensibles de por medio: es el único renglón del rubro que la duplica.
+// docs/conocimiento/11-datos-personales.md §8.6 lo pide por escrito:
+// "Filtro de datos sensibles colados […] Detecta y excluye."
+//
+// LÍMITE QUE HAY QUE TENER PRESENTE: esto reduce lo que se PERSISTE, no lo que
+// se remite. La foto entera ya viajó al modelo de visión antes de llegar aquí,
+// y una imagen no se puede enmascarar de antemano. El §8.6 pide ambas cosas;
+// este filtro cubre una.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Señales de que lo comprado dice algo sobre la salud o la vida sexual del
+ * titular. Se calibró a favor de la COBERTURA, no de la precisión, porque los
+ * dos errores no cuestan lo mismo: un falso positivo pierde una etiqueta de
+ * pantalla, un falso negativo escribe un dato sensible en la base.
+ *
+ * Ese cálculo se sostiene porque `producto` solo se usa para etiquetar
+ * combustible (`etiquetaConcepto`, cuadre/engine.ts): en un ticket de farmacia
+ * el campo no alimenta ninguna cifra ni ninguna decisión.
+ */
+const SENSIBLE: RegExp[] = [
+  // Formas farmacéuticas. Con \b a fuerza: "cap" sin frontera casa dentro de
+  // CAPUFE y "tab" dentro de TABASCO.
+  /\b(tab|tabs|tableta|tabletas|cap|caps|capsula|capsulas|gragea|grageas|jarabe|suspension|ampolleta|ampolletas|ampula|ampulas|inyectable|inyeccion|supositorio|supositorios|ovulo|ovulos|nebulizacion|inhalador)\b/,
+  // Dosis. mg/mcg/UI son unidades de medicamento; ml, g y kg NO se incluyen
+  // porque un refresco de 600 ML y un kilo de abarrotes darían falso positivo.
+  /\b\d+(\.\d+)?\s*(mg|mcg|ui)\b/,
+  // Contexto de salud impreso en el propio ticket.
+  /\b(farmacia|farmacias|medicamento|medicamentos|medicina|medicinas|receta|antibiotico|analgesico|antigripal|insulina|jeringa|jeringas|glucometro|glucosa|venda|vendas|gasa|gasas|curacion|consultorio|radiografia|ultrasonido|dentista|optica|oftalmico|oftalmica|hospital)\b/,
+  /\b(laboratorio|analisis) clinic/,
+  /\bconsulta medic/,
+  // Vida sexual y salud reproductiva — art. 2 fr. VI las lista igual que salud.
+  /\b(preservativo|preservativos|condon|condones|anticonceptivo|anticonceptivos)\b/,
+  /\bprueba de embarazo\b/,
+];
+
+/**
+ * Saneamiento de `producto`: lo mismo que `sanitizarTexto` y además EXCLUYE el
+ * valor completo cuando revela salud o vida sexual.
+ *
+ * Se descarta entero y no se sustituye por una marca del estilo
+ * "[dato de salud omitido]": esa marca sigue siendo una inferencia de salud
+ * sobre el titular, guardada en la base y visible para su patrón. Guardar la
+ * etiqueta del dato sensible es guardar el dato sensible.
+ */
+export function sanitizarProducto(s: string | null | undefined): string | undefined {
+  const limpio = sanitizarTexto(s);
+  if (!limpio) return undefined;
+  const normalizado = limpio
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')   // sin acentos: "CÁPSULA" y "INYECCIÓN"
+    .toLowerCase();
+  return SENSIBLE.some((r) => r.test(normalizado)) ? undefined : limpio;
+}

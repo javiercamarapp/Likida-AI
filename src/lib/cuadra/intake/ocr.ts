@@ -15,7 +15,7 @@ import { logger } from '@/lib/logger';
 import { generateStructured, StructuredError, TruncatedError } from '@/lib/llm/openrouter';
 import { decodeCodigosFromImage, bufferFromDataUrl, esRfcValido, esUuidValido, rfcChecksumOk } from './cfdi';
 import { normalizarFecha } from './fecha';
-import { sanitizarFolio, sanitizarTexto } from './sanitizar';
+import { sanitizarFolio, sanitizarTexto, sanitizarProducto } from './sanitizar';
 import { consultarCFDI } from './sat';
 import type { Gasto, ConceptoGasto, EstadoSat } from '@/types/cuadra';
 
@@ -337,7 +337,11 @@ export async function extraerComprobante(
     // Datos ricos del ticket (para el aviso de portal, rendimiento y validación).
     // El IVA/subtotal del TICKET NO alimentan el acreditamiento (eso exige XML).
     ocrExtra: {
-      producto: sanitizarTexto(data.producto),
+      // `sanitizarProducto`, no `sanitizarTexto`: el producto es el único campo
+      // donde un ticket puede revelar SALUD (una farmacia imprime el nombre del
+      // medicamento) y eso es dato sensible del art. 2 fr. VI de la LFPDPPP.
+      // Guardarlo en la liquidación lo pone además a la vista del patrón.
+      producto: sanitizarProducto(data.producto),
       fechaRaw: data.fecha ?? undefined,
       litros: data.litros ?? undefined,
       precioUnitario: data.precio_unitario ?? undefined,
