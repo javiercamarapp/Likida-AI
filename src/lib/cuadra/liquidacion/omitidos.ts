@@ -44,6 +44,9 @@ export interface FilaImprimible {
   monto: number;
   folio?: string;
   fecha?: string;
+  /** Para que el renglón diga el producto impreso y no el cajón del concepto:
+   *  un ticket de gasolina PLUS no puede aparecer como "Diésel". */
+  ocrExtra?: Record<string, unknown>;
 }
 
 /**

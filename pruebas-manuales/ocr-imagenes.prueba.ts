@@ -158,6 +158,12 @@ test('OCR sobre imágenes reales + cuadre del lote', async () => {
     const kb = (bytes / 1024).toFixed(0);
     console.log(`\n[${i + 1}/${imagenes.length}] ${basename(ruta)}  (${kb} KB${nota ? `, ${nota}` : ''})`);
 
+    // Se decodifica aparte SOLO para el informe: es lo único que distingue "el
+    // lector no vio nada" de "vio un código que no era de CFDI". Sin esto, el
+    // arnés decía "sin QR" sobre tickets cuyo QR se había leído perfectamente.
+    const { decodeCodigosFromImage, bufferFromDataUrl } = await import('@/lib/cuadra/intake/cfdi');
+    const codigos = await decodeCodigosFromImage(bufferFromDataUrl(url)).catch(() => []);
+
     const t0 = Date.now();
     let r: Awaited<ReturnType<typeof extraerComprobante>>;
     try {
@@ -193,7 +199,11 @@ test('OCR sobre imágenes reales + cuadre del lote', async () => {
     }
     console.log(
       `   fiscal   : RFC emisor ${g.rfcEmisor ?? (extra.rfcEmisorDudoso ? `⚠️ ${String(extra.rfcEmisorDudoso)} RECHAZADO (dígito verificador)` : '—')}  ·  receptor ${g.rfcReceptor ?? '—'}\n` +
-        `              UUID ${g.cfdiUuid ?? '—'}  ·  CFDI ${g.cfdiValido === true ? 'con QR ✅' : 'sin QR'}` +
+        // "sin QR" a secas engañaba: los tickets de este lote SÍ traen QR, pero de
+        // FACTURACIÓN (mefacturo.mx), no de CFDI — y el lector los leyó bien. El
+        // arnés hacía parecer que el decodificador había fallado cuando no.
+        `   códigos  : ${codigos.length ? codigos.map((c) => `[${c.formato}] ${String(c.texto).slice(0, 62)}`).join('\n              ') : '— ninguno leído'}\n` +
+        `              UUID ${g.cfdiUuid ?? '—'}  ·  QR de CFDI ${g.cfdiValido === true ? 'sí ✅' : 'no'}` +
         `  ·  SAT ${g.estadoSat ?? '—'}  ·  EFOS ${g.efos === true ? '🚨 EN LISTA 69-B' : g.efos === false ? 'limpio' : '—'}`,
     );
     console.log(`   costo    : ${r.costo.modelo}  ${r.costo.tokensIn}→${r.costo.tokensOut} tok  $${r.costo.costoUsd.toFixed(4)} USD`);
@@ -207,12 +217,24 @@ test('OCR sobre imágenes reales + cuadre del lote', async () => {
 
   // ── Cuadre del lote, como si fuera un viaje ────────────────────────────────
   const anticipo = Number(process.env.ANTICIPO ?? 0);
+  // El arnés pasaba SOLO la política, así que el motor corría a media máquina:
+  // sin `estimulos` no se evalúa el tope de alimentación de LISR 28-V ni el de
+  // efectivo, y sin `hoy` no se evalúan la fecha ni el plazo de facturación.
+  //
+  // Con tickets reales eso engaña: un ticket de $1,050 de comida pasaba sin que
+  // nadie notara que excede el tope de $750/día. Probar con fotos de verdad no
+  // sirve de nada si el motor no está entero.
+  const { DEMO_CONFIG } = await import('@/lib/cuadra/config');
+  const hoy = new Date().toISOString().slice(0, 10);
   const liq = cuadrarViaje({
     viajeId: 'prueba-manual',
     anticipo,
     gastos,
     politica: POLITICA,
     ruta: 'prueba',
+    hoy,
+    estimulos: DEMO_CONFIG.estimulos,
+    hidrocarburos: DEMO_CONFIG.hidrocarburos,
   });
 
   console.log(`\n${'═'.repeat(78)}\nCUADRE DEL LOTE  (anticipo ${money(anticipo)}${process.env.ANTICIPO ? '' : ' — pásalo con ANTICIPO=…'})\n${'═'.repeat(78)}`);

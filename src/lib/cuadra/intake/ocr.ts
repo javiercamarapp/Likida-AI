@@ -65,6 +65,7 @@ REGLAS DURAS:
 
 MAPEO DE ETIQUETAS (mapea el CONCEPTO, no la etiqueta literal; varían por estación):
 - folio ← "FOLIO" / "NOTA" / "NUM VENTA" / "NUM. VENTA".
+- fecha ← LEE EL AÑO CON CUIDADO. Muchas gasolineras imprimen la fecha con ESPACIOS y sin separadores ("FECHATRANS:2026 07 27 21:45:26"), y ese formato se confunde con facilidad: sobre tickets reales se leyó "2020" y "2024" en un ticket que decía 2026. El año son los CUATRO primeros dígitos de ese bloque. Si no puedes leer el año con seguridad, devuelve null en vez de adivinar: una fecha de otro ejercicio manda el gasto a revisión.
 - web_id ← "WEB ID" / "WebID" (trátalo como string; puede ser numérico "65038155" o alfanumérico "006A").
 - estacion ← "ESTACION" / "EST" / "EST.".
 - litros ← "LITROS" / "CANTIDAD" / "CANT-LTS" / "CANT/LTS" / "U.M." (la cantidad en litros).
