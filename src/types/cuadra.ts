@@ -86,6 +86,12 @@ export interface Liquidacion {
   estatus: EstatusLiquidacion;
   diferencias: Diferencia[];
   gastos: Gasto[];
+  // ── Deducibilidad: las tres cubetas SIEMPRE suman totalComprobado ───────────
+  totalDeducible: number;    // lo que sí se puede deducir para ISR
+  totalNoDeducible: number;  // lo que se perdió (incluye solo el EXCEDENTE del viático)
+  /** Combustible en efectivo: deducible hasta el 15% del ejercicio (RFA 2026
+   *  regla 2.9). No es deducible ni perdido hasta que el contador del 15% exista. */
+  totalPorConfirmar: number;
   iepsAcreditable: number; // Σ IEPS de diésel de CFDI deducibles → estímulo vs ISR (LIF 2026 Art. 20)
   ivaAcreditable: number;  // Σ IVA de CFDI deducibles (LIVA art. 5)
   peajeAcreditable: number; // Σ SubTotal de casetas × factor (0.5) → estímulo de peaje (LIF 2026 Art. 20-A)

@@ -252,6 +252,37 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     }
   }
 
+  // ── Totales de deducibilidad (la cifra que compra el contralor) ──────────────
+  // El motor ya detectaba todo lo necesario y no lo sumaba: el contralor tenía que
+  // leer la lista de diferencias y hacer la cuenta a mano.
+  //
+  // Son TRES cubetas, no dos. El combustible en efectivo no cabe en ninguna de las
+  // clásicas: es deducible hasta el 15% del combustible del ejercicio (RFA 2026
+  // regla 2.9) y ese contador todavía no existe. Ponerlo en "no deducible" le
+  // quita dinero al cliente; ponerlo en "deducible" le promete algo que quizá no
+  // tenga. Se declara "por confirmar" hasta que exista el contador.
+  //
+  // OJO: `sobre_politica` NO entra aquí. Exceder la política INTERNA de la flota
+  // no vuelve el gasto no deducible ante el SAT: son dos juicios distintos.
+  const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'sin_cfdi'];
+  const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo'];
+
+  let totalDeducible = 0, totalNoDeducible = 0, totalPorConfirmar = 0;
+  for (const g of input.gastos) {
+    // Mismo filtro que `totalComprobado`, para que las tres cubetas SIEMPRE sumen
+    // ese total. Si no cuadra, el contralor lo nota con una calculadora.
+    if (duplicados.has(g.id) || !(g.monto > 0)) continue;
+    const suyas = diferencias.filter((d) => d.gastoId === g.id);
+    if (suyas.some((d) => NO_DEDUCIBLE_ISR.includes(d.tipo))) { totalNoDeducible += g.monto; continue; }
+    if (suyas.some((d) => POR_CONFIRMAR.includes(d.tipo))) { totalPorConfirmar += g.monto; continue; }
+    // Parcial: del viático solo se pierde el EXCEDENTE sobre el tope fiscal
+    // (LISR 28-V), no el gasto entero. Mandar los $900 completos a no deducible
+    // por $150 de exceso es el error que más dinero le cuesta al cliente.
+    const excedente = suyas.filter((d) => d.tipo === 'viatico_excede_fiscal').reduce((s, d) => s + (d.monto ?? 0), 0);
+    totalNoDeducible += excedente;
+    totalDeducible += g.monto - excedente;
+  }
+
   // `ieps_no_desglosado` NO va aquí a propósito: el gasto es deducible y lo único
   // que se pierde es el acreditamiento del estímulo. Casi ningún CFDI de
   // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
@@ -270,6 +301,9 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     estatus,
     diferencias,
     gastos: input.gastos,
+    totalDeducible: round2(totalDeducible),
+    totalNoDeducible: round2(totalNoDeducible),
+    totalPorConfirmar: round2(totalPorConfirmar),
     iepsAcreditable: round2(iepsAcreditable),
     ivaAcreditable: round2(ivaAcreditable),
     peajeAcreditable: round2(peajeAcreditable),
