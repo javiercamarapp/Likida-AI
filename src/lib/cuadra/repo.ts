@@ -35,7 +35,11 @@ export async function getPolitica(tenantId: string): Promise<PoliticaGasto[]> {
 export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje | null> {
   const { data, error } = await supabaseAdmin()
     .from('viaje')
-    .select('id, folio, origen, destino, anticipo, fecha_inicio, fecha_fin')
+    // `demora_no_imputable` NO es opcional aquí: el PDF tiene una sección que
+    // depende de él (LFT 263-I) y sin traerlo esa sección no se activa NUNCA.
+    // Es el mismo patrón que ya costó dos rondas: el dato existe, el consumidor
+    // existe, y nadie los conectó.
+    .select('id, folio, origen, destino, anticipo, fecha_inicio, fecha_fin, demora_no_imputable')
     .eq('id', viajeId)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -44,6 +48,9 @@ export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje
   return {
     id: data.id as string,
     folio: (data.folio as string) || undefined,
+    // `?? undefined` y no `|| false`: NULL significa "sin determinar", que no es
+    // lo mismo que "la demora sí era imputable al operador".
+    demoraNoImputable: (data.demora_no_imputable as boolean | null) ?? undefined,
     origen: (data.origen as string) || undefined,
     destino: (data.destino as string) || undefined,
     anticipo: Number(data.anticipo ?? 0),
@@ -325,6 +332,7 @@ export async function saveLiquidacion(
     p_estatus: liq.estatus,
     p_diferencias: liq.diferencias,
     p_ieps: liq.iepsAcreditable,
+    p_litros_diesel: liq.litrosDieselAcreditables ?? 0,
     p_iva: liq.ivaAcreditable,
     p_peaje: liq.peajeAcreditable,
     p_pdf_url: pdfUrl ?? null,
