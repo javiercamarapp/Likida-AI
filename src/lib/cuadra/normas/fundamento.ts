@@ -115,7 +115,18 @@ const ALIAS_DE_INSTRUMENTO = [...new Set(
  */
 const FORMA_DE_CITA = new RegExp(
   `\\b(?:art[íi]culo|art\\.|arts\\.|regla|fracci[oó]n|fr\\.)\\s*\\d+` +
-  `|\\b(?:${SIGLAS.join('|')})\\s+\\d+`,
+  `|\\b(?:${SIGLAS.join('|')})\\s+\\d+` +
+  // La sigla DESPUÉS del número: "27-III LISR". Es tan natural en español
+  // hablado como la forma directa, y sin esto no llegaba ni a DESCONOCIDA.
+  `|\\b\\d+\\s*-\\s*[IVXLC]+\\s*(?:${SIGLAS.join('|')})\\b` +
+  // Número con sufijo pegado al nombre de la ley: "el 45-Z de la Ley del ISR".
+  // Se exige el instrumento cerca justamente para no confundir un folio
+  // ("A-4501") ni una fecha ("2026-07-28") con una cita: el folio empieza por
+  // letra y la fecha no lleva letras tras el guion.
+  `|\\b\\d+\\s*-\\s*[A-Za-z]{1,4}\\b[^.]{0,45}(?:${ALIAS_DE_INSTRUMENTO.map(esc).join('|')})` +
+  // El número escrito en palabras: "artículo veintisiete fracción tres". Se
+  // piden las DOS palabras clave para que la prosa normal no dispare.
+  `|\\b(?:art[íi]culo|regla)\\s+[a-zá-úñ]+(?:\\s+[a-zá-úñ]+){0,3}\\s*(?:fracci[oó]n|fr\\.)\\s+[a-zá-úñ]+`,
   'i',
 );
 
