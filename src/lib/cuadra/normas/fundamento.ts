@@ -32,7 +32,7 @@ export const CITA_DESCONOCIDA = 'DESCONOCIDA';
 function patronesDe(id: string): RegExp[] {
   const n = NORMAS[id];
   if (!n) return [];
-  const out: RegExp[] = n.citas.map((c) => new RegExp(esc(c).replace(/\s+/g, '\\s*'), 'i'));
+  const out: RegExp[] = n.citas.map((c) => new RegExp(esc(c).replace(/\s+/g, '\\s*') + FIN_DE_NUMERO, 'i'));
 
   // Forma larga. El modelo no dice siempre "LISR": dice "la Ley del ISR" o
   // "la Ley del Impuesto sobre la Renta". Se aceptan las tres.
@@ -49,11 +49,20 @@ function patronesDe(id: string): RegExp[] {
     const fr = n.fraccion ? `${sep}(?:fracci[oó]n|fr\\.?)${sep}${esc(n.fraccion)}` : '';
     const quien = `(?:${alias.map(esc).join('|')})`;
     // "artículo 27 fracción III ... LISR"  y  "LISR ... artículo 27 fracción III"
-    out.push(new RegExp(`(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}[^.]{0,45}${quien}`, 'i'));
-    out.push(new RegExp(`${quien}[^.]{0,45}(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}`, 'i'));
+    out.push(new RegExp(`(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}${FIN_DE_NUMERO}[^.]{0,45}${quien}`, 'i'));
+    out.push(new RegExp(`${quien}[^.]{0,45}(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}${FIN_DE_NUMERO}`, 'i'));
     // Sin instrumento cerca: "conforme al artículo 27, fracción III" a secas.
-    // Se acepta porque la fracción ya identifica la norma sin ambigüedad.
-    if (n.fraccion) out.push(new RegExp(`(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}`, 'i'));
+    //
+    // El número por sí solo NO identifica la norma. CFF 27-III es el registro
+    // del RFC y LISR 27-III es el pago en efectivo: mismo número, otra ley. Sin
+    // esta comprobación este patrón no solo dejaba pasar "artículo 27, fracción
+    // III del Código Fiscal de la Federación" teniendo permiso para la de la
+    // LISR — la APROBABA, que es peor que callarse: certifica una cita que nadie
+    // autorizó. Así que se acepta la forma a secas solo mientras el texto no
+    // nombre un instrumento AJENO cerca; si lo nombra, manda la ley, no el número.
+    const ajenos = ALIAS_DE_INSTRUMENTO.filter((a) => !alias.includes(a));
+    const salvoOtraLey = ajenos.length ? `(?![^.]{0,45}(?:${ajenos.map(esc).join('|')}))` : '';
+    if (n.fraccion) out.push(new RegExp(`(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}${FIN_DE_NUMERO}${salvoOtraLey}`, 'i'));
   }
   return out;
 }
@@ -79,13 +88,45 @@ function aliasCorto(instrumento?: string): string | undefined {
 const SIGLAS = [...new Set(IDS_NORMA.map((id) => (NORMAS[id].citas[0] ?? '').split(/\s+/)[0]).filter((s) => /^[A-Z]{3,6}$/.test(s)))];
 
 /**
+ * El número de la norma TERMINA donde termina. Sin esta frontera "2.9" calzaba
+ * dentro de "2.9.1", "57" dentro de "570" y "29-A" dentro de "29-A9": el modelo
+ * inventa una subregla que no existe y la guardia la reconoce como la de verdad.
+ * Solo corta cuando lo que sigue ALARGA el número —otro dígito, o un punto o
+ * guion seguido de dígito—, para no matar la cita que cierra una frase.
+ */
+const FIN_DE_NUMERO = '(?![.-]?\\d)';
+
+/**
+ * Todos los alias de instrumento del índice. Sirven para lo contrario que
+ * `SIGLAS`: reconocer que el texto habla de una ley AJENA a la norma que se está
+ * probando.
+ */
+const ALIAS_DE_INSTRUMENTO = [...new Set(
+  IDS_NORMA.flatMap((id) => {
+    const n = NORMAS[id];
+    return [(n.citas[0] ?? '').split(/\s+/)[0], n.instrumento, aliasCorto(n.instrumento)];
+  }).filter((s): s is string => typeof s === 'string' && s.length > 2),
+)];
+
+/**
  * Cualquier cosa con forma de cita normativa, se reconozca o no. Es lo que
  * permite detectar una INVENTADA: si parece un artículo y no está en el índice,
  * el modelo se lo sacó de la manga.
  */
 const FORMA_DE_CITA = new RegExp(
   `\\b(?:art[íi]culo|art\\.|arts\\.|regla|fracci[oó]n|fr\\.)\\s*\\d+` +
-  `|\\b(?:${SIGLAS.join('|')})\\s+\\d+`,
+  `|\\b(?:${SIGLAS.join('|')})\\s+\\d+` +
+  // La sigla DESPUÉS del número: "27-III LISR". Es tan natural en español
+  // hablado como la forma directa, y sin esto no llegaba ni a DESCONOCIDA.
+  `|\\b\\d+\\s*-\\s*[IVXLC]+\\s*(?:${SIGLAS.join('|')})\\b` +
+  // Número con sufijo pegado al nombre de la ley: "el 45-Z de la Ley del ISR".
+  // Se exige el instrumento cerca justamente para no confundir un folio
+  // ("A-4501") ni una fecha ("2026-07-28") con una cita: el folio empieza por
+  // letra y la fecha no lleva letras tras el guion.
+  `|\\b\\d+\\s*-\\s*[A-Za-z]{1,4}\\b[^.]{0,45}(?:${ALIAS_DE_INSTRUMENTO.map(esc).join('|')})` +
+  // El número escrito en palabras: "artículo veintisiete fracción tres". Se
+  // piden las DOS palabras clave para que la prosa normal no dispare.
+  `|\\b(?:art[íi]culo|regla)\\s+[a-zá-úñ]+(?:\\s+[a-zá-úñ]+){0,3}\\s*(?:fracci[oó]n|fr\\.)\\s+[a-zá-úñ]+`,
   'i',
 );
 

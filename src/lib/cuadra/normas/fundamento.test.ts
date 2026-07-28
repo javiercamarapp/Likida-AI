@@ -198,3 +198,117 @@ describe('guardiaFundamento — la puntuación natural del español', () => {
     ]) expect(citasEnTexto(t), t).toContain('lisr-27-fr-III');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 4 · CRÍTICO — el arreglo de la coma abrió un agujero peor.
+//
+// Al ensanchar los patrones para cazar "artículo 27, fracción III" se añadió un
+// patrón SIN instrumento, con el argumento de que "la fracción ya identifica la
+// norma sin ambigüedad". Identifica el NÚMERO, no la LEY. Y los patrones nunca
+// tuvieron frontera al final del número, así que "2.9" calza dentro de "2.9.1".
+//
+// La diferencia con el hueco anterior es de grado, no de tipo: antes la guardia
+// se quedaba callada ante una cita inventada; aquí la CERTIFICA como si una tool
+// la hubiera autorizado. Un fiscalista que busque "RFA 2026 regla 2.9.1" no
+// encuentra nada, y el producto queda como que inventa fundamentos.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('una cita no se aprueba por el número: tiene que ser la misma LEY', () => {
+  it('artículo y fracción correctos, pero de OTRO instrumento, no son la norma permitida', () => {
+    // CFF 27-III es el registro del RFC: nada que ver con pagos en efectivo.
+    const t = 'Ese diésel no es deducible por el artículo 27, fracción III del Código Fiscal de la Federación.';
+    expect(citasEnTexto(t)).not.toContain('lisr-27-fr-III');
+  });
+
+  it('y la guardia NO la deja pasar intacta aunque la tool haya autorizado la de la LISR', () => {
+    const t = 'No es deducible por el artículo 27, fracción III de la Ley del IVA.';
+    const r = guardiaFundamento(t, ['lisr-27-fr-III']);
+    expect(r.forzado).toBe(true);
+  });
+});
+
+describe('el número de la norma termina donde termina: sin frontera se aprueban subreglas inventadas', () => {
+  it('"regla 2.9.1" no es la regla 2.9', () => {
+    const t = 'Esto lo permite conforme a la RFA 2026 regla 2.9.1 para el autotransporte.';
+    expect(citasEnTexto(t)).not.toContain('rfa-2026-2.9');
+  });
+
+  it('"artículo 570" no es el artículo 57', () => {
+    expect(citasEnTexto('el artículo 570 del RLISR')).not.toContain('rlisr-57');
+  });
+
+  it('"artículo 29-A9" no es el artículo 29-A', () => {
+    expect(citasEnTexto('el artículo 29-A9 del CFF')).not.toContain('cff-29-A');
+  });
+
+  it('la guardia fuerza cuando el texto trae la subregla inventada', () => {
+    const t = 'Esto lo permite la RFA 2026 regla 2.9.1.';
+    expect(guardiaFundamento(t, ['rfa-2026-2.9']).forzado).toBe(true);
+  });
+});
+
+describe('lo que el arreglo NO debe romper (regresión de la ronda 3)', () => {
+  it('la cita legítima con coma sigue reconociéndose y conservándose entera', () => {
+    const t = 'No es deducible según el artículo 27, fracción III de la LISR.';
+    expect(citasEnTexto(t)).toContain('lisr-27-fr-III');
+    const r = guardiaFundamento(t, ['lisr-27-fr-III']);
+    expect(r.forzado).toBe(false);
+    expect(r.reply).toBe(t);
+  });
+
+  it('la regla 2.9 de verdad sigue reconociéndose', () => {
+    expect(citasEnTexto('conforme a la RFA 2026 regla 2.9')).toContain('rfa-2026-2.9');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 4 · CRÍTICO REINCIDENTE — formas de cita que el detector no veía.
+//
+// `FORMA_DE_CITA` era una lista de formas CONOCIDAS, no un detector de "esto
+// tiene pinta de referencia legal". Si el modelo no pegaba la palabra
+// "artículo"/"regla"/"fracción" a un dígito, o ponía la sigla DESPUÉS del
+// número, la cita inventada ni siquiera llegaba a CITA_DESCONOCIDA: salía
+// intacta hacia el contralor.
+//
+// La ronda 3 lo reportó, se declaró arreglado y el commit no tocó el regex.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('una cita inventada se detecta aunque no traiga la palabra "artículo"', () => {
+  it('sigla DESPUÉS del número: "27-III LISR"', () => {
+    expect(citasEnTexto('No es deducible: 27-III LISR.')).toContain('DESCONOCIDA');
+  });
+
+  it('número con sufijo junto al nombre de la ley: "45-Z de la Ley del ISR"', () => {
+    const t = 'Ese gasto no aplica conforme al 45-Z de la Ley del ISR, así que te lo dejo como no deducible.';
+    expect(citasEnTexto(t)).toContain('DESCONOCIDA');
+  });
+
+  it('el número escrito en palabras: "artículo veintisiete fracción tres"', () => {
+    const t = 'No es deducible por el artículo veintisiete fracción tres de la LISR.';
+    expect(citasEnTexto(t)).toContain('DESCONOCIDA');
+  });
+
+  it('y la guardia fuerza el texto en los tres casos', () => {
+    for (const t of [
+      'No es deducible: 27-III LISR.',
+      'Ese gasto no aplica conforme al 45-Z de la Ley del ISR.',
+      'No es deducible por el artículo veintisiete fracción tres de la LISR.',
+    ]) expect(guardiaFundamento(t, []).forzado, t).toBe(true);
+  });
+});
+
+describe('el detector ensanchado no puede confundir un folio ni una fecha con una cita', () => {
+  it('deja en paz el cuadre normal, que es la mayoría de los mensajes', () => {
+    const t = 'Listo, cuadré tu viaje 👇\n• Comprobado: $5,000.00\n• Anticipo: $6,000.00\n• Sobró $1,000.00 del anticipo';
+    expect(citasEnTexto(t)).toEqual([]);
+    expect(guardiaFundamento(t, []).forzado).toBe(false);
+  });
+
+  it('deja en paz folios, fechas y RFC', () => {
+    for (const t of [
+      'Tu folio es A-4501 y el ticket es del 2026-07-28.',
+      'La factura F-129 está timbrada al RFC XAXX010101000.',
+      'El viaje 2026-014 ya quedó.',
+    ]) expect(citasEnTexto(t), t).toEqual([]);
+  });
+});

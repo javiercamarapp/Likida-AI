@@ -512,7 +512,12 @@ export async function generateWithTools(opts: {
           let p = inRound.get(key);
           if (!p) { p = opts.toolExecutor(call.function.name, args); inRound.set(key, p); }
           const exec = await p;
-          if (isReadOnly(call.function.name)) crossRound.set(key, exec);
+          // Solo se cachea el ÉXITO, igual que la rejilla de mutaciones
+          // (`tool-executor.ts`). Guardar el fracaso convierte un blip de un
+          // segundo en un fallo permanente del turno: el modelo reintenta, se le
+          // sirve el mismo error desde memoria, y nadie vuelve a preguntarle a
+          // una base que ya se curó sola.
+          if (isReadOnly(call.function.name) && exec.success) crossRound.set(key, exec);
           executed.push({ toolName: call.function.name, args, result: exec.result, durationMs: exec.durationMs, error: exec.error });
           return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify(exec.success ? exec.result : { error: exec.error }) };
         }),
