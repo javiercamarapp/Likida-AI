@@ -128,3 +128,73 @@ describe('coste y resistencia de la detección', () => {
     expect(Date.now() - t0).toBeLessThan(100);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA GUARDIA NO PUEDE ROMPER EL MENSAJE QUE PROTEGE.
+//
+// Dos hallazgos de la auditoría 3, ambos en el camino feliz de la demo:
+//
+// 1. `limpiar()` colapsaba TODO espacio repetido con `\s{2,}`, y `\n` es
+//    espacio. El resumen de WhatsApp es multilínea —viñetas, párrafos— y salía
+//    convertido en un párrafo corrido cada vez que la guardia actuaba.
+//
+// 2. El resumen DETERMINÍSTICO del motor trae citas correctas puestas por
+//    `engine.ts`. Si `guardiaCifras` lo sustituye y esta guardia corre después
+//    con `permitidas=[]`, se las quita: la guardia corrompiendo la fuente
+//    autoritativa que existe para no depender del modelo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('guardiaFundamento — no rompe el mensaje', () => {
+  it('conserva los saltos de línea al quitar una cita', () => {
+    const multi = 'Listo, cuadré tu viaje 👇\n• Comprobado: $4,812.00\n• Sobró $188.00\n\nOjo con esto:\n• Falta la factura por LISR 27-III.';
+    const r = guardiaFundamento(multi, []);
+    expect(r.forzado).toBe(true);
+    expect(r.reply.split('\n').length, 'se comió los saltos de línea').toBeGreaterThan(4);
+    expect(r.reply).toContain('• Comprobado');
+  });
+
+  it('no deja renglones con espacios sobrantes tras quitar la cita', () => {
+    const r = guardiaFundamento('• Falta la factura (LISR 27-III).\n• Otra cosa.', []);
+    for (const l of r.reply.split('\n')) expect(l).not.toMatch(/\s{2,}/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA COMA. Hallazgo crítico de la auditoría 3.
+//
+// "artículo 27, fracción III de la LISR" es la puntuación más natural del
+// español y la que un modelo escribe sin pensar. El patrón exigía solo espacios
+// entre el número y la palabra "fracción", así que esa forma NO se detectaba:
+// una cita fiscal no autorizada pasaba entera al operador.
+//
+// Y el reverso, peor: una cita LEGÍTIMA escrita así tampoco se reconocía, no se
+// protegía, y la limpieza genérica de citas desconocidas se la comía a medias —
+// dejando el texto mutilado.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('guardiaFundamento — la puntuación natural del español', () => {
+  const conComa = 'No es deducible por el artículo 27, fracción III de la LISR.';
+
+  it('detecta la cita escrita con coma', () => {
+    expect(citasEnTexto(conComa)).toContain('lisr-27-fr-III');
+  });
+
+  it('la QUITA si ninguna tool la autorizó', () => {
+    const r = guardiaFundamento(conComa, []);
+    expect(r.forzado).toBe(true);
+    expect(r.reply).not.toMatch(/27/);
+  });
+
+  it('la CONSERVA entera si la tool la devolvió', () => {
+    // El reverso del bug: una cita legítima con coma se mutilaba.
+    const r = guardiaFundamento(conComa, ['lisr-27-fr-III']);
+    expect(r.forzado).toBe(false);
+    expect(r.reply).toBe(conComa);
+  });
+
+  it('aguanta otras separaciones que también escribe un modelo', () => {
+    for (const t of [
+      'el art. 27, fr. III de la LISR',
+      'LISR, artículo 27, fracción III',
+      'artículo 27 — fracción III de la LISR',
+    ]) expect(citasEnTexto(t), t).toContain('lisr-27-fr-III');
+  });
+});

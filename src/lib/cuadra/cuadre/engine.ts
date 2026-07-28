@@ -327,6 +327,11 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   //
   // El beneficiario es el operador del viaje: la liquidación es de un solo
   // operador, así que agrupar por día dentro del viaje es la unidad correcta.
+  // gastoId → qué fracción de él es deducible. Lo llena el tope diario de
+  // alimentación; el acreditamiento lo consume. Un gasto que no esté aquí es
+  // deducible al 100%.
+  const proporcionDeducible = new Map<string, number>();
+
   const topeAlimentacion = input.estimulos?.viaticosTopeFiscalDiarioMxn;
   if (topeAlimentacion != null) {
     // 'viaticos' a secas entra por compatibilidad: es lo que emitía el OCR viejo
@@ -345,8 +350,29 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       const total = delDia.reduce((s, x) => s + x.monto, 0);
       if (total <= topeAlimentacion) continue;
       const exceso = round2(total - topeAlimentacion);
-      // El excedente se cuelga del ÚLTIMO comprobante del día: los totales de
-      // deducibilidad suman por gastoId, así que tiene que vivir en alguno.
+
+      // LA PROPORCIÓN ES DEL DÍA, NO DEL COMPROBANTE QUE LO CRUZÓ.
+      //
+      // El tope de LISR 28-V es diario, así que lo deducible del día es
+      // `tope/total` y cada comprobante hereda esa misma proporción. Antes el
+      // exceso se colgaba entero del ÚLTIMO gasto del arreglo, y eso rompía el
+      // IVA de dos maneras:
+      //
+      //  - si ese último era MÁS CHICO que el exceso, su proporción se recortaba
+      //    a 0 y lo que sobraba no se descontaba de ningún lado: se acreditaba
+      //    IVA de más ($160 en vez de $120, reproducido en la auditoría 3);
+      //  - y con tasas distintas en el mismo día, el resultado dependía del
+      //    ORDEN de los gastos en el arreglo ($92 contra $80 con los mismos
+      //    hechos).
+      //
+      // Acreditar de más es del lado caro: responde el cliente ante una revisión.
+      const proporcionDia = topeAlimentacion / total;
+      for (const x of delDia) proporcionDeducible.set(x.id, proporcionDia);
+
+      // La DIFERENCIA sigue colgada de un comprobante, porque los totales de
+      // deducibilidad suman por gastoId y tiene que vivir en alguno. Eso es
+      // correcto para el total no deducible del día; lo que no podía ser es que
+      // decidiera también el prorrateo del IVA.
       const ancla = delDia[delDia.length - 1];
       const cuantos = delDia.length > 1 ? ` (${delDia.length} comprobantes del día)` : '';
       const cuando = dia.startsWith('sin-fecha') ? 'sin fecha' : dia;
@@ -402,10 +428,10 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // acredita solo en esa misma proporción. Antes se acreditaba el traslado
     // completo, y acreditar de más es del lado caro: es el cliente quien
     // responde ante una revisión, y el papel se lo dio Likida.
-    const noDeducibleDeEste = diferencias
-      .filter((d) => d.gastoId === g.id && d.tipo === 'viatico_excede_fiscal')
-      .reduce((s2, d) => s2 + (d.monto ?? 0), 0);
-    const proporcion = g.monto > 0 ? Math.max(0, Math.min(1, (g.monto - noDeducibleDeEste) / g.monto)) : 1;
+    // La proporción la fijó el tope diario, que es quien sabe repartirla entre
+    // los comprobantes del día. Deducirla aquí del monto de la diferencia era lo
+    // que colgaba todo el exceso de un solo gasto.
+    const proporcion = Math.max(0, Math.min(1, proporcionDeducible.get(g.id) ?? 1));
 
     if ((g.ivaTraslado ?? 0) > 0) ivaAcreditable += (g.ivaTraslado as number) * proporcion;
     // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas.
