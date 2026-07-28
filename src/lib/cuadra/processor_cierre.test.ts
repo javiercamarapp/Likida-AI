@@ -21,6 +21,9 @@ const runAgent = vi.fn();
 const sendText = vi.fn();
 const sendDocument = vi.fn();
 const createSignedUrl = vi.fn();
+const getOpenViaje = vi.fn<(tenantId: string, operadorId: string) => Promise<string | null>>(async () => 'v1');
+const saveCfdiXmlRaw = vi.fn();
+const downloadMediaAsText = vi.fn();
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
@@ -28,11 +31,11 @@ vi.mock('@/lib/cuadra/tools', () => ({}));
 vi.mock('@/lib/meta/client', () => ({
   sendText: (...a: unknown[]) => sendText(...a),
   sendDocument: (...a: unknown[]) => sendDocument(...a),
-  downloadMediaAsDataUrl: vi.fn(), downloadMediaAsText: vi.fn(),
+  downloadMediaAsDataUrl: vi.fn(), downloadMediaAsText: (...a: unknown[]) => downloadMediaAsText(...a),
 }));
 vi.mock('@/lib/cuadra/conv', () => ({
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
-  getOpenViaje: vi.fn(async () => 'v1'),
+  getOpenViaje: (t: string, o: string) => getOpenViaje(t, o),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
   saveConversation: vi.fn(), claimMessage: vi.fn(async () => true),
@@ -42,7 +45,7 @@ vi.mock('@/lib/cuadra/conv', () => ({
 }));
 vi.mock('@/lib/cuadra/repo', () => ({
   addGasto: vi.fn(), getGastos: vi.fn(async () => []), updateGastoCfdiXml: vi.fn(),
-  saveCfdiXmlRaw: vi.fn(), gastoExistePorHash: vi.fn(async () => false),
+  saveCfdiXmlRaw: (...a: unknown[]) => saveCfdiXmlRaw(...a), gastoExistePorHash: vi.fn(async () => false),
   enriquecerGastoConCodigo: vi.fn(), guardarCodigoPendiente: vi.fn(),
   getCodigosPendientes: vi.fn(async () => []), reclamarCodigoPendiente: vi.fn(),
   getDatosResponsable: vi.fn(async () => null), reclamarEnvioAviso: vi.fn(async () => false),
@@ -55,6 +58,9 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({ storage: { from: () => ({ createSignedUrl: (...a: unknown[]) => createSignedUrl(...a) }) } }),
 }));
 vi.mock('@/lib/logger', () => ({ logger }));
+vi.mock('@/lib/cuadra/intake/cfdi_xml', () => ({
+  parseCfdiXml: () => ({ uuid: 'uuid-abc', total: 100, fecha: '2026-05-01' }),
+}));
 
 const { processInbound } = await import('./processor');
 
@@ -105,5 +111,48 @@ describe('cierre sin PDF: ni se manda un documento que no existe, ni se calla', 
     await processInbound(listo);
     expect(sendDocument).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith('pdf.no_entregado', expect.objectContaining({ err: 'Object not found' }));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 4 · ALTO — el producto pedía el XML y luego se negaba a recibirlo.
+//
+// `complemento_no_verificable` no está en SOLO_CONTRALOR a propósito: su nota le
+// dice al operador "reenvía el XML (el que te manda la gasolinera por correo)".
+// Ese texto llega en el MISMO mensaje de cierre, cuando guardar_liquidacion ya
+// puso el viaje en 'liquidado'.
+//
+// El operador obedecía, el corte por "sin viaje abierto" lo mandaba de vuelta, y
+// el XML se descartaba SIN GUARDARSE EN NINGÚN LADO. Con él se va el
+// acreditamiento de IVA de ese CFDI y los litros que alimentan el estímulo del
+// LIF 20-A. Mismo error que ya se corrigió para el medio ARCO: se arregló el caso
+// y no la clase.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el XML que llega después del cierre no se pierde', () => {
+  const xmlDoc = { from: '+521111111101', type: 'document' as const, mediaId: 'm1', waMessageId: 'wa9' };
+
+  beforeEach(() => { sendText.mockReset(); saveCfdiXmlRaw.mockReset(); getOpenViaje.mockReset(); downloadMediaAsText.mockReset(); });
+
+  it('sin viaje abierto, el XML se conserva por UUID en vez de descartarse', async () => {
+    getOpenViaje.mockResolvedValue(null);
+    downloadMediaAsText.mockResolvedValue('<cfdi/>');
+    await processInbound(xmlDoc);
+    expect(saveCfdiXmlRaw).toHaveBeenCalledWith('t1', 'uuid-abc', null, '<cfdi/>');
+  });
+
+  it('y se le dice al operador que sí llegó, no "no tienes viaje abierto"', async () => {
+    getOpenViaje.mockResolvedValue(null);
+    downloadMediaAsText.mockResolvedValue('<cfdi/>');
+    await processInbound(xmlDoc);
+    const dicho = sendText.mock.calls.map((c) => String(c[1])).join('\n');
+    expect(dicho).toMatch(/Recib.* tu XML/i);
+    expect(dicho).not.toMatch(/No tienes un viaje abierto/i);
+  });
+
+  it('un TEXTO sin viaje abierto sigue recibiendo el mensaje de siempre (regresión)', async () => {
+    getOpenViaje.mockResolvedValue(null);
+    await processInbound({ from: '+521111111101', type: 'text', text: 'hola', waMessageId: 'wa10' });
+    expect(sendText.mock.calls.map((c) => String(c[1])).join('\n')).toMatch(/No tienes un viaje abierto/i);
+    expect(saveCfdiXmlRaw).not.toHaveBeenCalled();
   });
 });
