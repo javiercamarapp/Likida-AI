@@ -1,46 +1,123 @@
-# Deploy a Vercel — runbook
+# Runbook de producción
 
-El demo del 6 es **WhatsApp REAL** → necesita una URL HTTPS pública (webhook). Sin
-deploy no hay webhook. Este repo está listo (build de prod pasa en local); lo único
-que falta es **tu autenticación de Vercel** — ninguna tool automática puede setear
-los secrets ni conectar el repo a git por mí.
+Producción: **https://likidaai.vercel.app** — proyecto `likida/likida.ai` en Vercel,
+plan Pro. Ya está desplegado y sirviendo WhatsApp real; este documento es para
+**operarlo**, no para levantarlo. El apartado de despliegue está al final porque
+es lo que menos falta se hace a las 3 a.m.
 
-## El bloqueo (honesto)
-- No tengo token de Vercel, y no hay MCP tool que cree env vars en Vercel.
-- `deploy_to_vercel` (la única tool de deploy) no acepta env vars ni conecta git,
-  y exige transcribir los ~50 archivos fuente a mano → inviable para este repo.
-- **Conclusión:** el deploy necesita el Vercel CLI (o el dashboard), y ambos
-  requieren tu login. Es UNA acción interactiva; el resto lo automatizo.
+---
 
-## Camino recomendado (yo manejo casi todo)
-1. **Tú, una vez** (interactivo, abre el navegador):
+## Algo se rompió: qué mirar, en este orden
+
+1. **Los logs.** Todo sale como JSON de una línea por `src/lib/logger.ts`.
    ```
-   npm i -g vercel && vercel login
+   vercel logs https://likidaai.vercel.app --since 1h
    ```
-   Elige el scope `javiercamaraportepetit-2721's projects`.
-2. **Yo** corro `bash scripts/deploy-vercel.sh`, que:
-   - vincula/crea el proyecto `likida`,
-   - empuja TODAS las envs de `.env.local` a production + preview (incluidos los 3
-     flags y `CUADRA_INTAKE_ESPERA_MS`; salta las `WHATSAPP_*` vacías),
-   - despliega a producción y fija `NEXT_PUBLIC_APP_URL` al dominio real.
-3. **Yo** reporto: dominio, **tier real + si Fluid Compute está disponible**
-   (`vercel project inspect`), y decido maxDuration 120 vs QStash.
-4. **Yo** corro contra el dominio real: flujo del simulador, prueba de ráfaga, y
-   confirmo que los flags están activos en prod. Reporto qué cambió vs local.
+   O el panel: Vercel → proyecto → *Logs* (runtime). Ojo: **la retención de esa
+   vista es corta y no hay ningún log drain configurado** — un fallo del sábado
+   de madrugada puede no existir el lunes. Si el incidente importa, copia las
+   líneas antes de cerrar la pestaña.
 
-## Alternativa (dashboard, si prefieres)
-Vercel → Add New → Project → Import `javiercamarapp/cuadra` → pega las envs de
-`.env.example` (con los valores de `.env.local`) → Deploy. Conecta git para
-auto-deploys. Luego avísame el dominio y sigo desde el paso 3.
+2. **Qué buscar en la línea.** Los identificadores del camino del dinero
+   (`tenant`, `viaje`, `operador`, `gasto`, `liquidacion`) salen como huella
+   `id:xxxxxxxxxxxx`, no como UUID. Para cruzar una huella contra la base:
 
-## Variables que deben quedar en Vercel
-Todas las de `.env.example` con valor real (están en `.env.local`):
-Supabase (URL + anon + **service_role**), `OPENROUTER_API_KEY`, `DASHBOARD_PASSCODE`,
-`DASHBOARD_SECRET`, `DEMO_TENANT_ID`, y los flags
-(`CUADRA_INTAKE_GRACE_MS`, `CUADRA_RECUPERAR_CIERRE_PARCIAL`, `CUADRA_DEDUP_FOTOS`,
-`CUADRA_INTAKE_ESPERA_MS`). Las `WHATSAPP_*` cuando tengas las creds de Meta.
+   ```ts
+   import { huellaId } from '@/lib/logger';
+   huellaId('<el uuid de la fila>') // === lo que dice el log
+   ```
 
-## Meta / WhatsApp (cuando haya dominio)
-- Webhook URL: `https://<dominio>/api/webhook/whatsapp`
+   El porqué está explicado arriba de `src/lib/logger.ts`: el log solo no puede
+   revelar a nadie, pero quien tiene la base recorre el camino contrario en un
+   segundo. El RFC y los teléfonos sí se borran del todo y no se recuperan.
+
+3. **Los mensajes de arranque.** Cada instancia nueva emite:
+   - `startup.observabilidad` — `{"sentry":false}` en `error` significa que
+     **nadie va a recibir el siguiente fallo**. Es lo primero que hay que
+     arreglar si aparece.
+   - `startup.migraciones` — el esquema del camino del dinero.
+   - `startup.entorno` — falta configuración crítica.
+
+4. **Si el panel falló para el contralor.** Pídele el `Digest: <número>` que
+   Next enseña en pantalla y busca ese número en los logs: `onRequestError`
+   (`src/instrumentation.ts`) emite `request.fail` con `digest`, `ruta` y el
+   error. Es el único puente entre lo que él vio y el servidor.
+
+5. **Si las fotos dejaron de llegar.** El sospechoso número uno es el token de
+   WhatsApp caducado — ver la sección siguiente.
+
+---
+
+## Rotar el token de WhatsApp
+
+`WHATSAPP_ACCESS_TOKEN` es un token de usuario de sistema de Meta y **caduca**.
+Cuando caduca, la Graph API contesta 401 a las descargas de media: el operador
+recibe *"No pude descargar tu foto 😕. ¿Me la reenvías?"*, reenvía, y vuelve a
+fallar — reenviar no arregla un token vencido, así que el bucle no termina solo.
+
+1. Meta Business Settings → *Usuarios* → *Usuarios del sistema* → el usuario de
+   la app → **Generar nuevo token**, con los permisos `whatsapp_business_messaging`
+   y `whatsapp_business_management`.
+2. ```
+   vercel env rm WHATSAPP_ACCESS_TOKEN production
+   vercel env add WHATSAPP_ACCESS_TOKEN production
+   ```
+3. Redespliega (`vercel --prod`): las envs se leen en el arranque de la función.
+4. Comprueba con un mensaje de prueba al número de pruebas, no al del cliente.
+
+---
+
+## Variables que deben estar en Vercel
+
+Están todas en `.env.example`, que es el inventario completo y está verificado
+contra el código por la suite (`src/lib/observability/runbook.test.ts`). Las
+cuatro que hay que revisar a mano porque **si faltan el sistema arranca igual**:
+
+| Variable | Qué pasa si falta |
+|---|---|
+| `SENTRY_DSN` | No hay alerta de nada. Los errores mueren en el runtime log. |
+| `DASHBOARD_SECRET` | El HMAC de la cookie se deriva del passcode: crackeable offline. |
+| `DASHBOARD_PASSCODE` | `proxy.ts` **no bloquea** `/dashboard`: el panel queda abierto. |
+| `DEMO_TENANT_ID` | El panel consulta el tenant del seed y pinta **cero liquidaciones**, sin log. |
+
+Para listarlas: `vercel env ls production`.
+
+---
+
+## Desplegar
+
+Con el proyecto ya vinculado:
+
+```
+vercel --prod
+```
+
+Para un entorno nuevo desde cero, `bash scripts/deploy-vercel.sh` vincula el
+proyecto, empuja las envs de `.env.local` a production + preview (salta las
+`WHATSAPP_*` vacías) y fija `NEXT_PUBLIC_APP_URL` al dominio real.
+
+**No** copies solo "las envs de `.env.example` que tengan valor": ese atajo fue
+el que dejó fuera el passcode del panel y el tenant. El inventario de arriba es
+el que manda.
+
+### Meta / WhatsApp
+
+- Webhook URL: `https://likidaai.vercel.app/api/webhook/whatsapp`
 - Verify token: el valor de `WHATSAPP_VERIFY_TOKEN`.
-- El `GET` del webhook responde el challenge; el `POST` valida HMAC con `WHATSAPP_APP_SECRET`.
+- El `GET` responde el challenge; el `POST` valida HMAC con `WHATSAPP_APP_SECRET`.
+- El webhook responde **200 antes de trabajar** (el trabajo va en `after()`, con
+  `maxDuration = 120` en `src/app/api/webhook/whatsapp/route.ts`). Consecuencia
+  operativa: **Meta no reintenta**. Un error después del 200 es un mensaje
+  perdido, y por eso importa tanto que los errores tengan destino.
+
+---
+
+## Lo que este runbook NO cubre
+
+- **Quién recibe qué cuando algo falla.** Hoy no hay nadie asignado ni ningún
+  canal: sin `SENTRY_DSN` no hay a dónde mandarlo, y con él habría que decidir
+  destinatario.
+- **Qué se hace con una liquidación cerrada cuyo PDF no salió** (`pdf.no_entregado`).
+  El operador recibe aviso; el procedimiento de reenvío no está escrito.
+- **La retención exacta de los runtime logs** en este plan, ni si hace falta un
+  log drain antes del demo.
