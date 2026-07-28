@@ -97,3 +97,46 @@ describe('generateStructured — el camino del truncado también acumula', () =>
     expect(usado!.tokensOut).toBe(3552);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIN AbortSignal, EL OCR CAE AL DEFAULT DEL SDK: 10 MINUTOS.
+//
+// El webhook tiene 60s y procesa el lote de mensajes con Promise.all en UNA
+// invocación. El camino del "listo" ya está presupuestado, pero las ramas de
+// foto no miraban el reloj y `generateStructured` ni siquiera aceptaba una
+// señal: una foto lenta se lleva por delante la invocación entera, incluido el
+// "listo" que sí venía bien medido. Y como Meta ya recibió su 200, no reintenta.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('generateStructured — respeta el presupuesto de quien llama', () => {
+  beforeEach(() => { create.mockReset(); });
+
+  it('pasa el AbortSignal al SDK', async () => {
+    create.mockResolvedValue(R('stop', '{"monto":100}'));
+    const ac = new AbortController();
+    await generateStructured({
+      role: 'ocr', system: 's', messages: [{ role: 'user', content: 'u' }],
+      schema, schemaName: 'x', signal: ac.signal,
+    });
+    // El SDK recibe la señal en el 2º argumento (RequestOptions), no en el body.
+    expect(create.mock.calls[0][1]).toMatchObject({ signal: ac.signal });
+  });
+
+  it('sin señal no inventa una: el llamador decide', async () => {
+    create.mockResolvedValue(R('stop', '{"monto":100}'));
+    await generateStructured({ role: 'ocr', system: 's', messages: [{ role: 'user', content: 'u' }], schema, schemaName: 'x' });
+    expect(create.mock.calls[0][1]?.signal).toBeUndefined();
+  });
+
+  it('una señal ya abortada corta sin llamar al proveedor', async () => {
+    // Si el presupuesto se agotó antes de empezar, no tiene sentido pagar la
+    // llamada: se va a matar la función a media respuesta.
+    create.mockResolvedValue(R('stop', '{"monto":100}'));
+    const ac = new AbortController();
+    ac.abort();
+    await expect(generateStructured({
+      role: 'ocr', system: 's', messages: [{ role: 'user', content: 'u' }],
+      schema, schemaName: 'x', signal: ac.signal,
+    })).rejects.toThrow();
+    expect(create).not.toHaveBeenCalled();
+  });
+});

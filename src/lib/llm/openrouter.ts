@@ -172,6 +172,15 @@ export async function generateStructured<T>(opts: {
   messages: { role: 'user' | 'assistant'; content: string }[];
   schema: z.ZodType<T>;
   schemaName: string;
+  /**
+   * Corta la llamada cuando el presupuesto de la invocación se acaba.
+   *
+   * Sin esto se cae al default del SDK de OpenAI —10 minutos—, y el webhook solo
+   * tiene 60s: una foto lenta se lleva por delante la invocación entera,
+   * incluido el "listo" que sí venía bien medido. Y como Meta ya recibió su 200,
+   * no reintenta: el mensaje se pierde en silencio.
+   */
+  signal?: AbortSignal;
   /** Data-URLs de imágenes (OCR de comprobantes). Se adjuntan al último mensaje user. */
   images?: string[];
   maxTokens?: number;
@@ -221,10 +230,16 @@ export async function generateStructured<T>(opts: {
   };
 
   const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number }> => {
+    // Si el presupuesto ya se agotó, no se paga una llamada que se va a cortar a
+    // media respuesta.
+    opts.signal?.throwIfAborted();
     const msgs = note
       ? [{ role: 'system' as const, content: `${opts.system}\n\n${note}` }, ...built.slice(1)]
       : built;
     const maxTokens = tope ?? opts.maxTokens ?? DEFAULT_MAX_TOKENS;
+    // Si el presupuesto ya se agotó, no se paga una llamada que se va a cortar a
+    // media respuesta.
+    opts.signal?.throwIfAborted();
     const res = await getClient().chat.completions.create({
       model: m,
       messages: msgs,
@@ -236,7 +251,7 @@ export async function generateStructured<T>(opts: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
       ...PROVIDER_OPTS,
-    });
+    }, opts.signal ? { signal: opts.signal } : undefined);
     const raw = res.choices[0]?.message?.content || '';
     // La llamada se cobra aunque falle: el consumo viaja EN el error para que el
     // contador por liquidación no reporte $0 en los intentos fallidos.

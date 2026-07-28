@@ -940,3 +940,45 @@ describe('cuadrarViaje — estímulo de IEPS de diésel', () => {
     expect(r.litrosDieselAcreditables).toBe(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UN TICKET SIN TIMBRAR ES "POR CONFIRMAR", DIGA LO QUE DIGA LA POLÍTICA.
+//
+// `sin_cfdi` estaba en NO_DEDUCIBLE_ISR, que se evalúa ANTES que la regla de
+// "sin cfdiUuid → POR CONFIRMAR". Resultado: el mismo hecho —un ticket sin
+// timbrar— salía ROJO si el tenant tenía `requiereCfdi` en su política, y ÁMBAR
+// si no. El veredicto dependía de un flag de configuración, no de la ley.
+//
+// Y el correcto es ámbar: LISR 27-III exige comprobante fiscal, pero el ticket
+// TODAVÍA se puede timbrar. No es una deducción perdida, es una pendiente.
+// Pintarla de rojo le dice al contralor que dé por perdido un dinero que puede
+// recuperar con una llamada al portal.
+//
+// (Introducido el 28-jul al añadir la regla del ticket.)
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuadrarViaje — sin_cfdi no puede significar dos cosas', () => {
+  const conRequisito: PoliticaGasto[] = [{ concepto: 'diesel', topeMonto: 9000, requiereCfdi: true }];
+  const sinRequisito: PoliticaGasto[] = [{ concepto: 'diesel', topeMonto: 9000 }];
+  const ticket = () => g({ concepto: 'diesel', monto: 4812, folio: 'T1', formaPago: '04' });
+
+  it('con requiereCfdi va a POR CONFIRMAR, no a no deducible', () => {
+    const r = cuadrarViaje({ viajeId: 'v1', anticipo: 5000, politica: conRequisito, gastos: [ticket()] });
+    expect(r.totalPorConfirmar).toBe(4812);
+    expect(r.totalNoDeducible).toBe(0);
+  });
+
+  it('el veredicto es el MISMO con y sin el flag de política', () => {
+    const con = cuadrarViaje({ viajeId: 'v1', anticipo: 5000, politica: conRequisito, gastos: [ticket()] });
+    const sin = cuadrarViaje({ viajeId: 'v1', anticipo: 5000, politica: sinRequisito, gastos: [ticket()] });
+    expect(con.totalPorConfirmar).toBe(sin.totalPorConfirmar);
+    expect(con.totalNoDeducible).toBe(sin.totalNoDeducible);
+  });
+
+  it('se sigue avisando: la política no es decorativa', () => {
+    // Que no sea "perdido" no lo vuelve invisible. El contralor tiene que verlo
+    // en la bandeja para que alguien lo timbre antes de que venza el mes.
+    const r = cuadrarViaje({ viajeId: 'v1', anticipo: 5000, politica: conRequisito, gastos: [ticket()] });
+    expect(r.diferencias.some((d) => d.tipo === 'sin_cfdi')).toBe(true);
+    expect(r.estatus).toBe('revisar');
+  });
+});

@@ -146,7 +146,18 @@ export interface ExtraerResultado {
  *   - lo que venga de un código gana sobre lo leído por visión, y el OCR pasa a
  *     ser verificación del monto.
  */
-export async function extraerComprobante(imagenes: string | string[]): Promise<ExtraerResultado> {
+export async function extraerComprobante(
+  imagenes: string | string[],
+  /**
+   * Corta la llamada de visión cuando el presupuesto de la invocación se acaba.
+   *
+   * Sin señal, `generateStructured` cae al default del SDK de OpenAI —10
+   * minutos— y el webhook solo tiene 60s. Como el lote de mensajes comparte UNA
+   * invocación vía Promise.all, una foto lenta se lleva por delante al "listo"
+   * que sí venía bien presupuestado. Y Meta ya recibió su 200: no reintenta.
+   */
+  signal?: AbortSignal,
+): Promise<ExtraerResultado> {
   const fotos = (Array.isArray(imagenes) ? imagenes : [imagenes]).filter(Boolean);
 
   // Los códigos, primero: son gratis frente a una llamada de visión y deciden
@@ -170,6 +181,7 @@ export async function extraerComprobante(imagenes: string | string[]): Promise<E
       images: [principal],
       schema: ExtraccionSchema,
       schemaName: 'comprobante',
+      signal,
     });
   } catch (e) {
     // OJO: a este catch NO se llega por una foto mala. Un ticket ilegible sí
