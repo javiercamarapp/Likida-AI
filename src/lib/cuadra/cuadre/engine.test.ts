@@ -1134,3 +1134,93 @@ describe('cubetaDe — la clasificación no depende de la política del tenant',
     expect(r.diferencias.some((x) => x.tipo === 'sin_cfdi')).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNA FECHA DE OTRO EJERCICIO ES SOSPECHOSA POR SÍ SOLA.
+//
+// Encontrado con tickets REALES (28-jul-2026): el OCR leyó "2024-07-27" en un
+// ticket que dice "2026 07 27". Dos años de error, confianza 95%, y nada lo
+// marcó — `fecha_sospechosa` solo salta si el viaje trae rango, y no siempre lo
+// trae.
+//
+// Importa por dinero, no solo por prolijidad: un gasto de un ejercicio anterior
+// NO se deduce en este. Si nadie lo mira, entra al total comprobado y a la
+// deducción de un año al que no pertenece.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuadrarViaje — comprobante de otro ejercicio', () => {
+  const pol: PoliticaGasto[] = [{ concepto: 'diesel', topeMonto: 9000 }];
+
+  it('marca un comprobante de un ejercicio anterior aunque el viaje no traiga rango', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 1000, politica: pol, hoy: '2026-07-28',
+      gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2024-07-27', cfdiUuid: 'u1' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(true);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  it('el del ejercicio en curso NO se marca', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 1000, politica: pol, hoy: '2026-07-28',
+      gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2026-01-15', cfdiUuid: 'u1' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
+  });
+
+  it('tampoco se marca uno de diciembre pasado si estamos en enero', () => {
+    // Un viaje a caballo entre ejercicios es normal en la última semana del año:
+    // marcarlo sería ruido justo cuando más comprobantes hay.
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 1000, politica: pol, hoy: '2026-01-05',
+      gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2025-12-30', cfdiUuid: 'u1' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
+  });
+
+  it('sin `hoy` no inventa un veredicto', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 1000, politica: pol,
+      gastos: [g({ concepto: 'diesel', monto: 714.75, fecha: '2024-07-27', cfdiUuid: 'u1' })],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'fecha_sospechosa')).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SI EL TICKET DICE "PLUS", EL PAPEL NO PUEDE DECIR "DIÉSEL".
+//
+// El OCR mete toda la gasolinera en el concepto `diesel` —es lo que el prompt
+// le pide, y para el 15% de la RFA 2.9 está bien porque la regla habla de
+// "combustible", no solo de diésel—. Pero el ticket real que lo destapó dice
+// PRODUCT: PLUS, o sea gasolina premium, y el PDF lo etiquetaba "Diésel".
+//
+// Al contralor le chirría, y con razón: el estímulo de IEPS es SOLO diésel
+// (LIF 20-A fr. IV). Un papel que llama diésel a una gasolina invita a
+// reclamar un estímulo que no aplica.
+//
+// El dato real ya lo captura el OCR en `ocrExtra.producto`. Solo había que usarlo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('etiqueta del combustible', () => {
+  it('usa el producto impreso cuando el ticket lo trae', async () => {
+    const { etiquetaConcepto } = await import('./engine');
+    expect(etiquetaConcepto('diesel', { producto: 'PLUS' })).toMatch(/PLUS/i);
+    expect(etiquetaConcepto('diesel', { producto: 'MAGNA' })).toMatch(/MAGNA/i);
+  });
+
+  it('sin producto impreso dice "Combustible", que es cierto siempre', async () => {
+    const { etiquetaConcepto } = await import('./engine');
+    // "Diésel" a secas era una afirmación que el ticket no respalda.
+    expect(etiquetaConcepto('diesel', undefined)).toBe('Combustible');
+  });
+
+  it('si el producto SÍ es diésel, lo dice', async () => {
+    const { etiquetaConcepto } = await import('./engine');
+    expect(etiquetaConcepto('diesel', { producto: 'DIESEL' })).toMatch(/di[ée]sel/i);
+  });
+
+  it('los demás conceptos no cambian', async () => {
+    const { etiquetaConcepto } = await import('./engine');
+    expect(etiquetaConcepto('caseta', undefined)).toBe('Caseta');
+    expect(etiquetaConcepto('alimentacion', undefined)).toBe('Alimentación');
+  });
+});
