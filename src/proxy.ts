@@ -6,7 +6,7 @@ import { ACCESS_COOKIE, expectedAccessToken, tokenMatches } from '@/lib/auth/pas
 // El matcher EXCLUYE /api (webhook, demo, export manejan lo suyo y no deben pasar
 // por el gate ni cargar cabeceras de página).
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const res = NextResponse.next({ request: req });
   const path = req.nextUrl.pathname;
 

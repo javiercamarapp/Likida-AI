@@ -22,3 +22,4 @@ pruebas-manuales/imagenes/
 # persona) y es la evidencia del test de regresión del lector de códigos: sin
 # él, nadie puede comprobar que zxing lee donde jsQR no. Repo privado.
 # Cualquier OTRA foto de comprobante sigue fuera.
+.env*

@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // SEGUNDA CAPA DE AUTORIZACIÓN — la que no depende de un regex.
 //
-// Hoy el único candado del panel es el matcher del middleware:
+// Hoy el único candado del panel es el matcher del proxy:
 //
 //   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)']
 //
@@ -13,8 +13,8 @@
 //
 // Esta función es la segunda capa: se llama DENTRO de cada página del panel, así
 // que la autorización viaja con la página y no con la configuración de rutas.
-// Si el middleware falla, esto sigue de pie; si esto se olvida en una página
-// nueva, el middleware sigue de pie. Las dos tienen que fallar a la vez.
+// Si el proxy falla, esto sigue de pie; si esto se olvida en una página
+// nueva, el proxy sigue de pie. Las dos tienen que fallar a la vez.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { cookies } from 'next/headers';
@@ -25,7 +25,7 @@ import { ACCESS_COOKIE, expectedAccessToken, tokenMatches } from './passcode';
  * Corta la página si quien la pide no tiene una cookie válida.
  *
  * Sin passcode configurado (desarrollo) no bloquea: el mismo criterio que el
- * middleware, para que las dos capas no se contradigan.
+ * proxy, para que las dos capas no se contradigan.
  *
  * @param destino ruta a la que volver tras autenticarse.
  */

@@ -4,7 +4,7 @@
 // es un candado suave para que el director vea el panel después de la sala. El
 // flujo real de auth (+ AL-5, reads vía RLS) es bloqueante de SEGUNDO CLIENTE.
 //
-// Usa Web Crypto (crypto.subtle), disponible en edge Y node → el middleware
+// Usa Web Crypto (crypto.subtle), disponible en edge Y node → el proxy
 // funciona en cualquier runtime.
 
 export const ACCESS_COOKIE = 'likida_access';

@@ -12,6 +12,7 @@ const config = [
   {
     ignores: [
       '.next/**', 'node_modules/**', 'out/**', 'build/**',
+      '.vercel/**',    // salida de `vercel build`: JS generado, no código nuestro
       'next-env.d.ts',
       'supabase/**',   // migraciones: no es código de app
     ],

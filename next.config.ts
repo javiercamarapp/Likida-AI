@@ -13,6 +13,18 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/webhook/whatsapp': ['./node_modules/zxing-wasm/dist/reader/*.wasm'],
   },
+  // Cinturón, además del tirante. `cfdi.ts` lee el `.wasm` de disco en runtime y
+  // eso hace que el tracer considere alcanzable cualquier archivo bajo el
+  // proyecto: en una medición del 28-jul-2026 se colaron 348 archivos ajenos al
+  // bundle, entre ellos `.env.local` —con la service role key, el token de
+  // WhatsApp y el app secret— y 76 documentos internos de auditoría.
+  //
+  // Ninguno de esos archivos lo lee la función. Los secretos ya viven en las
+  // variables de entorno de Vercel, así que subir además el fichero es superficie
+  // regalada; y los .md son las notas internas del proyecto.
+  outputFileTracingExcludes: {
+    '*': ['./.env*', './**/*.md', './**/*.test.*', './docs/**', './supabase/**', './scripts/**'],
+  },
 };
 
 export default nextConfig;

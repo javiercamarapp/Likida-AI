@@ -16,7 +16,7 @@ export async function supabaseServer(): Promise<SupabaseClient> {
         try {
           list.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
         } catch {
-          // set() falla en Server Components de solo-lectura; el middleware refresca.
+          // set() falla en Server Components de solo-lectura; el proxy refresca.
         }
       },
     },
