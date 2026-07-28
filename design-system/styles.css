@@ -1,0 +1,421 @@
+@import url('https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,300..700;1,400&display=swap');
+
+/* ══════════════════════════════════════════════════════════════════════════
+   likida.ai — Design System
+   Derivado de MARCA.md (marca, hacia afuera) y DESIGN.md (producto, dentro).
+
+   DOS PIELES, UNA SOLA MARCA — MARCA.md §3.1:
+     .skin-papel     PRIMARIA. Papel recortado editorial. Toda la comunicación
+                     de marca: hero de landing, ads, orgánico, video.
+     .skin-producto  Producto real: capturas, demo, dashboard, feature section.
+
+   Nunca se mezclan dentro del mismo bloque. Se alternan por sección.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Tipografía ───────────────────────────────────────────────────────────
+     MARCA.md §3.3: UNA sola familia, geométrica de palo seco, humanista,
+     con `a` de un piso. Jost la cumple (Futura humanista, `a` de un piso).
+     Sustituto seguro aprobado: Poppins. Prohibido: script / cursiva neón. */
+  --font-heading: "Jost", "Poppins", system-ui, sans-serif;
+  --font-body: "Jost", "Poppins", system-ui, sans-serif;
+  --font-heading-weight: 700;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ── Paleta MARCA (papel) — MARCA.md §3.2 ─────────────────────────────── */
+  --brand-ladrillo: #E24A1B;  /* acento, energía, carretera, el ticket        */
+  --brand-marino:   #2A3F5F;  /* estructura, autoridad, la noche del viaje    */
+  --brand-crema:    #EDE4D3;  /* fondo por defecto                            */
+  --brand-oliva:    #6B7F4A;  /* secundario / positivo suave                  */
+  --brand-dinero:   #4E9A3E;  /* SOLO cifras recuperadas                      */
+
+  /* ── Paleta PRODUCTO (digital) ─────────────────────────────────────────── */
+  --brand-azul:     #0B5FFF;  /* logo, links, botón primario                  */
+  --brand-tinta:    #0E1A2B;  /* texto                                        */
+
+  /* ── Semáforo — solo estado, nunca decoración ─────────────────────────── */
+  --color-ok:   #34C759;      /* cuadra     */
+  --color-warn: #FF9F0A;      /* revisar    */
+  --color-bad:  #FF3B30;      /* diferencia */
+
+  /* ── Variantes accesibles ──────────────────────────────────────────────────
+     Los swatches de marca son para tinta y pantalla grande. Sobre crema, el
+     ladrillo puro da 3.18:1 y el verde dinero 2.75:1 — insuficiente para texto.
+     Estas son las variantes que SÍ pasan AA; ver foundations/color.html. */
+  --accent-solid: #C93F16;    /* relleno de botón, blanco encima → 5.02:1     */
+  --money-ink:    #3E7D31;    /* cifra recuperada sobre crema   → 4.01:1      */
+
+  /* ── Roles (piel papel por defecto) ───────────────────────────────────── */
+  --color-bg: var(--brand-crema);
+  --color-surface: #F7F1E5;
+  --color-text: var(--brand-marino);
+  --color-accent: var(--brand-ladrillo);
+  --color-accent-2: var(--brand-oliva);
+  --color-divider: color-mix(in srgb, var(--brand-marino) 22%, transparent);
+  --color-muted: color-mix(in srgb, var(--brand-marino) 68%, transparent);
+
+  /* ── Rampa neutra (papeles) ───────────────────────────────────────────── */
+  --color-neutral-100: #FBF7EF;
+  --color-neutral-200: #F2EADA;
+  --color-neutral-300: #E4D9C4;
+  --color-neutral-400: #CDBFA6;
+  --color-neutral-500: #A99C84;
+  --color-neutral-600: #7E7562;
+  --color-neutral-700: #5A5646;
+  --color-neutral-800: #3C3E3D;
+  --color-neutral-900: #22262E;
+
+  /* ── Rampa acento (ladrillo) ──────────────────────────────────────────── */
+  --color-accent-100: #FBE6DD;
+  --color-accent-200: #F6C7B4;
+  --color-accent-300: #F0A387;
+  --color-accent-400: #EB7D57;
+  --color-accent-500: #E24A1B;
+  --color-accent-600: #C93F16;
+  --color-accent-700: #A63311;
+  --color-accent-800: #7C260C;
+  --color-accent-900: #521907;
+
+  /* ── Rampa acento-2 (oliva) ───────────────────────────────────────────── */
+  --color-accent-2-100: #EDF0E4;
+  --color-accent-2-200: #D8DFC4;
+  --color-accent-2-300: #BDC79F;
+  --color-accent-2-400: #9EAC79;
+  --color-accent-2-500: #6B7F4A;
+  --color-accent-2-600: #5A6B3E;
+  --color-accent-2-700: #475432;
+  --color-accent-2-800: #343E25;
+  --color-accent-2-900: #232918;
+
+  /* ── Espacio ──────────────────────────────────────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+
+  /* ── Radio ────────────────────────────────────────────────────────────────
+     El papel no tiene esquinas redondeadas: se corta. El producto sí. */
+  --radius-sm: 2px;
+  --radius-md: 3px;   /* papel — casi recto        */
+  --radius-lg: 6px;
+  --radius-producto: 12px;  /* DESIGN.md: 10–14px  */
+
+  /* ── Elevación ────────────────────────────────────────────────────────────
+     Papel: sombra DURA con offset — una hoja levantada de la mesa.
+     Producto: sombra difusa — DESIGN.md §Principios 4. */
+  --shadow-sm: 2px 2px 0 color-mix(in srgb, var(--brand-marino) 16%, transparent);
+  --shadow-md: 5px 5px 0 color-mix(in srgb, var(--brand-marino) 18%, transparent);
+  --shadow-lg: 10px 10px 0 color-mix(in srgb, var(--brand-marino) 20%, transparent);
+  --shadow-producto: 0 1px 2px rgba(14,26,43,.05), 0 10px 30px -14px rgba(14,26,43,.20);
+  --shadow-producto-pop: 0 1px 2px rgba(14,26,43,.06), 0 20px 48px -16px rgba(14,26,43,.26);
+
+  /* ── Grano de papel — textura, no decoración ──────────────────────────── */
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.34'/%3E%3C/svg%3E");
+
+  --ease: cubic-bezier(.22,.61,.36,1);
+}
+
+/* ── Piel PRODUCTO ────────────────────────────────────────────────────────── */
+.skin-producto {
+  --color-bg: #FFFFFF;
+  --color-surface: #FFFFFF;
+  --color-text: var(--brand-tinta);
+  --color-accent: var(--brand-azul);
+  --accent-solid: var(--brand-azul);
+  --color-divider: color-mix(in srgb, var(--brand-tinta) 12%, transparent);
+  --color-muted: color-mix(in srgb, var(--brand-tinta) 62%, transparent);
+  --radius-md: var(--radius-producto);
+  --shadow-sm: 0 1px 2px rgba(14,26,43,.05);
+  --shadow-md: var(--shadow-producto);
+  --shadow-lg: var(--shadow-producto-pop);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* ── Piel MARINO — bloques de cierre, footer, hooks ───────────────────────── */
+.skin-marino {
+  --color-bg: var(--brand-marino);
+  --color-surface: #35496A;
+  --color-text: #F7F1E5;
+  --color-divider: color-mix(in srgb, #F7F1E5 24%, transparent);
+  --color-muted: color-mix(in srgb, #F7F1E5 72%, transparent);
+  --money-ink: #7BD168;      /* sobre marino el verde puede brillar */
+  --accent-solid: var(--brand-ladrillo);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* ══ Base ═════════════════════════════════════════════════════════════════ */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;   /* MARCA.md §3.3: cifras tabulares    */
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* El grano vive sobre el fondo crema. En producto, el papel se retira. */
+body { position: relative; }
+body::before {
+  content: "";
+  position: fixed; inset: 0; z-index: 0;
+  background-image: var(--paper-grain);
+  mix-blend-mode: multiply;
+  opacity: .5;
+  pointer-events: none;
+}
+.skin-producto::before, .skin-producto body::before { display: none; }
+
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  letter-spacing: -0.03em;               /* tracking apretado — MARCA.md §3.3 */
+  line-height: 1.02;
+  margin: 0;
+  text-wrap: balance;
+}
+
+a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+/* ══ Tipografía ═══════════════════════════════════════════════════════════ */
+.display   { font-family: var(--font-heading); font-weight: 700; font-size: clamp(44px, 7.2vw, 88px); line-height: .94; letter-spacing: -0.038em; }
+.title-1   { font-family: var(--font-heading); font-weight: 700; font-size: clamp(30px, 4vw, 44px); line-height: 1.02; letter-spacing: -0.03em; }
+.title-2   { font-family: var(--font-heading); font-weight: 600; font-size: 26px; line-height: 1.12; letter-spacing: -0.022em; }
+.title-3   { font-family: var(--font-heading); font-weight: 600; font-size: 19px; line-height: 1.25; letter-spacing: -0.015em; }
+.body      { font-size: 16px; line-height: 1.62; }
+.body-lg   { font-size: 19px; line-height: 1.55; color: var(--color-muted); }
+.small     { font-size: 14px; line-height: 1.55; }
+.kicker    { font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--color-muted); }
+.muted     { color: var(--color-muted); }
+
+/* La anáfora "Cada …" — MARCA.md §2.1. Nunca en cursiva, nunca neón. */
+.cada      { font-family: var(--font-heading); font-weight: 700; letter-spacing: -0.03em; line-height: 1.06; }
+.cada em   { font-style: normal; color: var(--color-accent); }
+
+/* ══ Papel ════════════════════════════════════════════════════════════════ */
+.paper {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  z-index: 1;
+}
+/* Borde recortado a mano: irregular, no simétrico. */
+.paper-cut {
+  clip-path: polygon(
+    0.4% 1.2%, 22% 0.2%, 47% 1.4%, 71% 0.1%, 99.4% 1.0%,
+    99.8% 26%, 99.2% 54%, 99.9% 78%, 99.3% 98.6%,
+    76% 99.8%, 51% 98.7%, 27% 99.9%, 0.7% 98.9%,
+    0.1% 74%, 0.9% 49%, 0.2% 25%
+  );
+  box-shadow: none;
+}
+.paper-tape {
+  position: absolute; top: -10px; left: 50%;
+  width: 96px; height: 24px; transform: translateX(-50%) rotate(-1.6deg);
+  background: color-mix(in srgb, var(--brand-crema) 88%, #fff);
+  opacity: .82;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--brand-marino) 12%, transparent);
+}
+.tilt-l { transform: rotate(-1.2deg); }
+.tilt-r { transform: rotate(1deg); }
+
+/* ══ Botones ══════════════════════════════════════════════════════════════ */
+.btn {
+  font-family: var(--font-heading);
+  font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 12px 22px;
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-md);
+  background: none; color: inherit;
+  cursor: pointer;
+  transition: transform .16s var(--ease), box-shadow .16s var(--ease),
+              background-color .16s var(--ease), color .16s var(--ease);
+}
+.btn-primary {
+  background: var(--accent-solid);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover { transform: translate(-1px,-1px); box-shadow: var(--shadow-md); }
+.btn-primary:active { transform: translate(1px,1px); box-shadow: none; }
+
+.btn-secondary {
+  border-color: color-mix(in srgb, var(--color-text) 32%, transparent);
+  color: var(--color-text);
+}
+.btn-secondary:hover { border-color: var(--color-text); background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+
+.btn-ghost { color: var(--color-text); padding-inline: 10px; }
+.btn-ghost:hover { color: var(--color-accent); }
+
+/* WhatsApp: el CTA real de la marca. Verde propio de WhatsApp, no de paleta. */
+.btn-wa { background: #25D366; color: #06301A; box-shadow: var(--shadow-sm); }
+.btn-wa:hover { transform: translate(-1px,-1px); box-shadow: var(--shadow-md); }
+
+.btn-block { width: 100%; justify-content: center; }
+.btn:disabled { opacity: .42; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn:focus-visible { outline: 2.5px solid var(--color-accent); outline-offset: 3px; }
+
+/* ══ Tags / estado ════════════════════════════════════════════════════════ */
+.tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  padding: 5px 10px; border-radius: var(--radius-sm);
+}
+.tag-accent  { background: var(--color-accent-100); color: var(--color-accent-800); }
+.tag-outline { border: 1.5px solid var(--color-divider); color: var(--color-muted); }
+.tag-neutral { background: color-mix(in srgb, var(--color-text) 8%, transparent); color: var(--color-muted); }
+.tag-ok   { background: color-mix(in srgb, var(--color-ok) 20%, transparent);   color: #14602C; }
+.tag-warn { background: color-mix(in srgb, var(--color-warn) 24%, transparent); color: #7A4A00; }
+.tag-bad  { background: color-mix(in srgb, var(--color-bad) 16%, transparent);  color: #8E1810; }
+.tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .85; }
+.tag-outline::before, .tag-neutral::before, .tag-accent::before { display: none; }
+
+/* ══ Cards ════════════════════════════════════════════════════════════════ */
+.card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-md);
+  position: relative; z-index: 1;
+}
+.card-flat { box-shadow: none; border: 1.5px solid var(--color-divider); }
+.card-num {
+  position: absolute; top: var(--space-4); right: var(--space-6);
+  font-family: var(--font-heading); font-weight: 700; font-size: 40px;
+  line-height: 1; color: color-mix(in srgb, var(--color-text) 12%, transparent);
+}
+
+/* ══ La cifra — el activo #1 del copy (MARCA.md §2.4) ═════════════════════ */
+.figure { display: grid; gap: 4px; min-width: 0; }
+.figure-amount {
+  font-family: var(--font-heading); font-weight: 700;
+  /* Techo bajo a propósito: en una rejilla de cuatro columnas una cifra larga
+     como $1,786.55 se encimaba sobre la siguiente. Ver .figure-amount-solo
+     para el caso de una sola cifra a página completa. */
+  font-size: clamp(28px, 3vw, 50px); line-height: .98; letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: break-word;
+}
+.figure-amount-solo { font-size: clamp(44px, 6vw, 82px); }
+.figure-money  { color: var(--money-ink); }        /* solo cifras recuperadas */
+.figure-label  { font-size: 13.5px; color: var(--color-muted); max-width: 30ch; }
+.figure-rule   { height: 3px; width: 44px; background: var(--color-accent); margin-bottom: 10px; }
+
+/* ══ Formularios ══════════════════════════════════════════════════════════ */
+.field { display: grid; gap: 6px; }
+.label { font-size: 12px; font-weight: 500; letter-spacing: .04em; color: var(--color-muted); }
+.input, .select, .textarea {
+  font-family: var(--font-body); font-size: 15px; color: var(--color-text);
+  background: color-mix(in srgb, var(--color-surface) 60%, #fff);
+  border: 1.5px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  padding: 11px 13px;
+  width: 100%;
+  transition: border-color .16s var(--ease), box-shadow .16s var(--ease);
+}
+.input:focus, .select:focus, .textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+.input::placeholder { color: color-mix(in srgb, var(--color-text) 42%, transparent); }
+.hint { font-size: 12.5px; color: var(--color-muted); }
+.hint-bad { color: #8E1810; }
+
+/* ══ Tabla de liquidación ═════════════════════════════════════════════════ */
+.table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.table th {
+  text-align: left; font-size: 11px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--color-muted);
+  padding: 0 var(--space-3) var(--space-2);
+  border-bottom: 1.5px solid var(--color-divider);
+}
+.table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
+  vertical-align: middle;
+}
+.table tr:last-child td { border-bottom: none; }
+/* Montos SIEMPRE a la derecha y tabulares — DESIGN.md §Reglas de UI */
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.num-bad   { color: #8E1810; font-weight: 600; }
+.num-money { color: var(--money-ink); font-weight: 600; }
+.table tfoot td {
+  border-top: 2px solid var(--color-divider); border-bottom: none;
+  font-weight: 600; padding-top: var(--space-3);
+}
+
+/* ══ WhatsApp — el canal es el producto ═══════════════════════════════════ */
+.wa { display: grid; gap: 10px; max-width: 340px; }
+.wa-row { display: flex; }
+.wa-row.me { justify-content: flex-end; }
+.wa-bubble {
+  font-size: 14.5px; line-height: 1.45;
+  padding: 9px 12px 7px;
+  border-radius: 10px;
+  max-width: 84%;
+  background: #FFFFFF;
+  color: var(--brand-tinta);
+  box-shadow: 0 1px 1px rgba(14,26,43,.14);
+}
+.wa-row.me .wa-bubble { background: #D6F5C8; }
+.wa-time { font-size: 10.5px; color: color-mix(in srgb, var(--brand-tinta) 45%, transparent); float: right; margin: 4px 0 0 10px; }
+
+/* ══ Navegación ═══════════════════════════════════════════════════════════ */
+.nav {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1.5px solid var(--color-divider);
+}
+.nav-links { display: flex; align-items: center; gap: var(--space-6); font-size: 14.5px; }
+.nav-links a { text-decoration: none; color: var(--color-muted); transition: color .16s var(--ease); }
+.nav-links a:hover, .nav-links a[aria-current] { color: var(--color-text); }
+
+/* ══ Logo — MARCA.md §4. SIEMPRE minúsculas. Sin sombra, sin 3D. ══════════ */
+.logo { display: inline-flex; align-items: baseline; gap: 7px; text-decoration: none; }
+.logo-mark { width: 15px; height: 19px; flex: none; align-self: center; }
+.logo-word {
+  font-family: var(--font-heading); font-weight: 600; font-size: 21px;
+  letter-spacing: -0.035em; text-transform: lowercase; color: var(--color-text);
+}
+.logo-descriptor {
+  font-size: 12px; font-weight: 400; text-transform: lowercase;
+  color: var(--color-muted); letter-spacing: 0;
+}
+
+/* ══ Utilidades de composición ════════════════════════════════════════════ */
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: var(--space-6); }
+.wrap-narrow { max-width: 720px; margin: 0 auto; padding-inline: var(--space-6); }
+.section { padding-block: var(--space-24); position: relative; z-index: 1; }
+.stack { display: grid; gap: var(--space-4); }
+.row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-6); }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-6); }
+.rule { height: 1.5px; background: var(--color-divider); border: 0; margin: 0; }
+
+/* Movimiento: discreto. Una entrada escalonada, nada que rebote. */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal { animation: rise .62s var(--ease) both; }
+  .reveal:nth-child(2) { animation-delay: .07s; }
+  .reveal:nth-child(3) { animation-delay: .14s; }
+  .reveal:nth-child(4) { animation-delay: .21s; }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }

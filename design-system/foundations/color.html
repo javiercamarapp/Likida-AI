@@ -1,0 +1,88 @@
+<!-- @dsCard group="Fundamentos" name="Color" subtitle="Paleta papel + paleta producto, con las variantes que sí pasan AA" viewport="680x740" -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>likida.ai — Color</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+.demo { max-width: 640px; margin: 0 auto; padding: var(--space-8) var(--space-6); }
+.sw { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: var(--space-3); }
+.chip { border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); }
+.chip .fill { height: 62px; }
+.chip .meta { padding: 8px 10px; background: var(--color-surface); }
+.chip b { display: block; font-family: var(--font-heading); font-size: 13px; font-weight: 600; }
+.chip code { font-size: 11px; color: var(--color-muted); font-family: var(--font-mono); }
+.ramp { display: flex; border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); }
+.ramp div { flex: 1; height: 44px; }
+h3 { font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--color-muted); margin: var(--space-8) 0 var(--space-3); }
+h3:first-of-type { margin-top: 0; }
+.note { font-size: 13px; color: var(--color-muted); max-width: 62ch; line-height: 1.55; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: var(--space-3); }
+.pair div { padding: 13px 15px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<h3>Marca — papel (primaria)</h3>
+<div class="sw">
+  <div class="chip"><div class="fill" style="background:#E24A1B"></div><div class="meta"><b>Ladrillo</b><code>#E24A1B</code></div></div>
+  <div class="chip"><div class="fill" style="background:#2A3F5F"></div><div class="meta"><b>Marino</b><code>#2A3F5F</code></div></div>
+  <div class="chip"><div class="fill" style="background:#EDE4D3"></div><div class="meta"><b>Crema papel</b><code>#EDE4D3</code></div></div>
+  <div class="chip"><div class="fill" style="background:#6B7F4A"></div><div class="meta"><b>Oliva</b><code>#6B7F4A</code></div></div>
+  <div class="chip"><div class="fill" style="background:#4E9A3E"></div><div class="meta"><b>Verde dinero</b><code>#4E9A3E</code></div></div>
+</div>
+<p class="note" style="margin-top:var(--space-3)">Verde dinero <b>solo</b> para cifras recuperadas. Nunca como color decorativo.</p>
+
+<h3>Producto — digital (secundaria)</h3>
+<div class="sw">
+  <div class="chip"><div class="fill" style="background:#0B5FFF"></div><div class="meta"><b>Azul Likida</b><code>#0B5FFF</code></div></div>
+  <div class="chip"><div class="fill" style="background:#0E1A2B"></div><div class="meta"><b>Tinta</b><code>#0E1A2B</code></div></div>
+  <div class="chip"><div class="fill" style="background:#FFFFFF"></div><div class="meta"><b>Blanco</b><code>#FFFFFF</code></div></div>
+</div>
+
+<h3>Semáforo — solo estado</h3>
+<div class="pair">
+  <div style="background:color-mix(in srgb,#34C759 20%,transparent);color:#14602C">Cuadra · #34C759</div>
+  <div style="background:color-mix(in srgb,#FF9F0A 24%,transparent);color:#7A4A00">Revisar · #FF9F0A</div>
+  <div style="background:color-mix(in srgb,#FF3B30 16%,transparent);color:#8E1810">Diferencia · #FF3B30</div>
+</div>
+
+<h3>Variantes accesibles — el ajuste necesario</h3>
+<p class="note">
+  Los swatches de marca están pensados para tinta y pantalla grande. Sobre crema, el ladrillo
+  puro da <b>3.18:1</b> y el verde dinero <b>2.75:1</b>: no alcanzan para texto. Estas son las
+  variantes que sí pasan AA y que usa el sistema en botones y cifras.
+</p>
+<div class="pair" style="margin-top:var(--space-3)">
+  <div style="background:#C93F16;color:#fff">Relleno de botón #C93F16 · 5.02:1</div>
+  <div style="background:#EDE4D3;color:#3E7D31;font-weight:700">Cifra #3E7D31 · 4.01:1</div>
+  <div style="background:#EDE4D3;color:#2A3F5F">Texto marino · 8.43:1</div>
+</div>
+
+<h3>Rampa acento (ladrillo)</h3>
+<div class="ramp">
+  <div style="background:var(--color-accent-100)"></div><div style="background:var(--color-accent-200)"></div>
+  <div style="background:var(--color-accent-300)"></div><div style="background:var(--color-accent-400)"></div>
+  <div style="background:var(--color-accent-500)"></div><div style="background:var(--color-accent-600)"></div>
+  <div style="background:var(--color-accent-700)"></div><div style="background:var(--color-accent-800)"></div>
+  <div style="background:var(--color-accent-900)"></div>
+</div>
+
+<h3>Rampa acento-2 (oliva)</h3>
+<div class="ramp">
+  <div style="background:var(--color-accent-2-100)"></div><div style="background:var(--color-accent-2-200)"></div>
+  <div style="background:var(--color-accent-2-300)"></div><div style="background:var(--color-accent-2-400)"></div>
+  <div style="background:var(--color-accent-2-500)"></div><div style="background:var(--color-accent-2-600)"></div>
+  <div style="background:var(--color-accent-2-700)"></div><div style="background:var(--color-accent-2-800)"></div>
+  <div style="background:var(--color-accent-2-900)"></div>
+</div>
+
+<h3>Retirados</h3>
+<p class="note">Morado, cian neón, amarillo, degradados arcoíris y el naranja de la carpeta 3D.
+Si aparece un color que no está arriba, está mal.</p>
+
+</main>
+</body>
+</html>

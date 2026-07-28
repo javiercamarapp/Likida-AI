@@ -1,0 +1,65 @@
+<!-- @dsCard group="Componentes" name="Hilo de WhatsApp" subtitle="El canal es el producto: así se ve una liquidación entrando" viewport="680x600" -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>likida.ai — Hilo de WhatsApp</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+.demo { max-width: 640px; margin: 0 auto; padding: var(--space-8) var(--space-6); }
+h3 { font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--color-muted); margin: var(--space-8) 0 var(--space-4); }
+h3:first-of-type { margin-top: 0; }
+.note { font-size: 13px; color: var(--color-muted); max-width: 62ch; line-height: 1.55; }
+.phone { background: #E9E2D6; padding: var(--space-4); border-radius: 10px; box-shadow: var(--shadow-md); max-width: 360px; }
+.phone-head { display: flex; align-items: center; gap: 10px; padding-bottom: var(--space-3); margin-bottom: var(--space-3); border-bottom: 1px solid rgba(14,26,43,.12); }
+.avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--brand-azul); display: grid; place-items: center; }
+.avatar svg { width: 14px; height: 17px; }
+.phone-head b { font-size: 14px; font-family: var(--font-heading); font-weight: 600; color: var(--brand-tinta); }
+.phone-head span { font-size: 11px; color: rgba(14,26,43,.5); display: block; }
+.doc { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.doc i { width: 26px; height: 32px; background: #fff; border: 1px solid rgba(14,26,43,.18); border-radius: 3px; display: block; flex: none; }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<h3>El operador manda su comprobante</h3>
+<div class="phone">
+  <div class="phone-head">
+    <span class="avatar">
+      <svg viewBox="0 0 15 19" fill="none" aria-hidden="true"><path d="M7.5 0.8C7.5 0.8 13.6 7.5 13.6 12.1a6.1 6.1 0 1 1-12.2 0C1.4 7.5 7.5.8 7.5.8Z" fill="#fff"/></svg>
+    </span>
+    <b>likida.ai<span>el liquidador automático</span></b>
+  </div>
+
+  <div class="wa" style="max-width:none">
+    <div class="wa-row me"><div class="wa-bubble"><span class="doc"><i></i> ticket_caseta.jpg</span><span class="wa-time">14:02</span></div></div>
+    <div class="wa-row"><div class="wa-bubble">Leído. Caseta Palmillas, $201.15. Va al viaje MX-4471.<span class="wa-time">14:02</span></div></div>
+    <div class="wa-row"><div class="wa-bubble">Te falta el ticket de diesel de la salida. ¿Lo mandas?<span class="wa-time">14:02</span></div></div>
+    <div class="wa-row me"><div class="wa-bubble"><span class="doc"><i></i> factura_diesel.xml</span><span class="wa-time">14:07</span></div></div>
+    <div class="wa-row"><div class="wa-bubble">Validado contra el SAT. $4,812.00, con complemento. El viaje MX-4471 ya cuadra.<span class="wa-time">14:07</span></div></div>
+  </div>
+</div>
+
+<h3>Cuando algo no se puede leer</h3>
+<div class="phone">
+  <div class="wa" style="max-width:none">
+    <div class="wa-row me"><div class="wa-bubble"><span class="doc"><i></i> ticket_borroso.jpg</span><span class="wa-time">09:41</span></div></div>
+    <div class="wa-row"><div class="wa-bubble">No alcanzo a leer el monto de este ticket. Lo dejo marcado para revisión. ¿Puedes mandarlo otra vez con más luz?<span class="wa-time">09:41</span></div></div>
+  </div>
+</div>
+<p class="note" style="margin-top:var(--space-4)">
+  Esta es la conversación más importante del producto. Likida <b>no inventa</b> el monto: lo dice
+  y lo manda a revisión. Es lo que sustituye a la promesa de «90 % de precisión».
+</p>
+
+<h3>Reglas del hilo</h3>
+<p class="note">
+  Burbuja del operador en verde claro, a la derecha. Respuesta de Likida en blanco, a la izquierda.
+  Frases cortas, del oficio, con acentos y con <b>¿ ¡</b>. Sin emojis en el copy de marca — los
+  archivos adjuntos sí pueden llevar su ícono. Nunca más de dos líneas por burbuja.
+</p>
+
+</main>
+</body>
+</html>

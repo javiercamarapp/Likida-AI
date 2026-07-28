@@ -1,0 +1,79 @@
+<!-- @dsCard group="Fundamentos" name="Espacio y elevación" subtitle="Dos elevaciones opuestas: sombra dura de papel, sombra difusa de producto" viewport="680x620" -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>likida.ai — Espacio y elevación</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+.demo { max-width: 640px; margin: 0 auto; padding: var(--space-8) var(--space-6); }
+h3 { font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--color-muted); margin: var(--space-8) 0 var(--space-3); }
+h3:first-of-type { margin-top: 0; }
+.scale { display: grid; gap: 7px; }
+.scale div { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: var(--space-3); font-family: var(--font-mono); font-size: 11px; color: var(--color-muted); }
+.scale i { height: 13px; background: var(--color-accent-300); border-radius: 2px; display: block; }
+.boxes { display: grid; grid-template-columns: repeat(3,1fr); gap: var(--space-6); }
+.box { background: var(--color-surface); border-radius: var(--radius-md); padding: var(--space-6) var(--space-4); text-align: center; font-size: 12px; font-family: var(--font-mono); color: var(--color-muted); }
+.note { font-size: 13px; color: var(--color-muted); max-width: 62ch; line-height: 1.55; }
+.radii { display: flex; gap: var(--space-4); align-items: flex-end; }
+.radii div { width: 76px; height: 60px; background: var(--color-accent-200); display: grid; place-items: end center; padding-bottom: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--color-accent-900); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<h3>Escala de espacio — base 4</h3>
+<div class="scale">
+  <div><span>--space-1</span><i style="width:4px"></i></div>
+  <div><span>--space-2</span><i style="width:8px"></i></div>
+  <div><span>--space-3</span><i style="width:12px"></i></div>
+  <div><span>--space-4</span><i style="width:16px"></i></div>
+  <div><span>--space-6</span><i style="width:24px"></i></div>
+  <div><span>--space-8</span><i style="width:32px"></i></div>
+  <div><span>--space-12</span><i style="width:48px"></i></div>
+  <div><span>--space-16</span><i style="width:64px"></i></div>
+  <div><span>--space-24</span><i style="width:96px"></i></div>
+</div>
+
+<h3>Radio</h3>
+<div class="radii">
+  <div style="border-radius:2px">2px · papel</div>
+  <div style="border-radius:3px">3px · md</div>
+  <div style="border-radius:6px">6px · lg</div>
+  <div style="border-radius:12px">12px · producto</div>
+</div>
+<p class="note" style="margin-top:var(--space-3)">
+  El papel no se redondea: se corta. El producto sí, a 10–14 px como manda <code>DESIGN.md</code>.
+</p>
+
+<h3>Elevación de papel — sombra dura con desplazamiento</h3>
+<div class="boxes">
+  <div class="box" style="box-shadow:var(--shadow-sm)">--shadow-sm</div>
+  <div class="box" style="box-shadow:var(--shadow-md)">--shadow-md</div>
+  <div class="box" style="box-shadow:var(--shadow-lg)">--shadow-lg</div>
+</div>
+<p class="note" style="margin-top:var(--space-4)">
+  Una hoja levantada de la mesa proyecta un borde nítido, no una nube. Sin blur, con offset.
+</p>
+
+<h3>Elevación de producto — sombra difusa</h3>
+<div class="boxes" style="grid-template-columns:repeat(2,1fr)">
+  <div class="box" style="background:#fff;box-shadow:var(--shadow-producto);border-radius:12px">--shadow-producto</div>
+  <div class="box" style="background:#fff;box-shadow:var(--shadow-producto-pop);border-radius:12px">--shadow-producto-pop</div>
+</div>
+
+<h3>Grano</h3>
+<p class="note">
+  El fondo crema lleva un grano de papel sutil en <code>multiply</code>. Se retira por completo
+  en la piel de producto: una captura de software no tiene textura.
+</p>
+
+<h3>Movimiento</h3>
+<p class="note">
+  150–250 ms, <code>ease-out</code>. Una sola entrada escalonada por pantalla. Nada rebota.
+  Respeta <code>prefers-reduced-motion</code>.
+</p>
+
+</main>
+</body>
+</html>

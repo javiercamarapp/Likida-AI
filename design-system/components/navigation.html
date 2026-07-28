@@ -1,0 +1,89 @@
+<!-- @dsCard group="Componentes" name="Navegación y logo" subtitle="Logo siempre en minúsculas, con descriptor; barra sobre crema o marino" viewport="680x560" -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>likida.ai — Navegación y logo</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+.demo { max-width: 640px; margin: 0 auto; padding: var(--space-8) var(--space-6); }
+h3 { font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--color-muted); margin: var(--space-8) 0 var(--space-4); }
+h3:first-of-type { margin-top: 0; }
+.note { font-size: 13px; color: var(--color-muted); max-width: 62ch; line-height: 1.55; }
+.bad { color: #8E1810; }
+.frame { border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); }
+.lockup { display: grid; gap: var(--space-6); grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); }
+.lockup > div { padding: var(--space-6); border-radius: var(--radius-md); display: grid; place-items: center; }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<h3>Barra sobre crema</h3>
+<div class="frame">
+  <nav class="nav" style="background:var(--color-surface)">
+    <a class="logo" href="#">
+      <svg class="logo-mark" viewBox="0 0 15 19" fill="none" aria-hidden="true"><path d="M7.5 0.8C7.5 0.8 13.6 7.5 13.6 12.1a6.1 6.1 0 1 1-12.2 0C1.4 7.5 7.5.8 7.5.8Z" fill="currentColor"/></svg>
+      <span class="logo-word">likida.ai</span>
+    </a>
+    <div class="nav-links">
+      <a href="#" aria-current="page">Producto</a>
+      <a href="#">Cómo funciona</a>
+      <a href="#">Preguntas</a>
+      <a class="btn btn-primary" href="#" style="padding:8px 16px;font-size:14px">Ver el demo</a>
+    </div>
+  </nav>
+</div>
+
+<h3>Barra sobre marino</h3>
+<div class="frame skin-marino">
+  <nav class="nav">
+    <a class="logo" href="#">
+      <svg class="logo-mark" viewBox="0 0 15 19" fill="none" aria-hidden="true"><path d="M7.5 0.8C7.5 0.8 13.6 7.5 13.6 12.1a6.1 6.1 0 1 1-12.2 0C1.4 7.5 7.5.8 7.5.8Z" fill="currentColor"/></svg>
+      <span class="logo-word">likida.ai</span>
+    </a>
+    <div class="nav-links">
+      <a href="#">Producto</a>
+      <a href="#">Preguntas</a>
+      <a class="btn btn-primary" href="#" style="padding:8px 16px;font-size:14px">Ver el demo</a>
+    </div>
+  </nav>
+</div>
+
+<h3>Lockup con descriptor</h3>
+<div class="lockup">
+  <div style="background:var(--color-surface)">
+    <a class="logo" href="#" style="flex-direction:column;align-items:flex-start;gap:2px">
+      <span style="display:flex;align-items:center;gap:7px">
+        <svg class="logo-mark" viewBox="0 0 15 19" fill="none" aria-hidden="true"><path d="M7.5 0.8C7.5 0.8 13.6 7.5 13.6 12.1a6.1 6.1 0 1 1-12.2 0C1.4 7.5 7.5.8 7.5.8Z" fill="currentColor"/></svg>
+        <span class="logo-word" style="font-size:27px">likida.ai</span>
+      </span>
+      <span class="logo-descriptor">el liquidador automático</span>
+    </a>
+  </div>
+  <div class="skin-marino">
+    <a class="logo" href="#" style="flex-direction:column;align-items:flex-start;gap:2px">
+      <span style="display:flex;align-items:center;gap:7px">
+        <svg class="logo-mark" viewBox="0 0 15 19" fill="none" aria-hidden="true"><path d="M7.5 0.8C7.5 0.8 13.6 7.5 13.6 12.1a6.1 6.1 0 1 1-12.2 0C1.4 7.5 7.5.8 7.5.8Z" fill="currentColor"/></svg>
+        <span class="logo-word" style="font-size:27px">likida.ai</span>
+      </span>
+      <span class="logo-descriptor">el liquidador automático</span>
+    </a>
+  </div>
+</div>
+
+<h3>Reglas del logo</h3>
+<p class="note">
+  Siempre minúsculas: <code>likida.ai</code> — el punto-ai es parte del nombre. El descriptor
+  <i>el liquidador automático</i> va debajo, en peso 400, nunca más ancho que el logotipo.
+  Área de respeto: la altura del isotipo por cada lado. Tamaño mínimo: 24 px de alto.
+  Sobre fondo oscuro, logotipo blanco sólido.
+</p>
+<p class="note bad">
+  Prohibido: mayúsculas, sombra 3D, brillo, cursiva, estirarlo, o la <i>İ</i> turca que se colaba
+  en las generaciones. De los cuatro lockups que existían, este es el único oficial.
+</p>
+
+</main>
+</body>
+</html>

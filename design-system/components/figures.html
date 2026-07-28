@@ -1,0 +1,76 @@
+<!-- @dsCard group="Componentes" name="Cifras" subtitle="El activo #1 del copy: nunca solas, siempre con contexto" viewport="680x560" -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>likida.ai — Cifras</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+.demo { max-width: 640px; margin: 0 auto; padding: var(--space-8) var(--space-6); }
+h3 { font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--color-muted); margin: var(--space-8) 0 var(--space-4); }
+h3:first-of-type { margin-top: 0; }
+.note { font-size: 13px; color: var(--color-muted); max-width: 62ch; line-height: 1.55; }
+.bad { color: #8E1810; }
+.panel { padding: var(--space-6); border-radius: var(--radius-md); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-8); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<h3>Cifra recuperada — verde dinero</h3>
+<div class="figure">
+  <div class="figure-rule"></div>
+  <div class="figure-amount figure-money">$1,786.55</div>
+  <div class="figure-label">Recuperables en un solo viaje.</div>
+</div>
+<p class="note" style="margin-top:var(--space-4)">
+  El verde dinero es exclusivo de este caso. Si la cifra no es dinero recuperado, va en el
+  color de texto normal.
+</p>
+
+<h3>Cifras neutras</h3>
+<div class="pair">
+  <div class="figure">
+    <div class="figure-rule"></div>
+    <div class="figure-amount">3.5 s</div>
+    <div class="figure-label">Ocho comprobantes leídos, validados y cuadrados.</div>
+  </div>
+  <div class="figure">
+    <div class="figure-rule"></div>
+    <div class="figure-amount">0</div>
+    <div class="figure-label">Liquidaciones alteradas.</div>
+  </div>
+</div>
+
+<h3>Desglose de apoyo</h3>
+<p class="body" style="margin:0">
+  $408.62 de IEPS de diesel · $774.48 de IVA acreditable · $603.45 de casetas, al 50%.
+</p>
+
+<h3>Sobre marino</h3>
+<div class="panel skin-marino">
+  <div class="figure">
+    <div class="figure-rule"></div>
+    <div class="figure-amount figure-money">$1,786.55</div>
+    <div class="figure-label">Recuperables en un solo viaje.</div>
+  </div>
+</div>
+
+<h3>Las reglas</h3>
+<p class="note">
+  <b>1.</b> Toda cifra en un anuncio debe ser reproducible en el demo. Si no la puedes enseñar
+  en pantalla, no va.<br>
+  <b>2.</b> Nunca una cifra sola: siempre con su contexto de una línea.<br>
+  <b>3.</b> Cifras tabulares, sin excepción.<br>
+  <b>4.</b> Sin porcentajes sin fuente.
+</p>
+<p class="note bad" style="margin-top:var(--space-3)">
+  Prohibido: «90 % de precisión». Para un contralor, 90 % significa que 1 de cada 10 sale mal:
+  asusta en vez de vender. En su lugar va precisión verificable — «cada cifra con su comprobante
+  al lado», «lo que no puede leer, lo dice».
+</p>
+
+</main>
+</body>
+</html>

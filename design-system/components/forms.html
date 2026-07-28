@@ -1,0 +1,82 @@
+<!-- @dsCard group="Componentes" name="Formularios" subtitle="Elementos nativos, estados temáticos; el error nombra el comprobante" viewport="680x620" -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>likida.ai — Formularios</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+.demo { max-width: 640px; margin: 0 auto; padding: var(--space-8) var(--space-6); }
+h3 { font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--color-muted); margin: var(--space-8) 0 var(--space-4); }
+h3:first-of-type { margin-top: 0; }
+.note { font-size: 13px; color: var(--color-muted); max-width: 62ch; line-height: 1.55; }
+.panel { padding: var(--space-6); border-radius: var(--radius-md); }
+.seg { display: inline-flex; border: 1.5px solid var(--color-divider); border-radius: var(--radius-md); overflow: hidden; }
+.seg button { font-family: var(--font-heading); font-size: 14px; font-weight: 500; padding: 9px 16px; background: none; border: 0; color: var(--color-muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-solid); color: #fff; }
+.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14.5px; line-height: 1.45; }
+.check input { margin-top: 3px; accent-color: var(--accent-solid); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<h3>Campos — piel papel</h3>
+<div class="stack" style="gap:var(--space-4)">
+  <div class="field">
+    <label class="label" for="f1">Nombre de la flota</label>
+    <input class="input" id="f1" placeholder="Transportes del Sureste" />
+  </div>
+  <div class="field">
+    <label class="label" for="f2">WhatsApp de contacto</label>
+    <input class="input" id="f2" value="+52 999 370 0779" />
+    <span class="hint">Al que te contestamos. El operador usa otro.</span>
+  </div>
+  <div class="field">
+    <label class="label" for="f3">Unidades en operación</label>
+    <select class="select" id="f3">
+      <option>1 – 5 unidades</option>
+      <option selected>6 – 25 unidades</option>
+      <option>26 – 100 unidades</option>
+      <option>Más de 100</option>
+    </select>
+  </div>
+</div>
+
+<h3>Estado de error — nombra el comprobante</h3>
+<div class="field">
+  <label class="label" for="f4">RFC del emisor</label>
+  <input class="input" id="f4" value="XAXX010101000" style="border-color:#8E1810;box-shadow:0 0 0 3px color-mix(in srgb,#FF3B30 18%,transparent)" />
+  <span class="hint hint-bad">Este RFC aparece en la lista 69-B del SAT. La factura de diesel del 14 de julio no es deducible.</span>
+</div>
+<p class="note" style="margin-top:var(--space-3)">
+  El error nunca dice «dato inválido». Dice qué comprobante, de qué fecha, y por qué. El
+  contralor tiene que poder actuar leyendo solo esa línea.
+</p>
+
+<h3>Control segmentado</h3>
+<div class="seg">
+  <button aria-pressed="true">Por viaje</button>
+  <button aria-pressed="false">Por unidad</button>
+  <button aria-pressed="false">Por operador</button>
+</div>
+
+<h3>Casillas</h3>
+<div class="stack" style="gap:var(--space-3)">
+  <label class="check"><input type="checkbox" checked /> Avisar al operador cuando falte un comprobante.</label>
+  <label class="check"><input type="checkbox" checked /> Marcar para revisión lo que no se pueda leer.</label>
+  <label class="check"><input type="checkbox" /> Enviar la póliza al ERP al cerrar el viaje.</label>
+</div>
+
+<h3>Piel producto</h3>
+<div class="panel skin-producto" style="box-shadow:var(--shadow-producto)">
+  <div class="field">
+    <label class="label" for="f5">Tope de viáticos por día</label>
+    <input class="input" id="f5" value="$1,400.00" />
+    <span class="hint">Se aplica a cada viaje. Lo que exceda queda marcado como diferencia.</span>
+  </div>
+</div>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!-- @dsCard group="Componentes" name="Tarjetas" subtitle="Hoja de papel levantada; en producto, superficie con hairline" viewport="680x600" -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>likida.ai — Tarjetas</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+.demo { max-width: 640px; margin: 0 auto; padding: var(--space-8) var(--space-6); }
+h3 { font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--color-muted); margin: var(--space-8) 0 var(--space-4); }
+h3:first-of-type { margin-top: 0; }
+.note { font-size: 13px; color: var(--color-muted); max-width: 62ch; line-height: 1.55; }
+.pain { border-top: 2px solid var(--color-text); padding-top: var(--space-4); }
+.pain h4 { font-family: var(--font-heading); font-size: 17px; font-weight: 600; letter-spacing: -.015em; margin: 0 0 8px; }
+.pain p { font-size: 14.5px; color: var(--color-muted); margin: 0; }
+.panel { padding: var(--space-6); border-radius: var(--radius-md); }
+</style>
+</head>
+<body>
+<main class="demo">
+
+<h3>Tarjeta numerada — capas de la plataforma</h3>
+<article class="card">
+  <span class="card-num">01</span>
+  <span class="kicker">La entrada</span>
+  <h4 class="title-2" style="margin:var(--space-3) 0">Lectura y validación</h4>
+  <p class="body muted" style="margin:0 0 var(--space-6)">
+    Foto, PDF o XML: da igual cómo llegue. Extrae monto, fecha, RFC, concepto y forma de pago,
+    y los contrasta contra el CFDI, el complemento y la lista del 69-B.
+  </p>
+  <div class="row">
+    <span class="tag tag-outline">Foto de ticket</span>
+    <span class="tag tag-outline">XML / CFDI</span>
+    <span class="tag tag-outline">Lista 69-B</span>
+  </div>
+</article>
+
+<h3>Tarjeta de dolor — regla superior, sin caja</h3>
+<div class="grid-2" style="gap:var(--space-6)">
+  <div class="pain">
+    <h4>El diesel en efectivo no es deducible</h4>
+    <p>Se carga el gasto, se pierde el acreditamiento. Nadie lo nota hasta la declaración.</p>
+  </div>
+  <div class="pain">
+    <h4>El faltante que nadie detectó</h4>
+    <p>Comprobantes que nunca llegaron. No aparecen porque nadie sabe que deberían estar.</p>
+  </div>
+</div>
+<p class="note" style="margin-top:var(--space-4)">
+  Los dolores no van en caja: van bajo una regla gruesa, como un titular de periódico. La caja
+  suaviza; el problema no debe verse suave.
+</p>
+
+<h3>Tarjeta plana — piel producto</h3>
+<div class="panel skin-producto" style="box-shadow:var(--shadow-producto)">
+  <div class="stack" style="gap:var(--space-3)">
+    <div class="card card-flat" style="padding:var(--space-4) var(--space-6)">
+      <span class="kicker">Entrada</span>
+      <p class="body" style="margin:4px 0 0">WhatsApp · foto, PDF o XML</p>
+    </div>
+    <div class="card card-flat" style="padding:var(--space-4) var(--space-6)">
+      <span class="kicker">Salida</span>
+      <p class="body" style="margin:4px 0 0">Liquidación en PDF · Excel / CSV</p>
+    </div>
+  </div>
+</div>
+
+<h3>Papel recortado y cinta</h3>
+<div class="paper paper-cut tilt-r" style="padding:var(--space-6);max-width:340px;margin-top:var(--space-6)">
+  <span class="paper-tape"></span>
+  <p class="cada" style="font-size:26px;margin:0">Cada litro, <em>cuadrado.</em></p>
+</div>
+<p class="note" style="margin-top:var(--space-6)">
+  <code>.paper-cut</code> recorta el borde con un contorno irregular y <code>.paper-tape</code>
+  añade la cinta. Úsalos con medida: uno o dos por página, nunca en cada tarjeta.
+</p>
+
+</main>
+</body>
+</html>
