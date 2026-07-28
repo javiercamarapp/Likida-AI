@@ -156,9 +156,19 @@ async function ponerAvisoADisposicion(
 
 export async function processInbound(msg: InboundMessage): Promise<void> {
   // Idempotencia: si Meta reintenta el webhook, no re-procesar (no duplicar gasto).
-  if (msg.waMessageId && !(await claimMessage(msg.waMessageId))) {
+  const claim = msg.waMessageId ? await claimMessage(msg.waMessageId) : 'nuevo';
+  if (claim === 'duplicado') {
     logger.info('wa.duplicate', { id: msg.waMessageId });
     return;
+  }
+  if (claim === 'indeterminado') {
+    // NO se abandona el turno. Meta ya recibió su 200 en `route.ts` y no
+    // reintenta, así que abandonar aquí no aplaza el mensaje: lo pierde, para
+    // siempre y en silencio. Se sigue, aceptando el riesgo de reprocesar: los
+    // efectos con dinero tienen sus propios candados —hash de comprobante para el
+    // gasto, `on conflict (viaje_id)` para la liquidación— y ninguno depende de
+    // esta rejilla. Perder el "listo" del operador no tiene candado ninguno.
+    logger.warn('wa.claim_indeterminado', { id: msg.waMessageId });
   }
 
   // ── RELOJ COMPARTIDO, desde la primera línea ─────────────────────────────
@@ -194,6 +204,29 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
 
     const viajeId = await getOpenViaje(op.tenantId, op.operadorId);
     if (!viajeId) {
+      // ── EL XML QUE PEDIMOS NO SE TIRA, aunque el viaje ya haya cerrado ──────
+      // `complemento_no_verificable` NO está en SOLO_CONTRALOR a propósito: su
+      // nota le dice al operador "reenvía el XML (el que te manda la gasolinera
+      // por correo)". Y ese texto llega en el MISMO mensaje de cierre, cuando
+      // `guardar_liquidacion` ya puso el viaje en 'liquidado'. Así que el
+      // operador obedecía, el corte de arriba lo mandaba de vuelta con "no tienes
+      // viaje abierto", y el XML se descartaba sin guardarse en ningún lado: el
+      // producto pedía un documento y luego se negaba a recibirlo.
+      //
+      // Se conserva por UUID (CFF 30 lo exige igual) con `gasto_id` nulo. Volver
+      // a cuadrar una liquidación ya cerrada es otra decisión —de producto, no de
+      // este corte— y por eso aquí solo se garantiza que el dato no se pierda y
+      // que al operador se le diga la verdad.
+      if (msg.type === 'document' && msg.mediaId) {
+        const xmlText = await downloadMediaAsText(msg.mediaId);
+        const xml = xmlText ? parseCfdiXml(xmlText) : null;
+        if (xml?.uuid) {
+          await saveCfdiXmlRaw(op.tenantId, xml.uuid, null, xmlText!);
+          logger.info('xml.sin_viaje_abierto', { tenant: op.tenantId, operador: op.operadorId, uuid: xml.uuid });
+          await sendText(msg.from, 'Recibí tu XML y ya quedó guardado ✅. Tu viaje ya estaba cerrado, así que tu contralor lo aplica desde el panel. 🙏');
+          return;
+        }
+      }
       await sendText(msg.from, 'No tienes un viaje abierto para liquidar ahorita. Cuando tu flota te asigne uno, aquí lo cerramos. 👍');
       return;
     }
@@ -500,7 +533,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         history,
         timeoutMs: reloj.acotar(40_000),
       });
-      reply = res.finalText || 'Listo. 👍';
+      // "Listo. 👍" SOLO si de verdad se hizo algo. Un turno sin texto y sin
+      // ninguna tool no es un turno exitoso y callado: es un turno en el que no
+      // pasó nada, y confirmarlo hace que el chofer deje de mandar comprobantes
+      // creyendo que su viaje cerró. Cuando sí corrieron tools, el silencio del
+      // modelo sí es benigno: el efecto ya ocurrió.
+      reply = res.finalText || (res.toolCalls.length > 0
+        ? 'Listo. 👍'
+        : 'Perdón, no alcancé a procesar eso. ¿Me lo repites?');
       agentTools = res.toolCalls;
       closed = res.toolCalls.some((t) => t.toolName === 'guardar_liquidacion' && !t.error);
       await registrarCosto({ tenantId: op.tenantId, viajeId, fase: faseDeModelo(res.model, 'cuadre'), modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.costUsd });
@@ -623,15 +663,35 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     }
 
     if (closed) {
+      // `guardar_liquidacion` devuelve `pdf_generado` y ese dato se tiraba. Si el
+      // PDF no se generó —o el upload a storage falló— se pedía igual una URL
+      // firmada de un objeto que no existe: `createSignedUrl` no lanza, devuelve
+      // `{ data: null, error }`, el error se descartaba en el destructuring, no
+      // había `else` y el `catch` nunca se disparaba. El operador se queda
+      // esperando el documento que el prompt le prometió, y en los logs no hay
+      // NADA. En el demo es el paso 3 del guion fallando en silencio.
+      const guardado = agentTools.find((t) => t.toolName === 'guardar_liquidacion' && !t.error);
+      const pdfGenerado = Boolean((guardado?.result as { pdf_generado?: boolean } | undefined)?.pdf_generado);
       try {
-        const path = `${op.tenantId}/${viajeId}.pdf`;
-        const { data } = await supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 3600);
-        if (data?.signedUrl) {
-          await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
-          await registrarCostoWhatsApp(op.tenantId, viajeId);
-        }
+        if (!pdfGenerado) throw new Error('la tool reportó pdf_generado=false');
+        // El ejemplar del OPERADOR, no el completo: ver `tools.ts`.
+        const path = `${op.tenantId}/${viajeId}-operador.pdf`;
+        const { data, error } = await supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 3600);
+        if (error || !data?.signedUrl) throw new Error(error?.message ?? 'storage no devolvió URL firmada');
+        await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
+        await registrarCostoWhatsApp(op.tenantId, viajeId);
       } catch (e) {
-        logger.warn('pdf.send', { err: e instanceof Error ? e.message : String(e) });
+        // Ruidoso a propósito: la liquidación SÍ quedó cerrada en la base, así que
+        // esto no es recuperable por reintento y nadie lo va a notar salvo por el log.
+        logger.error('pdf.no_entregado', {
+          tenant: op.tenantId, viaje: viajeId, pdfGenerado,
+          err: e instanceof Error ? e.message : String(e),
+        });
+        // Y se le dice al operador, en vez de dejarlo esperando: el cierre es
+        // real, lo que falta es el papel.
+        try {
+          await say('Tu liquidación ya quedó cerrada ✅, pero no pude generarte el PDF. Tu contralor ya la tiene en el panel; si necesitas el documento, pídeselo. 🙏');
+        } catch { /* best-effort */ }
       }
     }
 

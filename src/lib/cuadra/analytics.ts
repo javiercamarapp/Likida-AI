@@ -123,7 +123,7 @@ export async function getAcreditables(tenantId: string): Promise<Acreditables> {
 export interface LiquidacionDetalle {
   id: string; folio: string; estatus: string; fecha: string;
   totalComprobado: number; totalAnticipo: number; diferencia: number;
-  ieps: number; iva: number; peaje: number;
+  ieps: number; litrosDiesel: number; iva: number; peaje: number;
   diferencias: Array<{ tipo: string; nota: string; monto: number }>;
   gastos: Array<{ concepto: string; monto: number; folio?: string }>;
 }
@@ -133,7 +133,7 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   const admin = supabaseAdmin();
   const { data } = await admin
     .from('liquidacion')
-    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, iva_acreditable, peaje_acreditable, created_at, viaje:viaje_id(folio)')
+    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, viaje:viaje_id(folio)')
     .eq('id', id)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -152,6 +152,10 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
     totalAnticipo: Number(data.total_anticipo ?? 0),
     diferencia: Number(data.diferencia ?? 0),
     ieps: Number(data.ieps_acreditable ?? 0),
+    // El select no la pedía, así que el detalle NUNCA podía mostrar los litros:
+    // el contralor veía "1,850 L elegibles" en la tarjeta de la lista, hacía clic,
+    // y en la liquidación que los produjo no había ninguna mención.
+    litrosDiesel: Number(data.litros_diesel_acreditables ?? 0),
     iva: Number(data.iva_acreditable ?? 0),
     peaje: Number(data.peaje_acreditable ?? 0),
     diferencias: ((data.diferencias as Array<{ tipo: string; nota: string; monto: number }>) ?? []),

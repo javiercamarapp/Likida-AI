@@ -10,14 +10,9 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
 import { resumenOmitidos, filasImprimibles } from './omitidos';
 import { filasDeducibilidad } from './deducibilidad';
 import { resumenLaboral } from '../laboral/pagadero';
-import { etiquetaConcepto } from '../cuadre/engine';
-import type { TipoDiferencia } from '@/types/cuadra';
+import { cubetaDe, etiquetaConcepto } from '../cuadre/engine';
+import { SOLO_CONTRALOR, type Destinatario } from '../cuadre/resumen';
 
-/** Los que dejan un gasto fuera de la deducción de forma definitiva. */
-const NO_DEDUCIBLES_PDF = new Set<TipoDiferencia>([
-  'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado',
-  'complemento_hidrocarburos', 'efectivo_sobre_tope',
-]);
 import { leyendaPdf } from '../cuadre/leyendas';
 import type { Liquidacion, Viaje, Operador } from '@/types/cuadra';
 
@@ -64,6 +59,15 @@ export async function generarLiquidacionPDF(
   /** Razón social del cliente, para el descargo del pie. Sin ella dice
    *  "el contribuyente" — nunca se inventa un nombre. */
   razonSocial?: string,
+  /**
+   * A QUIÉN se le entrega ESTE ejemplar. `resumen.ts` ya filtra del mensaje al
+   * operador los veredictos que él no puede arreglar y que además lo señalan
+   * (EFOS, CFDI cancelado, RFC receptor…), y `processor.ts` pasa 'operador' con
+   * cuidado en los tres sitios. Y acto seguido se le mandaba, al mismo teléfono,
+   * un PDF que los imprimía todos. La defensa del texto no valía nada: el mismo
+   * destinatario recibía todo, en un documento que además puede reenviar.
+   */
+  destinatario: Destinatario = 'contralor',
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(`Liquidación ${viaje.folio ?? liq.id.slice(0, 8)}`);
@@ -309,10 +313,15 @@ export async function generarLiquidacionPDF(
   // DEDUCIBLE ≠ PAGADERO. Sin esta sección, quien lee "no deducible" en el papel
   // puede concluir que se le descuenta al operador, y la ley no lo permite: es un
   // problema de papeleo entre la flota y el SAT, no una deuda del chofer.
+  // La clasificación la decide el MOTOR (`cubetaDe`), no este archivo. Antes se
+  // reconstruía aquí desde `diferencias` con un criterio menos, y la sección se
+  // activaba o no según un flag de la política de la flota en vez de según la ley.
+  const cubetas = new Map(liq.gastos.map((g) => [g.id, cubetaDe(g, liq.diferencias.filter((d) => d.gastoId === g.id))]));
+  const idsEnCubeta = (c: string) => new Set([...cubetas].filter(([, v]) => v === c).map(([id]) => id));
   const lab = resumenLaboral({
     gastos: liq.gastos,
-    idsNoDeducibles: new Set(liq.diferencias.filter((d) => NO_DEDUCIBLES_PDF.has(d.tipo)).map((d) => d.gastoId!).filter(Boolean)),
-    idsPorConfirmar: new Set(liq.diferencias.filter((d) => d.tipo === 'sin_cfdi' || d.tipo === 'combustible_efectivo').map((d) => d.gastoId!).filter(Boolean)),
+    idsNoDeducibles: idsEnCubeta('no_deducible'),
+    idsPorConfirmar: idsEnCubeta('por_confirmar'),
     sobrePolitica: new Set(liq.diferencias.filter((d) => d.tipo === 'sobre_politica').map((d) => d.gastoId!).filter(Boolean)),
     demoraNoImputable: viaje.demoraNoImputable,
   });
@@ -333,7 +342,9 @@ export async function generarLiquidacionPDF(
   // ─── Diferencias detectadas ─────────────────────────────────────────────────
   // El 'anticipo' ya se imprime arriba en Totales: repetirlo aquí lo mostraba dos
   // veces con distinto formato. Se filtra ANTES de decidir si hay sección.
-  const obsPdf = liq.diferencias.filter((d) => d.tipo !== 'anticipo');
+  const obsPdf = liq.diferencias
+    .filter((d) => d.tipo !== 'anticipo')
+    .filter((d) => destinatario === 'contralor' || !SOLO_CONTRALOR.includes(d.tipo));
   if (obsPdf.length) {
     y -= 12;
     // El encabezado no se queda solo al pie de una hoja: se lleva su primera

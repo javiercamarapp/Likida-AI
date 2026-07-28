@@ -32,7 +32,7 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
   const d = await getLiquidacionDetalle(id, TENANT());
   if (!d) notFound();
   const e = ESTATUS[d.estatus] ?? { label: d.estatus, color: 'var(--muted)' };
-  const hayAcred = d.ieps > 0 || d.iva > 0 || d.peaje > 0;
+  const hayAcred = d.litrosDiesel > 0 || d.ieps > 0 || d.iva > 0 || d.peaje > 0;
 
   return (
     <div className="min-h-screen">
@@ -70,6 +70,10 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
           <section>
             <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>Acreditable / recuperable</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF
+                  × litros y esa cuota no la tenemos. `ieps` solo puede venir de filas
+                  viejas escritas antes del cambio; se conserva para no ocultarlas. */}
+              {d.litrosDiesel > 0 && <Tot label="Diésel elegible para el estímulo" value={`${d.litrosDiesel} L`} ok />}
               {d.ieps > 0 && <Tot label="IEPS de diésel (vs ISR)" value={mxn(d.ieps)} ok />}
               {d.iva > 0 && <Tot label="IVA acreditable" value={mxn(d.iva)} ok />}
               {d.peaje > 0 && <Tot label="Peaje 50%" value={mxn(d.peaje)} ok />}
