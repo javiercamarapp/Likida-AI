@@ -1,0 +1,37 @@
+id: rfa-2026-2.2
+tipo: rfa
+jerarquia: 3
+instrumento: "Resolución de Facilidades Administrativas para 2026"
+articulo_o_regla: "2.2"
+titulo: "Facilidades de comprobación (deducción del 8%, 'gasto ciego')"
+citas_en_codigo: ["RFA 2026 regla 2.2"]
+texto_vigente: >
+  Los contribuyentes personas físicas o morales, dedicados exclusivamente al
+  autotransporte terrestre de carga federal ... podrán deducir hasta el equivalente
+  al 8 por ciento de los ingresos propios de su actividad, sin exceder de
+  $1,000,000.00 (un millón de pesos 00/100 M.N.) durante el ejercicio fiscal, sin la
+  necesidad de contar con documentación que reúna requisitos fiscales, siempre que:
+  ... III. El contribuyente realice el pago del ISR anual sobre el monto deducido
+  ..., aplicando la tasa del 16 por ciento. El impuesto anual pagado sobre dicho
+  monto se considerará como definitivo y no será acreditable ni deducible.
+  ---
+  Lo establecido en esta regla no será aplicable a los gastos que realicen los
+  contribuyentes por concepto de adquisición de combustibles para llevar a cabo su
+  actividad.
+fecha_publicacion: 2026-02-17
+fecha_vigencia_desde: 2026-02-18
+fecha_vigencia_hasta: 2026-12-31
+fuente_url: "https://sidof.segob.gob.mx/notas/docFuente/5780249"
+fuente_tipo: dof_oficial
+estado_verificacion: verificado_fuente_primaria
+cambio_de_numero: true
+version_anterior: rfa-2022-1.2
+nota_renumeracion: >
+  Era la regla "1.2" en la RFA 2022. El contenido (8%, tope de $1,000,000, 16%
+  definitivo) no cambió con la renumeración.
+advertencia: >
+  NO cubre combustible. La regla lo excluye expresamente. Prometerle a un contralor
+  que el diésel sin factura "entra en el 8%" es falso.
+verificado_por: "ola1 / 03-isr-facilidades.md"
+verificado_el: 2026-07-27
+usado_en_codigo: []

@@ -1,0 +1,28 @@
+id: lfpdppp-2025-art-26-fr-II
+tipo: ley
+jerarquia: 1
+instrumento: "Ley Federal de Protección de Datos Personales en Posesión de los Particulares"
+articulo_o_regla: "26"
+fraccion: "II"
+titulo: "Decisiones automatizadas — el humano en el circuito"
+citas_en_codigo: ["LFPDPPP 26-II"]
+texto_vigente: null
+fecha_publicacion: 2025-03-20
+fecha_vigencia_desde: 2025-03-21
+estado_verificacion: sin_verificar
+nota_verificacion: >
+  La síntesis de la ola 1 concluye que obliga a intervención humana en decisiones
+  automatizadas que afecten al titular. El texto NO se transcribió. PARA CERRAR:
+  bajar la LFPDPPP vigente (DOF 20-mar-2025) de diputados.gob.mx y transcribir el
+  artículo 26 completo, confirmando el alcance de la fracción II.
+contexto_verificado: >
+  La nueva LFPDPPP entró en vigor el 21-mar-2025. El INAI desapareció y sus
+  funciones pasaron a la Secretaría de Anticorrupción y Buen Gobierno. Los datos
+  financieros y patrimoniales exigen consentimiento EXPRESO, y ya no valen las
+  "finalidades análogas o compatibles".
+impacto_en_producto: >
+  Si aplica, el contralor no puede ser sustituido por el motor en la decisión final:
+  la bandeja de excepciones deja de ser una comodidad y pasa a ser un requisito.
+verificado_por: "ola1 / 11-datos-personales.md (contexto); artículo 26 sin transcribir"
+verificado_el: 2026-07-27
+usado_en_codigo: []

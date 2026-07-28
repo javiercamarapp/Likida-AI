@@ -1,0 +1,45 @@
+id: lisr-27-fr-III
+tipo: ley
+jerarquia: 1
+instrumento: "Ley del Impuesto sobre la Renta"
+citas_en_codigo: ["LISR 27-III"]
+articulo_o_regla: "27"
+fraccion: "III"
+texto_vigente: >
+  Estar amparadas con un comprobante fiscal y que los pagos cuyo monto exceda de
+  $2,000.00 se efectúen mediante transferencia electrónica de fondos desde cuentas
+  abiertas a nombre del contribuyente en instituciones que componen el sistema
+  financiero...; cheque nominativo de la cuenta del contribuyente, tarjeta de
+  crédito, de débito, de servicios, o los denominados monederos electrónicos
+  autorizados por el Servicio de Administración Tributaria.
+  ---
+  Tratándose de la adquisición de combustibles para vehículos marítimos, aéreos y
+  terrestres, el pago deberá efectuarse en la forma señalada en el párrafo anterior,
+  aun cuando la contraprestación de dichas adquisiciones no excedan de $2,000.00 y
+  en el comprobante fiscal deberá constar la información del permiso vigente,
+  expedido en los términos de la Ley de Hidrocarburos al proveedor del combustible
+  y que, en su caso, dicho permiso no se encuentre suspendido, al momento de la
+  expedición del comprobante fiscal.
+fecha_publicacion: null
+fecha_vigencia_hasta: null
+fuente_url: "https://mexico.justia.com/federales/leyes/ley-del-impuesto-sobre-la-renta/titulo-ii/capitulo-ii/seccion-i/"
+fuente_tipo: fuente_secundaria
+estado_verificacion: evidencia_corroborante
+nota_verificacion: >
+  El texto coincide entre Justia, SDV Asesores y la propia página del SAT de
+  preguntas sobre deducción de combustibles. NO se leyó en diputados.gob.mx.
+  PARA CERRAR: leer el PDF vigente de la LISR en diputados.gob.mx y confirmar
+  que la redacción del segundo párrafo no cambió en la reforma más reciente.
+excepciones_que_lo_modifican:
+  - rfa-2026-2.9    # carga federal: 15% en efectivo SÍ cumple
+  - rfa-2026-3.12   # pasaje y turismo foráneo
+  - rfa-2026-1.9    # agrícolas, silvícolas, ganaderas y pesqueras
+advertencia: >
+  NUNCA citar esta fracción sola para declarar no deducible un combustible pagado
+  en efectivo de una flota de carga federal. Sin la RFA 2.9 la afirmación es falsa
+  y le quita al cliente una deducción que la ley le concede.
+verificado_por: "ola1 / 03-isr-facilidades.md; verificador adversarial ola1"
+verificado_el: 2026-07-27
+usado_en_codigo:
+  - "cuadre/engine.ts — regla combustible_efectivo"
+  - "cuadre/engine.ts — regla efectivo_sobre_tope"

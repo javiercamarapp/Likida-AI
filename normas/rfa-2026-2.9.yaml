@@ -1,0 +1,47 @@
+id: rfa-2026-2.9
+tipo: rfa
+jerarquia: 3
+instrumento: "Resolución de Facilidades Administrativas para 2026"
+articulo_o_regla: "2.9"
+titulo: "Adquisición de combustibles"
+citas_en_codigo: ["RFA 2026 regla 2.9"]
+texto_vigente: >
+  Los contribuyentes personas físicas o morales, dedicados exclusivamente al
+  autotransporte terrestre de carga federal, que tributen conforme al Título II,
+  Capítulo VII o Título IV, Capítulo II, Sección I de la Ley del ISR, considerarán
+  cumplida la obligación establecida en el artículo 27, fracción III, segundo
+  párrafo de la Ley del ISR, cuando los pagos por consumo de combustible se
+  realicen con medios distintos a cheque nominativo de la cuenta del contribuyente;
+  tarjeta de crédito, de débito o de servicios; o monederos electrónicos autorizados
+  por el SAT, siempre que estos no excedan el 15 por ciento del total de los pagos
+  efectuados por consumo de combustible para realizar su actividad. Además, en el
+  comprobante fiscal deberá constar la información del permiso vigente, expedido de
+  acuerdo con la Ley de Hidrocarburos al proveedor del combustible y que, en su
+  caso, dicho permiso no se encuentre suspendido en el momento de la expedición del
+  comprobante fiscal.
+fecha_publicacion: 2026-02-17
+fecha_vigencia_desde: 2026-02-18
+fecha_vigencia_hasta: 2026-12-31
+fuente_url: "https://sidof.segob.gob.mx/notas/docFuente/5780249"
+fuente_tipo: dof_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Leído en el DOF (SIDOF) y corroborado en tres reproducciones independientes.
+  La Resolución entra en vigor el 18-feb-2026 y rige todo el ejercicio 2026.
+cambio_de_numero: false
+condiciones_de_aplicacion:
+  - "Dedicados EXCLUSIVAMENTE al autotransporte terrestre de carga federal"
+  - "Tributar en Título II Cap. VII (coordinados) o Título IV Cap. II Secc. I (PF act. empresarial)"
+  - "El efectivo no puede exceder el 15% del total pagado por combustible en el ejercicio"
+  - "El CFDI debe consignar el permiso vigente y no suspendido"
+limite_importante: >
+  Conserva la DEDUCCIÓN para ISR. NO habilita el acreditamiento del IEPS: son dos
+  beneficios distintos y el efectivo solo salva uno.
+verificado_por: "ola1 / 03-isr-facilidades.md; verificador adversarial (refutó la versión absoluta de LISR 27-III)"
+verificado_el: 2026-07-27
+usado_en_codigo:
+  - "cuadre/engine.ts — nota de combustible_efectivo"
+  - "cuadre/engine.ts — SIN_ACREDITAMIENTO (sigue sin acreditar IEPS)"
+pendiente_en_producto: >
+  El CONTADOR del 15% por ejercicio no existe todavía. Hoy el motor avisa que hay
+  que contarlo pero no lleva la cuenta.

@@ -1,0 +1,36 @@
+id: cff-29-A
+tipo: ley
+jerarquia: 1
+instrumento: "Código Fiscal de la Federación"
+articulo_o_regla: "29-A"
+titulo: "Requisitos de los comprobantes fiscales digitales"
+citas_en_codigo: ["CFF 29-A", "CFF 29 y 29-A"]
+texto_vigente: null
+estado_verificacion: evidencia_corroborante
+nota_verificacion: >
+  Los requisitos generales (RFC y régimen del emisor, folio y sello del SAT, lugar y
+  fecha, RFC del receptor, cantidad y clase, valor unitario, importe total) se
+  leyeron en el minisitio de Factura del SAT. El texto del artículo NO se transcribió
+  de diputados.gob.mx. PARA CERRAR: pegar el texto vigente.
+reformas_relevantes:
+  - fecha: 2026-11-07
+    que_cambio: >
+      El decreto del DOF adiciona el inciso f) a la fracción V: número de permiso
+      vigente de la CNE para quienes distribuyan o enajenen hidrocarburos o
+      petrolíferos. Su Transitorio Tercero dispone que las referencias a la CNE
+      incluyen a la CRE.
+    verificado_por: "verificador adversarial ola1 (refutación 1)"
+  - fecha: 2026-11-07
+    que_cambio: >
+      Se reformó el cuarto párrafo: los CFDI se cancelan a más tardar en el mes en
+      que se deba presentar la declaración anual del ISR del ejercicio en que se
+      expidieron.
+    condicion_suspensiva: >
+      OJO: la RMF 2026 sujeta la entrada en vigor de las modificaciones de
+      cancelación a que el SAT publique el "Complemento Concepto" y transcurran 30
+      días naturales (regla 2.7.1.8, 2º párrafo). Un motor que hoy impida cancelar
+      por esta causa estaría aplicando una regla que puede NO estar vigente.
+    verificado_por: "verificador adversarial ola1 (refutación 2)"
+verificado_el: 2026-07-27
+usado_en_codigo:
+  - "intake/cfdi.ts — validación de UUID y RFC"

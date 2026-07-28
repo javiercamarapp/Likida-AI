@@ -1,0 +1,28 @@
+id: lisr-28-fr-V
+tipo: ley
+jerarquia: 1
+instrumento: "Ley del Impuesto sobre la Renta"
+articulo_o_regla: "28"
+fraccion: "V"
+titulo: "Viáticos y gastos de viaje — tope de alimentación"
+citas_en_codigo: ["LISR 28-V"]
+texto_vigente: null
+estado_verificacion: sin_verificar
+nota_verificacion: >
+  El tope de $750 diarios en territorio nacional para ALIMENTACIÓN circula en todo
+  el material del sector, pero NO se leyó el texto del artículo en esta
+  investigación. PARA CERRAR: bajar la LISR de diputados.gob.mx, transcribir la
+  fracción V y confirmar (a) el importe vigente 2026, (b) que el tope es por
+  beneficiario y por día, (c) que el hospedaje NACIONAL efectivamente no tiene tope,
+  y (d) la condición de la faja de 50 km del RLISR 57.
+contenido_asumido_en_el_codigo: >
+  Tope de $750 por día y por beneficiario, SOLO para alimentación en territorio
+  nacional. El hospedaje nacional NO tiene tope. El transporte tampoco.
+advertencia: >
+  El motor YA aplica este tope y marca el excedente como no deducible. Es una cifra
+  que el producto imprime sostenida por una ficha SIN VERIFICAR: es el pendiente
+  más urgente de esta carpeta.
+verificado_por: null
+usado_en_codigo:
+  - "config.ts — estimulos.viaticosTopeFiscalDiarioMxn"
+  - "cuadre/engine.ts — regla viatico_excede_fiscal (agrupada por día)"

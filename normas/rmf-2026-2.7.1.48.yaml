@@ -1,0 +1,34 @@
+id: rmf-2026-2.7.1.48
+tipo: regla_general
+jerarquia: 3
+instrumento: "Resolución Miscelánea Fiscal para 2026"
+articulo_o_regla: "2.7.1.48"
+titulo: "Complemento Concepto para la facturación de Hidrocarburos y Petrolíferos"
+citas_en_codigo: ["2.7.1.48"]
+texto_vigente: >
+  Para los efectos de los artículos 29 y 29-A del CFF, los contribuyentes que
+  enajenen gasolinas y diésel a que hace referencia la regla 2.6.1.1., fracción II,
+  deben incorporar en el CFDI que se emita, el "Complemento Concepto para la
+  facturación de Hidrocarburos y Petrolíferos", que al efecto publique el SAT en su
+  Portal.
+fecha_publicacion: 2026-07-09
+fecha_vigencia_desde: null
+fuente_url: "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/rmf/1aRM_RMF2026.pdf"
+fuente_tipo: sat_oficial
+estado_verificacion: evidencia_corroborante
+nota_verificacion: >
+  La fecha exacta de EXIGIBILIDAD no está confirmada. La regla, reformada el
+  09-jul-2026, sigue redactada en futuro ("que al efecto publique el SAT"), así que
+  la obligación puede estar latente y no vigente.
+  El código usa 2026-04-24 como `vigenteDesde` y ESA FECHA NO ESTÁ RESPALDADA por
+  esta ficha. PARA CERRAR: confirmar en el Portal del SAT la fecha de publicación
+  del complemento.
+advertencia: >
+  Cuatro documentos de la ola 1 se cerraron SIN leer la Primera Resolución de
+  Modificaciones (DOF 09-jul-2026), que modificó 28 reglas, agregó 5 y derogó 1.
+  Dos de las agregadas tocan el estímulo del diésel y la factura de las gasolineras.
+verificado_por: "ola2 / 11-huecos.md §2.4, 10-contradicciones.md"
+verificado_el: 2026-07-27
+usado_en_codigo:
+  - "config.ts — hidrocarburos.vigenteDesde (fecha SIN respaldo)"
+  - "cuadre/engine.ts — regla complemento_hidrocarburos"
