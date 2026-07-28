@@ -55,18 +55,21 @@ describe('crearPresupuesto', () => {
     // presupuesto y se lleva por delante al agente.
     let ahora = 0;
     const p = crearPresupuesto(60_000, () => ahora);
-    ahora = 47_000;                       // quedan 13 - margen = 5s
-    expect(p.acotar(20_000)).toBe(5_000);
-    expect(p.acotar(2_000)).toBe(2_000);  // si pide menos de lo que hay, se respeta
+    ahora = 47_000;
+    const quedan = 60_000 - MARGEN_CIERRE_MS - 47_000;
+    expect(p.acotar(20_000)).toBe(quedan);       // pide 20s, se le dan los que hay
+    expect(p.acotar(quedan - 1_000)).toBe(quedan - 1_000);  // si pide menos, se respeta
   });
 
   it('alcanza() responde si cabe una etapa que se sabe cara', () => {
     let ahora = 0;
     const p = crearPresupuesto(60_000, () => ahora);
     expect(p.alcanza(30_000)).toBe(true);
-    ahora = 40_000;                       // quedan 20 - margen = 12s
+    ahora = 40_000;
+    const quedan = 60_000 - MARGEN_CIERRE_MS - 40_000;
     expect(p.alcanza(30_000)).toBe(false);
-    expect(p.alcanza(10_000)).toBe(true);
+    expect(p.alcanza(quedan)).toBe(true);
+    expect(p.alcanza(quedan + 1)).toBe(false);
   });
 });
 
