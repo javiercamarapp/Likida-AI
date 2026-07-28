@@ -630,15 +630,34 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     }
 
     if (closed) {
+      // `guardar_liquidacion` devuelve `pdf_generado` y ese dato se tiraba. Si el
+      // PDF no se generó —o el upload a storage falló— se pedía igual una URL
+      // firmada de un objeto que no existe: `createSignedUrl` no lanza, devuelve
+      // `{ data: null, error }`, el error se descartaba en el destructuring, no
+      // había `else` y el `catch` nunca se disparaba. El operador se queda
+      // esperando el documento que el prompt le prometió, y en los logs no hay
+      // NADA. En el demo es el paso 3 del guion fallando en silencio.
+      const guardado = agentTools.find((t) => t.toolName === 'guardar_liquidacion' && !t.error);
+      const pdfGenerado = Boolean((guardado?.result as { pdf_generado?: boolean } | undefined)?.pdf_generado);
       try {
+        if (!pdfGenerado) throw new Error('la tool reportó pdf_generado=false');
         const path = `${op.tenantId}/${viajeId}.pdf`;
-        const { data } = await supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 3600);
-        if (data?.signedUrl) {
-          await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
-          await registrarCostoWhatsApp(op.tenantId, viajeId);
-        }
+        const { data, error } = await supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 3600);
+        if (error || !data?.signedUrl) throw new Error(error?.message ?? 'storage no devolvió URL firmada');
+        await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
+        await registrarCostoWhatsApp(op.tenantId, viajeId);
       } catch (e) {
-        logger.warn('pdf.send', { err: e instanceof Error ? e.message : String(e) });
+        // Ruidoso a propósito: la liquidación SÍ quedó cerrada en la base, así que
+        // esto no es recuperable por reintento y nadie lo va a notar salvo por el log.
+        logger.error('pdf.no_entregado', {
+          tenant: op.tenantId, viaje: viajeId, pdfGenerado,
+          err: e instanceof Error ? e.message : String(e),
+        });
+        // Y se le dice al operador, en vez de dejarlo esperando: el cierre es
+        // real, lo que falta es el papel.
+        try {
+          await say('Tu liquidación ya quedó cerrada ✅, pero no pude generarte el PDF. Tu contralor ya la tiene en el panel; si necesitas el documento, pídeselo. 🙏');
+        } catch { /* best-effort */ }
       }
     }
 
