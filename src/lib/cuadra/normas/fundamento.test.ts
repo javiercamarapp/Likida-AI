@@ -290,8 +290,23 @@ describe('lo que el arreglo NO debe romper (regresión de la ronda 3)', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('una cita inventada se detecta aunque no traiga la palabra "artículo"', () => {
-  it('sigla DESPUÉS del número: "27-III LISR"', () => {
-    expect(citasEnTexto('No es deducible: 27-III LISR.')).toContain('DESCONOCIDA');
+  // CORREGIDA EN LA AUDITORÍA 6. Esta prueba usaba como ejemplo de "cita
+  // inventada" una cita a una norma que SÍ está en el índice, y exigía que
+  // saliera `DESCONOCIDA`. Eso no era la protección: era el bug. `27-III LISR`
+  // es LISR 27-III escrito al revés, y tratarlo como desconocido lo BORRABA del
+  // mensaje aunque la tool lo hubiera devuelto ese mismo turno.
+  //
+  // Lo que la prueba quería fijar —que esta forma no pase inadvertida— se fija
+  // mejor abajo: sin permiso se quita igual, y ahora el log dice QUÉ norma se
+  // citó sin autorización en vez de un genérico "DESCONOCIDA".
+  it('sigla DESPUÉS del número: "27-III LISR" se atribuye a su norma', () => {
+    expect(citasEnTexto('No es deducible: 27-III LISR.')).toContain('lisr-27-fr-III');
+  });
+
+  it('y sin permiso se quita igual, nombrando la norma en el log', () => {
+    const r = guardiaFundamento('No es deducible: 27-III LISR.', []);
+    expect(r.forzado).toBe(true);
+    expect(r.quitadas).toContain('lisr-27-fr-III');
   });
 
   it('número con sufijo junto al nombre de la ley: "45-Z de la Ley del ISR"', () => {
