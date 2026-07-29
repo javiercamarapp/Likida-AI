@@ -733,7 +733,13 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // que la guardia no adivina, COTEJA. Va después del fundamento y antes de
     // `say` porque es lo último que puede desmentir el texto.
     if (!textoDeterminista) {
-      const est = guardiaEstado(reply, { cerro: closed, entrego: false });
+      // `entrego` NO es `false` aquí, y esa fue la regresión de la auditoría 6:
+      // el PDF se intenta 30 líneas más abajo, así que en este punto el envío
+      // está PENDIENTE, no descartado. Con `false` la guardia leía como mentira
+      // cualquier pretérito del modelo y sustituía el mensaje por "todavía no he
+      // cerrado tu liquidación" — justo antes de mandar el PDF de la liquidación
+      // cerrada. Ver `EstadoReal.entrego`.
+      const est = guardiaEstado(reply, { cerro: closed, entrego: closed ? 'pendiente' : false });
       if (est.forzado) {
         logger.error('agent.estado_falso', { viaje: viajeId, tenant: op.tenantId, motivos: est.motivos });
         reply = est.reply;

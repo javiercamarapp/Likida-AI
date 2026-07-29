@@ -65,3 +65,71 @@ describe('lo que NO es una afirmación de estado', () => {
     });
   }
 });
+
+// ── AUDITORÍA 6 · CRÍTICO del rubro agéntico ────────────────────────────────
+//
+// La guardia escrita para impedir que el bot se contradiga PRODUCÍA la
+// contradicción, en el camino más transitado que hay: el cierre que sí funciona.
+//
+// `processor.ts` la llamaba con `entrego: false` FIJO, siempre, porque en ese
+// punto el PDF todavía no se intenta —eso ocurre 30 líneas después—. Así que
+// cualquier pretérito del modelo ("ya te envié tu liquidación"), que el prompt
+// nunca prohibió, se leía como mentira. Y como la guardia solo reescribe el
+// texto sin tocar `closed`, el bloque del PDF corría igual: el operador recibía
+// "Todavía no he cerrado tu liquidación" e inmediatamente después el PDF de su
+// liquidación cerrada.
+//
+// Las pruebas de arriba no lo vieron porque usan `SI_CERRO = {cerro:true,
+// entrego:true}`, un estado que el cableado NUNCA produce.
+//
+// Dos defectos, y hacen falta los dos arreglos:
+//   1. "aún no lo he intentado en este turno" ≠ "no va a pasar" → `'pendiente'`.
+//   2. Un solo texto de reemplazo para los dos motivos: negaba el cierre incluso
+//      cuando el cierre SÍ había ocurrido.
+
+const CERRO_PDF_PENDIENTE = { cerro: true, entrego: 'pendiente' as const };
+
+describe('cierre REAL con el PDF todavía por mandar (el caso del demo)', () => {
+  const enPreterito = [
+    'Comprobaste $4,850.00 contra un anticipo de $5,000.00. Te quedan $150.00 a tu favor. Ya te envié tu liquidación, en un momento te llega el PDF. 🚛',
+    'Quedó cuadrado tu viaje: comprobaste $4,850 contra $5,000 de anticipo. Ya te la mandé, checa tu liquidación en PDF.',
+    'Listo, ya te lo mandé.',
+  ];
+
+  for (const t of enPreterito) {
+    it(`NO tacha un mensaje correcto: ${t.slice(0, 45)}…`, () => {
+      const r = guardiaEstado(t, CERRO_PDF_PENDIENTE);
+      // El envío está a punto de ocurrir. Si falla, el `catch` del PDF ya le dice
+      // la verdad al operador ("no pude generarte el PDF"). Tacharlo aquí cambia
+      // un tiempo verbal impreciso por una contradicción abierta.
+      expect(r.forzado, 'un cierre real no se puede desmentir').toBe(false);
+      expect(r.reply).toBe(t);
+    });
+  }
+
+  it('pero sigue tachando la mentira de cierre aunque el PDF esté pendiente', () => {
+    // `cerro: false` no puede darse junto a un PDF pendiente en el cableado de
+    // hoy, pero la guardia no debe depender de eso para ser correcta.
+    const r = guardiaEstado('Ya quedó cerrada tu liquidación ✅', { cerro: false, entrego: 'pendiente' });
+    expect(r.forzado).toBe(true);
+    expect(r.motivos).toContain('cierre_no_ocurrido');
+  });
+});
+
+describe('el texto de reemplazo no puede negar un cierre que SÍ ocurrió', () => {
+  it('con el cierre real y el envío fallido, no dice "todavía no he cerrado"', () => {
+    const r = guardiaEstado('Ya te mandé tu liquidación.', { cerro: true, entrego: false });
+    expect(r.forzado).toBe(true);
+    expect(r.motivos).toEqual(['envio_no_ocurrido']);
+    // El defecto: un solo texto para los dos motivos. Negar el cierre aquí es
+    // mentir en la dirección contraria.
+    expect(r.reply).not.toContain('Todavía no he cerrado');
+    expect(r.reply.toLowerCase()).toContain('cerrada');
+  });
+
+  it('sin cierre, el texto sigue siendo el que manda a escribir *listo*', () => {
+    const r = guardiaEstado('Ya te lo cerré.', { cerro: false, entrego: false });
+    expect(r.forzado).toBe(true);
+    expect(r.reply).toContain('Todavía no he cerrado');
+  });
+});

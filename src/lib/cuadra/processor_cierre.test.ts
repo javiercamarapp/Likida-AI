@@ -269,3 +269,71 @@ describe('un claim que no se pudo determinar no puede tragarse el mensaje', () =
     expect(logger.info).not.toHaveBeenCalledWith('wa.duplicate', expect.anything());
   });
 });
+
+// ── AUDITORÍA 6 · CRÍTICO (rubro agéntico) + CRÍTICO (rubro pruebas) ────────
+//
+// `guardiaEstado` tenía 17 pruebas como función pura y CERO sobre su cableado.
+// El bug vivía justo ahí: `processor.ts` la llamaba con `entrego: false` fijo,
+// así que un cierre REAL narrado en pretérito se tachaba y el operador recibía
+// "Todavía no he cerrado tu liquidación" seguido del PDF de su liquidación
+// cerrada. Las pruebas puras no podían verlo porque usaban `entrego: true`, un
+// estado que el cableado nunca produce.
+//
+// Es la quinta vez en este repo que un mecanismo correcto falla por el cable.
+// Por eso estas pruebas van por `processInbound`, no por la guardia.
+
+describe('el cierre real narrado en pretérito no se desmiente a sí mismo', () => {
+  beforeEach(() => {
+    createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://x/liq.pdf' }, error: null });
+  });
+
+  const enPreterito = {
+    ...cierre(true),
+    finalText: 'Comprobaste $4,850.00 contra un anticipo de $5,000.00. Te quedan $150.00 a tu favor. Ya te envié tu liquidación, en un momento te llega el PDF. 🚛',
+  };
+
+  it('NUNCA le dice "todavía no he cerrado" mientras le manda el PDF', async () => {
+    runAgent.mockResolvedValue(enPreterito);
+    await processInbound(listo);
+    // La contradicción que la auditoría 6 dio por viva: el texto negando el
+    // cierre y el documento de ese mismo cierre saliendo a continuación.
+    expect(textos().join(' ')).not.toContain('Todavía no he cerrado');
+    expect(documentos()).toHaveLength(1);
+  });
+
+  it('no registra un estado falso que no ocurrió', async () => {
+    runAgent.mockResolvedValue(enPreterito);
+    await processInbound(listo);
+    expect(logger.error).not.toHaveBeenCalledWith('agent.estado_falso', expect.anything());
+  });
+
+  // POR QUÉ NO OCURRÍA, y es lo que el hallazgo no vio: en todo cierre real
+  // `guardiaCifras` sustituye el texto (`guardia.ts:37-38` cuenta
+  // `guardar_liquidacion` como cuadre, y la línea 79 devuelve `forzado: true`
+  // SIEMPRE que hubo cuadre). Eso deja `textoDeterminista` en true y el
+  // `if (!textoDeterminista)` de `processor.ts` impide que `guardiaEstado`
+  // corra. La rama del falso positivo era inalcanzable.
+  //
+  // Esta prueba fija ese acoplamiento, que hasta hoy no lo fijaba nadie: si
+  // alguien hace que `guardiaCifras` deje de forzar en el cierre, `guardiaEstado`
+  // empieza a correr con `cerro=true` y este archivo lo dice de inmediato.
+  it('en el cierre el texto lo escribe el motor, no el modelo', async () => {
+    runAgent.mockResolvedValue(enPreterito);
+    await processInbound(listo);
+    expect(textos()[0]).not.toBe(enPreterito.finalText);
+    expect(textos()[0]).toContain('Listo, cuadré tu viaje');
+  });
+
+  it('pero SÍ desmiente el cierre inventado, que es para lo que existe la guardia', async () => {
+    // Sin `guardar_liquidacion` en las tool calls, `closed` es false: el modelo
+    // está afirmando un hecho que nadie ejecutó.
+    runAgent.mockResolvedValue({
+      finalText: 'Ya quedó cerrada tu liquidación ✅. En un momento te llega el PDF.',
+      toolCalls: [], model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0,
+    });
+    await processInbound(listo);
+    expect(textos()[0]).toContain('Todavía no he cerrado');
+    expect(documentos()).toHaveLength(0);
+    expect(logger.error).toHaveBeenCalledWith('agent.estado_falso', expect.anything());
+  });
+});
