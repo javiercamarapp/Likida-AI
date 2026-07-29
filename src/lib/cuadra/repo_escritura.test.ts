@@ -86,10 +86,16 @@ describe('addGasto — el mapeo a columnas', () => {
 describe('saveLiquidacion — el cierre', () => {
   beforeEach(() => { rpc.mockReset(); rpc.mockResolvedValue({ data: 'liq-1', error: null }); });
 
+  // AUDITORÍA 7 · CRÍTICO del rubro de pruebas: `iepsAcreditable` valía 0 y
+  // `diferencias` iba vacío, así que aunque se hubieran mirado, un parámetro
+  // perdido habría dado el mismo 0 y la prueba no habría dicho nada. Los valores
+  // de este fixture son distintos entre sí A PROPÓSITO: así una permutación de
+  // parámetros —mandar el IVA donde va el IEPS— también se ve.
   const liq: Omit<Liquidacion, 'id' | 'creadaEn'> = {
     viajeId: 'v1', totalComprobado: 4812.5, totalAnticipo: 5000, diferencia: 187.5,
     estatus: 'cuadrada', totalDeducible: 4812.5, totalNoDeducible: 0, totalPorConfirmar: 0,
-    diferencias: [], gastos: [], iepsAcreditable: 0, litrosDieselAcreditables: 255,
+    diferencias: [{ tipo: 'efectivo_sobre_tope', nota: 'pago en efectivo de $2,400', monto: 2400 }],
+    gastos: [], iepsAcreditable: 1477.35, litrosDieselAcreditables: 255,
     ivaAcreditable: 663.79, peajeAcreditable: 240,
   };
 
@@ -101,13 +107,38 @@ describe('saveLiquidacion — el cierre', () => {
     expect(rpc).toHaveBeenCalledWith('guardar_liquidacion_tx', expect.any(Object));
   });
 
-  it('manda cada total a su parámetro', async () => {
-    await saveLiquidacion('t1', liq);
+  // AUDITORÍA 7 · CRÍTICO del rubro de pruebas: esto miraba 8 de los 12
+  // parámetros que `saveLiquidacion` manda. Los cuatro que faltaban eran
+  // `p_diferencias`, `p_ieps`, `p_litros_diesel` y `p_pdf_url` — es decir, las
+  // dos cifras FISCALES que el producto vende, el motivo por el que una
+  // liquidación no cuadra, y la liga al PDF archivado.
+  //
+  // Verificado: cambiando `p_litros_diesel` por un `0` fijo en repo.ts, los 255
+  // litros de diésel del viaje se perdían al escribirse y las 10 pruebas de este
+  // archivo seguían verdes. El acreditamiento del IEPS del cliente sale de ese
+  // número.
+  //
+  // Se listan los 12 a propósito: `toMatchObject` solo mira las llaves que se le
+  // nombran, así que la única forma de que un parámetro nuevo no nazca ciego es
+  // que estén todos escritos.
+  it('manda los DOCE parámetros a su lugar, no solo los totales', async () => {
+    await saveLiquidacion('t1', liq, 'tenant-1/v1.pdf');
     expect(rpc.mock.calls[0][1]).toMatchObject({
       p_tenant: 't1', p_viaje: 'v1',
       p_total_comprobado: 4812.5, p_total_anticipo: 5000, p_diferencia: 187.5,
       p_estatus: 'cuadrada', p_iva: 663.79, p_peaje: 240,
+      p_ieps: 1477.35,
+      p_litros_diesel: 255,
+      p_diferencias: [{ tipo: 'efectivo_sobre_tope', nota: 'pago en efectivo de $2,400', monto: 2400 }],
+      p_pdf_url: 'tenant-1/v1.pdf',
     });
+  });
+
+  it('sin PDF, la liga va null explícito y no undefined', async () => {
+    // `undefined` viaja como ausencia en JSON y la RPC lo recibiría como su
+    // default, no como "no hubo PDF".
+    await saveLiquidacion('t1', liq);
+    expect(rpc.mock.calls[0][1]).toMatchObject({ p_pdf_url: null });
   });
 
   it('devuelve el id que da la RPC', async () => {
