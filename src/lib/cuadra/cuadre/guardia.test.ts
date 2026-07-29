@@ -48,7 +48,36 @@ describe('guardiaCifras', () => {
   it('cuadrar_viaje llamada + cifras: reemplaza por el resumen autoritativo', async () => {
     const r = await guardiaCifras('sobró 999', [tc('cuadrar_viaje')], 't', 'v');
     expect(r.forzado).toBe(true);
-    expect(r.reply).toContain('Listo, cuadré'); // afirma cierre porque sí cuadró
+    expect(cuadrarDesdeDB).toHaveBeenCalledWith('t', 'v');
+  });
+
+  // ── AUDITORÍA 7 · CRÍTICO del rubro agéntico ───────────────────────────────
+  // `cuadro` responde "¿hay números que respaldar?" y se estaba usando para
+  // responder otra pregunta distinta: "¿se CERRÓ?". Un turno que solo llama
+  // `cuadrar_viaje` CALCULA pero no cierra —el viaje sigue `abierto` y la tabla
+  // `liquidacion` está vacía—, y aun así el encabezado afirmaba "Listo, cuadré
+  // tu viaje". El comentario de `resumen.ts:48-49` ya declaraba el contrato que
+  // el código violaba: el encabezado neutral es para cuando la guardia sólo
+  // muestra el cuadre sin cierre confirmado.
+  //
+  // La versión anterior de esta prueba fijaba el comportamiento MALO
+  // ("afirma cierre porque sí cuadró"), así que la suite entera no podía verlo.
+  it('cuadrar_viaje SIN guardar_liquidacion: NO afirma el cierre', async () => {
+    const r = await guardiaCifras('sobró 999', [tc('cuadrar_viaje')], 't', 'v');
+    expect(r.forzado).toBe(true);
+    expect(r.reply).toContain('Este es el cuadre');
+    expect(r.reply).not.toContain('Listo, cuadré');
+  });
+
+  it('guardar_liquidacion: ahí sí se afirma el cierre', async () => {
+    const r = await guardiaCifras('sobró 999', [tc('guardar_liquidacion')], 't', 'v');
+    expect(r.forzado).toBe(true);
+    expect(r.reply).toContain('Listo, cuadré');
+  });
+
+  it('guardar_liquidacion CON error: no afirma el cierre', async () => {
+    const r = await guardiaCifras('sobró 999', [tc('guardar_liquidacion', new Error('boom'))], 't', 'v');
+    expect(r.reply).not.toContain('Listo, cuadré');
   });
 
   it('solo consultar_politica + cifras (topes): respeta el texto', async () => {
