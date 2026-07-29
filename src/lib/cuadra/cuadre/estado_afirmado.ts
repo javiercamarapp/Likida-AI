@@ -63,8 +63,26 @@ const AFIRMA_ENVIO: RegExp[] = [
 export interface EstadoReal {
   /** El servidor cerró la liquidación en este turno. */
   cerro: boolean;
-  /** El servidor mandó el documento en este turno. */
-  entrego: boolean;
+  /**
+   * El servidor mandó el documento en este turno.
+   *
+   * `'pendiente'` NO es un adorno: es el estado en el que esta guardia corre
+   * SIEMPRE en producción. El texto se manda (`say`) antes de intentar el PDF,
+   * así que en el punto de la llamada el envío no ha ocurrido *todavía* y no se
+   * puede saber si ocurrirá. La primera versión pasaba `false` ahí, y `false`
+   * significa "no va a pasar": cualquier pretérito del modelo —"ya te envié tu
+   * liquidación", que el prompt nunca prohibió— se leía como mentira. Como la
+   * guardia solo reescribe el texto y no toca `closed`, el PDF se mandaba igual:
+   * el operador recibía "Todavía no he cerrado tu liquidación" y acto seguido el
+   * PDF de su liquidación cerrada. La guardia contra contradicciones produciendo
+   * una, en el camino más transitado que existe.
+   *
+   * Con `'pendiente'` no se desmiente nada, y no hace falta: si el PDF falla, el
+   * `catch` de `processor.ts` ya le dice la verdad ("no pude generarte el PDF").
+   * Un tiempo verbal impreciso que se vuelve cierto en dos segundos es un
+   * problema mucho menor que un mensaje que se contradice a sí mismo.
+   */
+  entrego: boolean | 'pendiente';
 }
 
 export interface ResultadoEstado {
@@ -85,11 +103,20 @@ export interface ResultadoEstado {
 export function guardiaEstado(reply: string, real: EstadoReal): ResultadoEstado {
   const motivos: string[] = [];
   if (!real.cerro && AFIRMA_CIERRE.some((r) => r.test(reply))) motivos.push('cierre_no_ocurrido');
-  if (!real.entrego && AFIRMA_ENVIO.some((r) => r.test(reply))) motivos.push('envio_no_ocurrido');
+  // `=== false` y no `!real.entrego`: `'pendiente'` es truthy, pero apoyarse en
+  // eso dejaría el caso correcto dependiendo de una casualidad del lenguaje.
+  if (real.entrego === false && AFIRMA_ENVIO.some((r) => r.test(reply))) motivos.push('envio_no_ocurrido');
   if (motivos.length === 0) return { reply, forzado: false, motivos: [] };
 
+  // EL TEXTO TIENE QUE CORRESPONDER AL MOTIVO. Había uno solo para los dos, así
+  // que desmentir un envío negaba además el cierre — mentira en la dirección
+  // contraria, y sobre el hecho que más le importa al operador.
+  const reemplazo = real.cerro
+    ? 'Tu liquidación ya quedó cerrada ✅, pero todavía no te he mandado el PDF. Si no te llega en un momento, pídeselo a tu contralor: él ya la tiene en el panel. 🙏'
+    : 'Todavía no he cerrado tu liquidación. Cuando ya no te falte ningún comprobante, escribe *listo* y la cierro. 🚛';
+
   return {
-    reply: 'Todavía no he cerrado tu liquidación. Cuando ya no te falte ningún comprobante, escribe *listo* y la cierro. 🚛',
+    reply: reemplazo,
     forzado: true,
     motivos,
   };
