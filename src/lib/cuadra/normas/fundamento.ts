@@ -77,7 +77,60 @@ function patronesDe(id: string): RegExp[] {
     const salvoOtraLey = ajenos.length ? `(?![^.]{0,45}(?:${ajenos.map(esc).join('|')}))` : '';
     if (n.fraccion) out.push(new RegExp(`(?:art[íi]culo|art\\.?|regla)\\s*${art}${fr}${FIN_DE_NUMERO}${salvoOtraLey}`, 'i'));
   }
+
+  // ── LA SIGLA DESPUÉS DEL NÚMERO: "27-III LISR", "20-A LIF 2026" ────────────
+  //
+  // AUDITORÍA 6, rubro agéntico: esta forma la DETECTA `FORMA_DE_CITA` (su
+  // penúltima alternativa) y no la reconocía nadie aquí. El efecto no era dejar
+  // pasar una cita inventada, era BORRAR una legítima: la cita permitida no
+  // entraba en `citadas`, caía en `CITA_DESCONOCIDA` por descarte, y la limpieza
+  // la quitaba. "Te aplica el estímulo conforme al 20-A LIF 2026." salía como
+  // "Te aplica el estímulo conforme al." — el estímulo del diésel, que es la
+  // función que más vende el producto, sin artículo y sin ley.
+  //
+  // Se deriva de `citas_en_codigo`, NO de `articulo_o_regla`, y esa es la parte
+  // que importa: `articulo_o_regla` es prosa para un humano —el del LIF dice
+  // "20, apartado A (estímulos fiscales)"— y jamás casaría contra "20-A". Las
+  // citas en código ya traen el token exacto con el que se cita en la calle.
+  //
+  // Que salga de la MISMA fuente es deliberado: la causa raíz que el propio
+  // commit de ayer identificó son "dos catálogos que hay que sincronizar a
+  // mano". Añadir aquí una cuarta lista escrita a mano repetiría el error que
+  // este arreglo cierra.
+  for (const cita of n.citas) {
+    const num = numeroCitable(cita);
+    if (!num) continue;
+    if (!alias.length) continue;
+    const quien = `(?:${alias.map(esc).join('|')})`;
+    // MISMA DEFENSA QUE LA FORMA A SECAS, y hace falta: el número no identifica
+    // la norma. Sin esto, "el 27-III CFF y también la LISR" casaría —la ventana
+    // llega de sobra— y este patrón APROBARÍA una cita al Código Fiscal teniendo
+    // permiso solo para la LISR. Certificar una cita ajena es peor que borrarla.
+    const ajenos = ALIAS_DE_INSTRUMENTO.filter((a) => !alias.includes(a));
+    const noAjena = ajenos.length ? `(?![^.]{0,20}(?:${ajenos.map(esc).join('|')}))` : '';
+    // Ventana corta y LAZY, por la misma razón que arriba: liga el número al
+    // instrumento MÁS CERCANO. "el 20-A LIF 2026" y "el 27-III de la LISR".
+    out.push(new RegExp(`(?<![\\w-])${esc(num)}${FIN_DE_NUMERO}${noAjena}[^.]{0,20}?${quien}`, 'i'));
+  }
   return out;
+}
+
+/**
+ * El token con el que una cita se escribe en la calle: "LISR 27-III" → `27-III`,
+ * "LIF 2026 Art. 20-A" → `20-A`, "LIF Art. 20-A fr. IV" → `20-A`.
+ *
+ * Dos formas, y el orden importa: si la cita nombra el artículo ("Art.",
+ * "regla"), el número es el que va DESPUÉS —en "LIF 2026 Art. 20-A" el primer
+ * número es el AÑO, no el artículo—. Si no lo nombra, el número es el último,
+ * porque lo que va antes es la sigla ("RFA 2026 2.9").
+ */
+function numeroCitable(cita: string): string | null {
+  const TOKEN = /\d+(?:[.\-][A-Za-zÁ-Úá-ú0-9]+)*/g;
+  const marca = /\b(?:art[íi]culo|art\.?|regla)\s*/i.exec(cita);
+  const resto = marca ? cita.slice(marca.index + marca[0].length) : cita;
+  const tokens = resto.match(TOKEN);
+  if (!tokens?.length) return null;
+  return marca ? tokens[0] : tokens[tokens.length - 1];
 }
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
