@@ -141,7 +141,12 @@ async function atenderPrivacidad(tenantId: string, operadorId: string, telefono:
  * El obligado es la flota, no Likida; pero quien ejecuta el tratamiento es este
  * código, y no puede ejecutarlo a ciegas.
  */
-async function ponerAvisoADisposicion(
+// Se exporta para poder probarla: es la función que decide si HAY tratamiento,
+// y su rama de fallo —liberar la constancia cuando Meta no entregó— no la
+// ejecutaba ninguna prueba (auditoría 6, rubro pruebas). Llegar a ella por
+// `processInbound` exige montar la cadena entera, y entonces lo que se mide es
+// la cadena, no esta decisión.
+export async function ponerAvisoADisposicion(
   tenantId: string,
   operadorId: string,
   telefono: string,
