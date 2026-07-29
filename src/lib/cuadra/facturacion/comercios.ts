@@ -151,31 +151,53 @@ export const COMERCIOS: Comercio[] = [
   {
     clave: 'g500',
     nombre: 'G500',
-    portal: 'https://g500network.com/facturacion-en-linea/',
-    // G500 ES UNA RED DE FRANQUICIAS CON PORTALES REGIONALES, y el ticket lo
-    // dice él mismo. Uno de G500 MEGASUR (Mérida, 29-jul-2026) imprime
-    // "FACTURA FACIL EN NUESTRA PAGINA WEB WWW.G500SURESTE.COM.MX", no el
-    // portal de la red. Mandar al operador al genérico es mandarlo a un sitio
-    // donde su folio puede no existir.
+    // ── VERIFICADO EN VIVO CONTRA EL PORTAL, 29-jul-2026 ────────────────────
     //
-    // El portal de arriba se conserva como default porque es el de la red; los
-    // regionales conocidos se reconocen abajo para que la identificación no
-    // falle. Cuando haya tickets de más regiones, esto pide un campo
+    // Facturando un ticket real de G500 MEGASUR (Mérida, folio 1000724). Tres
+    // saltos hasta el portal de verdad, y el catálogo se quedaba en el primero:
+    //
+    //   g500network.com  (el de la red, lo que teníamos)
+    //   g500sureste.com.mx  (lo que imprime el ticket)  → solo redirige
+    //   megasur.com.mx:8029  ← AQUÍ se factura
+    //
+    // G500 es una red de franquicias y cada región monta su propio sistema. El
+    // de la red se conserva como fallback porque no todas las estaciones son
+    // del sureste; cuando aparezca un ticket de otra región, esto pide un campo
     // `portalPorRegion` en vez de una lista de dominios.
+    portal: 'http://megasur.com.mx:8029/',
+    // NO ES "CUENTA" EN EL SENTIDO HABITUAL. Se entra con el RFC y nada más:
+    // sin contraseña. Si el RFC no está dado de alta hay un "Regístrate", pero
+    // los datos fiscales quedan guardados del primer registro y en las
+    // siguientes facturas solo se confirman. Para el operador en carretera esto
+    // es la diferencia entre poder facturar desde el celular y no poder.
     requiereCuenta: true,
     plazo: 'mes_natural',
-    // VERIFICADO CONTRA UN TICKET REAL (G500 MEGASUR, Mérida, 29-jul-2026):
-    // "TICKET FACTURABLE EN EL MES DE EMISION", impreso en el propio
-    // comprobante. Fuente primaria, no la web del comercio.
+    // VERIFICADO POR PARTIDA DOBLE: impreso en el ticket ("TICKET FACTURABLE EN
+    // EL MES DE EMISION") y en los avisos del portal ("Solo podremos facturarle
+    // tickets del mes vigente").
     plazoVerificado: true,
     campos: [
-      // El caso que rompe un extractor genérico: DOS identificadores distintos
-      // del mismo ticket, y el portal no acepta uno solo.
-      { clave: 'folio', etiquetaPortal: 'Folio', requerido: true },
-      { clave: 'webId', etiquetaPortal: 'Web ID', requerido: true },
-      { clave: 'sucursal', etiquetaPortal: 'Permiso CRE o Nombre de la Estación', requerido: true },
+      // LO QUE EL PORTAL PIDE DE VERDAD ES UNO SOLO. La ficha anterior exigía
+      // folio + webId + sucursal —"el caso que rompe un extractor genérico"—, y
+      // con el ticket delante el formulario tiene UN campo, "Autorización/WebID".
+      // Con el WebID solo, el portal trajo estación, litros, producto, precio,
+      // importe y forma de pago ya resueltos.
+      //
+      // Los otros dos se conservan como `requerido: false` a propósito: sirven
+      // para que el operador coteje que la línea que le trajo el portal es la de
+      // SU ticket —el folio aparece dentro de la descripción— y porque no está
+      // verificado que el portal de la red se comporte igual.
+      { clave: 'webId', etiquetaPortal: 'Autorización/WebID', requerido: true },
+      { clave: 'folio', etiquetaPortal: 'Folio (viene en la descripción)', requerido: false },
+      { clave: 'sucursal', etiquetaPortal: 'Permiso CRE o Nombre de la Estación', requerido: false },
     ],
-    reconocer: { dominios: ['g500network.com', 'g500sureste.com.mx', 'miappg500.g500network.com'], texto: ['G500'] },
+    // EL AVISO DE LAS 24 h NO SE CUMPLE, y conviene no repetírselo al operador.
+    // El portal anuncia "facturar tickets de combustible despues de 24 hrs de
+    // emitidos" y aceptó uno de DOS HORAS. Decirle a un operador que espere un
+    // día por un aviso que el propio sistema no aplica es mandarlo a perder el
+    // plazo. Lo que sí es real y sí hay que avisarle: el portal recomienda
+    // facturar en ventanilla o en la terminal en las últimas horas del mes.
+    reconocer: { dominios: ['g500network.com', 'g500sureste.com.mx', 'megasur.com.mx', 'miappg500.g500network.com'], texto: ['G500', 'MEGASUR'] },
   },
   {
     clave: 'petromax',

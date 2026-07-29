@@ -80,12 +80,29 @@ describe('registro de comercios', () => {
     expect(comercio('enerser')?.requiereCuenta).toBe(false);
   });
 
-  it('G500 pide Folio Y Web ID — los dos, no uno', () => {
-    // Es el caso que rompe un extractor genérico: dos identificadores distintos
-    // del mismo ticket, y el portal no acepta uno solo.
-    const claves = comercio('g500')!.campos.filter((x) => x.requerido).map((x) => x.clave);
-    expect(claves).toContain('folio');
-    expect(claves).toContain('webId');
+  // CORREGIDA CONTRA EL PORTAL REAL, 29-jul-2026. Esta prueba afirmaba que G500
+  // "pide Folio Y Web ID — los dos, no uno", con el comentario "el portal no
+  // acepta uno solo". Se escribió desde una suposición razonable —el ticket
+  // imprime los dos— y NADIE la había comprobado.
+  //
+  // Facturando un ticket de verdad (G500 MEGASUR, folio 1000724, WebID
+  // 5480061000724), el formulario de megasur.com.mx:8029 tiene UN campo,
+  // "Autorización/WebID", y con el WebID solo trajo estación, litros, producto,
+  // precio, importe y forma de pago ya resueltos.
+  //
+  // Pedirle al operador un dato que el portal no necesita es fricción inventada,
+  // y en carretera con el celular la fricción es lo que hace que no facture.
+  it('a G500 le basta el Web ID: lo demás lo resuelve el portal', () => {
+    const requeridos = comercio('g500')!.campos.filter((x) => x.requerido).map((x) => x.clave);
+    expect(requeridos).toEqual(['webId']);
+  });
+
+  it('pero el folio se conserva como opcional, para que el operador coteje', () => {
+    // El portal devuelve el folio DENTRO de la descripción de la línea
+    // ("1000724 - GASOLINA CONTENIDO MIN. 91 OCTANOS"), así que sirve para
+    // confirmar que la línea que trajo es la del ticket que tiene en la mano.
+    const opcionales = comercio('g500')!.campos.filter((x) => !x.requerido).map((x) => x.clave);
+    expect(opcionales).toContain('folio');
   });
 
   it('el ITU de Office Depot trae su restricción de largo', () => {
