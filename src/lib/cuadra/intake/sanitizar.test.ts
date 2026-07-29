@@ -30,6 +30,31 @@ describe('sanitizarProducto — filtro de datos sensibles', () => {
     ]) expect(sanitizarProducto(p), p).toBeUndefined();
   });
 
+  it('excluye la presentación PEGADA A LA CANTIDAD, que es como la imprime el ticket', () => {
+    // Un ticket de farmacia no escribe "30 TABS" con espacio: escribe "30TABS",
+    // "20CAPS", "C/10TAB". El `\b` inicial de la regla de formas farmacéuticas
+    // no cae entre un dígito y una letra —los dos son caracteres de palabra—, así
+    // que el medicamento SIN dosis impresa se colaba entero. Los ejemplos de aquí
+    // no traen mg: si lo trajeran los salvaría la otra regla, y el hueco seguiría
+    // abierto para el siguiente ticket.
+    for (const p of [
+      'VITACILINA 10TAB',
+      'OMEPRAZOL 20CAPS',
+      'LORATADINA C/10TAB',
+      'AMOXICILINA 12CAPSULAS',
+    ]) expect(sanitizarProducto(p), p).toBeUndefined();
+  });
+
+  it('excluye lo que revela creencias religiosas — §8.6: "uno de comida, posiblemente creencias"', () => {
+    // El art. 2 fr. VI pone las creencias religiosas, filosóficas y morales en el
+    // mismo renglón que la salud (11-datos-personales.md:129), y §8.6 nombra
+    // justo este camino: el ticket de comida. No se cubren las opiniones
+    // políticas ni el origen étnico porque no hay un camino real por el que
+    // lleguen al campo `producto`; fingir que sí lo hay sería peor que el hueco.
+    for (const p of ['COMIDA KOSHER', 'MENU HALAL', 'DIEZMO PARROQUIA', 'BIBLIA DE BOLSILLO'])
+      expect(sanitizarProducto(p), p).toBeUndefined();
+  });
+
   it('excluye lo que revela vida sexual — el art. 2 fr. VI la lista igual que la salud', () => {
     for (const p of ['PRESERVATIVOS 3 PZ', 'Prueba de embarazo', 'ANTICONCEPTIVO ORAL'])
       expect(sanitizarProducto(p), p).toBeUndefined();

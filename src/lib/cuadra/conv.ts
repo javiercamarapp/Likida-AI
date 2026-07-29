@@ -304,10 +304,33 @@ export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number;
  * Barrera de ráfaga (contador de OCR en vuelo). Incremento/decremento atómico;
  * devuelve el nuevo contador. Las fotos hacen +1 al entrar y -1 al terminar.
  */
-export async function intakeDelta(viajeId: string, delta: number): Promise<number> {
+/**
+ * Devuelve `null` cuando NO se pudo consultar. NO cero.
+ *
+ * Devolvía 0 ante cualquier error, y 0 significa además "no hay nada en vuelo",
+ * así que un blip de la RPC ABRÍA la barrera: `esperarIntake` sondea con
+ * `intakeDelta(id, 0)`, veía 0, y devolvía `true` de inmediato.
+ *
+ * Escenario medido: el operador manda 5 fotos, la #5 sigue en OCR cuando llega
+ * "listo", y el sondeo cae por un 503 transitorio. La barrera se abre, el agente
+ * cuadra con 4 comprobantes, y si el #5 era el diésel de $8,000 la liquidación
+ * cierra con $8,000 menos comprobados —con el PDF emitido y el viaje ya
+ * `liquidado`—. El operador termina debiendo de su bolsa un gasto que sí hizo. Y
+ * como `intakeOk` salía `true`, tampoco se le avisaba.
+ *
+ * Es la misma confusión que ya se corrigió hoy en el diagnóstico de migraciones y
+ * en `resolveOperador`: un fallo de consulta disfrazado del valor que significa
+ * "no hay". Aquí el disfraz cuesta dinero del operador.
+ */
+export async function intakeDelta(viajeId: string, delta: number): Promise<number | null> {
   const { data, error } = await supabaseAdmin().rpc('intake_delta', { p_viaje: viajeId, p_delta: delta });
-  if (error) { logger.warn('intake.delta', { code: error.code, msg: error.message }); return 0; }
-  return typeof data === 'number' ? data : 0;
+  if (error) {
+    // El viaje va en el log: sin él, a la mañana siguiente no se puede saber CUÁL
+    // liquidación salió corta.
+    logger.warn('intake.delta', { viaje: viajeId, delta, code: error.code, msg: error.message });
+    return null;
+  }
+  return typeof data === 'number' ? data : null;
 }
 
 /**
@@ -323,7 +346,7 @@ export async function esperarIntake(
   timeoutMs?: number,
   // probe inyectable SOLO para test (default = el contador real). No cambia el
   // comportamiento en runtime; permite probar la gracia anti-carrera sin DB.
-  probe: (id: string) => Promise<number> = (id) => intakeDelta(id, 0),
+  probe: (id: string) => Promise<number | null> = (id) => intakeDelta(id, 0),
 ): Promise<boolean> {
   // Default 20s, NO 60s. El presupuesto de la función es maxDuration=60 y por
   // debajo de esta barrera todavía corren el lock (12s) y el agente (40s): con
@@ -342,11 +365,20 @@ export async function esperarIntake(
   // el ÚNICO camino que no le avisa nada al operador: su liquidación sale corta.
   const grace = Number(process.env.CUADRA_INTAKE_GRACE_MS) || 2_000;
   const start = Date.now();
-  if (grace > 0 && (await probe(viajeId)) <= 0) {
+  // `null` es "no sé", y no puede abrir la barrera. Fail-CLOSED: se sigue
+  // esperando hasta el tope y se devuelve `false`, que es lo que hace que el
+  // operador reciba el aviso de "cuadré con los N que alcancé a procesar". Antes
+  // un error de RPC devolvía 0 y abría la barrera en silencio, que es el único
+  // camino en el que la liquidación sale corta SIN decírselo a nadie.
+  const vacio = async (): Promise<boolean> => {
+    const n = await probe(viajeId);
+    return n !== null && n <= 0;
+  };
+  if (grace > 0 && (await vacio())) {
     await sleep(Math.min(grace, tope));
   }
   for (;;) {
-    if (await probe(viajeId) <= 0) return true;
+    if (await vacio()) return true;
     if (Date.now() - start >= tope) return false;
     await sleep(500);
   }

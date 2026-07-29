@@ -56,6 +56,23 @@ export interface Norma {
   citas: string[];
   jerarquia: Jerarquia;
   estado: EstadoVerificacion;
+  /**
+   * Desde cuándo la norma es EXIGIBLE, si alguna fuente lo respalda. Espejo de
+   * `fecha_vigencia_desde` en la ficha (ISO YYYY-MM-DD), y `null` cuando NADIE
+   * lo ha confirmado.
+   *
+   * No es adorno: es el interruptor de los veredictos duros. Una regla
+   * redactada en futuro —"el complemento que al efecto publique el SAT en su
+   * Portal"— puede estar LATENTE y no vigente, y el motor estaba tirando una
+   * deducción de $5,800 más su IVA sobre una fecha que ninguna ficha respalda
+   * (la de `config.ts`, fundada en una cita —RMF 2.7.1.8— que no tiene ficha).
+   *
+   * Con `null` el motor puede AVISAR, nunca declarar no deducible. El día que
+   * alguien confirme la fecha en el Portal del SAT, se llena aquí y en la ficha
+   * —`normas_sincronizadas.test.ts` obliga a que coincidan— y el veredicto duro
+   * se enciende solo.
+   */
+  exigibleDesde?: string | null;
   /** Ruta de la ficha con el texto vigente y la trazabilidad. */
   ficha: string;
 }
@@ -70,6 +87,28 @@ export const NORMAS: Record<string, Norma> = {
     jerarquia: 1,
     estado: "verificado_fuente_primaria",
     ficha: "normas/cff-69-B.yaml",
+  },
+  'cff-30': {
+    id: 'cff-30',
+    instrumento: "Código Fiscal de la Federación",
+    articulo: "30",
+    titulo: "Conservación de la contabilidad y de la documentación — el plazo de cinco años",
+    citas: ["CFF 30", "CFF art. 30"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: null,
+    ficha: "normas/cff-30.yaml",
+  },
+  'cff-89-90': {
+    id: 'cff-89-90',
+    instrumento: "Código Fiscal de la Federación",
+    articulo: "89 y 90",
+    titulo: "Infracciones cuya responsabilidad recae sobre TERCEROS, y su multa — la exposición de Likida",
+    citas: ["CFF 89", "CFF 90", "CFF arts. 89 y 90"],
+    jerarquia: 1,
+    estado: "verificado_fuente_primaria",
+    exigibleDesde: null,
+    ficha: "normas/cff-89-90.yaml",
   },
   'cff-29-A': {
     id: 'cff-29-A',
@@ -109,6 +148,7 @@ export const NORMAS: Record<string, Norma> = {
     citas: ["LFPDPPP 15", "LFPDPPP 16-II"],
     jerarquia: 1,
     estado: "verificado_fuente_primaria",
+    exigibleDesde: "2025-03-21",
     ficha: "normas/lfpdppp-15-16.yaml",
   },
   'lfpdppp-2025-art-2-fr-XII-XX': {
@@ -120,6 +160,7 @@ export const NORMAS: Record<string, Norma> = {
     citas: ["LFPDPPP 2-XII", "LFPDPPP 2-XX", "LFPDPPP 35"],
     jerarquia: 1,
     estado: "verificado_fuente_primaria",
+    exigibleDesde: "2025-03-21",
     ficha: "normas/lfpdppp-2-XII-XX.yaml",
   },
   'lfpdppp-2025-art-26-fr-II': {
@@ -131,6 +172,7 @@ export const NORMAS: Record<string, Norma> = {
     citas: ["LFPDPPP 26-II"],
     jerarquia: 1,
     estado: "verificado_fuente_primaria",
+    exigibleDesde: "2025-03-21",
     ficha: "normas/lfpdppp-26-II.yaml",
   },
   'lfpdppp-2025-art-59': {
@@ -141,6 +183,7 @@ export const NORMAS: Record<string, Norma> = {
     citas: ["LFPDPPP 59"],
     jerarquia: 1,
     estado: "verificado_fuente_primaria",
+    exigibleDesde: "2025-03-21",
     ficha: "normas/lfpdppp-59.yaml",
   },
   'lft-110-111-263': {
@@ -213,6 +256,7 @@ export const NORMAS: Record<string, Norma> = {
     citas: ["RFA 2026 regla 2.2"],
     jerarquia: 3,
     estado: "verificado_fuente_primaria",
+    exigibleDesde: "2026-02-18",
     ficha: "normas/rfa-2026-2.2.yaml",
   },
   'rfa-2026-2.9': {
@@ -223,6 +267,7 @@ export const NORMAS: Record<string, Norma> = {
     citas: ["RFA 2026 regla 2.9"],
     jerarquia: 3,
     estado: "verificado_fuente_primaria",
+    exigibleDesde: "2026-02-18",
     ficha: "normas/rfa-2026-2.9.yaml",
   },
   'rlisr-57': {
@@ -253,6 +298,12 @@ export const NORMAS: Record<string, Norma> = {
     citas: ["2.7.1.48"],
     jerarquia: 3,
     estado: "evidencia_corroborante",
+    // NADIE HA CONFIRMADO DESDE CUÁNDO SE EXIGE. La ficha trae
+    // `fecha_vigencia_desde: null` y lo dice con todas sus letras: la regla,
+    // reformada el 09-jul-2026, sigue redactada en futuro, así que la obligación
+    // puede estar latente. Mientras esto sea null, `cuadre/engine.ts` avisa pero
+    // NO declara no deducible por falta de complemento.
+    exigibleDesde: null,
     ficha: "normas/rmf-2026-2.7.1.48.yaml",
   },
 };

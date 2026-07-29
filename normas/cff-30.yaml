@@ -1,0 +1,67 @@
+id: cff-30
+tipo: ley
+jerarquia: 1
+instrumento: "Código Fiscal de la Federación"
+articulo_o_regla: "30"
+titulo: "Conservación de la contabilidad y de la documentación — el plazo de cinco años"
+citas_en_codigo: ["CFF 30", "CFF art. 30"]
+texto_vigente: >
+  Artículo 30. Las personas obligadas a llevar contabilidad deberán conservarla a
+  disposición de las autoridades fiscales de conformidad con la fracción III del
+  artículo 28 de este Código.
+
+  Las personas que no estén obligadas a llevar contabilidad deberán conservar en su
+  domicilio a disposición de las autoridades, toda documentación relacionada con el
+  cumplimiento de las disposiciones fiscales.
+
+  La documentación a que se refiere el párrafo anterior de este artículo y la
+  contabilidad, deberán conservarse durante un plazo de cinco años, contado a partir
+  de la fecha en la que se presentaron o debieron haberse presentado las declaraciones
+  con ellas relacionadas. Tratándose de la contabilidad y de la documentación
+  correspondiente a actos cuyos efectos fiscales se prolonguen en el tiempo, el plazo
+  de referencia comenzará a computarse a partir del día en el que se presente la
+  declaración fiscal del último ejercicio en que se hayan producido dichos efectos.
+  Cuando se trate de la documentación correspondiente a aquellos conceptos respecto de
+  los cuales se hubiera promovido algún recurso o juicio, el plazo para conservarla se
+  computará a partir de la fecha en la que quede firme la resolución que les ponga fin.
+
+  [...]
+
+  Los documentos con firma electrónica avanzada o sello digital, deberán conservarse
+  de conformidad con las reglas de carácter general que al efecto emita el Servicio de
+  Administración Tributaria.
+fecha_publicacion: 1981-12-31
+fecha_vigencia_desde: null
+fuente_url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/CFF.pdf"
+fuente_tipo: diputados_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Transcrito el 28-jul-2026 del PDF oficial de la Cámara de Diputados, TEXTO VIGENTE,
+  última reforma publicada DOF 09-04-2026 (art. 30 en la p. 61 de 377). Se transcriben
+  los tres párrafos operativos para lo que el código hace —conservar el XML crudo del
+  CFDI— y el párrafo de documentos con sello digital. Los párrafos intermedios
+  (aumentos y disminuciones de capital, fusión, escisión, dividendos) se marcan con
+  [...] porque no tocan este producto; el texto completo está en la fuente.
+
+  `fecha_vigencia_desde` queda en null a propósito: la obligación es de 1981 con
+  reformas sucesivas, y este producto NO decide dinero con una fecha de exigibilidad
+  de este artículo. Ver `normas/README.md` y el campo `exigibleDesde` del índice.
+por_que_nos_toca: >
+  El producto guarda el XML crudo de cada CFDI (`repo.ts — saveCfdiXmlRaw`) y esa
+  conservación es lo que permite al cliente cumplir el art. 30. Likida es ENCARGADA
+  del tratamiento, no la obligada: la obligación de conservar es del contribuyente.
+  Por eso la conservación se hace best-effort y su fallo NO tumba la liquidación —
+  perder el XML no invalida el gasto ya capturado, solo deja al cliente sin el
+  respaldo que él debe guardar.
+limite_importante: >
+  CINCO AÑOS es el plazo GENERAL. El propio artículo tiene tres excepciones que lo
+  alargan: efectos fiscales que se prolongan en el tiempo, conceptos con recurso o
+  juicio promovido, y actos societarios que se conservan "por todo el tiempo en el que
+  subsista la sociedad". El producto NO debe prometerle a nadie que con cinco años
+  basta sin mirar cuál de los tres supuestos le aplica.
+verificado_por: "auditoría 5 / ingeniero fiscal — transcripción directa del PDF de diputados.gob.mx"
+verificado_el: 2026-07-28
+usado_en_codigo:
+  - "repo.ts — saveCfdiXmlRaw (comentario: 'Conserva el XML CRUDO del CFDI (CFF art. 30)')"
+  - "processor.ts:238 — conservación por UUID con gasto_id nulo"
+  - "processor.ts:494 — conservar el XML crudo, best-effort"

@@ -28,7 +28,7 @@ export interface Anomalia {
 }
 
 /** Agrupa por una llave y devuelve solo los grupos que tocan 2+ viajes. */
-function entreViajes(filas: FilaGasto[], llave: (f: FilaGasto) => string | null) {
+function* entreViajes(filas: FilaGasto[], llave: (f: FilaGasto) => string | null) {
   const grupos = new Map<string, { viajes: Set<string>; monto: number }>();
   for (const f of filas) {
     const k = llave(f);
@@ -37,7 +37,41 @@ function entreViajes(filas: FilaGasto[], llave: (f: FilaGasto) => string | null)
     g.viajes.add(f.viajeId);
     grupos.set(k, g);
   }
-  return [...grupos.entries()].filter(([, g]) => g.viajes.size > 1);
+  // Se rinde grupo a grupo en vez de `[...grupos.entries()].filter(...)`: el mapa
+  // tiene una entrada por folio DISTINTO —decenas de miles en un año de flota— y
+  // los que interesan son un puñado. Materializar el arreglo completo era copiar
+  // toda la tabla para tirar el 99%.
+  for (const e of grupos) if (e[1].viajes.size > 1) yield e;
+}
+
+/**
+ * "¿Alguno de los UUID conocidos aparece DENTRO de esta llave?", que es la
+ * pregunta que evita reportar dos veces el ticket cuyo folio impreso ES el UUID.
+ *
+ * Se contesta al revés que antes. La versión anterior hacía, dentro del bucle de
+ * folios repetidos, `[...conUuid].some((u) => k.includes(u))`: materializaba el
+ * arreglo de TODOS los UUID del tenant —~20 000 en un año— en cada vuelta y
+ * corría una búsqueda de subcadena por cada uno. O(G × U), con una asignación de
+ * arreglo por grupo.
+ *
+ * Aquí se recorre la llave —que mide decenas de caracteres— y se le pregunta al
+ * Set por cada ventana del tamaño de un UUID. Un UUID tiene longitud fija, así
+ * que `largos` tiene uno o dos elementos y el costo queda en O(G × |llave|):
+ * deja de depender de cuántos comprobantes timbrados tenga el tenant, que es lo
+ * único que crecía sin techo.
+ *
+ * La respuesta es la MISMA, no una aproximación: `k.includes(u)` es cierto si y
+ * solo si alguna ventana de `k` de longitud `u.length` es igual a `u`.
+ */
+function buscadorDeUuidEnLlave(conUuid: Set<string>): (k: string) => boolean {
+  if (!conUuid.size) return () => false;
+  const largos = [...new Set([...conUuid].map((u) => u.length))];
+  return (k: string) => {
+    for (const L of largos) {
+      for (let i = 0; i + L <= k.length; i++) if (conUuid.has(k.slice(i, i + L))) return true;
+    }
+    return false;
+  };
 }
 
 export function detectarDuplicadosEntreViajes(filas: FilaGasto[]): Anomalia[] {
@@ -60,11 +94,12 @@ export function detectarDuplicadosEntreViajes(filas: FilaGasto[]): Anomalia[] {
   // basta. Acusar a un operador de fraude por una coincidencia de numeración es
   // peor que no detectarlo: destruye la confianza en toda la herramienta.
   const conUuid = new Set(filas.filter((f) => f.cfdiUuid).map((f) => f.cfdiUuid!.toLowerCase()));
+  const yaReportadoPorUuid = buscadorDeUuidEnLlave(conUuid);
   for (const [k, g] of entreViajes(filas, (f) =>
     // Si ya tiene UUID se reporta arriba; no se cuenta dos veces.
     !f.folio || f.cfdiUuid ? null : `${f.concepto.toLowerCase()}|${f.folio}|${f.monto}`,
   )) {
-    if (conUuid.size && [...conUuid].some((u) => k.includes(u))) continue;
+    if (yaReportadoPorUuid(k)) continue;
     out.push({
       tipo: 'folio_duplicado',
       detalle: `Folio ${k.split('|')[1]} (${k.split('|')[0]}) liquidado en ${g.viajes.size} viajes`,

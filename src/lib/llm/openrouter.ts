@@ -419,6 +419,40 @@ export class PartialExecutionError extends Error {
 const READ_PREFIXES = ['get_', 'check_', 'list_', 'find_', 'consultar_', 'validar_', 'cuadrar_'];
 const isReadOnly = (n: string) => READ_PREFIXES.some((p) => n.startsWith(p));
 
+/**
+ * Nombres de tools cuyo schema NO declara ni un solo parámetro.
+ *
+ * PARA ELLAS, LOS `arguments` NO SIGNIFICAN NADA: el handler recibe `_args` y no
+ * lo usa —es la regla estructural de Likida, el modelo decide CUÁNDO y nunca CON
+ * QUÉ DATOS—, así que dos llamadas con `{}` y con `{"viaje_id":"v1"}` producen
+ * exactamente el mismo resultado.
+ *
+ * La caché de lectura se llaveaba con `nombre:JSON.stringify(args)` y por eso no
+ * acertaba nunca: nada obliga a que `arguments` sea `{}` (los schemas de tools
+ * no llevan `strict: true`), así que el modelo variaba el JSON y `cuadrar_viaje`
+ * volvía a correr entero. Medido con el ciclo real: tres rondas con `{}`,
+ * `{"viaje_id":"v1"}` y `{"incluir_periodo":true}` → 3 ejecuciones, 0 aciertos.
+ * Cada una son tres lecturas del cuadre MÁS `getAcumuladoCombustible`, que barre
+ * todas las cargas de diésel del EJERCICIO del tenant, dentro de un turno
+ * acotado a 40 s.
+ *
+ * Con parámetros de verdad la llave vuelve a incluirlos: entonces sí describen
+ * el efecto.
+ */
+function llaveDeCache(tools: OpenAI.Chat.ChatCompletionTool[]) {
+  const sinParametros = new Set(
+    // `flatMap` y no `filter().map()`: el filtro no estrecha el tipo, y
+    // `ChatCompletionCustomTool` no tiene `.function`.
+    tools.flatMap((t) => {
+      if (t.type !== 'function') return [];
+      const props = (t.function.parameters as { properties?: Record<string, unknown> } | undefined)?.properties;
+      return props && Object.keys(props).length > 0 ? [] : [t.function.name];
+    }),
+  );
+  return (name: string, args: Record<string, unknown>) =>
+    sinParametros.has(name) ? name : `${name}:${JSON.stringify(args)}`;
+}
+
 export async function generateWithTools(opts: {
   role: ModelRole;
   system: string;
@@ -451,6 +485,7 @@ export async function generateWithTools(opts: {
     ...opts.messages,
   ];
   const crossRound = new Map<string, ToolExecResult>();
+  const llave = llaveDeCache(opts.tools);
 
   // CR-5: completado con fallback cross-provider. Reintentar SÓLO la llamada de
   // completado (las tools se ejecutan DESPUÉS, en nuestro código) es seguro: una
@@ -537,7 +572,7 @@ export async function generateWithTools(opts: {
             executed.push({ toolName: call.function.name, args: {}, result: null, durationMs: 0, error: 'args_parse' });
             return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify({ error: 'argumentos JSON inválidos' }) };
           }
-          const key = `${call.function.name}:${JSON.stringify(args)}`;
+          const key = llave(call.function.name, args);
           if (isReadOnly(call.function.name) && crossRound.has(key)) {
             const c = crossRound.get(key)!;
             executed.push({ toolName: call.function.name, args, result: c.result, durationMs: c.durationMs, error: c.error });

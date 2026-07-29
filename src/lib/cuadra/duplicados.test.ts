@@ -74,4 +74,97 @@ describe('detectarDuplicadosEntreViajes', () => {
     expect(detectarDuplicadosEntreViajes([])).toEqual([]);
     expect(detectarDuplicadosEntreViajes([f('v1'), f('v2')])).toEqual([]); // sin folio ni uuid
   });
+
+  it('el ticket cuyo FOLIO IMPRESO contiene un UUID ya reportado no se acusa dos veces', () => {
+    // Esta es la regla que la línea de `conUuid` protege, y no estaba probada: si
+    // el folio del ticket trae dentro el UUID del CFDI que ya salió arriba como
+    // `cfdi_duplicado`, reportarlo otra vez como `folio_duplicado` le pone al
+    // contralor dos acusaciones por el mismo comprobante.
+    const u = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const r = detectarDuplicadosEntreViajes([
+      f('v1', { cfdiUuid: u }),
+      f('v2', { cfdiUuid: u }),
+      f('v3', { folio: `FOL-${u}-X`, monto: 4000 }),
+      f('v4', { folio: `FOL-${u}-X`, monto: 4000 }),
+    ]);
+    expect(r.map((a) => a.tipo)).toEqual(['cfdi_duplicado']);
+  });
+
+  it('un folio repetido SIN UUID adentro sí se acusa aunque el tenant tenga CFDI', () => {
+    // El contrapeso de la prueba anterior: la exclusión tiene que ser por
+    // contención real, no "hay UUIDs, entonces me callo".
+    const r = detectarDuplicadosEntreViajes([
+      f('v1', { cfdiUuid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' }),
+      f('v3', { folio: 'A-991', monto: 4000 }),
+      f('v4', { folio: 'A-991', monto: 4000 }),
+    ]);
+    expect(r.map((a) => a.tipo)).toEqual(['folio_duplicado']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL COSTO NO PUEDE CRECER CON EL TAMAÑO DEL TENANT.
+//
+// El panel llama a esto con la tabla `gasto` COMPLETA del tenant en cada F5
+// (`analytics.ts:detectarAnomalias`, sin filtro de fecha ni caché): una flota de
+// 50 operadores × 20 viajes/mes × 8 comprobantes son ~96 000 filas al año.
+//
+// La versión anterior hacía `[...conUuid].some((u) => k.includes(u))` DENTRO del
+// bucle de folios repetidos: materializaba los ~20 000 UUID del tenant en un
+// arreglo nuevo por cada grupo. O(G × U). Medido antes del arreglo, con 96 000
+// filas: 233 ms con 1 000 folios repetidos y 1 292 ms con 3 000. Después: 28 y
+// 31 ms, con salida byte a byte idéntica.
+//
+// La prueba NO mide milisegundos absolutos —eso flaquea entre máquinas—, mide lo
+// que de verdad estaba mal: que el tiempo dependiera de CUÁNTOS COMPROBANTES
+// TIMBRADOS tenga el tenant. Con la misma cantidad de folios repetidos, pasar de
+// 500 a 40 000 CFDI no debe cambiar el trabajo del bucle.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('detectarDuplicadosEntreViajes a escala de un año de flota', () => {
+  const uuid = (n: number) => `aaaaaaaa-bbbb-cccc-dddd-${n.toString(16).padStart(12, '0')}`;
+
+  function generar(nTimbrados: number, gruposDup: number): FilaGasto[] {
+    const filas: FilaGasto[] = [];
+    for (let i = 0; i < nTimbrados; i++) {
+      filas.push({ viajeId: `v${i % 5000}`, concepto: 'diesel', monto: 1000 + (i % 900), cfdiUuid: uuid(i) });
+    }
+    for (let i = 0; i < 20_000; i++) {
+      filas.push({ viajeId: `v${i % 5000}`, concepto: 'casetas', monto: 100 + (i % 900), folio: `A-${i}` });
+    }
+    for (let g = 0; g < gruposDup; g++) {
+      filas.push({ viajeId: `dupA${g}`, concepto: 'diesel', monto: 2500, folio: `DUP-${g}` });
+      filas.push({ viajeId: `dupB${g}`, concepto: 'diesel', monto: 2500, folio: `DUP-${g}` });
+    }
+    return filas;
+  }
+
+  function medir(filas: FilaGasto[]) {
+    const t0 = performance.now();
+    const r = detectarDuplicadosEntreViajes(filas);
+    return { ms: performance.now() - t0, r };
+  }
+
+  // SE SALTA BAJO `--coverage`. La instrumentación de v8 cobra por llamada, y
+  // el caso de 40 000 CFDI hace muchísimas más que el de 500: el cociente pasa
+  // de ~4 a ~9 midiendo la instrumentación, no el algoritmo. En `npm test`
+  // —donde el umbral sí significa algo— corre igual que siempre.
+  it.skipIf(process.env.CUADRA_COBERTURA === '1')('el tiempo no explota al crecer el número de CFDI del tenant', () => {
+    const GRUPOS = 2_000;
+    const pocos = generar(500, GRUPOS);
+    const muchos = generar(40_000, GRUPOS);
+
+    // Calentamiento: sin él la primera corrida paga la compilación del JIT y el
+    // cociente mide eso en vez del algoritmo.
+    medir(pocos); medir(muchos);
+
+    const a = medir(pocos);
+    const b = medir(muchos);
+
+    expect(a.r).toHaveLength(GRUPOS);
+    expect(b.r).toHaveLength(GRUPOS);
+    // Con la versión anterior este cociente era ~80 (40 000/500 UUID por grupo).
+    // El margen de 8 deja sitio de sobra para el barrido lineal de los 39 500
+    // CFDI extra —que sí es trabajo legítimo— sin dejar pasar el O(G × U).
+    expect(b.ms / a.ms).toBeLessThan(8);
+  });
 });

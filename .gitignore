@@ -23,3 +23,4 @@ pruebas-manuales/imagenes/
 # él, nadie puede comprobar que zxing lee donde jsQR no. Repo privado.
 # Cualquier OTRA foto de comprobante sigue fuera.
 .env*
+.gstack/

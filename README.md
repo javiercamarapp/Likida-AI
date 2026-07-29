@@ -41,9 +41,20 @@ Se **quitaron** de `package.json` cinco dependencias con cero uso en el código:
 `@anthropic-ai/sdk` (se habla con OpenRouter, no con Anthropic directo),
 `facturapi`, `@upstash/redis`, `@upstash/qstash` y `axios`. Radix nunca estuvo.
 
-Siguen declaradas y **sin usar todavía**: `@sentry/nextjs` (a cablear: hoy no hay
-observabilidad de errores en producción), `class-variance-authority`, `date-fns`
-y `lucide-react`.
+`@sentry/nextjs` **ya está en uso** (`src/lib/observability/sentry.ts`, import
+dinámico): el logger replica ahí los `warn` y `error` ya redactados, y
+`onRequestError` manda las excepciones con stack. Se enciende solo si hay
+`SENTRY_DSN`; sin esa variable no hay alerta de nada y el arranque lo grita
+(`startup.observabilidad`).
+
+Siguen declaradas y **sin usar**: `class-variance-authority`, `date-fns` y
+`lucide-react`.
+
+> Hasta la auditoría 5 este párrafo decía que `@sentry/nextjs` estaba «sin usar
+> todavía (a cablear: hoy no hay observabilidad de errores en producción)». La
+> conclusión era cierta y el motivo falso: el cable existía desde antes, lo que
+> faltaba era el DSN en Vercel. Un documento que acierta por accidente es el que
+> deja de leerse.
 
 > Esta sección describía un stack que no existe, y no salió gratis: una revisión
 > externa calificó cuatro tecnologías que el proyecto no usa —leyó el README, no

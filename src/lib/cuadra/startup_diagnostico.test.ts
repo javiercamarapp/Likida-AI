@@ -26,7 +26,18 @@ vi.mock('@/lib/logger', () => ({ logger: { error: (...a: unknown[]) => error(...
 
 const { verificarMigracionesCriticas } = await import('./startup');
 
-const okTabla = { select: () => ({ limit: () => Promise.resolve({ error: null }) }) };
+// Stub encadenable: el sondeo de la 0016 usa `.select().limit()` y el de la 0019
+// `.select().not().limit()`. Un stub que solo soporta una de las dos cadenas hace
+// que la otra lance, el `catch` general se lo trague como `migraciones_skip`, y
+// las pruebas midan cualquier cosa menos lo que dicen medir.
+const tabla = (resultado: { error: unknown } = { error: null }) => {
+  const enlace: Record<string, unknown> = {};
+  for (const m of ['select', 'not', 'eq', 'limit']) enlace[m] = () => enlace;
+  // `await` sobre el enlace resuelve al resultado (igual que el query builder real).
+  enlace.then = (r: (v: unknown) => unknown) => Promise.resolve(resultado).then(r);
+  return enlace;
+};
+const okTabla = tabla();
 
 beforeEach(() => {
   rpc.mockReset(); from.mockReset(); error.mockReset(); warn.mockReset(); info.mockReset();
@@ -70,7 +81,8 @@ describe('diagnóstico de migraciones', () => {
   it('el mismo criterio aplica al probe de la barrera de intake', async () => {
     rpc.mockResolvedValueOnce({ error: null })                                        // 0005 ok
        .mockResolvedValueOnce({ error: null })                                        // unlock
-       .mockResolvedValueOnce({ error: { code: '', message: 'fetch failed' } });      // 0011 sin red
+       .mockResolvedValueOnce({ error: { code: '', message: 'fetch failed' } })       // 0011 sin red
+       .mockResolvedValue({ error: null });                                           // el resto ok
     await verificarMigracionesCriticas();
 
     expect(error).not.toHaveBeenCalled();
@@ -99,7 +111,8 @@ describe('la sobrecarga ambigua de guardar_liquidacion_tx', () => {
        .mockResolvedValueOnce({ error: null })   // unlock
        .mockResolvedValueOnce({ error: null })   // 0011
        .mockResolvedValueOnce({ error: null })   // 0017
-       .mockResolvedValueOnce({ error: { code: '42725', message: 'function guardar_liquidacion_tx(...) is not unique' } });
+       .mockResolvedValueOnce({ error: { code: '42725', message: 'function guardar_liquidacion_tx(...) is not unique' } })
+       .mockResolvedValue({ error: null });
     await verificarMigracionesCriticas();
 
     expect(info).not.toHaveBeenCalledWith('startup.migraciones', { ok: true });
@@ -113,5 +126,39 @@ describe('la sobrecarga ambigua de guardar_liquidacion_tx', () => {
     rpc.mockResolvedValue({ error: null });
     await verificarMigracionesCriticas();
     expect(info).toHaveBeenCalledWith('startup.migraciones', { ok: true });
+  });
+});
+
+// ALTO de la auditoría 5 (operabilidad): el arranque salía al PRIMER fallo, así
+// que con dos migraciones ausentes solo se veía UNA por ciclo de despliegue: se
+// arreglaba, se volvía a desplegar, y aparecía la siguiente. Y la 0019 no se
+// sondeaba: sin `uq_gasto_cfdi_uuid` el mismo CFDI de diésel entra dos veces, se
+// cuenta doble en el comprobado y su IVA se acredita por duplicado.
+describe('el arranque dice TODO lo que falta, no lo primero', () => {
+  it('con dos migraciones ausentes, reporta las dos', async () => {
+    rpc.mockResolvedValueOnce({ error: { code: 'PGRST202', message: 'no try_lock_viaje' } })  // 0005
+       .mockResolvedValueOnce({ error: null })                                                // unlock
+       .mockResolvedValueOnce({ error: { code: 'PGRST202', message: 'no intake_delta' } })     // 0011
+       .mockResolvedValue({ error: null });
+    await verificarMigracionesCriticas();
+
+    const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
+    expect(mensajes).toContain('0005');
+    expect(mensajes).toContain('0011');
+  });
+
+  it('con algo faltando NO dice ok', async () => {
+    rpc.mockResolvedValue({ error: { code: 'PGRST202', message: 'nada existe' } });
+    await verificarMigracionesCriticas();
+    expect(info).not.toHaveBeenCalledWith('startup.migraciones', { ok: true });
+  });
+
+  it('la 0019 se sonda: sin ella el mismo CFDI se liquida dos veces', async () => {
+    rpc.mockResolvedValue({ error: null });
+    from.mockReturnValue(tabla({ error: { code: '42P01', message: 'relation gasto does not exist' } }));
+    await verificarMigracionesCriticas();
+
+    const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
+    expect(mensajes).toContain('0019');
   });
 });

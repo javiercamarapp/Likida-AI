@@ -6,9 +6,21 @@
 # secretos, y por eso puede correr en cada push sin costo.
 name: CI
 
+# EN TODAS LAS RAMAS, y no solo en master/main.
+#
+# El disparador anterior era `branches: [master, main]`, así que un push a
+# cualquier otra rama no corría NADA salvo que ya existiera un PR abierto contra
+# master. Y es justo donde aterriza el trabajo autónomo: las rutinas de nube
+# pushean a `claude/*`, y hay ramas vivas fuera de esas dos (`claude/auditoria-4`,
+# `rutinas/paquete-completo`, `tooling/auditoria-diaria`). El typecheck, el lint,
+# las pruebas y el build podían no correr una sola vez sobre ese código.
+#
+# Correr en cada push cuesta ~2 minutos de runner y no necesita secretos (ver el
+# encabezado). Que el PR corra otra vez es duplicado a propósito: es la corrida
+# que decide el merge, y el `concurrency` de abajo ya cancela lo que quedó atrás.
 on:
   push:
-    branches: [master, main]
+    branches: ['**']
   pull_request:
 
 # Un push nuevo cancela la corrida anterior de la misma rama: no sirve de nada
@@ -40,8 +52,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Tests
-        run: npm test
+      # CON COBERTURA, y no `npm test` a secas: el umbral de `vitest.config.ts`
+      # es lo que convierte la cobertura en una puerta en vez de en un número
+      # que nadie mira. `--coverage` corre las MISMAS pruebas; lo único que
+      # agrega es la instrumentación y el veredicto del umbral.
+      - name: Tests (con umbral de cobertura)
+        run: npm run test:coverage
 
       # El build va al final porque es el más lento, y porque los tres de arriba
       # atrapan casi todo lo que lo haría fallar. Ya cazó un fallo real que solo

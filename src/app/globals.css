@@ -17,7 +17,17 @@
   --color-accent: #0e7c66;      /* verde-conciliación grafito, sobrio */
   --color-accent-fg: #ffffff;
 
-  --color-ok: #34c759;          /* semáforo Apple */
+  /* #34c759 (el verde de semáforo de Apple) mide 2.22:1 sobre blanco y 2.15:1
+     sobre --bg. AA pide 3:1 hasta para texto grande, así que reprobaba en los
+     dos. Y es TINTA, no adorno: `[id]/page.tsx` lo usa como color de las cuatro
+     cifras acreditables —"IVA acreditable $12,480"—, que son las que se
+     proyectan en la sala. Este verde llega a 7.67:1 sobre blanco y 7.42:1 sobre
+     --bg; es el mismo que el sistema de diseño del repo ya había elegido para
+     `.tag-ok` (design-system/styles.css), por esta misma razón.
+     En oscuro se invierte: #14602c cae a 2.35:1 y el de Apple sube a 8.12:1, así
+     que el override de abajo lo devuelve. Medido con la fórmula de luminancia
+     relativa de WCAG, no a ojo (auditoría 5, frontend, MEDIO 2). */
+  --color-ok: #14602c;
   --color-warn: #ff9f0a;
   /* #ff3b30 daba ~3.6:1 sobre blanco y AA pide 4.5:1 para texto normal. Este
      tono llega a 4.6:1 y se sigue leyendo como el rojo de sistema. */
@@ -55,15 +65,20 @@
        AA pide 4.5:1. Este tono llega a 5.29:1 en oscuro. Medido con la fórmula
        de WCAG, no a ojo: el mensaje de error del login se lee en los dos modos. */
     --color-bad: #ff453a;
+    /* El verde oscuro del modo claro da 2.35:1 aquí. Sobre superficie oscura el
+       de Apple llega a 8.12:1: cada modo se lleva el que pasa en ese modo. */
+    --color-ok: #34c759;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0b0b0f; --surface: #16161c; --ink: #e8edf5; --muted: #9aa0aa; --line: #242430; --accent: #2dd4bf; --accent-fg: #06231e;
   --color-bad: #ff453a;   /* ver la nota de contraste arriba */
+  --color-ok: #34c759;    /* 8.12:1 sobre #16161c */
 }
 :root[data-theme="light"] {
   --bg: #fbfbfd; --surface: #ffffff; --ink: #0b0b0f; --muted: #6b7280; --line: #ececef; --accent: #0e7c66; --accent-fg: #ffffff;
   --color-bad: #d70015;   /* 5.38:1 sobre blanco */
+  --color-ok: #14602c;    /* 7.67:1 sobre blanco */
 }
 
 * { border-color: var(--line); }

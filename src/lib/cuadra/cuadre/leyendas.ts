@@ -8,9 +8,26 @@
 //
 // Esa última es la posición de Likida, no la del cliente: un motor que calcula
 // mal un estímulo no comete un error del contralor, comete una práctica
-// indebida propia. Los arts. 89 y 90 del CFF son el marco de esa
-// responsabilidad, y decir con claridad qué es esto —y qué no— es la mitigación
-// que la propia ley ofrece.
+// indebida propia.
+//
+// EL MARCO ES CFF 89 Y 90, Y AHORA TIENE FICHA: `normas/cff-89-90.yaml`,
+// `verificado_fuente_primaria`, transcrita del PDF de la Cámara de Diputados
+// (texto vigente, última reforma DOF 09-04-2026). Estaba citado aquí sin ficha,
+// que es la deuda que `docs/fase1/inventario-normas.md` declaraba.
+//
+// Y lo que la ficha aporta es más que trazabilidad: la mitigación es LITERAL, y
+// está en el último párrafo del propio art. 89 —"No se incurrirá en la
+// infracción a que se refiere la fracción primera... cuando se manifieste...
+// POR ESCRITO al contribuyente que su asesoría puede ser contraria a la
+// interpretación de las autoridades fiscales"—. Por eso las dos leyendas de
+// abajo dicen "puede diferir de los criterios que dé a conocer el SAT", y por
+// eso tiene que ir ESCRITO en el papel que se archiva y no solo dicho en la
+// conversación: la conducta que exime es la manifestación por escrito.
+//
+// El agravante del art. 90, 2º párrafo, apunta al mismo lugar: la multa sube de
+// 10% a 20% de la contribución omitida cuando el criterio es DIVERSO al del
+// SAT. Quitar esa frase de estas dos constantes no ahorra una línea: quita la
+// eximente.
 //
 // Redacción tomada de docs/conocimiento/21-guardarrailes.md §5.2 y §5.3.
 // ═══════════════════════════════════════════════════════════════════════════

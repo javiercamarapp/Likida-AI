@@ -74,6 +74,38 @@ describe('avisarConfiguracionSilenciosa', () => {
     expect(log.mock.calls.map((c) => String(c[0])).join('\n')).not.toContain('algo');
   });
 
+  it('nombra el grupo y la variable que falta de la configuración dura', async () => {
+    // Auditoría 5, MEDIO: `requireEnv` existía, su comentario decía «llamar en
+    // los paths críticos» y no lo llamaba nadie. Ahora el inventario de `env.ts`
+    // tiene un consumidor: el arranque. Sin `OPENROUTER_API_KEY` el sistema hoy
+    // arranca y falla en el turno de un operador, con el error del SDK.
+    ponerTodo();
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { avisarConfiguracionSilenciosa } = await import('./arranque');
+
+    avisarConfiguracionSilenciosa();
+
+    const linea = spy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(linea).toContain('startup.entorno_grupos');
+    expect(linea).toContain('OPENROUTER_API_KEY');
+  });
+
+  it('el aviso de los grupos NO comparte `msg` con el de las silenciosas', async () => {
+    // Sentry agrupa por mensaje: dos avisos distintos en el mismo cubo es cómo
+    // se pierde el segundo.
+    ponerTodo();
+    vi.stubEnv('DEMO_TENANT_ID', '');
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { avisarConfiguracionSilenciosa } = await import('./arranque');
+
+    avisarConfiguracionSilenciosa();
+
+    const msgs = spy.mock.calls.map((c) => JSON.parse(String(c[0])).msg);
+    expect(new Set(msgs)).toEqual(new Set(['startup.config_silenciosa', 'startup.entorno_grupos']));
+  });
+
   it('en local no mete ruido', async () => {
     vi.stubEnv('VERCEL_ENV', '');
     vi.stubEnv('NODE_ENV', 'development');

@@ -10,6 +10,23 @@ nota_verificacion: >
   Los plazos que circulan (gasolineras 5-15 días, Oxxo 15, supermercados fin de mes,
   casetas ~7) vienen del BLOG DE UN COMPETIDOR (Clara Intelligence), no de los
   portales. PARA CERRAR: entrar a cada portal y leer sus términos.
+
+  EXCEPCIÓN VERIFICADA — Office Depot (25-jul-2026). Es la ÚNICA entrada del catálogo
+  con `plazoVerificado: true`, y no viene del blog: viene del papel. El ticket de
+  campo trae impreso al pie "ESTIMADO CLIENTE, DE REQUERIR FACTURA DEBERÁ SOLICITARLA
+  A MÁS TARDAR DENTRO DEL MES SIGUIENTE A LA FECHA DE EMISIÓN DEL TICKET", que NO es
+  el mes natural: un ticket del 25-jul vence el 31-ago, no el 31-jul. Con el default
+  el motor habría avisado "te quedan 3 días" — falso, y exactamente lo que
+  `plazoVerificado` existe para evitar.
+
+  Esta ficha decía que TODAS las entradas estaban en `false` y que el motor no usaba
+  estos números. Dejó de ser cierto con el commit 13a56c6 y la ficha se quedó atrás:
+  un auditor que rastreara la fecha "2026-08-31" llegaba a un YAML `sin_verificar`
+  que decía lo contrario del código. Corregido el 28-jul-2026 (auditoría 5).
+
+  Sigue siendo `sin_verificar` a nivel de FICHA a propósito: un plazo leído en un
+  ticket es evidencia de la política de ESE comercio en ESA fecha, no una norma. Lo
+  que cambia con la verificación es de dónde sale la cifra, no su jerarquía.
 advertencia_de_jerarquia: >
   ESTO NO ES UNA NORMA FISCAL. Es la política interna de un tercero y tiene CERO
   fuerza legal. El plazo LEGAL para pedir factura es todo el ejercicio (el SAT lo
@@ -17,10 +34,17 @@ advertencia_de_jerarquia: >
   listada por el propio SAT, con remedio en la Conciliación de Factura.
   El producto NUNCA debe presentar estos plazos como una obligación fiscal.
 uso_permitido_hoy: >
-  Solo como advertencia genérica: "la ventana del comercio puede ser menor".
-  El aviso del motor usa la regla general del mes natural, no estos números.
-verificado_por: "ola1 / 08-competencia.md (fuente secundaria)"
-verificado_el: 2026-07-27
+  Con `plazoVerificado: false` —el default y el caso de 12 de las 13 entradas—, solo
+  como advertencia genérica: "la ventana del comercio puede ser menor". El aviso usa
+  la regla general del mes natural, no estos números.
+
+  Con `plazoVerificado: true` se puede decir la fecha del comercio, PERO nombrándola
+  como lo que es: la política de ese comercio, no un plazo legal. El aviso tiene que
+  llevar el matiz del `advertencia_de_jerarquia` en la misma frase — un contralor que
+  lee "puedes timbrarlo hasta el 31-ago" a secas concluye que el 1-sep perdió el
+  CFDI, y no es cierto.
+verificado_por: "ola1 / 08-competencia.md (fuente secundaria) · Office Depot: ticket de campo del 25-jul-2026 (fuente directa)"
+verificado_el: 2026-07-28
 usado_en_codigo:
-  - "facturacion/comercios.ts — campo `plazoVerificado: false` en cada entrada"
-  - "cuadre/engine.ts — regla factura_por_vencer (NO usa estos plazos)"
+  - "facturacion/comercios.ts — `plazoVerificado: false` en 12 de 13 entradas; `true` SOLO en office_depot (plazo `mes_siguiente`, leído del ticket)"
+  - "cuadre/engine.ts — regla factura_por_vencer: usa el plazo de la cadena solo si `plazoVerificado`, y en las dos ramas (vencida y no vencida) dice que el plazo LEGAL es todo el ejercicio"

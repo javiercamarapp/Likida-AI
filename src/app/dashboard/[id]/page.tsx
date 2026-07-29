@@ -6,6 +6,7 @@ import { getLiquidacionDetalle } from '@/lib/cuadra/analytics';
 import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import { filasDeducibilidad } from '@/lib/cuadra/liquidacion/deducibilidad';
 import { mxn } from '@/lib/utils';
+import { litros, fechaMx } from '../formato';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,12 +59,24 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
       <main className="max-w-4xl mx-auto px-8 py-10 space-y-9">
         <div className="flex items-end justify-between flex-wrap gap-3">
           <div>
-            <div className="text-sm" style={{ color: 'var(--muted)' }}>Liquidación · {d.fecha}</div>
+            {/* Hora de México, no UTC: `.slice(0,10)` fechaba en agosto una
+                liquidación cerrada el 31 de julio a las 20:00 (ver formato.ts). */}
+            <div className="text-sm" style={{ color: 'var(--muted)' }}>Liquidación · {fechaMx(d.creadoEn)}</div>
             <h1 className="text-3xl font-semibold tracking-tight mt-1">{d.folio}</h1>
           </div>
-          <span className="text-base flex items-center gap-2">
-            <span className="inline-block w-3 h-3 rounded-full" style={{ background: e.color }} />{e.label}
-          </span>
+          <div className="flex items-center gap-4">
+            {/* El PDF existía, estaba autenticado y no había forma de llegar a
+                él: `pdf_url` ni se seleccionaba (auditoría 5, frontend, MEDIO 5).
+                En el demo, "¿me da el PDF?" se contestaba tecleando una URL. */}
+            {d.pdfPath && (
+              <a href={`/api/export/pdf/${d.id}`} className="text-sm px-3.5 py-2 rounded-lg hairline hover:opacity-70">
+                Descargar PDF
+              </a>
+            )}
+            <span className="text-base flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full" style={{ background: e.color }} />{e.label}
+            </span>
+          </div>
         </div>
 
         {/* Totales grandes */}
@@ -115,7 +128,7 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
               {/* Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF
                   × litros y esa cuota no la tenemos. `ieps` solo puede venir de filas
                   viejas escritas antes del cambio; se conserva para no ocultarlas. */}
-              {d.litrosDiesel > 0 && <Tot label="Diésel elegible para el estímulo" value={`${d.litrosDiesel} L`} ok />}
+              {d.litrosDiesel > 0 && <Tot label="Diésel elegible para el estímulo" value={litros(d.litrosDiesel)} ok />}
               {d.ieps > 0 && <Tot label="IEPS de diésel (vs ISR)" value={mxn(d.ieps)} ok />}
               {d.iva > 0 && <Tot label="IVA acreditable" value={mxn(d.iva)} ok />}
               {d.peaje > 0 && <Tot label="Peaje 50%" value={mxn(d.peaje)} ok />}
@@ -138,22 +151,68 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
           </section>
         )}
 
-        {/* Comprobantes */}
+        {/* ── Comprobantes ──
+            La tabla arrancaba directo en <tbody>: tres celdas sueltas por fila
+            para un lector de pantalla, y la columna del folio —que a veces es
+            "—"— no se anunciaba como nada (auditoría 5, frontend, BAJO 2).
+            Y sumaba $10,800 debajo de una tarjeta que decía $9,400: pintaba los
+            duplicados que el motor excluye del total. Ahora los renglones son
+            los mismos que imprime el PDF y el total va al pie, para que el
+            contralor no tenga que sumar la columna con el dedo. */}
         <section>
           <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>Comprobantes</h2>
-          <div className="card overflow-hidden">
+          {d.gastos.length === 0 ? (
+            // Pasa de verdad: en el tenant del demo hay liquidaciones con total
+            // guardado y cero filas en `gasto`. Una tabla con encabezados y nada
+            // debajo se lee como "se perdieron los comprobantes"; esto dice qué
+            // se sabe y qué no, sin afirmar ninguna de las dos cosas.
+            <div className="card p-8 text-base" style={{ color: 'var(--muted)' }}>
+              No hay comprobantes capturados en este viaje. El total de arriba es el que quedó
+              guardado al cerrar la liquidación.
+            </div>
+          ) : (
+          <div className="card overflow-x-auto">
             <table className="w-full text-base">
+              <thead>
+                <tr style={{ color: 'var(--muted)' }} className="text-left text-sm">
+                  <th scope="col" className="px-6 py-3 font-medium">Concepto</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Folio</th>
+                  <th scope="col" className="px-6 py-3 font-medium text-right">Monto</th>
+                </tr>
+              </thead>
               <tbody>
                 {d.gastos.map((g, i) => (
-                  <tr key={i} className="border-t first:border-t-0" style={{ borderColor: 'var(--line)' }}>
+                  <tr key={i} className="border-t" style={{ borderColor: 'var(--line)' }}>
                     <td className="px-6 py-3.5 font-medium">{etiquetaGasto(g)}</td>
                     <td className="px-6 py-3.5" style={{ color: 'var(--muted)' }}>{g.folio ?? '—'}</td>
                     <td className="px-6 py-3.5 text-right tabular">{mxn(g.monto)}</td>
                   </tr>
                 ))}
               </tbody>
+              {d.comprobantesCuadran && (
+                <tfoot>
+                  <tr className="border-t" style={{ borderColor: 'var(--line)' }}>
+                    <th scope="row" colSpan={2} className="px-6 py-3.5 text-left font-semibold">Total comprobado</th>
+                    <td className="px-6 py-3.5 text-right tabular font-semibold">{mxn(d.totalComprobado)}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
+          )}
+          {d.comprobantesExcluidos > 0 && (
+            <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+              {d.comprobantesExcluidos === 1
+                ? 'Se excluyó 1 comprobante del total (duplicado o monto inválido); está explicado arriba, en las diferencias detectadas.'
+                : `Se excluyeron ${d.comprobantesExcluidos} comprobantes del total (duplicados o montos inválidos); están explicados arriba, en las diferencias detectadas.`}
+            </p>
+          )}
+          {!d.comprobantesCuadran && d.gastos.length > 0 && (
+            <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+              Renglones tal como se capturaron: no se pudo reconstruir la liquidación, así que
+              esta columna puede no sumar el total de arriba.
+            </p>
+          )}
         </section>
         <p className="text-xs mt-10 pt-6 border-t" style={{ color: 'var(--muted)', borderColor: 'var(--line)' }}>
           {LEYENDA_CORTA}

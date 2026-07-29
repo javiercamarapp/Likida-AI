@@ -7,6 +7,7 @@
 import { detectarDuplicadosEntreViajes, type Anomalia } from './duplicados';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
+import { filasImprimibles } from './liquidacion/omitidos';
 
 // ── Los fallos de Supabase llegan POR VALOR, no lanzando ────────────────────
 // `shouldThrowOnError` es false por defecto en postgrest-js, así que un host
@@ -143,7 +144,11 @@ export async function getAcreditables(tenantId: string): Promise<Acreditables> {
 }
 
 export interface LiquidacionDetalle {
-  id: string; folio: string; estatus: string; fecha: string;
+  id: string; folio: string; estatus: string;
+  /** ISO crudo, en UTC. Se formatea en la pantalla y en hora de México:
+   *  `.slice(0, 10)` aquí fechaba en agosto lo cerrado el 31 de julio a las
+   *  20:00 hora local (auditoría 5, frontend, MEDIO 3). */
+  creadoEn: string;
   totalComprobado: number; totalAnticipo: number; diferencia: number;
   ieps: number; litrosDiesel: number; iva: number; peaje: number;
   diferencias: Array<{ tipo: string; nota: string; monto: number }>;
@@ -151,8 +156,19 @@ export interface LiquidacionDetalle {
    *  impreso en el ticket: sin él el panel dice "Diésel" donde el PDF dice
    *  "Combustible Magna" (auditoría 5, arquitectura, ALTO 1). */
   gastos: Array<{ concepto: string; monto: number; folio?: string; ocrExtra?: Record<string, unknown> }>;
+  /** Cuántos comprobantes NO están en `gastos` por estar excluidos del total
+   *  (duplicados y montos no positivos). `0` cuando la tabla es completa. */
+  comprobantesExcluidos: number;
+  /** true cuando `gastos` son las filas del motor y por tanto suman
+   *  `totalComprobado`. false cuando se sirvieron crudos de la base y la suma
+   *  puede no cuadrar: la pantalla lo dice en vez de dejar que el contralor lo
+   *  descubra con el dedo. */
+  comprobantesCuadran: boolean;
   /** Las tres cubetas del motor, o `null` si no se pudieron reconstruir. */
   deducibilidad: { totalDeducible: number; totalNoDeducible: number; totalPorConfirmar: number } | null;
+  /** Ruta del PDF del contralor en storage (`liquidacion.pdf_url`), o `null`.
+   *  No es una URL pública: se firma en `/api/export/pdf/[id]`. */
+  pdfPath: string | null;
 }
 
 /** Detalle de una liquidación (read-only) — para la vista de proyector. */
@@ -160,7 +176,7 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   const admin = supabaseAdmin();
   const res = await admin
     .from('liquidacion')
-    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, viaje:viaje_id(folio)')
+    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, pdf_url, viaje:viaje_id(folio)')
     .eq('id', id)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -170,18 +186,18 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   // existe. Puede que el enlace esté mal escrito".
   const data = exigir(res, 'getLiquidacionDetalle');
   if (!data) return null;
-  const resGastos = await admin
-    .from('gasto')
-    .select('concepto, monto, folio, ocr_extra')
-    .eq('tenant_id', tenantId)
-    .eq('viaje_id', data.viaje_id as string);
-  const gastos = exigir(resGastos, 'getLiquidacionDetalle/gastos');
+  const totalComprobado = Number(data.total_comprobado ?? 0);
+  const reconstruida = await reconstruir(tenantId, data.viaje_id as string, totalComprobado);
+  // Solo se consulta `gasto` cuando el motor no pudo reconstruir: en el camino
+  // normal las filas salen de la reconstrucción, que ya trae los gastos.
+  const crudos = reconstruida ? null : await leerGastos(admin, tenantId, data.viaje_id as string);
+  const gastos = reconstruida?.filas ?? crudos ?? [];
   return {
     id: data.id as string,
     folio: ((data.viaje as { folio?: string } | null)?.folio) ?? (data.id as string).slice(0, 8),
     estatus: data.estatus as string,
-    fecha: (data.created_at as string).slice(0, 10),
-    totalComprobado: Number(data.total_comprobado ?? 0),
+    creadoEn: data.created_at as string,
+    totalComprobado,
     totalAnticipo: Number(data.total_anticipo ?? 0),
     diferencia: Number(data.diferencia ?? 0),
     ieps: Number(data.ieps_acreditable ?? 0),
@@ -192,29 +208,71 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
     iva: Number(data.iva_acreditable ?? 0),
     peaje: Number(data.peaje_acreditable ?? 0),
     diferencias: ((data.diferencias as Array<{ tipo: string; nota: string; monto: number }>) ?? []),
-    gastos: (gastos ?? []).map((g) => ({
-      concepto: g.concepto as string,
-      monto: Number(g.monto),
-      folio: (g.folio as string) || undefined,
-      ocrExtra: (g.ocr_extra as Record<string, unknown>) || undefined,
-    })),
-    deducibilidad: await reconstruirDeducibilidad(tenantId, data.viaje_id as string),
+    gastos,
+    comprobantesExcluidos: reconstruida?.excluidos ?? 0,
+    comprobantesCuadran: reconstruida !== null,
+    deducibilidad: reconstruida?.deducibilidad ?? null,
+    pdfPath: (data.pdf_url as string) || null,
   };
 }
 
 /**
- * Cuánto de lo comprobado sobrevive una revisión del SAT — el cálculo que
- * diferencia al producto y que el panel NO podía enseñar.
+ * Los comprobantes tal como están guardados. Es el camino de RESPALDO: se usa
+ * solo cuando el motor no pudo reconstruir el viaje, y entonces la tabla puede
+ * no sumar el total (`comprobantesCuadran: false`).
  *
- * Las tres cubetas se calculan en el motor y se imprimen en el PDF, pero no se
- * persisten: no hay columnas `total_deducible` / `total_no_deducible` /
- * `total_por_confirmar` ni parámetros en `guardar_liquidacion_tx`. El contralor
- * que revisa desde el navegador —el uso que el panel promete— veía "Comprobado
- * $47,300" y ahí terminaba (auditoría 5, frontend, ALTO 2).
+ * Lleva `.order()` porque sin él Postgres puede devolver los renglones en
+ * distinto orden entre recargas: el contralor recarga y los comprobantes se
+ * barajan (auditoría 5, frontend, BAJO 2). Se ordena por fecha del comprobante,
+ * que es como se lee un estado de cuenta, con `id` de desempate para que dos
+ * tickets del mismo día tampoco bailen.
+ */
+async function leerGastos(
+  admin: ReturnType<typeof supabaseAdmin>,
+  tenantId: string,
+  viajeId: string,
+): Promise<Array<{ concepto: string; monto: number; folio?: string; ocrExtra?: Record<string, unknown> }>> {
+  const res = await admin
+    .from('gasto')
+    .select('id, concepto, monto, folio, ocr_extra')
+    .eq('tenant_id', tenantId)
+    .eq('viaje_id', viajeId)
+    .order('fecha', { ascending: true, nullsFirst: false })
+    .order('id', { ascending: true });
+  const filas = exigir(res, 'getLiquidacionDetalle/gastos') ?? [];
+  return filas.map((g) => ({
+    concepto: g.concepto as string,
+    monto: Number(g.monto),
+    folio: (g.folio as string) || undefined,
+    ocrExtra: (g.ocr_extra as Record<string, unknown>) || undefined,
+  }));
+}
+
+/**
+ * Reconstruye la liquidación con el MISMO motor que alimenta al PDF, y saca de
+ * ahí las dos cosas que el panel no podía enseñar.
  *
- * En vez de recalcularlas aquí —que sería la cuarta copia de la lógica del
- * dinero— se reconstruye la liquidación con el MISMO motor que alimenta al PDF.
- * Dos consecuencias buscadas:
+ * **Las tres cubetas.** Cuánto de lo comprobado sobrevive una revisión del SAT
+ * es el cálculo que diferencia al producto, y no se persiste: no hay columnas
+ * `total_deducible` / `total_no_deducible` / `total_por_confirmar` ni
+ * parámetros en `guardar_liquidacion_tx`. El contralor que revisa desde el
+ * navegador veía "Comprobado $47,300" y ahí terminaba (auditoría 5, frontend,
+ * ALTO 2). Recalcularlas aquí sería la cuarta copia de la lógica del dinero.
+ *
+ * **Los renglones que SÍ suman el total.** `totalComprobado` excluye los
+ * duplicados y los montos ≤ 0, pero el duplicado se persiste igual: el único
+ * unique de la base es por `cfdi_uuid` y por `img_hash`, así que dos fotos
+ * distintas del mismo ticket de caseta producen dos filas. El panel leía
+ * `gasto` directo y pintaba las cuatro: la tarjeta de arriba decía $9,400 y la
+ * tabla de abajo sumaba $10,800, con la fila duplicada pintada igual que las
+ * demás. En un producto cuyo argumento de venta es "detectamos duplicados"
+ * (auditoría 5, frontend, MEDIO 4). El PDF ya lo resolvía con
+ * `filasImprimibles`, y su invariante —la suma de las filas es EXACTAMENTE
+ * `totalComprobado`— está probada en `liquidacion/omitidos.ts`. Aquí se reusa
+ * esa función en vez de repetir el criterio: si cambia en un lado y no en el
+ * otro, vuelve el mismo bug.
+ *
+ * Dos consecuencias buscadas del diseño:
  *
  *  - Si la reconstrucción no cuadra con lo persistido (config del tenant
  *    cambiada, gastos añadidos después del cierre), las cubetas no van a sumar
@@ -222,16 +280,45 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
  *    calla en vez de contradecir a su propio total. Ese portón ya existe y está
  *    probado en `liquidacion/deducibilidad.ts`.
  *  - Si la reconstrucción falla (viaje borrado, lectura caída), el detalle se
- *    sirve igual sin el desglose. Es un extra: no puede tirar la pantalla que
- *    el contralor sí puede leer.
+ *    sirve igual: sin desglose y con los comprobantes crudos, marcados como
+ *    "puede no sumar". Es un extra: no puede tirar la pantalla que el contralor
+ *    sí puede leer.
+ *
+ * EL PORTÓN. Se descarta la reconstrucción entera si su `totalComprobado` no
+ * coincide con el que está PERSISTIDO, con un centavo de tolerancia por los
+ * redondeos del motor. Sin este portón la pantalla vuelve a contradecirse por
+ * el otro lado: medido contra el tenant del demo, la liquidación
+ * `VJ-2026-0845` tiene $12,100 guardados y CERO filas en `gasto`, así que la
+ * reconstrucción devolvía 0 y el pie de la tabla afirmaba "Total comprobado
+ * $12,100.00" debajo de ninguna fila. Es el mismo criterio que ya aplica
+ * `filasDeducibilidad`, y por la misma razón.
  */
-async function reconstruirDeducibilidad(tenantId: string, viajeId: string) {
+async function reconstruir(tenantId: string, viajeId: string, totalPersistido: number) {
   try {
     const liq = await cuadrarDesdeDB(tenantId, viajeId);
+    if (Math.abs(liq.totalComprobado - totalPersistido) > 0.015) return null;
+    const { filas, duplicados } = filasImprimibles(liq);
     return {
-      totalDeducible: liq.totalDeducible,
-      totalNoDeducible: liq.totalNoDeducible,
-      totalPorConfirmar: liq.totalPorConfirmar,
+      deducibilidad: {
+        totalDeducible: liq.totalDeducible,
+        totalNoDeducible: liq.totalNoDeducible,
+        totalPorConfirmar: liq.totalPorConfirmar,
+      },
+      // El orden se fija AQUÍ y no se hereda: `getGastos` (repo.ts) no lleva
+      // `.order()`, así que Postgres puede devolver los comprobantes en
+      // distinto orden entre recargas y el contralor ve la tabla barajarse
+      // (auditoría 5, frontend, BAJO 2). Mismo criterio que el camino de
+      // respaldo —fecha del comprobante, `id` de desempate— para que las dos
+      // rutas pinten la misma tabla. Ordenar no mueve ninguna suma.
+      filas: [...filas]
+        .sort((x, y) => (x.fecha ?? '').localeCompare(y.fecha ?? '') || x.id.localeCompare(y.id))
+        .map((g) => ({
+          concepto: g.concepto as string,
+          monto: Number(g.monto),
+          folio: g.folio || undefined,
+          ocrExtra: g.ocrExtra,
+        })),
+      excluidos: duplicados,
     };
   } catch {
     return null;

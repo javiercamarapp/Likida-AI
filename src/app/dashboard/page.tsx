@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mxn } from '@/lib/utils';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { estadoPanel } from './estado';
+import { litros, fechaMx } from './formato';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,11 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try { return await fn(); } catch { return null; }
 }
 
-interface LiqRow { id: string; folio: string; fecha: string; comprobado: number; diferencia: number; estatus: string }
+/** `creadoEn` viaja en ISO crudo: la fecha se formatea al pintarla, y en hora
+ *  de México. `.slice(0, 10)` se quedaba con el día UTC, así que una
+ *  liquidación cerrada el 31-jul a las 20:00 salía listada en agosto — justo en
+ *  el corte mensual (auditoría 5, frontend, MEDIO 3). */
+interface LiqRow { id: string; folio: string; creadoEn: string; comprobado: number; diferencia: number; estatus: string }
 
 async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
   const { data, error } = await supabaseAdmin()
@@ -39,7 +44,7 @@ async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
   return (data ?? []).map((r) => ({
     id: r.id as string,
     folio: ((r.viaje as { folio?: string } | null)?.folio) ?? (r.id as string).slice(0, 8),
-    fecha: (r.created_at as string).slice(0, 10),
+    creadoEn: r.created_at as string,
     comprobado: Number(r.total_comprobado ?? 0),
     diferencia: Number(r.diferencia ?? 0),
     estatus: r.estatus as string,
@@ -185,6 +190,20 @@ export default async function DashboardPage() {
 
             {/* ── Tabla (cada fila abre el detalle) ── */}
             <section>
+              {/* La ruta de export existía, iba detrás del mismo passcode, tenía
+                  rate-limit y devolvía un CSV con `Content-Disposition:
+                  attachment` — y NADA en la interfaz apuntaba a ella. En el demo,
+                  "¿esto lo puedo bajar a Excel?" se contestaba tecleando una URL
+                  a mano (auditoría 5, frontend, MEDIO 5). */}
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
+                  Detalle por liquidación
+                </h2>
+                <a href="/api/export/liquidaciones" download
+                  className="text-sm px-3.5 py-2 rounded-lg hairline hover:opacity-70">
+                  Exportar CSV
+                </a>
+              </div>
               {liqs === null ? (
                 <div className="card p-8" style={{ color: 'var(--muted)' }}>No se pudo cargar el listado.</div>
               ) : (
@@ -203,11 +222,22 @@ export default async function DashboardPage() {
                       {liqs.map((l) => {
                         const e = ESTATUS[l.estatus as keyof typeof ESTATUS] ?? { label: l.estatus, color: 'var(--muted)' };
                         return (
-                          <tr key={l.id} className="border-t hover:opacity-80" style={{ borderColor: 'var(--line)' }}>
+                          // `relative` + el pseudo-elemento estirado del <Link>:
+                          // la fila entera es el blanco de toque, no un texto de
+                          // ~20px dentro de una celda. El <tr> llevaba
+                          // `hover:opacity-80` —la señal universal de "esto se
+                          // puede clicar"— y solo el folio navegaba; en tableta
+                          // no hay hover, así que el único blanco del panel
+                          // quedaba muy por debajo de los 44px de toque
+                          // (auditoría 5, frontend, BAJO 1). Sigue habiendo UN
+                          // solo enlace por fila: cinco celdas enlazadas serían
+                          // cinco paradas de tabulación por liquidación.
+                          <tr key={l.id} className="relative border-t hover:opacity-80" style={{ borderColor: 'var(--line)' }}>
                             <td className="px-6 py-4 font-medium">
-                              <Link href={`/dashboard/${l.id}`} className="hover:underline">{l.folio}</Link>
+                              <Link href={`/dashboard/${l.id}`}
+                                className="hover:underline after:absolute after:inset-0 after:content-['']">{l.folio}</Link>
                             </td>
-                            <td className="px-6 py-4" style={{ color: 'var(--muted)' }}>{l.fecha}</td>
+                            <td className="px-6 py-4" style={{ color: 'var(--muted)' }}>{fechaMx(l.creadoEn)}</td>
                             <td className="px-6 py-4 text-right tabular">{mxn(l.comprobado)}</td>
                             {/* La dirección va PEGADA a la cifra, no en el detalle.
                                 `Math.abs()` sin más borraba el signo que el motor
@@ -258,9 +288,12 @@ function Acred({ titulo, valor, base, destacar, unidad }: { titulo: string; valo
   // `unidad` existe porque no todo lo acreditable son pesos. El estímulo de
   // diésel es cuota semanal disminuida × litros (LIF 2026 art. 20-A), y esa
   // cuota no la tenemos: entregar los litros es honesto, inventar los pesos no.
-  const texto = unidad === 'litros'
-    ? `${valor.toLocaleString('es-MX', { maximumFractionDigits: 0 })} L`
-    : mxn(valor);
+  //
+  // Con `maximumFractionDigits: 0` esta tarjeta decía "152 L" y el detalle,
+  // a un clic, "152.35 L" — y el PDF que el contralor le manda a su contador,
+  // una tercera cifra. En un dato fiscal, tres representaciones se leen como
+  // tres cálculos (auditoría 5, frontend, MEDIO 1). `litros()` es la única.
+  const texto = unidad === 'litros' ? litros(valor) : mxn(valor);
   return (
     <div className="card p-7" style={destacar ? { borderColor: 'var(--accent)' } : undefined}>
       <div className="text-sm font-medium" style={{ color: 'var(--muted)' }}>{titulo}</div>

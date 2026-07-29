@@ -228,11 +228,41 @@ export function versionAviso(texto: string): string {
 }
 
 /**
+ * Cómo se ejerce la OPOSICIÓN del art. 26 fr. II en un chat.
+ *
+ * El aviso anuncia el derecho con estas palabras: *"Esa revisión la hace un
+ * programa, sin que una persona la mire antes. Tienes derecho a oponerte a que
+ * se decida así y a pedir que la revise alguien."* Quien acaba de leer eso no
+ * contesta `PRIVACIDAD`: contesta con la frase que acaba de leer. Reconocer
+ * solo la palabra clave dejaba el ejercicio del derecho en manos del LLM, que
+ * es exactamente lo que el resto de este módulo decidió no hacer. §6 de
+ * `docs/conocimiento/11-datos-personales.md` lo pide con todas sus letras: un
+ * mecanismo de oposición documentado en el aviso *y accesible desde WhatsApp*.
+ *
+ * Calibrado a favor de la cobertura y no de la precisión, porque los dos errores
+ * no cuestan lo mismo: un falso positivo manda una respuesta que además dice
+ * "tu liquidación sigue igual, esto no la afecta" y el operador repite su
+ * mensaje; un falso negativo deja sin atender un derecho. Aun así se exige la
+ * forma de PETICIÓN ("que lo revise una persona"), no la mención suelta de una
+ * persona, para no secuestrar la conversación normal de la caseta.
+ */
+const OPOSICION: RegExp[] = [
+  /\bme opongo\b/,
+  /\boponerme\b/,
+  /\boposicion\b/,
+  /\brevision humana\b/,
+  /\bque (lo |la )?(revise|revisen|vea|vean) (un |una )?(persona|humano|humana|alguien|gente)\b/,
+  /\b(un|una) (persona|humano|humana|gente) (lo |la )?(revise|vea|revisara)\b/,
+];
+
+/**
  * ¿El operador está ejerciendo el medio que el aviso le prometió?
  *
  * Determinístico y ANTES del agente, a propósito. Un derecho ARCO no se deja a
  * que el LLM decida si el mensaje "califica": si el aviso dice que escribiendo
- * PRIVACIDAD se le atiende, tiene que atenderse siempre, no casi siempre.
+ * PRIVACIDAD se le atiende, tiene que atenderse siempre, no casi siempre. Lo
+ * mismo vale para la oposición del art. 26 fr. II, que el aviso anuncia con una
+ * frase que induce otras palabras (ver `OPOSICION`).
  *
  * Tolerante con cómo se escribe de verdad en WhatsApp: mayúsculas o no, con o
  * sin acento, con signos alrededor. No hace falta que sea el mensaje entero
@@ -243,7 +273,10 @@ export function pideAtencionPrivacidad(texto: string): boolean {
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')   // quita acentos
     .toLowerCase();
-  return /\b(privacidad|arco|mis datos personales|dar de baja mis datos)\b/.test(t);
+  return (
+    /\b(privacidad|arco|mis datos personales|dar de baja mis datos)\b/.test(t) ||
+    OPOSICION.some((r) => r.test(t))
+  );
 }
 
 /**
@@ -268,7 +301,13 @@ export function respuestaPrivacidad(r: DatosResponsable): string {
 
   if (revisarAvisoIntegral(r.urlAvisoIntegral) === 'ok') {
     partes.push(
-      `Ahí vienen los pasos para acceder, corregir, cancelar u oponerte al uso de tus datos (derechos ARCO):`,
+      // La oposición a la revisión automática se nombra aquí también, y no solo
+      // en la rama degradada: es el único derecho que este producto activa por
+      // sí mismo (art. 26 fr. II), y quien escribe suele estar ejerciéndolo
+      // precisamente porque el aviso se lo acaba de anunciar. Si solo se
+      // nombrara cuando la liga no sirve, el día que la flota publique su
+      // integral el producto diría MENOS sobre ese derecho que hoy.
+      `Ahí vienen los pasos para acceder, corregir, cancelar u oponerte al uso de tus datos (derechos ARCO), incluida la revisión automática de tus comprobantes:`,
       r.urlAvisoIntegral.trim(),
     );
   } else {

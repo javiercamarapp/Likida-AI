@@ -64,6 +64,22 @@ describe('reportar — el evento tiene que salir antes de que la invocación se 
     expect(sdk.captureMessage).toHaveBeenCalledTimes(2);
   });
 
+  it('un aviso y su desmentido NO caen en el mismo cubo de Sentry', async () => {
+    // Sentry agrupa por el texto del mensaje. El repo reutiliza el mismo `msg`
+    // para un estado y su contrario: `startup.migraciones` sale como error
+    // cuando falta una migración del camino del dinero y con `ok:true` cuando
+    // están todas. Agrupados juntos, el error se lee como "ya lo vi".
+    vi.stubEnv('SENTRY_DSN', 'https://algo@sentry.io/1');
+    const { reportar, flushObservabilidad } = await import('./sentry');
+
+    reportar('error', 'startup.migraciones', { ok: false });
+    reportar('warn', 'startup.migraciones', { ok: true });
+    await flushObservabilidad();
+
+    const huellas = sdk.captureMessage.mock.calls.map((c) => JSON.stringify((c[1] as { fingerprint?: string[] }).fingerprint));
+    expect(new Set(huellas).size).toBe(2);
+  });
+
   it('sin DSN, flushObservabilidad no lanza ni carga nada', async () => {
     vi.stubEnv('SENTRY_DSN', '');
     const { flushObservabilidad } = await import('./sentry');

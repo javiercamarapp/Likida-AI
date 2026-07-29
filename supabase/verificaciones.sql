@@ -14,8 +14,19 @@
 --
 -- Última corrida: 28-jul-2026, contra el proyecto Likida. Los cuatro primeros
 -- pasaron. Los bloques 5 a 11 son de la auditoría 5 y comprueban las migraciones
--- 0022 y 0024–0029: NO se han corrido todavía porque esas migraciones aún no se
--- aplican. Contra una base sin ellas, los bloques 6 a 11 reportan `f` — que es
+-- 0022 y 0024–0029.
+--
+-- ESTADO DE LAS MIGRACIONES QUE COMPRUEBAN (28-jul-2026, 22:00):
+--   · 0022, 0024, 0025, 0026, 0028 y 0029 → APLICADAS. Sus bloques (5, 6, 7,
+--     9, 10, 11) tienen que dar los valores esperados; si alguno reporta `f`,
+--     la base se ha ido del repo y hay que leerlo como una alarma, no como
+--     "todavía no toca".
+--   · 0027 (una foto = un gasto por flota) → ESCRITA Y NO APLICADA a propósito:
+--     hoy hay dos gastos vivos con el mismo SHA-256 en dos viajes, y aplicarla
+--     degrada el hash del más nuevo. El bloque 8 reporta `f` mientras siga así,
+--     y eso es lo correcto. El bloque 12 dice EXACTAMENTE qué filas toca antes
+--     de decidir.
+-- Contra una base sin las migraciones, los bloques 6 a 11 reportan `f` — que es
 -- justamente la lectura útil: dicen qué garantía falta.
 -- ═══════════════════════════════════════════════════════════════════════════
 
@@ -362,4 +373,45 @@ begin
 
   raise exception E'DOMINIOS  concepto-inventado=%  estatus-inventado=%  forma_pago-texto=%  rol-mal-escrito=%   (esperado t / t / t / t)',
     concepto, estatus, pago, rol;
+end $$;
+
+
+-- ── 12. Qué va a tocar la 0027 antes de aplicarla ───────────────────────────
+-- SOLO LECTURA: no inserta, no actualiza, no borra. Es el paso previo a
+-- `supabase db push` de la 0027, que degrada a NULL el `img_hash` del duplicado
+-- más nuevo de cada grupo (conservando el valor en `ocr_extra.imgHashDuplicado`).
+--
+-- Correrlo ANTES importa porque la base no puede distinguir un ENSAYO del demo
+-- —las mismas 17 fotos mandadas dos veces— de un fraude —el mismo ticket cobrado
+-- contra dos anticipos—. Son el mismo archivo en dos viajes. Esa distinción es
+-- de quien mira la lista, y esta es la lista.
+--
+-- Medido el 28-jul-2026: 1 grupo, el hash 250a4e5b… en los gastos
+-- 26fd8543-… (viaje …00ff) y 19299f03-… (viaje …00fe), $199.00 los dos.
+do $$
+declare r record; msg text := ''; n int := 0;
+begin
+  for r in
+    select g.tenant_id,
+           g.img_hash,
+           count(*) as veces,
+           count(distinct g.viaje_id) as viajes,
+           sum(g.monto) as monto_sumado,
+           string_agg(g.id::text || ' (viaje ' || right(g.viaje_id::text, 6) ||
+                      ', $' || g.monto::text || ')', E'\n      ' order by g.created_at) as filas
+    from gasto g
+    where g.img_hash is not null
+    group by g.tenant_id, g.img_hash
+    having count(*) > 1
+  loop
+    n := n + 1;
+    msg := msg || format(E'\n  · tenant %s · hash %s… · %s gastos en %s viajes · suma $%s\n      %s',
+                         r.tenant_id, left(r.img_hash, 12), r.veces, r.viajes, r.monto_sumado, r.filas);
+  end loop;
+
+  if n = 0 then
+    raise exception 'FOTOS REPETIDAS  grupos=0 → la 0027 se puede aplicar tal cual, no degrada ningún hash.';
+  end if;
+
+  raise exception E'FOTOS REPETIDAS  grupos=%  → la 0027 degradará a NULL el img_hash del MÁS NUEVO de cada grupo (el valor se guarda en ocr_extra.imgHashDuplicado):%\n\nRevísalos uno por uno: la base no sabe si es un ensayo del demo o el mismo ticket cobrado dos veces.', n, msg;
 end $$;

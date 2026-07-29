@@ -22,19 +22,30 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // persistente (ver conv.ts y conv_lock.test.ts).
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ───────────────────────────────────────────────────────────────────────────
+// AUDITORÍA 5 · ALTO — este archivo mockeaba `@/lib/cuadra/tools` y
+// `@/lib/meta/client` enteros. Ahora los dos corren de verdad y el único borde
+// mockeado es `fetch` hacia la Graph API: "no le escribe al operador" pasa de
+// ser "no se llamó un espía" a "no salió un solo byte hacia Meta", que es la
+// afirmación que de verdad importa cuando el otro turno ya le está escribiendo.
+// ───────────────────────────────────────────────────────────────────────────
+
 const runAgent = vi.fn();
 const acquireViajeLock = vi.fn();
-const sendText = vi.fn();
 const getOpenViaje = vi.fn();
 const claimMessage = vi.fn<(id: string) => Promise<'nuevo' | 'duplicado' | 'indeterminado'>>(async () => 'nuevo');
 
+/** Todo lo que salió hacia la Graph API. */
+const salientes: { url: string; body: Record<string, unknown> }[] = [];
+const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
+  salientes.push({ url: String(url), body: JSON.parse(String(init?.body ?? '{}')) });
+  return new Response(JSON.stringify({ messages: [{ id: 'wamid.TEST' }] }),
+    { status: 200, headers: { 'content-type': 'application/json' } });
+});
+
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
-vi.mock('@/lib/cuadra/tools', () => ({}));
-vi.mock('@/lib/meta/client', () => ({
-  sendText: (...a: unknown[]) => sendText(...a),
-  sendDocument: vi.fn(), downloadMediaAsDataUrl: vi.fn(), downloadMediaAsText: vi.fn(),
-}));
-vi.mock('@/lib/cuadra/conv', () => ({
+vi.mock('@/lib/cuadra/conv', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
   getOpenViaje: (...a: unknown[]) => getOpenViaje(...a),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
@@ -49,23 +60,44 @@ vi.mock('@/lib/cuadra/repo', () => ({
   saveCfdiXmlRaw: vi.fn(), gastoExistePorHash: vi.fn(async () => false),
   enriquecerGastoConCodigo: vi.fn(), guardarCodigoPendiente: vi.fn(),
   getCodigosPendientes: vi.fn(async () => []), reclamarCodigoPendiente: vi.fn(),
-  // Sin datos de responsable: el aviso de privacidad no se manda y no estorba.
-  getDatosResponsable: vi.fn(async () => null), reclamarEnvioAviso: vi.fn(async () => false),
+  // El aviso ya se le puso a disposición antes (`reclamarEnvioAviso` → false):
+  // no se manda otra vez y no estorba. Sin datos de responsable el processor
+  // bloquearía el tratamiento y el mutex ni se consultaría.
+  getDatosResponsable: vi.fn(async () => ({
+    razonSocial: 'FLOTA SA DE CV', domicilio: 'Calle 1, Mérida',
+    urlAvisoIntegral: 'https://flota.mx/privacidad',
+  })),
+  reclamarEnvioAviso: vi.fn(async () => false), liberarEnvioAviso: vi.fn(),
+  // `tools.ts` se importa de verdad: estos son sus accesos a datos.
+  getViaje: vi.fn(async () => ({ id: 'v1', anticipo: 0 })),
+  getOperador: vi.fn(async () => ({ id: 'o1', nombre: 'Operador', telefono: '5219993700779' })),
+  saveLiquidacion: vi.fn(async () => 'L1'),
+  getAcumuladoCombustible: vi.fn(async () => { throw new Error('sin base en pruebas'); }),
 }));
 vi.mock('@/lib/cuadra/costos', () => ({
   registrarCosto: vi.fn(), registrarCostoWhatsApp: vi.fn(),
   faseDeModelo: vi.fn(() => 'cuadre'), vincularCostosALiquidacion: vi.fn(),
 }));
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: vi.fn() }));
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }),
+    storage: { from: () => ({ upload: async () => ({ error: null }), createSignedUrl: async () => ({ data: null, error: { message: 'sin storage' } }) }) },
+  }),
+}));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { processInbound } = await import('./processor');
 
-const listo = { from: '+521111111101', type: 'text' as const, text: 'listo', waMessageId: 'wa1' };
+const listo = { from: '5219993700779', type: 'text' as const, text: 'listo', waMessageId: 'wa1' };
 
 describe('processInbound — mutex del viaje', () => {
   beforeEach(() => {
-    runAgent.mockReset(); acquireViajeLock.mockReset(); sendText.mockReset(); getOpenViaje.mockReset();
+    salientes.length = 0;
+    runAgent.mockReset(); acquireViajeLock.mockReset(); getOpenViaje.mockReset();
+    vi.stubGlobal('fetch', fetchSpy);
+    fetchSpy.mockClear();
+    process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
+    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
     getOpenViaje.mockResolvedValue('v1');
     runAgent.mockResolvedValue({ finalText: 'Listo', toolCalls: [], model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0 });
   });
@@ -76,6 +108,10 @@ describe('processInbound — mutex del viaje', () => {
     acquireViajeLock.mockResolvedValue(true);
     return processInbound(listo).then(() => {
       expect(runAgent).toHaveBeenCalledTimes(1);
+      // Y el mensaje SÍ sale, por el camino real: sin este contraste, la prueba
+      // de abajo pasaría igual si nunca saliera nada.
+      expect(salientes).toHaveLength(1);
+      expect(salientes[0].body.to).toBe('529993700779');
     });
   });
 
@@ -87,9 +123,11 @@ describe('processInbound — mutex del viaje', () => {
 
   it('con el lock OCUPADO, tampoco le escribe al operador', async () => {
     // El otro turno ya le está escribiendo: un segundo mensaje que nadie pidió
-    // se ve como un bug delante del comprador.
+    // se ve como un bug delante del comprador. Con el cliente real, esto afirma
+    // que no salió NADA hacia Meta, no que no se llamó una función.
     acquireViajeLock.mockResolvedValue(false);
     await processInbound(listo);
-    expect(sendText).not.toHaveBeenCalled();
+    expect(salientes, 'salió un mensaje que nadie pidió').toHaveLength(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
