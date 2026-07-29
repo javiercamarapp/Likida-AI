@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cuadrarViaje } from './cuadre/engine';
+import { derivoLaConfig } from './analytics';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 6 · CRÍTICO de frontend — EL PANEL CONTRADICE AL PDF ARCHIVADO.
@@ -55,15 +56,17 @@ describe('la premisa del hallazgo: la config mueve las cubetas y no el comprobad
 });
 
 describe('el portón nuevo mira los tipos de diferencia, que sí cambian', () => {
-  // `derivoLaConfig` no se exporta (es detalle de `reconstruir`); se prueba su
-  // criterio, que es lo que hay que fijar: el conjunto de TIPOS.
-  const tipos = (xs: Array<{ tipo?: string }>) => new Set(xs.map((d) => d.tipo));
-  const derivo = (a: Array<{ tipo?: string }>, b: Array<{ tipo?: string }>) => {
-    const antes = tipos(a); const ahora = tipos(b);
-    if (antes.size !== ahora.size) return true;
-    for (const t of ahora) if (!antes.has(t)) return true;
-    return false;
-  };
+  // AUDITORÍA 7 · CRÍTICO del rubro de pruebas: aquí vivía una REIMPLEMENTACIÓN
+  // de `derivoLaConfig` escrita dentro de este mismo archivo. Probaba "el
+  // criterio", no la función, así que la de producción podía romperse entera y
+  // estos cuatro casos seguían verdes — verificado: cambiando el `return true`
+  // de `analytics.ts` por `return false`, las 7 pruebas pasaban igual. El
+  // arreglo del CRÍTICO de frontend de la ronda 6 estaba sin anclar.
+  //
+  // La copia además NO era fiel: le faltaba la guarda `!Array.isArray`, así que
+  // ni siquiera probaba el mismo criterio que decía probar.
+  const derivo = (a: Array<{ tipo?: string }>, b: Array<{ tipo?: string }>) =>
+    derivoLaConfig(a, b);
 
   it('detecta el motivo nuevo del escenario real', () => {
     expect(derivo(

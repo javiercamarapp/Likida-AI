@@ -382,7 +382,7 @@ async function reconstruir(
  * liquidación vieja con `diferencias: null` es un dato que falta, no una
  * contradicción, y apagar el desglose por eso castigaría al camino bueno.
  */
-function derivoLaConfig(persistidas: unknown, actuales: Array<{ tipo?: string }>): boolean {
+export function derivoLaConfig(persistidas: unknown, actuales: Array<{ tipo?: string }>): boolean {
   if (!Array.isArray(persistidas)) return false;
   const tipos = (xs: Array<{ tipo?: string }>) =>
     new Set(xs.map((d) => d?.tipo).filter((t): t is string => typeof t === 'string'));

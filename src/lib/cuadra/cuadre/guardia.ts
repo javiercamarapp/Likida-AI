@@ -37,6 +37,17 @@ export async function guardiaCifras(
   const cuadro = toolCalls.some(
     (t) => (t.toolName === 'cuadrar_viaje' || t.toolName === 'guardar_liquidacion') && !t.error,
   );
+  // `cuadro` y `cerro` son DOS preguntas distintas y hay que tenerlas separadas:
+  //   `cuadro` → "¿hay números que respaldar?" (decide si se sustituye el texto)
+  //   `cerro`  → "¿el viaje quedó cerrado en este turno?" (decide el encabezado)
+  //
+  // Pasarle `cuadro` al parámetro `cerrado` de `resumenCuadre` hacía que un turno
+  // que sólo calcula —"¿cuánto llevo?" → `cuadrar_viaje`, sin `guardar_liquidacion`—
+  // encabezara "Listo, cuadré tu viaje" con el viaje todavía `abierto` y la tabla
+  // `liquidacion` vacía. El chofer dejaba de mandar comprobantes esperando un PDF
+  // que nadie iba a generar, y el panel del contralor no tenía esa liquidación.
+  // Es el mismo hecho que `processor.ts` llama `closed`, calculado igual.
+  const cerro = toolCalls.some((t) => t.toolName === 'guardar_liquidacion' && !t.error);
   const consultoPolitica = toolCalls.some((t) => t.toolName === 'consultar_politica' && !t.error);
 
   // El detector NO decide sobre un cuadre. Antes esta función salía en la primera
@@ -69,14 +80,15 @@ export async function guardiaCifras(
 
   try {
     const liq = await cuadrarDesdeDB(tenantId, viajeId);
-    // cerrado=cuadro: encabezado afirma el cierre solo si de verdad se cuadró.
+    // cerrado=cerro: el encabezado afirma el cierre SOLO si `guardar_liquidacion`
+    // corrió sin error en este turno. Ver el comentario de `cerro` arriba.
     //
     // 'operador' NO es opcional aquí: esta respuesta va por WhatsApp AL CHOFER, y
     // sin el destinatario caía al default 'contralor' — mandándole veredictos que
     // él no puede arreglar (proveedor en lista 69-B, CFDI cancelado, RFC receptor)
     // más el descargo legal. Y pasa en el CAMINO FELIZ: foto → "listo" → el agente
     // narra → la guardia reemplaza. O sea, delante del comprador en el demo.
-    return { reply: resumenCuadre(liq, cuadro, 'operador'), forzado: true };
+    return { reply: resumenCuadre(liq, cerro, 'operador'), forzado: true };
   } catch (err) {
     logger.error('guardia_cifras_fail_closed', { tenantId, viajeId, err: String(err) });
     return {
