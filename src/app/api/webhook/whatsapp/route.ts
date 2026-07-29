@@ -4,6 +4,7 @@ import { verifyWebhookChallenge, verifySignature } from '@/lib/meta/client';
 import { processInbound, type InboundMessage } from '@/lib/cuadra/processor';
 import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+import { flushObservabilidad } from '@/lib/observability/sentry';
 
 const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
 const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
@@ -73,6 +74,20 @@ export async function POST(req: NextRequest) {
           processInbound(m).catch((e) => logger.error('processInbound', { err: e instanceof Error ? e.message : String(e) })),
         ),
       );
+      // EL MECANISMO EXISTÍA Y NADIE LO LLAMABA (auditoría 6, operabilidad).
+      //
+      // `flushObservabilidad` se escribió para ESTE punto exacto —su comentario
+      // lo dice— y con ocho pruebas unitarias, pero el único `after()` del repo
+      // no la invocaba. Vercel CONGELA la invocación en cuanto esta promesa
+      // resuelve, así que el evento que más importa (el último error antes de
+      // morir) es justo el que menos probabilidad tiene de salir del proceso.
+      // `reportar()` pide `flush` dentro del envío, pero en fire-and-forget: la
+      // invocación puede congelarse antes de que esa promesa asiente.
+      //
+      // Aquí es donde se pueden esperar los envíos en vuelo sin retrasar al
+      // operador: su mensaje ya salió. Nunca lanza — un fallo de telemetría no
+      // puede sumarse al fallo que se está reportando.
+      await flushObservabilidad();
     });
   }
   // ── ACUSES DE ENTREGA ──────────────────────────────────────────────────────

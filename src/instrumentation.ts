@@ -23,8 +23,14 @@ export async function register() {
   const { avisarConfiguracionSilenciosa } = await import('@/lib/observability/arranque');
   avisarConfiguracionSilenciosa();
 
-  const { verificarMigracionesCriticas } = await import('@/lib/cuadra/startup');
+  const { verificarMigracionesCriticas, verificarAvisoDePrivacidad } = await import('@/lib/cuadra/startup');
   await verificarMigracionesCriticas();
+
+  // Y si la liga del aviso de privacidad EXISTE. Es lo único que distingue un
+  // dominio bien escrito de uno sin registrar, y hasta la auditoría 6 la función
+  // que lo comprueba no la llamaba nadie más que sus pruebas. Va al final porque
+  // hace una petición de red: no puede retrasar el diagnóstico de lo demás.
+  await verificarAvisoDePrivacidad();
 }
 
 type PeticionConError = { path?: string; method?: string; headers?: Record<string, string> } | undefined;
