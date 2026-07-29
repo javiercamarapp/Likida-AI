@@ -223,7 +223,17 @@ export async function updateGastoCfdiXml(
     iva_traslado: x.ivaTraslado ?? null,
     xml_verificado: true,
   }).eq('id', gastoId).eq('tenant_id', tenantId), 'updateGastoCfdiXml');
-  if (error) throw new Error(`updateGastoCfdiXml: ${error.message}`);
+  if (error) {
+    // SE PRESERVA `code`, igual que `addGasto` (auditoría 6, modelo de datos).
+    // Antes era un `throw new Error(...)` liso, así que este camino no podía
+    // distinguir una violación de CHECK (23514) ni un duplicado (23505) de un
+    // fallo cualquiera, ni aunque alguien quisiera manejarlos: el código venía
+    // borrado desde aquí. Una restricción nueva en la base es un error de
+    // tiempo de ejecución nuevo, y sin el código no hay forma de traducirlo.
+    const e = new Error(`updateGastoCfdiXml: ${error.message}`) as Error & { code?: string };
+    if (error.code) e.code = error.code;
+    throw e;
+  }
 }
 
 /**

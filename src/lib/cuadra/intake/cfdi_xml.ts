@@ -58,6 +58,38 @@ function toArr<T>(v: T | T[] | undefined): T[] {
 }
 
 /** Parsea el XML de un CFDI 4.0. Demo-safe: devuelve null ante cualquier error. */
+/**
+ * La `FormaPago` del CFDI, normalizada al catálogo `c_FormaPago` del SAT (dos
+ * dígitos) o descartada.
+ *
+ * ── POR QUÉ NO SE PASA EL ATRIBUTO TAL CUAL (auditoría 6, modelo de datos) ──
+ *
+ * La migración 0025 puso `gasto_forma_pago_formato` —`forma_pago is null or
+ * forma_pago ~ '^[0-9]{2}$'`— para cazar un fallo del mapeo de OCR. Ese camino
+ * ya estaba blindado con zod. Pero hay un SEGUNDO escritor que la migración no
+ * contempló: este parser, que leía `@_FormaPago` sin validar nada, y cuyo valor
+ * llega a `gasto` por los dos únicos caminos de escritura que existen.
+ *
+ * Un CFDI bien timbrado —UUID válido, RFC, total y fecha correctos— emitido por
+ * software de facturación de una gasolinera independiente puede traer
+ * `FormaPago="1"` en vez de `"01"`. Un solo dígito. Con eso, el `insert`
+ * violaba el CHECK (23514), `pg_errores.ts` no sabe traducir ese código,
+ * `processor.ts` solo reconoce los dos índices únicos y el resto cae en
+ * `throw e`, y el comprobante se perdía ENTERO — sin guardar siquiera el XML
+ * crudo que el CFF art. 30 obliga a conservar cinco años.
+ *
+ * Perder un dato accesorio es incomparablemente mejor que perder el CFDI. Un
+ * dígito suelto se rellena (el catálogo del SAT va de `01` a `99`, así que "1"
+ * solo puede querer decir "01"); cualquier otra cosa se descarta a `undefined`,
+ * que el CHECK acepta como `null`. La verdad de referencia sigue completa en el
+ * XML crudo.
+ */
+export function formaPagoSat(bruto: string | undefined | null): string | undefined {
+  const v = String(bruto ?? '').trim();
+  if (!/^\d{1,2}$/.test(v)) return undefined;
+  return v.padStart(2, '0');
+}
+
 export function parseCfdiXml(xml: string): CfdiXmlData | null {
   try {
     const doc = parser.parse(xml) as Record<string, unknown>;
@@ -124,7 +156,7 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       version: (comp['@_Version'] as string) || undefined,
       tipoComprobante: (comp['@_TipoDeComprobante'] as string) || undefined,
       fecha: (comp['@_Fecha'] as string) || undefined,
-      formaPago: (comp['@_FormaPago'] as string) || undefined,
+      formaPago: formaPagoSat(comp['@_FormaPago'] as string | undefined),
       subTotal: num(comp['@_SubTotal']),
       rfcEmisor: (emisor['@_Rfc'] as string)?.toUpperCase() || undefined,
       rfcReceptor: (receptor['@_Rfc'] as string)?.toUpperCase() || undefined,
