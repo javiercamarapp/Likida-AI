@@ -82,6 +82,19 @@ describe('índice de normas vs fichas', () => {
       expect(archivos, `${NORMAS[id].ficha} no existe`).toContain(NORMAS[id].ficha.replace('normas/', ''));
     }
   });
+
+  it('la FECHA DE EXIGIBILIDAD del índice es la de la ficha, no la del código', () => {
+    // Es el campo que enciende o apaga un veredicto DURO. `config.ts` traía
+    // `vigenteDesde: '2026-04-24'` fundado en una cita sin ficha (RMF 2.7.1.8) y
+    // el motor tiraba con ella una deducción entera más su IVA acreditable. La
+    // única fuente admisible de esa fecha es `fecha_vigencia_desde` de la ficha:
+    // si nadie la confirmó, es `null` y el motor no puede afirmar vigencia.
+    for (const f of fichas) {
+      const enFicha = campo(f.txt, 'fecha_vigencia_desde') ?? null;
+      const enIndice = NORMAS[f.id!].exigibleDesde ?? null;
+      expect(enIndice, `fecha_vigencia_desde distinta en ${f.archivo}`).toBe(enFicha);
+    }
+  });
 });
 
 describe('esVinculante', () => {

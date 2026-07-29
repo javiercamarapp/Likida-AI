@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { crearPresupuesto, MARGEN_CIERRE_MS, PRESUPUESTO_WEBHOOK_MS } from './presupuesto';
+import {
+  crearPresupuesto, MARGEN_CIERRE_MS, PRESUPUESTO_WEBHOOK_MS,
+  PASOS_CIERRE, COSTO_CIERRE_MS, TOPE_CONSULTA_MS,
+} from './presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PRESUPUESTO DE TIEMPO DE UNA INVOCACIÓN.
@@ -83,6 +86,61 @@ describe('PRESUPUESTO_WEBHOOK_MS', () => {
     const m = /export const maxDuration = (\d+)/.exec(ruta);
     expect(m, 'no se encontró maxDuration en la ruta del webhook').not.toBeNull();
     expect(Number(m![1]) * 1000).toBe(PRESUPUESTO_WEBHOOK_MS);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL MARGEN DE CIERRE ERA UNA CUENTA EN PROSA, Y LA PROSA MENTÍA.
+//
+// El comentario enumeraba SEIS pasos de red y los sumaba en "~7s en un día
+// malo". Contados contra `processor.ts` después de que `runAgent` devuelve son
+// TRECE y suman 8.9s. Seguía cabiendo en 12s, pero con 3.1s de holgura en vez de
+// los ~5s que sugería — y nadie podía notarlo porque una lista en un comentario
+// no la verifica nada.
+//
+// Es el mismo mecanismo que produjo el bug original de `maxDuration`: el número
+// escrito al lado del código dejó de coincidir con el código. Aquí se cierra
+// igual que allá, con una prueba.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la contabilidad del cierre', () => {
+  it('el margen reservado alcanza para los pasos que de verdad hay', () => {
+    expect(COSTO_CIERRE_MS).toBe(PASOS_CIERRE.reduce((s, p) => s + p.ms, 0));
+    expect(MARGEN_CIERRE_MS).toBeGreaterThanOrEqual(COSTO_CIERRE_MS);
+  });
+
+  it('la tabla trae los trece pasos, con dónde vive cada uno', () => {
+    // El `donde` no es adorno: sin él, revisar si la lista sigue completa exige
+    // releer `processor.ts` entero, que es exactamente lo que nadie hizo en tres
+    // rondas. Si añades un paso de red al cierre, añádelo aquí o sube el margen.
+    expect(PASOS_CIERRE).toHaveLength(13);
+    for (const p of PASOS_CIERRE) {
+      expect(p.ms, `${p.paso} sin costo`).toBeGreaterThan(0);
+      expect(p.donde, `${p.paso} sin ubicación`).toMatch(/\.ts/);
+    }
+  });
+
+  it('queda holgura para que un solo paso salga lento', () => {
+    // `sendDocument` es el más caro (2.5s presupuestados). Si se va al doble, el
+    // cierre todavía tiene que caber; si no, el operador se queda sin PDF y sin
+    // log, porque Vercel mata la función antes del `catch`.
+    const masCaro = Math.max(...PASOS_CIERRE.map((p) => p.ms));
+    expect(MARGEN_CIERRE_MS).toBeGreaterThanOrEqual(COSTO_CIERRE_MS + masCaro * 0.5);
+  });
+});
+
+describe('TOPE_CONSULTA_MS', () => {
+  it('es muchísimo menor que el presupuesto de la invocación', () => {
+    // La razón de existir del tope: el default de undici son 300 000 ms contra un
+    // `maxDuration` de 120 000. Un techo que no quepa varias veces en el
+    // presupuesto no es un techo, es el mismo problema con otro número.
+    expect(TOPE_CONSULTA_MS).toBeLessThan(PRESUPUESTO_WEBHOOK_MS / 10);
+  });
+
+  it('deja pasar una consulta sana con holgura de sobra', () => {
+    // Una consulta de este sistema cuesta ~0.3s en la contabilidad de arriba.
+    // Un tope por debajo de 3s empezaría a cortar consultas buenas en un mal
+    // día, y cortar una buena es peor que esperar una mala.
+    expect(TOPE_CONSULTA_MS).toBeGreaterThanOrEqual(3_000);
   });
 });
 

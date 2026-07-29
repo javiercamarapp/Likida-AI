@@ -19,7 +19,7 @@
 
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ACCESS_COOKIE, expectedAccessToken, tokenMatches } from './passcode';
+import { ACCESS_COOKIE, hayPasscode, tokenMatches } from './passcode';
 
 /**
  * Corta la página si quien la pide no tiene una cookie válida.
@@ -30,8 +30,7 @@ import { ACCESS_COOKIE, expectedAccessToken, tokenMatches } from './passcode';
  * @param destino ruta a la que volver tras autenticarse.
  */
 export async function exigirAcceso(destino: string): Promise<void> {
-  const esperado = await expectedAccessToken();
-  if (!esperado) return;                       // dev sin passcode
+  if (!hayPasscode()) return;                  // dev sin passcode
   const cookie = (await cookies()).get(ACCESS_COOKIE)?.value;
   if (await tokenMatches(cookie)) return;
   redirect(`/acceso?next=${encodeURIComponent(destino)}`);

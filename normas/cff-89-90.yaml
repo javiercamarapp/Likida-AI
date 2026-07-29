@@ -1,0 +1,82 @@
+id: cff-89-90
+tipo: ley
+jerarquia: 1
+instrumento: "Código Fiscal de la Federación"
+articulo_o_regla: "89 y 90"
+titulo: "Infracciones cuya responsabilidad recae sobre TERCEROS, y su multa — la exposición de Likida"
+citas_en_codigo: ["CFF 89", "CFF 90", "CFF arts. 89 y 90"]
+texto_vigente: >
+  Artículo 89. Son infracciones cuya responsabilidad recae sobre terceros, las
+  siguientes:
+
+  I. Asesorar, aconsejar o prestar servicios para omitir total o parcialmente el pago
+  de alguna contribución en contravención a las disposiciones fiscales.
+
+  II. Colaborar en la alteración o la inscripción de cuentas, asientos o datos falsos
+  en la contabilidad o en los documentos que se expidan.
+
+  III. Ser cómplice en cualquier forma no prevista, en la comisión de infracciones
+  fiscales.
+
+  IV. Al que permita o publique a través de cualquier medio, anuncios para la
+  adquisición o enajenación de comprobantes fiscales que amparen operaciones
+  inexistentes, falsas o actos jurídicos simulados.
+
+  No se incurrirá en la infracción a que se refiere la fracción primera de este
+  artículo, cuando se manifieste en la opinión que se otorgue por escrito que el
+  criterio contenido en ella es diverso a los criterios dados a conocer por las
+  autoridades fiscales en los términos del inciso h) de la fracción I del artículo 33
+  de este Código o bien manifiesten también por escrito al contribuyente que su
+  asesoría puede ser contraria a la interpretación de las autoridades fiscales.
+
+  ---
+
+  Artículo 90. Se sancionará con una multa de $79,130.00 a $124,380.00, a quien cometa
+  las infracciones a las disposiciones fiscales a que se refiere el artículo 89 de este
+  Código.
+
+  En los supuestos señalados en la fracción I del artículo citado, se considerará como
+  agravante que la asesoría, el consejo o la prestación de servicios sea diversa a los
+  criterios dados a conocer por las autoridades fiscales en los términos del inciso h)
+  de la fracción I del artículo 33 de este Código. En este caso, la multa se aumentará
+  de un 10% a un 20% del monto de la contribución omitida [...]
+fecha_publicacion: 1981-12-31
+fecha_vigencia_desde: null
+fuente_url: "https://www.diputados.gob.mx/LeyesBiblio/pdf/CFF.pdf"
+fuente_tipo: diputados_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Transcrito el 28-jul-2026 del PDF oficial de la Cámara de Diputados, TEXTO VIGENTE,
+  última reforma publicada DOF 09-04-2026 (arts. 89 y 90, pp. 174-175 de 377).
+
+  Los IMPORTES de la multa del art. 90 se ACTUALIZAN: el propio documento anota
+  "Multa del párrafo compilada por resolución miscelánea fiscal DOF 05-01-2022.
+  Actualizada DOF 27-12-2022. Compilada DOF 29-12-2023, 30-12-2024. Actualizada DOF
+  28-12-2025". Los $79,130.00 a $124,380.00 son los del texto vigente al 09-04-2026.
+  El producto NO debe imprimir estas cifras sin fecharlas: se mueven cada año.
+por_que_nos_toca: >
+  Es la posición de LIKIDA, no la del cliente. El art. 89 fr. I sanciona "asesorar,
+  aconsejar o PRESTAR SERVICIOS para omitir total o parcialmente el pago de alguna
+  contribución en contravención a las disposiciones fiscales", y un motor que calcula
+  mal un estímulo y lo imprime citando la ley es exactamente eso. Es el mismo alcance
+  que la fracción de cierre de los criterios del Anexo 3 (ver criterio-1-CFF-PI).
+mitigacion: >
+  LA MITIGACIÓN ESTÁ EN EL ÚLTIMO PÁRRAFO DEL PROPIO ART. 89, y es literal: no se
+  incurre en la infracción de la fracción I "cuando se manifieste... POR ESCRITO al
+  contribuyente que su asesoría puede ser contraria a la interpretación de las
+  autoridades fiscales".
+
+  Eso es exactamente lo que hace `cuadre/leyendas.ts`: LEYENDA_CORTA dice "puede
+  diferir de los criterios que dé a conocer el SAT" y `leyendaPdf()` lo repite en el
+  documento que se archiva. La leyenda no es adorno legal: es la conducta que el
+  artículo nombra para no caer en la infracción, y por eso tiene que ir POR ESCRITO y
+  en el papel, no solo en la conversación.
+
+  El agravante del art. 90, 2º párrafo, apunta al mismo lugar: la multa sube de 10% a
+  20% de la contribución omitida cuando el criterio es DIVERSO al del SAT. Otra razón
+  para que la frase "puede diferir de los criterios que dé a conocer el SAT" esté
+  escrita y no implícita.
+verificado_por: "auditoría 5 / ingeniero fiscal — transcripción directa del PDF de diputados.gob.mx"
+verificado_el: 2026-07-28
+usado_en_codigo:
+  - "cuadre/leyendas.ts — el marco de responsabilidad que documenta el encabezado, y la mitigación que implementan LEYENDA_CORTA y leyendaPdf()"

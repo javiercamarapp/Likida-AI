@@ -68,6 +68,21 @@ describe('toLiquidacionRows — el mapeo de dinero hacia el ERP', () => {
     expect(r.num_diferencias).toBe(2);
   });
 
+  it('la fecha es la del cliente, no la UTC: una liquidación de las 20:00 NO salta de mes', () => {
+    // `.slice(0, 10)` sobre el timestamptz daba `2026-08-01`. Las liquidaciones
+    // se cierran al terminar el viaje, de noche, y CST es UTC−6: todo lo que se
+    // cerraba después de las 18:00 hora local entraba al ERP con la fecha del
+    // día siguiente. En el corte mensual, julio se contabilizaba en agosto
+    // (auditoría 5, frontend, MEDIO 3).
+    const [r] = toLiquidacionRows([{ ...CRUDO[0], created_at: '2026-08-01T02:00:00.000+00:00' }]);
+    expect(r.fecha).toBe('2026-07-31');
+  });
+
+  it('sin created_at la celda queda vacía, no con "Invalid Date"', () => {
+    const [r] = toLiquidacionRows([{ ...CRUDO[0], created_at: '' }]);
+    expect(r.fecha).toBe('');
+  });
+
   it('un cero se exporta como 0, no se pierde ni se vuelve vacío', () => {
     // El caso que muerde en un ERP: un 0 que llega como null o como '' hace que
     // la conciliación lo trate como "no informado" en vez de "cuadró exacto".

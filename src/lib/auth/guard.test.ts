@@ -48,6 +48,20 @@ describe('exigirAcceso', () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  // La cookie caduca en el SERVIDOR, no solo en el navegador. Importa que la
+  // segunda capa lo respete por su cuenta: `/api/export/liquidaciones` también
+  // se apoya en `tokenMatches` y no pasa por el proxy (el matcher excluye /api).
+  it('con la cookie CADUCADA, manda a /acceso aunque el navegador la conserve', async () => {
+    vi.stubEnv('DASHBOARD_PASSCODE', 'demo2026');
+    vi.stubEnv('DASHBOARD_SECRET', 'secreto-de-servidor');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-06T10:00:00Z'));
+    get.mockReturnValue({ value: await accessToken('demo2026') });
+    vi.setSystemTime(new Date('2026-08-07T10:00:00Z'));   // 24 h después
+    await expect(exigirAcceso('/dashboard')).rejects.toThrow('NEXT_REDIRECT');
+    vi.useRealTimers();
+  });
+
   it('conserva a dónde volver, incluido el id de la liquidación', async () => {
     vi.stubEnv('DASHBOARD_PASSCODE', 'demo2026');
     vi.stubEnv('DASHBOARD_SECRET', 'secreto-de-servidor');

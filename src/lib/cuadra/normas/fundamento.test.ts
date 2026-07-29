@@ -119,7 +119,10 @@ describe('coste y resistencia de la detección', () => {
     }
   });
 
-  it('un mensaje normal cuesta una fracción de milisegundo', () => {
+  // SE SALTA BAJO `--coverage`: 100 llamadas instrumentadas cuestan ~107 ms
+  // contra los ~7 ms reales, así que el umbral mediría la instrumentación. En
+  // `npm test` corre a plena fuerza.
+  it.skipIf(process.env.CUADRA_COBERTURA === '1')('un mensaje normal cuesta una fracción de milisegundo', () => {
     const t = 'El diésel en efectivo se limita al 15% por RFA 2026 regla 2.9, y el resto no es deducible por LISR 27-III.';
     const t0 = Date.now();
     for (let i = 0; i < 100; i++) citasEnTexto(t);

@@ -128,11 +128,24 @@ async function atenderPrivacidad(tenantId: string, operadorId: string, telefono:
   }
 }
 
+/**
+ * Devuelve `false` cuando el aviso NO se pudo poner a disposición.
+ *
+ * Devolvía `void`, y el llamador seguía adelante pasara lo que pasara: sin razón
+ * social o domicilio de la flota, esta función registraba el error, retornaba de
+ * SÍ MISMA, y el procesamiento continuaba — la foto del operador se descargaba y
+ * se mandaba a un modelo externo igual. Eso es una transferencia de datos
+ * personales sin el aviso que la ampare, y es el único supuesto que el art. 8 de
+ * la LFPDPPP no admite en ninguna lectura.
+ *
+ * El obligado es la flota, no Likida; pero quien ejecuta el tratamiento es este
+ * código, y no puede ejecutarlo a ciegas.
+ */
 async function ponerAvisoADisposicion(
   tenantId: string,
   operadorId: string,
   telefono: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const datos = await getDatosResponsable(tenantId);
     if (!datos) {
@@ -140,13 +153,14 @@ async function ponerAvisoADisposicion(
       // NO se manda un aviso a medias: uno con el responsable equivocado —o sin
       // él— no dice a quién reclamarle, que es justo para lo que sirve.
       logger.error('privacidad.tenant_sin_datos_responsable', { tenantId });
-      return;
+      return false;
     }
     const texto = avisoSimplificado(datos);
-    if (!texto) return;
+    if (!texto) return false;
     // El claim vive en SQL: el primer mensaje puede llegar por dos caminos a la
     // vez, y sin él el operador recibiría el aviso dos o tres veces seguidas.
-    if (!(await reclamarEnvioAviso(tenantId, operadorId, versionAviso(texto)))) return;
+    // Ya se le puso a disposición antes: se puede tratar, y no se repite.
+    if (!(await reclamarEnvioAviso(tenantId, operadorId, versionAviso(texto)))) return true;
     // La reserva va ANTES de enviar (si no, el aviso sale dos o tres veces), pero
     // la CONSTANCIA solo vale si el mensaje salió de verdad. `sendText` devolvía
     // `void` y no lanza al fallar, así que la fila se escribía igual: el 28-jul la
@@ -157,12 +171,15 @@ async function ponerAvisoADisposicion(
     if (!id) {
       logger.error('privacidad.aviso_no_entregado', { tenantId, operadorId });
       await liberarEnvioAviso(tenantId, operadorId);   // que el siguiente mensaje reintente
-      return;
+      return false;
     }
     logger.info('privacidad.aviso_enviado', { tenantId, operadorId, id });
+    return true;
+    return true;
   } catch (e) {
     // Si la 0018 no está aplicada, las columnas no existen y esto truena.
-    logger.error('privacidad.aviso_error', { err: e instanceof Error ? e.message : String(e) });
+    logger.error('privacidad.aviso_error', { tenantId, operadorId, err: e instanceof Error ? e.message : String(e) });
+    return false;
   }
 }
 
@@ -195,6 +212,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
   const reloj = crearPresupuesto(PRESUPUESTO_WEBHOOK_MS);
 
   let lockedViaje: string | null = null;
+  // Contexto para el `catch` general. Vive FUERA del `try` a propósito: sin esto
+  // el log de un fallo salía como `{ id, de, err }` — sin tenant, sin viaje y sin
+  // saber si la liquidación había cerrado—, así que era imposible reconstruir
+  // CUÁL liquidación quedó cerrada sin entregar. Un error del camino del dinero
+  // que no dice de qué dinero habla no sirve a las 3 de la mañana.
+  let ctxTenant: string | null = null;
+  let ctxViaje: string | null = null;
+  let ctxCerro = false;
   try {
     const op = await resolveOperador(msg.from);
     if (!op) {
@@ -214,7 +239,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       return;
     }
 
+    ctxTenant = op.tenantId;
     const viajeId = await getOpenViaje(op.tenantId, op.operadorId);
+    ctxViaje = viajeId;
     if (!viajeId) {
       // ── EL XML QUE PEDIMOS NO SE TIRA, aunque el viaje ya haya cerrado ──────
       // `complemento_no_verificable` NO está en SOLO_CONTRALOR a propósito: su
@@ -256,7 +283,19 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     //
     // El obligado es el RESPONSABLE, o sea la flota. Likida solo pone el
     // mecanismo: sin él la flota no puede cumplir aunque quiera.
-    await ponerAvisoADisposicion(op.tenantId, op.operadorId, msg.from);
+    const avisoPuesto = await ponerAvisoADisposicion(op.tenantId, op.operadorId, msg.from);
+    if (!avisoPuesto) {
+      // SIN AVISO NO HAY TRATAMIENTO. Antes se seguía de largo: la foto se
+      // descargaba y se mandaba a un modelo externo sin el aviso que lo ampare.
+      // Solo ocurre si la flota no tiene razón social o domicilio capturados —o
+      // sea, si nunca terminó de darse de alta—, y entonces lo correcto es
+      // detenerse y decirlo, no tratar los datos igual.
+      logger.error('privacidad.tratamiento_bloqueado', { tenant: op.tenantId, operador: op.operadorId });
+      try {
+        await sendText(msg.from, 'No puedo procesar tus comprobantes todavía: tu empresa aún no ha terminado de configurar su aviso de privacidad. Avísale a tu flota. 🙏');
+      } catch { /* best-effort */ }
+      return;
+    }
 
 
     // ── IMAGEN: captura SILENCIOSA en PARALELO (acuse consolidado) ────────────
@@ -264,7 +303,11 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // al contador de intake al entrar y -1 al salir; el "listo" espera a que ese
     // contador llegue a 0 antes de cuadrar → nunca cierra sobre datos parciales.
     if (msg.type === 'image' && msg.mediaId) {
-      const enVuelo = await intakeDelta(viajeId, 1); // n===1 → soy la primera de la ráfaga
+      // El +1 de esta foto. El valor devuelto ya NO decide el acuse (ver abajo):
+      // decidirlo con "el contador pasó de 0 a 1" mandaba el mensaje una vez por
+      // foto. Se conserva la llamada porque su EFECTO —el incremento— es lo que
+      // sostiene la barrera del "listo".
+      await intakeDelta(viajeId, 1);
       try {
         const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
         if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
@@ -382,15 +425,33 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // ¿Había un acercamiento esperando por este comprobante? (el caso en que
         // el operador mandó primero el código y después el ticket).
         await pegarCodigoEnEspera(op.tenantId, viajeId, gasto);
-        // Acuse una sola vez: solo la PRIMERA foto de la ráfaga (la que llevó el
-        // contador de 0 a 1). En su propio try: un fallo de envío tras guardar el
-        // gasto NO debe disparar reproceso.
-        if (enVuelo === 1) {
-          try {
+        // ACUSE UNA SOLA VEZ POR VIAJE, no "cuando el contador va de 0 a 1".
+        //
+        // Esa era la condición anterior, y el comentario decía otra cosa: creía
+        // marcar la primera foto de la RÁFAGA. Pero el contador se decrementa en
+        // el `finally` de cada foto, así que vuelve a 0 entre una y otra. Un
+        // operador que fotografía 17 tickets en la gasolinera y los manda de uno
+        // en uno —adjuntar, enviar, ~15 s de interacción humana— deja que cada
+        // OCR termine antes de que llegue el siguiente: las 17 ven `enVuelo === 1`
+        // y recibe DIECISIETE veces el mismo mensaje. El guion del demo promete
+        // justo lo contrario.
+        //
+        // Se ata al primer COMPROBANTE del viaje, que es cuando el operador de
+        // verdad necesita saber cómo funciona el flujo. Cuesta un `count` por
+        // foto, que es despreciable al lado de la llamada de visión ($0.015).
+        //
+        // La carrera posible —dos fotos simultáneas que insertan antes de que
+        // cualquiera cuente— hace que se pierda el acuse, no que se dupliquen.
+        // Perder un acuse es molesto; mandar diecisiete es un producto roto.
+        try {
+          const registrados = await getGastos(viajeId, op.tenantId);
+          if (registrados.length === 1) {
             await say('📸 Voy recibiendo tus comprobantes. Mándalos todos y cuando termines escribe *listo* para cerrar tu liquidación. 🚛');
-          } catch (e) {
-            logger.warn('ack.send', { err: e instanceof Error ? e.message : String(e) });
           }
+        } catch (e) {
+          // En su propio try: un fallo aquí, ya guardado el gasto, NO debe
+          // disparar reproceso — el comprobante ya está registrado.
+          logger.warn('ack.send', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
         }
       } finally {
         await intakeDelta(viajeId, -1); // libera el contador pase lo que pase
@@ -555,6 +616,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         : 'Perdón, no alcancé a procesar eso. ¿Me lo repites?');
       agentTools = res.toolCalls;
       closed = res.toolCalls.some((t) => t.toolName === 'guardar_liquidacion' && !t.error);
+      ctxCerro = closed;
       await registrarCosto({ tenantId: op.tenantId, viajeId, fase: faseDeModelo(res.model, 'cuadre'), modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.costUsd });
       if (closed) {
         const call = res.toolCalls.find((t) => t.toolName === 'guardar_liquidacion' && !t.error);
@@ -683,12 +745,25 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
 
     // Si la barrera de intake venció (un OCR tardó demasiado), avisa que se
     // cuadró con lo que alcanzó — falla visible, no silenciosa.
+    // EL `try` ENVUELVE TAMBIÉN EL `getGastos`, y esa es la corrección.
+    //
+    // Estaba FUERA: si `getGastos` lanzaba —un blip de Supabase, justo cuando la
+    // barrera venció porque la base ya iba lenta— el control saltaba al `catch`
+    // general, que está DESPUÉS del bloque del PDF. Resultado con la liquidación
+    // ya cerrada y los dos PDF ya en storage: el operador recibía "Perdón, se me
+    // trabó tantito, ¿me reenvías tu último mensaje?", obedecía, y `getOpenViaje`
+    // ya no encontraba nada porque el viaje estaba `liquidado`. Callejón sin
+    // salida: liquidación cerrada, PDF existente, y ningún camino por el que
+    // llegue. `pdf.no_entregado` tampoco se disparaba, porque vive dentro del
+    // bloque que se saltó.
+    //
+    // Un aviso accesorio no puede tirar la entrega del entregable.
     if (!intakeOk) {
-      const n = (await getGastos(viajeId, op.tenantId)).length;
       try {
+        const n = (await getGastos(viajeId, op.tenantId)).length;
         await say(`⚠️ Ojo: cuadré con los ${n} comprobantes que alcancé a procesar. Si te faltó alguno, reenvíalo y escribe *listo* otra vez.`);
       } catch (e) {
-        logger.warn('intake.aviso', { err: e instanceof Error ? e.message : String(e) });
+        logger.warn('intake.aviso', { viaje: viajeId, tenant: op.tenantId, err: e instanceof Error ? e.message : String(e) });
       }
     }
 
@@ -743,7 +818,16 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       ambiguo ? 'processInbound.operador_ambiguo'
         : noSePudoConsultar ? 'processInbound.consulta_fallida'
         : 'processInbound.fail',
-      { id: msg.waMessageId, de: msg.from, err: e instanceof Error ? e.message : String(e) },
+      {
+        id: msg.waMessageId, de: msg.from,
+        tenant: ctxTenant, viaje: ctxViaje,
+        // Si esto sale `true`, la liquidación YA está cerrada en la base y el
+        // operador acaba de recibir "se me trabó": hay un PDF sin entregar y
+        // reenviar el mensaje NO lo va a arreglar, porque el viaje ya no está
+        // abierto. Es la señal de que alguien tiene que entrar a mano.
+        cerroSinEntregar: ctxCerro,
+        err: e instanceof Error ? e.message : String(e),
+      },
     );
     if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
     // Al operador se le dice lo que es cierto en cada caso. Reintentar sirve

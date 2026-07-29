@@ -142,6 +142,14 @@ export async function flushObservabilidad(timeoutMs = 2000): Promise<void> {
  * dentro del envío —en vez de dejarlo al temporizador del batch del SDK— porque
  * en serverless el proceso puede congelarse antes de que ese temporizador
  * dispare. Quien pueda esperar de verdad, que llame a `flushObservabilidad`.
+ *
+ * El `fingerprint` lleva el NIVEL además del mensaje. Sentry agrupa por texto
+ * del mensaje, y este código reutiliza el mismo `msg` para un estado y su
+ * contrario —`startup.migraciones` sale como `error` cuando falta una migración
+ * y como `info`/`ok:true` cuando están todas; `costo.vinculado` igual—. Sin
+ * esto, el aviso y su desmentido caen en el mismo cubo y el segundo se lee como
+ * "ya lo vi". Separarlos aquí, en un solo sitio, evita tener que renombrar
+ * mensajes por todo el repo cada vez que aparece una pareja así.
  */
 export function reportar(nivel: 'warn' | 'error', msg: string, meta?: Record<string, unknown>): void {
   if (!sentryActivo()) return;
@@ -149,7 +157,7 @@ export function reportar(nivel: 'warn' | 'error', msg: string, meta?: Record<str
   seguir(
     intento.then(async () => {
       try {
-        sentry?.captureMessage(msg, { level: nivel === 'error' ? 'error' : 'warning', extra: meta });
+        sentry?.captureMessage(msg, { level: nivel === 'error' ? 'error' : 'warning', extra: meta, fingerprint: [msg, nivel] });
         await sentry?.flush(2000);
       } catch { /* la telemetría nunca rompe el flujo */ }
     }),

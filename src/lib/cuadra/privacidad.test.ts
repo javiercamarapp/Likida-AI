@@ -247,6 +247,50 @@ describe('pideAtencionPrivacidad', () => {
     for (const t of ['listo', 'ya mandé todo', 'cuánto sobró?', 'el diesel fue de 4000', 'arcos de la caseta'])
       expect(pideAtencionPrivacidad(t), t).toBe(false);
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // El aviso ANUNCIA la oposición del art. 26 fr. II —"tienes derecho a
+  // oponerte a que se decida así y a pedir que la revise alguien"— y el
+  // mecanismo tiene que reconocer que alguien la ejerce. §6 de
+  // 11-datos-personales.md lo pide con esas palabras: "un mecanismo de
+  // oposición documentado en el aviso Y ACCESIBLE DESDE WHATSAPP".
+  //
+  // Quien acaba de leer esa frase no escribe PRIVACIDAD: escribe "me opongo" o
+  // "quiero que lo revise una persona". Si eso cae en el agente, el derecho
+  // queda a criterio del LLM, que es justo lo que este módulo decidió no hacer.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('reconoce la oposición al tratamiento automatizado, no solo la palabra PRIVACIDAD', () => {
+    for (const t of [
+      'me opongo',
+      'Me opongo a que un programa revise mis comprobantes',
+      'quiero oponerme a eso',
+      'oposición al tratamiento automatizado',
+      'quiero que lo revise una persona',
+      'que lo revise alguien, no un programa',
+      'pido revisión humana',
+      'quiero que una persona lo revise',
+    ]) expect(pideAtencionPrivacidad(t), t).toBe(true);
+  });
+
+  it('el aviso y el detector no pueden divergir', () => {
+    // El gancho que faltaba. La ficha `normas/lfpdppp-26-II.yaml` se escribió con
+    // `usado_en_codigo: []` —una conclusión sin nada que la amarre al código— y
+    // por eso nadie volvió a ella. Esta prueba amarra las dos mitades del
+    // mecanismo: si alguien reescribe la frase del aviso, aquí se entera de que
+    // también tiene que mirar `OPOSICION`, en vez de dejar anunciado un derecho
+    // cuyo ejercicio ya no reconoce nadie.
+    expect(avisoSimplificado(flota)!).toContain('pedir que la revise alguien');
+    expect(pideAtencionPrivacidad('quiero pedir que la revise alguien')).toBe(true);
+  });
+
+  it('la oposición tampoco se dispara con la conversación normal', () => {
+    for (const t of [
+      'ya lo revisé con la persona de la caseta',
+      'la persona de la gasolinera me dio el ticket',
+      'me opuse el mes pasado al horario',   // ni "opongo" ni "oponerme"
+      'revisa el monto porfa',
+    ]) expect(pideAtencionPrivacidad(t), t).toBe(false);
+  });
 });
 
 describe('respuestaPrivacidad', () => {
@@ -281,6 +325,16 @@ describe('respuestaPrivacidad', () => {
     const r = respuestaPrivacidad({ ...flota, urlAvisoIntegral: '' });
     expect(r).toContain(flota.razonSocial);
     expect(r).toContain(flota.domicilio);
+  });
+
+  it('nombra la oposición a la revisión automática TAMBIÉN cuando la liga sirve', () => {
+    // Art. 26 fr. II. La rama degradada ya lo decía y la rama buena no: el
+    // operador que ejerce la oposición recibía una respuesta que no menciona el
+    // derecho que acaba de ejercer. El día que la flota publique su integral,
+    // el producto diría MENOS que hoy sobre el único derecho que este sistema
+    // activa por sí mismo.
+    for (const r of [flota, { ...flota, urlAvisoIntegral: '' }])
+      expect(respuestaPrivacidad(r), r.urlAvisoIntegral).toMatch(/revisión automática|automátic/i);
   });
 
   it('no afirma que le avisó a la empresa: solo registra', () => {

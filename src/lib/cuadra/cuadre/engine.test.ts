@@ -187,14 +187,31 @@ describe('cuadrarViaje', () => {
     expect(r.diferencias.some((d) => d.tipo.startsWith('complemento'))).toBe(false);
   });
 
-  // NIVEL 2: XML de combustible SIN el nodo del complemento → DURA, no deducible.
-  it('B1 NIVEL 2: XML de combustible sin complemento → complemento_hidrocarburos (no deducible)', () => {
+  // NIVEL 2: XML de combustible SIN el nodo del complemento. El HECHO se detecta
+  // igual, pero el VEREDICTO depende de que la ficha respalde la exigibilidad.
+  // Hoy `normas/rmf-2026-2.7.1.48.yaml` trae `fecha_vigencia_desde: null` —la
+  // regla sigue redactada en futuro—, así que se avisa y se manda a revisión sin
+  // declarar no deducible. Ver `complemento_exigibilidad.test.ts`.
+  it('B1 NIVEL 2: XML sin complemento y exigibilidad SIN confirmar → aviso, no veredicto', () => {
     const r = cuadrarViaje({
       viajeId: 'h3', anticipo: 4200, politica, hidrocarburos: HC,
       gastos: [g({ concepto: 'diesel', monto: 4200, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: false })],
     });
+    expect(r.diferencias.some((d) => d.tipo === 'complemento_hidrocarburos')).toBe(false);
+    expect(r.diferencias.some((d) => d.tipo === 'complemento_no_verificable')).toBe(true);
+    expect(r.totalNoDeducible).toBe(0);
+    expect(r.estatus).toBe('revisar');
+  });
+
+  // NIVEL 2 con la fecha ya confirmada → regla DURA, no deducible.
+  it('B1 NIVEL 2: XML sin complemento y exigibilidad CONFIRMADA → complemento_hidrocarburos', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h3b', anticipo: 4200, politica, hidrocarburos: { ...HC, exigibleDesde: '2026-04-24' },
+      gastos: [g({ concepto: 'diesel', monto: 4200, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: false })],
+    });
     expect(r.diferencias.some((d) => d.tipo === 'complemento_hidrocarburos')).toBe(true);
     expect(r.diferencias.some((d) => d.tipo === 'complemento_no_verificable')).toBe(false);
+    expect(r.totalNoDeducible).toBe(4200);
     expect(r.estatus).toBe('revisar');
   });
 
@@ -229,7 +246,7 @@ describe('cuadrarViaje', () => {
   // regla dura corre AUNQUE la unidad no sea LTR (evita falso negativo).
   it('B1 NIVEL 2: sin complemento aplica aunque la unidad no sea LTR', () => {
     const r = cuadrarViaje({
-      viajeId: 'h7', anticipo: 4200, politica, hidrocarburos: HC,
+      viajeId: 'h7', anticipo: 4200, politica, hidrocarburos: { ...HC, exigibleDesde: '2026-04-24' },
       gastos: [g({ concepto: 'diesel', monto: 4200, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'E48', tipoComprobante: 'I', complementoHidrocarburos: false })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'complemento_hidrocarburos')).toBe(true);

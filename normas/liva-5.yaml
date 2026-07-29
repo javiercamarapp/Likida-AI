@@ -48,7 +48,7 @@ riesgo_actual: >
   El motor acredita el IVA leído del XML de todo gasto que no cayó en
   SIN_ACREDITAMIENTO. Si el artículo exige alguna condición adicional que hoy no se
   valida, la cifra impresa está de más. Es una cifra que el contralor usa.
-verificado_por: null
+verificado_por: "cierre del 28-jul-2026 contra el PDF de diputados.gob.mx (ver `fuente` y `nota_verificacion`). NINGÚN contador público ha revisado esta ficha: la transcripción es de fuente primaria, la INTERPRETACIÓN no está dictaminada."
 usado_en_codigo:
   - "cuadre/engine.ts — ivaAcreditable"
   - "liquidacion/pdf.ts — sección ACREDITABLE / RECUPERABLE"

@@ -23,6 +23,21 @@ nota_verificacion: >
   El código usa 2026-04-24 como `vigenteDesde` y ESA FECHA NO ESTÁ RESPALDADA por
   esta ficha. PARA CERRAR: confirmar en el Portal del SAT la fecha de publicación
   del complemento.
+
+  CERRADO EL LADO DEL CÓDIGO (28-jul-2026, auditoría 5). Esa fecha YA NO DECIDE
+  DINERO. Hasta hoy, el mismo CFDI de diésel de $5,800 movido un día pasaba de
+  "$5,800 deducibles, $689.66 de IVA acreditable, 200 L elegibles" a "$0, $0, 0 L",
+  y el papel afirmaba "obligatorio desde 24-abr-2026" sobre una regla redactada en
+  futuro, fundando la fecha en una cita SIN ficha (RMF 2.7.1.8, en el comentario de
+  `config.ts:88`).
+
+  Ahora el interruptor del veredicto duro es `fecha_vigencia_desde` de ESTA ficha,
+  espejada en `exigibleDesde` del índice y verificada por
+  `normas_sincronizadas.test.ts`. Mientras sea null, el motor AVISA (diferencia
+  `complemento_no_verificable`, que va a revisión y no toca deducibilidad ni
+  acreditamiento) y NO declara no deducible. El día que alguien confirme la fecha en
+  el Portal del SAT, se llena aquí y en el índice y el veredicto duro se enciende
+  solo — con esa fecha impresa, no con la de la configuración.
 advertencia: >
   Cuatro documentos de la ola 1 se cerraron SIN leer la Primera Resolución de
   Modificaciones (DOF 09-jul-2026), que modificó 28 reglas, agregó 5 y derogó 1.
@@ -30,5 +45,7 @@ advertencia: >
 verificado_por: "ola2 / 11-huecos.md §2.4, 10-contradicciones.md"
 verificado_el: 2026-07-27
 usado_en_codigo:
-  - "config.ts — hidrocarburos.vigenteDesde (fecha SIN respaldo)"
-  - "cuadre/engine.ts — regla complemento_hidrocarburos"
+  - "config.ts — hidrocarburos.vigenteDesde (fecha SIN respaldo). Desde el 28-jul-2026 es solo un FILTRO DE RUIDO: decide desde cuándo el motor se molesta en mirar el complemento, no si el gasto es deducible."
+  - "normas/indice.ts — exigibleDesde: null. Es el interruptor del veredicto duro."
+  - "cuadre/engine.ts — con exigibilidad SIN confirmar emite `complemento_no_verificable` (revisión); solo con fecha respaldada emite `complemento_hidrocarburos` (no deducible)."
+  - "cuadre/complemento_exigibilidad.test.ts — las dos ramas, con los importes del hallazgo."

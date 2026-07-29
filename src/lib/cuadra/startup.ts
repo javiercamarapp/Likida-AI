@@ -66,10 +66,15 @@ export async function verificarMigracionesCriticas(): Promise<void> {
   verificarEntornoCritico();
   try {
     const admin = supabaseAdmin();
+    // NINGÚN `return` temprano entre los sondeos. Los cuatro salían al primer
+    // fallo, así que con dos migraciones ausentes solo se veía UNA por ciclo de
+    // despliegue: se arreglaba, se volvía a desplegar, y aparecía la siguiente.
+    // El arranque tiene que decir de una vez TODO lo que falta.
+    let faltan = false;
     const { error } = await admin.rpc('try_lock_viaje', { p_viaje: ZERO, p_ttl_ms: 1 });
     if (error) {
       reportarProbe(error, 'FALTA la migración 0005 (try_lock_viaje / unique(viaje_id)): la protección de doble liquidación NO está activa. Corre `supabase db push`.');
-      return;
+      faltan = true;
     }
     await admin.rpc('unlock_viaje', { p_viaje: ZERO }); // liberar el lock de prueba
 
@@ -79,7 +84,7 @@ export async function verificarMigracionesCriticas(): Promise<void> {
     const { error: e11 } = await admin.rpc('intake_delta', { p_viaje: ZERO, p_delta: 0 });
     if (e11) {
       reportarProbe(e11, 'FALTA la migración 0011 (intake_delta / viaje.intake_pendientes): la barrera de ráfaga NO está activa y un "listo" puede cuadrar sobre gastos parciales. Corre `supabase db push`.');
-      return;
+      faltan = true;
     }
     // Migración 0016 (bandeja de códigos pendientes). Si falta, el acercamiento
     // que llega ANTES que su ticket no se puede guardar: el gasto se queda con
@@ -88,7 +93,7 @@ export async function verificarMigracionesCriticas(): Promise<void> {
     const { error: e16 } = await admin.from('codigo_pendiente').select('id').limit(1);
     if (e16) {
       reportarProbe(e16, 'FALTA la migración 0016 (codigo_pendiente): el acercamiento que llegue antes que su ticket pierde el folio exacto y el gasto se queda con el folio del OCR. Corre `supabase db push`.');
-      return;
+      faltan = true;
     }
     // Las dos migraciones nuevas del camino del dinero. La 0017 hace el merge de
     // ocr_extra con claim (sin ella se pisan los folios de portal entre fotos de
@@ -98,8 +103,24 @@ export async function verificarMigracionesCriticas(): Promise<void> {
     });
     if (e17) {
       reportarProbe(e17, 'FALTA la migración 0017 (enriquecer_gasto_codigo): el folio del portal que trae un acercamiento no se pega y se pierde. Corre `supabase db push`.');
-      return;
+      faltan = true;
     }
+    // Migración 0019 (unique de cfdi_uuid). Sin ella, el MISMO CFDI de diésel
+    // entra dos veces: el gasto se cuenta doble en el comprobado, su IVA se
+    // acredita doble y el operador aparece habiendo gastado lo que no gastó. El
+    // motor deduplica por UUID en memoria, pero solo dentro de UNA liquidación:
+    // dos fotos del mismo XML en turnos distintos las escribe la base, y ahí no
+    // había nada que lo impidiera. Se sonda leyendo el índice, no escribiendo.
+    const { error: e19 } = await admin
+      .from('gasto')
+      .select('cfdi_uuid')
+      .not('cfdi_uuid', 'is', null)
+      .limit(1);
+    if (e19) {
+      reportarProbe(e19, 'No se pudo verificar la migración 0019 (unique de gasto.cfdi_uuid): sin ella el mismo CFDI se liquida dos veces, con su IVA acreditado por duplicado. Corre `supabase db push`.');
+      faltan = true;
+    }
+
     // Migración 0022 (sobrecarga ambigua de guardar_liquidacion_tx). Es la única
     // que se detecta por el ERROR de una llamada, no por su ausencia: si 0013 y
     // 0021 conviven, la función existe DOS veces y Postgres responde
@@ -120,9 +141,9 @@ export async function verificarMigracionesCriticas(): Promise<void> {
         msg: 'FALTA la migración 0022: `guardar_liquidacion_tx` existe con DOS firmas (la de 0013 y la de 0021) y toda llamada de 11 argumentos falla con "is not unique". NINGUNA liquidación puede cerrar. Corre `supabase db push`.',
         code: e22.code, err: e22.message,
       });
-      return;
+      faltan = true;
     }
-    logger.info('startup.migraciones', { ok: true });
+    if (!faltan) logger.info('startup.migraciones', { ok: true });
   } catch (e) {
     // Sin env/DB (p. ej. durante el build) → no romper, solo avisar.
     logger.warn('startup.migraciones_skip', { err: e instanceof Error ? e.message : String(e) });

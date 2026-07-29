@@ -50,19 +50,35 @@ export function sanitizarTexto(s: string | null | undefined, maxLen = 80): strin
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Señales de que lo comprado dice algo sobre la salud o la vida sexual del
- * titular. Se calibró a favor de la COBERTURA, no de la precisión, porque los
- * dos errores no cuestan lo mismo: un falso positivo pierde una etiqueta de
- * pantalla, un falso negativo escribe un dato sensible en la base.
+ * Señales de que lo comprado dice algo sobre la salud, la vida sexual o las
+ * creencias del titular. Se calibró a favor de la COBERTURA, no de la
+ * precisión, porque los dos errores no cuestan lo mismo: un falso positivo
+ * pierde una etiqueta de pantalla, un falso negativo escribe un dato sensible
+ * en la base.
  *
  * Ese cálculo se sostiene porque `producto` solo se usa para etiquetar
  * combustible (`etiquetaConcepto`, cuadre/engine.ts): en un ticket de farmacia
  * el campo no alimenta ninguna cifra ni ninguna decisión.
+ *
+ * LO QUE ESTA LISTA NO CUBRE, dicho para que nadie la lea como el catálogo
+ * completo del art. 2 fr. VI: las opiniones políticas, el origen racial o
+ * étnico y la información genética no tienen un camino real hasta el campo
+ * `producto` de un comprobante de carretera, así que no se simulan reglas para
+ * ellos. Y tampoco cubre lo que llega por OTRO campo: el nombre de una farmacia
+ * viaja en `emisor`, que pasa por `sanitizarTexto` porque `identificarComercio`
+ * lo necesita para decidir si el gasto se puede facturar.
  */
 const SENSIBLE: RegExp[] = [
-  // Formas farmacéuticas. Con \b a fuerza: "cap" sin frontera casa dentro de
-  // CAPUFE y "tab" dentro de TABASCO.
-  /\b(tab|tabs|tableta|tabletas|cap|caps|capsula|capsulas|gragea|grageas|jarabe|suspension|ampolleta|ampolletas|ampula|ampulas|inyectable|inyeccion|supositorio|supositorios|ovulo|ovulos|nebulizacion|inhalador)\b/,
+  // Formas farmacéuticas.
+  //
+  // La frontera IZQUIERDA es `(^|[^a-z])` y no `\b`, y ahí estaba el hueco: un
+  // ticket de farmacia imprime la presentación PEGADA a la cantidad —"30TABS",
+  // "20CAPS", "C/10TAB"—, y entre un dígito y una letra no hay `\b` porque los
+  // dos son caracteres de palabra. "VITACILINA 10TAB" se guardaba entero.
+  // La frontera DERECHA sigue siendo `\b` a fuerza, y es la que protege el
+  // catálogo real: sin ella "cap" casa dentro de CAPUFE y "tab" dentro de
+  // TABASCO. Cambiar la izquierda no toca esa defensa.
+  /(^|[^a-z])(tab|tabs|tableta|tabletas|cap|caps|capsula|capsulas|gragea|grageas|jarabe|suspension|ampolleta|ampolletas|ampula|ampulas|inyectable|inyeccion|supositorio|supositorios|ovulo|ovulos|nebulizacion|inhalador)\b/,
   // Dosis. mg/mcg/UI son unidades de medicamento; ml, g y kg NO se incluyen
   // porque un refresco de 600 ML y un kilo de abarrotes darían falso positivo.
   /\b\d+(\.\d+)?\s*(mg|mcg|ui)\b/,
@@ -73,11 +89,19 @@ const SENSIBLE: RegExp[] = [
   // Vida sexual y salud reproductiva — art. 2 fr. VI las lista igual que salud.
   /\b(preservativo|preservativos|condon|condones|anticonceptivo|anticonceptivos)\b/,
   /\bprueba de embarazo\b/,
+  // Creencias religiosas. El art. 2 fr. VI las pone en el mismo renglón que la
+  // salud (11-datos-personales.md:129) y §8.6 nombra este camino exacto: "un
+  // ticket de farmacia revela salud; UNO DE COMIDA, POSIBLEMENTE CREENCIAS".
+  // Por eso van las dos marcas alimentarias, que es como una creencia llega de
+  // verdad a un gasto de viaje, y no una lista devocional larga que nunca
+  // aparecería en un comprobante de carretera.
+  /\b(kosher|halal)\b/,
+  /\b(diezmo|limosna|parroquia|templo|iglesia|biblia)\b/,
 ];
 
 /**
  * Saneamiento de `producto`: lo mismo que `sanitizarTexto` y además EXCLUYE el
- * valor completo cuando revela salud o vida sexual.
+ * valor completo cuando revela salud, vida sexual o creencias.
  *
  * Se descarta entero y no se sustituye por una marca del estilo
  * "[dato de salud omitido]": esa marca sigue siendo una inferencia de salud

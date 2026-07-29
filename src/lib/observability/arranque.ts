@@ -22,6 +22,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
+import { faltantes } from '@/lib/env';
 
 const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   { nombre: 'DEMO_TENANT_ID', consecuencia: 'el panel consulta el tenant del seed y pinta cero liquidaciones' },
@@ -45,10 +46,35 @@ export function avisarConfiguracionSilenciosa(): void {
   const faltan = SILENCIOSAS.filter((v) => !process.env[v.nombre]);
   if (faltan.length === 0) {
     logger.info('startup.config_silenciosa', { ok: true, revisadas: SILENCIOSAS.length });
+  } else {
+    logger.error('startup.config_silenciosa', {
+      ok: false,
+      faltan: faltan.map((v) => `${v.nombre}: ${v.consecuencia}`),
+    });
+  }
+
+  avisarGruposDeConfiguracion();
+}
+
+/**
+ * Y las variables cuya ausencia sí rompe algo, agrupadas por lo que apagan.
+ *
+ * Se emite con un `msg` PROPIO y no dentro del anterior a propósito: Sentry
+ * agrupa por mensaje, y meter un aviso y otro distinto en el mismo cubo es cómo
+ * se pierde el segundo. La misma razón por la que `startup.migraciones` no
+ * debería usar el mismo `msg` para el fallo y para el `ok:true`.
+ *
+ * Estas se descubrirían solas —sin `SUPABASE_SERVICE_ROLE_KEY` la primera
+ * consulta explota— pero se descubren en el turno de un operador, con el mensaje
+ * críptico del SDK. Aquí salen antes de servir la primera petición, con el
+ * nombre exacto de lo que falta.
+ */
+function avisarGruposDeConfiguracion(): void {
+  const falta = faltantes();
+  const grupos = Object.keys(falta);
+  if (grupos.length === 0) {
+    logger.info('startup.entorno_grupos', { ok: true });
     return;
   }
-  logger.error('startup.config_silenciosa', {
-    ok: false,
-    faltan: faltan.map((v) => `${v.nombre}: ${v.consecuencia}`),
-  });
+  logger.error('startup.entorno_grupos', { ok: false, faltan: falta });
 }

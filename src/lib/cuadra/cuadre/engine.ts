@@ -13,6 +13,7 @@ import { sanitizarFolio } from '../intake/sanitizar';
 import { esRfcValido, rfcChecksumOk } from '../intake/cfdi';
 import { calcularCaducidad } from '../facturacion/caducidad';
 import { identificarComercio } from '../facturacion/identificar';
+import { NORMAS } from '../normas/indice';
 import type { Gasto, Diferencia, Liquidacion, EstatusLiquidacion, TipoDiferencia } from '@/types/cuadra';
 
 export interface PoliticaGasto {
@@ -39,8 +40,22 @@ export interface CuadreInput {
    *  nombre de esa persona. Sin este dato no se rechaza — se manda a revisar. */
   operadorRfc?: string;
   /** Complemento de hidrocarburos (Bloque 1): claves de combustible, unidad,
-   *  y fecha de vigencia. Sin esto, la regla no corre. */
-  hidrocarburos?: { claves: string[]; unidad: string; vigenteDesde: string };
+   *  y desde cuándo se MIRA. Sin esto, la regla no corre.
+   *
+   *  `vigenteDesde` viene de la configuración y NO decide dinero: es solo el
+   *  filtro de ruido que evita pedir el complemento sobre CFDI viejos. La fecha
+   *  que decide dinero es `exigibleDesde`, y su fuente es la FICHA. */
+  hidrocarburos?: {
+    claves: string[];
+    unidad: string;
+    vigenteDesde: string;
+    /** Fecha de EXIGIBILIDAD respaldada por ficha, o `null` si nadie la ha
+     *  confirmado. Si se omite, se toma de `normas/rmf-2026-2.7.1.48.yaml` a
+     *  través del índice — que hoy dice `null`. Está aquí para poder probar las
+     *  dos ramas y para que el día que se confirme entre por configuración sin
+     *  tocar el motor. */
+    exigibleDesde?: string | null;
+  };
   /** Estímulos y topes fiscales (LIF 2026 art. 20, ap. A / LISR). */
   estimulos?: { peajeFactor: number; viaticosTopeFiscalDiarioMxn: number; efectivoTopeMxn: number; clavesDieselIeps?: string[] };
   /** Hoy (ISO YYYY-MM-DD), para el aviso de tickets por facturar. Se INYECTA:
@@ -302,19 +317,48 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // verificar — un falso positivo de fraude es peor que un falso negativo.
     // (h y esCombustible se hoistearon arriba del loop.)
     if (h && esCombustible) {
-      const aplicaPorFecha = !g.fecha || g.fecha >= h.vigenteDesde; // solo CFDI vigentes
+      // DOS FECHAS DISTINTAS, Y SOLO UNA PUEDE DECIDIR DINERO.
+      //
+      // `h.vigenteDesde` sale de `config.ts` ('2026-04-24') y su comentario la
+      // funda en la RMF 2.7.1.8 — una cita que NO tiene ficha. Con ella el motor
+      // declaraba no deducible: el MISMO CFDI de diésel de $5,800 movido un día
+      // pasaba de "$5,800 deducibles, $689.66 de IVA acreditable, 200 L
+      // elegibles" a "$0, $0, 0 L", y el papel afirmaba "obligatorio desde
+      // 24-abr-2026" sobre una regla redactada en FUTURO ("el complemento que al
+      // efecto publique el SAT en su Portal"), cuya propia ficha dice que la
+      // obligación puede estar latente y que esa fecha no está respaldada.
+      //
+      // Ahora `vigenteDesde` es solo el filtro de ruido —desde cuándo vale la
+      // pena mirar el complemento— y la que decide dinero es la de la FICHA. Con
+      // `null` el motor avisa y manda a revisión; nunca declara no deducible.
+      const miraElComplemento = !g.fecha || g.fecha >= h.vigenteDesde;
+      const exigibleDesde = h.exigibleDesde !== undefined
+        ? h.exigibleDesde
+        : (NORMAS['rmf-2026-2.7.1.48']?.exigibleDesde ?? null);
+      const exigible = exigibleDesde != null && (!g.fecha || g.fecha.slice(0, 10) >= exigibleDesde);
       if (g.xmlVerificado) {
-        // NIVEL 2: tenemos el XML → regla DURA (regla 2.7.1.48 RMF 2026). La ley
-        // obliga solo el ClaveProdServ de combustible en CFDI tipo I/E de un
-        // permisionario; la unidad LTR es consistencia esperada, NO requisito de
-        // la regla (por eso NO se exige aquí — evita falsos negativos). Se EXCLUYEN
-        // los esquemas alternos (monedero ECC / Carta Porte), que no caen en 2.7.1.48.
+        // NIVEL 2: tenemos el XML → se puede AFIRMAR que el complemento falta
+        // (regla 2.7.1.48 RMF 2026). La regla obliga solo el ClaveProdServ de
+        // combustible en CFDI tipo I/E de un permisionario; la unidad LTR es
+        // consistencia esperada, NO requisito de la regla (por eso NO se exige
+        // aquí — evita falsos negativos). Se EXCLUYEN los esquemas alternos
+        // (monedero ECC / Carta Porte), que no caen en 2.7.1.48.
         const combustibleFiscal = h.claves.includes(g.claveProdServ ?? '');
         const tipoAplica = g.tipoComprobante === 'I' || g.tipoComprobante === 'E';
-        if (combustibleFiscal && tipoAplica && aplicaPorFecha && !g.cfdiEsquemaAlterno && !g.complementoHidrocarburos) {
-          diferencias.push({ tipo: 'complemento_hidrocarburos', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} es de combustible y NO trae el complemento de hidrocarburos requerido (obligatorio desde 24-abr-2026, regla 2.7.1.48 RMF) — no deducible (CFF 29-A).`, gastoId: g.id });
+        if (combustibleFiscal && tipoAplica && miraElComplemento && !g.cfdiEsquemaAlterno && !g.complementoHidrocarburos) {
+          if (exigible) {
+            // Solo con una fecha de exigibilidad RESPALDADA se tira la deducción.
+            diferencias.push({ tipo: 'complemento_hidrocarburos', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} es de combustible y NO trae el complemento de hidrocarburos requerido (obligatorio desde ${exigibleDesde}, regla 2.7.1.48 RMF) — no deducible (CFF 29-A).`, gastoId: g.id });
+          } else {
+            // El hecho es verificable (el XML no trae el nodo); lo que NO es
+            // verificable es que ya se exija. Se reusa `complemento_no_verificable`
+            // porque es el tipo que significa "no se puede concluir": queda en
+            // REVISAR, fuera de NO_DEDUCIBLE_ISR y fuera de SIN_ACREDITAMIENTO,
+            // que es exactamente el veredicto que el motor puede sostener.
+            diferencias.push({ tipo: 'complemento_no_verificable', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} es de combustible y no trae el complemento de hidrocarburos de la regla 2.7.1.48 RMF. Pídele a la gasolinera la factura con el complemento. NO se declara no deducible: la fecha desde la que el SAT lo hace exigible no está confirmada — confírmalo con tu contador.`, gastoId: g.id });
+          }
         }
-      } else if (g.cfdiUuid && aplicaPorFecha) {
+      } else if (g.cfdiUuid && miraElComplemento) {
         // NIVEL 1: es una FACTURA de combustible (tiene UUID) pero sin el XML →
         // no se puede verificar el complemento. A la bandeja del liquidador, NO
         // se declara no deducible. Se resuelve cuando reenvíen el XML.
@@ -399,11 +443,28 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // portal reconocido, a tres días del cierre, y la liquidación en silencio.
       // Ahora se dice siempre, y lo que cambia con la urgencia es el TONO.
       if (c.desconocido) continue;
+      // LA FECHA QUE SE DICE ES DE NIVEL 6, Y TIENE QUE SONAR A NIVEL 6.
+      //
+      // `normas/politica-portales-plazos.yaml` lo dice sin rodeos: "ESTO NO ES
+      // UNA NORMA FISCAL… El plazo LEGAL para pedir factura es todo el ejercicio
+      // (el SAT lo dice expresamente)… El producto NUNCA debe presentar estos
+      // plazos como una obligación fiscal". La rama VENCIDA sí lo decía; las
+      // otras dos no, y son las que se leen antes. Un contralor que lee "puedes
+      // timbrarlo hasta el 31-ago" concluye que el 1-sep se perdió el CFDI —
+      // justo el error de confundir niveles que `normas/README.md` llama el más
+      // caro del dominio, esta vez cometido por el papel que vendemos.
+      //
+      // El matiz cambia según de dónde salga la fecha: sin verificar, la ventana
+      // del comercio puede ser MENOR; verificada, la ventana es la del comercio
+      // y el ejercicio sigue siendo el plazo de la ley.
+      const cierreComercio = comercio?.plazoVerificado
+        ? ` (plazo del portal de ${comercio.nombre}, no de la ley: legalmente puedes exigir la factura dentro del ejercicio)`
+        : ', y la ventana del comercio puede ser menor';
       const cuerpo = c.vencido
         ? `se pasó el plazo de facturación. El comercio ya no suele facturarlo en su portal, pero legalmente puedes exigirlo dentro del ejercicio (Conciliación de Factura del SAT)`
         : c.urgente
-          ? `quedan ${c.diasRestantes} día(s) para timbrarlo${comercio?.plazoVerificado ? '' : ' — y la ventana del comercio puede ser menor, así que hazlo antes'}`
-          : `puedes timbrarlo hasta el ${c.fechaLimite} (${c.diasRestantes} días)${comercio?.plazoVerificado ? '' : ', y la ventana del comercio puede ser menor'}`;
+          ? `quedan ${c.diasRestantes} día(s) para timbrarlo${comercio?.plazoVerificado ? `${cierreComercio}` : ' — y la ventana del comercio puede ser menor, así que hazlo antes'}`
+          : `puedes timbrarlo hasta el ${c.fechaLimite} (${c.diasRestantes} días)${cierreComercio}`;
       // Con comercio reconocido el aviso deja de ser genérico: dice a qué portal
       // ir y qué datos hay que teclear, que es la diferencia entre un recordatorio
       // y una instrucción que alguien puede ejecutar.

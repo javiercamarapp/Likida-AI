@@ -9,6 +9,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
 import { resumenOmitidos, filasImprimibles } from './omitidos';
 import { filasDeducibilidad } from './deducibilidad';
+import { filasAcreditables } from './acreditable';
 import { resumenLaboral } from '../laboral/pagadero';
 import { cubetaDe, etiquetaConcepto } from '../cuadre/engine';
 import { SOLO_CONTRALOR, type Destinatario } from '../cuadre/resumen';
@@ -271,40 +272,46 @@ export async function generarLiquidacionPDF(
   totalRow(difLabel, mxn(Math.abs(liq.diferencia)), bold, difColor, 13);
 
   // ─── Estímulos acreditables (IEPS diésel + IVA + peaje) — "lo que vende" ────
-  const hayLitros = (liq.litrosDieselAcreditables ?? 0) > 0;
-  if (liq.ivaAcreditable > 0 || liq.peajeAcreditable > 0 || hayLitros) {
+  //
+  // Los renglones y sus pies los decide `filasAcreditables`, no este archivo.
+  // Lo que se imprime aquí es una AFIRMACIÓN con un artículo citado al lado, y
+  // una afirmación tiene que poder probarse sin abrir un PDF.
+  //
+  // Lo que cambió: el estímulo de peaje salía en VERDE y en negritas, con "LIF
+  // 2026 art. 20, ap. A" al lado y ni una palabra sobre las cuatro condiciones
+  // de elegibilidad —que el motor no conoce, porque dispara con
+  // `concepto === 'caseta'` a secas— ni sobre cuál de las dos bases posibles
+  // usó. Una flota con ingresos ≥ $300M, o parte relacionada, se llevaba
+  // impreso un estímulo al que no tiene derecho.
+  const acreditable = filasAcreditables(liq);
+  if (acreditable) {
     y -= 10;
     asegurar(90);
     text('ACREDITABLE / RECUPERABLE', M, y, 8, bold, MUTED);
     y -= 6;
     rule(y);
     y -= 16;
-    const acred = (label: string, value: number) => {
-      text(label, M + 14, y, 9.5, font, INK);
-      right(mxn(value), cMonto, y, 9.5, bold, GREEN);
+    // VERDE solo para lo que el motor sostiene entero. Lo condicionado va en
+    // tinta neutra: el color es parte de la afirmación, y pintar de verde una
+    // cifra que depende de cuatro condiciones sin verificar es prometer con el
+    // formato lo que el texto matiza.
+    for (const f of acreditable.filas) {
+      text(f.label, M + 14, y, 9.5, font, INK);
+      right(f.valor, cMonto, y, 9.5, bold, f.tono === 'bueno' ? GREEN : INK);
       y -= 16;
-    };
-    // El IEPS de diésel NO se imprime en pesos, y es a propósito. El estímulo del
-    // LIF 2026 art. 20-A es cuota semanal disminuida × litros, no el IEPS
-    // trasladado del CFDI, y sin el acuerdo del DOF no se puede calcular aquí.
-    // Se entrega el dato duro —los litros elegibles— para que el contador lo
-    // multiplique por la cuota que él tenga fechada. Decisión D2 del roadmap.
-    if (hayLitros) {
-      text('Diésel elegible para el estímulo de IEPS (LIF 2026 art. 20, ap. A)', M + 14, y, 9.5, font, INK);
-      right(`${liq.litrosDieselAcreditables.toLocaleString('es-MX')} L`, cMonto, y, 9.5, bold, INK);
-      y -= 16;
+      for (const pie of f.pies) {
+        for (const linea of envolver(pie, 135)) {
+          text(linea, M + 22, y + 2, 7, font, MUTED);
+          y -= 9;
+        }
+      }
     }
-    if (liq.ivaAcreditable > 0) acred('IVA acreditable (LIVA art. 5)', liq.ivaAcreditable);
-    if (liq.peajeAcreditable > 0) acred('Estímulo de peaje 50% (LIF 2026 art. 20, ap. A)', liq.peajeAcreditable);
-    // Los estímulos del apartado A son INGRESO ACUMULABLE para ISR: el beneficio
-    // NETO es menor que la cifra de arriba. Pintarlos como neto era ~30% de
-    // sobrepromesa frente al contralor.
     y -= 2;
-    text('Los estímulos del art. 20 ap. A son ingreso acumulable para ISR: el beneficio neto es menor.', M + 14, y, 7, font, MUTED);
-    y -= 9;
-    if (hayLitros) {
-      text('El estímulo de diésel se calcula con la cuota SEMANAL vigente al momento de cada compra; se entregan los litros para que su contador aplique la cuota fechada.', M + 14, y, 7, font, MUTED);
-      y -= 9;
+    for (const pie of acreditable.piesGenerales) {
+      for (const linea of envolver(pie, 135)) {
+        text(linea, M + 14, y, 7, font, MUTED);
+        y -= 9;
+      }
     }
     y -= 5;
   }
