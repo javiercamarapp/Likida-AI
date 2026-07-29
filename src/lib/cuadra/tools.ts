@@ -15,7 +15,7 @@ import { generarLiquidacionPDF } from './liquidacion/pdf';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { Liquidacion } from '@/types/cuadra';
-import { normasDe } from './normas/por_diferencia';
+import { normasDe, normasDePolitica } from './normas/por_diferencia';
 import { getAcumuladoCombustible } from './repo';
 import { evaluarTope15 } from './periodo/combustible';
 import { avisoTope15 } from './periodo/aviso';
@@ -33,7 +33,45 @@ registerTool('consultar_politica', {
   },
   handler: async (_args, ctx) => {
     const config = await getConfig(ctx.tenantId);
-    return { politica: config.politica };
+    // ── EL PERMISO DE CITAR TIENE QUE VIAJAR CON LA POLÍTICA ────────────────
+    //
+    // AUDITORÍA 7, CRÍTICO. `permitidas` sale de `normasDeToolCalls`, que busca
+    // la llave `norma_id`, y el ÚNICO sitio que la emitía era `cuadrar_viaje`.
+    // Con eso, el sistema tenía una trampa cerrada sobre sí misma:
+    //
+    //   · turno CON `cuadrar_viaje` → `guardiaCifras` fuerza el texto SIEMPRE
+    //     (guardia.ts:37-39 y :79) → `textoDeterminista = true` → la guardia de
+    //     fundamento NO CORRE. Los permisos existen y no sirven.
+    //   · turno SIN `cuadrar_viaje` —el operador pregunta "¿y por qué no me
+    //     cuentas ese diésel?"— → la guardia SÍ corre, con `permitidas = []`, y
+    //     entonces TODA cita cae en CITA_DESCONOCIDA y se borra a media frase:
+    //
+    //       "…porque el artículo 27, fracción III de la LISR limita a $2,000…"
+    //     →  "…porque el limita a $2,000…"
+    //       "Te aplica el estímulo conforme al LIF 2026 Art. 20-A."
+    //     →  "Te aplica el estímulo conforme al -A."
+    //
+    // El turno que tiene permisos es exactamente el turno en que la guardia no
+    // corre; el turno en que corre nunca tiene permisos. El producto era
+    // estructuralmente incapaz de citar una norma, y al intentarlo entregaba una
+    // frase rota — con el estímulo del diésel, que es lo que se vende, saliendo
+    // como "conforme al -A."
+    //
+    // Explicar un tope ES citar la norma que lo sostiene, así que el permiso
+    // pertenece a esta tool tanto como a la del cuadre. Se emiten SOLO las que
+    // respaldan lo que esta tool devuelve —los límites de la política—, no un
+    // salvoconducto general: el resto sigue borrándose.
+    const fundamentos = normasDePolitica(config.politica);
+    return {
+      politica: config.politica,
+      fundamentos: fundamentos.map((id) => ({
+        norma_id: id,
+        cita: NORMAS[id].citas[0],
+        jerarquia: NORMAS[id].jerarquia,
+        verificada: NORMAS[id].estado !== 'sin_verificar',
+        vinculante: esVinculante(NORMAS[id].jerarquia),
+      })),
+    };
   },
 });
 
