@@ -42,11 +42,38 @@ export type EstadoAvisoIntegral = 'ok' | 'ausente' | 'inservible';
  * lista de "dominios prohibidos": es la lista de cosas que NADIE quiso publicar
  * como aviso y que solo llegan aquí porque alguien no terminó de capturar.
  */
-const RELLENOS = [
+/** Dominios enteros de plantilla: se comparan contra el HOST, no contra la URL. */
+const HOSTS_DE_RELLENO = [
   'example.com', 'example.org', 'example.net', 'ejemplo.com', 'ejemplo.mx',
-  'dominio.com', 'tudominio', 'tu-dominio', 'midominio', 'mi-dominio',
-  'localhost', 'test.com', 'changeme', 'cambiar', 'pendiente', 'por-definir',
-  'pordefinir', 'todo',
+  'dominio.com', 'localhost', 'test.com',
+];
+
+/**
+ * Palabras que solo son marcador de relleno cuando están SUELTAS.
+ *
+ * ── POR QUÉ NO ES UN `includes` (auditoría 6, legal) ────────────────────────
+ *
+ * Antes se buscaban como substring sobre la URL completa, y `'pendiente'` y
+ * `'todo'` viven dentro de palabras españolas normales. Medido con el módulo
+ * real, contra dominios plausibles del sector que el censo de Likida cubre:
+ *
+ *   https://transportistaindependiente.mx/aviso   → inservible  (in-de-PENDIENTE)
+ *   https://autotransportesindependientes.com.mx  → inservible
+ *   https://operadorindependiente.mx/aviso        → inservible
+ *   https://metodologiatransporte.mx/aviso        → inservible  (me-TODO-logía)
+ *
+ * "Independiente" es exactamente como se anuncia media flota mexicana. Y el
+ * coste no es cosmético: al marcar la liga inservible, el aviso simplificado
+ * sale diciendo que la empresa NO ha publicado su aviso integral —una
+ * afirmación falsa sobre el cumplimiento del cliente— y el operador se queda
+ * sin el canal ARCO que el art. 15 fr. V exige, teniendo uno publicado.
+ *
+ * Con frontera de palabra, `independiente` y `metodología` pasan, y
+ * `/aviso-pendiente` o `?url=todo` siguen cayendo.
+ */
+const PALABRAS_DE_RELLENO = [
+  'tudominio', 'tu-dominio', 'midominio', 'mi-dominio',
+  'changeme', 'cambiar', 'pendiente', 'por-definir', 'pordefinir', 'todo',
 ];
 
 /**
@@ -82,10 +109,17 @@ export function revisarAvisoIntegral(url: string | null | undefined): EstadoAvis
   const host = u.hostname.toLowerCase();
   if (!/\.[a-z]{2,}$/.test(host)) return 'inservible';
 
+  if (HOSTS_DE_RELLENO.some((r) => host === r || host.endsWith(`.${r}`))) return 'inservible';
+
+  // Frontera de palabra sobre la URL completa: en una dirección los separadores
+  // son `/`, `-`, `_`, `.`, `?`, `=`, `&`, así que la palabra cuenta como suelta
+  // cuando no está pegada a otras letras. `independiente` deja de disparar
+  // `pendiente`; `/aviso-pendiente` y `?url=todo` siguen cayendo.
   const completa = s.toLowerCase();
-  if (RELLENOS.some((r) => host === r || host.endsWith(`.${r}`) || completa.includes(r))) {
-    return 'inservible';
-  }
+  const suelta = (r: string) =>
+    new RegExp(`(?<![a-z0-9])${r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9])`).test(completa);
+  if (PALABRAS_DE_RELLENO.some(suelta)) return 'inservible';
+
   return 'ok';
 }
 
@@ -247,9 +281,22 @@ export function versionAviso(texto: string): string {
  * persona, para no secuestrar la conversación normal de la caseta.
  */
 const OPOSICION: RegExp[] = [
-  /\bme opongo\b/,
-  /\boponerme\b/,
+  // AUDITORÍA 6: faltaba la conjugación más natural del español hablado. El
+  // detector solo veía el presente ("me opongo") y el infinitivo con clítico
+  // pegado ("oponerme"), y la forma que un operador usa de verdad es la
+  // perifrástica: "me quiero oponer", "no me quiero oponer" —que también es
+  // ejercicio del derecho, aunque la primera lectura despiste—, "quisiera
+  // oponerme", "me voy a oponer". Sin esto, el derecho del art. 26 fr. II se
+  // pierde sin dejar rastro: el mensaje pasa al agente como una frase normal.
+  //
+  // El clítico va SUELTO y antes del verbo, que es donde el español lo pone en
+  // la perífrasis, así que `\boponerme\b` no puede casarlo.
+  /\bme\s+(?:\w+\s+){0,3}opon(?:go|er|ga)\b/,
+  // Solo con el clítico. `opongo` a secas no es ejercicio del derecho —"opongo
+  // mi camión al muro" lo disparaba— y la forma real siempre lo lleva.
+  /\bopon(?:erme|erse)\b/,
   /\boposicion\b/,
+  /\bno\s+(?:quiero|autorizo|acepto)\s+que\s+(?:me\s+)?(?:revisen|analicen|usen|traten)\b/,
   /\brevision humana\b/,
   /\bque (lo |la )?(revise|revisen|vea|vean) (un |una )?(persona|humano|humana|alguien|gente)\b/,
   /\b(un|una) (persona|humano|humana|gente) (lo |la )?(revise|vea|revisara)\b/,
