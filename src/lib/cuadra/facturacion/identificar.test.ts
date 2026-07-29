@@ -112,3 +112,88 @@ describe('registro de comercios', () => {
     expect(itu?.restriccion?.mayusculas).toBe(true);
   });
 });
+
+// ── AMPLIACIÓN DEL 29-JUL-2026: 13 → 33 portales ───────────────────────────
+//
+// Al añadir `megasur` (la ficha verificada del sureste) quedaron DOS comercios
+// reclamando `megasur.com.mx` y el texto `MEGASUR`, porque esos dominios se
+// habían puesto en `g500` esa misma mañana. Una ambigüedad aquí no es cosmética:
+// `identificarComercio` devuelve UN comercio, así que la colisión manda al
+// operador al portal equivocado — y el portal equivocado es exactamente el error
+// que esta ampliación venía a corregir.
+describe('el reconocimiento no puede ser ambiguo', () => {
+  it('ningún dominio lo reclaman dos comercios', () => {
+    const de = new Map<string, string[]>();
+    for (const c of COMERCIOS) {
+      for (const d of c.reconocer.dominios ?? []) {
+        de.set(d, [...(de.get(d) ?? []), c.clave]);
+      }
+    }
+    const choques = [...de].filter(([, cs]) => cs.length > 1);
+    expect(choques, `dominios ambiguos: ${choques.map(([d, cs]) => `${d} → ${cs.join('/')}`).join(', ')}`).toEqual([]);
+  });
+
+  it('ningún texto impreso lo reclaman dos comercios', () => {
+    const de = new Map<string, string[]>();
+    for (const c of COMERCIOS) {
+      for (const t of c.reconocer.texto ?? []) {
+        const k = t.toUpperCase().trim();
+        de.set(k, [...(de.get(k) ?? []), c.clave]);
+      }
+    }
+    const choques = [...de].filter(([, cs]) => cs.length > 1);
+    expect(choques, `textos ambiguos: ${choques.map(([t, cs]) => `"${t}" → ${cs.join('/')}`).join(', ')}`).toEqual([]);
+  });
+});
+
+describe('lo verificado se distingue de la hipótesis', () => {
+  // La ampliación metió 20 portales de INVESTIGACIÓN. `plazoVerificado` es lo
+  // que impide que el producto jure que un ticket está vigente cuando nadie lo
+  // comprobó, así que la lista de verificados es cerrada y esta prueba la fija:
+  // meter uno nuevo obliga a pasar por aquí, y a decir cómo se verificó.
+  //
+  // Y hay dos grados de "verificado", que conviene no confundir:
+  //   · FACTURANDO — megasur y la_gas: se timbró un CFDI real.
+  //   · LEYENDO EL PORTAL — office_depot (maxlength del campo) y g500 (el plazo
+  //     impreso en el ticket). Es evidencia de primera mano, pero no probó que
+  //     el portal acepte el ticket de punta a punta.
+  const VERIFICADOS = ['g500', 'la_gas', 'megasur', 'office_depot'];
+  const FACTURADOS = ['la_gas', 'megasur'];
+
+  it('la lista de verificados es exactamente ésta', () => {
+    const conPlazo = COMERCIOS.filter((c) => c.plazoVerificado).map((c) => c.clave).sort();
+    expect(conPlazo).toEqual([...VERIFICADOS].sort());
+  });
+
+  it('los 29 restantes NO se anuncian como verificados', () => {
+    const sin = COMERCIOS.filter((c) => !c.plazoVerificado);
+    expect(sin.length).toBe(COMERCIOS.length - VERIFICADOS.length);
+    for (const c of sin) expect(c.plazoVerificado, c.clave).toBe(false);
+  });
+
+  it('los facturados de verdad son dos, y hay que poder nombrarlos', () => {
+    for (const k of FACTURADOS) expect(comercio(k)?.plazoVerificado, k).toBe(true);
+  });
+
+  it('megasur: le basta el WebID, y eso se comprobó timbrando', () => {
+    const m = comercio('megasur')!;
+    expect(m.requiereCuenta).toBe(false);
+    expect(m.campos.filter((x) => x.requerido).map((x) => x.clave)).toEqual(['webId']);
+  });
+
+  it('la_gas: exige cuenta, y es el límite de la automatización', () => {
+    // Correo + teléfono + contraseña. Mientras eso siga así, Likida no puede
+    // facturar por el operador sin custodiar credenciales del cliente.
+    expect(comercio('la_gas')!.requiereCuenta).toBe(true);
+  });
+
+  it('PINFRA declara los siete campos de una caseta', () => {
+    // Una caseta pide máquina y consecutivo, que ningún otro comercio pide. Si
+    // alguien "simplifica" esta lista, 17 autopistas dejan de facturar.
+    const p = comercio('pinfra')!;
+    const cs = p.campos.map((x) => x.clave);
+    for (const k of ['sucursal', 'fecha', 'hora', 'referencia', 'caja', 'transaccion', 'monto']) {
+      expect(cs, `PINFRA sin ${k}`).toContain(k);
+    }
+  });
+});
