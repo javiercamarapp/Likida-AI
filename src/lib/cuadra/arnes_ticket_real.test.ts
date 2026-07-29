@@ -85,7 +85,13 @@ const cuadrar = (gastos: Gasto[], anticipo: number, hoy: string): Cuadre => cuad
   politica: DEMO_CONFIG.politica,
   estimulos: DEMO_CONFIG.estimulos,
   hidrocarburos: DEMO_CONFIG.hidrocarburos,
-  empresaRfc: DEMO_CONFIG.empresa.rfc,
+  // AUDITORÍA 6: el caso de oro usaba `DEMO_CONFIG.empresa.rfc`, que es el
+  // GENÉRICO del SAT, y sus CFDI estaban timbrados también al genérico —o sea,
+  // "público en general", que por CFF 29-A no ampara la deducción de nadie—. El
+  // arnés medía el camino feliz sobre facturas que no deberían ser deducibles, y
+  // pasaba porque con el genérico el motor no validaba receptor. Un tenant
+  // configurado tiene RFC propio y facturas a su nombre: eso es lo que se mide.
+  empresaRfc: 'CCO8605231N4',
   hoy,
 });
 
@@ -162,7 +168,7 @@ const ORO: Gasto[] = [
   {
     id: 'g-diesel', concepto: 'diesel', monto: 3500, fecha: '2026-05-08',
     folio: 'A-10231', cfdiUuid: '11111111-1111-1111-1111-111111111111',
-    rfcEmisor: 'PEP970101P77', rfcReceptor: 'XAXX010101000',
+    rfcEmisor: 'PEP970101P77', rfcReceptor: 'CCO8605231N4',
     claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I',
     complementoHidrocarburos: true, xmlVerificado: true,
     formaPago: '03',                       // transferencia: LIF 20-A-IV, 4º párrafo
@@ -172,7 +178,7 @@ const ORO: Gasto[] = [
   {
     id: 'g-caseta', concepto: 'caseta', monto: 800, fecha: '2026-05-08',
     folio: 'C-778', cfdiUuid: '22222222-2222-2222-2222-222222222222',
-    rfcEmisor: 'CAP980713RG9', rfcReceptor: 'XAXX010101000',
+    rfcEmisor: 'CAP980713RG9', rfcReceptor: 'CCO8605231N4',
     claveProdServ: '95111602', tipoComprobante: 'I', xmlVerificado: true, formaPago: '03',
     subTotal: 689.66, ivaTraslado: 110.34,
     ocrConfianza: 0.95, estadoSat: 'vigente', efos: false,

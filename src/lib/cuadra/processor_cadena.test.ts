@@ -52,14 +52,14 @@ const GASTOS: Gasto[] = [
   {
     id: 'g-caseta', concepto: 'caseta', monto: 800, fecha: HOY,
     folio: 'C-778', cfdiUuid: '22222222-2222-2222-2222-222222222222',
-    rfcEmisor: 'CAP980713RG9', rfcReceptor: 'XAXX010101000',
+    rfcEmisor: 'CAP980713RG9', rfcReceptor: 'CCO8605231N4',
     claveProdServ: '95111602', tipoComprobante: 'I', xmlVerificado: true, formaPago: '03',
     subTotal: 689.66, ivaTraslado: 110.34, ocrConfianza: 0.95, estadoSat: 'vigente', efos: false,
   },
   {
     id: 'g-diesel', concepto: 'diesel', monto: 3500, fecha: HOY,
     folio: 'A-10231', cfdiUuid: '11111111-1111-1111-1111-111111111111',
-    rfcEmisor: 'PEP970101P77', rfcReceptor: 'XAXX010101000',
+    rfcEmisor: 'PEP970101P77', rfcReceptor: 'CCO8605231N4',
     claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I',
     complementoHidrocarburos: true, xmlVerificado: true, formaPago: '03',
     subTotal: 2426.72, ivaTraslado: 388.28, iepsTraslado: 685,
@@ -68,7 +68,7 @@ const GASTOS: Gasto[] = [
   {
     id: 'g-hospedaje', concepto: 'hospedaje', monto: 1200, fecha: HOY,
     folio: 'H-9', cfdiUuid: '33333333-3333-3333-3333-333333333333',
-    rfcEmisor: 'HOT010101AB1', rfcReceptor: 'XAXX010101000',
+    rfcEmisor: 'HOT010101AB1', rfcReceptor: 'CCO8605231N4',
     tipoComprobante: 'I', xmlVerificado: true, formaPago: '03',
     subTotal: 1034.48, ivaTraslado: 165.52, ocrConfianza: 0.95, estadoSat: 'vigente',
     efos: true,   // ← lista negra 69-B: SOLO_CONTRALOR
@@ -135,9 +135,14 @@ const URL_FIRMADA = 'https://sb.test/firmada/liq-operador.pdf?token=abc';
 const storage = { rechazaEjemplarDelOperador: false };
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
-    // `getConfig` lee `tenant.rfc`/`tenant.config` de aquí; sin fila cae a
-    // DEMO_CONFIG, que es la config con la que corre el demo.
-    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }),
+    // `getConfig` lee `tenant.rfc`/`tenant.config` de aquí.
+    //
+    // AUDITORÍA 6: antes devolvía `data: null`, o sea "sin fila", y la config
+    // caía a DEMO_CONFIG — cuyo RFC es el GENÉRICO del SAT. Con el genérico el
+    // motor no validaba receptor, así que la cadena entera se medía sobre un
+    // tenant que en realidad no puede deducir nada. Se le da el RFC de una flota
+    // configurada, que es lo que la cadena pretende ejercitar.
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { rfc: 'CCO8605231N4', config: null }, error: null }) }) }) }),
     storage: {
       from: () => ({
         upload: async (path: string, buf: Buffer) => {
