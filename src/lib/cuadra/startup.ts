@@ -105,19 +105,40 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       reportarProbe(e17, 'FALTA la migración 0017 (enriquecer_gasto_codigo): el folio del portal que trae un acercamiento no se pega y se pierde. Corre `supabase db push`.');
       faltan = true;
     }
-    // Migración 0019 (unique de cfdi_uuid). Sin ella, el MISMO CFDI de diésel
-    // entra dos veces: el gasto se cuenta doble en el comprobado, su IVA se
-    // acredita doble y el operador aparece habiendo gastado lo que no gastó. El
-    // motor deduplica por UUID en memoria, pero solo dentro de UNA liquidación:
-    // dos fotos del mismo XML en turnos distintos las escribe la base, y ahí no
-    // había nada que lo impidiera. Se sonda leyendo el índice, no escribiendo.
-    const { error: e19 } = await admin
-      .from('gasto')
-      .select('cfdi_uuid')
-      .not('cfdi_uuid', 'is', null)
-      .limit(1);
-    if (e19) {
-      reportarProbe(e19, 'No se pudo verificar la migración 0019 (unique de gasto.cfdi_uuid): sin ella el mismo CFDI se liquida dos veces, con su IVA acreditado por duplicado. Corre `supabase db push`.');
+    // ── ÍNDICES ÚNICOS. SE MIRA EL CATÁLOGO, QUE ES LO ÚNICO QUE LOS VE ─────
+    //
+    // AUDITORÍA 6, arquitectura. Aquí había un `select cfdi_uuid from gasto
+    // where cfdi_uuid is not null limit 1` con un comentario afirmando que "se
+    // sonda leyendo el índice". No lo leía: `cfdi_uuid` es una columna de
+    // `0001_init.sql` y esa consulta responde igual de bien en una base donde la
+    // 0019 nunca se aplicó. Tercera ronda seguida con el mismo hallazgo
+    // —"anuncia que verifica y no verifica"—, y la última lo empeoró poniéndole
+    // encima seis líneas que aseguraban lo contrario.
+    //
+    // Un chequeo que no puede fallar no protege nada. Sin la 0019 el MISMO CFDI
+    // de diésel entra dos veces: se cuenta doble en el comprobado, su IVA se
+    // acredita doble, y el operador aparece habiendo gastado lo que no gastó. El
+    // motor deduplica por UUID en memoria, pero solo dentro de UNA liquidación.
+    //
+    // `indices_faltantes` (migración 0030) es de solo lectura y sirve para
+    // cualquier índice futuro. Si ELLA falta, `reportarProbe` lo dirá como "no
+    // se pudo preguntar", que es la verdad — no como "falta la 0019".
+    const INDICES = {
+      uq_gasto_cfdi_uuid: 'migración 0019: sin ella el mismo CFDI se liquida dos veces, con su IVA acreditado por duplicado',
+      uq_operador_telefono_activo: 'migración 0024: sin ella un mismo teléfono puede resolver a dos operadores y el gasto se le carga a quien no fue',
+    } as const;
+    const { data: faltantes, error: eIdx } = await admin.rpc('indices_faltantes', {
+      p_esperados: Object.keys(INDICES),
+    });
+    if (eIdx) {
+      reportarProbe(eIdx, 'No se pudieron verificar los índices únicos (falta la migración 0030, `indices_faltantes`). Corre `supabase db push`.');
+      faltan = true;
+    } else if (Array.isArray(faltantes) && faltantes.length) {
+      for (const idx of faltantes as string[]) {
+        logger.error('startup.migraciones', {
+          msg: `FALTA el índice \`${idx}\` (${INDICES[idx as keyof typeof INDICES] ?? 'sin descripción'}). Corre \`supabase db push\`.`,
+        });
+      }
       faltan = true;
     }
 

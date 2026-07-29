@@ -111,6 +111,7 @@ describe('la sobrecarga ambigua de guardar_liquidacion_tx', () => {
        .mockResolvedValueOnce({ error: null })   // unlock
        .mockResolvedValueOnce({ error: null })   // 0011
        .mockResolvedValueOnce({ error: null })   // 0017
+       .mockResolvedValueOnce({ data: [], error: null })  // indices_faltantes: ninguno falta
        .mockResolvedValueOnce({ error: { code: '42725', message: 'function guardar_liquidacion_tx(...) is not unique' } })
        .mockResolvedValue({ error: null });
     await verificarMigracionesCriticas();
@@ -123,7 +124,7 @@ describe('la sobrecarga ambigua de guardar_liquidacion_tx', () => {
   });
 
   it('un error NORMAL de esa sonda (tenant inexistente) no se confunde con la ambigüedad', async () => {
-    rpc.mockResolvedValue({ error: null });
+    rpc.mockResolvedValue({ data: [], error: null });
     await verificarMigracionesCriticas();
     expect(info).toHaveBeenCalledWith('startup.migraciones', { ok: true });
   });
@@ -153,12 +154,39 @@ describe('el arranque dice TODO lo que falta, no lo primero', () => {
     expect(info).not.toHaveBeenCalledWith('startup.migraciones', { ok: true });
   });
 
-  it('la 0019 se sonda: sin ella el mismo CFDI se liquida dos veces', async () => {
-    rpc.mockResolvedValue({ error: null });
-    from.mockReturnValue(tabla({ error: { code: '42P01', message: 'relation gasto does not exist' } }));
+  // REESCRITA EN LA AUDITORÍA 6. Antes esta prueba pasaba haciendo fallar la
+  // TABLA `gasto` entera, que es un fallo de otra cosa. El sondeo real
+  // —`select cfdi_uuid ... limit 1`— no podía detectar la ausencia del ÍNDICE:
+  // `cfdi_uuid` es una columna de `0001_init.sql` y la consulta responde igual
+  // de bien sin la 0019. La prueba verde daba por cubierto lo que no lo estaba.
+  it('el índice de la 0019 se sonda contra el catálogo, no contra la columna', async () => {
+    rpc.mockResolvedValue({ data: ['uq_gasto_cfdi_uuid'], error: null });
     await verificarMigracionesCriticas();
 
     const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
-    expect(mensajes).toContain('0019');
+    expect(mensajes).toContain('uq_gasto_cfdi_uuid');
+    expect(mensajes).toContain('mismo CFDI se liquida dos veces');
+  });
+
+  it('y el de la 0024, que evita cargarle el gasto a quien no fue', async () => {
+    rpc.mockResolvedValue({ data: ['uq_operador_telefono_activo'], error: null });
+    await verificarMigracionesCriticas();
+    expect(error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | '))
+      .toContain('uq_operador_telefono_activo');
+  });
+
+  it('si falta la función que los sonda, se dice ESO y no "falta la 0019"', async () => {
+    // La distinción que costó un diagnóstico falso en producción: "no pude
+    // preguntar" no es "no está".
+    rpc.mockResolvedValue({ error: { code: 'PGRST202', message: 'Could not find the function public.indices_faltantes' } });
+    await verificarMigracionesCriticas();
+    const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
+    expect(mensajes).toContain('0030');
+  });
+
+  it('con todos los índices puestos no inventa un faltante', async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    await verificarMigracionesCriticas();
+    expect(info).toHaveBeenCalledWith('startup.migraciones', { ok: true });
   });
 });
