@@ -62,3 +62,45 @@ describe('onRequestError — el fallo de una superficie web deja línea', () => 
     ).resolves.toBeUndefined();
   });
 });
+
+// ── AUDITORÍA 6 · el cable, no la función ──────────────────────────────────
+//
+// La ronda encontró DOS mecanismos correctos, con pruebas unitarias, que nadie
+// llamaba: `sondearAvisoIntegral` y `flushObservabilidad`. Sus pruebas pasaban
+// porque probaban la función en aislamiento — exactamente lo que el rubro de
+// pruebas señaló como el modo de falla dominante del repo.
+//
+// El comentario de arriba dice que estas pruebas NO llaman a `register()`
+// porque dispararía las RPC contra Supabase. Con los módulos mockeados sí se
+// puede, y es la única forma de fijar el cable.
+describe('register — el arranque llama a todo lo que dice que llama', () => {
+  it('sonda el aviso de privacidad, no solo las migraciones', async () => {
+    const verificarMigracionesCriticas = vi.fn(async () => {});
+    const verificarAvisoDePrivacidad = vi.fn(async () => {});
+    vi.doMock('@/lib/cuadra/startup', () => ({ verificarMigracionesCriticas, verificarAvisoDePrivacidad }));
+    vi.doMock('@/lib/observability/sentry', () => ({
+      avisarObservabilidad: vi.fn(), precargar: vi.fn(async () => {}),
+    }));
+    vi.doMock('@/lib/observability/arranque', () => ({ avisarConfiguracionSilenciosa: vi.fn() }));
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+
+    const { register } = await import('./instrumentation');
+    await register();
+
+    expect(verificarMigracionesCriticas).toHaveBeenCalled();
+    // ESTE es el hallazgo: la función existía y `register` no la invocaba.
+    expect(verificarAvisoDePrivacidad).toHaveBeenCalled();
+  });
+
+  it('fuera del runtime de Node no arranca nada', async () => {
+    const verificarAvisoDePrivacidad = vi.fn(async () => {});
+    vi.doMock('@/lib/cuadra/startup', () => ({
+      verificarMigracionesCriticas: vi.fn(async () => {}), verificarAvisoDePrivacidad,
+    }));
+    vi.stubEnv('NEXT_RUNTIME', 'edge');
+
+    const { register } = await import('./instrumentation');
+    await register();
+    expect(verificarAvisoDePrivacidad).not.toHaveBeenCalled();
+  });
+});

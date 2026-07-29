@@ -149,3 +149,60 @@ export async function verificarMigracionesCriticas(): Promise<void> {
     logger.warn('startup.migraciones_skip', { err: e instanceof Error ? e.message : String(e) });
   }
 }
+
+/**
+ * ¿La liga del aviso de privacidad integral EXISTE de verdad?
+ *
+ * ── EL MECANISMO ESTABA ESCRITO Y NADIE LO LLAMABA (auditoría 6, legal) ─────
+ *
+ * `revisarAvisoIntegral` es una revisión de FORMA: comprueba que la URL esté
+ * bien escrita y sea https. Un dominio perfectamente escrito y sin registrar la
+ * pasa. `sondearAvisoIntegral` es lo único que prueba existencia, y su propio
+ * comentario dice dónde va: *"en un arranque, en un preflight de despliegue o en
+ * un cron, donde un fallo se puede mirar"*. Ese arranque no existía: la función
+ * solo la llamaban sus pruebas.
+ *
+ * Mientras tanto, el tenant real de producción cita
+ * `transportesinnovativos.mx`, que responde NXDOMAIN. El aviso simplificado le
+ * manda al operador esa liga rota y la respuesta ARCO también — y la rama
+ * degradada que se escribió para ese caso ("la empresa aún no lo publica") no se
+ * activa nunca, porque la revisión de forma dice `ok`.
+ *
+ * LFPDPPP art. 16 fr. II: el aviso simplificado debe *"señalar el sitio donde se
+ * podrá consultar el aviso de privacidad integral"*. Un sitio que no resuelve no
+ * es un sitio. Y como el integral es además el canal ARCO (art. 15 fr. V), la
+ * liga rota se lleva por delante el ejercicio de derechos.
+ *
+ * NO bloquea el arranque ni el envío del aviso: un corte de red transitorio
+ * daría un falso negativo, y cambiar un incumplimiento por otro no arregla nada.
+ * Deja el diagnóstico donde se puede mirar, que es lo que faltaba.
+ */
+export async function verificarAvisoDePrivacidad(): Promise<void> {
+  const tenantId = process.env.DEMO_TENANT_ID;
+  if (!tenantId) return; // `arranque.ts` ya avisa de su ausencia; no se duplica.
+  try {
+    const { getDatosResponsable } = await import('./repo');
+    const { sondearAvisoIntegral } = await import('./privacidad');
+
+    const datos = await getDatosResponsable(tenantId);
+    if (!datos) {
+      logger.error('startup.aviso_privacidad', {
+        msg: 'El tenant no tiene razón social o domicilio fiscal, así que NO se puede armar el aviso de privacidad y el tratamiento de datos se detiene en el primer mensaje. Captura `razon_social` y `domicilio_fiscal` en la tabla `tenant`.',
+      });
+      return;
+    }
+
+    const sondeo = await sondearAvisoIntegral(datos.urlAvisoIntegral);
+    if (sondeo.abre) {
+      logger.info('startup.aviso_privacidad', { ok: true });
+      return;
+    }
+    logger.error('startup.aviso_privacidad', {
+      motivo: sondeo.motivo,
+      msg: `La liga del aviso de privacidad integral NO abre (${sondeo.motivo}). El aviso simplificado se la manda igual al operador, y es además el único canal para ejercer derechos ARCO (LFPDPPP art. 15 fr. V y 16 fr. II). Publica el aviso integral en una URL que resuelva y actualiza \`tenant.url_aviso_privacidad\`.`,
+    });
+  } catch (e) {
+    // Igual que los sondeos de migración: sin env/DB durante el build, no rompe.
+    logger.warn('startup.aviso_privacidad_skip', { err: e instanceof Error ? e.message : String(e) });
+  }
+}

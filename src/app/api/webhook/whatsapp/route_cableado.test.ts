@@ -32,6 +32,12 @@ const processInbound = vi.fn(async () => {});
 vi.mock('@/lib/cuadra/processor', () => ({ processInbound }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
+// AUDITORÍA 6 · operabilidad — el flush de Sentry existía, con ocho pruebas
+// unitarias, y el único `after()` del repo no lo llamaba. Se espía aquí porque
+// el defecto no estaba en la función: estaba en el cable.
+const flushObservabilidad = vi.fn(async () => {});
+vi.mock('@/lib/observability/sentry', () => ({ flushObservabilidad }));
+
 // `after()` fuera de una petición de Next lanza ("called outside a request
 // scope"). Se recogen las tareas y se corren a mano: así se puede AFIRMAR qué
 // llegó al procesador, que es lo que M18 rompe.
@@ -71,7 +77,11 @@ const payload = (from: string, mensaje: Record<string, unknown>) => JSON.stringi
   } }] }],
 });
 
-beforeEach(() => { processInbound.mockClear(); pendientes.length = 0; });
+beforeEach(() => {
+  processInbound.mockReset(); processInbound.mockImplementation(async () => {});
+  flushObservabilidad.mockReset(); flushObservabilidad.mockImplementation(async () => {});
+  pendientes.length = 0;
+});
 
 // ═══ M17 — la firma ═══════════════════════════════════════════════════════
 describe('el webhook exige la firma de Meta', () => {
@@ -173,5 +183,44 @@ describe('el webhook entrega al procesador lo que Meta manda', () => {
     const res = await postear(c, firmar(c));
     expect(res.status).toBe(400);
     expect(processInbound).not.toHaveBeenCalled();
+  });
+});
+
+// ── AUDITORÍA 6 · CRÍTICO de operabilidad: el mecanismo sin cable ───────────
+//
+// `flushObservabilidad` se escribió para sobrevivir al congelamiento de la
+// invocación en Vercel, con un comentario que nombra `after()` explícitamente y
+// ocho pruebas unitarias. El único `after()` del repo no la llamaba.
+//
+// Es el mismo modo de falla que `sondearAvisoIntegral` en el rubro legal, y la
+// razón por la que la ronda 6 bajó notas aunque los 55 arreglos del día
+// anterior fueran correctos por separado: siete agentes en paralelo, cada uno
+// cerrando su hallazgo dentro de su territorio, y el cable vive en el de otro.
+//
+// Por eso esta prueba mira el CABLE, no la función.
+describe('la telemetría se vacía antes de que Vercel congele la invocación', () => {
+  it('el after() del webhook llama al flush', async () => {
+    const c = payload('5219990000020', { id: 'wamid.FL1', type: 'text', text: { body: 'hola' } });
+    await postear(c, firmar(c));
+    expect(flushObservabilidad).toHaveBeenCalled();
+  });
+
+  it('y lo hace DESPUÉS de procesar, no antes', async () => {
+    // Vaciar antes de procesar no serviría de nada: los eventos que importan
+    // —`agent.fail`, `processInbound.fail`, `pdf.no_entregado`— los produce
+    // `processInbound`, así que el flush tiene que verlos ya encolados.
+    const orden: string[] = [];
+    processInbound.mockImplementation(async () => { orden.push('procesa'); });
+    flushObservabilidad.mockImplementation(async () => { orden.push('flush'); });
+    const c = payload('5219990000021', { id: 'wamid.FL2', type: 'text', text: { body: 'hola' } });
+    await postear(c, firmar(c));
+    expect(orden).toEqual(['procesa', 'flush']);
+  });
+
+  it('un fallo del procesador no impide vaciar la telemetría de ese fallo', async () => {
+    processInbound.mockImplementation(async () => { throw new Error('boom'); });
+    const c = payload('5219990000022', { id: 'wamid.FL3', type: 'text', text: { body: 'hola' } });
+    await postear(c, firmar(c));
+    expect(flushObservabilidad).toHaveBeenCalled();
   });
 });
