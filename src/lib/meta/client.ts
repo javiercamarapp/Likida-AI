@@ -66,18 +66,33 @@ export function destinatarioWhatsApp(telefono: string): string {
   return mx ? `52${mx[1]}` : d;
 }
 
-export async function sendText(to: string, body: string): Promise<void> {
+/**
+ * Devuelve el wamid si Meta ACEPTÓ el mensaje, o `null` si lo rechazó.
+ *
+ * Devolvía `void`, y eso hacía imposible que un llamador supiera si su mensaje
+ * salió. La constancia del aviso de privacidad se escribía antes de enviar y
+ * nadie podía comprobar después: el 28-jul la base afirmó que un operador
+ * recibió su aviso 10 minutos ANTES del commit que arregló el destinatario
+ * mexicano que Meta rechazaba. El operador nunca lo recibió y la constancia
+ * sigue ahí.
+ *
+ * Ojo con lo que este valor NO promete: un wamid significa aceptado, no
+ * entregado. La entrega se confirma —o se desmiente— por el webhook de acuses.
+ */
+export async function sendText(to: string, body: string): Promise<string | null> {
   const res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } }),
   });
-  if (!res.ok) { logger.error('wa.sendText', { status: res.status, body: await res.text().catch(() => '') }); return; }
+  if (!res.ok) { logger.error('wa.sendText', { status: res.status, body: await res.text().catch(() => '') }); return null; }
   // El ÉXITO también deja rastro. Sin esta línea, "se envió" y "nunca se llamó"
   // se ven igual en los logs —los dos, en blanco— y distinguirlos costó veinte
   // minutos de la primera prueba real. El id del mensaje es lo que permite
   // rastrearlo después en Meta.
-  logger.info('wa.sendText.ok', { id: await idDeRespuesta(res) });
+  const id = await idDeRespuesta(res);
+  logger.info('wa.sendText.ok', { id });
+  return id ?? null;
 }
 
 /** El wamid que devuelve Meta, para poder seguir el mensaje del lado de ellos. */

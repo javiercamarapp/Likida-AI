@@ -399,6 +399,28 @@ export async function reclamarEnvioAviso(
   return data === true;
 }
 
+/**
+ * Deshace la reserva del aviso cuando el envío NO salió.
+ *
+ * La reserva tiene que ir ANTES de enviar —si no, el primer mensaje llega por
+ * dos caminos y el operador recibe el aviso dos o tres veces—. Pero escribirla
+ * antes y no deshacerla convierte una reserva en una CONSTANCIA FALSA: el
+ * 28-jul la base afirmó que un operador recibió su aviso diez minutos antes del
+ * commit que arregló el destinatario que Meta rechazaba. Nunca lo recibió, y la
+ * fila sigue diciendo que sí.
+ *
+ * Ante la autoridad, esa fila es la prueba de haber cumplido el art. 16 de la
+ * LFPDPPP. Una prueba falsa es peor que ninguna.
+ */
+export async function liberarEnvioAviso(tenantId: string, operadorId: string): Promise<void> {
+  const { error } = await supabaseAdmin()
+    .from('operador')
+    .update({ aviso_privacidad_en: null, aviso_privacidad_version: null })
+    .eq('id', operadorId)
+    .eq('tenant_id', tenantId);
+  if (error) logger.error('privacidad.liberar_falló', { tenantId, operadorId, err: error.message });
+}
+
 // ── Acumulados del ejercicio (Fase 1: la capa de periodo) ────────────────────
 
 /**

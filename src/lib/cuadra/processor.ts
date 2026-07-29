@@ -19,6 +19,7 @@ import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { violaIndice } from '@/lib/cuadra/pg_errores';
 import { guardiaFundamento, normasDeToolCalls } from '@/lib/cuadra/normas/fundamento';
+import { guardiaEstado } from '@/lib/cuadra/cuadre/estado_afirmado';
 import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS } from '@/lib/cuadra/presupuesto';
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
 import { getConfig } from '@/lib/cuadra/config';
@@ -27,7 +28,7 @@ import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import {
   addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash,
   enriquecerGastoConCodigo, guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente,
-  getDatosResponsable, reclamarEnvioAviso,
+  getDatosResponsable, reclamarEnvioAviso, liberarEnvioAviso,
 } from '@/lib/cuadra/repo';
 import {
   resolveOperador, getOpenViaje, getTenantContext,
@@ -130,7 +131,7 @@ async function atenderPrivacidad(tenantId: string, operadorId: string, telefono:
 async function ponerAvisoADisposicion(
   tenantId: string,
   operadorId: string,
-  say: (t: string) => Promise<void>,
+  telefono: string,
 ): Promise<void> {
   try {
     const datos = await getDatosResponsable(tenantId);
@@ -146,8 +147,19 @@ async function ponerAvisoADisposicion(
     // El claim vive en SQL: el primer mensaje puede llegar por dos caminos a la
     // vez, y sin él el operador recibiría el aviso dos o tres veces seguidas.
     if (!(await reclamarEnvioAviso(tenantId, operadorId, versionAviso(texto)))) return;
-    await say(texto);
-    logger.info('privacidad.aviso_enviado', { tenantId, operadorId });
+    // La reserva va ANTES de enviar (si no, el aviso sale dos o tres veces), pero
+    // la CONSTANCIA solo vale si el mensaje salió de verdad. `sendText` devolvía
+    // `void` y no lanza al fallar, así que la fila se escribía igual: el 28-jul la
+    // base afirmó que un operador recibió su aviso diez minutos ANTES del commit
+    // que arregló el destinatario que Meta rechazaba. Ante la autoridad esa fila
+    // es la prueba del art. 16; una prueba falsa es peor que ninguna.
+    const id = await sendText(telefono, texto);
+    if (!id) {
+      logger.error('privacidad.aviso_no_entregado', { tenantId, operadorId });
+      await liberarEnvioAviso(tenantId, operadorId);   // que el siguiente mensaje reintente
+      return;
+    }
+    logger.info('privacidad.aviso_enviado', { tenantId, operadorId, id });
   } catch (e) {
     // Si la 0018 no está aplicada, las columnas no existen y esto truena.
     logger.error('privacidad.aviso_error', { err: e instanceof Error ? e.message : String(e) });
@@ -244,7 +256,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     //
     // El obligado es el RESPONSABLE, o sea la flota. Likida solo pone el
     // mecanismo: sin él la flota no puede cumplir aunque quiera.
-    await ponerAvisoADisposicion(op.tenantId, op.operadorId, say);
+    await ponerAvisoADisposicion(op.tenantId, op.operadorId, msg.from);
 
 
     // ── IMAGEN: captura SILENCIOSA en PARALELO (acuse consolidado) ────────────
@@ -647,6 +659,24 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       }
     } catch (e) {
       logger.warn('guardia_fundamento.fail', { err: e instanceof Error ? e.message : String(e) });
+    }
+
+    // ── La afirmación de ESTADO, contra el hecho que el servidor ya tiene ─────
+    //
+    // `guardiaCifras` impide inventar un número; nada impedía inventar un HECHO.
+    // "Ya quedó cerrada tu liquidación ✅" pasaba entera con `toolCalls: []`: el
+    // viaje seguía `abierto`, no había liquidación ni PDF, y el operador dejaba
+    // de mandar comprobantes esperando algo que nadie iba a generar.
+    //
+    // No es una heurística sobre el mundo: `closed` sale de las tool calls, así
+    // que la guardia no adivina, COTEJA. Va después del fundamento y antes de
+    // `say` porque es lo último que puede desmentir el texto.
+    if (!textoDeterminista) {
+      const est = guardiaEstado(reply, { cerro: closed, entrego: false });
+      if (est.forzado) {
+        logger.error('agent.estado_falso', { viaje: viajeId, tenant: op.tenantId, motivos: est.motivos });
+        reply = est.reply;
+      }
     }
 
     await say(reply);
