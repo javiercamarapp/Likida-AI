@@ -187,7 +187,9 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   const data = exigir(res, 'getLiquidacionDetalle');
   if (!data) return null;
   const totalComprobado = Number(data.total_comprobado ?? 0);
-  const reconstruida = await reconstruir(tenantId, data.viaje_id as string, totalComprobado);
+  const reconstruida = await reconstruir(
+    tenantId, data.viaje_id as string, totalComprobado, data.diferencias,
+  );
   // Solo se consulta `gasto` cuando el motor no pudo reconstruir: en el camino
   // normal las filas salen de la reconstrucción, que ya trae los gastos.
   const crudos = reconstruida ? null : await leerGastos(admin, tenantId, data.viaje_id as string);
@@ -293,10 +295,50 @@ async function leerGastos(
  * $12,100.00" debajo de ninguna fila. Es el mismo criterio que ya aplica
  * `filasDeducibilidad`, y por la misma razón.
  */
-async function reconstruir(tenantId: string, viajeId: string, totalPersistido: number) {
+async function reconstruir(
+  tenantId: string,
+  viajeId: string,
+  totalPersistido: number,
+  diferenciasPersistidas: unknown,
+) {
   try {
     const liq = await cuadrarDesdeDB(tenantId, viajeId);
     if (Math.abs(liq.totalComprobado - totalPersistido) > 0.015) return null;
+    // ── EL PORTÓN DE ARRIBA NO PUEDE VER UN CAMBIO DE CONFIG ────────────────
+    //
+    // AUDITORÍA 6, CRÍTICO de frontend. `cuadrarDesdeDB` llama a `getConfig`
+    // FRESCO en cada carga, así que el detalle recalcula con la política, el
+    // RFC y las vigencias de HOY, no con las del cierre. Y `totalComprobado`
+    // —la única cifra que este portón compara— es una suma de montos que no
+    // lee ni una clave de `config`: ni política, ni RFC, ni hidrocarburos, ni
+    // estímulos. El portón siempre pasa justo cuando lo que cambió es lo que
+    // mueve las cubetas.
+    //
+    // Medido con el motor real, mismo CFDI de diésel de $5,800:
+    //   al cerrar (sin RFC de flota)  → deducible 5,800 · por confirmar 0
+    //   al reabrir (con RFC ya capturado, distinto del receptor)
+    //                                 → deducible 0     · por confirmar 5,800
+    //   |totalComprobado1 − totalComprobado2| = 0
+    //
+    // Y no es de laboratorio: capturar el RFC del cliente es el paso más
+    // mundano del alta, y `getConfig` sobrescribe `empresa.rfc` con la columna
+    // `tenant.rfc` en CADA llamada. El contralor ya mandó el PDF a su contador
+    // citando "$X deducibles"; al reabrir la misma liquidación lee otra cifra,
+    // sin marca de que se recalculó ni de cuándo.
+    //
+    // Las tres cubetas no se persisten (no hay columnas ni parámetros en
+    // `guardar_liquidacion_tx`), así que no hay contra qué compararlas. Pero
+    // `diferencias` SÍ se persiste, y es justo lo que un cambio de config
+    // mueve: en el escenario de arriba pasa de ['anticipo'] a
+    // ['rfc_receptor_no_verificable','anticipo']. Comparar los TIPOS detecta la
+    // deriva sin tocar el RPC —cambiarle la firma a nueve días del demo es
+    // exactamente cómo nació la doble firma que arregla la 0022—.
+    //
+    // Ante deriva, la pantalla se calla: cae al camino de gastos crudos, que ya
+    // se marca como "puede no sumar". Callar es lo que este archivo ya hace
+    // cuando no puede sostener una cifra, y contradecir el PDF archivado sin
+    // avisar es peor que no enseñar el desglose.
+    if (derivoLaConfig(diferenciasPersistidas, liq.diferencias)) return null;
     const { filas, duplicados } = filasImprimibles(liq);
     return {
       deducibilidad: {
@@ -323,6 +365,32 @@ async function reconstruir(tenantId: string, viajeId: string, totalPersistido: n
   } catch {
     return null;
   }
+}
+
+/**
+ * ¿El conjunto de TIPOS de diferencia que produce el motor hoy es distinto del
+ * que se guardó al cerrar?
+ *
+ * Se comparan los tipos como conjunto, no la lista entera: los montos y los
+ * textos pueden variar por redondeo o por una leyenda reescrita sin que el
+ * veredicto cambie, y saltar por eso dejaría el desglose apagado siempre. Lo
+ * que importa es si apareció o desapareció un motivo — `rfc_receptor`,
+ * `rfc_receptor_no_verificable`, `efectivo_sobre_tope`, `sin_cfdi`—, que es
+ * exactamente la huella que deja un cambio de política, de RFC o de vigencia.
+ *
+ * Si lo persistido no es una lista utilizable, NO se declara deriva: una
+ * liquidación vieja con `diferencias: null` es un dato que falta, no una
+ * contradicción, y apagar el desglose por eso castigaría al camino bueno.
+ */
+function derivoLaConfig(persistidas: unknown, actuales: Array<{ tipo?: string }>): boolean {
+  if (!Array.isArray(persistidas)) return false;
+  const tipos = (xs: Array<{ tipo?: string }>) =>
+    new Set(xs.map((d) => d?.tipo).filter((t): t is string => typeof t === 'string'));
+  const antes = tipos(persistidas as Array<{ tipo?: string }>);
+  const ahora = tipos(actuales ?? []);
+  if (antes.size !== ahora.size) return true;
+  for (const t of ahora) if (!antes.has(t)) return true;
+  return false;
 }
 
 function round2(n: number): number {
