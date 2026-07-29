@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 // Alias '@' → src/ para que los tests puedan importar módulos que usan '@/...'
 // en tiempo de ejecución (antes solo los type-only resolvían).
+
 // LA INSTRUMENTACIÓN DE COBERTURA FALSEA EL RELOJ. Tres pruebas de la suite
 // afirman TIEMPO (un ReDoS, un cociente de escalado, un costo por llamada) y
 // bajo `--coverage` la misma suite pasa de 9 s a 34 s: sus umbrales dejan de

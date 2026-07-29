@@ -65,7 +65,12 @@ function* entreViajes(filas: FilaGasto[], llave: (f: FilaGasto) => string | null
  */
 function buscadorDeUuidEnLlave(conUuid: Set<string>): (k: string) => boolean {
   if (!conUuid.size) return () => false;
-  const largos = [...new Set([...conUuid].map((u) => u.length))];
+  // Se recorre el Set directamente en vez de `[...conUuid].map((u) => u.length)`:
+  // aquello asignaba DOS arreglos de ~20 000 elementos para quedarse con uno o
+  // dos números. Los UUID son de longitud fija; el conjunto de largos cabe en una
+  // mano.
+  const largos = new Set<number>();
+  for (const u of conUuid) largos.add(u.length);
   return (k: string) => {
     for (const L of largos) {
       for (let i = 0; i + L <= k.length; i++) if (conUuid.has(k.slice(i, i + L))) return true;

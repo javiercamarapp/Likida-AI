@@ -60,7 +60,7 @@ const nextConfig: NextConfig = {
   //
   //                       archivos      tamaño     del proyecto
   //   antes                    623     24.18 MB     145 arch / 4.22 MB
-  //   después                  498     22.46 MB      20 arch / 2.50 MB
+  //   después                  498     22.46 MB      20 arch / 2.51 MB
   //   de node_modules          478     19.96 MB     (idéntico: no se tocó nada
   //                                                  que una dependencia use)
   //

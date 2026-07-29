@@ -175,7 +175,6 @@ async function ponerAvisoADisposicion(
     }
     logger.info('privacidad.aviso_enviado', { tenantId, operadorId, id });
     return true;
-    return true;
   } catch (e) {
     // Si la 0018 no está aplicada, las columnas no existen y esto truena.
     logger.error('privacidad.aviso_error', { tenantId, operadorId, err: e instanceof Error ? e.message : String(e) });
