@@ -152,9 +152,22 @@ export const COMERCIOS: Comercio[] = [
     clave: 'g500',
     nombre: 'G500',
     portal: 'https://g500network.com/facturacion-en-linea/',
+    // G500 ES UNA RED DE FRANQUICIAS CON PORTALES REGIONALES, y el ticket lo
+    // dice él mismo. Uno de G500 MEGASUR (Mérida, 29-jul-2026) imprime
+    // "FACTURA FACIL EN NUESTRA PAGINA WEB WWW.G500SURESTE.COM.MX", no el
+    // portal de la red. Mandar al operador al genérico es mandarlo a un sitio
+    // donde su folio puede no existir.
+    //
+    // El portal de arriba se conserva como default porque es el de la red; los
+    // regionales conocidos se reconocen abajo para que la identificación no
+    // falle. Cuando haya tickets de más regiones, esto pide un campo
+    // `portalPorRegion` en vez de una lista de dominios.
     requiereCuenta: true,
     plazo: 'mes_natural',
-    plazoVerificado: false,
+    // VERIFICADO CONTRA UN TICKET REAL (G500 MEGASUR, Mérida, 29-jul-2026):
+    // "TICKET FACTURABLE EN EL MES DE EMISION", impreso en el propio
+    // comprobante. Fuente primaria, no la web del comercio.
+    plazoVerificado: true,
     campos: [
       // El caso que rompe un extractor genérico: DOS identificadores distintos
       // del mismo ticket, y el portal no acepta uno solo.
@@ -162,7 +175,7 @@ export const COMERCIOS: Comercio[] = [
       { clave: 'webId', etiquetaPortal: 'Web ID', requerido: true },
       { clave: 'sucursal', etiquetaPortal: 'Permiso CRE o Nombre de la Estación', requerido: true },
     ],
-    reconocer: { dominios: ['g500network.com'], texto: ['G500'] },
+    reconocer: { dominios: ['g500network.com', 'g500sureste.com.mx', 'miappg500.g500network.com'], texto: ['G500'] },
   },
   {
     clave: 'petromax',
