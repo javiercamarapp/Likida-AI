@@ -10,6 +10,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { ConsultaFallida } from './conv';
 import { esRfcValido, rfcChecksumOk } from './intake/cfdi';
 import type { PoliticaGasto } from './cuadre/engine';
 
@@ -141,10 +142,42 @@ export function fusionarConfig<T>(base: T, override: unknown): T {
   return salida as T;
 }
 
-/** Devuelve la config del tenant (override en DB) o los defaults de demo. */
+/**
+ * Devuelve la config del tenant (override en DB) o los defaults de demo.
+ *
+ * ── EL QUINTO SITIO DEL MISMO PATRÓN, Y EL MÁS CARO ────────────────────────
+ *
+ * La auditoría 6 lo encontró aquí después de que la 5 lo encontrara cuatro
+ * veces en un día: *un fallo de consulta disfrazado del valor que significa
+ * "no hay"*. Dos puertas, y la primera ni siquiera necesitaba que se cayera la
+ * red:
+ *
+ *   1. `const { data } = ...` DESCARTABA `error`. PostgREST devuelve los
+ *      errores POR VALOR, no los lanza: un timeout o un fallo de permisos daba
+ *      `data === null`, que aquí se leía como "este tenant no tiene override".
+ *   2. El `catch` devolvía `DEMO_CONFIG` a secas.
+ *
+ * Por cualquiera de las dos, la liquidación salía con la POLÍTICA DE LA DEMO
+ * —topes, tabulador, rendimiento— en vez de la del cliente. Y con algo peor:
+ * `DEMO_CONFIG.empresa.rfc` es el GENÉRICO del SAT, y con el genérico el motor
+ * apaga las DOS ramas de validación de receptor (`engine.ts`: `rfcsOk` queda
+ * vacía y `rfcEmpresaInservible` exige `!== RFC_GENERICO`). Resultado medido:
+ * un CFDI de $11,600 timbrado a un TERCERO sale "Deducible para ISR $11,600.00"
+ * en verde, con $1,600 de IVA acreditable citando LIVA art. 5, y cero
+ * diferencias. Es el mismo daño del crítico que se cerró ayer, entrando por la
+ * otra puerta.
+ *
+ * Ahora falla ruidoso, igual que `resolveOperador` y `getOpenViaje`: liquidar
+ * con la política equivocada es peor que no liquidar. `processInbound` ya
+ * traduce `ConsultaFallida` a "no pude consultar tus datos, inténtalo en un
+ * minuto" y libera el claim para que el reenvío se reprocese.
+ */
 export async function getConfig(tenantId: string): Promise<CuadraConfig> {
   try {
-    const { data } = await supabaseAdmin().from('tenant').select('rfc, config').eq('id', tenantId).maybeSingle();
+    const { data, error } = await supabaseAdmin().from('tenant').select('rfc, config').eq('id', tenantId).maybeSingle();
+    if (error) {
+      throw new ConsultaFallida(`config del tenant: ${error.message ?? String(error)}`);
+    }
     const override = (data?.config as Partial<CuadraConfig> | null) ?? null;
     const cfg: CuadraConfig = fusionarConfig(DEMO_CONFIG, override);
     // El RFC de la empresa puede venir en la columna `tenant.rfc`.
@@ -160,10 +193,30 @@ export async function getConfig(tenantId: string): Promise<CuadraConfig> {
           msg: `El RFC de la flota (${rfc}) no pasa el dígito verificador. La validación de receptor de CFDI queda APAGADA para este tenant: ninguna factura se rechazará por estar a nombre de otro. Corrige la columna tenant.rfc.`,
         });
       }
-      cfg.empresa = { ...cfg.empresa, rfc };
+      // ── NO SE MUTA `cfg`, Y ES UNA FUGA ENTRE TENANTS, NO UN ESCRÚPULO ────
+      //
+      // `fusionarConfig` devuelve la MISMA referencia cuando no hay override
+      // (`override == null → return base`), así que sin override `cfg` ES
+      // `DEMO_CONFIG`, el objeto del módulo. La línea que había aquí,
+      // `cfg.empresa = { ...cfg.empresa, rfc }`, le escribía encima:
+      //
+      //   tenant A (rfc propio) liquida  → DEMO_CONFIG.empresa.rfc = rfc de A
+      //   tenant B (rfc todavía en null) → recibe el RFC DE OTRA FLOTA
+      //
+      // Y con él, todos los CFDI legítimos de B —timbrados a nombre de B—
+      // fallan la validación de receptor. Persiste mientras viva la instancia,
+      // que Fluid Compute reutiliza entre peticiones y entre tenants.
+      //
+      // El propio `fusionarConfig` advierte de esto en su comentario: "no muta
+      // nada, mutarlo le aplicaría el override de un tenant al siguiente". La
+      // función no mutaba; mutaba su llamador, una línea después.
+      return { ...cfg, empresa: { ...cfg.empresa, rfc } };
     }
     return cfg;
-  } catch {
-    return DEMO_CONFIG; // demo-safe: si la DB no está, usa defaults
+  } catch (e) {
+    // Un `ConsultaFallida` que ya viene formado sube tal cual: envolverlo otra
+    // vez perdería el mensaje que dice QUÉ no se pudo consultar.
+    if (e instanceof ConsultaFallida) throw e;
+    throw new ConsultaFallida(`config del tenant: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
