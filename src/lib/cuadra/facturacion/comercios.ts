@@ -40,7 +40,10 @@ export interface RestriccionCampo {
 /** Los datos que SÍ hay que sacar del ticket (el resto los pone la flota). */
 export type ClaveCampo =
   | 'numeroTicket' | 'folio' | 'webId' | 'sucursal' | 'fecha'
-  | 'monto' | 'caja' | 'transaccion' | 'referencia' | 'codigo';
+  | 'monto' | 'caja' | 'transaccion' | 'referencia' | 'codigo'
+  // `hora` entró con PINFRA: su portal la pide como campo SEPARADO de la fecha
+  // en las 17 autopistas que opera, y sin ella el ticket no valida.
+  | 'hora';
 
 export interface CampoTicket {
   clave: ClaveCampo;
@@ -197,7 +200,12 @@ export const COMERCIOS: Comercio[] = [
     // día por un aviso que el propio sistema no aplica es mandarlo a perder el
     // plazo. Lo que sí es real y sí hay que avisarle: el portal recomienda
     // facturar en ventanilla o en la terminal en las últimas horas del mes.
-    reconocer: { dominios: ['g500network.com', 'g500sureste.com.mx', 'megasur.com.mx', 'miappg500.g500network.com'], texto: ['G500', 'MEGASUR'] },
+    // LOS DOMINIOS DEL SURESTE SE FUERON A `megasur`, que es la ficha
+    // verificada. Tenerlos en las dos hacía ambigua la identificación —dos
+    // comercios reclamando `megasur.com.mx`— y una ambigüedad aquí manda al
+    // operador al portal equivocado. Esta entrada queda para la RED G500; el
+    // sureste tiene la suya, más específica y comprobada.
+    reconocer: { dominios: ['g500network.com', 'miappg500.g500network.com'], texto: ['G500'] },
   },
   {
     clave: 'petromax',
@@ -324,6 +332,329 @@ export const COMERCIOS: Comercio[] = [
     campos: [],
     camposPendientes: true,
     reconocer: { dominios: ['buzonfacturas.com'] },
+  },
+  // ═══════════════════════════════════════════════════════════════════════
+  // AMPLIACIÓN DEL 29-JUL-2026 — cosechada de tres directorios de facturación.
+  //
+  // TODO LO DE ABAJO ES HIPÓTESIS salvo `megasur` y `la_gas`, que se facturaron
+  // de verdad. La investigación está en `docs/investigacion/`, con el nivel de
+  // confianza de cada ficha. Los tres directorios tenían MAL los dos comercios
+  // que sí verificamos, así que `plazoVerificado` queda en falso y los campos
+  // que no se leyeron en el portal van como `camposPendientes`.
+  //
+  // Se modela EL PORTAL, no la marca, que es la lección de la investigación: un
+  // portal cubre decenas de puntos de venta y modelar por marca multiplica
+  // trabajo idéntico. PINFRA es el caso extremo: 17 autopistas, un solo sistema.
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    clave: 'megasur',
+    nombre: 'G500 Sureste / Megasur (Mérida, Campeche, Q. Roo)',
+    // ✅ VERIFICADO facturando el ticket 1000724 de $839.70 el 29-jul-2026.
+    // UUID resultante: B0800A68-8565-47D9-90E0-CDA7803C50E4.
+    //
+    // El catálogo apuntaba a `g500network.com` y NO es donde se factura: G500 es
+    // red de franquicias y el sureste opera su propio sistema. Tres saltos hasta
+    // el portal real, y los directorios se quedaban en el primero.
+    portal: 'http://megasur.com.mx:8029/',
+    // Se entra con el RFC y NADA MÁS: sin contraseña. Hay alta para un RFC
+    // nuevo, pero los datos fiscales quedan guardados y después solo se
+    // confirman. Para el operador en carretera eso es la diferencia entre poder
+    // facturar desde el celular y no poder.
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: true, // impreso en el ticket Y en los avisos del portal
+    campos: [
+      // UN SOLO CAMPO, verificado: con el WebID el portal trajo estación,
+      // litros, producto, precio, importe y forma de pago ya resueltos.
+      { clave: 'webId', etiquetaPortal: 'Autorización/WebID', requerido: true },
+      { clave: 'folio', etiquetaPortal: 'Folio (aparece en la descripción)', requerido: false },
+    ],
+    reconocer: {
+      dominios: ['megasur.com.mx', 'g500sureste.com.mx'],
+      rfc: ['GME980817IX5'],
+      texto: ['G500 MEGASUR', 'MEGASUR', 'GASOLINERA DE MERIDA'],
+    },
+  },
+  {
+    clave: 'la_gas',
+    nombre: 'La Gas / Grupo GES (gasolineras del sureste)',
+    // ✅ VERIFICADO facturando el ticket 1670001331723 de $714.75 el 29-jul-2026.
+    // Serie-folio BOW-2025008.
+    //
+    // EXIGE CUENTA DE VERDAD: correo + teléfono + contraseña. Es el contraejemplo
+    // de Megasur —dos gasolineras del mismo estado, dos modelos opuestos— y el
+    // que marca el límite de la automatización sin custodiar credenciales.
+    //
+    // Y el portal viene con FORMA DE PAGO "01 Efectivo" preseleccionada. En un
+    // CFDI de combustible eso es falso y además dispara el límite de efectivo de
+    // LISR 27-III. Quien automatice esto tiene que corregirla a mano.
+    portal: 'https://facturacion.lagas.com.mx/',
+    requiereCuenta: true,
+    plazo: 'mes_natural',
+    plazoVerificado: true, // "Solo se podrá facturar dentro del mes de consumo"
+    campos: [
+      { clave: 'folio', etiquetaPortal: '# de Referencia', requerido: true },
+      { clave: 'monto', etiquetaPortal: 'Importe Ticket', requerido: true },
+    ],
+    reconocer: {
+      dominios: ['facturacion.lagas.com.mx', 'lagas.com.mx', 'gruges.com.mx'],
+      rfc: ['AES0706049E2'],
+      texto: ['LA GAS', 'ADMINISTRACION DE ESTACIONES DEL SURESTE'],
+    },
+  },
+  {
+    clave: 'pinfra',
+    nombre: 'PINFRA (17+ autopistas de peaje concesionadas)',
+    // EL MAYOR APALANCAMIENTO DEL CATÁLOGO. De 22 autopistas cosechadas con
+    // portal identificado, 18 usan este sistema: Monterrey–Nuevo Laredo,
+    // Tlaxcala–Puebla, Ecatepec–Pirámides, Armería–Manzanillo,
+    // Atlixco–Jantetelco, México–La Marquesa, Peñón–Texcoco, Apizaco–Huachinango,
+    // San Martín Texmelucan–Huejotzingo, Libramiento Aguascalientes…
+    //
+    // Un alta cubre las 17 con los MISMOS campos. Exige registro previo, pero es
+    // UNA cuenta de la flota, no una por operador: encaja con sesión delegada.
+    portal: 'http://www.pinfrafacturacion.com.mx/',
+    requiereCuenta: true,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      // Los siete campos vienen de la prosa del directorio, no de leer el
+      // portal. Se dejan porque son inusualmente específicos —una caseta pide
+      // máquina y consecutivo, que ningún otro comercio pide— pero hay que
+      // cotejarlos facturando.
+      { clave: 'sucursal', etiquetaPortal: 'Caseta', requerido: true },
+      { clave: 'fecha', etiquetaPortal: 'Fecha', requerido: true },
+      { clave: 'hora', etiquetaPortal: 'Hora', requerido: true },
+      { clave: 'referencia', etiquetaPortal: 'Numero Id', requerido: true },
+      { clave: 'caja', etiquetaPortal: 'Maquina', requerido: true },
+      { clave: 'transaccion', etiquetaPortal: 'Consecutivo', requerido: true },
+      { clave: 'monto', etiquetaPortal: 'Total', requerido: true },
+    ],
+    reconocer: {
+      dominios: ['pinfrafacturacion.com.mx', 'operadoradelasultana.com.mx'],
+      texto: ['PINFRA', 'PROMOTORA Y OPERADORA DE INFRAESTRUCTURA'],
+    },
+  },
+  {
+    clave: 'controlnet',
+    nombre: 'ControlNet (multi-comercio: Walmart, Alsea, OXXO, gasolineras)',
+    // EL HALLAZGO SUELTO MÁS VALIOSO: plataforma multi-comercio que, según su
+    // ficha, NO pide cuenta. Una integración tocaría varias cadenas grandes.
+    // Sin verificar; es lo primero que hay que facturar para confirmarlo.
+    portal: 'https://www.controlnet.com.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'numeroTicket', etiquetaPortal: 'Número de ticket', requerido: true },
+      { clave: 'fecha', etiquetaPortal: 'Fecha de compra', requerido: true },
+      { clave: 'monto', etiquetaPortal: 'Monto total', requerido: true },
+    ],
+    reconocer: { dominios: ['controlnet.com.mx'], texto: ['CONTROLNET'] },
+  },
+  {
+    clave: 'gorm_brentec',
+    nombre: 'GORM / Brentec (estaciones Pemex en franquicia)',
+    // Pemex NO tiene portal central: 8,000+ estaciones en franquicia, cada
+    // franquiciatario elige su sistema. GORM es el más extendido en grupos
+    // medianos y grandes. La URL lleva el nombre de la estación:
+    //   gorm.gasolinamexico.net/facturacion_[nombre]
+    // así que el `portal` de aquí es la raíz y el sufijo sale del ticket.
+    portal: 'https://gorm.gasolinamexico.net/',
+    requiereCuenta: true, // se entra con el RFC como usuario
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'sucursal', etiquetaPortal: 'estación (va en la URL del portal)', requerido: true },
+      { clave: 'numeroTicket', etiquetaPortal: 'número de facturación del ticket', requerido: true },
+    ],
+    reconocer: { dominios: ['gorm.gasolinamexico.net', 'gasolinamexico.net'], texto: ['GORM', 'BRENTEC'] },
+  },
+  {
+    clave: 'facturacion_estacion',
+    nombre: 'FacturacionEstacion (Pemex: El Roble, Los Pinos, La Morena…)',
+    // Cada estación tiene su SUBDOMINIO: [nombre].facturacionestacion.com. La
+    // URL viene impresa en el ticket, así que el reconocimiento por dominio es
+    // la señal fuerte y el subdominio sale del QR.
+    portal: 'https://facturacionestacion.com/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['facturacionestacion.com'], texto: ['FACTURACIONESTACION'] },
+  },
+  {
+    clave: 'facturagas',
+    nombre: 'FacturaGAS (estaciones Pemex independientes)',
+    // Centraliza estaciones independientes bajo una interfaz: se elige la
+    // estación de una lista y el sistema muestra las compras pendientes.
+    portal: 'https://app.facturagas.net/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['facturagas.net', 'app.facturagas.net'], texto: ['FACTURAGAS'] },
+  },
+  {
+    clave: 'shell',
+    nombre: 'Shell México',
+    portal: 'https://facturacion.shell.com.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['facturacion.shell.com.mx', 'shell.com.mx'], texto: ['SHELL'] },
+  },
+  {
+    clave: 'bp',
+    nombre: 'BP México',
+    portal: 'https://www.gasolineriabp.com.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['gasolineriabp.com.mx'], texto: ['BP ', 'GASOLINERIA BP'] },
+  },
+  {
+    clave: 'mobil',
+    nombre: 'Mobil México',
+    // OJO: según su ficha, el operador de cada estación varía y el portal
+    // depende de él. El dominio de abajo es el de la marca, no necesariamente
+    // el de facturación de la estación concreta.
+    portal: 'https://www.mobil.com.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['mobil.com.mx'], texto: ['MOBIL'] },
+  },
+  {
+    clave: 'hidrosina',
+    nombre: 'Hidrosina',
+    portal: 'https://facturacionelectronica.hidrosina.com.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['hidrosina.com.mx'], texto: ['HIDROSINA'] },
+  },
+  {
+    clave: 'circle_k',
+    nombre: 'Circle K México',
+    portal: 'https://facturacion.circlekmexico.com.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['circlekmexico.com.mx'], texto: ['CIRCLE K'] },
+  },
+  {
+    clave: 'petro_7',
+    nombre: 'Petro-7 / Petro Seven',
+    portal: 'https://www.tarjetapetro-7.com.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['tarjetapetro-7.com.mx', 'petro-7.com.mx'], texto: ['PETRO 7', 'PETRO-7', 'PETRO SEVEN'] },
+  },
+  {
+    clave: 'iave',
+    nombre: 'IAVE (TAG de CAPUFE)',
+    // SISTEMA DE TAG, no de ticket: la factura llega CONSOLIDADA por periodo.
+    // Aquí el problema no es facturar, es conciliar lo que llega contra los
+    // cruces. Es el camino "aguas arriba" que a una flota le conviene.
+    portal: 'https://iave.capufe.gob.mx/',
+    requiereCuenta: true, // la cuenta del TAG
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'referencia', etiquetaPortal: 'Número de tag IAVE', requerido: true },
+    ],
+    reconocer: { dominios: ['iave.capufe.gob.mx'], texto: ['IAVE'] },
+  },
+  {
+    clave: 'tag_pase',
+    nombre: 'TAG PASE (peaje)',
+    portal: 'https://www.pase.com.mx/',
+    requiereCuenta: true,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'referencia', etiquetaPortal: 'Número de tag TAG PASE', requerido: true },
+    ],
+    reconocer: { dominios: ['pase.com.mx'], texto: ['TAG PASE', 'PASE'] },
+  },
+  {
+    clave: 'televia',
+    nombre: 'TeleVía (peaje concesionado)',
+    portal: 'https://www.televia.com.mx/',
+    requiereCuenta: true,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'referencia', etiquetaPortal: 'Número de tag TeleVía', requerido: true },
+    ],
+    reconocer: { dominios: ['televia.com.mx'], texto: ['TELEVIA', 'TELEVÍA'] },
+  },
+  {
+    clave: 'circuito_exterior',
+    nombre: 'Circuito Exterior Mexiquense',
+    portal: 'https://www.circuitoexterior.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['circuitoexterior.mx'], texto: ['CIRCUITO EXTERIOR', 'CONMEX'] },
+  },
+  {
+    clave: 'ado',
+    nombre: 'ADO (autobuses)',
+    portal: 'https://www.ado.com.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'folio', etiquetaPortal: 'Número de boleto o folio', requerido: true },
+      { clave: 'fecha', etiquetaPortal: 'Fecha del viaje', requerido: true },
+    ],
+    reconocer: { dominios: ['ado.com.mx'], texto: ['ADO', 'AUTOBUSES DE ORIENTE'] },
+  },
+  {
+    clave: 'primera_plus',
+    nombre: 'Primera Plus (autobuses)',
+    portal: 'https://facturaelectronicagfa.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'folio', etiquetaPortal: 'Número de boleto o folio', requerido: true },
+      { clave: 'fecha', etiquetaPortal: 'Fecha del viaje', requerido: true },
+    ],
+    reconocer: { dominios: ['facturaelectronicagfa.mx'], texto: ['PRIMERA PLUS', 'FLECHA AMARILLA'] },
+  },
+  {
+    clave: 'autozone',
+    nombre: 'AutoZone México (refacciones)',
+    portal: 'https://www.autozone.com.mx/factura-electronica',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [
+      { clave: 'transaccion', etiquetaPortal: 'Número de folio de transacción', requerido: true },
+      { clave: 'fecha', etiquetaPortal: 'Fecha de compra', requerido: true },
+      { clave: 'monto', etiquetaPortal: 'Monto total', requerido: true },
+    ],
+    reconocer: { dominios: ['autozone.com.mx'], texto: ['AUTOZONE'] },
   },
 ];
 
