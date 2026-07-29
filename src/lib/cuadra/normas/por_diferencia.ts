@@ -13,6 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { TipoDiferencia } from '@/types/cuadra';
+import { NORMAS } from './indice';
 
 /**
  * Normas que fundamentan cada diferencia. El orden importa: la primera es la
@@ -80,4 +81,49 @@ export function normasDe(tipos: TipoDiferencia[]): string[] {
   const out = new Set<string>();
   for (const t of tipos) for (const id of NORMA_POR_DIFERENCIA[t] ?? []) out.add(id);
   return [...out];
+}
+
+/**
+ * Normas citables al explicar la POLÍTICA DE GASTOS de la flota.
+ *
+ * ── POR QUÉ EXISTE (auditoría 7, CRÍTICO del rubro agéntico) ───────────────
+ *
+ * `permitidas` salía únicamente de `cuadrar_viaje`, y ése es justo el turno en
+ * que `guardiaCifras` sustituye el texto y la guardia de fundamento no llega a
+ * correr. En el turno que sí la ejecuta —el operador pregunta "¿y por qué no me
+ * cuentas ese diésel?"— `permitidas` estaba vacío y TODA cita se borraba a
+ * media frase. El producto no podía citar una norma sin romper la oración.
+ *
+ * Explicar un tope ES citar la norma que lo sostiene, así que el permiso viaja
+ * también con `consultar_politica`.
+ *
+ * DOS NIVELES, y la diferencia importa:
+ *
+ *  · Las normas de PISO son las que sostienen cualquier política de viáticos de
+ *    autotransporte, tenga los conceptos que tenga: el límite de efectivo (LISR
+ *    27-III) y el tope diario de alimentación con su requisito de soporte (LISR
+ *    28-V). Un tope de gasto que el operador cuestiona se explica con ésas.
+ *  · Las de CONCEPTO se añaden solo si la política del tenant trae ese concepto.
+ *    Sin diésel en la política no hay por qué habilitar el estímulo del diésel.
+ *
+ * Es un permiso ACOTADO, no un salvoconducto: lo que no salga de aquí se sigue
+ * borrando, que es la posición segura.
+ */
+const NORMA_POR_CONCEPTO: Record<string, string[]> = {
+  diesel: ['lisr-27-fr-III', 'rfa-2026-2.9', 'lif-2026-art-20-A'],
+  caseta: ['lif-2026-art-20-A'],
+  alimentacion: ['lisr-28-fr-V'],
+  hospedaje: ['lisr-28-fr-V'],
+  transporte: ['lisr-28-fr-V'],
+  factura: ['lisr-27-fr-III'],
+};
+
+const NORMAS_DE_PISO = ['lisr-27-fr-III', 'lisr-28-fr-V'];
+
+export function normasDePolitica(politica: Array<{ concepto: string }>): string[] {
+  const out = new Set<string>(NORMAS_DE_PISO);
+  for (const p of politica) for (const id of NORMA_POR_CONCEPTO[p.concepto] ?? []) out.add(id);
+  // Una ficha que no existe en el índice no se puede citar: emitirla sería dar
+  // permiso sobre algo que `guardiaFundamento` no sabe reconocer.
+  return [...out].filter((id) => NORMAS[id]);
 }
