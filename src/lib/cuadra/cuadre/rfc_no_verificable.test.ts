@@ -61,10 +61,37 @@ describe('RFC de la flota mal formado: ni aprueba ni rechaza', () => {
     expect(l.ivaAcreditable).toBe(1600);
   });
 
-  // El límite: "no configuró RFC" (genérico del SAT) es una decisión anterior
-  // documentada (AL-6) y NO se toca aquí. Queda anotado como hallazgo abierto:
-  // por ese camino un CFDI de tercero todavía sale deducible.
-  it('el genérico del SAT conserva su comportamiento anterior', () => {
-    expect(tipos('XAXX010101000')).not.toContain('rfc_receptor_no_verificable');
+  // CERRADO EN LA AUDITORÍA 6. Esto era el hallazgo abierto AL-6: "no configuró
+  // RFC" (el genérico del SAT) quedaba fuera del tercer estado, así que por esa
+  // puerta un CFDI de TERCERO salía deducible con su IVA acreditable. La
+  // exclusión venía de cuando la única alternativa era "rechaza todo"; con el
+  // tercer estado ya escrito, no había razón para mantenerla.
+  //
+  // Y no era un caso raro: `DEMO_CONFIG.empresa.rfc` ES el genérico, o sea la
+  // ruta de cualquier tenant que aún no capturó el suyo — el día uno de un
+  // cliente, justo después de la demo.
+  it('el genérico del SAT también manda a revisión: no se puede verificar receptor', () => {
+    expect(tipos('XAXX010101000')).toContain('rfc_receptor_no_verificable');
+  });
+
+  it('con el genérico, un CFDI de tercero NO sale deducible ni acredita IVA', () => {
+    const l = cuadrar('XAXX010101000');
+    expect(l.totalDeducible).toBe(0);
+    expect(l.totalPorConfirmar).toBe(11600);
+    expect(l.ivaAcreditable).toBe(0);
+  });
+
+  it('y el texto dice CAPTURA, no CORRIGE: no es el mismo error', () => {
+    // Decirle "está mal capturado" a quien nunca lo capturó lo manda a buscar un
+    // error que no existe.
+    const nota = cuadrar('XAXX010101000').diferencias.find((d) => d.tipo === 'rfc_receptor_no_verificable')?.nota ?? '';
+    expect(nota).toContain('todavía no tiene su RFC capturado');
+    expect(nota).toContain('Captura el RFC');
+  });
+
+  it('mientras que un RFC mal formado sí dice CORRIGE', () => {
+    const nota = cuadrar('TIN010101AAA').diferencias.find((d) => d.tipo === 'rfc_receptor_no_verificable')?.nota ?? '';
+    expect(nota).toContain('mal capturado');
+    expect(nota).toContain('Corrige el RFC');
   });
 });

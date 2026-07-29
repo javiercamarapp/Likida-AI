@@ -142,10 +142,33 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   //
   // El estado correcto es el tercero: no se puede confirmar NI descartar → a
   // revisión. Nunca deducible, nunca acreditable, y dicho en el informe.
-  const rfcEmpresaInservible =
-    rfcsOk.size === 0 &&
-    !!input.empresaRfc &&
-    norm(input.empresaRfc) !== RFC_GENERICO;
+  // EL GENÉRICO ENTRA AQUÍ, y esa es la corrección de la auditoría 6.
+  //
+  // La exclusión `!== RFC_GENERICO` se escribió cuando la única alternativa era
+  // "rechaza todo": si el tenant no había capturado su RFC, validar el receptor
+  // marcaba TODA factura como ajena. Con esa disyuntiva, no validar era lo menos
+  // malo. Pero ayer se creó el tercer estado —no se puede confirmar NI
+  // descartar → a revisión— y el genérico se quedó fuera por inercia.
+  //
+  // `XAXX010101000` es el RFC de "público en general" del SAT. Que sea el de la
+  // FLOTA significa exactamente lo mismo que un RFC mal formado: hay un valor y
+  // no sirve para comparar. Tratarlo distinto era aprobar por defecto, y medido
+  // con el motor real un CFDI de $11,600 timbrado a un TERCERO salía
+  // "Deducible para ISR $11,600.00" en verde, con $1,600 de IVA acreditable y
+  // cero diferencias. El mismo daño del crítico de ayer, por la otra puerta.
+  //
+  // Y no es un caso raro: `DEMO_CONFIG.empresa.rfc` ES el genérico, así que ésta
+  // es la ruta de CUALQUIER tenant que todavía no capturó su RFC — el estado
+  // normal de un cliente el día uno, justo después de una demo.
+  //
+  // Sin RFC ninguno (`empresaRfc` ausente) NO entra: ahí no hay dato que
+  // interpretar, y meterlo cambiaría el veredicto de todo viaje sin config,
+  // incluidos los arneses de prueba. Un valor inservible y la ausencia de valor
+  // no son el mismo hecho.
+  const rfcEmpresaInservible = rfcsOk.size === 0 && !!input.empresaRfc;
+  /** El valor existe pero es el "público en general": nunca se capturó el real. */
+  const rfcEmpresaNoCapturado =
+    rfcEmpresaInservible && norm(input.empresaRfc as string) === RFC_GENERICO;
 
   // 0) Duplicados: primero por UUID (regla dura), luego por concepto+folio+monto.
   //    Se EXCLUYEN del total (no lo inflan) — fix del audit.
@@ -274,9 +297,18 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       diferencias.push({ tipo: 'ocr_baja_confianza', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} se leyó con baja confianza — conviene revisarlo a mano.`, gastoId: g.id });
     }
     if (rfcEmpresaInservible && g.rfcReceptor) {
+      // El texto distingue los dos motivos porque la acción es distinta: uno se
+      // corrige, el otro se captura. Decirle "está mal capturado" a quien nunca
+      // lo capturó lo manda a buscar un error que no existe.
+      const porQue = rfcEmpresaNoCapturado
+        ? 'la flota todavía no tiene su RFC capturado'
+        : 'el RFC de la flota está mal capturado';
+      const queHacer = rfcEmpresaNoCapturado
+        ? 'Captura el RFC de la empresa y vuelve a cuadrar.'
+        : 'Corrige el RFC de la empresa y vuelve a cuadrar.';
       diferencias.push({
         tipo: 'rfc_receptor_no_verificable', concepto: g.concepto, monto: 0,
-        nota: `No se puede verificar a nombre de quién está la factura de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)}: el RFC de la flota está mal capturado. Queda a revisión — corrige el RFC de la empresa y vuelve a cuadrar.`,
+        nota: `No se puede verificar a nombre de quién está la factura de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)}: ${porQue}. Queda a revisión — ${queHacer}`,
         gastoId: g.id,
       });
     }
