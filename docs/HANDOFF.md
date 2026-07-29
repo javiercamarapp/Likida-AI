@@ -1,0 +1,242 @@
+# Handoff — Likida / cuadra
+
+> Escrito el 29-jul-2026 sobre `abdc98d`. Todo lo que dice "verificado" se
+> comprobó corriendo el comando ese día. Lo que no, va marcado.
+> **Pégale esto entero a tu agente nuevo antes de pedirle nada.**
+
+---
+
+## 1. Qué es esto
+
+**Likida** liquida viajes por WhatsApp para flotas de autotransporte federal de
+carga en México. El operador manda fotos de sus tickets al WhatsApp de la
+empresa y escribe *listo*; el sistema hace OCR, lee el CFDI, cuadra contra el
+anticipo, aplica la política de gastos y la ley fiscal mexicana, y devuelve un
+PDF de liquidación. El contralor lo ve en un panel web.
+
+- **Repo:** `~/javiercamarapp/cuadra` · GitHub `javiercamarapp/cuadra` · rama `master`
+- **Pre-revenue, cero clientes.** Las empresas del censo son prospectos, no
+  clientes. **No inventes logos, testimonios ni capturas de producto.**
+- **Demo: 6-ago-2026.** El comprador es el **contralor** de la flota. Un error
+  que él vea en la sala cuesta el trato. Ese es el criterio de prioridad de todo.
+
+---
+
+## 2. Estado hoy — verificado el 29-jul-2026
+
+```
+HEAD          abdc98d   árbol limpio, pusheado a origin/master
+npm test      1115 pruebas · 1 saltada · 112 archivos     exit 0
+tsc --noEmit                                              exit 0
+eslint                                                    exit 0
+npm run build                                             exit 0
+cobertura     81.5% líneas · 85.5% ramas   (umbral rompe CI si baja)
+```
+
+**Funciona de punta a punta con WhatsApp real.** El 28-jul se cerró el ciclo
+completo por primera vez: mensaje entrante → resolución de operador → motor →
+agente → respuesta saliente → PDF.
+
+Se acaban de cerrar **seis rondas de auditoría** (12 rubros cada una). La última,
+`docs/auditoria-6/`, dejó nota global **5.3/10** y cerró 8 críticos y 5 altos.
+Lee `docs/auditoria-6/00-SINTESIS.md` **antes de tocar nada**: explica en qué
+estado quedó cada rubro y por qué.
+
+---
+
+## 3. Stack y dónde está cada cosa
+
+**Next.js 16** (App Router, `proxy.ts` en vez de `middleware.ts`, `after()`,
+`maxDuration`) · **Vercel** plan pro · **Supabase** (Postgres + storage) ·
+**Vitest** · **OpenRouter** para los modelos · **zxing-wasm** + **sharp** para el
+QR del CFDI · **pdf-lib**.
+
+```
+src/lib/cuadra/
+  cuadre/          EL MOTOR DEL DINERO. engine.ts es puro y sin I/O.
+                   guardia.ts (cifras) · estado_afirmado.ts (afirmaciones)
+                   cifras.ts · resumen.ts · leyendas.ts · desde_db.ts
+  normas/          indice.ts · fundamento.ts · por_diferencia.ts
+                   FUENTE DE VERDAD: los 21 YAML de `normas/` en la raíz
+  facturacion/     comercios.ts (13 comercios) · identificar.ts · caducidad.ts
+  intake/          ocr.ts · cfdi.ts (zxing) · cfdi_xml.ts · sat.ts
+                   emparejar.ts · decidir.ts · sanitizar.ts · concepto.ts
+  liquidacion/     pdf.ts · deducibilidad.ts · acreditable.ts · omitidos.ts
+  (raíz)           processor.ts · repo.ts (TODO el acceso a datos) · conv.ts
+                   presupuesto.ts · privacidad.ts · config.ts · costos.ts
+                   analytics.ts · startup.ts · tools.ts
+src/lib/           llm/ · agents/ · meta/client.ts · auth/ · observability/
+src/app/           api/webhook/whatsapp/route.ts (maxDuration = 120)
+                   dashboard/ (lista + detalle) · api/demo · api/export
+supabase/migrations/  0001 … 0030
+docs/auditoria-N/     seis rondas, con tablero.html y 00-SINTESIS.md
+```
+
+### Reglas del repo que NO son negociables
+
+1. **Ninguna cifra que vea el usuario sale del LLM.** `guardia.ts` y `cifras.ts`
+   lo imponen en código: si el modelo escribe un número que no vino de una tool,
+   el texto se sustituye por el resumen del motor.
+2. **El modelo solo puede citar una norma que una tool le devolvió ese turno.**
+   `guardiaFundamento` lo impone.
+3. **Todo el acceso a datos va por `repo.ts`.** (Se está incumpliendo: hay 55
+   sitios fuera. Es el hallazgo reincidente de arquitectura.)
+4. **El catálogo de comercios y el de normas son datos, no código.**
+5. Comentarios en español, explicando **por qué**, no qué.
+6. **`pruebas-manuales/*.prueba.ts` hacen llamadas REALES de pago. No se corren.**
+   Nada con `TICKET_PATH` tampoco.
+
+---
+
+## 4. Cosas que te van a morder si no las sabes
+
+- **El "1" mexicano.** Meta entrega el `wa_id` como `521XXXXXXXXXX` pero
+  **rechaza los envíos** a esa forma (error #131030). `destinatarioWhatsApp()` en
+  `meta/client.ts` lo normaliza a `52XXXXXXXXXX`. Si contestas al mismo `from`
+  que recibes, el mensaje rebota en silencio: webhook 200, logs en verde, y el
+  operador sin nada.
+- **El 200 de Meta significa ACEPTADO, no ENTREGADO.** La entrega real llega
+  después por el mismo webhook en `value.statuses`. Se lee en `route.ts`.
+- **Supabase/PostgREST devuelve los errores POR VALOR, no lanzados.** Un
+  `const { data } = await ...` que descarta `error` convierte un fallo de
+  consulta en "no hay". **Ese patrón apareció cinco veces en este repo**
+  (`startup.ts`, `resolveOperador`, `getOpenViaje`, `intakeDelta`, `getConfig`).
+  Cada vez que escribas una consulta, desestructura `error` y decide qué hacer
+  con él.
+- **`\b` no funciona después de vocal acentuada en JS.** `\w` es `[A-Za-z0-9_]`,
+  así que `cerr[ée]\b` no casa nunca. Usa `(?![\wáéíóúñ])`. En un producto
+  escrito en español esto va a volver.
+- **El `grep` de esta máquina es un wrapper de ugrep que salta binarios en
+  silencio.** Para afirmar que algo NO existe, usa `command grep` y corrobora con
+  dos búsquedas.
+- **`fusionarConfig(DEMO_CONFIG, null)` devuelve la MISMA referencia.** Mutar lo
+  que devuelve `getConfig` escribe el singleton del módulo y filtra datos entre
+  tenants. Ya pasó una vez.
+
+---
+
+## 5. Infraestructura y credenciales
+
+| Qué | Dónde |
+|---|---|
+| Supabase | proyecto `gngoqsvrxdguxvsizpbw` |
+| Vercel | `likidaai.vercel.app` · plan pro (tope 300 s) |
+| Meta app | `2118551055367905` |
+| WABA | `1285225531334385` |
+| Phone number ID | `1395114249160000` |
+
+Las credenciales vivas están en `.env.local` (local) y en las env de Vercel.
+`.env.example` está verificado en las dos direcciones. `DEPLOY.md` es el runbook
+y está al día (28-jul).
+
+**Migraciones: 0001–0030 aplicadas, salvo la 0027, que está escrita y SIN
+aplicar a propósito** — al aplicarla, reenviar las mismas fotos en un viaje nuevo
+deja de registrar gastos, y hasta el 6-ago eso estorba para ensayar. Aplícala
+después del demo.
+
+---
+
+## 6. Lo que Javier tiene que hacer, y nadie más puede
+
+Estas tres bloquean cosas reales y **no son código**:
+
+1. **RFC real de la flota** en `tenant.rfc`. Hoy el seed trae `TIN010101AAA`, que
+   falla el dígito verificador. Con un RFC inservible —o con el genérico
+   `XAXX010101000`— **toda factura sale "a revisión"**. Es el comportamiento
+   correcto, pero si no se captura uno válido, **el demo enseña todo en "por
+   confirmar"**. Ésta es la que puede morder en la sala.
+2. **URL del aviso de privacidad que resuelva.** Hoy apunta a
+   `transportesinnovativos.mx` → NXDOMAIN. El arranque ya lo grita, pero hasta
+   que exista, el operador recibe una liga rota **y la respuesta ARCO también**
+   (LFPDPPP art. 15 fr. V y 16 fr. II).
+3. **`SENTRY_DSN` en Vercel.** El arranque ya avisa de su ausencia y el flush ya
+   está cableado; falta la variable.
+
+Además, para facturar de verdad hacen falta cinco datos suyos: RFC, razón social,
+CP fiscal, régimen fiscal y uso de CFDI.
+
+---
+
+## 7. Roadmap
+
+### Antes del 6-ago (en orden)
+
+1. **Los tres puntos de la sección 6.** Sin el RFC, el demo se ve mal.
+2. **Ensayar el flujo completo en vivo, tres veces.** Fotos reales + *listo* +
+   PDF recibido. No es reproducible headless; es la única prueba que falta.
+3. **`GUION_DEMO.md`** existe — revísalo contra el comportamiento de hoy, que
+   cambió bastante desde el 25-jul.
+4. **Nada de refactors grandes.** El repo tiene precedente de que arreglar un
+   crítico abre uno peor; a nueve días del demo, el riesgo no se paga.
+
+### Después del demo
+
+- **Aplicar la 0027** (dedup de fotos por tenant).
+- **Auth por usuario** (Supabase Auth + RLS con `auth.uid()`). Hoy el panel es
+  UN passcode compartido para todos: no hay identidad, así que cortarle el acceso
+  a una persona es imposible por construcción. **Es bloqueante de segundo
+  cliente**, no de este demo.
+- **Bajar las copias de cada verdad.** El acceso a datos fuera de `repo.ts` lleva
+  cinco rondas subiendo (49 → 55). Dos críticos de la ronda 6 fueron exactamente
+  eso: dos copias que se separaron.
+- **Automatización completa de facturación en portales.** Investigado y planeado,
+  no construido. El dato que importa: **9 de los 13 comercios catalogados no
+  requieren cuenta**, y ésa es la cuña legalmente más segura.
+- **Optimizaciones de costo** (batch API, prompt caching, ruteo por niveles):
+  están en `ROADMAP.md` con la decisión explícita de no construirlas antes del
+  demo. Sigue siendo la decisión correcta.
+
+---
+
+## 8. Cómo se trabaja aquí
+
+Hay una rutina de auditoría (`~/.claude/skills/auditoria-diaria`) con 12 rubros,
+que es lo que ha sostenido la calidad. Si tu agente nuevo no puede correr 12
+subagentes, lo importante que se puede replicar a mano:
+
+- **Un hallazgo sin `archivo:línea` y sin escenario "entra esto → sale esto mal"
+  no es un hallazgo, es una opinión.** Se descarta.
+- **Verifica cada hallazgo abriendo el archivo antes de arreglarlo.** En esta
+  última ronda uno resultó **falso** y consta como falso en el tablero.
+- **Primero la prueba que falla, luego el arreglo, luego la prueba que pasa.**
+  No se arregla lo que no se pudo reproducir.
+- **Prueba el CABLE, no solo la función.** El hallazgo central de la ronda 6 fue
+  que dos mecanismos correctos, con pruebas unitarias verdes, **nunca se
+  conectaron**. Quita la llamada y comprueba que tu prueba se pone roja; si no se
+  pone, no está probando lo que crees.
+- **Verifica por código de salida, nunca leyendo la salida.** Y encadena con
+  `&&`, no con `;` — un commit se empujó en rojo por eso.
+- **Una nota que solo sube es una nota que nadie está midiendo.**
+
+---
+
+## 9. Documentos: cuáles creer
+
+| Archivo | Estado |
+|---|---|
+| `docs/auditoria-6/00-SINTESIS.md` | **Al día.** Empieza aquí. |
+| `docs/auditoria-6/tablero.html` | Al día, con los sha verificados uno por uno. |
+| `DEPLOY.md` · `README.md` | Al día (28-jul). |
+| `FISCAL_LEGAL.md` · `MARCA.md` | 27-jul, razonablemente al día. |
+| `normas/*.yaml` | **Fuente de verdad fiscal.** `normas/indice.ts` es copia. |
+| `ROADMAP.md` · `AUDIT*.md` · `ESTADO_FINAL.md` · `DECISIONES_PENDIENTES.md` | **24–25 de julio: PARCIALMENTE OBSOLETOS.** `DECISIONES_PENDIENTES.md` todavía dice que no hay proyecto en Vercel, y sí lo hay. Léelos como historia, no como estado. |
+
+**Regla general: si un documento contradice al código, gana el código.** Y si
+contradice a `docs/auditoria-6/`, gana la auditoría 6.
+
+---
+
+## 10. El error de criterio que más veces se ha cometido aquí
+
+Afirmar algo que no ocurrió. En todas sus formas:
+
+- decirle al operador "ya quedó cerrada tu liquidación" cuando la base no
+  contestó;
+- imprimir `Deducible para ISR $11,600.00` en verde sobre un CFDI de un tercero;
+- escribir en la base la constancia de un aviso de privacidad que Meta rechazó;
+- que el arranque diga "ok" sobre una migración que no puede comprobar.
+
+El producto vende **certeza fiscal**. Una cifra equivocada en verde citando un
+artículo es peor que no enseñar la cifra. Cuando el sistema no pueda confirmar
+algo, **tiene que decir que no puede** — hay un tercer estado ("a revisión")
+justamente para eso, y usarlo siempre gana a adivinar.
