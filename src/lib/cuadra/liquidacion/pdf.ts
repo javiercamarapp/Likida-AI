@@ -12,6 +12,7 @@ import { filasDeducibilidad } from './deducibilidad';
 import { filasAcreditables } from './acreditable';
 import { resumenLaboral } from '../laboral/pagadero';
 import { cubetaDe, etiquetaConcepto } from '../cuadre/engine';
+import { fechaMx } from '@/lib/utils';
 import { SOLO_CONTRALOR, type Destinatario } from '../cuadre/resumen';
 
 import { leyendaPdf } from '../cuadre/leyendas';
@@ -46,8 +47,11 @@ function envolver(texto: string, ancho: number): string[] {
   return out;
 }
 
-const fecha = (iso?: string) =>
-  iso ? new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+// LA MISMA que el panel, con `timeZone: America/Mexico_City`. Antes era una
+// copia sin zona horaria —o sea, la del servidor: UTC en Vercel—, así que una
+// liquidación cerrada a las 19:00 de México salía fechada al día siguiente EN EL
+// PAPEL mientras la pantalla la fechaba bien (auditoría 6, arquitectura).
+const fecha = (iso?: string) => fechaMx(iso);
 
 /**
  * Genera el PDF de liquidación. Devuelve los bytes listos para enviar por
