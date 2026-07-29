@@ -1,7 +1,7 @@
 # Handoff — Likida / cuadra
 
-> Escrito el 29-jul-2026 sobre `abdc98d`. Todo lo que dice "verificado" se
-> comprobó corriendo el comando ese día. Lo que no, va marcado.
+> Escrito el 29-jul-2026, actualizado sobre `e50510c`. Todo lo que dice
+> "verificado" se comprobó corriendo el comando ese día. Lo que no, va marcado.
 > **Pégale esto entero a tu agente nuevo antes de pedirle nada.**
 
 ---
@@ -25,22 +25,45 @@ PDF de liquidación. El contralor lo ve en un panel web.
 ## 2. Estado hoy — verificado el 29-jul-2026
 
 ```
-HEAD          abdc98d   árbol limpio, pusheado a origin/master
-npm test      1115 pruebas · 1 saltada · 112 archivos     exit 0
+HEAD          e50510c   árbol limpio, pusheado a origin/master
+npm test      1128 pruebas · 1 saltada · 113 archivos     exit 0
 tsc --noEmit                                              exit 0
 eslint                                                    exit 0
 npm run build                                             exit 0
-cobertura     81.5% líneas · 85.5% ramas   (umbral rompe CI si baja)
+cobertura     ~81.5% líneas · ~85.5% ramas  (umbral rompe CI si baja)
 ```
 
 **Funciona de punta a punta con WhatsApp real.** El 28-jul se cerró el ciclo
 completo por primera vez: mensaje entrante → resolución de operador → motor →
 agente → respuesta saliente → PDF.
 
-Se acaban de cerrar **seis rondas de auditoría** (12 rubros cada una). La última,
-`docs/auditoria-6/`, dejó nota global **5.3/10** y cerró 8 críticos y 5 altos.
-Lee `docs/auditoria-6/00-SINTESIS.md` **antes de tocar nada**: explica en qué
-estado quedó cada rubro y por qué.
+Se han cerrado **siete rondas de auditoría**. La 6 (completa, 12 rubros) dejó
+**5.3/10** y cerró 8 críticos y 5 altos. La 7 (ligera, 3 rubros por rotación)
+subió a **5.5/10** — y corrió **sola, como routine en la nube**, abriendo un PR
+que ya está mergeado a `master`.
+
+**Empieza por `docs/auditoria-7/00-SINTESIS.md`, y después la 6.**
+
+### Ojo con esto: hay una routine que trabaja sola
+
+Audita de madrugada, empuja a ramas `claude/*` y abre PR. Si te encuentras
+commits que no hiciste, es eso. **Haz `git pull --rebase` antes de empezar.**
+La ronda 7 y este servidor escribieron sobre los mismos archivos el mismo día y
+no se pisaron, pero fue suerte además de disciplina.
+
+### Lo que la ronda 7 encontró, y hay que saberlo
+
+Que **una prueba corría una copia de la función, no la función**
+(`analytics_deriva.test.ts` reimplementaba `derivoLaConfig` dentro del propio
+archivo). La de producción podía romperse entera y las 7 pruebas seguían verdes.
+Lo escribí yo en la ronda 6 — en la misma ronda cuyo hallazgo central era
+justamente "prueba el cable, no la función". Ya está arreglado por la routine.
+
+De los 3 críticos que la ronda 7 abrió en el rubro agéntico, **quedan dos**:
+
+1. **El texto y el PDF de la misma respuesta salen de dos fotografías distintas
+   de la base**, y la foto que entra durante el cierre queda huérfana.
+2. (El de `permitidas` vacío se cerró en `e50510c`; ver abajo.)
 
 ---
 
@@ -112,6 +135,17 @@ docs/auditoria-N/     seis rondas, con tablero.html y 00-SINTESIS.md
 - **`fusionarConfig(DEMO_CONFIG, null)` devuelve la MISMA referencia.** Mutar lo
   que devuelve `getConfig` escribe el singleton del módulo y filtra datos entre
   tenants. Ya pasó una vez.
+- **Las guardias se estorban entre sí, y hay que tenerlo en la cabeza.** En todo
+  cierre real `guardiaCifras` sustituye el texto (`guardia.ts:37-39` y `:79`), lo
+  que pone `textoDeterminista = true` y **hace que `guardiaFundamento` y
+  `guardiaEstado` no corran**. Dos hallazgos de auditoría se declararon críticos
+  sin ver ese acoplamiento y resultaron inalcanzables. Antes de arreglar
+  cualquier cosa en una guardia, comprueba que su rama se pueda alcanzar de
+  verdad: hay una prueba en `processor_cierre.test.ts` que fija el acoplamiento.
+- **El permiso de citar una norma viaja en la llave `norma_id`** dentro del
+  resultado de una tool. Si añades una tool que explique algo normativo y no la
+  emite, `guardiaFundamento` borrará la cita **a media frase** — no la rechaza,
+  la recorta. Ver `normasDePolitica` en `normas/por_diferencia.ts`.
 
 ---
 
