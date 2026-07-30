@@ -52,15 +52,23 @@ function extraer(html, url) {
   // EL PORTAL REAL es un enlace externo. Se descartan los del propio directorio
   // y el ruido de plugins: sin eso, el "portal" sale siendo la página que lo
   // describe, que fue el error que arruinó la extracción de facturasfacil.
-  const RUIDO = /facturaelectronicamexico|facturasfacil|recuperafacturas|rfacturacion|gasolinerasmx|wp\.com|wordpress|gravatar|jetpack|facebook|twitter|x\.com|instagram|youtube|google|gstatic|schema\.org|w3\.org/i;
+  const RUIDO = /facturaelectronicamexico|facturasfacil|recuperafacturas|rfacturacion|gasolinerasmx|facturacion-ticket|zummafinancial|wp\.com|wordpress|gravatar|jetpack|facebook|twitter|x\.com|instagram|youtube|google|gstatic|doubleclick|googletagmanager|analytics|schema\.org|w3\.org|cloudflare|jquery|bootstrap|unpkg|jsdelivr|openstreetmap|waze|gob\.mx\/cre/i;
   const enlaces = [...html.matchAll(/href="(https?:\/\/[^"]+)"/g)].map((m) => m[1]);
   f.portales = [...new Set(enlaces.filter((u) => !RUIDO.test(u)).map((u) => {
     try { return new URL(u).host.replace(/^www\./, ''); } catch { return null; }
   }).filter(Boolean))].slice(0, 6);
 
   // El bloque "Link para Facturación X" es el portal AUTORITATIVO cuando existe.
-  const link = html.match(/Link (?:para|de) Facturaci[oó]n[^<]*<\/h2>\s*(?:<[^>]+>\s*)*<a[^>]+href="(https?:\/\/[^"]+)"/is);
-  if (link) f.portal_declarado = link[1];
+  // El bloque "Link para Facturación X" es el portal AUTORITATIVO. La primera
+  // versión exigía que el <a> viniera inmediatamente después del </h2> y falló
+  // en la mayoría: el tema mete párrafos en medio. Se busca el primer enlace
+  // externo DENTRO de los 600 caracteres que siguen al encabezado.
+  const trasLink = html.match(/Link (?:para|de) Facturaci[oó]n[\s\S]{0,600}/i)?.[0];
+  if (trasLink) {
+    const a = [...trasLink.matchAll(/href="(https?:\/\/[^"]+)"/g)]
+      .map((m) => m[1]).find((u) => !RUIDO.test(u));
+    if (a) f.portal_declarado = a;
+  }
 
   const bloque = (titulo) => {
     const re = new RegExp(`<h[23][^>]*>[^<]*${titulo}[^<]*<\\/h[23]>(.*?)(?=<h[23]|$)`, 'is');
@@ -76,9 +84,23 @@ function extraer(html, url) {
     .map((m) => ({ n: Number(m[1]), titulo: limpio(m[2]), detalle: limpio(m[3])?.slice(0, 700) }))
     .filter((p) => p.detalle);
 
-  // Los campos que pide el portal viven en la lista tras "Ingresa los siguientes datos".
+  // ── LOS CAMPOS VIVEN DENTRO DEL TEXTO DEL PASO, no en una lista aparte ─────
+  //
+  // La primera versión los buscaba en un `<ul>` tras "Ingresa los siguientes
+  // datos" y salió vacía en la mayoría: estos sitios los escriben en línea,
+  // "Ingresa los siguientes datos: Código de Facturación Folio Rfc". Se leen de
+  // las dos formas y se toma la que dé algo.
   f.campos_ticket = lista(bloque('Ingresa los (?:siguientes )?datos'))
-    .concat(lista(bloque('datos del ticket'))).slice(0, 16);
+    .concat(lista(bloque('datos del ticket')));
+  if (f.campos_ticket.length === 0) {
+    const enLinea = f.pasos.map((x) => x.detalle).join(' ')
+      .match(/(?:siguientes datos|datos del ticket|datos de(?:l)? (?:compra|consumo))[:\s]+(.{5,220}?)(?:Haz click|Da click|Selecciona|Despu[eé]s|$)/i);
+    if (enLinea) {
+      f.campos_ticket = enLinea[1].split(/(?<=[a-zá-úñ])(?=[A-ZÁ-ÚÑ])|,|\u2022/)
+        .map((x) => x.trim()).filter((x) => x.length > 2 && x.length < 60).slice(0, 16);
+    }
+  }
+  f.campos_ticket = f.campos_ticket.slice(0, 16);
 
   f.telefono = limpio(html.match(/Tel[eé]fono[^:]*:?\s*<\/strong>?\s*([\d\s()+-]{7,})/i)?.[1]);
   f.email = html.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}(?:\.[a-z]{2,})?/i)?.[0] ?? null;
