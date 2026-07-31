@@ -250,6 +250,53 @@ describe('guardiaCifras — el encabezado afirma el cierre cuando de verdad se c
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 7 · CRÍTICO AG-3 — el texto y el PDF salían de dos fotografías
+// distintas de la base.
+//
+// `guardar_liquidacion` calcula el cuadre y genera los DOS PDF en UN momento
+// (T1, tools.ts). Hasta ahora, esta guardia volvía a llamar `cuadrarDesdeDB` en
+// OTRO momento (T2) para armar el texto de WhatsApp. Entre T1 y T2 las fotos
+// entrantes NO toman mutex (processor.ts) y pueden insertar un gasto nuevo: el
+// PDF archivado (T1) y el WhatsApp (T2) terminan narrando DOS cuadres distintos
+// del MISMO cierre — a veces de signo contrario ("sobró" vs "pusiste de tu
+// bolsa").
+//
+// El fix: `guardar_liquidacion` devuelve el snapshot que ya calculó (el mismo
+// que imprimió en el PDF) dentro del resultado de la tool call, y la guardia lo
+// REUSA en vez de recalcular. Se prueba haciendo que `cuadrarDesdeDB` (el
+// recálculo) devuelva un número DELIBERADAMENTE distinto: si el fix funciona,
+// ese número nunca debe aparecer, y `cuadrarDesdeDB` no debe ni llamarse.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('guardiaCifras — AG-3: el cierre usa el snapshot de guardar_liquidacion, no recalcula', () => {
+  const LIQ_CIERRE: Omit<Liquidacion, 'id' | 'creadaEn'> = {
+    ...LIQ,
+    totalComprobado: 8000,
+    totalAnticipo: 8000,
+    diferencia: 0,
+  };
+
+  beforeEach(() => {
+    cuadrarDesdeDB.mockReset();
+    // Deliberadamente OTRO número: si la guardia recalcula (el bug), esta cifra
+    // se filtra al operador aunque el PDF ya archivado diga otra cosa.
+    cuadrarDesdeDB.mockResolvedValue({ ...LIQ, totalComprobado: 500000, totalAnticipo: 8000, diferencia: -492000 });
+  });
+
+  it('usa el snapshot de la tool call, NO el recálculo de la DB', async () => {
+    const r = await guardiaCifras(
+      'listo',
+      [{ toolName: 'guardar_liquidacion', args: {}, result: { liquidacion_id: 'liq-1', estatus: 'cuadrada', diferencia: 0, pdf_generado: true, liq: LIQ_CIERRE } } as never],
+      't', 'v',
+    );
+    expect(r.forzado).toBe(true);
+    expect(cuadrarDesdeDB).not.toHaveBeenCalled();
+    expect(r.reply).toContain('$8,000.00');
+    expect(r.reply).not.toContain('500,000');
+    expect(r.reply).not.toContain('492,000');
+  });
+});
+
 describe('guardiaCifras — "no pude verificar" no es "está bien"', () => {
   beforeEach(() => {
     cuadrarDesdeDB.mockReset();
