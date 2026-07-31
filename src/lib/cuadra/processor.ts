@@ -661,6 +661,13 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       if (cierreParcial) {
         agentTools = parcial!;
         closed = true;
+        // AUDITORÍA 7, ALTO REINCIDENTE de ronda 6: `ctxCerro` es el Único campo
+        // que el log del catch general trae para distinguir "no pasó nada" de
+        // "la liquidación YA se cerró y el operador se quedó sin nada". Faltaba
+        // esta línea gemela a la de la línea ~623 (camino feliz) — sin ella, si
+        // algo tronaba DESPUÉS de esta recuperación (p. ej. `saveConversation`),
+        // el log mentía diciendo `cerroSinEntregar: false` sobre un cierre real.
+        ctxCerro = closed;
         const liqId = (cierreParcial.result as { liquidacion_id?: string } | undefined)?.liquidacion_id;
         if (liqId) {
           try { await vincularCostosALiquidacion(op.tenantId, viajeId, liqId); } catch { /* best-effort */ }
