@@ -129,13 +129,23 @@ export const COMERCIOS: Comercio[] = [
   },
   {
     clave: 'libramientos_meta',
-    nombre: 'Libramientos META',
+    nombre: 'Libramientos META / Quadrum / Valoran (San Luis Potosí)',
     portal: 'https://facturacionquadrum.com.mx/valoran/#/sinregistro',
     requiereCuenta: false,
     plazo: 'mes_natural',
     plazoVerificado: false,
     campos: [{ clave: 'codigo', etiquetaPortal: 'código del ticket', requerido: true }],
-    reconocer: { dominios: ['facturacionquadrum.com.mx'], texto: ['LIBRAMIENTO'] },
+    // La cosecha del 29-jul confirmó que este portal cubre SEIS libramientos de
+    // San Luis Potosí —Oriente, Norte, Arco Poniente y Avenida Horizontes— bajo
+    // las marcas Quadrum y Valoran. Se intentó añadirlo como comercio nuevo y la
+    // prueba de dominios ambiguos lo atrapó: ya estaba aquí, y esta entrada es
+    // MEJOR —trae la ruta `/valoran/#/sinregistro`, sabe que no pide cuenta y
+    // declara el campo—. Lo que faltaba eran los nombres impresos, que es por
+    // donde se reconoce un ticket de caseta.
+    reconocer: {
+      dominios: ['facturacionquadrum.com.mx'],
+      texto: ['LIBRAMIENTO', 'QUADRUM', 'VALORAN', 'ARCO PONIENTE', 'AVENIDA HORIZONTES'],
+    },
   },
   {
     clave: 'oxxo_gas',
@@ -655,6 +665,75 @@ export const COMERCIOS: Comercio[] = [
       { clave: 'monto', etiquetaPortal: 'Monto total', requerido: true },
     ],
     reconocer: { dominios: ['autozone.com.mx'], texto: ['AUTOZONE'] },
+  },
+  // ═══════════════════════════════════════════════════════════════════════
+  // SEGUNDA AMPLIACIÓN (29-jul-2026) — los portales multi-comercio de flota que
+  // salieron al cerrar la cosecha, ya sin los cinco artefactos de extracción.
+  //
+  // El criterio para entrar sigue siendo el mismo: **cubrir varios puntos de
+  // venta con un solo sistema**. Un portal de una sola estación no paga su
+  // mantenimiento; uno que cubre nueve autopistas, sí.
+  //
+  // Ninguno está verificado facturando, así que van con `camposPendientes` y
+  // `plazoVerificado: false`. Lo que aportan hoy es mandar al operador al sitio
+  // correcto en vez de dejarlo sin respuesta.
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    clave: 'redviacorta',
+    nombre: 'Red de Carreteras de Occidente (9 autopistas)',
+    // El segundo sistema de peaje por cobertura, después de PINFRA: León–
+    // Aguascalientes, Maravatío–Zapotlanejo, Tepic–San Blas, Zamora–Ecuándureo,
+    // Zapotlanejo–Guadalajara, Zapotlanejo–Lagos de Moreno y el resto de la RCO.
+    // Cubre el occidente, que es donde PINFRA no llega.
+    portal: 'https://redviacorta.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['redviacorta.mx'], texto: ['RED VIA CORTA', 'RCO', 'CARRETERAS DE OCCIDENTE'] },
+  },
+  {
+    clave: 'sevafusa',
+    nombre: 'Sevafusa (24 estaciones de servicio del noroeste)',
+    // Veinticuatro gasolineras bajo un portal: Bienestar I y II, Centenario I y
+    // II, Country, Degollado, Grullas, ASB Tijuana, Corerepe, Dren Juárez… Es el
+    // patrón de grupo gasolinero regional que ningún directorio agrupa por marca,
+    // porque cada estación tiene nombre propio.
+    portal: 'https://facturacion.sevafusa.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['sevafusa.mx'], texto: ['SEVAFUSA'] },
+  },
+  {
+    clave: 'supercarreteras',
+    nombre: 'Super Carreteras del Norte (Allende–Agujita, Premier)',
+    // OJO CON EL DOMINIO: `ddns.net` es DNS dinámico, o sea la IP cambia y el
+    // portal puede mudarse sin aviso. Se cataloga igual porque es la única forma
+    // de facturar esas autopistas, pero es exactamente el caso donde el
+    // reconocimiento por dominio se rompe solo — y por eso existe la tabla de
+    // permisos CRE.
+    portal: 'http://supercarreteras.ddns.net/',
+    requiereCuenta: true,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['supercarreteras.ddns.net'], texto: ['SUPER CARRETERAS', 'AUTOPISTA PREMIER', 'ALLENDE AGUJITA'] },
+  },
+  {
+    clave: 'grupo_centra',
+    nombre: 'Grupo Centra (Gasolinera 76, Vip Gas, Vip Market…)',
+    portal: 'https://facturacion.grupocentra.mx/',
+    requiereCuenta: false,
+    plazo: 'mes_natural',
+    plazoVerificado: false,
+    campos: [],
+    camposPendientes: true,
+    reconocer: { dominios: ['grupocentra.mx'], texto: ['GRUPO CENTRA', 'VIP GAS', 'VIP MARKET'] },
   },
 ];
 
