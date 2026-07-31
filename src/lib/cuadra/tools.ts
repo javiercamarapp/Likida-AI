@@ -184,6 +184,20 @@ registerTool('guardar_liquidacion', {
       estatus: liq.estatus,
       diferencia: liq.diferencia,
       pdf_generado: Boolean(pdfOperadorPath),
+      // ── AUDITORÍA 7, CRÍTICO AG-3 — EL SNAPSHOT VIAJA CON EL RESULTADO ──────
+      //
+      // Esta `liq` es la MISMA que ya se imprimió en los dos PDF (arriba) y la
+      // que se acaba de persistir en `saveLiquidacion`. Hasta ahora, ese número
+      // se tiraba al volver de esta tool, y `guardiaCifras` volvía a llamar
+      // `cuadrarDesdeDB` en OTRO momento para armar el texto de WhatsApp. Las
+      // fotos entrantes NO toman mutex (processor.ts): un comprobante que entra
+      // entre el cálculo de arriba y esa segunda lectura hace que el PDF
+      // archivado y el WhatsApp narren DOS cuadres distintos del MISMO cierre.
+      //
+      // Se manda el snapshot completo para que la guardia lo REUSE en vez de
+      // recalcular — el mismo principio que ya aplica el resto del sistema: una
+      // sola fotografía de la verdad por cierre, nunca dos.
+      liq,
     };
   },
 });

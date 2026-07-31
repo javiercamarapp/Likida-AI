@@ -22,6 +22,7 @@ import { resumenCuadre } from './resumen';
 import { tieneCifrasDeDinero, cifrasSinRespaldo, hablaDeDineroSinCifraVerificable } from './cifras';
 import { logger } from '@/lib/logger';
 import type { ToolCallRecord } from '@/lib/llm/openrouter';
+import type { Liquidacion } from '@/types/cuadra';
 
 export async function guardiaCifras(
   reply: string,
@@ -49,6 +50,26 @@ export async function guardiaCifras(
   // Es el mismo hecho que `processor.ts` llama `closed`, calculado igual.
   const cerro = toolCalls.some((t) => t.toolName === 'guardar_liquidacion' && !t.error);
   const consultoPolitica = toolCalls.some((t) => t.toolName === 'consultar_politica' && !t.error);
+
+  // ── AUDITORÍA 7, CRÍTICO AG-3 — DOS FOTOGRAFÍAS DISTINTAS DE LA BASE ────────
+  //
+  // `guardar_liquidacion` calcula el cuadre y genera los DOS PDF en UN momento
+  // (T1, tools.ts) y devuelve ese mismo cuadre dentro de `result.liq`. Esta
+  // guardia volvía a llamar `cuadrarDesdeDB` en OTRO momento (T2) para armar el
+  // texto — y entre T1 y T2 las fotos entrantes NO toman mutex (processor.ts:
+  // comentario explícito), así que un comprobante que entra en esa ventana hacía
+  // que el PDF archivado y el WhatsApp narraran DOS cuadres distintos del MISMO
+  // cierre, a veces de signo contrario ("Sobró $150" vs "Pusiste $650 de tu
+  // bolsa", con $800 de diferencia).
+  //
+  // El fix: si CERRÓ en este turno, se usa el snapshot que la tool ya devolvió
+  // — la MISMA lectura que se imprimió en los dos PDF — en vez de recalcular.
+  // Solo se recalcula si por alguna razón el snapshot no viene (defensivo; no
+  // debería pasar con la tool ya cableada).
+  const snapshotCierre = cerro
+    ? (toolCalls.find((t) => t.toolName === 'guardar_liquidacion' && !t.error)
+        ?.result as { liq?: Omit<Liquidacion, 'id' | 'creadaEn'> } | undefined)?.liq
+    : undefined;
 
   // El detector NO decide sobre un cuadre. Antes esta función salía en la primera
   // línea si `tieneCifrasDeDinero` decía que no, lo que ponía a un regex —que por
@@ -79,7 +100,9 @@ export async function guardiaCifras(
   }
 
   try {
-    const liq = await cuadrarDesdeDB(tenantId, viajeId);
+    // AG-3: con snapshot de cierre, NO se toca la DB — se narra exactamente lo
+    // que ya quedó impreso en los dos PDF y persistido en `saveLiquidacion`.
+    const liq = snapshotCierre ?? (await cuadrarDesdeDB(tenantId, viajeId));
     // cerrado=cerro: el encabezado afirma el cierre SOLO si `guardar_liquidacion`
     // corrió sin error en este turno. Ver el comentario de `cerro` arriba.
     //
