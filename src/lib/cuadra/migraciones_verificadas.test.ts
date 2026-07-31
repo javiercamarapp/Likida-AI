@@ -15,8 +15,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 // La migración escrita para que un chequeo dejara de mentir se quedó, ella
 // misma, sin comprobar.
 //
-// Al escribir esta lista aparecieron otras dos —la 0002 y la 0012—, que es para
-// lo que sirve escribirla. Ahora son los bloques 15 y 16.
+// Al escribir esta lista aparecieron otras TRES —la 0002, la 0011 y la 0012—,
+// que es para lo que sirve escribirla. Ahora son los bloques 14, 15 y 16.
 //
 // Esta prueba no lee SQL ni valida sintaxis. Hace UNA sola cosa: obliga a que
 // toda migración nueva tome una decisión explícita —bloque o exención con

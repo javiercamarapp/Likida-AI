@@ -158,6 +158,19 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       faltan = true;
     }
 
+    // Migración 0033: la constancia del aviso de privacidad separada de su
+    // reserva. Si falta, `liberarEnvioAviso` llama a una función que no existe,
+    // el error se registra y no se lanza —es best-effort a propósito— así que la
+    // reserva se queda puesta y el operador NUNCA recibe su aviso. Sin ella
+    // tampoco se escribe una sola constancia del art. 16: `confirmar` no existe.
+    const { error: e33 } = await admin.rpc('confirmar_aviso_privacidad', {
+      p_operador: ZERO, p_tenant: ZERO, p_version: 'sonda',
+    });
+    if (e33) {
+      reportarProbe(e33, 'FALTA la migración 0033 (confirmar/liberar_aviso_privacidad): NINGUNA constancia del art. 16 de la LFPDPPP se está escribiendo, y una reserva que no se puede soltar deja al operador sin recibir su aviso. Corre `supabase db push`.');
+      faltan = true;
+    }
+
     // Migración 0022 (sobrecarga ambigua de guardar_liquidacion_tx). Es la única
     // que se detecta por el ERROR de una llamada, no por su ausencia: si 0013 y
     // 0021 conviven, la función existe DOS veces y Postgres responde

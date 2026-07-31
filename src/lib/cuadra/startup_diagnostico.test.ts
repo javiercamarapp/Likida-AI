@@ -107,13 +107,14 @@ describe('diagnóstico de migraciones', () => {
 // liquidación cierra. Y este chequeo no la sondeaba: decía `ok: true`.
 describe('la sobrecarga ambigua de guardar_liquidacion_tx', () => {
   it('con DOS firmas vivas, el arranque lo grita en vez de decir ok', async () => {
-    rpc.mockResolvedValueOnce({ error: null })   // 0005
-       .mockResolvedValueOnce({ error: null })   // unlock
-       .mockResolvedValueOnce({ error: null })   // 0011
-       .mockResolvedValueOnce({ error: null })   // 0017
-       .mockResolvedValueOnce({ data: [], error: null })  // indices_faltantes: ninguno falta
-       .mockResolvedValueOnce({ error: { code: '42725', message: 'function guardar_liquidacion_tx(...) is not unique' } })
-       .mockResolvedValue({ error: null });
+    // POR NOMBRE, no por posición. Estaba encadenado con `mockResolvedValueOnce`
+    // en el orden exacto de los sondeos, así que agregar uno nuevo en medio
+    // —el de la 0033— corría la fila y esta prueba empezaba a medir otra cosa.
+    // Una prueba que se rompe al insertar un sondeo ANTES del que le importa no
+    // está midiendo lo que dice.
+    rpc.mockImplementation(async (nombre: string) => (nombre === 'guardar_liquidacion_tx'
+      ? { error: { code: '42725', message: 'function guardar_liquidacion_tx(...) is not unique' } }
+      : { data: [], error: null }));
     await verificarMigracionesCriticas();
 
     expect(info).not.toHaveBeenCalledWith('startup.migraciones', { ok: true });

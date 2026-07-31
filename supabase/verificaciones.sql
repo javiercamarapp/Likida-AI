@@ -14,8 +14,9 @@
 --
 -- Última corrida: 28-jul-2026, contra el proyecto Likida. Los cuatro primeros
 -- pasaron. Los bloques 5 a 11 son de la auditoría 5 y comprueban las migraciones
--- 0022 y 0024–0029. Los bloques 13 y 14 son del 31-jul y comprueban la 0030 y la
--- 0031 — SIN CORRER TODAVÍA contra la base, porque la 0031 no se ha aplicado.
+-- 0022 y 0024–0029. Los bloques 13 a 17 son del 31-jul: comprueban la 0030, la
+-- 0031 y la 0033, más las dos que llevaban desde el principio sin bloque (0002 y
+-- 0012) — SIN CORRER TODAVÍA contra la base.
 --
 -- ESTADO DE LAS MIGRACIONES QUE COMPRUEBAN (28-jul-2026, 22:00):
 --   · 0022, 0024, 0025, 0026, 0028 y 0029 → APLICADAS. Sus bloques (5, 6, 7,
@@ -30,9 +31,10 @@
 --   · 0030 (`indices_faltantes`) → APLICADA. El bloque 13 se escribió DESPUÉS,
 --     el 31-jul: la única migración que existe para que un chequeo dejara de
 --     mentir era, ella misma, la única sin comprobar.
---   · 0031 (TTL del contador de la barrera) → ESCRITA Y NO APLICADA. El bloque
---     14 va a fallar con `column intake_pendientes_en does not exist` hasta el
---     `supabase db push`, y ESE es su resultado correcto mientras tanto.
+--   · 0031 (TTL del contador de la barrera) y 0033 (la constancia del aviso
+--     separada de su reserva) → ESCRITAS Y NO APLICADAS. Los bloques 14 y 17 van
+--     a fallar con `column ... does not exist` hasta el `supabase db push`, y ESE
+--     es su resultado correcto mientras tanto.
 -- Contra una base sin las migraciones, los bloques 6 a 11 reportan `f` — que es
 -- justamente la lectura útil: dicen qué garantía falta.
 --
@@ -575,4 +577,69 @@ begin
 
   raise exception E'PERMISOS  rls-en-wa_mensaje=%  anon-intake=%  anon-lock=%  anon-unlock=%  service-role-intake=%   (esperado t / f / f / f / t)',
     rls_on, anon_intake, anon_lock, anon_unlock, svc_intake;
+end $$;
+
+
+-- ── 17. La constancia del aviso sobrevive a un envío fallido (mig. 0033) ────
+-- La 0018 puso la RESERVA y la CONSTANCIA en la misma fila:
+-- `marcar_aviso_privacidad` escribía `aviso_privacidad_en = now()` antes de
+-- mandar el mensaje. Correcto contra el envío duplicado — y por eso se hizo así.
+--
+-- Pero esa fila es la prueba del art. 16 de la LFPDPPP, así que deshacer la
+-- reserva borraba la constancia. Con un aviso que cambia de versión el camino
+-- completo es:
+--
+--   v1 entregado hace tres meses → la flota corrige la liga de su aviso integral
+--   → el texto cambia → v2 → llega un mensaje → la reserva gana porque la
+--   versión es distinta y PISA la constancia de v1 → Meta rechaza el envío
+--   (pasó el 28-jul) → liberar ponía las dos columnas en NULL.
+--
+-- La base terminaba diciendo que ese operador nunca recibió ningún aviso. Y sí
+-- lo recibió. Ante la autoridad la carga de probar el art. 16 es del
+-- responsable: "no consta" es el peor estado posible, y se llegaba a él
+-- destruyendo una prueba verdadera.
+--
+-- Esto es lo único que puede demostrarlo: el TS prueba que se llama a la RPC
+-- correcta, no lo que la RPC hace con la fila.
+do $$
+declare
+  v_t uuid; v_o uuid;
+  gano_v1 boolean; gano_repetido boolean; gano_v2 boolean;
+  constancia_v1 timestamptz; constancia_tras_fallo timestamptz;
+  version_tras_fallo text; reserva_tras_fallo timestamptz;
+  solto boolean; solto_de_nuevo boolean; gano_tras_ttl boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF AVISO') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t,'P','520000009017') returning id into v_o;
+
+  -- 1. Primer aviso: se reserva, sale, y se hace constar.
+  gano_v1 := marcar_aviso_privacidad(v_o, v_t, 'v1');
+  gano_repetido := marcar_aviso_privacidad(v_o, v_t, 'v1');  -- otro camino, misma ráfaga
+  perform confirmar_aviso_privacidad(v_o, v_t, 'v1');
+  select aviso_privacidad_en into constancia_v1 from operador where id = v_o;
+
+  -- 2. Cambia el texto de la flota. Se reserva el reenvío…
+  gano_v2 := marcar_aviso_privacidad(v_o, v_t, 'v2');
+  -- …y el envío FALLA, así que se suelta la reserva.
+  solto := liberar_aviso_privacidad(v_o, v_t);
+  solto_de_nuevo := liberar_aviso_privacidad(v_o, v_t);  -- ya no hay nada que soltar
+
+  select aviso_privacidad_en, aviso_privacidad_version, aviso_privacidad_claim_en
+    into constancia_tras_fallo, version_tras_fallo, reserva_tras_fallo
+    from operador where id = v_o;
+
+  -- 3. La reserva expira sola: un proceso que muera entre reservar y confirmar
+  --    no puede dejar a un operador sin su aviso para siempre.
+  perform marcar_aviso_privacidad(v_o, v_t, 'v2');
+  update operador set aviso_privacidad_claim_en = now() - interval '6 minutes' where id = v_o;
+  gano_tras_ttl := marcar_aviso_privacidad(v_o, v_t, 'v2');
+
+  raise exception E'AVISO  gana-1a=%   2do-camino-rebota=%  reenvio-por-version=%  CONSTANCIA-INTACTA=%  version-intacta=%  reserva-suelta=%  solto=%  solto-2a-vez=%  reserva-expira=%   (esperado t / f / t / t / v1 / t / t / f / t)',
+    gano_v1,
+    gano_repetido,
+    gano_v2,
+    constancia_tras_fallo = constancia_v1,   -- ← EL HALLAZGO: no se borró
+    version_tras_fallo,
+    reserva_tras_fallo is null,
+    solto, solto_de_nuevo, gano_tras_ttl;
 end $$;

@@ -28,7 +28,7 @@ import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import {
   addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash,
   enriquecerGastoConCodigo, guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente,
-  getDatosResponsable, reclamarEnvioAviso, liberarEnvioAviso,
+  getDatosResponsable, reclamarEnvioAviso, confirmarEnvioAviso, liberarEnvioAviso,
 } from '@/lib/cuadra/repo';
 import {
   resolveOperador, getOpenViaje, getTenantContext,
@@ -178,6 +178,11 @@ export async function ponerAvisoADisposicion(
       await liberarEnvioAviso(tenantId, operadorId);   // que el siguiente mensaje reintente
       return false;
     }
+    // LA CONSTANCIA VA AQUÍ, y no antes. Hasta la 0033 la escribía la reserva, y
+    // por eso deshacerla borraba la prueba de un aviso ANTERIOR que sí se había
+    // entregado: si el texto de la flota cambia y el reenvío falla, la base
+    // pasaba a decir que el operador nunca recibió ninguno.
+    await confirmarEnvioAviso(tenantId, operadorId, versionAviso(texto));
     logger.info('privacidad.aviso_enviado', { tenantId, operadorId, id });
     return true;
   } catch (e) {
