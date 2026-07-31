@@ -374,3 +374,178 @@ export function respuestaPrivacidad(r: DatosResponsable): string {
   );
   return partes.join('\n');
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL AVISO INTEGRAL. 31-jul-2026.
+//
+// Faltaba entero. `tenant.url_aviso_privacidad` apuntaba a
+// `transportesinnovativos.mx`, que responde NXDOMAIN: el operador recibía una
+// liga rota, y la respuesta a *PRIVACIDAD* tenía que confesar que no había a
+// dónde mandarlo. El art. 16 fr. II obliga a "señalar el sitio donde se podrá
+// consultar el aviso integral", y no había sitio.
+//
+// Seis de los once elementos del checklist (docs/conocimiento/11-datos-
+// personales.md §5.4) viven SOLO en el integral, así que sin él no existían en
+// ningún lado:
+//
+//     5   procedimiento ARCO ................... art. 15 fr. V
+//     6   cómo se comunican los cambios ........ art. 15 fr. VI
+//     7   cláusula de transferencias ........... art. 35
+//     8   revocación del consentimiento ........ art. 7 último párr.; Regl. 21
+//     10  contacto de datos personales ......... art. 29
+//     11  oposición al tratamiento automatizado  art. 26 fr. II
+//
+// ── POR QUÉ LO ALOJA LIKIDA Y NO LA FLOTA ─────────────────────────────────
+//
+// El responsable es la FLOTA (art. 14) y Likida es persona encargada (art. 2
+// fr. XX). Pero el obligado de la fr. II es señalar un sitio, no ser el dueño
+// del dominio: alojarlo aquí no traslada la responsabilidad, igual que un
+// despacho que publica el aviso de su cliente no se vuelve el responsable. El
+// texto lo dice en la primera línea, para que quien lo lea sepa a quién le
+// reclama.
+//
+// La alternativa era esperar a que cada flota publique el suyo. Eso es lo que
+// llevaba dos meses sin pasar, y mientras tanto el operador recibía una liga
+// muerta — que ante la autoridad es peor que no señalar ninguna, porque
+// aparenta cumplimiento.
+//
+// ── LO QUE ESTE TEXTO NO PUEDE INVENTAR ───────────────────────────────────
+//
+// El contacto del art. 29 es un dato de la flota. Si no está capturado, la
+// sección lo DICE en vez de rellenarla con el chat de WhatsApp y dar por
+// cumplido el artículo. Es el mismo criterio que ya rige a la liga rota:
+// decirle la verdad al titular cumple más que una dirección que no abre.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Una sección del integral. `pendiente` = falta un dato de la flota. */
+export interface SeccionAviso {
+  titulo: string;
+  /** Fundamento legal, para que quien lo revise pueda comprobarlo. */
+  fundamento: string;
+  parrafos: string[];
+  /** Cierto cuando la flota no ha capturado lo que la sección necesita. */
+  pendiente?: boolean;
+}
+
+/** Datos del integral: los del simplificado más el contacto del art. 29. */
+export interface DatosIntegral extends DatosResponsable {
+  /** Persona o departamento de datos personales. Art. 29. */
+  contactoPrivacidad?: string | null;
+}
+
+/**
+ * El aviso integral de una flota, sección por sección.
+ *
+ * Devuelve datos y no HTML a propósito: así se puede probar el CONTENIDO —que
+ * los once elementos estén, que ninguno se invente— sin renderizar una página.
+ * La vista solo lo pinta.
+ */
+export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
+  const razonSocial = r.razonSocial.trim();
+  const domicilio = r.domicilio.trim();
+  const contacto = r.contactoPrivacidad?.trim();
+
+  return [
+    {
+      titulo: 'Quién es responsable de tus datos',
+      fundamento: 'LFPDPPP art. 15 fr. I',
+      parrafos: [
+        `**${razonSocial}**, con domicilio en ${domicilio}, es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos.`,
+        `Likida opera la herramienta con la que se procesan: es **persona encargada** (art. 2 fr. XX), trata los datos por cuenta de la empresa y siguiendo sus instrucciones, y no decide sobre ellos. Este aviso está alojado en el sitio de Likida por encargo de la empresa; eso no cambia quién responde.`,
+      ],
+    },
+    {
+      titulo: 'Qué datos se tratan',
+      fundamento: 'LFPDPPP art. 15 fr. II',
+      parrafos: [
+        `Tu **nombre** y tu **número de teléfono**.`,
+        `Las **fotos de comprobantes** que envías por WhatsApp —diésel, casetas, alimentación, hospedaje, refacciones— y lo que viene escrito en ellas: montos, fechas, folios, RFC del establecimiento y datos fiscales del comprobante.`,
+        `El **contenido de tus mensajes** en esa conversación, y los **viajes y liquidaciones** en los que participas.`,
+        `**No se tratan datos sensibles.** Ni salud, ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Si en una foto aparece algo así por accidente, no se usa para nada y puedes pedir que se borre.`,
+      ],
+    },
+    {
+      titulo: 'Para qué se usan',
+      fundamento: 'LFPDPPP art. 15 fr. III',
+      parrafos: [
+        `**Finalidades necesarias — sin ellas no puede haber liquidación:**`,
+        `· Liquidar tus viajes: cuadrar lo que gastaste contra el anticipo que recibiste y emitir el documento de liquidación.`,
+        `· Comprobar los gastos ante el SAT y conservar los comprobantes fiscales el tiempo que la ley obliga (Código Fiscal de la Federación art. 30: cinco años).`,
+        `· Responderte por WhatsApp.`,
+        `**Finalidades que NO son necesarias, y a las que puedes oponerte sin que eso afecte tu liquidación:**`,
+        `· Revisar si un comprobante viene repetido o alterado, comparándolo contra los de tus viajes anteriores, y entregarle ese resultado a la empresa.`,
+        `· Medir cómo funciona el servicio para mejorarlo (estadísticas de uso, sin identificarte en los reportes).`,
+        `Cualquier finalidad que no esté escrita aquí requiere que te vuelvan a pedir permiso. La ley vigente ya no permite ampararse en usos "compatibles o análogos".`,
+      ],
+    },
+    {
+      titulo: 'Un programa revisa tus comprobantes, y puedes oponerte',
+      fundamento: 'LFPDPPP art. 26 fr. II',
+      parrafos: [
+        `La revisión de tus comprobantes —si están repetidos, si el monto de la foto no coincide con el del comprobante fiscal, si la fecha cae fuera del viaje— **la hace un programa, sin que una persona la mire antes**.`,
+        `Ese resultado llega a la empresa y puede influir en cómo te liquidan. Por eso tienes derecho a **oponerte a que se decida así** y a pedir que una persona lo revise.`,
+        `Oponerte a esta revisión no detiene tu liquidación: la empresa la hará a mano.`,
+      ],
+    },
+    {
+      titulo: 'Cómo limitar el uso de tus datos',
+      fundamento: 'LFPDPPP art. 15 fr. IV',
+      parrafos: [
+        `Escribe **PRIVACIDAD** por el mismo chat de WhatsApp. Tu solicitud queda registrada para la empresa y tu liquidación sigue igual.`,
+        `También puedes pedirlo directamente en el domicilio de la empresa que aparece arriba.`,
+      ],
+    },
+    {
+      titulo: 'Cómo ejercer tus derechos ARCO',
+      fundamento: 'LFPDPPP art. 15 fr. V',
+      parrafos: [
+        `Tienes derecho a **Acceder** a tus datos, **Rectificarlos** si están mal, **Cancelarlos** cuando ya no deban tratarse y **Oponerte** a un uso concreto.`,
+        `**Cómo:** escribe PRIVACIDAD por WhatsApp, o preséntalo por escrito en el domicilio de la empresa. Tu solicitud debe traer tu nombre, un medio para contestarte, copia de una identificación oficial, qué datos son y qué pides que se haga con ellos.`,
+        `**Plazos de la ley:** la empresa tiene **20 días hábiles** para contestarte y **15 días hábiles** más para hacerlo efectivo si procede. Ejercerlos es gratuito; solo puedes tener que pagar el envío o la copia.`,
+        `Si no te contestan o la respuesta no te satisface, puedes acudir a la autoridad garante en materia de protección de datos personales.`,
+      ],
+    },
+    {
+      titulo: 'Cómo revocar tu consentimiento',
+      fundamento: 'LFPDPPP art. 7 último párrafo; Reglamento art. 21',
+      parrafos: [
+        `Puedes retirar tu consentimiento en cualquier momento, por el mismo medio: escribe **PRIVACIDAD** por WhatsApp o preséntalo en el domicilio de la empresa.`,
+        `**Lo que la revocación no alcanza:** los comprobantes fiscales que ya se usaron para liquidar viajes pasados. La ley obliga a la empresa a conservarlos cinco años (CFF art. 30), y esa obligación no se puede revocar. Se te dice aquí para que no te sorprenda después.`,
+        `Revocar el consentimiento significa dejar de usar este canal para liquidar; la empresa te dirá por qué otro medio hacerlo.`,
+      ],
+    },
+    {
+      titulo: 'Transferencias a terceros',
+      fundamento: 'LFPDPPP art. 35',
+      parrafos: [
+        `**Tus datos no se venden, ni se comparten con nadie para que los use por su cuenta.**`,
+        `Sí pasan por proveedores que trabajan por instrucción de la empresa y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia** (art. 2 fr. XX)—: el proveedor de mensajería de WhatsApp, el de alojamiento de la base de datos, y los modelos de lenguaje que leen las fotos, contratados con retención cero (no conservan lo que procesan).`,
+        `Transferencias que sí lo son y no necesitan tu consentimiento: a la autoridad fiscal cuando la ley lo exige, y al contador de la empresa para cumplir sus obligaciones.`,
+        `**Si algún día se quisiera transferir tus datos para algo distinto, se te pedirá permiso antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
+      ],
+    },
+    {
+      titulo: 'A quién dirigirte en la empresa',
+      fundamento: 'LFPDPPP art. 29',
+      pendiente: !contacto,
+      parrafos: contacto
+        ? [
+            contacto,
+            `También puedes escribir **PRIVACIDAD** por WhatsApp y tu solicitud queda registrada.`,
+          ]
+        : [
+            `**La empresa todavía no ha designado a la persona o departamento de datos personales que el art. 29 exige.** Se dice aquí en vez de dejarlo en blanco o de poner un contacto que no existe.`,
+            `Mientras tanto, el camino que sí funciona: escribe **PRIVACIDAD** por WhatsApp, o preséntalo en el domicilio de la empresa que aparece arriba.`,
+          ],
+    },
+    {
+      titulo: 'Cómo te avisamos si este aviso cambia',
+      fundamento: 'LFPDPPP art. 15 fr. VI',
+      parrafos: [
+        `Cuando este aviso cambie, **recibes el aviso nuevo por el mismo WhatsApp**, sin que tengas que venir a revisarlo.`,
+        `No es una promesa: el sistema calcula una firma del texto y reenvía en cuanto deja de coincidir con la última que se te entregó. Por eso un cambio aquí llega solo.`,
+        `En esta página siempre está la versión vigente.`,
+      ],
+    },
+  ];
+}

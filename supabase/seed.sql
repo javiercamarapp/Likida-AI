@@ -25,13 +25,23 @@ insert into tenant (id, nombre, rfc, ciudad, plan,
   ('11111111-1111-1111-1111-111111111111', 'Transportes Innovativos',
    'TIN010101AAA',                 -- 🔴 INVENTADO: RFC real de Innovativos
    'Silao, Guanajuato', 'demo',
-   -- 🔴 INVENTADO los tres. La razón social va TAL CUAL esté en el RFC, el
-   -- domicilio es el FISCAL (la ciudad de arriba no sirve: no es un domicilio),
-   -- y la liga tiene que APUNTAR A ALGO REAL antes de enseñarle esto a nadie:
-   -- el operador la va a poder abrir desde WhatsApp.
+   -- 🔴 INVENTADOS los dos primeros. La razón social va TAL CUAL esté en el
+   -- RFC y el domicilio es el FISCAL (la ciudad de arriba no sirve: no es un
+   -- domicilio). Los dos los tiene que capturar la flota.
+   --
+   -- LA LIGA YA NO ES UN INVENTO. Apuntaba a `transportesinnovativos.mx`, que
+   -- responde NXDOMAIN: el operador recibía una dirección muerta y la respuesta
+   -- a *PRIVACIDAD* tenía que confesar que no había a dónde mandarlo. Ahora
+   -- apunta al integral que sirve la propia app (`/aviso/[tenant]`), armado con
+   -- estos mismos datos. El responsable sigue siendo la flota (art. 14); Likida
+   -- solo aloja el documento como persona encargada, y el texto lo dice.
+   --
+   -- En producción hay que reemplazar el host por el dominio real: en localhost
+   -- `revisarAvisoIntegral` lo marca `inservible` a propósito, así que en dev el
+   -- operador recibe el aviso degradado — que es lo correcto.
    'TRANSPORTES INNOVATIVOS SA DE CV',
    'Carretera Silao-Romita Km 4.5, Parque Industrial, 36100 Silao, Guanajuato',
-   'https://transportesinnovativos.mx/aviso-de-privacidad')
+   'https://cuadra.mx/aviso/11111111-1111-1111-1111-111111111111')
 on conflict (id) do update set
   -- Se actualiza aunque el tenant ya exista: el `do nothing` de antes dejaba a
   -- las flotas ya sembradas sin los campos nuevos para siempre.
