@@ -17,7 +17,8 @@ empresa y escribe *listo*; el sistema hace OCR, lee el CFDI, cuadra contra el
 anticipo, aplica la política de gastos y la ley fiscal mexicana, y devuelve un
 PDF de liquidación. El contralor lo ve en un panel web.
 
-- **Repo:** `~/javiercamarapp/cuadra` · GitHub `javiercamarapp/cuadra` · rama `master`
+- **Repo:** `~/javiercamarapp/cuadra` · GitHub **`javiercamarapp/likida.ai`** · rama `master`
+  (se renombró desde `cuadra`; GitHub redirige, pero el remoto ya apunta al nuevo)
 - **Pre-revenue, cero clientes.** Las empresas del censo son prospectos, no
   clientes. **No inventes logos, testimonios ni capturas de producto.**
 - **Demo: 6-ago-2026.** El comprador es el **contralor** de la flota. Un error
