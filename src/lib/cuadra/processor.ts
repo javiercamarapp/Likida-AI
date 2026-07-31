@@ -311,7 +311,27 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // decidirlo con "el contador pasó de 0 a 1" mandaba el mensaje una vez por
       // foto. Se conserva la llamada porque su EFECTO —el incremento— es lo que
       // sostiene la barrera del "listo".
-      await intakeDelta(viajeId, 1);
+      //
+      // AUDITORÍA 7, ALTO — EL PAR +1/-1 NO ERA SIMÉTRICO ANTE EL ERROR. Si este
+      // +1 fallaba (RPC transitoria → `null`), el código seguía de largo a
+      // descargar/OCR/registrar el gasto igual, sosteniendo la barrera con un
+      // incremento que NUNCA ocurrió — y el `finally` de abajo decrementa PASE
+      // LO QUE PASE. Si el OCR de esa foto no termina antes de que el operador
+      // escriba "listo", el cuadre cierra SIN ese comprobante, sin avisar, y el
+      // operador paga de su bolsa un gasto que sí hizo.
+      //
+      // Fail-closed: sin incremento confirmado, no se sigue procesando esa foto
+      // (nada que insertar sin que la barrera lo sepa) y se avisa, en vez de
+      // fallar en silencio. Como no hubo +1, tampoco se ejecuta el -1 gemelo:
+      // no hay nada que compensar, y compensarlo de todos modos recortaría el
+      // contador de OTRA foto que sí está en vuelo (`greatest(0,…)` no distingue
+      // de quién es el crédito).
+      const incrementado = await intakeDelta(viajeId, 1);
+      if (incrementado == null) {
+        logger.error('intake.incremento_fallido', { viaje: viajeId, tenant: op.tenantId });
+        await say('No pude registrar tu foto en el orden correcto 😕. Reenvíala en un momento y, si ya escribiste *listo*, vuelve a escribirlo cuando te confirme que la recibí.');
+        return;
+      }
       try {
         const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
         if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
