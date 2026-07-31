@@ -1,8 +1,11 @@
 # Handoff — Likida / cuadra
 
-> Escrito el 29-jul-2026, actualizado sobre `e50510c`. Todo lo que dice
-> "verificado" se comprobó corriendo el comando ese día. Lo que no, va marcado.
-> **Pégale esto entero a tu agente nuevo antes de pedirle nada.**
+> Escrito el 29-jul, actualizado el **31-jul-2026** sobre `c07360a`. Todo lo que
+> dice "verificado" se comprobó corriendo el comando ese día. Lo que no, va
+> marcado. **Pégale esto entero a tu agente nuevo antes de pedirle nada.**
+>
+> Las decisiones de arquitectura ya tomadas —y por qué— están en
+> `docs/investigacion/00-DECISIONES.md`. Léelo antes de proponer integraciones.
 
 ---
 
@@ -25,8 +28,8 @@ PDF de liquidación. El contralor lo ve en un panel web.
 ## 2. Estado hoy — verificado el 29-jul-2026
 
 ```
-HEAD          e50510c   árbol limpio, pusheado a origin/master
-npm test      1128 pruebas · 1 saltada · 113 archivos     exit 0
+HEAD          c07360a   árbol limpio, pusheado a origin/master
+npm test      1161 pruebas · 1 saltada · 115 archivos     exit 0
 tsc --noEmit                                              exit 0
 eslint                                                    exit 0
 npm run build                                             exit 0
@@ -36,6 +39,20 @@ cobertura     ~81.5% líneas · ~85.5% ramas  (umbral rompe CI si baja)
 **Funciona de punta a punta con WhatsApp real.** El 28-jul se cerró el ciclo
 completo por primera vez: mensaje entrante → resolución de operador → motor →
 agente → respuesta saliente → PDF.
+
+### Dónde va cada cosa (31-jul)
+
+| | |
+|---|---|
+| **Catálogo de portales** | **37** · verificados facturando: **2** (`megasur`, `la_gas`) |
+| **Tabla permiso CRE → marca** | **12,625 permisos** (88% del padrón nacional) |
+| **Investigación de competencia** | cerrada: 1,740 fichas, 319 portales, 5 competidores |
+| **Auditorías** | 7 rondas · la 7 dejó 6 hallazgos cerrados el 30-31 jul |
+| **Al demo** | **6 días** |
+
+Los seis commits del 30-31 jul (`2f79174`..`b187427`) se revisaron uno por uno el
+31: los seis correctos. El único hueco —un `return` que no liberaba su claim— se
+cerró en `c07360a`.
 
 Se han cerrado **siete rondas de auditoría**. La 6 (completa, 12 rubros) dejó
 **5.3/10** y cerró 8 críticos y 5 altos. La 7 (ligera, 3 rubros por rotación)
