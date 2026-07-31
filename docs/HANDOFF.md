@@ -1,6 +1,6 @@
 # Handoff — Likida / cuadra
 
-> Escrito el 29-jul, actualizado el **31-jul-2026** sobre `c07360a`. Todo lo que
+> Escrito el 29-jul, actualizado el **31-jul-2026** sobre `7712249`. Todo lo que
 > dice "verificado" se comprobó corriendo el comando ese día. Lo que no, va
 > marcado. **Pégale esto entero a tu agente nuevo antes de pedirle nada.**
 >
@@ -25,16 +25,19 @@ PDF de liquidación. El contralor lo ve en un panel web.
 
 ---
 
-## 2. Estado hoy — verificado el 29-jul-2026
+## 2. Estado hoy — verificado el 31-jul-2026
 
 ```
-HEAD          c07360a   árbol limpio, pusheado a origin/master
-npm test      1161 pruebas · 1 saltada · 115 archivos     exit 0
+HEAD          7712249   árbol limpio, pusheado a origin/master
+npm test      1197 pruebas · 1 saltada · 120 archivos     exit 0
 tsc --noEmit                                              exit 0
 eslint                                                    exit 0
 npm run build                                             exit 0
-cobertura     ~81.5% líneas · ~85.5% ramas  (umbral rompe CI si baja)
+cobertura     84.8% líneas · 85.3% ramas  (umbral rompe CI si baja)
 ```
+
+> ⚠️ **HAY CUATRO MIGRACIONES ESCRITAS Y SIN APLICAR** (0027, 0031, 0032, 0033).
+> El código nuevo ya llama a funciones que la base todavía no tiene. Ver §6.
 
 **Funciona de punta a punta con WhatsApp real.** El 28-jul se cerró el ciclo
 completo por primera vez: mensaje entrante → resolución de operador → motor →
@@ -47,7 +50,8 @@ agente → respuesta saliente → PDF.
 | **Catálogo de portales** | **37** · verificados facturando: **2** (`megasur`, `la_gas`) |
 | **Tabla permiso CRE → marca** | **12,625 permisos** (88% del padrón nacional) |
 | **Investigación de competencia** | cerrada: 1,740 fichas, 319 portales, 5 competidores |
-| **Auditorías** | 7 rondas · la 7 dejó 6 hallazgos cerrados el 30-31 jul |
+| **Auditorías** | 7 rondas · los 6 hallazgos abiertos de la 7 se cerraron el 31-jul |
+| **Migraciones** | 33 escritas · **4 sin aplicar** (0027, 0031, 0032, 0033) |
 | **Al demo** | **6 días** |
 
 Los seis commits del 30-31 jul (`2f79174`..`b187427`) se revisaron uno por uno el
@@ -76,11 +80,28 @@ archivo). La de producción podía romperse entera y las 7 pruebas seguían verd
 Lo escribí yo en la ronda 6 — en la misma ronda cuyo hallazgo central era
 justamente "prueba el cable, no la función". Ya está arreglado por la routine.
 
-De los 3 críticos que la ronda 7 abrió en el rubro agéntico, **quedan dos**:
+De los 3 críticos que la ronda 7 abrió en el rubro agéntico, **queda UNO**:
 
 1. **El texto y el PDF de la misma respuesta salen de dos fotografías distintas
-   de la base**, y la foto que entra durante el cierre queda huérfana.
+   de la base**, y la foto que entra durante el cierre queda huérfana. ← el
+   único hallazgo de código abierto que queda de las siete rondas.
 2. (El de `permitidas` vacío se cerró en `e50510c`; ver abajo.)
+
+### Los seis que se cerraron el 31-jul, y lo que enseñaron
+
+`60538b3` `3fb1816` `3bf1ff8` `cb392f5` `7712249`
+
+| hallazgo | lo que resultó ser |
+|---|---|
+| `mxn()` copiada a mano | reincidente por 3 rondas y **creciendo** (3 → 8 → 11 sitios). Faltaba una red que impidiera la copia SIGUIENTE, no arreglar las conocidas |
+| contador de barrera sin TTL | el `-1` vive en un `finally`, y un `finally` no corre si el proceso muere. Dejaba el viaje **averiado para siempre** |
+| 0030 sin bloque de verificación | escribir la lista destapó otras **tres** sin comprobar (0002, 0011, 0012) |
+| `politica_gasto` sin lectores | la tabla muerta era la que **más parecía viva**: el seed afirmaba por escrito que el motor la usaba |
+| pruebas saltadas bajo `--coverage` | CI corría **solo** `--coverage`, así que dos guardias de tiempo no se ejecutaban ahí ni una vez |
+| `liberarEnvioAviso` sin ejecutar | al ejecutarla apareció algo peor: **destruía constancias buenas** del art. 16 |
+
+Cuatro de los seis no eran el bug, eran **la red que faltaba para que el bug no
+volviera**. Es el patrón que más se repite en este repo.
 
 ---
 
@@ -189,7 +210,21 @@ después del demo.
 
 ## 6. Lo que Javier tiene que hacer, y nadie más puede
 
-Estas tres bloquean cosas reales y **no son código**:
+Estas cuatro bloquean cosas reales y **no son código**:
+
+0. **`supabase db push`.** Es lo primero, porque el código ya escrito llama a
+   funciones que la base no tiene todavía. Cuatro migraciones pendientes:
+
+   | | qué pasa si no se aplica |
+   |---|---|
+   | **0031** barrera con TTL | un OCR que muera deja ese viaje avisando "liquidación corta" en cada cierre, para siempre |
+   | **0033** aviso: reserva ≠ constancia | **`liberarEnvioAviso` llama a una función que no existe**: la reserva se queda puesta y el operador NUNCA recibe su aviso. Y no se escribe ni una constancia del art. 16 |
+   | **0032** `politica_gasto` muerta | solo comentarios. Inofensiva |
+   | **0027** dedup de fotos por flota | degrada el hash del duplicado más nuevo. Correr el **bloque 12** de `verificaciones.sql` ANTES: dice exactamente qué filas toca |
+
+   La 0033 es la urgente: hasta que se aplique, el camino del aviso de privacidad
+   está **peor** que antes de arreglarlo. Después de aplicar, correr los bloques
+   13 a 17 de `supabase/verificaciones.sql` y anotar el resultado en su cabecera.
 
 1. **RFC real de la flota** en `tenant.rfc`. Hoy el seed trae `TIN010101AAA`, que
    falla el dígito verificador. Con un RFC inservible —o con el genérico
@@ -212,12 +247,14 @@ CP fiscal, régimen fiscal y uso de CFDI.
 
 ### Antes del 6-ago (en orden)
 
-1. **Los tres puntos de la sección 6.** Sin el RFC, el demo se ve mal.
-2. **Ensayar el flujo completo en vivo, tres veces.** Fotos reales + *listo* +
+1. **`supabase db push` (§6 punto 0).** Bloquea a todo lo demás: sin la 0033 el
+   aviso de privacidad no se entrega y no queda constancia.
+2. **Los otros tres puntos de la sección 6.** Sin el RFC, el demo se ve mal.
+3. **Ensayar el flujo completo en vivo, tres veces.** Fotos reales + *listo* +
    PDF recibido. No es reproducible headless; es la única prueba que falta.
-3. **`GUION_DEMO.md`** existe — revísalo contra el comportamiento de hoy, que
+4. **`GUION_DEMO.md`** existe — revísalo contra el comportamiento de hoy, que
    cambió bastante desde el 25-jul.
-4. **Nada de refactors grandes.** El repo tiene precedente de que arreglar un
+5. **Nada de refactors grandes.** El repo tiene precedente de que arreglar un
    crítico abre uno peor; a nueve días del demo, el riesgo no se paga.
 
 ### Después del demo
