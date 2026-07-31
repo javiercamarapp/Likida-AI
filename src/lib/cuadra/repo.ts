@@ -5,7 +5,6 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { TOPE_CONSULTA_MS } from './presupuesto';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/cuadra';
-import type { PoliticaGasto } from './cuadre/engine';
 import type { CodigoPendiente } from './intake/emparejar';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -79,19 +78,19 @@ export async function saveCfdiXmlRaw(tenantId: string, cfdiUuid: string, gastoId
   if (error) logger.warn('cfdi_xml.save', { err: error.message });
 }
 
-export async function getPolitica(tenantId: string): Promise<PoliticaGasto[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('politica_gasto')
-    .select('concepto, ruta, tope_monto, requiere_cfdi')
-    .eq('tenant_id', tenantId), 'getPolitica');
-  if (error) throw new Error(`politica: ${error.message}`);
-  return (data ?? []).map((r) => ({
-    concepto: r.concepto as string,
-    ruta: (r.ruta as string) || undefined,
-    topeMonto: r.tope_monto != null ? Number(r.tope_monto) : undefined,
-    requiereCfdi: Boolean(r.requiere_cfdi),
-  }));
-}
+// `getPolitica` VIVÍA AQUÍ y no la llamaba nadie. Leía `politica_gasto`, una
+// tabla con `tope_monto` y `requiere_cfdi` que el motor NUNCA consulta: la
+// política viva sale de `tenant.config.politica` (config.ts → cuadrarDesdeDB).
+//
+// Dos orígenes para el mismo hecho, y el muerto era el que MÁS parece el vivo:
+// se llama "politica_gasto", tiene una columna por cada tope, y el seed afirmaba
+// por escrito que "el motor de cuadre usa tope_monto y requiere_cfdi". Un
+// contralor que le baje el tope de diésel ahí —que es el sitio obvio— ve cómo
+// las liquidaciones lo siguen ignorando, sin un error en ningún lado.
+//
+// La 0025 ya lo había documentado en SQL; lo que faltaba era borrar el lector.
+// La tabla se queda (tiene su check de dominio, por si alguien la revive) con un
+// `comment on table` que lo dice, que es lo único que se ve desde Supabase.
 
 export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje | null> {
   const { data, error } = await acotada(supabaseAdmin()

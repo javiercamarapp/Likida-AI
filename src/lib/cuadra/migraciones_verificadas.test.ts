@@ -65,6 +65,7 @@ const EXENTAS: Record<string, string> = {
   '0020': 'columna `demora_no_imputable`. El que se leyera o no es un bug de SELECT, ya cerrado y probado en TS.',
   '0021': 'litros de diésel en la liquidación. La firma ambigua que dejó es lo peligroso, y ESO es el bloque 5 (0022).',
   '0023': 'índice de velocidad para el acumulado del ejercicio. Sin él la consulta va lenta; no cambia ningún número.',
+  '0032': 'solo `comment on table`. No hay garantía que comprobar: lo que fija —que nadie lea `politica_gasto`— se prueba en `politica_un_origen.test.ts`, que sí puede mirar el código.',
 };
 
 const migraciones = readdirSync(DIR)

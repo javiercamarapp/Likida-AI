@@ -58,9 +58,18 @@ insert into operador (id, tenant_id, terminal_id, nombre, telefono, numero_emple
 on conflict (id) do nothing;
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- POLÍTICA DE GASTOS  🔴🔴🔴 TODA INVENTADA — PARAMETRIZABLE 🔴🔴🔴
--- Estructura de transportista de carga. AJUSTA cada tope con la política real.
--- El motor de cuadre usa `tope_monto` por comprobante y `requiere_cfdi`.
+-- POLÍTICA DE GASTOS  ⚠️  ESTA TABLA NO LA LEE NADIE  ⚠️
+--
+-- Aquí decía "el motor de cuadre usa `tope_monto` por comprobante y
+-- `requiere_cfdi`", y es FALSO desde hace tiempo: la política viva sale de
+-- `tenant.config.politica` (ver `DEMO_CONFIG` en src/lib/cuadra/config.ts).
+--
+-- Se nota en estas mismas filas: aquí abajo el viático se llama `viaticos` y en
+-- la config viva se llama `alimentacion`. Son dos listas que ya se separaron.
+--
+-- Estas filas se conservan porque la tabla sigue en pie con su check de dominio
+-- (mig. 0025) por si alguien la revive, pero cambiar un tope AQUÍ no cambia
+-- ninguna liquidación. El sitio real es `tenant.config`.
 -- Nota de corredor Silao→Laredo (~800 km one-way): casetas esperadas del
 -- trayecto ≈ 6-8 plazas, ~$2,800 total 🔴 INVENTADO — documentar el set real.
 -- ═══════════════════════════════════════════════════════════════════════════

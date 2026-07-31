@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { conceptoDesdeClave, CLAVES_PEAJE } from './concepto';
 
 // Un XML que llega sin foto previa creaba el gasto con `concepto: 'diesel' | 'factura'`
@@ -41,5 +42,38 @@ describe('conceptoDesdeClave', () => {
 
   it('tolera espacios alrededor de la clave', () => {
     expect(conceptoDesdeClave(' 95111603 ', CLAVES_DIESEL, CLAVES_PEAJE)).toBe('caseta');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RONDA 7 · EL MISMO HECHO FISCAL ESTABA ESCRITO EN DOS ARCHIVOS.
+//
+// `['95111602', '95111603']` vivía aquí y otra vez en `config.ts`, y el
+// comentario de `config.ts` decía "ver intake/concepto.ts" — o sea que quien lo
+// escribió SABÍA cuál era el original y aun así lo copió.
+//
+// Es la misma familia que `mxn()` (tres rondas, 3 → 8 → 11 sitios): dos copias
+// idénticas hoy que se separan mañana. Aquí la separación cuesta el 50% de
+// acreditamiento de peaje de LIF 2026 art. 20-A, aplicado en un camino y no en
+// el otro sobre la misma flota, sin un solo error en el log.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('las claves del SAT tienen un solo origen', () => {
+  const CONFIG = readFileSync('src/lib/cuadra/config.ts', 'utf8');
+
+  it('`config.ts` importa las claves de peaje, no las reescribe', () => {
+    for (const clave of CLAVES_PEAJE) {
+      expect(CONFIG, `config.ts vuelve a escribir la clave ${clave} en vez de importarla`)
+        .not.toMatch(new RegExp(`'${clave}'`));
+    }
+    expect(CONFIG).toMatch(/clavesPeaje: CLAVES_PEAJE/);
+  });
+
+  it('y el default de la función ya no deja saltarse la config del cliente', () => {
+    // Con default, `conceptoDesdeClave(clave, combustible)` compilaba y usaba la
+    // lista de aquí en vez de la del tenant. El único llamador de producción
+    // pasa `cfg.estimulos.clavesPeaje`, así que estaba muerto — pero era un
+    // camino abierto hacia dos respuestas distintas para la misma flota.
+    const FUENTE = readFileSync('src/lib/cuadra/intake/concepto.ts', 'utf8');
+    expect(FUENTE).not.toMatch(/clavesPeaje: string\[\] =/);
   });
 });

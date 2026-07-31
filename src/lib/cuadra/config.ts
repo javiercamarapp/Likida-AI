@@ -12,6 +12,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { ConsultaFallida } from './conv';
 import { esRfcValido, rfcChecksumOk } from './intake/cfdi';
+import { CLAVES_PEAJE } from './intake/concepto';
 import type { PoliticaGasto } from './cuadre/engine';
 
 export interface UnidadConfig {
@@ -93,11 +94,11 @@ export const DEMO_CONFIG: CuadraConfig = {
     viaticosTopeFiscalDiarioMxn: 750, // LISR 28-V, alimentación nacional
     efectivoTopeMxn: 2000,            // LISR 27-III
     clavesDieselIeps: ['15101505'],   // solo diésel (la gasolina 15101514/15 NO tiene el estímulo IEPS)
-    // Verificadas en la guía de sugerencias del SAT (Sugerencia_PyS/Peaje.pdf):
-    // "Carretera o autopista o autopista de peaje interestatal", unidad C62.
-    // 93151505 queda FUERA a propósito: es genérica ("organismos administrativos")
-    // y acreditaría peaje sobre gastos que no lo son. Ver intake/concepto.ts.
-    clavesPeaje: ['95111602', '95111603'],
+    // Importadas, no copiadas. Estaban escritas a mano AQUÍ y otra vez en
+    // `intake/concepto.ts`, con este comentario diciendo "ver intake/concepto.ts"
+    // — el mismo hecho fiscal en dos sitios y uno de los dos apuntando al otro.
+    // La justificación de por qué 93151505 queda fuera vive allá, junto al valor.
+    clavesPeaje: CLAVES_PEAJE,
   },
   validacion: { fechaToleranciaDiasAntes: 30 },
 };
