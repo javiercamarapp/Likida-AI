@@ -86,6 +86,22 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       reportarProbe(e11, 'FALTA la migración 0011 (intake_delta / viaje.intake_pendientes): la barrera de ráfaga NO está activa y un "listo" puede cuadrar sobre gastos parciales. Corre `supabase db push`.');
       faltan = true;
     }
+    // Migración 0031: el TTL del MISMO contador. Se sonda leyendo la columna que
+    // la migración agrega, y aquí sí sirve —al revés que el sondeo de la 0019,
+    // que leía `cfdi_uuid`, una columna de `0001_init.sql` que responde igual con
+    // índice o sin él—: `intake_pendientes_en` NACE en la 0031, así que su
+    // ausencia es exactamente la señal. Lo que este sondeo no puede distinguir es
+    // una base con la columna y el cuerpo viejo de la función; van en el mismo
+    // archivo, que se aplica entero o no se aplica.
+    //
+    // Sin ella, un proceso que muere entre el `+1` y el `-1` deja el viaje con el
+    // contador clavado: cada "listo" posterior espera la barrera completa y le
+    // avisa al operador que su liquidación salió corta cuando estaba entera.
+    const { error: e31 } = await admin.from('viaje').select('intake_pendientes_en').limit(1);
+    if (e31) {
+      reportarProbe(e31, 'FALTA la migración 0031 (viaje.intake_pendientes_en): el contador de la barrera no expira. Un OCR que muera sin ejecutar su `finally` deja ese viaje esperando 20s y avisando "liquidación corta" en cada cierre, para siempre. Corre `supabase db push`.');
+      faltan = true;
+    }
     // Migración 0016 (bandeja de códigos pendientes). Si falta, el acercamiento
     // que llega ANTES que su ticket no se puede guardar: el gasto se queda con
     // el folio que leyó la visión —el que baila— y nadie se entera, porque el

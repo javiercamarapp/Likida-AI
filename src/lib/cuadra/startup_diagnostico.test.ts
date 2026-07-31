@@ -190,3 +190,56 @@ describe('el arranque dice TODO lo que falta, no lo primero', () => {
     expect(info).toHaveBeenCalledWith('startup.migraciones', { ok: true });
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RONDA 7 · EL CONTADOR DE LA BARRERA NO SABÍA OLVIDAR (migración 0031).
+//
+// La 0011 dejó un contador puro: `+1` al entrar la foto, `-1` en el `finally`
+// del OCR. Un `finally` no corre cuando el proceso no vuelve, y la función del
+// webhook tiene `maxDuration = 120`: si Vercel la mata por tope, por memoria o
+// por un despliegue a media ráfaga, el `+1` queda y el `-1` no llega nunca.
+//
+// A partir de ahí ese viaje queda averiado PARA SIEMPRE: cada "listo" espera los
+// 20s completos de la barrera y termina avisándole al operador que se cuadró con
+// gastos parciales sobre una liquidación que estaba entera. El aviso que existe
+// para advertir de dinero perdido se vuelve permanente y falso justo en el viaje
+// que ya sufrió una caída — el mejor sitio para enseñar a ignorarlo.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el TTL del contador de la barrera (0031)', () => {
+  /** `from` por tabla: el sondeo de la 0031 lee `viaje`, el de la 0016 `codigo_pendiente`. */
+  const porTabla = (mapa: Record<string, { error: unknown }>) =>
+    from.mockImplementation((t: string) => tabla(mapa[t] ?? { error: null }));
+
+  it('sin la columna, el arranque lo dice — y dice qué se rompe', async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    // 42703 es el `undefined_column` de Postgres, que es como contesta PostgREST
+    // a un `select` de una columna que no existe.
+    porTabla({ viaje: { error: { code: '42703', message: 'column viaje.intake_pendientes_en does not exist' } } });
+    await verificarMigracionesCriticas();
+
+    const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
+    expect(mensajes).toContain('0031');
+    // La consecuencia, no solo el número: un mensaje que solo dice "falta la
+    // 0031" no le dice a quien lo lee de madrugada si puede esperar al lunes.
+    expect(mensajes).toContain('liquidación corta');
+    expect(info).not.toHaveBeenCalledWith('startup.migraciones', { ok: true });
+  });
+
+  it('un fallo de RED en ese sondeo tampoco se reporta como migración faltante', async () => {
+    // El mismo criterio que ya rige a los otros cinco: "no pude preguntar" no es
+    // "no está". Sin código de error no hubo respuesta de la base.
+    rpc.mockResolvedValue({ data: [], error: null });
+    porTabla({ viaje: { error: { code: '', message: 'TypeError: fetch failed' } } });
+    await verificarMigracionesCriticas();
+
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('startup.migraciones_sin_verificar', expect.anything());
+  });
+
+  it('con la 0031 aplicada no inventa nada', async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    porTabla({});
+    await verificarMigracionesCriticas();
+    expect(info).toHaveBeenCalledWith('startup.migraciones', { ok: true });
+  });
+});
