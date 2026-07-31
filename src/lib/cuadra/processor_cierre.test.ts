@@ -30,6 +30,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const runAgent = vi.fn();
 const createSignedUrl = vi.fn();
+const saveConversation = vi.fn();
 const getOpenViaje = vi.fn<(tenantId: string, operadorId: string) => Promise<string | null>>(async () => 'v1');
 const saveCfdiXmlRaw = vi.fn();
 const claimMessage = vi.fn<(id: string) => Promise<'nuevo' | 'duplicado' | 'indeterminado'>>(async () => 'nuevo');
@@ -70,7 +71,8 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   getOpenViaje: (t: string, o: string) => getOpenViaje(t, o),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
-  saveConversation: vi.fn(), claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
+  saveConversation: (...a: unknown[]) => saveConversation(...a),
+  claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
   acquireViajeLock: vi.fn(async () => true),
   releaseViajeLock: vi.fn(), releaseMessageClaim: vi.fn(),
   intakeDelta: vi.fn(async () => 0), esperarIntake: vi.fn(async () => true),
@@ -110,6 +112,7 @@ vi.mock('@/lib/cuadra/intake/cfdi_xml', () => ({
 }));
 
 const { processInbound } = await import('./processor');
+const { PartialExecutionError } = await import('@/lib/llm/openrouter');
 
 const listo = { from: '5219993700779', type: 'text' as const, text: 'listo', waMessageId: 'wa1' };
 
@@ -126,10 +129,12 @@ beforeEach(() => {
   getOpenViaje.mockReset(); getOpenViaje.mockResolvedValue('v1');
   claimMessage.mockReset(); claimMessage.mockResolvedValue('nuevo');
   saveCfdiXmlRaw.mockReset();
+  saveConversation.mockReset(); saveConversation.mockResolvedValue(undefined);
   vi.stubGlobal('fetch', fetchSpy);
   fetchSpy.mockClear();
   process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
   process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
+  delete process.env.CUADRA_RECUPERAR_CIERRE_PARCIAL;
 });
 
 describe('cierre sin PDF: ni se manda un documento que no existe, ni se calla', () => {
@@ -335,5 +340,39 @@ describe('el cierre real narrado en pretérito no se desmiente a sí mismo', () 
     expect(textos()[0]).toContain('Todavía no he cerrado');
     expect(documentos()).toHaveLength(0);
     expect(logger.error).toHaveBeenCalledWith('agent.estado_falso', expect.anything());
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 7 · ALTO REINCIDENTE de ronda 6 — `ctxCerro` no se actualiza en la
+// recuperación de cierre parcial.
+//
+// `ctxCerro` es el Único campo que el log de fallo trae para distinguir "no pasó
+// nada" de "la liquidación YA se cerró y el operador se quedó sin nada". La
+// rama de recuperación de cierre parcial (activa con
+// CUADRA_RECUPERAR_CIERRE_PARCIAL=1, que .env.example recomienda ENCENDIDA)
+// ponía `closed = true` pero nunca tocaba `ctxCerro`: si algo tronaba DESPUÉS
+// de la recuperación (p. ej. `saveConversation`), el log del catch general
+// decía `cerroSinEntregar: false` sobre una liquidación que SÍ se cerró.
+//
+// Se fuerza el escenario completo: `runAgent` lanza `PartialExecutionError` con
+// `guardar_liquidacion` YA ejecutado en las tool calls parciales, y
+// `saveConversation` (lo Último que corre en el camino feliz) truena. El único
+// rastro que puede decir la verdad es el log del catch general.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('ctxCerro en la recuperación de cierre parcial (AUD-7 ALTO-1)', () => {
+  beforeEach(() => {
+    process.env.CUADRA_RECUPERAR_CIERRE_PARCIAL = '1';
+    createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://x/liq.pdf' }, error: null });
+  });
+
+  it('el log del catch general dice la verdad: la liquidación SÍ se cerró', async () => {
+    const parcial = [{ toolName: 'guardar_liquidacion', args: {}, result: { liquidacion_id: 'L1', pdf_generado: true }, durationMs: 5 }];
+    runAgent.mockRejectedValue(new PartialExecutionError('boom', new Error('boom'), parcial, 10, 10, 0));
+    // Lo último del camino feliz truena DESPUÉS de que la recuperación ya marcó
+    // el cierre: aquí es donde `ctxCerro` tenía que haber quedado en `true`.
+    saveConversation.mockRejectedValue(new Error('db down'));
+    await processInbound(listo);
+    expect(logger.error).toHaveBeenCalledWith('processInbound.fail', expect.objectContaining({ cerroSinEntregar: true }));
   });
 });
