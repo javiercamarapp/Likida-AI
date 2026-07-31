@@ -14,7 +14,8 @@
 --
 -- Última corrida: 28-jul-2026, contra el proyecto Likida. Los cuatro primeros
 -- pasaron. Los bloques 5 a 11 son de la auditoría 5 y comprueban las migraciones
--- 0022 y 0024–0029.
+-- 0022 y 0024–0029. Los bloques 13 y 14 son del 31-jul y comprueban la 0030 y la
+-- 0031 — SIN CORRER TODAVÍA contra la base, porque la 0031 no se ha aplicado.
 --
 -- ESTADO DE LAS MIGRACIONES QUE COMPRUEBAN (28-jul-2026, 22:00):
 --   · 0022, 0024, 0025, 0026, 0028 y 0029 → APLICADAS. Sus bloques (5, 6, 7,
@@ -26,8 +27,19 @@
 --     degrada el hash del más nuevo. El bloque 8 reporta `f` mientras siga así,
 --     y eso es lo correcto. El bloque 12 dice EXACTAMENTE qué filas toca antes
 --     de decidir.
+--   · 0030 (`indices_faltantes`) → APLICADA. El bloque 13 se escribió DESPUÉS,
+--     el 31-jul: la única migración que existe para que un chequeo dejara de
+--     mentir era, ella misma, la única sin comprobar.
+--   · 0031 (TTL del contador de la barrera) → ESCRITA Y NO APLICADA. El bloque
+--     14 va a fallar con `column intake_pendientes_en does not exist` hasta el
+--     `supabase db push`, y ESE es su resultado correcto mientras tanto.
 -- Contra una base sin las migraciones, los bloques 6 a 11 reportan `f` — que es
 -- justamente la lectura útil: dicen qué garantía falta.
+--
+-- QUÉ MIGRACIONES NO TIENEN BLOQUE, Y POR QUÉ: `migraciones_verificadas.test.ts`
+-- lo mantiene honesto. Cada migración está o comprobada aquí, o exenta con una
+-- razón escrita. Sin esa lista, la respuesta a "¿está cubierta la 00XX?" se
+-- vuelve "creo que sí" — que fue exactamente lo que pasó con la 0030.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -414,4 +426,153 @@ begin
   end if;
 
   raise exception E'FOTOS REPETIDAS  grupos=%  → la 0027 degradará a NULL el img_hash del MÁS NUEVO de cada grupo (el valor se guarda en ocr_extra.imgHashDuplicado):%\n\nRevísalos uno por uno: la base no sabe si es un ensayo del demo o el mismo ticket cobrado dos veces.', n, msg;
+end $$;
+
+
+-- ── 13. La sonda de índices dice la verdad (mig. 0030) ──────────────────────
+-- La 0030 existe porque el arranque AFIRMABA verificar el unique de
+-- `gasto.cfdi_uuid` y no podía: sondeaba `select cfdi_uuid from gasto limit 1`,
+-- y esa columna es de `0001_init.sql` — responde igual de bien en una base donde
+-- la 0019 nunca se aplicó. Se cambió por `indices_faltantes`, que mira
+-- `pg_indexes`, y ese cambio se quedó SIN bloque aquí: la única migración que
+-- existe para que un chequeo deje de mentir era la única sin comprobar.
+--
+-- Un falso negativo aquí no rompe nada visible: deja que el arranque diga `ok`
+-- sobre una base que liquida el mismo CFDI dos veces y acredita su IVA doble.
+do $$
+declare
+  inventado text[]; real_falta text[]; ninguno text[];
+begin
+  -- Un índice que NO existe tiene que salir en la lista.
+  inventado := indices_faltantes(array['uq_no_existe_jamas_zzz']);
+  -- Uno que SÍ existe no puede salir. Si `uq_gasto_cfdi_uuid` aparece aquí, la
+  -- 0019 no está aplicada y es una alarma de dinero, no de esta prueba.
+  real_falta := indices_faltantes(array['uq_gasto_cfdi_uuid']);
+  -- La lista vacía devuelve vacío, no null: el TS hace `faltantes.length`.
+  ninguno := indices_faltantes(array[]::text[]);
+
+  raise exception E'INDICES_FALTANTES  ve-el-que-falta=%  calla-el-que-existe=%  vacio-no-es-null=%   (esperado t / t / t)',
+    inventado = array['uq_no_existe_jamas_zzz'],
+    real_falta = '{}'::text[],
+    ninguno is not null and cardinality(ninguno) = 0;
+end $$;
+
+
+-- ── 14. El contador de la barrera (mig. 0011 + 0031) ───────────────────────
+-- La 0011 tampoco tenía bloque, y salió a la luz al escribir la lista de
+-- `migraciones_verificadas.test.ts` — la cuarta que aparece por escribirla.
+-- El `-1` del OCR vive en un `finally` (processor.ts) y un `finally` no corre si
+-- el proceso no vuelve. Con `maxDuration = 120` en el webhook, una función que
+-- Vercel mata por tope, por memoria o por un despliegue a media ráfaga deja el
+-- `+1` escrito para siempre.
+--
+-- Desde ese momento ese viaje queda averiado de forma permanente: cada "listo"
+-- espera los 20s completos de la barrera y le avisa al operador que se cuadró
+-- con gastos parciales sobre una liquidación que estaba entera.
+--
+-- El olvido tiene que ocurrir también en el SONDEO (`p_delta = 0`), que es como
+-- lo llama `esperarIntake`: si solo ocurriera al incrementar, la barrera no se
+-- abriría hasta que llegara una foto nueva — y después de una caída puede que no
+-- llegue ninguna.
+do $$
+declare
+  v_t uuid; v_o uuid; v_v uuid;
+  huerfano int; tras_sondeo int; vivo int; sellado boolean;
+  nunca_negativo int; inexistente int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF BARRERA') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t,'P','520000009013') returning id into v_o;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o) returning id into v_v;
+
+  -- ── La garantía propia de la 0011 ────────────────────────────────────────
+  -- El contador NO puede bajar de 0. Un `-1` de más —un reintento de Meta que
+  -- reprocesa un intake ya contado— dejaría el contador en negativo, y entonces
+  -- las fotos siguientes tendrían que subirlo desde ahí: la barrera se abriría
+  -- con OCR todavía en vuelo, que es exactamente lo que la 0011 vino a impedir.
+  nunca_negativo := intake_delta(v_v, -3);
+  -- Y un viaje que no existe devuelve 0, no null: `intakeDelta` distingue null
+  -- ("no pude preguntar", fail-closed) de 0 ("no hay nada en vuelo").
+  inexistente := intake_delta('00000000-0000-0000-0000-000000000000'::uuid, 0);
+
+  -- ── El TTL, que es lo que agrega la 0031 ─────────────────────────────────
+  -- Una foto entra y su proceso muere: queda el +1 sin su -1.
+  huerfano := intake_delta(v_v, 1);
+  -- Se envejece el sello a mano para no esperar diez minutos reales.
+  update viaje set intake_pendientes_en = now() - interval '11 minutes' where id = v_v;
+
+  -- El sondeo de `esperarIntake`. Tiene que ver 0 y abrir la barrera.
+  tras_sondeo := intake_delta(v_v, 0);
+
+  -- Y un contador RECIÉN sellado no se puede tirar: eso reabriría la barrera
+  -- sobre fotos que sí están en vuelo, que es el bug que la 0011 vino a cerrar.
+  vivo := intake_delta(v_v, 1);
+  select intake_pendientes_en > now() - interval '1 minute' into sellado
+    from viaje where id = v_v;
+  vivo := intake_delta(v_v, 0);
+
+  raise exception E'BARRERA  nunca-negativo=%  viaje-inexistente=%  huerfano-cuenta=%  sondeo-lo-olvida=%  sella-al-incrementar=%  reciente-sobrevive=%   (esperado 0 / 0 / 1 / 0 / t / 1)',
+    nunca_negativo, inexistente, huerfano, tras_sondeo, sellado, vivo;
+end $$;
+
+
+-- ── 15. Un mensaje de Meta se procesa una vez (mig. 0002) ───────────────────
+-- Meta reintenta el webhook. El `insert ... on conflict` sobre la llave primaria
+-- de `wa_mensaje_procesado` ES el claim atómico: sin el unique, dos entregas del
+-- mismo mensaje en paralelo pasan las dos y el gasto se duplica.
+--
+-- No tenía bloque. Se descubrió al escribir la lista de
+-- `migraciones_verificadas.test.ts`, que es justo para lo que sirve la lista.
+do $$
+declare
+  segundo_rebota boolean := false;
+  claim_ok boolean;
+begin
+  insert into wa_mensaje_procesado (wa_message_id) values ('ZZZ_VERIF_IDEMP_0002');
+
+  begin
+    insert into wa_mensaje_procesado (wa_message_id) values ('ZZZ_VERIF_IDEMP_0002');
+  exception when unique_violation then segundo_rebota := true;
+  end;
+
+  -- Y la forma que usa el código: `on conflict do nothing` no inserta y no truena.
+  with i as (
+    insert into wa_mensaje_procesado (wa_message_id) values ('ZZZ_VERIF_IDEMP_0002')
+    on conflict do nothing returning 1
+  ) select count(*) = 0 into claim_ok from i;
+
+  raise exception E'IDEMPOTENCIA  segundo-rebota=%  on-conflict-no-inserta=%   (esperado t / t)',
+    segundo_rebota, claim_ok;
+end $$;
+
+
+-- ── 16. Lo interno no es ejecutable por un anónimo (mig. 0012) ──────────────
+-- Este NO inserta nada: se lee el catálogo, porque un `do $$` corre como el
+-- dueño y bypasea RLS — comprobarlo insertando probaría el privilegio de quien
+-- corre la prueba, no la garantía.
+--
+-- Lo que protege: sin RLS en `wa_mensaje_procesado`, un anónimo puede INSERTAR
+-- ids falsos por PostgREST y hacer que mensajes reales se descarten como
+-- duplicados. Los gastos de ese operador desaparecen sin un solo error. Y sin
+-- revocar las RPC, un anónimo suelta el mutex de un viaje ajeno o le mueve el
+-- contador de la barrera.
+--
+-- `revoke ... from anon` NO basta y por eso se revoca de PUBLIC: las funciones
+-- se otorgan a PUBLIC por defecto, y `anon` hereda de ahí.
+do $$
+declare
+  rls_on boolean; anon_intake boolean; anon_lock boolean; anon_unlock boolean;
+  svc_intake boolean;
+begin
+  select relrowsecurity into rls_on
+    from pg_class where oid = 'public.wa_mensaje_procesado'::regclass;
+
+  anon_intake := has_function_privilege('anon', 'public.intake_delta(uuid,integer)', 'execute');
+  anon_lock   := has_function_privilege('anon', 'public.try_lock_viaje(uuid,integer)', 'execute');
+  anon_unlock := has_function_privilege('anon', 'public.unlock_viaje(uuid)', 'execute');
+  -- Y el pipeline SÍ tiene que poder: una revocación de más rompe la barrera
+  -- entera, que es un fallo tan caro como el hueco que cierra.
+  svc_intake  := has_function_privilege('service_role', 'public.intake_delta(uuid,integer)', 'execute');
+
+  raise exception E'PERMISOS  rls-en-wa_mensaje=%  anon-intake=%  anon-lock=%  anon-unlock=%  service-role-intake=%   (esperado t / f / f / f / t)',
+    rls_on, anon_intake, anon_lock, anon_unlock, svc_intake;
 end $$;
