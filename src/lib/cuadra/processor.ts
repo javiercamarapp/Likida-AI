@@ -575,13 +575,30 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // llegan aquí — `acquireViajeLock` es fail-open ante RPC ausente o fallo
     // persistente, y devuelve `true`.
     //
-    // Y se abandona EN SILENCIO: mandar "espérame tantito" sería un segundo
-    // mensaje que el operador no pidió, justo cuando el otro turno ya le está
-    // escribiendo.
+    // AUDITORÍA 7, ALTO — SE ABANDONABA EN SILENCIO Y PARA SIEMPRE. El comentario
+    // que justificaba el `return` tenía razón en que "otro turno va a
+    // responder" — pero a SU mensaje, no al que se acaba de abandonar. Con dos
+    // mensajes de texto en la ventana del agente (p. ej. "¿cuánto llevo?" y
+    // "listo" 3s después), el segundo nunca corría el agente, nunca entraba a
+    // `wa_conversacion.estado.turns`, y seguía reclamado en
+    // `wa_mensaje_procesado` PARA SIEMPRE (este `return` no pasaba por
+    // `releaseMessageClaim`). El operador veía sus dos palomitas azules y
+    // ninguna respuesta a ese mensaje específico — el modo de falla "se trabó"
+    // sin que nadie diga que se trabó.
+    //
+    // Fix acotado (la cola de verdad —con reintento real del turno perdido— es
+    // FASE 3, deuda documentada en GUIA_BUILD.md): se AVISA en vez de callar, y
+    // se libera el claim para que el mensaje no quede atascado. No resuelve
+    // "el segundo mensaje se contesta", pero sí "el operador sabe que no se
+    // perdió, y puede volver a mandarlo".
     if (await acquireViajeLock(viajeId, { maxWaitMs: reloj.acotar(12_000) })) {
       lockedViaje = viajeId;
     } else {
       logger.warn('viaje.lock_ocupado_abandona', { viaje: viajeId, tenant: op.tenantId, restanteMs: reloj.restante() });
+      try {
+        await say('Un momento, todavía estoy procesando tu mensaje anterior 🙏. En cuanto termine, vuelve a escribirme esto si sigue pendiente.');
+      } catch { /* best-effort: el aviso es una cortesía, no puede tumbar la liberación del claim */ }
+      if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
       return;
     }
 
