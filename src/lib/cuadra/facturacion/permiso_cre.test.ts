@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   permisoDelTicket, permisosDelTicket, identificarPorPermiso,
   normalizarPermiso, coberturaTablaCre,
@@ -111,16 +112,54 @@ describe('los TRES estados, que es lo que impide el bug caro', () => {
 });
 
 describe('la tabla', () => {
-  it('tiene miles de permisos y cientos de marcas', () => {
+  it('cubre la mayor parte del padrón nacional', () => {
     const { permisos, marcas } = coberturaTablaCre();
-    expect(permisos).toBeGreaterThan(4000);
-    expect(marcas).toBeGreaterThan(500);
+    expect(permisos).toBeGreaterThan(12_000);
+    expect(marcas).toBeGreaterThan(3_000);
   });
 
-  it('cubre menos de la mitad del país, y por eso "desconocido" es lo normal', () => {
-    // ~14,300 estaciones en el padrón. Si algún día esto falla porque la tabla
-    // creció, es una buena noticia: hay que subir el número, no relajar la
-    // semántica de los tres estados.
+  it('pero NUNCA lo cubre entero, y "desconocido" sigue siendo un estado real', () => {
+    // ~14,300 estaciones en el padrón, y el padrón cambia: abren y cierran
+    // estaciones. Aunque la cosecha llegara al 100% hoy, mañana habría permisos
+    // nuevos. Por eso los tres estados no son un andamio temporal.
     expect(coberturaTablaCre().permisos).toBeLessThan(14_301);
+  });
+});
+
+// ── LO QUE LA TABLA NO PUEDE HACER, MEDIDO CONTRA LOS DOS TICKETS REALES ────
+//
+// Al cerrar la cosecha se probó con los dos permisos que tenemos en papel y las
+// dos respuestas fueron malas de formas distintas: una no sabe, la otra miente
+// porque la fuente tiene la marca equivocada. Estas pruebas fijan que eso es
+// TOLERABLE —porque el llamador no decide con esto— y que no se puede degradar
+// más.
+describe('la marca es una pista, no un veredicto', () => {
+  it('el permiso de La Gas responde PEMEX, y la fuente está mal', () => {
+    // El ticket impreso dice "LA GAS BOLICHE", RFC AES0706049E2. La ficha de
+    // `gasolinerasmx.mx` dice Pemex, con la MISMA dirección que el ticket. Es la
+    // misma estación con la marca equivocada en el origen.
+    //
+    // Se deja documentado en vez de parchado: un caso especial escondería que la
+    // fuente tiene errores, y hay 12,624 permisos más de la misma fuente.
+    const r = identificarPorPermiso('PERMISO: PL/7814/EXP/ES/2015');
+    expect(r.estado).toBe('reconocido');
+    if (r.estado === 'reconocido') expect(r.marca).toBe('PEMEX'); // ← mal, y por eso esto no decide nada
+  });
+
+  it('el de G500 responde desconocido, que es honesto', () => {
+    // Su ficha traía la compañía vacía y el extractor tomaba el campo siguiente
+    // (`Ciudad/Municipio Tixkokob`). El generador descarta ese patrón: es mejor
+    // no saber que poner un municipio donde va una marca.
+    expect(identificarPorPermiso('PERMISO CRE : PL/22384/EXP/ES/2019').estado).toBe('desconocido');
+  });
+
+  it('y por eso identificarComercio NO usa esta tabla', () => {
+    // La decisión de a qué portal se manda al operador sale de tres señales del
+    // propio papel —dominio del QR, RFC del emisor, texto impreso—, no de aquí.
+    // Si algún día alguien conecta la tabla a esa decisión, esta prueba tiene
+    // que fallar primero.
+    const fuente = readFileSync('src/lib/cuadra/facturacion/identificar.ts', 'utf8');
+    expect(fuente).not.toContain('permiso_cre');
+    expect(fuente).not.toContain('identificarPorPermiso');
   });
 });
