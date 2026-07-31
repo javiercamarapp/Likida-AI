@@ -36,12 +36,20 @@ insert into tenant (id, nombre, rfc, ciudad, plan,
    -- estos mismos datos. El responsable sigue siendo la flota (art. 14); Likida
    -- solo aloja el documento como persona encargada, y el texto lo dice.
    --
-   -- En producción hay que reemplazar el host por el dominio real: en localhost
-   -- `revisarAvisoIntegral` lo marca `inservible` a propósito, así que en dev el
-   -- operador recibe el aviso degradado — que es lo correcto.
+   -- El host es `likida.ai` porque HOY ese dominio sirve esta app: se comprobó
+   -- con curl el 31-jul (título de `layout.tsx`, `/acceso` 200, y el webhook
+   -- devolviendo 403 al token malo, o sea que la ruta existe). La primera
+   -- versión de esta línea decía `cuadra.mx`, que NO es nuestro: es un dominio
+   -- parkeado que redirige a su página de venta. Habría mandado al operador al
+   -- anuncio de un desconocido desde su aviso de privacidad.
+   --
+   -- Si el software se muda a `app.likida.ai` —porque la landing se quede con
+   -- el ápice— esta línea y `NEXT_PUBLIC_APP_URL` se mudan con él. En localhost
+   -- `revisarAvisoIntegral` marca la liga `inservible` a propósito, así que en
+   -- dev el operador recibe el aviso degradado, que es lo correcto.
    'TRANSPORTES INNOVATIVOS SA DE CV',
    'Carretera Silao-Romita Km 4.5, Parque Industrial, 36100 Silao, Guanajuato',
-   'https://cuadra.mx/aviso/11111111-1111-1111-1111-111111111111')
+   'https://likida.ai/aviso/11111111-1111-1111-1111-111111111111')
 on conflict (id) do update set
   -- Se actualiza aunque el tenant ya exista: el `do nothing` de antes dejaba a
   -- las flotas ya sembradas sin los campos nuevos para siempre.
