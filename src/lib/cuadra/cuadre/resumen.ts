@@ -3,6 +3,7 @@
 // llamado la tool. Los números salen del motor, nunca del modelo.
 
 import { LEYENDA_CORTA } from './leyendas';
+import { litros } from '@/lib/utils';
 import type { Liquidacion, TipoDiferencia } from '@/types/cuadra';
 
 const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
@@ -77,7 +78,10 @@ export function resumenCuadre(
   // Likida le enseña a una flota, no aparecían en el canal por el que se vende.
   if (liq.litrosDieselAcreditables > 0 || liq.ivaAcreditable > 0 || liq.peajeAcreditable > 0) {
     lines.push('', 'Acreditable (recuperable):');
-    if (liq.litrosDieselAcreditables > 0) lines.push(`• Diésel elegible para el estímulo de IEPS: ${liq.litrosDieselAcreditables} L`);
+    // AUDITORÍA 7 · reincidente por cuarta ronda: se usa la MISMA `litros()` de
+    // `utils.ts` que ya formatean el PDF (`acreditable.ts`) y el panel
+    // (`formato.ts`) — una sola fuente de formato, no tres copias a mano.
+    if (liq.litrosDieselAcreditables > 0) lines.push(`• Diésel elegible para el estímulo de IEPS: ${litros(liq.litrosDieselAcreditables)}`);
     if (liq.ivaAcreditable > 0) lines.push(`• IVA: ${mxn(liq.ivaAcreditable)}`);
     if (liq.peajeAcreditable > 0) lines.push(`• Peaje 50%: ${mxn(liq.peajeAcreditable)}`);
   }

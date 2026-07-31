@@ -114,4 +114,18 @@ describe('resumenCuadre — los acreditables del mensaje son los del motor', () 
     expect(texto).toContain('• IVA: $1,116.40');
     expect(texto).toContain('• Peaje 50%: $500.00');
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 7 · REINCIDENTE POR CUARTA RONDA — el mensaje de WhatsApp
+  // interpolaba `liq.litrosDieselAcreditables` crudo, mientras el PDF
+  // (`acreditable.ts:95`) y el panel (`utils.ts:48`) usan `toLocaleString`. Con
+  // menos de 1,000 L no divergen (sin separador de millares que agregar); un
+  // viaje real de carga federal cruza ese umbral sin esfuerzo, y ahí WhatsApp
+  // decía "1850.5 L" y el PDF "1,850.5 L": el mismo número, dos formatos.
+  // ═══════════════════════════════════════════════════════════════════════════
+  it('litros por encima de 1,000: mismo separador de millares que el PDF y el panel', () => {
+    const texto = resumenCuadre(oro({ litrosDieselAcreditables: 1850.5 }), true, 'contralor');
+    expect(texto).toContain('1,850.5 L');
+    expect(texto).not.toContain('1850.5 L');
+  });
 });
