@@ -222,21 +222,36 @@ migraciones se aplicaron el 31-jul y el aviso de privacidad ya tiene su liga
    `XAXX010101000`— **toda factura sale "a revisión"**. Es el comportamiento
    correcto, pero si no se captura uno válido, **el demo enseña todo en "por
    confirmar"**. Ésta es la que puede morder en la sala.
-2. **Decidir dónde vive el software.** Hoy `likida.ai` sirve ESTA app (título de
-   `layout.tsx`, `/acceso` 200, webhook 403 al token malo = la ruta existe), y la
-   landing de `~/javiercamarapp/likida-web` **no está desplegada en ningún lado**.
-   Si `likida.ai` pasa a ser la landing, la app se muda —lo natural es
-   `app.likida.ai`— y con ella **la Callback URL del webhook en el panel de
-   Meta**. Mover el ápice sin repuntar Meta deja de entrar todo mensaje, sin un
-   error visible de este lado.
+2. **Mudar el software a `app.likida.ai`** (decidido el 31-jul). Hoy `likida.ai`
+   sirve ESTA app y la landing de `~/javiercamarapp/likida-web` no está
+   desplegada en ningún lado.
 
-   Orden seguro: añadir `app.likida.ai` al MISMO proyecto de Vercel (los dos
-   dominios sirviendo la app), repuntar Meta y probar un mensaje, y solo entonces
-   mover `likida.ai` a la landing. `NEXT_PUBLIC_APP_URL` y la liga del aviso en
-   `seed.sql` se mudan al final.
+   ```
+   likida.ai       → landing (likida-web)
+   app.likida.ai   → software (este repo)
+                       /acceso          login  ← YA EXISTE, no hace falta /login
+                       /dashboard       panel
+                       /aviso/<tenant>  aviso público
+                       /api/webhook/…   ← repuntar en Meta
+   ```
 
-   `/acceso` YA es el login (con passcode, `proxy.ts` lo cablea). No hace falta
-   construir `/login`.
+   **EL ORDEN IMPORTA, y este es el que no rompe nada:**
+
+   1. Añadir `app.likida.ai` al MISMO proyecto de Vercel y el CNAME en el DNS.
+      Los dos dominios sirviendo la app: nada se cae.
+   2. Repuntar la **Callback URL** en el panel de Meta a
+      `https://app.likida.ai/api/webhook/whatsapp` y **probar un mensaje real**.
+   3. Cambiar `NEXT_PUBLIC_APP_URL` en Vercel y correr:
+      `update tenant set url_aviso_privacidad = 'https://app.likida.ai/aviso/' || id::text;`
+   4. Solo entonces, apuntar `likida.ai` a la landing.
+
+   **Mover el ápice antes del paso 2 deja de entrar TODO mensaje**, y de este
+   lado no aparece ningún error: Meta simplemente deja de llamar. A seis días
+   del demo es el fallo más caro que hay disponible.
+
+   El paso 3 cambia el texto del aviso → cambia su versión → el operador recibe
+   el aviso nuevo en su siguiente mensaje. Eso es el art. 15 fr. VI funcionando,
+   no un efecto secundario.
 
    Opcional pero pendiente: `tenant.contacto_privacidad` (art. 29). Mientras esté
    vacío, el aviso integral **lo dice** en vez de inventar un contacto.
