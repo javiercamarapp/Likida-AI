@@ -36,8 +36,9 @@ npm run build                                             exit 0
 cobertura     84.8% líneas · 85.3% ramas  (umbral rompe CI si baja)
 ```
 
-> ⚠️ **HAY CUATRO MIGRACIONES ESCRITAS Y SIN APLICAR** (0027, 0031, 0032, 0033).
-> El código nuevo ya llama a funciones que la base todavía no tiene. Ver §6.
+> **Migraciones: 0031, 0032 y 0033 aplicadas y verificadas contra la base real el
+> 31-jul** (bloques 13, 14, 16 y 17 de `supabase/verificaciones.sql`, salida
+> copiada en su cabecera). Queda **solo la 0027**, que degrada datos — ver §6.
 
 **Funciona de punta a punta con WhatsApp real.** El 28-jul se cerró el ciclo
 completo por primera vez: mensaje entrante → resolución de operador → motor →
@@ -51,7 +52,7 @@ agente → respuesta saliente → PDF.
 | **Tabla permiso CRE → marca** | **12,625 permisos** (88% del padrón nacional) |
 | **Investigación de competencia** | cerrada: 1,740 fichas, 319 portales, 5 competidores |
 | **Auditorías** | 7 rondas · los 6 hallazgos abiertos de la 7 se cerraron el 31-jul |
-| **Migraciones** | 33 escritas · **4 sin aplicar** (0027, 0031, 0032, 0033) |
+| **Migraciones** | 33 escritas · **1 sin aplicar** (0027, la que degrada datos) |
 | **Al demo** | **6 días** |
 
 Los seis commits del 30-31 jul (`2f79174`..`b187427`) se revisaron uno por uno el
@@ -212,19 +213,26 @@ después del demo.
 
 Estas cuatro bloquean cosas reales y **no son código**:
 
-0. **`supabase db push`.** Es lo primero, porque el código ya escrito llama a
-   funciones que la base no tiene todavía. Cuatro migraciones pendientes:
+0. **Decidir la 0027**, que es la única migración que queda sin aplicar. Las
+   otras tres (0031, 0032, 0033) se aplicaron y verificaron el 31-jul.
 
-   | | qué pasa si no se aplica |
-   |---|---|
-   | **0031** barrera con TTL | un OCR que muera deja ese viaje avisando "liquidación corta" en cada cierre, para siempre |
-   | **0033** aviso: reserva ≠ constancia | **`liberarEnvioAviso` llama a una función que no existe**: la reserva se queda puesta y el operador NUNCA recibe su aviso. Y no se escribe ni una constancia del art. 16 |
-   | **0032** `politica_gasto` muerta | solo comentarios. Inofensiva |
-   | **0027** dedup de fotos por flota | degrada el hash del duplicado más nuevo. Correr el **bloque 12** de `verificaciones.sql` ANTES: dice exactamente qué filas toca |
+   La 0027 pone en NULL el `img_hash` del duplicado más nuevo de cada grupo. Hoy
+   hay **un solo grupo**, medido con el bloque 12:
 
-   La 0033 es la urgente: hasta que se aplique, el camino del aviso de privacidad
-   está **peor** que antes de arreglarlo. Después de aplicar, correr los bloques
-   13 a 17 de `supabase/verificaciones.sql` y anotar el resultado en su cabecera.
+   ```
+   tenant 11111111-… · hash 250a4e5b34ec… · 2 gastos en 2 viajes · $398.00
+     823be0 (viaje 0000ff, $199.00, 28-Jul 21:41)
+     e00860 (viaje 0000fe, $199.00, 28-Jul 22:48)
+   ```
+
+   Mismo importe, misma flota demo, 67 minutos de diferencia, el día en que se
+   cerró el flujo de punta a punta por primera vez. **Se lee como un ensayo**, no
+   como el mismo ticket cobrado contra dos anticipos — pero esa lectura es de
+   quien mira la lista, no de la base. El valor viejo NO se pierde: queda en
+   `ocr_extra.imgHashDuplicado`, así que aplicarla es reversible.
+
+   Sin ella, una foto puede comprobarse en DOS viajes de la misma flota. Con más
+   de un cliente eso es un agujero de dinero; con la flota demo es un ensayo.
 
 1. **RFC real de la flota** en `tenant.rfc`. Hoy el seed trae `TIN010101AAA`, que
    falla el dígito verificador. Con un RFC inservible —o con el genérico
@@ -247,19 +255,17 @@ CP fiscal, régimen fiscal y uso de CFDI.
 
 ### Antes del 6-ago (en orden)
 
-1. **`supabase db push` (§6 punto 0).** Bloquea a todo lo demás: sin la 0033 el
-   aviso de privacidad no se entrega y no queda constancia.
-2. **Los otros tres puntos de la sección 6.** Sin el RFC, el demo se ve mal.
-3. **Ensayar el flujo completo en vivo, tres veces.** Fotos reales + *listo* +
+1. **Los tres puntos de la sección 6.** Sin el RFC, el demo se ve mal. (El punto
+   0, las migraciones, ya está hecho salvo la 0027.)
+2. **Ensayar el flujo completo en vivo, tres veces.** Fotos reales + *listo* +
    PDF recibido. No es reproducible headless; es la única prueba que falta.
-4. **`GUION_DEMO.md`** existe — revísalo contra el comportamiento de hoy, que
+3. **`GUION_DEMO.md`** existe — revísalo contra el comportamiento de hoy, que
    cambió bastante desde el 25-jul.
-5. **Nada de refactors grandes.** El repo tiene precedente de que arreglar un
+4. **Nada de refactors grandes.** El repo tiene precedente de que arreglar un
    crítico abre uno peor; a nueve días del demo, el riesgo no se paga.
 
 ### Después del demo
 
-- **Aplicar la 0027** (dedup de fotos por tenant).
 - **Auth por usuario** (Supabase Auth + RLS con `auth.uid()`). Hoy el panel es
   UN passcode compartido para todos: no hay identidad, así que cortarle el acceso
   a una persona es imposible por construcción. **Es bloqueante de segundo
