@@ -17,11 +17,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Los tres arneses que ejecutan `processInbound` mockean `liberarEnvioAviso` con
 // un `vi.fn()` y ninguno comprueba que se llame. La función existía sin que
 // nadie la corriera nunca.
+//
+// ── RONDA 7: ESTE ARNÉS TAMPOCO LA EJECUTA ────────────────────────────────
+//
+// Lo que se comprueba aquí es la ORQUESTACIÓN —qué llama el processor y en qué
+// orden—, con las tres funciones del aviso mockeadas. Sigue sin correr una sola
+// línea de sus cuerpos, y eso es correcto para lo que este archivo mide; lo que
+// no era correcto era creer que con esto quedaba cubierto. Los cuerpos corren en
+// `repo_aviso.test.ts` y las semánticas del SQL en el bloque 17 de
+// `supabase/verificaciones.sql`.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const sendText = vi.fn();
 const reclamarEnvioAviso = vi.fn();
 const liberarEnvioAviso = vi.fn(async () => {});
+const confirmarEnvioAviso = vi.fn(async () => {});
 const getDatosResponsable = vi.fn();
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
@@ -29,7 +39,7 @@ vi.mock('@/lib/meta/client', () => ({ sendText, sendDocument: vi.fn(), verifySig
 vi.mock('@/lib/logger', () => ({ logger }));
 vi.mock('./repo', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
-  getDatosResponsable, reclamarEnvioAviso, liberarEnvioAviso,
+  getDatosResponsable, reclamarEnvioAviso, confirmarEnvioAviso, liberarEnvioAviso,
 }));
 
 const { ponerAvisoADisposicion } = await import('./processor');
@@ -42,6 +52,7 @@ const RESPONSABLE = {
 
 beforeEach(() => {
   sendText.mockReset(); reclamarEnvioAviso.mockReset(); liberarEnvioAviso.mockReset();
+  confirmarEnvioAviso.mockReset(); confirmarEnvioAviso.mockResolvedValue(undefined);
   getDatosResponsable.mockReset();
   logger.info.mockReset(); logger.error.mockReset();
   getDatosResponsable.mockResolvedValue(RESPONSABLE);
@@ -56,6 +67,29 @@ describe('la constancia del aviso solo se conserva si el mensaje salió', () => 
     expect(ok).toBe(true);
     expect(liberarEnvioAviso).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith('privacidad.aviso_enviado', expect.objectContaining({ id: 'wamid.OK1' }));
+  });
+
+  it('y la constancia se escribe DESPUÉS del envío, con la versión del texto', () => {
+    // El orden es el hallazgo entero: hasta la 0033 la constancia la escribía la
+    // reserva, ANTES de mandar. Por eso soltarla borraba la prueba de un aviso
+    // anterior que sí se había entregado.
+    sendText.mockResolvedValue('wamid.OK1');
+    return ponerAvisoADisposicion('t1', 'op1', '5219990000001').then(() => {
+      expect(confirmarEnvioAviso).toHaveBeenCalledTimes(1);
+      const [tenant, operador, version] = confirmarEnvioAviso.mock.calls[0] as unknown as [string, string, string];
+      expect([tenant, operador]).toEqual(['t1', 'op1']);
+      // La versión es un hash del texto (`versionAviso`), no una constante.
+      expect(version).toMatch(/^[0-9a-z]+$/);
+      expect(sendText.mock.invocationCallOrder[0])
+        .toBeLessThan(confirmarEnvioAviso.mock.invocationCallOrder[0]);
+    });
+  });
+
+  it('si Meta no entrega, la constancia NO se escribe', () => {
+    sendText.mockResolvedValue(null);
+    return ponerAvisoADisposicion('t1', 'op1', '5219990000009').then(() => {
+      expect(confirmarEnvioAviso).not.toHaveBeenCalled();
+    });
   });
 
   it('si Meta NO entrega, la constancia se LIBERA — es la línea sin cobertura', async () => {

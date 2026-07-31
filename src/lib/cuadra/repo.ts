@@ -445,12 +445,19 @@ export async function getDatosResponsable(
 }
 
 /**
- * Deja constancia de que se puso el aviso a disposición. Devuelve `true` si ESTE
- * llamado fue el que la puso — o sea, si toca enviarlo.
+ * RESERVA el envío del aviso. Devuelve `true` si ESTE llamado ganó la reserva —
+ * o sea, si le toca enviarlo.
  *
- * El claim vive en SQL (igual que en la 0017): el primer mensaje puede llegar
- * por dos caminos a la vez y sin claim el operador recibiría el aviso dos o tres
- * veces seguidas.
+ * NO deja constancia: eso es `confirmarEnvioAviso`, y solo tras un envío que
+ * Meta acusó. Hasta la 0033 esta función escribía las dos cosas en la misma
+ * fila, y de ahí salían los dos fallos: una constancia falsa cuando el envío no
+ * salía, y la DESTRUCCIÓN de una constancia buena cuando el aviso cambiaba de
+ * versión y el reenvío fallaba.
+ *
+ * La reserva vive en SQL (igual que en la 0017): el primer mensaje puede llegar
+ * por dos caminos a la vez y sin ella el operador recibiría el aviso dos o tres
+ * veces seguidas. Expira a los 5 minutos, para que un proceso que muera entre
+ * reservar y confirmar no deje a un operador sin aviso para siempre.
  *
  * Se reenvía cuando la versión cambia: el art. 15 fr. VI obliga a comunicar los
  * cambios al aviso.
@@ -470,25 +477,69 @@ export async function reclamarEnvioAviso(
 }
 
 /**
- * Deshace la reserva del aviso cuando el envío NO salió.
+ * Deja CONSTANCIA del art. 16 de la LFPDPPP: se le puso el aviso a disposición.
  *
- * La reserva tiene que ir ANTES de enviar —si no, el primer mensaje llega por
- * dos caminos y el operador recibe el aviso dos o tres veces—. Pero escribirla
- * antes y no deshacerla convierte una reserva en una CONSTANCIA FALSA: el
- * 28-jul la base afirmó que un operador recibió su aviso diez minutos antes del
- * commit que arregló el destinatario que Meta rechazaba. Nunca lo recibió, y la
- * fila sigue diciendo que sí.
+ * Va DESPUÉS del envío y solo si Meta devolvió un id de mensaje. Es lo único en
+ * todo el sistema que escribe `aviso_privacidad_en`.
  *
- * Ante la autoridad, esa fila es la prueba de haber cumplido el art. 16 de la
- * LFPDPPP. Una prueba falsa es peor que ninguna.
+ * Que devuelva `false` es grave y por eso se registra como error: el mensaje SÍ
+ * salió y la prueba no quedó escrita. El operador recibirá el aviso otra vez
+ * cuando expire la reserva —molesto pero inocuo—; lo que no puede quedarse sin
+ * mirar es que la constancia no se escribiera.
+ */
+export async function confirmarEnvioAviso(
+  tenantId: string,
+  operadorId: string,
+  version: string,
+): Promise<void> {
+  const { data, error } = await acotada(supabaseAdmin().rpc('confirmar_aviso_privacidad', {
+    p_operador: operadorId,
+    p_tenant: tenantId,
+    p_version: version,
+  }), 'confirmarEnvioAviso');
+  if (error) {
+    logger.error('privacidad.constancia_no_escrita', { tenantId, operadorId, err: error.message });
+    return;
+  }
+  // `false` es "no tocó ninguna fila": el operador no existe o es de otra flota.
+  // Sin este ramo, un fallo de aislamiento entre tenants se vería igual que un
+  // éxito. PostgREST devuelve el resultado POR VALOR, no lanzando.
+  if (data !== true) logger.error('privacidad.constancia_sin_fila', { tenantId, operadorId });
+}
+
+/**
+ * Suelta la RESERVA cuando el envío no salió, para que el siguiente mensaje
+ * reintente. NO toca la constancia, y ahí está todo el asunto.
+ *
+ * Antes ponía `aviso_privacidad_en` y `aviso_privacidad_version` en NULL, porque
+ * hasta la 0033 la reserva y la constancia eran la misma fila. Eso arreglaba la
+ * constancia falsa del 28-jul —la base afirmó que un operador recibió su aviso
+ * diez minutos antes del commit que arregló el destinatario que Meta rechazaba—
+ * pero abría el fallo inverso, y peor:
+ *
+ *   El operador recibió el aviso v1 hace tres meses. La flota corrige la liga de
+ *   su aviso integral → el texto cambia → v2. Llega un mensaje, la reserva gana
+ *   porque la versión es distinta, el envío falla, y esta función borraba las dos
+ *   columnas. La base pasa a decir que ese operador NUNCA recibió ningún aviso.
+ *
+ * Ante la autoridad la carga de probar el art. 16 es del responsable, así que
+ * "no consta" es el peor estado posible — y se llegaba a él destruyendo una
+ * prueba verdadera. Resolver la liga del aviso es una tarea abierta: el paso 1
+ * de ese escenario está agendado.
  */
 export async function liberarEnvioAviso(tenantId: string, operadorId: string): Promise<void> {
-  const { error } = await acotada(supabaseAdmin()
-    .from('operador')
-    .update({ aviso_privacidad_en: null, aviso_privacidad_version: null })
-    .eq('id', operadorId)
-    .eq('tenant_id', tenantId), 'liberarEnvioAviso');
-  if (error) logger.error('privacidad.liberar_falló', { tenantId, operadorId, err: error.message });
+  const { data, error } = await acotada(supabaseAdmin().rpc('liberar_aviso_privacidad', {
+    p_operador: operadorId,
+    p_tenant: tenantId,
+  }), 'liberarEnvioAviso');
+  if (error) {
+    logger.error('privacidad.liberar_falló', { tenantId, operadorId, err: error.message });
+    return;
+  }
+  // No es error: la reserva pudo expirar sola por TTL entre el envío fallido y
+  // esta llamada. Se registra porque significa que el siguiente mensaje reintenta
+  // por otro motivo del esperado, y eso cambia cómo se lee el log.
+  if (data !== true) logger.warn('privacidad.liberar_sin_reserva', { tenantId, operadorId });
 }
 
 // ── Acumulados del ejercicio (Fase 1: la capa de periodo) ────────────────────
