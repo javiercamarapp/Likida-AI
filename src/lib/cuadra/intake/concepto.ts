@@ -29,11 +29,19 @@ export const CLAVES_PEAJE = ['95111602', '95111603'];
 /**
  * Concepto del gasto a partir de la clave del producto/servicio del CFDI.
  * Ante una clave desconocida devuelve 'factura': no adivina.
+ *
+ * `clavesPeaje` NO tiene default, y es a propósito. Lo tenía —`CLAVES_PEAJE`— y
+ * eso permitía llamar a la función con dos argumentos y saltarse en silencio la
+ * config del cliente. El único llamador de producción pasa
+ * `cfg.estimulos.clavesPeaje`, así que hoy el default estaba muerto; pero el día
+ * que un tenant añada una clave de peaje suya, un llamador de dos argumentos
+ * acreditaría el 50% de LIF 20-A en un camino y no en el otro, sobre la misma
+ * flota y sin un error. Obligarlo a pasar la lista deja UN solo origen.
  */
 export function conceptoDesdeClave(
   clave: string | undefined,
   clavesCombustible: string[],
-  clavesPeaje: string[] = CLAVES_PEAJE,
+  clavesPeaje: string[],
 ): ConceptoGasto {
   const c = (clave ?? '').trim();
   if (!c) return 'factura';

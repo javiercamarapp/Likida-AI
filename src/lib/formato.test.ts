@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
 import { mxn, litros, fechaMx } from './formato';
 
@@ -58,15 +59,12 @@ describe('NO puede volver a haber una copia a mano', () => {
   // rondas: cada vez se arreglaban las copias conocidas, nadie impedía la
   // siguiente, y al archivo nuevo le salía la suya. Esto lo mide sobre el
   // código, no sobre una lista escrita a mano que también se desactualiza.
-  // SE MIRA EL CÓDIGO, NO LOS COMENTARIOS. La primera versión hacía grep del
-  // literal sobre el archivo entero y se rompió con su propio comentario: el
-  // encabezado de `dashboard/formato.ts` CITA `toLocaleString('es-MX')` para
-  // contar la historia del hallazgo. Una prueba que prohíbe hablar del bug que
-  // vigila obliga a borrar justo la explicación que hace falta para no repetirlo.
-  const sinComentarios = (src: string) => src
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
-
+  // SE MIRA EL CÓDIGO, NO LOS COMENTARIOS (`sinComentarios`). La primera versión
+  // hacía grep del literal sobre el archivo entero y se rompió con su propio
+  // comentario: el encabezado de `dashboard/formato.ts` CITA
+  // `toLocaleString('es-MX')` para contar la historia del hallazgo. Una prueba
+  // que prohíbe hablar del bug que vigila obliga a borrar justo la explicación
+  // que hace falta para no repetirlo.
   const archivos = execSync(
     `grep -rl "toLocaleString('es-MX'" src/ --include='*.ts' --include='*.tsx' || true`,
     { encoding: 'utf8' },
