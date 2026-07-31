@@ -18,6 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { Gasto } from '@/types/cuadra';
+import { mxn } from '@/lib/formato';
 
 /** Ficha que fundamenta todo lo de este módulo. */
 export const NORMA_LABORAL = 'lft-110-111-263';
@@ -196,7 +197,6 @@ export function resumenLaboral(input: {
   if (!obligados.length && !aRevisar.length && !reembolsables.length) return null;
 
   const suma = (xs: Gasto[]) => xs.reduce((s, g) => s + g.monto, 0);
-  const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
   const lineas: string[] = [];
 
   if (obligados.length) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { mxn } from '@/lib/formato';
 
 interface Comprobante { concepto: string; monto: number; folio?: string; cfdiUuid?: string; label: string }
 interface Bubble { from: 'op' | 'cuadra'; text: string }
@@ -15,7 +16,6 @@ const PRESETS: Comprobante[] = [
   { concepto: 'factura', monto: 1200, folio: 'FA-9007', cfdiUuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', label: 'Factura CFDI $1,200' },
 ];
 
-const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 
 export default function Demo() {
   const [bubbles, setBubbles] = useState<Bubble[]>([

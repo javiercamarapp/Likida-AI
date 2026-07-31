@@ -52,8 +52,12 @@ describe('el PDF no puede volver a tener su propia copia', () => {
   const PDF = readFileSync('src/lib/cuadra/liquidacion/pdf.ts', 'utf8');
 
   it('usa la fecha compartida', () => {
-    expect(PDF).toContain("from '@/lib/utils'");
-    expect(PDF).toMatch(/fechaMx/);
+    // Se comprueba la FUNCIÓN, no el módulo del que viene. La primera versión
+    // exigía `from '@/lib/utils'` y se rompió al mover el formato a
+    // `formato.ts` —un archivo sin dependencias, para que el motor y el PDF no
+    // arrastren clsx ni tailwind-merge—. Fijar la ruta del import convierte un
+    // refactor correcto en una prueba roja, que es ruido, no protección.
+    expect(PDF).toMatch(/import \{[^}]*fechaMx[^}]*\} from '@\/lib\/(utils|formato)'/);
   });
 
   it('y no formatea fechas por su cuenta', () => {

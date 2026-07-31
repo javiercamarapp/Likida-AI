@@ -12,8 +12,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { Liquidacion } from '@/types/cuadra';
+// `litros` va con alias: este archivo tiene una VARIABLE con ese nombre (el
+// número de litros) y el import la haría sombra dentro de la función.
+import { mxn, litros as fmtLitros } from '@/lib/formato';
 
-const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 
 /** `bueno` = cifra que el motor sostiene entera. `condicionado` = depende de
  *  algo que el motor NO verifica, y el pie dice de qué. */
@@ -92,7 +94,7 @@ export function filasAcreditables(
   if (litros > 0) {
     filas.push({
       label: 'Diésel elegible para el estímulo de IEPS (LIF 2026 art. 20, ap. A)',
-      valor: `${litros.toLocaleString('es-MX')} L`,
+      valor: fmtLitros(litros),
       tono: 'condicionado',
       pies: [NOTA_LITROS_DIESEL],
     });

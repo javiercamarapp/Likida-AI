@@ -15,6 +15,8 @@ import { calcularCaducidad } from '../facturacion/caducidad';
 import { identificarComercio } from '../facturacion/identificar';
 import { NORMAS } from '../normas/indice';
 import type { Gasto, Diferencia, Liquidacion, EstatusLiquidacion, TipoDiferencia } from '@/types/cuadra';
+// `formato.ts` no importa NADA: el motor sigue siendo puro y sin I/O.
+import { mxn } from '@/lib/formato';
 
 export interface PoliticaGasto {
   concepto: string;       // diesel | caseta | viaticos | factura | otro
@@ -789,9 +791,6 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
 // ── helpers ─────────────────────────────────────────────────────────────────
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
-}
-function mxn(n: number): string {
-  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
 /**
  * Cómo se llama un concepto en el papel que ve el contralor.
