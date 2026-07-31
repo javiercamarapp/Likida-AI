@@ -34,6 +34,7 @@ const runAgent = vi.fn();
 const acquireViajeLock = vi.fn();
 const getOpenViaje = vi.fn();
 const claimMessage = vi.fn<(id: string) => Promise<'nuevo' | 'duplicado' | 'indeterminado'>>(async () => 'nuevo');
+const releaseMessageClaim = vi.fn();
 
 /** Todo lo que salió hacia la Graph API. */
 const salientes: { url: string; body: Record<string, unknown> }[] = [];
@@ -52,7 +53,7 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
   saveConversation: vi.fn(), claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
   acquireViajeLock: (...a: unknown[]) => acquireViajeLock(...a),
-  releaseViajeLock: vi.fn(), releaseMessageClaim: vi.fn(),
+  releaseViajeLock: vi.fn(), releaseMessageClaim: (...a: unknown[]) => releaseMessageClaim(...a),
   intakeDelta: vi.fn(async () => 0), esperarIntake: vi.fn(async () => true),
 }));
 vi.mock('@/lib/cuadra/repo', () => ({
@@ -121,13 +122,24 @@ describe('processInbound — mutex del viaje', () => {
     expect(runAgent, 'el segundo "listo" no puede correr el agente sin mutex').not.toHaveBeenCalled();
   });
 
-  it('con el lock OCUPADO, tampoco le escribe al operador', async () => {
-    // El otro turno ya le está escribiendo: un segundo mensaje que nadie pidió
-    // se ve como un bug delante del comprador. Con el cliente real, esto afirma
-    // que no salió NADA hacia Meta, no que no se llamó una función.
+  // AUDITORÍA 7 · ALTO — antes, con el lock ocupado, no salía NADA: el operador
+  // veía sus dos palomitas azules y ninguna respuesta a ESE mensaje, "listo"
+  // nunca corría el agente, nunca entraba a `wa_conversacion`, y seguía
+  // reclamado en `wa_mensaje_procesado` para siempre (el `return` no pasaba por
+  // `releaseMessageClaim`). El fix (acotado; la cola de verdad es FASE 3):
+  // cuando se pierde el lock, se AVISA que se está procesando el otro mensaje y
+  // se libera el claim para no dejarlo atascado.
+  it('con el lock OCUPADO, avisa que ya está ocupado (no se calla) y libera el claim', async () => {
     acquireViajeLock.mockResolvedValue(false);
     await processInbound(listo);
-    expect(salientes, 'salió un mensaje que nadie pidió').toHaveLength(0);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(salientes, 'antes se callaba del todo; ahora avisa').toHaveLength(1);
+    expect(String((salientes[0].body.text as { body: string }).body)).toMatch(/un momento|espera|proces/i);
+    expect(releaseMessageClaim).toHaveBeenCalledWith('wa1');
+  });
+
+  it('con el lock OCUPADO, sigue sin correr el agente (no hay doble cuadre)', async () => {
+    acquireViajeLock.mockResolvedValue(false);
+    await processInbound(listo);
+    expect(runAgent, 'el mensaje que pierde el mutex no corre el agente igual').not.toHaveBeenCalled();
   });
 });
