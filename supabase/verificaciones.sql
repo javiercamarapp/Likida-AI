@@ -12,29 +12,56 @@
 -- CÓMO CORRERLO: pegar un bloque en el SQL editor de Supabase. Es seguro contra
 -- producción — no deja nada — pero conviene correrlo de uno en uno.
 --
--- Última corrida: 28-jul-2026, contra el proyecto Likida. Los cuatro primeros
--- pasaron. Los bloques 5 a 11 son de la auditoría 5 y comprueban las migraciones
--- 0022 y 0024–0029. Los bloques 13 a 17 son del 31-jul: comprueban la 0030, la
--- 0031 y la 0033, más las dos que llevaban desde el principio sin bloque (0002 y
--- 0012) — SIN CORRER TODAVÍA contra la base.
+-- Última corrida: **31-jul-2026**, contra el proyecto Likida. Los bloques 13 a 17
+-- se escribieron ese día y se corrieron en cuanto se aplicaron la 0031, la 0032 y
+-- la 0033. Salida REAL, copiada tal cual:
 --
--- ESTADO DE LAS MIGRACIONES QUE COMPRUEBAN (28-jul-2026, 22:00):
+--   13  ve-el-que-falta=t  calla-el-que-existe=t  vacio-no-es-null=t
+--   14  nunca-negativo=0  viaje-inexistente=0  huerfano-cuenta=1
+--       sondeo-lo-olvida=0  sella-al-incrementar=t  reciente-sobrevive=1
+--   16  rls-en-wa_mensaje=t  anon-intake=f  anon-lock=f  anon-unlock=f
+--       service-role-intake=t
+--   17  gana-1a=t  2do-camino-rebota=f  reenvio-por-version=t
+--       CONSTANCIA-INTACTA=t  version-intacta=v1  reserva-suelta=t
+--       solto=t  solto-2a-vez=f  reserva-expira=t
+--
+-- Los cuatro dieron exactamente lo esperado. El 17 es el que importa: la
+-- constancia del art. 16 de un aviso v1 SOBREVIVE al reenvío fallido de un v2 —
+-- que es justo lo que la implementación vieja destruía. Y el 14 confirma contra
+-- Postgres, no contra un mock, que el contador huérfano se olvida en el SONDEO.
+--
+-- Comprobado además que los bloques no dejan basura: después de correrlos había
+-- 0 tenants `ZZZ VERIF%`, 0 contadores vivos, 0 reservas de aviso abiertas, y la
+-- única constancia real —la del 28-jul— intacta.
+--
+-- Los cuatro primeros pasaron el 28-jul. Los bloques 5 a 11 son de la auditoría 5
+-- y comprueban las migraciones 0022 y 0024–0029.
+--
+-- ESTADO DE LAS MIGRACIONES QUE COMPRUEBAN (31-jul-2026):
 --   · 0022, 0024, 0025, 0026, 0028 y 0029 → APLICADAS. Sus bloques (5, 6, 7,
 --     9, 10, 11) tienen que dar los valores esperados; si alguno reporta `f`,
 --     la base se ha ido del repo y hay que leerlo como una alarma, no como
 --     "todavía no toca".
---   · 0027 (una foto = un gasto por flota) → ESCRITA Y NO APLICADA a propósito:
---     hoy hay dos gastos vivos con el mismo SHA-256 en dos viajes, y aplicarla
---     degrada el hash del más nuevo. El bloque 8 reporta `f` mientras siga así,
---     y eso es lo correcto. El bloque 12 dice EXACTAMENTE qué filas toca antes
---     de decidir.
+--   · 0027 (una foto = un gasto por flota) → SIGUE SIN APLICARSE, y es la única
+--     que queda. El bloque 12 se corrió el 31-jul y da UN grupo:
+--
+--       tenant 11111111-… · hash 250a4e5b34ec… · 2 gastos en 2 viajes · $398.00
+--         823be0 (viaje 0000ff, $199.00, 28-Jul 21:41)
+--         e00860 (viaje 0000fe, $199.00, 28-Jul 22:48)
+--
+--     Mismo importe, misma flota demo, 67 minutos de diferencia, el día en que se
+--     cerró el flujo de punta a punta por primera vez. Se lee como un ENSAYO —las
+--     mismas fotos mandadas dos veces— y no como el mismo ticket cobrado contra
+--     dos anticipos. Pero esa lectura es de quien mira la lista, no de la base:
+--     por eso sigue esperando. Aplicarla es REVERSIBLE — el hash viejo no se
+--     pierde, queda en `ocr_extra.imgHashDuplicado`.
+--     El bloque 8 reporta `f` mientras siga así, y eso es lo correcto.
 --   · 0030 (`indices_faltantes`) → APLICADA. El bloque 13 se escribió DESPUÉS,
 --     el 31-jul: la única migración que existe para que un chequeo dejara de
 --     mentir era, ella misma, la única sin comprobar.
---   · 0031 (TTL del contador de la barrera) y 0033 (la constancia del aviso
---     separada de su reserva) → ESCRITAS Y NO APLICADAS. Los bloques 14 y 17 van
---     a fallar con `column ... does not exist` hasta el `supabase db push`, y ESE
---     es su resultado correcto mientras tanto.
+--   · 0031 (TTL del contador de la barrera), 0032 (`politica_gasto` muerta) y
+--     0033 (la constancia del aviso separada de su reserva) → APLICADAS el
+--     31-jul. Sus bloques (14 y 17) pasaron; la salida está copiada arriba.
 -- Contra una base sin las migraciones, los bloques 6 a 11 reportan `f` — que es
 -- justamente la lectura útil: dicen qué garantía falta.
 --
