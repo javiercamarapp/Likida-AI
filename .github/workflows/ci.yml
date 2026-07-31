@@ -54,10 +54,26 @@ jobs:
 
       # CON COBERTURA, y no `npm test` a secas: el umbral de `vitest.config.ts`
       # es lo que convierte la cobertura en una puerta en vez de en un número
-      # que nadie mira. `--coverage` corre las MISMAS pruebas; lo único que
-      # agrega es la instrumentación y el veredicto del umbral.
+      # que nadie mira.
+      #
+      # Aquí decía que "`--coverage` corre las MISMAS pruebas". Dejó de ser
+      # cierto: `vitest.config.ts` exporta `CUADRA_COBERTURA=1` bajo `--coverage`
+      # y dos pruebas de TIEMPO se saltan con esa bandera —la instrumentación de
+      # v8 cobra por llamada y el umbral acabaría midiéndola—. Como CI corría
+      # SOLO este comando, esas dos no se ejecutaban aquí ni una vez: la guardia
+      # de ReDoS del buscador de fundamentos y la de crecimiento no lineal del
+      # deduplicador de CFDI existían y nadie las corría más que Javier en su
+      # máquina. El paso de abajo las recupera.
       - name: Tests (con umbral de cobertura)
         run: npm run test:coverage
+
+      # LAS PRUEBAS DE TIEMPO, SIN INSTRUMENTAR — lo que el paso de arriba salta.
+      #
+      # Son segundos: cuatro archivos, no la suite. `pruebas_en_ci.test.ts` falla
+      # si alguien añade un `skipIf(CUADRA_COBERTURA)` en un archivo que este
+      # comando no alcanza, que es como se perdieron estas dos.
+      - name: Pruebas de tiempo (sin cobertura)
+        run: npx vitest run fundamento duplicados
 
       # El build va al final porque es el más lento, y porque los tres de arriba
       # atrapan casi todo lo que lo haría fallar. Ya cazó un fallo real que solo
