@@ -9,8 +9,8 @@
 
 import type { ResultadoTope15 } from './combustible';
 import { TOPE_EFECTIVO } from './combustible';
+import { mxn } from '@/lib/formato';
 
-const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
 /**

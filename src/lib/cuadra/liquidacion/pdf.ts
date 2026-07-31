@@ -12,7 +12,7 @@ import { filasDeducibilidad } from './deducibilidad';
 import { filasAcreditables } from './acreditable';
 import { resumenLaboral } from '../laboral/pagadero';
 import { cubetaDe, etiquetaConcepto } from '../cuadre/engine';
-import { fechaMx } from '@/lib/utils';
+import { fechaMx, mxn } from '@/lib/formato';
 import { SOLO_CONTRALOR, type Destinatario } from '../cuadre/resumen';
 
 import { leyendaPdf } from '../cuadre/leyendas';
@@ -30,9 +30,6 @@ const AMBER = rgb(1.0, 0.62, 0.04);
 // al pasar a `etiquetaConcepto`: dos mapas que alguien tiene que mantener
 // sincronizados ya se desincronizaron dos veces en este repo. Una función
 // importada no puede desincronizarse.)
-
-const mxn = (n: number) =>
-  n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 
 /** Parte un texto en renglones de a lo más `ancho` caracteres. pdf-lib no
  *  envuelve texto solo, y el descargo no cabe en una línea. */

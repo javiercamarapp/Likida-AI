@@ -3,10 +3,9 @@
 // llamado la tool. Los números salen del motor, nunca del modelo.
 
 import { LEYENDA_CORTA } from './leyendas';
-import { litros } from '@/lib/utils';
+import {litros, mxn} from '@/lib/formato';
 import type { Liquidacion, TipoDiferencia } from '@/types/cuadra';
 
-const mxn = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 
 /** Quién va a leer esto. Cambia qué se dice, no los números. */
 export type Destinatario = 'operador' | 'contralor';
