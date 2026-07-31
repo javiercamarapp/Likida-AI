@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PERMISO CRE: identificar la gasolinera desde el papel.
 //
-// POR QUÉ EXISTE. Cuatro de cada diez gasolineras del país son Pemex, y Pemex
-// NO tiene portal de facturación: son 8,000+ franquicias y cada franquiciatario
-// elige su sistema. Además hay ~mil marcas distintas —medido sobre 5,262
-// estaciones cosechadas—, varias con portales que son una IP con puerto
+// POR QUÉ EXISTE. **El 46.6% de las gasolineras del país son Pemex** —6,171 de
+// 12,625, medido sobre el padrón completo— y Pemex NO tiene portal de
+// facturación: son franquicias y cada franquiciatario elige su sistema. Además
+// hay **3,226 marcas distintas, y 2,935 de ellas tienen UNA sola estación**, varias con portales que son una IP con puerto
 // (`74.208.68.158:8060` factura los tickets de Fullgas) o un DNS dinámico
 // (`octano9603.dyndns.org`). Nada de eso se reconoce por dominio ni sobrevive a
 // un cambio de proveedor.
@@ -20,9 +20,10 @@
 //
 // ── LA TABLA ESTÁ INCOMPLETA A PROPÓSITO, Y ESO NO ES UN PROBLEMA ──────────
 //
-// Hoy cubre ~5,200 de las ~14,300 estaciones del país: la cosecha sigue
-// corriendo (`scripts/cosecha/estaciones.mjs`, reanudable) y la tabla se
-// regenera con `scripts/cosecha/generar-tabla-cre.mjs`. El código no cambia.
+// Cubre 12,625 de las ~14,300 estaciones del padrón (88%). Lo que falta son 676
+// páginas que fallaron por timeout y las fichas cuya "compañía" venía corrida,
+// que se descartan a propósito. Se regenera con
+// `scripts/cosecha/generar-tabla-cre.mjs` sin tocar el código.
 //
 // Es seguro usarla incompleta porque `identificarPorPermiso` devuelve TRES
 // estados y nunca dos. La distinción es la lección que este repo aprendió cinco
@@ -35,6 +36,32 @@
 //
 // Con 'desconocido' el producto NO puede afirmar que la estación no existe. Solo
 // puede decir que no la tiene mapeada, que es la verdad.
+//
+// ── LA MARCA ES UNA PISTA, NO UN VEREDICTO. MEDIDO CONTRA LOS DOS TICKETS ──
+//
+// Al cerrar la cosecha (12,625 permisos, 88% del padrón) se probó contra los dos
+// tickets que sí facturamos, y los dos fallaron de formas distintas:
+//
+//   G500 Megasur  PL/22384/EXP/ES/2019 → la ficha de origen traía la "compañía"
+//                 vacía y el extractor tomó el campo siguiente: salía
+//                 `Ciudad/Municipio Tixkokob`. Se descarta en el generador, así
+//                 que hoy responde 'desconocido'. Correcto: no la sabemos.
+//
+//   La Gas        PL/7814/EXP/ES/2015 → responde `PEMEX`, Y ESO ESTÁ MAL. La
+//                 fuente (`gasolinerasmx.mx`) la tiene como Pemex; el ticket
+//                 impreso dice "LA GAS BOLICHE", RFC AES0706049E2. La dirección
+//                 de la ficha —"20 x 1'C' y 1'B' No. 20, Mérida"— coincide con
+//                 la del ticket, así que es la misma estación con la marca
+//                 equivocada EN EL ORIGEN.
+//
+// De dos comprobaciones, una no sabe y la otra miente. Por eso esta tabla NO
+// puede decidir a qué portal se manda al operador: para eso está
+// `identificarComercio`, que usa el dominio del QR, el RFC del emisor y el texto
+// impreso —tres señales del propio papel—.
+//
+// El permiso sirve para lo que ninguna de esas tres resuelve: la ESTACIÓN
+// concreta cuando el portal es una IP con puerto o un DNS dinámico. Es una capa
+// de contexto, no de decisión.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import PERMISOS from './permisos_cre.json';
@@ -86,8 +113,8 @@ export type ResultadoPermiso =
    * Hay permiso en el ticket y NO está en la tabla.
    *
    * NO significa que la estación no exista: significa que no la tenemos. La
-   * tabla cubre ~5,200 de ~14,300 estaciones, así que este estado es el normal
-   * hoy, no la excepción.
+   * tabla cubre 12,625 de ~14,300, así que hoy es la excepción — pero sigue
+   * siendo un estado de primera clase, no un caso de borde.
    */
   | { estado: 'desconocido'; permiso: string }
   /** El ticket no trae permiso. No hay nada que buscar. */
