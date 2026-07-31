@@ -26,12 +26,31 @@ const rpc = vi.fn();
  * `resolveOperador` termina en `.limit(2)` y lo espera; `getOpenViaje` encadena
  * `.limit(1).maybeSingle()`. Un stub que solo soporta una de las dos formas hace
  * que la otra lance y la prueba mida cualquier cosa menos lo que dice medir.
+ *
+ * AUDITORÍA 7 · CRÍTICO PR-1 del rubro pruebas — el `.limit(n)` de aquí
+ * IGNORABA `n` (estaba en la lista de métodos que solo devuelven `e`, sin
+ * mirar el argumento). El `then()` delegaba en el mock externo `limit()` sin
+ * pasarle cuántas filas pidió el código real. Resultado: cambiar
+ * `resolveOperador` de `.limit(2)` a `.limit(1)` —justo el bug de "devuelve una
+ * fila arbitraria y decide el tenant con ella", dinero de una flota anotado en
+ * la de otra— era INVISIBLE para esta suite: las 11 pruebas seguían verdes.
+ *
+ * El fix: `.limit(n)` guarda `n` en una variable capturada, y `then()` trunca
+ * el array de `data` a ese tamaño antes de resolver — replicando el efecto
+ * real de Postgrest. Así, `.limit(1)` con un mock de DOS filas SÍ cambia el
+ * resultado (una fila, no dos) y `resolveOperador` deja de ver la ambigüedad.
  */
+let limiteFilas: number | undefined;
 const enlace = () => {
   const e: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'is', 'in', 'order', 'not', 'gte', 'limit']) e[m] = () => e;
+  for (const m of ['select', 'eq', 'is', 'in', 'order', 'not', 'gte']) e[m] = () => e;
+  e.limit = (n: number) => { limiteFilas = n; return e; };
   e.maybeSingle = maybeSingle;
-  e.then = (r: (v: unknown) => unknown, j?: (v: unknown) => unknown) => limit().then(r, j);
+  e.then = (r: (v: unknown) => unknown, j?: (v: unknown) => unknown) =>
+    limit().then((res: { data: unknown[] | null; error: unknown }) => {
+      const truncado = res.data && limiteFilas != null ? res.data.slice(0, limiteFilas) : res.data;
+      return r({ ...res, data: truncado });
+    }, j);
   return e;
 };
 
@@ -45,7 +64,7 @@ vi.mock('@/lib/logger', () => ({
 const { resolveOperador, getOpenViaje, intakeDelta, ConsultaFallida, OperadorAmbiguo } =
   await import('./conv');
 
-beforeEach(() => { maybeSingle.mockReset(); limit.mockReset(); rpc.mockReset(); });
+beforeEach(() => { maybeSingle.mockReset(); limit.mockReset(); rpc.mockReset(); limiteFilas = undefined; });
 
 // ── resolveOperador: a quién se le carga el gasto ───────────────────────────
 
