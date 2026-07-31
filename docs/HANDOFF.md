@@ -221,11 +221,21 @@ migraciones se aplicaron el 31-jul y el aviso de privacidad ya tiene su liga
    `XAXX010101000`— **toda factura sale "a revisión"**. Es el comportamiento
    correcto, pero si no se captura uno válido, **el demo enseña todo en "por
    confirmar"**. Ésta es la que puede morder en la sala.
-2. **Confirmar el dominio de producción.** El seed apunta a
-   `https://cuadra.mx/aviso/<tenant>`. Si el dominio real es otro, hay que
-   cambiarlo ahí y en `NEXT_PUBLIC_APP_URL`: en `localhost`
-   `revisarAvisoIntegral` marca la liga `inservible` a propósito, así que en
-   desarrollo el operador sigue recibiendo el aviso degradado — que es correcto.
+2. **Decidir dónde vive el software.** Hoy `likida.ai` sirve ESTA app (título de
+   `layout.tsx`, `/acceso` 200, webhook 403 al token malo = la ruta existe), y la
+   landing de `~/javiercamarapp/likida-web` **no está desplegada en ningún lado**.
+   Si `likida.ai` pasa a ser la landing, la app se muda —lo natural es
+   `app.likida.ai`— y con ella **la Callback URL del webhook en el panel de
+   Meta**. Mover el ápice sin repuntar Meta deja de entrar todo mensaje, sin un
+   error visible de este lado.
+
+   Orden seguro: añadir `app.likida.ai` al MISMO proyecto de Vercel (los dos
+   dominios sirviendo la app), repuntar Meta y probar un mensaje, y solo entonces
+   mover `likida.ai` a la landing. `NEXT_PUBLIC_APP_URL` y la liga del aviso en
+   `seed.sql` se mudan al final.
+
+   `/acceso` YA es el login (con passcode, `proxy.ts` lo cablea). No hace falta
+   construir `/login`.
 
    Opcional pero pendiente: `tenant.contacto_privacidad` (art. 29). Mientras esté
    vacío, el aviso integral **lo dice** en vez de inventar un contacto.

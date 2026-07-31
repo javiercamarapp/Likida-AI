@@ -384,8 +384,13 @@ export async function generarLiquidacionPDF(
   // Posiciones FIJAS al fondo: el contenido de arriba se corta en PISO_PIE, así
   // que esta zona siempre está libre.
   rule(PISO_PIE - 12);
-  text(`Generado por Cuadra · ${fecha(liq.creadaEn)}`, M, PISO_PIE - 26, 8, font, MUTED);
-  right('cuadra.mx', 595.28 - M, PISO_PIE - 26, 8, font, MUTED);
+  text(`Generado por Likida · ${fecha(liq.creadaEn)}`, M, PISO_PIE - 26, 8, font, MUTED);
+  // `cuadra.mx` NO ES NUESTRO. Es un dominio parkeado: devuelve un redirect a
+  // `/lander`, o sea la página de "en venta". Estuvo impreso en el pie de cada
+  // liquidación —el papel que el contralor archiva y que puede ver un tercero—
+  // apuntando a un anuncio de un desconocido. Se detectó el 31-jul comprobando
+  // dominios con curl, no leyendo el código: en el fuente se ve como una marca.
+  right('likida.ai', 595.28 - M, PISO_PIE - 26, 8, font, MUTED);
 
   // Descargo del art. 52 del CFF. NO es adorno: los criterios del Anexo 3 de la
   // RMF alcanzan a "quien asesore, aconseje, PRESTE SERVICIOS o participe", y

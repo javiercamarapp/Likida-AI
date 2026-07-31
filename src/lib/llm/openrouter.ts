@@ -24,8 +24,12 @@ export function getClient(): OpenAI {
     baseURL: 'https://openrouter.ai/api/v1',
     apiKey: key,
     defaultHeaders: {
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://cuadra.mx',
-      'X-Title': 'Cuadra',
+      // El fallback era `cuadra.mx`, que es un dominio PARKEADO de un tercero.
+      // Aquí solo viaja en una cabecera hacia OpenRouter, así que el daño era
+      // atribuirle nuestro consumo a un desconocido — pero es el mismo valor
+      // equivocado que estaba impreso en el PDF.
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://likida.ai',
+      'X-Title': 'Likida',
     },
   });
   return _client;
