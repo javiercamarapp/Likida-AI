@@ -43,8 +43,11 @@ insert into tenant (id, nombre, rfc, ciudad, plan,
    -- parkeado que redirige a su página de venta. Habría mandado al operador al
    -- anuncio de un desconocido desde su aviso de privacidad.
    --
-   -- Si el software se muda a `app.likida.ai` —porque la landing se quede con
-   -- el ápice— esta línea y `NEXT_PUBLIC_APP_URL` se mudan con él. En localhost
+   -- DECIDIDO el 31-jul: el software se muda a `app.likida.ai` y `likida.ai`
+   -- queda para la landing. Esta línea NO se adelanta a ese cambio a propósito
+   -- —hoy `app.likida.ai` da 404— porque una liga que todavía no resuelve es el
+   -- bug que esto vino a cerrar. Se mueve en el paso 3 del orden de §6 del
+   -- handoff, junto con `NEXT_PUBLIC_APP_URL`. En localhost
    -- `revisarAvisoIntegral` marca la liga `inservible` a propósito, así que en
    -- dev el operador recibe el aviso degradado, que es lo correcto.
    'TRANSPORTES INNOVATIVOS SA DE CV',
