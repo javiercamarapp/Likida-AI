@@ -36,9 +36,10 @@ npm run build                                             exit 0
 cobertura     84.8% líneas · 85.3% ramas  (umbral rompe CI si baja)
 ```
 
-> **Migraciones: 0031, 0032 y 0033 aplicadas y verificadas contra la base real el
-> 31-jul** (bloques 13, 14, 16 y 17 de `supabase/verificaciones.sql`, salida
-> copiada en su cabecera). Queda **solo la 0027**, que degrada datos — ver §6.
+> **Las 34 migraciones están aplicadas y verificadas contra la base real
+> (31-jul).** Es la primera vez que no hay ninguna esperando. La salida de los
+> bloques 8, 13, 14, 16 y 17 está copiada en la cabecera de
+> `supabase/verificaciones.sql`.
 
 **Funciona de punta a punta con WhatsApp real.** El 28-jul se cerró el ciclo
 completo por primera vez: mensaje entrante → resolución de operador → motor →
@@ -52,7 +53,7 @@ agente → respuesta saliente → PDF.
 | **Tabla permiso CRE → marca** | **12,625 permisos** (88% del padrón nacional) |
 | **Investigación de competencia** | cerrada: 1,740 fichas, 319 portales, 5 competidores |
 | **Auditorías** | 7 rondas · los 6 hallazgos abiertos de la 7 se cerraron el 31-jul |
-| **Migraciones** | 33 escritas · **1 sin aplicar** (0027, la que degrada datos) |
+| **Migraciones** | **34 escritas · 34 aplicadas** · verificadas contra la base |
 | **Al demo** | **6 días** |
 
 Los seis commits del 30-31 jul (`2f79174`..`b187427`) se revisaron uno por uno el
@@ -211,38 +212,24 @@ después del demo.
 
 ## 6. Lo que Javier tiene que hacer, y nadie más puede
 
-Estas cuatro bloquean cosas reales y **no son código**:
-
-0. **Decidir la 0027**, que es la única migración que queda sin aplicar. Las
-   otras tres (0031, 0032, 0033) se aplicaron y verificaron el 31-jul.
-
-   La 0027 pone en NULL el `img_hash` del duplicado más nuevo de cada grupo. Hoy
-   hay **un solo grupo**, medido con el bloque 12:
-
-   ```
-   tenant 11111111-… · hash 250a4e5b34ec… · 2 gastos en 2 viajes · $398.00
-     823be0 (viaje 0000ff, $199.00, 28-Jul 21:41)
-     e00860 (viaje 0000fe, $199.00, 28-Jul 22:48)
-   ```
-
-   Mismo importe, misma flota demo, 67 minutos de diferencia, el día en que se
-   cerró el flujo de punta a punta por primera vez. **Se lee como un ensayo**, no
-   como el mismo ticket cobrado contra dos anticipos — pero esa lectura es de
-   quien mira la lista, no de la base. El valor viejo NO se pierde: queda en
-   `ocr_extra.imgHashDuplicado`, así que aplicarla es reversible.
-
-   Sin ella, una foto puede comprobarse en DOS viajes de la misma flota. Con más
-   de un cliente eso es un agujero de dinero; con la flota demo es un ensayo.
+Estas dos bloquean cosas reales y **no son código**. Eran cuatro: las
+migraciones se aplicaron el 31-jul y el aviso de privacidad ya tiene su liga
+—la app sirve el integral en `/aviso/[tenant]`—, así que solo queda esto:
 
 1. **RFC real de la flota** en `tenant.rfc`. Hoy el seed trae `TIN010101AAA`, que
    falla el dígito verificador. Con un RFC inservible —o con el genérico
    `XAXX010101000`— **toda factura sale "a revisión"**. Es el comportamiento
    correcto, pero si no se captura uno válido, **el demo enseña todo en "por
    confirmar"**. Ésta es la que puede morder en la sala.
-2. **URL del aviso de privacidad que resuelva.** Hoy apunta a
-   `transportesinnovativos.mx` → NXDOMAIN. El arranque ya lo grita, pero hasta
-   que exista, el operador recibe una liga rota **y la respuesta ARCO también**
-   (LFPDPPP art. 15 fr. V y 16 fr. II).
+2. **Confirmar el dominio de producción.** El seed apunta a
+   `https://cuadra.mx/aviso/<tenant>`. Si el dominio real es otro, hay que
+   cambiarlo ahí y en `NEXT_PUBLIC_APP_URL`: en `localhost`
+   `revisarAvisoIntegral` marca la liga `inservible` a propósito, así que en
+   desarrollo el operador sigue recibiendo el aviso degradado — que es correcto.
+
+   Opcional pero pendiente: `tenant.contacto_privacidad` (art. 29). Mientras esté
+   vacío, el aviso integral **lo dice** en vez de inventar un contacto.
+
 3. **`SENTRY_DSN` en Vercel.** El arranque ya avisa de su ausencia y el flush ya
    está cableado; falta la variable.
 

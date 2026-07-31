@@ -25,7 +25,12 @@
 --       CONSTANCIA-INTACTA=t  version-intacta=v1  reserva-suelta=t
 --       solto=t  solto-2a-vez=f  reserva-expira=t
 --
--- Los cuatro dieron exactamente lo esperado. El 17 es el que importa: la
+-- Y el bloque 8 (0027) el mismo día, en cuanto se aplicó su migración:
+--
+--    8  repetido-entre-viajes-rebotado=t  sin-hash-que-entraron=2
+--       msg=duplicate key value violates unique constraint "uq_gasto_img_hash"
+--
+-- Los cinco dieron exactamente lo esperado. El 17 es el que importa: la
 -- constancia del art. 16 de un aviso v1 SOBREVIVE al reenvío fallido de un v2 —
 -- que es justo lo que la implementación vieja destruía. Y el 14 confirma contra
 -- Postgres, no contra un mock, que el contador huérfano se olvida en el SONDEO.
@@ -37,25 +42,34 @@
 -- Los cuatro primeros pasaron el 28-jul. Los bloques 5 a 11 son de la auditoría 5
 -- y comprueban las migraciones 0022 y 0024–0029.
 --
--- ESTADO DE LAS MIGRACIONES QUE COMPRUEBAN (31-jul-2026):
+-- ESTADO DE LAS MIGRACIONES QUE COMPRUEBAN (31-jul-2026): **TODAS APLICADAS.**
+-- Por primera vez desde que existe este archivo no hay ninguna esperando.
 --   · 0022, 0024, 0025, 0026, 0028 y 0029 → APLICADAS. Sus bloques (5, 6, 7,
 --     9, 10, 11) tienen que dar los valores esperados; si alguno reporta `f`,
 --     la base se ha ido del repo y hay que leerlo como una alarma, no como
 --     "todavía no toca".
---   · 0027 (una foto = un gasto por flota) → SIGUE SIN APLICARSE, y es la única
---     que queda. El bloque 12 se corrió el 31-jul y da UN grupo:
+--   · 0027 (una foto = un gasto por flota) → APLICADA el 31-jul, con Javier
+--     decidiendo sobre la lista del bloque 12, que daba UN grupo:
 --
 --       tenant 11111111-… · hash 250a4e5b34ec… · 2 gastos en 2 viajes · $398.00
---         823be0 (viaje 0000ff, $199.00, 28-Jul 21:41)
---         e00860 (viaje 0000fe, $199.00, 28-Jul 22:48)
+--         823be0 (viaje 0000ff, $199.00, 28-Jul 21:41)   ← conserva el hash
+--         e00860 (viaje 0000fe, $199.00, 28-Jul 22:48)   ← degradado
 --
 --     Mismo importe, misma flota demo, 67 minutos de diferencia, el día en que se
---     cerró el flujo de punta a punta por primera vez. Se lee como un ENSAYO —las
---     mismas fotos mandadas dos veces— y no como el mismo ticket cobrado contra
---     dos anticipos. Pero esa lectura es de quien mira la lista, no de la base:
---     por eso sigue esperando. Aplicarla es REVERSIBLE — el hash viejo no se
---     pierde, queda en `ocr_extra.imgHashDuplicado`.
---     El bloque 8 reporta `f` mientras siga así, y eso es lo correcto.
+--     cerró el flujo de punta a punta por primera vez: un ENSAYO, las mismas
+--     fotos mandadas dos veces. Esa lectura es de quien mira la lista, no de la
+--     base, y por eso esperó tres días a que alguien la mirara.
+--
+--     REVERSIBLE, y comprobado después de aplicar: el SHA-256 completo del
+--     degradado quedó en `ocr_extra.imgHashDuplicado`
+--     (250a4e5b34ecba43d043bf63b771c384296c5a62917bf326ab2826d1e9349d98) junto
+--     con `imgHashDegradadoPor`. Devolverlo es un UPDATE.
+--
+--     Bloque 8, corrido en cuanto se aplicó:
+--       repetido-entre-viajes-rebotado=t  sin-hash-que-entraron=2
+--       msg=duplicate key value violates unique constraint "uq_gasto_img_hash"
+--     El mensaje NOMBRA el índice, que es de lo que depende `processor.ts` para
+--     saber si un 23505 es benigno.
 --   · 0030 (`indices_faltantes`) → APLICADA. El bloque 13 se escribió DESPUÉS,
 --     el 31-jul: la única migración que existe para que un chequeo dejara de
 --     mentir era, ella misma, la única sin comprobar.
