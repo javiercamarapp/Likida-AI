@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const intakeDelta = vi.fn();
+const releaseMessageClaim = vi.fn();
 const extraerComprobante = vi.fn();
 const say = vi.fn();
 
@@ -53,7 +54,7 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   saveConversation: vi.fn(),
   claimMessage: vi.fn(async () => 'nuevo'),
   acquireViajeLock: vi.fn(async () => true),
-  releaseViajeLock: vi.fn(), releaseMessageClaim: vi.fn(),
+  releaseViajeLock: vi.fn(), releaseMessageClaim: (...a: unknown[]) => releaseMessageClaim(...a),
   intakeDelta: (...a: unknown[]) => intakeDelta(...(a as [string, number])),
   esperarIntake: vi.fn(async () => true),
 }));
@@ -69,7 +70,7 @@ const { processInbound } = await import('./processor');
 const foto = { from: '5219993700779', type: 'image' as const, mediaId: 'm1', waMessageId: 'wa1' };
 
 beforeEach(() => {
-  intakeDelta.mockReset();
+  intakeDelta.mockReset(); releaseMessageClaim.mockClear();
   extraerComprobante.mockReset();
   say.mockReset();
   process.env.WHATSAPP_ACCESS_TOKEN = 'tok';
@@ -118,4 +119,33 @@ describe('intakeDelta(+1) fallido: no se sostiene la barrera con un incremento q
   });
 });
 
+// ── REVISIÓN DEL 31-JUL: EL CLAIM SE QUEDABA TOMADO ────────────────────────
+//
+// El `return` de arriba avisa al operador —"reenvíala en un momento"— pero NO
+// liberaba el claim de `wa_mensaje_procesado`. Es EXACTAMENTE el patrón que otro
+// commit del mismo día arregló treinta líneas más abajo, con su comentario:
+// "seguía reclamado PARA SIEMPRE (este `return` no pasaba por
+// `releaseMessageClaim`)... el modo de falla 'se trabó' sin que nadie diga que
+// se trabó".
+//
+// Dos returns tempranos, mismo archivo, mismo día: uno aprendió la lección y el
+// otro la reintrodujo.
+//
+// El daño es acotado —el reenvío MANUAL trae otro `waMessageId`, así que el
+// operador sí puede recuperarse— pero deja el mensaje original marcado como
+// procesado para siempre, y cualquier reintento del MISMO id se descarta en
+// silencio. La idempotencia deja de tener vuelta atrás justo en el camino donde
+// se le pide al operador que reintente.
+describe('el claim no puede quedarse tomado cuando la foto no se procesó', () => {
+  it('libera el claim para que ese mensaje no quede atascado', async () => {
+    intakeDelta.mockResolvedValue(null);
+    await processInbound({ from: '5219993700779', type: 'image', mediaId: 'M1', waMessageId: 'wa-atascado' });
+    expect(releaseMessageClaim).toHaveBeenCalledWith('wa-atascado');
+  });
 
+  // NO hay prueba de control del camino feliz aquí, y es a propósito: se
+  // intentó una y resultó que entraba al CATCH GENERAL —que también libera el
+  // claim (processor.ts:885)— en vez de ejercitar el camino bueno. Una prueba
+  // que pasa por la razón equivocada es peor que ninguna, así que se quitó en
+  // lugar de ajustarle la aserción hasta que se pusiera verde.
+});

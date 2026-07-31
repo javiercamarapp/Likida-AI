@@ -330,6 +330,17 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       if (incrementado == null) {
         logger.error('intake.incremento_fallido', { viaje: viajeId, tenant: op.tenantId });
         await say('No pude registrar tu foto en el orden correcto 😕. Reenvíala en un momento y, si ya escribiste *listo*, vuelve a escribirlo cuando te confirme que la recibí.');
+        // Y SE LIBERA EL CLAIM, que faltaba. Este `return` dejaba el mensaje
+        // marcado en `wa_mensaje_procesado` para siempre — el mismo patrón que el
+        // `return` del mutex ocupado (abajo) arregló el mismo día, con su propio
+        // comentario: "seguía reclamado PARA SIEMPRE... el modo de falla 'se
+        // trabó' sin que nadie diga que se trabó".
+        //
+        // Aquí duele menos —se le pide al operador que reenvíe, y un reenvío
+        // manual trae otro `waMessageId`— pero la asimetría es real: el catch
+        // general y el mutex sí lo liberan. Un mensaje que no se procesó no puede
+        // quedar contado como procesado.
+        if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
         return;
       }
       try {
