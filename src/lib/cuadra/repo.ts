@@ -3,6 +3,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import type { DatosIntegral } from './privacidad';
 import { TOPE_CONSULTA_MS } from './presupuesto';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/cuadra';
 import type { CodigoPendiente } from './intake/emparejar';
@@ -423,10 +424,15 @@ export async function saveLiquidacion(
  */
 export async function getDatosResponsable(
   tenantId: string,
-): Promise<{ razonSocial: string; domicilio: string; urlAvisoIntegral: string } | null> {
+): Promise<DatosIntegral | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('tenant')
-    .select('razon_social, domicilio_fiscal, url_aviso_privacidad')
+    // `contacto_privacidad` (0034) es el art. 29 y solo lo usa el aviso
+    // INTEGRAL. Se trae aquí, y no en una segunda consulta, porque es el mismo
+    // renglón: pedirlo aparte sería otro viaje a la base para tres columnas que
+    // ya vienen juntas — y la regla del repo es que el acceso a datos no se
+    // duplique, que es el hallazgo que lleva cinco rondas subiendo.
+    .select('razon_social, domicilio_fiscal, url_aviso_privacidad, contacto_privacidad')
     .eq('id', tenantId)
     .maybeSingle(), 'getDatosResponsable');
   if (error) throw new Error(`getDatosResponsable: ${error.message}`);
@@ -435,6 +441,7 @@ export async function getDatosResponsable(
     razonSocial: (data.razon_social as string) ?? '',
     domicilio: (data.domicilio_fiscal as string) ?? '',
     urlAvisoIntegral: (data.url_aviso_privacidad as string) ?? '',
+    contactoPrivacidad: (data.contacto_privacidad as string | null) ?? null,
   };
   // La URL del integral NO se exige aquí. Devolver `null` por su ausencia hacía
   // que el operador no recibiera NADA: el aviso simplificado sí se puede armar
