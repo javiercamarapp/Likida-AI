@@ -156,3 +156,54 @@ describe('el PDF respeta el mismo destinatario que el mensaje', () => {
     expect(t).toMatch(/lista negra|EFOS/);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ENSAYO DEL 1-ago · el PDF cortaba la CITA LEGAL a media palabra.
+//
+// La nota de cada diferencia se recortaba a UNA línea con `cortar`, y lo que se
+// perdía era el final — que es justo donde vive el fundamento. En el PDF real
+// salían «… del mismo viaje: LISR 2...» y «… del mismo viaje: LISR ...».
+//
+// El comentario de ese bloque ya decía «nunca se truncan» y era verdad a medias:
+// hablaba de la LISTA (todas se imprimen, paginando). El TEXTO sí se truncaba.
+//
+// Duele en el único documento que el contralor archiva, y en la parte por la que
+// juzga si esto es serio: sin el artículo, la observación es una opinión.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('las observaciones se envuelven; el fundamento nunca se corta', () => {
+  const NOTA = 'Alimentación de $154.00 sin comprobante de hospedaje ni de transporte del mismo viaje: LISR 28-V condiciona la deducción a que uno de los dos la ampare. Adjúntalo o confírmalo con tu contador.';
+  const largo = liq({
+    diferencias: [{ tipo: 'sin_soporte', concepto: 'alimentacion', monto: 0, nota: NOTA }] as never,
+  });
+
+  it('la cita del artículo llega entera al papel', async () => {
+    const t = await textoDelPdf(await generarLiquidacionPDF(largo, viaje, operador));
+    // Se comprueban por separado a propósito: al envolverse, `LISR` cierra un
+    // renglón y `28-V` abre el siguiente, así que en el stream del PDF quedan
+    // separados por los operadores de posición. Lo que importa es que los DOS
+    // estén, y que el cierre de la nota también — eso solo pasa si se imprimió
+    // entera.
+    expect(t).toContain('LISR');
+    expect(t, 'la fracción del artículo se perdía en el recorte').toContain('28-V');
+    expect(t, 'el cierre de la nota también').toMatch(/contador/);
+  });
+
+  it('y no quedan puntos suspensivos de recorte en la observación', async () => {
+    // `...` es lo que dejaba `cortar`. Si vuelve, la nota volvió a truncarse.
+    const t = await textoDelPdf(await generarLiquidacionPDF(largo, viaje, operador));
+    expect(t).not.toMatch(/LISR 2\.\.\.|viaje: LISR \.\.\./);
+  });
+
+  it('con varias observaciones largas siguen saliendo TODAS', async () => {
+    // Envolver gasta más alto por observación; si el salto de página no lo
+    // contempla, las últimas se caen del papel en silencio.
+    const seis = liq({
+      diferencias: Array.from({ length: 6 }, (_, i) => ({
+        tipo: 'sin_soporte', concepto: 'alimentacion', monto: 0,
+        nota: `Observación número ${i + 1}: ${NOTA}`,
+      })) as never,
+    });
+    const t = await textoDelPdf(await generarLiquidacionPDF(seis, viaje, operador));
+    for (const n of [1, 2, 3, 4, 5, 6]) expect(t, `falta la observación ${n}`).toContain(`Observación número ${n}`);
+  });
+});
