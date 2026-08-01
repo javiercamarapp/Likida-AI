@@ -24,6 +24,7 @@ const gastoPorHash = vi.fn();
 const getGastos = vi.fn();
 const extraerComprobante = vi.fn();
 const runAgent = vi.fn();
+const subirComprobante = vi.fn();
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
 vi.mock('@/lib/cuadra/intake/ocr', () => ({
@@ -31,6 +32,10 @@ vi.mock('@/lib/cuadra/intake/ocr', () => ({
   tieneCodigoLegible: vi.fn(async () => false),
 }));
 vi.mock('@/lib/cuadra/intake/hash', () => ({ hashImagen: vi.fn(async () => 'HASH-DE-LA-FOTO') }));
+vi.mock('@/lib/cuadra/intake/almacen', () => ({
+  subirComprobante: (...a: unknown[]) => subirComprobante(...a),
+  ligaComprobante: vi.fn(),
+}));
 vi.mock('@/lib/cuadra/conv', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
@@ -108,7 +113,7 @@ const WALMART_MAL = {
 describe('processInbound — pedir la re-foto y saber recibirla', () => {
   beforeEach(() => {
     salientes.length = 0;
-    for (const m of [addGasto, corregirFechaGasto, gastoExistePorHash, gastoPorHash, getGastos, extraerComprobante, runAgent]) m.mockReset();
+    for (const m of [addGasto, corregirFechaGasto, gastoExistePorHash, gastoPorHash, getGastos, extraerComprobante, runAgent, subirComprobante]) m.mockReset();
     vi.stubGlobal('fetch', fetchSpy);
     fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
@@ -119,6 +124,7 @@ describe('processInbound — pedir la re-foto y saber recibirla', () => {
     getGastos.mockResolvedValue([]);
     gastoExistePorHash.mockResolvedValue(false);
     gastoPorHash.mockResolvedValue(null);
+    subirComprobante.mockResolvedValue('t1/v1/HASH-DE-LA-FOTO.jpg');
     runAgent.mockResolvedValue({ finalText: 'ok', toolCalls: [], model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0 });
   });
 
@@ -200,5 +206,67 @@ describe('processInbound — pedir la re-foto y saber recibirla', () => {
 
     expect(addGasto).toHaveBeenCalled();
     expect(salientes.join(' ')).not.toMatch(/otra foto|fecha que entendí/i);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA FOTO SE GUARDA CON EL GASTO — y su fallo no cuesta el gasto.
+//
+// Hasta el 1-ago no se guardaba ninguna: 22 gastos en producción, 0 con
+// `imagen_url`. El CFF art. 30 obliga a conservar el comprobante cinco años, y
+// un gasto con monto y folio pero sin el papel es una fila en una tabla.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('processInbound — el comprobante se archiva', () => {
+  beforeEach(() => {
+    // Bloque HERMANO del de arriba: no hereda su `beforeEach`, así que el
+    // arranque se repite entero. Sin esto, los mocks llegaban con el estado del
+    // último caso del otro bloque y dos pruebas pasaban por arrastre.
+    salientes.length = 0;
+    for (const m of [addGasto, corregirFechaGasto, gastoExistePorHash, gastoPorHash, getGastos, extraerComprobante, runAgent, subirComprobante]) m.mockReset();
+    vi.stubGlobal('fetch', fetchSpy);
+    fetchSpy.mockClear();
+    process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
+    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
+    process.env.CUADRA_DEDUP_FOTOS = '1';
+    addGasto.mockResolvedValue(undefined);
+    getGastos.mockResolvedValue([]);
+    gastoExistePorHash.mockResolvedValue(false);
+    gastoPorHash.mockResolvedValue(null);
+    subirComprobante.mockResolvedValue('t1/v1/HASH-DE-LA-FOTO.jpg');
+    runAgent.mockResolvedValue({ finalText: 'ok', toolCalls: [], model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0 });
+    extraerComprobante.mockResolvedValue({
+      legible: true,
+      gasto: { concepto: 'diesel', monto: 800, fecha: '2026-08-01', folio: 'A1', ocrExtra: {} },
+      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+    });
+  });
+
+  it('la RUTA de la foto se guarda junto al gasto', async () => {
+    await processInbound(foto);
+    expect(addGasto).toHaveBeenCalledWith('t1', 'v1', expect.objectContaining({
+      imagenUrl: 't1/v1/HASH-DE-LA-FOTO.jpg',
+    }));
+  });
+
+  it('la subida arranca ANTES del OCR: esperarla después costaría segundos de pared', async () => {
+    // Si alguien la mueve debajo de `extraerComprobante`, el operador paga esa
+    // latencia en cada foto sin que nada lo delate.
+    const orden: string[] = [];
+    subirComprobante.mockImplementation(async () => { orden.push('subida'); return 'ruta'; });
+    extraerComprobante.mockImplementation(async () => {
+      orden.push('ocr');
+      return { legible: true, gasto: { concepto: 'diesel', monto: 800, fecha: '2026-08-01', ocrExtra: {} },
+               costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 } };
+    });
+    await processInbound(foto);
+    expect(orden[0]).toBe('subida');
+  });
+
+  it('si storage falla, el gasto ENTRA igual — sin imagen, pero entra', async () => {
+    // El riesgo de meter una subida en el camino del dinero es exactamente éste.
+    subirComprobante.mockResolvedValue(undefined);
+    await processInbound(foto);
+    expect(addGasto).toHaveBeenCalled();
+    expect(addGasto.mock.calls[0][2]).not.toHaveProperty('imagenUrl');
   });
 });

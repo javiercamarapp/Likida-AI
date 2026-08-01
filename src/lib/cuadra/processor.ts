@@ -18,6 +18,7 @@ import { PartialExecutionError, type ToolCallRecord } from '@/lib/llm/openrouter
 import type { Gasto } from '@/types/cuadra';
 import { extraerComprobante, tieneCodigoLegible } from '@/lib/cuadra/intake/ocr';
 import { hashImagen } from '@/lib/cuadra/intake/hash';
+import { subirComprobante } from '@/lib/cuadra/intake/almacen';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { violaIndice, llegoTarde } from '@/lib/cuadra/pg_errores';
@@ -445,6 +446,23 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           }
         }
 
+        // LA FOTO SE GUARDA, y se arranca AQUÍ para que corra en paralelo con
+        // la visión: esperarla después costaría segundos de pared que no hacen
+        // falta, porque nadie la necesita hasta el `addGasto` de más abajo.
+        //
+        // Hasta hoy no se guardaba ninguna (22 gastos en producción, 0 con
+        // `imagen_url`). El CFF art. 30 obliga a conservar el comprobante cinco
+        // años, y un gasto con monto y folio pero sin el papel es una fila en
+        // una tabla. Además es lo único que dirime un OCR discutido: sin la
+        // foto, es la palabra del sistema contra la del operador.
+        //
+        // No se hace `await` aquí y `subirComprobante` nunca lanza: si falla, el
+        // gasto entra sin imagen. Perder el comprobante por no poder guardar su
+        // retrato sería cambiar un problema chico por el grande.
+        const subida = subirComprobante(
+          op.tenantId, viajeId, imgHash ?? randomUUID(), dataUrl,
+        );
+
         // AUDITORÍA 8, ALTO REINCIDENTE (rendimiento): protocolo de dos fotos —
         // retener el ticket completo unos segundos por si le sigue el
         // acercamiento, para pagar UNA visión en vez de dos. `foto_pendiente`
@@ -665,7 +683,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           return; // silencioso: el acuse de la ráfaga ya se dio con la 1ª foto
         }
         try {
-          await addGasto(op.tenantId, viajeId, imgHash ? { ...gasto, imgHash } : gasto);
+          // Aquí sí se espera la subida: es lo único que faltaba del gasto, y
+          // para este punto lleva corriendo todo el rato que tardó la visión.
+          const imagenUrl = await subida;
+          await addGasto(op.tenantId, viajeId, {
+            ...gasto,
+            ...(imgHash ? { imgHash } : {}),
+            ...(imagenUrl ? { imagenUrl } : {}),
+          });
         } catch (e) {
           // R1: dos fotos IDÉNTICAS en el mismo lote pasan el pre-check antes de
           // que cualquiera inserte; el índice único (mig. 0015) atrapa la 2ª con

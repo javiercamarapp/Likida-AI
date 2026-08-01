@@ -641,14 +641,35 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // para que esta advertencia desapareciera sobre una comida de $1,050. El
     // motor daba por amparado lo que la ley no ampara, y callando.
     const haySoporte = vivos.some((g) => g.concepto === 'hospedaje' || g.concepto === 'transporte');
-    if (!haySoporte) {
-      for (const g of vivos.filter((g) => g.concepto === 'alimentacion')) {
-        diferencias.push({
-          tipo: 'alimentacion_sin_soporte', concepto: g.concepto, monto: 0,
-          nota: `Alimentación de ${mxn(g.monto)} sin comprobante de hospedaje ni de transporte del mismo viaje: LISR 28-V condiciona la deducción a que uno de los dos la ampare. Adjúntalo o confírmalo con tu contador.`,
-          gastoId: g.id,
-        });
-      }
+    const comidas = haySoporte ? [] : vivos.filter((g) => g.concepto === 'alimentacion');
+    if (comidas.length) {
+      // UNA sola observación, no una por comida.
+      //
+      // La causa es una y es del VIAJE —no hay hospedaje ni transporte en toda
+      // la liquidación—, así que repetirla por comprobante no añade
+      // información: dice tres veces lo mismo cambiando la cifra. En el PDF del
+      // 1-ago eran tres renglones de seis, y al envolverse pasaron a nueve, con
+      // la mitad del papel ocupada por una frase idéntica.
+      //
+      // Lo que el contralor necesita saber es CUÁNTO está en revisión por esta
+      // causa, y eso antes tenía que sumarlo él.
+      //
+      // `monto` sigue en 0 a propósito: es una advertencia para revisar, no
+      // dinero perdido. Ponerle el total en la columna de importes lo declararía
+      // no deducible, que es justo lo que el comentario de arriba dice que no se
+      // puede afirmar sin ver toda la contabilidad de la flota.
+      const total = comidas.reduce((s, g) => s + g.monto, 0);
+      const sujeto = comidas.length === 1
+        ? `Alimentación de ${mxn(total)}`
+        : `${mxn(total)} en ${comidas.length} comprobantes de alimentación`;
+      diferencias.push({
+        tipo: 'alimentacion_sin_soporte', concepto: 'alimentacion', monto: 0,
+        nota: `${sujeto} sin comprobante de hospedaje ni de transporte del mismo viaje: LISR 28-V condiciona la deducción a que uno de los dos la ampare. Adjúntalo o confírmalo con tu contador.`,
+        // Con una sola comida se conserva a qué comprobante apunta; con varias
+        // no hay UNO al que señalar, y apuntar al primero sería mentir sobre los
+        // otros.
+        gastoId: comidas.length === 1 ? comidas[0].id : undefined,
+      });
     }
   }
 

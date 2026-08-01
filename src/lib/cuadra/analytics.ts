@@ -203,7 +203,7 @@ export interface LiquidacionDetalle {
   /** `ocrExtra` viaja porque la etiqueta del renglón depende del producto
    *  impreso en el ticket: sin él el panel dice "Diésel" donde el PDF dice
    *  "Combustible Magna" (auditoría 5, arquitectura, ALTO 1). */
-  gastos: Array<{ concepto: string; monto: number; folio?: string; ocrExtra?: Record<string, unknown> }>;
+  gastos: Array<{ concepto: string; monto: number; folio?: string; ocrExtra?: Record<string, unknown>; imagenUrl?: string }>;
   /** Cuántos comprobantes NO están en `gastos` por estar excluidos del total
    *  (duplicados y montos no positivos). `0` cuando la tabla es completa. */
   comprobantesExcluidos: number;
@@ -281,10 +281,10 @@ async function leerGastos(
   admin: ReturnType<typeof supabaseAdmin>,
   tenantId: string,
   viajeId: string,
-): Promise<Array<{ concepto: string; monto: number; folio?: string; ocrExtra?: Record<string, unknown> }>> {
+): Promise<Array<{ concepto: string; monto: number; folio?: string; ocrExtra?: Record<string, unknown>; imagenUrl?: string }>> {
   const res = await admin
     .from('gasto')
-    .select('id, concepto, monto, folio, ocr_extra')
+    .select('id, concepto, monto, folio, ocr_extra, imagen_url')
     .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId)
     .order('fecha', { ascending: true, nullsFirst: false })
@@ -295,6 +295,7 @@ async function leerGastos(
     monto: Number(g.monto),
     folio: (g.folio as string) || undefined,
     ocrExtra: (g.ocr_extra as Record<string, unknown>) || undefined,
+    imagenUrl: (g.imagen_url as string) || undefined,
   }));
 }
 

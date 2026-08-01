@@ -65,3 +65,48 @@ describe('el flete no ampara un viático de alimentos', () => {
     expect(d.filter((x) => x.tipo === 'sobre_politica')).toHaveLength(1);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNA observación, no una por comida. 1-ago-2026.
+//
+// La causa es del VIAJE —no hay hospedaje ni transporte en toda la liquidación—,
+// así que repetirla por comprobante decía tres veces lo mismo cambiando la
+// cifra. En el PDF real eran tres renglones de seis; al envolverse para no
+// cortar la cita legal pasaron a nueve, con media hoja ocupada por una frase
+// idéntica.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la advertencia de LISR 28-V no se repite por comprobante', () => {
+  const tres = [
+    g({ concepto: 'alimentacion', monto: 154, folio: '689630' }),
+    g({ concepto: 'alimentacion', monto: 192, folio: '106841' }),
+    g({ concepto: 'alimentacion', monto: 45, folio: '05461' }),
+  ];
+
+  it('tres comidas sin soporte levantan UNA sola', () => {
+    expect(sinSoporte(tres)).toHaveLength(1);
+  });
+
+  it('y trae el TOTAL en revisión, que antes el contralor tenía que sumar', () => {
+    const [d] = sinSoporte(tres);
+    expect(d.nota).toContain('$391.00');
+    expect(d.nota).toContain('3 comprobantes');
+    expect(d.nota, 'el fundamento no se pierde al colapsar').toContain('LISR 28-V');
+  });
+
+  it('sigue sin declarar dinero perdido: es para revisar, no un no deducible', () => {
+    // Ponerle el total en la columna de importes lo declararía no deducible sin
+    // ver la contabilidad de la flota, que es justo lo que el motor no puede
+    // afirmar.
+    expect(sinSoporte(tres)[0].monto).toBe(0);
+  });
+
+  it('con UNA comida el texto no cambia, y sigue apuntando a su comprobante', () => {
+    const [d] = sinSoporte([comida]);
+    expect(d.nota).toMatch(/^Alimentación de \$1,050\.00 sin comprobante/);
+    expect(d.gastoId).toBe(comida.id);
+  });
+
+  it('con varias NO apunta a ninguno: señalar al primero mentiría sobre los otros', () => {
+    expect(sinSoporte(tres)[0].gastoId).toBeUndefined();
+  });
+});

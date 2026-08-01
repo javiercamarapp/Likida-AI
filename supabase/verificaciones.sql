@@ -896,3 +896,32 @@ begin
   raise exception E'FOTO PENDIENTE  primera=%  segunda-bloqueada=%  sqlstate=%  reclamo1=%  reclamo2-nada-que-tomar=%   (esperado t / t / 23505 / t / f)',
     primera_ok, segunda_bloqueada, msg, reclamo1_ok, reclamo2_ok;
 end $$;
+
+-- ── 22. La foto del ticket no es pública (mig. 0039) ────────────────────────
+-- Un ticket no es un dato inocuo: trae RFC y domicilio del establecimiento, a
+-- veces el nombre del titular de la tarjeta, y —en una farmacia— el nombre del
+-- medicamento, que es dato SENSIBLE del art. 2 fr. VI de la LFPDPPP.
+--
+-- Un bucket público no falla ruidosamente: sirve. La liquidación se ve bien, el
+-- panel enseña las fotos, y el expediente de gastos de toda la flota queda
+-- accesible para quien adivine el nombre de un archivo, sin que nada avise. Es
+-- exactamente la clase de garantía que solo la base puede demostrar y que una
+-- prueba en TS con Supabase mockeado probaría contra el mock.
+--
+-- Se comprueba `buckets_publicos = 0` y no solo el de comprobantes: el modo de
+-- falla real es que alguien cree el siguiente bucket con el default equivocado,
+-- y ese día esto tiene que ponerse rojo aunque la 0039 siga bien.
+--
+-- Corrido el 1-ago, salida real:  1 / f / 0 / t / 0
+select
+  (select count(*) from storage.buckets where id='comprobantes')                    as existe,
+  (select bool_or(public) from storage.buckets where id='comprobantes')             as publico,
+  (select count(*) from storage.buckets where public)                               as buckets_publicos,
+  (select relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='storage' and c.relname='objects')                              as rls_objects,
+  (select count(*) from pg_policies
+    where schemaname='storage' and tablename='objects'
+      and (qual like '%comprobantes%' or with_check like '%comprobantes%'))         as policies_comprobantes;
+-- existe=1 · publico=f · buckets_publicos=0 · rls_objects=t · policies=0
+-- (sin policy sobre storage.objects, RLS deniega a anon/authenticated; solo el
+--  service-role escribe y firma. Mismo criterio que la 0008 y la 0038.)
