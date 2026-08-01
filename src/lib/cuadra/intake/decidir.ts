@@ -25,7 +25,11 @@ export type AccionFoto =
 export function decidirFoto(r: ExtraerResultado, gastos: Gasto[]): AccionFoto {
   if (r.legible) return { accion: 'alta' };
   if (r.motivo === 'fallo_tecnico') return { accion: 'avisar_falla' };
-  if (r.motivo === 'solo_codigo') {
+  // Acercamiento y VOUCHER se resuelven igual, y por la misma razón: los dos
+  // valen el mismo dinero que el ticket que les corresponde, así que sumarlos
+  // infla la liquidación. El voucher se añadió el 31-jul tras medirlo con 14
+  // fotos reales: cuatro pares voucher+ticket duplicaron $1,600.
+  if (r.motivo === 'solo_codigo' || r.motivo === 'solo_pago') {
     const destino = emparejarPorMonto(r.gasto.monto, gastos);
     // Sin destino único NO se da de alta: un acercamiento por su cuenta vale el
     // mismo dinero que el ticket que le corresponde, y sumar los dos infla la

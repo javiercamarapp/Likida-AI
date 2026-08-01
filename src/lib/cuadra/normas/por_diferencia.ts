@@ -26,6 +26,10 @@ import { NORMAS } from './indice';
  */
 export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   sin_cfdi: ['lisr-27-fr-III'],
+  // El papel dice "ESTE NO ES UN COMPROBANTE FISCAL". El art. 29-A lista lo que
+  // un comprobante tiene que traer para amparar una deducción; una nota de
+  // consumo no lo trae, y lo declara ella misma.
+  comprobante_no_fiscal: ['cff-29-A'],
   combustible_efectivo: ['lisr-27-fr-III', 'rfa-2026-2.9'],
   efectivo_sobre_tope: ['lisr-27-fr-III'],
   viatico_excede_fiscal: ['lisr-28-fr-V'],
