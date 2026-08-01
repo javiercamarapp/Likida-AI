@@ -30,7 +30,7 @@ import { getConfig } from '@/lib/cuadra/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/cuadra/intake/emparejar';
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import {
-  addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash, corregirFechaGasto,
+  addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash, gastoPorHash, corregirFechaGasto,
   enriquecerGastoConCodigo, guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente,
   guardarFotoPendiente, existeFotoPendiente, reclamarFotoPendiente,
   getDatosResponsable, reclamarEnvioAviso, confirmarEnvioAviso, liberarEnvioAviso,
@@ -415,7 +415,33 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           imgHash = await hashImagen(dataUrl);
           if (await gastoExistePorHash(viajeId, imgHash, op.tenantId)) {
             logger.info('foto.dedup', { viaje: viajeId });
-            return; // ya la teníamos: no re-OCR, no duplicar gasto, sin acuse extra
+            // EL SILENCIO ES CORRECTO… SALVO CUANDO ESA FOTO ES LA QUE SE PIDIÓ.
+            //
+            // Fallo del ensayo del 1-ago: se le pidió otra foto de un ticket con
+            // la fecha mal leída, reenvió EL MISMO archivo, y esto lo descartó
+            // antes del OCR sin decir nada. Hizo lo que se le pidió, no pasó
+            // nada, y no tenía forma de enterarse — el peor modo de falla que
+            // hay, porque desde su lado el sistema quedó mudo.
+            //
+            // Para un reenvío cualquiera (doble toque, reintento) el silencio
+            // sigue siendo lo correcto: avisarle de cada foto repetida sería
+            // ruido. Lo que cambia el caso es que el gasto que empata tenga la
+            // fecha en duda, porque entonces esa foto NO puede aportar nada:
+            // es la misma que ya se leyó mal.
+            try {
+              const [previo, v] = await Promise.all([
+                gastoPorHash(viajeId, imgHash, op.tenantId),
+                ventanaDesdeDB(op.tenantId, viajeId),
+              ]);
+              if (previo && v && fechaDudosa(previo.fecha, v)) {
+                await say(`Esa es la *misma foto* que ya me habías mandado 🔁, así que la fecha sigue igual. Necesito una foto *nueva* de ese ticket de ${mxn(previo.monto)} —tomada otra vez, no reenviada— enfocando la parte donde viene la fecha. 📸`);
+              }
+            } catch (e) {
+              // Best-effort: el dedup ya hizo su trabajo. Fallar aquí no puede
+              // costar un gasto, solo un aviso.
+              logger.warn('foto.dedup_aviso_falló', { err: e instanceof Error ? e.message : String(e) });
+            }
+            return; // ya la teníamos: no re-OCR, no duplicar gasto
           }
         }
 

@@ -139,6 +139,38 @@ export async function gastoExistePorHash(viajeId: string, imgHash: string, tenan
   return (data?.length ?? 0) > 0;
 }
 
+/**
+ * El gasto que ya tiene ese hash de imagen, con lo justo para hablar de él.
+ *
+ * Hermano de `gastoExistePorHash` y NO su sustituto: aquél es la compuerta y
+ * corre en toda foto; éste solo corre cuando la compuerta ya dio positivo, que
+ * es el caso raro del reenvío idéntico. Separarlos es lo que evita pagar esta
+ * lectura en el camino normal.
+ *
+ * Existe por un fallo del ensayo del 1-ago: se le pidió al operador otra foto de
+ * un ticket con la fecha mal leída, reenvió EL MISMO archivo, y el dedup por
+ * contenido lo descartó antes del OCR — en silencio. Hizo lo que se le pidió y
+ * no pasó nada, sin que nadie se lo dijera.
+ */
+export async function gastoPorHash(
+  viajeId: string, imgHash: string, tenantId: string,
+): Promise<{ id: string; fecha?: string; monto: number; concepto: string; folio?: string; ocrExtra?: Record<string, unknown> } | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('gasto')
+    .select('id, concepto, monto, fecha, folio, ocr_extra')
+    .eq('tenant_id', tenantId)
+    .eq('viaje_id', viajeId)
+    .eq('img_hash', imgHash)
+    .limit(1), 'gastoPorHash');
+  const fila = !error ? data?.[0] : null;
+  if (!fila) return null;
+  return {
+    id: fila.id, concepto: fila.concepto, monto: Number(fila.monto),
+    fecha: fila.fecha ?? undefined, folio: fila.folio ?? undefined,
+    ocrExtra: (fila.ocr_extra ?? {}) as Record<string, unknown>,
+  };
+}
+
 /** NIVEL 2: actualiza un gasto con los datos del XML del CFDI (por id). */
 /**
  * Re-fecha un gasto con lo que trajo la SEGUNDA foto del mismo ticket.
