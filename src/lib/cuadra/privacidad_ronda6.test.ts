@@ -86,3 +86,27 @@ describe('la oposición del art. 26 fr. II se reconoce como se habla', () => {
     it(`no lo confunde: "${t}"`, () => expect(pideAtencionPrivacidad(t)).toBe(false));
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 8 · ALTO — "que lo revise una persona" es la misma forma tanto
+// para oponerse a una decisión automatizada (art. 26 fr. II) como para pedir
+// ayuda con un ticket mal leído por el OCR. Sin distinguir el OBJETO de la
+// revisión, la queja real sobre el papel desaparecía sin rastro: el operador
+// recibía un discurso de ARCO en vez de ayuda con su comprobante.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la oposición ambigua NO secuestra una queja sobre un ticket', () => {
+  const quejasDeTicket = [
+    'que revise una persona el folio porque el sistema lo leyó mal',
+    'necesito que una persona vea este ticket, se ve mal la foto',
+    'oye que revise una persona mi comprobante, se ve rara la lectura',
+  ];
+  for (const t of quejasDeTicket) {
+    it(`NO la trata como oposición: "${t}"`, () => expect(pideAtencionPrivacidad(t)).toBe(false));
+  }
+
+  // Control: sin vocabulario de papel, "que lo revise una persona" SIGUE
+  // siendo oposición — el arreglo no puede volverse un falso negativo general.
+  it('control: "quiero que lo revise una persona" (sin ticket/folio) sigue contando', () => {
+    expect(pideAtencionPrivacidad('quiero que lo revise una persona')).toBe(true);
+  });
+});
