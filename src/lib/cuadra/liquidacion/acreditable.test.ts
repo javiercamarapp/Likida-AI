@@ -96,6 +96,8 @@ describe('filasAcreditables — el peaje deja de afirmarse solo', () => {
       estimulos: { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000 },
       gastos: [{
         id: 'g1', concepto: 'caseta', monto: 1160, fecha: '2026-07-20', cfdiUuid: 'u-caseta',
+        // AUDITORÍA 8: CFDI ya verificado — receptor presente a propósito.
+        rfcReceptor: 'REC010101AA1',
         xmlVerificado: true, subTotal: 1000, ivaTraslado: 160, formaPago: '03',
       }],
     });
