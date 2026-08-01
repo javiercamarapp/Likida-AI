@@ -369,7 +369,7 @@ async function reconstruir(
 
 /**
  * ¿El conjunto de TIPOS de diferencia que produce el motor hoy es distinto del
- * que se guardó al cerrar?
+ * que se guardó al cerrar, o cambió el `esperado` de alguno que se repite?
  *
  * Se comparan los tipos como conjunto, no la lista entera: los montos y los
  * textos pueden variar por redondeo o por una leyenda reescrita sin que el
@@ -378,16 +378,34 @@ async function reconstruir(
  * `rfc_receptor_no_verificable`, `efectivo_sobre_tope`, `sin_cfdi`—, que es
  * exactamente la huella que deja un cambio de política, de RFC o de vigencia.
  *
+ * AUDITORÍA 8, CRÍTICO: comparar solo el tipo no basta. `viatico_excede_fiscal`
+ * se emite siempre que el gasto exceda EL TOPE QUE SEA, así que un ajuste al
+ * tope de alimentación del tenant (`estimulos.viaticosTopeFiscalDiarioMxn`,
+ * config editable igual que el RFC del hallazgo original) mueve el
+ * `totalDeducible` sin mover el conjunto de tipos. `esperado` sí es ese dato:
+ * a diferencia de `monto`/`real` (calculados, sujetos a redondeo), `esperado`
+ * es el valor de configuración contra el que se compara — `pol.topeMonto`,
+ * `input.anticipo`, `topeAlimentacion` — y no varía salvo que la config sí
+ * haya cambiado. Se incluye en la llave solo cuando está presente, para no
+ * romper los tipos que nunca lo traen.
+ *
  * Si lo persistido no es una lista utilizable, NO se declara deriva: una
  * liquidación vieja con `diferencias: null` es un dato que falta, no una
  * contradicción, y apagar el desglose por eso castigaría al camino bueno.
  */
-export function derivoLaConfig(persistidas: unknown, actuales: Array<{ tipo?: string }>): boolean {
+export function derivoLaConfig(
+  persistidas: unknown,
+  actuales: Array<{ tipo?: string; esperado?: number }>,
+): boolean {
   if (!Array.isArray(persistidas)) return false;
-  const tipos = (xs: Array<{ tipo?: string }>) =>
-    new Set(xs.map((d) => d?.tipo).filter((t): t is string => typeof t === 'string'));
-  const antes = tipos(persistidas as Array<{ tipo?: string }>);
-  const ahora = tipos(actuales ?? []);
+  const llaves = (xs: Array<{ tipo?: string; esperado?: number }>) =>
+    new Set(
+      xs
+        .filter((d): d is { tipo: string; esperado?: number } => typeof d?.tipo === 'string')
+        .map((d) => (typeof d.esperado === 'number' ? `${d.tipo}:${d.esperado}` : d.tipo)),
+    );
+  const antes = llaves(persistidas as Array<{ tipo?: string; esperado?: number }>);
+  const ahora = llaves(actuales ?? []);
   if (antes.size !== ahora.size) return true;
   for (const t of ahora) if (!antes.has(t)) return true;
   return false;

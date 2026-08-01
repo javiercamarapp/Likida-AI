@@ -96,3 +96,41 @@ describe('el portón nuevo mira los tipos de diferencia, que sí cambian', () =>
     )).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 8 · CRÍTICO de frontend — MISMO BUG, PUERTA DEL TOPE DE VIÁTICOS.
+//
+// El portón de arriba compara el CONJUNTO de tipos, no el monto. Si alguien
+// ajusta `estimulos.viaticosTopeFiscalDiarioMxn` del tenant (config editable,
+// igual que el RFC del hallazgo original) entre el cierre y la reapertura, el
+// motor sigue emitiendo el MISMO tipo ('viatico_excede_fiscal') aunque el
+// `totalDeducible` real se mueva cientos de pesos — y `derivoLaConfig` decía
+// que no había deriva.
+//
+// Medido con el motor real (frontend.md, auditoría 8): tope 750 → deducible
+// 1050; tope 400 → deducible 700. `totalComprobado` no se mueve, los TIPOS
+// tampoco, pero el `esperado` de la diferencia sí (750 → 400) — y ese campo ya
+// se persiste, solo no se estaba mirando.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el portón también ve un tope fiscal que cambió, aunque el tipo se repita', () => {
+  const derivo = (a: Array<{ tipo?: string; esperado?: number }>, b: Array<{ tipo?: string; esperado?: number }>) =>
+    derivoLaConfig(a, b);
+
+  it('detecta que el tope de alimentación cambió, mismo tipo, distinto esperado', () => {
+    expect(derivo(
+      [{ tipo: 'viatico_excede_fiscal', esperado: 750 }],
+      [{ tipo: 'viatico_excede_fiscal', esperado: 400 }],
+    )).toBe(true);
+  });
+
+  it('el mismo tope, mismo esperado, no es deriva', () => {
+    expect(derivo(
+      [{ tipo: 'viatico_excede_fiscal', esperado: 750 }],
+      [{ tipo: 'viatico_excede_fiscal', esperado: 750 }],
+    )).toBe(false);
+  });
+
+  it('sin esperado en ninguno de los dos lados, se conserva el criterio de solo-tipo', () => {
+    expect(derivo([{ tipo: 'anticipo' }], [{ tipo: 'anticipo' }])).toBe(false);
+  });
+});
