@@ -179,12 +179,19 @@ const MAX_TURNS = 12;
  */
 export async function loadConversation(tenantId: string, telefono: string, viajeId: string | null): Promise<{ id: string; turns: ConvTurn[] }> {
   const admin = supabaseAdmin();
-  const { data } = await admin
+  const { data, error } = await admin
     .from('wa_conversacion')
     .select('id, estado, viaje_id')
     .eq('tenant_id', tenantId)
     .eq('telefono', telefono)
     .maybeSingle();
+  // AUDITORÍA 8, ALTO: era la única vecina de `getOpenViaje`/`resolveOperador`
+  // que descartaba `error`. Un blip de Supabase se leía como "no existe la
+  // conversación", caía al INSERT de abajo, chocaba con
+  // `wa_conversacion_tenant_tel_uidx` (23505), y el turno del asistente que el
+  // operador SÍ leyó se perdía — el agente arrancaba el siguiente mensaje sin
+  // memoria de lo que ya se dijo.
+  if (error) throw new ConsultaFallida(`loadConversation: ${error.message}`);
   if (data) {
     const estado = (data.estado as { turns?: ConvTurn[] }) || {};
     // El historial pertenece al viaje en el que se dijo. Si la fila viene de otro
@@ -236,11 +243,20 @@ export async function claimMessage(waMessageId: string): Promise<Claim> {
   return 'indeterminado';
 }
 
+// AUDITORÍA 8, ALTO: no lanza a propósito — para cuando esto corre, la
+// respuesta (y el PDF) ya pudieron haberse entregado, y el catch general de
+// `processInbound` mandaría un segundo mensaje "se me trabó" contradiciendo
+// una respuesta que sí llegó. Pero antes tampoco miraba `error`: un `.eq('id',
+// '')` sobre un `convId` vacío (el que devuelve `loadConversation` cuando su
+// propio INSERT choca) no actualizaba nada y no lo decía nadie. Ahora al
+// menos queda un ERROR en el log — se pierde el turno, no el rastro de que se
+// perdió.
 export async function saveConversation(convId: string, turns: ConvTurn[], viajeId: string | null): Promise<void> {
-  await supabaseAdmin()
+  const { error } = await supabaseAdmin()
     .from('wa_conversacion')
     .update({ estado: { turns: turns.slice(-MAX_TURNS) }, viaje_id: viajeId, updated_at: new Date().toISOString() })
     .eq('id', convId);
+  if (error) logger.error('conv.no_se_guardo', { convId, err: error.message });
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
