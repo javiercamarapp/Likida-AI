@@ -968,6 +968,34 @@ describe('cuadrarViaje — estímulo de IEPS de diésel', () => {
     });
     expect(r.litrosDieselAcreditables).toBe(0);
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 8 · CRÍTICO fiscal — los litros salían del OCR sin cotejar contra
+  // nada: ni el XML, ni precio×litros≈monto. Un decimal corrido en la lectura
+  // (200.00 L leído como 20,000 L) acreditaba 100 VECES el estímulo real.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('litros que no cuadran con el monto (un decimal corrido) NO se acreditan, y se marca para revisar', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 10000, politica: conIeps, estimulos: est,
+      gastos: [g({ concepto: 'diesel', monto: 5800, cfdiUuid: 'u1', claveProdServ: '15101514',
+                   ocrExtra: { litros: 20000 }, xmlVerificado: true, formaPago: '04' })],
+    });
+    expect(r.litrosDieselAcreditables).toBe(0);
+    expect((r.diferencias ?? []).map((d) => d.tipo)).toContain('diesel_desviacion');
+    expect(r.estatus).toBe('revisar');
+  });
+
+  it('control: litros consistentes con el monto (~$27/L) SÍ se acreditan, sin marca', () => {
+    // El mismo caso que ya cubre 'cuenta los LITROS elegibles' de arriba,
+    // repetido aquí para dejar el contraste con el de encima en el mismo bloque.
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 10000, politica: conIeps, estimulos: est,
+      gastos: [g({ concepto: 'diesel', monto: 5800, cfdiUuid: 'u1', claveProdServ: '15101514',
+                   ocrExtra: { litros: 215 }, xmlVerificado: true, formaPago: '04' })],   // $5800/215 ≈ $27/L
+    });
+    expect(r.litrosDieselAcreditables).toBe(215);
+    expect((r.diferencias ?? []).map((d) => d.tipo)).not.toContain('diesel_desviacion');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

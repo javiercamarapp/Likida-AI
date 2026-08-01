@@ -59,7 +59,7 @@ export interface CuadreInput {
     exigibleDesde?: string | null;
   };
   /** Estímulos y topes fiscales (LIF 2026 art. 20, ap. A / LISR). */
-  estimulos?: { peajeFactor: number; viaticosTopeFiscalDiarioMxn: number; efectivoTopeMxn: number; clavesDieselIeps?: string[] };
+  estimulos?: { peajeFactor: number; viaticosTopeFiscalDiarioMxn: number; efectivoTopeMxn: number; clavesDieselIeps?: string[]; precioDieselPorDefecto?: number };
   /** Hoy (ISO YYYY-MM-DD), para el aviso de tickets por facturar. Se INYECTA:
    *  el motor es puro y no lee el reloj del servidor. Sin esto, esa regla no corre. */
   hoy?: string;
@@ -769,7 +769,28 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // CFDI no siempre trae la cantidad desglosada por concepto).
       const litros = Number((g.ocrExtra as Record<string, unknown> | undefined)?.litros ?? 0);
       const pagoElectronico = !!g.formaPago && g.formaPago !== '01';
-      if (pagoElectronico && Number.isFinite(litros) && litros > 0) litrosDieselAcreditables += litros;
+      if (pagoElectronico && Number.isFinite(litros) && litros > 0) {
+        // AUDITORÍA 8, CRÍTICO: los litros salen del OCR y nada los cotejaba —
+        // ni contra el XML (no siempre trae la cantidad desglosada), ni contra
+        // precio×litros≈monto. Un decimal corrido en la lectura (200.00 L visto
+        // como 20,000 L) acreditaba cien veces el estímulo real, y es justo el
+        // número que el contador multiplica por la cuota del DOF. Tolerancia
+        // amplia (0.5×–2× el precio de referencia) a propósito: no es para fijar
+        // el precio del litro, solo para atrapar un error de lectura grosero sin
+        // marcar tickets legítimos por variación regional de precio.
+        const precioRef = input.estimulos?.precioDieselPorDefecto ?? 27.0;
+        const litrosEsperados = precioRef > 0 ? g.monto / precioRef : 0;
+        const razon = litrosEsperados > 0 ? litros / litrosEsperados : Infinity;
+        if (razon < 0.5 || razon > 2) {
+          diferencias.push({
+            tipo: 'diesel_desviacion', concepto: g.concepto, monto: 0,
+            nota: `Los ${litros} L leídos de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} no cuadran con el monto: ${mxn(g.monto)} ÷ ~$${precioRef}/L ≈ ${Math.round(litrosEsperados)} L esperados. No se acredita el estímulo hasta verificar el ticket.`,
+            gastoId: g.id,
+          });
+        } else {
+          litrosDieselAcreditables += litros;
+        }
+      }
       if (!(g.iepsTraslado ?? 0) && g.xmlVerificado) {
         diferencias.push({ tipo: 'ieps_no_desglosado', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} no desglosa el IEPS — es deducible, pero sin ese desglose se complica documentar el estímulo (LIF 2026 art. 20, ap. A).`, gastoId: g.id });
       }
@@ -837,7 +858,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
   // mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
   // Se sigue avisando en `diferencias`; ya no bloquea.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
