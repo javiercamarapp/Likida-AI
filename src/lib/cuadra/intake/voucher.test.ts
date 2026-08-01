@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { decidirFoto } from './decidir';
 import type { ExtraerResultado } from './ocr';
 import type { Gasto } from '@/types/cuadra';
+import { cuadrarViaje } from '@/lib/cuadra/cuadre/engine';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -120,5 +121,56 @@ describe('la nota no fiscal SÍ entra, pero avisa', () => {
     // `monto: 0` — informa, no le castiga el gasto al chofer por lo que le dio
     // el negocio.
     expect(engine).toMatch(/tipo: 'comprobante_no_fiscal', concepto: g\.concepto, monto: 0/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CONTRATO DE LA NOTA NO FISCAL, EN PESOS Y SIN GASTAR UN CENTAVO.
+//
+// Las dos pruebas de arriba miran el código fuente, que sirve para fijar la
+// forma pero no dice qué le pasa al dinero. Esto corre el motor de verdad, con
+// el ticket real de $116 que salió en las 14 fotos.
+//
+// Lo que tiene que valer, y es lo que distingue esta diferencia de todas las
+// demás: el gasto SIGUE contando. El operador puso ese dinero y se le repone.
+// Lo que no puede es pasar por deducible.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la nota no fiscal, en pesos', () => {
+  const gasto = (over: Partial<Gasto> = {}): Gasto => ({
+    id: 'g-nota', viajeId: 'v1', concepto: 'alimentacion', monto: 116,
+    fecha: '2026-07-31', ocrConfianza: 0.95, ...over,
+  } as Gasto);
+
+  const cuadre = (g: Gasto) => cuadrarViaje({
+    viajeId: 'v1', anticipo: 500, gastos: [g],
+    politica: [{ concepto: 'alimentacion', topeMonto: 800 }],
+    empresaRfc: 'CCO8605231N4', hoy: '2026-07-31',
+  });
+
+  it('el gasto SIGUE contando en el comprobado: al operador se le repone', () => {
+    const liq = cuadre(gasto({ ocrExtra: { noEsComprobanteFiscal: true } }));
+    expect(liq.totalComprobado, 'excluirlo sería que el chofer se coma su comida').toBe(116);
+  });
+
+  it('pero NO pasa por deducible', () => {
+    const liq = cuadre(gasto({ ocrExtra: { noEsComprobanteFiscal: true } }));
+    expect(liq.totalDeducible).toBe(0);
+  });
+
+  it('levanta la diferencia, cita el 29-A y dice qué hacer', () => {
+    const liq = cuadre(gasto({ ocrExtra: { noEsComprobanteFiscal: true } }));
+    const d = (liq.diferencias ?? []).find((x) => x.tipo === 'comprobante_no_fiscal');
+    expect(d, 'no se levantó la diferencia').toBeDefined();
+    expect(d!.monto, 'informa; no le castiga el gasto al chofer').toBe(0);
+    expect(d!.nota).toMatch(/29-A/);
+    expect(d!.nota).toMatch(/pedirle la factura/);
+    expect(d!.gastoId).toBe('g-nota');
+  });
+
+  it('sin la marca no se levanta nada: el mismo ticket, sin la leyenda impresa', () => {
+    // El control. Sin esto, una diferencia que se levantara SIEMPRE pasaría
+    // estas pruebas igual y estaría gritando sobre cada comida del país.
+    const liq = cuadre(gasto());
+    expect((liq.diferencias ?? []).some((x) => x.tipo === 'comprobante_no_fiscal')).toBe(false);
   });
 });
