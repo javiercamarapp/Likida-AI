@@ -277,18 +277,42 @@ migraciones se aplicaron el 31-jul y el aviso de privacidad ya tiene su liga
    GRATIS hasta el 1-oct-2026. El valor es la tarifa de después — conservador
    hoy, correcto en octubre. Si quieres la cifra real de hoy, ponla en 0.
 
-### Duda abierta, chica pero anotada
+### RESUELTA el 1-ago: el chequeo de migraciones SÍ corre
 
-`verificarMigracionesCriticas()` y `verificarAvisoDePrivacidad()` se invocan en
-`instrumentation.ts:27,33` y **no dejan rastro en `vercel logs`**, aunque las
-tres líneas de arranque anteriores sí salen. La explicación más probable es que
-sus `await` (red a Supabase y al aviso) terminan después de que se cierra el
-grupo de logs de la primera petición.
+Quedó anotado como duda porque `verificarMigracionesCriticas()` no dejaba rastro
+en `vercel logs`. Se resolvió mirando el log de un arranque EN FRÍO (el que
+disparó el primer mensaje de WhatsApp del día):
 
-No es un riesgo de corrección: las 36 migraciones se comprobaron DIRECTAMENTE
-contra la base con los bloques 8, 13, 14, 16, 17, 18 y 19. Y ahora que Sentry
-existe, un fallo real de ese chequeo sí tendría destino. Lo que no se puede ver
-hoy es su "todo bien". Vale diez minutos algún día.
+    {"msg":"startup.migraciones","meta":{"ok":true}}
+    {"msg":"startup.aviso_privacidad","meta":{"ok":true}}
+
+Las dos salen. Ayer se miró una ventana donde no había arranque en frío, así que
+lo que faltaba era la instancia, no el chequeo. Y el aviso de privacidad ahora
+pasa su sondeo de red — antes apuntaba a un NXDOMAIN.
+
+### La app de Meta está en `dev_mode` y eso SÍ muerde (medido el 1-ago)
+
+Un tercero mandó "hola" y no recibió respuesta. El diagnóstico, del log real:
+
+    (#131030) Recipient phone number not in allowed list
+
+El mensaje LLEGÓ y el pipeline lo procesó; lo que Meta rechazó fue la
+**respuesta**. En `dev_mode` solo se puede contestar a números dados de alta a
+mano, **hasta 5**.
+
+Para que alguien pueda usar Likida hacen falta DOS altas, en sitios distintos:
+
+| dónde | para qué |
+|---|---|
+| Meta → WhatsApp → API Setup → *Manage phone number list* | que Likida pueda RESPONDERLE |
+| Likida → `operador` con su teléfono | que Likida sepa QUIÉN ES y a qué viaje pegar sus gastos |
+
+Sin la primera: error 131030. Sin la segunda: el mensaje llega y no se reconoce.
+
+**Consecuencia para el 6-ago:** si en la sala alguien de Innovativos escribe
+desde su teléfono sin estar en las dos listas, no pasa nada. El tope de 5 es la
+razón real para poner la app en vivo — falta `contact_email_verified`, la
+política ya existe en `likida.ai/privacidad`.
 
 Además, para facturar de verdad hacen falta cinco datos suyos: RFC, razón social,
 CP fiscal, régimen fiscal y uso de CFDI.
