@@ -19,7 +19,7 @@ import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { violaIndice, llegoTarde } from '@/lib/cuadra/pg_errores';
 import { mxn } from '@/lib/formato';
-import { guardiaFundamento, normasDeToolCalls } from '@/lib/cuadra/normas/fundamento';
+import { guardiaFundamento, normasDeToolCalls, citasEnTexto, CITA_DESCONOCIDA } from '@/lib/cuadra/normas/fundamento';
 import { guardiaEstado } from '@/lib/cuadra/cuadre/estado_afirmado';
 import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, acotada } from '@/lib/cuadra/presupuesto';
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
@@ -864,8 +864,25 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     //
     // (Aquí había un comentario que afirmaba que ese texto "ya no trae citas".
     // Era falso, y lo demostró la auditoría 3.)
+    // AUDITORÍA 8, ALTO REINCIDENTE (AG-2): sin ninguna tool en el turno,
+    // `permitidas` salía vacío y la guardia borraba a media frase CUALQUIER
+    // cita — incluida la que el propio sistema ya le mandó al operador en un
+    // turno anterior de este MISMO viaje (el resumen de `engine.ts`, o una
+    // respuesta de `consultar_politica` que ya pasó por esta misma guardia).
+    // Repetir una cita que YA se entregó no es alucinar: es memoria.
+    //
+    // `turns` (arriba) trae el historial persistido más el mensaje del
+    // operador de ESTE turno; se filtra a `assistant` porque lo que el
+    // operador escribe no pasa por aquí — ampliar el permiso con texto del
+    // usuario sería dejar que él mismo se autorizara una cita.
     if (!textoDeterminista) try {
-      const permitidas = normasDeToolCalls(agentTools.filter((t) => !t.error).map((t) => t.result));
+      const yaEntregadas = citasEnTexto(
+        turns.filter((t) => t.role === 'assistant').map((t) => t.content).join('\n'),
+      ).filter((id) => id !== CITA_DESCONOCIDA);
+      const permitidas = [...new Set([
+        ...normasDeToolCalls(agentTools.filter((t) => !t.error).map((t) => t.result)),
+        ...yaEntregadas,
+      ])];
       const f = guardiaFundamento(reply, permitidas);
       if (f.forzado) {
         logger.warn('agent.fundamento_forzado', { viaje: viajeId, tenant: op.tenantId, quitadas: f.quitadas });
