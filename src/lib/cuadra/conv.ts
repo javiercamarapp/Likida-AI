@@ -144,7 +144,19 @@ export async function getTenantContext(tenantId: string): Promise<TenantContext>
   return {
     tenantId,
     nombreFlota: (data?.nombre as string) || 'la flota',
-    agentName: 'Cuadra',
+    // EL NOMBRE QUE EL OPERADOR LEE PRIMERO. Decía 'Cuadra', que es el nombre
+    // viejo del repo, y el operador terminaba leyendo LOS DOS en la misma
+    // pantalla: el aviso de privacidad dice "Likida procesa esta información por
+    // cuenta de la empresa" y tres líneas después llegaba "Soy Cuadra".
+    //
+    // Dos nombres para lo mismo, en el primer contacto, ante alguien que no sabe
+    // nada del producto. Se detectó el 1-ago mirando la conversación real, no el
+    // código: en el fuente `agentName: 'Cuadra'` se lee como una constante
+    // cualquiera.
+    //
+    // Misma familia que `cuadra.mx` impreso en el pie del PDF. `marca.test.ts`
+    // vigila que no vuelvan a separarse.
+    agentName: 'Likida',
     timezone: 'America/Mexico_City',
   };
 }
