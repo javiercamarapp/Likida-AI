@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { extraerComprobante, CONCEPTOS_OCR, type ExtraerResultado } from './intake/ocr';
+import { extraerComprobante, CONCEPTOS_OCR, MOTIVOS_FALLO, type ExtraerResultado } from './intake/ocr';
 import { decidirFoto } from './intake/decidir';
 import { cuadrarViaje, cubetaDe, etiquetaConcepto } from './cuadre/engine';
 import { DEMO_CONFIG } from './config';
@@ -106,7 +106,11 @@ function afirmarFormaDeExtraccion(r: ExtraerResultado, etiqueta: string): void {
   expect(typeof r.legible, etiqueta).toBe('boolean');
   // `motivo` es la razón de NO ser legible: presente exactamente cuando lo es.
   if (r.legible) expect(r.motivo, etiqueta).toBeUndefined();
-  else expect(['ilegible', 'fallo_tecnico', 'solo_codigo'], etiqueta).toContain(r.motivo);
+  // La lista SE IMPORTA. Estaba escrita a mano aquí, así que al añadir
+  // `solo_pago` el arnés abortó en la segunda foto —justo la que el arreglo
+  // acababa de clasificar bien— afirmando que el motivo nuevo no existía. Un
+  // motivo nuevo no puede requerir acordarse de un segundo archivo.
+  else expect([...MOTIVOS_FALLO], etiqueta).toContain(r.motivo);
 
   // Una visión que costó $0 es una visión que no ocurrió: sin esto, un arnés
   // apuntado a un stub o a una caché pasaría igual y diría lo mismo.
