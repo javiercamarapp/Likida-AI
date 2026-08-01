@@ -40,6 +40,8 @@ const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMx
 const diesel = (formaPago: string | undefined, extra: Partial<Gasto> = {}): Gasto => ({
   id: 'g1', concepto: 'diesel', monto: 5000, folio: 'D1', fecha: '2026-05-01',
   ocrConfianza: 0.95, cfdiUuid: 'u1', xmlVerificado: true,
+  // AUDITORÍA 8: CFDI ya verificado — receptor presente a propósito.
+  rfcReceptor: 'REC010101AA1',
   claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I',
   complementoHidrocarburos: true, iepsTraslado: 900, ivaTraslado: 640,
   ocrExtra: { litros: 200 },

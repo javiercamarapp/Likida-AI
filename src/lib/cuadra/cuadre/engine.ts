@@ -352,6 +352,23 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         gastoId: g.id,
       });
     }
+    // AUDITORÍA 8, CRÍTICO: AL-6 por la puerta que quedó abierta. Las dos
+    // validaciones de arriba y de abajo exigen `g.rfcReceptor` truthy — pero el
+    // esquema de visión NO tiene campo de receptor (el prompt del OCR pide
+    // expresamente el RFC del EMISOR, "no el del cliente"), así que un CFDI
+    // leído del QR de un ticket impreso, o un XML cuyo Receptor@Rfc no se
+    // parseó, llega aquí con `rfcReceptor` vacío. Sin este tercer camino, "no sé
+    // a nombre de quién está" caía en 'deducible' — el mismo daño de AL-6, por
+    // otra puerta. Solo aplica con CFDI presente: sin él, `cubetaDe` ya manda a
+    // 'por_confirmar' por falta de comprobante, y esta nota confundiría la
+    // causa.
+    if (g.cfdiUuid && !g.rfcReceptor) {
+      diferencias.push({
+        tipo: 'rfc_receptor_no_verificable', concepto: g.concepto, monto: 0,
+        nota: `No se puede verificar a nombre de quién está la factura de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)}: el receptor no se pudo leer del comprobante. Queda a revisión — reenvía el XML o una foto más clara del QR.`,
+        gastoId: g.id,
+      });
+    }
     if (rfcsOk.size > 0 && g.rfcReceptor && !rfcsOk.has(norm(g.rfcReceptor))) {
       // RLISR 57: "Si benefician a personas que le prestan servicios personales
       // subordinados, los comprobantes fiscales PODRÁN ser expedidos a nombre de

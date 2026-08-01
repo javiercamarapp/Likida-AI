@@ -30,6 +30,9 @@ const politica = [{ concepto: 'diesel' }];
 /** El CFDI de diésel del hallazgo, con la fecha como única variable. */
 const cfdiDiesel = (fecha: string): Gasto => ({
   id: 'g1', concepto: 'diesel', monto: 5800, fecha, cfdiUuid: 'uuid-1',
+  // AUDITORÍA 8: CFDI ya verificado — receptor presente a propósito, para no
+  // ejercitar el hallazgo (ese caso vive en rfc_receptor_faltante.test.ts).
+  rfcReceptor: 'REC010101AA1',
   xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR',
   tipoComprobante: 'I', complementoHidrocarburos: false,
   formaPago: '03', ivaTraslado: 689.66, iepsTraslado: 400,

@@ -2,11 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { cuadrarViaje, cubetaDe, type PoliticaGasto } from './engine';
 import type { Gasto, Diferencia } from '@/types/cuadra';
 
+// AUDITORÍA 8: un CFDI con `cfdiUuid` y sin `rfcReceptor` ahora cuenta como
+// "no se puede verificar a nombre de quién está" (el hallazgo que cerró el
+// crítico fiscal pendiente). Estos fixtures se escribieron ANTES de esa regla
+// y representan, salvo que digan lo contrario, un CFDI ya verificado — así
+// que `g()` les pone un receptor por default cuando traen `cfdiUuid` y no lo
+// declaran. Un test que sí quiera ejercitar el receptor faltante lo hace
+// pasando `rfcReceptor: undefined` explícito, que gana sobre el default.
+const RECEPTOR_VERIFICADO_DEFAULT = 'REC010101AA1';
 const g = (p: Partial<Gasto>): Gasto => ({
   id: Math.random().toString(36).slice(2),
   concepto: 'diesel',
   monto: 0,
   ocrConfianza: 0.95,
+  ...(p.cfdiUuid && !('rfcReceptor' in p) ? { rfcReceptor: RECEPTOR_VERIFICADO_DEFAULT } : {}),
   ...p,
 });
 
