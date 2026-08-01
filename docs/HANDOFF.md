@@ -105,10 +105,24 @@ Después basta escribir «listo». El trigger de la 0036 impide que entren gasto
 nuevos —ya hay liquidación— así que nada cambia salvo la salida, que es lo que
 se quiere comparar.
 
-**Lo que sigue abierto de ese ensayo:** tres fotos quedaron como `solo_codigo` y
-cada una mandó su propio «mándame el ticket completo» — tres mensajes idénticos
-seguidos. Debería salir uno. Y el voucher de $300 entró como gasto: es el
-residuo conocido de la foto con el voucher encima del ticket.
+**Cerrado el 1-ago, verificado en el TERCER PDF.** Los cuatro defectos, más la
+regresión que introdujo el arreglo del duplicado (la tabla imprimía las copias y
+escondía el original) y los tres avisos repetidos del acercamiento.
+
+El papel final cierra consigo mismo, que es la señal que antes no existía:
+
+    reembolsables      $4,216.00
+    excede política   $12,081.05
+                      ──────────
+                      $16,297.05   = total comprobado, exacto
+
+Las dos partes del párrafo laboral PARTEN el comprobado sin perder ni inventar
+un peso. Antes el reembolso solo ya daba $19,978.10 — más que el total.
+
+**Lo único que sigue abierto:** el voucher de $300 entró como gasto. Es el
+residuo conocido de la foto que trae el voucher ENCIMA del ticket fiscal,
+documentado el 31-jul y confirmado aquí. No pasa en silencio: queda en
+`revisar`.
 
 ### `vercel redeploy` NO despliega código — y confundirlo cuesta caro
 
