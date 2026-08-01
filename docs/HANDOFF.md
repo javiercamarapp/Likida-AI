@@ -261,8 +261,34 @@ migraciones se aplicaron el 31-jul y el aviso de privacidad ya tiene su liga
    Opcional pero pendiente: `tenant.contacto_privacidad` (art. 29). Mientras esté
    vacío, el aviso integral **lo dice** en vez de inventar un contacto.
 
-3. **`SENTRY_DSN` en Vercel.** El arranque ya avisa de su ausencia y el flush ya
-   está cableado; falta la variable.
+3. ~~`SENTRY_DSN` en Vercel~~ **HECHO el 1-ago.** Proyecto `atiendeai/likidaai`
+   (plataforma Next.js). Verificado en el log real del arranque:
+   `{"msg":"startup.observabilidad","sentry":true,"entorno":"production"}` — y de
+   punta a punta: capturó `startup.config_silenciosa` como issue LIKIDAAI-1, que
+   se arregló poniendo `CUADRA_WHATSAPP_MSG_USD=0.008` explícita y se marcó
+   resuelto. El arranque siguiente reporta `ok:true, revisadas:3`.
+
+   **NO se corrió el asistente de Sentry**, y no hay que correrlo: crearía
+   `sentry.client.config.ts` / `sentry.server.config.ts` y envolvería
+   `next.config.ts`, pisando la carga dinámica y la redacción de RFC/teléfonos
+   de `observability/sentry.ts`. Una sola variable, sin `NEXT_PUBLIC_`.
+
+   Sobre el 0.008: dentro de la ventana de servicio de 24h los mensajes son
+   GRATIS hasta el 1-oct-2026. El valor es la tarifa de después — conservador
+   hoy, correcto en octubre. Si quieres la cifra real de hoy, ponla en 0.
+
+### Duda abierta, chica pero anotada
+
+`verificarMigracionesCriticas()` y `verificarAvisoDePrivacidad()` se invocan en
+`instrumentation.ts:27,33` y **no dejan rastro en `vercel logs`**, aunque las
+tres líneas de arranque anteriores sí salen. La explicación más probable es que
+sus `await` (red a Supabase y al aviso) terminan después de que se cierra el
+grupo de logs de la primera petición.
+
+No es un riesgo de corrección: las 36 migraciones se comprobaron DIRECTAMENTE
+contra la base con los bloques 8, 13, 14, 16, 17, 18 y 19. Y ahora que Sentry
+existe, un fallo real de ese chequeo sí tendría destino. Lo que no se puede ver
+hoy es su "todo bien". Vale diez minutos algún día.
 
 Además, para facturar de verdad hacen falta cinco datos suyos: RFC, razón social,
 CP fiscal, régimen fiscal y uso de CFDI.
