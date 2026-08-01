@@ -240,6 +240,17 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // obedece— pero alguien puso ahí ese texto a propósito, y quien decide sobre
     // ese gasto merece saberlo. Va SOLO al contralor: avisarle al operador, que
     // es quien pudo haberlo intentado, únicamente le enseña a hacerlo mejor.
+    // EL PAPEL DICE DE SÍ MISMO QUE NO LO ES. Un ticket de restaurante puede
+    // traer RFC, subtotal e IVA y aun así llevar impreso "ESTE NO ES UN
+    // COMPROBANTE FISCAL": por el art. 29-A no ampara la deducción de nadie.
+    //
+    // El gasto NO se excluye del comprobado —es dinero que el operador puso y se
+    // le tiene que reponer— y por eso `monto: 0`: la diferencia informa, no
+    // castiga al chofer por lo que le dio el negocio. Lo que hay que hacer es
+    // pedir la factura, y eso es trabajo de la oficina.
+    if (extraOcr?.noEsComprobanteFiscal) {
+      diferencias.push({ tipo: 'comprobante_no_fiscal', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} lleva impreso que NO es un comprobante fiscal: no ampara deducción (CFF 29-A). El gasto se le repone al operador, pero hay que pedirle la factura al establecimiento.`, gastoId: g.id });
+    }
     if (extraOcr?.textoSospechoso) {
       diferencias.push({ tipo: 'texto_sospechoso', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} traía texto dirigido al lector automático. Se capturó el total impreso, pero conviene ver el papel original.`, gastoId: g.id });
     }
@@ -765,7 +776,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
   // mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
   // Se sigue avisando en `diferencias`; ya no bloquea.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

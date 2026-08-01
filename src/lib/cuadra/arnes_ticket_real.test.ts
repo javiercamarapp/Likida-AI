@@ -132,8 +132,24 @@ function afirmarFormaDeExtraccion(r: ExtraerResultado, etiqueta: string): void {
  * a uno bien clasificado si nadie suma.
  */
 function afirmarFormaDeLiquidacion(liq: Cuadre, gastos: Gasto[], anticipo: number): void {
-  const suma = Math.round(gastos.reduce((a, g) => a + g.monto, 0) * 100) / 100;
-  expect(liq.totalComprobado, 'el comprobado no es la suma de los gastos').toBe(suma);
+  // LOS DUPLICADOS NO CUENTAN, y esta afirmación decía que sí.
+  //
+  // El motor los EXCLUYE del comprobado a propósito ("Se EXCLUYEN del total (no
+  // lo inflan) — fix del audit", engine.ts) y los reporta aparte como diferencia
+  // `duplicado`. Esta función afirmaba `comprobado === suma(TODOS los gastos)`,
+  // que contradice ese comportamiento documentado.
+  //
+  // Nunca se había ejecutado con un duplicado, así que la afirmación falsa nunca
+  // falló. El 31-jul se pasaron 14 fotos reales que incluían el MISMO ticket de
+  // Costco fotografiado dos veces, el motor lo dedupló bien, y el arnés reportó
+  // el acierto como error: "expected 12397.05 to be 20278.1", con la diferencia
+  // igual, al centavo, al ticket duplicado.
+  //
+  // Es la misma familia que este repo lleva persiguiendo todo el día: una
+  // afirmación que codifica una creencia que el código contradice.
+  const dupes = new Set(liq.diferencias.filter((d) => d.tipo === 'duplicado').map((d) => d.gastoId));
+  const suma = Math.round(gastos.filter((g) => !dupes.has(g.id)).reduce((a, g) => a + g.monto, 0) * 100) / 100;
+  expect(liq.totalComprobado, 'el comprobado no es la suma de los gastos NO duplicados').toBe(suma);
   expect(liq.totalAnticipo).toBe(anticipo);
   // El SIGNO es el que el operador lee en su WhatsApp: positivo = sobró del
   // anticipo (a favor de la empresa), negativo = puso de su bolsa.

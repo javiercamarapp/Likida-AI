@@ -371,9 +371,18 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         const { gasto, costo } = extraccion;
         await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
 
-        // Los gastos ya registrados solo se leen cuando hay que emparejar un
-        // acercamiento: en el camino normal esa consulta no se paga.
-        const yaRegistrados = extraccion.motivo === 'solo_codigo' ? await getGastos(viajeId, op.tenantId) : [];
+        // Los gastos ya registrados solo se leen cuando hay que EMPAREJAR: el
+        // acercamiento del protocolo de dos fotos y el voucher de la terminal.
+        // En el camino normal esa consulta no se paga.
+        //
+        // La lista tiene que coincidir con la de `decidirFoto`. Si aquí falta un
+        // motivo que allá empareja, `gastos` llega vacío, `emparejarPorMonto` no
+        // encuentra nada y el operador recibe "mándame el ticket" por uno que ya
+        // mandó — sin error en ningún lado. `decidir_empareja.test.ts` fija las
+        // dos listas juntas.
+        const EMPAREJAN = ['solo_codigo', 'solo_pago'];
+        const yaRegistrados = EMPAREJAN.includes(extraccion.motivo ?? '')
+          ? await getGastos(viajeId, op.tenantId) : [];
         const decision = decidirFoto(extraccion, yaRegistrados);
 
         // Pedir reenvío SOLO cuando reenviar arregla algo. Si el fallo fue

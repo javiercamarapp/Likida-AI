@@ -58,6 +58,22 @@ const ExtraccionSchema = z.object({
   url_facturacion: z.string().nullable(),
   confianza: z.number().min(0).max(1),
   legible: z.boolean(),
+  // QUÉ CLASE DE PAPEL ES. Añadido el 31-jul-2026 tras pasar 14 fotos reales.
+  //
+  // Un voucher de terminal se lee PERFECTAMENTE y trae un total, así que entraba
+  // como gasto completo. La bomba escupe dos papeles —el voucher y el ticket
+  // fiscal— y el operador fotografía los dos: en las 14 fotos de prueba eso
+  // duplicó $1,600 sobre $1,600 de gasto real. El dedup del motor no los une
+  // porque su llave es `concepto|folio|monto` y el voucher enseña `Oper`/`Aut`
+  // mientras el ticket enseña `Ticket`: folios distintos, misma compra.
+  //
+  // Es el mismo razonamiento que ya justificaba `solo_codigo`, escrito en este
+  // archivo: "si entrara solo, el mismo gasto se contaría dos veces".
+  //
+  // `nullable` a propósito: si el modelo lo omite se trata como 'comprobante',
+  // que es el comportamiento de antes. Un campo nuevo no puede tirar la
+  // extracción de un ticket que sí sirve.
+  documento: z.enum(['comprobante', 'voucher_pago', 'nota_no_fiscal']).nullable(),
   // Señal APARTE de `legible`. Un papel que le habla al extractor se lee
   // perfectamente: mezclarlo con `legible` mandaba al operador a reenviar una
   // foto que iba a salir idéntica, en bucle, y el gasto no entraba nunca.
@@ -95,6 +111,17 @@ MAPEO DE ETIQUETAS (mapea el CONCEPTO, no la etiqueta literal; varían por estac
 - emisor ← la RAZÓN SOCIAL completa del encabezado, tal cual ("Cadena Comercial Ejemplo, S.A. de C.V."). Es el nombre legal, no el de la sucursal ni el eslogan.
 - url_facturacion ← la dirección web impresa para FACTURAR el ticket ("INSTRUCCIONES PARA FACTURAR: Ingrese a www.ejemplo.com.mx", "Factura en: portal.ejemplo.mx", "DATOS PARA REIMPRESION DE FACTURA: www.ejemplo.com.mx"). Cópiala TAL CUAL, sin agregarle protocolo ni completarla. Si el ticket no trae ninguna, null. NO pongas aquí la web de publicidad ni el correo.
 
+QUÉ CLASE DE PAPEL ES (campo "documento") — decide si el gasto entra o no:
+- "voucher_pago" ← el comprobante de la TERMINAL BANCARIA, no del comercio. Se reconoce porque trae "VENTA"/"APROBADA", "Aut.:", "Oper.:", "ARQC", "AID", "Autorizado sin firma", el nombre de la terminal (Getnet, Clip, Netpay, Bancomer, First Data) y los últimos 4 de la tarjeta — y porque NO trae RFC del comercio, ni litros, ni desglose de IVA. Es el papel que sale JUNTO al ticket de la gasolinera, por la misma compra.
+- "nota_no_fiscal" ← el papel dice de sí mismo que no lo es: "ESTE NO ES UN COMPROBANTE FISCAL", "no es comprobante fiscal", "documento sin valor fiscal", "nota de consumo", "cuenta". Puede traer RFC, subtotal e IVA y aun así decirlo: si lo dice, es esto.
+- "comprobante" ← todo lo demás: el ticket del comercio, la factura, el CFDI.
+- Ante la duda entre voucher_pago y comprobante: si NO hay RFC del emisor ni detalle de lo comprado (litros, artículos, producto), es "voucher_pago".
+
+FECHAS (crítico — un error de fecha manda el gasto a otro ejercicio):
+- Si el ticket trae la fecha ESCRITA CON LETRA ("a 01 de JULIO de 2026", "15 de marzo del 2026"), ÉSA manda sobre cualquier fecha numérica del mismo papel.
+- Una fecha numérica ambigua (7/01/26 puede ser 7-ene o 1-jul) NO se resuelve adivinando: busca en el papel otra fecha que la desambigüe. Las cadenas de origen estadounidense (Costco, Walmart, Sam's, Home Depot, Office Depot) imprimen MES/DÍA/AÑO.
+- El AÑO se copia de lo impreso. Si está tapado, borroso o cortado, devuelve null en "fecha": una fecha inventada se lee como un gasto de otro ejercicio.
+
 IMPUESTOS (crítico):
 - iva_monto: el IVA en pesos TAL CUAL aparece ("IVA:", "IVA 16%:", "8% IVA:"). NO lo calcules.
 - iva_tasa: la tasa que aparezca impresa (16% → 0.16; 8% → 0.08). Si el ticket NO muestra tasa ni desglose de IVA, devuelve null. En la franja fronteriza el IVA es 8%: respeta lo impreso.
@@ -116,8 +143,26 @@ NO CONFUNDIR: "CLAVE PEMEX 32011" (o similar) es un código INTERNO de producto 
  *                     correcto— y sobre todo NO se da de alta como gasto: se
  *                     pega al comprobante que le corresponde, porque si entrara
  *                     solo, el mismo gasto se contaría dos veces.
+ * - `solo_pago`     → TAMPOCO es un fallo: es el VOUCHER de la terminal, el
+ *                     papel que sale junto al ticket por la misma compra. Se lee
+ *                     perfectamente y trae un total, y por eso entraba como
+ *                     gasto: en 14 fotos reales duplicó $1,600. Igual que el
+ *                     acercamiento, se pega al comprobante que le corresponde en
+ *                     vez de darse de alta.
  */
-export type MotivoFallo = 'ilegible' | 'fallo_tecnico' | 'solo_codigo';
+export type MotivoFallo = 'ilegible' | 'fallo_tecnico' | 'solo_codigo' | 'solo_pago';
+
+/**
+ * El papel dice de sí mismo que no ampara deducción ("ESTE NO ES UN COMPROBANTE
+ * FISCAL"). Va en `ocrExtra` y NO en `motivo`, y la diferencia importa:
+ *
+ * un voucher es dinero que YA está representado por su ticket fiscal, así que no
+ * puede entrar dos veces. Una nota no fiscal es dinero que el operador puso y
+ * del que no hay otro papel: si no entrara, el operador se lo come de su bolsa.
+ * Entra como gasto —para que se le reponga— y el motor levanta que no es
+ * deducible y hay que pedir la factura (CFF 29-A).
+ */
+export const MARCA_NO_FISCAL = 'noEsComprobanteFiscal';
 
 /**
  * Marca que el modelo vio texto dirigido a ÉL dentro de la imagen.
@@ -368,6 +413,9 @@ export async function extraerComprobante(
       // El papel traía texto dirigido al extractor. El gasto entra igual, con su
       // monto impreso; lo que se levanta es una observación para el contralor.
       [MARCA_TEXTO_SOSPECHOSO]: data.texto_sospechoso || undefined,
+      // El papel dice que no ampara deducción. El gasto entra igual —es dinero
+      // que el operador puso— y el motor levanta que hay que pedir la factura.
+      [MARCA_NO_FISCAL]: data.documento === 'nota_no_fiscal' || undefined,
     },
   };
 
@@ -375,13 +423,21 @@ export async function extraerComprobante(
   // acercamiento, no un comprobante. Dejarlo pasar como gasto duplicaría el
   // dinero cuando llegue la foto del ticket completo.
   const soloCodigo = montoCodigo != null && montoOcr == null;
+  // El voucher de la terminal, por el mismo motivo. Se exige ADEMÁS que no haya
+  // RFC del emisor ni litros: un ticket de gasolinera que el modelo confunda con
+  // un voucher trae los dos, y perder un comprobante bueno cuesta más que dejar
+  // pasar un voucher. Ante la duda, entra como gasto y el dedup del motor tiene
+  // una segunda oportunidad.
+  const soloPago = data.documento === 'voucher_pago'
+    && !gasto.rfcEmisor
+    && (gasto.ocrExtra as Record<string, unknown>)?.litros == null;
   // El modelo respondió bien; si dice que no se lee (o no encontró monto) el
   // problema SÍ es la foto y pedir reenvío con mejor luz sirve de algo.
-  const legible = !soloCodigo && data.legible && monto > 0;
+  const legible = !soloCodigo && !soloPago && data.legible && monto > 0;
   return {
     gasto,
     legible,
-    motivo: legible ? undefined : soloCodigo ? 'solo_codigo' : 'ilegible',
+    motivo: legible ? undefined : soloCodigo ? 'solo_codigo' : soloPago ? 'solo_pago' : 'ilegible',
     costo: { modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.cost },
   };
 }

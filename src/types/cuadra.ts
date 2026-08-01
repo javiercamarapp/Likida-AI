@@ -87,6 +87,7 @@ export type TipoDiferencia =
   | 'alimentacion_sin_soporte' // comida sin hospedaje ni transporte que la ampare (LISR 28-V)
   | 'viatico_rfc_operador'  // viático a nombre de una persona: válido si es el operador (RLISR 57)
   | 'factura_por_vencer'   // ticket de portal sin timbrar y con la ventana cerrándose
+  | 'comprobante_no_fiscal' // el papel dice de sí mismo que no lo es → no ampara deducción (CFF 29-A)
   | 'diesel_desviacion';   // consumo de diésel fuera del rango esperado
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */
