@@ -88,7 +88,8 @@ export type TipoDiferencia =
   | 'viatico_rfc_operador'  // viático a nombre de una persona: válido si es el operador (RLISR 57)
   | 'factura_por_vencer'   // ticket de portal sin timbrar y con la ventana cerrándose
   | 'comprobante_no_fiscal' // el papel dice de sí mismo que no lo es → no ampara deducción (CFF 29-A)
-  | 'diesel_desviacion';   // consumo de diésel fuera del rango esperado
+  | 'diesel_desviacion'    // consumo de diésel fuera del rango esperado
+  | 'permiso_cre_no_verificable'; // CFDI de combustible: el permiso CRE del proveedor no se valida (LISR 27-III / RFA 2026 2.9) → a revisión, no baja la cubeta
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */
 export interface Diferencia {

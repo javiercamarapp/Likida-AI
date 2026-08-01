@@ -417,17 +417,28 @@ describe('cuadrarViaje', () => {
     expect(r.iepsAcreditable).toBe(0);
   });
 
-  it('7b: el IEPS sin desglosar NO manda la liquidación a revisar', () => {
+  it('7b: el IEPS sin desglosar NO manda la liquidación a revisar POR SÍ SOLO', () => {
     // El gasto SÍ es deducible: lo único que se pierde es el acreditamiento del
     // estímulo. Mandarlo a `revisar` tumbaba TODA liquidación con diésel —y casi
     // ningún CFDI de gasolinera desglosa el IEPS al consumidor final—, con lo que
     // la bandeja de excepciones dejaba de significar algo.
-    const r = cuadrarViaje({
+    //
+    // AUDITORÍA 8: esta liquidación SÍ queda hoy en 'revisar', pero por una razón
+    // AJENA al IEPS — el permiso CRE (`permiso_cre_no_verificable.test.ts`), que
+    // se dispara en CUALQUIER diésel con XML verificado, desglose el IEPS o no.
+    // Se aísla la causa comparando contra un control con el IEPS SÍ desglosado:
+    // si el estatus no cambia entre los dos, el IEPS no es quien lo decide.
+    const sinDesglosar = cuadrarViaje({
       viajeId: 'a4b', anticipo: 4000, politica, hidrocarburos: HC, estimulos: EST,
       gastos: [g({ concepto: 'diesel', monto: 4000, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true, formaPago: '03', iepsTraslado: 0 })],
     });
-    expect(r.diferencias.some((d) => d.tipo === 'ieps_no_desglosado')).toBe(true); // se sigue avisando
-    expect(r.estatus).not.toBe('revisar');                                         // pero no manda a la bandeja
+    const desglosado = cuadrarViaje({
+      viajeId: 'a4b-control', anticipo: 4000, politica, hidrocarburos: HC, estimulos: EST,
+      gastos: [g({ concepto: 'diesel', monto: 4000, cfdiUuid: 'u', fecha: '2026-05-01', xmlVerificado: true, claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true, formaPago: '03', iepsTraslado: 400 })],
+    });
+    expect(sinDesglosar.diferencias.some((d) => d.tipo === 'ieps_no_desglosado')).toBe(true); // se sigue avisando
+    expect(desglosado.diferencias.some((d) => d.tipo === 'ieps_no_desglosado')).toBe(false);  // el control no lo trae
+    expect(sinDesglosar.estatus).toBe(desglosado.estatus); // mismo estatus con o sin el IEPS: no es el IEPS quien lo decide
   });
 
   it('6: gasto no-combustible en efectivo > $2,000 → no deducible', () => {

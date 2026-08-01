@@ -47,6 +47,12 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   complemento_no_verificable: ['rmf-2026-2.7.1.48'],
   ieps_no_desglosado: ['lif-2026-art-20-A', 'criterio-1-LIF-PI'],
   factura_por_vencer: ['rmf-2026-2.7.1.21', 'politica-portales-plazos-facturacion'],
+  // Mismas dos fichas que `combustible_efectivo`: LISR 27-III es la que exige el
+  // permiso vigente del proveedor, y RFA 2026 regla 2.9 lo repite como condición
+  // de aplicación (`:36`). El motor no verifica el permiso —solo avisa que no lo
+  // verifica—, pero la norma que respalda ESE aviso sí existe y el agente debe
+  // poder citarla al explicarlo.
+  permiso_cre_no_verificable: ['lisr-27-fr-III', 'rfa-2026-2.9'],
 };
 
 /**
