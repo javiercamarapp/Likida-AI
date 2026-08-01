@@ -27,6 +27,32 @@ function exigir<T>(res: RespuestaPg<T>, consulta: string): T | null {
   return res.data;
 }
 
+// AUDITORÍA 8, ALTO REINCIDENTE: PostgREST recorta en silencio a `max_rows`
+// (1,000 por default) sin avisar — no lanza, no loguea, simplemente devuelve
+// menos filas. Para un tenant que ya lleva un trimestre operando, eso apagaba
+// `detectarAnomalias` (el detector de fraude entre viajes) justo cuando más
+// datos hay que mirar, sin que el panel supiera que la lectura estaba
+// incompleta. `getAcumuladoCombustible` (repo.ts) ya paginaba así desde la
+// ronda 6; aquí no se había movido.
+const PAGINA = 1_000;
+/** 100 páginas son 100,000 filas. Un tenant que las pase necesita un `sum()`
+ *  en SQL, no más vueltas: se corta y se dice, en vez de colgar el turno. */
+const MAX_PAGINAS = 100;
+
+async function traerTodo<T>(
+  construir: (desde: number, hasta: number) => PromiseLike<RespuestaPg<T[]>>,
+  consulta: string,
+): Promise<T[]> {
+  const filas: T[] = [];
+  for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+    const desde = pagina * PAGINA;
+    const pag = exigir(await construir(desde, desde + PAGINA - 1), consulta) ?? [];
+    filas.push(...pag);
+    if (pag.length < PAGINA) break;
+  }
+  return filas;
+}
+
 export interface DashboardKpis {
   viajesLiquidados: number;
   montoComprobado: number;
@@ -37,11 +63,15 @@ export interface DashboardKpis {
 }
 
 export async function getKpis(tenantId: string): Promise<DashboardKpis> {
-  const res = await supabaseAdmin()
-    .from('liquidacion')
-    .select('total_comprobado, diferencia, estatus, diferencias')
-    .eq('tenant_id', tenantId);
-  const rows = exigir(res, 'getKpis') ?? [];
+  const rows = await traerTodo<{ total_comprobado: unknown; diferencia: unknown; estatus: unknown; diferencias: unknown }>(
+    (desde, hasta) => supabaseAdmin()
+      .from('liquidacion')
+      .select('total_comprobado, diferencia, estatus, diferencias')
+      .eq('tenant_id', tenantId)
+      .order('id')
+      .range(desde, hasta),
+    'getKpis',
+  );
   const conDif = rows.filter((r) => r.estatus === 'con_diferencias').length;
   const revisar = rows.filter((r) => r.estatus === 'revisar').length;
   const cuadradas = rows.filter((r) => r.estatus === 'cuadrada').length;
@@ -70,22 +100,31 @@ export interface OperadorStat {
 /** Rendimiento por operador (diésel total, # de diferencias) — señal operativa. */
 export async function getStatsPorOperador(tenantId: string): Promise<OperadorStat[]> {
   const admin = supabaseAdmin();
-  const [{ data: ops }, { data: gastos }, { data: viajes }] = await Promise.all([
-    admin.from('operador').select('id, nombre').eq('tenant_id', tenantId),
-    admin.from('gasto').select('viaje_id, concepto, monto').eq('tenant_id', tenantId).eq('concepto', 'diesel'),
-    admin.from('viaje').select('id, operador_id').eq('tenant_id', tenantId),
+  const [ops, gastos, viajes] = await Promise.all([
+    traerTodo<{ id: unknown; nombre: unknown }>(
+      (desde, hasta) => admin.from('operador').select('id, nombre').eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getStatsPorOperador.operador',
+    ),
+    traerTodo<{ viaje_id: unknown; concepto: unknown; monto: unknown }>(
+      (desde, hasta) => admin.from('gasto').select('viaje_id, concepto, monto').eq('tenant_id', tenantId).eq('concepto', 'diesel').order('id').range(desde, hasta),
+      'getStatsPorOperador.gasto',
+    ),
+    traerTodo<{ id: unknown; operador_id: unknown }>(
+      (desde, hasta) => admin.from('viaje').select('id, operador_id').eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getStatsPorOperador.viaje',
+    ),
   ]);
-  const viajeToOp = new Map((viajes ?? []).map((v) => [v.id as string, v.operador_id as string]));
+  const viajeToOp = new Map(viajes.map((v) => [v.id as string, v.operador_id as string]));
   const dieselPorOp = new Map<string, number>();
   const viajesPorOp = new Map<string, Set<string>>();
-  for (const gr of gastos ?? []) {
+  for (const gr of gastos) {
     const op = viajeToOp.get(gr.viaje_id as string);
     if (!op) continue;
     dieselPorOp.set(op, (dieselPorOp.get(op) ?? 0) + Number(gr.monto));
     if (!viajesPorOp.has(op)) viajesPorOp.set(op, new Set());
     viajesPorOp.get(op)!.add(gr.viaje_id as string);
   }
-  return (ops ?? []).map((o) => ({
+  return ops.map((o) => ({
     operadorId: o.id as string,
     nombre: o.nombre as string,
     viajes: viajesPorOp.get(o.id as string)?.size ?? 0,
@@ -104,15 +143,20 @@ export type { Anomalia } from './duplicados';
  * probó: declaraba detectar `folio_duplicado` y solo producía `cfdi_duplicado`.
  */
 export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
-  const res = await supabaseAdmin()
-    .from('gasto')
-    .select('viaje_id, concepto, monto, folio, cfdi_uuid')
-    .eq('tenant_id', tenantId);
-  // Un "0 anomalías" por fallo de lectura se lee como "revisamos y todo está
-  // limpio", que es la afirmación más cara que puede hacer este producto.
-  const data = exigir(res, 'detectarAnomalias');
+  // Un "0 anomalías" por fallo de lectura O por recorte silencioso de
+  // PostgREST se lee como "revisamos y todo está limpio", que es la
+  // afirmación más cara que puede hacer este producto.
+  const data = await traerTodo<{ viaje_id: unknown; concepto: unknown; monto: unknown; folio: unknown; cfdi_uuid: unknown }>(
+    (desde, hasta) => supabaseAdmin()
+      .from('gasto')
+      .select('viaje_id, concepto, monto, folio, cfdi_uuid')
+      .eq('tenant_id', tenantId)
+      .order('id')
+      .range(desde, hasta),
+    'detectarAnomalias',
+  );
   return detectarDuplicadosEntreViajes(
-    (data ?? []).map((r) => ({
+    data.map((r) => ({
       viajeId: r.viaje_id as string,
       concepto: (r.concepto as string) ?? 'otro',
       monto: Number(r.monto),
@@ -128,11 +172,15 @@ export interface Acreditables {
 
 /** Suma de estímulos acreditables del periodo (IEPS diésel + IVA + peaje 50%). */
 export async function getAcreditables(tenantId: string): Promise<Acreditables> {
-  const res = await supabaseAdmin()
-    .from('liquidacion')
-    .select('ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables')
-    .eq('tenant_id', tenantId);
-  const rows = exigir(res, 'getAcreditables') ?? [];
+  const rows = await traerTodo<{ ieps_acreditable: unknown; iva_acreditable: unknown; peaje_acreditable: unknown; litros_diesel_acreditables: unknown }>(
+    (desde, hasta) => supabaseAdmin()
+      .from('liquidacion')
+      .select('ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables')
+      .eq('tenant_id', tenantId)
+      .order('id')
+      .range(desde, hasta),
+    'getAcreditables',
+  );
   return {
     ieps: round2(rows.reduce((s, r) => s + Number(r.ieps_acreditable ?? 0), 0)),
     iva: round2(rows.reduce((s, r) => s + Number(r.iva_acreditable ?? 0), 0)),
