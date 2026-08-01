@@ -177,16 +177,22 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   const duplicados = new Set<string>();
   const vistoUuid = new Map<string, string>();
   const vistoFolio = new Map<string, string>();
+  /** copia → el gasto original del que es copia. */
+  const originalDe = new Map<string, string>();
   for (const g of input.gastos) {
     if (g.cfdiUuid) {
       const u = g.cfdiUuid.toLowerCase();
-      if (vistoUuid.has(u)) duplicados.add(g.id);
+      const previo = vistoUuid.get(u);
+      // De QUIÉN es copia, no solo que lo es: sin esto no se pueden agrupar las
+      // apariciones de un mismo comprobante en una sola línea.
+      if (previo) { duplicados.add(g.id); originalDe.set(g.id, previo); }
       else vistoUuid.set(u, g.id);
       continue;
     }
     if (g.folio) {
       const key = `${strip_accents(g.concepto.toLowerCase())}|${g.folio}|${g.monto}`;
-      if (vistoFolio.has(key)) duplicados.add(g.id);
+      const previo = vistoFolio.get(key);
+      if (previo) { duplicados.add(g.id); originalDe.set(g.id, previo); }
       else vistoFolio.set(key, g.id);
     }
   }
@@ -413,10 +419,44 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   }
 
   // 2) Duplicados como diferencia (ya excluidos del total).
+  //
+  // UNA LÍNEA POR COMPROBANTE REPETIDO, NO UNA POR COPIA. El 1-ago, en el primer
+  // ensayo con tickets reales, el mismo Costco entró TRES veces y el cierre le
+  // enseñó al operador dos líneas idénticas, palabra por palabra:
+  //
+  //     • Comprobante duplicado: Alimentación folio 3522 por $7,881.05 aparece
+  //       dos veces (excluido del total).
+  //     • Comprobante duplicado: Alimentación folio 3522 por $7,881.05 aparece
+  //       dos veces (excluido del total).
+  //
+  // El motor tenía razón —había dos copias sobrantes— pero repetir el mismo
+  // texto se lee como un sistema roto justo delante de quien decide la compra. Y
+  // "aparece dos veces" era falso: aparecía tres.
+  //
+  // Se agrupa por el gasto ORIGINAL (el que sí cuenta), y el `gastoId` que se
+  // reporta es el del original: es el que el contralor tiene que abrir para
+  // decidir cuál se queda. Las copias no le sirven de nada.
+  const copiasPorOriginal = new Map<string, Gasto[]>();
   for (const g of input.gastos) {
-    if (duplicados.has(g.id)) {
-      diferencias.push({ tipo: 'duplicado', concepto: g.concepto, monto: g.monto, nota: `Comprobante duplicado: ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)}${g.folio ? ` folio ${sanitizarFolio(g.folio)}` : ''} por ${mxn(g.monto)} aparece dos veces (excluido del total).`, gastoId: g.id });
-    }
+    if (!duplicados.has(g.id)) continue;
+    const original = originalDe.get(g.id);
+    if (!original) continue;
+    const lista = copiasPorOriginal.get(original) ?? [];
+    lista.push(g);
+    copiasPorOriginal.set(original, lista);
+  }
+  for (const [originalId, copias] of copiasPorOriginal) {
+    const g = input.gastos.find((x) => x.id === originalId) ?? copias[0];
+    const veces = copias.length + 1;   // las copias más el original
+    diferencias.push({
+      tipo: 'duplicado',
+      concepto: g.concepto,
+      // El impacto en pesos es lo que se EXCLUYÓ, no el valor de una copia: con
+      // tres apariciones se excluyeron dos.
+      monto: round2(copias.reduce((a, c) => a + (c.monto > 0 ? c.monto : 0), 0)),
+      nota: `Comprobante duplicado: ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)}${g.folio ? ` folio ${sanitizarFolio(g.folio)}` : ''} por ${mxn(g.monto)} aparece ${veces} veces (${copias.length === 1 ? 'una excluida' : `${copias.length} excluidas`} del total).`,
+      gastoId: originalId,
+    });
   }
 
   // 3) Diferencia global contra el anticipo
