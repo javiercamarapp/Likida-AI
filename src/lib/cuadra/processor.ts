@@ -440,7 +440,30 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
             // igual recibe la instrucción y el gasto entra con la foto del ticket.
             logger.error('foto.codigo_en_espera_error', { err: e instanceof Error ? e.message : String(e) });
           }
-          await say('Ya tengo el código de ese ticket 👍. Mándame también la foto del *ticket completo* para registrar el gasto.');
+          // UNA VEZ POR VIAJE, no una por acercamiento. Mismo criterio que el
+          // acuse de la ráfaga, y por la misma razón: en el primer ensayo real
+          // (1-ago) tres acercamientos seguidos produjeron TRES avisos idénticos
+          // uno detrás de otro. El operador no necesita que se lo digan tres
+          // veces; necesita entender el protocolo una vez.
+          //
+          // Se ata al PRIMER código pendiente del viaje, que es cuando de verdad
+          // hace falta explicarlo. Y como el `guardarCodigoPendiente` de arriba
+          // ya ocurrió, si esto devuelve 1 es que éste es el primero.
+          //
+          // La carrera —dos acercamientos simultáneos que guardan antes de que
+          // cualquiera cuente— hace que se pierda el aviso, no que se duplique.
+          // Igual que con el acuse: perder uno es molesto, mandar tres es un
+          // producto que se ve roto.
+          try {
+            const pendientes = await getCodigosPendientes(viajeId, op.tenantId);
+            if (pendientes.length <= 1) {
+              await say('Ya tengo el código de ese ticket 👍. Mándame también la foto del *ticket completo* para registrar el gasto.');
+            }
+          } catch {
+            // Si no se puede contar, se avisa igual: es peor dejar al operador
+            // sin instrucción que repetírsela.
+            await say('Ya tengo el código de ese ticket 👍. Mándame también la foto del *ticket completo* para registrar el gasto.');
+          }
           return;
         }
         if (decision.accion === 'enriquecer') {
