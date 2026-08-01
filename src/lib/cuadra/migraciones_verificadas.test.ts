@@ -66,6 +66,7 @@ const EXENTAS: Record<string, string> = {
   '0021': 'litros de diésel en la liquidación. La firma ambigua que dejó es lo peligroso, y ESO es el bloque 5 (0022).',
   '0023': 'índice de velocidad para el acumulado del ejercicio. Sin él la consulta va lenta; no cambia ningún número.',
   '0034': 'columna nullable `tenant.contacto_privacidad` (art. 29). Si falta, el aviso integral marca esa sección como pendiente — que es su comportamiento con la columna vacía, así que no hay garantía que la base pueda romper. El contenido se prueba en `aviso_integral.test.ts`.',
+  '0035': 'solo `alter function ... set search_path`, y las diez son SECURITY INVOKER: no hay escalada que comprobar. Lo que sí se comprueba —que ninguna RPC interna sea ejecutable por `anon`— es el bloque 18.',
   '0032': 'solo `comment on table`. No hay garantía que comprobar: lo que fija —que nadie lea `politica_gasto`— se prueba en `politica_un_origen.test.ts`, que sí puede mirar el código.',
 };
 
