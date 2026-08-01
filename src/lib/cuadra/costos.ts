@@ -36,6 +36,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { acotada } from './presupuesto';
 
 export type FaseCosto = 'ocr' | 'cuadre' | 'escalacion' | 'chat' | 'router' | 'whatsapp';
 
@@ -127,7 +128,7 @@ export async function registrarCosto(c: CostoLLM): Promise<void> {
   try {
     // `{ error }`, como las 19 funciones de repo.ts: supabase-js NO lanza ante un
     // error de la base. El `catch` de abajo solo cubre que reviente el `fetch`.
-    const { error } = await supabaseAdmin().from('llm_costo').insert({
+    const { error } = await acotada(supabaseAdmin().from('llm_costo').insert({
       tenant_id: c.tenantId,
       viaje_id: c.viajeId ?? null,
       liquidacion_id: c.liquidacionId ?? null,
@@ -136,7 +137,7 @@ export async function registrarCosto(c: CostoLLM): Promise<void> {
       tokens_in: entero(c.tokensIn),
       tokens_out: entero(c.tokensOut),
       costo_usd: Number(c.costoUsd.toFixed(6)),
-    });
+    }), 'registrarCosto');
     if (error) fallo(c, error.message, (error as { code?: string }).code);
   } catch (e) {
     fallo(c, e instanceof Error ? e.message : String(e));
@@ -167,13 +168,13 @@ function fallo(c: CostoLLM, err: string, code?: string): void {
  */
 export async function vincularCostosALiquidacion(tenantId: string, viajeId: string, liquidacionId: string): Promise<void> {
   try {
-    const { data, error } = await supabaseAdmin()
+    const { data, error } = await acotada(supabaseAdmin()
       .from('llm_costo')
       .update({ liquidacion_id: liquidacionId })
       .eq('tenant_id', tenantId)
       .eq('viaje_id', viajeId)
       .is('liquidacion_id', null)
-      .select('id');
+      .select('id'), 'costoDeLiquidacion');
     if (error) {
       logger.error('costo.no_vinculado', {
         tenant: tenantId, viaje: viajeId, liquidacion: liquidacionId,
@@ -200,11 +201,11 @@ export async function vincularCostosALiquidacion(tenantId: string, viajeId: stri
 }
 
 async function avisarSiNoHayCosto(tenantId: string, viajeId: string, liquidacionId: string): Promise<void> {
-  const { count, error } = await supabaseAdmin()
+  const { count, error } = await acotada(supabaseAdmin()
     .from('llm_costo')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', tenantId)
-    .eq('viaje_id', viajeId);
+    .eq('viaje_id', viajeId), 'contarCostosDelViaje');
   if (error) {
     logger.warn('costo.conteo_ilegible', { tenant: tenantId, viaje: viajeId, err: error.message });
     return;
@@ -252,10 +253,10 @@ export type ResumenCosto =
 export async function getResumenCosto(tenantId: string): Promise<ResumenCosto> {
   let filas: Array<Record<string, unknown>>;
   try {
-    const { data, error } = await supabaseAdmin()
+    const { data, error } = await acotada(supabaseAdmin()
       .from('llm_costo')
       .select('viaje_id, fase, tokens_in, tokens_out, costo_usd')
-      .eq('tenant_id', tenantId);
+      .eq('tenant_id', tenantId), 'vincularCostosALiquidacion');
     if (error) return ilegible(tenantId, error.message);
     filas = (data ?? []) as Array<Record<string, unknown>>;
   } catch (e) {

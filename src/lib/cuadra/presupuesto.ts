@@ -1,3 +1,5 @@
+import { logger } from '@/lib/logger';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PRESUPUESTO DE TIEMPO DE UNA INVOCACIÓN.
 //
@@ -97,6 +99,74 @@ export const MARGEN_CIERRE_MS = 12_000;
  * documentada hay que poder aflojarlo desde el panel y no desde un commit.
  */
 export const TOPE_CONSULTA_MS = Number(process.env.CUADRA_TOPE_CONSULTA_MS) || 8_000;
+
+/** Margen sobre el tope antes de que dispare la red de seguridad. */
+const GRACIA_TOPE_MS = 1_500;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TODA CONSULTA DE ESTE ARCHIVO TIENE TECHO.
+//
+// `supabaseAdmin()` crea el cliente sin `fetch` propio, así que hasta aquí
+// ninguna consulta ni RPC llevaba señal de aborto y todas heredaban el default
+// de undici: 300 000 ms. Vercel mata la función a los 120s, o sea que el fetch
+// se rendía 180s después de que ya no había nadie escuchando. Medido contra un
+// servidor que acepta y calla: `fetch()` seguía bloqueado a los 20s, y `getViaje`
+// a los 12s (ver `repo_tope.test.ts`).
+//
+// Morir así es el peor final que tiene este producto: la liquidación ya quedó
+// escrita, el operador no recibe ni resumen ni PDF, ni siquiera se escribe el
+// `logger.error` porque el proceso muere antes del `catch`, y Meta no reintenta.
+//
+// El tope se impone en DOS capas a propósito:
+//
+//   1. `abortSignal` cuando el builder lo acepta —que es el caso en producción—,
+//      porque eso CANCELA el socket de verdad. Sin cancelar, una instancia
+//      caliente de Lambda se queda con la conexión colgada hasta los 300s.
+//   2. Una carrera contra un temporizador, como red de seguridad, porque la
+//      señal solo cubre lo que el SDK decida pasarle al fetch: si reintenta por
+//      dentro, o si el cuelgue está antes (DNS, TLS), la señal sola no basta.
+//
+// Y sobre todo: agotar el tope entra por el MISMO camino que un error de
+// Postgres —`{ data: null, error }`—, no por uno nuevo. Así cada llamador
+// conserva la semántica que ya tenía y que está probada: `getGastos` lanza,
+// `gastoExistePorHash` devuelve false, `saveCfdiXmlRaw` deja un warn. Un tope
+// que además cambiara cómo falla cada función sería dos cambios disfrazados de
+// uno, en el archivo por el que pasa todo el dinero.
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// AUDITORÍA 8, ALTO REINCIDENTE: esto vivía en `repo.ts`, así que solo protegía
+// lo que pasaba por ahí. `costos.ts`, `conv.ts` y `config.ts` llamaban a
+// `supabaseAdmin()` en crudo — ONCE de los trece pasos del cierre, incluido el
+// mutex del viaje y la barrera de ráfaga. Un cuelgue ahí no tenía techo y se
+// comía los 120 s de la función entera.
+//
+// Vive aquí, junto a `TOPE_CONSULTA_MS`, para que cualquier archivo lo importe
+// sin volver a copiarlo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Margen sobre el tope antes de que dispare la red de seguridad. */
+export async function acotada<T>(consulta: PromiseLike<T>, etiqueta: string): Promise<T> {
+  const conSenal = consulta as PromiseLike<T> & { abortSignal?: (s: AbortSignal) => unknown };
+  if (typeof conSenal.abortSignal === 'function') conSenal.abortSignal(AbortSignal.timeout(TOPE_CONSULTA_MS));
+
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      consulta,
+      new Promise<T>((resolver) => {
+        temporizador = setTimeout(() => {
+          logger.error('supabase.tope_agotado', { consulta: etiqueta, topeMs: TOPE_CONSULTA_MS });
+          resolver({
+            data: null,
+            error: { message: `sin respuesta en ${TOPE_CONSULTA_MS} ms (tope de consulta)` },
+          } as unknown as T);
+        }, TOPE_CONSULTA_MS + GRACIA_TOPE_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(temporizador);
+  }
+}
 
 /**
  * Presupuesto de la invocación del webhook, en ms.
