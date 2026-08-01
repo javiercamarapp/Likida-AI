@@ -68,6 +68,48 @@ que ya está mergeado a `master`.
 
 **Empieza por `docs/auditoria-7/00-SINTESIS.md`, y después la 6.**
 
+### El primer ensayo real (1-ago) y lo que sacó
+
+Trece tickets de verdad por WhatsApp, cierre completo y PDF. **Funcionó de punta
+a punta** — y encontró cuatro defectos que ninguna prueba había visto, porque
+los cuatro solo existen cuando alguien LEE la salida.
+
+Lo que salió bien y no hay que volver a dudar: los once montos, cruzados uno por
+uno contra los tickets. Litros, folios y RFC también. El motor levantó solo los
+dos topes de política, `comprobante_no_fiscal` con su CFF 29-A, la fecha de
+junio fuera de rango y el duplicado. Y en los logs, `agent.cifras_forzadas`: la
+guardia corrigió al modelo.
+
+**Los cuatro defectos, en orden de gravedad:**
+
+| qué | cómo se vio |
+|---|---|
+| **el papel mandaba pagar 3 veces el mismo ticket** | el párrafo de reembolso decía $19,978.10 con un comprobado de $16,297.05. `resumenLaboral` recorría TODOS los gastos, copias incluidas |
+| **todas las fechas un día antes** | el PDF se contradecía solo: tabla «18 jun 2026», diferencias «(2026-06-19)». Un ticket del 1-jul salía «30 jun» — otro mes fiscal |
+| **dos líneas de duplicado idénticas** | el mismo Costco entró 3 veces y el cierre repetía el texto palabra por palabra |
+| **el producto se presentaba con dos nombres** | «Soy Cuadra» en el chat y «Likida» en el aviso, tres líneas antes |
+
+Los cuatro están cerrados con prueba y control. El patrón que comparten: **el
+mismo hecho calculado o escrito en dos sitios**, y ninguno visible desde el
+código —hay que mirar el mensaje, el papel, la pantalla del teléfono.
+
+**Cómo repetir un ensayo sin volver a gastar visión.** Los gastos ya están en la
+base; lo que cambia entre versiones es cómo se arma el papel. Se reabre el viaje
+y se vuelve a cerrar:
+
+    update viaje set estatus = 'abierto' where folio = 'VJ-2026-0847';
+    update wa_conversacion set estado = jsonb_set(estado,'{turns}','[]'::jsonb)
+     where telefono = '5219993700779';
+
+Después basta escribir «listo». El trigger de la 0036 impide que entren gastos
+nuevos —ya hay liquidación— así que nada cambia salvo la salida, que es lo que
+se quiere comparar.
+
+**Lo que sigue abierto de ese ensayo:** tres fotos quedaron como `solo_codigo` y
+cada una mandó su propio «mándame el ticket completo» — tres mensajes idénticos
+seguidos. Debería salir uno. Y el voucher de $300 entró como gasto: es el
+residuo conocido de la foto con el voucher encima del ticket.
+
 ### `vercel redeploy` NO despliega código — y confundirlo cuesta caro
 
 Pasó el 1-ago, dos veces seguidas, y lo detectó Javier pegando lo que de verdad
