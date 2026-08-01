@@ -77,6 +77,13 @@ describe('filasAcreditables — el peaje deja de afirmarse solo', () => {
     expect(r.filas[0].pies.join(' ')).toContain('cuota SEMANAL');
   });
 
+  // AUDITORÍA 8 · CRÍTICO de pruebas (superviviente de la ronda 6): `litros > 0`
+  // mutado a `litros !== 0` seguía verde en 1299/1300 pruebas — nada probaba un
+  // valor negativo, que las dos condiciones tratan distinto.
+  it('litros negativos NO arman el renglón del estímulo (litros > 0, no !== 0)', () => {
+    expect(filasAcreditables(liq({ litrosDieselAcreditables: -5 }))).toBe(null);
+  });
+
   it('el aviso de ingreso acumulable sigue debajo de todo el bloque', () => {
     const r = filasAcreditables(liq({ ivaAcreditable: 100 }))!;
     expect(r.piesGenerales.join(' ')).toContain('ingreso acumulable');

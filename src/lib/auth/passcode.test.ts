@@ -135,6 +135,18 @@ describe('fuerza del passcode', () => {
     expect(motivoPasscodeDebil(FUERTE)).toBeNull();
   });
 
+  // AUDITORÍA 8 · CRÍTICO de pruebas (superviviente de la ronda 6): nada fijaba
+  // el límite EXACTO. Mutado LARGO_MINIMO de 24 a 1, 1299/1300 pruebas seguían
+  // pasando — el rechazo por longitud nunca se ejercitaba con un valor que solo
+  // fallara por eso.
+  it('un valor aleatorio de 23 caracteres NO pasa — solo por el largo', () => {
+    const veintitres = FUERTE.slice(0, 23);
+    expect(veintitres).toHaveLength(23);
+    const motivo = motivoPasscodeDebil(veintitres);
+    expect(motivo).not.toBeNull();
+    expect(motivo).toMatch(/23.*24|24/);
+  });
+
   it('un passcode igual al secreto de servidor no pasa', () => {
     process.env.DASHBOARD_SECRET = FUERTE;
     expect(motivoPasscodeDebil(FUERTE)).not.toBeNull();
