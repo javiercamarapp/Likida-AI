@@ -17,7 +17,8 @@ import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
 import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
-import { violaIndice } from '@/lib/cuadra/pg_errores';
+import { violaIndice, llegoTarde } from '@/lib/cuadra/pg_errores';
+import { mxn } from '@/lib/formato';
 import { guardiaFundamento, normasDeToolCalls } from '@/lib/cuadra/normas/fundamento';
 import { guardiaEstado } from '@/lib/cuadra/cuadre/estado_afirmado';
 import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS } from '@/lib/cuadra/presupuesto';
@@ -467,6 +468,22 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           // procesamiento y Meta reintentaría el webhook en bucle.
           if (violaIndice(e, 'uq_gasto_cfdi_uuid')) {
             logger.info('foto.cfdi_ya_registrado', { viaje: viajeId, uuid: gasto.cfdiUuid });
+            return;
+          }
+          // LLEGÓ TARDE (mig. 0036): la liquidación de este viaje ya se emitió.
+          //
+          // NO es benigno como los dos de arriba, y por eso no se ignora en
+          // silencio: en aquellos el gasto ya está registrado, aquí no está en
+          // ningún lado. Antes esta foto entraba y hacía que el texto de
+          // WhatsApp y el PDF ya emitido dijeran cifras distintas y de signo
+          // contrario, con el gasto huérfano de por vida.
+          //
+          // Se le dice al operador, porque es lo único que le permite hacer algo
+          // —abrir el viaje siguiente y mandarla ahí, o pedirle a la oficina que
+          // reabra—. Tragárselo le quita el dinero sin avisarle.
+          if (llegoTarde(e)) {
+            logger.warn('foto.llego_tarde', { viaje: viajeId, monto: gasto.monto });
+            await sendText(msg.from, `Ese comprobante de ${mxn(gasto.monto)} llegó después de que cerré tu liquidación, así que NO entró. Guárdalo: mándalo en tu siguiente viaje o pídele a la oficina que lo agregue.`);
             return;
           }
           throw e;

@@ -14,6 +14,22 @@
 export const UNIQUE_VIOLATION = '23505';
 
 /**
+ * SQLSTATE propio de la migración 0036: el gasto llegó DESPUÉS de que la
+ * liquidación del viaje ya se emitió.
+ *
+ * Tiene código propio y no un 23505 a propósito: lo que hay que hacer es
+ * distinto. Un duplicado se ignora en silencio porque el gasto YA está
+ * registrado; éste no está en ningún lado y el operador tiene que enterarse —su
+ * foto llegó tarde y ese dinero no entró al papel que ya se emitió.
+ */
+export const GASTO_TARDE = 'CU001';
+
+/** ¿El gasto llegó después de que el viaje ya se liquidó? (mig. 0036) */
+export function llegoTarde(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as { code?: string }).code === GASTO_TARDE;
+}
+
+/**
  * ¿Este error es una violación del índice único `indice`?
  *
  * Supabase no expone el nombre de la constraint en un campo propio: viene dentro
