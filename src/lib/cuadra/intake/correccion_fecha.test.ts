@@ -166,7 +166,7 @@ describe('el mensaje le dice CUÁL ticket es', () => {
   const t = {
     etiqueta: 'Alimentación', monto: 154, folio: '3522',
     emisor: 'FARMACIA GUADALAJARA', estacion: null,
-    fecha: '2026-01-08', fechaRaw: '01/08/26', ejercicioHoy: 2026,
+    fecha: '2026-01-08', fechaImpresa: '01/08/26', ejercicioHoy: 2026,
   };
 
   it('trae todas las señas que sí se leyeron', () => {
@@ -186,8 +186,23 @@ describe('el mensaje le dice CUÁL ticket es', () => {
     expect(m).toMatch(/entendí:.*ene.*2026.*venía impresa como "01\/08\/26"/s);
   });
 
+  it('si la impresa REPITE la interpretada, el paréntesis se calla', () => {
+    // Visto en producción el 1-ago: el campo que se pintaba era
+    // `ocrExtra.fechaRaw`, que guarda lo que el MODELO contestó antes de
+    // normalizar — o sea, ISO. El renglón salía «Fecha que entendí: 01 jun 2026
+    // (venía impresa como "2026-06-01")»: la misma fecha dos veces, sin delatar
+    // nada. Por eso ahora se lee `fechaImpresa`, y por eso se compara.
+    const m = mensajePideFechaOtraVez({ ...t, fecha: '2026-06-01', fechaImpresa: '2026-06-01' }, 'fuera_de_rango');
+    expect(m).not.toContain('venía impresa');
+  });
+
+  it('y tampoco la repite cuando viene ya con formato bonito', () => {
+    const m = mensajePideFechaOtraVez({ ...t, fecha: '2026-06-01', fechaImpresa: '01 jun 2026' }, 'fuera_de_rango');
+    expect(m).not.toContain('venía impresa');
+  });
+
   it('omite los renglones que no se leyeron en vez de dejarlos vacíos', () => {
-    const m = mensajePideFechaOtraVez({ ...t, emisor: null, folio: null, fechaRaw: null }, 'fuera_de_rango');
+    const m = mensajePideFechaOtraVez({ ...t, emisor: null, folio: null, fechaImpresa: null }, 'fuera_de_rango');
     expect(m).not.toContain('Comercio:');
     expect(m).not.toContain('Folio:');
     expect(m).not.toContain('venía impresa');

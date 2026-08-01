@@ -42,6 +42,10 @@ const ExtraccionSchema = z.object({
   precio_unitario: z.number().nullable(),
   forma_pago: z.enum(['efectivo', 'tarjeta', 'otro']).nullable(),
   fecha: z.string().nullable(),
+  // La fecha TAL CUAL está impresa, sin interpretar. NO es `fecha`: aquélla ya
+  // pasó por la cabeza del modelo y sale normalizada, así que no sirve para
+  // enseñarle al operador QUÉ se leyó mal. Ver el bloque FECHAS del prompt.
+  fecha_impresa: z.string().nullable(),
   folio: z.string().nullable(),           // CRUDO, tal cual (conserva ceros a la izquierda)
   web_id: z.string().nullable(),          // string (numérico o alfanumérico)
   estacion: z.string().nullable(),        // nombre/# de estación
@@ -120,6 +124,7 @@ QUÉ CLASE DE PAPEL ES (campo "documento") — decide si el gasto entra o no:
 FECHAS (crítico — un error de fecha manda el gasto a otro ejercicio):
 - Si el ticket trae la fecha ESCRITA CON LETRA ("a 01 de JULIO de 2026", "15 de marzo del 2026"), ÉSA manda sobre cualquier fecha numérica del mismo papel.
 - MÉXICO ESCRIBE DÍA/MES/AÑO. Ante una fecha numérica ambigua (01/08/26), ésa es la lectura por defecto: 1 de agosto, NO 8 de enero.
+- fecha_impresa ← COPIA LITERAL de lo que dice el papel, sin interpretar ni reordenar: si el ticket dice "01/08/26", devuelve "01/08/26"; si dice "a 01 de JULIO de 2026", devuelve eso. NO la conviertas a ISO: para eso está el campo "fecha". Sirve para enseñarle al operador qué se leyó y que él vea el error; una copia ya normalizada no le dice nada. Si no alcanzas a leerla, null.
 - La ÚNICA excepción confirmada es COSTCO, cuyo pie imprime MES/DÍA/AÑO (verificado en un ticket real: el pie decía "7/01/26" y el encabezado, con letra, "a 01 de JULIO de 2026"). No supongas que otras cadenas de origen estadounidense hacen lo mismo — Walmart de México imprime DÍA/MES, y darlo por hecho ya costó leer un ticket del 1 de agosto como del 8 de enero.
 - Si el papel trae DOS fechas y no coinciden, gana la que esté con letra; si ninguna lo está, gana la que sea imposible en el otro formato (un componente mayor que 12).
 - El AÑO se copia de lo impreso. Si está tapado, borroso o cortado, devuelve null en "fecha": una fecha inventada se lee como un gasto de otro ejercicio.
@@ -407,7 +412,12 @@ export async function extraerComprobante(
       // medicamento) y eso es dato sensible del art. 2 fr. VI de la LFPDPPP.
       // Guardarlo en la liquidación lo pone además a la vista del patrón.
       producto: sanitizarProducto(data.producto),
+      // Lo que el MODELO contestó antes de normalizar. Se conserva para poder
+      // depurar una lectura rara; no sirve para hablar con el operador, porque
+      // ya viene interpretada.
       fechaRaw: data.fecha ?? undefined,
+      // Lo que el PAPEL dice. Ésta es la que se le enseña al operador.
+      fechaImpresa: sanitizarTexto(data.fecha_impresa),
       litros: data.litros ?? undefined,
       precioUnitario: data.precio_unitario ?? undefined,
       webId: sanitizarFolio(data.web_id),

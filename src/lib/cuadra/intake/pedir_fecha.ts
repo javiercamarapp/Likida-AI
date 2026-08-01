@@ -32,8 +32,16 @@ export interface TicketPorRefotografiar {
   estacion?: string | null;
   /** La fecha que se interpretó, en ISO. */
   fecha: string;
-  /** La fecha TAL COMO venía impresa, sin interpretar. */
-  fechaRaw?: string | null;
+  /**
+   * La fecha TAL COMO venía impresa, sin interpretar.
+   *
+   * NO es `ocrExtra.fechaRaw`, y esa confusión ya costó una vez: `fechaRaw`
+   * guarda lo que el MODELO contestó antes de normalizar, que sale en ISO. Al
+   * pintarlo como «venía impresa como "2026-06-01"» junto a «la entendí como 01
+   * jun 2026», el renglón repetía la misma fecha dos veces y no delataba nada.
+   * Lo útil es lo que el PAPEL dice: `ocrExtra.fechaImpresa`.
+   */
+  fechaImpresa?: string | null;
   /** Ejercicio corriente, para el texto de `otro_ejercicio`. */
   ejercicioHoy?: number | null;
 }
@@ -45,6 +53,14 @@ export interface TicketPorRefotografiar {
  * adivinar el operador. Los que no se leyeron se omiten en vez de salir vacíos
  * —un "Folio: —" no ayuda a encontrar nada y hace ver el producto roto.
  */
+/** ¿La fecha impresa aporta algo, o repite la que ya se muestra al lado? */
+function impresaUtil(t: TicketPorRefotografiar): boolean {
+  const i = t.fechaImpresa?.trim();
+  if (!i) return false;
+  const norm = (s: string) => s.replace(/[^0-9a-záéíóúñ]/gi, '').toLowerCase();
+  return norm(i) !== norm(t.fecha) && norm(i) !== norm(fechaMx(t.fecha));
+}
+
 export function mensajePideFechaOtraVez(
   t: TicketPorRefotografiar,
   motivo: MotivoFechaDudosa,
@@ -58,7 +74,11 @@ export function mensajePideFechaOtraVez(
     // además le enseña al operador qué fue lo que se leyó mal: ver
     // «venía impresa como 01/08/26» junto a «la entendí como 8 de enero» hace
     // obvio el error de día/mes sin tener que explicárselo.
-    `• Fecha que entendí: ${fechaMx(t.fecha)}${t.fechaRaw ? ` (venía impresa como "${t.fechaRaw}")` : ''}`,
+    //
+    // Solo si DIFIERE de lo interpretado. Si el modelo devolvió la misma cadena
+    // —porque no alcanzó a copiarla literal—, el paréntesis repetiría la fecha
+    // que va a su izquierda y el renglón dejaría de decir nada.
+    `• Fecha que entendí: ${fechaMx(t.fecha)}${impresaUtil(t) ? ` (venía impresa como "${t.fechaImpresa}")` : ''}`,
   ].filter(Boolean).join('\n');
 
   const porQue = motivo === 'otro_ejercicio'

@@ -726,7 +726,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
             emisor: extra.emisor as string | undefined,
             estacion: extra.estacion as string | undefined,
             fecha: gasto.fecha!,
-            fechaRaw: extra.fechaRaw as string | undefined,
+            fechaImpresa: extra.fechaImpresa as string | undefined,
             ejercicioHoy: ventana?.hoy ? Number(ventana.hoy.slice(0, 4)) : null,
           }, dudosa));
         }
