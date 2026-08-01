@@ -1143,6 +1143,31 @@ describe('cuadrarViaje — el excedente diario se reparte, no se cuelga de uno',
     expect(r.ivaAcreditable).toBeCloseTo(144 * (750 / 900), 2);
     expect(r.totalNoDeducible).toBe(150);
   });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 8 · CRÍTICO fiscal — el tope se repartía contra pesos que
+  // TODAVÍA NO SON DEDUCCIÓN DE NADIE. `porDia` sumaba TODOS los gastos con
+  // tope del día, timbrados o no, y esos $ sin CFDI diluían la proporción de
+  // los que sí amparan. Una comida timbrada de $700 (bajo el tope de $750)
+  // salía "$194.44 deducibles" solo porque otro ticket sin timbrar del mismo
+  // día se sumó al denominador.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('un ticket SIN timbrar del mismo día no diluye la proporción del que sí ampara', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 5000, politica: pol, estimulos: est,
+      gastos: [
+        comida(700, 96.55),                                              // CON CFDI, bajo el tope
+        g({ concepto: 'alimentacion', monto: 2000, fecha: '2026-05-01', formaPago: '01' }), // SIN CFDI
+      ],
+    });
+    // $700 está POR DEBAJO del tope de $750 ENTRE LOS TIMBRADOS: deducible
+    // completo. El ticket sin timbrar no debe restarle nada — antes salía
+    // "$194.44 deducibles" solo porque el total del día lo diluía.
+    expect(r.totalDeducible).toBe(700);
+    expect(r.ivaAcreditable).toBe(96.55);
+    expect(r.totalPorConfirmar).toBe(2000);
+    expect(r.totalNoDeducible).toBe(0);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

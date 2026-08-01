@@ -672,8 +672,22 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       //    hechos).
       //
       // Acreditar de más es del lado caro: responde el cliente ante una revisión.
-      const proporcionDia = topeAlimentacion / total;
-      for (const x of delDia) proporcionDeducible.set(x.id, proporcionDia);
+      // AUDITORÍA 8, CRÍTICO: la proporción que de verdad se APLICA al dinero se
+      // calcula solo entre los TIMBRADOS del día, no contra `total` (que incluye
+      // tickets sin CFDI). `cubetaDe` ya manda esos tickets a por_confirmar por
+      // su cuenta y nunca lee `proporcionDeducible` — pero antes SÍ inflaban este
+      // denominador, y le recortaban la deducción a los comprobantes que sí
+      // amparan. Medido: una comida de $700 con CFDI, bajo el tope de $750,
+      // salía "$194.44 deducibles" solo porque un ticket sin timbrar del mismo
+      // día se sumó al total. La nota de arriba (`total`, `exceso`) sigue
+      // informando del día completo a propósito: antes de timbrarse, el
+      // contralor quiere saber que ese gasto tampoco va a deducir completo.
+      const timbrados = delDia.filter((x) => x.cfdiUuid);
+      const totalTimbrado = timbrados.reduce((s, x) => s + x.monto, 0);
+      if (totalTimbrado > 0) {
+        const proporcionTimbrado = Math.min(1, topeAlimentacion / totalTimbrado);
+        for (const x of timbrados) proporcionDeducible.set(x.id, proporcionTimbrado);
+      }
 
       // La DIFERENCIA sigue colgada de un comprobante, porque los totales de
       // deducibilidad suman por gastoId y tiene que vivir en alguno. Eso es
