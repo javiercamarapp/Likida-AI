@@ -32,6 +32,14 @@ describe('el producto se presenta con un solo nombre', () => {
     expect(conv, 'volvió el nombre viejo al saludo del operador').not.toMatch(/agentName: 'Cuadra'/);
   });
 
+  it('el PDF dice UN nombre, arriba y abajo', () => {
+    // La cabecera decía 'Cuadra' en 20pt y el pie 'Generado por Likida'. Los dos
+    // nombres en la hoja que el contralor archiva.
+    const pdf = readFileSync('src/lib/cuadra/liquidacion/pdf.ts', 'utf8');
+    expect(pdf).toMatch(/text\('Likida', M, y, 20, bold/);
+    expect(pdf).toMatch(/setProducer\('Likida'\)/);
+  });
+
   it('el pie del PDF también', () => {
     // El papel que el contralor archiva y que puede ver un tercero.
     const pdf = readFileSync('src/lib/cuadra/liquidacion/pdf.ts', 'utf8');
@@ -50,7 +58,22 @@ describe('el producto se presenta con un solo nombre', () => {
     // quitó, y esa explicación es lo que impide que alguien lo reponga.
     const culpables = fuentesDeProduccion('src')
       .filter((f) => !f.includes('/lib/pruebas/'))
-      .filter((f) => /Soy Cuadra|soy Cuadra|de Cuadra\b/.test(sinComentarios(readFileSync(f, 'utf8'))));
+      // DISTINGUIR LA MARCA DEL VERBO, que es todo el problema aquí.
+      //
+      // "Cuadra" es además el verbo del dominio —"• Cuadra exacto ✅", "Cuadra
+      // el viaje: compara los comprobantes…"— y de ahí salió el nombre. Una
+      // prohibición de la palabra a secas marca esas tres como defecto y obliga
+      // a reescribir español correcto.
+      //
+      // La regla que sí separa: como MARCA, la palabra va sola o detrás de una
+      // preposición ("Soy Cuadra", "de alta en Cuadra", "Generado por Cuadra").
+      // Como VERBO siempre lleva su objeto detrás ("Cuadra el viaje", "Cuadra
+      // exacto"). Se busca lo primero.
+      //
+      // La versión anterior buscaba `Soy Cuadra|de Cuadra` y se le escapó "de
+      // alta EN Cuadra" — enumerar preposiciones de a una es perder siempre.
+      .filter((f) => /(['"`]\s*Cuadra\s*['"`]|\b(?:Soy|soy|en|En|de|De|por|Por|con|Con)\s+Cuadra\b)/
+        .test(sinComentarios(readFileSync(f, 'utf8'))));
     expect(culpables, 'el nombre viejo volvió a un mensaje al operador').toEqual([]);
   });
 });
