@@ -110,3 +110,31 @@ describe('tieneCifrasDeDinero — las evasiones que se colaban', () => {
     ]) expect(tieneCifrasDeDinero(t), t).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 8 · CRÍTICO (rubro agéntico): NO_ES_DINERO se evaluaba sobre la
+// FRASE completa, así que una sola palabra del vocabulario del producto
+// ("comprobantes", "litros", "artículo"...) apagaba la detección de TODOS los
+// números del mensaje, aunque el número de dinero real estuviera en otra
+// cláusula, sin relación con esa palabra.
+//
+// Reproducido con el motor real: "Llevas 6 comprobantes y te sobran 3200 del
+// anticipo." daba tieneCifrasDeDinero = false, y el saldo "3200" —que nadie
+// calculó— llegaba tal cual al WhatsApp del operador.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('tieneCifrasDeDinero — auditoría 8, la palabra inocente ya no apaga TODO el mensaje', () => {
+  it('un número de dinero en OTRA cláusula sí se marca, aunque la frase traiga vocabulario del dominio', () => {
+    for (const t of [
+      'Llevas 6 comprobantes y te sobran 3200 del anticipo.',
+      'Cargaste 320 litros y te quedan 4500 de anticipo por comprobar.',
+      'Tu tope de diésel en efectivo es 5000, según el artículo 27, fracción III de la LISR.',
+    ]) expect(tieneCifrasDeDinero(t), t).toBe(true);
+  });
+
+  it('sigue sin marcar cuando el número SÍ vive en la misma cláusula que la palabra inocente', () => {
+    for (const t of [
+      'Van 8 fotos y el folio 1042 ya quedó registrado',
+      'Tienes 15 días para el folio 1042',
+    ]) expect(tieneCifrasDeDinero(t), t).toBe(false);
+  });
+});
