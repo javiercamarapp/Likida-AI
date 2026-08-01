@@ -438,7 +438,23 @@ export async function extraerComprobante(
   return {
     gasto,
     legible,
-    motivo: legible ? undefined : soloCodigo ? 'solo_codigo' : soloPago ? 'solo_pago' : 'ilegible',
+    // EL VOUCHER GANA SOBRE EL ACERCAMIENTO, y el orden importa porque los dos
+    // se disparan a la vez.
+    //
+    // `soloCodigo` estaba primero, y un voucher de terminal TRAE CÓDIGO DE
+    // BARRAS: el "Ticket: 059286188" impreso al pie de un Getnet decodifica y
+    // deja `montoCodigo` puesto sin que el cuerpo dé monto. Resultado, medido en
+    // el ensayo del 1-ago: tres vouchers entraron como `solo_codigo` y el
+    // operador recibió «ya tengo el código, mándame el ticket completo» por un
+    // papel del que NO hay ticket más completo. Se queda esperando algo que no
+    // existe, y el gasto real ya estaba registrado por otra foto.
+    //
+    // Los dos evitan el mismo daño —que el papel entre como gasto duplicado—
+    // así que invertirlos no cambia el dinero: cambia lo que se le pide al
+    // operador. Y `solo_pago` es la afirmación MÁS fuerte de las dos: el modelo
+    // dijo qué clase de documento es, mientras que `solo_codigo` solo observa
+    // que el cuerpo no dio monto, que es lo que le pasa a un voucher.
+    motivo: legible ? undefined : soloPago ? 'solo_pago' : soloCodigo ? 'solo_codigo' : 'ilegible',
     costo: { modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.cost },
   };
 }

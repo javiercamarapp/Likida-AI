@@ -15,8 +15,16 @@ export type AccionFoto =
   | { accion: 'alta' }
   /** Acercamiento que encontró su comprobante: le pega folio, código y liga. */
   | { accion: 'enriquecer'; gastoId: string }
-  /** Trae código pero no hay comprobante al cual pegarlo (o hay más de uno). */
-  | { accion: 'pedir_ticket' }
+  /**
+   * Trae código o es un voucher, y no hay comprobante al cual pegarlo.
+   *
+   * `porVoucher` cambia lo que se le pide al operador, y esa distinción salió
+   * del ensayo real: a quien mandó el voucher de la terminal se le decía
+   * «mándame el ticket completo», y de ese papel NO hay ticket más completo.
+   * Se queda esperando algo que no existe. Lo que hay que pedirle es OTRO
+   * documento: el del comercio.
+   */
+  | { accion: 'pedir_ticket'; porVoucher?: boolean }
   /** La foto de verdad no se lee: reenviarla con mejor luz sirve. */
   | { accion: 'pedir_reenvio' }
   /** Falló nuestro lado: reenviar la misma foto falla igual. */
@@ -34,7 +42,9 @@ export function decidirFoto(r: ExtraerResultado, gastos: Gasto[]): AccionFoto {
     // Sin destino único NO se da de alta: un acercamiento por su cuenta vale el
     // mismo dinero que el ticket que le corresponde, y sumar los dos infla la
     // liquidación. Se le pide la foto del ticket y no se pierde nada.
-    return destino ? { accion: 'enriquecer', gastoId: destino.id } : { accion: 'pedir_ticket' };
+    return destino
+      ? { accion: 'enriquecer', gastoId: destino.id }
+      : { accion: 'pedir_ticket', porVoucher: r.motivo === 'solo_pago' };
   }
   return { accion: 'pedir_reenvio' };
 }

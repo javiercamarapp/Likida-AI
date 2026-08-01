@@ -37,10 +37,21 @@ describe('el aviso del acercamiento sale una vez por viaje', () => {
   it('y si no se puede contar, se avisa igual', () => {
     // Perder el aviso deja al operador sin instrucción y con una foto que no
     // entró: peor que repetirlo. La degradación va hacia el lado seguro.
+    //
+    // Se cuenta el USO del mensaje, no el literal: desde que el voucher tiene su
+    // propio texto, los dos caminos mandan la misma variable `pideOtroPapel`.
+    // Contar la cadena suelta era contar cómo está escrito, no qué hace.
     const i = P.indexOf("accion === 'pedir_ticket'");
-    const rama = P.slice(i, i + 1600);
-    const avisos = [...rama.matchAll(/Ya tengo el código de ese ticket/g)];
-    expect(avisos.length, 'falta la rama del catch').toBe(2);
+    const rama = P.slice(i, i + 1800);
+    const envios = [...rama.matchAll(/say\(pideOtroPapel\)/g)];
+    expect(envios.length, 'falta la rama del catch').toBe(2);
+  });
+
+  it('y el mensaje depende de si fue voucher o acercamiento', () => {
+    // La variable existe para eso: un voucher no tiene "ticket más completo".
+    const i = P.indexOf("accion === 'pedir_ticket'");
+    const rama = P.slice(i, i + 1800);
+    expect(rama).toMatch(/const pideOtroPapel = decision\.porVoucher/);
   });
 
   it('el acuse de la ráfaga sigue atado al primer comprobante', () => {

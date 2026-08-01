@@ -8,6 +8,13 @@ import { logger } from '@/lib/logger';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const DOWNLOAD_TIMEOUT_MS = 15_000;
+// AUDITORÍA 8, ALTO REINCIDENTE: `sendText`/`sendDocument` seguían con `fetch`
+// pelado, sin `signal` — el mismo hueco que `repo.ts` ya cerró para Supabase.
+// El default de undici (300s) contra un `maxDuration` de 120 significa que un
+// solo envío colgado se lleva la invocación entera, y es el paso final del
+// cierre: el PDF ya se generó, el operador solo se queda sin el mensaje que
+// lo entrega.
+const SEND_TIMEOUT_MS = 10_000;
 
 function token(): string {
   const t = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -84,6 +91,7 @@ export async function sendText(to: string, body: string): Promise<string | null>
     method: 'POST',
     headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } }),
+    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
   });
   if (!res.ok) { logger.error('wa.sendText', { status: res.status, body: await res.text().catch(() => '') }); return null; }
   // El ÉXITO también deja rastro. Sin esta línea, "se envió" y "nunca se llamó"
@@ -114,6 +122,7 @@ export async function sendDocument(to: string, link: string, filename: string, c
       type: 'document',
       document: { link, filename, caption },
     }),
+    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
   });
   if (!res.ok) { logger.error('wa.sendDocument', { status: res.status, body: await res.text().catch(() => '') }); return; }
   // Igual que en `sendText`: el envío del PDF es EL entregable, y su éxito no

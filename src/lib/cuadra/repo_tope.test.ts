@@ -31,6 +31,17 @@ const puerto = (servidorMudo.address() as net.AddressInfo).port;
 
 // Van ANTES del import: `supabaseAdmin()` lee la URL al construir el cliente y
 // `TOPE_CONSULTA_MS` lee su env al cargar el módulo.
+//
+// AUDITORÍA 8: `process.env.X = ...` NO se auto-restaura entre archivos de
+// prueba (a diferencia de `vi.stubEnv`) — es estado del proceso de Node, y
+// vitest puede correr varios archivos en el mismo worker. Sin este `afterAll`,
+// este archivo dejaba `NEXT_PUBLIC_SUPABASE_URL` apuntando al servidor mudo
+// para CUALQUIER prueba que corriera después en el mismo worker.
+const ENV_ORIGINAL = {
+  url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  key: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  tope: process.env.CUADRA_TOPE_CONSULTA_MS,
+};
 process.env.NEXT_PUBLIC_SUPABASE_URL = `http://127.0.0.1:${puerto}`;
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'llave-falsa-para-la-medicion';
 process.env.CUADRA_TOPE_CONSULTA_MS = '1500';   // el de producción son 8 000
@@ -38,7 +49,12 @@ process.env.CUADRA_TOPE_CONSULTA_MS = '1500';   // el de producción son 8 000
 const { getViaje, getGastos, gastoExistePorHash, saveLiquidacion } = await import('./repo');
 const { TOPE_CONSULTA_MS } = await import('./presupuesto');
 
-afterAll(() => { servidorMudo.close(); });
+afterAll(() => {
+  servidorMudo.close();
+  if (ENV_ORIGINAL.url === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL; else process.env.NEXT_PUBLIC_SUPABASE_URL = ENV_ORIGINAL.url;
+  if (ENV_ORIGINAL.key === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = ENV_ORIGINAL.key;
+  if (ENV_ORIGINAL.tope === undefined) delete process.env.CUADRA_TOPE_CONSULTA_MS; else process.env.CUADRA_TOPE_CONSULTA_MS = ENV_ORIGINAL.tope;
+});
 
 const CORTE_MS = 12_000;   // muy por encima del tope; si se llega, es que no hay tope
 

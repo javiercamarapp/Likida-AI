@@ -56,14 +56,14 @@ describe('el voucher de la terminal no se da de alta dos veces', () => {
   it('sin ticket al cual pegarse, se le PIDE — y tampoco se da de alta', () => {
     // El operador mandó primero el voucher. Pedirle el ticket es correcto: sin
     // él no hay RFC, ni litros, ni folio para facturar en el portal.
-    expect(decidirFoto(extraccion(), [])).toEqual({ accion: 'pedir_ticket' });
+    expect(decidirFoto(extraccion(), [])).toEqual({ accion: 'pedir_ticket', porVoucher: true });
   });
 
   it('con DOS gastos del mismo monto no adivina a cuál pegarse', () => {
     // Dos cargas de $400 el mismo viaje es normal. Elegir una al azar pegaría el
     // pago a la carga equivocada; se pide el ticket y no se pierde nada.
     const dos = [base({ id: 'a' }), base({ id: 'b' })];
-    expect(decidirFoto(extraccion(), dos)).toEqual({ accion: 'pedir_ticket' });
+    expect(decidirFoto(extraccion(), dos)).toEqual({ accion: 'pedir_ticket', porVoucher: true });
   });
 
   it('un comprobante normal SIGUE dándose de alta', () => {
@@ -172,5 +172,53 @@ describe('la nota no fiscal, en pesos', () => {
     // estas pruebas igual y estaría gritando sobre cada comida del país.
     const liq = cuadre(gasto());
     expect((liq.diferencias ?? []).some((x) => x.tipo === 'comprobante_no_fiscal')).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL VOUCHER TRAE CÓDIGO DE BARRAS, Y ESO LO DISFRAZABA DE ACERCAMIENTO.
+//
+// Diagnosticado el 1-ago sobre la bandeja real: tres códigos pendientes de $400
+// cada uno, y el primero con `codigo_barras = 059286188` y
+// `url_facturacion = lodenored.com.mx`. Ese número es literalmente el "Ticket:"
+// impreso al pie de un voucher de Getnet.
+//
+// `soloCodigo` se evaluaba ANTES que `soloPago`, y un voucher dispara los dos:
+// su código de barras decodifica y deja `montoCodigo` puesto sin que el cuerpo
+// dé monto — que es exactamente la firma de un acercamiento.
+//
+// El dinero no cambiaba (los dos evitan que el papel entre como gasto), pero el
+// operador recibía «ya tengo el código, mándame el ticket completo» por un papel
+// del que NO hay ticket más completo. Se quedaba esperando algo que no existe,
+// con su gasto ya registrado por otra foto.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('un voucher no es un acercamiento, aunque traiga código', () => {
+  const FUENTE = sinComentarios(readFileSync('src/lib/cuadra/intake/ocr.ts', 'utf8'));
+
+  it('`solo_pago` se decide ANTES que `solo_codigo`', () => {
+    // El orden ES el arreglo. `solo_pago` es la afirmación más fuerte: el modelo
+    // dijo qué clase de documento es, mientras que `solo_codigo` solo observa
+    // que el cuerpo no dio monto — que es lo que le pasa a un voucher.
+    expect(FUENTE).toMatch(/soloPago \? 'solo_pago' : soloCodigo \? 'solo_codigo'/);
+  });
+
+  it('y se le pide OTRO documento, no el mismo más completo', () => {
+    const P = sinComentarios(readFileSync('src/lib/cuadra/processor.ts', 'utf8'));
+    expect(P).toMatch(/decision\.porVoucher/);
+    expect(P).toMatch(/terminal.*tarjeta|tarjeta.*terminal/i);
+    expect(P).toMatch(/ticket del \*comercio\*/);
+  });
+
+  it('`decidirFoto` marca de dónde viene la petición', () => {
+    const conTicket = decidirFoto(extraccion(), []);
+    expect(conTicket).toEqual({ accion: 'pedir_ticket', porVoucher: true });
+
+    const conCodigo = decidirFoto(extraccion({ motivo: 'solo_codigo' }), []);
+    expect(conCodigo).toEqual({ accion: 'pedir_ticket', porVoucher: false });
+  });
+
+  it('emparejar sigue ganando: si su ticket ya está, se pega y no se pide nada', () => {
+    const ticket = base({ id: 'ticket-real', monto: 400 });
+    expect(decidirFoto(extraccion(), [ticket])).toEqual({ accion: 'enriquecer', gastoId: 'ticket-real' });
   });
 });
