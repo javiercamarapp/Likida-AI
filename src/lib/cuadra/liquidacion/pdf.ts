@@ -129,6 +129,41 @@ export async function generarLiquidacionPDF(
     }
     return v.slice(0, lo) + '...';
   };
+  /**
+   * Parte un texto en las líneas que caben en `ancho`, midiendo con la fuente
+   * real.
+   *
+   * Existe porque `cortar` estaba mintiendo justo donde más duele: la nota de
+   * cada diferencia se recortaba a UNA línea y lo que se perdía era el final,
+   * que es donde vive el fundamento. En el PDF del 1-ago salía «LISR 2...» y
+   * «LISR ...» — la cita legal partida a la mitad, en el único documento que el
+   * contralor archiva y por el que juzga si esto es serio.
+   *
+   * El comentario de ese bloque ya decía «nunca se truncan», y hablaba de la
+   * LISTA (todas se imprimen, paginando). El TEXTO sí se truncaba.
+   *
+   * NO es el `envolver` de arriba, y la diferencia importa: aquél cuenta
+   * CARACTERES, que basta para el descargo del pie —texto corrido, sin nada al
+   * lado—. Éste MIDE con la fuente, que es lo único que sirve cuando a la
+   * derecha hay una columna de dinero contra la que no se puede chocar.
+   */
+  const envolverMedido = (s2: string, ancho: number, f: PDFFont, size: number): string[] => {
+    const palabras = wa(s2).split(/\s+/).filter(Boolean);
+    const lineas: string[] = [];
+    let actual = '';
+    for (const p of palabras) {
+      const tentativa = actual ? `${actual} ${p}` : p;
+      if (f.widthOfTextAtSize(tentativa, size) <= ancho) { actual = tentativa; continue; }
+      if (actual) lineas.push(actual);
+      // Una palabra sola más ancha que la columna (una URL de portal, un folio
+      // largo) sí se corta: salirse de la caja se monta encima del monto, que
+      // es el fallo que `cortar` existía para evitar.
+      if (f.widthOfTextAtSize(p, size) <= ancho) { actual = p; }
+      else { lineas.push(cortar(p, ancho, f, size)); actual = ''; }
+    }
+    if (actual) lineas.push(actual);
+    return lineas.length ? lineas : [''];
+  };
   const rule = (yy: number, color = HAIRLINE) =>
     page.drawLine({ start: { x: M, y: yy }, end: { x: 595.28 - M, y: yy }, thickness: 0.75, color });
   const circulo = (x: number, yy: number, color: ReturnType<typeof rgb>) =>
@@ -372,14 +407,20 @@ export async function generarLiquidacionPDF(
     y -= 16;
     let difImpresas = 0;
     for (const d of obsPdf) {
-      // Las diferencias son lo ÚNICO accionable del papel: nunca se truncan.
-      if (asegurar(16)) { text('DIFERENCIAS DETECTADAS (cont.)', M, y, 8, bold, MUTED); y -= 6; rule(y); y -= 16; }
+      // Las diferencias son lo ÚNICO accionable del papel: nunca se truncan —
+      // ni la lista NI el texto. 70pt de aire antes de la columna del monto,
+      // para que nunca se toquen.
+      const lineas = envolverMedido(d.nota, cMonto - (M + 14) - 70, font, 9.5);
+      const alto = 16 + (lineas.length - 1) * 11;
+      // El bloque entero cabe o se va completo a la hoja siguiente: una
+      // observación partida por la mitad se lee como dos cosas distintas.
+      if (asegurar(alto)) { text('DIFERENCIAS DETECTADAS (cont.)', M, y, 8, bold, MUTED); y -= 6; rule(y); y -= 16; }
       circulo(M + 3, y + 3, d.tipo === 'sin_comprobante' ? RED : AMBER);
-      // 70pt de aire antes de la columna del monto, para que nunca se toquen.
-      text(cortar(d.nota, cMonto - (M + 14) - 70, font, 9.5), M + 14, y, 9.5, font, INK);
+      lineas.forEach((ln, i) => text(ln, M + 14, y - i * 11, 9.5, font, INK));
+      // El monto se ancla a la PRIMERA línea, junto a la viñeta.
       right(mxn(d.monto), cMonto, y, 9.5, bold, d.monto >= 0 ? INK : AMBER);
       difImpresas++;
-      y -= 16;
+      y -= alto;
     }
     const difFuera = obsPdf.length - difImpresas;
     if (difFuera > 0) {
