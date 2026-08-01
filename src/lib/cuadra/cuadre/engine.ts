@@ -598,7 +598,22 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       const cierreComercio = comercio?.plazoVerificado
         ? ` (plazo del portal de ${comercio.nombre}, no de la ley: legalmente puedes exigir la factura dentro del ejercicio)`
         : ', y la ventana del comercio puede ser menor';
-      const cuerpo = c.vencido
+      // SI LA FECHA ESTÁ EN DUDA, EL PLAZO TAMBIÉN. Las dos observaciones salen
+      // del MISMO dato, y una de ellas manda a la oficina a hacer algo.
+      //
+      // Visto el 1-ago con un ticket real: el OCR leyó un 8 como 6 y fechó en
+      // junio una compra de agosto. El motor dudó de la fecha —bien— y en la
+      // línea siguiente afirmó que el plazo de facturación se había vencido,
+      // calculado sobre esa misma fecha. Le habría costado a la oficina pelear
+      // por Conciliación de Factura una factura que el portal del comercio
+      // habría emitido sin discutir.
+      //
+      // Dudar de un dato y a la vez actuar sobre él es peor que no dudar: el
+      // aviso lleva la autoridad de un cálculo y la fragilidad de una lectura.
+      const fechaEnDuda = diferencias.some((d) => d.tipo === 'fecha_sospechosa' && d.gastoId === g.id);
+      const cuerpo = fechaEnDuda
+        ? `no se puede calcular el plazo de facturación: su fecha no cuadra con el viaje y hay que verificarla primero en el papel`
+        : c.vencido
         ? `se pasó el plazo de facturación. El comercio ya no suele facturarlo en su portal, pero legalmente puedes exigirlo dentro del ejercicio (Conciliación de Factura del SAT)`
         : c.urgente
           ? `quedan ${c.diasRestantes} día(s) para timbrarlo${comercio?.plazoVerificado ? `${cierreComercio}` : ' — y la ventana del comercio puede ser menor, así que hazlo antes'}`
