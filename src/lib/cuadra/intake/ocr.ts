@@ -150,7 +150,8 @@ NO CONFUNDIR: "CLAVE PEMEX 32011" (o similar) es un código INTERNO de producto 
  *                     acercamiento, se pega al comprobante que le corresponde en
  *                     vez de darse de alta.
  */
-export type MotivoFallo = 'ilegible' | 'fallo_tecnico' | 'solo_codigo' | 'solo_pago';
+export const MOTIVOS_FALLO = ['ilegible', 'fallo_tecnico', 'solo_codigo', 'solo_pago'] as const;
+export type MotivoFallo = typeof MOTIVOS_FALLO[number];
 
 /**
  * El papel dice de sí mismo que no ampara deducción ("ESTE NO ES UN COMPROBANTE
