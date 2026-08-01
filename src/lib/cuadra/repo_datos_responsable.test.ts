@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let fila: Record<string, unknown> | null = null;
 
-const from = vi.fn((_tabla: string) => {
+const from = vi.fn(() => {
   const enlace: Record<string, unknown> = {};
   for (const m of ['select', 'eq']) enlace[m] = () => enlace;
   enlace.maybeSingle = async () => ({ data: fila, error: null });
