@@ -217,11 +217,17 @@ Estas dos bloquean cosas reales y **no son código**. Eran cuatro: las
 migraciones se aplicaron el 31-jul y el aviso de privacidad ya tiene su liga
 —la app sirve el integral en `/aviso/[tenant]`—, así que solo queda esto:
 
-1. **RFC real de la flota** en `tenant.rfc`. Hoy el seed trae `TIN010101AAA`, que
-   falla el dígito verificador. Con un RFC inservible —o con el genérico
-   `XAXX010101000`— **toda factura sale "a revisión"**. Es el comportamiento
-   correcto, pero si no se captura uno válido, **el demo enseña todo en "por
-   confirmar"**. Ésta es la que puede morder en la sala.
+1. ~~RFC real de la flota~~ **HECHO el 31-jul.** `tenant.rfc = GMX0902279I1`
+   (G3M, la empresa del amigo de Javier, la misma a la que se facturaron los
+   tickets reales de esa mañana). Pasa forma Y dígito verificador —comprobado
+   con `rfcChecksumOk`, no supuesto—; el `TIN010101AAA` del seed fallaba el
+   dígito, que es por lo que la validación de receptor estaba APAGADA.
+
+   **La razón social NO se cambió, a propósito.** El aviso integral es una
+   página PÚBLICA (`/aviso/<tenant>`): poner ahí los datos de G3M publicaría a
+   la empresa de un tercero como responsable de un tratamiento que no hace. La
+   validación de receptor solo necesita el RFC. Si en el demo se va a enseñar el
+   aviso, hay que decidirlo antes.
 2. **Mudar el software a `app.likida.ai`** (decidido el 31-jul). Hoy `likida.ai`
    sirve ESTA app y la landing de `~/javiercamarapp/likida-web` no está
    desplegada en ningún lado.

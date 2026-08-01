@@ -25,6 +25,15 @@
 --       CONSTANCIA-INTACTA=t  version-intacta=v1  reserva-suelta=t
 --       solto=t  solto-2a-vez=f  reserva-expira=t
 --
+-- Y el BARRIDO DE PRODUCCIÓN del 31-jul, bloque 18 contra la base real:
+--
+--   18  tablas-sin-rls=—  politicas-que-dicen-true=—  rpc-abiertas-a-anon=—
+--
+-- Además se atacó la API REST como anónimo con la llave publicable: 14 tablas
+-- leídas → 0 filas, y CINCO escrituras rechazadas (envenenar la idempotencia,
+-- inventar un gasto, soltar el mutex de un viaje ajeno, mover el contador de la
+-- barrera, marcar una constancia de aviso falsa). Todas con 42501.
+--
 -- Y el bloque 8 (0027) el mismo día, en cuanto se aplicó su migración:
 --
 --    8  repetido-entre-viajes-rebotado=t  sin-hash-que-entraron=2
@@ -73,9 +82,10 @@
 --   · 0030 (`indices_faltantes`) → APLICADA. El bloque 13 se escribió DESPUÉS,
 --     el 31-jul: la única migración que existe para que un chequeo dejara de
 --     mentir era, ella misma, la única sin comprobar.
---   · 0031 (TTL del contador de la barrera), 0032 (`politica_gasto` muerta) y
---     0033 (la constancia del aviso separada de su reserva) → APLICADAS el
---     31-jul. Sus bloques (14 y 17) pasaron; la salida está copiada arriba.
+--   · 0031 (TTL del contador de la barrera), 0032 (`politica_gasto` muerta),
+--     0033 (la constancia del aviso separada de su reserva), 0034 (contacto del
+--     art. 29) y 0035 (`search_path` fijo) → APLICADAS el 31-jul. Sus bloques
+--     (14, 17 y 18) pasaron; la salida está copiada arriba.
 -- Contra una base sin las migraciones, los bloques 6 a 11 reportan `f` — que es
 -- justamente la lectura útil: dicen qué garantía falta.
 --
@@ -683,4 +693,55 @@ begin
     version_tras_fallo,
     reserva_tras_fallo is null,
     solto, solto_de_nuevo, gano_tras_ttl;
+end $$;
+
+
+-- ── 18. El aislamiento entre flotas, mirado en el catálogo (barrido 31-jul) ──
+-- SOLO LECTURA. Nace del barrido de producción del 31-jul, en el que se atacó la
+-- API REST como anónimo con la llave publicable: 14 tablas leídas → 0 filas, y
+-- cinco escrituras rechazadas (envenenar la idempotencia, inventar un gasto,
+-- soltar el mutex de un viaje ajeno, mover el contador de la barrera, marcar una
+-- constancia de aviso falsa).
+--
+-- Aquello fue una foto de ese momento. Esto es lo que se puede volver a correr, y
+-- comprueba las tres formas de perder el aislamiento SIN que nada falle:
+--
+--   1. una tabla nueva SIN RLS — el default de Postgres es permitir,
+--   2. una política que diga `true` — se ve igual de segura en la lista y no
+--      filtra nada,
+--   3. una función interna ejecutable por `anon`.
+--
+-- LO QUE NO ES UN HALLAZGO, para que nadie lo "arregle": `codigo_pendiente`,
+-- `viaje_lock` y `wa_mensaje_procesado` tienen RLS y CERO políticas. Eso es
+-- denegación total a anon/authenticated y es exactamente lo que la 0012 buscaba;
+-- solo el service-role escribe ahí. Y `get_user_tenant_ids()`/`is_superadmin()`
+-- son SECURITY DEFINER ejecutables por anon a propósito: las usan las once
+-- políticas, y resuelven contra `auth.uid()`, que para un anónimo es NULL —
+-- devuelven vacío y false. Revocarlas rompe el aislamiento en vez de cerrarlo.
+do $$
+declare
+  sin_rls text; con_true text; rpc_abierta text;
+begin
+  select coalesce(string_agg(c.relname, ', ' order by c.relname), '—') into sin_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
+
+  -- Una política permisiva cuya expresión sea literalmente `true` deja pasar
+  -- todo con RLS encendido: el peor estado, porque el tablero dice "protegida".
+  select coalesce(string_agg(tablename || '.' || policyname, ', '), '—') into con_true
+    from pg_policies
+   where schemaname = 'public' and permissive = 'PERMISSIVE'
+     and btrim(coalesce(qual, with_check, '')) in ('true', '(true)');
+
+  -- Las RPC internas del pipeline. Ninguna puede ser ejecutable por `anon`.
+  select coalesce(string_agg(p.proname, ', ' order by p.proname), '—') into rpc_abierta
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname in ('try_lock_viaje','unlock_viaje','intake_delta','enriquecer_gasto_codigo',
+                       'guardar_liquidacion_tx','marcar_aviso_privacidad','confirmar_aviso_privacidad',
+                       'liberar_aviso_privacidad','indices_faltantes')
+     and has_function_privilege('anon', p.oid, 'execute');
+
+  raise exception E'AISLAMIENTO  tablas-sin-rls=%  politicas-que-dicen-true=%  rpc-abiertas-a-anon=%   (esperado — / — / —)',
+    sin_rls, con_true, rpc_abierta;
 end $$;
