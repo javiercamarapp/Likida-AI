@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { violaIndice, llegoTarde, GASTO_TARDE, UNIQUE_VIOLATION } from './pg_errores';
-import { sinComentarios } from '@/lib/pruebas/codigo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ÚLTIMO CRÍTICO DE CÓDIGO DE LAS SIETE RONDAS.
@@ -18,6 +16,16 @@ import { sinComentarios } from '@/lib/pruebas/codigo';
 // El arreglo vive en la base (0036) porque en TypeScript sería comprobar y
 // luego escribir, con la carrera justo en medio. Aquí se fija lo que le toca a
 // este lado: distinguir ese error de los benignos y decírselo al operador.
+//
+// AUDITORÍA 8, ALTO (pruebas): este archivo tenía un segundo describe,
+// "el processor se lo dice al operador", que probaba el TEXTO fuente de
+// `processor.ts` (`P.slice(...).toContain('sendText')`) en vez de ejecutarlo.
+// Un `if (llegoTarde(e))` mudo a `if (false && llegoTarde(e))` dejaba el
+// texto vecino intacto y esas tres pruebas seguían verdes — verificado
+// aplicando ese mutante exacto. Se reemplazó por `foto_llego_tarde.test.ts`,
+// que corre `processInbound` de verdad con `addGasto` lanzando el CU001 real
+// y verifica la RESPUESTA, no el código fuente. Aquí solo quedan las
+// funciones puras.
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('llegar tarde no es lo mismo que estar repetido', () => {
@@ -44,27 +52,7 @@ describe('llegar tarde no es lo mismo que estar repetido', () => {
   });
 });
 
-describe('el processor se lo dice al operador', () => {
-  const P = sinComentarios(readFileSync('src/lib/cuadra/processor.ts', 'utf8'));
-
-  it('manda un mensaje en vez de tragárselo', () => {
-    // El `return` silencioso es correcto para los dos duplicados de arriba y
-    // sería el error entero aquí: el gasto no quedó en ningún lado.
-    const i = P.indexOf('llegoTarde(e)');
-    expect(i, 'el processor no distingue el gasto tardío').toBeGreaterThan(0);
-    const rama = P.slice(i, i + 700);
-    expect(rama, 'no le avisa al operador').toContain('sendText');
-    expect(rama).toMatch(/llegó después|llegó tarde|NO entró/i);
-  });
-
-  it('le dice qué HACER, no solo que falló', () => {
-    // Un aviso sin salida es una mala noticia; con salida es una instrucción.
-    const rama = P.slice(P.indexOf('llegoTarde(e)'), P.indexOf('llegoTarde(e)') + 700);
-    expect(rama).toMatch(/siguiente viaje|la oficina/i);
-  });
-
-  it('y el monto va en el mensaje, formateado por `formato.ts`', () => {
-    const rama = P.slice(P.indexOf('llegoTarde(e)'), P.indexOf('llegoTarde(e)') + 700);
-    expect(rama).toContain('mxn(gasto.monto)');
-  });
-});
+// El comportamiento real —"manda un mensaje en vez de tragárselo", "dice qué
+// HACER", "el monto va formateado"— vive ahora en foto_llego_tarde.test.ts
+// (imagen) y xml_llego_tarde.test.ts (documento/XML), corriendo
+// `processInbound` de verdad. Ver la nota de arriba.
