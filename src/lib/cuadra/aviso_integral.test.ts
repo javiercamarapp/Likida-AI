@@ -100,10 +100,18 @@ describe('lo que este producto sí hace, dicho sin adornos', () => {
     expect(s.parrafos.join(' ')).toMatch(/CFF art\. 30|art\. 30/);
   });
 
-  it('dice que los modelos de lenguaje leen las fotos, y con retención cero', () => {
+  it('dice que los modelos de lenguaje leen las fotos, y que se les pide no retener', () => {
     // Esconderlo detrás de "proveedores tecnológicos" sería cierto y useless.
+    //
+    // AUDITORÍA 8, ALTO: "contratados con retención cero" afirmaba un contrato
+    // de Zero Data Retention que nadie negoció con OpenRouter —
+    // `data_collection: 'deny'` es una preferencia de ruteo que se PIDE en
+    // cada llamada, no una garantía confirmada del lado del proveedor. El
+    // aviso ya no puede decir más de lo que el código sabe.
     expect(todo()).toMatch(/modelos de lenguaje/i);
-    expect(todo()).toMatch(/retención cero/i);
+    expect(todo(), 'ya no debe prometer un contrato que no existe').not.toMatch(/retención cero/i);
+    expect(todo()).toMatch(/se les pide|se le pide/i);
+    expect(todo()).toMatch(/no retengan|no retenga/i);
   });
 
   it('separa encargados de transferencias, que es la distinción del art. 2 fr. XX', () => {

@@ -78,7 +78,7 @@ const SECCIONES: Seccion[] = [
     fundamento: 'LFPDPPP art. 35 · art. 2 fr. XX',
     parrafos: [
       `**No se venden, y no se comparten con nadie para que los use por su cuenta.**`,
-      `Pasan por proveedores que trabajan por instrucción de Likida y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia**—: alojamiento de aplicación y base de datos, mensajería de WhatsApp, monitoreo de errores, y los modelos de lenguaje que leen los comprobantes, contratados con **retención cero**.`,
+      `Pasan por proveedores que trabajan por instrucción de Likida y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia**—: alojamiento de aplicación y base de datos, mensajería de WhatsApp, monitoreo de errores, y los modelos de lenguaje que leen los comprobantes, a los que en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
       `El detalle de esos subencargados está en la documentación del producto y se actualiza cuando cambia.`,
       `**Si algún día quisiéramos transferir tus datos para algo distinto, te lo pediríamos antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
     ],

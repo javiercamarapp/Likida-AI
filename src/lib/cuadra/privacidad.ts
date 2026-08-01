@@ -298,9 +298,25 @@ const OPOSICION: RegExp[] = [
   /\boposicion\b/,
   /\bno\s+(?:quiero|autorizo|acepto)\s+que\s+(?:me\s+)?(?:revisen|analicen|usen|traten)\b/,
   /\brevision humana\b/,
+];
+
+/**
+ * AUDITORÍA 8, ALTO: "que lo revise una persona" es sintácticamente idéntica
+ * tanto para oponerse a una decisión automatizada (art. 26 fr. II) como para
+ * pedirle a alguien que revise un ticket mal leído por el OCR — el motivo de
+ * queja más común de este producto. Estos dos patrones son AMBIGUOS a
+ * propósito, y solo cuentan como oposición si el mensaje NO trae vocabulario
+ * de "esto es sobre un papel, no sobre mí" (ver `OBJETO_DE_PAPEL` abajo). Se
+ * separan de `OPOSICION` —que sigue siendo inequívoca— para no perder
+ * cobertura ahí.
+ */
+const OPOSICION_AMBIGUA: RegExp[] = [
   /\bque (lo |la )?(revise|revisen|vea|vean) (un |una )?(persona|humano|humana|alguien|gente)\b/,
   /\b(un|una) (persona|humano|humana|gente) (lo |la )?(revise|vea|revisara)\b/,
 ];
+
+/** El objeto de la revisión es un PAPEL, no una decisión sobre la persona. */
+const OBJETO_DE_PAPEL = /\b(ticket|folio|comprobante|recibo|factura|foto|imagen|lectura)\b/;
 
 /**
  * ¿El operador está ejerciendo el medio que el aviso le prometió?
@@ -322,7 +338,8 @@ export function pideAtencionPrivacidad(texto: string): boolean {
     .toLowerCase();
   return (
     /\b(privacidad|arco|mis datos personales|dar de baja mis datos)\b/.test(t) ||
-    OPOSICION.some((r) => r.test(t))
+    OPOSICION.some((r) => r.test(t)) ||
+    (OPOSICION_AMBIGUA.some((r) => r.test(t)) && !OBJETO_DE_PAPEL.test(t))
   );
 }
 
@@ -517,9 +534,15 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
     {
       titulo: 'Transferencias a terceros',
       fundamento: 'LFPDPPP art. 35',
+      // AUDITORÍA 8, ALTO: decía "contratados con retención cero", una garantía
+      // contractual que nadie negoció con OpenRouter — `data_collection: 'deny'`
+      // (openrouter.ts) es una preferencia de ruteo que se PIDE en cada llamada,
+      // no un contrato de Zero Data Retention firmado. El texto ahora describe
+      // lo que el código hace (pedirlo), no lo que no se ha confirmado (que se
+      // cumpla del lado del proveedor).
       parrafos: [
         `**Tus datos no se venden, ni se comparten con nadie para que los use por su cuenta.**`,
-        `Sí pasan por proveedores que trabajan por instrucción de la empresa y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia** (art. 2 fr. XX)—: el proveedor de mensajería de WhatsApp, el de alojamiento de la base de datos, y los modelos de lenguaje que leen las fotos, contratados con retención cero (no conservan lo que procesan).`,
+        `Sí pasan por proveedores que trabajan por instrucción de la empresa y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia** (art. 2 fr. XX)—: el proveedor de mensajería de WhatsApp, el de alojamiento de la base de datos, y los modelos de lenguaje que leen las fotos, a los que en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
         `Transferencias que sí lo son y no necesitan tu consentimiento: a la autoridad fiscal cuando la ley lo exige, y al contador de la empresa para cumplir sus obligaciones.`,
         `**Si algún día se quisiera transferir tus datos para algo distinto, se te pedirá permiso antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
       ],
