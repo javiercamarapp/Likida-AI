@@ -233,7 +233,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
   try {
     const op = await resolveOperador(msg.from);
     if (!op) {
-      await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Cuadra. 🚛');
+      await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Likida. 🚛');
       return;
     }
     // ── El medio ARCO responde SIEMPRE, haya viaje o no ──────────────────────
@@ -280,10 +280,27 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       return;
     }
 
-    // Helper: enviar + contar el costo (solo mensajes SALIENTES se cobran).
-    const say = async (text: string) => {
-      await sendText(msg.from, text);
+    // Helper: enviar + contar el costo. DEVUELVE SI SALIÓ, y ahí está el asunto.
+    //
+    // `sendText` NO lanza cuando Meta rechaza: devuelve `null` (y su propio
+    // comentario dice que el éxito deja rastro justo para poder distinguirlos).
+    // Aquí se tiraba ese resultado, así que un mensaje rebotado se trataba igual
+    // que uno entregado. Dos consecuencias, y las dos se vieron en producción el
+    // 1-ago con un `131030` (destinatario fuera de la lista de Meta):
+    //
+    //   · el turno del asistente se guardaba en la conversación igual, así que
+    //     el agente CREÍA haber saludado a alguien que nunca leyó nada, y en el
+    //     siguiente mensaje contestaba como si viniera de una charla en curso;
+    //   · y se cobraba el costo de un mensaje que no se entregó, inflando el
+    //     costo por liquidación.
+    //
+    // Es la misma familia que la constancia falsa del aviso de privacidad, que
+    // se cerró esta misma semana: registrar como hecho algo que no ocurrió.
+    const say = async (text: string): Promise<boolean> => {
+      const id = await sendText(msg.from, text);
+      if (!id) return false;
       await registrarCostoWhatsApp(op.tenantId, viajeId);
+      return true;
     };
 
     // ── Aviso de privacidad, una vez por operador (LFPDPPP art. 16 fr. II) ────
@@ -837,7 +854,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       }
     }
 
-    await say(reply);
+    const entregado = await say(reply);
 
     // Si la barrera de intake venció (un OCR tardó demasiado), avisa que se
     // cuadró con lo que alcanzó — falla visible, no silenciosa.
@@ -896,7 +913,19 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       }
     }
 
-    await saveConversation(conv.id, [...turns, { role: 'assistant', content: reply }], closed ? null : viajeId);
+    // LA CONVERSACIÓN GUARDA LO QUE EL OPERADOR LEYÓ, no lo que se intentó
+    // decirle. Si el envío rebotó, ese turno NO entra: dejarlo haría que el
+    // agente diera por dicho algo que el operador nunca vio, y en el siguiente
+    // mensaje respondiera desde una charla que solo existió de este lado.
+    //
+    // Los turnos del OPERADOR sí se guardan siempre: ésos sí ocurrieron, y
+    // perderlos borraría lo único que él sí mandó.
+    await saveConversation(
+      conv.id,
+      entregado ? [...turns, { role: 'assistant', content: reply }] : turns,
+      closed ? null : viajeId,
+    );
+    if (!entregado) logger.error('wa.respuesta_no_entregada', { tenant: op.tenantId, viaje: viajeId });
   } catch (e) {
     // CR-2: si el procesamiento crashea, liberar el claim para que el retry de
     // Meta lo reprocese (at-least-once). El OCR/agente ya tienen sus propios

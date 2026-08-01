@@ -73,7 +73,7 @@ export async function generarLiquidacionPDF(
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(`Liquidación ${viaje.folio ?? liq.id.slice(0, 8)}`);
-  doc.setProducer('Cuadra');
+  doc.setProducer('Likida');
 
   const A4: [number, number] = [595.28, 841.89];
   // `page` es MUTABLE: el documento ya no cabe forzosamente en una hoja. Un
@@ -147,7 +147,11 @@ export async function generarLiquidacionPDF(
   };
 
   // ─── Encabezado ───────────────────────────────────────────────────────────
-  text('Cuadra', M, y, 20, bold, INK);
+  // EL TÍTULO DEL PAPEL. Decía 'Cuadra' en 20pt mientras el pie —tres párrafos
+  // más abajo, en la misma hoja— decía "Generado por Likida · likida.ai". Los
+  // dos nombres del producto en el documento que el contralor archiva y que
+  // puede ver un tercero.
+  text('Likida', M, y, 20, bold, INK);
   right('LIQUIDACIÓN DE VIAJE', 595.28 - M, y + 3, 9, bold, MUTED);
   right(`Folio ${viaje.folio ?? liq.id.slice(0, 8).toUpperCase()}`, 595.28 - M, y - 10, 9, font, MUTED);
   y -= 28;
