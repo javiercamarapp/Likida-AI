@@ -65,9 +65,17 @@ const liq = (gastos: Gasto[], diferencias: Liquidacion['diferencias'], total: nu
 });
 
 describe('filasImprimibles', () => {
-  const a = { id: 'a', concepto: 'caseta' as const, monto: 300 };
-  const b = { id: 'b', concepto: 'caseta' as const, monto: 300 }; // el duplicado
-  const c = { id: 'c', concepto: 'diesel' as const, monto: 1000 };
+  // EL FIXTURE LLEVA FOLIO, y antes no. Sin folio ni UUID el motor NO puede
+  // marcar un duplicado —su llave es `concepto|folio|monto`— así que estas
+  // pruebas afirmaban sobre un estado que el sistema nunca produce. Pasaban
+  // porque `filasImprimibles` se creía la diferencia en vez de mirar los gastos.
+  //
+  // Cuando la diferencia `duplicado` pasó a apuntar al ORIGINAL (1-ago), la
+  // tabla del PDF empezó a imprimir LAS DOS COPIAS y a esconder el original, y
+  // estas pruebas siguieron verdes. Un fixture imposible no protege nada.
+  const a = { id: 'a', concepto: 'caseta' as const, monto: 300, folio: 'CA-1' };
+  const b = { id: 'b', concepto: 'caseta' as const, monto: 300, folio: 'CA-1' }; // copia de `a`
+  const c = { id: 'c', concepto: 'diesel' as const, monto: 1000, folio: 'DS-9' };
 
   it('el duplicado NO se imprime como renglón con monto', () => {
     const r = filasImprimibles(liq([a, b, c], [{ tipo: 'duplicado', concepto: 'caseta', monto: 300, nota: 'x', gastoId: 'b' }], 1300));
