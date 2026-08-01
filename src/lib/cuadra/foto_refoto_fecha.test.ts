@@ -102,7 +102,7 @@ const foto = { from: '5219993700779', type: 'image' as const, mediaId: 'media1',
 /** El ticket de Walmart del ensayo: impreso 01/08/26, leído como 8 de enero. */
 const WALMART_MAL = {
   id: 'g-walmart', concepto: 'alimentacion', monto: 45, fecha: '2026-01-08', folio: '05461',
-  ocrExtra: { emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV', fechaRaw: '01/08/26' },
+  ocrExtra: { emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV', fechaImpresa: '01/08/26' },
 };
 
 describe('processInbound — pedir la re-foto y saber recibirla', () => {
@@ -174,7 +174,7 @@ describe('processInbound — pedir la re-foto y saber recibirla', () => {
       legible: true,
       gasto: {
         concepto: 'alimentacion', monto: 45, fecha: '2026-01-08', folio: '05461',
-        ocrExtra: { emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV', fechaRaw: '01/08/26' },
+        ocrExtra: { emisor: 'NUEVA WAL MART DE MEXICO S DE RL DE CV', fechaImpresa: '01/08/26' },
       },
       costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
     });
