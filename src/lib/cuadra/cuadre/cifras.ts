@@ -53,14 +53,27 @@ const NUMERO_SUELTO = /(?<![\w-])\d{2,}(?:[.,]\d+)?(?![\w-])/;
  */
 const ANIO = /(?<![\w-])(?:19|20)\d{2}(?![\w-])/g;
 
+/**
+ * Divide el texto en cláusulas para que "comprobantes" en una parte del
+ * mensaje no apague un número de dinero real en otra. AUDITORÍA 8, CRÍTICO:
+ * "Llevas 6 comprobantes y te sobran 3200 del anticipo." apagaba TODOS los
+ * números del mensaje por la palabra "comprobantes", y el 3200 —que nadie
+ * calculó— salía tal cual.
+ */
+const SEPARADOR_DE_CLAUSULA = /[,;.:!?¡¿]|\s+(?:y|o|pero|porque)\s+/i;
+
 export function tieneCifrasDeDinero(texto: string): boolean {
   if (DINERO_EXPLICITO.test(texto) || DINERO_EN_PALABRAS.test(texto)) return true;
-  // Un número suelto SOLO cuenta si nada en la frase lo explica como otra cosa.
-  // Se mira la frase entera y no la vecindad del número: el modelo escribe
-  // "Ya recibí tus 3 comprobantes" y "Tu saldo: 500" con la misma estructura, y
-  // lo que las distingue es el sustantivo, esté donde esté.
-  if (NO_ES_DINERO.test(texto)) return false;
-  return NUMERO_SUELTO.test(texto.replace(ANIO, ' '));
+  // Un número suelto SOLO cuenta si nada en SU cláusula lo explica como otra
+  // cosa. Antes se miraba la frase entera, y una palabra del vocabulario del
+  // producto en cualquier parte del mensaje apagaba números sin relación con
+  // ella. Ahora cada cláusula se evalúa por separado: "Ya recibí tus 3
+  // comprobantes" sigue sin marcar (el 3 y "comprobantes" viven juntos), pero
+  // "Llevas 6 comprobantes y te sobran 3200 del anticipo" sí marca (el 3200
+  // vive en una cláusula sin ninguna palabra de la lista).
+  const sinAnios = texto.replace(ANIO, ' ');
+  const clausulas = sinAnios.split(SEPARADOR_DE_CLAUSULA);
+  return clausulas.some((c) => NUMERO_SUELTO.test(c) && !NO_ES_DINERO.test(c));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
