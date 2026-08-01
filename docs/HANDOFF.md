@@ -68,6 +68,38 @@ que ya está mergeado a `master`.
 
 **Empieza por `docs/auditoria-7/00-SINTESIS.md`, y después la 6.**
 
+### `vercel redeploy` NO despliega código — y confundirlo cuesta caro
+
+Pasó el 1-ago, dos veces seguidas, y lo detectó Javier pegando lo que de verdad
+le llegaba por WhatsApp:
+
+    vercel redeploy <url>   reconstruye el MISMO build con las variables de
+                            entorno nuevas. NO toma commits.
+    vercel deploy --prod    sube el directorio local y compila de verdad.
+
+Con `redeploy` el estado queda en lo peor que hay: repo verde, GitHub al día,
+1272 pruebas en cero... y producción sirviendo código viejo **sin que nada
+falle**. Es la misma trampa que `cuadra.mx` devolviendo 200: la comprobación que
+debía delatarlo era justo la que lo confirmaba.
+
+**Cómo verificar de verdad que un cambio está vivo.** Si el cambio no se ve por
+HTTP —los del camino de WhatsApp y del PDF no se ven— el despliegue no es
+prueba. Hay que mirar el efecto:
+
+    npx vercel alias ls | grep -E "likida.ai|likidaai"
+
+Los TRES hosts (`likida.ai`, `app.likida.ai` y `likidaai.vercel.app`, que es el
+del webhook) tienen que apuntar al mismo despliegue nuevo. Y aun así, la prueba
+final de un cambio de conversación es el mensaje que llega al teléfono.
+
+**Y para probar un saludo hay que vaciar la conversación.** El agente solo se
+presenta cuando `wa_conversacion.estado->turns` está vacío; si hay turnos,
+continúa y no dice su nombre. Se limpia así, sin borrar la fila:
+
+    update wa_conversacion
+       set estado = jsonb_set(estado, '{turns}', '[]'::jsonb)
+     where telefono = '<el de Meta, CON el 1: 521...>';
+
 ### Ojo con esto: hay una routine que trabaja sola
 
 Audita de madrugada, empuja a ramas `claude/*` y abre PR. Si te encuentras
