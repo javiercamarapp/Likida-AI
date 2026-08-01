@@ -114,4 +114,34 @@ describe('processInbound — la foto que llega tarde avisa la verdad, no la pier
     await processInbound(foto);
     expect(salientes.join(' ')).not.toMatch(/llegó después de que cerré/i);
   });
+
+  // AUDITORÍA 8, ALTO (backend): los duplicados benignos (23505 contra los
+  // índices únicos de hash e imagen) nunca se ejercitaban a través de
+  // `processInbound` real — solo como función pura en gasto_tarde.test.ts.
+  it('duplicado por hash de imagen (23505, ráfaga): se ignora en silencio, no avisa nada', async () => {
+    const err = new Error('duplicate key value violates unique constraint "uq_gasto_img_hash"') as Error & { code?: string };
+    err.code = '23505';
+    addGasto.mockRejectedValue(err);
+    process.env.CUADRA_DEDUP_FOTOS = '1';
+
+    await processInbound(foto);
+
+    expect(salientes, 'un duplicado benigno no debe generar ningún mensaje').toHaveLength(0);
+    delete process.env.CUADRA_DEDUP_FOTOS;
+  });
+
+  it('duplicado por CFDI (23505, mismo comprobante dos veces): se ignora en silencio', async () => {
+    extraerComprobante.mockResolvedValue({
+      gasto: { concepto: 'diesel', monto: 800, fecha: '2026-08-01', cfdiUuid: 'u1', ocrExtra: {} },
+      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+      legible: true,
+    });
+    const err = new Error('duplicate key value violates unique constraint "uq_gasto_cfdi_uuid"') as Error & { code?: string };
+    err.code = '23505';
+    addGasto.mockRejectedValue(err);
+
+    await processInbound(foto);
+
+    expect(salientes, 'el mismo CFDI dos veces es benigno: el comprobante ya está registrado').toHaveLength(0);
+  });
 });
