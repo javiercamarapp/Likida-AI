@@ -174,7 +174,7 @@ export async function vincularCostosALiquidacion(tenantId: string, viajeId: stri
       .eq('tenant_id', tenantId)
       .eq('viaje_id', viajeId)
       .is('liquidacion_id', null)
-      .select('id'), 'costoDeLiquidacion');
+      .select('id'), 'vincularCostosALiquidacion');
     if (error) {
       logger.error('costo.no_vinculado', {
         tenant: tenantId, viaje: viajeId, liquidacion: liquidacionId,
@@ -256,7 +256,7 @@ export async function getResumenCosto(tenantId: string): Promise<ResumenCosto> {
     const { data, error } = await acotada(supabaseAdmin()
       .from('llm_costo')
       .select('viaje_id, fase, tokens_in, tokens_out, costo_usd')
-      .eq('tenant_id', tenantId), 'vincularCostosALiquidacion');
+      .eq('tenant_id', tenantId), 'getResumenCosto');
     if (error) return ilegible(tenantId, error.message);
     filas = (data ?? []) as Array<Record<string, unknown>>;
   } catch (e) {

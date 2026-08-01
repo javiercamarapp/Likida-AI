@@ -21,7 +21,7 @@ import { violaIndice, llegoTarde } from '@/lib/cuadra/pg_errores';
 import { mxn } from '@/lib/formato';
 import { guardiaFundamento, normasDeToolCalls } from '@/lib/cuadra/normas/fundamento';
 import { guardiaEstado } from '@/lib/cuadra/cuadre/estado_afirmado';
-import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS } from '@/lib/cuadra/presupuesto';
+import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, acotada } from '@/lib/cuadra/presupuesto';
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
 import { getConfig } from '@/lib/cuadra/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/cuadra/intake/emparejar';
@@ -423,6 +423,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           // A la BANDEJA (mig. 0016): el acercamiento llegó antes que su ticket.
           // Sin esto, el folio exacto que trae el código se perdía y el gasto se
           // quedaba con el que leyó la visión — que es justo el que baila.
+          // QUÉ SE LE PIDE DEPENDE DE QUÉ MANDÓ. A quien mandó el voucher de la
+          // terminal se le decía «mándame el ticket completo», y de ese papel no
+          // hay ticket más completo: se queda esperando algo que no existe. Lo
+          // que le falta es OTRO documento — el del comercio, que es el que trae
+          // los litros y el RFC para facturar.
+          const pideOtroPapel = decision.porVoucher
+            ? 'Ese es el comprobante de la *terminal* (el de la tarjeta) 💳, y ése no sirve para facturar. Mándame el ticket del *comercio* — el que trae los litros y el RFC. 🧾'
+            : 'Ya tengo el código de ese ticket 👍. Mándame también la foto del *ticket completo* para registrar el gasto.';
           const extra = (gasto.ocrExtra ?? {}) as Record<string, unknown>;
           try {
             await guardarCodigoPendiente(op.tenantId, viajeId, {
@@ -456,13 +464,11 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           // producto que se ve roto.
           try {
             const pendientes = await getCodigosPendientes(viajeId, op.tenantId);
-            if (pendientes.length <= 1) {
-              await say('Ya tengo el código de ese ticket 👍. Mándame también la foto del *ticket completo* para registrar el gasto.');
-            }
+            if (pendientes.length <= 1) await say(pideOtroPapel);
           } catch {
             // Si no se puede contar, se avisa igual: es peor dejar al operador
             // sin instrucción que repetírsela.
-            await say('Ya tengo el código de ese ticket 👍. Mándame también la foto del *ticket completo* para registrar el gasto.');
+            await say(pideOtroPapel);
           }
           return;
         }
@@ -943,7 +949,11 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         if (!pdfGenerado) throw new Error('la tool reportó pdf_generado=false');
         // El ejemplar del OPERADOR, no el completo: ver `tools.ts`.
         const path = `${op.tenantId}/${viajeId}-operador.pdf`;
-        const { data, error } = await supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 3600);
+        // AUDITORÍA 8, ALTO REINCIDENTE: `createSignedUrl` seguía crudo, sin
+        // `acotada` — el único de los 13 pasos del cierre que faltaba en este
+        // archivo. Ya está dentro de un try/catch que lo maneja bien; lo que
+        // faltaba era no colgarse 300s antes de llegar a ese catch.
+        const { data, error } = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 3600), 'createSignedUrl');
         if (error || !data?.signedUrl) throw new Error(error?.message ?? 'storage no devolvió URL firmada');
         await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
         await registrarCostoWhatsApp(op.tenantId, viajeId);

@@ -180,12 +180,12 @@ const MAX_TURNS = 12;
  */
 export async function loadConversation(tenantId: string, telefono: string, viajeId: string | null): Promise<{ id: string; turns: ConvTurn[] }> {
   const admin = supabaseAdmin();
-  const { data, error } = await admin
+  const { data, error } = await acotada(admin
     .from('wa_conversacion')
     .select('id, estado, viaje_id')
     .eq('tenant_id', tenantId)
     .eq('telefono', telefono)
-    .maybeSingle();
+    .maybeSingle(), 'loadConversation');
   // AUDITORÍA 8, ALTO: era la única vecina de `getOpenViaje`/`resolveOperador`
   // que descartaba `error`. Un blip de Supabase se leía como "no existe la
   // conversación", caía al INSERT de abajo, chocaba con
@@ -203,11 +203,11 @@ export async function loadConversation(tenantId: string, telefono: string, viaje
     }
     return { id: data.id as string, turns: mismoViaje ? (estado.turns ?? []).slice(-MAX_TURNS) : [] };
   }
-  const { data: created } = await admin
+  const { data: created } = await acotada(admin
     .from('wa_conversacion')
     .insert({ tenant_id: tenantId, telefono, viaje_id: viajeId, estado: { turns: [] } })
     .select('id')
-    .single();
+    .single(), 'loadConversation.insert');
   return { id: (created?.id as string) ?? '', turns: [] };
 }
 
@@ -236,7 +236,7 @@ export async function claimMessage(waMessageId: string): Promise<Claim> {
   if (!waMessageId) return 'nuevo';
   const { error } = await acotada(supabaseAdmin()
     .from('wa_mensaje_procesado')
-    .insert({ wa_message_id: waMessageId }), 'loadConversation');
+    .insert({ wa_message_id: waMessageId }), 'claimMessage');
   if (!error) return 'nuevo';
   // 23505 = unique_violation → ya existía → duplicado de verdad (no reprocesar).
   if (error.code === '23505') return 'duplicado';

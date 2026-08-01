@@ -291,7 +291,7 @@ describe('arnés · caso de oro (sin gastar): el pipeline post-OCR contra cifras
     expect(decidirFoto({ ...base, legible: true, gasto: g(100) }, [])).toEqual({ accion: 'alta' });
     expect(decidirFoto({ ...base, legible: false, motivo: 'ilegible', gasto: g(0) }, [])).toEqual({ accion: 'pedir_reenvio' });
     expect(decidirFoto({ ...base, legible: false, motivo: 'fallo_tecnico', gasto: g(0) }, [])).toEqual({ accion: 'avisar_falla' });
-    expect(decidirFoto({ ...base, legible: false, motivo: 'solo_codigo', gasto: g(100) }, [])).toEqual({ accion: 'pedir_ticket' });
+    expect(decidirFoto({ ...base, legible: false, motivo: 'solo_codigo', gasto: g(100) }, [])).toEqual({ accion: 'pedir_ticket', porVoucher: false });
   });
 });
 
