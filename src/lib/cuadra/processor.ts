@@ -593,9 +593,25 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       if (match) {
         // Ya existía el gasto: se enriquece con el XML. Si era un ticket, el XML
         // además le aporta UUID, RFC, monto y fecha, que son autoritativos.
-        await updateGastoCfdiXml(op.tenantId, match.id, eraTicket
-          ? { ...xml, uuid: xml.uuid, rfcEmisor: xml.rfcEmisor, rfcReceptor: xml.rfcReceptor, total: xml.total, fecha: xml.fecha }
-          : xml);
+        //
+        // AUDITORÍA 8, ALTO (modelo de datos + agéntico): este UPDATE puede
+        // cambiar monto/IVA/IEPS de un gasto que ya forma parte de una
+        // liquidación emitida — la 0037 lo bloquea en la base (mismo SQLSTATE
+        // `CU001` que la 0036), pero sin este catch el operador recibía "se me
+        // trabó tantito" en vez de la verdad, igual que el brazo de imagen ya
+        // corrige más abajo con `llegoTarde`.
+        try {
+          await updateGastoCfdiXml(op.tenantId, match.id, eraTicket
+            ? { ...xml, uuid: xml.uuid, rfcEmisor: xml.rfcEmisor, rfcReceptor: xml.rfcReceptor, total: xml.total, fecha: xml.fecha }
+            : xml);
+        } catch (e) {
+          if (llegoTarde(e)) {
+            logger.warn('xml.llego_tarde', { viaje: viajeId, gasto: match.id });
+            await sendText(msg.from, `El XML que mandaste llegó después de que cerré tu liquidación, así que NO se aplicó. Guárdalo: mándalo en tu siguiente viaje o pídele a la oficina que lo agregue.`);
+            return;
+          }
+          throw e;
+        }
         if (eraTicket) logger.info('xml.pegado_a_ticket', { viaje: viajeId, gasto: match.id });
         gastoId = match.id;
       } else {

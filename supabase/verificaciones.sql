@@ -806,3 +806,44 @@ begin
   raise exception E'TARDE  entra-antes=%  rebota-despues=%  sqlstate=%  liquidado-sin-liquidacion-sigue=%   (esperado t / f / CU001 / t)',
     antes, tarde, msg, sin_liq;
 end $$;
+
+-- ── 20. Un UPDATE tampoco puede reescribir el dinero tras liquidar (mig. 0037) ──
+-- AUDITORÍA 8, ALTO (modelo de datos). La 0036 (bloque 19) blindaba el INSERT;
+-- `updateGastoCfdiXml` (repo.ts:198) es un UPDATE que pega un XML a un gasto ya
+-- existente y puede reescribir `monto`, `sub_total`, `iva_traslado` e
+-- `ieps_traslado` — las cifras que ya se imprimieron si el viaje se liquidó
+-- entre medias. Nada lo veía.
+--
+-- El `when` del trigger solo mira los campos financieros/UUID: un UPDATE que no
+-- toque ninguno de esos (p. ej. solo `clave_prod_serv`) sigue pasando, y eso
+-- también se comprueba aquí para no bloquear de más.
+do $$
+declare
+  v_t uuid; v_o uuid; v_v uuid; v_g uuid;
+  monto_bloqueado boolean := false; msg text := ''; no_financiero_pasa boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF UPDATE TARDE') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t,'P','520000009020') returning id into v_o;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o) returning id into v_v;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'diesel', 850) returning id into v_g;
+
+  perform guardar_liquidacion_tx(v_t, v_v, 850, 1000, 150, 'cuadrada', '[]'::jsonb, 0,0,0, 'https://x/liq.pdf', 0);
+
+  -- El XML que llega tarde intentando corregir el monto. ESTE es el bug.
+  begin
+    update gasto set monto = 800, cfdi_uuid = gen_random_uuid()::text where id = v_g;
+    monto_bloqueado := false;
+  exception when others then monto_bloqueado := true; msg := SQLSTATE;
+  end;
+
+  -- Control: un campo no financiero (aquí, clave_prod_serv) sigue pudiendo
+  -- corregirse después de liquidar — el trigger no bloquea de más.
+  begin
+    update gasto set clave_prod_serv = '15101505' where id = v_g;
+    no_financiero_pasa := true;
+  exception when others then no_financiero_pasa := false;
+  end;
+
+  raise exception E'UPDATE TARDE  bloqueado=%  sqlstate=%  no-financiero-sigue-pasando=%   (esperado t / CU001 / t)',
+    monto_bloqueado, msg, no_financiero_pasa;
+end $$;
