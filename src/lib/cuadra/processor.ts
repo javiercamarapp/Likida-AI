@@ -894,10 +894,20 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // bloque que se saltó.
     //
     // Un aviso accesorio no puede tirar la entrega del entregable.
+    //
+    // AUDITORÍA 8, ALTO: "reenvíalo y escribe *listo* otra vez" se escribió
+    // cuando reenviar funcionaba. Con `closed`, la liquidación YA se emitió y
+    // las dos instrucciones son imposibles: reenviar truena con el trigger de
+    // la 0036 (`trg_gasto_no_tras_liquidar`) y "listo" ya no encuentra viaje
+    // abierto. El consejo se distingue por `closed`, igual que el mensaje
+    // gemelo de `llegoTarde` (arriba, línea ~526) para el mismo hecho.
     if (!intakeOk) {
       try {
         const n = (await getGastos(viajeId, op.tenantId)).length;
-        await say(`⚠️ Ojo: cuadré con los ${n} comprobantes que alcancé a procesar. Si te faltó alguno, reenvíalo y escribe *listo* otra vez.`);
+        const consejo = closed
+          ? 'Guárdalo: mándalo en tu siguiente viaje o pídele a la oficina que lo agregue desde el panel.'
+          : 'Si te faltó alguno, reenvíalo y escribe *listo* otra vez.';
+        await say(`⚠️ Ojo: cuadré con los ${n} comprobantes que alcancé a procesar. ${consejo}`);
       } catch (e) {
         logger.warn('intake.aviso', { viaje: viajeId, tenant: op.tenantId, err: e instanceof Error ? e.message : String(e) });
       }
