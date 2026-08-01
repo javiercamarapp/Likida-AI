@@ -111,6 +111,47 @@ export function cubetaDe(g: Gasto, suyas: Diferencia[]): Cubeta {
   return 'deducible';
 }
 
+/**
+ * Qué gastos son COPIA de otro, y de cuál.
+ *
+ * Exportada y única, porque tiene DOS consumidores que se habían separado sin
+ * que nadie lo notara: el cuadre —que excluye las copias del total comprobado—
+ * y el resumen laboral del PDF, que le dice al contralor cuánto reembolsarle al
+ * operador.
+ *
+ * El segundo recorría TODOS los gastos, copias incluidas. En el primer PDF real
+ * (1-ago-2026) eso decía "$19,978.10 no son deducibles todavía, pero el operador
+ * puso el dinero: se le reembolsan igual" cuando el total comprobado eran
+ * $16,297.05. La diferencia, al centavo, eran las dos copias del mismo ticket de
+ * Costco: $15,762.10 que el papel mandaba pagar tres veces.
+ *
+ * Se detecta primero por UUID del CFDI (regla dura) y si no hay, por
+ * concepto+folio+monto. La primera aparición es el ORIGINAL y las siguientes son
+ * copias suyas.
+ */
+export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
+  const vistoUuid = new Map<string, string>();
+  const vistoFolio = new Map<string, string>();
+  /** copia → el gasto original del que es copia. */
+  const originalDe = new Map<string, string>();
+  for (const g of gastos) {
+    if (g.cfdiUuid) {
+      const u = g.cfdiUuid.toLowerCase();
+      const previo = vistoUuid.get(u);
+      if (previo) originalDe.set(g.id, previo);
+      else vistoUuid.set(u, g.id);
+      continue;
+    }
+    if (g.folio) {
+      const key = `${strip_accents(g.concepto.toLowerCase())}|${g.folio}|${g.monto}`;
+      const previo = vistoFolio.get(key);
+      if (previo) originalDe.set(g.id, previo);
+      else vistoFolio.set(key, g.id);
+    }
+  }
+  return originalDe;
+}
+
 export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'creadaEn'> {
   const umbral = input.umbralConfianza ?? 0.85;
   const diferencias: Diferencia[] = [];
@@ -174,28 +215,8 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
 
   // 0) Duplicados: primero por UUID (regla dura), luego por concepto+folio+monto.
   //    Se EXCLUYEN del total (no lo inflan) — fix del audit.
-  const duplicados = new Set<string>();
-  const vistoUuid = new Map<string, string>();
-  const vistoFolio = new Map<string, string>();
-  /** copia → el gasto original del que es copia. */
-  const originalDe = new Map<string, string>();
-  for (const g of input.gastos) {
-    if (g.cfdiUuid) {
-      const u = g.cfdiUuid.toLowerCase();
-      const previo = vistoUuid.get(u);
-      // De QUIÉN es copia, no solo que lo es: sin esto no se pueden agrupar las
-      // apariciones de un mismo comprobante en una sola línea.
-      if (previo) { duplicados.add(g.id); originalDe.set(g.id, previo); }
-      else vistoUuid.set(u, g.id);
-      continue;
-    }
-    if (g.folio) {
-      const key = `${strip_accents(g.concepto.toLowerCase())}|${g.folio}|${g.monto}`;
-      const previo = vistoFolio.get(key);
-      if (previo) { duplicados.add(g.id); originalDe.set(g.id, previo); }
-      else vistoFolio.set(key, g.id);
-    }
-  }
+  const originalDe = copiasDeComprobante(input.gastos);
+  const duplicados = new Set(originalDe.keys());
 
   // Sólo montos > 0 suman al total: un monto negativo/cero (OCR erróneo, nota de
   // crédito) NO debe reducir el comprobado ni sesgar la diferencia. ME-5.
