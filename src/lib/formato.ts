@@ -69,9 +69,31 @@ export function litros(n: number): string {
  */
 export function fechaMx(iso?: string | null): string {
   if (!iso) return '—';
-  const d = new Date(iso);
+
+  // UNA FECHA SIN HORA NO TIENE ZONA, Y CONVERTIRLA LA CORRE UN DÍA.
+  //
+  // `gasto.fecha` es `date` en Postgres y llega como '2026-07-15'. `new Date()`
+  // lo interpreta como MEDIANOCHE UTC, y al formatearlo en America/Mexico_City
+  // (UTC−6) sale «14 jul». TODAS las fechas del PDF salían un día antes.
+  //
+  // Se vio en el primer PDF real (1-ago-2026), y el propio documento se
+  // contradecía: la tabla decía «18 jun 2026» y la línea de diferencias, tres
+  // párrafos abajo, «(2026-06-19)». El ticket del Costco es del 1 de julio y
+  // aparecía como «30 jun» — otro mes, otro periodo fiscal.
+  //
+  // La ironía: esta función nació para arreglar el problema INVERSO. Un
+  // `.slice(0,10)` sobre un `timestamptz` se quedaba con la fecha UTC y los
+  // cierres nocturnos salían fechados al día siguiente. Aquello se arregló
+  // poniendo la zona, y esa misma zona rompió el caso sin hora.
+  //
+  // Un valor de solo fecha es un día del calendario, no un instante: tiene que
+  // imprimirse tal cual está escrito. Se formatea en UTC —la zona en la que se
+  // construyó— para que no se mueva.
+  const soloFecha = /^\d{4}-\d{2}-\d{2}$/.test(iso.trim());
+  const d = soloFecha ? new Date(`${iso.trim()}T00:00:00Z`) : new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('es-MX', {
-    day: '2-digit', month: 'short', year: 'numeric', timeZone: TZ_MX,
+    day: '2-digit', month: 'short', year: 'numeric',
+    timeZone: soloFecha ? 'UTC' : TZ_MX,
   });
 }

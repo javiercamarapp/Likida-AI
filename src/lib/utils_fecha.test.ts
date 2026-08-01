@@ -66,3 +66,47 @@ describe('el PDF no puede volver a tener su propia copia', () => {
     expect(PDF).not.toMatch(/toLocaleDateString/);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 1-ago-2026 · Y AL ARREGLAR EL TIMESTAMPTZ SE ROMPIÓ EL `date` PURO.
+//
+// Se vio en el PRIMER PDF real: las once fechas de comprobantes salían un día
+// antes. Y el documento se contradecía solo — la tabla decía «18 jun 2026» y la
+// línea de diferencias, tres párrafos abajo, «(2026-06-19)».
+//
+// `gasto.fecha` es `date` en Postgres y llega como '2026-07-15'. `new Date()` lo
+// lee como medianoche UTC y formatearlo en CST (UTC−6) lo devuelve al día
+// anterior. Un valor de solo fecha es un día del calendario, no un instante.
+//
+// El caso caro: el ticket del Costco es del 1 de julio y salía «30 jun». Otro
+// mes, otro periodo fiscal, en el papel que se archiva.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('una fecha sin hora se imprime tal cual está escrita', () => {
+  it('no se corre un día', () => {
+    expect(fechaMx('2026-07-15')).toContain('15');
+    expect(fechaMx('2026-07-15')).toContain('jul');
+  });
+
+  it('y menos si eso la cambia de MES', () => {
+    // El caso que se vio: 1-jul salía 30-jun.
+    expect(fechaMx('2026-07-01')).toContain('01');
+    expect(fechaMx('2026-07-01')).toContain('jul');
+    expect(fechaMx('2026-07-01')).not.toContain('jun');
+  });
+
+  it('ni de AÑO', () => {
+    expect(fechaMx('2026-01-01')).toContain('2026');
+    expect(fechaMx('2026-01-01')).not.toContain('2025');
+  });
+
+  it('el `timestamptz` SIGUE usando la zona de México, que era el bug original', () => {
+    // 31-jul 19:30 en México = 01:30 UTC del 1-ago. Tiene que decir 31 jul.
+    expect(fechaMx('2026-08-01T01:30:00.000Z')).toContain('31');
+    expect(fechaMx('2026-08-01T01:30:00.000Z')).toContain('jul');
+  });
+
+  it('y lo ilegible sigue siendo una raya', () => {
+    expect(fechaMx('2026-13-45')).toBe('—');
+    expect(fechaMx('no es fecha')).toBe('—');
+  });
+});
