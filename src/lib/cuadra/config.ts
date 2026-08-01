@@ -14,6 +14,7 @@ import { ConsultaFallida } from './conv';
 import { esRfcValido, rfcChecksumOk } from './intake/cfdi';
 import { CLAVES_PEAJE } from './intake/concepto';
 import type { PoliticaGasto } from './cuadre/engine';
+import { acotada } from './presupuesto';
 
 export interface UnidadConfig {
   rendimientoBase: number;   // km/L en vacío
@@ -175,7 +176,7 @@ export function fusionarConfig<T>(base: T, override: unknown): T {
  */
 export async function getConfig(tenantId: string): Promise<CuadraConfig> {
   try {
-    const { data, error } = await supabaseAdmin().from('tenant').select('rfc, config').eq('id', tenantId).maybeSingle();
+    const { data, error } = await acotada(supabaseAdmin().from('tenant').select('rfc, config').eq('id', tenantId).maybeSingle(), 'getConfig');
     if (error) {
       throw new ConsultaFallida(`config del tenant: ${error.message ?? String(error)}`);
     }

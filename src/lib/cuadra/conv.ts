@@ -4,6 +4,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { TenantContext } from '@/lib/agents/types';
+import { acotada } from './presupuesto';
 
 export interface ResolvedOperador {
   tenantId: string;
@@ -57,7 +58,7 @@ export function variantesTelefono(telefono: string): string[] {
 
 /** Resuelve el operador (y su flota) por número de WhatsApp. */
 export async function resolveOperador(telefono: string): Promise<ResolvedOperador | null> {
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await acotada(supabaseAdmin()
     .from('operador')
     .select('id, tenant_id, nombre, telefono')
     .in('telefono', variantesTelefono(telefono))
@@ -70,7 +71,7 @@ export async function resolveOperador(telefono: string): Promise<ResolvedOperado
     //
     // Esta función es la que DETERMINA el tenant, así que no puede filtrar por
     // él: lo único correcto ante la ambigüedad es negarse.
-    .limit(2);
+    .limit(2), 'resolveOperador');
   // "No está dado de alta" y "no pude preguntar" NO son lo mismo, y `error || !data`
   // los volvía la misma cosa. Con un fallo transitorio de Supabase, un operador que
   // SÍ existe recibía "no te tengo registrado" —una frase que suena a dato mal
@@ -121,7 +122,7 @@ export class OperadorAmbiguo extends Error {
 
 /** Viaje abierto del operador (el que se está liquidando). */
 export async function getOpenViaje(tenantId: string, operadorId: string): Promise<string | null> {
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await acotada(supabaseAdmin()
     .from('viaje')
     .select('id')
     .eq('tenant_id', tenantId)
@@ -129,7 +130,7 @@ export async function getOpenViaje(tenantId: string, operadorId: string): Promis
     .in('estatus', ['abierto', 'en_cuadre'])
     .order('created_at', { ascending: false })
     .limit(1)
-    .maybeSingle();
+    .maybeSingle(), 'getOpenViaje');
   // Misma distinción que en `resolveOperador`, y aquí es peor: un error de red en
   // la RE-VERIFICACIÓN posterior al mutex hacía que el operador recibiera "ese
   // viaje ya quedó cerrado 👍" sobre un viaje que sigue `abierto`, sin liquidación,
@@ -140,7 +141,7 @@ export async function getOpenViaje(tenantId: string, operadorId: string): Promis
 }
 
 export async function getTenantContext(tenantId: string): Promise<TenantContext> {
-  const { data } = await supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).maybeSingle();
+  const { data } = await acotada(supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).maybeSingle(), 'getTenantContext');
   return {
     tenantId,
     nombreFlota: (data?.nombre as string) || 'la flota',
@@ -233,9 +234,9 @@ export type Claim = 'nuevo' | 'duplicado' | 'indeterminado';
  */
 export async function claimMessage(waMessageId: string): Promise<Claim> {
   if (!waMessageId) return 'nuevo';
-  const { error } = await supabaseAdmin()
+  const { error } = await acotada(supabaseAdmin()
     .from('wa_mensaje_procesado')
-    .insert({ wa_message_id: waMessageId });
+    .insert({ wa_message_id: waMessageId }), 'loadConversation');
   if (!error) return 'nuevo';
   // 23505 = unique_violation → ya existía → duplicado de verdad (no reprocesar).
   if (error.code === '23505') return 'duplicado';
@@ -252,10 +253,10 @@ export async function claimMessage(waMessageId: string): Promise<Claim> {
 // menos queda un ERROR en el log — se pierde el turno, no el rastro de que se
 // perdió.
 export async function saveConversation(convId: string, turns: ConvTurn[], viajeId: string | null): Promise<void> {
-  const { error } = await supabaseAdmin()
+  const { error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .update({ estado: { turns: turns.slice(-MAX_TURNS) }, viaje_id: viajeId, updated_at: new Date().toISOString() })
-    .eq('id', convId);
+    .eq('id', convId), 'saveConversation');
   if (error) logger.error('conv.no_se_guardo', { convId, err: error.message });
 }
 
@@ -351,7 +352,7 @@ export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number;
  * "no hay". Aquí el disfraz cuesta dinero del operador.
  */
 export async function intakeDelta(viajeId: string, delta: number): Promise<number | null> {
-  const { data, error } = await supabaseAdmin().rpc('intake_delta', { p_viaje: viajeId, p_delta: delta });
+  const { data, error } = await acotada(supabaseAdmin().rpc('intake_delta', { p_viaje: viajeId, p_delta: delta }), 'intakeDelta');
   if (error) {
     // El viaje va en el log: sin él, a la mañana siguiente no se puede saber CUÁL
     // liquidación salió corta.
@@ -415,7 +416,7 @@ export async function esperarIntake(
 /** Libera el mutex del viaje (best-effort; si falla, expira por TTL). */
 export async function releaseViajeLock(viajeId: string): Promise<void> {
   try {
-    await supabaseAdmin().rpc('unlock_viaje', { p_viaje: viajeId });
+    await acotada(supabaseAdmin().rpc('unlock_viaje', { p_viaje: viajeId }), 'releaseViajeLock');
   } catch (e) {
     logger.warn('viaje.unlock', { err: e instanceof Error ? e.message : String(e) });
   }
@@ -428,7 +429,7 @@ export async function releaseViajeLock(viajeId: string): Promise<void> {
 export async function releaseMessageClaim(waMessageId: string): Promise<void> {
   if (!waMessageId) return;
   try {
-    await supabaseAdmin().from('wa_mensaje_procesado').delete().eq('wa_message_id', waMessageId);
+    await acotada(supabaseAdmin().from('wa_mensaje_procesado').delete().eq('wa_message_id', waMessageId), 'releaseMessageClaim');
   } catch (e) {
     logger.warn('wa.release_claim', { err: e instanceof Error ? e.message : String(e) });
   }
