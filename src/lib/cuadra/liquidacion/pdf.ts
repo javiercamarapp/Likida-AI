@@ -11,7 +11,7 @@ import { resumenOmitidos, filasImprimibles } from './omitidos';
 import { filasDeducibilidad } from './deducibilidad';
 import { filasAcreditables } from './acreditable';
 import { resumenLaboral } from '../laboral/pagadero';
-import { cubetaDe, etiquetaConcepto } from '../cuadre/engine';
+import { cubetaDe, copiasDeComprobante, etiquetaConcepto } from '../cuadre/engine';
 import { fechaMx, mxn } from '@/lib/formato';
 import { SOLO_CONTRALOR, type Destinatario } from '../cuadre/resumen';
 
@@ -335,6 +335,10 @@ export async function generarLiquidacionPDF(
     idsNoDeducibles: idsEnCubeta('no_deducible'),
     idsPorConfirmar: idsEnCubeta('por_confirmar'),
     sobrePolitica: new Set(liq.diferencias.filter((d) => d.tipo === 'sobre_politica').map((d) => d.gastoId!).filter(Boolean)),
+    // De la MISMA función que usa el cuadre, no reconstruido aquí. La diferencia
+    // `duplicado` ya no sirve para esto: apunta al ORIGINAL —que es lo que el
+    // contralor tiene que abrir— y no a las copias que hay que descontar.
+    idsDuplicados: new Set(copiasDeComprobante(liq.gastos).keys()),
     demoraNoImputable: viaje.demoraNoImputable,
   });
   if (lab) {

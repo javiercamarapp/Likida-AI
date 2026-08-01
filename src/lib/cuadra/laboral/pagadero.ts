@@ -176,6 +176,16 @@ export function resumenLaboral(input: {
   idsNoDeducibles: Set<string>;
   idsPorConfirmar: Set<string>;
   sobrePolitica: Set<string>;
+  /**
+   * Gastos que el cuadre EXCLUYÓ del total por ser copia de otro.
+   *
+   * Sin esto, esta función recorría todos los gastos y sumaba las copias: en el
+   * primer PDF real le dijo al contralor que le reembolsara $19,978.10 cuando el
+   * total comprobado eran $16,297.05 — la diferencia eran las dos copias del
+   * mismo ticket de Costco. Un párrafo que dice cuánto PAGARLE a alguien no
+   * puede contar tres veces el mismo papel.
+   */
+  idsDuplicados?: Set<string>;
   demoraNoImputable?: boolean;
 }): ResumenLaboral | null {
   const obligados: Gasto[] = [];
@@ -183,6 +193,8 @@ export function resumenLaboral(input: {
   const reembolsables: Gasto[] = [];
 
   for (const g of input.gastos) {
+    // Una copia no es dinero que el operador puso: es el mismo dinero, otra vez.
+    if (input.idsDuplicados?.has(g.id)) continue;
     const deducible = !input.idsNoDeducibles.has(g.id) && !input.idsPorConfirmar.has(g.id);
     const v = veredictoLaboral(g, {
       deducible,
