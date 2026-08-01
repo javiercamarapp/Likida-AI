@@ -434,6 +434,21 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         // (monedero ECC / Carta Porte), que no caen en 2.7.1.48.
         const combustibleFiscal = h.claves.includes(g.claveProdServ ?? '');
         const tipoAplica = g.tipoComprobante === 'I' || g.tipoComprobante === 'E';
+
+        // PERMISO CRE (LISR 27-III 2º párrafo / RFA 2026 regla 2.9): el CFDI de
+        // combustible debe consignar el permiso vigente del proveedor. El
+        // sistema no lo extrae del XML —el atributo exacto dentro del
+        // complemento de hidrocarburos no está confirmado contra el esquema
+        // oficial del SAT, y afirmar mal ahí es peor que no afirmar nada— así
+        // que NUNCA se declara cumplido ni incumplido. Solo REVISAR: no toca
+        // la cubeta ni el acreditamiento, mismo criterio que EFOS y el
+        // complemento de arriba (nunca declarar sin verificar). Independiente
+        // de si el complemento de hidrocarburos está presente: son dos
+        // requisitos distintos de la misma compra.
+        if (combustibleFiscal && tipoAplica) {
+          diferencias.push({ tipo: 'permiso_cre_no_verificable', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} es de combustible: LISR 27-III y RFA 2026 regla 2.9 exigen que conste el permiso CRE vigente del proveedor. El sistema todavía no lo valida — confírmalo con tu contador contra el CFDI.`, gastoId: g.id });
+        }
+
         if (combustibleFiscal && tipoAplica && miraElComplemento && !g.cfdiEsquemaAlterno && !g.complementoHidrocarburos) {
           if (exigible) {
             // Solo con una fecha de exigibilidad RESPALDADA se tira la deducción.
@@ -889,7 +904,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
   // mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
   // Se sigue avisando en `diferencias`; ya no bloquea.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'permiso_cre_no_verificable'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
