@@ -140,6 +140,38 @@ export async function gastoExistePorHash(viajeId: string, imgHash: string, tenan
 }
 
 /** NIVEL 2: actualiza un gasto con los datos del XML del CFDI (por id). */
+/**
+ * Re-fecha un gasto con lo que trajo la SEGUNDA foto del mismo ticket.
+ *
+ * Toca UNA columna. No `monto`, no `concepto`, no `folio`: si algo de eso
+ * cambiara no sería el mismo papel, y `emparejarCorreccionDeFecha` ya lo habría
+ * descartado. Dejar la escritura tan estrecha es lo que hace que un
+ * emparejamiento equivocado —el riesgo real de este camino— cueste una fecha
+ * movida y no un total alterado.
+ *
+ * El trigger de la 0037 sigue mandando: si la liquidación ya se emitió, esto
+ * levanta `CU001` y el processor lo traduce, igual que en el alta.
+ */
+export async function corregirFechaGasto(
+  tenantId: string,
+  gastoId: string,
+  fecha: string,
+): Promise<void> {
+  const { error } = await acotada(
+    supabaseAdmin().from('gasto').update({ fecha })
+      .eq('id', gastoId).eq('tenant_id', tenantId),
+    'corregirFechaGasto',
+  );
+  if (error) {
+    // `code` preservado por la misma razón que en `updateGastoCfdiXml`: sin él,
+    // el `CU001` de la 0037 llega aquí indistinguible de un fallo cualquiera y
+    // el operador recibiría "hubo un problema" en vez de "llegó tarde".
+    const e = new Error(`corregirFechaGasto: ${error.message}`) as Error & { code?: string };
+    if (error.code) e.code = error.code;
+    throw e;
+  }
+}
+
 export async function updateGastoCfdiXml(
   tenantId: string,
   gastoId: string,
@@ -288,6 +320,65 @@ export async function reclamarCodigoPendiente(tenantId: string, id: string): Pro
     .select('id'), 'reclamarCodigoPendiente');
   if (error) throw new Error(`reclamarCodigoPendiente: ${error.message}`);
   return (data?.length ?? 0) > 0;
+}
+
+// ── FOTO PENDIENTE (0038) — retener el ticket completo por si le sigue el
+// acercamiento, y pagar UNA visión en vez de dos. Ver el comentario largo en
+// la migración: como mucho UNA por viaje (el unique de la tabla), para que
+// nunca haya dos fotos SIN código esperando a la vez y arriesgar emparejar la
+// que llegue después con la que no es.
+
+/**
+ * Deja la foto (SIN código, candidata a "ticket completo") esperando.
+ *
+ * Devuelve el id de la fila, o `null` si YA había una foto esperando en este
+ * viaje (el unique de la 0038) — nunca lanza por esa causa: es la señal de
+ * "no esperes, procésate sola", no un error.
+ */
+export async function guardarFotoPendiente(tenantId: string, viajeId: string, mediaId: string): Promise<string | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('foto_pendiente')
+    .insert({ tenant_id: tenantId, viaje_id: viajeId, media_id: mediaId })
+    .select('id')
+    .single(), 'guardarFotoPendiente');
+  if (error) {
+    if (error.code === '23505') return null; // unique(viaje_id): ya hay una esperando
+    throw new Error(`guardarFotoPendiente: ${error.message}`);
+  }
+  return (data?.id as string) ?? null;
+}
+
+/** ¿Sigue esperando la foto `id`? Lectura, no reclamo — para el poll de espera. */
+export async function existeFotoPendiente(tenantId: string, id: string): Promise<boolean> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('foto_pendiente')
+    .select('id')
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .maybeSingle(), 'existeFotoPendiente');
+  if (error) throw new Error(`existeFotoPendiente: ${error.message}`);
+  return data != null;
+}
+
+/**
+ * Reclama la foto pendiente de un viaje (si hay), por `id` O por `viajeId`.
+ *
+ * Dos llamadores compiten por la MISMA fila: el acercamiento que llega y
+ * quiere emparejar, y la propia foto cuando se le acaba la espera y se
+ * reclama a sí misma para procesarse sola. El `delete().select()` es
+ * atómico — solo uno de los dos recibe la fila — así que nunca se procesa
+ * la misma foto dos veces ni se pierde en el reparto.
+ */
+export async function reclamarFotoPendiente(
+  tenantId: string,
+  by: { id: string } | { viajeId: string },
+): Promise<{ id: string; mediaId: string } | null> {
+  let q = supabaseAdmin().from('foto_pendiente').delete().eq('tenant_id', tenantId);
+  q = 'id' in by ? q.eq('id', by.id) : q.eq('viaje_id', by.viajeId);
+  const { data, error } = await acotada(q.select('id, media_id'), 'reclamarFotoPendiente');
+  if (error) throw new Error(`reclamarFotoPendiente: ${error.message}`);
+  const fila = data?.[0];
+  return fila ? { id: fila.id as string, mediaId: fila.media_id as string } : null;
 }
 
 export async function getGastos(viajeId: string, tenantId: string): Promise<Gasto[]> {

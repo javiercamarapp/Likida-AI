@@ -33,6 +33,48 @@ export function emparejarPorMonto(monto: number, gastos: Gasto[]): Gasto | null 
 }
 
 /**
+ * La SEGUNDA foto del mismo ticket, mandada porque se le pidió al operador que
+ * la repitiera: la primera trajo una fecha que no cuadraba con el viaje.
+ *
+ * Sin esto, pedirle esa foto sería mandarlo a hacer algo que el sistema tira:
+ * una foto legible del mismo papel entra como `alta`, el motor la ve como
+ * duplicado y la EXCLUYE del total. El operador hace el trabajo, no se rompe
+ * nada visible, y la fecha mala sigue exactamente donde estaba.
+ *
+ * Y NO es solo que se pierda la corrección: `copiasDeComprobante` deduplica por
+ * `concepto|folio|monto`, así que un ticket SIN folio no se deduplica. La
+ * segunda foto de ése entra como gasto nuevo e INFLA el total. Pedir la foto sin
+ * este camino no era neutro: podía cobrar el mismo gasto dos veces.
+ *
+ * Reglas, todas necesarias para no mover el dinero:
+ *
+ *   • el candidato tiene que tener la fecha YA marcada como dudosa. No se
+ *     re-fecha un comprobante que nadie cuestionó;
+ *   • mismo concepto y mismo total;
+ *   • si LOS DOS traen folio, tiene que ser el mismo. Es la llave que el motor
+ *     usa para deduplicar, y es lo único que distingue dos casetas de $300 del
+ *     mismo día —conflatarlas dejaría una con la fecha de la otra y la segunda
+ *     sin registrar—. Que a uno le falte se tolera: leer mal el folio es justo
+ *     por lo que se pidió la foto otra vez;
+ *   • y ÚNICO. Ante dos candidatos no se adivina, misma regla que sus hermanas.
+ *
+ * Lo que devuelve se usa para ACTUALIZAR la fecha, nunca el monto: si el total
+ * cambió, no es el mismo ticket y no hay corrección que hacer.
+ */
+export function emparejarCorreccionDeFecha(
+  foto: { monto: number; concepto: string; folio?: string | null },
+  gastos: Gasto[],
+  esDudosa: (fecha: string | null | undefined) => boolean,
+): Gasto | null {
+  const candidatos = gastos.filter((g) =>
+    Math.abs(g.monto - foto.monto) <= TOLERANCIA &&
+    g.concepto === foto.concepto &&
+    esDudosa(g.fecha) &&
+    (!g.folio || !foto.folio || g.folio === foto.folio));
+  return candidatos.length === 1 ? candidatos[0] : null;
+}
+
+/**
  * Un acercamiento que llegó ANTES que su ticket y quedó esperando en la bandeja.
  * Solo lleva lo que sacó del código: nada de esto pasó por visión.
  */

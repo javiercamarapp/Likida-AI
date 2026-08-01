@@ -33,12 +33,14 @@ vi.mock('@/lib/meta/client', () => ({
 }));
 vi.mock('@/lib/cuadra/intake/ocr', () => ({
   extraerComprobante: (...a: unknown[]) => extraerComprobante(...a),
+  tieneCodigoLegible: vi.fn(async () => false),
 }));
 vi.mock('@/lib/cuadra/repo', () => ({
   addGasto: vi.fn(), getGastos: vi.fn(async () => []), updateGastoCfdiXml: vi.fn(),
   saveCfdiXmlRaw: vi.fn(), gastoExistePorHash: vi.fn(async () => false),
   enriquecerGastoConCodigo: vi.fn(), guardarCodigoPendiente: vi.fn(),
   getCodigosPendientes: vi.fn(async () => []), reclamarCodigoPendiente: vi.fn(),
+  guardarFotoPendiente: vi.fn(async () => null), existeFotoPendiente: vi.fn(async () => false), reclamarFotoPendiente: vi.fn(async () => null),
   getDatosResponsable: vi.fn(async () => ({
     razonSocial: 'FLOTA SA DE CV', domicilio: 'Calle 1, Mérida',
     urlAvisoIntegral: 'https://flota.mx/privacidad',

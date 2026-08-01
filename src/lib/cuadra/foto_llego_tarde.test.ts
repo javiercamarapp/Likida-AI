@@ -16,7 +16,10 @@ const addGasto = vi.fn();
 const extraerComprobante = vi.fn();
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
-vi.mock('@/lib/cuadra/intake/ocr', () => ({ extraerComprobante: (...a: unknown[]) => extraerComprobante(...a) }));
+vi.mock('@/lib/cuadra/intake/ocr', () => ({
+  extraerComprobante: (...a: unknown[]) => extraerComprobante(...a),
+  tieneCodigoLegible: vi.fn(async () => false),
+}));
 vi.mock('@/lib/cuadra/conv', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
@@ -35,6 +38,7 @@ vi.mock('@/lib/cuadra/repo', () => ({
   saveCfdiXmlRaw: vi.fn(), gastoExistePorHash: vi.fn(async () => false),
   enriquecerGastoConCodigo: vi.fn(), guardarCodigoPendiente: vi.fn(),
   getCodigosPendientes: vi.fn(async () => []), reclamarCodigoPendiente: vi.fn(),
+  guardarFotoPendiente: vi.fn(async () => null), existeFotoPendiente: vi.fn(async () => false), reclamarFotoPendiente: vi.fn(async () => null),
   getDatosResponsable: vi.fn(async () => ({
     razonSocial: 'FLOTA SA DE CV', domicilio: 'Calle 1, Mérida', urlAvisoIntegral: 'https://flota.mx/p',
   })),

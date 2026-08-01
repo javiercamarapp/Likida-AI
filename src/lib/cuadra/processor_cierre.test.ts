@@ -82,6 +82,7 @@ vi.mock('@/lib/cuadra/repo', () => ({
   saveCfdiXmlRaw: (...a: unknown[]) => saveCfdiXmlRaw(...a), gastoExistePorHash: vi.fn(async () => false),
   enriquecerGastoConCodigo: vi.fn(), guardarCodigoPendiente: vi.fn(),
   getCodigosPendientes: vi.fn(async () => []), reclamarCodigoPendiente: vi.fn(),
+  guardarFotoPendiente: vi.fn(async () => null), existeFotoPendiente: vi.fn(async () => false), reclamarFotoPendiente: vi.fn(async () => null),
   // Con datos de responsable y el aviso ya puesto a disposición: sin esto el
   // processor bloquea el tratamiento (LFPDPPP art. 16) y nada de lo de abajo
   // llega a correr.

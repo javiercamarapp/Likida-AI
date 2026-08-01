@@ -98,6 +98,7 @@ vi.mock('@/lib/cuadra/repo', () => ({
   gastoExistePorHash: vi.fn(async () => false), enriquecerGastoConCodigo: vi.fn(),
   guardarCodigoPendiente: vi.fn(), getCodigosPendientes: vi.fn(async () => []),
   reclamarCodigoPendiente: vi.fn(),
+  guardarFotoPendiente: vi.fn(async () => null), existeFotoPendiente: vi.fn(async () => false), reclamarFotoPendiente: vi.fn(async () => null),
   // Con datos de responsable y el aviso YA puesto a disposición en un mensaje
   // anterior (`reclamarEnvioAviso` → false): sin esto el processor bloquea el
   // tratamiento —correctamente— y la cadena no llega a correr.
