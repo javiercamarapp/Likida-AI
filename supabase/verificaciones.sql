@@ -28,6 +28,7 @@
 -- Y el BARRIDO DE PRODUCCIÓN del 31-jul, bloque 18 contra la base real:
 --
 --   18  tablas-sin-rls=—  politicas-que-dicen-true=—  rpc-abiertas-a-anon=—
+--   19  entra-antes=t  rebota-despues=f  sqlstate=CU001  liquidado-sin-liq=t
 --
 -- Además se atacó la API REST como anónimo con la llave publicable: 14 tablas
 -- leídas → 0 filas, y CINCO escrituras rechazadas (envenenar la idempotencia,
@@ -84,8 +85,9 @@
 --     mentir era, ella misma, la única sin comprobar.
 --   · 0031 (TTL del contador de la barrera), 0032 (`politica_gasto` muerta),
 --     0033 (la constancia del aviso separada de su reserva), 0034 (contacto del
---     art. 29) y 0035 (`search_path` fijo) → APLICADAS el 31-jul. Sus bloques
---     (14, 17 y 18) pasaron; la salida está copiada arriba.
+--     art. 29), 0035 (`search_path` fijo) y 0036 (nada entra tras liquidar) →
+--     APLICADAS el 31-jul. Sus bloques (14, 17, 18 y 19) pasaron; la salida está
+--     copiada arriba.
 -- Contra una base sin las migraciones, los bloques 6 a 11 reportan `f` — que es
 -- justamente la lectura útil: dicen qué garantía falta.
 --
@@ -744,4 +746,63 @@ begin
 
   raise exception E'AISLAMIENTO  tablas-sin-rls=%  politicas-que-dicen-true=%  rpc-abiertas-a-anon=%   (esperado — / — / —)',
     sin_rls, con_true, rpc_abierta;
+end $$;
+
+
+-- ── 19. Un gasto no entra después de emitida la liquidación (mig. 0036) ─────
+-- Cierra el ÚLTIMO crítico de código de las siete rondas de auditoría.
+--
+-- `guardar_liquidacion` genera los dos PDF en T1; segundos después
+-- `guardiaCifras` VUELVE A CALCULAR para armar el texto de WhatsApp (T2). Entre
+-- los dos, la tabla `gasto` seguía abierta: las fotos corren en su propio
+-- `processInbound`, no toman el mutex del viaje, y `addGasto` no miraba nada.
+--
+--   T1  5 gastos, $4,850 → PDF: "Sobró $150.00 (a favor de la empresa)"
+--   T2  6 gastos, $5,650 → WhatsApp: "Pusiste $650.00 de tu bolsa"
+--
+-- Las dos cosas seguidas, con $800 de diferencia y de SIGNO CONTRARIO, y el
+-- sexto gasto huérfano de por vida.
+--
+-- El `for update` del trigger es lo que lo cierra de verdad: sin él, en READ
+-- COMMITTED el trigger no vería la liquidación aún sin confirmar y dejaría pasar
+-- el gasto — el mismo bug, movido de sitio.
+--
+-- Corrido el 31-jul, salida real:  t / f / CU001 / t
+do $$
+declare
+  v_t uuid; v_o uuid; v_v uuid; v_o2 uuid; v_x uuid;
+  antes boolean := false; tarde boolean := false; msg text := ''; sin_liq boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF TARDE') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t,'P','520000009019') returning id into v_o;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o) returning id into v_v;
+
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'diesel', 850);
+    antes := true;
+  exception when others then antes := false;
+  end;
+
+  perform guardar_liquidacion_tx(v_t, v_v, 4850, 5000, 150, 'cuadrada', '[]'::jsonb, 0,0,0, 'https://x/liq.pdf', 0);
+
+  -- La foto que llegó tarde. ESTE es el bug.
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'diesel', 800);
+    tarde := true;
+  exception when others then tarde := false; msg := SQLSTATE;
+  end;
+
+  -- Un viaje marcado `liquidado` SIN liquidación emitida sigue aceptando gastos:
+  -- es lo que hace el bloque 8, que con la 0029 no puede tener dos abiertos del
+  -- mismo operador. La regla se ancla a la liquidación, no al estatus.
+  begin
+    insert into operador (tenant_id, nombre, telefono) values (v_t,'Q','520000009020') returning id into v_o2;
+    insert into viaje (tenant_id, operador_id, estatus) values (v_t, v_o2, 'liquidado') returning id into v_x;
+    insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_x, 'caseta', 50);
+    sin_liq := true;
+  exception when others then sin_liq := false;
+  end;
+
+  raise exception E'TARDE  entra-antes=%  rebota-despues=%  sqlstate=%  liquidado-sin-liquidacion-sigue=%   (esperado t / f / CU001 / t)',
+    antes, tarde, msg, sin_liq;
 end $$;

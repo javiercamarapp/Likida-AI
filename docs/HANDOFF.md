@@ -83,12 +83,11 @@ archivo). La de producción podía romperse entera y las 7 pruebas seguían verd
 Lo escribí yo en la ronda 6 — en la misma ronda cuyo hallazgo central era
 justamente "prueba el cable, no la función". Ya está arreglado por la routine.
 
-De los 3 críticos que la ronda 7 abrió en el rubro agéntico, **queda UNO**:
+De los 3 críticos que la ronda 7 abrió en el rubro agéntico, **NO QUEDA
+NINGUNO.** El último —el texto y el PDF saliendo de dos fotografías distintas de
+la base— se cerró el 31-jul con la migración 0036.
 
-1. **El texto y el PDF de la misma respuesta salen de dos fotografías distintas
-   de la base**, y la foto que entra durante el cierre queda huérfana. ← el
-   único hallazgo de código abierto que queda de las siete rondas.
-2. (El de `permitidas` vacío se cerró en `e50510c`; ver abajo.)
+**Cero hallazgos de código abiertos de las siete rondas de auditoría.**
 
 ### Los seis que se cerraron el 31-jul, y lo que enseñaron
 
