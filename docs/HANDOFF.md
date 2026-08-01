@@ -303,7 +303,10 @@ CP fiscal, régimen fiscal y uso de CFDI.
    0, las migraciones, ya está hecho salvo la 0027.)
 2. **Ensayar el flujo completo en vivo, tres veces.** Fotos reales + *listo* +
    PDF recibido. No es reproducible headless; es la única prueba que falta.
-3. **`GUION_DEMO.md`** existe — revísalo contra el comportamiento de hoy, que
+3. ~~`GUION_DEMO.md`~~ **REESCRITO el 1-ago** contra el comportamiento de hoy
+   (el anterior era del 25-jul, 182 commits atrás). Trae el bloque de preguntas
+   de descubrimiento, y `guion_demo.test.ts` lo ata al panel: falla si vuelve a
+   prometer el IEPS en pesos. Lo viejo — revísalo contra el comportamiento de hoy, que
    cambió bastante desde el 25-jul.
 4. **Nada de refactors grandes.** El repo tiene precedente de que arreglar un
    crítico abre uno peor; a nueve días del demo, el riesgo no se paga.
