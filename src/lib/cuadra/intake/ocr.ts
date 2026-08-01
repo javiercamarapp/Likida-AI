@@ -119,7 +119,9 @@ QUÉ CLASE DE PAPEL ES (campo "documento") — decide si el gasto entra o no:
 
 FECHAS (crítico — un error de fecha manda el gasto a otro ejercicio):
 - Si el ticket trae la fecha ESCRITA CON LETRA ("a 01 de JULIO de 2026", "15 de marzo del 2026"), ÉSA manda sobre cualquier fecha numérica del mismo papel.
-- Una fecha numérica ambigua (7/01/26 puede ser 7-ene o 1-jul) NO se resuelve adivinando: busca en el papel otra fecha que la desambigüe. Las cadenas de origen estadounidense (Costco, Walmart, Sam's, Home Depot, Office Depot) imprimen MES/DÍA/AÑO.
+- MÉXICO ESCRIBE DÍA/MES/AÑO. Ante una fecha numérica ambigua (01/08/26), ésa es la lectura por defecto: 1 de agosto, NO 8 de enero.
+- La ÚNICA excepción confirmada es COSTCO, cuyo pie imprime MES/DÍA/AÑO (verificado en un ticket real: el pie decía "7/01/26" y el encabezado, con letra, "a 01 de JULIO de 2026"). No supongas que otras cadenas de origen estadounidense hacen lo mismo — Walmart de México imprime DÍA/MES, y darlo por hecho ya costó leer un ticket del 1 de agosto como del 8 de enero.
+- Si el papel trae DOS fechas y no coinciden, gana la que esté con letra; si ninguna lo está, gana la que sea imposible en el otro formato (un componente mayor que 12).
 - El AÑO se copia de lo impreso. Si está tapado, borroso o cortado, devuelve null en "fecha": una fecha inventada se lee como un gasto de otro ejercicio.
 
 IMPUESTOS (crítico):
