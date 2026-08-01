@@ -30,7 +30,7 @@ function crearBuilder(tabla: string) {
   const resp = (): Resp => respuestas.get(tabla) ?? { data: [], error: null };
   const b: Record<string, unknown> = {};
   const self = () => b;
-  for (const m of ['select', 'eq', 'order', 'limit', 'in', 'gte', 'lte', 'is', 'not']) b[m] = self;
+  for (const m of ['select', 'eq', 'order', 'limit', 'range', 'in', 'gte', 'lte', 'is', 'not']) b[m] = self;
   b.maybeSingle = () => Promise.resolve(resp());
   b.single = () => Promise.resolve(resp());
   b.then = (ok: (v: Resp) => unknown, fail?: (e: unknown) => unknown) => Promise.resolve(resp()).then(ok, fail);
