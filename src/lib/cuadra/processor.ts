@@ -9,16 +9,19 @@ import type OpenAI from 'openai';
 import '@/lib/cuadra/tools'; // side-effect: registra las tools en el registry
 import { runAgent } from '@/lib/agents/run';
 import { guardiaCifras } from '@/lib/cuadra/cuadre/guardia';
-import { cuadrarDesdeDB } from '@/lib/cuadra/cuadre/desde_db';
+import { cuadrarDesdeDB, ventanaDesdeDB } from '@/lib/cuadra/cuadre/desde_db';
+import { fechaDudosa } from '@/lib/cuadra/cuadre/fecha_dudosa';
+import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
+import { mensajePideFechaOtraVez } from '@/lib/cuadra/intake/pedir_fecha';
 import { resumenCuadre } from '@/lib/cuadra/cuadre/resumen';
 import { PartialExecutionError, type ToolCallRecord } from '@/lib/llm/openrouter';
 import type { Gasto } from '@/types/cuadra';
-import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
+import { extraerComprobante, tieneCodigoLegible } from '@/lib/cuadra/intake/ocr';
 import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { violaIndice, llegoTarde } from '@/lib/cuadra/pg_errores';
-import { mxn } from '@/lib/formato';
+import { mxn, fechaMx } from '@/lib/formato';
 import { guardiaFundamento, normasDeToolCalls, citasEnTexto, CITA_DESCONOCIDA } from '@/lib/cuadra/normas/fundamento';
 import { guardiaEstado } from '@/lib/cuadra/cuadre/estado_afirmado';
 import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, acotada } from '@/lib/cuadra/presupuesto';
@@ -27,8 +30,9 @@ import { getConfig } from '@/lib/cuadra/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/cuadra/intake/emparejar';
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import {
-  addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash,
+  addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash, corregirFechaGasto,
   enriquecerGastoConCodigo, guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente,
+  guardarFotoPendiente, existeFotoPendiente, reclamarFotoPendiente,
   getDatosResponsable, reclamarEnvioAviso, confirmarEnvioAviso, liberarEnvioAviso,
 } from '@/lib/cuadra/repo';
 import {
@@ -48,6 +52,38 @@ export interface InboundMessage {
   text?: string;
   mediaId?: string;           // para image/document
   waMessageId?: string;       // id de Meta, para idempotencia
+}
+
+// AUDITORÍA 8, ALTO REINCIDENTE (rendimiento): cuánto espera un ticket
+// completo SIN código a que le llegue el acercamiento antes de procesarse
+// solo. Env-configurable, mismo patrón que `CUADRA_INTAKE_GRACE_MS` — el
+// default es una estimación razonada (tiempo humano de tomar una segunda
+// foto y mandarla), no una medición como las que sí tiene este archivo en
+// otras partes; se deja ajustable para afinarla con datos reales de campo.
+const HOLD_FOTO_MS = () => Number(process.env.CUADRA_FOTO_PENDIENTE_HOLD_MS) || 3_000;
+const POLL_FOTO_MS = () => Number(process.env.CUADRA_FOTO_PENDIENTE_POLL_MS) || 400;
+
+/**
+ * Espera a que la foto pendiente `id` sea reclamada por un acercamiento, o se
+ * reclama a sí misma al vencer el plazo.
+ *
+ * Devuelve `true` si YA la reclamó alguien más — esta invocación no debe
+ * hacer nada más: la del acercamiento va a procesar el par completo (una
+ * sola visión, un solo alta, un solo acuse). Devuelve `false` si nadie llegó
+ * y esta invocación se reclamó a sí misma — sigue SOLA, exactamente como hoy.
+ */
+async function esperarReclamoDeFoto(tenantId: string, id: string): Promise<boolean> {
+  const vence = Date.now() + HOLD_FOTO_MS();
+  while (Date.now() < vence) {
+    await new Promise((r) => setTimeout(r, POLL_FOTO_MS()));
+    if (!(await existeFotoPendiente(tenantId, id))) return true; // alguien la tomó
+  }
+  // Nadie llegó: se reclama a sí misma. Es la MISMA función atómica que usa el
+  // acercamiento — si en el instante final justo se cruzó con uno, esta
+  // llamada pierde la carrera (devuelve null) y es correcto ceder: quien la
+  // ganó ya va a procesar el par.
+  const reclamo = await reclamarFotoPendiente(tenantId, { id });
+  return reclamo == null;
 }
 
 /**
@@ -383,15 +419,73 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           }
         }
 
+        // AUDITORÍA 8, ALTO REINCIDENTE (rendimiento): protocolo de dos fotos —
+        // retener el ticket completo unos segundos por si le sigue el
+        // acercamiento, para pagar UNA visión en vez de dos. `foto_pendiente`
+        // (migración 0038) es la memoria entre las dos invocaciones separadas
+        // en las que llegan; `esperarReclamoDeFoto` (arriba) es la espera.
+        //
+        // TODO ESTE BLOQUE ES BEST-EFFORT A PROPÓSITO: es una optimización de
+        // COSTO, no el camino del dinero. Si `foto_pendiente` falla —tabla sin
+        // migrar, RPC caída— la foto se procesa SOLA, exactamente como antes
+        // de este arreglo. Nunca se pierde un comprobante por un problema del
+        // mecanismo que intenta ahorrar una visión.
+        let imagenes: string | string[] = dataUrl;
+        if (await tieneCodigoLegible(dataUrl).catch(() => false)) {
+          // Candidata a ACERCAMIENTO: ¿hay un ticket completo esperando en
+          // este viaje? Si lo hay, se manda junto — el código YA decodificado
+          // de ESTA foto se fusiona gratis con la visión de la otra
+          // (`extraerComprobante` ya sabe hacerlo con `string[]`).
+          try {
+            const pendiente = await reclamarFotoPendiente(op.tenantId, { viajeId });
+            if (pendiente) {
+              const dataUrlPendiente = await downloadMediaAsDataUrl(pendiente.mediaId);
+              if (dataUrlPendiente) imagenes = [dataUrlPendiente, dataUrl];
+            }
+          } catch (e) {
+            logger.warn('foto.pendiente_error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+          }
+        } else {
+          // Candidata a TICKET COMPLETO (el acercamiento se toma justo porque
+          // el código no se lee en la foto amplia): se ofrece en espera.
+          let idPendiente: string | null = null;
+          try {
+            idPendiente = await guardarFotoPendiente(op.tenantId, viajeId, msg.mediaId);
+          } catch (e) {
+            logger.warn('foto.pendiente_error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+          }
+          if (idPendiente) {
+            let laTomoOtro = false;
+            try {
+              laTomoOtro = await esperarReclamoDeFoto(op.tenantId, idPendiente);
+            } catch (e) {
+              logger.warn('foto.pendiente_espera_error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+              // Se intenta liberar la propia espera para que nadie la reclame
+              // más tarde contra una foto que ya se va a procesar sola aquí
+              // abajo — dejarla huérfana arriesgaría que un acercamiento
+              // futuro se fusione con un ticket que ya se registró por su
+              // cuenta.
+              try { await reclamarFotoPendiente(op.tenantId, { id: idPendiente }); } catch { /* best-effort */ }
+            }
+            if (laTomoOtro) return; // el acercamiento ya procesó el par completo
+          }
+          // idPendiente null = ya había OTRO ticket sin código esperando en
+          // este viaje (el unique de la 0038: como mucho uno a la vez). Son
+          // dos tickets DISTINTOS — emparejar el acercamiento que llegue con
+          // "el que sea" arriesga pegarle el folio al que no es. Se sigue
+          // sola, sin esperar nada.
+        }
+
         // La foto también respeta el reloj: 25s de tope propio, o menos si ya se
         // gastó el presupuesto. Sin esto caía al default del SDK (10 min).
-        const extraccion = await extraerComprobante(dataUrl, reloj.senal(25_000));
+        const extraccion = await extraerComprobante(imagenes, reloj.senal(25_000));
         const { gasto, costo } = extraccion;
         await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
 
-        // Los gastos ya registrados solo se leen cuando hay que EMPAREJAR: el
-        // acercamiento del protocolo de dos fotos y el voucher de la terminal.
-        // En el camino normal esa consulta no se paga.
+        // Los gastos ya registrados se leen para EMPAREJAR: el acercamiento del
+        // protocolo de dos fotos y el voucher de la terminal — y, desde el
+        // 1-ago, también en el camino legible, por la corrección de fecha de
+        // abajo.
         //
         // La lista tiene que coincidir con la de `decidirFoto`. Si aquí falta un
         // motivo que allá empareja, `gastos` llega vacío, `emparejarPorMonto` no
@@ -399,9 +493,30 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // mandó — sin error en ningún lado. `decidir_empareja.test.ts` fija las
         // dos listas juntas.
         const EMPAREJAN = ['solo_codigo', 'solo_pago'];
-        const yaRegistrados = EMPAREJAN.includes(extraccion.motivo ?? '')
-          ? await getGastos(viajeId, op.tenantId) : [];
-        const decision = decidirFoto(extraccion, yaRegistrados);
+        // Una foto LEGIBLE también necesita los gastos y la ventana del viaje:
+        // es lo que permite reconocer que ésta es la SEGUNDA foto de un ticket
+        // cuya fecha no cuadraba, y re-fechar el gasto que ya existe en vez de
+        // dar de alta otro. Sin eso, la foto que se le pidió al operador entra
+        // como gasto nuevo y —si el ticket no trae folio, que es la llave del
+        // dedup— cobra el mismo consumo dos veces.
+        //
+        // En paralelo para que cueste un viaje a la base y no tres. Al lado de
+        // la llamada de visión que acaba de correr, es ruido.
+        const [yaRegistrados, ventana] = await Promise.all([
+          extraccion.legible || EMPAREJAN.includes(extraccion.motivo ?? '')
+            ? getGastos(viajeId, op.tenantId) : Promise.resolve([]),
+          // FAIL-OPEN a propósito: si esto falla, `ventana` queda `undefined` y
+          // el intake se comporta como antes —sin corrección y sin petición—.
+          // Tumbar la foto por no poder calcular una ventana sería cambiar una
+          // mejora por una pérdida de comprobante.
+          extraccion.legible
+            ? ventanaDesdeDB(op.tenantId, viajeId).catch((e) => {
+                logger.warn('foto.ventana_no_disponible', { err: e instanceof Error ? e.message : String(e) });
+                return undefined;
+              })
+            : Promise.resolve(undefined),
+        ]);
+        const decision = decidirFoto(extraccion, yaRegistrados, ventana);
 
         // Pedir reenvío SOLO cuando reenviar arregla algo. Si el fallo fue
         // nuestro (truncamiento, provider caído), la misma foto falla igual:
@@ -472,6 +587,31 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           }
           return;
         }
+        // LA FOTO QUE SE LE PIDIÓ: re-fecha el gasto que ya existe.
+        //
+        // No da de alta nada. Es el mismo papel, y darlo de alta otra vez lo
+        // cobraría dos veces cuando el ticket no trae folio —la llave con la que
+        // `copiasDeComprobante` deduplica—. Se toca UNA columna: la fecha.
+        if (decision.accion === 'corregir_fecha') {
+          try {
+            await corregirFechaGasto(op.tenantId, decision.gastoId, decision.fecha);
+            logger.info('foto.fecha_corregida', { viaje: viajeId, gasto: decision.gastoId, fecha: decision.fecha });
+            await say(`Ya quedó ✅ — ese ticket de ${mxn(gasto.monto)} ahora tiene fecha *${fechaMx(decision.fecha)}*. No lo registré otra vez: es el mismo gasto, solo con la fecha corregida.`);
+          } catch (e) {
+            // Mismo hecho que en el alta: la liquidación de este viaje ya se
+            // emitió y el trigger de la 0037 lo impide. Aquí el operador hizo
+            // exactamente lo que se le pidió, así que callarlo sería peor que en
+            // el alta: creería que su corrección entró.
+            if (llegoTarde(e)) {
+              logger.warn('foto.correccion_llego_tarde', { viaje: viajeId, gasto: decision.gastoId });
+              await say(`Esa foto llegó después de que cerré tu liquidación, así que la fecha quedó como estaba. Pídele a la oficina que corrija el ticket de ${mxn(gasto.monto)}: la fecha buena es ${fechaMx(decision.fecha)}.`);
+              return;
+            }
+            logger.error('foto.correccion_error', { err: e instanceof Error ? e.message : String(e) });
+            await say(`No pude guardar la fecha corregida de ese ticket de ${mxn(gasto.monto)} ⚙️. Avísale a la oficina: la fecha buena es ${fechaMx(decision.fecha)}.`);
+          }
+          return;
+        }
         if (decision.accion === 'enriquecer') {
           const destino = yaRegistrados.find((g) => g.id === decision.gastoId);
           if (destino) {
@@ -537,6 +677,33 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // ¿Había un acercamiento esperando por este comprobante? (el caso en que
         // el operador mandó primero el código y después el ticket).
         await pegarCodigoEnEspera(op.tenantId, viajeId, gasto);
+
+        // FECHA QUE NO CUADRA → se le pide otra foto AHORA, no al cuadrar.
+        //
+        // Al cuadrar, la liquidación ya se emitió y el trigger de la 0037 impide
+        // tocar el gasto: pedírsela entonces sería mandarlo a hacer algo que el
+        // sistema ya no puede aceptar. Aquí todavía tiene el ticket en la mano.
+        //
+        // El gasto YA ENTRÓ y se queda: la fecha dudosa no lo invalida, y no
+        // registrarlo por una fecha sospechosa le costaría al operador un gasto
+        // que sí hizo. Si manda la foto buena, `corregir_fecha` la re-fecha; si
+        // no la manda, el cuadre levanta `fecha_sospechosa` como siempre. Los
+        // dos caminos siguen cerrados.
+        const dudosa = ventana ? fechaDudosa(gasto.fecha, ventana) : null;
+        if (dudosa) {
+          const extra = (gasto.ocrExtra ?? {}) as Record<string, unknown>;
+          logger.info('foto.fecha_dudosa', { viaje: viajeId, motivo: dudosa, fecha: gasto.fecha });
+          await say(mensajePideFechaOtraVez({
+            etiqueta: etiquetaConcepto(gasto.concepto, extra),
+            monto: gasto.monto,
+            folio: gasto.folio,
+            emisor: extra.emisor as string | undefined,
+            estacion: extra.estacion as string | undefined,
+            fecha: gasto.fecha!,
+            fechaRaw: extra.fechaRaw as string | undefined,
+            ejercicioHoy: ventana?.hoy ? Number(ventana.hoy.slice(0, 4)) : null,
+          }, dudosa));
+        }
         // ACUSE UNA SOLA VEZ POR VIAJE, no "cuando el contador va de 0 a 1".
         //
         // Esa era la condición anterior, y el comentario decía otra cosa: creía

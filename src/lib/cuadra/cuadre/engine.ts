@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { strip_accents } from './util';
+import { fechaDudosa } from './fecha_dudosa';
 import { sanitizarFolio } from '../intake/sanitizar';
 import { esRfcValido, rfcChecksumOk } from '../intake/cfdi';
 import { calcularCaducidad } from '../facturacion/caducidad';
@@ -289,28 +290,14 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // puede cruzar la frontera del complemento (24-abr-2026). Fuera de rango → bandeja.
     if (g.fecha) {
       const f = g.fecha.slice(0, 10);
-      // DE OTRO EJERCICIO, con o sin rango del viaje. Encontrado con tickets
-      // reales: el OCR leyó "2024-07-27" en un ticket que decía "2026 07 27" —
-      // dos años de error, confianza 95%, y nada lo marcaba porque esto dependía
-      // de que el viaje trajera rango.
-      //
-      // Importa por dinero: un gasto de un ejercicio anterior NO se deduce en
-      // este. Si nadie lo mira, entra al total comprobado de un año al que no
-      // pertenece.
-      //
-      // Se tolera el ejercicio inmediato anterior durante enero: un viaje a
-      // caballo entre años es normal en la última semana de diciembre, y
-      // marcarlo sería ruido justo cuando más comprobantes hay.
-      const ejercicioHoy = input.hoy ? Number(input.hoy.slice(0, 4)) : null;
-      const ejercicioGasto = Number(f.slice(0, 4));
-      const enero = input.hoy?.slice(5, 7) === '01';
-      const deOtroEjercicio =
-        ejercicioHoy != null && Number.isFinite(ejercicioGasto) &&
-        ejercicioGasto < ejercicioHoy - (enero ? 1 : 0);
-
-      if (deOtroEjercicio) {
-        diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está fechado en ${ejercicioGasto} y estamos en ${ejercicioHoy}: un gasto de otro ejercicio no se deduce en este. Puede ser un error de lectura — verifica la fecha impresa.`, gastoId: g.id });
-      } else if ((input.fechaMax != null && f > input.fechaMax) || (input.fechaMin != null && f < input.fechaMin)) {
+      // La REGLA vive en `fecha_dudosa.ts`, no aquí: el intake tiene que
+      // contestar exactamente lo mismo para pedirle otra foto al operador, y dos
+      // copias de esta condición se separan en silencio.
+      const motivo = fechaDudosa(f, { fechaMin: input.fechaMin, fechaMax: input.fechaMax, hoy: input.hoy });
+      if (motivo === 'otro_ejercicio') {
+        const ejercicioHoy = input.hoy ? Number(input.hoy.slice(0, 4)) : null;
+        diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} está fechado en ${Number(f.slice(0, 4))} y estamos en ${ejercicioHoy}: un gasto de otro ejercicio no se deduce en este. Puede ser un error de lectura — verifica la fecha impresa.`, gastoId: g.id });
+      } else if (motivo === 'fuera_de_rango') {
         diferencias.push({ tipo: 'fecha_sospechosa', concepto: g.concepto, monto: 0, nota: `La fecha del comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} (${f}) está fuera del rango esperado del viaje — verifícala (afecta periodo fiscal y plazo de facturación).`, gastoId: g.id });
       }
     }

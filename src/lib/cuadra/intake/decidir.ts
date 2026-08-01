@@ -8,7 +8,8 @@
 
 import type { Gasto } from '@/types/cuadra';
 import type { ExtraerResultado } from './ocr';
-import { emparejarPorMonto } from './emparejar';
+import { emparejarPorMonto, emparejarCorreccionDeFecha } from './emparejar';
+import { fechaDudosa, type VentanaViaje } from '../cuadre/fecha_dudosa';
 
 export type AccionFoto =
   /** Comprobante completo: alta normal. */
@@ -25,13 +26,46 @@ export type AccionFoto =
    * documento: el del comercio.
    */
   | { accion: 'pedir_ticket'; porVoucher?: boolean }
+  /**
+   * La segunda foto de un ticket cuya fecha no cuadraba: se le RE-FECHA el
+   * gasto que ya existe en vez de dar de alta otro.
+   *
+   * Sin esto, esa foto entra como `alta` y —si el ticket no trae folio, que es
+   * la llave del dedup— el mismo gasto queda contado dos veces.
+   */
+  | { accion: 'corregir_fecha'; gastoId: string; fecha: string }
   /** La foto de verdad no se lee: reenviarla con mejor luz sirve. */
   | { accion: 'pedir_reenvio' }
   /** Falló nuestro lado: reenviar la misma foto falla igual. */
   | { accion: 'avisar_falla' };
 
-export function decidirFoto(r: ExtraerResultado, gastos: Gasto[]): AccionFoto {
-  if (r.legible) return { accion: 'alta' };
+export function decidirFoto(
+  r: ExtraerResultado,
+  gastos: Gasto[],
+  /**
+   * La ventana del viaje. Opcional porque quien no la tenga se comporta como
+   * antes: sin ella no hay forma de saber que una fecha es dudosa, y adivinarlo
+   * sería peor que no corregir.
+   */
+  ventana?: VentanaViaje,
+): AccionFoto {
+  if (r.legible) {
+    // ¿Es la foto que se le PIDIÓ al operador porque la fecha no cuadraba?
+    //
+    // Solo si la fecha nueva es creíble: si la segunda foto se lee igual de mal,
+    // corregir sería cambiar un error por otro, y el gasto entraría duplicado
+    // encima. En ese caso cae a `alta` y el cuadre la vuelve a marcar.
+    const nueva = r.gasto.fecha?.slice(0, 10);
+    if (ventana && nueva && !fechaDudosa(nueva, ventana)) {
+      const destino = emparejarCorreccionDeFecha(
+        { monto: r.gasto.monto, concepto: r.gasto.concepto, folio: r.gasto.folio },
+        gastos,
+        (f) => fechaDudosa(f, ventana) != null,
+      );
+      if (destino) return { accion: 'corregir_fecha', gastoId: destino.id, fecha: nueva };
+    }
+    return { accion: 'alta' };
+  }
   if (r.motivo === 'fallo_tecnico') return { accion: 'avisar_falla' };
   // Acercamiento y VOUCHER se resuelven igual, y por la misma razón: los dos
   // valen el mismo dinero que el ticket que les corresponde, así que sumarlos
