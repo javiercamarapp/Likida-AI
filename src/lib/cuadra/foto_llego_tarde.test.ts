@@ -16,6 +16,8 @@ const addGasto = vi.fn();
 const extraerComprobante = vi.fn();
 const guardarHuerfano = vi.fn();
 const ubicarGastoPorHash = vi.fn();
+const intakeDelta = vi.fn();
+const getGastos = vi.fn();
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
 vi.mock('@/lib/cuadra/intake/ocr', () => ({
@@ -32,7 +34,7 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   claimMessage: vi.fn(async () => 'nuevo' as const),
   acquireViajeLock: vi.fn(async () => true), releaseViajeLock: vi.fn(),
   releaseMessageClaim: vi.fn(),
-  intakeDelta: vi.fn(async () => 1), esperarIntake: vi.fn(async () => true),
+  intakeDelta: (...a: unknown[]) => intakeDelta(...a), esperarIntake: vi.fn(async () => true),
 }));
 vi.mock('@/lib/cuadra/repo', () => ({
   ubicarGastoPorHash: (...a: unknown[]) => ubicarGastoPorHash(...a),
@@ -41,7 +43,7 @@ vi.mock('@/lib/cuadra/repo', () => ({
   getHuerfanos: vi.fn(async () => []), guardarHuerfano: (...a: unknown[]) => guardarHuerfano(...a),
   resolverHuerfanos: vi.fn(), marcarHuerfanosOfrecidos: vi.fn(),
   addGasto: (...a: unknown[]) => addGasto(...a),
-  getGastos: vi.fn(async () => []), updateGastoCfdiXml: vi.fn(),
+  getGastos: (...a: unknown[]) => getGastos(...a), updateGastoCfdiXml: vi.fn(),
   saveCfdiXmlRaw: vi.fn(), gastoExistePorHash: vi.fn(async () => false),
   enriquecerGastoConCodigo: vi.fn(), guardarCodigoPendiente: vi.fn(),
   getCodigosPendientes: vi.fn(async () => []), reclamarCodigoPendiente: vi.fn(),
@@ -89,6 +91,8 @@ describe('processInbound — la foto que llega tarde avisa la verdad, no la pier
     runAgent.mockReset(); addGasto.mockReset(); extraerComprobante.mockReset();
     guardarHuerfano.mockReset(); guardarHuerfano.mockResolvedValue(true);
     ubicarGastoPorHash.mockReset(); ubicarGastoPorHash.mockResolvedValue(null);
+    intakeDelta.mockReset(); intakeDelta.mockResolvedValue(1);
+    getGastos.mockReset(); getGastos.mockResolvedValue([]);
     vi.stubGlobal('fetch', fetchSpy);
     fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
@@ -211,6 +215,8 @@ describe('la foto que ya estaba en otro viaje', () => {
     runAgent.mockReset(); addGasto.mockReset(); extraerComprobante.mockReset();
     guardarHuerfano.mockReset(); guardarHuerfano.mockResolvedValue(true);
     ubicarGastoPorHash.mockReset(); ubicarGastoPorHash.mockResolvedValue(null);
+    intakeDelta.mockReset(); intakeDelta.mockResolvedValue(1);
+    getGastos.mockReset(); getGastos.mockResolvedValue([]);
     vi.stubGlobal('fetch', fetchSpy); fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
     process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
@@ -251,5 +257,101 @@ describe('la foto que ya estaba en otro viaje', () => {
     await processInbound(foto);
 
     expect(salientes).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RESUMEN AL CERRAR LA RÁFAGA. 1-ago-2026.
+//
+// Un operador mandó DIECIOCHO fotos de golpe y no recibió una sola palabra
+// sobre ellas: diez ya estaban registradas en otro viaje, tres eran
+// acercamientos a códigos, dos eran idénticas. Todos caminos CORRECTOS y todos
+// silenciosos. Desde su lado, mandó dieciocho fotos y no pasó nada — y un
+// chofer no va a escribir después para preguntar: da por hecho que se perdieron.
+//
+// Avisar por foto tampoco vale: serían diez mensajes seguidos.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la ráfaga termina diciendo qué quedó', () => {
+  beforeEach(() => {
+    salientes.length = 0;
+    runAgent.mockReset(); addGasto.mockReset(); extraerComprobante.mockReset();
+    guardarHuerfano.mockReset(); guardarHuerfano.mockResolvedValue(true);
+    ubicarGastoPorHash.mockReset(); ubicarGastoPorHash.mockResolvedValue(null);
+    intakeDelta.mockReset(); getGastos.mockReset(); getGastos.mockResolvedValue([]);
+    addGasto.mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', fetchSpy); fetchSpy.mockClear();
+    process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
+    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
+    process.env.CUADRA_DEDUP_FOTOS = '1';
+    extraerComprobante.mockResolvedValue({
+      gasto: { concepto: 'diesel', monto: 800, fecha: '2026-08-01', ocrExtra: {} },
+      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 }, legible: true,
+    });
+  });
+
+  /** Entra viendo `entrada` fotos en vuelo y sale dejando `salida`. */
+  const rafaga = (entrada: number, salida: number) =>
+    intakeDelta.mockResolvedValueOnce(entrada).mockResolvedValueOnce(salida);
+
+  it('EL FALLO: la última foto de la ráfaga dice cuántos comprobantes quedaron', async () => {
+    rafaga(7, 0);
+    getGastos.mockResolvedValue([
+      { id: 'a', concepto: 'diesel', monto: 800 }, { id: 'b', concepto: 'caseta', monto: 200 },
+    ]);
+
+    await processInbound(foto);
+
+    const dicho = salientes.join(' ');
+    expect(dicho, 'el operador tiene que saber que sus fotos hicieron algo').toMatch(/ya revisé tus fotos/i);
+    expect(dicho).toContain('2 comprobantes');
+    expect(dicho).toContain('$1,000.00');
+    expect(dicho).toMatch(/escribe \*listo\*/);
+  });
+
+  it('a media ráfaga NO resume: solo la que la cierra', async () => {
+    rafaga(7, 3);
+    await processInbound(foto);
+    expect(salientes.join(' ')).not.toMatch(/ya revisé tus fotos/i);
+  });
+
+  it('una foto SUELTA tampoco: su propio camino ya habló', async () => {
+    rafaga(1, 0);
+    await processInbound(foto);
+    expect(salientes.join(' ')).not.toMatch(/ya revisé tus fotos/i);
+  });
+
+  it('los duplicados NO inflan el total del resumen', async () => {
+    // `monto <= 0` no suma; el resumen es orientativo y no puede contradecir al
+    // cuadre, que excluye copias.
+    rafaga(3, 0);
+    getGastos.mockResolvedValue([
+      { id: 'a', concepto: 'diesel', monto: 800 }, { id: 'b', concepto: 'otro', monto: 0 },
+    ]);
+    await processInbound(foto);
+    expect(salientes.join(' ')).toContain('$800.00');
+  });
+
+  it('EN RÁFAGA, la foto que ya está en otro viaje se calla: la cubre el resumen', async () => {
+    // Diez de éstos serían diez mensajes seguidos, que es el antipatrón que ya
+    // hizo ver roto este producto tres veces.
+    rafaga(9, 4);
+    const err = new Error('duplicate key value violates unique constraint "uq_gasto_img_hash"') as Error & { code?: string };
+    err.code = '23505';
+    addGasto.mockRejectedValue(err);
+    ubicarGastoPorHash.mockResolvedValue({ viajeId: 'v-otro', folio: 'VJ-9', monto: 800 });
+
+    await processInbound(foto);
+
+    expect(salientes).toHaveLength(0);
+    expect(ubicarGastoPorHash, 'ni siquiera se pregunta: es una consulta por foto').not.toHaveBeenCalled();
+  });
+
+  it('si falla el resumen, la foto ya entró igual', async () => {
+    // La PRIMERA lectura es la del emparejamiento, y esa tiene que funcionar o
+    // el fallo no sería del resumen sino del intake entero.
+    rafaga(4, 0);
+    getGastos.mockResolvedValueOnce([]).mockRejectedValue(new Error('base caída'));
+    await processInbound(foto);
+    expect(addGasto).toHaveBeenCalled();
   });
 });
