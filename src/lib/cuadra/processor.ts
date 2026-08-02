@@ -27,7 +27,7 @@ import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { violaIndice, llegoTarde } from '@/lib/cuadra/pg_errores';
 import { mxn, fechaMx } from '@/lib/formato';
-import { guardiaFundamento, normasDeToolCalls, citasEnTexto, CITA_DESCONOCIDA } from '@/lib/cuadra/normas/fundamento';
+import { guardiaFundamento, normasDeToolCalls } from '@/lib/cuadra/normas/fundamento';
 import { guardiaEstado } from '@/lib/cuadra/cuadre/estado_afirmado';
 import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, acotada } from '@/lib/cuadra/presupuesto';
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
@@ -1245,19 +1245,23 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // respuesta de `consultar_politica` que ya pasó por esta misma guardia).
     // Repetir una cita que YA se entregó no es alucinar: es memoria.
     //
+    // AUDITORÍA 9, ALTO: ese arreglo concedía la memoria por `norma_id` SOLO,
+    // sin comprobar que la afirmación actual fuera la misma que la justificó
+    // la primera vez — "RFA 2026 regla 2.9" (tope de diésel en efectivo) se
+    // podía pegar sin tool en una frase sobre una caseta, y la guardia la
+    // dejaba pasar porque el id ya se había visto en el viaje. Por eso ya no
+    // se calcula aquí una lista de ids permitidos por memoria: se le pasa a
+    // `guardiaFundamento` el HISTORIAL crudo, y es ella quien decide —oración
+    // por oración, por tema— si la cita de hoy es la misma afirmación de ayer.
+    //
     // `turns` (arriba) trae el historial persistido más el mensaje del
     // operador de ESTE turno; se filtra a `assistant` porque lo que el
     // operador escribe no pasa por aquí — ampliar el permiso con texto del
     // usuario sería dejar que él mismo se autorizara una cita.
     if (!textoDeterminista) try {
-      const yaEntregadas = citasEnTexto(
-        turns.filter((t) => t.role === 'assistant').map((t) => t.content).join('\n'),
-      ).filter((id) => id !== CITA_DESCONOCIDA);
-      const permitidas = [...new Set([
-        ...normasDeToolCalls(agentTools.filter((t) => !t.error).map((t) => t.result)),
-        ...yaEntregadas,
-      ])];
-      const f = guardiaFundamento(reply, permitidas);
+      const historialAsistente = turns.filter((t) => t.role === 'assistant').map((t) => t.content).join('\n');
+      const permitidas = normasDeToolCalls(agentTools.filter((t) => !t.error).map((t) => t.result));
+      const f = guardiaFundamento(reply, permitidas, historialAsistente);
       if (f.forzado) {
         logger.warn('agent.fundamento_forzado', { viaje: viajeId, tenant: op.tenantId, quitadas: f.quitadas });
         reply = f.reply;
