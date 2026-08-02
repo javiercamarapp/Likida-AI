@@ -144,7 +144,23 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
       continue;
     }
     if (g.folio) {
-      const key = `${strip_accents(g.concepto.toLowerCase())}|${g.folio}|${g.monto}`;
+      // POR `folioNorm`, NO POR EL FOLIO CRUDO.
+      //
+      // `folioNorm` existe justo para esto —quita los ceros a la izquierda,
+      // `05461` → `5461`— y el dedup lo ignoraba. Dos fotos del MISMO ticket
+      // leídas una con el cero y otra sin él daban llaves distintas, así que no
+      // se veían como copias y el consumo entraba DOS VECES al total.
+      //
+      // Encontrado el 1-ago con un fajo real de 17 comprobantes: el mismo folio
+      // aparecía como `286188` y como `059286188`. Un cero de más en una lectura
+      // no es un ticket distinto.
+      //
+      // El riesgo del otro lado —dos tickets DE VERDAD distintos cuyos folios
+      // solo difieran en ceros a la izquierda, con el mismo concepto y el mismo
+      // total al centavo— es justo la definición de un duplicado, no un caso
+      // legítimo que se pierda.
+      const llaveFolio = g.folioNorm || g.folio;
+      const key = `${strip_accents(g.concepto.toLowerCase())}|${llaveFolio}|${g.monto}`;
       const previo = vistoFolio.get(key);
       if (previo) originalDe.set(g.id, previo);
       else vistoFolio.set(key, g.id);
