@@ -158,6 +158,32 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       faltan = true;
     }
 
+    // AUDITORÍA 9, CRÍTICO (operabilidad): 0036/0037, el trigger que impide
+    // que un gasto se inserte o se modifique DESPUÉS de emitida la
+    // liquidación — "el peor bug histórico del camino del dinero" en
+    // palabras de la propia 0036 (PDF y WhatsApp diciendo cifras contrarias
+    // del mismo viaje), y ninguna línea de este archivo lo sondeaba. Mismo
+    // motivo que los índices de arriba: PostgREST no expone `pg_trigger`,
+    // así que hace falta `triggers_faltantes` (migración 0043).
+    const TRIGGERS = {
+      trg_gasto_no_tras_liquidar: 'migración 0036: un gasto puede INSERTARSE después de emitida la liquidación — el PDF archivado y el WhatsApp que lee el operador dicen cifras contrarias del mismo viaje',
+      trg_gasto_no_tras_liquidar_update: 'migraciones 0037/0042: un gasto puede REESCRIBIRSE (monto, fecha, CFDI) después de emitida la liquidación, con el mismo efecto',
+    } as const;
+    const { data: trigFaltantes, error: eTrig } = await admin.rpc('triggers_faltantes', {
+      p_esperados: Object.keys(TRIGGERS),
+    });
+    if (eTrig) {
+      reportarProbe(eTrig, 'No se pudieron verificar los triggers de "nada entra tras liquidar" (falta la migración 0043, `triggers_faltantes`). Corre `supabase db push`.');
+      faltan = true;
+    } else if (Array.isArray(trigFaltantes) && trigFaltantes.length) {
+      for (const trig of trigFaltantes as string[]) {
+        logger.error('startup.migraciones', {
+          msg: `FALTA el trigger \`${trig}\` (${TRIGGERS[trig as keyof typeof TRIGGERS] ?? 'sin descripción'}). Corre \`supabase db push\`.`,
+        });
+      }
+      faltan = true;
+    }
+
     // Migración 0033: la constancia del aviso de privacidad separada de su
     // reserva. Si falta, `liberarEnvioAviso` llama a una función que no existe,
     // el error se registra y no se lanza —es best-effort a propósito— así que la

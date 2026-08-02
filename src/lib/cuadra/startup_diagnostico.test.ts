@@ -192,6 +192,54 @@ describe('el arranque dice TODO lo que falta, no lo primero', () => {
   });
 });
 
+// AUDITORÍA 9, CRÍTICO (operabilidad) — "0036/0037, el trigger que blinda el
+// peor bug histórico del camino del dinero, y ninguna línea de este archivo
+// lo sondeaba." PostgREST no expone `pg_trigger`, así que el sondeo pasa por
+// `triggers_faltantes` (migración 0043), mismo patrón que `indices_faltantes`.
+describe('los triggers de "nada entra ni se reescribe tras liquidar" (0036/0037)', () => {
+  it('si el trigger de INSERT falta, lo dice con la migración y la consecuencia', async () => {
+    rpc.mockResolvedValue({ data: ['trg_gasto_no_tras_liquidar'], error: null });
+    await verificarMigracionesCriticas();
+
+    const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
+    expect(mensajes).toContain('trg_gasto_no_tras_liquidar');
+    expect(mensajes).toContain('0036');
+    expect(mensajes).toContain('cifras contrarias');
+  });
+
+  it('si el trigger de UPDATE falta, lo dice con las dos migraciones que lo escribieron', async () => {
+    rpc.mockResolvedValue({ data: ['trg_gasto_no_tras_liquidar_update'], error: null });
+    await verificarMigracionesCriticas();
+
+    const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
+    expect(mensajes).toContain('trg_gasto_no_tras_liquidar_update');
+    expect(mensajes).toContain('0037');
+    expect(mensajes).toContain('0042');
+  });
+
+  it('con algo faltando NO dice ok, ni siquiera si el resto de migraciones están', async () => {
+    rpc.mockResolvedValue({ data: ['trg_gasto_no_tras_liquidar'], error: null });
+    await verificarMigracionesCriticas();
+    expect(info).not.toHaveBeenCalledWith('startup.migraciones', { ok: true });
+  });
+
+  it('si falta la función que los sonda, se dice ESO y no "falta el trigger"', async () => {
+    // Misma distinción que ya existe para índices: "no pude preguntar" no es
+    // "no está" — un diagnóstico falso manda a correr `db push` contra un
+    // problema que no existe.
+    rpc.mockResolvedValue({ error: { code: 'PGRST202', message: 'Could not find the function public.triggers_faltantes' } });
+    await verificarMigracionesCriticas();
+    const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
+    expect(mensajes).toContain('0043');
+  });
+
+  it('con los dos triggers puestos no inventa un faltante', async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    await verificarMigracionesCriticas();
+    expect(info).toHaveBeenCalledWith('startup.migraciones', { ok: true });
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // RONDA 7 · EL CONTADOR DE LA BARRERA NO SABÍA OLVIDAR (migración 0031).
 //

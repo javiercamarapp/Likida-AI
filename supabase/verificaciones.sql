@@ -960,3 +960,25 @@ begin
   raise exception E'FECHA TARDE  bloqueada=%  sqlstate=%  no-financiero-sigue-pasando=%   (esperado t / CU001 / t)',
     fecha_bloqueada, msg, no_financiero_pasa;
 end $$;
+
+-- ── 25. La sonda de triggers dice la verdad (mig. 0043) ─────────────────────
+-- AUDITORÍA 9, CRÍTICO (operabilidad) — mismo motivo exacto que el bloque 13
+-- (`indices_faltantes`, mig. 0030): el arranque no podía sondear 0036/0037
+-- porque PostgREST no expone `pg_trigger`. `triggers_faltantes` lo resuelve
+-- mirando el catálogo; este bloque prueba que la SONDA misma dice la verdad,
+-- no que los triggers existan (eso ya lo comprueban los bloques 19/20/24).
+do $$
+declare
+  inventado text[]; real_falta text[]; ninguno text[];
+begin
+  inventado := triggers_faltantes(array['trigger_no_existe_jamas_zzz']);
+  -- Si `trg_gasto_no_tras_liquidar` aparece aquí, la 0036 no está aplicada y
+  -- es una alarma de dinero, no de esta prueba.
+  real_falta := triggers_faltantes(array['trg_gasto_no_tras_liquidar']);
+  ninguno := triggers_faltantes(array[]::text[]);
+
+  raise exception E'TRIGGERS_FALTANTES  ve-el-que-falta=%  calla-el-que-existe=%  vacio-no-es-null=%   (esperado t / t / t)',
+    inventado = array['trigger_no_existe_jamas_zzz'],
+    real_falta = '{}'::text[],
+    ninguno is not null and cardinality(ninguno) = 0;
+end $$;
