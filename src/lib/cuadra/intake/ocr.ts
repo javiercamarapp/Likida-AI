@@ -208,21 +208,6 @@ export interface ExtraerResultado {
 }
 
 /**
- * ¿Esta foto trae al menos un código legible (QR o de barras)?
- *
- * AUDITORÍA 8, ALTO REINCIDENTE (rendimiento) — barato a propósito: es el
- * MISMO `decodeCodigosFromImage` que `extraerComprobante` ya corre gratis por
- * dentro, expuesto aparte para decidir ANTES de pagar la visión si esta foto
- * es candidata a "ticket completo" (sin código → puede que le siga un
- * acercamiento) o a "acercamiento" (con código → puede que ya haya un ticket
- * completo esperando). Ver `processor.ts` (`foto_pendiente`).
- */
-export async function tieneCodigoLegible(dataUrl: string): Promise<boolean> {
-  const codigos = await decodeCodigosFromImage(bufferFromDataUrl(dataUrl));
-  return codigos.length > 0;
-}
-
-/**
  * Extrae un comprobante de UNA o VARIAS fotos del mismo ticket.
  *
  * El protocolo de dos fotos sale de una medición, no de una preferencia: sobre
