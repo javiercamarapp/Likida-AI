@@ -8,6 +8,7 @@ import { detectarDuplicadosEntreViajes, type Anomalia } from './duplicados';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
 import { filasImprimibles } from './liquidacion/omitidos';
+import { round2 } from '@/lib/formato';
 
 // ── Los fallos de Supabase llegan POR VALOR, no lanzando ────────────────────
 // `shouldThrowOnError` es false por defecto en postgrest-js, así que un host
@@ -458,8 +459,4 @@ export function derivoLaConfig(
   if (antes.size !== ahora.size) return true;
   for (const t of ahora) if (!antes.has(t)) return true;
   return false;
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
 }

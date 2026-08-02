@@ -33,6 +33,27 @@
 /** Zona del cliente: la flota, el contralor y el SAT están todos aquí. */
 export const TZ_MX = 'America/Mexico_City';
 
+/**
+ * Redondea a dos decimales (centavos) sin creerle a la coma flotante.
+ *
+ * AUDITORÍA 9, ALTO REINCIDENTE (arquitectura) — reimplementado a mano en
+ * CUATRO archivos de dinero (`engine.ts`, `analytics.ts`, `pagadero.ts`,
+ * `combustible.ts`), los cuatro con `Math.round(n * 100) / 100` y el mismo
+ * bug: `round2(1.005)` daba `1`, no `1.01`. `1.005` no es representable
+ * exacto en punto flotante —se guarda como `1.00499999999999989…`— y
+ * `Math.round(100.4999…)` cae para abajo. El `+ Number.EPSILON` antes de
+ * multiplicar empuja el valor lo suficiente para que el redondeo caiga del
+ * lado correcto sin afectar los casos que ya funcionaban.
+ *
+ * El signo se separa ANTES de sumar el `EPSILON`: sumar un épsilon positivo a
+ * un negativo lo acerca a cero (`-1.005 + EPSILON` es MENOS negativo), y el
+ * mismo truco que arregla el redondeo hacia arriba lo rompe hacia abajo. Se
+ * corrige sobre el valor absoluto y se restaura el signo al final.
+ */
+export function round2(n: number): number {
+  return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100;
+}
+
 /** Pesos mexicanos como los espera un contador: `$1,234.56`. */
 export function mxn(n: number): string {
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { mxn, litros, fechaMx } from './formato';
+import { mxn, litros, fechaMx, round2 } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -51,6 +51,60 @@ describe('el formato del dinero', () => {
     // 31-jul 19:30 en México (CST, UTC−6) = 01:30 UTC del 1-ago.
     expect(fechaMx('2026-08-01T01:30:00.000Z')).toContain('31');
     expect(fechaMx('2026-08-01T01:30:00.000Z')).toContain('jul');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 9, ALTO REINCIDENTE (arquitectura) — `round2()` reimplementado en
+// CUATRO archivos de dinero (`engine.ts`, `analytics.ts`, `pagadero.ts`,
+// `combustible.ts`), las cuatro copias idénticas y las cuatro con el MISMO
+// bug: `Math.round(n * 100) / 100` redondea mal cuando el número no es
+// representable exacto en punto flotante. `round2(1.005)` da `1`, no `1.01`
+// —1.005 se guarda como 1.00499999999999989…, y `Math.round(100.4999…)` cae
+// para abajo—. Ya lo había marcado la ronda 8 como advertencia y nadie lo
+// atacó: por la regla del rubro, una advertencia que vuelve a ocurrir es un
+// hallazgo, no una advertencia.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('round2 — redondeo a centavos que no le cree a la coma flotante', () => {
+  it('el caso que reprueba Math.round(n*100)/100 a secas', () => {
+    expect(round2(1.005)).toBe(1.01);
+  });
+
+  it('otros valores de la misma familia (x.xx5) que la coma flotante representa mal', () => {
+    expect(round2(35.645)).toBe(35.65);
+    expect(round2(0.145)).toBe(0.15);
+  });
+
+  it('el caso común (nada especial en punto flotante) sigue redondeando normal', () => {
+    expect(round2(1234.567)).toBe(1234.57);
+    expect(round2(839.7)).toBe(839.7);
+  });
+
+  it('negativos', () => {
+    expect(round2(-1.005)).toBe(-1.01);
+  });
+
+  it('cero y enteros no se mueven', () => {
+    expect(round2(0)).toBe(0);
+    expect(round2(500)).toBe(500);
+  });
+});
+
+describe('NO puede volver a haber una copia de round2', () => {
+  // Mismo mecanismo que el guardarraíl de `mxn()` de arriba: se mide el
+  // código, no una lista escrita a mano. La ronda 9 encontró las cuatro
+  // copias por `command grep`; esto asegura que una quinta no pase inadvertida.
+  const archivos = execSync(
+    `command grep -rl "function round2\\|const round2\\s*=" src/ --include='*.ts' || true`,
+    { encoding: 'utf8' },
+  ).split('\n').filter(Boolean);
+
+  it('solo `formato.ts` define round2', () => {
+    const fuera = archivos.filter((f) => !f.includes('lib/formato.ts') && !f.includes('.test.'));
+    expect(
+      fuera,
+      `estos archivos reimplementan round2 en vez de importarlo de formato.ts:\n${fuera.join('\n')}`,
+    ).toEqual([]);
   });
 });
 

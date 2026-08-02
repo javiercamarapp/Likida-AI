@@ -19,6 +19,8 @@
 // Especificación completa y sus huecos: `docs/fase1/spec-contadores-periodo.md`.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { round2 } from '@/lib/formato';
+
 /** El tope de la facilidad. Es ley (bueno, RFA): no se toca sin cambiar la ficha. */
 export const TOPE_EFECTIVO = 0.15;
 
@@ -59,8 +61,6 @@ export interface ResultadoTope15 {
    */
   margen: number;
 }
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * @param efectivo         pagos de combustible en efectivo del ejercicio.
