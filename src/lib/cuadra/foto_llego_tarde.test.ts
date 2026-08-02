@@ -15,6 +15,7 @@ const runAgent = vi.fn();
 const addGasto = vi.fn();
 const extraerComprobante = vi.fn();
 const guardarHuerfano = vi.fn();
+const ubicarGastoPorHash = vi.fn();
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
 vi.mock('@/lib/cuadra/intake/ocr', () => ({
@@ -34,6 +35,7 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   intakeDelta: vi.fn(async () => 1), esperarIntake: vi.fn(async () => true),
 }));
 vi.mock('@/lib/cuadra/repo', () => ({
+  ubicarGastoPorHash: (...a: unknown[]) => ubicarGastoPorHash(...a),
   // Sala de espera de comprobantes sin viaje (mig. 0040). Sin estas cuatro,
   // `getHuerfanos` llega `undefined` y el processor truena en el `.length`.
   getHuerfanos: vi.fn(async () => []), guardarHuerfano: (...a: unknown[]) => guardarHuerfano(...a),
@@ -86,6 +88,7 @@ describe('processInbound — la foto que llega tarde avisa la verdad, no la pier
     salientes.length = 0;
     runAgent.mockReset(); addGasto.mockReset(); extraerComprobante.mockReset();
     guardarHuerfano.mockReset(); guardarHuerfano.mockResolvedValue(true);
+    ubicarGastoPorHash.mockReset(); ubicarGastoPorHash.mockResolvedValue(null);
     vi.stubGlobal('fetch', fetchSpy);
     fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
@@ -178,5 +181,75 @@ describe('processInbound — la foto que llega tarde avisa la verdad, no la pier
     await processInbound(foto);
 
     expect(salientes, 'el mismo CFDI dos veces es benigno: el comprobante ya está registrado').toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL ÍNDICE ES DE TODA LA FLOTA, EL PRE-CHEQUEO ES DE UN VIAJE. 1-ago-2026.
+//
+// `uq_gasto_img_hash` es `unique(tenant_id, img_hash)`; `gastoExistePorHash`
+// mira un solo viaje. Una foto ya registrada en OTRO viaje pasa el pre-chequeo,
+// la rechaza el índice con 23505, y el processor la tomaba por una carrera de
+// ráfaga: `logger.info('foto.dedup_race')` y `return`, sin decir nada.
+//
+// Medido en producción con un operador que reenvió su fajo: DIEZ fotos
+// rechazadas, cero mensajes. Desde su lado las mandó y no pasó nada — el tercer
+// caso del mismo patrón en un día.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la foto que ya estaba en otro viaje', () => {
+  const duplicado = () => {
+    const err = new Error('duplicate key value violates unique constraint "uq_gasto_img_hash"') as Error & { code?: string };
+    err.code = '23505';
+    return err;
+  };
+
+  beforeEach(() => {
+    // Bloque HERMANO: no hereda el `beforeEach` de arriba. Sin repetirlo,
+    // `salientes` llega con el mensaje del caso anterior y las dos pruebas de
+    // silencio pasan o fallan por arrastre, no por lo que miden.
+    salientes.length = 0;
+    runAgent.mockReset(); addGasto.mockReset(); extraerComprobante.mockReset();
+    guardarHuerfano.mockReset(); guardarHuerfano.mockResolvedValue(true);
+    ubicarGastoPorHash.mockReset(); ubicarGastoPorHash.mockResolvedValue(null);
+    vi.stubGlobal('fetch', fetchSpy); fetchSpy.mockClear();
+    process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
+    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
+    process.env.CUADRA_DEDUP_FOTOS = '1';
+    extraerComprobante.mockResolvedValue({
+      gasto: { concepto: 'diesel', monto: 800, fecha: '2026-08-01', ocrExtra: {} },
+      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+      legible: true,
+    });
+  });
+
+  it('se lo DICE, con el viaje donde ya está y el monto', async () => {
+    addGasto.mockRejectedValue(duplicado());
+    ubicarGastoPorHash.mockResolvedValue({ viajeId: 'v-otro', folio: 'VJ-2026-0801', monto: 800 });
+
+    await processInbound(foto);
+
+    expect(salientes).toHaveLength(1);
+    expect(salientes[0]).toContain('VJ-2026-0801');
+    expect(salientes[0]).toContain('$800.00');
+    expect(salientes[0], 'y por qué no lo puso aquí').toMatch(/no lo agregué aquí|dos veces/i);
+  });
+
+  it('pero la carrera de verdad —dos fotos idénticas del MISMO viaje— sigue callada', async () => {
+    // Ahí sí es benigno y avisar sería ruido: el gasto ya está en este viaje.
+    addGasto.mockRejectedValue(duplicado());
+    ubicarGastoPorHash.mockResolvedValue({ viajeId: 'v1', folio: 'VJ-1', monto: 800 });
+
+    await processInbound(foto);
+
+    expect(salientes).toHaveLength(0);
+  });
+
+  it('si no se puede averiguar dónde está, se calla en vez de inventar un viaje', async () => {
+    addGasto.mockRejectedValue(duplicado());
+    ubicarGastoPorHash.mockResolvedValue(null);
+
+    await processInbound(foto);
+
+    expect(salientes).toHaveLength(0);
   });
 });

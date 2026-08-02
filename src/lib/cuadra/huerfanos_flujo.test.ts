@@ -45,6 +45,7 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   intakeDelta: vi.fn(async () => 1), esperarIntake: vi.fn(async () => true),
 }));
 vi.mock('@/lib/cuadra/repo', () => ({
+  ubicarGastoPorHash: vi.fn(async () => null),
   addGasto: (...a: unknown[]) => addGasto(...a),
   guardarHuerfano: (...a: unknown[]) => guardarHuerfano(...a),
   getHuerfanos: (...a: unknown[]) => getHuerfanos(...a),
