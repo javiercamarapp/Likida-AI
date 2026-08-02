@@ -1047,6 +1047,22 @@ link por email funciona igual sin él.
 - Delete: `src/app/acceso/page.tsx`
 - Delete: `src/lib/auth/passcode.ts`
 - Delete: `src/lib/auth/passcode.test.ts`
+- Modify: `src/lib/observability/arranque.ts` — quitar la entrada
+  `DASHBOARD_PASSCODE` de `SILENCIOSAS` (su `consecuencia`, "proxy.ts no
+  bloquea /dashboard", ya es falsa desde la Task 6: `proxy.ts` no referencia
+  esa variable). Dejarla sería una falsa alarma de seguridad en el primer
+  arranque de producción sin ella.
+- Modify: `src/lib/cuadra/startup.ts` — mismo chequeo: revisar si sigue
+  mencionando `DASHBOARD_SECRET`/`DASHBOARD_PASSCODE` como crítico y quitarlo
+  si ya no aplica.
+- Modify: los tests correspondientes (`arranque.test.ts` y el de
+  `startup.ts` si existe) que fijen la lista exacta de `SILENCIOSAS` o de
+  variables críticas — van a necesitar el mismo ajuste.
+
+**Hallazgo de la revisión final de rama (2-ago-2026):** el hallazgo original
+de este punto era sobre `DEMO_TENANT_ID` y `DASHBOARD_PASSCODE`; verificar
+también si `DEMO_TENANT_ID` sigue teniendo sentido en `SILENCIOSAS` una vez
+que el dashboard ya no lo lee en ningún camino (Task 4).
 
 **Solo ejecutar este task después de que la Task 11 haya pasado completa.**
 Es el punto sin retorno del riesgo aceptado en el spec: sin passcode de
@@ -1067,8 +1083,16 @@ más probable: algún otro archivo todavía importaba `ACCESS_COOKIE` o
 
 - [ ] **Step 3: Verificar que compila y pasan las pruebas**
 
-Run: `npm run check`
-Expected: 0 errores, todas las pruebas verdes.
+`package.json` no tiene un script `check` — correr los cuatro por separado:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+Expected: 0 errores en los cuatro. Los dos warnings de `src/lib/cuadra/intake/cfdi.ts`
+en el build son preexistentes y ajenos a este plan — no bloquean.
 
 - [ ] **Step 4: Commit**
 
