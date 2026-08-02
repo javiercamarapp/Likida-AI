@@ -89,6 +89,7 @@ vi.mock('openai', () => ({
 // ── BORDE 2: Supabase (datos) ───────────────────────────────────────────────
 const saveLiquidacion = vi.fn(async () => 'L1');
 vi.mock('@/lib/cuadra/repo', () => ({
+  ubicarGastoPorHash: vi.fn(async () => null),
   // Sala de espera de comprobantes sin viaje (mig. 0040). Sin estas cuatro,
   // `getHuerfanos` llega `undefined` y el processor truena en el `.length`.
   getHuerfanos: vi.fn(async () => []), guardarHuerfano: vi.fn(async () => true),

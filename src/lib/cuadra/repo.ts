@@ -140,6 +140,36 @@ export async function gastoExistePorHash(viajeId: string, imgHash: string, tenan
 }
 
 /**
+ * ¿DÓNDE está ya esta foto? Busca en TODA la flota, no solo en un viaje.
+ *
+ * Existe por el desfase entre el pre-chequeo y el índice: `gastoExistePorHash`
+ * mira un VIAJE, pero `uq_gasto_img_hash` es `unique(tenant_id, img_hash)` —
+ * toda la flota—. Una foto ya registrada en OTRO viaje pasa el pre-chequeo, la
+ * rechaza el índice con 23505, y el processor la tomaba por una carrera de
+ * ráfaga y la descartaba en silencio.
+ *
+ * Medido el 1-ago con un operador que reenvió su fajo: diez fotos rechazadas,
+ * cero mensajes. Desde su lado, las mandó y no pasó nada.
+ */
+export async function ubicarGastoPorHash(
+  tenantId: string, imgHash: string,
+): Promise<{ viajeId: string; folio?: string; monto: number } | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('gasto')
+    .select('viaje_id, monto, viaje:viaje_id(folio)')
+    .eq('tenant_id', tenantId)
+    .eq('img_hash', imgHash)
+    .limit(1), 'ubicarGastoPorHash');
+  const fila = !error ? data?.[0] : null;
+  if (!fila) return null;
+  return {
+    viajeId: fila.viaje_id as string,
+    folio: ((fila.viaje as { folio?: string } | null)?.folio) || undefined,
+    monto: Number(fila.monto),
+  };
+}
+
+/**
  * El gasto que ya tiene ese hash de imagen, con lo justo para hablar de él.
  *
  * Hermano de `gastoExistePorHash` y NO su sustituto: aquél es la compuerta y

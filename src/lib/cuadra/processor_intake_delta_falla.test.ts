@@ -36,6 +36,7 @@ vi.mock('@/lib/cuadra/intake/ocr', () => ({
   tieneCodigoLegible: vi.fn(async () => false),
 }));
 vi.mock('@/lib/cuadra/repo', () => ({
+  ubicarGastoPorHash: vi.fn(async () => null),
   // Sala de espera de comprobantes sin viaje (mig. 0040). Sin estas cuatro,
   // `getHuerfanos` llega `undefined` y el processor truena en el `.length`.
   getHuerfanos: vi.fn(async () => []), guardarHuerfano: vi.fn(async () => true),

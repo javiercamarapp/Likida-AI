@@ -35,7 +35,7 @@ import { getConfig } from '@/lib/cuadra/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/cuadra/intake/emparejar';
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import {
-  addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash, gastoPorHash, corregirFechaGasto,
+  addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash, gastoPorHash, ubicarGastoPorHash, corregirFechaGasto,
   guardarHuerfano, getHuerfanos, resolverHuerfanos, marcarHuerfanosOfrecidos, getViaje,
   enriquecerGastoConCodigo, guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente,
   guardarFotoPendiente, existeFotoPendiente, reclamarFotoPendiente,
@@ -746,6 +746,25 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           // que cualquiera inserte; el índice único (mig. 0015) atrapa la 2ª con
           // 23505 → es un duplicado benigno, no un error. Se ignora en silencio.
           if (imgHash && violaIndice(e, 'uq_gasto_img_hash')) {
+            // OJO: EL ÍNDICE ES `unique(tenant_id, img_hash)` — TODA LA FLOTA.
+            //
+            // El pre-chequeo de arriba mira UN VIAJE, así que aquí caen dos
+            // casos que no son el mismo:
+            //
+            //   a) misma ráfaga, dos fotos idénticas → carrera benigna, silencio;
+            //   b) la foto YA ESTÁ registrada en OTRO viaje → no es una carrera,
+            //      y callarse deja al operador creyendo que la mandó bien.
+            //
+            // Se trataban las dos como (a). Medido el 1-ago con un operador que
+            // reenvió su fajo: DIEZ fotos rechazadas, cero mensajes. Tercer caso
+            // del mismo patrón en un día —descartar en silencio— y el que más
+            // veces se repitió.
+            const donde = await ubicarGastoPorHash(op.tenantId, imgHash).catch(() => null);
+            if (donde && donde.viajeId !== viajeId) {
+              logger.info('foto.ya_en_otro_viaje', { viaje: viajeId, otro: donde.viajeId, monto: donde.monto });
+              await say(`Ese comprobante de ${mxn(donde.monto)} ya estaba registrado en ${donde.folio ? `tu viaje *${donde.folio}*` : 'otro viaje tuyo'}, así que no lo agregué aquí para no cobrarlo dos veces. Si de verdad es de este viaje, dile a la oficina que lo mueva. 🙏`);
+              return;
+            }
             logger.info('foto.dedup_race', { viaje: viajeId });
             return;
           }
