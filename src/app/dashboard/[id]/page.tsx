@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { notFound } from 'next/navigation';
 import { getLiquidacionDetalle } from '@/lib/cuadra/analytics';
-import { ligaComprobante } from '@/lib/cuadra/intake/almacen';
 import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import { filasDeducibilidad } from '@/lib/cuadra/liquidacion/deducibilidad';
 import { mxn } from '@/lib/utils';
@@ -38,17 +37,13 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
   const d = await getLiquidacionDetalle(id, TENANT());
   if (!d) notFound();
   const e = ESTATUS[d.estatus] ?? { label: d.estatus, color: 'var(--muted)' };
-  // LAS FOTOS DE LOS TICKETS. El bucket es privado —un ticket trae RFC,
-  // domicilio y a veces lo que se compró—, así que la liga se firma aquí, en el
-  // servidor, con una hora de vida. En la base se guarda la RUTA, no la URL
-  // firmada: guardar la firmada la dejaría caducada y sin forma de renovarla.
-  //
-  // `Promise.all` y no una firma por clic: son diez renglones a lo sumo, y una
-  // ruta de API nueva por una liga es más superficie de la que hace falta.
-  const ligas = await Promise.all(
-    d.gastos.map((g) => (g.imagenUrl ? ligaComprobante(g.imagenUrl) : Promise.resolve(undefined))),
-  );
-  const hayFotos = ligas.some(Boolean);
+  // LA FOTO DEL TICKET SE GUARDA (CFF art. 30, conservación 5 años) PERO NO SE
+  // ENSEÑA AQUÍ. El aviso de privacidad (privacidad.ts:498) le promete al
+  // operador que un dato sensible que aparezca por accidente en su ticket "no
+  // se usa para nada" — pero ni `subirComprobante` ni nada en este flujo filtra
+  // contenido sensible de la IMAGEN (solo del texto que el OCR extrae de ella,
+  // ver sanitizar.ts). Enseñarla en un clic desde el panel del contralor sí es
+  // "usarla": convertía la promesa en falsa. AUDITORÍA 9, CRÍTICO legal.
   const hayAcred = d.litrosDiesel > 0 || d.ieps > 0 || d.iva > 0 || d.peaje > 0;
   // Las tres cubetas SIEMPRE suman totalComprobado (types/cuadra.ts). Se le
   // pasa el total PERSISTIDO junto a las cubetas RECONSTRUIDAS a propósito: si
@@ -189,11 +184,6 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
                 <tr style={{ color: 'var(--muted)' }} className="text-left text-sm">
                   <th scope="col" className="px-6 py-3 font-medium">Concepto</th>
                   <th scope="col" className="px-6 py-3 font-medium">Folio</th>
-                  {/* Solo si hay alguna. Una columna "Ticket" con todos los
-                      renglones vacíos afirma que se perdieron los comprobantes;
-                      las liquidaciones anteriores al 1-ago no tienen foto porque
-                      nunca se guardó, y eso no es lo mismo que haberla perdido. */}
-                  {hayFotos && <th scope="col" className="px-6 py-3 font-medium">Ticket</th>}
                   <th scope="col" className="px-6 py-3 font-medium text-right">Monto</th>
                 </tr>
               </thead>
@@ -202,20 +192,6 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
                   <tr key={i} className="border-t" style={{ borderColor: 'var(--line)' }}>
                     <td className="px-6 py-3.5 font-medium">{etiquetaGasto(g)}</td>
                     <td className="px-6 py-3.5" style={{ color: 'var(--muted)' }}>{g.folio ?? '—'}</td>
-                    {hayFotos && (
-                      <td className="px-6 py-3.5">
-                        {ligas[i] ? (
-                          // `rel=noreferrer` porque la liga firmada lleva el token
-                          // en la query: sin esto viaja en el Referer al destino.
-                          <a href={ligas[i]} target="_blank" rel="noreferrer noopener"
-                             className="underline underline-offset-2" style={{ color: 'var(--ink)' }}>
-                            Ver foto
-                          </a>
-                        ) : (
-                          <span style={{ color: 'var(--muted)' }}>—</span>
-                        )}
-                      </td>
-                    )}
                     <td className="px-6 py-3.5 text-right tabular">{mxn(g.monto)}</td>
                   </tr>
                 ))}
