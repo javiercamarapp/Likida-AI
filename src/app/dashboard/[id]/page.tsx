@@ -56,7 +56,7 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
   // Un desglose que contradice al total que tiene tres centímetros arriba es
   // peor que no tener desglose.
   const deducibilidad = d.deducibilidad
-    ? filasDeducibilidad({ ...d.deducibilidad, totalComprobado: d.totalComprobado })
+    ? filasDeducibilidad({ ...d.deducibilidad, totalComprobado: d.totalComprobado, diferencias: d.diferencias })
     : null;
 
   return (
