@@ -40,6 +40,15 @@ describe('identificarComercio', () => {
     expect(identificarComercio({ textoTicket: 'ABARROTES DOÑA MARY' })).toBeNull();
   });
 
+  // Ticket real de Tim Hortons (2-ago-2026): el emisor impreso es "OPERADORA
+  // DE CAFE PENINSULAR", y "OPERADORA" contiene la subcadena "ADO" — el token
+  // de reconocimiento de ADO (autobuses). Con matching por substring esto
+  // identificaba el café como la línea de camiones y mandaba al operador a
+  // pedir "número de boleto" a un ticket que nunca lo tuvo.
+  it('un token corto no casa dentro de otra palabra', () => {
+    expect(identificarComercio({ textoTicket: 'OPERADORA DE CAFE PENINSULAR' })).toBeNull();
+  });
+
   it('sin ninguna señal devuelve null', () => {
     expect(identificarComercio({})).toBeNull();
   });
