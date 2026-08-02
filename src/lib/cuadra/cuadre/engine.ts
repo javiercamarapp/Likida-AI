@@ -748,7 +748,6 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     for (const [dia, delDia] of porDia) {
       const total = delDia.reduce((s, x) => s + x.monto, 0);
       if (total <= topeAlimentacion) continue;
-      const exceso = round2(total - topeAlimentacion);
 
       // LA PROPORCIÓN ES DEL DÍA, NO DEL COMPROBANTE QUE LO CRUZÓ.
       //
@@ -772,15 +771,30 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // denominador, y le recortaban la deducción a los comprobantes que sí
       // amparan. Medido: una comida de $700 con CFDI, bajo el tope de $750,
       // salía "$194.44 deducibles" solo porque un ticket sin timbrar del mismo
-      // día se sumó al total. La nota de arriba (`total`, `exceso`) sigue
-      // informando del día completo a propósito: antes de timbrarse, el
-      // contralor quiere saber que ese gasto tampoco va a deducir completo.
+      // día se sumó al total. La nota sigue informando del día completo
+      // (`total`, abajo) a propósito: antes de timbrarse, el contralor quiere
+      // saber que ese gasto tampoco va a deducir completo — pero el `monto`
+      // de la diferencia ya no es ese informativo (ver AUDITORÍA 9 abajo).
       const timbrados = delDia.filter((x) => x.cfdiUuid);
       const totalTimbrado = timbrados.reduce((s, x) => s + x.monto, 0);
       if (totalTimbrado > 0) {
         const proporcionTimbrado = Math.min(1, topeAlimentacion / totalTimbrado);
         for (const x of timbrados) proporcionDeducible.set(x.id, proporcionTimbrado);
       }
+
+      // AUDITORÍA 9, ALTO (fiscal): el `monto` de esta diferencia CERRABA el
+      // dinero (arriba: solo entre timbrados) pero no la FRASE — seguía
+      // colgado de `exceso`, calculado contra `total` (el día completo,
+      // timbrado o no). Con dos tickets SIN CFDI de $1,200 y $800, el papel
+      // imprimía "el excedente de $1,250.00 no es deducible" en la misma hoja
+      // donde el desglose decía "No deducible $0.00" — ninguna cubeta
+      // contenía esos $1,250, porque un comprobante sin timbrar no es
+      // deducción de nadie todavía (LISR 28-V acota la DEDUCCIÓN, no el gasto
+      // crudo). `montoNoDeducible` ahora es SOLO el exceso de lo timbrado —lo
+      // mismo que de verdad resta de `totalDeducible`— y la nota distingue el
+      // panorama informativo del día (`total`, que sigue avisando ANTES de
+      // timbrarse, a propósito) de lo que hoy es una afirmación real.
+      const montoNoDeducible = totalTimbrado > topeAlimentacion ? round2(totalTimbrado - topeAlimentacion) : 0;
 
       // La DIFERENCIA sigue colgada de un comprobante, porque los totales de
       // deducibilidad suman por gastoId y tiene que vivir en alguno. Eso es
@@ -789,10 +803,13 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       const ancla = delDia[delDia.length - 1];
       const cuantos = delDia.length > 1 ? ` (${delDia.length} comprobantes del día)` : '';
       const cuando = dia.startsWith('sin-fecha') ? 'sin fecha' : dia;
+      const nota = montoNoDeducible > 0
+        ? `Alimentación del ${cuando}: ${mxn(total)}${cuantos} excede el tope fiscal de ${mxn(topeAlimentacion)} por día (LISR 28-V) — el excedente de ${mxn(montoNoDeducible)} no es deducible.`
+        : `Alimentación del ${cuando}: ${mxn(total)}${cuantos} excede el tope fiscal de ${mxn(topeAlimentacion)} por día (LISR 28-V). Hoy nada de esto es "no deducible" todavía: lo que falta por timbrar sigue por confirmar — el excedente se calcula cuando llegue la factura.`;
       diferencias.push({
         tipo: 'viatico_excede_fiscal', concepto: ancla.concepto,
-        esperado: topeAlimentacion, real: round2(total), monto: exceso,
-        nota: `Alimentación del ${cuando}: ${mxn(total)}${cuantos} excede el tope fiscal de ${mxn(topeAlimentacion)} por día (LISR 28-V) — el excedente de ${mxn(exceso)} no es deducible.`,
+        esperado: topeAlimentacion, real: round2(total), monto: montoNoDeducible,
+        nota,
         gastoId: ancla.id,
       });
     }

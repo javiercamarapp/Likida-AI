@@ -449,14 +449,18 @@ describe('cuadrarViaje', () => {
     expect(r.diferencias.some((d) => d.tipo === 'efectivo_sobre_tope')).toBe(true);
   });
 
-  it('1.10: viático > tope fiscal $750/día → excedente no deducible', () => {
+  it('1.10: viático > tope fiscal $750/día, SIN timbrar → avisa, pero el excedente no es deducible de nadie TODAVÍA', () => {
+    // AUDITORÍA 9, ALTO (fiscal): sin CFDI, el excedente no puede ser "no
+    // deducible" — no es deducción de nadie hasta que se timbre (cae en
+    // por_confirmar). `monto` refleja eso; la nota informa igual.
     const r = cuadrarViaje({
       viajeId: 'a6', anticipo: 900, politica, estimulos: EST,
       gastos: [g({ concepto: 'viaticos', monto: 900, folio: 'V1' })],
     });
     const d = r.diferencias.find((x) => x.tipo === 'viatico_excede_fiscal');
     expect(d).toBeTruthy();
-    expect(d!.monto).toBe(150); // 900 - 750
+    expect(d!.monto).toBe(0);
+    expect(d!.nota).toMatch(/por confirmar/i);
   });
 });
 
@@ -578,28 +582,67 @@ describe('cuadrarViaje — tope de viáticos', () => {
     expect(r.totalNoDeducible).toBe(0);
   });
 
-  it('la alimentación sí: $900 en un día marca $150', () => {
+  it('la alimentación sí: $900 en un día, CON CFDI, marca $150 no deducibles', () => {
+    // AUDITORÍA 9: `cfdiUuid` a propósito — sin timbrar, el excedente no es
+    // deducción de nadie todavía (ver "1.10" arriba, que cubre ese caso).
     const r = cuadrarViaje({
       viajeId: 'w2', anticipo: 900, politica: [], estimulos: EST,
-      gastos: [g({ concepto: 'alimentacion', monto: 900, fecha: '2026-05-01', formaPago: '04' })],
+      gastos: [g({ concepto: 'alimentacion', monto: 900, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u-w2', xmlVerificado: true })],
     });
     const d = r.diferencias.find((x) => x.tipo === 'viatico_excede_fiscal')!;
     expect(d.monto).toBe(150);
   });
 
-  it('el tope es POR DÍA, no por comprobante: tres comidas de $400 el mismo día exceden', () => {
+  it('el tope es POR DÍA, no por comprobante: tres comidas timbradas de $400 el mismo día exceden', () => {
     // Es el hueco que dejaba pasar el gasto real: partir la cuenta en tres
     // tickets del mismo día burlaba un tope aplicado comprobante por comprobante.
+    // Timbradas a propósito (AUDITORÍA 9): sin CFDI el excedente no es
+    // deducible de nadie todavía, y esta prueba mide el reparto en dinero.
     const r = cuadrarViaje({
       viajeId: 'w3', anticipo: 1200, politica: [], estimulos: EST,
       gastos: [
-        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' }),
-        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' }),
-        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' }),
+        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u-w3a', xmlVerificado: true }),
+        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u-w3b', xmlVerificado: true }),
+        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u-w3c', xmlVerificado: true }),
       ],
     });
     const total = r.diferencias.filter((x) => x.tipo === 'viatico_excede_fiscal').reduce((s, x) => s + (x.monto ?? 0), 0);
     expect(total).toBe(450); // 1200 - 750
+  });
+
+  // AUDITORÍA 9, ALTO (fiscal) — el escenario EXACTO del hallazgo: dos
+  // comprobantes SIN timbrar de un día ($1,200 y $800) excedían el tope y el
+  // papel imprimía "el excedente de $1,250.00 no es deducible" en la misma
+  // hoja donde el desglose decía "No deducible $0.00" — ninguna cubeta
+  // contenía esos $1,250, porque nada estaba timbrado.
+  it('dos comprobantes SIN timbrar que exceden el tope: el monto de la diferencia ya no contradice el desglose', () => {
+    const r = cuadrarViaje({
+      viajeId: 'w-sin-timbrar', anticipo: 2000, politica: [], estimulos: EST,
+      gastos: [
+        g({ concepto: 'alimentacion', monto: 1200, fecha: '2026-07-20', formaPago: '04' }),
+        g({ concepto: 'alimentacion', monto: 800, fecha: '2026-07-20', formaPago: '04' }),
+      ],
+    });
+    const d = r.diferencias.find((x) => x.tipo === 'viatico_excede_fiscal')!;
+    expect(d, 'sigue avisando: el contralor necesita saber que ese gasto tampoco va a deducir completo').toBeTruthy();
+    expect(d.monto, 'nada está timbrado: el excedente no es deducible de NADIE todavía').toBe(0);
+    expect(d.nota).not.toMatch(/no es deducible/); // ya no afirma lo que el desglose desmiente
+    expect(r.totalNoDeducible, 'el desglose y la diferencia ahora dicen lo mismo').toBe(d.monto);
+  });
+
+  it('un día MIXTO (timbrado + sin timbrar): el monto es SOLO el exceso de lo timbrado', () => {
+    const r = cuadrarViaje({
+      viajeId: 'w-mixto', anticipo: 2700, politica: [], estimulos: EST,
+      gastos: [
+        g({ concepto: 'alimentacion', monto: 700, fecha: '2026-07-20', formaPago: '04', cfdiUuid: 'u-mixto', xmlVerificado: true }),
+        g({ concepto: 'alimentacion', monto: 2000, fecha: '2026-07-20', formaPago: '04' }), // sin timbrar
+      ],
+    });
+    const d = r.diferencias.find((x) => x.tipo === 'viatico_excede_fiscal')!;
+    // $700 timbrados NO exceden el tope de $750 por sí solos: nada es no
+    // deducible hoy, aunque el día completo ($2,700) sí lo exceda.
+    expect(d.monto).toBe(0);
+    expect(r.totalNoDeducible).toBe(0);
   });
 
   it('comidas de días distintos NO se suman entre sí', () => {
