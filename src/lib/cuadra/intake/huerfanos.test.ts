@@ -72,6 +72,33 @@ describe('los acuses dicen la verdad de lo que pasó', () => {
     expect(m).toContain('3 comprobantes');
     expect(m).toMatch(/escribe \*listo\*/);
   });
+
+  it('EL FALLO: ya no suelta un total que se cae a la mitad tres mensajes después', () => {
+    // Medido el 1-ago: el acuse dijo «$28,041.15» y la liquidación dijo
+    // «$12,388.05 comprobado», porque seis venían repetidos. El acuse era
+    // exacto y aun así el operador entiende que le recortaron.
+    const m = mensajeAdjuntados(TRES, { copias: 2, comprobado: 3000 });
+    expect(m).toContain('$4,320.00');      // lo que entregó en papel
+    expect(m).toContain('2 repetidos');
+    expect(m).toContain('$3,000.00');      // lo que de verdad cuenta
+  });
+
+  it('sin repetidos no inventa una advertencia', () => {
+    const m = mensajeAdjuntados(TRES, { copias: 0, comprobado: 4320 });
+    expect(m).not.toMatch(/repetid/i);
+    expect(m).toContain('$4,320.00');
+  });
+
+  it('si no se pudo calcular el neto, NO promete un total del viaje', () => {
+    // Callar es mejor que arriesgar una cifra que después contradice al PDF.
+    const m = mensajeAdjuntados(TRES);
+    expect(m).not.toMatch(/llevas/i);
+  });
+
+  it('ya no dice «los demás», que sonaba a que quedó algo pendiente', () => {
+    // No faltaba ninguno: se acababa de vaciar la sala de espera.
+    expect(mensajeAdjuntados(TRES)).not.toMatch(/los demás/i);
+  });
 });
 
 describe('entender el sí y el no — aquí es donde se mueve el dinero', () => {

@@ -56,12 +56,36 @@ export function mensajeOfrecer(pendientes: Esperando[], ruta?: string): string {
     `¿Los agrego a este viaje? Contesta *sí* o dime cuáles no van. 👍`;
 }
 
-/** Lo que se contesta cuando dijo que sí. */
-export function mensajeAdjuntados(pendientes: Esperando[]): string {
+/**
+ * Lo que se contesta cuando dijo que sí.
+ *
+ * DICE EL NETO, NO SOLO LA SUMA DEL PAPEL. Medido el 1-ago: se adjuntaron 17
+ * comprobantes y el acuse dijo «$28,041.15»; tres mensajes después la
+ * liquidación decía «$12,388.05 comprobado», porque seis venían repetidos. El
+ * acuse era exacto —eso fue lo que se agregó— y aun así ponía en la cabeza del
+ * operador un número que se caía a la mitad. Un chofer lee $28 mil y luego $12
+ * mil y entiende que le recortaron.
+ *
+ * El dedup ya se puede calcular en ese momento, así que se calcula y se dice.
+ * Cuando no se puede (`neto` ausente), el mensaje NO promete un total del viaje:
+ * callar es mejor que arriesgar la cifra que después contradice el PDF.
+ *
+ * Y no dice «cuando termines de mandar los demás»: no faltaba ninguno, y eso
+ * sonaba a que algo quedó pendiente justo después de vaciar la sala de espera.
+ */
+export function mensajeAdjuntados(
+  pendientes: Esperando[],
+  neto?: { copias: number; comprobado: number },
+): string {
   const total = pendientes.reduce((s, p) => s + p.monto, 0);
-  return pendientes.length === 1
-    ? `Listo, agregué ese comprobante de *${mxn(total)}* a tu viaje ✅. Cuando termines de mandar los demás, escribe *listo*.`
-    : `Listo, agregué los ${pendientes.length} comprobantes (*${mxn(total)}*) a tu viaje ✅. Cuando termines de mandar los demás, escribe *listo*.`;
+  const cabeza = pendientes.length === 1
+    ? `Listo, agregué ese comprobante de *${mxn(total)}* a tu viaje ✅.`
+    : `Listo, agregué los ${pendientes.length} comprobantes a tu viaje ✅ — ${mxn(total)} en papel.`;
+  const cuerpo = !neto ? ''
+    : neto.copias > 0
+      ? `\n\nEncontré *${neto.copias} ${neto.copias === 1 ? 'repetido' : 'repetidos'}*, que cuento una sola vez. En este viaje llevas *${mxn(neto.comprobado)}* comprobado.`
+      : `\n\nEn este viaje llevas *${mxn(neto.comprobado)}* comprobado.`;
+  return `${cabeza}${cuerpo}\n\nSi te falta alguno, mándalo. Cuando ya no tengas más, escribe *listo*. 👍`;
 }
 
 const norm = (t: string) => strip_accents(t.toLowerCase()).replace(/[^a-z0-9\s]/g, ' ').trim();
