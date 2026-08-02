@@ -24,3 +24,9 @@ pruebas-manuales/imagenes/
 # Cualquier OTRA foto de comprobante sigue fuera.
 .env*
 .gstack/
+
+# Worktrees de sesiones de Claude Code. Sin esto, un worktree activo aparece
+# como "untracked" en `git status` desde la raíz del repo, y vitest (sin el
+# exclude propio en vitest.config.ts) escanea dentro de él y corre una
+# segunda copia de cada prueba en paralelo con la real.
+.claude/worktrees/

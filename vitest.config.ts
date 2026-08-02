@@ -19,6 +19,19 @@ export default defineConfig({
     },
   },
   test: {
+    // `.claude/worktrees/` no está en .gitignore, y sin este exclude vitest
+    // escanea DENTRO de un worktree activo al correr desde la raíz del repo —
+    // una segunda copia de cada archivo de prueba corriendo en paralelo con
+    // la real. Medido el 2-ago-2026 con el worktree de auth-panel vivo: 17
+    // fallos que desaparecían al filtrar por la copia de `src/` a secas,
+    // mismos archivos, mismo resultado real. Se preservan los excludes por
+    // defecto de vitest (node_modules, dist, .git, etc.) y se agrega el propio.
+    exclude: [
+      '**/node_modules/**', '**/dist/**', '**/cypress/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
+      '**/.claude/**',
+    ],
     env: { CUADRA_COBERTURA: CON_COBERTURA ? '1' : '' },
     // ═════════════════════════════════════════════════════════════════════════
     // MEDICIÓN DE COBERTURA — auditoría 5, MEDIO.
