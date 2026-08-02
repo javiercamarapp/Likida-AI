@@ -34,6 +34,7 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   efectivo_sobre_tope: ['lisr-27-fr-III'],
   viatico_excede_fiscal: ['lisr-28-fr-V'],
   alimentacion_sin_soporte: ['lisr-28-fr-V'],
+  alimentacion_transporte_sin_tarjeta_credito: ['lisr-28-fr-V'],
   viatico_rfc_operador: ['rlisr-57'],
   rfc_receptor: ['cff-29-A'],
   // El veredicto más severo que emite el motor. Hasta hoy no tenía ficha: se
