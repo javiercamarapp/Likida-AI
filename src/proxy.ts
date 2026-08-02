@@ -1,13 +1,21 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { ACCESS_COOKIE, hayPasscode, tokenMatches } from '@/lib/auth/passcode';
+import { createServerClient } from '@supabase/ssr';
 
-// Cabeceras de seguridad + gate de passcode del dashboard (demo). Sin Supabase
-// Auth: el dashboard es read-only y va detrás de un passcode simple.
-// El matcher EXCLUYE /api (webhook, demo, export manejan lo suyo y no deben pasar
-// por el gate ni cargar cabeceras de página).
-
+// Cabeceras de seguridad + gate de sesión del dashboard. El matcher EXCLUYE
+// /api (webhook, demo, export manejan lo suyo y no deben pasar por el gate ni
+// cargar cabeceras de página).
+//
+// El gate ya NO es un passcode compartido: usa la sesión real de Supabase
+// Auth. `createServerClient` aquí, con las cookies de request/response, es el
+// patrón oficial para refrescar el token de sesión en middleware — sin esto,
+// una sesión cuyo access token expiró a mitad de vida se vería como "sin
+// sesión" hasta el siguiente refresh del lado del navegador.
+//
+// Esta es la PRIMERA capa (barata, por matcher de ruta). La segunda vive en
+// cada página vía `requireSessionTenant` (src/lib/auth/guard.ts): las dos
+// tienen que fallar a la vez para que el panel se sirva sin autorización.
 export async function proxy(req: NextRequest) {
-  const res = NextResponse.next({ request: req });
+  let res = NextResponse.next({ request: req });
   const path = req.nextUrl.pathname;
 
   res.headers.set('X-Content-Type-Options', 'nosniff');
@@ -15,29 +23,31 @@ export async function proxy(req: NextRequest) {
   res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
 
-  // Solo en producción: en http:// el navegador ignora la cabecera, pero
-  // ponerla en local tampoco aporta nada y sí confunde al depurar. Sin
-  // `includeSubDomains` a propósito — hoy no se sabe qué subdominios del
-  // dominio final existirán, y forzarlos a TLS a ciegas los deja inalcanzables
-  // durante un año en los navegadores que ya la vieron.
   if (process.env.NODE_ENV === 'production') {
     res.headers.set('Strict-Transport-Security', 'max-age=31536000');
   }
 
   if (path.startsWith('/dashboard')) {
-    // El panel pinta nombres de operadores, montos y RFC. Sin esto, la respuesta
-    // se queda en el caché del navegador y en el back/forward: la sesión caduca
-    // a las 8 h en el servidor y la pantalla sigue ahí para el siguiente que
-    // agarre la laptop del demo.
     res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
 
-    const cookie = req.cookies.get(ACCESS_COOKIE)?.value;
-    // Si no hay passcode configurado (dev), no bloquear. Con passcode, exigir
-    // que la cookie sea una sesión VIVA: `tokenMatches` comprueba la firma y la
-    // hora de emisión, no solo que el valor coincida (passcode.ts).
-    if (hayPasscode() && !(await tokenMatches(cookie))) {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => req.cookies.getAll(),
+          setAll: (list) => {
+            list.forEach(({ name, value }) => req.cookies.set(name, value));
+            res = NextResponse.next({ request: req });
+            list.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
+          },
+        },
+      },
+    );
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
       const url = req.nextUrl.clone();
-      url.pathname = '/acceso';
+      url.pathname = '/login';
       url.searchParams.set('next', path);
       return NextResponse.redirect(url);
     }
