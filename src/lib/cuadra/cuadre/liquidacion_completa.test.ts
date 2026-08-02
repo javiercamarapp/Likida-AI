@@ -86,16 +86,20 @@ describe('liquidación completa de 20 comprobantes', () => {
     // Es la prueba de fuego de la Fase 0. Antes, `ieps_no_desglosado` mandaba a
     // `revisar` TODA liquidación con diésel, y la bandeja dejaba de significar algo.
     //
-    // AUDITORÍA 8: `permiso_cre_no_verificable` SÍ tiene razón —el motor avisa,
-    // siempre, que no valida el permiso CRE del proveedor (LISR 27-III / RFA 2026
-    // 2.9) en NINGÚN diésel con XML verificado— así que se excluye aquí igual que
-    // `diesel_desviacion`: es una nota esperada, no una regla que se disparó sin
-    // motivo. Con dos cargas de diésel timbradas en este fixture, la liquidación
-    // queda en 'revisar' a propósito.
+    // AUDITORÍA 9, ALTO (frontend): `permiso_cre_no_verificable` SÍ tiene razón
+    // —el motor avisa, siempre, que no valida el permiso CRE del proveedor
+    // (LISR 27-III / RFA 2026 2.9) en NINGÚN diésel con XML verificado— pero
+    // mandarlo a REVISAR (como decidió la ronda 8) hacía que CUALQUIER
+    // liquidación con un diésel bien facturado quedara incapaz de volver a ser
+    // "Cuadrada" — incluido el viaje que `seed.sql` sembró como pieza central
+    // del demo. Corregido: ya no entra a REVISAR (mismo criterio que
+    // `diesel_desviacion` y `ieps_no_desglosado`, que tampoco entran); el
+    // aviso se imprime igual, con tono `condicionado` junto al renglón
+    // "Deducible para ISR" (ver `permiso_cre_no_verificable.test.ts`).
     const enBandeja = r.diferencias.filter((d) =>
       !['duplicado', 'sobre_politica', 'anticipo', 'diesel_desviacion', 'permiso_cre_no_verificable'].includes(d.tipo));
     expect(enBandeja.map((d) => d.tipo)).toEqual([]);
-    expect(r.estatus).toBe('revisar'); // por el permiso CRE, no por una regla descontrolada
+    expect(r.estatus).not.toBe('revisar'); // el permiso CRE ya no puede mandar la liquidación a la bandeja
   });
 
   it('las tres cubetas suman el total comprobado', () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { cuadrarViaje, cubetaDe } from './engine';
 import { SOLO_CONTRALOR } from './resumen';
+import { filasDeducibilidad } from '../liquidacion/deducibilidad';
 import type { Gasto } from '@/types/cuadra';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -21,9 +22,17 @@ import type { Gasto } from '@/types/cuadra';
 // contador lo confirme a mano contra el papel — mismo criterio que EFOS y el
 // complemento: nunca declarar sin verificar.
 //
-// Decisión explícita (Javier, 01-ago-2026): el aviso va a la bandeja de
-// REVISAR, pero NO baja la cubeta — el diésel sigue viéndose deducible/verde,
-// no se toca el acreditamiento ni el demo cambia de color.
+// AUDITORÍA 9 · ALTO (frontend) — la decisión original (ronda 8) mandaba el
+// aviso a la bandeja de REVISAR "sin bajar la cubeta ni cambiar el color del
+// demo". Era falso: `permiso_cre_no_verificable` se dispara en TODO diésel
+// con XML verificado —el camino de MEJOR calidad de dato, el que el demo usa
+// como pieza central— y `REVISAR` pinta el estatus de rojo
+// (`--color-bad`) en el panel. Un viaje sin ningún otro problema quedaba
+// estructuralmente incapaz de volver a ser "Cuadrada". Corregido: el aviso ya
+// NO entra a REVISAR (mismo criterio que `ieps_no_desglosado`, que tampoco
+// entra por la misma razón) y en su lugar el renglón "Deducible para ISR" se
+// imprime con tono `condicionado` — la afirmación que el motor no puede
+// sostener entera, junto al número, no en REVISAR ni tres párrafos abajo.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const politica = [{ concepto: 'diesel' }, { concepto: 'alimentacion' }];
@@ -52,6 +61,14 @@ describe('permiso CRE — el motor avisa que no lo valida, sin bajar la cubeta',
     expect(nota!.nota).toMatch(/permiso CRE/i);
   });
 
+  it('dos CFDI de diésel producen UNA sola nota, no una por CFDI (mismo criterio que alimentacion_sin_soporte)', () => {
+    const g2: Gasto = { ...cfdiDiesel(), id: 'g2', cfdiUuid: 'uuid-2', monto: 3200 };
+    const liq = cuadre([cfdiDiesel(), g2]);
+    const notas = liq.diferencias.filter((d) => d.tipo === 'permiso_cre_no_verificable');
+    expect(notas).toHaveLength(1);
+    expect(notas[0].nota).toMatch(/2 CFDI de combustible/i);
+  });
+
   it('el diésel SIGUE deducible: la nota no baja la cubeta (decisión explícita)', () => {
     const g = cfdiDiesel();
     const liq = cuadre([g]);
@@ -60,9 +77,18 @@ describe('permiso CRE — el motor avisa que no lo valida, sin bajar la cubeta',
     expect(liq.totalDeducible).toBe(5800);
   });
 
-  it('la liquidación SÍ queda en estatus "revisar" para que el contador la vea', () => {
+  it('la liquidación NO queda en "revisar": ese estatus no puede volver a "cuadrada" nunca', () => {
     const liq = cuadre([cfdiDiesel()]);
-    expect(liq.estatus).toBe('revisar');
+    expect(liq.estatus).toBe('cuadrada');
+  });
+
+  it('el renglón "Deducible para ISR" sale con tono condicionado y su pie, no liso en verde', () => {
+    const liq = cuadre([cfdiDiesel()]);
+    const filas = filasDeducibilidad(liq)!;
+    const deducible = filas.find((f) => f.label.startsWith('Deducible para ISR'))!;
+    expect(deducible.tono).toBe('condicionado');
+    expect(deducible.label).toMatch(/permiso CRE/i);
+    expect(deducible.pie).toMatch(/permiso CRE vigente/i);
   });
 
   it('un gasto que NO es combustible (alimentación) no trae la nota', () => {

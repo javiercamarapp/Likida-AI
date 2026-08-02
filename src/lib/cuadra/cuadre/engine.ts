@@ -242,6 +242,12 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     0,
   );
 
+  // AUDITORÍA 9, ALTO (fiscal): el permiso CRE se acumula aquí y se avisa UNA
+  // vez, no una por CFDI de combustible — mismo criterio que
+  // `alimentacion_sin_soporte` (abajo), después de que el mismo hallazgo
+  // midió tres párrafos idénticos de 253 caracteres por tres CFDI de diésel.
+  const gastosSinPermisoCre: Gasto[] = [];
+
   // 1) Por gasto: política, CFDI, confianza, RFC receptor, estatus SAT.
   for (const g of input.gastos) {
     if (duplicados.has(g.id)) continue; // los duplicados se reportan aparte (paso 2)
@@ -443,13 +449,16 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         // sistema no lo extrae del XML —el atributo exacto dentro del
         // complemento de hidrocarburos no está confirmado contra el esquema
         // oficial del SAT, y afirmar mal ahí es peor que no afirmar nada— así
-        // que NUNCA se declara cumplido ni incumplido. Solo REVISAR: no toca
-        // la cubeta ni el acreditamiento, mismo criterio que EFOS y el
-        // complemento de arriba (nunca declarar sin verificar). Independiente
-        // de si el complemento de hidrocarburos está presente: son dos
-        // requisitos distintos de la misma compra.
+        // que NUNCA se declara cumplido ni incumplido. No toca la cubeta ni el
+        // acreditamiento, mismo criterio que EFOS y el complemento de arriba
+        // (nunca declarar sin verificar). Independiente de si el complemento
+        // de hidrocarburos está presente: son dos requisitos distintos de la
+        // misma compra.
+        //
+        // AUDITORÍA 9, ALTO: se acumula aquí y se avisa UNA vez al cerrar el
+        // loop, no por CFDI — ver `gastosSinPermisoCre` arriba.
         if (combustibleFiscal && tipoAplica) {
-          diferencias.push({ tipo: 'permiso_cre_no_verificable', concepto: g.concepto, monto: 0, nota: `El CFDI de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} es de combustible: LISR 27-III y RFA 2026 regla 2.9 exigen que conste el permiso CRE vigente del proveedor. El sistema todavía no lo valida — confírmalo con tu contador contra el CFDI.`, gastoId: g.id });
+          gastosSinPermisoCre.push(g);
         }
 
         if (combustibleFiscal && tipoAplica && miraElComplemento && !g.cfdiEsquemaAlterno && !g.complementoHidrocarburos) {
@@ -472,6 +481,19 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         diferencias.push({ tipo: 'complemento_no_verificable', concepto: g.concepto, monto: 0, nota: `La factura de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} es de combustible: reenvía el XML (el que te manda la gasolinera por correo) para verificar el complemento de hidrocarburos.`, gastoId: g.id });
       }
     }
+  }
+
+  // El permiso CRE, UNA sola vez, no una por CFDI de combustible (arriba).
+  if (gastosSinPermisoCre.length) {
+    const total = gastosSinPermisoCre.reduce((s, g) => s + g.monto, 0);
+    const sujeto = gastosSinPermisoCre.length === 1
+      ? `El CFDI de ${etiquetaConcepto(gastosSinPermisoCre[0].concepto, gastosSinPermisoCre[0].ocrExtra as Record<string, unknown> | undefined)}`
+      : `${gastosSinPermisoCre.length} CFDI de combustible (${mxn(total)})`;
+    diferencias.push({
+      tipo: 'permiso_cre_no_verificable', concepto: 'diesel', monto: 0,
+      nota: `${sujeto} de combustible: LISR 27-III y RFA 2026 regla 2.9 exigen que conste el permiso CRE vigente del proveedor. El sistema todavía no lo valida — confírmalo con tu contador contra el CFDI.`,
+      gastoId: gastosSinPermisoCre.length === 1 ? gastosSinPermisoCre[0].id : undefined,
+    });
   }
 
   // 2) Duplicados como diferencia (ya excluidos del total).
@@ -943,7 +965,17 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // gasolinera desglosa el IEPS al consumidor final, así que tenerlo en REVISAR
   // mandaba TODA liquidación con diésel a la bandeja y la vaciaba de significado.
   // Se sigue avisando en `diferencias`; ya no bloquea.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'permiso_cre_no_verificable'];
+  //
+  // `permiso_cre_no_verificable` TAMPOCO va aquí, por la MISMA razón exacta —y
+  // costó un hallazgo verlo: AUDITORÍA 9, ALTO (frontend). Se dispara en TODO
+  // CFDI de diésel con XML verificado —el camino de MEJOR calidad de dato que
+  // existe hoy—, así que mandarlo a REVISAR volvía "Por revisar" (rojo,
+  // `--color-bad` en el panel) el estatus de CUALQUIER liquidación con un
+  // diésel bien facturado, incluido el viaje que `seed.sql` sembró como pieza
+  // central del demo. El requisito sigue avisado —ahora con tono `condicionado`
+  // en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
+  // no puede bajar un estatus que nunca podría volver a subir.
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

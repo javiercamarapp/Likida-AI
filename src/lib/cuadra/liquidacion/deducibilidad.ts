@@ -11,7 +11,10 @@
 
 import type { Liquidacion } from '@/types/cuadra';
 
-export type TonoDeducibilidad = 'bueno' | 'malo' | 'pendiente';
+/** `condicionado` = el motor no puede sostener la afirmación entera: hay un
+ *  requisito legal de la deducción que el sistema no verifica. Mismo
+ *  significado que en `acreditable.ts`, para la cubeta de al lado. */
+export type TonoDeducibilidad = 'bueno' | 'malo' | 'pendiente' | 'condicionado';
 
 export interface FilaDeducibilidad {
   label: string;
@@ -29,7 +32,17 @@ export interface FilaDeducibilidad {
  * cuando TODO es deducible, que sí conviene afirmarlo.
  */
 export function filasDeducibilidad(
-  liq: Pick<Liquidacion, 'totalDeducible' | 'totalNoDeducible' | 'totalPorConfirmar' | 'totalComprobado'>,
+  liq: Pick<Liquidacion, 'totalDeducible' | 'totalNoDeducible' | 'totalPorConfirmar' | 'totalComprobado'> & {
+    // Estructural y no `Liquidacion['diferencias']` a propósito: el llamador
+    // del panel (`analytics.ts`) trae `tipo` como `string` suelto, no como el
+    // union `TipoDiferencia` — es una fila ya leída de la base, no una recién
+    // calculada por el motor. Todo lo que esta función necesita es comparar el
+    // texto, así que atarla al tipo estricto solo forzaría un cast en el
+    // llamador sin ganar nada. Opcional: los llamadores que solo prueban el
+    // reparto de cubetas (sin ninguna condición fiscal de por medio) no tienen
+    // por qué construir un arreglo vacío a mano.
+    diferencias?: { tipo: string }[];
+  },
 ): FilaDeducibilidad[] | null {
   if (!(liq.totalComprobado > 0)) return null;
   // Las tres cubetas TIENEN que sumar el total comprobado. Si no suman, algo
@@ -43,7 +56,20 @@ export function filasDeducibilidad(
 
   const filas: FilaDeducibilidad[] = [];
   if (liq.totalDeducible > 0) {
-    filas.push({ label: 'Deducible para ISR', monto: liq.totalDeducible, tono: 'bueno' });
+    // AUDITORÍA 9, ALTO (fiscal): "Deducible para ISR" es una AFIRMACIÓN —la
+    // misma regla que ya gobierna `acreditable.ts:9-11` para el renglón de al
+    // lado— y el motor no sostiene entera la de un CFDI de diésel cuyo permiso
+    // CRE no verificó. El renglón de peaje ya cumple esa regla con tono
+    // `condicionado`; éste no la podía cumplir porque el tono no existía.
+    const permisoCreNoVerificado = (liq.diferencias ?? []).some((d) => d.tipo === 'permiso_cre_no_verificable');
+    filas.push(permisoCreNoVerificado
+      ? {
+          label: 'Deducible para ISR — sujeto a permiso CRE vigente',
+          monto: liq.totalDeducible,
+          tono: 'condicionado',
+          pie: 'LISR 27-III y RFA 2026 regla 2.9 exigen que el CFDI de combustible consigne el permiso CRE vigente del proveedor. El sistema no lo valida — confírmelo con su contador.',
+        }
+      : { label: 'Deducible para ISR', monto: liq.totalDeducible, tono: 'bueno' });
   }
   if (liq.totalPorConfirmar > 0) {
     filas.push({

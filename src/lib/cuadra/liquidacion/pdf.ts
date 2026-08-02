@@ -287,7 +287,12 @@ export async function generarLiquidacionPDF(
   const deduc = filasDeducibilidad(liq);
   if (deduc) {
     for (const f of deduc) {
-      const color = f.tono === 'bueno' ? GREEN : f.tono === 'malo' ? RED : AMBER;
+      // `condicionado` en INK, no AMBER: mismo criterio que `acreditable.ts`
+      // (línea de peaje) para el mismo concepto — no es "falta algo del
+      // operador" (eso es AMBER/`pendiente`), es "el sistema no verifica un
+      // requisito legal". Confundir los dos tonos le pide al operador resolver
+      // algo que no puede.
+      const color = f.tono === 'bueno' ? GREEN : f.tono === 'malo' ? RED : f.tono === 'condicionado' ? INK : AMBER;
       text(f.label, M + 14, y, 9.5, font, MUTED);
       right(mxn(f.monto), cMonto, y, 9.5, font, color);
       y -= 15;
@@ -296,9 +301,12 @@ export async function generarLiquidacionPDF(
       // como si lo perdido fuera recuperable — el mensaje contrario. Visto en
       // el render, invisible para los tests.
       //
-      // Solo se pinta el de "por confirmar": es el único accionable. El de "no
+      // Se pinta el de "por confirmar" (el único accionable por el operador) y
+      // el de "condicionado" (AUDITORÍA 9: es la afirmación que el renglón
+      // verde no puede sostener entera — el mismo requisito legal, junto al
+      // número, no tres párrafos abajo donde nadie lo cruza). El de "no
       // deducible" repetiría lo que ya dice la sección de diferencias.
-      if (f.tono === 'pendiente' && f.pie) { text(f.pie, M + 22, y + 2, 7, font, MUTED); y -= 11; }
+      if ((f.tono === 'pendiente' || f.tono === 'condicionado') && f.pie) { text(f.pie, M + 22, y + 2, 7, font, MUTED); y -= 11; }
     }
     y -= 3;
   }
