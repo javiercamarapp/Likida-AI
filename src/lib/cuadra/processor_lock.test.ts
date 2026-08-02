@@ -66,7 +66,6 @@ vi.mock('@/lib/cuadra/repo', () => ({
   saveCfdiXmlRaw: vi.fn(), gastoExistePorHash: vi.fn(async () => false),
   enriquecerGastoConCodigo: vi.fn(), guardarCodigoPendiente: vi.fn(),
   getCodigosPendientes: vi.fn(async () => []), reclamarCodigoPendiente: vi.fn(),
-  guardarFotoPendiente: vi.fn(async () => null), existeFotoPendiente: vi.fn(async () => false), reclamarFotoPendiente: vi.fn(async () => null),
   // El aviso ya se le puso a disposición antes (`reclamarEnvioAviso` → false):
   // no se manda otra vez y no estorba. Sin datos de responsable el processor
   // bloquearía el tratamiento y el mutex ni se consultaría.

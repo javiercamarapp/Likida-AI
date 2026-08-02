@@ -470,65 +470,6 @@ export async function reclamarCodigoPendiente(tenantId: string, id: string): Pro
   return (data?.length ?? 0) > 0;
 }
 
-// ── FOTO PENDIENTE (0038) — retener el ticket completo por si le sigue el
-// acercamiento, y pagar UNA visión en vez de dos. Ver el comentario largo en
-// la migración: como mucho UNA por viaje (el unique de la tabla), para que
-// nunca haya dos fotos SIN código esperando a la vez y arriesgar emparejar la
-// que llegue después con la que no es.
-
-/**
- * Deja la foto (SIN código, candidata a "ticket completo") esperando.
- *
- * Devuelve el id de la fila, o `null` si YA había una foto esperando en este
- * viaje (el unique de la 0038) — nunca lanza por esa causa: es la señal de
- * "no esperes, procésate sola", no un error.
- */
-export async function guardarFotoPendiente(tenantId: string, viajeId: string, mediaId: string): Promise<string | null> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('foto_pendiente')
-    .insert({ tenant_id: tenantId, viaje_id: viajeId, media_id: mediaId })
-    .select('id')
-    .single(), 'guardarFotoPendiente');
-  if (error) {
-    if (error.code === '23505') return null; // unique(viaje_id): ya hay una esperando
-    throw new Error(`guardarFotoPendiente: ${error.message}`);
-  }
-  return (data?.id as string) ?? null;
-}
-
-/** ¿Sigue esperando la foto `id`? Lectura, no reclamo — para el poll de espera. */
-export async function existeFotoPendiente(tenantId: string, id: string): Promise<boolean> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('foto_pendiente')
-    .select('id')
-    .eq('id', id)
-    .eq('tenant_id', tenantId)
-    .maybeSingle(), 'existeFotoPendiente');
-  if (error) throw new Error(`existeFotoPendiente: ${error.message}`);
-  return data != null;
-}
-
-/**
- * Reclama la foto pendiente de un viaje (si hay), por `id` O por `viajeId`.
- *
- * Dos llamadores compiten por la MISMA fila: el acercamiento que llega y
- * quiere emparejar, y la propia foto cuando se le acaba la espera y se
- * reclama a sí misma para procesarse sola. El `delete().select()` es
- * atómico — solo uno de los dos recibe la fila — así que nunca se procesa
- * la misma foto dos veces ni se pierde en el reparto.
- */
-export async function reclamarFotoPendiente(
-  tenantId: string,
-  by: { id: string } | { viajeId: string },
-): Promise<{ id: string; mediaId: string } | null> {
-  let q = supabaseAdmin().from('foto_pendiente').delete().eq('tenant_id', tenantId);
-  q = 'id' in by ? q.eq('id', by.id) : q.eq('viaje_id', by.viajeId);
-  const { data, error } = await acotada(q.select('id, media_id'), 'reclamarFotoPendiente');
-  if (error) throw new Error(`reclamarFotoPendiente: ${error.message}`);
-  const fila = data?.[0];
-  return fila ? { id: fila.id as string, mediaId: fila.media_id as string } : null;
-}
-
 export async function getGastos(viajeId: string, tenantId: string): Promise<Gasto[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('gasto')

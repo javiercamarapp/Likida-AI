@@ -848,54 +848,13 @@ begin
     monto_bloqueado, msg, no_financiero_pasa;
 end $$;
 
--- ── 21. Como mucho UNA foto pendiente por viaje, y el reclamo es atómico (mig. 0038) ──
--- AUDITORÍA 8, ALTO REINCIDENTE (rendimiento). `foto_pendiente` retiene el
--- ticket sin código por si le sigue el acercamiento, para pagar UNA visión en
--- vez de dos. La garantía que solo Postgres puede demostrar es el `unique
--- (viaje_id)`: sin ella, dos fotos SIN código del mismo viaje podrían quedar
--- ambas esperando, y el acercamiento que llegue después emparejaría con
--- CUALQUIERA de las dos — arriesgando fusionar dos tickets DISTINTOS en uno,
--- perdiendo un gasto real entero. El unique hace que la segunda simplemente no
--- pueda esperar: se procesa sola, como hoy.
---
--- También se comprueba que el reclamo (`delete ... returning`) es lo que hace
--- imposible que dos llamadores —el acercamiento y la propia foto venciendo su
--- plazo— se lleven la misma fila los dos.
-do $$
-declare
-  v_t uuid; v_o uuid; v_v uuid;
-  primera_ok boolean := false; segunda_bloqueada boolean := false; msg text := '';
-  fila_id uuid; media text;
-  reclamo1_ok boolean; reclamo2_ok boolean;
-begin
-  insert into tenant (nombre) values ('ZZZ VERIF FOTO PENDIENTE') returning id into v_t;
-  insert into operador (tenant_id, nombre, telefono) values (v_t,'P','520000009021') returning id into v_o;
-  insert into viaje (tenant_id, operador_id) values (v_t, v_o) returning id into v_v;
-
-  insert into foto_pendiente (tenant_id, viaje_id, media_id) values (v_t, v_v, 'media-1');
-  primera_ok := true;
-
-  -- La SEGUNDA foto sin código del MISMO viaje: el unique la rechaza.
-  begin
-    insert into foto_pendiente (tenant_id, viaje_id, media_id) values (v_t, v_v, 'media-2');
-    segunda_bloqueada := false;
-  exception when others then segunda_bloqueada := true; msg := SQLSTATE;
-  end;
-
-  -- El reclamo (lo que hace `reclamarFotoPendiente`): el primero que llega se
-  -- la lleva, y ahí ya no queda nada que un segundo pueda reclamar.
-  delete from foto_pendiente where viaje_id = v_v returning id, media_id into fila_id, media;
-  reclamo1_ok := fila_id is not null and media = 'media-1';
-
-  begin
-    delete from foto_pendiente where viaje_id = v_v returning id into fila_id;
-    reclamo2_ok := fila_id is not null; -- debería quedar en NULL: no hay fila
-  exception when others then reclamo2_ok := false;
-  end;
-
-  raise exception E'FOTO PENDIENTE  primera=%  segunda-bloqueada=%  sqlstate=%  reclamo1=%  reclamo2-nada-que-tomar=%   (esperado t / t / 23505 / t / f)',
-    primera_ok, segunda_bloqueada, msg, reclamo1_ok, reclamo2_ok;
-end $$;
+-- ── 21. (retirado) ──────────────────────────────────────────────────────────
+-- Verificaba `foto_pendiente` (mig. 0038): unicidad por viaje y reclamo
+-- atómico. AUDITORÍA 9, CRÍTICO — el mecanismo que esa tabla sostenía fusionaba
+-- comprobantes DISTINTOS cuando llegaban fuera de orden (dos auditores
+-- independientes, agéntico y backend); se revirtió (mig. 0041, `drop table`)
+-- y este bloque ya no tiene qué comprobar. Los números 5-20 y 22+ no se
+-- renumeran para no invalidar referencias existentes a ellos.
 
 -- ── 22. La foto del ticket no es pública (mig. 0039) ────────────────────────
 -- Un ticket no es un dato inocuo: trae RFC y domicilio del establecimiento, a

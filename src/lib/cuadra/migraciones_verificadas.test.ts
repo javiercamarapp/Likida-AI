@@ -68,6 +68,8 @@ const EXENTAS: Record<string, string> = {
   '0034': 'columna nullable `tenant.contacto_privacidad` (art. 29). Si falta, el aviso integral marca esa sección como pendiente — que es su comportamiento con la columna vacía, así que no hay garantía que la base pueda romper. El contenido se prueba en `aviso_integral.test.ts`.',
   '0035': 'solo `alter function ... set search_path`, y las diez son SECURITY INVOKER: no hay escalada que comprobar. Lo que sí se comprueba —que ninguna RPC interna sea ejecutable por `anon`— es el bloque 18.',
   '0032': 'solo `comment on table`. No hay garantía que comprobar: lo que fija —que nadie lea `politica_gasto`— se prueba en `politica_un_origen.test.ts`, que sí puede mirar el código.',
+  '0038': 'creaba `foto_pendiente`, revertida por la 0041 (AUDITORÍA 9, CRÍTICO: fusionaba comprobantes distintos). El bloque 21 que la comprobaba se retiró junto con la tabla — no queda nada que verificar.',
+  '0041': '`drop table foto_pendiente`. Reversión de la 0038; no hay garantía nueva que comprobar, la ausencia de la tabla la confirma cualquier consulta a `information_schema` y no vale la pena un bloque para eso.',
 };
 
 const migraciones = readdirSync(DIR)
