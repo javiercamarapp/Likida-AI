@@ -12,9 +12,15 @@ export async function GET(req: NextRequest) {
   const dest = next && next.startsWith('/dashboard') ? next : '/dashboard';
 
   if (code) {
-    const sb = await supabaseServer();
-    const { error } = await sb.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(new URL(dest, req.url));
+    try {
+      const sb = await supabaseServer();
+      const { error } = await sb.auth.exchangeCodeForSession(code);
+      if (!error) return NextResponse.redirect(new URL(dest, req.url));
+    } catch {
+      // Fallo inesperado del SDK o supabaseServer() — cae al mismo fallback
+      // para evitar que un error raro se vuelva un 500 genérico en la pantalla
+      // de login más importante
+    }
   }
   return NextResponse.redirect(new URL('/login?error=1', req.url));
 }
