@@ -709,6 +709,40 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         gastoId: comidas.length === 1 ? comidas[0].id : undefined,
       });
     }
+
+    // AUDITORÍA 9, ALTO (fiscal) — H1b: cuando lo único que ampara la comida es
+    // TRANSPORTE (sin hospedaje en el viaje), LISR 28-V exige ADEMÁS que el
+    // pago se haya hecho con tarjeta de crédito de quien viaja (2º párrafo,
+    // 3ª oración, verificado_fuente_primaria):
+    //
+    //   "Cuando a la documentación que ampare el gasto de alimentación el
+    //   contribuyente únicamente acompañe el comprobante fiscal relativo al
+    //   transporte, la deducción... sólo procederá cuando el pago se efectúe
+    //   mediante tarjeta de crédito de la persona que realiza el viaje."
+    //
+    // Débito ('28') NO cuenta: la ley pide crédito ('04'), no cualquier
+    // tarjeta. Con hospedaje presente esta condición no aplica —ya no es
+    // "únicamente" transporte— y es exactamente lo que ya cubre H1 arriba.
+    //
+    // Mismo criterio de severidad que H1 y la misma razón: no vemos toda la
+    // contabilidad de la flota (el hospedaje podría existir fuera de esta
+    // liquidación), así que se manda a revisión, no se declara no deducible.
+    const hayHospedaje = vivos.some((g) => g.concepto === 'hospedaje');
+    const hayTransporte = vivos.some((g) => g.concepto === 'transporte');
+    if (!hayHospedaje && hayTransporte) {
+      const comidasSinTarjeta = vivos.filter((g) => g.concepto === 'alimentacion' && g.formaPago !== '04');
+      if (comidasSinTarjeta.length) {
+        const total = comidasSinTarjeta.reduce((s, g) => s + g.monto, 0);
+        const sujeto = comidasSinTarjeta.length === 1
+          ? `Alimentación de ${mxn(total)}`
+          : `${mxn(total)} en ${comidasSinTarjeta.length} comprobantes de alimentación`;
+        diferencias.push({
+          tipo: 'alimentacion_transporte_sin_tarjeta_credito', concepto: 'alimentacion', monto: 0,
+          nota: `${sujeto} amparada SOLO por transporte (sin hospedaje en el viaje): LISR 28-V exige que, en ese caso, el pago sea con tarjeta de crédito de quien viaja. Sin esa condición la deducción no procede — confírmalo con tu contador.`,
+          gastoId: comidasSinTarjeta.length === 1 ? comidasSinTarjeta[0].id : undefined,
+        });
+      }
+    }
   }
 
   // ── Tope fiscal de ALIMENTACIÓN: $750 POR DÍA y por beneficiario (LISR 28-V) ──
@@ -992,7 +1026,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // central del demo. El requisito sigue avisado —ahora con tono `condicionado`
   // en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
   // no puede bajar un estatus que nunca podría volver a subir.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

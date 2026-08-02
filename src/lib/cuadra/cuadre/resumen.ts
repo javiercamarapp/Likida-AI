@@ -25,6 +25,11 @@ export const SOLO_CONTRALOR: TipoDiferencia[] = [
   'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_cancelado', 'cfdi_no_encontrado',
   'cfdi_pendiente', 'rfc_receptor', 'complemento_hidrocarburos',
   'ieps_no_desglosado', 'texto_sospechoso', 'permiso_cre_no_verificable',
+  // El operador no puede cambiar retroactivamente cómo pagó una comida ya
+  // hecha (LISR 28-V, condición de tarjeta de crédito) — a diferencia de
+  // `alimentacion_sin_soporte`, que sí puede resolver adjuntando la foto que
+  // le faltó mandar.
+  'alimentacion_transporte_sin_tarjeta_credito',
 ];
 
 // `complemento_no_verificable` NO va en esa lista, y estuvo. Su propia nota le
