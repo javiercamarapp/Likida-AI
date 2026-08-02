@@ -57,7 +57,15 @@ export async function proxy(req: NextRequest) {
       const url = req.nextUrl.clone();
       url.pathname = '/login';
       url.searchParams.set('next', path);
-      return withSecurityHeaders(NextResponse.redirect(url));
+      // Las cookies que `setAll` escribió en `res` viajan TAMBIÉN en el
+      // redirect. Cuando `getUser()` encuentra un refresh token muerto, el SDK
+      // pide borrar la cookie por esa vía — y este camino devolvía otra
+      // respuesta, así que la instrucción de borrado se perdía: el navegador
+      // seguía mandando la cookie muerta y cada petición pagaba un refresh
+      // fallido antes de acabar, otra vez, en este mismo redirect.
+      const redirectRes = NextResponse.redirect(url);
+      res.cookies.getAll().forEach((c) => redirectRes.cookies.set(c));
+      return withSecurityHeaders(redirectRes);
     }
     res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   }
