@@ -924,3 +924,39 @@ select * from _res order by quien;
 --
 -- Si `anon` devuelve >0, el expediente de gastos de todas las flotas es público
 -- para cualquiera con la anon key, que va en el navegador.
+
+-- ── 24. Un UPDATE de solo `fecha` tampoco puede reescribirse tras liquidar (mig. 0042) ──
+-- AUDITORÍA 9, ALTO (backend, seguridad y modelo de datos, tres auditores
+-- independientes). El `when` de la 0037 (bloque 20) no incluía `fecha`;
+-- `corregirFechaGasto` (repo.ts, ronda 9) hacía `UPDATE gasto SET fecha = …`
+-- sin que el trigger lo viera. La fecha decide ejercicio fiscal, plazo de
+-- facturación y la agrupación del tope diario de LISR 28-V — no es cosmética.
+do $$
+declare
+  v_t uuid; v_o uuid; v_v uuid; v_g uuid;
+  fecha_bloqueada boolean := false; msg text := ''; no_financiero_pasa boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF FECHA TARDE') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t,'P','520000009024') returning id into v_o;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o) returning id into v_v;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha) values (v_t, v_v, 'diesel', 850, '2026-01-08') returning id into v_g;
+
+  perform guardar_liquidacion_tx(v_t, v_v, 850, 1000, 150, 'cuadrada', '[]'::jsonb, 0,0,0, 'https://x/liq.pdf', 0);
+
+  -- El re-fechado que llega tarde: ESTE es el bug.
+  begin
+    update gasto set fecha = '2026-08-01' where id = v_g;
+    fecha_bloqueada := false;
+  exception when others then fecha_bloqueada := true; msg := SQLSTATE;
+  end;
+
+  -- Control: una columna que nunca debe bloquearse sigue pasando.
+  begin
+    update gasto set clave_prod_serv = '15101505' where id = v_g;
+    no_financiero_pasa := true;
+  exception when others then no_financiero_pasa := false;
+  end;
+
+  raise exception E'FECHA TARDE  bloqueada=%  sqlstate=%  no-financiero-sigue-pasando=%   (esperado t / CU001 / t)',
+    fecha_bloqueada, msg, no_financiero_pasa;
+end $$;
