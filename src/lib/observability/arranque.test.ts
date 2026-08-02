@@ -22,6 +22,7 @@ function ponerTodo() {
   vi.stubEnv('DEMO_TENANT_ID', '11111111-1111-1111-1111-111111111111');
   vi.stubEnv('DASHBOARD_PASSCODE', 'algo');
   vi.stubEnv('CUADRA_WHATSAPP_MSG_USD', '0.008');
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://likidaai.vercel.app');
 }
 
 describe('avisarConfiguracionSilenciosa', () => {
@@ -37,6 +38,22 @@ describe('avisarConfiguracionSilenciosa', () => {
     expect(linea).toContain('startup.config_silenciosa');
     expect(linea).toContain('"level":"error"');
     expect(linea).toContain('DEMO_TENANT_ID');
+  });
+
+  it('grita cuando falta NEXT_PUBLIC_APP_URL: el login redirige al dominio equivocado', async () => {
+    // El caso más caro de este rubro en la rama de auth: sin ella el magic link
+    // se arma contra el fallback del código y el contralor nunca completa la
+    // sesión, sin que nada falle en ningún log.
+    ponerTodo();
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', '');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { avisarConfiguracionSilenciosa } = await import('./arranque');
+
+    avisarConfiguracionSilenciosa();
+
+    const linea = spy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(linea).toContain('startup.config_silenciosa');
+    expect(linea).toContain('NEXT_PUBLIC_APP_URL');
   });
 
   it('grita cuando falta DASHBOARD_PASSCODE: el panel queda abierto', async () => {

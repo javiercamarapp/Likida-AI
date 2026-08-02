@@ -9,7 +9,7 @@ import { faltantes, envHealth } from './env';
 const TODAS = [
   'OPENROUTER_API_KEY',
   'WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET',
-  'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
+  'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY',
 ];
 
 function ponerTodas() {
@@ -35,6 +35,15 @@ describe('faltantes', () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', '');
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '');
     expect(faltantes().supabase).toEqual(['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']);
+  });
+
+  it('nombra NEXT_PUBLIC_SUPABASE_ANON_KEY: sin ella el proxy tira 500 en cada /dashboard', () => {
+    // La usan `proxy.ts` y `supabase/server.ts`. Antes del login por usuario no
+    // era carga estructural; ahora `createServerClient` lanza dentro del
+    // middleware y el panel entero deja de servirse.
+    ponerTodas();
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', '');
+    expect(faltantes().supabase).toEqual(['NEXT_PUBLIC_SUPABASE_ANON_KEY']);
   });
 
   it('una cadena vacía cuenta como ausente', () => {
