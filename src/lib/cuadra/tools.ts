@@ -184,6 +184,15 @@ registerTool('guardar_liquidacion', {
       estatus: liq.estatus,
       diferencia: liq.diferencia,
       pdf_generado: Boolean(pdfOperadorPath),
+      // AUDITORÍA 8/9, MEDIO REINCIDENTE (backend): `pdf_generado` de arriba
+      // solo refleja el ejemplar del OPERADOR (es lo que decide si se le
+      // manda el PDF por WhatsApp, ver processor.ts). El del CONTRALOR —el
+      // que decide la compra— podía fallar en silencio: `saveLiquidacion` ya
+      // persiste `pdf_url = null` cuando `pdfPath` viene undefined, pero
+      // nada aguas abajo se enteraba de CUÁL de los dos ejemplares faltaba.
+      // Sin este campo, un fallo del upload del contralor con el del
+      // operador exitoso pasaba exactamente igual que el camino feliz.
+      pdf_contralor_generado: Boolean(pdfPath),
       // ── AUDITORÍA 7, CRÍTICO AG-3 — EL SNAPSHOT VIAJA CON EL RESULTADO ──────
       //
       // Esta `liq` es la MISMA que ya se imprimió en los dos PDF (arriba) y la

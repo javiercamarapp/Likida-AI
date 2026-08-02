@@ -1371,6 +1371,20 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // NADA. En el demo es el paso 3 del guion fallando en silencio.
       const guardado = agentTools.find((t) => t.toolName === 'guardar_liquidacion' && !t.error);
       const pdfGenerado = Boolean((guardado?.result as { pdf_generado?: boolean } | undefined)?.pdf_generado);
+      // AUDITORÍA 8/9, MEDIO REINCIDENTE (backend): el ejemplar del CONTRALOR
+      // —quien decide la compra— es el que queda en `liquidacion.pdf_path` y
+      // el botón de descarga del panel. Su fallo era invisible: nada lo
+      // revisaba, así que un upload roto solo del lado del contralor pasaba
+      // exactamente igual que el camino feliz. No hay a quién avisarle por
+      // WhatsApp (el contralor no tiene este chat), así que la única
+      // reparación disponible es hacerlo RUIDOSO en el log — mismo criterio
+      // que ya usa `pdf.no_entregado` dos líneas abajo para el caso gemelo
+      // del operador.
+      const pdfContralorGenerado = Boolean((guardado?.result as { pdf_contralor_generado?: boolean } | undefined)?.pdf_contralor_generado);
+      if (!pdfContralorGenerado) {
+        const liqId = (guardado?.result as { liquidacion_id?: string } | undefined)?.liquidacion_id;
+        logger.error('pdf.contralor_no_generado', { tenant: op.tenantId, viaje: viajeId, liqId });
+      }
       try {
         if (!pdfGenerado) throw new Error('la tool reportó pdf_generado=false');
         // El ejemplar del OPERADOR, no el completo: ver `tools.ts`.

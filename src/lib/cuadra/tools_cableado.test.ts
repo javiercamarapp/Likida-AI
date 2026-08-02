@@ -51,6 +51,8 @@ const OPERADOR: Operador = { id: 'o1', nombre: 'Juan Pérez', telefono: '5219993
 /** Lo que se subió a storage, por ruta. El PDF es real. */
 const subidos = new Map<string, Uint8Array>();
 const saveLiquidacion = vi.fn(async () => 'liq-1');
+/** Rutas que el `upload` de storage debe fallar en la prueba de arriba. */
+const fallaEnRuta = new Set<string>();
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('./cuadre/desde_db', () => ({ cuadrarDesdeDB: vi.fn(async () => LIQ) }));
@@ -66,6 +68,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     storage: {
       from: () => ({
         upload: async (path: string, buf: Buffer) => {
+          if (fallaEnRuta.has(path)) return { error: { message: 'storage caído' } };
           subidos.set(path, new Uint8Array(buf));
           return { error: null };
         },
@@ -100,7 +103,7 @@ async function textoDelPdf(bytes: Uint8Array): Promise<string> {
 const CTX = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779' };
 const cerrar = () => executeTool('guardar_liquidacion', {}, CTX);
 
-beforeEach(() => { subidos.clear(); saveLiquidacion.mockClear(); });
+beforeEach(() => { subidos.clear(); fallaEnRuta.clear(); saveLiquidacion.mockClear(); });
 
 describe('guardar_liquidacion — el cierre genera DOS ejemplares y cada uno es el suyo', () => {
   it('sube el ejemplar del contralor y el del operador, en rutas distintas', async () => {
@@ -143,5 +146,23 @@ describe('guardar_liquidacion — el cierre genera DOS ejemplares y cada uno es 
   it('el resultado declara que el PDF del operador se generó (de eso depende el envío)', async () => {
     const r = await cerrar();
     expect((r.result as { pdf_generado: boolean }).pdf_generado).toBe(true);
+  });
+
+  // AUDITORÍA 8/9, MEDIO REINCIDENTE — `pdf_generado` solo reflejaba el
+  // ejemplar del OPERADOR. El del CONTRALOR —quien decide la compra, y cuyo
+  // ejemplar es el que queda en `liquidacion.pdf_path` y el botón de descarga
+  // del panel— podía fallar sin que el resultado de la tool dijera nada
+  // distinto del camino feliz.
+  it('el resultado declara POR SEPARADO si el PDF del contralor se generó', async () => {
+    const r = await cerrar();
+    expect((r.result as { pdf_contralor_generado: boolean }).pdf_contralor_generado).toBe(true);
+  });
+
+  it('si SOLO falla la subida del ejemplar del contralor, el resultado lo distingue del operador', async () => {
+    fallaEnRuta.add('t1/v1.pdf'); // el del contralor; el del operador es 't1/v1-operador.pdf'
+    const r = await cerrar();
+    const res = r.result as { pdf_generado: boolean; pdf_contralor_generado: boolean };
+    expect(res.pdf_contralor_generado, 'el del contralor falló y el campo tiene que decirlo').toBe(false);
+    expect(res.pdf_generado, 'el del operador se subió bien y no debe verse afectado').toBe(true);
   });
 });
