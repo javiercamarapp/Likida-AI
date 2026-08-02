@@ -18,7 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { Gasto } from '@/types/cuadra';
-import { mxn } from '@/lib/formato';
+import { mxn, round2 } from '@/lib/formato';
 
 /** Ficha que fundamenta todo lo de este módulo. */
 export const NORMA_LABORAL = 'lft-110-111-263';
@@ -103,8 +103,6 @@ export interface TopeDescuento {
   sinCriterio: boolean;
   nota: string;
 }
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Los dos topes del art. 110 fr. I, que son DISTINTOS y conviene no confundir:
