@@ -17,7 +17,7 @@
 - Ningún cambio toca las 7 tablas de negocio ni cómo el dashboard las consulta (sigue usando `supabaseAdmin()` con `.eq('tenant_id', ...)` explícito) — solo cambia DE DÓNDE sale ese `tenantId`.
 - Estilo visual dentro del sistema de diseño ya existente de Likida (`.card`, `.glass`, `var(--accent)`, `var(--surface)`, `var(--muted)`, `var(--line)`, `var(--ink)` — ver `src/app/globals.css`), no un stack de componentes nuevo.
 - Bloqueos externos, fuera de este repo, que no bloquean escribir el código pero sí probarlo de punta a punta:
-  - **Google OAuth** requiere que Javier cree un cliente OAuth en Google Cloud Console y lo configure en Supabase Auth (Task 11).
+  - **Google OAuth** requiere que Javier cree un cliente OAuth en Google Cloud Console y lo configure en Supabase Auth (Task 12).
   - **Referencia visual de usehandle.ai** requiere la extensión de Chrome conectada (no disponible al escribir este plan) — Task 6 puede construirse con el layout descrito en el spec sin esa referencia, y afinarse visualmente después si la extensión se conecta.
 
 ---
@@ -365,7 +365,7 @@ Expected: 0 errores. Si algo más en el archivo referenciaba `TENANT` o
 
 Con el resto de las tasks de este plan ya aplicadas (login funcionando), entrar
 al panel de verdad con una sesión real y confirmar que carga los datos del
-tenant correcto. Esta verificación se hace completa al final de la Task 10, no
+tenant correcto. Esta verificación se hace completa al final de la Task 11, no
 aquí — este paso queda bloqueado hasta entonces porque todavía no hay forma de
 iniciar sesión.
 
@@ -378,7 +378,180 @@ git commit -m "feat(dashboard): el tenantId sale de la sesión, no de DEMO_TENAN
 
 ---
 
-### Task 5: `proxy.ts` — el gate de `/dashboard` valida sesión real
+### Task 5: Migrar los export routes (CSV y PDF) a `getSessionTenant`
+
+**Hallazgo durante la Task 4, no previsto al escribir el plan original:**
+`src/app/api/export/liquidaciones/route.ts` y `src/app/api/export/pdf/[id]/route.ts`
+—linkeados directo desde el dashboard ("Exportar CSV" / "Descargar PDF")—
+importan `ACCESS_COOKIE`/`tokenMatches` de `src/lib/auth/passcode.ts`
+directamente, con su propio gate (mismo passcode del panel) y su propio
+`TENANT()`. La Task 13 (antes Task 12) borra `passcode.ts` — sin este task
+antes, esa borradura rompe la compilación Y deja las dos rutas de exportación
+sin gate alguno a medio camino.
+
+**Files:**
+- Modify: `src/app/api/export/liquidaciones/route.ts`
+- Modify: `src/app/api/export/pdf/[id]/route.ts`
+
+**Interfaces:**
+- Consumes: `getSessionTenant()` de `@/lib/auth/session` — **NO**
+  `requireSessionTenant` de `guard.ts`: esa función llama `redirect()` de
+  `next/navigation`, pensado para páginas (Server Components), no para Route
+  Handlers de API. Aquí se regresa un `NextResponse` 401 a mano, igual que ya
+  hacían con el passcode.
+
+- [ ] **Step 1: Reemplazar `src/app/api/export/liquidaciones/route.ts` completo**
+
+```ts
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { toCsv, toLiquidacionRows } from '@/lib/cuadra/export';
+import { rateLimit, clientIp } from '@/lib/ratelimit';
+import { getSessionTenant } from '@/lib/auth/session';
+import { logger } from '@/lib/logger';
+
+export const runtime = 'nodejs';
+
+// Export de liquidaciones a CSV (ERP/Excel). Gate por la sesión real del
+// contralor (Supabase Auth) — ya no por el passcode compartido. El
+// service-role salta RLS, así que se sigue filtrando EXPLÍCITO por
+// tenant_id, ahora tomado de la sesión en vez de un env var.
+export async function GET(req: Request) {
+  if (!rateLimit(`export:${clientIp(req)}`, 10, 60_000)) return new NextResponse('Demasiadas peticiones', { status: 429 });
+
+  const s = await getSessionTenant();
+  if (!s || !s.tenantId) return new NextResponse('No autorizado', { status: 401 });
+  const tenantId = s.tenantId;
+
+  const { data, error } = await supabaseAdmin()
+    .from('liquidacion')
+    .select('created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, viaje:viaje_id(folio, operador:operador_id(nombre))')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(5000);
+  // El texto crudo de PostgREST iba en el cuerpo del 500 y del lado del
+  // servidor NO quedaba ninguna línea: el único testigo del fallo era el
+  // navegador del contralor, que no lo guarda. Si cerraba la pestaña, el evento
+  // no existió. Y de paso el mensaje sacaba nombres de columna y detalle del
+  // esquema hacia afuera (auditoría 5, operabilidad, ALTO).
+  //
+  // Se invierte: el detalle se queda dentro y el usuario recibe algo que puede
+  // repetir por teléfono. `tenant` va en el log —el redactor lo huella, no lo
+  // borra— para saber de qué flota era el fallo.
+  if (error) {
+    logger.error('export.liquidaciones', { tenant: tenantId, err: error.message });
+    return new NextResponse('No se pudo generar el export. Intenta de nuevo en un momento.', { status: 500 });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = toLiquidacionRows((data ?? []) as any);
+  const csv = toCsv(rows);
+  return new NextResponse(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="liquidaciones_likida.csv"`,
+    },
+  });
+}
+```
+
+- [ ] **Step 2: Reemplazar `src/app/api/export/pdf/[id]/route.ts` completo**
+
+```ts
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { rateLimit, clientIp } from '@/lib/ratelimit';
+import { getSessionTenant } from '@/lib/auth/session';
+import { logger } from '@/lib/logger';
+
+export const runtime = 'nodejs';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PDF QUE YA EXISTÍA Y NO TENÍA PUERTA.
+//
+// `guardar_liquidacion_tx` recibe `p_pdf_url` y la columna `pdf_url` existe
+// desde la 0001, pero `getLiquidacionDetalle` ni la seleccionaba y ninguna
+// página la renderizaba: en el demo, "¿me da el PDF?" se contestaba tecleando
+// una URL a mano (auditoría 5, frontend, MEDIO 5).
+//
+// Lo guardado NO es una URL pública: es la ruta dentro del bucket privado
+// `liquidaciones` (`{tenantId}/{viajeId}.pdf`, ver tools.ts). Servirla tal cual
+// no funcionaría, y hacer público el bucket dejaría las liquidaciones de todas
+// las flotas al alcance de quien adivine dos UUIDs. Por eso aquí se firma una
+// URL de vida corta, detrás de la sesión real del contralor.
+//
+// El ejemplar que se entrega es el del CONTRALOR (`{viajeId}.pdf`), no el del
+// operador: es el que lleva los veredictos y el que se archiva. Esa separación
+// es deliberada en `tools.ts` y aquí se respeta.
+// ═══════════════════════════════════════════════════════════════════════════
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!rateLimit(`export-pdf:${clientIp(req)}`, 30, 60_000)) {
+    return new NextResponse('Demasiadas peticiones', { status: 429 });
+  }
+
+  const s = await getSessionTenant();
+  if (!s || !s.tenantId) return new NextResponse('No autorizado', { status: 401 });
+  const tenantId = s.tenantId;
+
+  const { id } = await params;
+  const admin = supabaseAdmin();
+  // El filtro por tenant es EXPLÍCITO: el service-role salta RLS, así que un
+  // id de otra flota no puede resolver aquí — tenantId sale de la sesión, no
+  // de un env var.
+  const { data, error } = await admin
+    .from('liquidacion')
+    .select('pdf_url')
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+
+  if (error) {
+    logger.error('export.pdf.lectura', { tenant: tenantId, liquidacion: id, err: error.message });
+    return new NextResponse('No se pudo leer la liquidación. Intenta de nuevo en un momento.', { status: 500 });
+  }
+  // Sin fila y con fila sin PDF son 404 los dos: quien pregunta no debe poder
+  // distinguir "no existe" de "existe y aún no tiene papel".
+  if (!data?.pdf_url) return new NextResponse('No hay PDF para esta liquidación', { status: 404 });
+
+  const firmada = await admin.storage
+    .from('liquidaciones')
+    .createSignedUrl(data.pdf_url as string, 60, { download: `liquidacion_${id.slice(0, 8)}.pdf` });
+
+  if (firmada.error || !firmada.data?.signedUrl) {
+    logger.error('export.pdf.firma', {
+      tenant: tenantId, liquidacion: id, path: data.pdf_url,
+      err: firmada.error?.message ?? 'storage no devolvió URL firmada',
+    });
+    return new NextResponse('No se pudo preparar la descarga. Intenta de nuevo en un momento.', { status: 502 });
+  }
+
+  return NextResponse.redirect(firmada.data.signedUrl, 302);
+}
+```
+
+- [ ] **Step 3: Verificar que compila**
+
+Run: `npm run typecheck`
+Expected: 0 errores.
+
+- [ ] **Step 4: Verificación manual (no hay test para estas rutas — tampoco lo había antes de este plan; se verifican igual que `proxy.ts`, por curl/uso real)**
+
+Sin sesión, las dos rutas deben seguir regresando 401 (antes por passcode
+ausente, ahora por sesión ausente). Con sesión real (una vez desplegado y
+probado en la Task 11), confirmar que "Exportar CSV" y "Descargar PDF" desde
+el panel siguen funcionando y devuelven solo los datos del tenant de quien
+inició sesión.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/app/api/export/liquidaciones/route.ts src/app/api/export/pdf/\[id\]/route.ts
+git commit -m "fix(export): CSV y PDF leen el tenant de la sesión, no del passcode/env var"
+```
+
+---
+
+### Task 6: `proxy.ts` — el gate de `/dashboard` valida sesión real
 
 **Files:**
 - Modify: `src/proxy.ts`
@@ -477,7 +650,7 @@ git commit -m "feat(proxy): el gate de /dashboard valida sesión de Supabase, no
 
 ---
 
-### Task 6: Página `/login` — magic link + Google
+### Task 7: Página `/login` — magic link + Google
 
 **Files:**
 - Create: `src/app/login/page.tsx`
@@ -613,7 +786,7 @@ git commit -m "feat(auth): página /login — magic link + Google"
 
 ---
 
-### Task 7: Ruta `/auth/callback`
+### Task 8: Ruta `/auth/callback`
 
 **Files:**
 - Create: `src/app/auth/callback/route.ts`
@@ -660,7 +833,7 @@ git commit -m "feat(auth): ruta /auth/callback completa la sesión tras magic li
 
 ---
 
-### Task 8: Página `/sin-acceso` y página `/cuenta`
+### Task 9: Página `/sin-acceso` y página `/cuenta`
 
 **Files:**
 - Create: `src/app/sin-acceso/page.tsx`
@@ -757,7 +930,7 @@ git commit -m "feat(auth): páginas /sin-acceso y /cuenta"
 
 ---
 
-### Task 9: Link del home apunta a `/login`
+### Task 10: Link del home apunta a `/login`
 
 **Files:**
 - Modify: `src/app/page.tsx`
@@ -788,7 +961,7 @@ git commit -m "chore(home): el link de Entrar apunta a /login"
 
 ---
 
-### Task 10: Verificación de punta a punta con una cuenta real
+### Task 11: Verificación de punta a punta con una cuenta real
 
 **Files:** ninguno (operación, no código)
 
@@ -838,15 +1011,15 @@ datos de Transportes Innovativos.
 
 - [ ] **Step 5: Registrar el resultado**
 
-Si algo de esto falla, NO se avanza a la Task 11 (retiro del passcode) hasta
+Si algo de esto falla, NO se avanza a la Task 13 (retiro del passcode) hasta
 resolverlo — es la última verificación antes de quedarse sin respaldo.
 
 ---
 
-### Task 11 (acción de Javier, fuera de este repo): habilitar Google OAuth
+### Task 12 (acción de Javier, fuera de este repo): habilitar Google OAuth
 
 No es código. Pasos exactos para que el botón "Continuar con Google" del
-Task 6 funcione:
+Task 7 funcione:
 
 1. En [Google Cloud Console](https://console.cloud.google.com/), crear un
    proyecto (o usar uno existente) → **APIs & Services → Credentials → Create
@@ -868,14 +1041,14 @@ link por email funciona igual sin él.
 
 ---
 
-### Task 12: Retirar el passcode compartido
+### Task 13: Retirar el passcode compartido
 
 **Files:**
 - Delete: `src/app/acceso/page.tsx`
 - Delete: `src/lib/auth/passcode.ts`
 - Delete: `src/lib/auth/passcode.test.ts`
 
-**Solo ejecutar este task después de que la Task 10 haya pasado completa.**
+**Solo ejecutar este task después de que la Task 11 haya pasado completa.**
 Es el punto sin retorno del riesgo aceptado en el spec: sin passcode de
 respaldo, un fallo del login nuevo no tiene puerta trasera.
 
@@ -919,17 +1092,23 @@ git push
 
 ## Self-review de este plan
 
-- **Cobertura del spec:** provisión (Task 1, 10), autenticación magic link +
-  Google (Task 6, 11), resolución de tenant (Task 2, 3, 4), proxy (Task 5),
-  páginas `/login` `/auth/callback` `/cuenta` `/sin-acceso` (Task 6-8), link
-  del home (Task 9), retiro del passcode (Task 12), verificación con
-  "verificar mirando" (Task 10). Todas las secciones del spec tienen task.
+- **Cobertura del spec:** provisión (Task 1, 11), autenticación magic link +
+  Google (Task 7, 12), resolución de tenant (Task 2, 3, 4), export routes
+  migrados (Task 5, hallazgo durante Task 4 — no estaba en el spec original,
+  añadido para no romper el build en la Task 13), proxy (Task 6), páginas
+  `/login` `/auth/callback` `/cuenta` `/sin-acceso` (Task 7-9), link del home
+  (Task 10), retiro del passcode (Task 13), verificación con "verificar
+  mirando" (Task 11). Todas las secciones del spec original tienen task, más
+  el hallazgo de la Task 5.
 - **Placeholders:** ninguno — cada step de código trae el archivo completo o
   el diff exacto a aplicar.
 - **Consistencia de tipos:** `SessionTenant` (de `session.ts`, sin tocar) se
-  usa igual en `guard.ts` (Task 3) y en `cuenta/page.tsx` (Task 8).
+  usa igual en `guard.ts` (Task 3) y en `cuenta/page.tsx` (Task 9).
   `requireSessionTenant` regresa `SessionTenant & { tenantId: string }` en
-  las dos páginas que lo consumen (Task 4 y Task 8).
+  las dos páginas que lo consumen (Task 4 y Task 9). Las rutas de exportación
+  (Task 5) usan `getSessionTenant()` directo, no `requireSessionTenant` —
+  son Route Handlers, no páginas, y no pueden usar el `redirect()` de
+  `next/navigation` en el que se apoya el guard.
 - **Alcance:** un solo subsistema (auth del panel). No toca el intake de
   WhatsApp, el motor de cuadre, ni las 7 tablas de negocio más allá de leer
   `tenant.nombre` en `/cuenta`.
