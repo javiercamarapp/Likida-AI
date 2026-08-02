@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
-import { ACCESS_COOKIE, tokenMatches } from '@/lib/auth/passcode';
+import { getSessionTenant } from '@/lib/auth/session';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
-
-const TENANT = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-111111111111';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PDF QUE YA EXISTÍA Y NO TENÍA PUERTA.
@@ -21,7 +18,7 @@ const TENANT = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-1111
 // `liquidaciones` (`{tenantId}/{viajeId}.pdf`, ver tools.ts). Servirla tal cual
 // no funcionaría, y hacer público el bucket dejaría las liquidaciones de todas
 // las flotas al alcance de quien adivine dos UUIDs. Por eso aquí se firma una
-// URL de vida corta, detrás del MISMO passcode que el resto del panel.
+// URL de vida corta, detrás de la sesión real del contralor.
 //
 // El ejemplar que se entrega es el del CONTRALOR (`{viajeId}.pdf`), no el del
 // operador: es el que lleva los veredictos y el que se archiva. Esa separación
@@ -32,22 +29,24 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return new NextResponse('Demasiadas peticiones', { status: 429 });
   }
 
-  const cookie = (await cookies()).get(ACCESS_COOKIE)?.value;
-  if (!(await tokenMatches(cookie))) return new NextResponse('No autorizado', { status: 401 });
+  const s = await getSessionTenant();
+  if (!s || !s.tenantId) return new NextResponse('No autorizado', { status: 401 });
+  const tenantId = s.tenantId;
 
   const { id } = await params;
   const admin = supabaseAdmin();
-  // El filtro por tenant es EXPLÍCITO: sin sesión de Supabase no hay RLS que
-  // scopee, así que un id de otra flota no puede resolver aquí.
+  // El filtro por tenant es EXPLÍCITO: el service-role salta RLS, así que un
+  // id de otra flota no puede resolver aquí — tenantId sale de la sesión, no
+  // de un env var.
   const { data, error } = await admin
     .from('liquidacion')
     .select('pdf_url')
     .eq('id', id)
-    .eq('tenant_id', TENANT())
+    .eq('tenant_id', tenantId)
     .maybeSingle();
 
   if (error) {
-    logger.error('export.pdf.lectura', { tenant: TENANT(), liquidacion: id, err: error.message });
+    logger.error('export.pdf.lectura', { tenant: tenantId, liquidacion: id, err: error.message });
     return new NextResponse('No se pudo leer la liquidación. Intenta de nuevo en un momento.', { status: 500 });
   }
   // Sin fila y con fila sin PDF son 404 los dos: quien pregunta no debe poder
@@ -60,7 +59,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   if (firmada.error || !firmada.data?.signedUrl) {
     logger.error('export.pdf.firma', {
-      tenant: TENANT(), liquidacion: id, path: data.pdf_url,
+      tenant: tenantId, liquidacion: id, path: data.pdf_url,
       err: firmada.error?.message ?? 'storage no devolvió URL firmada',
     });
     return new NextResponse('No se pudo preparar la descarga. Intenta de nuevo en un momento.', { status: 502 });

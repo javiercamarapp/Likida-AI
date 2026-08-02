@@ -1,28 +1,27 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { toCsv, toLiquidacionRows } from '@/lib/cuadra/export';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
-import { ACCESS_COOKIE, tokenMatches } from '@/lib/auth/passcode';
+import { getSessionTenant } from '@/lib/auth/session';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 
-const TENANT = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-111111111111';
-
-// Export de liquidaciones a CSV (ERP/Excel). Gate por el MISMO passcode del
-// dashboard (la app no tiene Supabase Auth). Como no hay sesión, RLS no puede
-// scopear solo → se filtra EXPLÍCITO por tenant_id con service-role.
+// Export de liquidaciones a CSV (ERP/Excel). Gate por la sesión real del
+// contralor (Supabase Auth) — ya no por el passcode compartido. El
+// service-role salta RLS, así que se sigue filtrando EXPLÍCITO por
+// tenant_id, ahora tomado de la sesión en vez de un env var.
 export async function GET(req: Request) {
   if (!rateLimit(`export:${clientIp(req)}`, 10, 60_000)) return new NextResponse('Demasiadas peticiones', { status: 429 });
 
-  const cookie = (await cookies()).get(ACCESS_COOKIE)?.value;
-  if (!(await tokenMatches(cookie))) return new NextResponse('No autorizado', { status: 401 });
+  const s = await getSessionTenant();
+  if (!s || !s.tenantId) return new NextResponse('No autorizado', { status: 401 });
+  const tenantId = s.tenantId;
 
   const { data, error } = await supabaseAdmin()
     .from('liquidacion')
     .select('created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, viaje:viaje_id(folio, operador:operador_id(nombre))')
-    .eq('tenant_id', TENANT())
+    .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(5000);
   // El texto crudo de PostgREST iba en el cuerpo del 500 y del lado del
@@ -35,7 +34,7 @@ export async function GET(req: Request) {
   // repetir por teléfono. `tenant` va en el log —el redactor lo huella, no lo
   // borra— para saber de qué flota era el fallo.
   if (error) {
-    logger.error('export.liquidaciones', { tenant: TENANT(), err: error.message });
+    logger.error('export.liquidaciones', { tenant: tenantId, err: error.message });
     return new NextResponse('No se pudo generar el export. Intenta de nuevo en un momento.', { status: 500 });
   }
 
