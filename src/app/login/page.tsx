@@ -100,77 +100,100 @@ export default async function Login({
     redirect(`/login?next=${encodeURIComponent(dest)}&enviado=1`);
   }
 
-  // Estética clonada de usehandle.ai/login (branding.colors + CSS computado,
-  // capturado 2-ago-2026): fondo blanco liso sin card ni sombra, botones
-  // `rounded-full`, tipografía Inter apretada, acento monocromo (negro/blanco,
-  // no el verde de marca) — el mecanismo de auth no cambió, solo el envoltorio.
+  // Clon estructural de usehandle.ai/login (HTML + CSS computado, capturado
+  // 2-ago-2026 por curl — Firecrawl estaba sin créditos): mismo layout de dos
+  // columnas, mismos radios/espaciados/transiciones, colores literales de
+  // Handle (no las variables de marca de Likida, a propósito, para que quede
+  // idéntico). Lo único que cambia de contenido es lo que sería falso decir
+  // de Likida: el banner de ronda de inversión de Handle, "As seen in" con
+  // prensa que Likida no tiene, el selector US/MX/BR y "Contact sales"/"Try
+  // Handle" (sin funnel de marketing todavía), "Sign up" (Likida no tiene
+  // alta propia — decisión ya tomada y probada), y "Download desktop app"
+  // (no existe). La imagen de la derecha es propia, generada en el mismo
+  // estilo pixel-art — no la artwork de Handle.
   return (
-    <main className="min-h-screen flex items-center justify-center px-6" style={{ background: 'var(--bg)' }}>
-      <div className="w-full max-w-[330px]">
-        <div className="text-center text-[15px] font-semibold tracking-tight" style={{ color: 'var(--ink)' }}>
-          Likida
+    <main className="min-h-screen flex bg-white">
+      <div className="flex w-full flex-col lg:w-1/2">
+        <div className="flex items-center px-6 py-6 md:px-10 lg:px-12 lg:py-12">
+          <span className="text-[17px] font-semibold tracking-tight text-[#0a0a0a]">Likida</span>
         </div>
-        <h1 className="mt-6 text-center text-[28px] font-bold leading-[1.05] tracking-[-0.03em]" style={{ color: 'var(--ink)' }}>
-          Entra a tu panel
-        </h1>
-        <p className="mt-3 text-center text-[14px] leading-relaxed" style={{ color: 'var(--muted)' }}>
-          Con la cuenta que te dio tu flota.
-        </p>
 
-        {sp?.enviado ? (
-          <p className="mt-8 text-[14px] p-4 rounded-lg text-center"
-            style={{ background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--ink)' }}>
-            Te mandamos un link a tu correo. Ábrelo desde este mismo dispositivo.
-          </p>
-        ) : (
-          <>
-            <form action={entrarConGoogle} className="mt-8">
-              <input type="hidden" name="next" value={next} />
-              <button type="submit"
-                className="flex w-full items-center justify-center gap-2.5 rounded-full px-5 py-3 text-[14px] font-medium transition-colors hover:bg-[var(--line)]"
-                style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}>
-                <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
-                  <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z" />
-                  <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
-                  <path fill="#FBBC05" d="M3.97 10.72a5.41 5.41 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z" />
-                  <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
-                </svg>
-                Continuar con Google
-              </button>
-            </form>
+        <div className="flex flex-1 items-center justify-center px-6 pb-16 md:px-10">
+          <div className="w-full max-w-[330px]">
+            <h1 className="text-center text-[32px] font-bold leading-[1.05] tracking-[-0.04em] text-[#0a0a0a]">
+              Bienvenido a Likida
+            </h1>
+            <p className="mt-3 text-center text-[14px] leading-relaxed text-[#6b6b6b]">
+              El panel de liquidación de tu flota.
+            </p>
 
-            <div className="my-6 flex items-center gap-4">
-              <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
-              <span className="text-[11px] font-medium uppercase tracking-[0.1em]"
-                style={{ color: 'var(--muted)', fontFamily: 'ui-monospace, "JetBrains Mono", monospace' }}>
-                o
-              </span>
-              <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
-            </div>
+            {sp?.enviado ? (
+              <p className="mt-8 rounded-lg border border-[#e5e5e5] bg-white p-4 text-center text-[14px] text-[#0a0a0a]">
+                Te mandamos un link a tu correo. Ábrelo desde este mismo dispositivo.
+              </p>
+            ) : (
+              <>
+                <form action={entrarConGoogle} className="mt-8">
+                  <input type="hidden" name="next" value={next} />
+                  <button type="submit"
+                    className="flex w-full items-center justify-center gap-2.5 rounded-full border border-[#e5e5e5] bg-white px-5 py-3 text-[14px] font-medium text-[#0a0a0a] transition-colors hover:bg-[#fafafa]">
+                    <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
+                      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z" />
+                      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
+                      <path fill="#FBBC05" d="M3.97 10.72a5.41 5.41 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z" />
+                      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+                    </svg>
+                    Continuar con Google
+                  </button>
+                </form>
 
-            <form action={entrarConEmail} className="flex flex-col gap-4">
-              <input type="hidden" name="next" value={next} />
-              <input name="email" type="email" required placeholder="tu@flota.com"
-                className="rounded-lg px-3.5 py-2.5 text-[14px] outline-none transition-colors focus:border-[var(--ink)]"
-                style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }} />
-              <button type="submit"
-                className="mt-1 inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-[14px] font-medium text-white transition-colors hover:opacity-85"
-                style={{ background: 'var(--ink)' }}>
-                Continuar con email
-              </button>
-            </form>
-          </>
-        )}
+                <div className="my-6 flex items-center gap-4">
+                  <span className="h-px flex-1 bg-[#e5e5e5]" />
+                  <span className="font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-[#6b6b6b]">o</span>
+                  <span className="h-px flex-1 bg-[#e5e5e5]" />
+                </div>
 
-        {sp?.error && (
-          <p className="text-[13px] mt-4 text-center" style={{ color: 'var(--color-bad)' }}>
-            Algo falló. Intenta otra vez.
-          </p>
-        )}
+                <form action={entrarConEmail} className="flex flex-col gap-4">
+                  <input type="hidden" name="next" value={next} />
+                  <input name="email" type="email" required placeholder="tu@flota.com"
+                    className="rounded-lg border border-[#e5e5e5] bg-white px-3.5 py-2.5 text-[14px] text-[#0a0a0a] outline-none transition-colors placeholder:text-[#6b6b6b99] focus:border-[#0a0a0a]" />
+                  <button type="submit"
+                    className="mt-1 inline-flex w-full items-center justify-center rounded-full bg-[#0a0a0a] px-5 py-3 text-[14px] font-medium text-white transition-colors duration-300 hover:bg-[#272628]">
+                    Continuar con email
+                  </button>
+                </form>
 
-        <p className="mt-8 text-center text-[13px]" style={{ color: 'var(--muted)' }}>
-          ¿Tu correo no tiene acceso? Pídele a tu flota que te dé de alta en Likida.
-        </p>
+                <p className="mt-6 text-center text-[13px] text-[#6b6b6b]">
+                  ¿Tu correo no tiene acceso?{' '}
+                  <span className="font-medium text-[#0a0a0a]">Pídele a tu flota que te dé de alta.</span>
+                </p>
+              </>
+            )}
+
+            {sp?.error && (
+              <p className="mt-4 text-center text-[13px]" style={{ color: 'var(--color-bad)' }}>
+                Algo falló. Intenta otra vez.
+              </p>
+            )}
+
+            <p className="mt-8 text-center text-[11px] leading-relaxed text-[#6b6b6b]/70">
+              Al continuar, aceptas el{' '}
+              <a href="/privacidad" className="text-[#0a0a0a] underline underline-offset-2 transition-opacity hover:opacity-70">
+                Aviso de Privacidad
+              </a>{' '}
+              de Likida.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Panel derecho — solo desktop, igual que el original (`hidden lg:flex`). */}
+      <div className="hidden lg:flex lg:w-1/2 lg:flex-col lg:pb-12 lg:pl-3 lg:pr-12 lg:pt-12">
+        <div className="relative mt-8 min-h-0 flex-1 overflow-hidden rounded-[28px] bg-[#0a0a0a]">
+          {/* eslint-disable-next-line @next/next/no-img-element -- imagen estática de fondo, no contenido de producto */}
+          <img src="/images/login-hero.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/25" />
+        </div>
       </div>
     </main>
   );
