@@ -121,9 +121,9 @@ const { PartialExecutionError } = await import('@/lib/llm/openrouter');
 
 const listo = { from: '5219993700779', type: 'text' as const, text: 'listo', waMessageId: 'wa1' };
 
-const cierre = (pdf_generado: boolean) => ({
+const cierre = (pdf_generado: boolean, pdf_contralor_generado = pdf_generado) => ({
   finalText: 'Listo, cerré tu viaje',
-  toolCalls: [{ toolName: 'guardar_liquidacion', args: {}, result: { liquidacion_id: 'L1', pdf_generado }, durationMs: 5 }],
+  toolCalls: [{ toolName: 'guardar_liquidacion', args: {}, result: { liquidacion_id: 'L1', pdf_generado, pdf_contralor_generado }, durationMs: 5 }],
   model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0,
 });
 
@@ -187,6 +187,39 @@ describe('cierre sin PDF: ni se manda un documento que no existe, ni se calla', 
     await processInbound(listo);
     expect(documentos()).toHaveLength(0);
     expect(logger.error).toHaveBeenCalledWith('pdf.no_entregado', expect.objectContaining({ err: 'Object not found' }));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 8/9 · MEDIO REINCIDENTE — el ejemplar del CONTRALOR podía fallar
+// sin que nada se enterara. `pdf_generado` (arriba) refleja SOLO el ejemplar
+// del OPERADOR: con el del contralor fallido y el del operador exitoso, el
+// operador recibía su PDF normal y el contralor se quedaba sin botón de
+// descarga en el panel, sin ningún log que lo distinguiera del camino feliz.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el PDF del contralor puede fallar sin que el del operador se entere, pero ya no en silencio', () => {
+  beforeEach(() => {
+    createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://x/liq.pdf' }, error: null });
+  });
+
+  it('con pdf_contralor_generado=false (y el del operador en true), deja rastro propio en el log', async () => {
+    runAgent.mockResolvedValue(cierre(true, false));
+    await processInbound(listo);
+    expect(logger.error).toHaveBeenCalledWith('pdf.contralor_no_generado', expect.objectContaining({ viaje: 'v1', liqId: 'L1' }));
+  });
+
+  it('con pdf_contralor_generado=false, el operador SIGUE recibiendo su propio PDF sin problema', async () => {
+    // El fallo es del ejemplar del contralor, no del operador: los dos se
+    // suben por separado (tools.ts) y uno puede fallar sin el otro.
+    runAgent.mockResolvedValue(cierre(true, false));
+    await processInbound(listo);
+    expect(documentos()).toHaveLength(1);
+  });
+
+  it('control: con los dos en true, no se agrega ningún log de contralor', async () => {
+    runAgent.mockResolvedValue(cierre(true, true));
+    await processInbound(listo);
+    expect(logger.error).not.toHaveBeenCalledWith('pdf.contralor_no_generado', expect.anything());
   });
 });
 
