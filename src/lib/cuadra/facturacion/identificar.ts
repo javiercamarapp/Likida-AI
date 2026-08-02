@@ -42,7 +42,17 @@ export function identificarComercio(señales: SeñalesTicket): Comercio | null {
 
   const texto = señales.textoTicket?.toUpperCase() ?? '';
   if (texto) {
-    const coincidencias = COMERCIOS.filter((c) => c.reconocer.texto?.some((t) => texto.includes(t.toUpperCase())));
+    // Palabra completa, no subcadena: "ADO" (autobuses) es substring literal de
+    // "OPERADORA" — un ticket real de café con emisor "OPERADORA DE CAFE
+    // PENINSULAR" se identificaba como la línea de camiones ADO y mandaba al
+    // operador a un portal que le pedía "número de boleto" a un café. Cualquier
+    // token corto (3-4 letras) puede colisionar así contra palabras comunes en
+    // español que lo contienen.
+    const esPalabraCompleta = (t: string) => {
+      const escapado = t.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`\\b${escapado}\\b`).test(texto);
+    };
+    const coincidencias = COMERCIOS.filter((c) => c.reconocer.texto?.some(esPalabraCompleta));
     // Dos marcas impresas en el mismo papel = no hay respuesta única.
     if (coincidencias.length === 1) return coincidencias[0];
   }
