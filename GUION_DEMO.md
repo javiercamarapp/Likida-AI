@@ -57,17 +57,23 @@ captura?"* — te da el tamaño y te da el nombre de quien va a usar esto.
   Mándalos todos y cuando termines escribe **listo**."*
 - Escribes **listo**.
 
-> ⚠️ **EL ORDEN NO ES NEGOCIABLE: todas las fotos ANTES del `listo`.** Probado en
-> vivo el 1-ago: escribir `listo` primero cierra la liquidación, y las fotos que
-> lleguen después rebotan con *"llegó después de que cerré tu liquidación, así que
-> NO entró"*. Es el candado que impide que el PDF ya entregado y el mensaje de
-> WhatsApp digan cifras distintas — o sea, funciona como debe— pero **en la sala
-> se ve como que el sistema rechazó un comprobante**, y hoy no hay forma de
-> reabrir desde WhatsApp ni desde el panel: se arregla por SQL.
+> ⚠️ **Todas las fotos ANTES del `listo`.** Una vez emitida la liquidación, un
+> comprobante nuevo NO entra en ella: lo impide el trigger de la 0036, que existe
+> para que el PDF ya entregado y el mensaje de WhatsApp no digan cifras distintas
+> y de signo contrario.
 >
-> Si te pasa, no pelees con ello: dilo como diseño —*"una vez que firmo la
-> liquidación ya no la puedo alterar sin que se note; eso es a propósito"*— y
-> sigue con el simulador `/demo`, donde puedes repetir el flujo entero.
+> Desde el 1-ago eso **ya no pierde el comprobante**: pasa a la sala de espera
+> (`comprobante_huerfano`) y el sistema lo ofrece en el viaje siguiente. Así que
+> si te pasa en la sala, la respuesta es buena — *"no entró en ésta, la guardé
+> para tu próximo viaje"*— y se puede narrar como diseño: *"una vez que firmo una
+> liquidación ya no la puedo alterar sin que se note, pero tampoco tiro tu
+> ticket"*.
+>
+> **Lo que sigue sin existir es reabrir un viaje ya liquidado.** No se puede ni
+> desde WhatsApp ni desde el panel; hoy se hace por SQL. Y `update viaje set
+> estatus='abierto'` NO basta: el trigger mira si existe la liquidación, no el
+> estatus, así que hay que borrar esa fila (se regenera sola al próximo `listo`).
+> Aprendido a golpes ese mismo día — cuatro "ya lo reabrí" que no reabrían nada.
 - Llega el **cuadre** —comprobado contra anticipo, la diferencia y las
   observaciones en lenguaje humano— y después el **PDF**.
 
@@ -141,7 +147,8 @@ detalle sale vacío. Están ahí solo para que la lista no se vea sola.
 | **El modelo tarda o cae** | hay respaldo entre proveedores; si todo cae, el agente pide reenviar **sin inventar números** |
 | **La base pausó** | una consulta la despierta (~10 s). Por eso el paso 2 del checklist |
 | **"No tienes un viaje abierto"** | tu operador ya cerró el viaje. Hay que abrir otro; ten a la mano quién lo hace |
-| **"llegó después de que cerré tu liquidación"** | mandaste una foto DESPUÉS del `listo`. No se puede reabrir en vivo: pasa al simulador `/demo` y repite el flujo ahí. Nárralo como el candado que impide alterar una liquidación ya firmada |
+| **"ya cerré esta liquidación… lo guardé para tu siguiente viaje"** | mandaste una foto DESPUÉS del `listo`. Es la respuesta correcta y el comprobante NO se pierde. Nárralo: el candado impide alterar una liquidación firmada, y la sala de espera impide tirar el ticket |
+| **"ese comprobante ya estaba registrado en tu viaje VJ-…"** | esa foto ya se usó en otro viaje. Correcto: evita cobrarla dos veces |
 | **"Por ahora solo proceso texto, fotos y XML"** | mandaste audio, sticker o documento. Es la respuesta correcta; repite con la foto |
 
 ---
