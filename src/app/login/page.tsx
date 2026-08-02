@@ -100,39 +100,62 @@ export default async function Login({
     redirect(`/login?next=${encodeURIComponent(dest)}&enviado=1`);
   }
 
+  // Estética clonada de usehandle.ai/login (branding.colors + CSS computado,
+  // capturado 2-ago-2026): fondo blanco liso sin card ni sombra, botones
+  // `rounded-full`, tipografía Inter apretada, acento monocromo (negro/blanco,
+  // no el verde de marca) — el mecanismo de auth no cambió, solo el envoltorio.
   return (
-    <main className="min-h-screen flex items-center justify-center px-4">
-      <div className="card p-8 w-full max-w-sm">
-        <div className="text-lg font-semibold tracking-tight">Likida · Panel</div>
-        <p className="text-sm mt-1 mb-6" style={{ color: 'var(--muted)' }}>
-          Entra con la cuenta que te dio tu flota.
+    <main className="min-h-screen flex items-center justify-center px-6" style={{ background: 'var(--bg)' }}>
+      <div className="w-full max-w-[330px]">
+        <div className="text-center text-[15px] font-semibold tracking-tight" style={{ color: 'var(--ink)' }}>
+          Likida
+        </div>
+        <h1 className="mt-6 text-center text-[28px] font-bold leading-[1.05] tracking-[-0.03em]" style={{ color: 'var(--ink)' }}>
+          Entra a tu panel
+        </h1>
+        <p className="mt-3 text-center text-[14px] leading-relaxed" style={{ color: 'var(--muted)' }}>
+          Con la cuenta que te dio tu flota.
         </p>
 
         {sp?.enviado ? (
-          <p className="text-sm p-3 rounded-lg hairline" style={{ background: 'var(--surface)' }}>
+          <p className="mt-8 text-[14px] p-4 rounded-lg text-center"
+            style={{ background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--ink)' }}>
             Te mandamos un link a tu correo. Ábrelo desde este mismo dispositivo.
           </p>
         ) : (
           <>
-            <form action={entrarConGoogle}>
+            <form action={entrarConGoogle} className="mt-8">
               <input type="hidden" name="next" value={next} />
               <button type="submit"
-                className="w-full px-4 py-2.5 rounded-lg text-sm font-medium hairline mb-3"
-                style={{ color: 'var(--ink)' }}>
+                className="flex w-full items-center justify-center gap-2.5 rounded-full px-5 py-3 text-[14px] font-medium transition-colors hover:bg-[var(--line)]"
+                style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}>
+                <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
+                  <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z" />
+                  <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
+                  <path fill="#FBBC05" d="M3.97 10.72a5.41 5.41 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z" />
+                  <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+                </svg>
                 Continuar con Google
               </button>
             </form>
 
-            <div className="text-xs text-center mb-3" style={{ color: 'var(--muted)' }}>o</div>
+            <div className="my-6 flex items-center gap-4">
+              <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
+              <span className="text-[11px] font-medium uppercase tracking-[0.1em]"
+                style={{ color: 'var(--muted)', fontFamily: 'ui-monospace, "JetBrains Mono", monospace' }}>
+                o
+              </span>
+              <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
+            </div>
 
-            <form action={entrarConEmail}>
+            <form action={entrarConEmail} className="flex flex-col gap-4">
               <input type="hidden" name="next" value={next} />
               <input name="email" type="email" required placeholder="tu@flota.com"
-                className="w-full px-3 py-2.5 rounded-lg hairline text-sm mb-3"
-                style={{ background: 'var(--surface)' }} />
+                className="rounded-lg px-3.5 py-2.5 text-[14px] outline-none transition-colors focus:border-[var(--ink)]"
+                style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }} />
               <button type="submit"
-                className="w-full px-4 py-2.5 rounded-lg text-sm font-medium"
-                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+                className="mt-1 inline-flex w-full items-center justify-center rounded-full px-5 py-3 text-[14px] font-medium text-white transition-colors hover:opacity-85"
+                style={{ background: 'var(--ink)' }}>
                 Continuar con email
               </button>
             </form>
@@ -140,12 +163,12 @@ export default async function Login({
         )}
 
         {sp?.error && (
-          <p className="text-xs mt-3" style={{ color: 'var(--color-bad)' }}>
+          <p className="text-[13px] mt-4 text-center" style={{ color: 'var(--color-bad)' }}>
             Algo falló. Intenta otra vez.
           </p>
         )}
 
-        <p className="text-xs mt-6" style={{ color: 'var(--muted)' }}>
+        <p className="mt-8 text-center text-[13px]" style={{ color: 'var(--muted)' }}>
           ¿Tu correo no tiene acceso? Pídele a tu flota que te dé de alta en Likida.
         </p>
       </div>
