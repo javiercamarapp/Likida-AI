@@ -76,9 +76,18 @@ export default async function DashboardPage() {
             <span className="font-semibold tracking-tight text-xl">Likida</span>
             <span className="text-base" style={{ color: 'var(--muted)' }}>· Panel de liquidación</span>
           </h1>
-          <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: 'var(--muted)', background: 'color-mix(in srgb, var(--muted) 10%, transparent)' }}>
-            datos de demostración
-          </span>
+          {/* `/cuenta` es el ÚNICO sitio con "Cerrar sesión" y nada en la app
+              apuntaba ahí: la página existía y solo se llegaba tecleando la URL.
+              Con el passcode no importaba (se cerraba borrando la cookie); con
+              cuentas por usuario, salirse es parte del producto. */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: 'var(--muted)', background: 'color-mix(in srgb, var(--muted) 10%, transparent)' }}>
+              datos de demostración
+            </span>
+            <Link href="/cuenta" className="text-sm px-3 py-1.5 rounded-lg hairline hover:opacity-70">
+              Mi cuenta
+            </Link>
+          </div>
         </div>
       </header>
 
