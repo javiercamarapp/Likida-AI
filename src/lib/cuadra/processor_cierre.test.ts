@@ -147,6 +147,17 @@ describe('cierre sin PDF: ni se manda un documento que no existe, ni se calla', 
     createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://x/liq.pdf' }, error: null });
   });
 
+  // AUDITORÍA 9, MEDIO REINCIDENTE ×4 (rondas 5, 6, 8 y 9) — el TTL de la liga
+  // firmada seguía en 3600s aunque el único consumidor es Meta, que descarga
+  // en segundos, y el objeto lleva folio y montos de un ticket. La línea se
+  // tocó la ronda pasada (se le puso `acotada`) y el 3600 se dejó intacto —
+  // lo que convirtió el hallazgo de "pendiente" a "revisado y no arreglado".
+  it('la liga firmada del PDF vive 60s, no una hora — Meta la descarga en segundos', async () => {
+    runAgent.mockResolvedValue(cierre(true));
+    await processInbound(listo);
+    expect(createSignedUrl).toHaveBeenCalledWith(expect.any(String), 60);
+  });
+
   it('con pdf_generado=true manda el documento (control: sin esto lo de abajo no prueba nada)', async () => {
     runAgent.mockResolvedValue(cierre(true));
     await processInbound(listo);

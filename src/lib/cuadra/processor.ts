@@ -1401,7 +1401,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // `acotada` — el único de los 13 pasos del cierre que faltaba en este
         // archivo. Ya está dentro de un try/catch que lo maneja bien; lo que
         // faltaba era no colgarse 300s antes de llegar a ese catch.
-        const { data, error } = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 3600), 'createSignedUrl');
+        //
+        // AUDITORÍA 9, MEDIO REINCIDENTE ×4 (rondas 5, 6, 8 y 9): el TTL seguía
+        // en 3600s aunque el único consumidor es Meta, que descarga en
+        // segundos, y el objeto lleva folio y montos de un ticket de un bucket
+        // privado. `api/export/pdf/[id]/route.ts:59` ya nació con el TTL
+        // correcto (60s, "la necesidad dura lo que tarda la descarga") — se
+        // copia el mismo número aquí en vez del que se copió de más viejo.
+        const { data, error } = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 60), 'createSignedUrl');
         if (error || !data?.signedUrl) throw new Error(error?.message ?? 'storage no devolvió URL firmada');
         await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
         await registrarCostoWhatsApp(op.tenantId, viajeId);
