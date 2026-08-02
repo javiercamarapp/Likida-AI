@@ -15,6 +15,11 @@ const config = [
       '.vercel/**',    // salida de `vercel build`: JS generado, no código nuestro
       'next-env.d.ts',
       'supabase/**',   // migraciones: no es código de app
+      // Worktrees de Claude Code: cada uno trae su PROPIO node_modules. Sin
+      // este ignore, `eslint .` desde la raíz del repo lo recorre entero — un
+      // worktree activo (auth-panel, 2-ago-2026) infló la corrida a ~29,000
+      // problemas, todos ajenos al código real.
+      '.claude/**',
     ],
   },
   ...nextCoreWebVitals,
