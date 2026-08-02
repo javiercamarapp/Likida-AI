@@ -1,37 +1,24 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // SEGUNDA CAPA DE AUTORIZACIÓN — la que no depende de un regex.
 //
-// Hoy el único candado del panel es el matcher del proxy:
+// Mismo criterio que la versión anterior (passcode): el proxy es la primera
+// capa (barata, por matcher de ruta); esta es la segunda, y viaja CON la
+// página en vez de con la configuración de rutas. Las dos tienen que fallar a
+// la vez para que una página del panel se sirva sin autorización.
 //
-//   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)']
-//
-// Funciona, y se comprobó que ninguna ruta queda fuera. Pero es UNA capa, y de
-// las frágiles: basta añadir una excepción al negative lookahead, mover una
-// página a un route group nuevo, o que Next cambie cómo resuelve el matcher, para
-// que una página del panel quede servida sin pasar por el gate. El fallo no deja
-// rastro — la página simplemente responde 200 a quien no debía.
-//
-// Esta función es la segunda capa: se llama DENTRO de cada página del panel, así
-// que la autorización viaja con la página y no con la configuración de rutas.
-// Si el proxy falla, esto sigue de pie; si esto se olvida en una página
-// nueva, el proxy sigue de pie. Las dos tienen que fallar a la vez.
+// Ahora la fuente de verdad es `app_user` vía `getSessionTenant()`, no un
+// passcode compartido: sin sesión de Supabase, a /login; con sesión pero sin
+// tenant asignado (superadmin, o alta pendiente), a /sin-acceso — nunca se
+// sirve el panel sin un tenantId real.
 // ═══════════════════════════════════════════════════════════════════════════
-
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ACCESS_COOKIE, hayPasscode, tokenMatches } from './passcode';
+import { getSessionTenant, type SessionTenant } from './session';
 
-/**
- * Corta la página si quien la pide no tiene una cookie válida.
- *
- * Sin passcode configurado (desarrollo) no bloquea: el mismo criterio que el
- * proxy, para que las dos capas no se contradigan.
- *
- * @param destino ruta a la que volver tras autenticarse.
- */
-export async function exigirAcceso(destino: string): Promise<void> {
-  if (!hayPasscode()) return;                  // dev sin passcode
-  const cookie = (await cookies()).get(ACCESS_COOKIE)?.value;
-  if (await tokenMatches(cookie)) return;
-  redirect(`/acceso?next=${encodeURIComponent(destino)}`);
+export async function requireSessionTenant(
+  destino: string,
+): Promise<SessionTenant & { tenantId: string }> {
+  const s = await getSessionTenant();
+  if (!s) redirect(`/login?next=${encodeURIComponent(destino)}`);
+  if (!s.tenantId) redirect('/sin-acceso');
+  return s as SessionTenant & { tenantId: string };
 }
