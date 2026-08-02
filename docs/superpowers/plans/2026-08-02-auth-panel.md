@@ -365,7 +365,7 @@ Expected: 0 errores. Si algo más en el archivo referenciaba `TENANT` o
 
 Con el resto de las tasks de este plan ya aplicadas (login funcionando), entrar
 al panel de verdad con una sesión real y confirmar que carga los datos del
-tenant correcto. Esta verificación se hace completa al final de la Task 9, no
+tenant correcto. Esta verificación se hace completa al final de la Task 10, no
 aquí — este paso queda bloqueado hasta entonces porque todavía no hay forma de
 iniciar sesión.
 
