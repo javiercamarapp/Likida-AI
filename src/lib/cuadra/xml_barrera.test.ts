@@ -44,6 +44,10 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   esperarIntake: vi.fn(async () => true),
 }));
 vi.mock('@/lib/cuadra/repo', () => ({
+  // Sala de espera de comprobantes sin viaje (mig. 0040). Sin estas cuatro,
+  // `getHuerfanos` llega `undefined` y el processor truena en el `.length`.
+  getHuerfanos: vi.fn(async () => []), guardarHuerfano: vi.fn(async () => true),
+  resolverHuerfanos: vi.fn(), marcarHuerfanosOfrecidos: vi.fn(),
   addGasto: vi.fn(), getGastos: (...a: unknown[]) => getGastos(...a),
   updateGastoCfdiXml: (...a: unknown[]) => updateGastoCfdiXml(...a),
   saveCfdiXmlRaw: vi.fn(), gastoExistePorHash: vi.fn(async () => false),

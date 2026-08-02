@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const runAgent = vi.fn();
 const addGasto = vi.fn();
 const extraerComprobante = vi.fn();
+const guardarHuerfano = vi.fn();
 
 vi.mock('@/lib/agents/run', () => ({ runAgent: (...a: unknown[]) => runAgent(...a) }));
 vi.mock('@/lib/cuadra/intake/ocr', () => ({
@@ -33,6 +34,10 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   intakeDelta: vi.fn(async () => 1), esperarIntake: vi.fn(async () => true),
 }));
 vi.mock('@/lib/cuadra/repo', () => ({
+  // Sala de espera de comprobantes sin viaje (mig. 0040). Sin estas cuatro,
+  // `getHuerfanos` llega `undefined` y el processor truena en el `.length`.
+  getHuerfanos: vi.fn(async () => []), guardarHuerfano: (...a: unknown[]) => guardarHuerfano(...a),
+  resolverHuerfanos: vi.fn(), marcarHuerfanosOfrecidos: vi.fn(),
   addGasto: (...a: unknown[]) => addGasto(...a),
   getGastos: vi.fn(async () => []), updateGastoCfdiXml: vi.fn(),
   saveCfdiXmlRaw: vi.fn(), gastoExistePorHash: vi.fn(async () => false),
@@ -80,6 +85,7 @@ describe('processInbound — la foto que llega tarde avisa la verdad, no la pier
   beforeEach(() => {
     salientes.length = 0;
     runAgent.mockReset(); addGasto.mockReset(); extraerComprobante.mockReset();
+    guardarHuerfano.mockReset(); guardarHuerfano.mockResolvedValue(true);
     vi.stubGlobal('fetch', fetchSpy);
     fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
@@ -91,7 +97,17 @@ describe('processInbound — la foto que llega tarde avisa la verdad, no la pier
     });
   });
 
-  it('con CU001 (la 0036), avisa que llegó tarde con el monto EXACTO, no "se me trabó"', async () => {
+  // EL MENSAJE CAMBIÓ A PROPÓSITO EL 1-ago. Decía «NO entró. Guárdalo: mándalo
+  // en tu siguiente viaje o pídele a la oficina que lo agregue», y eso mandaba
+  // al operador a un trámite QUE NO EXISTE: no hay forma de que la oficina
+  // agregue un comprobante a un viaje ya liquidado, ni desde el panel ni desde
+  // ningún lado. El comprobante se perdía igual, solo que despacio y con el
+  // operador cargando un papel que nadie iba a capturar.
+  //
+  // Ahora pasa a la sala de espera (mig. 0040) y se le ofrece en su próximo
+  // viaje. Lo que esta prueba fija es lo que NO puede volver: que se le diga
+  // que no entró sin haberlo guardado.
+  it('con CU001 (la 0036), lo GUARDA y se lo dice con el monto exacto', async () => {
     const err = new Error('el viaje ya tiene liquidación emitida') as Error & { code?: string };
     err.code = 'CU001';
     addGasto.mockRejectedValue(err);
@@ -99,10 +115,25 @@ describe('processInbound — la foto que llega tarde avisa la verdad, no la pier
     await processInbound(foto);
 
     expect(salientes).toHaveLength(1);
-    expect(salientes[0]).toMatch(/llegó después de que cerré tu liquidación/i);
     expect(salientes[0]).toContain('$800.00');
-    expect(salientes[0]).toMatch(/siguiente viaje|oficina/i);
+    expect(salientes[0], 'tiene que decir que ya cerró, no "se me trabó"').toMatch(/ya cerré esta liquidación/i);
+    expect(salientes[0], 'y que NO se perdió, que es lo que cambió').toMatch(/no se perdió/i);
+    expect(salientes[0]).toMatch(/siguiente viaje/i);
     expect(salientes[0]).not.toMatch(/se me trabó/i);
+    expect(guardarHuerfano, 'decirle que lo guardó sin guardarlo sería peor que el mensaje viejo')
+      .toHaveBeenCalledWith('t1', 'o1', expect.objectContaining({ motivo: 'tras_liquidar' }));
+  });
+
+  it('y si NO se pudo guardar, se lo dice en vez de prometerle que lo tiene', async () => {
+    const err = new Error('ya liquidado') as Error & { code?: string };
+    err.code = 'CU001';
+    addGasto.mockRejectedValue(err);
+    guardarHuerfano.mockResolvedValueOnce(false);
+
+    await processInbound(foto);
+
+    expect(salientes[0]).toMatch(/no lo pude guardar/i);
+    expect(salientes[0]).toMatch(/consérvalo/i);
   });
 
   it('con un error normal, sí cae al genérico (no se traga el catch)', async () => {

@@ -925,3 +925,43 @@ select
 -- existe=1 · publico=f · buckets_publicos=0 · rls_objects=t · policies=0
 -- (sin policy sobre storage.objects, RLS deniega a anon/authenticated; solo el
 --  service-role escribe y firma. Mismo criterio que la 0008 y la 0038.)
+
+-- ── 23. La sala de espera no es legible por un anónimo (mig. 0040) ──────────
+-- `comprobante_huerfano` guarda la EXTRACCIÓN COMPLETA de tickets que todavía
+-- no tienen viaje: montos, folios, RFC del establecimiento, fechas. Es un
+-- expediente de gastos de operadores de todas las flotas en una sola tabla.
+--
+-- Y los grants de tabla NO la protegen: `anon` y `authenticated` tienen
+-- SELECT/INSERT/UPDATE/DELETE sobre ella (8 grants), porque es el default del
+-- esquema `public` en Supabase. Lo ÚNICO que la cierra es el RLS sin policy.
+-- O sea: la línea `alter table ... enable row level security` de la 0040 no es
+-- defensa en profundidad, es la defensa.
+--
+-- Por eso no vale con mirar `relrowsecurity`: se comprueba LEYENDO como anon
+-- con una fila sembrada. Un `enable` mal aplicado, o un `force` que falte el
+-- día que la tabla cambie de dueño, se ve aquí y no en el catálogo.
+--
+-- Corrido el 1-ago, salida real:  anon=0 filas · service_role=1 fila
+create temp table if not exists _res(quien text, filas int, nota text);
+truncate _res;
+do $$
+declare n int; nota text;
+begin
+  begin
+    set local role anon;
+    select count(*) into n from comprobante_huerfano;
+    reset role;
+    nota := case when n = 0 then 'RLS lo deja a ciegas' else 'FUGA: anon LEE' end;
+  exception when insufficient_privilege then
+    reset role;
+    n := -1; nota := 'denegado por privilegios de tabla';
+  end;
+  insert into _res values ('anon', n, nota);
+  insert into _res select 'service_role', count(*), 've todo (BYPASSRLS)' from comprobante_huerfano;
+end $$;
+select * from _res order by quien;
+-- anon         | 0 | RLS lo deja a ciegas      ← con una fila sembrada
+-- service_role | 1 | ve todo (BYPASSRLS)
+--
+-- Si `anon` devuelve >0, el expediente de gastos de todas las flotas es público
+-- para cualquiera con la anon key, que va en el navegador.

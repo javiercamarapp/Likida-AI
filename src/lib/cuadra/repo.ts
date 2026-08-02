@@ -172,6 +172,92 @@ export async function gastoPorHash(
 }
 
 /** NIVEL 2: actualiza un gasto con los datos del XML del CFDI (por id). */
+// ═══════════════════════════════════════════════════════════════════════════
+// LA SALA DE ESPERA DE LOS COMPROBANTES SIN VIAJE (mig. 0040).
+//
+// Una foto NUNCA se rechaza. Si no hay viaje abierto —o si la liquidación ya se
+// emitió— el comprobante queda aquí con su extracción hecha, y se le pregunta
+// al operador si va cuando haya viaje al que ponerlo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface Huerfano {
+  id: string;
+  gasto: Gasto;
+  motivo: 'sin_viaje' | 'tras_liquidar';
+  creadoEn: string;
+  rutaImagen?: string;
+  /** Cuándo se le preguntó al operador si van. `undefined` = nunca. */
+  ofrecidoEn?: string;
+}
+
+/** Best-effort: si esto falla, se le dice al operador que no se pudo guardar. */
+export async function guardarHuerfano(
+  tenantId: string, operadorId: string,
+  h: { gasto: Gasto; motivo: 'sin_viaje' | 'tras_liquidar'; rutaImagen?: string },
+): Promise<boolean> {
+  const { error } = await acotada(supabaseAdmin().from('comprobante_huerfano').insert({
+    tenant_id: tenantId, operador_id: operadorId,
+    gasto: h.gasto, motivo: h.motivo, ruta_imagen: h.rutaImagen ?? null,
+  }), 'guardarHuerfano');
+  if (error) logger.error('huerfano.guardar_error', { err: error.message });
+  return !error;
+}
+
+/**
+ * Los que siguen esperando. Devuelve `[]` ante un error de lectura, y eso es
+ * deliberado: no poder leer la sala de espera no puede impedirle al operador
+ * cerrar el viaje que sí tiene. Se pierde el ofrecimiento, no el comprobante —
+ * las filas siguen ahí para el mensaje siguiente.
+ */
+export async function getHuerfanos(tenantId: string, operadorId: string): Promise<Huerfano[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('comprobante_huerfano')
+    .select('id, gasto, motivo, creado_en, ruta_imagen, ofrecido_en')
+    .eq('tenant_id', tenantId).eq('operador_id', operadorId)
+    .is('resuelto_en', null)
+    .order('creado_en', { ascending: true })
+    .limit(50), 'getHuerfanos');
+  if (error || !data) return [];
+  return data.map((r) => ({
+    id: r.id as string,
+    gasto: r.gasto as Gasto,
+    motivo: r.motivo as 'sin_viaje' | 'tras_liquidar',
+    creadoEn: r.creado_en as string,
+    rutaImagen: (r.ruta_imagen as string) || undefined,
+    ofrecidoEn: (r.ofrecido_en as string) || undefined,
+  }));
+}
+
+/**
+ * Deja constancia de que ya se le preguntó, para no repetir la oferta en cada
+ * mensaje. Best-effort: si falla, el peor caso es preguntar de más.
+ */
+export async function marcarHuerfanosOfrecidos(tenantId: string, ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await acotada(supabaseAdmin().from('comprobante_huerfano')
+    .update({ ofrecido_en: new Date().toISOString() })
+    .in('id', ids).eq('tenant_id', tenantId), 'marcarHuerfanosOfrecidos');
+  if (error) logger.warn('huerfano.marcar_ofrecido_error', { err: error.message });
+}
+
+/**
+ * Cierra las filas. `viajeId` solo cuando se adjuntaron.
+ *
+ * Se marca DESPUÉS de insertar los gastos, no antes: si el `addGasto` falla a
+ * medias, lo que queda es una fila todavía pendiente —que se vuelve a ofrecer—
+ * y no un comprobante marcado como puesto que no está en ningún lado.
+ */
+export async function resolverHuerfanos(
+  tenantId: string, ids: string[],
+  resolucion: 'adjuntado' | 'descartado', viajeId: string | null,
+): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await acotada(supabaseAdmin().from('comprobante_huerfano').update({
+    resuelto_en: new Date().toISOString(), resolucion, viaje_id: viajeId,
+  }).in('id', ids).eq('tenant_id', tenantId), 'resolverHuerfanos');
+  if (error) logger.error('huerfano.resolver_error', { err: error.message });
+}
+
 /**
  * Re-fecha un gasto con lo que trajo la SEGUNDA foto del mismo ticket.
  *

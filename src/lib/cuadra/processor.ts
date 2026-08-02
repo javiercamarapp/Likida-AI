@@ -19,6 +19,10 @@ import type { Gasto } from '@/types/cuadra';
 import { extraerComprobante, tieneCodigoLegible } from '@/lib/cuadra/intake/ocr';
 import { hashImagen } from '@/lib/cuadra/intake/hash';
 import { subirComprobante } from '@/lib/cuadra/intake/almacen';
+import {
+  mensajeGuardadoSinViaje, mensajeGuardadoTrasLiquidar, mensajeOfrecer,
+  mensajeAdjuntados, esAfirmacion, esNegacion,
+} from '@/lib/cuadra/intake/huerfanos';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { violaIndice, llegoTarde } from '@/lib/cuadra/pg_errores';
@@ -32,6 +36,7 @@ import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/cuadra/intake/e
 import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
 import {
   addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash, gastoPorHash, corregirFechaGasto,
+  guardarHuerfano, getHuerfanos, resolverHuerfanos, marcarHuerfanosOfrecidos, getViaje,
   enriquecerGastoConCodigo, guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente,
   guardarFotoPendiente, existeFotoPendiente, reclamarFotoPendiente,
   getDatosResponsable, reclamarEnvioAviso, confirmarEnvioAviso, liberarEnvioAviso,
@@ -310,6 +315,51 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           await saveCfdiXmlRaw(op.tenantId, xml.uuid, null, xmlText!);
           logger.info('xml.sin_viaje_abierto', { tenant: op.tenantId, operador: op.operadorId, uuid: xml.uuid });
           await sendText(msg.from, 'Recibí tu XML y ya quedó guardado ✅. Tu viaje ya estaba cerrado, así que tu contralor lo aplica desde el panel. 🙏');
+          return;
+        }
+      }
+      // ── LA FOTO TAMPOCO SE TIRA ─────────────────────────────────────────────
+      // Era la asimetría más fea del intake: el XML de arriba SÍ se conservaba y
+      // la foto —el documento que de verdad importa— se descartaba con un «no
+      // tienes viaje abierto», que es cierto y no es lo que pasó. Lo que pasó es
+      // que se tiraron sus tickets.
+      //
+      // Y hay un chofer real detrás: no todos escriben «hola» ni esperan a que
+      // la oficina abra el viaje. Terminan la ruta, sacan el fajo y mandan once
+      // fotos de golpe. Ese operador perdía once comprobantes sin enterarse.
+      //
+      // Se le paga la visión AQUÍ, sin viaje: es lo que permite decirle cuánto
+      // trae cada uno cuando se le pregunte si van, y evita pagarla otra vez al
+      // adjuntarlos. Un comprobante vale mucho más que una llamada de visión.
+      if (msg.type === 'image' && msg.mediaId) {
+        try {
+          const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
+          if (!dataUrl) { await sendText(msg.from, 'No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
+          const ruta = await subirComprobante(op.tenantId, 'sin-viaje', await hashImagen(dataUrl), dataUrl);
+          const ex = await extraerComprobante(dataUrl, reloj.senal(25_000));
+          await registrarCosto({ tenantId: op.tenantId, viajeId: null, fase: 'ocr', modelo: ex.costo.modelo, tokensIn: ex.costo.tokensIn, tokensOut: ex.costo.tokensOut, costoUsd: ex.costo.costoUsd });
+          // Ilegible: se le pide otra ANTES de guardar algo que no se puede usar.
+          if (!ex.legible && ex.motivo !== 'solo_codigo' && ex.motivo !== 'solo_pago') {
+            await sendText(msg.from, 'Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?');
+            return;
+          }
+          const guardado = await guardarHuerfano(op.tenantId, op.operadorId, {
+            gasto: ruta ? { ...ex.gasto, imagenUrl: ruta } : ex.gasto,
+            motivo: 'sin_viaje', rutaImagen: ruta,
+          });
+          logger.info('huerfano.guardado', { tenant: op.tenantId, operador: op.operadorId, monto: ex.gasto.monto, ok: guardado });
+          if (!guardado) {
+            // Se le dice la verdad: es la única forma de que no lo dé por hecho.
+            await sendText(msg.from, 'No pude guardar ese comprobante ⚙️. Guarda el ticket y vuelve a mandarlo en un rato, por favor.');
+            return;
+          }
+          // Cuántos lleva ya, para no acusar once veces en una ráfaga de once.
+          const enEspera = await getHuerfanos(op.tenantId, op.operadorId);
+          if (enEspera.length <= 1) await sendText(msg.from, mensajeGuardadoSinViaje(enEspera.length));
+          return;
+        } catch (e) {
+          logger.error('huerfano.error', { err: e instanceof Error ? e.message : String(e) });
+          await sendText(msg.from, 'Se me trabó tantito al recibir tu foto 😕. ¿Me la reenvías?');
           return;
         }
       }
@@ -719,8 +769,24 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           // —abrir el viaje siguiente y mandarla ahí, o pedirle a la oficina que
           // reabra—. Tragárselo le quita el dinero sin avisarle.
           if (llegoTarde(e)) {
-            logger.warn('foto.llego_tarde', { viaje: viajeId, monto: gasto.monto });
-            await sendText(msg.from, `Ese comprobante de ${mxn(gasto.monto)} llegó después de que cerré tu liquidación, así que NO entró. Guárdalo: mándalo en tu siguiente viaje o pídele a la oficina que lo agregue.`);
+            // NO SE PIERDE: pasa a la sala de espera (mig. 0040) y se le ofrece
+            // en su próximo viaje.
+            //
+            // Antes decía «NO entró. Guárdalo: mándalo en tu siguiente viaje o
+            // pídele a la oficina que lo agregue», y eso mandaba al operador a
+            // un trámite que NO EXISTE: no hay forma de que la oficina agregue
+            // un comprobante a un viaje cerrado, ni desde el panel ni desde
+            // ningún lado. El comprobante se perdía igual, solo que despacio y
+            // con el operador cargando un papel que nadie iba a capturar.
+            const ruta = await subida;
+            const ok = await guardarHuerfano(op.tenantId, op.operadorId, {
+              gasto: ruta ? { ...gasto, imagenUrl: ruta } : gasto,
+              motivo: 'tras_liquidar', rutaImagen: ruta,
+            });
+            logger.warn('foto.llego_tarde', { viaje: viajeId, monto: gasto.monto, guardado: ok });
+            await sendText(msg.from, ok
+              ? mensajeGuardadoTrasLiquidar(gasto.monto)
+              : `Ese comprobante de ${mxn(gasto.monto)} llegó después de que cerré tu liquidación y no lo pude guardar ⚙️. Consérvalo y mándalo en tu siguiente viaje.`);
             return;
           }
           throw e;
@@ -910,6 +976,70 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     if (!(msg.type === 'text' && msg.text)) {
       await say('Por ahora solo proceso texto, fotos de comprobantes y el XML del CFDI. Mándame la foto de tu ticket o el XML. 📸');
       return;
+    }
+
+    // ── COMPROBANTES QUE ESPERABAN VIAJE (mig. 0040) ─────────────────────────
+    //
+    // Ya hay viaje, así que por fin hay dónde ponerlos. NO se adjuntan solos: un
+    // ticket del viaje anterior metido en éste es dinero en la liquidación
+    // equivocada, y nadie lo nota hasta que el contralor paga. Se enseña qué hay
+    // y se pregunta.
+    //
+    // Todo este bloque es best-effort: `getHuerfanos` devuelve [] ante un error
+    // de lectura, y no poder leer la sala de espera NO puede impedirle al
+    // operador cerrar el viaje que sí tiene.
+    const enEspera = await getHuerfanos(op.tenantId, op.operadorId);
+    if (enEspera.length) {
+      const ofrecidos = enEspera.filter((h) => h.ofrecidoEn);
+      const comoLista = (hs: typeof enEspera) => hs.map((h) => ({
+        monto: h.gasto.monto,
+        etiqueta: etiquetaConcepto(h.gasto.concepto, h.gasto.ocrExtra as Record<string, unknown> | undefined),
+      }));
+
+      if (ofrecidos.length && esAfirmacion(msg.text)) {
+        // Se marcan DESPUÉS de insertar, no antes: si un `addGasto` falla a
+        // medias, lo que queda es una fila todavía pendiente —que se vuelve a
+        // ofrecer— y no un comprobante marcado como puesto que no está.
+        const puestos: string[] = [];
+        for (const h of ofrecidos) {
+          try {
+            await addGasto(op.tenantId, viajeId, h.gasto);
+            puestos.push(h.id);
+          } catch (e) {
+            // Un duplicado benigno también cuenta como resuelto: el comprobante
+            // YA está en el viaje, que es lo que el operador pidió.
+            if (violaIndice(e, 'uq_gasto_img_hash') || violaIndice(e, 'uq_gasto_cfdi_uuid')) { puestos.push(h.id); continue; }
+            logger.error('huerfano.adjuntar_error', { err: e instanceof Error ? e.message : String(e) });
+          }
+        }
+        await resolverHuerfanos(op.tenantId, puestos, 'adjuntado', viajeId);
+        const ok = ofrecidos.filter((h) => puestos.includes(h.id));
+        logger.info('huerfano.adjuntados', { viaje: viajeId, cuantos: ok.length, de: ofrecidos.length });
+        await say(ok.length
+          ? mensajeAdjuntados(comoLista(ok))
+          : 'No pude agregarlos ⚙️. Siguen guardados; lo intento otra vez en un momento.');
+        return;
+      }
+
+      if (ofrecidos.length && esNegacion(msg.text)) {
+        await resolverHuerfanos(op.tenantId, ofrecidos.map((h) => h.id), 'descartado', null);
+        logger.info('huerfano.descartados', { viaje: viajeId, cuantos: ofrecidos.length });
+        await say('Va, no los agrego a este viaje 👍. Si alguno sí era de aquí, dime cuál y lo pongo.');
+        return;
+      }
+
+      // AÚN NO SE LE HA PREGUNTADO. Se aparta cuando el mensaje parece un
+      // cierre: interceptar un "listo" con una pregunta lo obligaría a
+      // escribirlo dos veces, y en una sala eso se ve como que no entendió.
+      // Perder la oferta este turno no cuesta nada — se le vuelve a hacer.
+      const pareceCierre = /^\s*(listo|ya|ya est[aá]|termin[ée]|termine|acab[ée]|cierra|cerrar|eso es todo|es todo)\b/i.test(msg.text);
+      if (!ofrecidos.length && !pareceCierre) {
+        const viaje = await getViaje(viajeId, op.tenantId).catch(() => null);
+        await marcarHuerfanosOfrecidos(op.tenantId, enEspera.map((h) => h.id));
+        logger.info('huerfano.ofrecidos', { viaje: viajeId, cuantos: enEspera.length });
+        await say(mensajeOfrecer(comoLista(enEspera), viaje?.destino ? `${viaje.origen ?? ''}${viaje.origen ? '→' : ''}${viaje.destino}` : undefined));
+        return;
+      }
     }
 
     // BARRERA DE RÁFAGA: espera a que terminen los OCR de fotos en vuelo antes de
