@@ -110,3 +110,31 @@ describe('la oposición ambigua NO secuestra una queja sobre un ticket', () => {
     expect(pideAtencionPrivacidad('quiero que lo revise una persona')).toBe(true);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 9, ALTO — el arreglo de arriba (OBJETO_DE_PAPEL) cerró el falso
+// positivo abriendo un falso negativo del otro lado: quien contesta con las
+// palabras EXACTAS que el aviso le enseña —"que lo revise una persona, no el
+// programa"— también nombra el objeto que se revisa (es inevitable: la
+// revisión automatizada es sobre comprobantes), y eso apagaba una oposición
+// real. La distinción no es "menciona un papel": es "rechaza explícitamente
+// lo automatizado" (RECHAZA_AUTOMATIZADO).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la oposición real SÍ cuenta cuando además nombra el objeto que se revisa', () => {
+  const oposicionesReales = [
+    'quiero que una persona revise mi comprobante en vez del programa',
+    'que revise una persona mi comprobante, no el programa automático',
+    'quiero que una persona revise mi ticket, no confío en el programa',
+  ];
+  for (const t of oposicionesReales) {
+    it(`SÍ la trata como oposición: "${t}"`, () => expect(pideAtencionPrivacidad(t)).toBe(true));
+  }
+
+  // Las quejas de ticket de la ronda 8 (arriba) NO tienen el rechazo explícito
+  // —"el sistema lo leyó mal" describe un error, no rechaza el sistema— y
+  // tienen que seguir sin contar. Sin este control, ampliar la cobertura aquí
+  // podría reabrir el falso positivo que la ronda 8 cerró.
+  it('control: la queja de ticket original de la ronda 8 sigue SIN contar', () => {
+    expect(pideAtencionPrivacidad('que revise una persona el folio porque el sistema lo leyó mal')).toBe(false);
+  });
+});

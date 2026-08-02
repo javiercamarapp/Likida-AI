@@ -319,6 +319,23 @@ const OPOSICION_AMBIGUA: RegExp[] = [
 const OBJETO_DE_PAPEL = /\b(ticket|folio|comprobante|recibo|factura|foto|imagen|lectura)\b/;
 
 /**
+ * AUDITORÍA 9, ALTO: `OBJETO_DE_PAPEL` cerró el falso positivo de la ronda 8
+ * (la queja de ticket) abriendo un falso negativo del otro lado — el que el
+ * aviso mismo induce con estas palabras: *"Tienes derecho a oponerte a que se
+ * decida así [un programa] y a pedir que la revise alguien."* Quien contesta
+ * "que lo revise una persona **en vez del programa**" está nombrando lo que
+ * se está revisando —es inevitable, la revisión automatizada ES sobre
+ * comprobantes— y ESO no puede seguir descalificando la oposición.
+ *
+ * La distinción no es "menciona un papel", es "rechaza explícitamente lo
+ * automatizado". "que revise una persona el folio porque el sistema lo leyó
+ * mal" solo describe un error (`sistema` es el sujeto de una queja, no algo
+ * que se rechaza); "que lo revise una persona, no el programa" SÍ lo rechaza.
+ * Con el contraste explícito presente, `OBJETO_DE_PAPEL` deja de excluir.
+ */
+const RECHAZA_AUTOMATIZADO = /\b(?:no\s+(?:el\s+|un\s+|confio\s+en\s+el\s+)?(?:programa|sistema|robot|bot)\b|en\s+vez\s+del?\s+(?:programa|sistema))/;
+
+/**
  * ¿El operador está ejerciendo el medio que el aviso le prometió?
  *
  * Determinístico y ANTES del agente, a propósito. Un derecho ARCO no se deja a
@@ -339,7 +356,7 @@ export function pideAtencionPrivacidad(texto: string): boolean {
   return (
     /\b(privacidad|arco|mis datos personales|dar de baja mis datos)\b/.test(t) ||
     OPOSICION.some((r) => r.test(t)) ||
-    (OPOSICION_AMBIGUA.some((r) => r.test(t)) && !OBJETO_DE_PAPEL.test(t))
+    (OPOSICION_AMBIGUA.some((r) => r.test(t)) && (!OBJETO_DE_PAPEL.test(t) || RECHAZA_AUTOMATIZADO.test(t)))
   );
 }
 
