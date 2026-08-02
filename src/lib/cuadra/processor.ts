@@ -1318,13 +1318,20 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // la 0036 (`trg_gasto_no_tras_liquidar`) y "listo" ya no encuentra viaje
     // abierto. El consejo se distingue por `closed`, igual que el mensaje
     // gemelo de `llegoTarde` (arriba, línea ~526) para el mismo hecho.
+    // AUDITORÍA 9, MEDIO agéntico: la primera mitad del aviso ("cuadré con los
+    // N comprobantes") afirmaba un cuadre que, sin `closed`, no ocurrió —el
+    // agente pudo simplemente haber contestado un saludo sin llamar ninguna
+    // tool, el viaje sigue `abierto`, y no hay liquidación ni PDF. Es la misma
+    // clase de mentira que `guardiaEstado` existe para tapar, solo que este
+    // texto no pasa por ninguna guardia. Se bifurca la frase ENTERA por
+    // `closed`, no solo el consejo (que ya se bifurcaba desde la ronda 8).
     if (!intakeOk) {
       try {
         const n = (await getGastos(viajeId, op.tenantId)).length;
-        const consejo = closed
-          ? 'Guárdalo: mándalo en tu siguiente viaje o pídele a la oficina que lo agregue desde el panel.'
-          : 'Si te faltó alguno, reenvíalo y escribe *listo* otra vez.';
-        await say(`⚠️ Ojo: cuadré con los ${n} comprobantes que alcancé a procesar. ${consejo}`);
+        const aviso = closed
+          ? `⚠️ Ojo: cuadré con los ${n} comprobantes que alcancé a procesar. Guárdalo: mándalo en tu siguiente viaje o pídele a la oficina que lo agregue desde el panel.`
+          : `⚠️ Ojo: uno de tus comprobantes tardó más de lo normal en procesarse — llevo ${n} guardados de este viaje, pero todavía no cuadro nada. Si te faltó alguno, reenvíalo y escribe *listo* cuando quieras que cuadre.`;
+        await say(aviso);
       } catch (e) {
         logger.warn('intake.aviso', { viaje: viajeId, tenant: op.tenantId, err: e instanceof Error ? e.message : String(e) });
       }
