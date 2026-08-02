@@ -14,22 +14,30 @@ import { createServerClient } from '@supabase/ssr';
 // Esta es la PRIMERA capa (barata, por matcher de ruta). La segunda vive en
 // cada página vía `requireSessionTenant` (src/lib/auth/guard.ts): las dos
 // tienen que fallar a la vez para que el panel se sirva sin autorización.
-export async function proxy(req: NextRequest) {
-  let res = NextResponse.next({ request: req });
-  const path = req.nextUrl.pathname;
-
+//
+// LAS CABECERAS SE APLICAN AL FINAL, EN UN SOLO LUGAR. `setAll` reasigna
+// `res` a una respuesta NUEVA cada vez que Supabase refresca el token de
+// sesión (pasa a media vida, no solo al expirar) — si las cabeceras se
+// hubieran puesto antes de ese punto, un refresh de sesión las tiraba en
+// silencio en cualquier respuesta autenticada. Y el redirect a /login es
+// OTRO objeto de respuesta aparte de `res`: sin este helper aplicado también
+// ahí, la página de login nunca llevaba cabeceras de seguridad tampoco.
+function withSecurityHeaders(res: NextResponse): NextResponse {
   res.headers.set('X-Content-Type-Options', 'nosniff');
   res.headers.set('X-Frame-Options', 'DENY');
   res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
-
   if (process.env.NODE_ENV === 'production') {
     res.headers.set('Strict-Transport-Security', 'max-age=31536000');
   }
+  return res;
+}
+
+export async function proxy(req: NextRequest) {
+  let res = NextResponse.next({ request: req });
+  const path = req.nextUrl.pathname;
 
   if (path.startsWith('/dashboard')) {
-    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -49,10 +57,12 @@ export async function proxy(req: NextRequest) {
       const url = req.nextUrl.clone();
       url.pathname = '/login';
       url.searchParams.set('next', path);
-      return NextResponse.redirect(url);
+      return withSecurityHeaders(NextResponse.redirect(url));
     }
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   }
-  return res;
+
+  return withSecurityHeaders(res);
 }
 
 export const config = {
