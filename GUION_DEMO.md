@@ -56,6 +56,18 @@ captura?"* — te da el tamaño y te da el nombre de quien va a usar esto.
 - El sistema acusa **una sola vez**: *"📸 Voy recibiendo tus comprobantes.
   Mándalos todos y cuando termines escribe **listo**."*
 - Escribes **listo**.
+
+> ⚠️ **EL ORDEN NO ES NEGOCIABLE: todas las fotos ANTES del `listo`.** Probado en
+> vivo el 1-ago: escribir `listo` primero cierra la liquidación, y las fotos que
+> lleguen después rebotan con *"llegó después de que cerré tu liquidación, así que
+> NO entró"*. Es el candado que impide que el PDF ya entregado y el mensaje de
+> WhatsApp digan cifras distintas — o sea, funciona como debe— pero **en la sala
+> se ve como que el sistema rechazó un comprobante**, y hoy no hay forma de
+> reabrir desde WhatsApp ni desde el panel: se arregla por SQL.
+>
+> Si te pasa, no pelees con ello: dilo como diseño —*"una vez que firmo la
+> liquidación ya no la puedo alterar sin que se note; eso es a propósito"*— y
+> sigue con el simulador `/demo`, donde puedes repetir el flujo entero.
 - Llega el **cuadre** —comprobado contra anticipo, la diferencia y las
   observaciones en lenguaje humano— y después el **PDF**.
 
@@ -129,6 +141,8 @@ detalle sale vacío. Están ahí solo para que la lista no se vea sola.
 | **El modelo tarda o cae** | hay respaldo entre proveedores; si todo cae, el agente pide reenviar **sin inventar números** |
 | **La base pausó** | una consulta la despierta (~10 s). Por eso el paso 2 del checklist |
 | **"No tienes un viaje abierto"** | tu operador ya cerró el viaje. Hay que abrir otro; ten a la mano quién lo hace |
+| **"llegó después de que cerré tu liquidación"** | mandaste una foto DESPUÉS del `listo`. No se puede reabrir en vivo: pasa al simulador `/demo` y repite el flujo ahí. Nárralo como el candado que impide alterar una liquidación ya firmada |
+| **"Por ahora solo proceso texto, fotos y XML"** | mandaste audio, sticker o documento. Es la respuesta correcta; repite con la foto |
 
 ---
 
