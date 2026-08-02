@@ -81,7 +81,7 @@ export default async function Login({
       options: {
         emailRedirectTo: `${siteUrl()}/auth/callback?next=${encodeURIComponent(dest)}`,
         // Nadie se da de alta solo (decisión 1 del spec): las cuentas las crea
-        // `provisionarFlotaAdmin`. Sin esto, Supabase por default crea el
+        // `provisionarUsuario`. Sin esto, Supabase por default crea el
         // `auth.users` de CUALQUIER correo que alguien teclee aquí.
         shouldCreateUser: false,
       },

@@ -974,16 +974,27 @@ git push
 (Recordatorio del propio repo: `git push` YA despliega — no correr
 `vercel deploy` después.)
 
-- [ ] **Step 2: Provisionar el correo real de Javier como flota_admin del tenant demo**
+- [ ] **Step 2: Provisionar cuentas reales**
 
-Ejecutar una sola vez, con el correo real que Javier va a usar en la sala:
+**Actualización 2-ago-2026:** `provisionarFlotaAdmin` se generalizó a
+`provisionarUsuario(tenantId, email, nombre?, rol?)` — acepta `tenantId: null`
+y un `rol` explícito, porque además de la cuenta del contralor de la demo
+hizo falta una cuenta `superadmin` para Javier mismo (`app_user.tenant_id`
+nulo, ver `guard.ts` — un superadmin cae al tenant demo hasta que exista un
+selector real de flota). Ejecutar una sola vez cada una:
 
 ```ts
-import { provisionarFlotaAdmin } from '@/lib/auth/provisionar';
-await provisionarFlotaAdmin(
-  '11111111-1111-1111-1111-111111111111', // tenant demo, Transportes Innovativos
-  'CORREO_REAL_DE_JAVIER',
-  'Javier',
+import { provisionarUsuario } from '@/lib/auth/provisionar';
+
+// Javier, superadmin — no pertenece a ningún tenant.
+await provisionarUsuario(null, 'javiercamaraportepetit@gmail.com', 'Javier', 'superadmin');
+
+// Cuenta para probar el dashboard como lo vería un cliente (flota_admin del
+// tenant demo, Transportes Innovativos).
+await provisionarUsuario(
+  '11111111-1111-1111-1111-111111111111',
+  'likida.ai@gmail.com',
+  'Cliente demo',
 );
 ```
 
