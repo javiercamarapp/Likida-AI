@@ -864,87 +864,111 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           await say('Recibí un documento, pero necesito el *XML* del CFDI (el archivo .xml que te manda la gasolinera por correo), no el PDF. ¿Me lo reenvías? 📎');
           return;
         }
-        const gastos = await getGastos(viajeId, op.tenantId);
-        // 1) Por UUID: el gasto ya venía de un CFDI (foto con QR fiscal legible).
-        let match = gastos.find((x) => x.cfdiUuid && x.cfdiUuid.toLowerCase() === xml.uuid);
-        let eraTicket = false;
-        if (!match) {
-          // 2) Por monto y fecha, contra los TICKETS sin timbrar. Es el caso normal:
-          // un ticket de gasolinera NO trae UUID, así que buscar solo por UUID no
-          // encontraba nada y se creaba un SEGUNDO gasto — el mismo consumo contado
-          // dos veces, con su IVA y su IEPS encima. Un unique(cfdi_uuid) no lo
-          // arregla: el del ticket es NULL y NULL no colisiona.
-          const porTicket = emparejarXmlConTicket({ total: xml.total, fecha: xml.fecha }, gastos);
-          if (porTicket) { match = porTicket; eraTicket = true; }
+
+        // AUDITORÍA 9, MEDIO agéntico — MUTEX, porque esto es read-modify-write
+        // sobre una fila COMPARTIDA, no un insert nuevo como la foto. Sin él, dos
+        // XML del mismo total en el mismo lote (Meta los entrega juntos,
+        // `route.ts:72` los corre con `Promise.all`) leían el mismo `gastos`
+        // ANTES de que ninguno escribiera, los dos emparejaban con el MISMO
+        // ticket sin `cfdi_uuid`, y el segundo `updateGastoCfdiXml` pisaba al
+        // primero: su UUID, RFC emisor, IVA e IEPS desaparecían sin aviso —
+        // `saveCfdiXmlRaw` seguía conservando el XML crudo del primero, apuntando
+        // a un gasto que ya no traía su propio UUID. El mismo mutex que ya
+        // protege el "listo" contra el doble cierre protege aquí el
+        // emparejamiento contra la carrera. Si sigue ocupado tras esperar, se le
+        // pide al operador que reenvíe en vez de proceder sin exclusividad —
+        // proceder es exactamente la carrera que esto existe para cerrar.
+        const xmlLock = await acquireViajeLock(viajeId, { maxWaitMs: reloj.acotar(12_000) });
+        if (!xmlLock) {
+          logger.warn('xml.lock_ocupado', { viaje: viajeId, tenant: op.tenantId });
+          await sendText(msg.from, 'Estoy terminando de procesar otro XML de tu viaje 🙏. Reenvía este en un momento.');
+          return;
         }
-        let gastoId: string;
-        if (match) {
-          // Ya existía el gasto: se enriquece con el XML. Si era un ticket, el XML
-          // además le aporta UUID, RFC, monto y fecha, que son autoritativos.
-          //
-          // AUDITORÍA 8, ALTO (modelo de datos + agéntico): este UPDATE puede
-          // cambiar monto/IVA/IEPS de un gasto que ya forma parte de una
-          // liquidación emitida — la 0037 lo bloquea en la base (mismo SQLSTATE
-          // `CU001` que la 0036), pero sin este catch el operador recibía "se me
-          // trabó tantito" en vez de la verdad, igual que el brazo de imagen ya
-          // corrige más abajo con `llegoTarde`.
-          try {
-            await updateGastoCfdiXml(op.tenantId, match.id, eraTicket
-              ? { ...xml, uuid: xml.uuid, rfcEmisor: xml.rfcEmisor, rfcReceptor: xml.rfcReceptor, total: xml.total, fecha: xml.fecha }
-              : xml);
-          } catch (e) {
-            if (llegoTarde(e)) {
-              logger.warn('xml.llego_tarde', { viaje: viajeId, gasto: match.id });
-              await sendText(msg.from, `El XML que mandaste llegó después de que cerré tu liquidación, así que NO se aplicó. Guárdalo: mándalo en tu siguiente viaje o pídele a la oficina que lo agregue.`);
-              return;
-            }
-            throw e;
+        try {
+          const gastos = await getGastos(viajeId, op.tenantId);
+          // 1) Por UUID: el gasto ya venía de un CFDI (foto con QR fiscal legible).
+          let match = gastos.find((x) => x.cfdiUuid && x.cfdiUuid.toLowerCase() === xml.uuid);
+          let eraTicket = false;
+          if (!match) {
+            // 2) Por monto y fecha, contra los TICKETS sin timbrar. Es el caso normal:
+            // un ticket de gasolinera NO trae UUID, así que buscar solo por UUID no
+            // encontraba nada y se creaba un SEGUNDO gasto — el mismo consumo contado
+            // dos veces, con su IVA y su IEPS encima. Un unique(cfdi_uuid) no lo
+            // arregla: el del ticket es NULL y NULL no colisiona.
+            const porTicket = emparejarXmlConTicket({ total: xml.total, fecha: xml.fecha }, gastos);
+            if (porTicket) { match = porTicket; eraTicket = true; }
           }
-          if (eraTicket) logger.info('xml.pegado_a_ticket', { viaje: viajeId, gasto: match.id });
-          gastoId = match.id;
-        } else {
-          // El XML llegó sin foto previa: se crea el gasto desde el XML.
-          // El concepto sale de la CLAVE del SAT, no de un prefijo. Antes esto era
-          // `startsWith('15101') ? 'diesel' : 'factura'`, así que toda caseta
-          // timbrada entraba como 'factura' y perdía el estímulo del 50% de peaje
-          // (LIF 2026 Art. 20-A), que el motor sólo aplica a `concepto === 'caseta'`.
-          gastoId = randomUUID();
-          const cfg = await getConfig(op.tenantId);
-          // AUDITORÍA 8, ALTO (agéntico): sin este try/catch, un XML sin foto
-          // previa que llega tarde chocaba con la 0036 (CU001) igual que el
-          // camino de arriba, pero saltaba al catch general — "se me trabó
-          // tantito" para un hecho que no es transitorio.
-          try {
-            await addGasto(op.tenantId, viajeId, {
-              id: gastoId,
-              concepto: conceptoDesdeClave(xml.claveProdServ, cfg.hidrocarburos.claves, cfg.estimulos.clavesPeaje),
-              monto: xml.total ?? 0,
-              fecha: xml.fecha,
-              rfcEmisor: xml.rfcEmisor,
-              rfcReceptor: xml.rfcReceptor,
-              cfdiUuid: xml.uuid,
-              claveProdServ: xml.claveProdServ,
-              claveUnidad: xml.claveUnidad,
-              tipoComprobante: xml.tipoComprobante,
-              complementoHidrocarburos: xml.complementoHidrocarburos,
-              cfdiEsquemaAlterno: xml.esquemaAlterno,
-              formaPago: xml.formaPago,
-              subTotal: xml.subTotal,
-              iepsTraslado: xml.iepsTraslado,
-              ivaTraslado: xml.ivaTraslado,
-              xmlVerificado: true,
-            });
-          } catch (e) {
-            if (llegoTarde(e)) {
-              logger.warn('xml.llego_tarde', { viaje: viajeId, gasto: gastoId });
-              await sendText(msg.from, `El XML que mandaste llegó después de que cerré tu liquidación, así que NO se aplicó. Guárdalo: mándalo en tu siguiente viaje o pídele a la oficina que lo agregue.`);
-              return;
+          let gastoId: string;
+          if (match) {
+            // Ya existía el gasto: se enriquece con el XML. Si era un ticket, el XML
+            // además le aporta UUID, RFC, monto y fecha, que son autoritativos.
+            //
+            // AUDITORÍA 8, ALTO (modelo de datos + agéntico): este UPDATE puede
+            // cambiar monto/IVA/IEPS de un gasto que ya forma parte de una
+            // liquidación emitida — la 0037 lo bloquea en la base (mismo SQLSTATE
+            // `CU001` que la 0036), pero sin este catch el operador recibía "se me
+            // trabó tantito" en vez de la verdad, igual que el brazo de imagen ya
+            // corrige más abajo con `llegoTarde`.
+            try {
+              await updateGastoCfdiXml(op.tenantId, match.id, eraTicket
+                ? { ...xml, uuid: xml.uuid, rfcEmisor: xml.rfcEmisor, rfcReceptor: xml.rfcReceptor, total: xml.total, fecha: xml.fecha }
+                : xml);
+            } catch (e) {
+              if (llegoTarde(e)) {
+                logger.warn('xml.llego_tarde', { viaje: viajeId, gasto: match.id });
+                await sendText(msg.from, `El XML que mandaste llegó después de que cerré tu liquidación, así que NO se aplicó. Guárdalo: mándalo en tu siguiente viaje o pídele a la oficina que lo agregue.`);
+                return;
+              }
+              throw e;
             }
-            throw e;
+            if (eraTicket) logger.info('xml.pegado_a_ticket', { viaje: viajeId, gasto: match.id });
+            gastoId = match.id;
+          } else {
+            // El XML llegó sin foto previa: se crea el gasto desde el XML.
+            // El concepto sale de la CLAVE del SAT, no de un prefijo. Antes esto era
+            // `startsWith('15101') ? 'diesel' : 'factura'`, así que toda caseta
+            // timbrada entraba como 'factura' y perdía el estímulo del 50% de peaje
+            // (LIF 2026 Art. 20-A), que el motor sólo aplica a `concepto === 'caseta'`.
+            gastoId = randomUUID();
+            const cfg = await getConfig(op.tenantId);
+            // AUDITORÍA 8, ALTO (agéntico): sin este try/catch, un XML sin foto
+            // previa que llega tarde chocaba con la 0036 (CU001) igual que el
+            // camino de arriba, pero saltaba al catch general — "se me trabó
+            // tantito" para un hecho que no es transitorio.
+            try {
+              await addGasto(op.tenantId, viajeId, {
+                id: gastoId,
+                concepto: conceptoDesdeClave(xml.claveProdServ, cfg.hidrocarburos.claves, cfg.estimulos.clavesPeaje),
+                monto: xml.total ?? 0,
+                fecha: xml.fecha,
+                rfcEmisor: xml.rfcEmisor,
+                rfcReceptor: xml.rfcReceptor,
+                cfdiUuid: xml.uuid,
+                claveProdServ: xml.claveProdServ,
+                claveUnidad: xml.claveUnidad,
+                tipoComprobante: xml.tipoComprobante,
+                complementoHidrocarburos: xml.complementoHidrocarburos,
+                cfdiEsquemaAlterno: xml.esquemaAlterno,
+                formaPago: xml.formaPago,
+                subTotal: xml.subTotal,
+                iepsTraslado: xml.iepsTraslado,
+                ivaTraslado: xml.ivaTraslado,
+                xmlVerificado: true,
+              });
+            } catch (e) {
+              if (llegoTarde(e)) {
+                logger.warn('xml.llego_tarde', { viaje: viajeId, gasto: gastoId });
+                await sendText(msg.from, `El XML que mandaste llegó después de que cerré tu liquidación, así que NO se aplicó. Guárdalo: mándalo en tu siguiente viaje o pídele a la oficina que lo agregue.`);
+                return;
+              }
+              throw e;
+            }
           }
+          // 1.8: conservar el XML crudo (CFF 30). Best-effort.
+          await saveCfdiXmlRaw(op.tenantId, xml.uuid, gastoId, xmlText!);
+        } finally {
+          await releaseViajeLock(viajeId);
         }
-        // 1.8: conservar el XML crudo (CFF 30). Best-effort.
-        await saveCfdiXmlRaw(op.tenantId, xml.uuid, gastoId, xmlText!);
       } finally {
         await intakeDelta(viajeId, -1); // libera el contador pase lo que pase
       }
