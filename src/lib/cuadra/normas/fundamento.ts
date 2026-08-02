@@ -135,6 +135,87 @@ function numeroCitable(cita: string): string | null {
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// ═══════════════════════════════════════════════════════════════════════════
+// MEMORIA POR TEMA, NO POR ID — AUDITORÍA 9, ALTO agéntico.
+//
+// La memoria (AUDITORÍA 8, AG-2) le permite al modelo repetir SIN tool una cita
+// que el propio sistema ya entregó en este viaje. El error que abrió esa
+// memoria: se concedía por `norma_id` solo, sin comprobar que la afirmación
+// ACTUAL fuera la misma que la justificó la primera vez. Dos citas con el mismo
+// id pueden ser sobre cosas distintas — "RFA 2026 regla 2.9" es el tope del 15%
+// de DIÉSEL en efectivo, y nada impide que el modelo la pegue en una frase sobre
+// una CASETA. El id coincide, el tema no, y el id solo no lo distingue.
+//
+// Por eso la memoria compara la ORACIÓN que trae la cita ahora contra las
+// oraciones que la trajeron antes, por palabras compartidas fuera de la cita
+// misma. Sin contexto que comparar (oración pelada, o sin historial) la memoria
+// no se concede — falla cerrado, que es la misma asimetría del resto del
+// archivo: quitar una cita legítima cuesta precisión; dejar pasar una mal
+// aplicada cuesta la credibilidad frente al fiscalista del contralor.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Palabras que no distinguen tema en español. */
+const RELLENO = new Set([
+  'de', 'la', 'el', 'en', 'y', 'a', 'que', 'tu', 'se', 'por', 'con', 'del',
+  'las', 'los', 'un', 'una', 'al', 'es', 'lo', 'no', 'si', 'ya', 'te', 'me',
+  'su', 'para', 'como', 'pero', 'ojo', 'esa', 'ese', 'esto', 'eso', 'ha',
+]);
+
+function palabrasClave(s: string): Set<string> {
+  return new Set(
+    s
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !RELLENO.has(w)),
+  );
+}
+
+/**
+ * Oraciones (separadas por '.', salto de línea o ';') que contienen la cita.
+ *
+ * El punto NO parte la oración cuando es DECIMAL —dígito a los dos lados,
+ * como en "regla 2.9"—: partirlo ahí desarma la propia cita ("regla 2" y "9"
+ * por separado) y ninguna mitad vuelve a casar contra `patrones`.
+ */
+function oracionesConCita(texto: string, patrones: RegExp[]): string[] {
+  return texto
+    .split(/(?:(?<!\d)\.|\.(?!\d))+|[\n;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && patrones.some((p) => p.test(s)));
+}
+
+/** El tema de una oración: sus palabras clave con la cita misma quitada. */
+function temaDe(oracion: string, patrones: RegExp[]): Set<string> {
+  let sinCita = oracion;
+  for (const p of patrones) sinCita = sinCita.replace(new RegExp(p.source, 'gi'), ' ');
+  return palabrasClave(sinCita);
+}
+
+/** Al menos dos palabras de tema compartidas, fuera de la cita. */
+const UMBRAL_TEMA = 2;
+
+/**
+ * `true` si la cita `id`, tal como aparece en `reply`, está hablando del MISMO
+ * asunto que la trajo en `historial`. Sin historial, o sin palabras de tema en
+ * ninguno de los dos lados, no hay nada que comparar y la memoria no aplica.
+ */
+function citaEsMismoTema(id: string, reply: string, historial: string): boolean {
+  if (!historial) return false;
+  const patrones = patronesDe(id);
+  const oracionActual = oracionesConCita(reply, patrones)[0];
+  if (!oracionActual) return false;
+  const temaActual = temaDe(oracionActual, patrones);
+  if (temaActual.size === 0) return false;
+  return oracionesConCita(historial, patrones).some((h) => {
+    const temaHistorico = temaDe(h, patrones);
+    let compartidas = 0;
+    for (const w of temaActual) if (temaHistorico.has(w)) compartidas++;
+    return compartidas >= UMBRAL_TEMA;
+  });
+}
+
 /**
  * "Ley del Impuesto sobre la Renta" → "Ley del ISR", que es como lo abrevia un
  * humano (y el modelo). Sin esto, la forma larga más común se escapa.
@@ -258,11 +339,14 @@ export interface ResultadoFundamento {
 }
 
 /**
- * Quita del texto toda cita normativa que no venga de `permitidas`.
+ * Quita del texto toda cita normativa que no venga de `permitidas` NI sea, por
+ * su ORACIÓN, la misma afirmación que ya se entregó en `historial`.
  *
  * @param permitidas ids de norma que una tool devolvió EN ESTE TURNO.
+ * @param historial texto de los turnos `assistant` previos de este viaje —
+ *   fuente de la memoria por tema. Sin él, no hay memoria: solo `permitidas`.
  */
-export function guardiaFundamento(reply: string, permitidas: string[]): ResultadoFundamento {
+export function guardiaFundamento(reply: string, permitidas: string[], historial = ''): ResultadoFundamento {
   const ok = new Set(permitidas);
 
   // ── 1. ¿Se presenta como obligación algo que NO obliga? ───────────────────
@@ -275,6 +359,13 @@ export function guardiaFundamento(reply: string, permitidas: string[]): Resultad
   const suavizar = noVinculantes.length > 0 && OBLIGA.test(reply);
 
   const citadas = citasEnTexto(reply);
+  // MEMORIA POR TEMA: una cita que ninguna tool trajo este turno se admite si,
+  // y SOLO si, la oración que la trae ahora habla del mismo asunto que la
+  // oración que la trajo antes. El id solo no basta — ver comentario arriba de
+  // `citaEsMismoTema`.
+  for (const id of citadas) {
+    if (id !== CITA_DESCONOCIDA && !ok.has(id) && citaEsMismoTema(id, reply, historial)) ok.add(id);
+  }
   const sobran = citadas.filter((id) => !ok.has(id));
   if (sobran.length === 0 && !suavizar) return { reply, forzado: false, quitadas: [] };
 
