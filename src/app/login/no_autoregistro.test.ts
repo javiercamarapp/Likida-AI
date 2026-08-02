@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 //  · `shouldCreateUser: false`. El default de Supabase es `true`: sin esa
 //    opción, CUALQUIER correo tecleado en la caja crea un `auth.users` real,
 //    justo lo contrario de la decisión 1 del spec (nadie se da de alta solo;
-//    las cuentas las crea `provisionarFlotaAdmin`). Es una omisión invisible:
+//    las cuentas las crea `provisionarUsuario`). Es una omisión invisible:
 //    la pantalla se comporta igual.
 //  · El límite por IP. El passcode que este login reemplaza lo tenía
 //    (`acceso/page.tsx`); aquí el costo de no tenerlo es mayor, porque cada
