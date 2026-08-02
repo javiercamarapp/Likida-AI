@@ -144,3 +144,33 @@ describe('liquidación completa de 20 comprobantes', () => {
     expect(resumenCuadre(r, true, 'contralor')).toMatch(/no sustituye|no es un dictamen|contador/i);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PLURAL, QUE NO ES COSMÉTICO CUANDO SE PROYECTA. 1-ago-2026.
+//
+// El cuadre real cerró con «…y 12 observación(es) más en el panel». El paréntesis
+// es la marca de un texto sin terminar, y este mensaje es literalmente lo que se
+// enseña en la sala. El PDF ya lo resolvía bien.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el corte de observaciones se lee como español', () => {
+  const conObs = (n: number) => resumenCuadre({
+    totalComprobado: 100, totalAnticipo: 100, diferencia: 0, estatus: 'cuadrada',
+    diferencias: Array.from({ length: n }, (_, i) => ({
+      tipo: 'fecha_sospechosa', concepto: 'diesel', monto: 0, nota: `obs ${i}`,
+    })),
+  } as never, true, 'operador');
+
+  it('con varias, plural sin paréntesis', () => {
+    const t = conObs(18);
+    expect(t).toContain('12 observaciones más');
+    expect(t, 'el paréntesis delata un texto a medias').not.toContain('(es)');
+  });
+
+  it('con una sola, singular', () => {
+    expect(conObs(7)).toContain('1 observación más');
+  });
+
+  it('con seis o menos no corta nada', () => {
+    expect(conObs(6)).not.toMatch(/más en el panel/);
+  });
+});

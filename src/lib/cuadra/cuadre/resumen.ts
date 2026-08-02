@@ -65,7 +65,13 @@ export function resumenCuadre(
     for (const d of obs.slice(0, 6)) lines.push(`• ${d.nota}`);
     // Truncar en silencio hace que quien lo lee crea que vio todo. El conteo va
     // sobre `obs` YA filtrada por destinatario, no sobre la lista completa.
-    if (obs.length > 6) lines.push(`• …y ${obs.length - 6} observación(es) más en el panel.`);
+    // `observación(es)` no: es la marca de un texto sin terminar, y este mensaje
+    // es lo que se proyecta en la sala. El PDF ya lo resolvía bien tres archivos
+    // más allá; aquí se había quedado el paréntesis.
+    if (obs.length > 6) {
+      const n = obs.length - 6;
+      lines.push(`• …y ${n} ${n === 1 ? 'observación más' : 'observaciones más'} en el panel.`);
+    }
   }
 
   // LITROS, NO PESOS. `engine.ts` fija `iepsAcreditable = 0` a propósito: el
