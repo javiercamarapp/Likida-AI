@@ -101,7 +101,15 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
     }
     logger.info('foto.pendiente_pegado', { viaje: viajeId, gasto: gasto.id });
   } catch (e) {
-    logger.warn('foto.pendiente_error', { err: e instanceof Error ? e.message : String(e) });
+    // AUDITORÍA 9, ALTO operabilidad: `tenantId`/`viajeId`/`gasto.id` están en
+    // scope y las tres líneas vecinas los usan — solo este catch los omitía.
+    // Sentry agrupa por `msg`, así que sin ellos un fallo aquí ("fetch failed")
+    // no se puede cruzar contra la base para saber a qué viaje o tenant
+    // pertenece. (El otro mecanismo que compartía este mismo nombre de log,
+    // `foto_pendiente`/mig. 0038, se revirtió esta ronda; ya no hay colisión
+    // de dos mecanismos distintos bajo un mismo `msg`, pero la falta de
+    // contexto en ESTE sitio seguía siendo real por su cuenta.)
+    logger.warn('foto.pendiente_error', { viaje: viajeId, tenant: tenantId, gasto: gasto.id, err: e instanceof Error ? e.message : String(e) });
   }
 }
 
