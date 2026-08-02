@@ -258,7 +258,12 @@ describe('arnés · caso de oro (sin gastar): el pipeline post-OCR contra cifras
     expect(tipos).toContain('viatico_excede_fiscal');   // LISR 28-V, $750/día
     expect(tipos).toContain('sobre_politica');          // DEMO_CONFIG: $800
     const fiscal = (liq.diferencias ?? []).find((d) => d.tipo === 'viatico_excede_fiscal');
-    expect(fiscal?.monto).toBe(300);                    // 1,050 − 750
+    // AUDITORÍA 9, ALTO (fiscal): `g-comida` (arriba) está SIN timbrar a
+    // propósito ("por confirmar hasta que se facture") — el excedente del
+    // tope diario no puede ser "no deducible" de un comprobante que todavía
+    // no es deducción de nadie. `monto` ahora refleja eso ($0, nada timbrado
+    // hoy excede el tope); la nota sigue avisando del día completo ($750).
+    expect(fiscal?.monto).toBe(0);
     expect(fiscal?.nota).toMatch(/750/);
   });
 
