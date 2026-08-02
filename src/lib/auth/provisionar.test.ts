@@ -51,4 +51,13 @@ describe('provisionarUsuario', () => {
     });
     expect(r).toEqual({ userId: 'u-3' });
   });
+
+  // Quinto rol del panel (docs/superpowers/plans/2026-08-02-roles-flota.md):
+  // ve todo el tenant y puede asignar viajes a choferes, sin llegar a
+  // facturación/invitar usuarios (eso sigue siendo solo de flota_admin).
+  it('acepta rol encargado', async () => {
+    createUser.mockResolvedValue({ data: { user: { id: 'u-4' } }, error: null });
+    await provisionarUsuario('t-1', 'encargado@innovativos.mx', 'Luis', 'encargado');
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ rol: 'encargado' }));
+  });
 });

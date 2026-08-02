@@ -13,7 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
-export type RolAppUser = 'superadmin' | 'flota_admin' | 'contador' | 'operador';
+export type RolAppUser = 'superadmin' | 'flota_admin' | 'contador' | 'operador' | 'encargado';
 
 export async function provisionarUsuario(
   tenantId: string | null,
