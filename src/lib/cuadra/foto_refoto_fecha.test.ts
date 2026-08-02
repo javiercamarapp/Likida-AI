@@ -178,6 +178,52 @@ describe('processInbound — pedir la re-foto y saber recibirla', () => {
     expect(salientes.join(' ')).toContain('$45.00');
   });
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 9, ALTO backend — el catch `if (llegoTarde(e))` de
+  // `processor.ts:622` se escribió para este caso exacto (la re-foto llega
+  // después de que la 0037 ya cerró la liquidación) y nunca corría en ningún
+  // test: el trigger de la 0037 no cubría la columna `fecha`, así que
+  // `corregirFechaGasto` nunca lanzaba `CU001` de verdad contra la base real.
+  // La migración 0042 (este mismo repo, esta misma ronda) agregó `fecha` al
+  // `when` del trigger — este test prueba el CABLEADO que ya existía y que la
+  // migración por fin vuelve alcanzable: con `CU001`, el operador se entera de
+  // que su corrección NO se aplicó, en vez de creer que sí.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('con CU001 (la liquidación ya cerró), avisa que la fecha NO se corrigió — no "ya quedó"', async () => {
+    getGastos.mockResolvedValue([WALMART_MAL]);
+    extraerComprobante.mockResolvedValue({
+      legible: true,
+      gasto: { concepto: 'alimentacion', monto: 45, fecha: '2026-08-01', folio: '05461', ocrExtra: {} },
+      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+    });
+    const err = new Error('el viaje ya tiene liquidación emitida') as Error & { code?: string };
+    err.code = 'CU001';
+    corregirFechaGasto.mockRejectedValue(err);
+
+    await processInbound(foto);
+
+    expect(salientes).toHaveLength(1);
+    expect(salientes[0], 'no puede afirmar un cierre que el trigger acaba de rechazar').not.toMatch(/ya quedó/i);
+    expect(salientes[0]).toMatch(/llegó después de que cerré tu liquidación/i);
+    expect(salientes[0]).toContain('$45.00');
+  });
+
+  it('con un error normal, sigue cayendo al mensaje genérico (no se confunde con CU001)', async () => {
+    getGastos.mockResolvedValue([WALMART_MAL]);
+    extraerComprobante.mockResolvedValue({
+      legible: true,
+      gasto: { concepto: 'alimentacion', monto: 45, fecha: '2026-08-01', folio: '05461', ocrExtra: {} },
+      costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+    });
+    corregirFechaGasto.mockRejectedValue(new Error('fallo de red cualquiera'));
+
+    await processInbound(foto);
+
+    expect(salientes).toHaveLength(1);
+    expect(salientes[0]).not.toMatch(/llegó después de que cerré/i);
+    expect(salientes[0]).toMatch(/no pude guardar la fecha/i);
+  });
+
   it('una foto con la fecha fuera del viaje SÍ entra, y se le pide otra nombrando el ticket', async () => {
     // El gasto se registra igual: no registrarlo por una fecha sospechosa le
     // costaría al operador un gasto que sí hizo.
