@@ -14,6 +14,10 @@
 //     del contralor queda abierto y tampoco avisa.
 //   · `CUADRA_WHATSAPP_MSG_USD` ausente → el costo por liquidación se calcula con
 //     un default, y esa cifra es la que decide el precio del producto.
+//   · `NEXT_PUBLIC_APP_URL` ausente → `login/page.tsx` cae a `https://likida.ai`
+//     y manda los magic links y el retorno de Google a un dominio que no es el
+//     desplegado. El correo llega, el link abre, y la sesión se completa en otro
+//     sitio: no hay error en ninguna parte, simplemente nadie entra.
 //
 // No duplica `verificarEntornoCritico()` de `cuadra/startup.ts`, que revisa
 // `DASHBOARD_SECRET` (una variable que sí es un agujero de seguridad, no una
@@ -28,6 +32,11 @@ const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   { nombre: 'DEMO_TENANT_ID', consecuencia: 'el panel consulta el tenant del seed y pinta cero liquidaciones' },
   { nombre: 'DASHBOARD_PASSCODE', consecuencia: 'proxy.ts no bloquea /dashboard' },
   { nombre: 'CUADRA_WHATSAPP_MSG_USD', consecuencia: 'el costo por liquidación usa el default 0.008' },
+  {
+    nombre: 'NEXT_PUBLIC_APP_URL',
+    consecuencia:
+      'login arma sus redirects contra https://likida.ai (el fallback del código) en vez del dominio desplegado: el magic link y el retorno de Google apuntan a otro sitio y nadie entra, sin un solo error',
+  },
 ];
 
 /**

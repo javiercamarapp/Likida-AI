@@ -29,7 +29,12 @@
 const GROUPS = {
   llm: ['OPENROUTER_API_KEY'],
   whatsapp: ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET'],
-  supabase: ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'],
+  // `NEXT_PUBLIC_SUPABASE_ANON_KEY` entró al grupo con el login por usuario: la
+  // usan `proxy.ts` y `supabase/server.ts`, así que sin ella `createServerClient`
+  // lanza DENTRO del middleware y CADA petición a /dashboard se vuelve un 500.
+  // Rompe ruidosamente, sí, pero en el turno de alguien y con el error del SDK:
+  // aquí sale antes, con el nombre exacto.
+  supabase: ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'],
 } as const;
 
 export type EnvGroup = keyof typeof GROUPS;
