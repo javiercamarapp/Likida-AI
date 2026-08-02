@@ -27,7 +27,7 @@ export default async function Cuenta() {
             <dd>{(tenant?.nombre as string) ?? '—'}</dd>
           </div>
           <div>
-            <dt style={{ color: 'var(--muted)' }}>Correo</dt>
+            <dt style={{ color: 'var(--muted)' }}>Usuario</dt>
             <dd>{s.nombre ?? s.userId}</dd>
           </div>
         </dl>
