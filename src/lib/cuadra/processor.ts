@@ -759,7 +759,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
             // reenvió su fajo: DIEZ fotos rechazadas, cero mensajes. Tercer caso
             // del mismo patrón en un día —descartar en silencio— y el que más
             // veces se repitió.
-            const donde = await ubicarGastoPorHash(op.tenantId, imgHash).catch(() => null);
+            //
+            // SOLO SI LLEGÓ SOLA (`incrementado === 1`). En una ráfaga de
+            // dieciocho, diez de estos serían diez mensajes seguidos —el mismo
+            // antipatrón de siempre—; ahí lo cubre el resumen del cierre de
+            // ráfaga, que dice cuántos comprobantes quedaron en el viaje.
+            const donde = incrementado === 1
+              ? await ubicarGastoPorHash(op.tenantId, imgHash).catch(() => null)
+              : null;
             if (donde && donde.viajeId !== viajeId) {
               logger.info('foto.ya_en_otro_viaje', { viaje: viajeId, otro: donde.viajeId, monto: donde.monto });
               await say(`Ese comprobante de ${mxn(donde.monto)} ya estaba registrado en ${donde.folio ? `tu viaje *${donde.folio}*` : 'otro viaje tuyo'}, así que no lo agregué aquí para no cobrarlo dos veces. Si de verdad es de este viaje, dile a la oficina que lo mueva. 🙏`);
@@ -869,7 +876,37 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           logger.warn('ack.send', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
         }
       } finally {
-        await intakeDelta(viajeId, -1); // libera el contador pase lo que pase
+        const quedan = await intakeDelta(viajeId, -1); // libera el contador pase lo que pase
+
+        // ── RESUMEN AL CERRAR LA RÁFAGA ────────────────────────────────────────
+        //
+        // El problema que arregla, medido el 1-ago: un operador mandó DIECIOCHO
+        // fotos de golpe y no recibió una sola palabra sobre ellas. Diez ya
+        // estaban registradas en otro viaje, tres eran acercamientos a códigos y
+        // dos eran idénticas a fotos de este viaje — todos caminos correctos, y
+        // todos SILENCIOSOS. Desde su lado: mandó dieciocho fotos y no pasó nada.
+        //
+        // Y avisar por foto no es la salida: serían diez mensajes seguidos, que
+        // es el antipatrón que ya hizo ver roto este producto tres veces (el
+        // acuse de ráfaga, el aviso de acercamiento, los avisos de fecha).
+        //
+        // `quedan === 0` significa que ESTA fue la última foto en vuelo: el
+        // contador es atómico, así que exactamente una invocación lo ve. Y solo
+        // se resume si de verdad hubo RÁFAGA (`incrementado > 1`): para una foto
+        // suelta, su propio camino ya habló y esto sería un mensaje de más.
+        try {
+          if (quedan === 0 && incrementado > 1) {
+            const puestos = await getGastos(viajeId, op.tenantId);
+            const total = puestos.reduce((s, g) => s + (g.monto > 0 ? g.monto : 0), 0);
+            logger.info('foto.resumen_rafaga', { viaje: viajeId, gastos: puestos.length });
+            await sendText(msg.from,
+              `📸 Ya revisé tus fotos. En este viaje llevo *${puestos.length} ${puestos.length === 1 ? 'comprobante' : 'comprobantes'}* por *${mxn(total)}*.\n\n` +
+              `Si te falta alguno, mándalo otra vez. Cuando termines, escribe *listo*. 👍`);
+          }
+        } catch (e) {
+          // Best-effort puro: el resumen es información, no el dinero.
+          logger.warn('foto.resumen_falló', { err: e instanceof Error ? e.message : String(e) });
+        }
       }
       return; // no corre el agente por foto
     }
