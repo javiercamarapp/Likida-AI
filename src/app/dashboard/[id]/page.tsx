@@ -1,4 +1,4 @@
-import { exigirAcceso } from '@/lib/auth/guard';
+import { requireSessionTenant } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { notFound } from 'next/navigation';
@@ -9,8 +9,6 @@ import { mxn } from '@/lib/utils';
 import { litros, fechaMx } from '../formato';
 
 export const dynamic = 'force-dynamic';
-
-const TENANT = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-111111111111';
 
 // Este mapa YA NO pinta el renglón: lo pinta `etiquetaGasto` (abajo), que
 // delega en el motor. Se queda como traducción de respaldo y como el mapa que
@@ -32,9 +30,9 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
   // Segunda capa (ver dashboard/page.tsx). El id va en la ruta de vuelta para
   // que tras el passcode aterrice en la liquidación que pidió.
   const { id: idParaVolver } = await params;
-  await exigirAcceso(`/dashboard/${idParaVolver}`);
+  const { tenantId } = await requireSessionTenant(`/dashboard/${idParaVolver}`);
   const { id } = await params;
-  const d = await getLiquidacionDetalle(id, TENANT());
+  const d = await getLiquidacionDetalle(id, tenantId);
   if (!d) notFound();
   const e = ESTATUS[d.estatus] ?? { label: d.estatus, color: 'var(--muted)' };
   // LA FOTO DEL TICKET SE GUARDA (CFF art. 30, conservación 5 años) PERO NO SE
