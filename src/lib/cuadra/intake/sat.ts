@@ -59,22 +59,29 @@ export async function consultarCFDI(q: QrCfdi, timeoutMs = 4000): Promise<Result
       ? 'no_encontrado'
       : 'pendiente';
     // ValidacionEFOS del SAT. 200/201 = emisor LIMPIO (fuera de lista 69-B).
-    // ME-2: NO marcamos fraude por descarte. Sólo declaramos EFOS=true ante un
-    // código de "presunto/definitivo" conocido; cualquier valor inesperado (o
-    // cambio de formato del SAT) → null (no evaluable), nunca true sobre un CFDI
+    // ME-2: NO marcamos fraude por descarte. Un valor inesperado (o cambio de
+    // formato del SAT) → null (no evaluable), nunca true sobre un CFDI
     // legítimo. Un falso positivo de "fraude" es peor que un falso negativo.
+    //
+    // AUDITORÍA 9, ALTO (fiscal): aquí vivía `EFOS_EN_LISTA = new Set(['100'])`
+    // mapeado directo a `efos: true` — el veredicto MÁS DURO que emite el
+    // motor (NO_DEDUCIBLE_ISR, "lista negra del SAT" en tinta roja). El propio
+    // comentario que reemplaza este admitía "presunto/definitivo (documentado)"
+    // en la misma línea que trataba los dos como un solo estado. `cff-69-B.yaml`
+    // (verificado_fuente_primaria) dice lo contrario: el efecto de "no producen
+    // ni produjeron efecto fiscal alguno" es SOLO del listado DEFINITIVO (4º
+    // párrafo); el PRESUNTO (1er párrafo) solo "se PRESUMIRÁ la inexistencia",
+    // con derecho a desvirtuar. `ConsultaCFDIService` no distingue las dos
+    // etapas en el código que devuelve, así que declarar fraude confirmado
+    // sobre un presunto es exactamente el falso positivo que el párrafo de
+    // arriba dice que es peor que un falso negativo. Nunca se afirma `efos:
+    // true` desde este código — cualquier valor que no sea limpio cae en
+    // `efosDesconocido` (bandeja, `cfdi_efos_indeterminado`), no en fraude.
     const efosCode = efosRaw.trim();
     const EFOS_LIMPIO = new Set(['200', '201']);
-    const EFOS_EN_LISTA = new Set(['100']); // presunto/definitivo 69-B (documentado)
-    const efos = !efosCode
-      ? null
-      : EFOS_LIMPIO.has(efosCode)
-      ? false
-      : EFOS_EN_LISTA.has(efosCode)
-      ? true
-      : null;
-    // Código presente pero no mapeado → no concluyente → a bandeja (1.9), sin fraude.
-    const efosDesconocido = !!efosCode && !EFOS_LIMPIO.has(efosCode) && !EFOS_EN_LISTA.has(efosCode);
+    const efos = !efosCode ? null : EFOS_LIMPIO.has(efosCode) ? false : null;
+    // Código presente pero no limpio → no concluyente → a bandeja (1.9), sin fraude.
+    const efosDesconocido = !!efosCode && !EFOS_LIMPIO.has(efosCode);
     if (efosDesconocido) logger.warn('sat.efos_desconocido', { code: efosCode });
     return { estado, efos, efosDesconocido };
   } catch (e) {
