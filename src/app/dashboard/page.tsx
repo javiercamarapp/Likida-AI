@@ -1,4 +1,4 @@
-import { exigirAcceso } from '@/lib/auth/guard';
+import { requireSessionTenant } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { getKpis, getAcreditables, detectarAnomalias, type DashboardKpis, type Acreditables, type Anomalia } from '@/lib/cuadra/analytics';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -8,8 +8,6 @@ import { estadoPanel } from './estado';
 import { litros, fechaMx } from './formato';
 
 export const dynamic = 'force-dynamic';
-
-const TENANT = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-111111111111';
 
 const ESTATUS = {
   cuadrada: { label: 'Cuadrada', color: 'var(--color-ok)' },
@@ -54,8 +52,7 @@ async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
 export default async function DashboardPage() {
   // Segunda capa: la autorización viaja con la página, no solo con el matcher
   // del proxy. Las dos tienen que fallar a la vez para que esto se sirva.
-  await exigirAcceso('/dashboard');
-  const tenantId = TENANT();
+  const { tenantId } = await requireSessionTenant('/dashboard');
   const [acred, kpis, liqs, anomalias] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
