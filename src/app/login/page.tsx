@@ -17,7 +17,8 @@ export default async function Login({
 
   async function entrarConGoogle(formData: FormData) {
     'use server';
-    const dest = String(formData.get('next') ?? '/dashboard');
+    const rawNext = String(formData.get('next') ?? '/dashboard');
+    const dest = rawNext.startsWith('/dashboard') ? rawNext : '/dashboard';
     const sb = await supabaseServer();
     const { data, error } = await sb.auth.signInWithOAuth({
       provider: 'google',
@@ -29,7 +30,8 @@ export default async function Login({
 
   async function entrarConEmail(formData: FormData) {
     'use server';
-    const dest = String(formData.get('next') ?? '/dashboard');
+    const rawNext = String(formData.get('next') ?? '/dashboard');
+    const dest = rawNext.startsWith('/dashboard') ? rawNext : '/dashboard';
     const email = String(formData.get('email') ?? '').trim();
     if (!email) redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
     const sb = await supabaseServer();
