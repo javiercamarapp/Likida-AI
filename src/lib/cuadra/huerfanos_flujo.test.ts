@@ -19,6 +19,7 @@ const getHuerfanos = vi.fn();
 const resolverHuerfanos = vi.fn();
 const marcarHuerfanosOfrecidos = vi.fn();
 const getOpenViaje = vi.fn();
+const getGastos = vi.fn();
 const extraerComprobante = vi.fn();
 const subirComprobante = vi.fn();
 const runAgent = vi.fn();
@@ -51,7 +52,7 @@ vi.mock('@/lib/cuadra/repo', () => ({
   getHuerfanos: (...a: unknown[]) => getHuerfanos(...a),
   resolverHuerfanos: (...a: unknown[]) => resolverHuerfanos(...a),
   marcarHuerfanosOfrecidos: (...a: unknown[]) => marcarHuerfanosOfrecidos(...a),
-  getGastos: vi.fn(async () => []), updateGastoCfdiXml: vi.fn(), saveCfdiXmlRaw: vi.fn(),
+  getGastos: (...a: unknown[]) => getGastos(...a), updateGastoCfdiXml: vi.fn(), saveCfdiXmlRaw: vi.fn(),
   gastoExistePorHash: vi.fn(async () => false), gastoPorHash: vi.fn(async () => null),
   corregirFechaGasto: vi.fn(),
   enriquecerGastoConCodigo: vi.fn(), guardarCodigoPendiente: vi.fn(),
@@ -111,11 +112,12 @@ describe('el chofer que manda fotos sin viaje abierto', () => {
   beforeEach(() => {
     salientes.length = 0;
     for (const m of [addGasto, guardarHuerfano, getHuerfanos, resolverHuerfanos,
-                     marcarHuerfanosOfrecidos, getOpenViaje, extraerComprobante, subirComprobante, runAgent]) m.mockReset();
+                     marcarHuerfanosOfrecidos, getOpenViaje, extraerComprobante, subirComprobante, runAgent, getGastos]) m.mockReset();
     vi.stubGlobal('fetch', fetchSpy); fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok'; process.env.WHATSAPP_PHONE_NUMBER_ID = '123';
     getOpenViaje.mockResolvedValue(null);          // ← SIN viaje
     getHuerfanos.mockResolvedValue([]);
+    getGastos.mockResolvedValue([]);
     guardarHuerfano.mockResolvedValue(true);
     subirComprobante.mockResolvedValue('t1/sin-viaje/HASH.jpg');
     addGasto.mockResolvedValue(undefined);
@@ -175,10 +177,11 @@ describe('cuando por fin hay viaje, se pregunta antes de adjuntar', () => {
   beforeEach(() => {
     salientes.length = 0;
     for (const m of [addGasto, guardarHuerfano, getHuerfanos, resolverHuerfanos,
-                     marcarHuerfanosOfrecidos, getOpenViaje, extraerComprobante, subirComprobante, runAgent]) m.mockReset();
+                     marcarHuerfanosOfrecidos, getOpenViaje, extraerComprobante, subirComprobante, runAgent, getGastos]) m.mockReset();
     vi.stubGlobal('fetch', fetchSpy); fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok'; process.env.WHATSAPP_PHONE_NUMBER_ID = '123';
     getOpenViaje.mockResolvedValue('v1');          // ← CON viaje
+    getGastos.mockResolvedValue([]);
     guardarHuerfano.mockResolvedValue(true);
     addGasto.mockResolvedValue(undefined);
     subirComprobante.mockResolvedValue('ruta');
@@ -202,6 +205,28 @@ describe('cuando por fin hay viaje, se pregunta antes de adjuntar', () => {
     expect(addGasto).toHaveBeenCalledTimes(2);
     expect(resolverHuerfanos).toHaveBeenCalledWith('t1', ['a', 'b'], 'adjuntado', 'v1');
     expect(salientes.join(' ')).toContain('$3,870.00');
+  });
+
+  it('y el acuse dice el NETO, calculado con el mismo dedup que el cuadre', async () => {
+    // El acuse decía «$28,041.15» y la liquidación «$12,388.05». Los dos ciertos,
+    // y el operador entendiendo que le recortaron. Ahora sale la resta ahí mismo.
+    getHuerfanos.mockResolvedValue([HUERFANO('a', 100, true)]);
+    getGastos.mockResolvedValue([
+      { id: 'x', concepto: 'diesel', monto: 100, folio: 'F1', folioNorm: 'F1' },
+      { id: 'y', concepto: 'diesel', monto: 100, folio: 'F1', folioNorm: 'F1' },  // copia
+    ]);
+    await processInbound(texto('sí'));
+    const m = salientes.join(' ');
+    expect(m).toContain('1 repetido');
+    expect(m, 'el comprobado real, no la suma del papel').toContain('$100.00');
+  });
+
+  it('si no se puede leer el viaje, el acuse NO promete un total', async () => {
+    getHuerfanos.mockResolvedValue([HUERFANO('a', 100, true)]);
+    getGastos.mockRejectedValue(new Error('base caída'));
+    await processInbound(texto('sí'));
+    expect(salientes.join(' ')).not.toMatch(/llevas/i);
+    expect(addGasto, 'y los comprobantes sí entraron').toHaveBeenCalled();
   });
 
   it('si uno falla al insertarse, NO se marca como puesto', async () => {
