@@ -46,6 +46,30 @@ function Insignia({ Icono, tamaño = 'md' }: { Icono: typeof Truck; tamaño?: 's
   );
 }
 
+/** Ícono antes del nombre en "Costo por modelo" — el proveedor se lee del
+ *  prefijo real `proveedor/modelo` (google/gemini-…, anthropic/claude-…),
+ *  no un mapa a mano que se olvida en el próximo modelo nuevo. WhatsApp
+ *  no trae ese prefijo, se detecta por nombre. Insignia de letra en vez
+ *  del logotipo exacto de cada marca — mismo lenguaje monocromo del resto
+ *  del panel, sin reproducir un logo con color/tipografía de marca fuera
+ *  de su paleta oficial. */
+function IconoProveedor({ modelo }: { modelo: string }) {
+  if (modelo.toLowerCase().includes('whatsapp')) {
+    return (
+      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+        <Smartphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+      </div>
+    );
+  }
+  const proveedor = modelo.includes('/') ? modelo.split('/')[0] : modelo;
+  const letra = proveedor.charAt(0).toUpperCase();
+  return (
+    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold" style={{ background: 'var(--ink)', color: 'white' }}>
+      {letra}
+    </div>
+  );
+}
+
 /** Título de sección — SIEMPRE vive DENTRO de un `.glass-panel` (nunca
  *  suelto sobre el fondo oscuro): así el gris de `--muted` se lee bien
  *  porque está sobre la superficie blanca del panel, no sobre la imagen
@@ -211,15 +235,16 @@ export default async function Admin() {
             )}
           </section>
 
-          <section className="border-t" style={{ borderColor: 'var(--line)' }}>
-            <div className="px-5 pt-4"><TituloSeccion>Costo por modelo</TituloSeccion></div>
+          <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+            <TituloSeccion>Costo por modelo</TituloSeccion>
             {r.porModelo.length === 0 ? (
-              <div className="px-5 py-4 text-sm" style={{ color: 'var(--muted)' }}>Sin llamadas registradas todavía.</div>
+              <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>Sin llamadas registradas todavía.</div>
             ) : (
-              <div className="divide-y mt-2" style={{ borderColor: 'var(--line)' }}>
+              <div className="card divide-y mt-3" style={{ borderColor: 'var(--line)' }}>
                 {r.porModelo.map((m) => (
-                  <div key={m.modelo} className="px-5 py-3 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
+                  <div key={m.modelo} className="px-5 py-3 flex items-center gap-3">
+                    <IconoProveedor modelo={m.modelo} />
+                    <div className="min-w-0 flex-1">
                       <div className="text-sm font-mono truncate">{m.modelo}</div>
                       <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{m.n} llamadas</div>
                     </div>
