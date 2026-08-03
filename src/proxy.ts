@@ -37,10 +37,11 @@ export async function proxy(req: NextRequest) {
   let res = NextResponse.next({ request: req });
   const path = req.nextUrl.pathname;
 
-  // /mis-viajes es el panel del chofer (0045 + requireOperador, guard.ts):
-  // mismo gate de sesión que /dashboard, la distinción de ROL vive en la
-  // página, no aquí — esta capa solo pregunta "¿hay sesión?".
-  if (path.startsWith('/dashboard') || path.startsWith('/mis-viajes')) {
+  // /mis-viajes es el panel del chofer y /admin la consola de negocio de
+  // Javier (requireOperador / requireSuperadmin, guard.ts): mismo gate de
+  // sesión que /dashboard, la distinción de ROL vive en la página, no aquí
+  // — esta capa solo pregunta "¿hay sesión?".
+  if (path.startsWith('/dashboard') || path.startsWith('/mis-viajes') || path.startsWith('/admin')) {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

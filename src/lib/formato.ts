@@ -64,6 +64,11 @@ export function usd(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
+/** Un entero con separador de millares, sin moneda ni unidad — tokens, conteos. */
+export function numero(n: number): string {
+  return n.toLocaleString('es-MX');
+}
+
 /**
  * Litros con separador de millares y hasta dos decimales, sin rellenar ceros.
  *

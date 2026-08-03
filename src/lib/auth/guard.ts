@@ -52,3 +52,16 @@ export async function requireOperador(): Promise<SessionTenant & { operadorId: s
   if (!s.operadorId) redirect('/sin-acceso');
   return s as SessionTenant & { operadorId: string };
 }
+
+/**
+ * Puerta de /admin — la consola de negocio de Likida. Ningún otro rol la ve,
+ * ni flota_admin: lo que vive aquí (cuántos tenants, cuánto gasta Likida en
+ * IA) es de Javier, no de un cliente. Un rol≠superadmin va a /dashboard —
+ * SÍ tiene panel, es otro.
+ */
+export async function requireSuperadmin(): Promise<SessionTenant> {
+  const s = await getSessionTenant();
+  if (!s) redirect(`/login?next=${encodeURIComponent('/admin')}`);
+  if (s.rol !== 'superadmin') redirect('/dashboard');
+  return s;
+}
