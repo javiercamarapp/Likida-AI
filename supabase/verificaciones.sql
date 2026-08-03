@@ -982,3 +982,39 @@ begin
     real_falta = '{}'::text[],
     ninguno is not null and cardinality(ninguno) = 0;
 end $$;
+
+-- ── 26. El chofer solo ve sus propios viajes (mig. 0045) ─────────────────────
+-- `tenant_data` da acceso completo al tenant a cualquier app_user, sin mirar
+-- el rol — correcto para flota_admin/encargado/contador, un IDOR si se
+-- repitiera para `operador`. Se siembran DOS choferes del mismo tenant, cada
+-- uno con su viaje/gasto/liquidacion, se impersona al primero por
+-- `request.jwt.claims` (mismo mecanismo que usa PostgREST con un JWT real) y
+-- se cuenta qué ve. 1/1/1 = solo lo suyo. 2/2/2 sería la fuga.
+do $$
+declare
+  v_t uuid; v_o1 uuid; v_o2 uuid; v_v1 uuid; v_v2 uuid; v_u1 uuid := gen_random_uuid();
+  n_viaje int; n_gasto int; n_liq int; n_otro_viaje int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF OPERADOR RLS') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Uno', '520000009030') returning id into v_o1;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Dos', '520000009031') returning id into v_o2;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o1) returning id into v_v1;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o2) returning id into v_v2;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v1, 'diesel', 100), (v_t, v_v2, 'diesel', 200);
+  insert into liquidacion (tenant_id, viaje_id) values (v_t, v_v1), (v_t, v_v2);
+  insert into app_user (id, tenant_id, email, rol, operador_id)
+    values (v_u1, v_t, 'zzz-verif-chofer1@likida.test', 'operador', v_o1);
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
+
+  select count(*) into n_viaje from viaje where tenant_id = v_t;
+  select count(*) into n_gasto from gasto where tenant_id = v_t;
+  select count(*) into n_liq from liquidacion where tenant_id = v_t;
+  select count(*) into n_otro_viaje from viaje where id = v_v2;   -- el viaje del OTRO chofer, por id directo
+
+  reset role;
+
+  raise exception E'OPERADOR_RLS  viajes-del-tenant-visibles=%  gastos-visibles=%  liquidaciones-visibles=%  viaje-ajeno-por-id=%   (esperado 1 / 1 / 1 / 0 — nunca 2, que sería ver los dos choferes)',
+    n_viaje, n_gasto, n_liq, n_otro_viaje;
+end $$;
