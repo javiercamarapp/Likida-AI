@@ -29,7 +29,7 @@ function Digito({ valor, tamaño }: { valor: string; tamaño: 'md' | 'lg' }) {
     return () => clearTimeout(t);
   }, [anterior]);
 
-  const dims = tamaño === 'lg' ? { w: 40, h: 54, font: 36, radio: 8 } : { w: 20, h: 27, font: 18, radio: 5 };
+  const dims = tamaño === 'lg' ? { w: 33, h: 45, font: 29, radio: 7 } : { w: 20, h: 27, font: 18, radio: 5 };
   const base: React.CSSProperties = {
     fontSize: dims.font,
     fontFamily: 'var(--font-sans)',
@@ -91,7 +91,7 @@ export default function ContadorRetro({
   return (
     <div className="hidden sm:flex flex-col items-end gap-2 shrink-0">
       <div className="flex items-center gap-1.5">
-        {prefijo && <span className="font-bold" style={{ fontSize: tamaño === 'lg' ? 28 : 16, color: 'var(--muted)' }}>{prefijo}</span>}
+        {prefijo && <span className="font-bold" style={{ fontSize: tamaño === 'lg' ? 23 : 16, color: 'var(--muted)' }}>{prefijo}</span>}
         {cifras.map((d, i) => <Digito key={i} valor={d} tamaño={tamaño} />)}
       </div>
       <span className="text-xs font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: 'var(--muted)' }}>

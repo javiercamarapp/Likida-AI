@@ -126,7 +126,7 @@ export default async function Admin() {
               (`.card` opacos) son los que se sobreponen encima de ESA
               superficie, no la superficie misma la que se corta en pedazos. */}
           <div className="glass-panel overflow-hidden">
-          <div className="px-6 py-5 flex items-center justify-between gap-4">
+          <div className="px-6 pt-4 pb-4 flex items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
                 {SALUDO()}, {nombre ?? 'Javier'}
