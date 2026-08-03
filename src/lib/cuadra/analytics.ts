@@ -63,14 +63,32 @@ export interface DashboardKpis {
   tasaCuadre: number;            // % de liquidaciones sin diferencias
 }
 
-export async function getKpis(tenantId: string): Promise<DashboardKpis> {
+/**
+ * Corte inferior de una ventana de N días, en ISO — o `null` para "todo el
+ * histórico". Vive aquí, en un solo lugar, porque el panel enseñaba
+ * "ESTÍMULOS ACREDITABLES DEL PERIODO" y "LIQUIDACIONES DEL PERIODO" sobre
+ * consultas que NO filtraban por fecha: los rótulos decían periodo y las
+ * cifras eran de siempre. El filtro 7d/30d/Todo de la pantalla, además, solo
+ * movía la gráfica de barras — un control de fecha que no cambia los números
+ * de abajo enseña a desconfiar del control.
+ */
+function corteVentana(ventanaDias?: number, hoy: string = new Date().toISOString().slice(0, 10)): string | null {
+  if (!ventanaDias) return null;
+  const d = new Date(`${hoy}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - (ventanaDias - 1));
+  return d.toISOString();
+}
+
+export async function getKpis(tenantId: string, ventanaDias?: number): Promise<DashboardKpis> {
+  const corte = corteVentana(ventanaDias);
   const rows = await traerTodo<{ total_comprobado: unknown; diferencia: unknown; estatus: unknown; diferencias: unknown }>(
-    (desde, hasta) => supabaseAdmin()
-      .from('liquidacion')
-      .select('total_comprobado, diferencia, estatus, diferencias')
-      .eq('tenant_id', tenantId)
-      .order('id')
-      .range(desde, hasta),
+    (desde, hasta) => {
+      const q = supabaseAdmin()
+        .from('liquidacion')
+        .select('total_comprobado, diferencia, estatus, diferencias')
+        .eq('tenant_id', tenantId);
+      return (corte ? q.gte('created_at', corte) : q).order('id').range(desde, hasta);
+    },
     'getKpis',
   );
   const conDif = rows.filter((r) => r.estatus === 'con_diferencias').length;
@@ -210,14 +228,16 @@ export interface Acreditables {
   litrosDiesel: number; ieps: number; iva: number; peaje: number; }
 
 /** Suma de estímulos acreditables del periodo (IEPS diésel + IVA + peaje 50%). */
-export async function getAcreditables(tenantId: string): Promise<Acreditables> {
+export async function getAcreditables(tenantId: string, ventanaDias?: number): Promise<Acreditables> {
+  const corte = corteVentana(ventanaDias);
   const rows = await traerTodo<{ ieps_acreditable: unknown; iva_acreditable: unknown; peaje_acreditable: unknown; litros_diesel_acreditables: unknown }>(
-    (desde, hasta) => supabaseAdmin()
-      .from('liquidacion')
-      .select('ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables')
-      .eq('tenant_id', tenantId)
-      .order('id')
-      .range(desde, hasta),
+    (desde, hasta) => {
+      const q = supabaseAdmin()
+        .from('liquidacion')
+        .select('ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables')
+        .eq('tenant_id', tenantId);
+      return (corte ? q.gte('created_at', corte) : q).order('id').range(desde, hasta);
+    },
     'getAcreditables',
   );
   return {
