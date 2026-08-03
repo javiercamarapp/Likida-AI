@@ -5,16 +5,21 @@ import { AreaChartSimple } from './charts';
 import { usd } from '@/lib/utils';
 
 /** Real: recorta el arreglo `porDia` ya traído del servidor, sin refetch —
- *  no hay nada que inventar, solo cuántos días mostrar. */
-export default function GraficaCostoConRango({ porDia }: { porDia: Array<{ dia: string; costoUsd: number }> }) {
+ *  no hay nada que inventar, solo cuántos días mostrar.
+ *
+ *  `anidado`: cuando la gráfica vive DENTRO de otro `.glass-panel` grande
+ *  (el bloque "Likida en números"), no necesita su propio panel — solo una
+ *  tarjeta `.card` opaca más chica, para que se lea sobrepuesta sobre el
+ *  panel grande en vez de dos glass iguales pegados uno sobre otro. */
+export default function GraficaCostoConRango({ porDia, anidado = false }: { porDia: Array<{ dia: string; costoUsd: number }>; anidado?: boolean }) {
   const [dias, setDias] = useState<7 | 30 | 0>(0); // 0 = todo
 
   const datos = (dias === 0 ? porDia : porDia.slice(-dias)).map((d) => ({ dia: d.dia, valor: d.costoUsd }));
 
   return (
-    <div className="glass-panel p-5">
+    <div className={anidado ? 'card p-4' : 'glass-panel p-5'}>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+        <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
           Costo de IA en el tiempo
         </h2>
         <div className="flex items-center gap-1 text-xs rounded-lg hairline p-0.5">

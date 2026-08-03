@@ -37,7 +37,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         fontFamily: 'var(--font-sans-handle), var(--font-sans)',
       }}
     >
-      <div className="min-h-screen flex gap-4 p-4">
+      <div className="min-h-screen flex items-start gap-4 p-4">
         <aside className="glass-panel w-[232px] shrink-0 flex flex-col h-[calc(100vh-2rem)] sticky top-4 overflow-hidden">
           <div className="px-4 py-4 flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element -- logo estático, no next/image en el resto del repo */}

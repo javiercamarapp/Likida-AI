@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Send } from 'lucide-react';
 import type { ResumenNegocio } from '@/lib/admin/negocio';
 import { usd, numero } from '@/lib/utils';
 
@@ -79,14 +80,14 @@ export default function ChatNegocio({ resumen, compacto = false }: { resumen: Re
         ))}
       </div>
 
-      <form onSubmit={(e) => { e.preventDefault(); preguntar(texto); }} className="flex gap-2">
+      <form onSubmit={(e) => { e.preventDefault(); preguntar(texto); }} className="flex items-center gap-2">
         <input value={texto} onChange={(e) => setTexto(e.target.value)}
           placeholder="Pregunta algo…"
-          className="flex-1 min-w-0 text-sm px-3 py-2 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
-        <button type="submit"
-          className="text-sm px-3 py-2 rounded-lg font-medium shrink-0 transition-opacity hover:opacity-85"
+          className="flex-1 min-w-0 text-sm px-3 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
+        <button type="submit" aria-label="Enviar"
+          className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-opacity hover:opacity-85"
           style={{ background: 'var(--ink)', color: 'white' }}>
-          ➜
+          <Send width={15} height={15} strokeWidth={2} />
         </button>
       </form>
     </>
