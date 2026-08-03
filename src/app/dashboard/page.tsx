@@ -1,13 +1,9 @@
 import Link from 'next/link';
-import {
-  Fuel, Receipt, Route as RouteIcon, Truck, Wallet, AlertTriangle, Percent,
-  ScanText, ReceiptText, TrendingUp, Sparkles,
-} from 'lucide-react';
+import { Fuel, Receipt, Route as RouteIcon, Truck, Wallet, AlertTriangle, Percent } from 'lucide-react';
 import {
   getKpis, getAcreditables, detectarAnomalias, getLiquidacionesPorDia,
   type DashboardKpis, type Acreditables, type Anomalia,
 } from '@/lib/cuadra/analytics';
-import { mxn } from '@/lib/utils';
 import { saludo, fechaLarga } from '@/lib/saludo';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -15,8 +11,7 @@ import { estadoPanel } from './estado';
 import { BarChartSimple } from '../admin/charts';
 import { GlobalFilter } from '../admin/ui/global-filter';
 import { KpiTile } from '../admin/ui/kit';
-import ContadorRetro from '../admin/contador-retro';
-import AsistenteFlotaExpandible from './asistente-expandible';
+import CifraGrande from './cifra-grande';
 import { sufijoTenant } from './sufijo';
 
 export const dynamic = 'force-dynamic';
@@ -59,16 +54,27 @@ export async function InicioContenido({
   nombre: string | null;
   sp: { vista?: string; tenant?: string; rango?: string } | undefined;
 }) {
-  const rango = sp?.rango === '30' ? '30' : sp?.rango === 'todo' ? 'todo' : '7';
-  const ventanaDias = rango === '30' ? 30 : 7;
+  // Por defecto 30 DÍAS, no 7 como /admin. Ahí el filtro solo movía una
+  // gráfica de actividad; aquí mueve los acreditables fiscales, y con la
+  // ventana de 7 días el panel abría con "IVA acreditable $0.00 · Peaje
+  // $0.00" teniendo miles de pesos acumulados un poco más atrás. Un cero de
+  // encuadre se lee como un cero de la flota. El mes es además la unidad en
+  // la que un contralor piensa su corte.
+  const rango = sp?.rango === '7' ? '7' : sp?.rango === 'todo' ? 'todo' : '30';
+  const ventanaDias = rango === '7' ? 7 : 30;
   const sufijo = sufijoTenant(sp);
 
+  // El filtro de arriba mueve TODO, no solo la gráfica: con 'todo' se pasa
+  // `undefined` (sin corte) y con 7/30 la misma ventana a las tres consultas,
+  // para que los rótulos "del periodo" digan la verdad.
+  const ventana = rango === 'todo' ? undefined : ventanaDias;
   const [acred, kpis, anomalias, porDia] = await Promise.all([
-    safe<Acreditables>(() => getAcreditables(tenantId)),
-    safe<DashboardKpis>(() => getKpis(tenantId)),
+    safe<Acreditables>(() => getAcreditables(tenantId, ventana)),
+    safe<DashboardKpis>(() => getKpis(tenantId, ventana)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
     safe<Array<{ dia: string; valor: number }>>(() => getLiquidacionesPorDia(tenantId, ventanaDias)),
   ]);
+  const etiquetaVentana = rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`;
 
   // `liquidaciones` ya no se carga en esta página (se fue a /dashboard/cuadre),
   // así que el estado se decide con lo que SÍ vive aquí. `estadoPanel` sigue
@@ -93,47 +99,50 @@ export async function InicioContenido({
     });
   }
 
-  const main = (
+  return (
     <main>
       <div className="glass-panel overflow-hidden">
-        <div className="px-6 pt-4 pb-4 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
+        <div className="px-5 pt-3.5 pb-3.5 flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
               {saludo()}, {nombre ?? 'flota'}
             </h1>
-            <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
+            <p className="text-[13px] mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
             {tenantNombre && (
-              <span className="inline-block mt-2 text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
+              <span className="inline-block mt-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
                 viendo como superadmin · {tenantNombre}
               </span>
             )}
           </div>
-          {/* Contador retro (§2 del documento: FlipCounter) — el número real
-              de cabecera de una FLOTA es lo comprobado del periodo, no un MRR
-              (la flota no le cobra a nadie desde aquí). Se redondea a pesos
-              enteros a propósito: el componente pinta un tile por carácter y
-              un punto decimal quedaría como un dígito más. La cifra exacta con
-              centavos vive en el KpiTile de abajo. */}
-          <ContadorRetro valor={Math.round(kpis?.montoComprobado ?? 0)} digitos={7} prefijo="$"
-            etiqueta="Comprobado — histórico" tamaño="lg" />
+          {/* `CifraGrande`, no el `ContadorRetro` de tiles negros: ese reloj
+              Solari es el guiño de la consola INTERNA y ahí se queda. Y no
+              repite el "Monto comprobado" del grid de abajo —era la misma
+              cifra dos veces en pantalla— sino lo que el motor SEÑALÓ, que es
+              lo único aquí que solo Likida pone sobre la mesa. */}
+          <CifraGrande
+            valor={kpis?.diferenciaDetectada ?? 0}
+            formato="mxn"
+            etiqueta="Señalado por el motor"
+            nota={`Sobre política y duplicados · ${etiquetaVentana}`}
+          />
         </div>
 
         {alertas.length > 0 && (
-          <div className="px-6 pb-4 space-y-2">
+          <div className="px-5 pb-3.5 space-y-1.5">
             {alertas.map((a) => (
               <Link key={a.href} href={a.href}
-                className="card p-3.5 flex items-center gap-3 hover:opacity-85 transition-opacity"
+                className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
                 style={{ borderColor: 'var(--warn)' }}>
-                <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
-                <span className="text-sm">{a.texto}</span>
-                <span className="ml-auto text-xs shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
+                <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
+                <span className="text-[13px]">{a.texto}</span>
+                <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
               </Link>
             ))}
           </div>
         )}
 
         {estado === 'error' ? (
-          <div className="px-6 pb-6 pt-2">
+          <div className="px-5 pb-5 pt-1">
             <div className="card p-10 text-center">
               <p className="text-lg font-semibold tracking-tight">No se pudieron cargar los datos</p>
               <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>
@@ -143,7 +152,7 @@ export async function InicioContenido({
             </div>
           </div>
         ) : estado === 'vacio' ? (
-          <div className="px-6 pb-6 pt-2">
+          <div className="px-5 pb-5 pt-1">
             <div className="card p-10 text-center">
               <p className="text-lg font-semibold tracking-tight">Aún no hay liquidaciones</p>
               <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>
@@ -170,12 +179,12 @@ export async function InicioContenido({
             )}
 
             {/* ── ComboChart (§2 del documento: barras + línea, toggle 7d/30d/Todo) ── */}
-            <div className="px-6 pb-5 border-t pt-5" style={{ borderColor: 'var(--line)' }}>
+            <div className="px-5 pb-4 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
               <div className="flex items-center justify-between gap-4 mb-3">
                 <TituloSeccion>
                   Liquidaciones cerradas — {rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`}
                 </TituloSeccion>
-                <GlobalFilter base="/dashboard" activo={rango} extra={sp?.tenant ? { tenant: sp.tenant } : sp?.vista ? { vista: sp.vista } : undefined} />
+                <GlobalFilter base="/dashboard" pordefecto="30" activo={rango} extra={sp?.tenant ? { tenant: sp.tenant } : sp?.vista ? { vista: sp.vista } : undefined} />
               </div>
               {rango === 'todo' ? (
                 <div className="flex flex-col items-center justify-center" style={{ height: 160 }}>
@@ -196,12 +205,12 @@ export async function InicioContenido({
             </div>
 
             {/* ── Estímulos acreditables ── */}
-            <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-              <TituloSeccion>Estímulos acreditables del periodo</TituloSeccion>
+            <section className="p-4 border-t" style={{ borderColor: 'var(--line)' }}>
+              <TituloSeccion>Estímulos acreditables</TituloSeccion>
               {acred === null ? (
                 <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 mt-2.5">
                   <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
                     etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" destacar
                     nota="LIF 2026, Art. 20-A — su contador aplica la cuota semanal vigente" />
@@ -215,10 +224,10 @@ export async function InicioContenido({
               )}
             </section>
 
-            {/* ── Liquidaciones del periodo ── */}
-            <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+            {/* ── Liquidaciones ── */}
+            <section className="p-4 border-t" style={{ borderColor: 'var(--line)' }}>
               <div className="flex items-center justify-between gap-4">
-                <TituloSeccion>Liquidaciones del periodo</TituloSeccion>
+                <TituloSeccion>Liquidaciones</TituloSeccion>
                 <Link href={`/dashboard/cuadre${sufijo}`} className="text-xs font-medium px-2.5 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity shrink-0">
                   Ver detalle →
                 </Link>
@@ -226,7 +235,7 @@ export async function InicioContenido({
               {kpis === null ? (
                 <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mt-2.5">
                   <KpiTile icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
                     etiqueta="Viajes liquidados" valor={kpis.viajesLiquidados} formato="entero" />
                   <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
@@ -246,63 +255,6 @@ export async function InicioContenido({
     </main>
   );
 
-  const accesos = [
-    { href: `/dashboard/cuadre${sufijo}`, Icono: ReceiptText, titulo: 'Cuadre / Liquidación', subtitulo: kpis ? `${kpis.viajesLiquidados} cerradas` : 'Detalle por viaje' },
-    { href: `/dashboard/documentos${sufijo}`, Icono: ScanText, titulo: 'Documentos (OCR)', subtitulo: 'Comprobantes procesados' },
-    { href: `/dashboard/valor-ahorro${sufijo}`, Icono: TrendingUp, titulo: 'Valor & Ahorro', subtitulo: 'Lo que Likida te ahorra' },
-    { href: `/dashboard/viajes${sufijo}`, Icono: Truck, titulo: 'Viajes', subtitulo: 'Estado de la operación' },
-  ];
-
-  const asideTop = (
-    <>
-      <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-        Hola {nombre ?? 'de nuevo'}, aquí tienes accesos rápidos y lo más importante de hoy.
-      </div>
-
-      <div className="space-y-1.5">
-        {accesos.map((a) => (
-          <Link key={a.titulo} href={a.href}
-            className="flex items-center gap-2.5 p-2.5 rounded-xl hairline transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)]">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-              <a.Icono width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-            </div>
-            <span className="min-w-0">
-              <span className="block text-sm font-medium truncate">{a.titulo}</span>
-              <span className="block text-xs truncate" style={{ color: 'var(--muted)' }}>{a.subtitulo}</span>
-            </span>
-          </Link>
-        ))}
-      </div>
-
-      {/* Smart Insight — SOLO cuando hay un hallazgo real que reportar. Sin
-          anomalías ni liquidaciones no se pinta nada: una tarjeta verde que
-          dice "todo bien" cuando en realidad no se revisó nada entrena a
-          ignorarla. */}
-      {(anomalias && anomalias.length > 0) ? (
-        <div className="rounded-xl p-3.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
-          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
-            <Sparkles width={12} height={12} strokeWidth={2} /> Smart Insight
-          </div>
-          <p className="text-sm">
-            Encontré {anomalias.length} comprobante{anomalias.length === 1 ? '' : 's'} cargado{anomalias.length === 1 ? '' : 's'} en
-            más de un viaje, por {mxn(anomalias.reduce((s, a) => s + a.monto, 0))} en total. Es una coincidencia detectada, no un veredicto.
-          </p>
-        </div>
-      ) : kpis && kpis.viajesLiquidados > 0 ? (
-        <div className="rounded-xl p-3.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
-          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
-            <Sparkles width={12} height={12} strokeWidth={2} /> Smart Insight
-          </div>
-          <p className="text-sm">
-            Tu tasa de cuadre es {kpis.tasaCuadre}% — {kpis.viajesLiquidados - kpis.conDiferencias - kpis.porRevisar} de {kpis.viajesLiquidados} liquidaciones
-            cerraron sin diferencias.
-          </p>
-        </div>
-      ) : null}
-    </>
-  );
-
-  return <AsistenteFlotaExpandible main={main} asideTop={asideTop} kpis={kpis} acred={acred} />;
 }
 
 /** La página real: resuelve quién eres y a qué flota apuntas, y pinta el

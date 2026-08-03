@@ -18,11 +18,20 @@ const OPCIONES = [
  * una flota real) — sin esto, tocar 7d/30d/Todo perdía de cuál flota se
  * estaba hablando, el mismo bug de `requireSessionTenant` que dropea query
  * params al redirigir.
+ *
+ * `pordefecto` — cuál opción es la que la página asume cuando NO hay
+ * `?rango=` en la URL; es la única que se enlaza sin el parámetro. Era '7'
+ * fijo, y en cuanto /dashboard cambió su default a 30 días eso se volvió un
+ * bug silencioso: el botón "7d" apuntaba a la URL sin parámetro, la página
+ * la leía como 30, y el pill activo saltaba de vuelta a 30d. Un filtro que
+ * ignora un clic es peor que no tenerlo.
  */
-export function GlobalFilter({ base, activo, extra }: { base: string; activo: string; extra?: Record<string, string> }) {
+export function GlobalFilter({
+  base, activo, extra, pordefecto = '7',
+}: { base: string; activo: string; extra?: Record<string, string>; pordefecto?: string }) {
   const construir = (rango: string) => {
     const params = new URLSearchParams(extra);
-    if (rango !== '7') params.set('rango', rango);
+    if (rango !== pordefecto) params.set('rango', rango);
     const qs = params.toString();
     return qs ? `${base}?${qs}` : base;
   };

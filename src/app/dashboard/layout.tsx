@@ -27,7 +27,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <DashboardChrome nombre={sesion.nombre} cerrarSesion={cerrarSesion}>
+    <DashboardChrome nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion}>
       {children}
     </DashboardChrome>
   );
