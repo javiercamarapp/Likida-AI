@@ -58,15 +58,16 @@ const SISTEMA: Item[] = [
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] transition-colors';
 const ICONO = { width: 16, height: 16, strokeWidth: 1.75, color: 'var(--muted)' } as const;
 
-/** Una sección plegable — arranca abierta SOLO si la página activa vive
- *  adentro (así no se pierde de dónde viene al cargar), colapsada si no.
- *  Plegar/desplegar es estado de React, no `<details>`: con 6 secciones y
- *  ~29 links no cabían todas abiertas a la vez sin scroll — colapsadas se
- *  ven las 6 categorías de un vistazo, y cada una se abre nada más la que
- *  se necesita. */
-function Seccion({ titulo, items }: { titulo: string; items: Item[] }) {
+/** Una sección plegable — arranca abierta si la página activa vive adentro
+ *  (así no se pierde de dónde viene al cargar) o si `defaultAbierto` lo
+ *  fuerza (Agentes: la primera categoría del dashboard, siempre visible de
+ *  entrada), colapsada si no. Plegar/desplegar es estado de React, no
+ *  `<details>`: con 6 secciones y ~29 links no cabían todas abiertas a la
+ *  vez sin scroll — colapsadas se ven las 6 categorías de un vistazo, y
+ *  cada una se abre nada más la que se necesita. */
+function Seccion({ titulo, items, defaultAbierto = false }: { titulo: string; items: Item[]; defaultAbierto?: boolean }) {
   const pathname = usePathname();
-  const [abierto, setAbierto] = useState(() => items.some((it) => it.href === pathname));
+  const [abierto, setAbierto] = useState(() => defaultAbierto || items.some((it) => it.href === pathname));
 
   return (
     <div>
@@ -96,7 +97,7 @@ export default function SidebarNav() {
           <LayoutGrid {...ICONO} /> Inicio
         </Link>
       </div>
-      <Seccion titulo="Agentes" items={AGENTES} />
+      <Seccion titulo="Agentes" items={AGENTES} defaultAbierto />
       <Seccion titulo="Negocio" items={NEGOCIO} />
       <Seccion titulo="Plataforma" items={PLATAFORMA} />
       <Seccion titulo="Control" items={CONTROL} />

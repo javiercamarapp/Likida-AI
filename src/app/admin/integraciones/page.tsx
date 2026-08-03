@@ -4,6 +4,7 @@ import { usd } from '@/lib/formato';
 import {
   Blocks, Database, Mail, Bug, Rocket, Smartphone, KeyRound,
 } from 'lucide-react';
+import { IconoProveedor } from '../proveedor-icono';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,25 +15,6 @@ function Insignia({ Icono }: { Icono: typeof Blocks }) {
   return (
     <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
       <Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-    </div>
-  );
-}
-
-/** Ícono de proveedor por el prefijo real `proveedor/modelo` — mismo patrón
- *  que `IconoProveedor` en admin/page.tsx, recreado local a propósito. */
-function IconoProveedor({ modelo }: { modelo: string }) {
-  if (modelo.toLowerCase().includes('whatsapp')) {
-    return (
-      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-        <Smartphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-      </div>
-    );
-  }
-  const proveedor = modelo.includes('/') ? modelo.split('/')[0] : modelo;
-  const letra = proveedor.charAt(0).toUpperCase();
-  return (
-    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold" style={{ background: 'var(--ink)', color: 'white' }}>
-      {letra}
     </div>
   );
 }

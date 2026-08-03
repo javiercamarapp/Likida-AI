@@ -10,6 +10,7 @@ import { Sparkline, Tendencia, Dona, BarChartSimple } from './charts';
 import GraficaCostoConRango from './rango-costo';
 import AsistenteExpandible from './asistente-expandible';
 import ContadorRetro from './contador-retro';
+import { IconoProveedor } from './proveedor-icono';
 
 const SALUDO = () => {
   const h = new Date().getUTCHours() - 6; // hora de México, aproximada — un saludo no necesita el minuto exacto
@@ -43,30 +44,6 @@ function Insignia({ Icono, tamaño = 'md' }: { Icono: typeof Truck; tamaño?: 's
   return (
     <div className={`${box} rounded-lg flex items-center justify-center shrink-0`} style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
       <Icono width={icon} height={icon} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-    </div>
-  );
-}
-
-/** Ícono antes del nombre en "Costo por modelo" — el proveedor se lee del
- *  prefijo real `proveedor/modelo` (google/gemini-…, anthropic/claude-…),
- *  no un mapa a mano que se olvida en el próximo modelo nuevo. WhatsApp
- *  no trae ese prefijo, se detecta por nombre. Insignia de letra en vez
- *  del logotipo exacto de cada marca — mismo lenguaje monocromo del resto
- *  del panel, sin reproducir un logo con color/tipografía de marca fuera
- *  de su paleta oficial. */
-function IconoProveedor({ modelo }: { modelo: string }) {
-  if (modelo.toLowerCase().includes('whatsapp')) {
-    return (
-      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-        <Smartphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-      </div>
-    );
-  }
-  const proveedor = modelo.includes('/') ? modelo.split('/')[0] : modelo;
-  const letra = proveedor.charAt(0).toUpperCase();
-  return (
-    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold" style={{ background: 'var(--ink)', color: 'white' }}>
-      {letra}
     </div>
   );
 }

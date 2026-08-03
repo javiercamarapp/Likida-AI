@@ -65,7 +65,7 @@ export default function AsistenteExpandible({
         <div className={expandido ? 'flex-1 min-w-0 flex flex-col px-4 pb-4 pt-2 overflow-hidden' : 'shrink-0 px-4 py-3 border-t'}
           style={expandido ? undefined : { borderColor: 'var(--line)' }}>
           {expandido ? (
-            <div className="flex-1 min-w-0 overflow-y-auto">
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
               <ChatNegocio resumen={resumen} />
             </div>
           ) : (

@@ -43,7 +43,16 @@ function responder(pregunta: string, r: ResumenNegocio): string {
 }
 
 /** `compacto`: la versión del panel lateral (ancho fijo ~260px) — mismas
- *  respuestas, sin la tarjeta ni el título grande de la página propia. */
+ *  respuestas, sin la tarjeta ni el título grande de la página propia.
+ *
+ *  En la versión expandida (no-compacto) el historial es lo que crece y
+ *  hace scroll (`flex-1 overflow-y-auto min-h-0`) y la caja de texto vive
+ *  FUERA de esa zona, como último hijo `shrink-0` del `flex flex-col` de
+ *  altura completa — así el input queda anclado abajo como cualquier chat
+ *  normal, en vez de aparecer pegado arriba con un hueco vacío debajo
+ *  cuando el historial es corto (lo que pasaba antes: todo el bloque —
+ *  historial, sugerencias e input— vivía suelto dentro de un contenedor
+ *  con scroll, así que ocupaba solo el espacio de su contenido). */
 export default function ChatNegocio({ resumen, compacto = false }: { resumen: ResumenNegocio; compacto?: boolean }) {
   const [historial, setHistorial] = useState<Array<{ q: string; a: string }>>([]);
   const [texto, setTexto] = useState('');
@@ -54,23 +63,23 @@ export default function ChatNegocio({ resumen, compacto = false }: { resumen: Re
     setTexto('');
   }
 
-  const cuerpo = (
-    <>
-      {historial.length > 0 ? (
-        <div className="space-y-3 mb-3 max-h-56 overflow-y-auto">
-          {historial.map((h, i) => (
-            <div key={i} className="text-sm">
-              <div className="font-medium">{h.q}</div>
-              <div style={{ color: 'var(--muted)' }}>{h.a}</div>
-            </div>
-          ))}
+  const historialView = historial.length > 0 ? (
+    <div className="space-y-3">
+      {historial.map((h, i) => (
+        <div key={i} className="text-sm">
+          <div className="font-medium">{h.q}</div>
+          <div style={{ color: 'var(--muted)' }}>{h.a}</div>
         </div>
-      ) : compacto && (
-        <p className="text-sm mb-3" style={{ color: 'var(--muted)' }}>
-          Pregúntame sobre costo, tokens, flotas o viajes.
-        </p>
-      )}
+      ))}
+    </div>
+  ) : (
+    <p className="text-sm" style={{ color: 'var(--muted)' }}>
+      Pregúntame sobre costo, tokens, flotas o viajes.
+    </p>
+  );
 
+  const pie = (
+    <>
       <div className="flex flex-wrap gap-1.5 mb-3">
         {(compacto ? PREGUNTAS.slice(0, 2) : PREGUNTAS).map((p) => (
           <button key={p} type="button" onClick={() => preguntar(p)}
@@ -93,14 +102,22 @@ export default function ChatNegocio({ resumen, compacto = false }: { resumen: Re
     </>
   );
 
-  if (compacto) return <div>{cuerpo}</div>;
+  if (compacto) {
+    return (
+      <div>
+        {historial.length > 0 && <div className="mb-3 max-h-56 overflow-y-auto">{historialView}</div>}
+        {pie}
+      </div>
+    );
+  }
 
   return (
-    <div className="glass-panel p-6">
-      <h2 className="text-sm font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
+    <div className="glass-panel p-6 h-full flex flex-col overflow-hidden">
+      <h2 className="text-sm font-semibold uppercase tracking-wide mb-4 shrink-0" style={{ color: 'var(--muted)' }}>
         Pregunta a tus datos
       </h2>
-      {cuerpo}
+      <div className="flex-1 min-h-0 overflow-y-auto">{historialView}</div>
+      <div className="shrink-0 pt-4">{pie}</div>
     </div>
   );
 }
