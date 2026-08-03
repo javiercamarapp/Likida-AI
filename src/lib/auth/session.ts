@@ -6,6 +6,8 @@ export interface SessionTenant {
   tenantId: string | null;
   rol: string;
   nombre: string | null;
+  /** Solo llena cuando rol='operador' (0045) — liga con la fila de `operador`. */
+  operadorId: string | null;
 }
 
 /** Devuelve el tenant del usuario autenticado, o null si no hay sesión/config. */
@@ -14,7 +16,7 @@ export async function getSessionTenant(): Promise<SessionTenant | null> {
     const sb = await supabaseServer();
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return null;
-    const { data, error } = await sb.from('app_user').select('tenant_id, rol, nombre').eq('id', user.id).maybeSingle();
+    const { data, error } = await sb.from('app_user').select('tenant_id, rol, nombre, operador_id').eq('id', user.id).maybeSingle();
     // Sin este log, un bache de Supabase o una regresión de RLS es
     // INDISTINGUIBLE de "este correo nunca se dio de alta": las dos acaban con
     // `tenantId: null`, y `requireSessionTenant` manda al contralor a
@@ -27,6 +29,7 @@ export async function getSessionTenant(): Promise<SessionTenant | null> {
       tenantId: (data?.tenant_id as string) ?? null,
       rol: (data?.rol as string) ?? 'flota_admin',
       nombre: (data?.nombre as string) ?? null,
+      operadorId: (data?.operador_id as string) ?? null,
     };
   } catch (e) {
     // Lo que llega aquí ya no es "no hay sesión", es que el SDK tronó: red
