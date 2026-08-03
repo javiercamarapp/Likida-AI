@@ -103,29 +103,31 @@ export default async function Admin() {
               (`.card` opacos) son los que se sobreponen encima de ESA
               superficie, no la superficie misma la que se corta en pedazos. */}
           <div className="glass-panel overflow-hidden">
-          <div className="flex items-start gap-6 px-6 py-5">
-            <div className="shrink-0">
-              <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
-                {SALUDO()}, {nombre ?? 'Javier'}
-              </h1>
-              <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
+          <div className="px-6 py-5">
+            <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
+              {SALUDO()}, {nombre ?? 'Javier'}
+            </h1>
+            <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
+          </div>
+
+          {/* Facturas = filas de `gasto` (cada una pasó por OCR/CFDI) — el
+              mismo dato real que ya se usa en Costo por modelo, agrupado
+              por día en vez de por modelo. Últimos 7 días siempre, con 0
+              donde no hubo actividad (getResumenNegocio ya lo rellena).
+              A lo ancho y con más alto que antes — a la mitad del saludo
+              se veía flaca y estirada; sola, en su propia fila, aguanta
+              ser más grande. */}
+          <div className="px-6 pb-5 border-t pt-5" style={{ borderColor: 'var(--line)' }}>
+            <div className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
+              Facturas procesadas — últimos 7 días
             </div>
-            {/* Facturas = filas de `gasto` (cada una pasó por OCR/CFDI) — el
-                mismo dato real que ya se usa en Costo por modelo, agrupado
-                por día en vez de por modelo. Últimos 7 días siempre, con 0
-                donde no hubo actividad (getResumenNegocio ya lo rellena). */}
-            <div className="flex-1 min-w-0 hidden md:block">
-              <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--muted)' }}>
-                Facturas procesadas — últimos 7 días
+            {r.facturasPorDia.some((d) => d.n > 0) ? (
+              <BarChartSimple datos={r.facturasPorDia.map((d) => ({ dia: d.dia, valor: d.n }))} alto={160} />
+            ) : (
+              <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
+                Aún sin datos suficientes.
               </div>
-              {r.facturasPorDia.some((d) => d.n > 0) ? (
-                <BarChartSimple datos={r.facturasPorDia.map((d) => ({ dia: d.dia, valor: d.n }))} />
-              ) : (
-                <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 96 }}>
-                  Aún sin datos suficientes.
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           <section id="agentes" className="p-5 border-t scroll-mt-24" style={{ borderColor: 'var(--line)' }}>
