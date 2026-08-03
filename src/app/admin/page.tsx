@@ -4,7 +4,7 @@ import { usd, numero } from '@/lib/utils';
 import Link from 'next/link';
 import {
   Truck, DollarSign, Cpu, CheckCircle2, BarChart3, UserPlus2, MessageCircle,
-  Sparkles, ChevronDown, ScanText, Calculator, Flag, MessageSquareText, Shuffle, Smartphone,
+  Sparkles, ChevronDown, ScanText, Calculator, Flag, MessageSquareText, Shuffle, Smartphone, ExternalLink,
 } from 'lucide-react';
 import { Sparkline, Tendencia, Dona, BarChartSimple } from './charts';
 import GraficaCostoConRango from './rango-costo';
@@ -250,6 +250,7 @@ export default async function Admin() {
                       <th className="px-5 py-2.5 font-medium">Plan</th>
                       <th className="px-5 py-2.5 font-medium text-right">Viajes</th>
                       <th className="px-5 py-2.5 font-medium text-right">Costo de IA</th>
+                      <th className="px-5 py-2.5 font-medium text-right"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -259,6 +260,12 @@ export default async function Admin() {
                         <td className="px-5 py-2.5" style={{ color: 'var(--muted)' }}>{f.plan}</td>
                         <td className="px-5 py-2.5 text-right tabular">{f.viajes}</td>
                         <td className="px-5 py-2.5 text-right tabular">{usd(f.costoIaUsd)}</td>
+                        <td className="px-5 py-2.5 text-right">
+                          <Link href={`/dashboard?tenant=${f.id}`} target="_blank"
+                            className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
+                            <ExternalLink width={11} height={11} strokeWidth={1.75} /> Ver dashboard
+                          </Link>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -54,18 +54,37 @@ async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string }>;
 }) {
   // Segunda capa: la autorización viaja con la página, no solo con el matcher
   // del proxy. Las dos tienen que fallar a la vez para que esto se sirva.
-  const { tenantId, rol } = await requireSessionTenant('/dashboard');
+  const { tenantId: tenantIdDemo, rol } = await requireSessionTenant('/dashboard');
   // Sin esto, un superadmin que llegue aquí por bookmark/historial (no por
   // /login, que es lo único que /auth/callback intercepta) se quedaba
   // viendo el panel del tenant demo en vez de SU consola. /admin enlaza aquí
-  // con `?vista=demo` a propósito, cuando de verdad quiere ver lo que ve un
-  // cliente.
+  // con `?vista=demo` (o con `?tenant=<id>` desde Flotas) a propósito, cuando
+  // de verdad quiere ver lo que ve un cliente.
   const sp = await searchParams;
-  if (rol === 'superadmin' && sp?.vista !== 'demo') redirect('/admin');
+  if (rol === 'superadmin' && sp?.vista !== 'demo' && !sp?.tenant) redirect('/admin');
+
+  // `?tenant=<id>` — "Ver dashboard" desde /admin/flotas: el superadmin entra
+  // al panel de ESA flota real, no la demo. `requireSessionTenant` solo
+  // conoce el tenant demo (0001_init.sql: tenant_id nulo = superadmin, sin
+  // selector de flota todavía), así que la elección real vive aquí, validada
+  // contra la tabla — nunca se confía el uuid de la URL a ciegas. Un rol≠
+  // superadmin nunca llega a este branch: su `tenantId` YA es el suyo real,
+  // `requireSessionTenant` se lo dio arriba sin pasar por el default de
+  // Fase 1.
+  let tenantId = tenantIdDemo;
+  let tenantNombre: string | null = null;
+  if (rol === 'superadmin' && sp?.tenant) {
+    const { data: t } = await supabaseAdmin().from('tenant').select('id, nombre').eq('id', sp.tenant).maybeSingle();
+    if (t) {
+      tenantId = t.id as string;
+      tenantNombre = t.nombre as string;
+    }
+  }
+
   const [acred, kpis, liqs, anomalias] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
@@ -94,9 +113,20 @@ export default async function DashboardPage({
               Con el passcode no importaba (se cerraba borrando la cookie); con
               cuentas por usuario, salirse es parte del producto. */}
           <div className="flex items-center gap-3">
-            <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: 'var(--muted)', background: 'color-mix(in srgb, var(--muted) 10%, transparent)' }}>
-              datos de demostración
-            </span>
+            {tenantNombre ? (
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
+                viendo como superadmin · {tenantNombre}
+              </span>
+            ) : (
+              <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: 'var(--muted)', background: 'color-mix(in srgb, var(--muted) 10%, transparent)' }}>
+                datos de demostración
+              </span>
+            )}
+            {rol === 'superadmin' && (
+              <Link href="/admin" className="text-sm px-3 py-1.5 rounded-lg hairline hover:opacity-70">
+                ← Volver a /admin
+              </Link>
+            )}
             <Link href="/cuenta" className="text-sm px-3 py-1.5 rounded-lg hairline hover:opacity-70">
               Mi cuenta
             </Link>
@@ -255,7 +285,7 @@ export default async function DashboardPage({
                           // cinco paradas de tabulación por liquidación.
                           <tr key={l.id} className="relative border-t hover:opacity-80" style={{ borderColor: 'var(--line)' }}>
                             <td className="px-6 py-4 font-medium">
-                              <Link href={`/dashboard/${l.id}`}
+                              <Link href={tenantNombre ? `/dashboard/${l.id}?tenant=${tenantId}` : `/dashboard/${l.id}`}
                                 className="hover:underline after:absolute after:inset-0 after:content-['']">{l.folio}</Link>
                             </td>
                             <td className="px-6 py-4" style={{ color: 'var(--muted)' }}>{fechaMx(l.creadoEn)}</td>
