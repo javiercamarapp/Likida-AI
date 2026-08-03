@@ -267,6 +267,27 @@ describe('el detalle lleva lo que el panel necesita para no contradecir al PDF',
     expect(d?.creadoEn).toBe('2026-07-31T02:00:00Z');
   });
 
+  it('trae el chofer asignado hoy — lo que "Reasignar chofer" necesita para saber de dónde parte', async () => {
+    respuestas.set('liquidacion', {
+      data: {
+        id: 'liq-1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 1240, total_anticipo: 1240, diferencia: 0,
+        created_at: '2026-07-31T02:00:00Z',
+        viaje: { folio: 'VJ-2026-0900', operador_id: 'o-9', operador: { nombre: 'Juan Pérez' } },
+      },
+      error: null,
+    });
+    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    expect(d?.viajeId).toBe('v1');
+    expect(d?.operadorId).toBe('o-9');
+    expect(d?.operadorNombre).toBe('Juan Pérez');
+  });
+
+  it('sin chofer asignado, operadorNombre se lee como "—" en vez de reventar', async () => {
+    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    expect(d?.operadorId).toBe('');
+    expect(d?.operadorNombre).toBe('—');
+  });
+
   it('si la reconstrucción falla, el detalle se sirve igual sin el desglose', async () => {
     // La deducibilidad es un extra: que no se pueda reconstruir no puede tirar
     // la pantalla que el contralor sí puede leer.

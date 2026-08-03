@@ -1,12 +1,14 @@
 import { requireSessionTenant } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getLiquidacionDetalle } from '@/lib/cuadra/analytics';
 import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import { filasDeducibilidad } from '@/lib/cuadra/liquidacion/deducibilidad';
 import { mxn } from '@/lib/utils';
 import { litros, fechaMx } from '../formato';
+import { puedeExportar, puedeAsignar } from '@/lib/auth/permisos';
+import { listOperadores, reasignarOperador } from '@/lib/cuadra/repo';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,11 +32,28 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
   // Segunda capa (ver dashboard/page.tsx). El id va en la ruta de vuelta para
   // que tras el passcode aterrice en la liquidación que pidió.
   const { id: idParaVolver } = await params;
-  const { tenantId } = await requireSessionTenant(`/dashboard/${idParaVolver}`);
+  const { tenantId, rol } = await requireSessionTenant(`/dashboard/${idParaVolver}`);
   const { id } = await params;
   const d = await getLiquidacionDetalle(id, tenantId);
   if (!d) notFound();
   const e = ESTATUS[d.estatus] ?? { label: d.estatus, color: 'var(--muted)' };
+  const puedeReasignar = puedeAsignar(rol);
+  const operadores = puedeReasignar ? await listOperadores(tenantId) : [];
+
+  async function reasignar(formData: FormData) {
+    'use server';
+    // Repite la comprobación de permiso EN el server action: el `puedeAsignar`
+    // de arriba solo decide si el <form> se pinta. Sin este segundo chequeo,
+    // un contador que arme la petición a mano (misma sesión válida, sin el
+    // botón) podría reasignar igual — el mismo criterio que ya usa
+    // `requireSessionTenant` para no confiar solo en lo que el proxy filtra.
+    const { tenantId: t, rol: r } = await requireSessionTenant(`/dashboard/${id}`);
+    if (!puedeAsignar(r)) redirect(`/dashboard/${id}`);
+    const operadorId = String(formData.get('operadorId') ?? '');
+    if (!operadorId) redirect(`/dashboard/${id}`);
+    await reasignarOperador(t, d!.viajeId, operadorId);
+    redirect(`/dashboard/${id}`);
+  }
   // LA FOTO DEL TICKET SE GUARDA (CFF art. 30, conservación 5 años) PERO NO SE
   // ENSEÑA AQUÍ. El aviso de privacidad (privacidad.ts:498) le promete al
   // operador que un dato sensible que aparezca por accidente en su ticket "no
@@ -73,7 +92,7 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
             {/* El PDF existía, estaba autenticado y no había forma de llegar a
                 él: `pdf_url` ni se seleccionaba (auditoría 5, frontend, MEDIO 5).
                 En el demo, "¿me da el PDF?" se contestaba tecleando una URL. */}
-            {d.pdfPath && (
+            {d.pdfPath && puedeExportar(rol) && (
               <a href={`/api/export/pdf/${d.id}`} className="text-sm px-3.5 py-2 rounded-lg hairline hover:opacity-70">
                 Descargar PDF
               </a>
@@ -82,6 +101,27 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
               <span className="inline-block w-3 h-3 rounded-full" style={{ background: e.color }} />{e.label}
             </span>
           </div>
+        </div>
+
+        {/* ── Chofer asignado / reasignar ──
+            Solo dueño/encargado (permisos.ts: puedeAsignar) — un contador o un
+            superadmin de paso por el tenant demo no mueve viajes de chofer.
+            docs/superpowers/plans/2026-08-02-roles-flota.md, Task 3. */}
+        <div className="flex items-center justify-between flex-wrap gap-3 -mt-4">
+          <div className="text-sm" style={{ color: 'var(--muted)' }}>
+            Chofer: <span style={{ color: 'var(--ink)' }} className="font-medium">{d.operadorNombre}</span>
+          </div>
+          {puedeReasignar && operadores.length > 0 && (
+            <form action={reasignar} className="flex items-center gap-2">
+              <select name="operadorId" defaultValue={d.operadorId}
+                className="text-sm px-3 py-1.5 rounded-lg hairline" style={{ background: 'var(--surface)' }}>
+                {operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+              </select>
+              <button type="submit" className="text-sm px-3 py-1.5 rounded-lg hairline hover:opacity-70">
+                Reasignar chofer
+              </button>
+            </form>
+          )}
         </div>
 
         {/* Totales grandes */}

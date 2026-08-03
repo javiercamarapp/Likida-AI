@@ -83,6 +83,38 @@ export async function getOperador(operadorId: string, tenantId: string): Promise
   };
 }
 
+/**
+ * Choferes activos del tenant, para el selector de "Reasignar chofer" del
+ * panel (docs/superpowers/plans/2026-08-02-roles-flota.md, Task 3). Solo
+ * `nombre` — la vista de asignación no necesita el teléfono.
+ */
+export async function listOperadores(tenantId: string): Promise<Array<{ id: string; nombre: string }>> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('operador')
+    .select('id, nombre')
+    .eq('tenant_id', tenantId)
+    .eq('activo', true)
+    .order('nombre'), 'listOperadores');
+  // Un error leído como lista vacía se pinta "no hay choferes" — falso, y
+  // esconde justo la sección que decide si "Reasignar" tiene sentido mostrarse.
+  if (error) throw new Error(`listOperadores: ${error.message}`);
+  return (data ?? []) as Array<{ id: string; nombre: string }>;
+}
+
+/**
+ * Mueve un viaje de un chofer a otro. Acotado por tenant en el propio UPDATE
+ * (no solo en la página que lo llama): con RLS activa esto es cinturón y
+ * tirantes, no el único candado.
+ */
+export async function reasignarOperador(tenantId: string, viajeId: string, operadorId: string): Promise<void> {
+  const { error } = await acotada(supabaseAdmin()
+    .from('viaje')
+    .update({ operador_id: operadorId })
+    .eq('id', viajeId)
+    .eq('tenant_id', tenantId), 'reasignarOperador');
+  if (error) throw new Error(`reasignarOperador: ${error.message}`);
+}
+
 export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Promise<void> {
   const { error } = await acotada(supabaseAdmin().from('gasto').insert({
     id: g.id,

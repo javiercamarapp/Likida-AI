@@ -193,7 +193,9 @@ export async function getAcreditables(tenantId: string): Promise<Acreditables> {
 }
 
 export interface LiquidacionDetalle {
-  id: string; folio: string; estatus: string;
+  id: string; viajeId: string; folio: string; estatus: string;
+  /** Chofer asignado hoy — para "Reasignar chofer" (Task 3 del plan de roles). */
+  operadorId: string; operadorNombre: string;
   /** ISO crudo, en UTC. Se formatea en la pantalla y en hora de México:
    *  `.slice(0, 10)` aquí fechaba en agosto lo cerrado el 31 de julio a las
    *  20:00 hora local (auditoría 5, frontend, MEDIO 3). */
@@ -225,7 +227,7 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   const admin = supabaseAdmin();
   const res = await admin
     .from('liquidacion')
-    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, pdf_url, viaje:viaje_id(folio)')
+    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, pdf_url, viaje:viaje_id(folio, operador_id, operador:operador_id(nombre))')
     .eq('id', id)
     .eq('tenant_id', tenantId)
     .maybeSingle();
@@ -243,9 +245,13 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   // normal las filas salen de la reconstrucción, que ya trae los gastos.
   const crudos = reconstruida ? null : await leerGastos(admin, tenantId, data.viaje_id as string);
   const gastos = reconstruida?.filas ?? crudos ?? [];
+  const viaje = data.viaje as { folio?: string; operador_id?: string; operador?: { nombre?: string } | null } | null;
   return {
     id: data.id as string,
-    folio: ((data.viaje as { folio?: string } | null)?.folio) ?? (data.id as string).slice(0, 8),
+    viajeId: data.viaje_id as string,
+    folio: (viaje?.folio) ?? (data.id as string).slice(0, 8),
+    operadorId: viaje?.operador_id ?? '',
+    operadorNombre: viaje?.operador?.nombre ?? '—',
     estatus: data.estatus as string,
     creadoEn: data.created_at as string,
     totalComprobado,
