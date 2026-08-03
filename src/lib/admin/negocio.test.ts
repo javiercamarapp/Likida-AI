@@ -36,7 +36,7 @@ describe('getResumenNegocio', () => {
       ],
       error: null,
     });
-    const r = await getResumenNegocio();
+    const r = await getResumenNegocio('2026-08-02');
     expect(r.tenants).toBe(1);
     expect(r.flotas).toEqual([{ id: 't1', nombre: 'Transportes Innovativos', plan: 'demo', viajes: 2, costoIaUsd: 1.93 }]);
     expect(r.viajesProcesados).toBe(2);
@@ -55,14 +55,35 @@ describe('getResumenNegocio', () => {
       { dia: '2026-08-01', costoUsd: 1.51, tokens: 1800 },
       { dia: '2026-08-02', costoUsd: 0.43, tokens: 350 },
     ]);
+    // Sin 7 días previos con datos (Likida lleva 2 días), no hay contra qué
+    // comparar — null, no "creció infinito".
+    expect(r.tendenciaCosto).toBeNull();
+    expect(r.tendenciaTokens).toBeNull();
   });
 
   it('sin datos (Likida recién arrancando), ceros — no un error ni un crash', async () => {
-    const r = await getResumenNegocio();
+    const r = await getResumenNegocio('2026-08-02');
     expect(r).toEqual({
       tenants: 0, flotas: [], viajesProcesados: 0, costoIaUsd: 0, tokensIn: 0, tokensOut: 0,
-      porFase: [], porModelo: [], porDia: [],
+      porFase: [], porModelo: [], porDia: [], tendenciaCosto: null, tendenciaTokens: null,
     });
+  });
+
+  it('con dos semanas de historia, la tendencia es el % real de cambio', async () => {
+    respuestas.set('tenant', { data: [], error: null });
+    respuestas.set('viaje', { data: [], error: null });
+    respuestas.set('llm_costo', {
+      data: [
+        // Semana anterior (26-jul a 1-ago): $10 total.
+        { tenant_id: 't1', fase: 'ocr', modelo: 'm', tokens_in: 100, tokens_out: 0, costo_usd: 10, created_at: '2026-07-28T10:00:00Z' },
+        // Semana actual (2-ago a 8-ago, recortada por `hoy`): $15 total.
+        { tenant_id: 't1', fase: 'ocr', modelo: 'm', tokens_in: 200, tokens_out: 0, costo_usd: 15, created_at: '2026-08-02T10:00:00Z' },
+      ],
+      error: null,
+    });
+    const r = await getResumenNegocio('2026-08-05');
+    expect(r.tendenciaCosto).toBe(50); // (15-10)/10 × 100
+    expect(r.tendenciaTokens).toBe(100); // (200-100)/100 × 100
   });
 
   it('un fallo de Supabase LANZA, no se lee como "cero negocio"', async () => {
@@ -71,18 +92,18 @@ describe('getResumenNegocio', () => {
   });
 });
 
-// `estado` es una máquina de estados (qué espera el bot de este teléfono),
-// NO un historial de mensajes — Likida no guarda el texto de WhatsApp. Esto
-// prueba que se lee tal cual, sin inventar un "hilo de conversación" que no
-// existe.
+// `estado` SÍ trae el historial de mensajes (`{ turns: ConvTurn[] }`, misma
+// forma que conv.ts lee/escribe) — no una máquina de estados sin texto,
+// como decía el comentario anterior de la función. Se corrigió tras verlo
+// mal renderizado (JSON crudo desbordando la tarjeta).
 describe('getConversacionesActivas', () => {
   beforeEach(() => { respuestas.clear(); });
 
-  it('trae el estado real, más reciente primero, con el nombre de la flota', async () => {
+  it('trae los turnos reales, más reciente primero, con el nombre de la flota', async () => {
     respuestas.set('wa_conversacion', {
       data: [{
         telefono: '529993700779', updated_at: '2026-08-02T20:00:00Z',
-        estado: { esperando: 'foto_comprobante', viajeId: 'v1' },
+        estado: { turns: [{ role: 'user', content: 'Listo' }, { role: 'assistant', content: 'Listo, cuadré tu viaje' }] },
         tenant: { nombre: 'Transportes Innovativos' },
       }],
       error: null,
@@ -91,18 +112,19 @@ describe('getConversacionesActivas', () => {
     expect(r).toEqual([{
       telefono: '529993700779',
       tenantNombre: 'Transportes Innovativos',
-      estado: { esperando: 'foto_comprobante', viajeId: 'v1' },
+      turns: [{ role: 'user', content: 'Listo' }, { role: 'assistant', content: 'Listo, cuadré tu viaje' }],
       actualizadaEn: '2026-08-02T20:00:00Z',
     }]);
   });
 
-  it('sin tenant ligado, "—" en vez de reventar', async () => {
+  it('sin turns (conversación recién creada) o estado ajeno, lista vacía en vez de reventar', async () => {
     respuestas.set('wa_conversacion', {
       data: [{ telefono: '529990000000', updated_at: '2026-08-02T20:00:00Z', estado: {}, tenant: null }],
       error: null,
     });
     const r = await getConversacionesActivas();
     expect(r[0].tenantNombre).toBe('—');
+    expect(r[0].turns).toEqual([]);
   });
 
   it('un fallo de Supabase lanza', async () => {
