@@ -8,7 +8,10 @@ import Notificaciones from './notificaciones';
 import { calcularAlertas } from './calcular-alertas';
 import PerfilMenu from './perfil';
 import SidebarNav from './sidebar-nav';
+import SidebarNavIconos from './sidebar-nav-iconos';
 import FondoShader from './fondo-shader';
+import CommandPalette from './command-palette';
+import BuscadorTrigger from './buscador-trigger';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,23 +54,36 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           altura calculada no es la que realmente se ve — eso rompe el
           `sticky` del header cuando el navegador recalcula al hacer scroll.
           `dvh` (dynamic viewport height) sigue el viewport visual real. */}
+      <CommandPalette />
       <div className="min-h-dvh flex items-start gap-4 p-4 relative z-10">
-        <aside className="glass-panel w-[232px] shrink-0 flex flex-col h-[calc(100dvh-2rem)] sticky top-4 self-start overflow-hidden">
-          <div className="px-4 py-4 flex items-center gap-2">
+        {/* `w-[72px] lg:w-[232px]` — colapsa a solo íconos entre `md` y
+            `lg` (§G del complemento: "Sidebar colapsa a íconos en
+            pantallas medianas"), responsive por CSS, no un toggle manual.
+            `SidebarNav` (con texto, acordeón) se oculta con `hidden
+            lg:block`; `SidebarNavIconos` (lista plana con tooltip) es su
+            reverso `lg:hidden`. */}
+        <aside className="glass-panel w-[72px] lg:w-[232px] shrink-0 flex flex-col h-[calc(100dvh-2rem)] sticky top-4 self-start overflow-hidden">
+          <div className="px-4 py-4 flex items-center justify-center lg:justify-start gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element -- logo estático, no next/image en el resto del repo */}
             <img src="/images/logo.png" alt="Likida" className="h-5 w-auto" />
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
+            <span className="hidden lg:inline text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
               ADMIN
             </span>
           </div>
 
+          <div className="hidden lg:block px-2.5 pb-1">
+            <BuscadorTrigger />
+          </div>
+
           <nav className="flex-1 overflow-y-auto px-2.5 space-y-3 pb-4">
-            <SidebarNav />
+            <div className="hidden lg:block"><SidebarNav /></div>
+            <div className="lg:hidden"><SidebarNavIconos /></div>
           </nav>
 
           <div className="px-2.5 pb-2.5 pt-2.5" style={{ borderTop: '1px solid var(--line)' }}>
-            <Link href="/dashboard?vista=demo" className={ITEM} style={{ color: 'var(--muted)' }}>
-              <ArrowLeftRight {...ICONO} /> Ver panel de flota (demo)
+            <Link href="/dashboard?vista=demo" title="Ver panel de flota (demo)"
+              className={`${ITEM} justify-center lg:justify-start`} style={{ color: 'var(--muted)' }}>
+              <ArrowLeftRight {...ICONO} /> <span className="hidden lg:inline">Ver panel de flota (demo)</span>
             </Link>
             {/* El chip de perfil ya NO abre un popup — pedido explícito:
                 quitar el menú, el avatar+nombre lleva directo a
@@ -76,17 +92,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 dentro de un menú. Espacio libre entre aquí y el botón de
                 cerrar sesión a propósito — para las categorías que el
                 usuario dijo que agregará después. */}
-            <div className="flex items-center px-2.5 py-2.5 mt-1">
+            <div className="flex items-center justify-center lg:justify-start px-2.5 py-2.5 mt-1">
               <PerfilMenu nombre={nombre ?? 'Javier'} avatarUrl={avatarUrl} />
-              <div className="ml-auto"><Notificaciones alertas={alertas} /></div>
+              <div className="hidden lg:block ml-auto"><Notificaciones alertas={alertas} /></div>
             </div>
 
             <form action={cerrarSesion} className="mt-2">
-              <button type="submit"
+              <button type="submit" title="Cerrar sesión"
                 className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-opacity hover:opacity-85"
                 style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
                 <LogOut width={15} height={15} strokeWidth={1.75} />
-                Cerrar sesión
+                <span className="hidden lg:inline">Cerrar sesión</span>
               </button>
             </form>
           </div>

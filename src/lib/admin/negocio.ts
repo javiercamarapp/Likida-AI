@@ -28,9 +28,10 @@ export interface ResumenNegocio {
   porModelo: Array<{ modelo: string; n: number; costoUsd: number }>;
   porDia: Array<{ dia: string; costoUsd: number; tokens: number }>;
   /** Facturas (filas de `gasto` — cada una es un comprobante que pasó por
-   *  OCR/CFDI) procesadas por día, últimos 7 días — siempre las 7 fechas,
-   *  con `n: 0` en las que no hubo actividad, para que la gráfica de barras
-   *  no comprima una semana con un solo día real. */
+   *  OCR/CFDI) procesadas por día, ventana de `ventanaDias` (default 7) —
+   *  siempre TODAS las fechas de la ventana, con `n: 0` en las que no hubo
+   *  actividad, para que la gráfica de barras no comprima el periodo a un
+   *  solo día real. */
   facturasPorDia: Array<{ dia: string; n: number }>;
   /** Total histórico de facturas (todas las filas de `gasto`, sin filtro
    *  de fecha) — para el contador retro junto al saludo. */
@@ -46,8 +47,16 @@ export interface ResumenNegocio {
  * `hoy` es inyectable (default: fecha real) — mismo criterio que
  * `cuadrarViaje({ hoy })` en el motor: una prueba de tendencia no puede
  * depender del reloj del sistema el día que corra.
+ *
+ * `ventanaDias` (default 7) es lo que mueve el `<GlobalFilter>` de Inicio
+ * (7d/30d) — solo afecta `facturasPorDia`; el resto de los números
+ * (costoIaUsd, tendencias, etc.) son totales o comparativos de 7 días fijos
+ * a propósito, no se re-derivan por ventana todavía.
  */
-export async function getResumenNegocio(hoy: string = new Date().toISOString().slice(0, 10)): Promise<ResumenNegocio> {
+export async function getResumenNegocio(
+  hoy: string = new Date().toISOString().slice(0, 10),
+  ventanaDias: number = 7,
+): Promise<ResumenNegocio> {
   const admin = supabaseAdmin();
   const [tenantsRes, viajesRes, costoRes, gastoRes] = await Promise.all([
     admin.from('tenant').select('id, nombre, plan'),
@@ -137,8 +146,8 @@ export async function getResumenNegocio(hoy: string = new Date().toISOString().s
     const dia = g.created_at.slice(0, 10);
     facturasPorDiaMap.set(dia, (facturasPorDiaMap.get(dia) ?? 0) + 1);
   }
-  const facturasPorDia = Array.from({ length: 7 }, (_, i) => {
-    const dia = cortes(6 - i);
+  const facturasPorDia = Array.from({ length: ventanaDias }, (_, i) => {
+    const dia = cortes(ventanaDias - 1 - i);
     return { dia, n: facturasPorDiaMap.get(dia) ?? 0 };
   });
 
