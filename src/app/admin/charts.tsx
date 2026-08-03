@@ -49,7 +49,7 @@ export function AreaChartSimple({
   datos: Array<{ dia: string; valor: number }>;
   etiquetaValor: (v: number) => string;
 }) {
-  const ANCHO = 640, ALTO = 200, PAD_IZQ = 8, PAD_DER = 8, PAD_SUP = 16, PAD_INF = 28;
+  const ANCHO = 640, ALTO = 240, PAD_IZQ = 8, PAD_DER = 8, PAD_SUP = 16, PAD_INF = 28;
   const w = ANCHO - PAD_IZQ - PAD_DER, h = ALTO - PAD_SUP - PAD_INF;
   const max = Math.max(...datos.map((d) => d.valor), 1);
   const paso = datos.length > 1 ? w / (datos.length - 1) : 0;
@@ -89,7 +89,7 @@ export function AreaChartSimple({
   );
 }
 
-const RADIO = 70, GROSOR = 22;
+const RADIO = 78, GROSOR = 24;
 const CIRC = 2 * Math.PI * RADIO;
 
 /** Dona de una categoría — identidad por color (monocromo: por OPACIDAD,
@@ -107,15 +107,15 @@ export function Dona({ segmentos }: { segmentos: Array<{ etiqueta: string; valor
   }, []);
   return (
     <div className="flex items-center gap-6">
-      <svg width={160} height={160} viewBox="0 0 160 160" className="shrink-0 -rotate-90">
-        <circle cx={80} cy={80} r={RADIO} fill="none" stroke="var(--line)" strokeWidth={GROSOR} />
+      <svg width={192} height={192} viewBox="0 0 192 192" className="shrink-0 -rotate-90">
+        <circle cx={96} cy={96} r={RADIO} fill="none" stroke="var(--line)" strokeWidth={GROSOR} />
         {segmentos.map((s, i) => {
           const frac = s.valor / total;
           const dash = frac * CIRC;
           const acumuladoPrevio = i === 0 ? 0 : acumulados[i - 1];
           const offset = -acumuladoPrevio * CIRC;
           return (
-            <circle key={s.etiqueta} cx={80} cy={80} r={RADIO} fill="none" stroke="var(--ink)"
+            <circle key={s.etiqueta} cx={96} cy={96} r={RADIO} fill="none" stroke="var(--ink)"
               strokeWidth={GROSOR} strokeDasharray={`${dash} ${CIRC - dash}`} strokeDashoffset={offset}
               opacity={pasos[i]} strokeLinecap="butt"
               style={{ transition: 'stroke-dasharray 0.4s ease' }} />

@@ -7,11 +7,11 @@ export default async function AdminChat() {
   const r = await getResumenNegocio();
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b h-16 flex items-center px-8" style={{ borderColor: 'var(--line)' }}>
-        <span className="text-base font-medium">Chatea con tus Datos</span>
+    <div className="flex flex-col gap-4">
+      <header className="glass-panel h-14 flex items-center px-5">
+        <span className="text-sm font-medium">Chatea con tus Datos</span>
       </header>
-      <main className="px-8 py-10 max-w-2xl">
+      <main className="max-w-2xl">
         <ChatNegocio resumen={r} />
       </main>
     </div>

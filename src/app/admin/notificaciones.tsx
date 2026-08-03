@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { Bell } from 'lucide-react';
 
 export interface Alerta { tipo: 'ok' | 'atencion'; texto: string }
 
@@ -27,14 +28,15 @@ export default function Notificaciones({ alertas }: { alertas: Alerta[] }) {
   return (
     <div className="relative shrink-0" ref={ref}>
       <button type="button" onClick={() => setAbierto((v) => !v)}
-        className="relative w-9 h-9 rounded-lg hairline flex items-center justify-center text-sm hover:opacity-70 transition-opacity">
-        🔔
+        className="relative w-9 h-9 rounded-lg hairline flex items-center justify-center hover:opacity-70 transition-opacity"
+        style={{ background: 'var(--surface)' }}>
+        <Bell width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
         {hayAtencion && (
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: 'var(--color-bad)' }} />
         )}
       </button>
       {abierto && (
-        <div className="absolute right-0 mt-2 w-72 rounded-xl overflow-hidden z-20 card">
+        <div className="absolute right-0 mt-2 w-72 rounded-xl overflow-hidden z-20 glass-panel">
           <div className="px-4 py-3 text-sm font-medium border-b" style={{ borderColor: 'var(--line)' }}>Notificaciones</div>
           {alertas.length === 0 ? (
             <div className="px-4 py-6 text-sm text-center" style={{ color: 'var(--muted)' }}>Sin novedades.</div>

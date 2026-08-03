@@ -115,7 +115,8 @@ export default async function Login({
     <main className="min-h-screen flex bg-white">
       <div className="flex w-full flex-col lg:w-1/2">
         <div className="flex items-center px-6 py-6 md:px-10 lg:px-12 lg:py-12">
-          <span className="text-[17px] font-semibold tracking-tight text-[#0a0a0a]">Likida</span>
+          {/* eslint-disable-next-line @next/next/no-img-element -- logo estático, no next/image en el resto del repo */}
+          <img src="/images/logo.png" alt="Likida" className="h-6 w-auto" />
         </div>
 
         <div className="flex flex-1 items-center justify-center px-6 pb-16 md:px-10">

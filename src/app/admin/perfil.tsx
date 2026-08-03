@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 export default function PerfilMenu({ nombre, cerrarSesion }: { nombre: string; cerrarSesion: () => void }) {
   const [abierto, setAbierto] = useState(false);
@@ -23,10 +24,10 @@ export default function PerfilMenu({ nombre, cerrarSesion }: { nombre: string; c
           {nombre.charAt(0).toUpperCase()}
         </span>
         <span className="text-sm font-medium hidden md:inline">{nombre}</span>
-        <span className="text-xs" style={{ color: 'var(--muted)' }}>⌄</span>
+        <ChevronDown width={13} height={13} style={{ color: 'var(--muted)' }} />
       </button>
       {abierto && (
-        <div className="absolute right-0 mt-2 w-48 rounded-xl overflow-hidden z-20 card">
+        <div className="absolute right-0 mt-2 w-48 rounded-xl overflow-hidden z-20 glass-panel">
           <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--line)' }}>
             <div className="text-sm font-medium">{nombre}</div>
             <div className="text-xs" style={{ color: 'var(--muted)' }}>Superadmin</div>
