@@ -50,26 +50,13 @@
   --accent-fg: #ffffff;          /* texto sobre el acento (verde oscuro → blanco) */
 }
 
-/* Dark: el acento pasa a teal brillante (#2dd4bf); texto BLANCO encima falla
-   WCAG (~1.6:1). Se usa tinta oscura sobre el teal para contraste AA. A1. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0b0f;
-    --surface: #16161c;
-    --ink: #e8edf5;
-    --muted: #9aa0aa;
-    --line: #242430;
-    --accent: #2dd4bf;
-    --accent-fg: #06231e;
-    /* #d70015 da 5.38:1 sobre blanco pero solo 3.35:1 sobre el fondo oscuro, y
-       AA pide 4.5:1. Este tono llega a 5.29:1 en oscuro. Medido con la fórmula
-       de WCAG, no a ojo: el mensaje de error del login se lee en los dos modos. */
-    --color-bad: #ff453a;
-    /* El verde oscuro del modo claro da 2.35:1 aquí. Sobre superficie oscura el
-       de Apple llega a 8.12:1: cada modo se lleva el que pasa en ese modo. */
-    --color-ok: #34c759;
-  }
-}
+/* Antes había un `@media (prefers-color-scheme: dark)` aquí que cambiaba el
+   tema solo por el ajuste del sistema operativo del contralor, sin que nadie
+   lo pidiera en la app — así se veía "todo negro" sin que Likida lo hubiera
+   decidido. Se quita: el estilo de referencia (usehandle.ai) no tiene modo
+   oscuro, y esta app tampoco tiene hoy un switch manual que lo active — las
+   dos reglas `[data-theme]` de abajo quedan listas para ESE switch, si algún
+   día se construye, pero ya no se disparan solas. */
 :root[data-theme="dark"] {
   --bg: #0b0b0f; --surface: #16161c; --ink: #e8edf5; --muted: #9aa0aa; --line: #242430; --accent: #2dd4bf; --accent-fg: #06231e;
   --color-bad: #ff453a;   /* ver la nota de contraste arriba */

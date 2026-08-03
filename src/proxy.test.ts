@@ -67,4 +67,11 @@ describe('proxy · gate de /dashboard sin sesión', () => {
     expect(res.headers.get('location')).toBeNull();
     expect(res.headers.get('Cache-Control')).toContain('no-store');
   });
+
+  it('/mis-viajes (panel del chofer) pasa por el mismo gate que /dashboard', async () => {
+    const res = await pedir('/mis-viajes');
+    const destino = new URL(res.headers.get('location')!);
+    expect(destino.pathname).toBe('/login');
+    expect(destino.searchParams.get('next')).toBe('/mis-viajes');
+  });
 });

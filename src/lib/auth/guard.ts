@@ -35,3 +35,20 @@ export async function requireSessionTenant(
   }
   return s as SessionTenant & { tenantId: string };
 }
+
+/**
+ * Puerta de /mis-viajes — el reverso de `requireSessionTenant`.
+ *
+ * Un rol≠operador no va a /sin-acceso (SÍ tiene acceso, solo que a OTRO
+ * panel): va a /dashboard, que es el suyo. Y un operador sin `operador_id`
+ * ligado (alta a medias — se creó la cuenta de Auth pero no se completó la
+ * liga con `operador`) sí va a /sin-acceso: no hay panel del que rebotarlo,
+ * de verdad no puede entrar a nada todavía.
+ */
+export async function requireOperador(): Promise<SessionTenant & { operadorId: string }> {
+  const s = await getSessionTenant();
+  if (!s) redirect('/login?next=%2Fmis-viajes');
+  if (s.rol !== 'operador') redirect('/dashboard');
+  if (!s.operadorId) redirect('/sin-acceso');
+  return s as SessionTenant & { operadorId: string };
+}

@@ -100,12 +100,12 @@ describe('modo oscuro: el mismo token, el otro color', () => {
     expect(contraste(oscuro, '#ffffff')).toBeLessThan(3);
   });
 
-  it('el override automático (prefers-color-scheme) dice lo mismo que data-theme', () => {
-    // Quien no toca el selector de tema entra por la media query. Si los dos
-    // caminos no coinciden, el color medido depende de cómo llegó el usuario.
-    expect(token('@media (prefers-color-scheme: dark)', '--color-ok'))
-      .toBe(token(':root[data-theme="dark"]', '--color-ok'));
-    expect(token('@media (prefers-color-scheme: dark)', '--color-bad'))
-      .toBe(token(':root[data-theme="dark"]', '--color-bad'));
-  });
+  // La prueba de "el override automático (prefers-color-scheme) dice lo mismo
+  // que data-theme" se quitó con el bloque `@media (prefers-color-scheme:
+  // dark)` mismo (docs/superpowers/plans/2026-08-02-roles-flota.md): el panel
+  // cambiaba a oscuro solo por el sistema operativo del contralor, sin que
+  // nadie en Likida lo hubiera pedido, y así se veía "todo negro" sin
+  // decisión. El estilo de referencia (usehandle.ai) no tiene modo oscuro. El
+  // bloque `[data-theme="dark"]` se conserva por si algún día hay un switch
+  // manual — eso sí seguiría midiéndose arriba.
 });
