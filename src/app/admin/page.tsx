@@ -51,6 +51,19 @@ function Insignia({ Icono, tamaño = 'md' }: { Icono: typeof Truck; tamaño?: 's
   );
 }
 
+/** Título de sección — SIEMPRE vive DENTRO de un `.glass-panel` (nunca
+ *  suelto sobre el fondo oscuro): así el gris de `--muted` se lee bien
+ *  porque está sobre la superficie blanca del panel, no sobre la imagen
+ *  negra difuminada de fondo. Un texto gris flotando directo sobre esa
+ *  imagen no pasa contraste. */
+function TituloSeccion({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      {children}
+    </h2>
+  );
+}
+
 /**
  * Inicio de /admin — el `requireSuperadmin()` ya lo hizo el layout
  * (admin/layout.tsx), esta página solo trae datos. Todas las cifras,
@@ -124,91 +137,118 @@ export default async function Admin() {
             <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
           </div>
 
-          <section>
-            <h2 className="text-xs font-semibold uppercase tracking-wide mb-2.5 px-1" style={{ color: 'var(--muted)' }}>
-              Likida en números
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="glass-panel p-4">
-                <Insignia Icono={Truck} tamaño="sm" />
-                <div className="text-2xl font-semibold tracking-tight tabular mt-2.5">{r.tenants}</div>
-                <div className="text-sm mt-0.5" style={{ color: 'var(--muted)' }}>
-                  {r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
+          {/* Un solo panel glass grande: los 4 recuadros de cifras Y las dos
+              gráficas (línea + dona) van SOBREPUESTOS encima, como tarjetas
+              `.card` opacas más chicas — nunca dos glass idénticos pegados.
+              Esto también resuelve el contraste: el título y los textos
+              grises quedan sobre la superficie blanca del panel grande, no
+              sueltos sobre la imagen de fondo. */}
+          <section id="agentes" className="glass-panel p-5 scroll-mt-24">
+            <TituloSeccion>Likida en números</TituloSeccion>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+              <div className="card p-3.5">
+                <div className="flex items-center gap-3">
+                  <Insignia Icono={Truck} tamaño="sm" />
+                  <div className="min-w-0">
+                    <div className="text-xl font-semibold tracking-tight tabular leading-tight">{r.tenants}</div>
+                    <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>
+                      {r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="glass-panel p-4">
-                <Insignia Icono={DollarSign} tamaño="sm" />
-                <div className="text-2xl font-semibold tracking-tight tabular mt-2.5">{usd(r.costoIaUsd)}</div>
-                <div className="text-sm mt-0.5" style={{ color: 'var(--muted)' }}>Gastado en IA</div>
-                {chipsCosto.length > 1 && <div className="mt-2 -mx-1"><Sparkline valores={chipsCosto} alto={32} /></div>}
-                <div className="mt-1"><Tendencia valor={r.tendenciaCosto} /></div>
+              <div className="card p-3.5">
+                <div className="flex items-center gap-3">
+                  <Insignia Icono={DollarSign} tamaño="sm" />
+                  <div className="min-w-0">
+                    <div className="text-xl font-semibold tracking-tight tabular leading-tight">{usd(r.costoIaUsd)}</div>
+                    <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>Gastado en IA</div>
+                  </div>
+                </div>
+                {chipsCosto.length > 1 && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex-1 min-w-0"><Sparkline valores={chipsCosto} alto={20} /></div>
+                    <Tendencia valor={r.tendenciaCosto} />
+                  </div>
+                )}
               </div>
-              <div className="glass-panel p-4">
-                <Insignia Icono={Cpu} tamaño="sm" />
-                <div className="text-2xl font-semibold tracking-tight tabular mt-2.5">{numero(r.tokensIn + r.tokensOut)}</div>
-                <div className="text-sm mt-0.5" style={{ color: 'var(--muted)' }}>Tokens usados</div>
-                {chipsTokens.length > 1 && <div className="mt-2 -mx-1"><Sparkline valores={chipsTokens} alto={32} /></div>}
-                <div className="mt-1"><Tendencia valor={r.tendenciaTokens} /></div>
+              <div className="card p-3.5">
+                <div className="flex items-center gap-3">
+                  <Insignia Icono={Cpu} tamaño="sm" />
+                  <div className="min-w-0">
+                    <div className="text-xl font-semibold tracking-tight tabular leading-tight">{numero(r.tokensIn + r.tokensOut)}</div>
+                    <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>Tokens usados</div>
+                  </div>
+                </div>
+                {chipsTokens.length > 1 && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex-1 min-w-0"><Sparkline valores={chipsTokens} alto={20} /></div>
+                    <Tendencia valor={r.tendenciaTokens} />
+                  </div>
+                )}
               </div>
-              <div className="glass-panel p-4">
-                <Insignia Icono={CheckCircle2} tamaño="sm" />
-                <div className="text-2xl font-semibold tracking-tight tabular mt-2.5">{r.viajesProcesados}</div>
-                <div className="text-sm mt-0.5" style={{ color: 'var(--muted)' }}>Viajes procesados</div>
+              <div className="card p-3.5">
+                <div className="flex items-center gap-3">
+                  <Insignia Icono={CheckCircle2} tamaño="sm" />
+                  <div className="min-w-0">
+                    <div className="text-xl font-semibold tracking-tight tabular leading-tight">{r.viajesProcesados}</div>
+                    <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>Viajes procesados</div>
+                  </div>
+                </div>
               </div>
             </div>
             {r.tenants <= 1 && (
-              <p className="text-xs mt-2.5 px-1" style={{ color: 'var(--muted)' }}>
+              <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
                 Cifras reales, no de ejemplo — Likida todavía no tiene clientes, así que son bajas a propósito.
               </p>
             )}
+
+            {(r.porDia.length > 1 || r.porFase.length > 0) && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-4">
+                {r.porDia.length > 1 ? (
+                  <GraficaCostoConRango porDia={r.porDia} anidado />
+                ) : (
+                  <div className="card p-4 flex items-center text-sm" style={{ color: 'var(--muted)' }}>Sin historial suficiente todavía.</div>
+                )}
+                {r.porFase.length > 0 ? (
+                  <div className="card p-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
+                      Agentes — costo por fase
+                    </h3>
+                    <Dona segmentos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))} />
+                  </div>
+                ) : (
+                  <div className="card p-4 flex items-center text-sm" style={{ color: 'var(--muted)' }}>Todavía no hay actividad de IA registrada.</div>
+                )}
+              </div>
+            )}
           </section>
 
-          {r.porDia.length > 1 && <GraficaCostoConRango porDia={r.porDia} />}
-
-          <div id="agentes" className="grid grid-cols-1 md:grid-cols-2 gap-4 scroll-mt-24">
-            <section>
-              <h2 className="text-xs font-semibold uppercase tracking-wide mb-2.5 px-1" style={{ color: 'var(--muted)' }}>
-                Agentes — costo por fase
-              </h2>
-              {r.porFase.length === 0 ? (
-                <div className="glass-panel p-6 text-sm" style={{ color: 'var(--muted)' }}>Todavía no hay actividad de IA registrada.</div>
-              ) : (
-                <div className="glass-panel p-5">
-                  <Dona segmentos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))} />
-                </div>
-              )}
-            </section>
-
-            <section>
-              <h2 className="text-xs font-semibold uppercase tracking-wide mb-2.5 px-1" style={{ color: 'var(--muted)' }}>
-                Costo por modelo
-              </h2>
-              {r.porModelo.length === 0 ? (
-                <div className="glass-panel p-6 text-sm" style={{ color: 'var(--muted)' }}>Sin llamadas registradas todavía.</div>
-              ) : (
-                <div className="glass-panel divide-y" style={{ borderColor: 'var(--line)' }}>
-                  {r.porModelo.map((m) => (
-                    <div key={m.modelo} className="px-5 py-3 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-mono truncate">{m.modelo}</div>
-                        <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{m.n} llamadas</div>
-                      </div>
-                      <div className="text-sm font-semibold tabular shrink-0">{usd(m.costoUsd)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-
-          <section id="flotas" className="scroll-mt-24">
-            <h2 className="text-xs font-semibold uppercase tracking-wide mb-2.5 px-1" style={{ color: 'var(--muted)' }}>
-              Flotas
-            </h2>
-            {r.flotas.length === 0 ? (
-              <div className="glass-panel p-6 text-sm" style={{ color: 'var(--muted)' }}>Sin flotas dadas de alta todavía.</div>
+          <section className="glass-panel overflow-hidden">
+            <div className="px-5 pt-4"><TituloSeccion>Costo por modelo</TituloSeccion></div>
+            {r.porModelo.length === 0 ? (
+              <div className="px-5 py-4 text-sm" style={{ color: 'var(--muted)' }}>Sin llamadas registradas todavía.</div>
             ) : (
-              <div className="glass-panel overflow-x-auto">
+              <div className="divide-y mt-2" style={{ borderColor: 'var(--line)' }}>
+                {r.porModelo.map((m) => (
+                  <div key={m.modelo} className="px-5 py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-mono truncate">{m.modelo}</div>
+                      <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{m.n} llamadas</div>
+                    </div>
+                    <div className="text-sm font-semibold tabular shrink-0">{usd(m.costoUsd)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section id="flotas" className="glass-panel overflow-hidden scroll-mt-24">
+            <div className="px-5 pt-4 pb-1"><TituloSeccion>Flotas</TituloSeccion></div>
+            {r.flotas.length === 0 ? (
+              <div className="px-5 py-4 text-sm" style={{ color: 'var(--muted)' }}>Sin flotas dadas de alta todavía.</div>
+            ) : (
+              <div className="overflow-x-auto mt-2">
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
@@ -231,22 +271,20 @@ export default async function Admin() {
                 </table>
               </div>
             )}
-            <p className="text-xs mt-2 px-1" style={{ color: 'var(--muted)' }}>
+            <p className="text-xs px-5 pt-2 pb-4" style={{ color: 'var(--muted)' }}>
               Plan, uso vs. límite y estado de cuenta (activa/en riesgo/morosa) son Fase 1 del roadmap — hoy solo se enseña lo que ya existe.
             </p>
           </section>
 
-          <section id="conversaciones" className="scroll-mt-24">
-            <h2 className="text-xs font-semibold uppercase tracking-wide mb-2.5 px-1" style={{ color: 'var(--muted)' }}>
-              Conversaciones de WhatsApp
-            </h2>
+          <section id="conversaciones" className="glass-panel p-5 scroll-mt-24">
+            <TituloSeccion>Conversaciones de WhatsApp</TituloSeccion>
             {conversaciones.length === 0 ? (
-              <div className="glass-panel p-6 text-sm" style={{ color: 'var(--muted)' }}>Sin conversaciones activas.</div>
+              <div className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>Sin conversaciones activas.</div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2.5 mt-3">
                 {conversaciones.map((c) => (
-                  <details key={c.telefono} className="glass-panel overflow-hidden group">
-                    <summary className="px-5 py-3.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)] transition-colors">
+                  <details key={c.telefono} className="card overflow-hidden group">
+                    <summary className="px-4 py-3 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)] transition-colors">
                       <div>
                         <div className="text-sm font-medium">{c.telefono}</div>
                         <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.tenantNombre}</div>
@@ -257,12 +295,12 @@ export default async function Admin() {
                       </div>
                     </summary>
                     {c.turns.length > 0 && (
-                      <div className="px-5 pb-5 pt-1 space-y-2 border-t" style={{ borderColor: 'var(--line)' }}>
+                      <div className="px-4 pb-4 pt-1 space-y-2 border-t" style={{ borderColor: 'var(--line)' }}>
                         {c.turns.slice(-6).map((t, i) => (
                           <div key={i} className={`flex ${t.role === 'user' ? 'justify-start' : 'justify-end'}`}>
                             <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
                               style={t.role === 'user'
-                                ? { background: 'var(--surface)', border: '1px solid var(--line)' }
+                                ? { background: 'var(--bg)', border: '1px solid var(--line)' }
                                 : { background: 'var(--ink)', color: 'var(--bg)' }}>
                               {t.content}
                             </div>
@@ -276,16 +314,14 @@ export default async function Admin() {
             )}
           </section>
 
-          <section>
-            <h2 className="text-xs font-semibold uppercase tracking-wide mb-2.5 px-1" style={{ color: 'var(--muted)' }}>
-              Salud del sistema
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <a href="https://sentry.io" target="_blank" rel="noopener noreferrer" className="glass-panel p-5 hover:shadow-md transition-shadow">
+          <section className="glass-panel p-5">
+            <TituloSeccion>Salud del sistema</TituloSeccion>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <a href="https://sentry.io" target="_blank" rel="noopener noreferrer" className="card p-4 hover:shadow-md transition-shadow">
                 <div className="text-sm font-medium">Errores — Sentry</div>
                 <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Ya conectado. Se enlaza en vez de reconstruirse.</div>
               </a>
-              <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="glass-panel p-5 hover:shadow-md transition-shadow">
+              <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="card p-4 hover:shadow-md transition-shadow">
                 <div className="text-sm font-medium">Uptime y deploys — Vercel</div>
                 <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Vercel ya lo mide. Se enlaza en vez de reconstruirse.</div>
               </a>
