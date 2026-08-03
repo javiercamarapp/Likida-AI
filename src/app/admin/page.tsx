@@ -9,7 +9,7 @@ import {
 import { Sparkline, Tendencia, Dona, BarChartSimple } from './charts';
 import GraficaCostoConRango from './rango-costo';
 import AsistenteExpandible from './asistente-expandible';
-import ContadorFacturas from './contador-facturas';
+import ContadorRetro from './contador-retro';
 
 const SALUDO = () => {
   const h = new Date().getUTCHours() - 6; // hora de México, aproximada — un saludo no necesita el minuto exacto
@@ -133,7 +133,10 @@ export default async function Admin() {
               </h1>
               <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
             </div>
-            <ContadorFacturas total={r.facturasTotal} />
+            {/* MRR real: $0 — Likida no cobra a ningún cliente todavía.
+                No es un placeholder, es el número verdadero de hoy. 7
+                dígitos = el ancho de "1,000,000", la meta. */}
+            <ContadorRetro valor={0} digitos={7} prefijo="$" etiqueta="MRR — meta $1,000,000" tamaño="lg" />
           </div>
 
           {/* Facturas = filas de `gasto` (cada una pasó por OCR/CFDI) — el
