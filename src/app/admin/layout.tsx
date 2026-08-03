@@ -28,7 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div
-      className="min-h-screen"
+      className="min-h-dvh"
       style={{
         backgroundImage: 'url(/images/bg-admin.jpg)',
         backgroundSize: 'cover',
@@ -37,8 +37,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         fontFamily: 'var(--font-sans-handle), var(--font-sans)',
       }}
     >
-      <div className="min-h-screen flex items-start gap-4 p-4">
-        <aside className="glass-panel w-[232px] shrink-0 flex flex-col h-[calc(100vh-2rem)] sticky top-4 overflow-hidden">
+      {/* `dvh` en vez de `vh` a propósito: en iOS Safari, `100vh` cuenta el
+          espacio DETRÁS de la barra de direcciones colapsable, así que la
+          altura calculada no es la que realmente se ve — eso rompe el
+          `sticky` del header cuando el navegador recalcula al hacer scroll.
+          `dvh` (dynamic viewport height) sigue el viewport visual real. */}
+      <div className="min-h-dvh flex items-start gap-4 p-4">
+        <aside className="glass-panel w-[232px] shrink-0 flex flex-col h-[calc(100dvh-2rem)] sticky top-4 self-start overflow-hidden">
           <div className="px-4 py-4 flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element -- logo estático, no next/image en el resto del repo */}
             <img src="/images/logo.png" alt="Likida" className="h-5 w-auto" />
