@@ -1,13 +1,15 @@
 import type { Metadata } from 'next';
-import { Fraunces } from 'next/font/google';
+import { Inter, Manrope } from 'next/font/google';
 import './globals.css';
 
-// Serif editorial para títulos grandes en todo el sitio — el mismo espíritu
-// que la referencia de Javier (Balkist, de paga, sin licencia disponible)
-// con una alternativa gratuita real, self-hosted vía next/font. `--font-display`
-// queda disponible como variable CSS; qué headline la usa se decide por
-// página, no de golpe en todos lados.
-const fraunces = Fraunces({ subsets: ['latin'], variable: '--font-display', style: ['normal', 'italic'] });
+// La MISMA familia que usehandle.ai, leída de su propio CSS computado
+// (capturado 2-ago-2026): Inter de default en todo el sitio, y su clase
+// `.display` usa Satoshi — una fuente de Fontshare que no está en Google
+// Fonts y no tiene un next/font/google que la sirva con licencia clara.
+// Manrope es la alternativa geométrica más cercana a Satoshi que sí se
+// puede self-hostear aquí con licencia real (Google Fonts, SIL OFL).
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans-handle' });
+const manrope = Manrope({ subsets: ['latin'], variable: '--font-display' });
 
 export const metadata: Metadata = {
   title: 'Likida — Liquidación de viajes',
@@ -26,7 +28,7 @@ export const viewport = { width: 'device-width', initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={fraunces.variable}>
+    <html lang="es" className={`${inter.variable} ${manrope.variable}`}>
       <body>{children}</body>
     </html>
   );

@@ -1,14 +1,7 @@
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
-import { Geist } from 'next/font/google';
 
 export const dynamic = 'force-dynamic';
-
-// Geist para UI/tablas/botones — el serif editorial (`--font-display`,
-// Fraunces) ya se carga una sola vez en app/layout.tsx y se usa donde
-// corresponda (títulos), no aquí de nuevo, para no cargar la misma fuente
-// dos veces.
-const geist = Geist({ subsets: ['latin'], variable: '--font-admin' });
 
 const AGENTES = [
   { fase: 'ocr', nombre: 'Agente OCR' },
@@ -27,7 +20,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { nombre } = await requireSuperadmin();
 
   return (
-    <div className={`${geist.variable} min-h-screen flex`} style={{ background: 'var(--bg)', fontFamily: 'var(--font-admin), var(--font-sans)' }}>
+    <div className="min-h-screen flex" style={{
+      fontFamily: 'var(--font-sans-handle), var(--font-sans)',
+      // Degradado de fondo sutil (negro/gris, no morado) — las tarjetas
+      // blancas quedan sobrepuestas encima. Radial arriba-izquierda, se
+      // desvanece antes de llegar al centro para no pelear con el contenido.
+      background: 'radial-gradient(1200px 600px at 0% 0%, color-mix(in srgb, var(--ink) 6%, var(--bg)) 0%, var(--bg) 55%)',
+    }}>
       <aside className="w-[260px] shrink-0 border-r flex flex-col h-screen sticky top-0" style={{ borderColor: 'var(--line)' }}>
         <div className="px-5 py-5 flex items-center gap-2">
           <span className="font-semibold tracking-tight text-lg">Likida</span>
@@ -71,6 +70,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/chat"
               className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]">
               Chatea con tus Datos
+            </Link>
+            <Link href="/admin/usuarios/nuevo"
+              className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]">
+              + Nuevo usuario
             </Link>
           </div>
         </nav>

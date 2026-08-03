@@ -1,9 +1,15 @@
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio';
+import { supabaseServer } from '@/lib/supabase/server';
 import { usd, numero } from '@/lib/utils';
-import { Sparkline, Tendencia, AreaChartSimple, Dona } from './charts';
+import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import { Sparkline, Tendencia, Dona } from './charts';
 import BuscadorSecciones from './buscador';
 import ChatNegocio from './chat';
+import Notificaciones, { type Alerta } from './notificaciones';
+import PerfilMenu from './perfil';
+import GraficaCostoConRango from './rango-costo';
 
 const SALUDO = () => {
   const h = new Date().getUTCHours() - 6; // hora de México, aproximada — un saludo no necesita el minuto exacto
@@ -24,37 +30,70 @@ const FASE_LABEL: Record<string, string> = {
   chat: 'Agente de Chat', router: 'Agente Router', whatsapp: 'Agente de WhatsApp',
 };
 
+const FASE_ICONO: Record<string, string> = {
+  ocr: '📇', cuadre: '🧮', escalacion: '🚩', chat: '💬', router: '🔀', whatsapp: '📱',
+};
+
 /**
  * Inicio de /admin — el `requireSuperadmin()` ya lo hizo el layout
- * (admin/layout.tsx), esta página solo trae datos. Todas las cifras y
- * gráficas son reales (`getResumenNegocio`/`getConversacionesActivas`), no
- * de relleno: con 1 tenant, los números se ven chicos a propósito, y la
- * tendencia se calla (`null`) en vez de inventar un % sin 7 días previos
- * que comparar.
+ * (admin/layout.tsx), esta página solo trae datos. Todas las cifras,
+ * gráficas Y ALERTAS son reales (`getResumenNegocio`/
+ * `getConversacionesActivas`): con 1 tenant, los números se ven chicos a
+ * propósito, y una alerta que no tiene una condición real detrás no se
+ * muestra — nada de "14 items waiting" inventado.
  */
 export default async function Admin() {
   const [{ nombre }, r, conversaciones] = await Promise.all([
     requireSuperadmin(), getResumenNegocio(), getConversacionesActivas(),
   ]);
-  const serieCosto = r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }));
   const chipsCosto = r.porDia.slice(-8).map((d) => d.costoUsd);
   const chipsTokens = r.porDia.slice(-8).map((d) => d.tokens);
   const topFase = r.porFase[0] ? (FASE_LABEL[r.porFase[0].fase] ?? r.porFase[0].fase) : null;
 
+  async function cerrarSesion() {
+    'use server';
+    const sb = await supabaseServer();
+    await sb.auth.signOut();
+    redirect('/login');
+  }
+
+  // Condiciones reales, no contadores de adorno. Con 1 tenant y pocos días
+  // de historia, la lista casi siempre sale corta — es lo honesto.
+  const alertas: Alerta[] = [];
+  if (r.tendenciaCosto !== null && r.tendenciaCosto >= 30) {
+    alertas.push({ tipo: 'atencion', texto: `El costo de IA subió ${r.tendenciaCosto}% esta semana vs la anterior.` });
+  }
+  if (conversaciones.length > 0) {
+    alertas.push({ tipo: 'ok', texto: `${conversaciones.length} conversación(es) de WhatsApp con actividad reciente.` });
+  }
+  if (r.tenants <= 1) {
+    alertas.push({ tipo: 'atencion', texto: 'Likida sigue con solo el tenant demo — sin clientes reales dados de alta.' });
+  }
+
+  const recomendaciones = [
+    { href: '#agentes', icono: '📊', titulo: 'Costo por agente', subtitulo: 'Desglose por fase de IA' },
+    { href: '#flotas', icono: '🚛', titulo: 'Flotas', subtitulo: `${r.tenants} dada${r.tenants === 1 ? '' : 's'} de alta` },
+    { href: '/admin/usuarios/nuevo', icono: '➕', titulo: 'Nuevo usuario', subtitulo: 'Dar de alta una cuenta' },
+    { href: '#conversaciones', icono: '💬', titulo: 'Conversaciones', subtitulo: `${conversaciones.length} activas` },
+  ];
+
   return (
     <div className="min-h-screen">
-      <header className="border-b h-16 flex items-center gap-4 px-8" style={{ borderColor: 'var(--line)' }}>
+      <header className="border-b h-16 flex items-center gap-3 px-8" style={{ borderColor: 'var(--line)' }}>
         <BuscadorSecciones />
-        <a href="https://sentry.io" target="_blank" rel="noopener noreferrer"
-          className="w-9 h-9 rounded-lg hairline flex items-center justify-center text-sm hover:opacity-70 transition-opacity shrink-0" title="Errores (Sentry)">
-          🔔
+        <a href="mailto:javiercamaraportepetit@gmail.com?subject=Agentes%20a%20la%20medida"
+          className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg transition-opacity hover:opacity-85 shrink-0"
+          style={{ background: 'var(--ink)', color: 'white' }}>
+          + Contáctanos
         </a>
+        <Notificaciones alertas={alertas} />
+        <PerfilMenu nombre={nombre ?? 'Javier'} cerrarSesion={cerrarSesion} />
       </header>
 
       <div className="flex">
       <main className="flex-1 min-w-0 px-8 py-8 space-y-8">
         <div>
-          <h1 className="text-4xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 500 }}>
+          <h1 className="text-4xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
             {SALUDO()}, {nombre ?? 'Javier'}
           </h1>
           <p className="text-sm mt-1 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
@@ -66,24 +105,28 @@ export default async function Admin() {
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="card p-5 transition-shadow hover:shadow-md">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm mb-3" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>🚛</div>
               <div className="text-2xl font-semibold tracking-tight tabular">{r.tenants}</div>
               <div className="text-sm mt-1" style={{ color: 'var(--muted)' }}>
                 {r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
               </div>
             </div>
             <div className="card p-5 transition-shadow hover:shadow-md">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm mb-3" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>💵</div>
               <div className="text-2xl font-semibold tracking-tight tabular">{usd(r.costoIaUsd)}</div>
               <div className="text-sm mt-1" style={{ color: 'var(--muted)' }}>Gastado en IA</div>
               {chipsCosto.length > 1 && <div className="mt-2 -mx-1"><Sparkline valores={chipsCosto} /></div>}
               <div className="mt-1.5"><Tendencia valor={r.tendenciaCosto} /></div>
             </div>
             <div className="card p-5 transition-shadow hover:shadow-md">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm mb-3" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>🧮</div>
               <div className="text-2xl font-semibold tracking-tight tabular">{numero(r.tokensIn + r.tokensOut)}</div>
               <div className="text-sm mt-1" style={{ color: 'var(--muted)' }}>Tokens usados</div>
               {chipsTokens.length > 1 && <div className="mt-2 -mx-1"><Sparkline valores={chipsTokens} /></div>}
               <div className="mt-1.5"><Tendencia valor={r.tendenciaTokens} /></div>
             </div>
             <div className="card p-5 transition-shadow hover:shadow-md">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm mb-3" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>✅</div>
               <div className="text-2xl font-semibold tracking-tight tabular">{r.viajesProcesados}</div>
               <div className="text-sm mt-1" style={{ color: 'var(--muted)' }}>Viajes procesados</div>
             </div>
@@ -95,16 +138,7 @@ export default async function Admin() {
           )}
         </section>
 
-        {serieCosto.length > 1 && (
-          <section>
-            <h2 className="text-sm font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
-              Costo de IA en el tiempo
-            </h2>
-            <div className="card p-6">
-              <AreaChartSimple datos={serieCosto} etiquetaValor={usd} />
-            </div>
-          </section>
-        )}
+        {r.porDia.length > 1 && <GraficaCostoConRango porDia={r.porDia} />}
 
         <div id="agentes" className="grid grid-cols-1 md:grid-cols-2 gap-8 scroll-mt-24">
           <section>
@@ -235,26 +269,50 @@ export default async function Admin() {
       </main>
 
       {/* Panel derecho — mismo lugar que "AI Agent Assistant" en la
-          referencia, con datos reales: nada de "18% mejor esta semana" si
-          `tendenciaCosto` es null por falta de historia. */}
-      <aside className="w-[300px] shrink-0 border-l px-5 py-6 space-y-5 hidden xl:block" style={{ borderColor: 'var(--line)' }}>
-        <div>
-          <div className="text-sm font-semibold mb-3">Asistente de negocio</div>
-          <ChatNegocio resumen={r} compacto />
+          referencia: saludo, tarjetas de acceso rápido a secciones REALES
+          (no "Optimize Workflows" sin nada detrás), insight con datos
+          reales, chat compacto hasta abajo. */}
+      <aside className="w-[300px] shrink-0 border-l px-5 py-6 space-y-5 hidden xl:block overflow-y-auto" style={{ borderColor: 'var(--line)' }}>
+        <div className="flex items-center gap-2">
+          <span>✨</span>
+          <span className="font-semibold text-sm">Asistente de negocio</span>
+        </div>
+
+        <div className="rounded-xl p-3.5 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+          👋 Hola {nombre ?? 'Javier'}, aquí tienes accesos rápidos y lo más importante de hoy.
+        </div>
+
+        <div className="space-y-2">
+          {recomendaciones.map((rec) => (
+            <Link key={rec.titulo} href={rec.href}
+              className="flex items-center gap-3 p-3 rounded-xl hairline transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)]">
+              <span className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+                {rec.icono}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium truncate">{rec.titulo}</span>
+                <span className="block text-xs truncate" style={{ color: 'var(--muted)' }}>{rec.subtitulo}</span>
+              </span>
+            </Link>
+          ))}
         </div>
 
         {(topFase || r.tendenciaCosto !== null) && (
           <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
             <div className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
-              Insight
+              ✨ Smart Insight
             </div>
             <p className="text-sm">
               {r.tendenciaCosto !== null
                 ? `El gasto de IA ${r.tendenciaCosto >= 0 ? 'subió' : 'bajó'} ${Math.abs(r.tendenciaCosto)}% esta semana vs la anterior.`
-                : `"${topFase}" es tu agente más caro hoy: ${usd(r.porFase[0].costoUsd)}.`}
+                : `"${topFase}" ${FASE_ICONO[r.porFase[0].fase] ?? ''} es tu agente más caro hoy: ${usd(r.porFase[0].costoUsd)}.`}
             </p>
           </div>
         )}
+
+        <div>
+          <ChatNegocio resumen={r} compacto />
+        </div>
       </aside>
       </div>
     </div>
