@@ -25,30 +25,37 @@ describe('getSessionTenant', () => {
     maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'flota_admin', nombre: 'Ana' } });
     const r = await getSessionTenant();
     expect(from).toHaveBeenCalledWith('app_user');
-    expect(select).toHaveBeenCalledWith('tenant_id, rol, nombre, operador_id');
+    expect(select).toHaveBeenCalledWith('tenant_id, rol, nombre, operador_id, avatar_url');
     expect(eq).toHaveBeenCalledWith('id', 'u-1');
-    expect(r).toEqual({ userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana', operadorId: null });
+    expect(r).toEqual({ userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana', operadorId: null, avatarUrl: null });
   });
 
   it('usuario autenticado sin fila en app_user, tenantId null y valores por defecto', async () => {
     getUser.mockResolvedValue({ data: { user: { id: 'u-2' } } });
     maybeSingle.mockResolvedValue({ data: null });
     const r = await getSessionTenant();
-    expect(r).toEqual({ userId: 'u-2', tenantId: null, rol: 'flota_admin', nombre: null, operadorId: null });
+    expect(r).toEqual({ userId: 'u-2', tenantId: null, rol: 'flota_admin', nombre: null, operadorId: null, avatarUrl: null });
   });
 
   it('superadmin con fila app_user pero tenant_id null, preserva rol/nombre reales', async () => {
     getUser.mockResolvedValue({ data: { user: { id: 'u-3' } } });
     maybeSingle.mockResolvedValue({ data: { tenant_id: null, rol: 'superadmin', nombre: 'Ana' } });
     const r = await getSessionTenant();
-    expect(r).toEqual({ userId: 'u-3', tenantId: null, rol: 'superadmin', nombre: 'Ana', operadorId: null });
+    expect(r).toEqual({ userId: 'u-3', tenantId: null, rol: 'superadmin', nombre: 'Ana', operadorId: null, avatarUrl: null });
   });
 
   it('chofer: trae operadorId — la vista /mis-viajes lo necesita para saber qué es "lo suyo"', async () => {
     getUser.mockResolvedValue({ data: { user: { id: 'u-4' } } });
     maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'operador', nombre: 'Juan', operador_id: 'o-9' } });
     const r = await getSessionTenant();
-    expect(r).toEqual({ userId: 'u-4', tenantId: 't-1', rol: 'operador', nombre: 'Juan', operadorId: 'o-9' });
+    expect(r).toEqual({ userId: 'u-4', tenantId: 't-1', rol: 'operador', nombre: 'Juan', operadorId: 'o-9', avatarUrl: null });
+  });
+
+  it('con avatar_url en app_user, lo trae en avatarUrl', async () => {
+    getUser.mockResolvedValue({ data: { user: { id: 'u-6' } } });
+    maybeSingle.mockResolvedValue({ data: { tenant_id: null, rol: 'superadmin', nombre: 'Javier', avatar_url: 'https://x/avatares/u-6/foto.jpg' } });
+    const r = await getSessionTenant();
+    expect(r).toEqual({ userId: 'u-6', tenantId: null, rol: 'superadmin', nombre: 'Javier', operadorId: null, avatarUrl: 'https://x/avatares/u-6/foto.jpg' });
   });
 
   it('si Supabase truena las DOS veces, regresa null en vez de lanzar', async () => {
@@ -60,6 +67,6 @@ describe('getSessionTenant', () => {
     getUser.mockRejectedValueOnce(new Error('fetch failed')).mockResolvedValue({ data: { user: { id: 'u-5' } } });
     maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'superadmin', nombre: 'Javier' } });
     const r = await getSessionTenant();
-    expect(r).toEqual({ userId: 'u-5', tenantId: 't-1', rol: 'superadmin', nombre: 'Javier', operadorId: null });
+    expect(r).toEqual({ userId: 'u-5', tenantId: 't-1', rol: 'superadmin', nombre: 'Javier', operadorId: null, avatarUrl: null });
   });
 });

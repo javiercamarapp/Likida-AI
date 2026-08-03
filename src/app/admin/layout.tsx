@@ -3,7 +3,7 @@ import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio
 import { supabaseServer } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeftRight, UserCircle2 } from 'lucide-react';
+import { ArrowLeftRight } from 'lucide-react';
 import Notificaciones from './notificaciones';
 import { calcularAlertas } from './calcular-alertas';
 import PerfilMenu from './perfil';
@@ -27,7 +27,7 @@ const ICONO = { width: 16, height: 16, strokeWidth: 1.75, color: 'var(--muted)' 
  * con hairline como antes.
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { nombre } = await requireSuperadmin();
+  const { nombre, avatarUrl } = await requireSuperadmin();
 
   // Las alertas viven aquí (no en admin/page.tsx) para que la campana esté
   // en el sidebar — visible en TODO /admin, no solo en Inicio — junto al
@@ -69,13 +69,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/dashboard?vista=demo" className={ITEM} style={{ color: 'var(--muted)' }}>
               <ArrowLeftRight {...ICONO} /> Ver panel de flota (demo)
             </Link>
-            <Link href="/cuenta" className={ITEM} style={{ color: 'var(--muted)' }}>
-              <UserCircle2 {...ICONO} /> Mi cuenta
-            </Link>
-            {/* Campana + perfil viven aquí — ya no hay header arriba.
+            {/* "Mi cuenta" (/cuenta, genérica de flota_admin/operador) se
+                quitó de aquí: "Mi perfil" adentro del menú de PerfilMenu
+                ya cubre esto para el superadmin, con una página propia y
+                editable (/admin/mi-perfil) — tener las dos era un
+                duplicado confuso con contenido/diseño distintos.
+                Campana + perfil viven aquí — ya no hay header arriba.
                 `ml-auto` en la campana para que no quede pegada al perfil. */}
             <div className="flex items-center px-2.5 py-2.5 mt-1">
-              <PerfilMenu nombre={nombre ?? 'Javier'} cerrarSesion={cerrarSesion} />
+              <PerfilMenu nombre={nombre ?? 'Javier'} avatarUrl={avatarUrl} cerrarSesion={cerrarSesion} />
               <div className="ml-auto"><Notificaciones alertas={alertas} /></div>
             </div>
           </div>

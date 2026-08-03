@@ -1018,3 +1018,49 @@ begin
   raise exception E'OPERADOR_RLS  viajes-del-tenant-visibles=%  gastos-visibles=%  liquidaciones-visibles=%  viaje-ajeno-por-id=%   (esperado 1 / 1 / 1 / 0 — nunca 2, que sería ver los dos choferes)',
     n_viaje, n_gasto, n_liq, n_otro_viaje;
 end $$;
+
+-- ── 27. Cada quien solo escribe SU PROPIO avatar (mig. 0046) ─────────────────
+-- El bucket `avatares` es público a propósito (foto de perfil, no un
+-- comprobante fiscal — bloque 22 es el caso contrario) — lo que sí tiene
+-- que aislarse es la ESCRITURA: bucket público + storage.objects sin RLS
+-- de escritura = cualquier autenticado pisa el avatar de cualquiera. Se
+-- impersonan dos usuarios (mismo mecanismo del bloque 26): cada uno
+-- intenta escribir en SU propia carpeta (debe pasar) y en la del otro
+-- (debe fallar), directo contra `storage.objects` — así se prueba la
+-- policy real, no un mock.
+--
+-- Corrido el 3-ago, salida real:  escribe-en-su-carpeta=t  escribe-en-carpeta-ajena=f
+do $$
+declare
+  v_u1 uuid := gen_random_uuid();
+  v_u2 uuid := gen_random_uuid();
+  ok_propio boolean;
+  ok_ajeno boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
+
+  begin
+    insert into storage.objects (bucket_id, name, owner) values ('avatares', v_u1::text || '/avatar.jpg', v_u1);
+    ok_propio := true;
+  exception when others then
+    ok_propio := false;
+  end;
+
+  begin
+    insert into storage.objects (bucket_id, name, owner) values ('avatares', v_u2::text || '/avatar.jpg', v_u1);
+    ok_ajeno := true;
+  exception when others then
+    ok_ajeno := false;
+  end;
+
+  reset role;
+  -- `storage.objects` tiene un trigger (`protect_delete`) que bloquea el
+  -- DELETE directo por SQL — hay que pedirlo explícito, o el cleanup de
+  -- este mismo bloque revienta.
+  set local storage.allow_delete_query = 'true';
+  delete from storage.objects where bucket_id = 'avatares' and name in (v_u1::text || '/avatar.jpg', v_u2::text || '/avatar.jpg');
+
+  raise exception E'AVATARES_RLS  escribe-en-su-carpeta=%  escribe-en-carpeta-ajena=%   (esperado true / false — ajeno=true sería la fuga)',
+    ok_propio, ok_ajeno;
+end $$;

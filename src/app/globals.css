@@ -148,6 +148,15 @@ html, body {
   100% { transform: rotateX(-100deg); opacity: 0; }
 }
 
+/* Menú de perfil (admin/perfil.tsx) — abre HACIA ARRIBA desde el botón
+   (vive en la fila de hasta abajo del sidebar), así que la entrada se
+   desliza desde abajo hacia su lugar, con el mismo origin-bottom del
+   `transform-origin` en el JSX. */
+@keyframes perfil-menu-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* Números tabulares para montos y tablas */
 .tabular { font-variant-numeric: tabular-nums; }
 
