@@ -7,7 +7,6 @@ import {
   Sparkles, ChevronDown, ScanText, Calculator, Flag, MessageSquareText, Shuffle, Smartphone,
 } from 'lucide-react';
 import { Sparkline, Tendencia, Dona, BarChartSimple } from './charts';
-import BuscadorSecciones from './buscador';
 import ChatNegocio from './chat';
 import GraficaCostoConRango from './rango-costo';
 
@@ -90,18 +89,11 @@ export default async function Admin() {
   ];
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* La columna que envuelve esto (admin/layout.tsx) es su propio
-          `overflow-y-auto` — así el header tiene un ancestro de scroll
-          inequívoco y `sticky top-0` funciona sin depender del scroll de
-          la página completa a través de varios niveles de flexbox
-          anidados. Contáctanos/campana/perfil ya no viven aquí: la
-          campana y el perfil se movieron al sidebar (junto al avatar),
-          Contáctanos se quitó — sobraba en este ancho. */}
-      <header className="glass-panel sticky top-0 z-20 h-14 flex items-center gap-3 px-5 shrink-0">
-        <BuscadorSecciones />
-      </header>
-
+    <div>
+      {/* Sin header: buscador, Contáctanos, campana y perfil ya no viven
+          aquí — campana+perfil están en el sidebar (admin/layout.tsx,
+          junto al avatar), y el buscador se quitó del todo. Las gráficas
+          centrales y el chat del Asistente arrancan pegados arriba. */}
       <div className="flex gap-4 items-start">
         <main className="flex-1 min-w-0">
           {/* Un solo panel glass grande, EXTENDIDO para toda la columna
@@ -329,7 +321,7 @@ export default async function Admin() {
             era un solo `space-y-4` con scroll global, y en pantallas bajas
             el cuadro de "Pregunta algo…" quedaba más abajo del borde
             visible. */}
-        <aside className="glass-panel w-[276px] shrink-0 hidden xl:flex flex-col sticky top-[4.5rem] self-start h-[calc(100dvh-6.5rem)]">
+        <aside className="glass-panel w-[276px] shrink-0 hidden xl:flex flex-col sticky top-0 self-start h-[calc(100dvh-2rem)]">
           <div className="flex-1 min-w-0 overflow-y-auto px-4 pt-4 space-y-4">
             <div className="flex items-center gap-2">
               <Sparkles width={15} height={15} strokeWidth={1.75} />

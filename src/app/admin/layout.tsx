@@ -116,11 +116,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/cuenta" className={ITEM} style={{ color: 'var(--muted)' }}>
               <UserCircle2 {...ICONO} /> Mi cuenta
             </Link>
-            {/* Campana + perfil viven juntos aquí — el header de arriba se
-                queda solo con el buscador. */}
-            <div className="flex items-center gap-2 px-2.5 py-2.5 mt-1">
+            {/* Campana + perfil viven aquí — ya no hay header arriba.
+                `ml-auto` en la campana para que no quede pegada al perfil. */}
+            <div className="flex items-center px-2.5 py-2.5 mt-1">
               <PerfilMenu nombre={nombre ?? 'Javier'} cerrarSesion={cerrarSesion} />
-              <Notificaciones alertas={alertas} />
+              <div className="ml-auto"><Notificaciones alertas={alertas} /></div>
             </div>
           </div>
         </aside>
