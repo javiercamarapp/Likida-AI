@@ -66,15 +66,26 @@ describe('etiquetas de concepto — las tres fuentes dicen lo mismo', () => {
   });
 });
 
-// El MISMO patrón, en el otro mapa duplicado del panel. `ESTATUS` vive en las dos
-// páginas del dashboard con el mismo contenido copiado; el auditor lo señaló como
-// "latente para el próximo estatus nuevo". Es exactamente lo que pasó con
-// CONCEPTO dos veces, así que se cierra antes de que pase una tercera.
+// ── ESTATUS: el duplicado SE ELIMINÓ, no se sigue vigilando ────────────────
+//
+// Este bloque comparaba las DOS copias de `ESTATUS` (la lista y el detalle del
+// panel) y verificaba que no se separaran — el auditor lo había marcado como
+// "latente para el próximo estatus nuevo". Al reestructurar /dashboard el mapa
+// se movió a `app/dashboard/estatus.ts` y las dos páginas lo importan, así que
+// ya no hay dos copias que puedan divergir: comparar una copia consigo misma
+// no prueba nada.
+//
+// El mapa gemelo de CONCEPTO (arriba) sí se queda vigilado: vive en runtimes
+// distintos (motor, PDF, panel) y no se puede importar de uno a otro. Este no.
+//
+// Lo que SÍ sigue siendo posible perder —y por eso se conserva— es que alguien
+// añada un estatus al tipo y no lo etiquete: entonces sale en pantalla como la
+// clave cruda. Eso se prueba contra la fuente única.
 /**
  * Igual que `etiquetas`, para mapas cuyo valor es un objeto:
  *   clave: { label: '…', color: '…' }
- * El extractor simple corta en el primer `}` y aquí eso caía dentro del primer
- * valor anidado.
+ * El extractor simple corta en el primer `}` y aquí eso caería DENTRO del
+ * primer valor anidado, devolviendo `label`/`color` como si fueran claves.
  */
 function etiquetasAnidadas(ruta: string, ancla: string): Record<string, Record<string, string>> {
   const src = readFileSync(new URL(ruta, import.meta.url), 'utf8');
@@ -90,24 +101,25 @@ function etiquetasAnidadas(ruta: string, ancla: string): Record<string, Record<s
   return out;
 }
 
-describe('etiquetas de estatus — las dos páginas del panel dicen lo mismo', () => {
-  const lista = etiquetasAnidadas('../../app/dashboard/page.tsx', 'const ESTATUS');
-  const detalle = etiquetasAnidadas('../../app/dashboard/[id]/page.tsx', 'const ESTATUS');
+describe('etiquetas de estatus — la fuente única cubre el tipo', () => {
+  const unica = etiquetasAnidadas('../../app/dashboard/estatus.ts', 'export const ESTATUS');
 
-  it('cubren los mismos estatus', () => {
-    expect(Object.keys(lista).sort()).toEqual(Object.keys(detalle).sort());
+  it('el mapa ya no está duplicado en las páginas del panel', () => {
+    // Si alguien vuelve a pegar un mapa local en vez de importar el
+    // compartido, este test lo caza — igual que el del PDF, arriba.
+    for (const ruta of ['../../app/dashboard/cuadre/page.tsx', '../../app/dashboard/[id]/page.tsx']) {
+      const src = readFileSync(new URL(ruta, import.meta.url), 'utf8');
+      expect(src, `volvió a aparecer un mapa de estatus propio en ${ruta}`).not.toMatch(/const ESTATUS[:\s]*[:=]/);
+      expect(src, `${ruta} ya no usa la fuente única de estatus`).toMatch(/etiquetaEstatus/);
+    }
   });
 
-  it('con las mismas etiquetas y los mismos colores', () => {
-    expect(lista).toEqual(detalle);
-  });
-
-  it('cubren todos los estatus que el tipo permite', () => {
+  it('cubre todos los estatus que el tipo permite', () => {
     const tipos = readFileSync(new URL('../../types/cuadra.ts', import.meta.url), 'utf8');
     const i = tipos.indexOf('export type EstatusLiquidacion');
     const decl = tipos.slice(i, tipos.indexOf(';', i));
     const estatus = [...decl.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
     expect(estatus.length, 'no se pudo leer EstatusLiquidacion').toBeGreaterThan(1);
-    for (const e of estatus) expect(lista[e], `falta etiqueta para el estatus "${e}"`).toBeTruthy();
+    for (const e of estatus) expect(unica[e], `falta etiqueta para el estatus "${e}"`).toBeTruthy();
   });
 });

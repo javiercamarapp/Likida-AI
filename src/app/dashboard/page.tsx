@@ -1,197 +1,207 @@
-import { requireSessionTenant } from '@/lib/auth/guard';
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Fuel, Receipt, Route as RouteIcon, Truck, Wallet, AlertTriangle as IconoAlerta, Percent } from 'lucide-react';
-import { getKpis, getAcreditables, detectarAnomalias, type DashboardKpis, type Acreditables, type Anomalia } from '@/lib/cuadra/analytics';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import {
+  Fuel, Receipt, Route as RouteIcon, Truck, Wallet, AlertTriangle, Percent,
+  ScanText, ReceiptText, TrendingUp, Sparkles,
+} from 'lucide-react';
+import {
+  getKpis, getAcreditables, detectarAnomalias, getLiquidacionesPorDia,
+  type DashboardKpis, type Acreditables, type Anomalia,
+} from '@/lib/cuadra/analytics';
 import { mxn } from '@/lib/utils';
+import { saludo, fechaLarga } from '@/lib/saludo';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
+import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { estadoPanel } from './estado';
-import { fechaMx } from './formato';
-import { puedeExportar } from '@/lib/auth/permisos';
+import { BarChartSimple } from '../admin/charts';
+import { GlobalFilter } from '../admin/ui/global-filter';
 import { KpiTile } from '../admin/ui/kit';
+import ContadorRetro from '../admin/contador-retro';
+import AsistenteFlotaExpandible from './asistente-expandible';
+import { sufijoTenant } from './sufijo';
 
 export const dynamic = 'force-dynamic';
 
-const ESTATUS = {
-  cuadrada: { label: 'Cuadrada', color: 'var(--color-ok)' },
-  con_diferencias: { label: 'Con diferencias', color: 'var(--color-warn)' },
-  revisar: { label: 'Por revisar', color: 'var(--color-bad)' },
-} as const;
-
-/** Resiliencia por sección: si una consulta falla, devuelve null y la tarjeta
- *  muestra un fallback en vez de tirar toda la pantalla. */
+/** Resiliencia por sección: si una consulta falla, devuelve null y la
+ *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try { return await fn(); } catch { return null; }
 }
 
-/** `creadoEn` viaja en ISO crudo: la fecha se formatea al pintarla, y en hora
- *  de México. `.slice(0, 10)` se quedaba con el día UTC, así que una
- *  liquidación cerrada el 31-jul a las 20:00 salía listada en agosto — justo en
- *  el corte mensual (auditoría 5, frontend, MEDIO 3). */
-interface LiqRow { id: string; folio: string; creadoEn: string; comprobado: number; diferencia: number; estatus: string }
-
-async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
-  const { data, error } = await supabaseAdmin()
-    .from('liquidacion')
-    .select('id, estatus, total_comprobado, diferencia, created_at, viaje:viaje_id(folio)')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false })
-    .limit(20);
-  // supabase-js reporta el fallo POR VALOR: sin este throw, una lectura caída
-  // devolvía `[]` y `safe()` nunca veía el error. La tabla salía con
-  // encabezados y cero filas bajo unos KPIs que decían "12 viajes liquidados"
-  // (auditoría 5, frontend, CRÍTICO).
-  if (error) throw new Error(`getLiquidaciones: ${error.message}`);
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    folio: ((r.viaje as { folio?: string } | null)?.folio) ?? (r.id as string).slice(0, 8),
-    creadoEn: r.created_at as string,
-    comprobado: Number(r.total_comprobado ?? 0),
-    diferencia: Number(r.diferencia ?? 0),
-    estatus: r.estatus as string,
-  }));
+function TituloSeccion({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      {children}
+    </h2>
+  );
 }
 
-export default async function DashboardPage({
-  searchParams,
+/**
+ * Inicio / Resumen del panel de la FLOTA — el equivalente de admin/page.tsx
+ * para el cliente: mismo encabezado con saludo + contador retro, misma
+ * gráfica de barras+línea con filtro 7d/30d/Todo, mismos KpiTile, mismo rail
+ * de Asistente. Lo que cambia es de quién son los números: aquí TODO está
+ * filtrado al `tenantId` que le pasan.
+ *
+ * El detalle por liquidación y la lista de anomalías YA NO viven aquí: se
+ * fueron a /dashboard/cuadre, su propia página. Inicio es el vistazo, no el
+ * expediente.
+ *
+ * Recibe el tenant YA resuelto en vez de resolverlo adentro (eso lo hace
+ * `page.tsx`, abajo) — misma razón que `chrome.tsx`: así este contenido se
+ * puede renderizar en una prueba visual sin sesión, y lo que se verifica es
+ * la pantalla REAL, no una copia que puede haber divergido.
+ */
+export async function InicioContenido({
+  tenantId, tenantNombre, nombre, sp,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string }>;
+  tenantId: string;
+  tenantNombre: string | null;
+  nombre: string | null;
+  sp: { vista?: string; tenant?: string; rango?: string } | undefined;
 }) {
-  // Segunda capa: la autorización viaja con la página, no solo con el matcher
-  // del proxy. Las dos tienen que fallar a la vez para que esto se sirva.
-  const { tenantId: tenantIdDemo, rol } = await requireSessionTenant('/dashboard');
-  // Sin esto, un superadmin que llegue aquí por bookmark/historial (no por
-  // /login, que es lo único que /auth/callback intercepta) se quedaba
-  // viendo el panel del tenant demo en vez de SU consola. /admin enlaza aquí
-  // con `?vista=demo` (o con `?tenant=<id>` desde Flotas) a propósito, cuando
-  // de verdad quiere ver lo que ve un cliente.
-  const sp = await searchParams;
-  if (rol === 'superadmin' && sp?.vista !== 'demo' && !sp?.tenant) redirect('/admin');
+  const rango = sp?.rango === '30' ? '30' : sp?.rango === 'todo' ? 'todo' : '7';
+  const ventanaDias = rango === '30' ? 30 : 7;
+  const sufijo = sufijoTenant(sp);
 
-  // `?tenant=<id>` — "Ver dashboard" desde /admin/flotas: el superadmin entra
-  // al panel de ESA flota real, no la demo. `requireSessionTenant` solo
-  // conoce el tenant demo (0001_init.sql: tenant_id nulo = superadmin, sin
-  // selector de flota todavía), así que la elección real vive aquí, validada
-  // contra la tabla — nunca se confía el uuid de la URL a ciegas. Un rol≠
-  // superadmin nunca llega a este branch: su `tenantId` YA es el suyo real,
-  // `requireSessionTenant` se lo dio arriba sin pasar por el default de
-  // Fase 1.
-  let tenantId = tenantIdDemo;
-  let tenantNombre: string | null = null;
-  if (rol === 'superadmin' && sp?.tenant) {
-    const { data: t } = await supabaseAdmin().from('tenant').select('id, nombre').eq('id', sp.tenant).maybeSingle();
-    if (t) {
-      tenantId = t.id as string;
-      tenantNombre = t.nombre as string;
-    }
-  }
-
-  const [acred, kpis, liqs, anomalias] = await Promise.all([
+  const [acred, kpis, anomalias, porDia] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
-    safe<LiqRow[]>(() => getLiquidaciones(tenantId)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
+    safe<Array<{ dia: string; valor: number }>>(() => getLiquidacionesPorDia(tenantId, ventanaDias)),
   ]);
 
-  // La decisión vive en `estado.ts` y está probada. Aquí solo se aplica.
-  // Antes eran dos booleanos con una premisa falsa: daban por hecho que una
-  // consulta caída llega como `null`, y supabase-js reporta por valor, así que
-  // llegaba como ceros y el panel afirmaba "Aún no hay liquidaciones" con la
-  // base caída. Las consultas ya lanzan (analytics.ts); falta no volver a
-  // afirmar nada cuando UNA sección se cayó.
-  const estado = estadoPanel({ acreditables: acred, kpis, liquidaciones: liqs, anomalias });
+  // `liquidaciones` ya no se carga en esta página (se fue a /dashboard/cuadre),
+  // así que el estado se decide con lo que SÍ vive aquí. `estadoPanel` sigue
+  // siendo la misma función probada: se le pasa `porDia` en el lugar de la
+  // lista, que es la sección equivalente de esta pantalla.
+  const estado = estadoPanel({ acreditables: acred, kpis, liquidaciones: porDia, anomalias });
 
-  return (
-    <div className="min-h-screen">
-      <header className="glass sticky top-0 z-10 border-b" style={{ borderColor: 'var(--line)' }}>
-        <div className="max-w-6xl mx-auto px-8 h-16 flex items-center justify-between">
-          <h1 className="flex items-center gap-3 m-0 font-normal">
-            <span className="font-semibold tracking-tight text-xl">Likida</span>
-            <span className="text-base" style={{ color: 'var(--muted)' }}>· Panel de liquidación</span>
-          </h1>
-          {/* `/cuenta` es el ÚNICO sitio con "Cerrar sesión" y nada en la app
-              apuntaba ahí: la página existía y solo se llegaba tecleando la URL.
-              Con el passcode no importaba (se cerraba borrando la cookie); con
-              cuentas por usuario, salirse es parte del producto. */}
-          <div className="flex items-center gap-3">
-            {tenantNombre ? (
-              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
+  const alertas: Array<{ texto: string; href: string }> = [];
+  if (kpis && kpis.porRevisar > 0) {
+    // "liquidación" + "es" da "liquidaciónes": en español el acento SE PIERDE
+    // al pluralizar (liquidación → liquidaciones), así que el sufijo pegado
+    // no sirve para esta palabra — va la palabra completa.
+    alertas.push({
+      texto: `${kpis.porRevisar} ${kpis.porRevisar === 1 ? 'liquidación' : 'liquidaciones'} por revisar`,
+      href: `/dashboard/cuadre${sufijo}`,
+    });
+  }
+  if (anomalias && anomalias.length > 0) {
+    alertas.push({
+      texto: `${anomalias.length} comprobante${anomalias.length === 1 ? '' : 's'} aparece${anomalias.length === 1 ? '' : 'n'} en más de un viaje`,
+      href: `/dashboard/cuadre${sufijo}#anomalias`,
+    });
+  }
+
+  const main = (
+    <main>
+      <div className="glass-panel overflow-hidden">
+        <div className="px-6 pt-4 pb-4 flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
+              {saludo()}, {nombre ?? 'flota'}
+            </h1>
+            <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
+            {tenantNombre && (
+              <span className="inline-block mt-2 text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
                 viendo como superadmin · {tenantNombre}
               </span>
-            ) : (
-              <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: 'var(--muted)', background: 'color-mix(in srgb, var(--muted) 10%, transparent)' }}>
-                datos de demostración
-              </span>
             )}
-            {rol === 'superadmin' && (
-              <Link href="/admin" className="text-sm px-3 py-1.5 rounded-lg hairline hover:opacity-70">
-                ← Volver a /admin
-              </Link>
-            )}
-            <Link href="/cuenta" className="text-sm px-3 py-1.5 rounded-lg hairline hover:opacity-70">
-              Mi cuenta
-            </Link>
           </div>
+          {/* Contador retro (§2 del documento: FlipCounter) — el número real
+              de cabecera de una FLOTA es lo comprobado del periodo, no un MRR
+              (la flota no le cobra a nadie desde aquí). Se redondea a pesos
+              enteros a propósito: el componente pinta un tile por carácter y
+              un punto decimal quedaría como un dígito más. La cifra exacta con
+              centavos vive en el KpiTile de abajo. */}
+          <ContadorRetro valor={Math.round(kpis?.montoComprobado ?? 0)} digitos={7} prefijo="$"
+            etiqueta="Comprobado — histórico" tamaño="lg" />
         </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto px-8 py-10">
+        {alertas.length > 0 && (
+          <div className="px-6 pb-4 space-y-2">
+            {alertas.map((a) => (
+              <Link key={a.href} href={a.href}
+                className="card p-3.5 flex items-center gap-3 hover:opacity-85 transition-opacity"
+                style={{ borderColor: 'var(--warn)' }}>
+                <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
+                <span className="text-sm">{a.texto}</span>
+                <span className="ml-auto text-xs shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
         {estado === 'error' ? (
-          <div className="glass-panel p-12 text-center">
-            <p className="text-2xl font-semibold tracking-tight">No se pudieron cargar los datos</p>
-            <p className="mt-3 text-base" style={{ color: 'var(--muted)' }}>
-              Hubo un problema al leer del sistema. Recarga la página en un momento.
-            </p>
-            <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>
-              Esto NO significa que no haya liquidaciones: significa que no se pudieron leer.
-            </p>
+          <div className="px-6 pb-6 pt-2">
+            <div className="card p-10 text-center">
+              <p className="text-lg font-semibold tracking-tight">No se pudieron cargar los datos</p>
+              <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>
+                Hubo un problema al leer del sistema. Recarga la página en un momento — esto NO significa
+                que no haya liquidaciones, significa que no se pudieron leer.
+              </p>
+            </div>
           </div>
         ) : estado === 'vacio' ? (
-          <div className="glass-panel p-12 text-center">
-            <p className="text-2xl font-semibold tracking-tight">Aún no hay liquidaciones</p>
-            <p className="mt-3 text-base" style={{ color: 'var(--muted)' }}>
-              En cuanto un operador cierre su primer viaje por WhatsApp, aquí aparecerán los acreditables y el detalle.
-            </p>
-            <Link href="/demo" className="inline-block mt-6 px-5 py-2.5 rounded-xl text-base font-medium"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Ver el demo</Link>
+          <div className="px-6 pb-6 pt-2">
+            <div className="card p-10 text-center">
+              <p className="text-lg font-semibold tracking-tight">Aún no hay liquidaciones</p>
+              <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>
+                En cuanto un operador cierre su primer viaje por WhatsApp, aquí aparecen los acreditables y el detalle.
+              </p>
+              <Link href="/demo" className="inline-block mt-5 px-5 py-2.5 rounded-xl text-sm font-medium"
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Ver el demo</Link>
+            </div>
           </div>
         ) : (
-          <div className="glass-panel overflow-hidden">
-            {/* ── Aviso de carga incompleta ──
-                Un fallo PARCIAL callado es peor que uno total: los KPIs dicen
-                "12 viajes · $340,000" y la tabla de abajo sale vacía, o la
-                sección de duplicados no aparece y se lee como "todo limpio".
-                Ninguna cifra de esta pantalla es el corte del periodo mientras
-                falte una sección, y eso se dice arriba, no en gris. */}
+          <>
             {estado === 'parcial' && (
-              <div className="p-5 flex items-start gap-3 border-b" style={{ borderColor: 'var(--color-warn)' }}>
-                <span className="inline-block w-2.5 h-2.5 rounded-full mt-2 shrink-0" style={{ background: 'var(--color-warn)' }} />
-                <div>
-                  <p className="text-base font-semibold m-0">Faltan datos por cargar — esta pantalla está incompleta</p>
-                  <p className="text-sm mt-1 m-0" style={{ color: 'var(--muted)' }}>
-                    Una o más secciones no respondieron. No tomes estas cifras como el corte del periodo:
-                    recarga en un momento y vuelve a compararlas.
-                  </p>
+              <div className="px-6 pb-4">
+                <div className="card p-4 flex items-start gap-3" style={{ borderColor: 'var(--warn)' }}>
+                  <span className="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
+                  <div>
+                    <p className="text-sm font-semibold m-0">Faltan datos por cargar — esta pantalla está incompleta</p>
+                    <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
+                      Una o más secciones no respondieron. No tomes estas cifras como el corte del periodo.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* ── HERO: acreditables del periodo (lo que hace enderezarse al contralor) ── */}
-            <section className="p-5">
-              <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                Estímulos acreditables del periodo
-              </h2>
+            {/* ── ComboChart (§2 del documento: barras + línea, toggle 7d/30d/Todo) ── */}
+            <div className="px-6 pb-5 border-t pt-5" style={{ borderColor: 'var(--line)' }}>
+              <div className="flex items-center justify-between gap-4 mb-3">
+                <TituloSeccion>
+                  Liquidaciones cerradas — {rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`}
+                </TituloSeccion>
+                <GlobalFilter base="/dashboard" activo={rango} extra={sp?.tenant ? { tenant: sp.tenant } : sp?.vista ? { vista: sp.vista } : undefined} />
+              </div>
+              {rango === 'todo' ? (
+                <div className="flex flex-col items-center justify-center" style={{ height: 160 }}>
+                  <div className="text-4xl font-semibold tracking-tight tabular">{kpis?.viajesLiquidados ?? 0}</div>
+                  <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Liquidaciones cerradas — total histórico</div>
+                </div>
+              ) : porDia === null ? (
+                <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
+                  No se pudo cargar esta gráfica.
+                </div>
+              ) : porDia.some((d) => d.valor > 0) ? (
+                <BarChartSimple datos={porDia} alto={160} />
+              ) : (
+                <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
+                  Sin cierres en esta ventana — prueba con 30d o el histórico.
+                </div>
+              )}
+            </div>
+
+            {/* ── Estímulos acreditables ── */}
+            <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+              <TituloSeccion>Estímulos acreditables del periodo</TituloSeccion>
               {acred === null ? (
-                <div className="mt-3" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
+                <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-                  {/* `litros()` es la única representación de este número en todo
-                      el producto (panel, PDF, detalle) — no todo lo acreditable
-                      son pesos: el estímulo de diésel es cuota semanal × litros
-                      (LIF 2026 art. 20-A) y esa cuota no la tenemos, así que
-                      entregar los litros es honesto y los pesos serían inventados
-                      (auditoría 5, frontend, MEDIO 1). */}
                   <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
                     etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" destacar
                     nota="LIF 2026, Art. 20-A — su contador aplica la cuota semanal vigente" />
@@ -207,152 +217,104 @@ export default async function DashboardPage({
 
             {/* ── Liquidaciones del periodo ── */}
             <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-              <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                Liquidaciones del periodo
-              </h2>
+              <div className="flex items-center justify-between gap-4">
+                <TituloSeccion>Liquidaciones del periodo</TituloSeccion>
+                <Link href={`/dashboard/cuadre${sufijo}`} className="text-xs font-medium px-2.5 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity shrink-0">
+                  Ver detalle →
+                </Link>
+              </div>
               {kpis === null ? (
-                <div className="mt-3" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
+                <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
                   <KpiTile icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
                     etiqueta="Viajes liquidados" valor={kpis.viajesLiquidados} formato="entero" />
                   <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
                     etiqueta="Monto comprobado" valor={kpis.montoComprobado} formato="mxn" />
-                  <KpiTile icono={<IconoAlerta width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
                     etiqueta="Con diferencia" valor={kpis.conDiferencias + kpis.porRevisar} formato="entero" />
                   <KpiTile icono={<Percent width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
                     etiqueta="Tasa de cuadre" valor={kpis.tasaCuadre} formato="porcentaje" />
                 </div>
               )}
             </section>
-
-            {/* ── Mismo comprobante en dos viajes ──
-                Cada liquidación se ve impecable por separado: esto solo se ve
-                mirando TODAS juntas. Se muestra únicamente si hay algo — una
-                sección vacía que dice "0 anomalías" entrena a ignorarla. */}
-            {anomalias !== null && anomalias.length > 0 && (
-              <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-                <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                  Revisar · mismo comprobante en varios viajes
-                </h2>
-                <div className="divide-y mt-3" style={{ borderColor: 'var(--line)' }}>
-                  {anomalias.map((a, i) => (
-                    <div key={i} className="flex items-center justify-between gap-4 py-3">
-                      <div>
-                        <div className="text-sm">{a.detalle}</div>
-                        <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                          Viajes: {a.viajes.join(' · ')}
-                        </div>
-                      </div>
-                      <div className="text-sm font-semibold tabular-nums whitespace-nowrap">{mxn(a.monto)}</div>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-                  Coincidencia detectada, no un veredicto: verifica antes de conversarlo con el operador.
-                </p>
-              </section>
-            )}
-
-            {/* ── Tabla (cada fila abre el detalle) ──
-                Header con su propio `px-5 pt-5 pb-2` y la tabla como
-                hermano sin padding de sección (mismo patrón que
-                admin/flotas): los `<th>`/`<td>` cargan un solo `px-5` que
-                sirve de margen Y de separación entre columnas a la vez —
-                envolver la tabla en `section.p-5` duplicaría ese margen y,
-                si a cambio se le quita el padding a las celdas, "Diferencia"
-                y "Estatus" quedan pegadas sin espacio entre sí. */}
-            <div className="pt-5 pb-2 px-5 border-t flex items-center justify-between" style={{ borderColor: 'var(--line)' }}>
-              <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-                Detalle por liquidación
-              </h2>
-              {/* La ruta de export existía, iba detrás del mismo passcode, tenía
-                  rate-limit y devolvía un CSV con `Content-Disposition:
-                  attachment` — y NADA en la interfaz apuntaba a ella. En el demo,
-                  "¿esto lo puedo bajar a Excel?" se contestaba tecleando una URL
-                  a mano (auditoría 5, frontend, MEDIO 5). */}
-              {puedeExportar(rol) && (
-                <a href="/api/export/liquidaciones" download
-                  className="text-sm px-3.5 py-2 rounded-lg hairline hover:opacity-70">
-                  Exportar CSV
-                </a>
-              )}
-            </div>
-            {liqs === null ? (
-              <div className="px-5 pb-5" style={{ color: 'var(--muted)' }}>No se pudo cargar el listado.</div>
-            ) : (
-              <div className="overflow-x-auto mt-1 pb-2">
-                <table className="w-full text-base">
-                  <thead>
-                    <tr style={{ color: 'var(--muted)' }} className="text-left text-sm">
-                      <th className="px-5 py-2.5 font-medium">Folio</th>
-                      <th className="px-5 py-2.5 font-medium">Fecha</th>
-                      <th className="px-5 py-2.5 font-medium text-right">Comprobado</th>
-                      <th className="px-5 py-2.5 font-medium text-right">Diferencia</th>
-                      <th className="px-5 py-2.5 font-medium">Estatus</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {liqs.map((l) => {
-                      const e = ESTATUS[l.estatus as keyof typeof ESTATUS] ?? { label: l.estatus, color: 'var(--muted)' };
-                      return (
-                        // `relative` + el pseudo-elemento estirado del <Link>:
-                        // la fila entera es el blanco de toque, no un texto de
-                        // ~20px dentro de una celda. El <tr> llevaba
-                        // `hover:opacity-80` —la señal universal de "esto se
-                        // puede clicar"— y solo el folio navegaba; en tableta
-                        // no hay hover, así que el único blanco del panel
-                        // quedaba muy por debajo de los 44px de toque
-                        // (auditoría 5, frontend, BAJO 1). Sigue habiendo UN
-                        // solo enlace por fila: cinco celdas enlazadas serían
-                        // cinco paradas de tabulación por liquidación.
-                        <tr key={l.id} className="relative border-t hover:opacity-80" style={{ borderColor: 'var(--line)' }}>
-                          <td className="px-5 py-3 font-medium">
-                            <Link href={tenantNombre ? `/dashboard/${l.id}?tenant=${tenantId}` : `/dashboard/${l.id}`}
-                              className="hover:underline after:absolute after:inset-0 after:content-['']">{l.folio}</Link>
-                          </td>
-                          <td className="px-5 py-3" style={{ color: 'var(--muted)' }}>{fechaMx(l.creadoEn)}</td>
-                          <td className="px-5 py-3 text-right tabular">{mxn(l.comprobado)}</td>
-                          {/* La dirección va PEGADA a la cifra, no en el detalle.
-                              `Math.abs()` sin más borraba el signo que el motor
-                              define (engine.ts: + sobró anticipo, − el operador
-                              puso de su bolsa): dos liquidaciones opuestas
-                              —$10,000 de anticipo contra $8,500 comprobados, y
-                              contra $11,500— imprimían el MISMO "$1,500.00", con
-                              el mismo estatus y la misma tipografía. El contralor
-                              escanea la lista y lee todo como dinero a favor de
-                              la empresa; en la mitad de los casos la empresa DEBE
-                              ese dinero. El detalle ya lo decía bien y la lista no
-                              lo heredó (auditoría 5, frontend, ALTO 1). */}
-                          <td className="px-5 py-3 text-right">
-                            {l.diferencia === 0 ? (
-                              <span className="tabular">—</span>
-                            ) : (
-                              <>
-                                <span className="tabular block">{mxn(Math.abs(l.diferencia))}</span>
-                                <span className="text-xs block whitespace-nowrap" style={{ color: 'var(--muted)' }}>
-                                  {l.diferencia > 0 ? 'a favor de la empresa' : 'a favor del operador'}
-                                </span>
-                              </>
-                            )}
-                          </td>
-                          <td className="px-5 py-3">
-                            <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 align-middle" style={{ background: e.color }} />
-                            {e.label}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          </>
         )}
-        <p className="text-xs mt-6" style={{ color: 'var(--muted)' }}>
-          {LEYENDA_CORTA}
-        </p>
-      </main>
-    </div>
+
+        <p className="text-xs px-5 pb-5 pt-1" style={{ color: 'var(--muted)' }}>{LEYENDA_CORTA}</p>
+      </div>
+    </main>
   );
+
+  const accesos = [
+    { href: `/dashboard/cuadre${sufijo}`, Icono: ReceiptText, titulo: 'Cuadre / Liquidación', subtitulo: kpis ? `${kpis.viajesLiquidados} cerradas` : 'Detalle por viaje' },
+    { href: `/dashboard/documentos${sufijo}`, Icono: ScanText, titulo: 'Documentos (OCR)', subtitulo: 'Comprobantes procesados' },
+    { href: `/dashboard/valor-ahorro${sufijo}`, Icono: TrendingUp, titulo: 'Valor & Ahorro', subtitulo: 'Lo que Likida te ahorra' },
+    { href: `/dashboard/viajes${sufijo}`, Icono: Truck, titulo: 'Viajes', subtitulo: 'Estado de la operación' },
+  ];
+
+  const asideTop = (
+    <>
+      <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+        Hola {nombre ?? 'de nuevo'}, aquí tienes accesos rápidos y lo más importante de hoy.
+      </div>
+
+      <div className="space-y-1.5">
+        {accesos.map((a) => (
+          <Link key={a.titulo} href={a.href}
+            className="flex items-center gap-2.5 p-2.5 rounded-xl hairline transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)]">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+              <a.Icono width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+            </div>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium truncate">{a.titulo}</span>
+              <span className="block text-xs truncate" style={{ color: 'var(--muted)' }}>{a.subtitulo}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+
+      {/* Smart Insight — SOLO cuando hay un hallazgo real que reportar. Sin
+          anomalías ni liquidaciones no se pinta nada: una tarjeta verde que
+          dice "todo bien" cuando en realidad no se revisó nada entrena a
+          ignorarla. */}
+      {(anomalias && anomalias.length > 0) ? (
+        <div className="rounded-xl p-3.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
+            <Sparkles width={12} height={12} strokeWidth={2} /> Smart Insight
+          </div>
+          <p className="text-sm">
+            Encontré {anomalias.length} comprobante{anomalias.length === 1 ? '' : 's'} cargado{anomalias.length === 1 ? '' : 's'} en
+            más de un viaje, por {mxn(anomalias.reduce((s, a) => s + a.monto, 0))} en total. Es una coincidencia detectada, no un veredicto.
+          </p>
+        </div>
+      ) : kpis && kpis.viajesLiquidados > 0 ? (
+        <div className="rounded-xl p-3.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
+            <Sparkles width={12} height={12} strokeWidth={2} /> Smart Insight
+          </div>
+          <p className="text-sm">
+            Tu tasa de cuadre es {kpis.tasaCuadre}% — {kpis.viajesLiquidados - kpis.conDiferencias - kpis.porRevisar} de {kpis.viajesLiquidados} liquidaciones
+            cerraron sin diferencias.
+          </p>
+        </div>
+      ) : null}
+    </>
+  );
+
+  return <AsistenteFlotaExpandible main={main} asideTop={asideTop} kpis={kpis} acred={acred} />;
+}
+
+/** La página real: resuelve quién eres y a qué flota apuntas, y pinta el
+ *  contenido de arriba. `esRaiz` hace que un superadmin sin `?tenant=` ni
+ *  `?vista=demo` se vaya a SU consola (/admin) en vez de quedarse viendo la
+ *  demo por accidente — ver `resolverTenantEfectivo`. */
+export default async function DashboardInicio({
+  searchParams,
+}: {
+  searchParams: Promise<{ vista?: string; tenant?: string; rango?: string }>;
+}) {
+  const sp = await searchParams;
+  const { tenantId, tenantNombre, nombre } = await resolverTenantEfectivo('/dashboard', sp, { esRaiz: true });
+  return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} sp={sp} />;
 }

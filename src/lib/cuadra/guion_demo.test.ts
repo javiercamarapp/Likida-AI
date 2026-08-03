@@ -25,8 +25,16 @@ const PANEL = readFileSync('src/app/dashboard/page.tsx', 'utf8');
 describe('el guion dice lo que el producto hace', () => {
   it('el panel enseña el diésel en LITROS, no en pesos', () => {
     // La fuente de verdad. Si esto cambia, el guion tiene que cambiar con ello.
-    expect(PANEL).toMatch(/unidad="litros"/);
+    // Era `unidad="litros"` (prop del componente `Acred`, propio del panel);
+    // al pasar /dashboard al design system compartido esa tarjeta es un
+    // `KpiTile` con un preset de formato. Lo que se prueba es lo mismo —que la
+    // cifra del estímulo salga en litros y no en pesos—, escrito como el panel
+    // lo escribe hoy.
+    expect(PANEL).toMatch(/formato="litros"/);
     expect(PANEL).toMatch(/litrosDiesel/);
+    // Y que NO se cuele un preset de moneda en esa misma tarjeta: es
+    // exactamente la regresión que este archivo existe para cazar.
+    expect(PANEL).not.toMatch(/valor=\{acred\.litrosDiesel\}\s+formato="mxn"/);
   });
 
   it('y el guion lo dice en litros', () => {

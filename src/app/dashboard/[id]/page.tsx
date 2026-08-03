@@ -7,6 +7,7 @@ import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import { filasDeducibilidad } from '@/lib/cuadra/liquidacion/deducibilidad';
 import { mxn } from '@/lib/utils';
 import { litros, fechaMx } from '../formato';
+import { etiquetaEstatus } from '../estatus';
 import { puedeExportar, puedeAsignar } from '@/lib/auth/permisos';
 import { listOperadores, reasignarOperador } from '@/lib/cuadra/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -22,11 +23,6 @@ const CONCEPTO: Record<string, string> = {
   diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura',
   alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte', flete: 'Flete',
   viaticos: 'Viáticos', otro: 'Otro',
-};
-const ESTATUS: Record<string, { label: string; color: string }> = {
-  cuadrada: { label: 'Cuadrada', color: 'var(--color-ok)' },
-  con_diferencias: { label: 'Con diferencias', color: 'var(--color-warn)' },
-  revisar: { label: 'Por revisar', color: 'var(--color-bad)' },
 };
 
 export default async function Detalle({
@@ -55,7 +51,7 @@ export default async function Detalle({
 
   const d = await getLiquidacionDetalle(id, tenantId);
   if (!d) notFound();
-  const e = ESTATUS[d.estatus] ?? { label: d.estatus, color: 'var(--muted)' };
+  const e = etiquetaEstatus(d.estatus);
   const puedeReasignar = puedeAsignar(rol);
   const operadores = puedeReasignar ? await listOperadores(tenantId) : [];
 
