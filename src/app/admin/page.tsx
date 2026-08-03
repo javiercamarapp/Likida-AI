@@ -7,8 +7,8 @@ import {
   Sparkles, ChevronDown, ScanText, Calculator, Flag, MessageSquareText, Shuffle, Smartphone,
 } from 'lucide-react';
 import { Sparkline, Tendencia, Dona, BarChartSimple } from './charts';
-import ChatNegocio from './chat';
 import GraficaCostoConRango from './rango-costo';
+import AsistenteExpandible from './asistente-expandible';
 
 const SALUDO = () => {
   const h = new Date().getUTCHours() - 6; // hora de México, aproximada — un saludo no necesita el minuto exacto
@@ -112,14 +112,12 @@ export default async function Admin() {
     { href: '#conversaciones', Icono: MessageCircle, titulo: 'Conversaciones', subtitulo: `${conversaciones.length} activas` },
   ];
 
-  return (
-    <div>
-      {/* Sin header: buscador, Contáctanos, campana y perfil ya no viven
-          aquí — campana+perfil están en el sidebar (admin/layout.tsx,
-          junto al avatar), y el buscador se quitó del todo. Las gráficas
-          centrales y el chat del Asistente arrancan pegados arriba. */}
-      <div className="flex gap-4 items-start">
-        <main className="flex-1 min-w-0">
+  // `main` y `asideTop` se pasan como children al cliente
+  // (asistente-expandible.tsx) — se renderizan aquí en el servidor, el
+  // componente cliente solo los muestra/oculta y anima el ancho. Ningún
+  // ícono/función cruza la frontera server→client, solo el JSX ya resuelto.
+  const main = (
+    <main>
           {/* Un solo panel glass grande, EXTENDIDO para toda la columna
               central — antes cada sección flotaba por separado con huecos
               entre sí; ahora es una sola superficie continua, dividida por
@@ -340,61 +338,54 @@ export default async function Admin() {
             </div>
           </section>
           </div>
-        </main>
+    </main>
+  );
 
-        {/* Panel derecho — el chat queda FIJO abajo (nunca se corta ni hay
-            que perseguirlo con scroll); lo de arriba (saludo, accesos
-            rápidos, insight) es lo que hace scroll si no cabe. Antes todo
-            era un solo `space-y-4` con scroll global, y en pantallas bajas
-            el cuadro de "Pregunta algo…" quedaba más abajo del borde
-            visible. */}
-        <aside className="glass-panel w-[276px] shrink-0 hidden xl:flex flex-col sticky top-0 self-start h-[calc(100dvh-2rem)]">
-          <div className="flex-1 min-w-0 overflow-y-auto px-4 pt-4 space-y-4">
-            <div className="flex items-center gap-2">
-              <Sparkles width={15} height={15} strokeWidth={1.75} />
-              <span className="font-semibold text-sm">Asistente de negocio</span>
-            </div>
-
-            <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-              Hola {nombre ?? 'Javier'}, aquí tienes accesos rápidos y lo más importante de hoy.
-            </div>
-
-            <div className="space-y-1.5">
-              {recomendaciones.map((rec) => (
-                <Link key={rec.titulo} href={rec.href}
-                  className="flex items-center gap-2.5 p-2.5 rounded-xl hairline transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)]">
-                  <Insignia Icono={rec.Icono} tamaño="sm" />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium truncate">{rec.titulo}</span>
-                    <span className="block text-xs truncate" style={{ color: 'var(--muted)' }}>{rec.subtitulo}</span>
-                  </span>
-                </Link>
-              ))}
-            </div>
-
-            {(topFase || r.tendenciaCosto !== null) && (
-              <div className="rounded-xl p-3.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
-                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
-                  <Sparkles width={12} height={12} strokeWidth={2} /> Smart Insight
-                </div>
-                <p className="text-sm">
-                  {r.tendenciaCosto !== null
-                    ? `El gasto de IA ${r.tendenciaCosto >= 0 ? 'subió' : 'bajó'} ${Math.abs(r.tendenciaCosto)}% esta semana vs la anterior.`
-                    : (
-                      <span className="inline-flex items-center gap-1.5">
-                        <TopFaseIcono width={13} height={13} strokeWidth={1.75} /> &quot;{topFase}&quot; es tu agente más caro hoy: {usd(r.porFase[0].costoUsd)}.
-                      </span>
-                    )}
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="shrink-0 px-4 py-3 border-t" style={{ borderColor: 'var(--line)' }}>
-            <ChatNegocio resumen={r} compacto />
-          </div>
-        </aside>
+  const asideTop = (
+    <>
+      <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+        Hola {nombre ?? 'Javier'}, aquí tienes accesos rápidos y lo más importante de hoy.
       </div>
+
+      <div className="space-y-1.5">
+        {recomendaciones.map((rec) => (
+          <Link key={rec.titulo} href={rec.href}
+            className="flex items-center gap-2.5 p-2.5 rounded-xl hairline transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)]">
+            <Insignia Icono={rec.Icono} tamaño="sm" />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium truncate">{rec.titulo}</span>
+              <span className="block text-xs truncate" style={{ color: 'var(--muted)' }}>{rec.subtitulo}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+
+      {(topFase || r.tendenciaCosto !== null) && (
+        <div className="rounded-xl p-3.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
+            <Sparkles width={12} height={12} strokeWidth={2} /> Smart Insight
+          </div>
+          <p className="text-sm">
+            {r.tendenciaCosto !== null
+              ? `El gasto de IA ${r.tendenciaCosto >= 0 ? 'subió' : 'bajó'} ${Math.abs(r.tendenciaCosto)}% esta semana vs la anterior.`
+              : (
+                <span className="inline-flex items-center gap-1.5">
+                  <TopFaseIcono width={13} height={13} strokeWidth={1.75} /> &quot;{topFase}&quot; es tu agente más caro hoy: {usd(r.porFase[0].costoUsd)}.
+                </span>
+              )}
+          </p>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <div>
+      {/* Sin header: buscador, Contáctanos, campana y perfil ya no viven
+          aquí — campana+perfil están en el sidebar (admin/layout.tsx,
+          junto al avatar), y el buscador se quitó del todo. Las gráficas
+          centrales y el chat del Asistente arrancan pegados arriba. */}
+      <AsistenteExpandible main={main} asideTop={asideTop} resumen={r} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { LayoutGrid, ScanText, Calculator, MessagesSquare, Building2, Sparkles, UserPlus, ArrowLeftRight, UserCircle2 } from 'lucide-react';
-import Notificaciones, { type Alerta } from './notificaciones';
+import Notificaciones, { calcularAlertas } from './notificaciones';
 import PerfilMenu from './perfil';
 
 export const dynamic = 'force-dynamic';
@@ -36,16 +36,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // perfil, como pidió el usuario. Sí duplica el fetch de getResumenNegocio
   // con el de page.tsx; aceptable hoy (pocas filas, un solo tenant real).
   const [r, conversaciones] = await Promise.all([getResumenNegocio(), getConversacionesActivas()]);
-  const alertas: Alerta[] = [];
-  if (r.tendenciaCosto !== null && r.tendenciaCosto >= 30) {
-    alertas.push({ tipo: 'atencion', texto: `El costo de IA subió ${r.tendenciaCosto}% esta semana vs la anterior.` });
-  }
-  if (conversaciones.length > 0) {
-    alertas.push({ tipo: 'ok', texto: `${conversaciones.length} conversación(es) de WhatsApp con actividad reciente.` });
-  }
-  if (r.tenants <= 1) {
-    alertas.push({ tipo: 'atencion', texto: 'Likida sigue con solo el tenant demo — sin clientes reales dados de alta.' });
-  }
+  const alertas = calcularAlertas(r, conversaciones);
 
   async function cerrarSesion() {
     'use server';
