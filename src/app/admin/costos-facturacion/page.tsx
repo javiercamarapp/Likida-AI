@@ -1,7 +1,8 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
-import { DollarSign, Smartphone } from 'lucide-react';
+import { DollarSign } from 'lucide-react';
 import { AreaChartSimple, Dona } from '../charts';
+import { IconoProveedor } from '../proveedor-icono';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,25 +12,6 @@ const FASE_LABEL: Record<string, string> = {
   ocr: 'Agente OCR', cuadre: 'Agente de Cuadre', escalacion: 'Agente de Escalación',
   chat: 'Agente de Chat', router: 'Agente Router', whatsapp: 'Agente de WhatsApp',
 };
-
-/** Ícono antes del nombre en "Costo por modelo" — mismo patrón de
- *  admin/page.tsx, recreado aquí porque no se exporta de ahí. */
-function IconoProveedor({ modelo }: { modelo: string }) {
-  if (modelo.toLowerCase().includes('whatsapp')) {
-    return (
-      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-        <Smartphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-      </div>
-    );
-  }
-  const proveedor = modelo.includes('/') ? modelo.split('/')[0] : modelo;
-  const letra = proveedor.charAt(0).toUpperCase();
-  return (
-    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold" style={{ background: 'var(--ink)', color: 'white' }}>
-      {letra}
-    </div>
-  );
-}
 
 /**
  * Costos & Facturación — todo lo real que existe hoy sobre el gasto de IA

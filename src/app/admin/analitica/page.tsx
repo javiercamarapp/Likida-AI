@@ -1,8 +1,9 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
-import { LineChart, Smartphone } from 'lucide-react';
+import { LineChart } from 'lucide-react';
 import { AreaChartSimple, Dona, BarChartSimple } from '../charts';
 import ContadorRetro from '../contador-retro';
+import { IconoProveedor } from '../proveedor-icono';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,27 +20,6 @@ function TituloSeccion({ children }: { children: React.ReactNode }) {
     <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
       {children}
     </h2>
-  );
-}
-
-/** Ícono antes del nombre en "Costo por modelo" — copiado verbatim de
- *  admin/page.tsx (no está exportado ahí, así que se recrea aquí): el
- *  proveedor se lee del prefijo real `proveedor/modelo`, WhatsApp se
- *  detecta por nombre, insignia de letra en vez de logotipo de marca. */
-function IconoProveedor({ modelo }: { modelo: string }) {
-  if (modelo.toLowerCase().includes('whatsapp')) {
-    return (
-      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-        <Smartphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-      </div>
-    );
-  }
-  const proveedor = modelo.includes('/') ? modelo.split('/')[0] : modelo;
-  const letra = proveedor.charAt(0).toUpperCase();
-  return (
-    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold" style={{ background: 'var(--ink)', color: 'white' }}>
-      {letra}
-    </div>
   );
 }
 

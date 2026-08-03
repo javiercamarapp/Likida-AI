@@ -1,29 +1,11 @@
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { usd } from '@/lib/formato';
-import { ScanText, Smartphone } from 'lucide-react';
+import { ScanText } from 'lucide-react';
 import { BarChartSimple } from '../charts';
 import ContadorRetro from '../contador-retro';
+import { IconoProveedor } from '../proveedor-icono';
 
 export const dynamic = 'force-dynamic';
-
-/** Ícono de proveedor por el prefijo real `proveedor/modelo` — mismo patrón
- *  que `IconoProveedor` en admin/page.tsx, recreado local a propósito. */
-function IconoProveedor({ modelo }: { modelo: string }) {
-  if (modelo.toLowerCase().includes('whatsapp')) {
-    return (
-      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-        <Smartphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-      </div>
-    );
-  }
-  const proveedor = modelo.includes('/') ? modelo.split('/')[0] : modelo;
-  const letra = proveedor.charAt(0).toUpperCase();
-  return (
-    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold" style={{ background: 'var(--ink)', color: 'white' }}>
-      {letra}
-    </div>
-  );
-}
 
 function TituloSeccion({ children }: { children: React.ReactNode }) {
   return (
