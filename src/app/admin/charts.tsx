@@ -165,50 +165,80 @@ export function BarChartSimple({
   );
 }
 
-const RADIO = 78, GROSOR = 24;
-const CIRC = 2 * Math.PI * RADIO;
+const RADIO_OUT = 90, RADIO_IN = 66; // mismo grosor visual que antes (78 ± 24/2)
+const CENTRO = 96;
+const GAP_DEG = 2.4; // separación angular entre rebanadas — ver nota abajo
+
+/** Punto sobre un círculo de radio `r`, en el ángulo `anguloDeg` medido en
+ *  grados con 0° = arriba (12 en punto) y creciendo en sentido horario. */
+function puntoEnCirculo(r: number, anguloDeg: number): [number, number] {
+  const rad = ((anguloDeg - 90) * Math.PI) / 180;
+  return [CENTRO + r * Math.cos(rad), CENTRO + r * Math.sin(rad)];
+}
+
+/** Path de una rebanada de dona (sector anular) entre dos ángulos — UNA
+ *  sola figura cerrada por rebanada, no un trazo de círculo con
+ *  `stroke-dasharray`. La técnica anterior apilaba círculos completos con
+ *  dasharray/dashoffset para simular cada rebanada: matemáticamente cierra
+ *  exacto, pero el redondeo de punto flotante en `frac * CIRC` deja un
+ *  sub-píxel de desajuste justo en la costura entre rebanadas, que el
+ *  navegador antialiasea como una punta/superposición visible (el defecto
+ *  que se veía en el reporte). Un `<path>` con las cuatro esquinas de la
+ *  rebanada calculadas directo desde el mismo ángulo no tiene ese punto de
+ *  falla: no hay costura que desalinear. */
+function pathRebanada(anguloIni: number, anguloFin: number): string {
+  const largeArc = anguloFin - anguloIni > 180 ? 1 : 0;
+  const [xOi, yOi] = puntoEnCirculo(RADIO_OUT, anguloIni);
+  const [xOf, yOf] = puntoEnCirculo(RADIO_OUT, anguloFin);
+  const [xIf, yIf] = puntoEnCirculo(RADIO_IN, anguloFin);
+  const [xIi, yIi] = puntoEnCirculo(RADIO_IN, anguloIni);
+  return [
+    `M ${xOi} ${yOi}`,
+    `A ${RADIO_OUT} ${RADIO_OUT} 0 ${largeArc} 1 ${xOf} ${yOf}`,
+    `L ${xIf} ${yIf}`,
+    `A ${RADIO_IN} ${RADIO_IN} 0 ${largeArc} 0 ${xIi} ${yIi}`,
+    'Z',
+  ].join(' ');
+}
 
 /**
  * Dona de una categoría — identidad por color (monocromo: por OPACIDAD, no
  * por hue, ya que la paleta es blanco/negro) + leyenda directa.
  *
- * El SVG viv­e en un `div` de tamaño fijo con `aspect-square` (NO en el
+ * El SVG vive en un `div` de tamaño fijo con `aspect-square` (NO en el
  * `<svg>` mismo con `width`/`height` en px como antes): un tamaño fijo en
  * el propio SVG no cede cuando la tarjeta que lo contiene es más angosta
  * que 192px (p.ej. a la mitad de un grid de 2 columnas), así que se salía
- * de la tarjeta y el padre con `overflow-hidden` le cortaba un pedazo — el
- * anillo gris de fondo (`var(--line)`, la vuelta completa detrás de los
- * arcos) es lo primero que se nota cortado porque es el más ancho. Con el
- * tamaño en el `div` envolvente y el SVG a `width="100%" height="100%"`,
+ * de la tarjeta y el padre con `overflow-hidden` le cortaba un pedazo. Con
+ * el tamaño en el `div` envolvente y el SVG a `width="100%" height="100%"`,
  * flexbox SÍ puede encogerlo, y como se encoge parejo en X e Y
  * (`aspect-square`) el círculo nunca se deforma en óvalo.
  */
 export function Dona({ segmentos }: { segmentos: Array<{ etiqueta: string; valor: number }> }) {
   const total = segmentos.reduce((s, x) => s + x.valor, 0) || 1;
   const pasos = segmentos.length <= 1 ? [1] : segmentos.map((_, i) => 0.35 + (0.65 * i) / (segmentos.length - 1));
-  // Offset de cada arco = la suma acumulada de los anteriores — calculado
-  // ANTES del render (no mutando una variable dentro del .map) para que un
-  // futuro React Compiler no lo confunda con una mutación en el render.
   const acumulados = segmentos.reduce<number[]>((acc, s) => {
     const anterior = acc.length ? acc[acc.length - 1] : 0;
     acc.push(anterior + s.valor / total);
     return acc;
   }, []);
+  // Gap fijo entre rebanadas (no aplica con una sola, no hay nada que
+  // separar) — mismo criterio que la skill de dataviz: un hueco de
+  // superficie deliberado entre marcas adyacentes en vez de intentar que
+  // toquen exacto.
+  const gap = segmentos.length > 1 ? GAP_DEG : 0;
   return (
     <div className="flex items-center gap-6 min-w-0">
       <div className="shrink min-w-0 aspect-square" style={{ width: 160 }}>
-        <svg viewBox="0 0 192 192" width="100%" height="100%" className="-rotate-90 block">
-          <circle cx={96} cy={96} r={RADIO} fill="none" stroke="var(--line)" strokeWidth={GROSOR} />
+        <svg viewBox="0 0 192 192" width="100%" height="100%" className="block">
+          <circle cx={CENTRO} cy={CENTRO} r={(RADIO_OUT + RADIO_IN) / 2} fill="none" stroke="var(--line)" strokeWidth={RADIO_OUT - RADIO_IN} />
           {segmentos.map((s, i) => {
-            const frac = s.valor / total;
-            const dash = frac * CIRC;
-            const acumuladoPrevio = i === 0 ? 0 : acumulados[i - 1];
-            const offset = -acumuladoPrevio * CIRC;
+            const anguloIniBase = (i === 0 ? 0 : acumulados[i - 1]) * 360;
+            const anguloFinBase = acumulados[i] * 360;
+            const anguloIni = anguloIniBase + gap / 2;
+            const anguloFin = Math.max(anguloIni, anguloFinBase - gap / 2);
             return (
-              <circle key={s.etiqueta} cx={96} cy={96} r={RADIO} fill="none" stroke="var(--ink)"
-                strokeWidth={GROSOR} strokeDasharray={`${dash} ${CIRC - dash}`} strokeDashoffset={offset}
-                opacity={pasos[i]} strokeLinecap="butt"
-                style={{ transition: 'stroke-dasharray 0.4s ease' }} />
+              <path key={s.etiqueta} d={pathRebanada(anguloIni, anguloFin)} fill="var(--ink)" opacity={pasos[i]} />
             );
           })}
         </svg>
