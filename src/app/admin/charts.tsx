@@ -95,14 +95,14 @@ export function AreaChartSimple({
  *  base, 1 solo eje, tooltip por barra al :hover — mismas specs que
  *  `AreaChartSimple`. */
 /**
- * `alto` es un pixel FIJO en pantalla (no solo unidades del viewBox): sin
- * esto, `w-full h-auto` escala la altura junto con el ancho, y en un
- * contenedor angosto (tarjeta) contra uno ancho (junto al saludo) la MISMA
- * gráfica sale 3× más alta — es justo lo que empujó el título fuera de la
- * tarjeta la primera vez. `preserveAspectRatio="none"` deja que el viewBox
- * se estire libremente al contenedor real en vez de pelear por su propia
- * proporción; en un chart de barras (sin curvas) estirar no distorsiona
- * nada que importe.
+ * CSS/flexbox, NO SVG — la primera versión usaba un `<svg>` con
+ * `preserveAspectRatio="none"` para estirarse al ancho real de la
+ * tarjeta, pero eso estira TAMBIÉN las curvas Bézier de las esquinas
+ * redondeadas de forma no-uniforme (X y Y a factores distintos), y el
+ * resultado se ve borroso/mal definido en vez de nítido — es un problema
+ * inherente a estirar curvas, no algo que se arregla ajustando números.
+ * Barras planas con `border-radius` en CSS no tienen ese problema: no hay
+ * viewBox que estirar, cada barra escala limpio a cualquier ancho.
  */
 export function BarChartSimple({
   datos, etiquetaValor = (v: number) => String(v), alto = 96,
@@ -111,44 +111,35 @@ export function BarChartSimple({
   etiquetaValor?: (v: number) => string;
   alto?: number;
 }) {
-  const ANCHO = 320, ALTO = 140, PAD_IZQ = 4, PAD_DER = 4, PAD_SUP = 10, PAD_INF = 20;
-  const w = ANCHO - PAD_IZQ - PAD_DER, h = ALTO - PAD_SUP - PAD_INF;
   const max = Math.max(...datos.map((d) => d.valor), 1);
-  const paso = w / datos.length;
-  const anchoBarra = Math.min(28, paso * 0.55);
-  const RADIO_BARRA = 4;
+  const ALTO_BARRAS = alto - 24; // deja lugar a la etiqueta del día abajo
 
   return (
-    <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} width="100%" height={alto} preserveAspectRatio="none" className="block">
-      <line x1={PAD_IZQ} x2={ANCHO - PAD_DER} y1={PAD_SUP + h} y2={PAD_SUP + h} stroke="var(--line)" strokeWidth={1} />
-      {datos.map((d, i) => {
-        const cx = PAD_IZQ + paso * i + paso / 2;
-        const altoBarra = d.valor > 0 ? Math.max(3, (d.valor / max) * h) : 0;
-        const y = PAD_SUP + h - altoBarra;
-        // `path` en vez de `rect` porque solo las esquinas de ARRIBA se
-        // redondean — la base tiene que quedar recta sobre la línea base.
-        const x0 = cx - anchoBarra / 2, x1 = cx + anchoBarra / 2;
-        const r = Math.min(RADIO_BARRA, altoBarra / 2, anchoBarra / 2);
-        const d2 = altoBarra > 0
-          ? `M${x0},${y + altoBarra} V${y + r} Q${x0},${y} ${x0 + r},${y} H${x1 - r} Q${x1},${y} ${x1},${y + r} V${y + altoBarra} Z`
-          : '';
-        return (
-          <g key={d.dia} className="group cursor-default">
-            <rect x={cx - paso / 2} y={PAD_SUP} width={paso} height={h} fill="transparent" />
-            {altoBarra > 0 && <path d={d2} fill="var(--ink)" opacity={0.82} />}
-            <text x={cx} y={ALTO - 6} textAnchor="middle" fontSize={9} fill="var(--muted)">
-              {d.dia.slice(8)}
-            </text>
-            <g className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              <rect x={cx - 24} y={y - 24} width={48} height={18} rx={5} fill="var(--ink)" />
-              <text x={cx} y={y - 11} textAnchor="middle" fontSize={10} fill="var(--bg)" fontWeight={600}>
+    <div style={{ height: alto }}>
+      <div className="flex items-end gap-2 border-b" style={{ height: ALTO_BARRAS, borderColor: 'var(--line)' }}>
+        {datos.map((d) => {
+          const pct = d.valor > 0 ? Math.max(4, (d.valor / max) * 100) : 0;
+          return (
+            <div key={d.dia} className="flex-1 h-full flex items-end justify-center group relative cursor-default">
+              {d.valor > 0 && (
+                <div className="w-full max-w-14 rounded-t-[4px]" style={{ height: `${pct}%`, background: 'var(--ink)', opacity: 0.82, minHeight: 3 }} />
+              )}
+              <div className="absolute left-1/2 -translate-x-1/2 px-2 py-1 rounded-md text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap"
+                style={{ bottom: `calc(${pct}% + 8px)`, background: 'var(--ink)', color: 'var(--bg)' }}>
                 {etiquetaValor(d.valor)}
-              </text>
-            </g>
-          </g>
-        );
-      })}
-    </svg>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-2 mt-2">
+        {datos.map((d) => (
+          <div key={d.dia} className="flex-1 text-center text-xs" style={{ color: 'var(--muted)' }}>
+            {d.dia.slice(8)}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
