@@ -27,6 +27,11 @@ export interface ResumenNegocio {
   porFase: Array<{ fase: string; n: number; costoUsd: number }>;
   porModelo: Array<{ modelo: string; n: number; costoUsd: number }>;
   porDia: Array<{ dia: string; costoUsd: number; tokens: number }>;
+  /** Facturas (filas de `gasto` — cada una es un comprobante que pasó por
+   *  OCR/CFDI) procesadas por día, últimos 7 días — siempre las 7 fechas,
+   *  con `n: 0` en las que no hubo actividad, para que la gráfica de barras
+   *  no comprima una semana con un solo día real. */
+  facturasPorDia: Array<{ dia: string; n: number }>;
   /** % de cambio de los últimos 7 días vs los 7 anteriores — `null` sin
    *  suficiente historia (menos de 14 días con datos) para no inventar una
    *  tendencia de dos puntos. */
@@ -41,18 +46,20 @@ export interface ResumenNegocio {
  */
 export async function getResumenNegocio(hoy: string = new Date().toISOString().slice(0, 10)): Promise<ResumenNegocio> {
   const admin = supabaseAdmin();
-  const [tenantsRes, viajesRes, costoRes] = await Promise.all([
+  const [tenantsRes, viajesRes, costoRes, gastoRes] = await Promise.all([
     admin.from('tenant').select('id, nombre, plan'),
     admin.from('viaje').select('id, tenant_id'),
     admin.from('llm_costo').select('tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd, created_at'),
+    admin.from('gasto').select('created_at'),
   ]);
-  // Los tres fallan POR VALOR (supabase-js), no lanzando: sin este chequeo
+  // Los cuatro fallan POR VALOR (supabase-js), no lanzando: sin este chequeo
   // explícito, una base caída se lee "0 tenants, $0 gastados" — que es
   // indistinguible de que Likida de verdad no tiene nada, el mismo error que
   // ya se cerró para el panel de una flota (analytics.ts).
   if (tenantsRes.error) throw new Error(`getResumenNegocio/tenant: ${tenantsRes.error.message}`);
   if (viajesRes.error) throw new Error(`getResumenNegocio/viaje: ${viajesRes.error.message}`);
   if (costoRes.error) throw new Error(`getResumenNegocio/llm_costo: ${costoRes.error.message}`);
+  if (gastoRes.error) throw new Error(`getResumenNegocio/gasto: ${gastoRes.error.message}`);
 
   const filas = (costoRes.data ?? []) as Array<
     { tenant_id: string; fase: string; modelo: string; tokens_in: number; tokens_out: number; costo_usd: number; created_at: string }
@@ -119,6 +126,19 @@ export async function getResumenNegocio(hoy: string = new Date().toISOString().s
   for (const v of (viajesRes.data ?? []) as Array<{ tenant_id: string }>) {
     viajesPorTenant.set(v.tenant_id, (viajesPorTenant.get(v.tenant_id) ?? 0) + 1);
   }
+  // Últimos 7 días, siempre las 7 fechas (0 donde no hubo facturas) — el
+  // mismo criterio de `cortes()` de arriba, para que "hoy" sea inyectable
+  // en las pruebas en vez de depender del reloj real.
+  const facturasPorDiaMap = new Map<string, number>();
+  for (const g of (gastoRes.data ?? []) as Array<{ created_at: string }>) {
+    const dia = g.created_at.slice(0, 10);
+    facturasPorDiaMap.set(dia, (facturasPorDiaMap.get(dia) ?? 0) + 1);
+  }
+  const facturasPorDia = Array.from({ length: 7 }, (_, i) => {
+    const dia = cortes(6 - i);
+    return { dia, n: facturasPorDiaMap.get(dia) ?? 0 };
+  });
+
   const flotasBase = (tenantsRes.data ?? []) as Array<{ id: string; nombre: string; plan: string }>;
   const flotas = flotasBase.map((t) => ({
     ...t,
@@ -135,6 +155,7 @@ export async function getResumenNegocio(hoy: string = new Date().toISOString().s
     porFase,
     porModelo,
     porDia,
+    facturasPorDia,
     tendenciaCosto: tendencia('costoUsd'),
     tendenciaTokens: tendencia('tokens'),
   };

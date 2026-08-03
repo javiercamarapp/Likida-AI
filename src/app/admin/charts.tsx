@@ -89,6 +89,69 @@ export function AreaChartSimple({
   );
 }
 
+/** Barras — una magnitud por día (facturas procesadas), no una serie en el
+ *  tiempo continua, así que barra en vez de línea (dataviz skill: forma
+ *  según el trabajo del dato). Puntas redondeadas de 4px ancladas a la
+ *  base, 1 solo eje, tooltip por barra al :hover — mismas specs que
+ *  `AreaChartSimple`. */
+/**
+ * `alto` es un pixel FIJO en pantalla (no solo unidades del viewBox): sin
+ * esto, `w-full h-auto` escala la altura junto con el ancho, y en un
+ * contenedor angosto (tarjeta) contra uno ancho (junto al saludo) la MISMA
+ * gráfica sale 3× más alta — es justo lo que empujó el título fuera de la
+ * tarjeta la primera vez. `preserveAspectRatio="none"` deja que el viewBox
+ * se estire libremente al contenedor real en vez de pelear por su propia
+ * proporción; en un chart de barras (sin curvas) estirar no distorsiona
+ * nada que importe.
+ */
+export function BarChartSimple({
+  datos, etiquetaValor = (v: number) => String(v), alto = 96,
+}: {
+  datos: Array<{ dia: string; valor: number }>;
+  etiquetaValor?: (v: number) => string;
+  alto?: number;
+}) {
+  const ANCHO = 320, ALTO = 140, PAD_IZQ = 4, PAD_DER = 4, PAD_SUP = 10, PAD_INF = 20;
+  const w = ANCHO - PAD_IZQ - PAD_DER, h = ALTO - PAD_SUP - PAD_INF;
+  const max = Math.max(...datos.map((d) => d.valor), 1);
+  const paso = w / datos.length;
+  const anchoBarra = Math.min(28, paso * 0.55);
+  const RADIO_BARRA = 4;
+
+  return (
+    <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} width="100%" height={alto} preserveAspectRatio="none" className="block">
+      <line x1={PAD_IZQ} x2={ANCHO - PAD_DER} y1={PAD_SUP + h} y2={PAD_SUP + h} stroke="var(--line)" strokeWidth={1} />
+      {datos.map((d, i) => {
+        const cx = PAD_IZQ + paso * i + paso / 2;
+        const altoBarra = d.valor > 0 ? Math.max(3, (d.valor / max) * h) : 0;
+        const y = PAD_SUP + h - altoBarra;
+        // `path` en vez de `rect` porque solo las esquinas de ARRIBA se
+        // redondean — la base tiene que quedar recta sobre la línea base.
+        const x0 = cx - anchoBarra / 2, x1 = cx + anchoBarra / 2;
+        const r = Math.min(RADIO_BARRA, altoBarra / 2, anchoBarra / 2);
+        const d2 = altoBarra > 0
+          ? `M${x0},${y + altoBarra} V${y + r} Q${x0},${y} ${x0 + r},${y} H${x1 - r} Q${x1},${y} ${x1},${y + r} V${y + altoBarra} Z`
+          : '';
+        return (
+          <g key={d.dia} className="group cursor-default">
+            <rect x={cx - paso / 2} y={PAD_SUP} width={paso} height={h} fill="transparent" />
+            {altoBarra > 0 && <path d={d2} fill="var(--ink)" opacity={0.82} />}
+            <text x={cx} y={ALTO - 6} textAnchor="middle" fontSize={9} fill="var(--muted)">
+              {d.dia.slice(8)}
+            </text>
+            <g className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <rect x={cx - 24} y={y - 24} width={48} height={18} rx={5} fill="var(--ink)" />
+              <text x={cx} y={y - 11} textAnchor="middle" fontSize={10} fill="var(--bg)" fontWeight={600}>
+                {etiquetaValor(d.valor)}
+              </text>
+            </g>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 const RADIO = 78, GROSOR = 24;
 const CIRC = 2 * Math.PI * RADIO;
 

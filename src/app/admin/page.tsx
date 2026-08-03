@@ -8,7 +8,7 @@ import {
   Truck, DollarSign, Cpu, CheckCircle2, BarChart3, UserPlus2, MessageCircle,
   Sparkles, ChevronDown, ScanText, Calculator, Flag, MessageSquareText, Shuffle, Smartphone,
 } from 'lucide-react';
-import { Sparkline, Tendencia, Dona } from './charts';
+import { Sparkline, Tendencia, Dona, BarChartSimple } from './charts';
 import BuscadorSecciones from './buscador';
 import ChatNegocio from './chat';
 import Notificaciones, { type Alerta } from './notificaciones';
@@ -118,13 +118,22 @@ export default async function Admin() {
       <header className="glass-panel sticky top-4 z-20 h-14 flex items-center gap-3 px-5 shrink-0">
         <BuscadorSecciones />
         <div className="flex items-center gap-2.5 ml-auto">
+          {/* Contáctanos y el menú de perfil se esconden hasta `lg`: en
+              pantallas angostas (celular, o Safari con "sitio de
+              escritorio" que sigue midiendo angosto) sobraban — el nombre
+              y "cerrar sesión" ya viven en el sidebar (abajo del todo), así
+              que no se pierde nada real, solo el amontonamiento. La
+              campana es la única que se queda siempre: es la única acción
+              que no vive en ningún otro lado. */}
           <a href="mailto:javiercamaraportepetit@gmail.com?subject=Agentes%20a%20la%20medida"
-            className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg transition-opacity hover:opacity-85 shrink-0"
+            className="hidden lg:inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg transition-opacity hover:opacity-85 shrink-0"
             style={{ background: 'var(--ink)', color: 'white' }}>
             Contáctanos
           </a>
           <Notificaciones alertas={alertas} />
-          <PerfilMenu nombre={nombre ?? 'Javier'} cerrarSesion={cerrarSesion} />
+          <div className="hidden lg:block">
+            <PerfilMenu nombre={nombre ?? 'Javier'} cerrarSesion={cerrarSesion} />
+          </div>
         </div>
       </header>
 
@@ -137,11 +146,29 @@ export default async function Admin() {
               (`.card` opacos) son los que se sobreponen encima de ESA
               superficie, no la superficie misma la que se corta en pedazos. */}
           <div className="glass-panel overflow-hidden">
-          <div className="px-6 py-5">
-            <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
-              {SALUDO()}, {nombre ?? 'Javier'}
-            </h1>
-            <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
+          <div className="flex items-start gap-6 px-6 py-5">
+            <div className="shrink-0">
+              <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
+                {SALUDO()}, {nombre ?? 'Javier'}
+              </h1>
+              <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
+            </div>
+            {/* Facturas = filas de `gasto` (cada una pasó por OCR/CFDI) — el
+                mismo dato real que ya se usa en Costo por modelo, agrupado
+                por día en vez de por modelo. Últimos 7 días siempre, con 0
+                donde no hubo actividad (getResumenNegocio ya lo rellena). */}
+            <div className="flex-1 min-w-0 hidden md:block">
+              <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--muted)' }}>
+                Facturas procesadas — últimos 7 días
+              </div>
+              {r.facturasPorDia.some((d) => d.n > 0) ? (
+                <BarChartSimple datos={r.facturasPorDia.map((d) => ({ dia: d.dia, valor: d.n }))} />
+              ) : (
+                <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 96 }}>
+                  Aún sin datos suficientes.
+                </div>
+              )}
+            </div>
           </div>
 
           <section id="agentes" className="p-5 border-t scroll-mt-24" style={{ borderColor: 'var(--line)' }}>
@@ -331,50 +358,55 @@ export default async function Admin() {
           </div>
         </main>
 
-        {/* Panel derecho — accesos rápidos a secciones REALES (no "Optimize
-            Workflows" sin nada detrás), insight con datos reales, chat
-            compacto hasta abajo. Flota aparte del main, pegado arriba. */}
-        <aside className="glass-panel w-[276px] shrink-0 px-4 py-4 space-y-4 hidden xl:block sticky top-[4.5rem] self-start max-h-[calc(100dvh-6.5rem)] overflow-y-auto">
-          <div className="flex items-center gap-2">
-            <Sparkles width={15} height={15} strokeWidth={1.75} />
-            <span className="font-semibold text-sm">Asistente de negocio</span>
-          </div>
-
-          <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-            Hola {nombre ?? 'Javier'}, aquí tienes accesos rápidos y lo más importante de hoy.
-          </div>
-
-          <div className="space-y-1.5">
-            {recomendaciones.map((rec) => (
-              <Link key={rec.titulo} href={rec.href}
-                className="flex items-center gap-2.5 p-2.5 rounded-xl hairline transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)]">
-                <Insignia Icono={rec.Icono} tamaño="sm" />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium truncate">{rec.titulo}</span>
-                  <span className="block text-xs truncate" style={{ color: 'var(--muted)' }}>{rec.subtitulo}</span>
-                </span>
-              </Link>
-            ))}
-          </div>
-
-          {(topFase || r.tendenciaCosto !== null) && (
-            <div className="rounded-xl p-3.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
-              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
-                <Sparkles width={12} height={12} strokeWidth={2} /> Smart Insight
-              </div>
-              <p className="text-sm">
-                {r.tendenciaCosto !== null
-                  ? `El gasto de IA ${r.tendenciaCosto >= 0 ? 'subió' : 'bajó'} ${Math.abs(r.tendenciaCosto)}% esta semana vs la anterior.`
-                  : (
-                    <span className="inline-flex items-center gap-1.5">
-                      <TopFaseIcono width={13} height={13} strokeWidth={1.75} /> &quot;{topFase}&quot; es tu agente más caro hoy: {usd(r.porFase[0].costoUsd)}.
-                    </span>
-                  )}
-              </p>
+        {/* Panel derecho — el chat queda FIJO abajo (nunca se corta ni hay
+            que perseguirlo con scroll); lo de arriba (saludo, accesos
+            rápidos, insight) es lo que hace scroll si no cabe. Antes todo
+            era un solo `space-y-4` con scroll global, y en pantallas bajas
+            el cuadro de "Pregunta algo…" quedaba más abajo del borde
+            visible. */}
+        <aside className="glass-panel w-[276px] shrink-0 hidden xl:flex flex-col sticky top-[4.5rem] self-start h-[calc(100dvh-6.5rem)]">
+          <div className="flex-1 min-w-0 overflow-y-auto px-4 pt-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <Sparkles width={15} height={15} strokeWidth={1.75} />
+              <span className="font-semibold text-sm">Asistente de negocio</span>
             </div>
-          )}
 
-          <div>
+            <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+              Hola {nombre ?? 'Javier'}, aquí tienes accesos rápidos y lo más importante de hoy.
+            </div>
+
+            <div className="space-y-1.5">
+              {recomendaciones.map((rec) => (
+                <Link key={rec.titulo} href={rec.href}
+                  className="flex items-center gap-2.5 p-2.5 rounded-xl hairline transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)]">
+                  <Insignia Icono={rec.Icono} tamaño="sm" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium truncate">{rec.titulo}</span>
+                    <span className="block text-xs truncate" style={{ color: 'var(--muted)' }}>{rec.subtitulo}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+
+            {(topFase || r.tendenciaCosto !== null) && (
+              <div className="rounded-xl p-3.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
+                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
+                  <Sparkles width={12} height={12} strokeWidth={2} /> Smart Insight
+                </div>
+                <p className="text-sm">
+                  {r.tendenciaCosto !== null
+                    ? `El gasto de IA ${r.tendenciaCosto >= 0 ? 'subió' : 'bajó'} ${Math.abs(r.tendenciaCosto)}% esta semana vs la anterior.`
+                    : (
+                      <span className="inline-flex items-center gap-1.5">
+                        <TopFaseIcono width={13} height={13} strokeWidth={1.75} /> &quot;{topFase}&quot; es tu agente más caro hoy: {usd(r.porFase[0].costoUsd)}.
+                      </span>
+                    )}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="shrink-0 px-4 py-3 border-t" style={{ borderColor: 'var(--line)' }}>
             <ChatNegocio resumen={r} compacto />
           </div>
         </aside>
