@@ -168,8 +168,21 @@ export function BarChartSimple({
 const RADIO = 78, GROSOR = 24;
 const CIRC = 2 * Math.PI * RADIO;
 
-/** Dona de una categoría — identidad por color (monocromo: por OPACIDAD,
- *  no por hue, ya que la paleta es blanco/negro) + leyenda directa. */
+/**
+ * Dona de una categoría — identidad por color (monocromo: por OPACIDAD, no
+ * por hue, ya que la paleta es blanco/negro) + leyenda directa.
+ *
+ * El SVG viv­e en un `div` de tamaño fijo con `aspect-square` (NO en el
+ * `<svg>` mismo con `width`/`height` en px como antes): un tamaño fijo en
+ * el propio SVG no cede cuando la tarjeta que lo contiene es más angosta
+ * que 192px (p.ej. a la mitad de un grid de 2 columnas), así que se salía
+ * de la tarjeta y el padre con `overflow-hidden` le cortaba un pedazo — el
+ * anillo gris de fondo (`var(--line)`, la vuelta completa detrás de los
+ * arcos) es lo primero que se nota cortado porque es el más ancho. Con el
+ * tamaño en el `div` envolvente y el SVG a `width="100%" height="100%"`,
+ * flexbox SÍ puede encogerlo, y como se encoge parejo en X e Y
+ * (`aspect-square`) el círculo nunca se deforma en óvalo.
+ */
 export function Dona({ segmentos }: { segmentos: Array<{ etiqueta: string; valor: number }> }) {
   const total = segmentos.reduce((s, x) => s + x.valor, 0) || 1;
   const pasos = segmentos.length <= 1 ? [1] : segmentos.map((_, i) => 0.35 + (0.65 * i) / (segmentos.length - 1));
@@ -182,28 +195,30 @@ export function Dona({ segmentos }: { segmentos: Array<{ etiqueta: string; valor
     return acc;
   }, []);
   return (
-    <div className="flex items-center gap-6">
-      <svg width={192} height={192} viewBox="0 0 192 192" className="shrink-0 -rotate-90">
-        <circle cx={96} cy={96} r={RADIO} fill="none" stroke="var(--line)" strokeWidth={GROSOR} />
-        {segmentos.map((s, i) => {
-          const frac = s.valor / total;
-          const dash = frac * CIRC;
-          const acumuladoPrevio = i === 0 ? 0 : acumulados[i - 1];
-          const offset = -acumuladoPrevio * CIRC;
-          return (
-            <circle key={s.etiqueta} cx={96} cy={96} r={RADIO} fill="none" stroke="var(--ink)"
-              strokeWidth={GROSOR} strokeDasharray={`${dash} ${CIRC - dash}`} strokeDashoffset={offset}
-              opacity={pasos[i]} strokeLinecap="butt"
-              style={{ transition: 'stroke-dasharray 0.4s ease' }} />
-          );
-        })}
-      </svg>
-      <div className="space-y-2">
+    <div className="flex items-center gap-6 min-w-0">
+      <div className="shrink min-w-0 aspect-square" style={{ width: 160 }}>
+        <svg viewBox="0 0 192 192" width="100%" height="100%" className="-rotate-90 block">
+          <circle cx={96} cy={96} r={RADIO} fill="none" stroke="var(--line)" strokeWidth={GROSOR} />
+          {segmentos.map((s, i) => {
+            const frac = s.valor / total;
+            const dash = frac * CIRC;
+            const acumuladoPrevio = i === 0 ? 0 : acumulados[i - 1];
+            const offset = -acumuladoPrevio * CIRC;
+            return (
+              <circle key={s.etiqueta} cx={96} cy={96} r={RADIO} fill="none" stroke="var(--ink)"
+                strokeWidth={GROSOR} strokeDasharray={`${dash} ${CIRC - dash}`} strokeDashoffset={offset}
+                opacity={pasos[i]} strokeLinecap="butt"
+                style={{ transition: 'stroke-dasharray 0.4s ease' }} />
+            );
+          })}
+        </svg>
+      </div>
+      <div className="space-y-2 min-w-0">
         {segmentos.map((s, i) => (
           <div key={s.etiqueta} className="flex items-center gap-2 text-sm">
             <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: 'var(--ink)', opacity: pasos[i] }} />
-            <span className="font-medium">{s.etiqueta}</span>
-            <span style={{ color: 'var(--muted)' }}>{Math.round((s.valor / total) * 100)}%</span>
+            <span className="font-medium truncate">{s.etiqueta}</span>
+            <span className="shrink-0" style={{ color: 'var(--muted)' }}>{Math.round((s.valor / total) * 100)}%</span>
           </div>
         ))}
       </div>
