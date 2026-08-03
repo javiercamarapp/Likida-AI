@@ -115,7 +115,7 @@ export default async function Admin() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="glass-panel sticky top-4 z-20 h-14 flex items-center gap-3 px-5">
+      <header className="glass-panel sticky top-4 z-20 h-14 flex items-center gap-3 px-5 shrink-0">
         <BuscadorSecciones />
         <div className="flex items-center gap-2.5 ml-auto">
           <a href="mailto:javiercamaraportepetit@gmail.com?subject=Agentes%20a%20la%20medida"
@@ -129,21 +129,22 @@ export default async function Admin() {
       </header>
 
       <div className="flex gap-4 items-start">
-        <main className="flex-1 min-w-0 space-y-5">
-          <div className="glass-panel px-6 py-5">
+        <main className="flex-1 min-w-0">
+          {/* Un solo panel glass grande, EXTENDIDO para toda la columna
+              central — antes cada sección flotaba por separado con huecos
+              entre sí; ahora es una sola superficie continua, dividida por
+              hairlines internas (`border-t`), y los recuadros de datos
+              (`.card` opacos) son los que se sobreponen encima de ESA
+              superficie, no la superficie misma la que se corta en pedazos. */}
+          <div className="glass-panel overflow-hidden">
+          <div className="px-6 py-5">
             <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
               {SALUDO()}, {nombre ?? 'Javier'}
             </h1>
             <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
           </div>
 
-          {/* Un solo panel glass grande: los 4 recuadros de cifras Y las dos
-              gráficas (línea + dona) van SOBREPUESTOS encima, como tarjetas
-              `.card` opacas más chicas — nunca dos glass idénticos pegados.
-              Esto también resuelve el contraste: el título y los textos
-              grises quedan sobre la superficie blanca del panel grande, no
-              sueltos sobre la imagen de fondo. */}
-          <section id="agentes" className="glass-panel p-5 scroll-mt-24">
+          <section id="agentes" className="p-5 border-t scroll-mt-24" style={{ borderColor: 'var(--line)' }}>
             <TituloSeccion>Likida en números</TituloSeccion>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
               <div className="card p-3.5">
@@ -224,7 +225,7 @@ export default async function Admin() {
             )}
           </section>
 
-          <section className="glass-panel overflow-hidden">
+          <section className="border-t" style={{ borderColor: 'var(--line)' }}>
             <div className="px-5 pt-4"><TituloSeccion>Costo por modelo</TituloSeccion></div>
             {r.porModelo.length === 0 ? (
               <div className="px-5 py-4 text-sm" style={{ color: 'var(--muted)' }}>Sin llamadas registradas todavía.</div>
@@ -243,7 +244,7 @@ export default async function Admin() {
             )}
           </section>
 
-          <section id="flotas" className="glass-panel overflow-hidden scroll-mt-24">
+          <section id="flotas" className="border-t scroll-mt-24" style={{ borderColor: 'var(--line)' }}>
             <div className="px-5 pt-4 pb-1"><TituloSeccion>Flotas</TituloSeccion></div>
             {r.flotas.length === 0 ? (
               <div className="px-5 py-4 text-sm" style={{ color: 'var(--muted)' }}>Sin flotas dadas de alta todavía.</div>
@@ -276,7 +277,7 @@ export default async function Admin() {
             </p>
           </section>
 
-          <section id="conversaciones" className="glass-panel p-5 scroll-mt-24">
+          <section id="conversaciones" className="p-5 border-t scroll-mt-24" style={{ borderColor: 'var(--line)' }}>
             <TituloSeccion>Conversaciones de WhatsApp</TituloSeccion>
             {conversaciones.length === 0 ? (
               <div className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>Sin conversaciones activas.</div>
@@ -314,7 +315,7 @@ export default async function Admin() {
             )}
           </section>
 
-          <section className="glass-panel p-5">
+          <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
             <TituloSeccion>Salud del sistema</TituloSeccion>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
               <a href="https://sentry.io" target="_blank" rel="noopener noreferrer" className="card p-4 hover:shadow-md transition-shadow">
@@ -327,12 +328,13 @@ export default async function Admin() {
               </a>
             </div>
           </section>
+          </div>
         </main>
 
         {/* Panel derecho — accesos rápidos a secciones REALES (no "Optimize
             Workflows" sin nada detrás), insight con datos reales, chat
             compacto hasta abajo. Flota aparte del main, pegado arriba. */}
-        <aside className="glass-panel w-[276px] shrink-0 px-4 py-4 space-y-4 hidden xl:block sticky top-[4.5rem] max-h-[calc(100vh-6.5rem)] overflow-y-auto">
+        <aside className="glass-panel w-[276px] shrink-0 px-4 py-4 space-y-4 hidden xl:block sticky top-[4.5rem] self-start max-h-[calc(100dvh-6.5rem)] overflow-y-auto">
           <div className="flex items-center gap-2">
             <Sparkles width={15} height={15} strokeWidth={1.75} />
             <span className="font-semibold text-sm">Asistente de negocio</span>
