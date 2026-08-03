@@ -113,6 +113,21 @@ depende 100% de Fase 3, facturación real), Dev/calendario de
 contribuciones (nuevo, cosmético — bajo riesgo, se puede construir en
 Fase 1 con datos reales de `git log`/Vercel si algún día hace falta).
 
+**Actualización, misma madrugada:** llegaron dos versiones más del mismo
+prompt — una con retícula de 12 columnas y tamaños de tarjeta (XS–XL) por
+fila, y una versión "maestra" que junta las 26 páginas con esa misma
+retícula en un solo archivo. Son la MISMA visión, cada vez más detallada
+en composición visual (qué tan grande cada gráfica, qué tipo, qué split
+asimétrico) — no cambian el fondo de las tablas de arriba ni la decisión
+de stack. Se toma la versión "maestra" (26 páginas, §4 completo) como la
+referencia de composición para cuando cada página se construya: retícula
+12 col, una pieza dominante por página (L/XL), nunca puro muro de tiles
+iguales, splits 8+4/7+5 antes que 6+6. El detalle exacto de columnas/alto
+por widget vive en el prompt que Javier ya tiene guardado — no se
+transcribe aquí completo para no duplicar 300 líneas; este documento
+apunta a esa fuente y sigue llevando la cuenta de qué es real vs. qué
+falta.
+
 ## Una lectura honesta
 
 La mayoría de "❌" de la Tanda 3 solo tienen sentido **después** de tener
