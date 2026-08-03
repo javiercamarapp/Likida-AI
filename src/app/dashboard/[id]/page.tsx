@@ -9,6 +9,7 @@ import { mxn } from '@/lib/utils';
 import { litros, fechaMx } from '../formato';
 import { puedeExportar, puedeAsignar } from '@/lib/auth/permisos';
 import { listOperadores, reasignarOperador } from '@/lib/cuadra/repo';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,12 +29,30 @@ const ESTATUS: Record<string, { label: string; color: string }> = {
   revisar: { label: 'Por revisar', color: 'var(--color-bad)' },
 };
 
-export default async function Detalle({ params }: { params: Promise<{ id: string }> }) {
+export default async function Detalle({
+  params, searchParams,
+}: { params: Promise<{ id: string }>; searchParams: Promise<{ tenant?: string }> }) {
   // Segunda capa (ver dashboard/page.tsx). El id va en la ruta de vuelta para
   // que tras el passcode aterrice en la liquidación que pidió.
   const { id: idParaVolver } = await params;
-  const { tenantId, rol } = await requireSessionTenant(`/dashboard/${idParaVolver}`);
+  const { tenantId: tenantIdDemo, rol } = await requireSessionTenant(`/dashboard/${idParaVolver}`);
   const { id } = await params;
+  const sp = await searchParams;
+
+  // Mismo criterio de dashboard/page.tsx: un superadmin viendo la flota X
+  // desde "Ver dashboard" (admin/flotas) necesita que ESTA página de detalle
+  // también resuelva a X, no al tenant demo — si no, el link de la tabla
+  // llevaría a un 404 (la liquidación no existe bajo el tenant equivocado).
+  let tenantId = tenantIdDemo;
+  let volverQS = '';
+  if (rol === 'superadmin' && sp?.tenant) {
+    const { data: t } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
+    if (t) {
+      tenantId = t.id as string;
+      volverQS = `?tenant=${tenantId}`;
+    }
+  }
+
   const d = await getLiquidacionDetalle(id, tenantId);
   if (!d) notFound();
   const e = ESTATUS[d.estatus] ?? { label: d.estatus, color: 'var(--muted)' };
@@ -47,12 +66,17 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
     // un contador que arme la petición a mano (misma sesión válida, sin el
     // botón) podría reasignar igual — el mismo criterio que ya usa
     // `requireSessionTenant` para no confiar solo en lo que el proxy filtra.
-    const { tenantId: t, rol: r } = await requireSessionTenant(`/dashboard/${id}`);
-    if (!puedeAsignar(r)) redirect(`/dashboard/${id}`);
+    const { tenantId: tDemo, rol: r } = await requireSessionTenant(`/dashboard/${id}`);
+    if (!puedeAsignar(r)) redirect(`/dashboard/${id}${volverQS}`);
+    let t = tDemo;
+    if (r === 'superadmin' && sp?.tenant) {
+      const { data: tFila } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
+      if (tFila) t = tFila.id as string;
+    }
     const operadorId = String(formData.get('operadorId') ?? '');
-    if (!operadorId) redirect(`/dashboard/${id}`);
+    if (!operadorId) redirect(`/dashboard/${id}${volverQS}`);
     await reasignarOperador(t, d!.viajeId, operadorId);
-    redirect(`/dashboard/${id}`);
+    redirect(`/dashboard/${id}${volverQS}`);
   }
   // LA FOTO DEL TICKET SE GUARDA (CFF art. 30, conservación 5 años) PERO NO SE
   // ENSEÑA AQUÍ. El aviso de privacidad (privacidad.ts:498) le promete al
@@ -75,8 +99,12 @@ export default async function Detalle({ params }: { params: Promise<{ id: string
     <div className="min-h-screen">
       <header className="glass sticky top-0 z-10 border-b" style={{ borderColor: 'var(--line)' }}>
         <div className="max-w-4xl mx-auto px-8 h-16 flex items-center justify-between">
-          <Link href="/dashboard" className="text-base hover:opacity-70" style={{ color: 'var(--muted)' }}>← Panel</Link>
-          <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: 'var(--muted)', background: 'color-mix(in srgb, var(--muted) 10%, transparent)' }}>datos de demostración</span>
+          <Link href={`/dashboard${volverQS}`} className="text-base hover:opacity-70" style={{ color: 'var(--muted)' }}>← Panel</Link>
+          {volverQS ? (
+            <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>viendo como superadmin</span>
+          ) : (
+            <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: 'var(--muted)', background: 'color-mix(in srgb, var(--muted) 10%, transparent)' }}>datos de demostración</span>
+          )}
         </div>
       </header>
 

@@ -1,6 +1,7 @@
+import Link from 'next/link';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
-import { Truck } from 'lucide-react';
+import { Truck, ExternalLink } from 'lucide-react';
 import ContadorRetro from '../contador-retro';
 
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,7 @@ export default async function FlotasPage() {
                   <th className="px-5 py-2.5 font-medium">Plan</th>
                   <th className="px-5 py-2.5 font-medium text-right">Viajes</th>
                   <th className="px-5 py-2.5 font-medium text-right">Costo de IA</th>
+                  <th className="px-5 py-2.5 font-medium text-right"></th>
                 </tr>
               </thead>
               <tbody>
@@ -61,6 +63,18 @@ export default async function FlotasPage() {
                     <td className="px-5 py-3" style={{ color: 'var(--muted)' }}>{f.plan}</td>
                     <td className="px-5 py-3 text-right tabular">{f.viajes}</td>
                     <td className="px-5 py-3 text-right tabular">{usd(f.costoIaUsd)}</td>
+                    <td className="px-5 py-3 text-right">
+                      {/* Ve el panel REAL que ve esa flota (mismo /dashboard del
+                          cliente), no una copia — "Login as" honesto: sin
+                          fingir ser un usuario de esa flota, el superadmin
+                          entra con su propia sesión y `?tenant=` resuelve el
+                          tenant, validado contra la tabla real (ver
+                          dashboard/page.tsx). */}
+                      <Link href={`/dashboard?tenant=${f.id}`} target="_blank"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
+                        <ExternalLink width={12} height={12} strokeWidth={1.75} /> Ver dashboard
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -69,7 +83,7 @@ export default async function FlotasPage() {
         )}
         <div className="px-5 pt-4 pb-5 border-t space-y-2" style={{ borderColor: 'var(--line)' }}>
           <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            Uso vs. límite, salud (activa/en riesgo/morosa), MRR por cliente, &quot;Login as&quot; con audit log — Fase 3 del roadmap, depende de tener clientes reales pagando.
+            &quot;Ver dashboard&quot; ya existe (arriba) — entra al panel real de esa flota con tu propia sesión de superadmin, sin credenciales nuevas. Uso vs. límite, salud (activa/en riesgo/morosa), MRR por cliente y un audit log de qué flota viste y cuándo siguen en el roadmap.
           </p>
           <p className="text-xs" style={{ color: 'var(--muted)' }}>
             Retención por cohortes, distribución por plan — necesita más de 1 tenant para decir algo real.
