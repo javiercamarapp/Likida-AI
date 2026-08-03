@@ -70,6 +70,9 @@ describe('getResumenNegocio', () => {
       { dia: '2026-07-30', n: 0 }, { dia: '2026-07-31', n: 0 },
       { dia: '2026-08-01', n: 2 }, { dia: '2026-08-02', n: 1 },
     ]);
+    // Total histórico: TODAS las filas de gasto, sin filtro de fecha — no
+    // solo las de la ventana de 7 días de arriba.
+    expect(r.facturasTotal).toBe(3);
     // Sin 7 días previos con datos (Likida lleva 2 días), no hay contra qué
     // comparar — null, no "creció infinito".
     expect(r.tendenciaCosto).toBeNull();
@@ -86,6 +89,7 @@ describe('getResumenNegocio', () => {
         { dia: '2026-07-30', n: 0 }, { dia: '2026-07-31', n: 0 },
         { dia: '2026-08-01', n: 0 }, { dia: '2026-08-02', n: 0 },
       ],
+      facturasTotal: 0,
       tendenciaCosto: null, tendenciaTokens: null,
     });
   });

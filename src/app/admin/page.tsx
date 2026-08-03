@@ -9,6 +9,7 @@ import {
 import { Sparkline, Tendencia, Dona, BarChartSimple } from './charts';
 import GraficaCostoConRango from './rango-costo';
 import AsistenteExpandible from './asistente-expandible';
+import ContadorFacturas from './contador-facturas';
 
 const SALUDO = () => {
   const h = new Date().getUTCHours() - 6; // hora de México, aproximada — un saludo no necesita el minuto exacto
@@ -125,11 +126,14 @@ export default async function Admin() {
               (`.card` opacos) son los que se sobreponen encima de ESA
               superficie, no la superficie misma la que se corta en pedazos. */}
           <div className="glass-panel overflow-hidden">
-          <div className="px-6 py-5">
-            <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
-              {SALUDO()}, {nombre ?? 'Javier'}
-            </h1>
-            <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
+          <div className="px-6 py-5 flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
+                {SALUDO()}, {nombre ?? 'Javier'}
+              </h1>
+              <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
+            </div>
+            <ContadorFacturas total={r.facturasTotal} />
           </div>
 
           {/* Facturas = filas de `gasto` (cada una pasó por OCR/CFDI) — el

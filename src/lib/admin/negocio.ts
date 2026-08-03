@@ -32,6 +32,9 @@ export interface ResumenNegocio {
    *  con `n: 0` en las que no hubo actividad, para que la gráfica de barras
    *  no comprima una semana con un solo día real. */
   facturasPorDia: Array<{ dia: string; n: number }>;
+  /** Total histórico de facturas (todas las filas de `gasto`, sin filtro
+   *  de fecha) — para el contador retro junto al saludo. */
+  facturasTotal: number;
   /** % de cambio de los últimos 7 días vs los 7 anteriores — `null` sin
    *  suficiente historia (menos de 14 días con datos) para no inventar una
    *  tendencia de dos puntos. */
@@ -156,6 +159,7 @@ export async function getResumenNegocio(hoy: string = new Date().toISOString().s
     porModelo,
     porDia,
     facturasPorDia,
+    facturasTotal: (gastoRes.data ?? []).length,
     tendenciaCosto: tendencia('costoUsd'),
     tendenciaTokens: tendencia('tokens'),
   };

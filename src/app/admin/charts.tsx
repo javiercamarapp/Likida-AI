@@ -113,24 +113,46 @@ export function BarChartSimple({
 }) {
   const max = Math.max(...datos.map((d) => d.valor), 1);
   const ALTO_BARRAS = alto - 24; // deja lugar a la etiqueta del día abajo
+  const n = datos.length;
+  // Mismo % que la altura de cada barra — el punto queda EXACTO en su
+  // tope, así la línea de verdad seala "cómo se mueve" la barra, no un
+  // dato distinto trazado encima.
+  const pcts = datos.map((d) => (d.valor > 0 ? Math.max(4, (d.valor / max) * 100) : 0));
+  const xPct = (i: number) => ((i + 0.5) / n) * 100;
 
   return (
     <div style={{ height: alto }}>
-      <div className="flex items-end gap-2 border-b" style={{ height: ALTO_BARRAS, borderColor: 'var(--line)' }}>
-        {datos.map((d) => {
-          const pct = d.valor > 0 ? Math.max(4, (d.valor / max) * 100) : 0;
-          return (
-            <div key={d.dia} className="flex-1 h-full flex items-end justify-center group relative cursor-default">
-              {d.valor > 0 && (
-                <div className="w-full max-w-14 rounded-t-[4px]" style={{ height: `${pct}%`, background: 'var(--ink)', opacity: 0.82, minHeight: 3 }} />
-              )}
-              <div className="absolute left-1/2 -translate-x-1/2 px-2 py-1 rounded-md text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap"
-                style={{ bottom: `calc(${pct}% + 8px)`, background: 'var(--ink)', color: 'var(--bg)' }}>
-                {etiquetaValor(d.valor)}
-              </div>
+      <div className="relative flex items-end gap-2 border-b" style={{ height: ALTO_BARRAS, borderColor: 'var(--line)' }}>
+        {datos.map((d, i) => (
+          <div key={d.dia} className="flex-1 h-full flex items-end justify-center group relative cursor-default">
+            {d.valor > 0 && (
+              <div className="w-full max-w-14 rounded-t-[4px]" style={{ height: `${pcts[i]}%`, background: 'var(--ink)', opacity: 0.82, minHeight: 3 }} />
+            )}
+            <div className="absolute left-1/2 -translate-x-1/2 px-2 py-1 rounded-md text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10"
+              style={{ bottom: `calc(${pcts[i]}% + 8px)`, background: 'var(--ink)', color: 'var(--bg)' }}>
+              {etiquetaValor(d.valor)}
             </div>
-          );
-        })}
+          </div>
+        ))}
+
+        {/* Línea + puntos conectados que siguen el tope de cada barra —
+            la fluctuación de un vistazo. Solo la polyline (segmentos
+            rectos) vive en el SVG que se estira al ancho real: una recta
+            estirada sigue siendo recta, no se distorsiona como una curva
+            (el mismo problema que rompía las esquinas redondeadas). Los
+            puntos son divs reales — círculos de verdad, nunca óvalos —
+            posicionados aparte, no dentro del SVG estirado. */}
+        <svg width="100%" height="100%" className="absolute inset-0 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <polyline
+            points={pcts.map((p, i) => `${xPct(i)},${100 - p}`).join(' ')}
+            fill="none" stroke="var(--ink)" strokeWidth={1.5} strokeOpacity={0.4}
+            vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"
+          />
+        </svg>
+        {pcts.map((p, i) => (
+          <div key={i} className="absolute w-[7px] h-[7px] rounded-full pointer-events-none"
+            style={{ left: `${xPct(i)}%`, bottom: `${p}%`, transform: 'translate(-50%, 50%)', background: 'var(--ink)', boxShadow: '0 0 0 2px var(--surface)' }} />
+        ))}
       </div>
       <div className="flex gap-2 mt-2">
         {datos.map((d) => (
