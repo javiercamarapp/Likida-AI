@@ -1,6 +1,7 @@
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio';
 import { usd, numero } from '@/lib/utils';
+import { saludo, fechaLarga } from '@/lib/saludo';
 import Link from 'next/link';
 import {
   Truck, DollarSign, Cpu, CheckCircle2, BarChart3, UserPlus2, MessageCircle,
@@ -13,18 +14,6 @@ import ContadorRetro from './contador-retro';
 import { IconoProveedor } from './proveedor-icono';
 import { GlobalFilter } from './ui/global-filter';
 import { KpiTile } from './ui/kit';
-
-const SALUDO = () => {
-  const h = new Date().getUTCHours() - 6; // hora de México, aproximada — un saludo no necesita el minuto exacto
-  const hora = ((h % 24) + 24) % 24;
-  if (hora < 12) return 'Buenos días';
-  if (hora < 19) return 'Buenas tardes';
-  return 'Buenas noches';
-};
-
-const FECHA_HOY = () => new Date().toLocaleDateString('es-MX', {
-  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City',
-});
 
 export const dynamic = 'force-dynamic';
 
@@ -118,9 +107,9 @@ export default async function Admin({
           <div className="px-6 pt-4 pb-4 flex items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
-                {SALUDO()}, {nombre ?? 'Javier'}
+                {saludo()}, {nombre ?? 'Javier'}
               </h1>
-              <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
+              <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
             </div>
             {/* MRR real: $0 — Likida no cobra a ningún cliente todavía.
                 No es un placeholder, es el número verdadero de hoy. 7

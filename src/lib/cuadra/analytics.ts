@@ -167,6 +167,44 @@ export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
   );
 }
 
+/**
+ * Liquidaciones cerradas por día, ventana de `ventanaDias` (7/30, mismo
+ * `GlobalFilter` de admin/page.tsx) — SIEMPRE las `ventanaDias` fechas, con
+ * `n: 0` donde no hubo cierre, para que `BarChartSimple` no comprima el
+ * periodo a un solo día real. Mismo patrón que `facturasPorDia` en
+ * `lib/admin/negocio.ts`; `hoy` inyectable por la misma razón que ahí
+ * (una prueba de ventana no puede depender del reloj real).
+ */
+export async function getLiquidacionesPorDia(
+  tenantId: string,
+  ventanaDias: number = 7,
+  hoy: string = new Date().toISOString().slice(0, 10),
+): Promise<Array<{ dia: string; valor: number }>> {
+  const rows = await traerTodo<{ created_at: unknown }>(
+    (desde, hasta) => supabaseAdmin()
+      .from('liquidacion')
+      .select('created_at')
+      .eq('tenant_id', tenantId)
+      .order('id')
+      .range(desde, hasta),
+    'getLiquidacionesPorDia',
+  );
+  const porDiaMap = new Map<string, number>();
+  for (const r of rows) {
+    const dia = (r.created_at as string).slice(0, 10);
+    porDiaMap.set(dia, (porDiaMap.get(dia) ?? 0) + 1);
+  }
+  const cortes = (diasAtras: number) => {
+    const d = new Date(`${hoy}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - diasAtras);
+    return d.toISOString().slice(0, 10);
+  };
+  return Array.from({ length: ventanaDias }, (_, i) => {
+    const dia = cortes(ventanaDias - 1 - i);
+    return { dia, valor: porDiaMap.get(dia) ?? 0 };
+  });
+}
+
 export interface Acreditables {
   /** Litros de diésel elegibles. El estímulo en pesos lo calcula el contador. */
   litrosDiesel: number; ieps: number; iva: number; peaje: number; }
@@ -190,6 +228,259 @@ export async function getAcreditables(tenantId: string): Promise<Acreditables> {
     // y esa cuota no la tenemos—, así que lo que se entrega es el dato duro.
     litrosDiesel: round2(rows.reduce((s, r) => s + Number(r.litros_diesel_acreditables ?? 0), 0)),
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VALOR & AHORRO — lo que Likida le ahorra a la flota.
+//
+// Esta es la pantalla más fácil de convertir en mentira, así que la regla es
+// más estricta que en el resto del archivo: CADA cifra es un conteo real de la
+// base, o es una ESTIMACIÓN declarada como tal con su supuesto a la vista.
+// Nunca una tercera cosa.
+//
+// Lo que se cuenta de verdad:
+//   · documentos que pasaron por el Agente OCR  → `gasto.ocr_confianza` no nula
+//   · acciones de IA por agente                 → filas de `llm_costo` por fase
+//   · liquidaciones que cerró el motor          → filas de `liquidacion`
+//   · comprobantes sin viaje que el sistema resolvió → `comprobante_huerfano`
+//   · dinero que el cuadre observó              → `getKpis().diferenciaDetectada`
+//
+// `gasto.ocr_raw` NO sirve para esto aunque el nombre lo sugiera: está MUERTA
+// (`repo.ts` escribe `ocr_confianza`/`ocr_extra` y nunca `ocr_raw`), así que
+// contarla daría 0 documentos procesados con 40 en la tabla — la cifra más
+// vergonzosa posible en la pantalla que presume el trabajo del producto.
+//
+// Lo que NO se calcula aquí, y por qué:
+//   · multas de Carta Porte evitadas — Likida no valida Carta Porte todavía
+//   · días de cobro (DSO) reducidos — no hay tabla de facturación ni cobranza
+//   · "por cada $1 que pagas, ahorras $X" — Likida no le cobra a nadie, y sin
+//     denominador real ese número se inventa solo
+//   · mensajes de WhatsApp atendidos — `wa_mensaje_procesado` no tiene
+//     `tenant_id`: son 102 filas globales que NO se pueden atribuir a una
+//     flota sin inventar la atribución
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Minutos que toma capturar UN comprobante a mano (teclear monto, folio,
+ *  RFC, fecha, y archivarlo). Es un SUPUESTO, no una medición: se declara
+ *  aquí, se enseña en pantalla, y el que lo lea puede discutirlo. */
+export const MINUTOS_CAPTURA_MANUAL = 4;
+
+export interface ValorAhorro {
+  /** Comprobantes que pasaron por el Agente OCR. Conteo real. */
+  documentosProcesados: number;
+  /** Liquidaciones que cerró el motor de cuadre. Conteo real. */
+  liquidacionesCerradas: number;
+  /** Comprobantes que llegaron sin viaje y el sistema logró amarrar. Real. */
+  huerfanosResueltos: number;
+  huerfanosTotales: number;
+  /** Acciones de IA por agente (filas de `llm_costo`). Conteo real. */
+  accionesPorAgente: Array<{ fase: string; n: number }>;
+  /** Documentos procesados por mes, acumulado. Conteo real. */
+  acumuladoPorMes: Array<{ mes: string; n: number; acumulado: number }>;
+  /** ESTIMACIÓN: documentosProcesados × MINUTOS_CAPTURA_MANUAL. */
+  horasAhorradasEstimadas: number;
+}
+
+export async function getValorAhorro(tenantId: string): Promise<ValorAhorro> {
+  const admin = supabaseAdmin();
+  const [docs, liqs, huerfanos, costos] = await Promise.all([
+    traerTodo<{ created_at: unknown; ocr_confianza: unknown }>(
+      (desde, hasta) => admin.from('gasto').select('created_at, ocr_confianza')
+        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getValorAhorro.gasto',
+    ),
+    traerTodo<{ id: unknown }>(
+      (desde, hasta) => admin.from('liquidacion').select('id')
+        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getValorAhorro.liquidacion',
+    ),
+    traerTodo<{ resuelto_en: unknown }>(
+      (desde, hasta) => admin.from('comprobante_huerfano').select('resuelto_en')
+        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getValorAhorro.huerfano',
+    ),
+    traerTodo<{ fase: unknown }>(
+      (desde, hasta) => admin.from('llm_costo').select('fase')
+        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getValorAhorro.llm_costo',
+    ),
+  ]);
+
+  const procesados = docs.filter((d) => d.ocr_confianza !== null && d.ocr_confianza !== undefined);
+
+  const porFase = new Map<string, number>();
+  for (const c of costos) porFase.set(c.fase as string, (porFase.get(c.fase as string) ?? 0) + 1);
+
+  const porMes = new Map<string, number>();
+  for (const d of procesados) {
+    const mes = (d.created_at as string).slice(0, 7);
+    porMes.set(mes, (porMes.get(mes) ?? 0) + 1);
+  }
+  let corrido = 0;
+  const acumuladoPorMes = [...porMes.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([mes, n]) => { corrido += n; return { mes, n, acumulado: corrido }; });
+
+  return {
+    documentosProcesados: procesados.length,
+    liquidacionesCerradas: liqs.length,
+    huerfanosResueltos: huerfanos.filter((h) => h.resuelto_en !== null && h.resuelto_en !== undefined).length,
+    huerfanosTotales: huerfanos.length,
+    accionesPorAgente: [...porFase.entries()].map(([fase, n]) => ({ fase, n })).sort((a, b) => b.n - a.n),
+    acumuladoPorMes,
+    horasAhorradasEstimadas: round2((procesados.length * MINUTOS_CAPTURA_MANUAL) / 60),
+  };
+}
+
+// ── Consultas de las páginas de operación de /dashboard ────────────────────
+
+export interface ViajeRow {
+  id: string; folio: string; origen: string | null; destino: string | null;
+  estatus: string; anticipo: number; operadorNombre: string | null;
+  fechaInicio: string | null; intakePendientes: number;
+}
+
+/** Los viajes de la flota, el más reciente primero. `viaje` NO tiene columna
+ *  de unidad ni de POD (no existen en el esquema), así que la tabla enseña lo
+ *  que sí hay — inventar columnas vacías haría ver el producto más completo y
+ *  la pantalla más inútil. */
+export async function getViajes(tenantId: string, limite = 100): Promise<ViajeRow[]> {
+  const res = await supabaseAdmin()
+    .from('viaje')
+    .select('id, folio, origen, destino, estatus, anticipo, fecha_inicio, intake_pendientes, operador:operador_id(nombre)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limite);
+  const filas = exigir(res, 'getViajes') ?? [];
+  return filas.map((v) => ({
+    id: v.id as string,
+    folio: (v.folio as string) || (v.id as string).slice(0, 8),
+    origen: (v.origen as string) || null,
+    destino: (v.destino as string) || null,
+    estatus: v.estatus as string,
+    anticipo: Number(v.anticipo ?? 0),
+    operadorNombre: ((v.operador as { nombre?: string } | null)?.nombre) ?? null,
+    fechaInicio: (v.fecha_inicio as string) || null,
+    intakePendientes: Number(v.intake_pendientes ?? 0),
+  }));
+}
+
+export interface DocumentoRow {
+  id: string; concepto: string; monto: number; fecha: string | null; folio: string | null;
+  rfcEmisor: string | null; cfdiUuid: string | null; estadoSat: string | null;
+  ocrConfianza: number | null; efos: boolean | null; xmlVerificado: boolean | null;
+  tieneImagen: boolean;
+}
+
+/** La bandeja del Agente OCR — cada fila de `gasto` es un comprobante que
+ *  entró por WhatsApp y pasó por el agente. */
+export async function getDocumentos(tenantId: string, limite = 100): Promise<DocumentoRow[]> {
+  const res = await supabaseAdmin()
+    .from('gasto')
+    .select('id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, estado_sat, ocr_confianza, efos, xml_verificado, imagen_url')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limite);
+  const filas = exigir(res, 'getDocumentos') ?? [];
+  return filas.map((g) => ({
+    id: g.id as string,
+    concepto: (g.concepto as string) ?? 'otro',
+    monto: Number(g.monto ?? 0),
+    fecha: (g.fecha as string) || null,
+    folio: (g.folio as string) || null,
+    rfcEmisor: (g.rfc_emisor as string) || null,
+    cfdiUuid: (g.cfdi_uuid as string) || null,
+    estadoSat: (g.estado_sat as string) || null,
+    ocrConfianza: g.ocr_confianza === null || g.ocr_confianza === undefined ? null : Number(g.ocr_confianza),
+    efos: (g.efos as boolean) ?? null,
+    xmlVerificado: (g.xml_verificado as boolean) ?? null,
+    tieneImagen: Boolean(g.imagen_url),
+  }));
+}
+
+export interface GastoPorConcepto { concepto: string; n: number; total: number }
+
+/** Gasto agrupado por concepto (diésel, caseta, alimentación…) — la base de
+ *  la página de Combustible & Casetas. */
+export async function getGastoPorConcepto(tenantId: string): Promise<GastoPorConcepto[]> {
+  const filas = await traerTodo<{ concepto: unknown; monto: unknown }>(
+    (desde, hasta) => supabaseAdmin().from('gasto').select('concepto, monto')
+      .eq('tenant_id', tenantId).order('id').range(desde, hasta),
+    'getGastoPorConcepto',
+  );
+  const mapa = new Map<string, { n: number; total: number }>();
+  for (const f of filas) {
+    const k = (f.concepto as string) ?? 'otro';
+    const v = mapa.get(k) ?? { n: 0, total: 0 };
+    v.n += 1; v.total += Number(f.monto ?? 0);
+    mapa.set(k, v);
+  }
+  return [...mapa.entries()]
+    .map(([concepto, v]) => ({ concepto, n: v.n, total: round2(v.total) }))
+    .sort((a, b) => b.total - a.total);
+}
+
+export interface OperadorDetalle {
+  operadorId: string; nombre: string; telefono: string | null; numeroEmpleado: string | null;
+  activo: boolean; viajes: number; anticipoTotal: number; comprobadoTotal: number;
+  /** % de anticipo comprobado, o `null` si nunca recibió anticipo (dividir
+   *  entre cero daría 0% y se leería como "no comprobó nada"). */
+  pctComprobado: number | null;
+}
+
+/** Operadores con su anticipo abierto y qué tanto comprobaron — el cruce que
+ *  el dueño usa para la conversación difícil. No existía: `getStatsPorOperador`
+ *  solo suma diésel. */
+export async function getOperadoresDetalle(tenantId: string): Promise<OperadorDetalle[]> {
+  const admin = supabaseAdmin();
+  const [ops, viajes, liqs] = await Promise.all([
+    traerTodo<{ id: unknown; nombre: unknown; telefono: unknown; numero_empleado: unknown; activo: unknown }>(
+      (desde, hasta) => admin.from('operador').select('id, nombre, telefono, numero_empleado, activo')
+        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getOperadoresDetalle.operador',
+    ),
+    traerTodo<{ id: unknown; operador_id: unknown; anticipo: unknown }>(
+      (desde, hasta) => admin.from('viaje').select('id, operador_id, anticipo')
+        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getOperadoresDetalle.viaje',
+    ),
+    traerTodo<{ viaje_id: unknown; total_comprobado: unknown }>(
+      (desde, hasta) => admin.from('liquidacion').select('viaje_id, total_comprobado')
+        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getOperadoresDetalle.liquidacion',
+    ),
+  ]);
+
+  const comprobadoPorViaje = new Map<string, number>();
+  for (const l of liqs) {
+    const k = l.viaje_id as string;
+    comprobadoPorViaje.set(k, (comprobadoPorViaje.get(k) ?? 0) + Number(l.total_comprobado ?? 0));
+  }
+  const acum = new Map<string, { viajes: number; anticipo: number; comprobado: number }>();
+  for (const v of viajes) {
+    const op = v.operador_id as string;
+    if (!op) continue;
+    const a = acum.get(op) ?? { viajes: 0, anticipo: 0, comprobado: 0 };
+    a.viajes += 1;
+    a.anticipo += Number(v.anticipo ?? 0);
+    a.comprobado += comprobadoPorViaje.get(v.id as string) ?? 0;
+    acum.set(op, a);
+  }
+
+  return ops.map((o) => {
+    const a = acum.get(o.id as string) ?? { viajes: 0, anticipo: 0, comprobado: 0 };
+    return {
+      operadorId: o.id as string,
+      nombre: o.nombre as string,
+      telefono: (o.telefono as string) || null,
+      numeroEmpleado: (o.numero_empleado as string) || null,
+      activo: Boolean(o.activo),
+      viajes: a.viajes,
+      anticipoTotal: round2(a.anticipo),
+      comprobadoTotal: round2(a.comprobado),
+      pctComprobado: a.anticipo > 0 ? Math.round((a.comprobado / a.anticipo) * 100) : null,
+    };
+  }).sort((x, y) => y.viajes - x.viajes);
 }
 
 export interface LiquidacionDetalle {
