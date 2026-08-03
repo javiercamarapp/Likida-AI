@@ -36,6 +36,13 @@ describe('getResumenNegocio', () => {
       ],
       error: null,
     });
+    respuestas.set('gasto', {
+      data: [
+        { created_at: '2026-08-01T08:00:00Z' }, { created_at: '2026-08-01T09:00:00Z' },
+        { created_at: '2026-08-02T07:00:00Z' },
+      ],
+      error: null,
+    });
     const r = await getResumenNegocio('2026-08-02');
     expect(r.tenants).toBe(1);
     expect(r.flotas).toEqual([{ id: 't1', nombre: 'Transportes Innovativos', plan: 'demo', viajes: 2, costoIaUsd: 1.93 }]);
@@ -55,6 +62,14 @@ describe('getResumenNegocio', () => {
       { dia: '2026-08-01', costoUsd: 1.51, tokens: 1800 },
       { dia: '2026-08-02', costoUsd: 0.43, tokens: 350 },
     ]);
+    // Facturas por día: SIEMPRE las 7 fechas (0 donde no hubo actividad),
+    // no solo las que tuvieron gasto — si no, la gráfica de barras
+    // comprimiría una semana en 1-2 barras.
+    expect(r.facturasPorDia).toEqual([
+      { dia: '2026-07-27', n: 0 }, { dia: '2026-07-28', n: 0 }, { dia: '2026-07-29', n: 0 },
+      { dia: '2026-07-30', n: 0 }, { dia: '2026-07-31', n: 0 },
+      { dia: '2026-08-01', n: 2 }, { dia: '2026-08-02', n: 1 },
+    ]);
     // Sin 7 días previos con datos (Likida lleva 2 días), no hay contra qué
     // comparar — null, no "creció infinito".
     expect(r.tendenciaCosto).toBeNull();
@@ -65,7 +80,13 @@ describe('getResumenNegocio', () => {
     const r = await getResumenNegocio('2026-08-02');
     expect(r).toEqual({
       tenants: 0, flotas: [], viajesProcesados: 0, costoIaUsd: 0, tokensIn: 0, tokensOut: 0,
-      porFase: [], porModelo: [], porDia: [], tendenciaCosto: null, tendenciaTokens: null,
+      porFase: [], porModelo: [], porDia: [],
+      facturasPorDia: [
+        { dia: '2026-07-27', n: 0 }, { dia: '2026-07-28', n: 0 }, { dia: '2026-07-29', n: 0 },
+        { dia: '2026-07-30', n: 0 }, { dia: '2026-07-31', n: 0 },
+        { dia: '2026-08-01', n: 0 }, { dia: '2026-08-02', n: 0 },
+      ],
+      tendenciaCosto: null, tendenciaTokens: null,
     });
   });
 

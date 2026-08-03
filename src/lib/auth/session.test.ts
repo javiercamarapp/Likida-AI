@@ -51,8 +51,15 @@ describe('getSessionTenant', () => {
     expect(r).toEqual({ userId: 'u-4', tenantId: 't-1', rol: 'operador', nombre: 'Juan', operadorId: 'o-9' });
   });
 
-  it('si Supabase truena, regresa null en vez de lanzar', async () => {
+  it('si Supabase truena las DOS veces, regresa null en vez de lanzar', async () => {
     getUser.mockRejectedValue(new Error('fetch failed'));
     expect(await getSessionTenant()).toBeNull();
+  });
+
+  it('si Supabase truena una vez pero se recupera al reintentar, regresa la sesión — no expulsa a alguien recién logueado por un bache', async () => {
+    getUser.mockRejectedValueOnce(new Error('fetch failed')).mockResolvedValue({ data: { user: { id: 'u-5' } } });
+    maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'superadmin', nombre: 'Javier' } });
+    const r = await getSessionTenant();
+    expect(r).toEqual({ userId: 'u-5', tenantId: 't-1', rol: 'superadmin', nombre: 'Javier', operadorId: null });
   });
 });

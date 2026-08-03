@@ -73,6 +73,46 @@ le pueda enchufar, o si necesita infraestructura nueva desde cero (y cuál).
 
 ---
 
+## Tanda 4 — Prompt completo de 20 páginas (3-ago-2026, madrugada)
+
+El mensaje más detallado hasta ahora: un prompt tipo "pégalo en una carpeta
+vacía" para construir el super-admin desde cero en **Vite + React Router +
+Recharts + framer-motion + datos mock** (sin backend), con 20 páginas
+(A–T: Overview, Model Ops, Conversaciones, Multi-tenant, Costos &
+Facturación, Observabilidad, Calidad & Evals, RAG, Integraciones, WhatsApp
+Infra, Crecimiento, Cobranza, Dev, SRE, RBAC/Auditoría, Analítica, Chatea
+con tus Datos, Trust & Safety, Ejecutivo/Board, Playground).
+
+**Decisión explícita del usuario, en el mismo mensaje: "RESPETA EL DISEÑO
+QUE YA TENEMOS... Y SIGUE EL ESQUELETO CON NUESTRO ESTILO DE ESTO"** — el
+prompt es un ÍNDICE de páginas y métricas a construir, NO una instrucción
+de cambiar de stack. Se descarta explícitamente: Vite/React Router (queda
+Next.js App Router), Recharts (quedan los SVG monocromos a mano de
+`charts.tsx`, ya validados contra la skill de dataviz), y sobre todo los
+**datos mock** — contradice directamente la regla de esta noche ("cifras
+reales, no de ejemplo") que ya está probada en cada pantalla construida.
+
+**Regla reforzada en el mismo hilo ("HAZ TODO SI NO HAY DATA AÚN QUE
+SIRVA, PON AÚN SIN SUFICIENTES DATOS O UNA LEYENDA ASÍ"):** cualquier
+página/métrica nueva de este roadmap que no tenga dato real detrás todavía
+se construye con su fallback "Aún sin datos suficientes" (mismo patrón que
+`Tendencia`, `Sin actividad de IA registrada`, y el nuevo bar chart de
+facturas), NUNCA con un número inventado — esto aplica a las 20 páginas de
+abajo, no solo a lo de esta noche.
+
+El índice de navegación del prompt (INICIO · AGENTES · NEGOCIO ·
+PLATAFORMA · CONTROL) es más completo que las Tandas 1–3 y las reemplaza
+como referencia de qué existe en cada página — pero el estado real
+("✅/⚠️/❌") de cada pieza sigue siendo el de las tablas de arriba, no
+cambia solo porque el prompt lo liste de nuevo. Páginas nuevas que no
+tenían tabla previa: Model Ops (2.1 de la Tanda 1, ahora con playground y
+A/B de prompts), RAG (Tanda 1 punto 2.3 — Likida no tiene, ni lo necesita
+hoy: no hay base de conocimiento por cliente), Trust & Safety (Tanda 1
+punto 5, ahora con jailbreak/PII explícitos), Ejecutivo/Board (nuevo —
+depende 100% de Fase 3, facturación real), Dev/calendario de
+contribuciones (nuevo, cosmético — bajo riesgo, se puede construir en
+Fase 1 con datos reales de `git log`/Vercel si algún día hace falta).
+
 ## Una lectura honesta
 
 La mayoría de "❌" de la Tanda 3 solo tienen sentido **después** de tener
