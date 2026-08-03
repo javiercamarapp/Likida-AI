@@ -27,9 +27,19 @@ export interface ResumenNegocio {
   porFase: Array<{ fase: string; n: number; costoUsd: number }>;
   porModelo: Array<{ modelo: string; n: number; costoUsd: number }>;
   porDia: Array<{ dia: string; costoUsd: number; tokens: number }>;
+  /** % de cambio de los últimos 7 días vs los 7 anteriores — `null` sin
+   *  suficiente historia (menos de 14 días con datos) para no inventar una
+   *  tendencia de dos puntos. */
+  tendenciaCosto: number | null;
+  tendenciaTokens: number | null;
 }
 
-export async function getResumenNegocio(): Promise<ResumenNegocio> {
+/**
+ * `hoy` es inyectable (default: fecha real) — mismo criterio que
+ * `cuadrarViaje({ hoy })` en el motor: una prueba de tendencia no puede
+ * depender del reloj del sistema el día que corra.
+ */
+export async function getResumenNegocio(hoy: string = new Date().toISOString().slice(0, 10)): Promise<ResumenNegocio> {
   const admin = supabaseAdmin();
   const [tenantsRes, viajesRes, costoRes] = await Promise.all([
     admin.from('tenant').select('id, nombre, plan'),
@@ -87,6 +97,24 @@ export async function getResumenNegocio(): Promise<ResumenNegocio> {
     .map(([dia, v]) => ({ dia, costoUsd: round2(v.costoUsd), tokens: v.tokens }))
     .sort((a, b) => a.dia.localeCompare(b.dia));
 
+  // Tendencia real, no de adorno: si la ventana ANTERIOR está vacía (Likida
+  // lleva menos de 7 días con actividad), "creció ∞%" no dice nada — se
+  // calla en vez de inventar una flecha.
+  const cortes = (diasAtras: number) => {
+    const d = new Date(`${hoy}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - diasAtras);
+    return d.toISOString().slice(0, 10);
+  };
+  const [inicioActual, inicioAnterior] = [cortes(7), cortes(14)];
+  const sumaEnVentana = (desde: string, hasta: string, campo: 'costoUsd' | 'tokens') =>
+    porDia.filter((d) => d.dia >= desde && d.dia < hasta).reduce((s, d) => s + d[campo], 0);
+  const tendencia = (campo: 'costoUsd' | 'tokens'): number | null => {
+    const actual = sumaEnVentana(inicioActual, cortes(0), campo);
+    const anterior = sumaEnVentana(inicioAnterior, inicioActual, campo);
+    if (anterior === 0) return null;
+    return round2(((actual - anterior) / anterior) * 100);
+  };
+
   const viajesPorTenant = new Map<string, number>();
   for (const v of (viajesRes.data ?? []) as Array<{ tenant_id: string }>) {
     viajesPorTenant.set(v.tenant_id, (viajesPorTenant.get(v.tenant_id) ?? 0) + 1);
@@ -107,22 +135,27 @@ export async function getResumenNegocio(): Promise<ResumenNegocio> {
     porFase,
     porModelo,
     porDia,
+    tendenciaCosto: tendencia('costoUsd'),
+    tendenciaTokens: tendencia('tokens'),
   };
 }
+
+export interface TurnoConversacion { role: 'user' | 'assistant'; content: string }
 
 export interface ConversacionActiva {
   telefono: string;
   tenantNombre: string;
-  estado: Record<string, unknown>;
+  turns: TurnoConversacion[];
   actualizadaEn: string;
 }
 
 /**
- * `wa_conversacion.estado` es una MÁQUINA DE ESTADOS (jsonb: qué espera el
- * bot de este teléfono ahora mismo), NO un historial de mensajes — Likida no
- * guarda el texto de la conversación de WhatsApp. Por eso esto no es un
- * "inbox" con hilos que se puedan leer: es el estado operativo real de cada
- * conversación en curso, que es lo que SÍ existe.
+ * CORRECCIÓN (2-ago-2026, tras verla mal renderizada): `wa_conversacion.
+ * estado` SÍ trae el historial de mensajes — `{ turns: ConvTurn[] }`, la
+ * misma forma que `conv.ts` (`loadConversation`/`saveConversation`) lee y
+ * escribe, acotada a `MAX_TURNS` recientes. El comentario anterior de esta
+ * función decía que Likida "no guarda el texto de la conversación" — estaba
+ * mal: sí lo guarda, solo que en una ventana rodante, no para siempre.
  */
 export async function getConversacionesActivas(): Promise<ConversacionActiva[]> {
   const admin = supabaseAdmin();
@@ -132,10 +165,13 @@ export async function getConversacionesActivas(): Promise<ConversacionActiva[]> 
     .order('updated_at', { ascending: false })
     .limit(20);
   if (error) throw new Error(`getConversacionesActivas: ${error.message}`);
-  return (data ?? []).map((c) => ({
-    telefono: c.telefono as string,
-    tenantNombre: ((c.tenant as { nombre?: string } | null)?.nombre) ?? '—',
-    estado: (c.estado as Record<string, unknown>) ?? {},
-    actualizadaEn: c.updated_at as string,
-  }));
+  return (data ?? []).map((c) => {
+    const estado = (c.estado as { turns?: TurnoConversacion[] }) ?? {};
+    return {
+      telefono: c.telefono as string,
+      tenantNombre: ((c.tenant as { nombre?: string } | null)?.nombre) ?? '—',
+      turns: Array.isArray(estado.turns) ? estado.turns : [],
+      actualizadaEn: c.updated_at as string,
+    };
+  });
 }
