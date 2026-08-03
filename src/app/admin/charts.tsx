@@ -170,10 +170,15 @@ const CENTRO = 96;
 const GAP_DEG = 2.4; // separación angular entre rebanadas — ver nota abajo
 
 /** Punto sobre un círculo de radio `r`, en el ángulo `anguloDeg` medido en
- *  grados con 0° = arriba (12 en punto) y creciendo en sentido horario. */
+ *  grados con 0° = arriba (12 en punto) y creciendo en sentido horario.
+ *  Redondeado a 3 decimales — sin esto, `Math.cos`/`Math.sin` puede
+ *  imprimir el último dígito distinto entre el motor JS del servidor y el
+ *  del navegador (mismo valor matemático, representación de punto
+ *  flotante distinta), y React marca eso como un mismatch de hidratación
+ *  aunque la diferencia sea invisible al ojo. */
 function puntoEnCirculo(r: number, anguloDeg: number): [number, number] {
   const rad = ((anguloDeg - 90) * Math.PI) / 180;
-  return [CENTRO + r * Math.cos(rad), CENTRO + r * Math.sin(rad)];
+  return [Math.round((CENTRO + r * Math.cos(rad)) * 1000) / 1000, Math.round((CENTRO + r * Math.sin(rad)) * 1000) / 1000];
 }
 
 /** Path de una rebanada de dona (sector anular) entre dos ángulos — UNA

@@ -48,6 +48,38 @@
   --line: var(--color-line);
   --accent: var(--color-accent);
   --accent-fg: #ffffff;          /* texto sobre el acento (verde oscuro → blanco) */
+
+  /* ── Design system v2 de /admin (mockup aprobado, ago-2026) ──────────────
+     Tokens NUEVOS, aditivos — no tocan --ink/--muted/--line/--color-ok/
+     --color-bad de arriba (esos ya tienen historia de contraste auditada y
+     los usa TODA la app, no solo /admin). --panel es alias directo de
+     --surface (mismo blanco, #ffffff, nombre nuevo para los componentes de
+     la librería compartida). --g1..--g5 es la rampa de gris para gráficas
+     — identidad por opacidad/paso, nunca por color, sigue siendo monocromo. */
+  --panel: var(--surface);
+  --canvas: #f4f4f5;
+  --canvas2: #fafafa;
+  --ink2: #3f3f46;
+  --faint: #a1a1aa;
+  --line2: #e4e4e7;
+
+  --g1: #ededed;
+  --g2: #cfcfd2;
+  --g3: #9a9aa0;
+  --g4: #57575c;
+  --g5: #0a0a0b;
+
+  /* --ok/--warn/--bad NUEVOS (para la librería de componentes de /admin) —
+     no reemplazan --color-ok/--color-bad, que siguen siendo los que usa el
+     resto de la app (auditados AA arriba). Estos también pasan AA sobre
+     blanco (--ok 5.02:1, --warn 5.02:1, --bad 6.47:1 — misma fórmula de
+     luminancia WCAG de la nota de arriba, no a ojo). */
+  --ok: #15803d;
+  --okbg: #e7f5ec;
+  --warn: #b45309;
+  --warnbg: #fdf1e3;
+  --bad: #b91c1c;
+  --badbg: #fbeaea;
 }
 
 /* Antes había un `@media (prefers-color-scheme: dark)` aquí que cambiaba el
@@ -125,3 +157,20 @@ html, body {
   to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
 }
 .animate-in { animation: fadeSlideIn 0.25s ease-out both; }
+
+/* Shimmer de carga (§E del complemento: "skeleton shimmer, no spinners
+   genéricos") — un solo barrido de brillo cruzando el bloque gris, en vez
+   de un ícono girando. `--canvas`/`--line` (design system v2), no colores
+   nuevos. Desactivado si el visitante pidió menos movimiento. */
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+.skeleton {
+  background-image: linear-gradient(90deg, var(--canvas) 25%, var(--line2) 37%, var(--canvas) 63%);
+  background-size: 300% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background-position: 0 0; }
+}
