@@ -95,7 +95,7 @@ export default function ChatNegocio({ resumen, compacto = false }: { resumen: Re
   if (compacto) return <div>{cuerpo}</div>;
 
   return (
-    <div className="card p-6">
+    <div className="glass-panel p-6">
       <h2 className="text-sm font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
         Pregunta a tus datos
       </h2>

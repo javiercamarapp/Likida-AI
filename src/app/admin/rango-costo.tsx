@@ -12,8 +12,8 @@ export default function GraficaCostoConRango({ porDia }: { porDia: Array<{ dia: 
   const datos = (dias === 0 ? porDia : porDia.slice(-dias)).map((d) => ({ dia: d.dia, valor: d.costoUsd }));
 
   return (
-    <div className="card p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="glass-panel p-5">
+      <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
           Costo de IA en el tiempo
         </h2>

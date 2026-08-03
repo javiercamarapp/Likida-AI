@@ -1,5 +1,7 @@
 'use client';
 
+import { Search } from 'lucide-react';
+
 // Buscador real: navega por las secciones que YA existen en la página
 // (mismos anchors que el sidebar), no un ⌘K decorativo que no hace nada.
 const SECCIONES = [
@@ -11,7 +13,7 @@ const SECCIONES = [
 export default function BuscadorSecciones() {
   return (
     <div className="relative flex-1 max-w-sm">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none" style={{ color: 'var(--muted)' }}>⌕</span>
+      <Search width={15} height={15} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--muted)' }} />
       <select
         defaultValue=""
         className="w-full pl-8 pr-3 py-2 rounded-lg text-sm hairline appearance-none cursor-pointer"

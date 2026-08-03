@@ -36,12 +36,12 @@ export default async function NuevoUsuario() {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b h-16 flex items-center px-8" style={{ borderColor: 'var(--line)' }}>
-        <span className="text-base font-medium">Nuevo usuario</span>
+    <div className="flex flex-col gap-4">
+      <header className="glass-panel h-14 flex items-center px-5">
+        <span className="text-sm font-medium">Nuevo usuario</span>
       </header>
-      <main className="px-8 py-10 max-w-md">
-        <form action={crear} className="card p-6 space-y-4">
+      <main className="max-w-md">
+        <form action={crear} className="glass-panel p-6 space-y-4">
           <div>
             <label className="text-sm font-medium block mb-1.5">Flota</label>
             <select name="tenantId" required className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }}>

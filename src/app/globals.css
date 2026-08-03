@@ -92,6 +92,20 @@ html, body {
   box-shadow: var(--shadow-card);
 }
 
+/* Panel "glass" para /admin: flota sobre el fondo oscuro difuminado de la
+   consola de negocio. Más opaco que `.glass` (pensado para barras sobre
+   fondo CLARO) porque aquí tiene que leerse blanco, no gris, contra una
+   imagen oscura detrás — y con sombra más grande, tipo ventana de macOS,
+   para que se note que está SOBREPUESTO y no pegado al fondo. */
+.glass-panel {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(160%) blur(28px);
+  -webkit-backdrop-filter: saturate(160%) blur(28px);
+  border: 1px solid color-mix(in srgb, white 45%, var(--line));
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 24px 48px -20px rgba(0,0,0,0.45);
+}
+
 .hairline { border: 1px solid var(--line); }
 
 /* Números tabulares para montos y tablas */
