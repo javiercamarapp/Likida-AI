@@ -1,4 +1,4 @@
-import { usd, numero } from '@/lib/formato';
+import { usd, numero, mxn, litros } from '@/lib/formato';
 
 /**
  * Presets de formato en vez de recibir una función callback como prop —
@@ -8,12 +8,19 @@ import { usd, numero } from '@/lib/formato';
  * Components"). Con un preset de texto, la página server solo pasa un
  * string plano; la función real se resuelve AQUÍ DENTRO, ya del lado
  * del cliente.
+ *
+ * `mxn`/`litros` se suman aquí (no se reimplementan) para que `/dashboard`
+ * — la moneda real del cliente, nunca la de costo interno de IA — pueda
+ * usar `KpiTile` sin duplicar `toLocaleString('es-MX')` fuera de
+ * `src/lib/formato.ts` (lo bloquea `formato.test.ts`).
  */
-export type FormatoPreset = 'usd' | 'numero' | 'entero' | 'porcentaje' | 'porcentajeSigno';
+export type FormatoPreset = 'usd' | 'mxn' | 'numero' | 'entero' | 'litros' | 'porcentaje' | 'porcentajeSigno';
 
 export function resolverFormato(preset: FormatoPreset = 'numero'): (v: number) => string {
   switch (preset) {
     case 'usd': return (v) => usd(v);
+    case 'mxn': return (v) => mxn(v);
+    case 'litros': return (v) => litros(v);
     case 'porcentaje': return (v) => `${Math.round(v)}%`;
     // Con signo explícito en positivos — MarginDivergingBars (rentabilidad
     // ±): "+22%"/"-8%", nunca solo "22%"/"-8%" (ambiguo cuál lado es cuál).

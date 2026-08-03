@@ -18,7 +18,7 @@ import { resolverFormato, type FormatoPreset } from './formato-preset';
 // ── KpiTile ──────────────────────────────────────────────────────────────
 
 export function KpiTile({
-  icono, etiqueta, valor, formato = 'numero', tendencia, sparkline, vacio,
+  icono, etiqueta, valor, formato = 'numero', tendencia, sparkline, vacio, destacar, nota,
 }: {
   /** Elemento YA renderizado (`icono={<DollarSign width={15} .../>}`), no
    *  la referencia al componente — una referencia a función/componente no
@@ -34,13 +34,23 @@ export function KpiTile({
   /** Mensaje honesto ("sin historia suficiente") cuando no hay serie real
    *  que graficar — nunca se inventa un sparkline plano de relleno. */
   vacio?: string;
+  /** Borde en --accent para LA cifra encabezado de una sección (p.ej. el
+   *  litraje elegible del estímulo en /dashboard) — nunca dos destacadas en
+   *  la misma grilla, o deja de leerse como jerarquía. */
+  destacar?: boolean;
+  /** Cita/base legal u otra nota fija de una línea (p.ej. "LIF 2026, Art.
+   *  20-A") — a diferencia de `vacio`, no es un mensaje de "sin datos": se
+   *  pinta SIEMPRE que se pasa, sin importar sparkline/vacio. Cada tile de
+   *  /dashboard cita un artículo distinto; fusionarlas en una sola nota de
+   *  sección se leería como que las tres comparten un mismo fundamento. */
+  nota?: string;
 }) {
   const reducido = usePrefersReducedMotion();
   const mostrado = useCountUp(valor, !reducido);
   const fmt = resolverFormato(formato);
 
   return (
-    <div className="card p-3.5">
+    <div className="card p-3.5" style={destacar ? { borderColor: 'var(--accent)' } : undefined}>
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
           {icono}
@@ -58,6 +68,7 @@ export function KpiTile({
           {tendencia !== undefined && <Tendencia valor={tendencia} />}
         </div>
       ) : null}
+      {nota && <p className="text-xs mt-2" style={{ color: 'var(--faint)' }}>{nota}</p>}
     </div>
   );
 }
