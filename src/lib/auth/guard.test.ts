@@ -6,7 +6,7 @@ vi.mock('next/navigation', () => ({ redirect: (...a: unknown[]) => redirect(...(
 const getSessionTenant = vi.fn();
 vi.mock('./session', () => ({ getSessionTenant: (...a: unknown[]) => getSessionTenant(...a) }));
 
-const { requireSessionTenant, requireOperador } = await import('./guard');
+const { requireSessionTenant, requireOperador, requireSuperadmin } = await import('./guard');
 
 describe('requireSessionTenant', () => {
   beforeEach(() => { redirect.mockClear(); getSessionTenant.mockReset(); });
@@ -69,6 +69,33 @@ describe('requireOperador', () => {
     const s = { userId: 'u-3', tenantId: 't-1', rol: 'operador', nombre: 'Juan', operadorId: 'o-9' };
     getSessionTenant.mockResolvedValue(s);
     await expect(requireOperador()).resolves.toEqual(s);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+});
+
+// `requireSuperadmin` es la puerta de /admin — la consola de negocio de
+// Likida (docs/superpowers/plans/2026-08-02-panel-superadmin.md). Ningún
+// otro rol la ve: ni siquiera flota_admin, que sí ve todo SU tenant, ve
+// cuánto gasta Likida en IA o cuántos tenants tiene.
+describe('requireSuperadmin', () => {
+  beforeEach(() => { redirect.mockClear(); getSessionTenant.mockReset(); });
+
+  it('sin sesión, manda a /login', async () => {
+    getSessionTenant.mockResolvedValue(null);
+    await expect(requireSuperadmin()).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/admin')}`);
+  });
+
+  it('cualquier rol que no sea superadmin manda a /dashboard — es SU panel, no la consola de negocio', async () => {
+    getSessionTenant.mockResolvedValue({ userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana', operadorId: null });
+    await expect(requireSuperadmin()).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/dashboard');
+  });
+
+  it('superadmin entra sin redirigir', async () => {
+    const s = { userId: 'u-2', tenantId: null, rol: 'superadmin', nombre: 'Javier', operadorId: null };
+    getSessionTenant.mockResolvedValue(s);
+    await expect(requireSuperadmin()).resolves.toEqual(s);
     expect(redirect).not.toHaveBeenCalled();
   });
 });

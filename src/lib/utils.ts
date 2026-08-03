@@ -9,4 +9,4 @@ export function cn(...inputs: ClassValue[]): string {
 // tailwind-merge, que este archivo sí necesita para `cn()`. Se reexporta para
 // que el panel siga importando de aquí sin cambios, y para que el motor y el PDF
 // puedan traerlo sin arrastrar el sistema de clases de Tailwind.
-export { TZ_MX, mxn, usd, litros, fechaMx } from './formato';
+export { TZ_MX, mxn, usd, litros, fechaMx, numero } from './formato';
