@@ -3,16 +3,60 @@ import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio
 import { supabaseServer } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutGrid, ScanText, Calculator, MessagesSquare, Building2, Sparkles, UserPlus, ArrowLeftRight, UserCircle2 } from 'lucide-react';
+import {
+  LayoutGrid, ScanText, Calculator, MessagesSquare, MessageCircle, Sparkles, UserPlus, ArrowLeftRight, UserCircle2,
+  Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
+  Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
+  Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge,
+} from 'lucide-react';
 import Notificaciones, { calcularAlertas } from './notificaciones';
 import PerfilMenu from './perfil';
 
 export const dynamic = 'force-dynamic';
 
+/** Las 6 secciones del roadmap (INICIO/AGENTES/NEGOCIO/PLATAFORMA/CONTROL/
+ *  SISTEMA) — cada link apunta a una página real ya construida, ninguno es
+ *  un anchor (`#seccion`) a una sección dentro de Inicio: cada feature
+ *  tiene su propia ruta ahora. */
 const AGENTES = [
-  { fase: 'ocr', nombre: 'Agente OCR', Icono: ScanText },
-  { fase: 'cuadre', nombre: 'Agente de Cuadre', Icono: Calculator },
-  { fase: 'whatsapp', nombre: 'Agente de WhatsApp', Icono: MessagesSquare },
+  { href: '/admin/agente-ocr', nombre: 'Agente OCR', Icono: ScanText },
+  { href: '/admin/agente-cuadre', nombre: 'Agente de Cuadre', Icono: Calculator },
+  { href: '/admin/agente-whatsapp', nombre: 'Agente de WhatsApp', Icono: MessagesSquare },
+  { href: '/admin/model-ops', nombre: 'Model Ops', Icono: Settings2 },
+  { href: '/admin/playground', nombre: 'Playground', Icono: FlaskConical },
+];
+
+const NEGOCIO = [
+  { href: '/admin/flotas', nombre: 'Flotas / Clientes', Icono: Truck },
+  { href: '/admin/conversaciones', nombre: 'Conversaciones', Icono: MessageCircle },
+  { href: '/admin/analitica', nombre: 'Analítica & Stats', Icono: LineChart },
+  { href: '/admin/costos-facturacion', nombre: 'Costos & Facturación', Icono: DollarSign },
+  { href: '/admin/cobranza', nombre: 'Cobranza', Icono: Receipt },
+  { href: '/admin/crecimiento', nombre: 'Crecimiento', Icono: TrendingUp },
+  { href: '/admin/ejecutivo', nombre: 'Ejecutivo / Board', Icono: Presentation },
+];
+
+const PLATAFORMA = [
+  { href: '/admin/whatsapp-infra', nombre: 'WhatsApp Infra', Icono: Server },
+  { href: '/admin/integraciones', nombre: 'Integraciones', Icono: Blocks },
+  { href: '/admin/conocimiento-rag', nombre: 'Conocimiento / RAG', Icono: BookOpen },
+  { href: '/admin/comunicacion', nombre: 'Comunicación', Icono: Megaphone },
+];
+
+const CONTROL = [
+  { href: '/admin/trust-safety', nombre: 'Trust & Safety', Icono: ShieldAlert },
+  { href: '/admin/compliance', nombre: 'Compliance & Datos', Icono: ShieldCheck },
+  { href: '/admin/equipo', nombre: 'Equipo', Icono: Users },
+  { href: '/admin/configuracion', nombre: 'Configuración', Icono: Settings },
+];
+
+const SISTEMA = [
+  { href: '/admin/observabilidad', nombre: 'Observabilidad', Icono: Activity },
+  { href: '/admin/calidad-evals', nombre: 'Calidad & Evals', Icono: ClipboardCheck },
+  { href: '/admin/dev', nombre: 'Dev', Icono: Code2 },
+  { href: '/admin/salud-sistema', nombre: 'Salud del sistema', Icono: HeartPulse },
+  { href: '/admin/soporte', nombre: 'Soporte', Icono: LifeBuoy },
+  { href: '/admin/capacidad-forecast', nombre: 'Capacidad & Forecast', Icono: Gauge },
 ];
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] transition-colors';
@@ -82,8 +126,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <div className="text-[11px] font-semibold uppercase tracking-wide px-2.5 mb-1.5" style={{ color: 'var(--muted)' }}>
                 Agentes
               </div>
-              {AGENTES.map(({ fase, nombre: n, Icono: I }) => (
-                <Link key={fase} href={`/admin#${fase}`} className={ITEM}>
+              {AGENTES.map(({ href, nombre: n, Icono: I }) => (
+                <Link key={href} href={href} className={ITEM}>
                   <I {...ICONO} /> {n}
                 </Link>
               ))}
@@ -93,10 +137,46 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <div className="text-[11px] font-semibold uppercase tracking-wide px-2.5 mb-1.5" style={{ color: 'var(--muted)' }}>
                 Negocio
               </div>
-              <Link href="/admin#flotas" className={ITEM}><Building2 {...ICONO} /> Flotas</Link>
-              <Link href="/admin#conversaciones" className={ITEM}><MessagesSquare {...ICONO} /> Conversaciones</Link>
+              {NEGOCIO.map(({ href, nombre: n, Icono: I }) => (
+                <Link key={href} href={href} className={ITEM}>
+                  <I {...ICONO} /> {n}
+                </Link>
+              ))}
               <Link href="/admin/chat" className={ITEM}><Sparkles {...ICONO} /> Chatea con tus Datos</Link>
               <Link href="/admin/usuarios/nuevo" className={ITEM}><UserPlus {...ICONO} /> Nuevo usuario</Link>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide px-2.5 mb-1.5" style={{ color: 'var(--muted)' }}>
+                Plataforma
+              </div>
+              {PLATAFORMA.map(({ href, nombre: n, Icono: I }) => (
+                <Link key={href} href={href} className={ITEM}>
+                  <I {...ICONO} /> {n}
+                </Link>
+              ))}
+            </div>
+
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide px-2.5 mb-1.5" style={{ color: 'var(--muted)' }}>
+                Control
+              </div>
+              {CONTROL.map(({ href, nombre: n, Icono: I }) => (
+                <Link key={href} href={href} className={ITEM}>
+                  <I {...ICONO} /> {n}
+                </Link>
+              ))}
+            </div>
+
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide px-2.5 mb-1.5" style={{ color: 'var(--muted)' }}>
+                Sistema
+              </div>
+              {SISTEMA.map(({ href, nombre: n, Icono: I }) => (
+                <Link key={href} href={href} className={ITEM}>
+                  <I {...ICONO} /> {n}
+                </Link>
+              ))}
             </div>
           </nav>
 

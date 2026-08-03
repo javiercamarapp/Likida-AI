@@ -165,6 +165,33 @@ export async function getResumenNegocio(hoy: string = new Date().toISOString().s
   };
 }
 
+export interface CostoPorFaseModelo { fase: string; modelo: string; n: number; costoUsd: number }
+
+/**
+ * `llm_costo` agrupado por fase Y modelo A LA VEZ (no cada uno por separado
+ * como en `getResumenNegocio`) — para Model Ops y Agente OCR, que necesitan
+ * saber qué modelo corrió DENTRO de una fase específica (p. ej. "¿qué costó
+ * OCR, desglosado por modelo?"), algo que `porFase`/`porModelo` no pueden
+ * responder solos porque cada uno agrupa por un solo eje. Mismo dato real
+ * de siempre, solo agrupado más fino — nada nuevo que instrumentar.
+ */
+export async function getCostoPorFaseModelo(): Promise<CostoPorFaseModelo[]> {
+  const admin = supabaseAdmin();
+  const { data, error } = await admin.from('llm_costo').select('fase, modelo, costo_usd');
+  if (error) throw new Error(`getCostoPorFaseModelo: ${error.message}`);
+  const map = new Map<string, { fase: string; modelo: string; n: number; costoUsd: number }>();
+  for (const f of (data ?? []) as Array<{ fase: string; modelo: string; costo_usd: number }>) {
+    const key = `${f.fase}::${f.modelo}`;
+    const cur = map.get(key) ?? { fase: f.fase, modelo: f.modelo, n: 0, costoUsd: 0 };
+    cur.n += 1;
+    cur.costoUsd += Number(f.costo_usd);
+    map.set(key, cur);
+  }
+  return [...map.values()]
+    .map((v) => ({ ...v, costoUsd: round2(v.costoUsd) }))
+    .sort((a, b) => b.costoUsd - a.costoUsd);
+}
+
 export interface TurnoConversacion { role: 'user' | 'assistant'; content: string }
 
 export interface ConversacionActiva {
@@ -199,4 +226,39 @@ export async function getConversacionesActivas(): Promise<ConversacionActiva[]> 
       actualizadaEn: c.updated_at as string,
     };
   });
+}
+
+export interface MiembroEquipo {
+  id: string;
+  email: string;
+  nombre: string | null;
+  rol: string;
+  tenantId: string | null;
+  tenantNombre: string | null;
+  operadorId: string | null;
+}
+
+/**
+ * Roster real de `app_user` para la página Equipo/RBAC — mismo patrón de
+ * error que el resto del archivo (falla por valor, se revisa `.error` a
+ * mano). `tenant_id` es nullable (superadmin no pertenece a ninguna flota,
+ * 0001_init.sql:21), así que el join a `tenant` viene NULL en esas filas —
+ * no un error, un superadmin de verdad no tiene flota.
+ */
+export async function getEquipo(): Promise<MiembroEquipo[]> {
+  const admin = supabaseAdmin();
+  const { data, error } = await admin
+    .from('app_user')
+    .select('id, tenant_id, rol, nombre, email, operador_id, tenant:tenant_id(nombre)')
+    .order('rol', { ascending: true });
+  if (error) throw new Error(`getEquipo: ${error.message}`);
+  return (data ?? []).map((u) => ({
+    id: u.id as string,
+    email: u.email as string,
+    nombre: (u.nombre as string | null) ?? null,
+    rol: u.rol as string,
+    tenantId: (u.tenant_id as string | null) ?? null,
+    tenantNombre: ((u.tenant as { nombre?: string } | null)?.nombre) ?? null,
+    operadorId: (u.operador_id as string | null) ?? null,
+  }));
 }
