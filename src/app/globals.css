@@ -108,6 +108,14 @@ html, body {
 
 .hairline { border: 1px solid var(--line); }
 
+/* Reloj retro de tarjetas plegables (admin/reloj-retro.tsx) — la hoja que
+   "cae" al cambiar un dígito, tipo reloj Solari. */
+@keyframes reloj-flip {
+  0% { transform: rotateX(0deg); opacity: 1; }
+  60% { opacity: 1; }
+  100% { transform: rotateX(-100deg); opacity: 0; }
+}
+
 /* Números tabulares para montos y tablas */
 .tabular { font-variant-numeric: tabular-nums; }
 
