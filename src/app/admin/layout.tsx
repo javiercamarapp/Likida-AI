@@ -1,6 +1,11 @@
 import { requireSuperadmin } from '@/lib/auth/guard';
+import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio';
+import { supabaseServer } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { LayoutGrid, ScanText, Calculator, MessagesSquare, Building2, Sparkles, UserPlus, ArrowLeftRight, UserCircle2 } from 'lucide-react';
+import Notificaciones, { type Alerta } from './notificaciones';
+import PerfilMenu from './perfil';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +30,29 @@ const ICONO = { width: 16, height: 16, strokeWidth: 1.75, color: 'var(--muted)' 
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { nombre } = await requireSuperadmin();
+
+  // Las alertas viven aquí (no en admin/page.tsx) para que la campana esté
+  // en el sidebar — visible en TODO /admin, no solo en Inicio — junto al
+  // perfil, como pidió el usuario. Sí duplica el fetch de getResumenNegocio
+  // con el de page.tsx; aceptable hoy (pocas filas, un solo tenant real).
+  const [r, conversaciones] = await Promise.all([getResumenNegocio(), getConversacionesActivas()]);
+  const alertas: Alerta[] = [];
+  if (r.tendenciaCosto !== null && r.tendenciaCosto >= 30) {
+    alertas.push({ tipo: 'atencion', texto: `El costo de IA subió ${r.tendenciaCosto}% esta semana vs la anterior.` });
+  }
+  if (conversaciones.length > 0) {
+    alertas.push({ tipo: 'ok', texto: `${conversaciones.length} conversación(es) de WhatsApp con actividad reciente.` });
+  }
+  if (r.tenants <= 1) {
+    alertas.push({ tipo: 'atencion', texto: 'Likida sigue con solo el tenant demo — sin clientes reales dados de alta.' });
+  }
+
+  async function cerrarSesion() {
+    'use server';
+    const sb = await supabaseServer();
+    await sb.auth.signOut();
+    redirect('/login');
+  }
 
   return (
     <div
@@ -88,20 +116,22 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/cuenta" className={ITEM} style={{ color: 'var(--muted)' }}>
               <UserCircle2 {...ICONO} /> Mi cuenta
             </Link>
-            <div className="flex items-center gap-2.5 px-2.5 py-2.5 mt-1">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-                style={{ background: 'var(--ink)', color: 'white' }}>
-                {(nombre ?? 'J').charAt(0).toUpperCase()}
-              </div>
-              <div className="text-sm min-w-0">
-                <div className="font-medium leading-tight truncate">{nombre ?? 'Javier'}</div>
-                <div className="text-xs leading-tight" style={{ color: 'var(--muted)' }}>Likida</div>
-              </div>
+            {/* Campana + perfil viven juntos aquí — el header de arriba se
+                queda solo con el buscador. */}
+            <div className="flex items-center gap-2 px-2.5 py-2.5 mt-1">
+              <PerfilMenu nombre={nombre ?? 'Javier'} cerrarSesion={cerrarSesion} />
+              <Notificaciones alertas={alertas} />
             </div>
           </div>
         </aside>
 
-        <div className="flex-1 min-w-0">{children}</div>
+        {/* Columna de contenido: SU PROPIO scroll (`overflow-y-auto`), no el
+            de la página — así el `sticky` del header y del panel derecho de
+            admin/page.tsx tienen un solo ancestro de scroll inequívoco, en
+            vez de depender del scroll del documento a través de varios
+            niveles de flexbox anidados (el patrón anterior fallaba en
+            Safari/iOS incluso con `items-start` + `dvh`). */}
+        <div className="flex-1 min-w-0 h-[calc(100dvh-2rem)] overflow-y-auto">{children}</div>
       </div>
     </div>
   );

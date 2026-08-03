@@ -1,8 +1,6 @@
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio';
-import { supabaseServer } from '@/lib/supabase/server';
 import { usd, numero } from '@/lib/utils';
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import {
   Truck, DollarSign, Cpu, CheckCircle2, BarChart3, UserPlus2, MessageCircle,
@@ -11,8 +9,6 @@ import {
 import { Sparkline, Tendencia, Dona, BarChartSimple } from './charts';
 import BuscadorSecciones from './buscador';
 import ChatNegocio from './chat';
-import Notificaciones, { type Alerta } from './notificaciones';
-import PerfilMenu from './perfil';
 import GraficaCostoConRango from './rango-costo';
 
 const SALUDO = () => {
@@ -86,26 +82,6 @@ export default async function Admin() {
   const topFase = r.porFase[0] ? (FASE_LABEL[r.porFase[0].fase] ?? r.porFase[0].fase) : null;
   const TopFaseIcono = r.porFase[0] ? (FASE_ICONO[r.porFase[0].fase] ?? Sparkles) : Sparkles;
 
-  async function cerrarSesion() {
-    'use server';
-    const sb = await supabaseServer();
-    await sb.auth.signOut();
-    redirect('/login');
-  }
-
-  // Condiciones reales, no contadores de adorno. Con 1 tenant y pocos días
-  // de historia, la lista casi siempre sale corta — es lo honesto.
-  const alertas: Alerta[] = [];
-  if (r.tendenciaCosto !== null && r.tendenciaCosto >= 30) {
-    alertas.push({ tipo: 'atencion', texto: `El costo de IA subió ${r.tendenciaCosto}% esta semana vs la anterior.` });
-  }
-  if (conversaciones.length > 0) {
-    alertas.push({ tipo: 'ok', texto: `${conversaciones.length} conversación(es) de WhatsApp con actividad reciente.` });
-  }
-  if (r.tenants <= 1) {
-    alertas.push({ tipo: 'atencion', texto: 'Likida sigue con solo el tenant demo — sin clientes reales dados de alta.' });
-  }
-
   const recomendaciones = [
     { href: '#agentes', Icono: BarChart3, titulo: 'Costo por agente', subtitulo: 'Desglose por fase de IA' },
     { href: '#flotas', Icono: Truck, titulo: 'Flotas', subtitulo: `${r.tenants} dada${r.tenants === 1 ? '' : 's'} de alta` },
@@ -115,26 +91,15 @@ export default async function Admin() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="glass-panel sticky top-4 z-20 h-14 flex items-center gap-3 px-5 shrink-0">
+      {/* La columna que envuelve esto (admin/layout.tsx) es su propio
+          `overflow-y-auto` — así el header tiene un ancestro de scroll
+          inequívoco y `sticky top-0` funciona sin depender del scroll de
+          la página completa a través de varios niveles de flexbox
+          anidados. Contáctanos/campana/perfil ya no viven aquí: la
+          campana y el perfil se movieron al sidebar (junto al avatar),
+          Contáctanos se quitó — sobraba en este ancho. */}
+      <header className="glass-panel sticky top-0 z-20 h-14 flex items-center gap-3 px-5 shrink-0">
         <BuscadorSecciones />
-        <div className="flex items-center gap-2.5 ml-auto">
-          {/* Contáctanos y el menú de perfil se esconden hasta `lg`: en
-              pantallas angostas (celular, o Safari con "sitio de
-              escritorio" que sigue midiendo angosto) sobraban — el nombre
-              y "cerrar sesión" ya viven en el sidebar (abajo del todo), así
-              que no se pierde nada real, solo el amontonamiento. La
-              campana es la única que se queda siempre: es la única acción
-              que no vive en ningún otro lado. */}
-          <a href="mailto:javiercamaraportepetit@gmail.com?subject=Agentes%20a%20la%20medida"
-            className="hidden lg:inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg transition-opacity hover:opacity-85 shrink-0"
-            style={{ background: 'var(--ink)', color: 'white' }}>
-            Contáctanos
-          </a>
-          <Notificaciones alertas={alertas} />
-          <div className="hidden lg:block">
-            <PerfilMenu nombre={nombre ?? 'Javier'} cerrarSesion={cerrarSesion} />
-          </div>
-        </div>
       </header>
 
       <div className="flex gap-4 items-start">
