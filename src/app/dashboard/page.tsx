@@ -1,4 +1,5 @@
 import { requireSessionTenant } from '@/lib/auth/guard';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getKpis, getAcreditables, detectarAnomalias, type DashboardKpis, type Acreditables, type Anomalia } from '@/lib/cuadra/analytics';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -50,10 +51,21 @@ async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
   }));
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ vista?: string }>;
+}) {
   // Segunda capa: la autorización viaja con la página, no solo con el matcher
   // del proxy. Las dos tienen que fallar a la vez para que esto se sirva.
   const { tenantId, rol } = await requireSessionTenant('/dashboard');
+  // Sin esto, un superadmin que llegue aquí por bookmark/historial (no por
+  // /login, que es lo único que /auth/callback intercepta) se quedaba
+  // viendo el panel del tenant demo en vez de SU consola. /admin enlaza aquí
+  // con `?vista=demo` a propósito, cuando de verdad quiere ver lo que ve un
+  // cliente.
+  const sp = await searchParams;
+  if (rol === 'superadmin' && sp?.vista !== 'demo') redirect('/admin');
   const [acred, kpis, liqs, anomalias] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
