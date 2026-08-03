@@ -3,7 +3,7 @@ import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio
 import { supabaseServer } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeftRight } from 'lucide-react';
+import { ArrowLeftRight, LogOut } from 'lucide-react';
 import Notificaciones from './notificaciones';
 import { calcularAlertas } from './calcular-alertas';
 import PerfilMenu from './perfil';
@@ -69,17 +69,26 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/dashboard?vista=demo" className={ITEM} style={{ color: 'var(--muted)' }}>
               <ArrowLeftRight {...ICONO} /> Ver panel de flota (demo)
             </Link>
-            {/* "Mi cuenta" (/cuenta, genérica de flota_admin/operador) se
-                quitó de aquí: "Mi perfil" adentro del menú de PerfilMenu
-                ya cubre esto para el superadmin, con una página propia y
-                editable (/admin/mi-perfil) — tener las dos era un
-                duplicado confuso con contenido/diseño distintos.
-                Campana + perfil viven aquí — ya no hay header arriba.
-                `ml-auto` en la campana para que no quede pegada al perfil. */}
+            {/* El chip de perfil ya NO abre un popup — pedido explícito:
+                quitar el menú, el avatar+nombre lleva directo a
+                /admin/mi-perfil (perfil.tsx). "Cerrar sesión" quedó
+                aparte, como su propio botón siempre visible, no escondido
+                dentro de un menú. Espacio libre entre aquí y el botón de
+                cerrar sesión a propósito — para las categorías que el
+                usuario dijo que agregará después. */}
             <div className="flex items-center px-2.5 py-2.5 mt-1">
-              <PerfilMenu nombre={nombre ?? 'Javier'} avatarUrl={avatarUrl} cerrarSesion={cerrarSesion} />
+              <PerfilMenu nombre={nombre ?? 'Javier'} avatarUrl={avatarUrl} />
               <div className="ml-auto"><Notificaciones alertas={alertas} /></div>
             </div>
+
+            <form action={cerrarSesion} className="mt-2">
+              <button type="submit"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-opacity hover:opacity-85"
+                style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+                <LogOut width={15} height={15} strokeWidth={1.75} />
+                Cerrar sesión
+              </button>
+            </form>
           </div>
         </aside>
 
