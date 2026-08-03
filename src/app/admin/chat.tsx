@@ -41,7 +41,9 @@ function responder(pregunta: string, r: ResumenNegocio): string {
   return 'Todavía no sé responder eso — pregúntame sobre costo de IA, tokens, flotas o viajes procesados.';
 }
 
-export default function ChatNegocio({ resumen }: { resumen: ResumenNegocio }) {
+/** `compacto`: la versión del panel lateral (ancho fijo ~260px) — mismas
+ *  respuestas, sin la tarjeta ni el título grande de la página propia. */
+export default function ChatNegocio({ resumen, compacto = false }: { resumen: ResumenNegocio; compacto?: boolean }) {
   const [historial, setHistorial] = useState<Array<{ q: string; a: string }>>([]);
   const [texto, setTexto] = useState('');
 
@@ -51,14 +53,10 @@ export default function ChatNegocio({ resumen }: { resumen: ResumenNegocio }) {
     setTexto('');
   }
 
-  return (
-    <div className="card p-6">
-      <h2 className="text-sm font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
-        Pregunta a tus datos
-      </h2>
-
-      {historial.length > 0 && (
-        <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+  const cuerpo = (
+    <>
+      {historial.length > 0 ? (
+        <div className="space-y-3 mb-3 max-h-56 overflow-y-auto">
           {historial.map((h, i) => (
             <div key={i} className="text-sm">
               <div className="font-medium">{h.q}</div>
@@ -66,12 +64,16 @@ export default function ChatNegocio({ resumen }: { resumen: ResumenNegocio }) {
             </div>
           ))}
         </div>
+      ) : compacto && (
+        <p className="text-sm mb-3" style={{ color: 'var(--muted)' }}>
+          Pregúntame sobre costo, tokens, flotas o viajes.
+        </p>
       )}
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        {PREGUNTAS.map((p) => (
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {(compacto ? PREGUNTAS.slice(0, 2) : PREGUNTAS).map((p) => (
           <button key={p} type="button" onClick={() => preguntar(p)}
-            className="text-xs px-3 py-1.5 rounded-full hairline hover:opacity-70">
+            className="text-xs px-2.5 py-1.5 rounded-full hairline hover:opacity-70 text-left transition-opacity">
             {p}
           </button>
         ))}
@@ -79,13 +81,25 @@ export default function ChatNegocio({ resumen }: { resumen: ResumenNegocio }) {
 
       <form onSubmit={(e) => { e.preventDefault(); preguntar(texto); }} className="flex gap-2">
         <input value={texto} onChange={(e) => setTexto(e.target.value)}
-          placeholder="Pregunta sobre costo, flotas, viajes…"
-          className="flex-1 text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
+          placeholder="Pregunta algo…"
+          className="flex-1 min-w-0 text-sm px-3 py-2 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
         <button type="submit"
-          className="text-sm px-4 py-2.5 rounded-lg font-medium" style={{ background: 'var(--ink)', color: 'white' }}>
-          Preguntar
+          className="text-sm px-3 py-2 rounded-lg font-medium shrink-0 transition-opacity hover:opacity-85"
+          style={{ background: 'var(--ink)', color: 'white' }}>
+          ➜
         </button>
       </form>
+    </>
+  );
+
+  if (compacto) return <div>{cuerpo}</div>;
+
+  return (
+    <div className="card p-6">
+      <h2 className="text-sm font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
+        Pregunta a tus datos
+      </h2>
+      {cuerpo}
     </div>
   );
 }

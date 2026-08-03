@@ -2,6 +2,8 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio';
 import { usd, numero } from '@/lib/utils';
 import { Sparkline, Tendencia, AreaChartSimple, Dona } from './charts';
+import BuscadorSecciones from './buscador';
+import ChatNegocio from './chat';
 
 const SALUDO = () => {
   const h = new Date().getUTCHours() - 6; // hora de México, aproximada — un saludo no necesita el minuto exacto
@@ -37,53 +39,53 @@ export default async function Admin() {
   const serieCosto = r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }));
   const chipsCosto = r.porDia.slice(-8).map((d) => d.costoUsd);
   const chipsTokens = r.porDia.slice(-8).map((d) => d.tokens);
+  const topFase = r.porFase[0] ? (FASE_LABEL[r.porFase[0].fase] ?? r.porFase[0].fase) : null;
 
   return (
     <div className="min-h-screen">
-      <header className="border-b h-16 flex items-center px-8" style={{ borderColor: 'var(--line)' }}>
-        <span className="text-base font-medium">Inicio</span>
+      <header className="border-b h-16 flex items-center gap-4 px-8" style={{ borderColor: 'var(--line)' }}>
+        <BuscadorSecciones />
+        <a href="https://sentry.io" target="_blank" rel="noopener noreferrer"
+          className="w-9 h-9 rounded-lg hairline flex items-center justify-center text-sm hover:opacity-70 transition-opacity shrink-0" title="Errores (Sentry)">
+          🔔
+        </a>
       </header>
 
-      <main className="px-8 py-10 space-y-10 max-w-5xl">
+      <div className="flex">
+      <main className="flex-1 min-w-0 px-8 py-8 space-y-8">
         <div>
-          <h1 className="text-4xl font-semibold tracking-tight">{SALUDO()}, {nombre ?? 'Javier'}</h1>
-          <p className="text-sm mt-1.5 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
+          <h1 className="text-4xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 500 }}>
+            {SALUDO()}, {nombre ?? 'Javier'}
+          </h1>
+          <p className="text-sm mt-1 capitalize" style={{ color: 'var(--muted)' }}>{FECHA_HOY()}</p>
         </div>
 
         <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
+          <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
             Likida en números
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-            <div className="card p-6 transition-shadow hover:shadow-md">
-              <div className="text-3xl font-semibold tracking-tight tabular">{r.tenants}</div>
-              <div className="text-sm mt-1.5" style={{ color: 'var(--muted)' }}>
-                {r.tenants <= 1 ? 'Flota (todavía solo el demo)' : 'Flotas'}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="card p-5 transition-shadow hover:shadow-md">
+              <div className="text-2xl font-semibold tracking-tight tabular">{r.tenants}</div>
+              <div className="text-sm mt-1" style={{ color: 'var(--muted)' }}>
+                {r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
               </div>
             </div>
-            <div className="card p-6 transition-shadow hover:shadow-md">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="text-3xl font-semibold tracking-tight tabular">{usd(r.costoIaUsd)}</div>
-                  <div className="text-sm mt-1.5" style={{ color: 'var(--muted)' }}>Gastado en IA</div>
-                </div>
-                {chipsCosto.length > 1 && <Sparkline valores={chipsCosto} />}
-              </div>
-              <div className="mt-2"><Tendencia valor={r.tendenciaCosto} /></div>
+            <div className="card p-5 transition-shadow hover:shadow-md">
+              <div className="text-2xl font-semibold tracking-tight tabular">{usd(r.costoIaUsd)}</div>
+              <div className="text-sm mt-1" style={{ color: 'var(--muted)' }}>Gastado en IA</div>
+              {chipsCosto.length > 1 && <div className="mt-2 -mx-1"><Sparkline valores={chipsCosto} /></div>}
+              <div className="mt-1.5"><Tendencia valor={r.tendenciaCosto} /></div>
             </div>
-            <div className="card p-6 transition-shadow hover:shadow-md">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="text-3xl font-semibold tracking-tight tabular">{numero(r.tokensIn + r.tokensOut)}</div>
-                  <div className="text-sm mt-1.5" style={{ color: 'var(--muted)' }}>Tokens usados</div>
-                </div>
-                {chipsTokens.length > 1 && <Sparkline valores={chipsTokens} />}
-              </div>
-              <div className="mt-2"><Tendencia valor={r.tendenciaTokens} /></div>
+            <div className="card p-5 transition-shadow hover:shadow-md">
+              <div className="text-2xl font-semibold tracking-tight tabular">{numero(r.tokensIn + r.tokensOut)}</div>
+              <div className="text-sm mt-1" style={{ color: 'var(--muted)' }}>Tokens usados</div>
+              {chipsTokens.length > 1 && <div className="mt-2 -mx-1"><Sparkline valores={chipsTokens} /></div>}
+              <div className="mt-1.5"><Tendencia valor={r.tendenciaTokens} /></div>
             </div>
-            <div className="card p-6 transition-shadow hover:shadow-md">
-              <div className="text-3xl font-semibold tracking-tight tabular">{r.viajesProcesados}</div>
-              <div className="text-sm mt-1.5" style={{ color: 'var(--muted)' }}>Viajes procesados</div>
+            <div className="card p-5 transition-shadow hover:shadow-md">
+              <div className="text-2xl font-semibold tracking-tight tabular">{r.viajesProcesados}</div>
+              <div className="text-sm mt-1" style={{ color: 'var(--muted)' }}>Viajes procesados</div>
             </div>
           </div>
           {r.tenants <= 1 && (
@@ -231,6 +233,30 @@ export default async function Admin() {
           </div>
         </section>
       </main>
+
+      {/* Panel derecho — mismo lugar que "AI Agent Assistant" en la
+          referencia, con datos reales: nada de "18% mejor esta semana" si
+          `tendenciaCosto` es null por falta de historia. */}
+      <aside className="w-[300px] shrink-0 border-l px-5 py-6 space-y-5 hidden xl:block" style={{ borderColor: 'var(--line)' }}>
+        <div>
+          <div className="text-sm font-semibold mb-3">Asistente de negocio</div>
+          <ChatNegocio resumen={r} compacto />
+        </div>
+
+        {(topFase || r.tendenciaCosto !== null) && (
+          <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
+            <div className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
+              Insight
+            </div>
+            <p className="text-sm">
+              {r.tendenciaCosto !== null
+                ? `El gasto de IA ${r.tendenciaCosto >= 0 ? 'subió' : 'bajó'} ${Math.abs(r.tendenciaCosto)}% esta semana vs la anterior.`
+                : `"${topFase}" es tu agente más caro hoy: ${usd(r.porFase[0].costoUsd)}.`}
+            </p>
+          </div>
+        )}
+      </aside>
+      </div>
     </div>
   );
 }
