@@ -70,6 +70,7 @@ const EXENTAS: Record<string, string> = {
   '0032': 'solo `comment on table`. No hay garantía que comprobar: lo que fija —que nadie lea `politica_gasto`— se prueba en `politica_un_origen.test.ts`, que sí puede mirar el código.',
   '0038': 'creaba `foto_pendiente`, revertida por la 0041 (AUDITORÍA 9, CRÍTICO: fusionaba comprobantes distintos). El bloque 21 que la comprobaba se retiró junto con la tabla — no queda nada que verificar.',
   '0041': '`drop table foto_pendiente`. Reversión de la 0038; no hay garantía nueva que comprobar, la ausencia de la tabla la confirma cualquier consulta a `information_schema` y no vale la pena un bloque para eso.',
+  '0044': 'extiende el dominio de app_user_rol_dominio con un valor más (encargado). La garantía de que basura sigue rechazada ya la prueba el bloque 11 (0025); que "encargado" se acepta se prueba en TS (provisionar.test.ts).',
 };
 
 const migraciones = readdirSync(DIR)

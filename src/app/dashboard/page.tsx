@@ -6,6 +6,7 @@ import { mxn } from '@/lib/utils';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { estadoPanel } from './estado';
 import { litros, fechaMx } from './formato';
+import { puedeExportar } from '@/lib/auth/permisos';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,7 +53,7 @@ async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
 export default async function DashboardPage() {
   // Segunda capa: la autorización viaja con la página, no solo con el matcher
   // del proxy. Las dos tienen que fallar a la vez para que esto se sirva.
-  const { tenantId } = await requireSessionTenant('/dashboard');
+  const { tenantId, rol } = await requireSessionTenant('/dashboard');
   const [acred, kpis, liqs, anomalias] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
@@ -205,10 +206,12 @@ export default async function DashboardPage() {
                 <h2 className="text-sm font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
                   Detalle por liquidación
                 </h2>
-                <a href="/api/export/liquidaciones" download
-                  className="text-sm px-3.5 py-2 rounded-lg hairline hover:opacity-70">
-                  Exportar CSV
-                </a>
+                {puedeExportar(rol) && (
+                  <a href="/api/export/liquidaciones" download
+                    className="text-sm px-3.5 py-2 rounded-lg hairline hover:opacity-70">
+                    Exportar CSV
+                  </a>
+                )}
               </div>
               {liqs === null ? (
                 <div className="card p-8" style={{ color: 'var(--muted)' }}>No se pudo cargar el listado.</div>
