@@ -1,4 +1,5 @@
 import { Code2 } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,12 +39,14 @@ export default function DevPage() {
           <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
             Lo que falta
           </h2>
-          <p className="text-sm mt-3" style={{ color: 'var(--muted)' }}>
-            Calendario de contribuciones, deploys recientes con estado de build, feature flags & kill switches,
-            PRs abiertos/tiempo de merge/cobertura/error budget, changelog — este panel no tiene integración con la
-            API de GitHub ni con la de Vercel para traer esto en vivo hoy. Vercel y Sentry ya están enlazados desde
-            Inicio/Observabilidad.
-          </p>
+          <div className="mt-3">
+            <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+              Calendario de contribuciones, deploys recientes con estado de build, feature flags & kill switches,
+              PRs abiertos/tiempo de merge/cobertura/error budget, changelog — este panel no tiene integración con la
+              API de GitHub ni con la de Vercel para traer esto en vivo hoy. Vercel y Sentry ya están enlazados desde
+              Inicio/Observabilidad.
+            </EstadoVacio>
+          </div>
         </section>
       </div>
     </div>

@@ -1,7 +1,8 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
-import { TrendingUp, Info } from 'lucide-react';
+import { TrendingUp, DollarSign } from 'lucide-react';
 import { AreaChartSimple } from '../charts';
+import { ChartCard, KpiTile, EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,30 +50,34 @@ export default async function CapacidadForecastPage() {
           </h2>
 
           {proyeccion === null ? (
-            <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>
-              Sin datos de costo de IA registrados todavía — no hay base para proyectar nada.
+            <div className="mt-3">
+              <EstadoVacio>
+                Sin datos de costo de IA registrados todavía — no hay base para proyectar nada.
+              </EstadoVacio>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                <div className="card p-4">
-                  {r.porDia.length > 1 ? (
+                {r.porDia.length > 1 ? (
+                  <ChartCard titulo="Costo de IA por día" tamano="L">
                     <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={(v) => usd(v)} />
-                  ) : (
-                    <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 240 }}>
-                      Sin historial suficiente todavía para una serie — solo hay un día con datos.
-                    </div>
-                  )}
-                </div>
-                <div className="card p-4 flex flex-col justify-center gap-3">
-                  <div>
-                    <div className="text-xl font-semibold tracking-tight tabular leading-tight">{usd(proyeccion.promedioDiario)}</div>
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>Costo diario promedio, últimos {proyeccion.diasVentana} día{proyeccion.diasVentana === 1 ? '' : 's'}</div>
-                  </div>
-                  <div className="border-t pt-3" style={{ borderColor: 'var(--line)' }}>
-                    <div className="text-xl font-semibold tracking-tight tabular leading-tight">{usd(proyeccion.proyeccionMensual)}</div>
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>Proyección a 30 días</div>
-                  </div>
+                  </ChartCard>
+                ) : (
+                  <EstadoVacio>
+                    Sin historial suficiente todavía para una serie — solo hay un día con datos.
+                  </EstadoVacio>
+                )}
+                <div className="flex flex-col gap-3 justify-center">
+                  <KpiTile
+                    icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                    etiqueta={`Costo diario promedio, últimos ${proyeccion.diasVentana} día${proyeccion.diasVentana === 1 ? '' : 's'}`}
+                    valor={proyeccion.promedioDiario} formato="usd"
+                  />
+                  <KpiTile
+                    icono={<TrendingUp width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                    etiqueta="Proyección a 30 días"
+                    valor={proyeccion.proyeccionMensual} formato="usd"
+                  />
                 </div>
               </div>
               <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
@@ -85,17 +90,10 @@ export default async function CapacidadForecastPage() {
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <div className="card p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-                <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-              </div>
-              <p className="text-sm">
-                Números de WhatsApp libres, días para tope de cuota, onboarding self-service — no aplica hoy con 1
-                número y sin sistema de aprovisionamiento.
-              </p>
-            </div>
-          </div>
+          <EstadoVacio>
+            Números de WhatsApp libres, días para tope de cuota, onboarding self-service — no aplica hoy con 1
+            número y sin sistema de aprovisionamiento.
+          </EstadoVacio>
         </section>
       </div>
     </div>

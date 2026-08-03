@@ -3,6 +3,8 @@ import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
 import { Truck, ExternalLink } from 'lucide-react';
 import ContadorRetro from '../contador-retro';
+import { HBars } from '../ui/graficas';
+import { ChartCard, EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,8 +43,10 @@ export default async function FlotasPage() {
           )}
         </div>
         {flotasOrdenadas.length === 0 ? (
-          <div className="px-5 py-10 text-sm text-center" style={{ color: 'var(--muted)' }}>
-            Sin flotas dadas de alta todavía.
+          <div className="px-5 pt-3 pb-5">
+            <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+              Sin flotas dadas de alta todavía.
+            </EstadoVacio>
           </div>
         ) : (
           <div className="overflow-x-auto mt-1">
@@ -81,13 +85,27 @@ export default async function FlotasPage() {
             </table>
           </div>
         )}
-        <div className="px-5 pt-4 pb-5 border-t space-y-2" style={{ borderColor: 'var(--line)' }}>
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>
+
+        {/* Ranking real de las mismas flotas de la tabla, por costo de IA —
+            HBars (design system v2) compara categorías de un vistazo; la
+            tabla arriba se queda porque tiene columnas que una barra no
+            puede mostrar (plan, viajes, el link "Ver dashboard"). Solo con
+            2+ flotas: con 1 sola, "ranking" no dice nada que la tabla ya no
+            diga. */}
+        {flotasOrdenadas.length > 1 && (
+          <div className="px-5 pt-2 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
+            <ChartCard titulo="Top flotas por costo de IA" tamano="M">
+              <HBars datos={flotasOrdenadas.map((f) => ({ etiqueta: f.nombre, valor: f.costoIaUsd }))} formato="usd" />
+            </ChartCard>
+          </div>
+        )}
+
+        <div className="px-5 pt-4 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          <EstadoVacio>
             &quot;Ver dashboard&quot; ya existe (arriba) — entra al panel real de esa flota con tu propia sesión de superadmin, sin credenciales nuevas. Uso vs. límite, salud (activa/en riesgo/morosa), MRR por cliente y un audit log de qué flota viste y cuándo siguen en el roadmap.
-          </p>
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>
+            <br /><br />
             Retención por cohortes, distribución por plan — necesita más de 1 tenant para decir algo real.
-          </p>
+          </EstadoVacio>
         </div>
       </div>
     </div>

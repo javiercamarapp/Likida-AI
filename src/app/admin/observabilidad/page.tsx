@@ -2,6 +2,7 @@ import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
 import { Activity } from 'lucide-react';
 import { AreaChartSimple } from '../charts';
+import { ChartCard, StatusPill, EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,19 +50,24 @@ export default async function ObservabilidadPage() {
           <TituloSeccion>Salud del sistema</TituloSeccion>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
             <a href="https://sentry.io" target="_blank" rel="noopener noreferrer" className="card p-4 hover:shadow-md transition-shadow">
-              <div className="text-sm font-medium">Errores — Sentry</div>
-              <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Ya conectado. Se enlaza en vez de reconstruirse.</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium">Errores — Sentry</div>
+                <StatusPill estado="ok">Conectado</StatusPill>
+              </div>
+              <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Se enlaza en vez de reconstruirse.</div>
             </a>
             <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="card p-4 hover:shadow-md transition-shadow">
-              <div className="text-sm font-medium">Uptime, deploys y latencia de edge — Vercel</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium">Uptime, deploys y latencia de edge — Vercel</div>
+                <StatusPill estado="ok">Conectado</StatusPill>
+              </div>
               <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Vercel ya lo mide. Se enlaza en vez de reconstruirse.</div>
             </a>
           </div>
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <TituloSeccion>Actividad de IA en el tiempo</TituloSeccion>
-          <div className="card p-4 mt-3">
+          <ChartCard titulo="Actividad de IA en el tiempo" tamano="M">
             {r.porDia.length > 1 ? (
               <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} />
             ) : (
@@ -69,7 +75,7 @@ export default async function ObservabilidadPage() {
                 Sin historial suficiente todavía.
               </div>
             )}
-          </div>
+          </ChartCard>
           <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
             Proxy honesto de actividad, no de rendimiento: enseña cuánto gasta la IA día a día, no qué tan rápido responde.
           </p>
@@ -77,11 +83,13 @@ export default async function ObservabilidadPage() {
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <TituloSeccion>Rendimiento por llamada</TituloSeccion>
-          <p className="text-sm mt-3" style={{ color: 'var(--muted)' }}>
-            Latencia p50/p95/p99 por llamada, tasa de éxito de tool-calls, tasa de escalamiento a humano, tiempo de
-            resolución end-to-end, trace viewer paso a paso — ninguno de estos se instrumenta hoy (no hay columna de
-            duración en <code className="font-mono text-xs">llm_costo</code> ni un sistema de trazas). Fase 1-4 del roadmap.
-          </p>
+          <div className="mt-3">
+            <EstadoVacio icono={<Activity width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+              Latencia p50/p95/p99 por llamada, tasa de éxito de tool-calls, tasa de escalamiento a humano, tiempo de
+              resolución end-to-end, trace viewer paso a paso — ninguno de estos se instrumenta hoy (no hay columna de
+              duración en <code className="font-mono text-xs">llm_costo</code> ni un sistema de trazas). Fase 1-4 del roadmap.
+            </EstadoVacio>
+          </div>
         </section>
       </div>
     </div>

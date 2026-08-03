@@ -1,9 +1,10 @@
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { usd } from '@/lib/formato';
-import { ScanText } from 'lucide-react';
+import { ScanText, DollarSign, Repeat } from 'lucide-react';
 import { BarChartSimple } from '../charts';
 import ContadorRetro from '../contador-retro';
 import { IconoProveedor } from '../proveedor-icono';
+import { KpiTile, ChartCard } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,14 +51,14 @@ export default async function AgenteOcrPage() {
         <section className="p-5">
           <TituloSeccion>Costo real</TituloSeccion>
           <div className="grid grid-cols-2 gap-3 mt-3">
-            <div className="card p-3.5">
-              <div className="text-xl font-semibold tracking-tight tabular leading-tight">{ocr ? usd(ocr.costoUsd) : usd(0)}</div>
-              <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>Gastado en OCR</div>
-            </div>
-            <div className="card p-3.5">
-              <div className="text-xl font-semibold tracking-tight tabular leading-tight">{ocr ? ocr.n : 0}</div>
-              <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>Llamadas de OCR</div>
-            </div>
+            <KpiTile
+              icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              etiqueta="Gastado en OCR" valor={ocr ? ocr.costoUsd : 0} formato="usd"
+            />
+            <KpiTile
+              icono={<Repeat width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              etiqueta="Llamadas de OCR" valor={ocr ? ocr.n : 0} formato="entero"
+            />
           </div>
         </section>
 
@@ -87,16 +88,15 @@ export default async function AgenteOcrPage() {
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <TituloSeccion>Facturas procesadas — últimos 7 días</TituloSeccion>
-          {r.facturasPorDia.some((d) => d.n > 0) ? (
-            <div className="mt-3">
+          <ChartCard titulo="Facturas procesadas — últimos 7 días" tamano="L">
+            {r.facturasPorDia.some((d) => d.n > 0) ? (
               <BarChartSimple datos={r.facturasPorDia.map((d) => ({ dia: d.dia, valor: d.n }))} alto={220} />
-            </div>
-          ) : (
-            <div className="flex items-center text-sm mt-3" style={{ color: 'var(--muted)', height: 160 }}>
-              Aún sin datos suficientes.
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
+                Aún sin datos suficientes.
+              </div>
+            )}
+          </ChartCard>
         </section>
       </div>
     </div>

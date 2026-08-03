@@ -1,4 +1,5 @@
-import { ShieldCheck, Info, FileWarning } from 'lucide-react';
+import { ShieldCheck, FileWarning } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,32 +24,18 @@ export default function CompliancePage() {
 
       <div className="glass-panel overflow-hidden">
         <section className="p-5">
-          <div className="card p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-                <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-              </div>
-              <p className="text-sm">
-                Solicitudes ARCO abiertas, datos por vencer retención, exports pendientes, audit log completo — Likida
-                no tiene estos flujos construidos hoy.
-              </p>
-            </div>
-          </div>
+          <EstadoVacio>
+            Solicitudes ARCO abiertas, datos por vencer retención, exports pendientes, audit log completo — Likida
+            no tiene estos flujos construidos hoy.
+          </EstadoVacio>
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <div className="card p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-                <FileWarning width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-              </div>
-              <p className="text-sm">
-                Dado que la app sí procesa datos fiscales/personales (RFC, montos, imágenes de comprobantes), esto sube
-                de prioridad en cuanto haya un cliente real — no antes, para no construir un sistema de compliance para
-                datos que hoy son solo del tenant demo.
-              </p>
-            </div>
-          </div>
+          <EstadoVacio icono={<FileWarning width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            Dado que la app sí procesa datos fiscales/personales (RFC, montos, imágenes de comprobantes), esto sube
+            de prioridad en cuanto haya un cliente real — no antes, para no construir un sistema de compliance para
+            datos que hoy son solo del tenant demo.
+          </EstadoVacio>
         </section>
       </div>
     </div>

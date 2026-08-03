@@ -1,5 +1,6 @@
 import { getConversacionesActivas } from '@/lib/admin/negocio';
 import { Smartphone, MessageCircle, ChevronDown, Info } from 'lucide-react';
+import { KpiTile, EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,17 +82,20 @@ export default async function WhatsappInfraPage() {
 
         <section id="conversaciones" className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <TituloSeccion>Conversaciones</TituloSeccion>
-          <div className="card p-4 mt-3">
-            <div className="flex items-center gap-3">
-              <Insignia Icono={MessageCircle} />
-              <div className="min-w-0">
-                <div className="text-xl font-semibold tracking-tight tabular leading-tight">{conversaciones.length}</div>
-                <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                  Conversaciones activas más recientes (`wa_conversacion`, tope de 20 filas)
-                </div>
-              </div>
-            </div>
+          {/* KpiTile (design system v2, ui/kit.tsx) — mismo conteo real de
+              antes (`getConversacionesActivas`), solo el icono-en-caja +
+              número a mano queda reemplazado; la nota de la fuente
+              (`wa_conversacion`, tope de 20 filas) baja como caption, mismo
+              patrón que "Likida en números" en Inicio. */}
+          <div className="mt-3">
+            <KpiTile
+              icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              etiqueta="Conversaciones activas" valor={conversaciones.length} formato="entero"
+            />
           </div>
+          <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+            Conversaciones activas más recientes (`wa_conversacion`, tope de 20 filas)
+          </p>
 
           {conversaciones.length === 0 ? (
             <div className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>Sin conversaciones activas.</div>
@@ -131,22 +135,24 @@ export default async function WhatsappInfraPage() {
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <TituloSeccion>Fuera de alcance hoy</TituloSeccion>
-          <div className="card p-4 mt-3">
-            <div className="flex items-start gap-3">
-              <Insignia Icono={Info} />
-              <div className="min-w-0">
-                <p className="text-sm">
-                  Ninguno de estos existe todavía en este panel — requieren integrar más a fondo la Meta WhatsApp
-                  Business API de lo que Likida usa hoy (Fase 5 del roadmap, a escala):
-                </p>
-                <ul className="text-sm mt-2 space-y-1" style={{ color: 'var(--muted)' }}>
-                  {FUERA_DE_ALCANCE.map((item) => (
-                    <li key={item}>· {item}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+          {/* EstadoVacio (design system v2, ui/kit.tsx) — mismo mensaje +
+              icono (Info, igual que antes) de la intro; la lista de items
+              fuera de alcance baja como bloque aparte, mismo patrón que
+              "Qué va a mostrar esta página cuando exista" en Cobranza. */}
+          <div className="mt-3">
+            <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+              Ninguno de estos existe todavía en este panel — requieren integrar más a fondo la Meta WhatsApp
+              Business API de lo que Likida usa hoy (Fase 5 del roadmap, a escala):
+            </EstadoVacio>
           </div>
+          <ul className="text-sm mt-3 space-y-2" style={{ color: 'var(--muted)' }}>
+            {FUERA_DE_ALCANCE.map((item) => (
+              <li key={item} className="flex items-start gap-2.5">
+                <span className="w-1 h-1 rounded-full mt-2 shrink-0" style={{ background: 'var(--muted)' }} />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       </div>
     </div>

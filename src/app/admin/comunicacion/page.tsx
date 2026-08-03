@@ -1,4 +1,5 @@
-import { Megaphone, Info } from 'lucide-react';
+import { Megaphone } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,18 +22,14 @@ export default function ComunicacionPage() {
 
       <div className="glass-panel overflow-hidden">
         <section className="p-5">
-          <div className="card p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-                <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-              </div>
-              <p className="text-sm">
-                Nuevo aviso/campaña, segmentación, historial de envíos con métricas de apertura, reglas de alertas
-                configurables — Likida no tiene un sistema de comunicación masiva hoy. El único canal de mensajes es
-                el bot de WhatsApp conversando 1 a 1 con cada chofer, no un broadcast.
-              </p>
-            </div>
-          </div>
+          {/* EstadoVacio (design system v2, ui/kit.tsx) — mismo icono-en-caja +
+              mensaje honesto de antes, presentación consolidada, ni una
+              palabra cambiada. Icono por defecto (Info), igual que antes. */}
+          <EstadoVacio>
+            Nuevo aviso/campaña, segmentación, historial de envíos con métricas de apertura, reglas de alertas
+            configurables — Likida no tiene un sistema de comunicación masiva hoy. El único canal de mensajes es
+            el bot de WhatsApp conversando 1 a 1 con cada chofer, no un broadcast.
+          </EstadoVacio>
         </section>
       </div>
     </div>

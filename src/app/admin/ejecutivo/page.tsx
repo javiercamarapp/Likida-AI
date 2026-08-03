@@ -1,20 +1,9 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
-import { usd } from '@/lib/utils';
 import { DollarSign, Truck, CheckCircle2 } from 'lucide-react';
-import { Sparkline, Tendencia } from '../charts';
 import ContadorRetro from '../contador-retro';
+import { KpiTile } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
-
-/** Mismo patrón de insignia cuadrada que Inicio (`admin/page.tsx`) — no se
- *  reimporta de ahí porque no lo exporta, se repite local (5 líneas). */
-function Insignia({ Icono }: { Icono: typeof DollarSign }) {
-  return (
-    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-      <Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-    </div>
-  );
-}
 
 /**
  * Ejecutivo / Board — la vista para junta directiva. El MRR es el mismo $0
@@ -48,42 +37,27 @@ export default async function EjecutivoPage() {
           <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
             Lo que sí existe hoy
           </div>
+          {/* KpiTile (design system v2, ui/kit.tsx) — mismo patrón de la
+              grilla "Likida en números" de Inicio: count-up real,
+              sparkline+tendencia del gasto de IA, sin inventar historia
+              donde no la hay (flotas/viajes no traen sparkline: n=1 no es
+              una serie). */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-            <div className="card p-3.5">
-              <div className="flex items-center gap-3">
-                <Insignia Icono={DollarSign} />
-                <div className="min-w-0">
-                  <div className="text-xl font-semibold tracking-tight tabular leading-tight">{usd(r.costoIaUsd)}</div>
-                  <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>Gasto en IA (no es burn total de la empresa)</div>
-                </div>
-              </div>
-              {chipsCosto.length > 1 && (
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="flex-1 min-w-0"><Sparkline valores={chipsCosto} alto={20} /></div>
-                  <Tendencia valor={r.tendenciaCosto} />
-                </div>
-              )}
-            </div>
-            <div className="card p-3.5">
-              <div className="flex items-center gap-3">
-                <Insignia Icono={Truck} />
-                <div className="min-w-0">
-                  <div className="text-xl font-semibold tracking-tight tabular leading-tight">{r.tenants}</div>
-                  <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>
-                    {r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="card p-3.5">
-              <div className="flex items-center gap-3">
-                <Insignia Icono={CheckCircle2} />
-                <div className="min-w-0">
-                  <div className="text-xl font-semibold tracking-tight tabular leading-tight">{r.viajesProcesados}</div>
-                  <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>Viajes procesados</div>
-                </div>
-              </div>
-            </div>
+            <KpiTile
+              icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              etiqueta="Gasto en IA (no es burn total de la empresa)"
+              valor={r.costoIaUsd} formato="usd"
+              tendencia={r.tendenciaCosto} sparkline={chipsCosto}
+            />
+            <KpiTile
+              icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              etiqueta={r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
+              valor={r.tenants} formato="entero"
+            />
+            <KpiTile
+              icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              etiqueta="Viajes procesados" valor={r.viajesProcesados} formato="entero"
+            />
           </div>
         </section>
 

@@ -1,4 +1,5 @@
-import { Activity, ExternalLink, Info } from 'lucide-react';
+import { Activity, ExternalLink } from 'lucide-react';
+import { Semaphore, EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,18 +10,20 @@ export const dynamic = 'force-dynamic';
  * Supabase, la herramienta que hoy se usa de verdad para ver el estado de
  * la base. Nada de esto llama APIs en vivo desde aquí — son enlaces a
  * dashboards que YA miden esto, no una reconstrucción a medias de esas
- * herramientas dentro de /admin.
+ * herramientas dentro de /admin. El "Ya conectado" ahora lo carga el
+ * `<Semaphore estado="ok">` (design system v2) en vez de repetirse a mano
+ * en cada `detalle` — el resto de cada frase sigue intacto.
  */
 const INTEGRACIONES = [
   {
     href: 'https://sentry.io',
     titulo: 'Errores — Sentry',
-    detalle: 'Ya conectado. Excepciones, stack traces y frecuencia por release.',
+    detalle: 'Excepciones, stack traces y frecuencia por release.',
   },
   {
     href: 'https://vercel.com/dashboard',
     titulo: 'Uptime y deploys — Vercel',
-    detalle: 'Ya conectado. Historial de deploys, logs de build y runtime, analítica de tráfico.',
+    detalle: 'Historial de deploys, logs de build y runtime, analítica de tráfico.',
   },
   {
     href: 'https://supabase.com/dashboard',
@@ -50,6 +53,7 @@ export default function SaludSistemaPage() {
                   <span className="text-sm font-medium">{i.titulo}</span>
                   <ExternalLink width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} className="shrink-0" />
                 </div>
+                <Semaphore estado="ok" etiqueta="Conectado" />
                 <span className="text-xs" style={{ color: 'var(--muted)' }}>{i.detalle}</span>
               </a>
             ))}
@@ -57,18 +61,11 @@ export default function SaludSistemaPage() {
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <div className="card p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-                <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-              </div>
-              <p className="text-sm">
-                Estado de integraciones en semáforo dentro de este panel (sin llamar sus APIs en vivo), timeline de
-                incidentes, on-call, consumo vs. rate limits agregado — no está instrumentado aquí hoy; Sentry y
-                Vercel ya miden esto en sus propios dashboards, enlazados arriba.
-              </p>
-            </div>
-          </div>
+          <EstadoVacio>
+            Estado de integraciones en semáforo dentro de este panel (sin llamar sus APIs en vivo), timeline de
+            incidentes, on-call, consumo vs. rate limits agregado — no está instrumentado aquí hoy; Sentry y
+            Vercel ya miden esto en sus propios dashboards, enlazados arriba.
+          </EstadoVacio>
         </section>
       </div>
     </div>

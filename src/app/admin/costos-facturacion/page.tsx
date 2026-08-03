@@ -1,8 +1,9 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
-import { DollarSign } from 'lucide-react';
+import { DollarSign, Calculator } from 'lucide-react';
 import { AreaChartSimple, Dona } from '../charts';
 import { IconoProveedor } from '../proveedor-icono';
+import { ChartCard, EstadoVacio, KpiTile } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,13 @@ const FASE_LABEL: Record<string, string> = {
  * falsa). Likida no cobra a ningún cliente todavía: margen por cliente,
  * MRR/ARR, límites de gasto y cobros no tienen fuente de datos real en
  * este esquema — se enseñan como honest empty-state, Fase 3 del roadmap.
+ *
+ * Ni `Waterfall` ni `MarginDivergingBars` (graficas.tsx) aplican aquí a
+ * propósito: ambos piden una forma de dato que Likida no tiene — un saldo
+ * que se reconcilia paso a paso (Waterfall, tipo MRR bridge) o un valor
+ * con signo ± (margen de rentabilidad por cliente) — y hoy solo existen
+ * magnitudes no-negativas por fase/modelo. `Dona` y la lista con
+ * `IconoProveedor` ya son el mejor ajuste real para esa forma de dato.
  */
 export default async function CostosFacturacionPage() {
   const r = await getResumenNegocio();
@@ -37,82 +45,97 @@ export default async function CostosFacturacionPage() {
           <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
             Costo total de IA
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-            <div className="card p-4">
-              <div className="text-2xl font-semibold tracking-tight tabular">{usd(r.costoIaUsd)}</div>
-              <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Gastado en IA — todo el histórico</div>
+          {/* KpiTile necesita un `valor` numérico real siempre — cuando
+              `costoPorViaje` es `null` (sin viajes procesados) no hay
+              número honesto que mostrarle (ni siquiera 0: 0 viajes ÷ 0
+              costo no es "costo por viaje = $0", es indefinido), así que
+              ese caso se queda con el card original en vez de forzar un
+              0 engañoso dentro de KpiTile. */}
+          {costoPorViaje !== null ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <KpiTile
+                icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                etiqueta="Gastado en IA — todo el histórico" valor={r.costoIaUsd} formato="usd"
+              />
+              <KpiTile
+                icono={<Calculator width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                etiqueta="Costo estimado de IA por viaje procesado (costo total ÷ viajes procesados)"
+                valor={costoPorViaje} formato="usd"
+              />
             </div>
-            <div className="card p-4">
-              <div className="text-2xl font-semibold tracking-tight tabular">
-                {costoPorViaje !== null ? usd(costoPorViaje) : '—'}
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <div className="card p-4">
+                <div className="text-2xl font-semibold tracking-tight tabular">{usd(r.costoIaUsd)}</div>
+                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Gastado en IA — todo el histórico</div>
               </div>
-              <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                {costoPorViaje !== null
-                  ? 'Costo estimado de IA por viaje procesado (costo total ÷ viajes procesados)'
-                  : 'Sin viajes procesados todavía para estimar un costo por viaje'}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Costo de IA en el tiempo
-          </h2>
-          {r.porDia.length > 1 ? (
-            <div className="mt-3">
-              <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} />
-            </div>
-          ) : (
-            <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>Sin historial suficiente todavía.</div>
-          )}
-        </section>
-
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Costo por fase
-          </h2>
-          {r.porFase.length > 0 ? (
-            <div className="card p-4 mt-3">
-              <Dona segmentos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))} />
-            </div>
-          ) : (
-            <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>Todavía no hay actividad de IA registrada.</div>
-          )}
-        </section>
-
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Costo por modelo
-          </h2>
-          {r.porModelo.length === 0 ? (
-            <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>Sin llamadas registradas todavía.</div>
-          ) : (
-            <div className="card divide-y mt-3" style={{ borderColor: 'var(--line)' }}>
-              {r.porModelo.map((m) => (
-                <div key={m.modelo} className="px-5 py-3 flex items-center gap-3">
-                  <IconoProveedor modelo={m.modelo} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-mono truncate">{m.modelo}</div>
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{m.n} llamadas</div>
-                  </div>
-                  <div className="text-sm font-semibold tabular shrink-0">{usd(m.costoUsd)}</div>
+              <div className="card p-4">
+                <div className="text-2xl font-semibold tracking-tight tabular">—</div>
+                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                  Sin viajes procesados todavía para estimar un costo por viaje
                 </div>
-              ))}
+              </div>
             </div>
           )}
         </section>
 
-        <section className="p-5 border-t space-y-2" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Lo que todavía no es real
-          </h2>
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            Margen por cliente, ingresos MRR/ARR, waterfall de MRR, límites de gasto configurables con alertas, proyección de gasto vs. presupuesto — TODO esto depende de tener precio/plan de facturación real por cliente, que no existe (Likida no cobra a nadie hoy). Fase 3 del roadmap.
-          </p>
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            Cobros: exitosos/fallidos, dunning, conciliación Stripe, CFDI de facturación a clientes — sin integración de cobro todavía.
-          </p>
+        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          {r.porDia.length > 1 ? (
+            <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
+              <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} />
+            </ChartCard>
+          ) : (
+            <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
+              <EstadoVacio icono={<DollarSign width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+                Sin historial suficiente todavía.
+              </EstadoVacio>
+            </ChartCard>
+          )}
+        </section>
+
+        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          {r.porFase.length > 0 ? (
+            <ChartCard titulo="Costo por fase" tamano="S">
+              <Dona segmentos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))} />
+            </ChartCard>
+          ) : (
+            <ChartCard titulo="Costo por fase" tamano="S">
+              <EstadoVacio>Todavía no hay actividad de IA registrada.</EstadoVacio>
+            </ChartCard>
+          )}
+        </section>
+
+        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          {r.porModelo.length === 0 ? (
+            <ChartCard titulo="Costo por modelo" tamano="S">
+              <EstadoVacio>Sin llamadas registradas todavía.</EstadoVacio>
+            </ChartCard>
+          ) : (
+            <ChartCard titulo="Costo por modelo" tamano="M">
+              <div className="divide-y" style={{ borderColor: 'var(--line)' }}>
+                {r.porModelo.map((m) => (
+                  <div key={m.modelo} className="py-3 flex items-center gap-3">
+                    <IconoProveedor modelo={m.modelo} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-mono truncate">{m.modelo}</div>
+                      <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{m.n} llamadas</div>
+                    </div>
+                    <div className="text-sm font-semibold tabular shrink-0">{usd(m.costoUsd)}</div>
+                  </div>
+                ))}
+              </div>
+            </ChartCard>
+          )}
+        </section>
+
+        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          <ChartCard titulo="Lo que todavía no es real" tamano="S">
+            <EstadoVacio>
+              Margen por cliente, ingresos MRR/ARR, waterfall de MRR, límites de gasto configurables con alertas, proyección de gasto vs. presupuesto — TODO esto depende de tener precio/plan de facturación real por cliente, que no existe (Likida no cobra a nadie hoy). Fase 3 del roadmap.
+              <br /><br />
+              Cobros: exitosos/fallidos, dunning, conciliación Stripe, CFDI de facturación a clientes — sin integración de cobro todavía.
+            </EstadoVacio>
+          </ChartCard>
         </section>
       </div>
     </div>

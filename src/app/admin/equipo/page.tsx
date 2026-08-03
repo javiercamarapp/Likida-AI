@@ -1,6 +1,7 @@
 import { getEquipo } from '@/lib/admin/negocio';
 import type { RolAppUser } from '@/lib/auth/provisionar';
-import { Users, Info, CheckCircle2 } from 'lucide-react';
+import { Users, CheckCircle2 } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,16 +107,9 @@ export default async function EquipoPage() {
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <div className="card p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-                <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-              </div>
-              <p className="text-sm">
-                2FA, última sesión, audit log de acciones/impersonations — no se registra hoy.
-              </p>
-            </div>
-          </div>
+          <EstadoVacio>
+            2FA, última sesión, audit log de acciones/impersonations — no se registra hoy.
+          </EstadoVacio>
         </section>
       </div>
     </div>

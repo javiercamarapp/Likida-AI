@@ -1,4 +1,5 @@
-import { LifeBuoy, Info } from 'lucide-react';
+import { LifeBuoy } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,18 +23,11 @@ export default function SoportePage() {
 
       <div className="glass-panel overflow-hidden">
         <section className="p-5">
-          <div className="card p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-                <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-              </div>
-              <p className="text-sm">
-                Tickets abiertos, tiempo de primera respuesta, % de SLA cumplido, cola por prioridad, macros/respuestas
-                guardadas — Likida no tiene un sistema de tickets hoy. Con 0 clientes reales, tampoco hay soporte que
-                atender todavía.
-              </p>
-            </div>
-          </div>
+          <EstadoVacio>
+            Tickets abiertos, tiempo de primera respuesta, % de SLA cumplido, cola por prioridad, macros/respuestas
+            guardadas — Likida no tiene un sistema de tickets hoy. Con 0 clientes reales, tampoco hay soporte que
+            atender todavía.
+          </EstadoVacio>
         </section>
       </div>
     </div>
