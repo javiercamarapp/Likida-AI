@@ -6,12 +6,13 @@ import {
   Truck, DollarSign, Cpu, CheckCircle2, BarChart3, UserPlus2, MessageCircle,
   Sparkles, ChevronDown, ScanText, Calculator, Flag, MessageSquareText, Shuffle, Smartphone, ExternalLink,
 } from 'lucide-react';
-import { Sparkline, Tendencia, Dona, BarChartSimple } from './charts';
+import { Dona, BarChartSimple } from './charts';
 import GraficaCostoConRango from './rango-costo';
 import AsistenteExpandible from './asistente-expandible';
 import ContadorRetro from './contador-retro';
 import { IconoProveedor } from './proveedor-icono';
 import { GlobalFilter } from './ui/global-filter';
+import { KpiTile } from './ui/kit';
 
 const SALUDO = () => {
   const h = new Date().getUTCHours() - 6; // hora de México, aproximada — un saludo no necesita el minuto exacto
@@ -157,57 +158,31 @@ export default async function Admin({
 
           <section id="agentes" className="p-5 border-t scroll-mt-24" style={{ borderColor: 'var(--line)' }}>
             <TituloSeccion>Likida en números</TituloSeccion>
+            {/* KpiTile (design system v2, ui/kit.tsx) — reemplaza el
+                Insignia+número a mano de las 4 tiles: count-up real,
+                mismo sparkline+tendencia de siempre, y el mensaje "sin
+                historia" honesto queda resuelto adentro del componente en
+                vez de repetirse por tile. */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-              <div className="card p-3.5">
-                <div className="flex items-center gap-3">
-                  <Insignia Icono={Truck} tamaño="sm" />
-                  <div className="min-w-0">
-                    <div className="text-xl font-semibold tracking-tight tabular leading-tight">{r.tenants}</div>
-                    <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>
-                      {r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="card p-3.5">
-                <div className="flex items-center gap-3">
-                  <Insignia Icono={DollarSign} tamaño="sm" />
-                  <div className="min-w-0">
-                    <div className="text-xl font-semibold tracking-tight tabular leading-tight">{usd(r.costoIaUsd)}</div>
-                    <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>Gastado en IA</div>
-                  </div>
-                </div>
-                {chipsCosto.length > 1 && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="flex-1 min-w-0"><Sparkline valores={chipsCosto} alto={20} /></div>
-                    <Tendencia valor={r.tendenciaCosto} />
-                  </div>
-                )}
-              </div>
-              <div className="card p-3.5">
-                <div className="flex items-center gap-3">
-                  <Insignia Icono={Cpu} tamaño="sm" />
-                  <div className="min-w-0">
-                    <div className="text-xl font-semibold tracking-tight tabular leading-tight">{numero(r.tokensIn + r.tokensOut)}</div>
-                    <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>Tokens usados</div>
-                  </div>
-                </div>
-                {chipsTokens.length > 1 && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="flex-1 min-w-0"><Sparkline valores={chipsTokens} alto={20} /></div>
-                    <Tendencia valor={r.tendenciaTokens} />
-                  </div>
-                )}
-              </div>
-              <div className="card p-3.5">
-                <div className="flex items-center gap-3">
-                  <Insignia Icono={CheckCircle2} tamaño="sm" />
-                  <div className="min-w-0">
-                    <div className="text-xl font-semibold tracking-tight tabular leading-tight">{r.viajesProcesados}</div>
-                    <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>Viajes procesados</div>
-                  </div>
-                </div>
-              </div>
+              <KpiTile
+                icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                etiqueta={r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
+                valor={r.tenants} formato="entero"
+              />
+              <KpiTile
+                icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                etiqueta="Gastado en IA" valor={r.costoIaUsd} formato="usd"
+                tendencia={r.tendenciaCosto} sparkline={chipsCosto}
+              />
+              <KpiTile
+                icono={<Cpu width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                etiqueta="Tokens usados" valor={r.tokensIn + r.tokensOut} formato="numero"
+                tendencia={r.tendenciaTokens} sparkline={chipsTokens}
+              />
+              <KpiTile
+                icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                etiqueta="Viajes procesados" valor={r.viajesProcesados} formato="entero"
+              />
             </div>
             {r.tenants <= 1 && (
               <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
