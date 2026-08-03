@@ -11,6 +11,7 @@ import GraficaCostoConRango from './rango-costo';
 import AsistenteExpandible from './asistente-expandible';
 import ContadorRetro from './contador-retro';
 import { IconoProveedor } from './proveedor-icono';
+import { GlobalFilter } from './ui/global-filter';
 
 const SALUDO = () => {
   const h = new Date().getUTCHours() - 6; // hora de México, aproximada — un saludo no necesita el minuto exacto
@@ -74,9 +75,19 @@ function TituloSeccion({ children }: { children: React.ReactNode }) {
  * espacio ENTRE tarjetas deja ver el fondo a propósito, para que se lean
  * sobrepuestas y no pegadas.
  */
-export default async function Admin() {
+export default async function Admin({
+  searchParams,
+}: { searchParams: Promise<{ rango?: string }> }) {
+  const sp = await searchParams;
+  // `GlobalFilter` (§3 del complemento) — 'todo' no cabe en una gráfica de
+  // barras por día (sería un muro de barras diminutas), así que ahí se
+  // enseña el total histórico real (`facturasTotal`) en vez de fingir una
+  // ventana de días que no existe.
+  const rango = sp?.rango === '30' ? '30' : sp?.rango === 'todo' ? 'todo' : '7';
+  const ventanaDias = rango === '30' ? 30 : 7;
+
   const [{ nombre }, r, conversaciones] = await Promise.all([
-    requireSuperadmin(), getResumenNegocio(), getConversacionesActivas(),
+    requireSuperadmin(), getResumenNegocio(undefined, ventanaDias), getConversacionesActivas(),
   ]);
   const chipsCosto = r.porDia.slice(-8).map((d) => d.costoUsd);
   const chipsTokens = r.porDia.slice(-8).map((d) => d.tokens);
@@ -118,16 +129,24 @@ export default async function Admin() {
 
           {/* Facturas = filas de `gasto` (cada una pasó por OCR/CFDI) — el
               mismo dato real que ya se usa en Costo por modelo, agrupado
-              por día en vez de por modelo. Últimos 7 días siempre, con 0
-              donde no hubo actividad (getResumenNegocio ya lo rellena).
-              A lo ancho y con más alto que antes — a la mitad del saludo
-              se veía flaca y estirada; sola, en su propia fila, aguanta
-              ser más grande. */}
+              por día en vez de por modelo. Ventana de `ventanaDias` (7/30,
+              GlobalFilter), con 0 donde no hubo actividad
+              (getResumenNegocio ya lo rellena). A lo ancho y con más alto
+              que antes — a la mitad del saludo se veía flaca y estirada;
+              sola, en su propia fila, aguanta ser más grande. */}
           <div className="px-6 pb-5 border-t pt-5" style={{ borderColor: 'var(--line)' }}>
-            <div className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
-              Facturas procesadas — últimos 7 días
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+                Facturas procesadas — {rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`}
+              </div>
+              <GlobalFilter base="/admin" activo={rango} />
             </div>
-            {r.facturasPorDia.some((d) => d.n > 0) ? (
+            {rango === 'todo' ? (
+              <div className="flex flex-col items-center justify-center" style={{ height: 160 }}>
+                <div className="text-4xl font-semibold tracking-tight tabular">{numero(r.facturasTotal)}</div>
+                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Facturas procesadas — total histórico</div>
+              </div>
+            ) : r.facturasPorDia.some((d) => d.n > 0) ? (
               <BarChartSimple datos={r.facturasPorDia.map((d) => ({ dia: d.dia, valor: d.n }))} alto={160} />
             ) : (
               <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>

@@ -21,7 +21,7 @@ export default function PerfilMenu({ nombre, avatarUrl }: { nombre: string; avat
           {nombre.charAt(0).toUpperCase()}
         </span>
       )}
-      <span className="text-sm font-medium hidden md:inline">{nombre}</span>
+      <span className="text-sm font-medium hidden lg:inline">{nombre}</span>
     </Link>
   );
 }
