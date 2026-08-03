@@ -7,6 +7,7 @@ import { ArrowLeftRight, UserCircle2 } from 'lucide-react';
 import Notificaciones, { calcularAlertas } from './notificaciones';
 import PerfilMenu from './perfil';
 import SidebarNav from './sidebar-nav';
+import FondoShader from './fondo-shader';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,10 +19,11 @@ const ICONO = { width: 16, height: 16, strokeWidth: 1.75, color: 'var(--muted)' 
  * `requireSuperadmin()` vive AQUÍ: gatea el layout entero, así que ninguna
  * página nueva bajo /admin puede olvidarlo.
  *
- * El fondo de TODA la consola es la imagen difuminada negra generada en
- * Higgsfield (public/images/bg-admin.jpg) — sidebar, header y tarjetas son
- * paneles "glass" SOBREPUESTOS con espacio real entre sí (el `p-4 gap-4` de
- * abajo), no regiones pegadas con hairline como antes.
+ * El fondo de TODA la consola es un shader WebGL animado monocromo
+ * (`fondo-shader.tsx`, tipo "shadow blending") en vez del JPG estático que
+ * había antes — sidebar, header y tarjetas son paneles "glass" SOBREPUESTOS
+ * con espacio real entre sí (el `p-4 gap-4` de abajo), no regiones pegadas
+ * con hairline como antes.
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { nombre } = await requireSuperadmin();
@@ -41,22 +43,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div
-      className="min-h-dvh"
-      style={{
-        backgroundImage: 'url(/images/bg-admin.jpg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed',
-        fontFamily: 'var(--font-sans-handle), var(--font-sans)',
-      }}
-    >
+    <div className="min-h-dvh" style={{ fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>
+      <FondoShader />
       {/* `dvh` en vez de `vh` a propósito: en iOS Safari, `100vh` cuenta el
           espacio DETRÁS de la barra de direcciones colapsable, así que la
           altura calculada no es la que realmente se ve — eso rompe el
           `sticky` del header cuando el navegador recalcula al hacer scroll.
           `dvh` (dynamic viewport height) sigue el viewport visual real. */}
-      <div className="min-h-dvh flex items-start gap-4 p-4">
+      <div className="min-h-dvh flex items-start gap-4 p-4 relative z-10">
         <aside className="glass-panel w-[232px] shrink-0 flex flex-col h-[calc(100dvh-2rem)] sticky top-4 self-start overflow-hidden">
           <div className="px-4 py-4 flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element -- logo estático, no next/image en el resto del repo */}
