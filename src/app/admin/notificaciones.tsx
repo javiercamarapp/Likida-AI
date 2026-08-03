@@ -1,38 +1,22 @@
+'use client';
+
+import { useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { Bell } from 'lucide-react';
-import type { ResumenNegocio, ConversacionActiva } from '@/lib/admin/negocio';
-
-export interface Alerta { tipo: 'ok' | 'atencion'; texto: string }
-
-/**
- * Nada de contadores inventados ("14 items waiting"): las alertas se
- * calculan de datos reales — tendencia de costo, conversaciones activas.
- * Vive aquí (no en cada page.tsx que las necesita) para que layout.tsx Y
- * admin/notificaciones/page.tsx usen EXACTAMENTE el mismo cálculo, no dos
- * copias que se puedan desincronizar.
- */
-export function calcularAlertas(r: ResumenNegocio, conversaciones: ConversacionActiva[]): Alerta[] {
-  const alertas: Alerta[] = [];
-  if (r.tendenciaCosto !== null && r.tendenciaCosto >= 30) {
-    alertas.push({ tipo: 'atencion', texto: `El costo de IA subió ${r.tendenciaCosto}% esta semana vs la anterior.` });
-  }
-  if (conversaciones.length > 0) {
-    alertas.push({ tipo: 'ok', texto: `${conversaciones.length} conversación(es) de WhatsApp con actividad reciente.` });
-  }
-  if (r.tenants <= 1) {
-    alertas.push({ tipo: 'atencion', texto: 'Likida sigue con solo el tenant demo — sin clientes reales dados de alta.' });
-  }
-  return alertas;
-}
+import type { Alerta } from './calcular-alertas';
+import { leerLeidas, claveAlerta, suscribirCambiosLeidas, SIN_LEIDAS } from './notificaciones-leidas';
 
 /**
  * La campana ya NO abre un dropdown — lleva a /admin/notificaciones, una
- * página real (decisión explícita: "debe de aparecer una página de
- * notificaciones"). Server Component: sin estado propio, solo un Link con
- * el punto rojo si hay algo que de verdad requiere atención.
+ * página real. Sigue siendo solo un punto rojo, NUNCA un número dentro de
+ * un círculo — pedido explícito del usuario, no un contador de badge tipo
+ * app store. El punto ahora respeta "marcar como leído" (localStorage,
+ * `notificaciones-leidas.ts`): si ya se leyeron todas las de tipo
+ * "atención", no se muestra aunque `calcularAlertas` las siga calculando.
  */
 export default function Notificaciones({ alertas }: { alertas: Alerta[] }) {
-  const hayAtencion = alertas.some((a) => a.tipo === 'atencion');
+  const leidas = useSyncExternalStore(suscribirCambiosLeidas, leerLeidas, () => SIN_LEIDAS);
+  const hayAtencion = alertas.some((a) => a.tipo === 'atencion' && !leidas.has(claveAlerta(a)));
 
   return (
     <Link href="/admin/notificaciones"
