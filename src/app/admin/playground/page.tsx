@@ -1,4 +1,5 @@
 import { FlaskConical, ScanText, Calculator, Smartphone, Gauge, Info } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,28 +27,23 @@ export default function PlaygroundPage() {
 
       <div className="glass-panel overflow-hidden">
         <section className="p-6">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-              <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold">Esta función no existe en Likida hoy.</p>
-              <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
-                Cuando exista, el Playground va a servir para probar un agente en vivo con una entrada de prueba
-                (una foto de comprobante, un mensaje de WhatsApp) y ver tokens, costo, latencia y la traza paso a
-                paso — sin afectar producción ni escribir en las tablas reales de una flota.
-              </p>
-              <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
-                No es una pantalla que falte diseñar: construirlo de verdad requiere una ruta de ejecución aislada
-                del pipeline, instrumentar la latencia por llamada (hoy Likida no la registra — ver <span className="font-mono text-xs">Model Ops</span>)
-                y garantizar que ninguna prueba toque datos reales de un cliente. Por eso esta página no simula un
-                chat ni una caja de prueba: sería una demo que aparenta funcionar sin hacerlo.
-              </p>
-              <p className="text-xs mt-4" style={{ color: 'var(--muted)' }}>
-                Referencia: <span className="font-mono">docs/superpowers/plans/2026-08-02-roadmap-admin-negocio.md</span>
-              </p>
-            </div>
-          </div>
+          <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <span className="block text-sm font-semibold">Esta función no existe en Likida hoy.</span>
+            <span className="block text-sm mt-2" style={{ color: 'var(--muted)' }}>
+              Cuando exista, el Playground va a servir para probar un agente en vivo con una entrada de prueba
+              (una foto de comprobante, un mensaje de WhatsApp) y ver tokens, costo, latencia y la traza paso a
+              paso — sin afectar producción ni escribir en las tablas reales de una flota.
+            </span>
+            <span className="block text-sm mt-2" style={{ color: 'var(--muted)' }}>
+              No es una pantalla que falte diseñar: construirlo de verdad requiere una ruta de ejecución aislada
+              del pipeline, instrumentar la latencia por llamada (hoy Likida no la registra — ver <span className="font-mono text-xs">Model Ops</span>)
+              y garantizar que ninguna prueba toque datos reales de un cliente. Por eso esta página no simula un
+              chat ni una caja de prueba: sería una demo que aparenta funcionar sin hacerlo.
+            </span>
+            <span className="block text-xs mt-4" style={{ color: 'var(--muted)' }}>
+              Referencia: <span className="font-mono">docs/superpowers/plans/2026-08-02-roadmap-admin-negocio.md</span>
+            </span>
+          </EstadoVacio>
         </section>
 
         <section className="p-6 border-t" style={{ borderColor: 'var(--line)' }}>

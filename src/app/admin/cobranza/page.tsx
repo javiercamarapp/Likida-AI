@@ -1,4 +1,5 @@
 import { Receipt } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,17 +28,14 @@ export default function CobranzaPage() {
       </header>
 
       <div className="glass-panel overflow-hidden">
-        <div className="p-6 flex items-start gap-4">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-            <Receipt width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-          </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight">Sin facturación todavía</h1>
-            <p className="text-sm mt-1.5 leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Likida no cobra a ningún cliente todavía — esta página se llena en cuanto exista facturación
-              real (Fase 3 del roadmap).
-            </p>
-          </div>
+        <div className="p-6">
+          {/* EstadoVacio (design system v2, ui/kit.tsx) — mismo icono-en-caja +
+              mensaje que antes, presentación consolidada, misma redacción
+              honesta sin cambiar una palabra. */}
+          <EstadoVacio icono={<Receipt width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <span className="font-semibold">Sin facturación todavía.</span> Likida no cobra a ningún cliente
+            todavía — esta página se llena en cuanto exista facturación real (Fase 3 del roadmap).
+          </EstadoVacio>
         </div>
 
         <div className="px-6 pb-6 pt-5 border-t" style={{ borderColor: 'var(--line)' }}>

@@ -5,6 +5,7 @@ import {
   Blocks, Database, Mail, Bug, Rocket, Smartphone, KeyRound,
 } from 'lucide-react';
 import { IconoProveedor } from '../proveedor-icono';
+import { StatusPill, EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,17 +28,13 @@ function TituloSeccion({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Punto de estado verde — las 5 tarjetas de esta sección están
- *  efectivamente conectadas HOY (no hay una tabla de "estado de
- *  integración" detrás; es un hecho verificable del código y la cuenta de
- *  cada servicio, igual que el resto de esta página). */
-function PuntoOk() {
-  return <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: 'var(--color-ok)' }} />;
-}
-
 /** Tarjeta de conector — mismo patrón que "Salud del sistema" en
- *  admin/page.tsx (`.card` que es un link completo, hover con sombra),
- *  ahora con un punto de estado junto al nombre. `href` externo abre en
+ *  admin/page.tsx (`.card` que es un link completo, hover con sombra), ahora
+ *  con `StatusPill` (design system v2, ui/kit.tsx) junto al nombre en vez
+ *  del punto de color suelto de antes — mismo hecho real de siempre (las 5
+ *  tarjetas están efectivamente conectadas HOY, verificable en código/cuenta
+ *  de cada servicio), solo que ahora con la etiqueta de texto que la propia
+ *  regla de `StatusPill` exige ("nunca color solo"). `href` externo abre en
  *  pestaña nueva; interno (WhatsApp Infra, ya vive bajo /admin) usa
  *  `next/link` para no recargar toda la consola. */
 function Conector({
@@ -48,10 +45,10 @@ function Conector({
   const contenido = (
     <>
       <Insignia Icono={Icono} />
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5">
-          <PuntoOk />
-          <span className="text-sm font-medium">{titulo}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium truncate">{titulo}</span>
+          <StatusPill estado="ok">Conectado</StatusPill>
         </div>
         <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{subtitulo}</p>
       </div>
@@ -140,14 +137,14 @@ export default async function IntegracionesPage() {
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <TituloSeccion>Rotación de API keys</TituloSeccion>
-          <div className="card p-4 mt-3">
-            <div className="flex items-start gap-3">
-              <Insignia Icono={KeyRound} />
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                Rotación de API keys — Fase 5 del roadmap. Hoy las llaves de cada servicio viven en variables de
-                entorno de Vercel, sin una UI de administración ni rotación automática dentro de este panel.
-              </p>
-            </div>
+          {/* EstadoVacio (design system v2, ui/kit.tsx) — mismo icono
+              (KeyRound, igual que antes) y mensaje honesto, ni una palabra
+              cambiada. */}
+          <div className="mt-3">
+            <EstadoVacio icono={<KeyRound width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+              Rotación de API keys — Fase 5 del roadmap. Hoy las llaves de cada servicio viven en variables de
+              entorno de Vercel, sin una UI de administración ni rotación automática dentro de este panel.
+            </EstadoVacio>
           </div>
         </section>
       </div>

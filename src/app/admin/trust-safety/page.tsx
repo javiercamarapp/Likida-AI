@@ -1,4 +1,5 @@
 import { ShieldAlert } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,23 +24,20 @@ export default function TrustSafetyPage() {
       </header>
 
       <div className="glass-panel overflow-hidden">
-        <div className="p-8 text-center">
-          <div className="w-12 h-12 rounded-xl mx-auto flex items-center justify-center" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-            <ShieldAlert width={20} height={20} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          </div>
-          <p className="text-sm mt-4 max-w-lg mx-auto" style={{ color: 'var(--muted)' }}>
+        <section className="p-5">
+          <EstadoVacio icono={<ShieldAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
             Intentos de jailbreak bloqueados, fugas de PII detectadas, cuentas bloqueadas por abuso/spam, rate
             limiting por cuenta — Likida no tiene un pipeline de detección de esto hoy.
-          </p>
-        </div>
-        <div className="px-5 pb-5 pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
+          </EstadoVacio>
+        </section>
+        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <p className="text-xs" style={{ color: 'var(--muted)' }}>
             El prompt del Agente de Cuadre ya incluye instrucciones anti-inyección explícitas — trata folios,
             tickets y mensajes del operador como datos, nunca como instrucciones
             (<code className="font-mono">src/lib/agents/prompts.ts</code>) — pero eso es mitigación en el prompt,
             no detección ni alertas: no hay panel de eso hoy.
           </p>
-        </div>
+        </section>
       </div>
     </div>
   );

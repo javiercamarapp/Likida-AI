@@ -1,16 +1,8 @@
 import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio';
-import { usd } from '@/lib/formato';
 import { Smartphone, MessageCircle, ChevronDown } from 'lucide-react';
+import { KpiTile, EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
-
-function Insignia({ Icono }: { Icono: typeof Smartphone }) {
-  return (
-    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-      <Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-    </div>
-  );
-}
 
 function TituloSeccion({ children }: { children: React.ReactNode }) {
   return (
@@ -44,24 +36,14 @@ export default async function AgenteWhatsappPage() {
         <section className="p-5">
           <TituloSeccion>Costo real</TituloSeccion>
           <div className="grid grid-cols-2 gap-3 mt-3">
-            <div className="card p-3.5">
-              <div className="flex items-center gap-3">
-                <Insignia Icono={Smartphone} />
-                <div className="min-w-0">
-                  <div className="text-xl font-semibold tracking-tight tabular leading-tight">{whatsapp ? usd(whatsapp.costoUsd) : usd(0)}</div>
-                  <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>Gastado en WhatsApp</div>
-                </div>
-              </div>
-            </div>
-            <div className="card p-3.5">
-              <div className="flex items-center gap-3">
-                <Insignia Icono={MessageCircle} />
-                <div className="min-w-0">
-                  <div className="text-xl font-semibold tracking-tight tabular leading-tight">{whatsapp ? whatsapp.n : 0}</div>
-                  <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>Llamadas de WhatsApp</div>
-                </div>
-              </div>
-            </div>
+            <KpiTile
+              icono={<Smartphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              etiqueta="Gastado en WhatsApp" valor={whatsapp ? whatsapp.costoUsd : 0} formato="usd"
+            />
+            <KpiTile
+              icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              etiqueta="Llamadas de WhatsApp" valor={whatsapp ? whatsapp.n : 0} formato="entero"
+            />
           </div>
         </section>
 
@@ -105,10 +87,12 @@ export default async function AgenteWhatsappPage() {
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <TituloSeccion>Lo que falta</TituloSeccion>
-          <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
-            Entrega (enviados/entregados/leídos), ventana de 24h, opt-ins — requiere integrar la Meta WhatsApp
-            Business API más a fondo de lo que Likida usa hoy.
-          </p>
+          <div className="mt-2">
+            <EstadoVacio>
+              Entrega (enviados/entregados/leídos), ventana de 24h, opt-ins — requiere integrar la Meta WhatsApp
+              Business API más a fondo de lo que Likida usa hoy.
+            </EstadoVacio>
+          </div>
         </section>
       </div>
     </div>

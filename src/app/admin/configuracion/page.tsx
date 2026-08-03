@@ -1,5 +1,6 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
-import { Settings, Info } from 'lucide-react';
+import { Settings } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,17 +51,10 @@ export default async function ConfiguracionPage() {
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <div className="card p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-                <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
-              </div>
-              <p className="text-sm">
-                Backups, disaster recovery, residencia de datos — gestionados por Supabase/Vercel a nivel de
-                infraestructura, sin panel propio aquí; si hace falta detalle, se consulta directo en sus dashboards.
-              </p>
-            </div>
-          </div>
+          <EstadoVacio>
+            Backups, disaster recovery, residencia de datos — gestionados por Supabase/Vercel a nivel de
+            infraestructura, sin panel propio aquí; si hace falta detalle, se consulta directo en sus dashboards.
+          </EstadoVacio>
         </section>
       </div>
     </div>

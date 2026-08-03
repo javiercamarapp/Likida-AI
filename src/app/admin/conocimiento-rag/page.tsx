@@ -1,4 +1,5 @@
 import { BookOpen } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,19 +26,28 @@ export default function ConocimientoRagPage() {
       </header>
 
       <div className="glass-panel overflow-hidden">
-        <section className="p-6">
-          <p className="text-sm leading-relaxed">
-            Likida no usa RAG (retrieval-augmented generation) hoy — sus agentes trabajan directo sobre la
-            extracción estructurada de OCR y la lógica de conciliación, no sobre una base de conocimiento
-            documental. Esta página existe en el mapa de features de referencia, pero no aplica al producto
-            actual a menos que eso cambie.
-          </p>
-          <p className="text-sm mt-3" style={{ color: 'var(--muted)' }}>
-            No hay tabla de embeddings, vector store, ni pipeline de retrieval en este código — por eso no hay
-            nada más que mostrar aquí: ni carga de documentos, ni medidor de calidad de retrieval, ni un
-            probador de RAG. Construir cualquiera de esos widgets sin la feature detrás sería aparentar algo
-            que no existe.
-          </p>
+        <section className="p-5">
+          {/* EstadoVacio (design system v2, ui/kit.tsx) — mismo mensaje
+              honesto de antes, ni una palabra cambiada; las dos oraciones
+              que antes eran `<p>` separados van como `<span className="block">`
+              porque EstadoVacio ya envuelve `children` en un `<p>` propio, y
+              anidar `<p>` dentro de `<p>` es HTML inválido (el navegador
+              cierra el `<p>` externo antes de tiempo y React lo marca como
+              mismatch de hidratación). Icono por defecto (Info). */}
+          <EstadoVacio>
+            <span className="block">
+              Likida no usa RAG (retrieval-augmented generation) hoy — sus agentes trabajan directo sobre la
+              extracción estructurada de OCR y la lógica de conciliación, no sobre una base de conocimiento
+              documental. Esta página existe en el mapa de features de referencia, pero no aplica al producto
+              actual a menos que eso cambie.
+            </span>
+            <span className="block mt-3" style={{ color: 'var(--muted)' }}>
+              No hay tabla de embeddings, vector store, ni pipeline de retrieval en este código — por eso no hay
+              nada más que mostrar aquí: ni carga de documentos, ni medidor de calidad de retrieval, ni un
+              probador de RAG. Construir cualquiera de esos widgets sin la feature detrás sería aparentar algo
+              que no existe.
+            </span>
+          </EstadoVacio>
         </section>
       </div>
     </div>

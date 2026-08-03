@@ -4,6 +4,7 @@ import { LineChart } from 'lucide-react';
 import { AreaChartSimple, Dona, BarChartSimple } from '../charts';
 import ContadorRetro from '../contador-retro';
 import { IconoProveedor } from '../proveedor-icono';
+import { ChartCard, EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,17 +12,6 @@ const FASE_LABEL: Record<string, string> = {
   ocr: 'Agente OCR', cuadre: 'Agente de Cuadre', escalacion: 'Agente de Escalación',
   chat: 'Agente de Chat', router: 'Agente Router', whatsapp: 'Agente de WhatsApp',
 };
-
-/** Título de sección — mismo patrón que admin/page.tsx: SIEMPRE dentro de
- *  un `.glass-panel`, nunca suelto sobre el fondo difuminado (el gris de
- *  `--muted` solo pasa contraste sobre la superficie blanca del panel). */
-function TituloSeccion({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-      {children}
-    </h2>
-  );
-}
 
 /**
  * Analítica & Stats — el explorador de BI de /admin: mismos datos que
@@ -33,8 +23,15 @@ function TituloSeccion({ children }: { children: React.ReactNode }) {
  * Con 1 tenant y `llm_costo`/`gasto` cubriendo apenas una semana, esta
  * página se queda a propósito en escala honesta: nada de histogramas,
  * mapas de calor ni comparativas por cliente inventados — esos necesitan
- * más historia y más de un tenant, así que la sección 4 lo dice tal cual
- * en vez de simular una gráfica vacía.
+ * más historia y más de un tenant, así que la última sección lo dice tal
+ * cual en vez de simular una gráfica vacía. Por la misma razón NO se
+ * combinan costo y tokens en un `MultiLine` (graficas.tsx): son dos
+ * unidades de escala muy distintas (dólares vs. miles de tokens) — en un
+ * solo eje compartido la serie más chica se aplastaría casi a cero, el
+ * mismo motivo por el que `AreaChartSimple` ya las pide por separado (ver
+ * comentario en `admin/page.tsx`). Tampoco se usa `CalendarHeatmap`/
+ * `Heatmap`: la sección de abajo documenta que no hay suficiente historia
+ * día a día todavía para que un mapa de calor diga algo real.
  */
 export default async function AnaliticaPage() {
   const r = await getResumenNegocio();
@@ -56,40 +53,37 @@ export default async function AnaliticaPage() {
 
       <div className="glass-panel overflow-hidden">
         <section className="p-5">
-          <TituloSeccion>Costo de IA en el tiempo</TituloSeccion>
-          <div className="card p-4 mt-3">
-            {r.porDia.length > 1 ? (
+          {r.porDia.length > 1 ? (
+            <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
               <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} />
-            ) : (
-              <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
+            </ChartCard>
+          ) : (
+            <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
+              <EstadoVacio icono={<LineChart width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
                 Sin historial suficiente todavía.
-              </div>
-            )}
-          </div>
+              </EstadoVacio>
+            </ChartCard>
+          )}
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div className="card p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
-                Costo por fase
-              </h3>
-              {r.porFase.length > 0 ? (
+            {r.porFase.length > 0 ? (
+              <ChartCard titulo="Costo por fase" tamano="S">
                 <Dona segmentos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))} />
-              ) : (
-                <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 60 }}>
-                  Todavía no hay actividad de IA registrada.
-                </div>
-              )}
-            </div>
+              </ChartCard>
+            ) : (
+              <ChartCard titulo="Costo por fase" tamano="S">
+                <EstadoVacio>Todavía no hay actividad de IA registrada.</EstadoVacio>
+              </ChartCard>
+            )}
 
-            <div className="card p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
-                Costo por modelo
-              </h3>
-              {r.porModelo.length === 0 ? (
-                <div className="text-sm" style={{ color: 'var(--muted)' }}>Sin llamadas registradas todavía.</div>
-              ) : (
+            {r.porModelo.length === 0 ? (
+              <ChartCard titulo="Costo por modelo" tamano="S">
+                <EstadoVacio>Sin llamadas registradas todavía.</EstadoVacio>
+              </ChartCard>
+            ) : (
+              <ChartCard titulo="Costo por modelo" tamano="M">
                 <div className="divide-y" style={{ borderColor: 'var(--line)' }}>
                   {r.porModelo.map((m) => (
                     <div key={m.modelo} className="py-2.5 flex items-center gap-3">
@@ -102,38 +96,36 @@ export default async function AnaliticaPage() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <TituloSeccion>Facturas procesadas por día</TituloSeccion>
-          <div className="card p-4 mt-3">
-            {r.facturasPorDia.some((d) => d.n > 0) ? (
-              <BarChartSimple datos={r.facturasPorDia.map((d) => ({ dia: d.dia, valor: d.n }))} alto={160} />
-            ) : (
-              <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
-                Aún sin datos suficientes.
-              </div>
+              </ChartCard>
             )}
           </div>
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <TituloSeccion>Distribuciones y comparativas</TituloSeccion>
-          <p className="text-sm mt-3" style={{ color: 'var(--muted)' }}>
-            Histogramas de mensajes por conversación, mapa de calor hora×día y comparativas por cliente
-            necesitan más historia y más de un tenant para decir algo real — hoy Likida tiene 1 flota y
-            pocos días de datos, así que estas vistas se muestran en cuanto haya suficiente para que no
-            sean solo ruido.
-          </p>
+          {r.facturasPorDia.some((d) => d.n > 0) ? (
+            <ChartCard titulo="Facturas procesadas por día" tamano="M">
+              <BarChartSimple datos={r.facturasPorDia.map((d) => ({ dia: d.dia, valor: d.n }))} alto={160} />
+            </ChartCard>
+          ) : (
+            <ChartCard titulo="Facturas procesadas por día" tamano="M">
+              <EstadoVacio>Aún sin datos suficientes.</EstadoVacio>
+            </ChartCard>
+          )}
+        </section>
+
+        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          <ChartCard titulo="Distribuciones y comparativas" tamano="S">
+            <EstadoVacio>
+              Histogramas de mensajes por conversación, mapa de calor hora×día y comparativas por cliente
+              necesitan más historia y más de un tenant para decir algo real — hoy Likida tiene 1 flota y
+              pocos días de datos, así que estas vistas se muestran en cuanto haya suficiente para que no
+              sean solo ruido.
+            </EstadoVacio>
+          </ChartCard>
         </section>
 
         <section className="px-5 py-4 border-t" style={{ borderColor: 'var(--line)' }}>
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            Exportar CSV y reportes programados — Fase 2 del roadmap.
-          </p>
+          <EstadoVacio>Exportar CSV y reportes programados — Fase 2 del roadmap.</EstadoVacio>
         </section>
       </div>
     </div>

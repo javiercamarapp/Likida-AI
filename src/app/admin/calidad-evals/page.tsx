@@ -1,4 +1,5 @@
 import { FlaskConical } from 'lucide-react';
+import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,19 +21,15 @@ export default function CalidadEvalsPage() {
       </header>
 
       <div className="glass-panel overflow-hidden">
-        <div className="p-8 text-center">
-          <div className="w-12 h-12 rounded-xl mx-auto flex items-center justify-center" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-            <FlaskConical width={20} height={20} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          </div>
-          <p className="text-sm mt-4 max-w-lg mx-auto" style={{ color: 'var(--muted)' }}>
+        <section className="p-5">
+          <EstadoVacio icono={<FlaskConical width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
             Score de calidad, % de baja confianza, alucinaciones detectadas, CSAT, feedback 👍/👎, drift de calidad,
             evals automáticos por criterio, cola de revisión priorizada — Likida no tiene un pipeline de evaluación
             ni una tabla de feedback hoy.
-          </p>
-          <p className="text-xs mt-3 max-w-lg mx-auto" style={{ color: 'var(--muted)' }}>
+            <br /><br />
             Esto es AgentOps de nivel Langfuse/Braintrust — semanas de trabajo real, Fase 4 del roadmap.
-          </p>
-        </div>
+          </EstadoVacio>
+        </section>
       </div>
     </div>
   );

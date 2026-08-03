@@ -2,7 +2,8 @@ import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { usd } from '@/lib/formato';
 import { Settings2, ScanText, Calculator, Smartphone } from 'lucide-react';
 import { Dona } from '../charts';
-import { IconoProveedor } from '../proveedor-icono';
+import { ChartCard, EstadoVacio } from '../ui/kit';
+import { HBars } from '../ui/graficas';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,40 +103,33 @@ export default async function ModelOpsPage() {
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <TituloSeccion>Costo por fase y tráfico por modelo</TituloSeccion>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
-            {r.porFase.length > 0 ? (
-              <div className="card p-4">
+            <ChartCard titulo="Costo por fase" tamano="L">
+              {r.porFase.length > 0 ? (
                 <Dona segmentos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))} />
-              </div>
-            ) : (
-              <div className="card p-4 flex items-center text-sm" style={{ color: 'var(--muted)' }}>Todavía no hay actividad de IA registrada.</div>
-            )}
+              ) : (
+                <div className="flex items-center h-full text-sm" style={{ color: 'var(--muted)' }}>Todavía no hay actividad de IA registrada.</div>
+              )}
+            </ChartCard>
 
-            {r.porModelo.length === 0 ? (
-              <div className="card p-4 text-sm" style={{ color: 'var(--muted)' }}>Sin llamadas registradas todavía.</div>
-            ) : (
-              <div className="card divide-y" style={{ borderColor: 'var(--line)' }}>
-                {r.porModelo.map((m) => (
-                  <div key={m.modelo} className="px-4 py-3 flex items-center gap-3">
-                    <IconoProveedor modelo={m.modelo} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-mono truncate">{m.modelo}</div>
-                      <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{m.n} llamadas · todas las fases</div>
-                    </div>
-                    <div className="text-sm font-semibold tabular shrink-0">{usd(m.costoUsd)}</div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <ChartCard titulo="Costo por modelo — todas las fases" tamano="M">
+              {r.porModelo.length === 0 ? (
+                <div className="flex items-center h-full text-sm" style={{ color: 'var(--muted)' }}>Sin llamadas registradas todavía.</div>
+              ) : (
+                <HBars datos={r.porModelo.map((m) => ({ etiqueta: m.modelo, valor: m.costoUsd }))} formato="usd" />
+              )}
+            </ChartCard>
           </div>
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <TituloSeccion>Roadmap</TituloSeccion>
-          <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
-            Versionado de prompts, rollback, guardrails configurables — Fase 2 del roadmap. Hoy los prompts viven en código
-            (<code className="font-mono text-xs">src/lib/agents/prompts.ts</code>), sin historial de versiones ni UI de edición.
-            No existe tampoco un selector de modelo por fase ni tenant: cambiar de modelo hoy es un cambio de código y un deploy.
-          </p>
+          <div className="mt-2">
+            <EstadoVacio>
+              Versionado de prompts, rollback, guardrails configurables — Fase 2 del roadmap. Hoy los prompts viven en código
+              (<code className="font-mono text-xs">src/lib/agents/prompts.ts</code>), sin historial de versiones ni UI de edición.
+              No existe tampoco un selector de modelo por fase ni tenant: cambiar de modelo hoy es un cambio de código y un deploy.
+            </EstadoVacio>
+          </div>
         </section>
       </div>
     </div>
