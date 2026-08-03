@@ -1,7 +1,14 @@
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
+import { Geist } from 'next/font/google';
 
 export const dynamic = 'force-dynamic';
+
+// Geist para UI/tablas/botones — el serif editorial (`--font-display`,
+// Fraunces) ya se carga una sola vez en app/layout.tsx y se usa donde
+// corresponda (títulos), no aquí de nuevo, para no cargar la misma fuente
+// dos veces.
+const geist = Geist({ subsets: ['latin'], variable: '--font-admin' });
 
 const AGENTES = [
   { fase: 'ocr', nombre: 'Agente OCR' },
@@ -20,7 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { nombre } = await requireSuperadmin();
 
   return (
-    <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
+    <div className={`${geist.variable} min-h-screen flex`} style={{ background: 'var(--bg)', fontFamily: 'var(--font-admin), var(--font-sans)' }}>
       <aside className="w-[260px] shrink-0 border-r flex flex-col h-screen sticky top-0" style={{ borderColor: 'var(--line)' }}>
         <div className="px-5 py-5 flex items-center gap-2">
           <span className="font-semibold tracking-tight text-lg">Likida</span>

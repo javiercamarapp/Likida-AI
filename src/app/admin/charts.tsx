@@ -4,30 +4,39 @@
 // hairline de 1px. Interactividad con :hover puro en CSS — sin estado de
 // React para algo que no lo necesita.
 
-export function Sparkline({ valores, ancho = 96, alto = 28 }: { valores: number[]; ancho?: number; alto?: number }) {
-  if (valores.length < 2) return <div style={{ width: ancho, height: alto }} />;
+/**
+ * `width="100%"` + viewBox, NUNCA un ancho fijo en px: un ancho fijo dentro
+ * de un flex angosto (la tarjeta de stat) fue justo lo que empujó el trazo
+ * fuera de la tarjeta la primera vez. El viewBox interno sigue en unidades
+ * fijas (100×28) — lo que cambia es que el SVG se ESCALA al contenedor real
+ * en vez de reclamar un ancho propio que el contenedor tiene que ceder.
+ */
+export function Sparkline({ valores, alto = 24 }: { valores: number[]; alto?: number }) {
+  const ANCHO_VB = 100;
+  if (valores.length < 2) return null;
   const max = Math.max(...valores);
   const min = Math.min(...valores);
   const rango = max - min || 1;
-  const paso = ancho / (valores.length - 1);
-  const puntos = valores.map((v, i) => [i * paso, alto - ((v - min) / rango) * alto] as const);
+  const paso = ANCHO_VB / (valores.length - 1);
+  const puntos = valores.map((v, i) => [i * paso, alto - 2 - ((v - min) / rango) * (alto - 4)] as const);
   const d = puntos.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   const [ux, uy] = puntos[puntos.length - 1];
   return (
-    <svg width={ancho} height={alto} viewBox={`0 0 ${ancho} ${alto}`} className="overflow-visible">
-      <path d={d} fill="none" stroke="var(--ink)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.55} />
+    <svg width="100%" height={alto} viewBox={`0 0 ${ANCHO_VB} ${alto}`} preserveAspectRatio="none" className="block">
+      <path d={d} fill="none" stroke="var(--ink)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} vectorEffect="non-scaling-stroke" />
       <circle cx={ux} cy={uy} r={2.5} fill="var(--ink)" />
     </svg>
   );
 }
 
 export function Tendencia({ valor }: { valor: number | null }) {
-  if (valor === null) return <span className="text-xs" style={{ color: 'var(--muted)' }}>sin historia suficiente</span>;
+  if (valor === null) return <span className="text-xs block truncate" style={{ color: 'var(--muted)' }}>sin historia suficiente</span>;
   const sube = valor >= 0;
   return (
-    <span className="text-xs font-medium inline-flex items-center gap-0.5" style={{ color: sube ? 'var(--color-ok)' : 'var(--color-bad)' }}>
+    <span className="text-xs font-medium block truncate" style={{ color: sube ? 'var(--color-ok)' : 'var(--color-bad)' }}
+      title={`${sube ? '+' : ''}${valor}% vs los 7 días previos`}>
       {sube ? '↑' : '↓'} {Math.abs(valor)}%
-      <span style={{ color: 'var(--muted)', fontWeight: 400 }}>&nbsp;vs 7 días previos</span>
+      <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · 7d</span>
     </span>
   );
 }
