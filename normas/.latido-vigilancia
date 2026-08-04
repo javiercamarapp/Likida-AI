@@ -1,37 +1,37 @@
-fecha_corrida: 2026-08-03
+fecha_corrida: 2026-08-04
 ultimo_dia_barrido: null
-rango_intentado: 2026-07-24..2026-08-02
+rango_intentado: 2026-07-24..2026-08-03
 notas_revisadas: 0
 notas_por_edicion: {matutina: null, vespertina: null, extraordinaria: null}
 fichas_disparadas: 0
 etag_sat: null
-etag_sat_check: "bloqueado_egress (hoy es LUNES, tocaba correrlo)"
+etag_sat_check: no_aplica_hoy_no_es_lunes
 deriva_ley_check: no_aplica_no_es_dia_1_trimestre
 estado: "INFRA egress_bloqueado"
 detalle: >
-  Quinta corrida consecutiva (02-ago, 31-jul, 28-jul, y antes) bloqueada por la
-  misma causa: el proxy de salida de esta sesión responde 403 a todo CONNECT
-  hacia sidofqa.segob.gob.mx. Confirmado de nuevo por dos vías independientes
-  en esta corrida: `curl` directo (CONNECT tunnel failed, response 403) y la
-  herramienta WebFetch (HTTP 403 Forbidden), ambas contra
-  `sidofqa.segob.gob.mx/dof/sidof/diarios/porFecha/03-08-2026`. Se repitió
-  también la prueba directa a `www.sat.gob.mx` y `www.diputados.gob.mx`: mismo
-  403 en el CONNECT tunnel para los tres hosts. Hoy es LUNES, así que además
-  del barrido diario tocaba el chequeo del ETag del minisitio del SAT — también
-  bloqueado por la misma causa, cero intento posible.
-  `__agentproxy/status` sigue mostrando el rechazo en `recentRelayFailures`:
-  "gateway answered 403 to CONNECT (policy denial or upstream failure)" para
-  sidofqa.segob.gob.mx:443, www.sat.gob.mx:443 y www.diputados.gob.mx:443. La
-  allowlist de la sesión (noProxy) sigue limitada a paquetería (npm, pypi, jsr,
-  crates, proxy.golang.org) y dominios de anthropic.com — no incluye SIDOF, SAT
-  ni diputados.gob.mx. No se reintentó (403 de política no se reintenta): mismo
-  diagnóstico que las cuatro corridas anteriores, nada cambió en la política de
-  egreso desde el 28-jul.
-sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible, quinta vez consecutiva.
+  Sexta corrida consecutiva (04-ago, 03-ago, 02-ago, 31-jul, 28-jul, y antes)
+  bloqueada por la misma causa: el proxy de salida de esta sesión responde 403
+  a todo CONNECT hacia sidofqa.segob.gob.mx. Confirmado de nuevo por dos vías
+  independientes en esta corrida: `curl` directo contra
+  `sidofqa.segob.gob.mx/dof/sidof/diarios/porFecha/04-08-2026`
+  (CONNECT tunnel failed, response 403) y la herramienta WebFetch contra la
+  misma URL (HTTP 403 Forbidden). `__agentproxy/status` sigue mostrando el
+  mismo rechazo en `recentRelayFailures`: "gateway answered 403 to CONNECT
+  (policy denial or upstream failure)" para sidofqa.segob.gob.mx:443. La
+  allowlist de la sesión (noProxy) sigue sin incluir sidofqa.segob.gob.mx,
+  www.sat.gob.mx ni diputados.gob.mx — solo paquetería (npm, pypi, jsr,
+  crates, proxy.golang.org) y dominios de anthropic.com. Por README de la
+  proxy: un 403/407 de política no se reintenta ni se rodea, se reporta. Hoy
+  no era lunes (no tocaba ETag del SAT) ni día 1 de trimestre (no tocaba
+  deriva de ley), así que el único chequeo pendiente hoy era el barrido del
+  DOF, y también quedó bloqueado.
+sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible, sexta vez consecutiva.
 accion_requerida: >
   Habilitar en la política de egreso de esta sesión/entorno los hosts:
-  sidofqa.segob.gob.mx, www.sat.gob.mx, www.diputados.gob.mx (o su alternativa
-  api.tlaloc.sh si se prefiere la vía comercial). Sin eso, esta rutina no puede
-  correr en este entorno bajo ninguna cadencia, y el rango sin barrer sigue
-  creciendo (ya cubre desde antes del 21-jul, ahora hasta el 02-ago — 5
-  corridas y contando sin una sola verificación real).
+  sidofqa.segob.gob.mx, www.sat.gob.mx, www.diputados.gob.mx (o su
+  alternativa api.tlaloc.sh si se prefiere la vía comercial). Sin eso, esta
+  rutina no puede correr en este entorno bajo ninguna cadencia. El rango sin
+  barrer sigue creciendo: ya cubre desde el 24-jul, ahora hasta el 03-ago —
+  seis corridas y contando sin una sola verificación real. La ventana
+  anticipada del SAT (ETag del minisitio, chequeo semanal de lunes) también
+  lleva bloqueada dos lunes seguidos (28-jul, 03-ago) por la misma causa.
