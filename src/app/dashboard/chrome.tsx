@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import Fondo from '../fondo';
-import { MARCO_FILA, MARCO_SIDEBAR, MARCO_COLUMNA, CLASE_COLUMNA_CENTRO } from '../marco';
+import { MARCO_FILA, MARCO_SIDEBAR, MARCO_COLUMNA, MARCO_SCROLL, CLASE_COLUMNA_CENTRO } from '../marco';
 import SidebarNav from './sidebar-nav';
 import AvisoRol from './aviso-rol';
 import RailAsistente from './rail';
@@ -80,8 +80,10 @@ export default function DashboardChrome({
         </aside>
 
         <div className={`${MARCO_COLUMNA} ${CLASE_COLUMNA_CENTRO}`}>
-          <AvisoRol rolReal={rol} />
-          {children}
+          <div className={MARCO_SCROLL}>
+            <AvisoRol rolReal={rol} />
+            {children}
+          </div>
         </div>
 
         {/* El rail, fijo a la derecha en las 20 páginas. */}

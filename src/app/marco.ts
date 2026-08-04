@@ -22,21 +22,24 @@ export const MARCO_FILA = 'min-h-dvh flex items-start gap-4 p-4 relative z-10';
 export const MARCO_SIDEBAR =
   'glass-panel w-[72px] lg:w-[232px] shrink-0 flex flex-col h-[calc(100dvh-2rem)] sticky top-4 self-start overflow-hidden';
 
-/** La columna de contenido, con su propio scroll.
+/** La columna de contenido.
  *
- *  `pb-3` no es adorno: sin él, el último panel de la página termina EXACTO
- *  donde termina el área de scroll y su borde redondeado nunca se ve, ni
- *  llegando hasta abajo. Se lee como si la interfaz estuviera cortada. Con el
- *  respiro, todo panel cierra.
+ *  RECORTA EN REDONDO Y NO SCROLLEA ELLA MISMA. Antes tenía `overflow-y-auto`
+ *  y el recorte era un rectángulo: cualquier panel más alto que la pantalla se
+ *  cortaba a ras, en escuadra, y su borde redondeado no aparecía nunca — se
+ *  lee como interfaz rota, no como "hay más abajo".
  *
- *  Las páginas que además quieren el encabezado FIJO y el scroll dentro del
- *  panel —como Inicio en las dos consolas— lo declaran ellas: `h-full flex
- *  flex-col` en el `<main>`, el encabezado `shrink-0`, y el resto envuelto en
- *  `flex-1 min-h-0 overflow-y-auto`. No se puede hacer desde aquí porque cada
- *  página decide qué parte suya es encabezado. */
-export const MARCO_COLUMNA = 'flex-1 min-w-0 h-[calc(100dvh-2rem)] overflow-y-auto pb-3';
+ *  Con `rounded-2xl overflow-hidden` aquí y el scroll en el hijo
+ *  (`MARCO_SCROLL`), el límite visual de CUALQUIER página es una esquina
+ *  redondeada y el contenido se recorre adentro. Se resuelve desde el marco,
+ *  así que aplica a las ~60 páginas de las dos consolas sin tocarlas una por
+ *  una. */
+export const MARCO_COLUMNA = 'flex-1 min-w-0 h-[calc(100dvh-2rem)] rounded-2xl overflow-hidden';
 
-/** Ancho del asistente contraído, en px. */
+/** El hijo que sí scrollea. `pb-3` para que el último panel de la página
+ *  termine con aire y su borde inferior se vea completo al llegar abajo. */
+export const MARCO_SCROLL = 'h-full overflow-y-auto pb-3';
+
 export const ANCHO_ASISTENTE = 276;
 
 /** El asistente contraído: pegado a la derecha, con su propio alto.

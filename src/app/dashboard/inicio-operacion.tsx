@@ -70,7 +70,7 @@ export async function InicioOperacion({
     // del recuadro nunca aparece, como si la interfaz estuviera rota.
     // Con `h-full` + `min-h-0` en la cadena, cada panel cierra donde debe y
     // lo que no cabe se desplaza adentro.
-    <main className="flex flex-col gap-3 h-full">
+    <main className="flex flex-col gap-3">
       <div className="glass-panel overflow-hidden shrink-0">
         <div className="px-5 pt-3 pb-3 flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1">
@@ -121,8 +121,8 @@ export async function InicioOperacion({
         <TableroCifras t={tablero} />
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 flex-1 min-h-0 overflow-y-auto xl:overflow-visible">
-        <section className="glass-panel overflow-hidden flex flex-col min-h-0">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        <section className="glass-panel overflow-hidden">
           <div className="px-5 pt-4 pb-2 flex items-center gap-2 shrink-0">
             <CircleSlash width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
             <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
@@ -141,7 +141,7 @@ export async function InicioOperacion({
               </EstadoVacio>
             </div>
           ) : (
-            <ul className="pb-3 flex-1 min-h-0 overflow-y-auto">
+            <ul className="pb-3">
               {sinAsignar.map((v) => (
                 <li key={v.id} className="px-5 py-2 border-t flex items-center gap-3 text-sm" style={{ borderColor: 'var(--line)' }}>
                   <span className="font-medium">{v.folio ?? '—'}</span>
@@ -155,7 +155,7 @@ export async function InicioOperacion({
           )}
         </section>
 
-        <section className="glass-panel overflow-hidden flex flex-col min-h-0">
+        <section className="glass-panel overflow-hidden">
           <div className="px-5 pt-4 pb-2 flex items-center gap-2 shrink-0">
             <UserCog width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
             <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
@@ -165,7 +165,7 @@ export async function InicioOperacion({
           {carga === null ? (
             <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la carga.</div>
           ) : (
-            <div className="flex-1 min-h-0 overflow-y-auto"><TablaCarga carga={carga} /></div>
+            <TablaCarga carga={carga} />
           )}
         </section>
       </div>
