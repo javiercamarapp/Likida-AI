@@ -122,6 +122,45 @@ export function calcCost(model: string, tokIn: number, tokOut: number): number {
 // OpenRouter: no retener input (compliance de datos fiscales).
 const PROVIDER_OPTS = { provider: { data_collection: 'deny' } } as const;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RAZONAMIENTO DEL OCR — la palanca de costo más grande, y la más peligrosa.
+//
+// MEDIDO el 4-ago-2026 sobre las 57 llamadas de OCR en producción: la salida
+// promedia 1,536 tokens, con 51 de 57 entre 1,015 y 1,976. El JSON del schema
+// son ~300. El resto son tokens de RAZONAMIENTO del modelo, que OpenRouter
+// cobra como salida — y la salida cuesta varias veces más que la entrada.
+//
+// Que la distribución sea UNA sola joroba es lo que lo demuestra: si fueran
+// reintentos (que este archivo suma en `gastado`) habría dos o tres grupos
+// separados, no una campana. No los hay.
+//
+// Apagarlo bajaría la salida ~80% y el costo del OCR a la mitad o menos.
+//
+// POR QUÉ VIENE APAGADO POR DEFECTO. El razonamiento es probablemente lo que
+// hace que lea un ticket térmico arrugado, con sol encima, fotografiado en una
+// gasolinera. Y en ESTE producto un OCR peor no es "menor calidad": es un monto
+// mal leído dentro de un documento fiscal — exactamente lo que la regla número
+// uno del repo prohíbe. Un ahorro del 50% que introduce un error de captura
+// cada tantos tickets sale carísimo.
+//
+// CÓMO SE ENCIENDE, BIEN: se mide primero contra un conjunto dorado de tickets
+// reales etiquetados a mano (precisión del monto y del folio, tasa de esquema
+// inválido), y solo se deja si NO pierde exactitud. Sin ese set, "se ve bien"
+// no es evidencia. Existe la skill `conjunto-dorado` para armarlo.
+//
+// Se controla por entorno para poder probarlo sin desplegar:
+//   LLM_RAZONAMIENTO_OCR=off    → sin razonamiento (barato, sin verificar)
+//   LLM_RAZONAMIENTO_OCR=low    → razonamiento mínimo
+//   (sin variable)              → como hoy, sin tocar nada
+// ═══════════════════════════════════════════════════════════════════════════
+function opcionesDeRazonamiento(role: ModelRole): Record<string, unknown> {
+  if (role !== 'ocr') return {};
+  const v = (process.env.LLM_RAZONAMIENTO_OCR ?? '').trim().toLowerCase();
+  if (v === 'off' || v === 'none' || v === '0') return { reasoning: { enabled: false } };
+  if (v === 'low' || v === 'minimal') return { reasoning: { effort: 'low' } };
+  return {};
+}
+
 // ── generateResponse: chat simple con fallback ──────────────────────────────
 export async function generateResponse(opts: {
   role: ModelRole;
@@ -290,6 +329,7 @@ export async function generateStructured<T>(opts: {
         json_schema: { name: opts.schemaName, strict: true, schema: jsonSchema },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
+      ...opcionesDeRazonamiento(opts.role),
       ...PROVIDER_OPTS,
     }, opts.signal ? { signal: opts.signal } : undefined);
     const raw = res.choices[0]?.message?.content || '';
