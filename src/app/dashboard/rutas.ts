@@ -1,6 +1,6 @@
 import {
   LayoutGrid, TrendingUp, LineChart, Sparkles, DollarSign, Users2, Fuel,
-  Truck, Wrench, UserCog, Map, Calculator, ScanText, ReceiptText, FileText, Landmark,
+  Truck, Wrench, UserCog, Map, Calculator, ScanText, ReceiptText, FileText, Landmark, Send,
   LifeBuoy, Users, ScrollText, Settings,
 } from 'lucide-react';
 
@@ -26,6 +26,10 @@ export const NEGOCIO: Item[] = [
 ];
 
 export const OPERACION: Item[] = [
+  // Despacho va PRIMERO del grupo a propósito: es la pantalla de aterrizaje
+  // del encargado, la única del panel donde se escribe en la base en vez de
+  // solo leerla, y la que se abre en la mañana antes que ninguna otra.
+  { href: '/dashboard/despacho', nombre: 'Despacho', Icono: Send },
   { href: '/dashboard/viajes', nombre: 'Viajes', Icono: Truck },
   { href: '/dashboard/unidades', nombre: 'Unidades', Icono: Wrench },
   { href: '/dashboard/operadores', nombre: 'Operadores', Icono: UserCog },
