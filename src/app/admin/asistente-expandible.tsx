@@ -22,7 +22,9 @@ export default function AsistenteExpandible({
   main, asideTop, resumen,
 }: {
   main: React.ReactNode;
-  asideTop: React.ReactNode;
+  /** Contenido extra arriba del chat. Opcional: cuando el asistente vive en
+   *  el LAYOUT (todas las páginas) no hay nada específico de página que poner. */
+  asideTop?: React.ReactNode;
   resumen: ResumenNegocio;
 }) {
   const [expandido, setExpandido] = useState(false);

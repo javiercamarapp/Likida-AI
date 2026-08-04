@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { Dona, BarChartSimple } from './charts';
 import GraficaCostoConRango from './rango-costo';
-import AsistenteExpandible from './asistente-expandible';
 import ContadorRetro from './contador-retro';
 import { IconoProveedor } from './proveedor-icono';
 import { GlobalFilter } from './ui/global-filter';
@@ -365,7 +364,11 @@ export default async function Admin({
           aquí — campana+perfil están en el sidebar (admin/layout.tsx,
           junto al avatar), y el buscador se quitó del todo. Las gráficas
           centrales y el chat del Asistente arrancan pegados arriba. */}
-      <AsistenteExpandible main={main} asideTop={asideTop} resumen={r} />
+      {/* El asistente ya no se monta aquí — vive en admin/layout.tsx, para
+          estar en todas las páginas. Las recomendaciones, que antes iban
+          arriba del chat, se quedan con el contenido de esta página. */}
+      <div className="mb-3">{asideTop}</div>
+      {main}
     </div>
   );
 }
