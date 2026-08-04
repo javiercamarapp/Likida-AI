@@ -108,17 +108,21 @@ export async function InicioContenido({
   return (
     <main>
       <div className="glass-panel overflow-hidden">
-        <div className="px-5 pt-2.5 pb-2.5 flex items-center justify-between gap-4">
-          <div className="min-w-0">
+        <div className="px-5 pt-3 pb-3 flex items-start justify-between gap-6">
+          <div className="min-w-0 flex-1">
             <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
               {saludo()}, {nombre ?? 'flota'}
             </h1>
             <p className="text-[13px] mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
             {tenantNombre && (
-              <span className="inline-block mt-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
+              <span className="inline-block mt-1 text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
                 viendo como superadmin · {tenantNombre}
               </span>
             )}
+            {/* La barra vive DENTRO de la columna del saludo, no debajo del
+                bloque: así queda al nivel de la cifra grande y se corta antes
+                de ella en vez de pasarle por abajo y estirar el encabezado. */}
+            <AvanceCierre viajes={viajes ?? []} ahoraMs={ahoraMs()} />
           </div>
           {/* `CifraGrande`, no el `ContadorRetro` de tiles negros: ese reloj
               Solari es el guiño de la consola INTERNA y ahí se queda. Y no
@@ -132,8 +136,6 @@ export async function InicioContenido({
             nota={`Sobre política y duplicados · ${etiquetaVentana}`}
           />
         </div>
-
-        <AvanceCierre viajes={viajes ?? []} ahoraMs={ahoraMs()} />
 
         {alertas.length > 0 && (
           <div className="px-5 pb-3.5 space-y-1.5">
