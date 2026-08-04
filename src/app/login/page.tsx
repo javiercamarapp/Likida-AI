@@ -177,8 +177,15 @@ export default async function Login({
               </p>
             )}
 
+            {/* Los DOS, no solo privacidad: aquí es donde se acepta el contrato,
+                y hasta hoy la única liga era la del aviso — se aceptaban unos
+                términos que no había forma de leer desde esta pantalla. */}
             <p className="mt-8 text-center text-[11px] leading-relaxed text-[#6b6b6b]/70">
-              Al continuar, aceptas el{' '}
+              Al continuar, aceptas los{' '}
+              <a href="/terminos" className="text-[#0a0a0a] underline underline-offset-2 transition-opacity hover:opacity-70">
+                Términos de Servicio
+              </a>{' '}
+              y el{' '}
               <a href="/privacidad" className="text-[#0a0a0a] underline underline-offset-2 transition-opacity hover:opacity-70">
                 Aviso de Privacidad
               </a>{' '}
