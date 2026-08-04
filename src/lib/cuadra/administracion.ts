@@ -33,6 +33,31 @@ export class DatoInvalido extends Error {
 }
 
 /**
+ * Traduce una excepción al texto que ve quien llenó el formulario.
+ *
+ * `DatoInvalido` se enseña VERBATIM: su mensaje se escribió para esto y es lo
+ * único que le dice a la persona QUÉ corregir. Cambiarlo por un "revisa los
+ * datos" genérico destruiría el valor de estas cuatro funciones — la de
+ * teléfonos existe para poder decir "ese número ya está en OTRA flota", no para
+ * negarse en abstracto.
+ *
+ * Cualquier otra excepción NO se enseña tal cual: trae el mensaje de Postgres,
+ * que no significa nada para un dueño de flota y sí describe la forma del
+ * esquema. Pero tampoco se calla —eso dejaría a alguien creyendo que el alta se
+ * hizo—: se loguea completo y en pantalla se dice qué operación falló y que no
+ * fue culpa de lo capturado, que es la diferencia que decide si vuelve a
+ * intentarlo o corrige algo que estaba bien.
+ */
+export function mensajeParaPantalla(e: unknown, operacion: string): string {
+  if (e instanceof DatoInvalido) return e.message;
+  logger.error('administracion.falla', {
+    operacion,
+    err: e instanceof Error ? e.message : String(e),
+  });
+  return `No se pudo ${operacion}, y no es por lo que capturaste: es una falla del sistema y quedó registrada. Vuelve a intentarlo; si se repite, avísale a Likida.`;
+}
+
+/**
  * Deja constancia. Best-effort A PROPÓSITO: si la bitácora falla, el alta ya
  * ocurrió y tirarla dejaría el sistema peor —una flota a medio crear— que sin
  * el registro. El fallo se loguea para que no se pierda en silencio.
@@ -260,6 +285,61 @@ export async function guardarPolitica(
 /** La política vigente de la flota, ya fusionada con la base. */
 export async function politicaVigente(tenantId: string): Promise<PoliticaGasto[]> {
   return (await getConfig(tenantId)).politica;
+}
+
+/** Lo que un renglón del formulario de políticas manda por concepto. */
+export interface RenglonPolitica {
+  concepto: string;
+  /** Tal como se tecleó. `''` es SIN TOPE; `'0'` es tope de cero. */
+  tope: string;
+  exigeCfdi: boolean;
+}
+
+/**
+ * Arma la política que se va a guardar a partir de lo que se capturó.
+ *
+ * VIVE AQUÍ Y NO EN LA PÁGINA PORQUE PUEDE PERDER DATOS, y eso hay que poder
+ * probarlo. `fusionarConfig` REEMPLAZA el arreglo completo en vez de fusionarlo
+ * renglón por renglón, así que lo que esta función devuelva es la política
+ * entera de la flota: lo que no venga aquí, se borró.
+ *
+ * De ahí `porRuta`. El formulario se indexa por CONCEPTO y no tiene dónde poner
+ * la ruta, así que las reglas por ruta no viajan en el formulario — y guardar
+ * sin ellas se las lleva. Se reponen verbatim. Borrarle a una flota su tope de
+ * casetas de una ruta concreta, en silencio, por haber guardado otra cosa, es
+ * el tipo de daño que nadie relaciona con esta pantalla tres semanas después.
+ *
+ * `''` vs `'0'`: vacío es SIN TOPE y cero es TOPE DE CERO (el concepto deja de
+ * permitirse). `Number('')` da 0, que los confundiría — y confundirlos prohíbe
+ * un gasto que nadie quiso prohibir.
+ */
+export function armarPolitica(
+  renglones: RenglonPolitica[],
+  porRuta: PoliticaGasto[] = [],
+): PoliticaGasto[] {
+  const nueva: PoliticaGasto[] = [];
+
+  for (const r of renglones) {
+    const concepto = r.concepto.trim();
+    if (!concepto) throw new DatoInvalido('Hay un renglón de la política sin concepto.');
+
+    const crudo = r.tope.trim();
+    let topeMonto: number | undefined;
+    if (crudo !== '') {
+      const n = Number(crudo);
+      if (!Number.isFinite(n) || n < 0) {
+        throw new DatoInvalido(`El tope de "${concepto}" tiene que ser un número mayor o igual a 0.`);
+      }
+      topeMonto = n;
+    }
+
+    // Un renglón sin tope y sin exigir CFDI no dice nada: el motor lo ignora
+    // igual y guardarlo solo ensucia la config.
+    if (topeMonto === undefined && !r.exigeCfdi) continue;
+    nueva.push({ concepto, topeMonto, requiereCfdi: r.exigeCfdi });
+  }
+
+  return [...nueva, ...porRuta];
 }
 
 // ── 4. Reabrir un viaje liquidado ──────────────────────────────────────────
