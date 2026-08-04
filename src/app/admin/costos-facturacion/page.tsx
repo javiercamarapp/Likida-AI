@@ -1,11 +1,41 @@
+import { revalidatePath } from 'next/cache';
 import { getResumenNegocio } from '@/lib/admin/negocio';
-import { usd } from '@/lib/utils';
-import { DollarSign, Calculator } from 'lucide-react';
+import { usd, mxn } from '@/lib/utils';
+import { DollarSign, Calculator, CreditCard, TriangleAlert } from 'lucide-react';
+import { requireSuperadmin } from '@/lib/auth/guard';
+import { mensajeParaPantalla } from '@/lib/cuadra/administracion';
+import { getPlanes, guardarPriceDePlan, type Plan } from '@/lib/saas/suscripcion';
+import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import { AreaChartSimple, Dona } from '../charts';
 import { IconoProveedor } from '../proveedor-icono';
-import { ChartCard, EstadoVacio, KpiTile } from '../ui/kit';
+import { ChartCard, EstadoVacio, KpiTile, StatusPill } from '../ui/kit';
+import { FormaConAviso, Campo, type ResultadoAccion } from '../ui/forma';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Liga un plan con su price de Stripe.
+ *
+ * EL MONTO NO SE TECLEA AQUÍ, y esa es la decisión de diseño de esta pantalla.
+ * Si el precio de la base y el de Stripe se capturaran por separado, el panel
+ * podría decir "$2,400/mes" mientras Stripe cobra otra cosa — y esa diferencia
+ * la descubre el cliente en su estado de cuenta, con toda la razón de reclamar.
+ * `guardarPriceDePlan` LEE el monto de Stripe y lo espeja en la base.
+ */
+async function accionPrecio(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  'use server';
+  await requireSuperadmin();
+  const clave = String(fd.get('plan') ?? '');
+  const price = String(fd.get('price') ?? '');
+  try {
+    const { montoMensual, moneda } = await guardarPriceDePlan(clave, price);
+    revalidatePath('/admin/costos-facturacion');
+    revalidatePath('/dashboard/suscripcion');
+    return { ok: `Plan ${clave}: ${mxn(montoMensual)} ${moneda} al mes, leído de Stripe. Ya se puede contratar.` };
+  } catch (e) {
+    return { error: mensajeParaPantalla(e, 'guardar el precio del plan') };
+  }
+}
 
 // Mismo diccionario de admin/page.tsx (no se exporta de ahí) — solo las
 // etiquetas legibles para la dona de "Costo por fase".
@@ -32,6 +62,15 @@ const FASE_LABEL: Record<string, string> = {
 export default async function CostosFacturacionPage() {
   const r = await getResumenNegocio();
   const costoPorViaje = r.viajesProcesados > 0 ? r.costoIaUsd / r.viajesProcesados : null;
+
+  const hayStripe = stripeConfigurado();
+  const modo = modoStripe();
+  // Sin Stripe no se pide la lista: la sección entera se reemplaza por el aviso
+  // de qué falta, y una consulta que nadie va a mirar solo puede fallar.
+  let planes: Plan[] = [];
+  if (hayStripe) {
+    try { planes = await getPlanes(); } catch { planes = []; }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -128,12 +167,80 @@ export default async function CostosFacturacionPage() {
           )}
         </section>
 
+        {/* ── Planes y precios ── */}
+        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex items-center gap-2 mb-1">
+            <CreditCard width={15} height={15} strokeWidth={1.75} />
+            <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
+              Planes y precios
+            </h2>
+            {modo === null ? (
+              <StatusPill estado="bad">Stripe sin conectar</StatusPill>
+            ) : modo === 'prueba' ? (
+              <StatusPill estado="warn">Llave de prueba</StatusPill>
+            ) : (
+              <StatusPill estado="ok">Producción</StatusPill>
+            )}
+            {modo !== null && !webhookConfigurado() && <StatusPill estado="bad">Sin webhook</StatusPill>}
+          </div>
+
+          {!hayStripe ? (
+            <div className="mt-3">
+              <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--warn)' }} />}>
+                Falta <code>STRIPE_SECRET_KEY</code>. Sin ella no se puede leer un price ni cobrar, y la pantalla del
+                cliente esconde el botón de pago a propósito — uno que no cobra es peor que ninguno.
+              </EstadoVacio>
+            </div>
+          ) : (
+            <>
+              {!webhookConfigurado() && (
+                <div className="mt-3">
+                  <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
+                    Falta <code>STRIPE_WEBHOOK_SECRET</code>. Se puede mandar a pagar, pero NADIE se entera del pago:
+                    el webhook contesta 503 y la suscripción nunca pasa a activa. El cliente pagaría y seguiría
+                    viéndose sin plan.
+                  </EstadoVacio>
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                {planes.map((p) => (
+                  <div key={p.clave} className="card p-4 flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{p.nombre}</span>
+                      {p.stripePriceId
+                        ? <StatusPill estado="ok">Se puede contratar</StatusPill>
+                        : <StatusPill estado="neutral">Sin precio</StatusPill>}
+                    </div>
+                    <div className="text-xl font-semibold tabular">
+                      {p.precioMensual === null
+                        ? <span className="text-sm font-normal" style={{ color: 'var(--muted)' }}>Sin configurar</span>
+                        : <>{mxn(p.precioMensual)}<span className="text-xs font-normal" style={{ color: 'var(--muted)' }}> /mes</span></>}
+                    </div>
+                    <FormaConAviso accion={accionPrecio} boton="Guardar price" columnas="md:grid-cols-1">
+                      <input type="hidden" name="plan" value={p.clave} />
+                      <Campo nombre="price" etiqueta="Price ID de Stripe" requerido
+                        valorInicial={p.stripePriceId ?? ''} placeholder="price_1Abc..." />
+                    </FormaConAviso>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
+                El monto <strong>no se teclea</strong>: se lee de Stripe al guardar el price. Dos cifras capturadas
+                aparte pueden divergir, y esa diferencia la descubre el cliente en su estado de cuenta.
+              </p>
+            </>
+          )}
+        </section>
+
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <ChartCard titulo="Lo que todavía no es real" tamano="S">
             <EstadoVacio>
-              Margen por cliente, ingresos MRR/ARR, waterfall de MRR, límites de gasto configurables con alertas, proyección de gasto vs. presupuesto — TODO esto depende de tener precio/plan de facturación real por cliente, que no existe (Likida no cobra a nadie hoy). Fase 3 del roadmap.
+              MRR/ARR, waterfall de MRR y margen por cliente ya tienen de dónde salir (planes, suscripcion y
+              factura_saas) pero necesitan clientes cobrando de verdad: con cero suscripciones activas, cualquier
+              cifra aquí sería un cero de encuadre.
               <br /><br />
-              Cobros: exitosos/fallidos, dunning, conciliación Stripe, CFDI de facturación a clientes — sin integración de cobro todavía.
+              El CFDI de la facturación de Likida a sus flotas sigue sin timbrarse: Stripe cobra, la factura fiscal
+              mexicana se emite aparte. Dunning y conciliación tampoco están automatizados.
             </EstadoVacio>
           </ChartCard>
         </section>

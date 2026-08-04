@@ -23,39 +23,13 @@ import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { getConfig } from './config';
 import type { PoliticaGasto } from './cuadre/engine';
 import { logger } from '@/lib/logger';
+import { DatoInvalido } from './errores';
 
-/** Error de captura: el mensaje es para enseñárselo a quien llenó el formulario. */
-export class DatoInvalido extends Error {
-  constructor(mensaje: string) {
-    super(mensaje);
-    this.name = 'DatoInvalido';
-  }
-}
-
-/**
- * Traduce una excepción al texto que ve quien llenó el formulario.
- *
- * `DatoInvalido` se enseña VERBATIM: su mensaje se escribió para esto y es lo
- * único que le dice a la persona QUÉ corregir. Cambiarlo por un "revisa los
- * datos" genérico destruiría el valor de estas cuatro funciones — la de
- * teléfonos existe para poder decir "ese número ya está en OTRA flota", no para
- * negarse en abstracto.
- *
- * Cualquier otra excepción NO se enseña tal cual: trae el mensaje de Postgres,
- * que no significa nada para un dueño de flota y sí describe la forma del
- * esquema. Pero tampoco se calla —eso dejaría a alguien creyendo que el alta se
- * hizo—: se loguea completo y en pantalla se dice qué operación falló y que no
- * fue culpa de lo capturado, que es la diferencia que decide si vuelve a
- * intentarlo o corrige algo que estaba bien.
- */
-export function mensajeParaPantalla(e: unknown, operacion: string): string {
-  if (e instanceof DatoInvalido) return e.message;
-  logger.error('administracion.falla', {
-    operacion,
-    err: e instanceof Error ? e.message : String(e),
-  });
-  return `No se pudo ${operacion}, y no es por lo que capturaste: es una falla del sistema y quedó registrada. Vuelve a intentarlo; si se repite, avísale a Likida.`;
-}
+// `DatoInvalido` y `mensajeParaPantalla` viven en `errores.ts` desde que
+// `saas/suscripcion.ts` los necesitó: importarlos de aquí metía todo este módulo
+// —motor de cuadre, CFDI, cliente de Meta— en el bundle del webhook de Stripe.
+// Se re-exportan para no mover los imports de las pantallas que ya los usan.
+export { DatoInvalido, mensajeParaPantalla } from './errores';
 
 /**
  * Deja constancia. Best-effort A PROPÓSITO: si la bitácora falla, el alta ya
