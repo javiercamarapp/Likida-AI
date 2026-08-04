@@ -11,7 +11,7 @@ import { Dona, BarChartSimple } from './charts';
 import GraficaCostoConRango from './rango-costo';
 import ContadorRetro from './contador-retro';
 import { IconoProveedor } from './proveedor-icono';
-import { GlobalFilter } from './ui/global-filter';
+import { GlobalFilter, resolverRango } from './ui/global-filter';
 import { KpiTile } from './ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -72,8 +72,8 @@ export default async function Admin({
   // barras por día (sería un muro de barras diminutas), así que ahí se
   // enseña el total histórico real (`facturasTotal`) en vez de fingir una
   // ventana de días que no existe.
-  const rango = sp?.rango === '30' ? '30' : sp?.rango === 'todo' ? 'todo' : '7';
-  const ventanaDias = rango === '30' ? 30 : 7;
+  const filtro = resolverRango(sp?.rango, '7');
+  const { rango, ventanaDias } = filtro;
 
   const [{ nombre }, r, conversaciones] = await Promise.all([
     requireSuperadmin(), getResumenNegocio(undefined, ventanaDias), getConversacionesActivas(),
@@ -120,7 +120,7 @@ export default async function Admin({
               <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                 Facturas procesadas — {rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`}
               </div>
-              <GlobalFilter base="/admin" activo={rango} />
+              <GlobalFilter base="/admin" r={filtro} />
             </div>
             {rango === 'todo' ? (
               <div className="flex flex-col items-center justify-center" style={{ height: 160 }}>
