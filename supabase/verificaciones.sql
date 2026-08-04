@@ -1304,3 +1304,50 @@ begin
   raise exception E'BITACORA  lee=%  modifica=%  borra=%   (esperado 1 / 0 / 0 — si modifica o borra pasan de 0, la bitacora ya no prueba nada)',
     n_lee, n_upd, n_del;
 end $$;
+
+-- ── 33. La vista de saldos respeta el RLS de quien pregunta (mig. 0054) ──────
+-- LA FUGA ENTRE INQUILINOS MÁS CARA QUE PUEDE TENER ESTE PRODUCTO, y estuvo
+-- abierta entre la 0049 y la 0054.
+--
+-- Una vista en Postgres corre por default con los permisos de QUIEN LA CREÓ.
+-- Como `factura_saldo` la creó el rol de servicio, devolvía las facturas de
+-- TODAS las flotas a cualquier usuario autenticado que le pegara por PostgREST
+-- —aunque `factura_emitida` tuviera su RLS perfectamente puesto—. La política
+-- de la tabla NO se hereda a la vista.
+--
+-- No lo habría encontrado ninguna prueba de TypeScript: el código estaba bien,
+-- el que estaba mal era el objeto de la base. Por eso vive aquí.
+--
+-- Corrido antes del arreglo:  via-tabla=1  via-vista=2   ← la 2ª era de otra flota
+-- Corrido después:            via-tabla=1  via-vista=1
+--
+-- Se comprueba de paso que `anon` ya no puede ejecutar `ve_finanzas()`: el
+-- `revoke ... from anon` de la 0048 no revocaba nada, porque el permiso venía
+-- de PUBLIC y anon solo lo heredaba.
+do $$
+declare
+  tA uuid; tB uuid; cA uuid; cB uuid; uA uuid := gen_random_uuid();
+  n_tabla int; n_vista int; anon_puede boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF VISTA A') returning id into tA;
+  insert into tenant (nombre) values ('ZZZ VERIF VISTA B') returning id into tB;
+  insert into cliente (tenant_id, nombre) values (tA, 'Cliente A') returning id into cA;
+  insert into cliente (tenant_id, nombre) values (tB, 'Cliente B') returning id into cB;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (tA, cA, 1000, 160, 1160, 'emitida');
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (tB, cB, 9999, 1599.84, 11598.84, 'emitida');
+  insert into app_user (id, tenant_id, email, rol)
+    values (uA, tA, 'zzz-verif-vista@likida.test', 'flota_admin');
+
+  anon_puede := has_function_privilege('anon', 'public.ve_finanzas()', 'EXECUTE');
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', uA)::text, true);
+  select count(*) into n_tabla from factura_emitida;
+  select count(*) into n_vista from factura_saldo;
+  reset role;
+
+  raise exception E'VISTA_SALDO  via-tabla=%  via-vista=%  anon-ejecuta-ve_finanzas=%   (esperado 1 / 1 / false — un 2 en la vista es la factura de OTRA flota)',
+    n_tabla, n_vista, anon_puede;
+end $$;
