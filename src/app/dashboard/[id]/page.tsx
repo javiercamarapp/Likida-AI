@@ -9,9 +9,13 @@ import { filasDeducibilidad } from '@/lib/cuadra/liquidacion/deducibilidad';
 import { mxn } from '@/lib/utils';
 import { litros, fechaMx } from '../formato';
 import { etiquetaEstatus } from '../estatus';
-import { puedeExportar, puedeAsignar } from '@/lib/auth/permisos';
+import { puedeExportar, puedeAsignar, puedeAdministrar } from '@/lib/auth/permisos';
 import { listOperadores, reasignarOperador } from '@/lib/cuadra/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { revalidatePath } from 'next/cache';
+import { RotateCcw } from 'lucide-react';
+import { reabrirViaje, mensajeParaPantalla } from '@/lib/cuadra/administracion';
+import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,6 +66,38 @@ export default async function Detalle({
   const e = etiquetaEstatus(d.estatus);
   const puedeReasignar = puedeAsignar(rol);
   const operadores = puedeReasignar ? await listOperadores(tenantId) : [];
+  // Reabrir es del dueño, no del encargado ni del contador: borra la
+  // liquidación y el PDF que quizá ya se entregó.
+  const puedeReabrir = puedeAdministrar(rol) && d.estatus === 'liquidado';
+
+  /**
+   * Reabre el viaje. NO BASTA CAMBIAR `viaje.estatus` — el trigger de la 0036
+   * mira si EXISTE la fila de `liquidacion`, y mientras esté no entra ni un
+   * gasto. Eso lo resuelve `reabrirViaje`; aquí solo se comprueba el permiso y
+   * se exige la confirmación explícita, porque es destructivo.
+   */
+  async function reabrir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await requireSessionTenant(`/dashboard/${id}`);
+    if (!puedeAdministrar(s.rol)) {
+      return { error: 'Tu rol no puede reabrir un viaje liquidado. Pídeselo al dueño de la flota.' };
+    }
+    let t = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
+      if (data) t = data.id as string;
+    }
+
+    try {
+      const { pdfPerdido } = await reabrirViaje(t, d!.folio, fd.get('confirmar') === 'on', { id: s.userId });
+      revalidatePath(`/dashboard/${id}`);
+      return {
+        ok: `${d!.folio} quedó abierto y vuelve a aceptar comprobantes.${pdfPerdido ? ' El PDF anterior ya no es válido.' : ''}`,
+      };
+    } catch (err) {
+      return { error: mensajeParaPantalla(err, 'reabrir el viaje') };
+    }
+  }
 
   async function reasignar(formData: FormData) {
     'use server';
@@ -291,6 +327,27 @@ export default async function Detalle({
             </p>
           )}
         </section>
+
+        {puedeReabrir && (
+          <section className="card p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <RotateCcw width={15} height={15} strokeWidth={1.75} />
+              <h2 className="text-sm font-medium m-0">Reabrir este viaje</h2>
+            </div>
+            <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+              Vuelve a aceptar comprobantes por WhatsApp. <strong>Borra la liquidación actual y su PDF</strong> — si
+              ya se lo entregaste al operador o a tu contador, ese papel dejará de cuadrar con lo que el sistema diga
+              después. Se genera una nueva al cerrar otra vez.
+            </p>
+            <FormaConAviso accion={reabrir} boton="Reabrir viaje" columnas="md:grid-cols-1">
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="confirmar" className="w-4 h-4 mt-0.5" />
+                <span>Entiendo que se borra la liquidación {d.folio} y su PDF.</span>
+              </label>
+            </FormaConAviso>
+          </section>
+        )}
+
         <p className="text-xs mt-10 pt-6 border-t" style={{ color: 'var(--muted)', borderColor: 'var(--line)' }}>
           {LEYENDA_CORTA}
         </p>
