@@ -1117,3 +1117,190 @@ begin
   raise exception E'OPERACION_RLS  unidades=%  mantenimientos=%  incidencias=%  pods-visibles=%  pod-ajeno-por-id=%   (esperado 0 / 0 / 0 / 1 / 0 — cualquier otra cosa es fuga al chofer)',
     n_unidad, n_mant, n_inc, n_pod, n_pod_ajeno;
 end $$;
+
+-- ── 29. El encargado NO ve dinero (mig. 0048 + 0049 + 0051) ─────────────────
+-- Las tres migraciones comerciales meten seis tablas de dinero de golpe:
+-- cliente, tarifa, factura_emitida, pago_recibido, factura_viaje, cotizacion.
+-- El riesgo es el de la 0047 pero un escalón más arriba: ahí bastaba excluir
+-- al chofer con `not is_operador()`, aquí no. El ENCARGADO (0044) es de
+-- oficina —pasa ese filtro— y sin embargo no debe ver finanzas: la matriz de
+-- `lib/auth/visibilidad.ts` le da 'operacion' y nada más.
+--
+-- Esa matriz vivía SOLO en TypeScript. Mientras el panel consulte con la
+-- service role alcanza, pero cualquier usuario autenticado tiene la anon key y
+-- puede pegarle a PostgREST directo: ahí la única frontera es RLS. Por eso la
+-- 0048 crea `ve_finanzas()`, y esto comprueba que de verdad cierra.
+--
+-- Se impersona a un ENCARGADO (no a un chofer) y se cuenta. Esperado: 0 en las
+-- seis. Cualquier otra cosa es una fuga de precios y saldos al jefe de tráfico.
+do $$
+declare
+  v_t uuid; v_c uuid; v_f uuid; v_u1 uuid := gen_random_uuid();
+  n_cli int; n_tar int; n_fac int; n_pag int; n_cot int; n_fv int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF FINANZAS RLS') returning id into v_t;
+  insert into cliente (tenant_id, nombre, rfc) values (v_t, 'Cliente Uno', 'XAXX010101000') returning id into v_c;
+  insert into tarifa (tenant_id, cliente_id, modo, precio) values (v_t, v_c, 'por_viaje', 18500.00);
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (v_t, v_c, 10000.00, 1600.00, 11600.00, 'emitida') returning id into v_f;
+  insert into pago_recibido (tenant_id, factura_id, monto) values (v_t, v_f, 5000.00);
+  insert into cotizacion (tenant_id, cliente_id, origen, destino, precio)
+    values (v_t, v_c, 'Silao', 'Nuevo Laredo', 21000.00);
+
+  -- Un ENCARGADO de esa misma flota: pasa `not is_operador()` y aun así no
+  -- debe ver nada de esto.
+  insert into app_user (id, tenant_id, email, rol)
+    values (v_u1, v_t, 'zzz-verif-encargado@likida.test', 'encargado');
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
+
+  select count(*) into n_cli from cliente         where tenant_id = v_t;
+  select count(*) into n_tar from tarifa          where tenant_id = v_t;
+  select count(*) into n_fac from factura_emitida where tenant_id = v_t;
+  select count(*) into n_pag from pago_recibido   where tenant_id = v_t;
+  select count(*) into n_cot from cotizacion      where tenant_id = v_t;
+  select count(*) into n_fv  from factura_viaje;
+
+  reset role;
+
+  raise exception E'FINANZAS_RLS  clientes=%  tarifas=%  facturas=%  pagos=%  cotizaciones=%  factura_viaje=%   (esperado 0 en las seis — cualquier otra cosa le abre precios y saldos al encargado)',
+    n_cli, n_tar, n_fac, n_pag, n_cot, n_fv;
+end $$;
+
+-- ── 30. El rastreo: ni el chofer ve posiciones, ni el contador ve tokens (mig. 0050) ──
+-- Dos garantías distintas en la misma migración, y por eso van juntas:
+--
+--   · `posicion` y `geocerca` son de oficina → el chofer queda fuera. Dónde
+--     va cada unidad de la flota no es asunto suyo, y devolverle "la suya"
+--     por aquí abriría la puerta a leer la de los demás.
+--   · `rastreo_credencial` es MÁS estricta que todo lo demás del esquema:
+--     solo flota_admin y superadmin. Un token de rastreo permite ver y a veces
+--     MANDAR órdenes a la flota entera, así que no cabe en `ve_finanzas()` —
+--     no es dinero, es control. El CONTADOR sí ve dinero y aun así no debe
+--     ver esto, y esa distinción es justo la que un `ve_finanzas()` de más
+--     borraría sin que nadie lo note.
+--
+-- Esperado: chofer 0/0, contador 0 credenciales.
+do $$
+declare
+  v_t uuid; v_o uuid; v_un uuid;
+  v_chofer uuid := gen_random_uuid(); v_conta uuid := gen_random_uuid();
+  n_pos int; n_geo int; n_cred int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF RASTREO RLS') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer GPS', '520000009060') returning id into v_o;
+  insert into unidad (tenant_id, numero_economico) values (v_t, 'GPS-01') returning id into v_un;
+  insert into posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor)
+    values (v_t, v_un, 20.9674, -89.5926, now(), 'wialon');
+  insert into geocerca (tenant_id, nombre, lat, lng, radio_m)
+    values (v_t, 'Patio Mérida', 20.9674, -89.5926, 250);
+  insert into rastreo_credencial (tenant_id, proveedor, token_ultimos4)
+    values (v_t, 'wialon', '4417');
+
+  insert into app_user (id, tenant_id, email, rol, operador_id)
+    values (v_chofer, v_t, 'zzz-verif-gps-chofer@likida.test', 'operador', v_o);
+  insert into app_user (id, tenant_id, email, rol)
+    values (v_conta, v_t, 'zzz-verif-gps-conta@likida.test', 'contador');
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_chofer)::text, true);
+  select count(*) into n_pos from posicion where tenant_id = v_t;
+  select count(*) into n_geo from geocerca where tenant_id = v_t;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', v_conta)::text, true);
+  select count(*) into n_cred from rastreo_credencial where tenant_id = v_t;
+
+  reset role;
+
+  raise exception E'RASTREO_RLS  chofer-posiciones=%  chofer-geocercas=%  contador-credenciales=%   (esperado 0 / 0 / 0 — la tercera es la que separa "ve dinero" de "manda en la flota")',
+    n_pos, n_geo, n_cred;
+end $$;
+
+-- ── 31. Ni la suscripción ni la invitación se duplican (mig. 0052 + 0053) ────
+-- Dos unicidades parciales que solo la base puede garantizar, y las dos
+-- cuestan dinero o permisos si fallan:
+--
+--   · dos suscripciones VIVAS para la misma flota cobran dos veces, y ninguna
+--     de las dos parece equivocada mirándola sola.
+--   · dos invitaciones VIVAS para el mismo correo dan dos roles distintos
+--     según cuál se abra primero — un `encargado` y un `flota_admin` en la
+--     misma bandeja.
+--
+-- Son índices PARCIALES a propósito: una suscripción cancelada y una
+-- invitación revocada SÍ pueden convivir con la nueva, porque son historia.
+-- Esta prueba comprueba las dos mitades: que el duplicado vivo truena y que
+-- el histórico no.
+do $$
+declare
+  v_t uuid; v_dup boolean := false; v_hist boolean := true;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF UNICIDAD') returning id into v_t;
+
+  insert into suscripcion (tenant_id, plan_clave, estado) values (v_t, 'demo', 'activa');
+  begin
+    insert into suscripcion (tenant_id, plan_clave, estado) values (v_t, 'flota', 'activa');
+    v_dup := true;   -- si llega aquí, el índice NO protege
+  exception when unique_violation then
+    v_dup := false;
+  end;
+
+  -- Una cancelada convive: es historia, no cobro.
+  begin
+    insert into suscripcion (tenant_id, plan_clave, estado, cancelada_en)
+      values (v_t, 'empresa', 'cancelada', now());
+  exception when unique_violation then
+    v_hist := false;
+  end;
+
+  insert into invitacion (tenant_id, email, rol, token_hash, expira_en)
+    values (v_t, 'Alguien@Flota.mx', 'encargado', 'hash-uno', now() + interval '7 days');
+  begin
+    -- MAYÚSCULAS distintas: el índice es sobre lower(email), así que esto es
+    -- el MISMO correo. Sin el lower(), "Alguien@" y "alguien@" serían dos.
+    insert into invitacion (tenant_id, email, rol, token_hash, expira_en)
+      values (v_t, 'ALGUIEN@flota.mx', 'flota_admin', 'hash-dos', now() + interval '7 days');
+    raise exception 'UNICIDAD  suscripcion-duplicada=%  historico-convive=%  invitacion-duplicada=SI   (la invitacion duplicada NO deberia entrar)', v_dup, v_hist;
+  exception when unique_violation then
+    raise exception E'UNICIDAD  suscripcion-duplicada=%  historico-convive=%  invitacion-duplicada=NO   (esperado false / true / NO)', v_dup, v_hist;
+  end;
+end $$;
+
+-- ── 32. La bitácora no se corrige ni se borra (mig. 0053) ────────────────────
+-- Un registro de auditoría que su propio dueño puede editar no sirve como
+-- evidencia ante nadie: ni ante el INAI, ni ante un cliente que pregunta quién
+-- tocó su dato. La 0053 le da a `bitacora_auditoria` policies de SELECT e
+-- INSERT y NINGUNA de UPDATE ni de DELETE — sin policy, RLS los niega, que es
+-- append-only sin necesidad de un trigger.
+--
+-- Es fácil de romper sin querer: basta que alguien añada un `for all` "para
+-- que se pueda limpiar" y la tabla deja de ser prueba de nada, en silencio.
+-- Esperado: 0 filas modificadas y 0 borradas por un flota_admin.
+do $$
+declare
+  v_t uuid; v_admin uuid := gen_random_uuid();
+  n_lee int; n_upd int; n_del int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF BITACORA') returning id into v_t;
+  insert into app_user (id, tenant_id, email, rol)
+    values (v_admin, v_t, 'zzz-verif-bitacora@likida.test', 'flota_admin');
+  insert into bitacora_auditoria (tenant_id, actor_id, accion, entidad)
+    values (v_t, v_admin, 'liquidacion.emitida', 'liquidacion');
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_admin)::text, true);
+
+  select count(*) into n_lee from bitacora_auditoria where tenant_id = v_t;
+
+  with u as (update bitacora_auditoria set accion = 'BORRADO POR EL AUDITADO'
+              where tenant_id = v_t returning 1)
+  select count(*) into n_upd from u;
+
+  with d as (delete from bitacora_auditoria where tenant_id = v_t returning 1)
+  select count(*) into n_del from d;
+
+  reset role;
+
+  raise exception E'BITACORA  lee=%  modifica=%  borra=%   (esperado 1 / 0 / 0 — si modifica o borra pasan de 0, la bitacora ya no prueba nada)',
+    n_lee, n_upd, n_del;
+end $$;
