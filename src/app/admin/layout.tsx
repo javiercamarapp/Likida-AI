@@ -10,6 +10,7 @@ import PerfilMenu from './perfil';
 import SidebarNav from './sidebar-nav';
 import SidebarNavIconos from './sidebar-nav-iconos';
 import Fondo from '../fondo';
+import AsistenteExpandible from './asistente-expandible';
 import { MARCO_FILA, MARCO_SIDEBAR } from '../marco';
 import CommandPalette from './command-palette';
 import BuscadorTrigger from './buscador-trigger';
@@ -115,7 +116,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             vez de depender del scroll del documento a través de varios
             niveles de flexbox anidados (el patrón anterior fallaba en
             Safari/iOS incluso con `items-start` + `dvh`). */}
-        <div className="flex-1 min-w-0 h-[calc(100dvh-2rem)] overflow-y-auto">{children}</div>
+        {/* EL ASISTENTE VIVE AQUÍ, no en admin/page.tsx: así está en TODAS las
+            páginas de /admin y no solo en Inicio — igual que el rail de
+            /dashboard, que ya vivía en su marco. El `resumen` ya se traía
+            arriba para las alertas de la campana, así que no cuesta un
+            fetch extra. */}
+        <div className="flex-1 min-w-0 h-[calc(100dvh-2rem)] overflow-y-auto">
+          <AsistenteExpandible main={children} resumen={r} />
+        </div>
       </div>
     </div>
   );

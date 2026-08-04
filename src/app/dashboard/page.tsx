@@ -14,6 +14,8 @@ import { GlobalFilter } from '../admin/ui/global-filter';
 import { KpiTile } from '../admin/ui/kit';
 import CifraGrande from './cifra-grande';
 import AvanceCierre from './avance-cierre';
+import { InicioOperacion } from './inicio-operacion';
+import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { sufijoTenant } from './sufijo';
 
 export const dynamic = 'force-dynamic';
@@ -274,9 +276,25 @@ export async function InicioContenido({
 export default async function DashboardInicio({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rango?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rango?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, tenantNombre, nombre } = await resolverTenantEfectivo('/dashboard', sp, { esRaiz: true });
+  const { tenantId, tenantNombre, nombre, rol } = await resolverTenantEfectivo('/dashboard', sp, { esRaiz: true });
+
+  // DOS CASAS DISTINTAS EN LA MISMA PUERTA.
+  //
+  // El Resumen de arriba es del DUEÑO: abre con lo que el motor señaló en
+  // pesos, los acreditables fiscales y el monto comprobado. El encargado no
+  // ve nada de eso (visibilidad.ts), así que aterrizaba en una pantalla
+  // hecha para otro rol. No se le esconden secciones al Resumen del dueño —
+  // eso deja un queso gruyere—: se le da su propia pantalla, con las mismas
+  // piezas y otro contenido.
+  //
+  // El criterio es "¿ve dinero?" y no "¿es encargado?": un rol nuevo que
+  // tampoco vea finanzas cae aquí solo, sin tocar esta línea.
+  if (!puedeVerArea(rol, 'dinero')) {
+    return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} sp={sp} />;
+  }
+
   return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} sp={sp} />;
 }
