@@ -1,5 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { DatoInvalido } from '@/lib/cuadra/errores';
+import { logger } from '@/lib/logger';
+import { facturapiConfigurado, timbrarMensualidad, enviarPorCorreo } from './facturapi';
+import { getDatosFiscales, estanCompletos } from './fiscal';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COBRAR POR TRANSFERENCIA A LA CUENTA DE LIKIDA.
@@ -194,6 +197,69 @@ export async function conciliar(
     })
     .eq('id', facturaId);
   if (error) throw new Error(`conciliar: ${error.message}`);
+}
+
+/**
+ * Timbra el CFDI de una factura YA PAGADA.
+ *
+ * SEPARADO DE `conciliar()` A PROPÓSITO, aunque se llamen juntos. Marcar el pago
+ * es un hecho del banco y no puede fallar porque el PAC esté caído; timbrar crea
+ * un documento fiscal REAL ante el SAT. Si fueran la misma operación, un error
+ * del PAC obligaría a decidir entre perder la conciliación o dejar el cobro sin
+ * registrar — y las dos son malas.
+ *
+ * NO REINTENTA A CIEGAS y por eso comprueba `cfdi_uuid` primero: cada timbrado
+ * exitoso consume un folio y crea un CFDI de verdad. Timbrar dos veces la misma
+ * mensualidad obliga a cancelar uno, y una cancelación fuera de plazo se le
+ * queda al cliente en su contabilidad. El índice único de la 0056 es la última
+ * red, pero la primera es esta comprobación.
+ */
+export async function timbrarFactura(facturaId: string): Promise<{ uuid: string } | { pendiente: string }> {
+  if (!facturapiConfigurado()) {
+    return { pendiente: 'El timbrado no está conectado todavía (falta FACTURAPI_SECRET_KEY). El cobro es válido; el CFDI se emite cuando se configure.' };
+  }
+
+  const admin = supabaseAdmin();
+  const { data: f, error } = await admin
+    .from('factura_saas')
+    .select('id, tenant_id, estado, monto, periodo_inicio, periodo_fin, referencia, cfdi_uuid')
+    .eq('id', facturaId)
+    .maybeSingle();
+  if (error) throw new Error(`timbrarFactura.leer: ${error.message}`);
+  if (!f) throw new DatoInvalido('Esa factura ya no existe.');
+  if (f.cfdi_uuid) throw new DatoInvalido(`Esa factura ya está timbrada (UUID ${String(f.cfdi_uuid).slice(0, 8)}…). Timbrarla otra vez crearía un segundo CFDI que habría que cancelar.`);
+  if (f.estado !== 'pagada') throw new DatoInvalido('Solo se timbra lo que ya está pagado.');
+
+  const fiscales = await getDatosFiscales(f.tenant_id as string);
+  if (!estanCompletos(fiscales)) {
+    throw new DatoInvalido('Esa flota no tiene sus datos fiscales completos: sin RFC, razón social, régimen, código postal y uso de CFDI el SAT rechaza el timbrado.');
+  }
+
+  const cfdi = await timbrarMensualidad({
+    receptor: {
+      rfc: fiscales!.rfc!, razonSocial: fiscales!.razonSocial!,
+      regimenFiscal: fiscales!.regimenFiscal!, codigoPostal: fiscales!.codigoPostal!,
+      usoCfdi: fiscales!.usoCfdi!,
+    },
+    monto: Number(f.monto),
+    periodoInicio: f.periodo_inicio as string,
+    periodoFin: f.periodo_fin as string,
+    referencia: (f.referencia as string) ?? undefined,
+  });
+
+  // El CFDI YA EXISTE ante el SAT en este punto. Si guardarlo falla, se loguea
+  // fuerte y se devuelve igual: perder el UUID en nuestra base es un problema
+  // de registro; volver a timbrar sería un problema fiscal del cliente.
+  const { error: errGuardar } = await admin
+    .from('factura_saas')
+    .update({ cfdi_uuid: cfdi.uuid, cfdi_xml_url: cfdi.urlXml, timbrada_en: new Date().toISOString() })
+    .eq('id', facturaId);
+  if (errGuardar) {
+    logger.error('facturapi.uuid_sin_guardar', { facturaId, uuid: cfdi.uuid, err: errGuardar.message });
+  }
+
+  await enviarPorCorreo(cfdi.id);
+  return { uuid: cfdi.uuid };
 }
 
 /** Lo que está por cobrarse, para la pantalla de Javier. */
