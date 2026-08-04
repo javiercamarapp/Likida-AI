@@ -53,7 +53,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 const {
   getCargaOperadores, getViajesSinAsignar, getUnidades, getIncidencias,
-  getTableroOperacion, cambiarEstadoIncidencia, crearViaje,
+  getTableroOperacion, cambiarEstadoIncidencia, crearViaje, getPods, rechazarPod,
 } = await import('./operacion');
 
 beforeEach(() => { TABLAS = {}; FALLAN = {}; escrituras.length = 0; });
@@ -250,6 +250,45 @@ describe('getTableroOperacion', () => {
   });
 });
 
+describe('getPods — se parte de los VIAJES, no de la tabla pod', () => {
+  it('el viaje del que nadie creó registro sale con estado null y PRIMERO', async () => {
+    TABLAS = {
+      viaje: [
+        { id: 'v-1', folio: 'VJ-1', operador_id: 'o-1', estatus: 'abierto' },
+        { id: 'v-2', folio: 'VJ-2', operador_id: 'o-1', estatus: 'abierto' },   // nadie lo tocó
+        { id: 'v-3', folio: 'VJ-3', operador_id: 'o-1', estatus: 'liquidado' }, // ya cerró
+      ],
+      pod: [{ id: 'p-1', viaje_id: 'v-1', estado: 'subido', nota: null, capturado_en: null }],
+      operador: [{ id: 'o-1', nombre: 'Ana Ruiz', telefono: '52999' }],
+    };
+    const r = await getPods('t-1');
+    // El liquidado no aparece: la evidencia se persigue mientras el viaje vive.
+    expect(r.map((x) => x.folio)).toEqual(['VJ-2', 'VJ-1']);
+    expect(r[0].estado).toBeNull();
+    expect(r[0].operadorNombre).toBe('Ana Ruiz');
+    expect(r[1].estado).toBe('subido');
+  });
+
+  it('ordena lo que falta antes de lo que llegó', async () => {
+    TABLAS = {
+      viaje: [
+        { id: 'v-1', folio: 'llegó', operador_id: null, estatus: 'abierto' },
+        { id: 'v-2', folio: 'rechazado', operador_id: null, estatus: 'abierto' },
+        { id: 'v-3', folio: 'pedido', operador_id: null, estatus: 'abierto' },
+        { id: 'v-4', folio: 'nadie', operador_id: null, estatus: 'abierto' },
+      ],
+      pod: [
+        { id: 'p-1', viaje_id: 'v-1', estado: 'subido', nota: null, capturado_en: null },
+        { id: 'p-2', viaje_id: 'v-2', estado: 'rechazado', nota: null, capturado_en: null },
+        { id: 'p-3', viaje_id: 'v-3', estado: 'pendiente', nota: null, capturado_en: null },
+      ],
+      operador: [],
+    };
+    const r = await getPods('t-1');
+    expect(r.map((x) => x.folio)).toEqual(['nadie', 'pedido', 'rechazado', 'llegó']);
+  });
+});
+
 describe('escrituras', () => {
   it('crearViaje acota por tenant y nace abierto', async () => {
     await crearViaje('t-1', { folio: 'VJ-9', origen: 'GDL', destino: 'MTY', anticipo: 5000 });
@@ -275,5 +314,16 @@ describe('escrituras', () => {
   it('un insert que falla lanza en vez de devolver un id inventado', async () => {
     FALLAN = { viaje: 'folio duplicado' };
     await expect(crearViaje('t-1', { folio: 'VJ-9' })).rejects.toThrow('folio duplicado');
+  });
+
+  it('rechazar un POD NO borra el archivo — solo cambia el estado y anota', async () => {
+    // Borrar la ruta dejaría la discusión con el chofer sin la prueba de lo
+    // que sí mandó. Además, `pod_subido_tiene_archivo` (0047) solo exige
+    // archivo para 'subido', así que la fila rechazada queda consistente.
+    await rechazarPod('t-1', 'p-1', 'ilegible, no se ve el sello');
+    const w = escrituras.find((e) => e.tabla === 'pod')!;
+    expect(w.valores).toEqual({ estado: 'rechazado', nota: 'ilegible, no se ve el sello' });
+    expect(w.valores).not.toHaveProperty('storage_path');
+    expect(w.filtros).toEqual([['id', 'p-1'], ['tenant_id', 't-1']]);
   });
 });
