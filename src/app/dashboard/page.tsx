@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { Fuel, Receipt, Route as RouteIcon, Truck, Wallet, AlertTriangle, Percent } from 'lucide-react';
 import {
-  getKpis, getAcreditables, detectarAnomalias, getLiquidacionesPorDia,
+  getKpis, getAcreditables, detectarAnomalias, getLiquidacionesPorDia, getViajes,
+  type ViajeRow,
   type DashboardKpis, type Acreditables, type Anomalia,
 } from '@/lib/cuadra/analytics';
-import { saludo, fechaLarga } from '@/lib/saludo';
+import { saludo, fechaLarga, ahoraMs } from '@/lib/saludo';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { estadoPanel } from './estado';
@@ -12,6 +13,7 @@ import { BarChartSimple } from '../admin/charts';
 import { GlobalFilter } from '../admin/ui/global-filter';
 import { KpiTile } from '../admin/ui/kit';
 import CifraGrande from './cifra-grande';
+import AvanceCierre from './avance-cierre';
 import { sufijoTenant } from './sufijo';
 
 export const dynamic = 'force-dynamic';
@@ -68,11 +70,15 @@ export async function InicioContenido({
   // `undefined` (sin corte) y con 7/30 la misma ventana a las tres consultas,
   // para que los rótulos "del periodo" digan la verdad.
   const ventana = rango === 'todo' ? undefined : ventanaDias;
-  const [acred, kpis, anomalias, porDia] = await Promise.all([
+  const [acred, kpis, anomalias, porDia, viajes] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId, ventana)),
     safe<DashboardKpis>(() => getKpis(tenantId, ventana)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
     safe<Array<{ dia: string; valor: number }>>(() => getLiquidacionesPorDia(tenantId, ventanaDias)),
+    // Para la barra de avance de cierre: se traen los viajes con su fecha y
+    // estatus y el filtro por periodo se hace en el cliente, así cambiar de
+    // semana a mes no cuesta una consulta por clic.
+    safe<ViajeRow[]>(() => getViajes(tenantId)),
   ]);
   const etiquetaVentana = rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`;
 
@@ -102,7 +108,7 @@ export async function InicioContenido({
   return (
     <main>
       <div className="glass-panel overflow-hidden">
-        <div className="px-5 pt-3.5 pb-3.5 flex items-center justify-between gap-4">
+        <div className="px-5 pt-2.5 pb-2.5 flex items-center justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
               {saludo()}, {nombre ?? 'flota'}
@@ -126,6 +132,8 @@ export async function InicioContenido({
             nota={`Sobre política y duplicados · ${etiquetaVentana}`}
           />
         </div>
+
+        <AvanceCierre viajes={viajes ?? []} ahoraMs={ahoraMs()} />
 
         {alertas.length > 0 && (
           <div className="px-5 pb-3.5 space-y-1.5">

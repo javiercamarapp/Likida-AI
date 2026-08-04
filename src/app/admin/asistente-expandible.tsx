@@ -48,7 +48,7 @@ export default function AsistenteExpandible({
           El centro ya se retira solo aquí, con su propio width/opacity. */}
       <aside
         className={`glass-panel shrink-0 hidden xl:flex flex-col ${
-          expandido ? MARCO_ASISTENTE_EXPANDIDO : MARCO_ASISTENTE
+          expandido ? MARCO_ASISTENTE_EXPANDIDO : `${MARCO_ASISTENTE} top-0`
         }`}
         style={expandido ? undefined : { width: ANCHO_ASIDE, transition: `width ${DURACION}` }}
       >
