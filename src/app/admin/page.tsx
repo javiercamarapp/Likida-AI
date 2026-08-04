@@ -367,7 +367,11 @@ export default async function Admin({
       {/* El asistente ya no se monta aquí — vive en admin/layout.tsx, para
           estar en todas las páginas. Las recomendaciones, que antes iban
           arriba del chat, se quedan con el contenido de esta página. */}
-      <div className="mb-3">{asideTop}</div>
+      {/* Las recomendaciones vivían DENTRO del asistente, sobre su superficie
+          blanca. Al mudarse aquí quedaron sueltas sobre el fondo naranja y sus
+          tarjetas se veían transparentes: las hairlines y los fondos de esas
+          tarjetas asumen una superficie clara debajo. Se les devuelve una. */}
+      <div className="glass-panel p-3.5 mb-3">{asideTop}</div>
       {main}
     </div>
   );
