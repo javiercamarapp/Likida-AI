@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
-import FondoShader from '../admin/fondo-shader';
+import Fondo from '../fondo';
 import SidebarNav from './sidebar-nav';
 import AvisoRol from './aviso-rol';
 import RailAsistente from './rail';
@@ -41,7 +41,7 @@ export default function DashboardChrome({
 }) {
   return (
     <div className="min-h-dvh" style={{ fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>
-      <FondoShader />
+      <Fondo />
       {/* `gap-3 p-3` (antes 4): con el rail fijo en TODAS las páginas la
           columna del centro perdió ~300px, así que cada píxel de margen que
           no aporta se recorta. El sidebar baja de 232 a 208 por lo mismo. */}

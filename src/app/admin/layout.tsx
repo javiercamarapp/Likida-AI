@@ -9,7 +9,7 @@ import { calcularAlertas } from './calcular-alertas';
 import PerfilMenu from './perfil';
 import SidebarNav from './sidebar-nav';
 import SidebarNavIconos from './sidebar-nav-iconos';
-import FondoShader from './fondo-shader';
+import Fondo from '../fondo';
 import CommandPalette from './command-palette';
 import BuscadorTrigger from './buscador-trigger';
 import { Logo } from '../logo';
@@ -49,7 +49,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-dvh" style={{ fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>
-      <FondoShader />
+      <Fondo />
       {/* `dvh` en vez de `vh` a propósito: en iOS Safari, `100vh` cuenta el
           espacio DETRÁS de la barra de direcciones colapsable, así que la
           altura calculada no es la que realmente se ve — eso rompe el
