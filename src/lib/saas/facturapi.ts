@@ -54,6 +54,27 @@ function llave(): string {
   return k;
 }
 
+/**
+ * Impide timbrar en PRODUCCIÓN con una llave de sandbox.
+ *
+ * Un CFDI de prueba NO existe para el SAT, pero sí devuelve un UUID con la misma
+ * forma que uno real — y la base no distingue uno del otro. Sin este candado,
+ * una llave `sk_test` pegada por error en producción llenaría `factura_saas` de
+ * folios fiscales inexistentes que se ven perfectamente válidos, y el cliente lo
+ * descubriría en su declaración con meses de retraso.
+ *
+ * Es el mismo criterio que el webhook de Stripe sin secreto: preferir no operar
+ * a operar en falso. Aquí falla ruidosamente en vez de crear papel inválido.
+ */
+function exigirLlaveCoherente(): void {
+  const entorno = process.env.VERCEL_ENV ?? process.env.NODE_ENV;
+  if (entorno === 'production' && modoFacturapi() === 'prueba') {
+    throw new DatoInvalido(
+      'La llave de Facturapi en producción es de PRUEBA (sk_test). Un CFDI de sandbox no existe para el SAT: se cobró bien, pero no se timbra hasta poner la llave sk_live.',
+    );
+  }
+}
+
 async function pedir<T>(ruta: string, opciones: { metodo?: 'GET' | 'POST'; cuerpo?: unknown } = {}): Promise<T> {
   const { metodo = 'POST', cuerpo } = opciones;
   const r = await fetch(`${API}${ruta}`, {
@@ -136,6 +157,7 @@ export async function timbrarMensualidad(datos: {
   if (!receptor.rfc || !receptor.razonSocial || !receptor.regimenFiscal || !receptor.codigoPostal) {
     throw new DatoInvalido('Faltan datos fiscales del cliente: RFC, razón social, régimen y código postal.');
   }
+  exigirLlaveCoherente();
 
   const descripcion = `Servicio de software Likida — liquidación de viajes. Periodo ${datos.periodoInicio} a ${datos.periodoFin}`;
 

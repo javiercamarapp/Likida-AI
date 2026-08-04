@@ -91,3 +91,42 @@ describe('timbrarMensualidad', () => {
       .rejects.toThrow(/FACTURAPI_SECRET_KEY/);
   });
 });
+
+describe('el candado de producción', () => {
+  afterEach(() => { delete process.env.VERCEL_ENV; });
+
+  it('en PRODUCCIÓN con llave de prueba NO timbra — un CFDI de sandbox no existe para el SAT', async () => {
+    // Sin esto, una sk_test pegada por error en producción llenaría la base de
+    // folios fiscales inexistentes con forma de válidos, y el cliente lo
+    // descubriría en su declaración meses después.
+    process.env.FACTURAPI_SECRET_KEY = 'sk_test_abc';
+    process.env.VERCEL_ENV = 'production';
+    const llamo = vi.fn();
+    vi.stubGlobal('fetch', llamo);
+
+    await expect(timbrarMensualidad({ receptor: RECEPTOR, monto: 100, periodoInicio: 'a', periodoFin: 'b' }))
+      .rejects.toThrow(/sk_live/);
+    // Y no se gastó una llamada.
+    expect(llamo).not.toHaveBeenCalled();
+  });
+
+  it('en producción con sk_live sí timbra', async () => {
+    process.env.FACTURAPI_SECRET_KEY = 'sk_live_abc';
+    process.env.VERCEL_ENV = 'production';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ id: 'inv_1', uuid: 'AAAA-BBBB', total: 116 }), { status: 200 },
+    )));
+    const r = await timbrarMensualidad({ receptor: RECEPTOR, monto: 100, periodoInicio: 'a', periodoFin: 'b' });
+    expect(r.uuid).toBe('AAAA-BBBB');
+  });
+
+  it('fuera de producción, la llave de prueba sí timbra (es para lo que sirve)', async () => {
+    process.env.FACTURAPI_SECRET_KEY = 'sk_test_abc';
+    process.env.VERCEL_ENV = 'preview';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ id: 'inv_2', uuid: 'CCCC-DDDD', total: 116 }), { status: 200 },
+    )));
+    const r = await timbrarMensualidad({ receptor: RECEPTOR, monto: 100, periodoInicio: 'a', periodoFin: 'b' });
+    expect(r.uuid).toBe('CCCC-DDDD');
+  });
+});
