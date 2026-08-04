@@ -31,6 +31,20 @@ export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'router'
 const DEFAULTS: Record<ModelRole, string> = {
   // OCR de comprobantes (visión). Gemini 3.6 Flash (21-jul-2026): #1 OCR Arena
   // en recibos ruidosos ES; visión + JSON en una sola llamada.
+  //
+  // MEDIDO EL 4-AGO-2026 CONTRA 18 COMPROBANTES REALES, dos corridas: este
+  // default PIERDE contra `google/gemini-3.1-flash-lite` en las tres métricas
+  // —legibles 13-14 vs 14-15, montos 13-14 vs 14-15, folios 10-12 vs 13-14— y
+  // cuesta 12.5× más ($0.0188 vs $0.0015 por comprobante).
+  //
+  // De dónde sale la diferencia: 3.6 emite ~1,500 tokens de salida (razonamiento
+  // que se cobra) y el lite ~274. Y el sesgo del experimento FAVORECÍA al 3.6,
+  // porque los valores asentados los produjo él en producción; aun así perdió.
+  //
+  // El override vive en la variable `CUADRA_MODEL_OCR` de Vercel, apuntando ya
+  // a 3.1-flash-lite. El default se deja aquí a propósito: 18 comprobantes son
+  // pocos para reescribir la elección de arquitectura, y revertir tiene que
+  // costar una variable de entorno, no un despliegue.
   ocr: 'google/gemini-3.6-flash',
   // Cerebro de conciliación. Sonnet 5 (30-jun-2026): mejor que 4.5 en todo, con
   // precio intro $2/$10 hasta 31-ago — justo la ventana del demo.

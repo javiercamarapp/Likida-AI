@@ -84,6 +84,14 @@ export function isTransientError(err: unknown): boolean {
 const PRICES: Record<string, [number, number]> = {
   'google/gemini-3.6-flash': [1.5, 7.5],
   'google/gemini-3.5-flash-lite': [0.3, 2.5],
+  // Añadidos el 4-ago-2026 al medir OCR: sin ellos, `calcCost` caía a la red de
+  // seguridad (tarifa más cara) y reportaba ~$0.030 por comprobante donde el
+  // costo real es ~$0.0016. La red hizo su trabajo —salió alto y por eso se
+  // miró— pero un modelo sin precio no se puede comparar contra otro.
+  'google/gemini-3.1-flash-lite': [0.25, 1.5],
+  'google/gemini-2.5-flash-lite': [0.1, 0.4],
+  'google/gemini-2.5-flash': [0.3, 2.5],
+  'google/gemini-3-flash-preview': [0.5, 3],
   'anthropic/claude-sonnet-5': [2, 10],       // intro VIGENTE hasta 31-ago-2026; revertir a [3,15] después
   'anthropic/claude-opus-5': [5, 25],
   'anthropic/claude-haiku-4.5': [1, 5],
