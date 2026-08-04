@@ -17,7 +17,22 @@
 //     vez de intentar leer el ticket entero bien.
 //   - Solo 7 de 60 guías mencionan un QR en el ticket. El QR es la EXCEPCIÓN;
 //     el camino normal es OCR + validación contra la restricción del campo.
-//   - 42 de 60 exigen crear cuenta en el portal.
+//   - LA MAYORÍA NO EXIGE CUENTA: 26 de los 37 comercios registrados (70%) se
+//     facturan solo con los datos del ticket. Los 11 que sí la piden son casi
+//     todos de PEAJE —IAVE, PASE, TeleVía, PINFRA, REA, Super Carreteras— más
+//     cinco gasolineras (OXXO Gas, G500, Petromax, GORM, La Gas).
+//
+//     Este renglón decía "42 de 60 exigen crear cuenta" y estaba INVERTIDO:
+//     42/60 es 70%, la misma proporción que 26/37, pero es la de los que NO la
+//     exigen. Javier lo cazó el 4-ago-2026 por conocimiento de campo, y el
+//     registro de abajo le dio la razón. Importa porque decide la arquitectura:
+//     con cuenta obligatoria en el 70%, automatizar portales sería administrar
+//     contraseñas de 42 sitios; sin ella, la mayoría se factura con lo que ya
+//     se leyó del ticket.
+//
+//     El peaje además no se factura ticket por ticket: el TAG factura mensual
+//     contra la cuenta. Así que entre lo que un chofer FOTOGRAFÍA, la
+//     proporción sin cuenta es todavía mayor que ese 70%.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { Plazo } from './caducidad';
