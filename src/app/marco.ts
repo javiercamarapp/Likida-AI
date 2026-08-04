@@ -37,8 +37,17 @@ export const MARCO_SIDEBAR =
 export const MARCO_COLUMNA = 'flex-1 min-w-0 h-[calc(100dvh-2rem)] rounded-2xl overflow-hidden';
 
 /** El hijo que sí scrollea. `pb-3` para que el último panel de la página
- *  termine con aire y su borde inferior se vea completo al llegar abajo. */
-export const MARCO_SCROLL = 'h-full overflow-y-auto pb-3';
+ *  termine con aire y su borde inferior se vea completo al llegar abajo.
+ *
+ *  VA REDONDEADO, aunque el padre ya lo esté. `overflow-y: auto` convierte a
+ *  este div en contenedor de scroll, y un contenedor de scroll recorta por su
+ *  CAJA DE BORDE: sin radio propio, ese recorte es un rectángulo en escuadra.
+ *  En /admin el asistente vive DENTRO de esta caja y queda pegado a su borde
+ *  derecho, así que se le comían las dos esquinas de ese lado — el panel salía
+ *  con la izquierda redonda y la derecha a filo. En /dashboard no pasaba porque
+ *  ahí el rail es hermano de la columna, no hijo de este scroll: el mismo
+ *  componente se veía distinto según el panel. */
+export const MARCO_SCROLL = 'h-full overflow-y-auto pb-3 rounded-2xl';
 
 export const ANCHO_ASISTENTE = 276;
 
