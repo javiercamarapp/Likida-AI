@@ -5,7 +5,9 @@ import { Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import ChatNegocio from './chat';
 import type { ResumenNegocio } from '@/lib/admin/negocio';
 
-const ANCHO_ASIDE = 276;
+import { ANCHO_ASISTENTE, MARCO_ASISTENTE, MARCO_ASISTENTE_EXPANDIDO } from '../marco';
+
+const ANCHO_ASIDE = ANCHO_ASISTENTE;
 const DURACION = '480ms cubic-bezier(0.22, 1, 0.36, 1)'; // easeOutQuint — la misma curva "premium" que usan los paneles de macOS/iOS al expandirse
 
 /**
@@ -39,13 +41,14 @@ export default function AsistenteExpandible({
         {main}
       </div>
 
-      {/* Mismo arreglo que en dashboard/rail.tsx: expandido SALE del flujo.
-          Pedir `width: 100%` dentro de un flex que también carga el sidebar
-          de 232px desbordaba el panel a la derecha y se llevaba el botón de
-          contraer fuera de la pantalla. */}
+      {/* Mismo marco que dashboard/rail.tsx (marco.ts): expandido SALE del
+          flujo —pedir `width: 100%` dentro de un flex que también carga el
+          sidebar desbordaba el panel y se llevaba el botón de contraer fuera
+          de la pantalla— y arranca DESPUÉS del sidebar, que se queda visible.
+          El centro ya se retira solo aquí, con su propio width/opacity. */}
       <aside
         className={`glass-panel shrink-0 hidden xl:flex flex-col ${
-          expandido ? 'fixed inset-4 z-20' : 'sticky top-0 self-start h-[calc(100dvh-2rem)]'
+          expandido ? MARCO_ASISTENTE_EXPANDIDO : MARCO_ASISTENTE
         }`}
         style={expandido ? undefined : { width: ANCHO_ASIDE, transition: `width ${DURACION}` }}
       >
