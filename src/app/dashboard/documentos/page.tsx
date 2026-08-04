@@ -1,4 +1,4 @@
-import { ScanText, FileCheck2, ShieldAlert, Image as IconoImagen } from 'lucide-react';
+import { ScanText, FileCheck2, ShieldAlert, Image as IconoImagen, ReceiptText } from 'lucide-react';
 import { getDocumentos, type DocumentoRow } from '@/lib/cuadra/analytics';
 import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import { mxn } from '@/lib/utils';
@@ -6,6 +6,8 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { fechaMx } from '../formato';
 import { KpiTile, EstadoVacio, StatusPill, type Estado } from '../../admin/ui/kit';
+import { getPorFacturar, resumen as resumirFacturas, type TicketPorFacturar } from '@/lib/cuadra/facturacion/pendientes';
+import { PorFacturar } from './por-facturar';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +52,9 @@ export default async function DocumentosPage({
   // si el SAT los valida, que es su trabajo, sin ver por cuánto son.
   const veDinero = puedeVerArea(rol, 'dinero');
   const docs = await safe<DocumentoRow[]>(() => getDocumentos(tenantId));
+  // El módulo de facturación (60 comercios, plazos, reconocedor) llevaba
+  // construido desde el 27-jul sin que ninguna pantalla lo usara. Aquí se conecta.
+  const porFacturar = await safe<TicketPorFacturar[]>(() => getPorFacturar(tenantId));
 
   const conCfdi = docs?.filter((d) => d.cfdiUuid).length ?? 0;
   const bajaConfianza = docs?.filter((d) => d.ocrConfianza !== null && d.ocrConfianza < CONFIANZA_BAJA).length ?? 0;
@@ -143,6 +148,20 @@ export default async function DocumentosPage({
                 )}
               </div>
             )}
+
+            <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+              <div className="flex items-center gap-2 mb-3">
+                <ReceiptText width={15} height={15} strokeWidth={1.75} />
+                <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
+                  Por facturar
+                </h2>
+              </div>
+              {porFacturar === null ? (
+                <div className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer qué falta por facturar.</div>
+              ) : (
+                <PorFacturar tickets={porFacturar} resumen={resumirFacturas(porFacturar)} veDinero={veDinero} />
+              )}
+            </section>
 
             <div className="px-5 pt-4 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
               <EstadoVacio>
