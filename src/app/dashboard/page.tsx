@@ -119,7 +119,9 @@ export async function InicioContenido({
     // KPIs y su borde redondeado no aparece nunca — se lee como interfaz rota.
     <main className="h-full flex flex-col">
       <div className="glass-panel overflow-hidden flex flex-col min-h-0">
-        <div className="px-5 pt-3 pb-3 flex items-start justify-between gap-6">
+        {/* Encabezado FIJO: el saludo y la cifra grande no se van al hacer
+            scroll — son el marco de referencia de todo lo de abajo. */}
+        <div className="px-5 pt-3 pb-3 flex items-start justify-between gap-6 shrink-0">
           <div className="min-w-0 flex-1">
             <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
               {saludo()}, {nombre ?? 'flota'}
@@ -147,6 +149,11 @@ export async function InicioContenido({
             nota={`Sobre política y duplicados · ${etiquetaVentana}`}
           />
         </div>
+
+        {/* TODO LO DEMÁS SCROLLEA AQUÍ ADENTRO. El panel conserva su borde
+            redondeado abajo —no se corta a media fila como antes— y el
+            contenido que no cabe se recorre sin mover el encabezado. */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
 
         {alertas.length > 0 && (
           <div className="px-5 pb-3.5 space-y-1.5">
@@ -272,6 +279,7 @@ export async function InicioContenido({
         )}
 
         <p className="text-xs px-5 pb-5 pt-1" style={{ color: 'var(--muted)' }}>{LEYENDA_CORTA}</p>
+        </div>
       </div>
     </main>
   );
