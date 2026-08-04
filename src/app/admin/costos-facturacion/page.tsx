@@ -7,8 +7,9 @@ import { mensajeParaPantalla } from '@/lib/cuadra/administracion';
 import { getPlanes, guardarPriceDePlan, type Plan } from '@/lib/saas/suscripcion';
 import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import {
-  datosBancarios, emitirMensualidad, conciliar, getPorCobrar, type FacturaPorCobrar,
+  datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrar, type FacturaPorCobrar,
 } from '@/lib/saas/transferencia';
+import { facturapiConfigurado, modoFacturapi } from '@/lib/saas/facturapi';
 import { AreaChartSimple, Dona } from '../charts';
 import { IconoProveedor } from '../proveedor-icono';
 import { ChartCard, EstadoVacio, KpiTile, StatusPill } from '../ui/kit';
@@ -101,10 +102,22 @@ async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<
   'use server';
   const s = await requireSuperadmin();
   try {
-    await conciliar(String(fd.get('facturaId') ?? ''), String(fd.get('referenciaBanco') ?? ''), s.userId);
+    const id = String(fd.get('facturaId') ?? '');
+    await conciliar(id, String(fd.get('referenciaBanco') ?? ''), s.userId);
+
+    // El timbrado va DESPUÉS y con su propio try: el pago ya quedó registrado y
+    // un PAC caído no puede deshacer un hecho del banco.
+    let nota = '';
+    try {
+      const r = await timbrarFactura(id);
+      nota = 'uuid' in r ? ` CFDI timbrado: ${r.uuid.slice(0, 8)}…` : ` ${r.pendiente}`;
+    } catch (e) {
+      nota = ` El pago quedó registrado, pero el CFDI NO se timbró: ${mensajeParaPantalla(e, 'timbrar')}`;
+    }
+
     revalidatePath('/admin/costos-facturacion');
     revalidatePath('/dashboard/suscripcion');
-    return { ok: 'Factura marcada como pagada, con su referencia del banco.' };
+    return { ok: `Factura marcada como pagada, con su referencia del banco.${nota}` };
   } catch (e) {
     return { error: mensajeParaPantalla(e, 'conciliar el pago') };
   }
@@ -312,6 +325,11 @@ export default async function CostosFacturacionPage() {
               <StatusPill estado="ok">Producción</StatusPill>
             )}
             {modo !== null && !webhookConfigurado() && <StatusPill estado="bad">Sin webhook</StatusPill>}
+            {facturapiConfigurado()
+              ? <StatusPill estado={modoFacturapi() === 'produccion' ? 'ok' : 'warn'}>
+                  {modoFacturapi() === 'produccion' ? 'Timbra CFDI' : 'CFDI en prueba'}
+                </StatusPill>
+              : <StatusPill estado="warn">Sin timbrar CFDI</StatusPill>}
           </div>
 
           {!hayStripe ? (
