@@ -121,7 +121,7 @@ export async function InicioOperacion({
         <TableroCifras t={tablero} />
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 flex-1 min-h-0">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 flex-1 min-h-0 overflow-y-auto xl:overflow-visible">
         <section className="glass-panel overflow-hidden flex flex-col min-h-0">
           <div className="px-5 pt-4 pb-2 flex items-center gap-2 shrink-0">
             <CircleSlash width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />

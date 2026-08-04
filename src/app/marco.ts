@@ -22,8 +22,19 @@ export const MARCO_FILA = 'min-h-dvh flex items-start gap-4 p-4 relative z-10';
 export const MARCO_SIDEBAR =
   'glass-panel w-[72px] lg:w-[232px] shrink-0 flex flex-col h-[calc(100dvh-2rem)] sticky top-4 self-start overflow-hidden';
 
-/** La columna de contenido, con su propio scroll. */
-export const MARCO_COLUMNA = 'flex-1 min-w-0 h-[calc(100dvh-2rem)] overflow-y-auto';
+/** La columna de contenido, con su propio scroll.
+ *
+ *  `pb-3` no es adorno: sin él, el último panel de la página termina EXACTO
+ *  donde termina el área de scroll y su borde redondeado nunca se ve, ni
+ *  llegando hasta abajo. Se lee como si la interfaz estuviera cortada. Con el
+ *  respiro, todo panel cierra.
+ *
+ *  Las páginas que además quieren el encabezado FIJO y el scroll dentro del
+ *  panel —como Inicio en las dos consolas— lo declaran ellas: `h-full flex
+ *  flex-col` en el `<main>`, el encabezado `shrink-0`, y el resto envuelto en
+ *  `flex-1 min-h-0 overflow-y-auto`. No se puede hacer desde aquí porque cada
+ *  página decide qué parte suya es encabezado. */
+export const MARCO_COLUMNA = 'flex-1 min-w-0 h-[calc(100dvh-2rem)] overflow-y-auto pb-3';
 
 /** Ancho del asistente contraído, en px. */
 export const ANCHO_ASISTENTE = 276;
