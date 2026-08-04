@@ -1,11 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import {
-  Maximize2, Minimize2, Sparkles, ReceiptText, ScanText, TrendingUp, Truck,
-} from 'lucide-react';
+import { Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import ChatFlota from './chat';
 import type { DashboardKpis, Acreditables } from '@/lib/cuadra/analytics';
 import { mxn } from '@/lib/formato';
@@ -36,8 +33,6 @@ interface Datos {
 export default function RailAsistente() {
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
-  const vista = sp.get('vista');
-  const sufijo = tenant ? `?tenant=${tenant}` : vista ? `?vista=${vista}` : '';
 
   const [expandido, setExpandido] = useState(false);
   const [datos, setDatos] = useState<Datos | null>(null);
@@ -72,12 +67,6 @@ export default function RailAsistente() {
   const acred = datos?.acred ?? null;
   const anomalias = datos?.anomalias ?? null;
 
-  const accesos = [
-    { href: `/dashboard/cuadre${sufijo}`, Icono: ReceiptText, titulo: 'Cuadre / Liquidación', sub: kpis ? `${kpis.viajesLiquidados} cerradas` : 'Detalle por viaje' },
-    { href: `/dashboard/documentos${sufijo}`, Icono: ScanText, titulo: 'Documentos (OCR)', sub: 'Comprobantes procesados' },
-    { href: `/dashboard/valor-ahorro${sufijo}`, Icono: TrendingUp, titulo: 'Valor & Ahorro', sub: 'Lo que Likida te ahorra' },
-    { href: `/dashboard/viajes${sufijo}`, Icono: Truck, titulo: 'Viajes', sub: 'Estado de la operación' },
-  ];
 
   return (
     // EXPANDIDO SE SALE DEL FLUJO, no crece dentro de él.
@@ -115,22 +104,7 @@ export default function RailAsistente() {
           <div className="rounded-lg p-2.5 text-[13px] leading-snug" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
             {cargando
               ? 'Cargando lo de hoy…'
-              : `Hola ${datos?.nombre ?? 'de nuevo'}${datos?.tenantNombre ? ` — viendo ${datos.tenantNombre}` : ''}. Aquí tienes accesos rápidos.`}
-          </div>
-
-          <div className="space-y-1">
-            {accesos.map((a) => (
-              <Link key={a.titulo} href={a.href}
-                className="flex items-center gap-2 p-2 rounded-lg hairline transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)]">
-                <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                  <a.Icono width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-                </div>
-                <span className="min-w-0">
-                  <span className="block text-[13px] font-medium truncate leading-tight">{a.titulo}</span>
-                  <span className="block text-[11px] truncate" style={{ color: 'var(--muted)' }}>{a.sub}</span>
-                </span>
-              </Link>
-            ))}
+              : `Hola ${datos?.nombre ?? 'de nuevo'}${datos?.tenantNombre ? ` — viendo ${datos.tenantNombre}` : ''}. Pregúntame lo que quieras de tu operación.`}
           </div>
 
           {/* Smart Insight — solo con un hallazgo REAL. Un recuadro verde que

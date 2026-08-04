@@ -214,3 +214,15 @@ html, body {
   .columna-centro { transition: none; }
   :root[data-asistente="expandido"] .columna-centro { transform: none; }
 }
+
+/* El logo de la pantalla de carga: respira, no parpadea. `animate-pulse` de
+   Tailwind salta entre dos opacidades; esta curva es la misma easeOutQuint de
+   los paneles, así que el producto entero se mueve igual. */
+@keyframes likida-respira {
+  0%, 100% { opacity: 0.35; transform: scale(0.985); }
+  50%      { opacity: 1;    transform: scale(1); }
+}
+.likida-respira { animation: likida-respira 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .likida-respira { animation: none; opacity: 0.6; }
+}

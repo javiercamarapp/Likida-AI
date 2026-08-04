@@ -80,15 +80,7 @@ export default async function Admin({
   ]);
   const chipsCosto = r.porDia.slice(-8).map((d) => d.costoUsd);
   const chipsTokens = r.porDia.slice(-8).map((d) => d.tokens);
-  const topFase = r.porFase[0] ? (FASE_LABEL[r.porFase[0].fase] ?? r.porFase[0].fase) : null;
-  const TopFaseIcono = r.porFase[0] ? (FASE_ICONO[r.porFase[0].fase] ?? Sparkles) : Sparkles;
 
-  const recomendaciones = [
-    { href: '#agentes', Icono: BarChart3, titulo: 'Costo por agente', subtitulo: 'Desglose por fase de IA' },
-    { href: '#flotas', Icono: Truck, titulo: 'Flotas', subtitulo: `${r.tenants} dada${r.tenants === 1 ? '' : 's'} de alta` },
-    { href: '/admin/usuarios/nuevo', Icono: UserPlus2, titulo: 'Nuevo usuario', subtitulo: 'Dar de alta una cuenta' },
-    { href: '#conversaciones', Icono: MessageCircle, titulo: 'Conversaciones', subtitulo: `${conversaciones.length} activas` },
-  ];
 
   // `main` y `asideTop` se pasan como children al cliente
   // (asistente-expandible.tsx) — se renderizan aquí en el servidor, el
@@ -320,43 +312,6 @@ export default async function Admin({
     </main>
   );
 
-  const asideTop = (
-    <>
-      <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-        Hola {nombre ?? 'Javier'}, aquí tienes accesos rápidos y lo más importante de hoy.
-      </div>
-
-      <div className="space-y-1.5">
-        {recomendaciones.map((rec) => (
-          <Link key={rec.titulo} href={rec.href}
-            className="flex items-center gap-2.5 p-2.5 rounded-xl hairline transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)]">
-            <Insignia Icono={rec.Icono} tamaño="sm" />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium truncate">{rec.titulo}</span>
-              <span className="block text-xs truncate" style={{ color: 'var(--muted)' }}>{rec.subtitulo}</span>
-            </span>
-          </Link>
-        ))}
-      </div>
-
-      {(topFase || r.tendenciaCosto !== null) && (
-        <div className="rounded-xl p-3.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
-          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-ok)' }}>
-            <Sparkles width={12} height={12} strokeWidth={2} /> Smart Insight
-          </div>
-          <p className="text-sm">
-            {r.tendenciaCosto !== null
-              ? `El gasto de IA ${r.tendenciaCosto >= 0 ? 'subió' : 'bajó'} ${Math.abs(r.tendenciaCosto)}% esta semana vs la anterior.`
-              : (
-                <span className="inline-flex items-center gap-1.5">
-                  <TopFaseIcono width={13} height={13} strokeWidth={1.75} /> &quot;{topFase}&quot; es tu agente más caro hoy: {usd(r.porFase[0].costoUsd)}.
-                </span>
-              )}
-          </p>
-        </div>
-      )}
-    </>
-  );
 
   return (
     <div>
@@ -367,11 +322,6 @@ export default async function Admin({
       {/* El asistente ya no se monta aquí — vive en admin/layout.tsx, para
           estar en todas las páginas. Las recomendaciones, que antes iban
           arriba del chat, se quedan con el contenido de esta página. */}
-      {/* Las recomendaciones vivían DENTRO del asistente, sobre su superficie
-          blanca. Al mudarse aquí quedaron sueltas sobre el fondo naranja y sus
-          tarjetas se veían transparentes: las hairlines y los fondos de esas
-          tarjetas asumen una superficie clara debajo. Se les devuelve una. */}
-      <div className="glass-panel p-3.5 mb-3">{asideTop}</div>
       {main}
     </div>
   );
