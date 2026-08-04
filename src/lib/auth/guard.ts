@@ -65,3 +65,19 @@ export async function requireSuperadmin(): Promise<SessionTenant> {
   if (s.rol !== 'superadmin') redirect('/dashboard');
   return s;
 }
+
+/**
+ * Gate de PANTALLA por rol, para las páginas que no pasan por
+ * `resolverTenantEfectivo` — los stubs sin datos.
+ *
+ * Existe porque un stub también filtra: "Cobranza" y "Rentabilidad", aunque
+ * estén vacías, le anuncian a un jefe de tráfico qué mira su patrón. Y el día
+ * que dejen de ser stubs, el gate ya está puesto en vez de ser algo que
+ * alguien tenga que acordarse de agregar.
+ */
+export async function exigirVerRuta(destino: string): Promise<SessionTenant> {
+  const { puedeVerRuta, inicioDe } = await import('./visibilidad');
+  const s = await requireSessionTenant(destino);
+  if (!puedeVerRuta(s.rol, destino)) redirect(inicioDe(s.rol));
+  return s;
+}

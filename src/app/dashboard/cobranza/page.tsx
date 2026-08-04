@@ -1,9 +1,11 @@
 import { Landmark } from 'lucide-react';
 import SeccionPendiente from '../pendiente';
+import { exigirVerRuta } from '@/lib/auth/guard';
 
 export const dynamic = 'force-dynamic';
 
-export default function CobranzaPage() {
+export default async function CobranzaPage() {
+  await exigirVerRuta('/dashboard/cobranza');
   return (
     <SeccionPendiente
       Icono={Landmark}

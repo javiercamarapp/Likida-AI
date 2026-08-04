@@ -1,0 +1,114 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// QUÉ PANTALLAS EXISTEN PARA CADA ROL — una sola fuente, y no es el sidebar.
+//
+// `permisos.ts` decide qué ACCIÓN se ofrece encima de un dato que el rol ya
+// puede ver (exportar, asignar, administrar). Esto decide algo distinto y
+// anterior: si la PANTALLA existe siquiera para ese rol.
+//
+// Hacía falta porque `encargado` y `contador` entraban al mismo /dashboard
+// que el dueño y veían TODO: rentabilidad, cobranza, facturación, clientes.
+// El encargado es el jefe de tráfico — despacha, no factura — y enseñarle el
+// margen de la flota no es un detalle de UI, es exponerle a un puesto medio
+// las finanzas completas de la empresa.
+//
+// SE APLICA EN DOS SITIOS, Y LOS DOS HACEN FALTA:
+//   1. el sidebar, para no pintar el link;
+//   2. la PÁGINA, con `exigirVer()`, porque un link que no se pinta se
+//      escribe a mano en la barra de direcciones. Esconder sin gatear es el
+//      patrón que la 0045 ya tuvo que cerrar para el chofer: la UI lo
+//      escondía, la consulta no.
+//
+// RLS no puede resolver esto: `tenant_data` es por TENANT, no por rol, y los
+// tres roles de oficina comparten exactamente las mismas filas. Lo que
+// cambia es qué se le enseña a cada quien, y eso se decide aquí.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Las secciones en que se parte el panel, por naturaleza del dato. */
+export type Area = 'operacion' | 'dinero' | 'administracion';
+
+/**
+ * Qué áreas ve cada rol del dominio de `app_user.rol` (0044).
+ *
+ * `operador` NO aparece: su vista es /mis-viajes con RLS propia (0045), no
+ * este panel. Un rol desconocido cae al `??` de `areasDe` y no ve nada:
+ * fail closed, igual que `permisos.ts`.
+ */
+const AREAS_POR_ROL: Record<string, readonly Area[]> = {
+  superadmin: ['operacion', 'dinero', 'administracion'],
+  flota_admin: ['operacion', 'dinero', 'administracion'],
+  // El jefe de tráfico: despacha y da seguimiento. No ve finanzas ni toca la
+  // configuración de la cuenta. Es el rol para el que existe este archivo.
+  encargado: ['operacion'],
+  // El contador vive del dinero y del papel. No despacha: asignarle un viaje
+  // a un chofer no es su trabajo y la matriz de permisos ya se lo niega.
+  contador: ['dinero'],
+};
+
+export function areasDe(rol: string): readonly Area[] {
+  return AREAS_POR_ROL[rol] ?? [];
+}
+
+export function puedeVerArea(rol: string, area: Area): boolean {
+  return areasDe(rol).includes(area);
+}
+
+/**
+ * A qué área pertenece cada ruta de /dashboard.
+ *
+ * Explícito y no por prefijo a propósito: una ruta nueva que nadie clasifique
+ * cae a `undefined`, y `puedeVerRuta` la niega. Es preferible que una pantalla
+ * nueva no se vea a que se vea de más — el error caro es el segundo.
+ */
+const AREA_POR_RUTA: Record<string, Area> = {
+  '/dashboard': 'operacion',
+
+  // Operación
+  '/dashboard/despacho': 'operacion',
+  '/dashboard/viajes': 'operacion',
+  '/dashboard/pod': 'operacion',
+  '/dashboard/incidencias': 'operacion',
+  '/dashboard/unidades': 'operacion',
+  '/dashboard/operadores': 'operacion',
+  '/dashboard/mapa': 'operacion',
+  '/dashboard/documentos': 'operacion',
+  '/dashboard/analitica': 'operacion',
+  '/dashboard/chat': 'operacion',
+  '/dashboard/soporte': 'operacion',
+
+  // Dinero — lo que el encargado no ve
+  '/dashboard/valor-ahorro': 'dinero',
+  '/dashboard/rentabilidad': 'dinero',
+  '/dashboard/clientes': 'dinero',
+  '/dashboard/combustible-casetas': 'dinero',
+  '/dashboard/cotizador': 'dinero',
+  '/dashboard/cuadre': 'dinero',
+  '/dashboard/facturacion': 'dinero',
+  '/dashboard/cobranza': 'dinero',
+
+  // Administración de la cuenta — solo el dueño
+  '/dashboard/usuarios': 'administracion',
+  '/dashboard/politicas': 'administracion',
+  '/dashboard/configuracion': 'administracion',
+};
+
+export function areaDeRuta(href: string): Area | undefined {
+  return AREA_POR_RUTA[href];
+}
+
+export function puedeVerRuta(rol: string, href: string): boolean {
+  const area = areaDeRuta(href);
+  return area !== undefined && puedeVerArea(rol, area);
+}
+
+/**
+ * A dónde mandar a un rol que no puede ver donde está parado.
+ *
+ * No es `/dashboard` fijo: para el contador, `/dashboard` es de operación y
+ * lo rebotaría otra vez — un bucle de redirects, que es peor que la fuga que
+ * se quería evitar.
+ */
+export function inicioDe(rol: string): string {
+  if (puedeVerArea(rol, 'operacion')) return '/dashboard';
+  if (puedeVerArea(rol, 'dinero')) return '/dashboard/cuadre';
+  return '/sin-acceso';
+}

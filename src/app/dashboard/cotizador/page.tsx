@@ -1,9 +1,11 @@
 import { Calculator } from 'lucide-react';
 import SeccionPendiente from '../pendiente';
+import { exigirVerRuta } from '@/lib/auth/guard';
 
 export const dynamic = 'force-dynamic';
 
-export default function CotizadorPage() {
+export default async function CotizadorPage() {
+  await exigirVerRuta('/dashboard/cotizador');
   return (
     <SeccionPendiente
       Icono={Calculator}

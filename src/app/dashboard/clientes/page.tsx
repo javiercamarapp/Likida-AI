@@ -1,9 +1,11 @@
 import { Users2 } from 'lucide-react';
 import SeccionPendiente from '../pendiente';
+import { exigirVerRuta } from '@/lib/auth/guard';
 
 export const dynamic = 'force-dynamic';
 
-export default function ClientesPage() {
+export default async function ClientesPage() {
+  await exigirVerRuta('/dashboard/clientes');
   return (
     <SeccionPendiente
       Icono={Users2}

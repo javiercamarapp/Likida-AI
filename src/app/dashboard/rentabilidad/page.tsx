@@ -1,9 +1,11 @@
 import { DollarSign } from 'lucide-react';
 import SeccionPendiente from '../pendiente';
+import { exigirVerRuta } from '@/lib/auth/guard';
 
 export const dynamic = 'force-dynamic';
 
-export default function RentabilidadPage() {
+export default async function RentabilidadPage() {
+  await exigirVerRuta('/dashboard/rentabilidad');
   return (
     <SeccionPendiente
       Icono={DollarSign}

@@ -1,4 +1,5 @@
 import { requireSessionTenant } from '@/lib/auth/guard';
+import { puedeVerArea, inicioDe } from '@/lib/auth/visibilidad';
 import Link from 'next/link';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { notFound, redirect } from 'next/navigation';
@@ -32,6 +33,13 @@ export default async function Detalle({
   // que tras el passcode aterrice en la liquidación que pidió.
   const { id: idParaVolver } = await params;
   const { tenantId: tenantIdDemo, rol } = await requireSessionTenant(`/dashboard/${idParaVolver}`);
+
+  // ESTA PANTALLA ES DINERO, no la ficha operativa del viaje: enseña
+  // comprobado contra anticipo, la deducibilidad y el desglose de IVA/IEPS.
+  // El área se comprueba a mano y no por `puedeVerRuta` porque la ruta es
+  // dinámica (`/dashboard/<uuid>`) y no puede estar en el mapa de rutas.
+  if (!puedeVerArea(rol, 'dinero')) redirect(inicioDe(rol));
+
   const { id } = await params;
   const sp = await searchParams;
 

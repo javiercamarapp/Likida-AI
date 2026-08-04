@@ -54,7 +54,7 @@ export default function DashboardChrome({
           </div>
 
           <nav className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">
-            <SidebarNav />
+            <SidebarNav rol={rol} />
           </nav>
 
           <div className="px-2 pb-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>

@@ -19,6 +19,7 @@
 // `requireSessionTenant` ya hace, sin sorpresas.
 import { redirect } from 'next/navigation';
 import { requireSessionTenant } from './guard';
+import { puedeVerRuta, inicioDe } from './visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { SessionTenant } from './session';
 
@@ -36,6 +37,16 @@ export async function resolverTenantEfectivo(
   opts: { esRaiz?: boolean } = {},
 ): Promise<TenantEfectivo> {
   const sesion = await requireSessionTenant(destino);
+
+  // ¿ESTA PANTALLA EXISTE PARA ESTE ROL? — antes de resolver nada más.
+  //
+  // Hasta aquí, encargado y contador entraban al mismo panel que el dueño y
+  // veían todo: rentabilidad, cobranza, facturación, clientes. RLS no podía
+  // evitarlo (`tenant_data` es por tenant, no por rol: los tres comparten
+  // exactamente las mismas filas) y esconder el link tampoco — se teclea la
+  // URL. Se gatea aquí porque `destino` ES la ruta y todas las páginas de
+  // /dashboard con datos ya pasan por esta función.
+  if (!puedeVerRuta(sesion.rol, destino)) redirect(inicioDe(sesion.rol));
 
   if (opts.esRaiz && sesion.rol === 'superadmin' && sp?.vista !== 'demo' && !sp?.tenant) {
     redirect('/admin');
