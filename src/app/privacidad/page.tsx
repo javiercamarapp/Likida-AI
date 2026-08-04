@@ -1,4 +1,4 @@
-import { fechaMx } from '@/lib/formato';
+import { PaginaLegal, FaltaDato, type SeccionLegal } from '../legal/marco';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA POLÍTICA DE PRIVACIDAD DE LIKIDA. 1-ago-2026.
@@ -42,9 +42,7 @@ const RESPONSABLE = {
   contacto: 'likida.ai@gmail.com',
 };
 
-type Seccion = { titulo: string; fundamento: string; parrafos: string[] };
-
-const SECCIONES: Seccion[] = [
+const SECCIONES: SeccionLegal[] = [
   {
     titulo: 'Quién es responsable, y de qué datos exactamente',
     fundamento: 'LFPDPPP art. 15 fr. I · art. 14',
@@ -120,67 +118,27 @@ const SECCIONES: Seccion[] = [
   },
 ];
 
-function ConNegritas({ texto }: { texto: string }) {
-  return (
-    <>
-      {texto.split(/(\*\*[^*]+\*\*)/g).map((t, i) =>
-        t.startsWith('**') && t.endsWith('**')
-          ? <strong key={i} className="font-semibold" style={{ color: 'var(--ink)' }}>{t.slice(2, -2)}</strong>
-          : <span key={i}>{t}</span>,
-      )}
-    </>
-  );
-}
-
 export default function Privacidad() {
   const faltan = !RESPONSABLE.razonSocial || !RESPONSABLE.domicilio;
 
   return (
-    <main
-      className="mx-auto max-w-2xl px-5 py-10 text-[15px] leading-relaxed"
-      style={{ color: 'var(--muted)' }}
-    >
-      <header className="pb-6" style={{ borderBottom: '1px solid var(--line)' }}>
-        <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-          Política de privacidad
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold" style={{ color: 'var(--ink)' }}>Likida</h1>
-        <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>
-          Vigente al {fechaMx(new Date().toISOString())} · Ley Federal de Protección de
-          Datos Personales en Posesión de los Particulares
-        </p>
-      </header>
-
-      {faltan && (
-        // Mismo criterio que el aviso integral: el hueco se enseña en vez de
-        // rellenarse. Una razón social inventada en una política de privacidad
-        // es peor que una que falta, porque la que falta se nota.
-        <p
-          className="mt-6 rounded-md px-4 py-3 text-sm"
-          style={{ border: '1px solid var(--color-warn)', color: 'var(--ink)' }}
-        >
+    <PaginaLegal
+      etiqueta="Política de privacidad"
+      bajada="Ley Federal de Protección de Datos Personales en Posesión de los Particulares"
+      secciones={SECCIONES}
+      aviso={faltan ? (
+        <FaltaDato>
           Falta capturar la razón social y el domicilio fiscal de la empresa que opera Likida.
           Aparece señalado en vez de quedar en blanco.
-        </p>
-      )}
-
-      {SECCIONES.map((s) => (
-        <section key={s.titulo} className="mt-8">
-          <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>{s.titulo}</h2>
-          <p className="mt-0.5 text-xs" style={{ color: 'var(--muted)' }}>{s.fundamento}</p>
-          {s.parrafos.map((p, i) => (
-            <p key={i} className="mt-3"><ConNegritas texto={p} /></p>
-          ))}
-        </section>
-      ))}
-
-      <footer className="mt-12 pt-6 text-sm" style={{ borderTop: '1px solid var(--line)', color: 'var(--muted)' }}>
+        </FaltaDato>
+      ) : undefined}
+      pie={
         <p>
           ¿Eres operador de una flota? Esta página no es tu aviso: el tuyo lo publica tu
           empresa. Escribe <strong style={{ color: 'var(--ink)' }}>PRIVACIDAD</strong> por el
           mismo chat de WhatsApp y te llega la liga.
         </p>
-      </footer>
-    </main>
+      }
+    />
   );
 }
