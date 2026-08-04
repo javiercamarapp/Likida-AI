@@ -58,14 +58,20 @@ export async function InicioContenido({
   nombre: string | null;
   sp: { vista?: string; tenant?: string; rango?: string } | undefined;
 }) {
-  // Por defecto 30 DÍAS, no 7 como /admin. Ahí el filtro solo movía una
-  // gráfica de actividad; aquí mueve los acreditables fiscales, y con la
-  // ventana de 7 días el panel abría con "IVA acreditable $0.00 · Peaje
-  // $0.00" teniendo miles de pesos acumulados un poco más atrás. Un cero de
-  // encuadre se lee como un cero de la flota. El mes es además la unidad en
-  // la que un contralor piensa su corte.
-  const rango = sp?.rango === '7' ? '7' : sp?.rango === 'todo' ? 'todo' : '30';
-  const ventanaDias = rango === '7' ? 7 : 30;
+  // Por defecto 7 DÍAS, igual que /admin — decisión de Javier (3-ago-2026).
+  //
+  // ESTO REVIERTE UNA DECISIÓN ANTERIOR Y HAY QUE SABER QUÉ SE ACEPTA. El
+  // default era 30 porque este filtro no mueve una gráfica de actividad como
+  // en /admin: mueve los ACREDITABLES FISCALES. Con ventana de 7 días el
+  // panel puede abrir con "IVA acreditable $0.00 · Peaje $0.00" teniendo
+  // miles de pesos acumulados un poco más atrás, y un cero de encuadre se lee
+  // como un cero de la flota. El mes es además la unidad en la que un
+  // contralor piensa su corte.
+  //
+  // Si en el demo el panel abre en ceros con datos existiendo, es esto: se
+  // cambia el default de vuelta a '30' en esta línea.
+  const rango = sp?.rango === '30' ? '30' : sp?.rango === 'todo' ? 'todo' : '7';
+  const ventanaDias = rango === '30' ? 30 : 7;
   const sufijo = sufijoTenant(sp);
 
   // El filtro de arriba mueve TODO, no solo la gráfica: con 'todo' se pasa
@@ -108,8 +114,11 @@ export async function InicioContenido({
   }
 
   return (
-    <main>
-      <div className="glass-panel overflow-hidden">
+    // Mismo criterio que en `inicio-operacion.tsx`: el scroll vive DENTRO del
+    // panel. Con la columna scrolleando, el recuadro se corta a media fila de
+    // KPIs y su borde redondeado no aparece nunca — se lee como interfaz rota.
+    <main className="h-full flex flex-col">
+      <div className="glass-panel overflow-hidden flex flex-col min-h-0">
         <div className="px-5 pt-3 pb-3 flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1">
             <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
