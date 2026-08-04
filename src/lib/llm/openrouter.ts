@@ -111,6 +111,38 @@ const PRICES: Record<string, [number, number]> = {
  * silencio es peor que uno que se equivoca ruidosamente: nadie mira lo que
  * parece correcto.
  */
+/**
+ * El costo REAL de una llamada: el que reporta el proveedor si viene, y solo si
+ * no viene se recalcula con la tabla.
+ *
+ * POR QUÉ ESTE ORDEN. `calcCost` multiplica tokens por tarifa de lista, y eso es
+ * ciego a todo lo que el proveedor descuenta. Medido el 4-ago-2026 contra
+ * OpenRouter con el mismo system de 9,543 tokens dos veces seguidas:
+ *
+ *     llamada 1  cache_write_tokens 9543   cost $0.0239715
+ *     llamada 2  cached_tokens      9543   cost $0.0020226   (-91.6%)
+ *
+ * La tabla decía $0.0181 en las dos. O sea que la caché de prompt SÍ estaba
+ * funcionando y el contador no podía verla: se habría reportado "0% de ahorro"
+ * sobre una optimización que ahorra el 92%, y lo lógico habría sido revertirla.
+ *
+ * Arregla además dos cosas que ya habían mordido: un modelo que no está en
+ * `PRICES` (se estimaba con la tarifa más cara, 20× de más) y los precios que
+ * caducan — el intro de Sonnet vence el 31-ago-2026 y la tabla no se entera.
+ */
+export function costoReal(
+  usage: { cost?: number } | undefined,
+  model: string,
+  tokIn: number,
+  tokOut: number,
+): number {
+  const delProveedor = usage?.cost;
+  if (typeof delProveedor === 'number' && Number.isFinite(delProveedor) && delProveedor >= 0) {
+    return delProveedor;
+  }
+  return calcCost(model, tokIn, tokOut);
+}
+
 export function calcCost(model: string, tokIn: number, tokOut: number): number {
   // El sufijo de proveedor no cambia el precio del modelo.
   const limpio = model.split(':')[0];
@@ -128,7 +160,13 @@ export function calcCost(model: string, tokIn: number, tokOut: number): number {
 }
 
 // OpenRouter: no retener input (compliance de datos fiscales).
-const PROVIDER_OPTS = { provider: { data_collection: 'deny' } } as const;
+const PROVIDER_OPTS = {
+  provider: { data_collection: 'deny' },
+  // Pide el desglose REAL de consumo, incluido `cost` y los tokens de caché.
+  // Sin esto OpenRouter no manda el costo y hay que recalcularlo a mano — que
+  // es justo lo que ocultaba el ahorro de la caché (ver `costoReal`).
+  usage: { include: true },
+} as const;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL RAZONAMIENTO DEL OCR — la palanca de costo más grande, y la más peligrosa.
@@ -194,7 +232,7 @@ export async function generateResponse(opts: {
       model: res.model || m,
       tokensIn: res.usage?.prompt_tokens ?? 0,
       tokensOut: res.usage?.completion_tokens ?? 0,
-      cost: calcCost(m, res.usage?.prompt_tokens ?? 0, res.usage?.completion_tokens ?? 0),
+      cost: costoReal(res.usage as { cost?: number } | undefined, m, res.usage?.prompt_tokens ?? 0, res.usage?.completion_tokens ?? 0),
     };
   };
 
@@ -345,7 +383,7 @@ export async function generateStructured<T>(opts: {
     // contador por liquidación no reporte $0 en los intentos fallidos.
     const tokIn = res.usage?.prompt_tokens ?? 0;
     const tokOut = res.usage?.completion_tokens ?? 0;
-    const usage = { model: res.model || m, tokensIn: tokIn, tokensOut: tokOut, cost: calcCost(m, tokIn, tokOut) };
+    const usage = { model: res.model || m, tokensIn: tokIn, tokensOut: tokOut, cost: costoReal(res.usage as { cost?: number } | undefined, m, tokIn, tokOut) };
     // Se cobra AQUÍ, antes de cualquier salida: pase lo que pase debajo —
     // truncado, JSON roto, schema inválido— esta llamada ya se pagó.
     cobrar(usage);
@@ -608,7 +646,7 @@ export async function generateWithTools(opts: {
       tokOut += rOut;
       // `activeModel` ya refleja quién respondió ESTA ronda: `complete` lo mueve
       // al fallback antes de devolver.
-      costo += calcCost(activeModel, rIn, rOut);
+      costo += costoReal(res.usage as { cost?: number } | undefined, activeModel, rIn, rOut);
       used = res.model || activeModel;
       const choice = res.choices[0];
       const calls = choice?.message?.tool_calls;
