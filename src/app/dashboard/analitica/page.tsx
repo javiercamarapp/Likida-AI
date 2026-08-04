@@ -4,6 +4,7 @@ import { getKpis, getGastoPorConcepto, getLiquidacionesPorDia, type DashboardKpi
 import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeExportar } from '@/lib/auth/permisos';
+import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { GlobalFilter, resolverRango } from '../../admin/ui/global-filter';
 import { EstadoVacio, ChartCard } from '../../admin/ui/kit';
 import { HBars } from '../../admin/ui/graficas';
@@ -35,6 +36,9 @@ export default async function AnaliticaPage({
 
   // 30 días por defecto. El filtro recibe este mismo objeto, así que ya no hay
   // dos declaraciones del default que puedan discrepar (ver `resolverRango`).
+  // Área `operacion`: el encargado entra. "Gasto por concepto" son pesos de la
+  // flota y la matriz de roles (0044) no se los da.
+  const veDinero = puedeVerArea(rol, 'dinero');
   const r = resolverRango(sp?.rango, '30');
   const { rango, ventanaDias, ventana } = r;
 
@@ -82,7 +86,11 @@ export default async function AnaliticaPage({
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          {porConcepto && porConcepto.length > 0 ? (
+          {!veDinero ? (
+            <ChartCard titulo="Gasto por concepto" tamano="S">
+              <EstadoVacio>Tu rol no ve cifras de dinero. Los cierres por día de arriba sí son tuyos.</EstadoVacio>
+            </ChartCard>
+          ) : porConcepto && porConcepto.length > 0 ? (
             <ChartCard titulo="Gasto por concepto" subtitulo="Todo el histórico de la flota" tamano="M">
               <HBars datos={porConcepto.map((c) => ({ etiqueta: etiquetaConcepto(c.concepto), valor: c.total }))} formato="mxn" />
             </ChartCard>

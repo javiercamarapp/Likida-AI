@@ -2,6 +2,7 @@ import { Truck, MapPin, Wallet, Clock } from 'lucide-react';
 import { getViajes, type ViajeRow } from '@/lib/cuadra/analytics';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { fechaMx } from '../formato';
 import { KpiTile, EstadoVacio, StatusPill, type Estado } from '../../admin/ui/kit';
 
@@ -37,7 +38,12 @@ export default async function ViajesPage({
   searchParams: Promise<{ vista?: string; tenant?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId } = await resolverTenantEfectivo('/dashboard/viajes', sp);
+  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/viajes', sp);
+  // ESTA PÁGINA ES ÁREA `operacion`, ASÍ QUE EL ENCARGADO ENTRA. El anticipo es
+  // dinero y la matriz de roles (0044) no se lo da: el despacho ya lo dice
+  // explícito —"el anticipo se captura porque el motor lo necesita, pero no se
+  // lista ni se suma en ninguna columna"— y aquí sí se listaba y se sumaba.
+  const veDinero = puedeVerArea(rol, 'dinero');
   const viajes = await safe<ViajeRow[]>(() => getViajes(tenantId));
 
   // "Sin liquidar" son los DOS estatus previos al cierre (`abierto` y
@@ -72,8 +78,10 @@ export default async function ViajesPage({
                   etiqueta="Viajes registrados" valor={viajes.length} formato="entero" />
                 <KpiTile icono={<MapPin width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Abiertos (sin liquidar)" valor={abiertos} formato="entero" />
-                <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Anticipo en viajes abiertos" valor={anticipoAbierto} formato="mxn" />
+                {veDinero && (
+                  <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+                    etiqueta="Anticipo en viajes abiertos" valor={anticipoAbierto} formato="mxn" />
+                )}
                 <KpiTile icono={<Clock width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Con comprobantes en camino" valor={conPendientes} formato="entero"
                   nota="Fotos que el operador mandó y el agente todavía está procesando" />
@@ -100,7 +108,7 @@ export default async function ViajesPage({
                       <th className="px-5 py-2.5 font-medium">Ruta</th>
                       <th className="px-5 py-2.5 font-medium">Operador</th>
                       <th className="px-5 py-2.5 font-medium">Inicio</th>
-                      <th className="px-5 py-2.5 font-medium text-right">Anticipo</th>
+                      {veDinero && <th className="px-5 py-2.5 font-medium text-right">Anticipo</th>}
                       <th className="px-5 py-2.5 font-medium">Estatus</th>
                     </tr>
                   </thead>
@@ -115,7 +123,7 @@ export default async function ViajesPage({
                           </td>
                           <td className="px-5 py-3">{v.operadorNombre ?? '—'}</td>
                           <td className="px-5 py-3" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio)}</td>
-                          <td className="px-5 py-3 text-right tabular">{v.anticipo > 0 ? mxn(v.anticipo) : '—'}</td>
+                          {veDinero && <td className="px-5 py-3 text-right tabular">{v.anticipo > 0 ? mxn(v.anticipo) : '—'}</td>}
                           <td className="px-5 py-3">
                             <StatusPill estado={e.estado}>{e.label}</StatusPill>
                           </td>
