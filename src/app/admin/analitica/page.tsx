@@ -59,7 +59,7 @@ export default async function AnaliticaPage() {
             </ChartCard>
           ) : (
             <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
-              <EstadoVacio icono={<LineChart width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+              <EstadoVacio icono={<LineChart width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Sin historial suficiente todavía.
               </EstadoVacio>
             </ChartCard>

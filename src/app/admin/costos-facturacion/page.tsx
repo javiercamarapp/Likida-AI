@@ -54,11 +54,11 @@ export default async function CostosFacturacionPage() {
           {costoPorViaje !== null ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
               <KpiTile
-                icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Gastado en IA — todo el histórico" valor={r.costoIaUsd} formato="usd"
               />
               <KpiTile
-                icono={<Calculator width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                icono={<Calculator width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Costo estimado de IA por viaje procesado (costo total ÷ viajes procesados)"
                 valor={costoPorViaje} formato="usd"
               />
@@ -86,7 +86,7 @@ export default async function CostosFacturacionPage() {
             </ChartCard>
           ) : (
             <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
-              <EstadoVacio icono={<DollarSign width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+              <EstadoVacio icono={<DollarSign width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Sin historial suficiente todavía.
               </EstadoVacio>
             </ChartCard>

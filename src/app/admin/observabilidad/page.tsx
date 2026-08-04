@@ -84,7 +84,7 @@ export default async function ObservabilidadPage() {
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <TituloSeccion>Rendimiento por llamada</TituloSeccion>
           <div className="mt-3">
-            <EstadoVacio icono={<Activity width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <EstadoVacio icono={<Activity width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               Latencia p50/p95/p99 por llamada, tasa de éxito de tool-calls, tasa de escalamiento a humano, tiempo de
               resolución end-to-end, trace viewer paso a paso — ninguno de estos se instrumenta hoy (no hay columna de
               duración en <code className="font-mono text-xs">llm_costo</code> ni un sistema de trazas). Fase 1-4 del roadmap.

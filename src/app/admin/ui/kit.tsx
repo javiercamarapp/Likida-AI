@@ -149,7 +149,7 @@ export function EstadoVacio({ icono, children }: { icono?: React.ReactNode; chil
     <div className="card p-4">
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-          {icono ?? <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+          {icono ?? <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
         </div>
         <p className="text-sm pt-1">{children}</p>
       </div>

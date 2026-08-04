@@ -158,7 +158,7 @@ export default async function DespachoPage({
           <div className="px-5 pb-5 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la lista.</div>
         ) : sinAsignar.length === 0 ? (
           <div className="px-5 pb-5">
-            <EstadoVacio icono={<PackageCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <EstadoVacio icono={<PackageCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               Todo lo que está en curso ya trae chofer. Cuando entre un viaje sin asignar, aparece aquí.
             </EstadoVacio>
           </div>
@@ -171,7 +171,7 @@ export default async function DespachoPage({
           </div>
         ) : ops.length === 0 ? (
           <div className="px-5 pb-5">
-            <EstadoVacio icono={<UserCog width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <EstadoVacio icono={<UserCog width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               Hay {sinAsignar.length} viaje(s) sin chofer y ningún operador activo a quien asignárselos. Los
               operadores se dan de alta cuando escriben por WhatsApp por primera vez.
             </EstadoVacio>

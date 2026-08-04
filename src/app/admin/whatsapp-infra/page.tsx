@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 function Insignia({ Icono }: { Icono: typeof Smartphone }) {
   return (
     <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-      <Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+      <Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
     </div>
   );
 }
@@ -89,7 +89,7 @@ export default async function WhatsappInfraPage() {
               patrón que "Likida en números" en Inicio. */}
           <div className="mt-3">
             <KpiTile
-              icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Conversaciones activas" valor={conversaciones.length} formato="entero"
             />
           </div>
@@ -120,7 +120,7 @@ export default async function WhatsappInfraPage() {
                           <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
                             style={t.role === 'user'
                               ? { background: 'var(--bg)', border: '1px solid var(--line)' }
-                              : { background: 'var(--ink)', color: 'var(--bg)' }}>
+                              : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                             {t.content}
                           </div>
                         </div>
@@ -140,7 +140,7 @@ export default async function WhatsappInfraPage() {
               fuera de alcance baja como bloque aparte, mismo patrón que
               "Qué va a mostrar esta página cuando exista" en Cobranza. */}
           <div className="mt-3">
-            <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               Ninguno de estos existe todavía en este panel — requieren integrar más a fondo la Meta WhatsApp
               Business API de lo que Likida usa hoy (Fase 5 del roadmap, a escala):
             </EstadoVacio>

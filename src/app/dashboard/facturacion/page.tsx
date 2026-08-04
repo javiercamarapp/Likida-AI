@@ -62,15 +62,15 @@ export default async function FacturacionPage({
           ) : (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Comprobantes con CFDI" valor={conCfdi.length} formato="entero"
                   nota={`De ${docs.length} comprobantes en total — el resto son tickets sin factura`} />
-                <KpiTile icono={<ShieldCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<ShieldCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Vigentes ante el SAT" valor={vigentes} formato="entero" />
-                <KpiTile icono={<ShieldAlert width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<ShieldAlert width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Cancelados" valor={cancelados} formato="entero"
                   nota="Un CFDI cancelado después de que lo pagaste deja de ser deducible" />
-                <KpiTile icono={<ShieldAlert width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<ShieldAlert width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Emisor en lista EFOS" valor={conEfos} formato="entero"
                   nota="Proveedores que el SAT tiene marcados — deducirles es riesgo" />
               </div>
@@ -92,11 +92,11 @@ export default async function FacturacionPage({
             <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-              <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="IVA acreditable" valor={acred.iva} formato="mxn" nota="LIVA, Art. 5 — CFDI con IVA desglosado" />
-              <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Peaje acreditable (50%)" valor={acred.peaje} formato="mxn" nota="LIF 2026, Art. 20-A" />
-              <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Litros de diésel elegibles" valor={acred.litrosDiesel} formato="litros"
                 nota="El estímulo en pesos lo calcula tu contador con la cuota semanal del DOF" />
             </div>

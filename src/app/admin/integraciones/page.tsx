@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 function Insignia({ Icono }: { Icono: typeof Blocks }) {
   return (
     <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-      <Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+      <Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
     </div>
   );
 }
@@ -141,7 +141,7 @@ export default async function IntegracionesPage() {
               (KeyRound, igual que antes) y mensaje honesto, ni una palabra
               cambiada. */}
           <div className="mt-3">
-            <EstadoVacio icono={<KeyRound width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <EstadoVacio icono={<KeyRound width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               Rotación de API keys — Fase 5 del roadmap. Hoy las llaves de cada servicio viven en variables de
               entorno de Vercel, sin una UI de administración ni rotación automática dentro de este panel.
             </EstadoVacio>

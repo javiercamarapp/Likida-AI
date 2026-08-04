@@ -68,13 +68,13 @@ export default async function ViajesPage({
                 Estado de la operación
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                <KpiTile icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Viajes registrados" valor={viajes.length} formato="entero" />
-                <KpiTile icono={<MapPin width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<MapPin width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Abiertos (sin liquidar)" valor={abiertos} formato="entero" />
-                <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Anticipo en viajes abiertos" valor={anticipoAbierto} formato="mxn" />
-                <KpiTile icono={<Clock width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<Clock width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Con comprobantes en camino" valor={conPendientes} formato="entero"
                   nota="Fotos que el operador mandó y el agente todavía está procesando" />
               </div>
@@ -87,7 +87,7 @@ export default async function ViajesPage({
             </div>
             {viajes.length === 0 ? (
               <div className="px-5 pb-5">
-                <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+                <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                   Aún no hay viajes registrados para esta flota.
                 </EstadoVacio>
               </div>

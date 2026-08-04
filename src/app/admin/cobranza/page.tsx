@@ -32,7 +32,7 @@ export default function CobranzaPage() {
           {/* EstadoVacio (design system v2, ui/kit.tsx) — mismo icono-en-caja +
               mensaje que antes, presentación consolidada, misma redacción
               honesta sin cambiar una palabra. */}
-          <EstadoVacio icono={<Receipt width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+          <EstadoVacio icono={<Receipt width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             <span className="font-semibold">Sin facturación todavía.</span> Likida no cobra a ningún cliente
             todavía — esta página se llena en cuanto exista facturación real (Fase 3 del roadmap).
           </EstadoVacio>

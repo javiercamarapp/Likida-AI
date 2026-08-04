@@ -40,7 +40,7 @@ export function GlobalFilter({
       {OPCIONES.map((o) => (
         <Link key={o.valor} href={construir(o.valor)}
           className="text-xs font-medium px-2.5 py-1 rounded-full transition-colors"
-          style={activo === o.valor ? { background: 'var(--ink)', color: 'white' } : { color: 'var(--muted)' }}>
+          style={activo === o.valor ? { background: 'var(--marca)', color: 'white' } : { color: 'var(--muted)' }}>
           {o.etiqueta}
         </Link>
       ))}

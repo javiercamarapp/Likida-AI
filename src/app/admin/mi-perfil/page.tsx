@@ -87,7 +87,7 @@ export default async function MiPerfilPage({
               className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
           </div>
           <button type="submit" className="text-sm px-4 py-2.5 rounded-lg font-medium transition-opacity hover:opacity-85"
-            style={{ background: 'var(--ink)', color: 'white' }}>
+            style={{ background: 'var(--marca)', color: 'white' }}>
             Guardar nombre
           </button>
         </form>

@@ -37,15 +37,15 @@ export default async function AgenteCuadrePage() {
           <TituloSeccion>Costo real</TituloSeccion>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
             <KpiTile
-              icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Gastado en Cuadre" valor={cuadre ? cuadre.costoUsd : 0} formato="usd"
             />
             <KpiTile
-              icono={<Calculator width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              icono={<Calculator width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Llamadas de Cuadre" valor={cuadre ? cuadre.n : 0} formato="entero"
             />
             <KpiTile
-              icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Viajes procesados" valor={r.viajesProcesados} formato="entero"
             />
           </div>

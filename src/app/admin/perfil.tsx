@@ -17,7 +17,7 @@ export default function PerfilMenu({ nombre, avatarUrl }: { nombre: string; avat
         <img src={avatarUrl} alt={nombre} className="w-7 h-7 rounded-full object-cover shrink-0" />
       ) : (
         <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-          style={{ background: 'var(--ink)', color: 'white' }}>
+          style={{ background: 'var(--marca)', color: 'white' }}>
           {nombre.charAt(0).toUpperCase()}
         </span>
       )}

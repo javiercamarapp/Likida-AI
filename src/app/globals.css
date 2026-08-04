@@ -11,10 +11,15 @@
 
   --color-bg: #fbfbfd;
   --color-surface: #ffffff;
-  --color-ink: #0b0b0f;
+  --color-ink: #17100d;      /* negro cálido: sigue siendo tinta, ya no es azulado */
   --color-muted: #6b7280;
   --color-line: #ececef;
-  --color-accent: #0e7c66;      /* verde-conciliación grafito, sobrio */
+  /* NARANJA DE MARCA. Un solo tono para las dos cosas que tiene que hacer:
+     rellenar (con texto blanco encima) y ser tinta sobre blanco. #c2410c mide
+     5.18:1 contra blanco por la fórmula de luminancia WCAG — pasa AA en los
+     dos sentidos, que es justo lo que un naranja vivo (#f97316, 2.9:1) no
+     hace: se ve bien en un mockup y deja el texto del botón ilegible. */
+  --color-accent: #c2410c;
   --color-accent-fg: #ffffff;
 
   /* #34c759 (el verde de semáforo de Apple) mide 2.22:1 sobre blanco y 2.15:1
@@ -28,7 +33,7 @@
      que el override de abajo lo devuelve. Medido con la fórmula de luminancia
      relativa de WCAG, no a ojo (auditoría 5, frontend, MEDIO 2). */
   --color-ok: #14602c;
-  --color-warn: #ff9f0a;
+  --color-warn: #a16207;      /* movido del naranja: la marca ya es naranja y un aviso naranja deja de avisar */
   /* #ff3b30 daba ~3.6:1 sobre blanco y AA pide 4.5:1 para texto normal. Este
      tono llega a 4.6:1 y se sigue leyendo como el rojo de sistema. */
   --color-bad: #d70015;
@@ -63,11 +68,19 @@
   --faint: #a1a1aa;
   --line2: #e4e4e7;
 
-  --g1: #ededed;
-  --g2: #cfcfd2;
-  --g3: #9a9aa0;
-  --g4: #57575c;
-  --g5: #0a0a0b;
+  --g1: #fdebd9;
+  --g2: #f9c99f;
+  --g3: #f2913f;
+  --g4: #ea580c;
+  --g5: #c2410c;
+
+  /* El relleno de marca: lo que antes era negro sólido —botones primarios,
+     barras, pills activos, puntos de leyenda—. Es el MISMO valor que --g5 y
+     que --accent a propósito: tres nombres para el mismo naranja según lo
+     que cada componente cree estar pintando (grafismo, acción, acento), y
+     un solo sitio donde cambiarlo. */
+  --marca: #c2410c;
+  --marca-fg: #ffffff;
 
   /* --ok/--warn/--bad NUEVOS (para la librería de componentes de /admin) —
      no reemplazan --color-ok/--color-bad, que siguen siendo los que usa el
@@ -76,8 +89,8 @@
      luminancia WCAG de la nota de arriba, no a ojo). */
   --ok: #15803d;
   --okbg: #e7f5ec;
-  --warn: #b45309;
-  --warnbg: #fdf1e3;
+  --warn: #a16207;
+  --warnbg: #fbf3e0;
   --bad: #b91c1c;
   --badbg: #fbeaea;
 }
@@ -90,12 +103,12 @@
    dos reglas `[data-theme]` de abajo quedan listas para ESE switch, si algún
    día se construye, pero ya no se disparan solas. */
 :root[data-theme="dark"] {
-  --bg: #0b0b0f; --surface: #16161c; --ink: #e8edf5; --muted: #9aa0aa; --line: #242430; --accent: #2dd4bf; --accent-fg: #06231e;
+  --bg: #0b0b0f; --surface: #16161c; --ink: #f5ece7; --muted: #9aa0aa; --line: #242430; --accent: #fb923c; --accent-fg: #2a1206;
   --color-bad: #ff453a;   /* ver la nota de contraste arriba */
   --color-ok: #34c759;    /* 8.12:1 sobre #16161c */
 }
 :root[data-theme="light"] {
-  --bg: #fbfbfd; --surface: #ffffff; --ink: #0b0b0f; --muted: #6b7280; --line: #ececef; --accent: #0e7c66; --accent-fg: #ffffff;
+  --bg: #fbfbfd; --surface: #ffffff; --ink: #17100d; --muted: #6b7280; --line: #ececef; --accent: #c2410c; --accent-fg: #ffffff;
   --color-bad: #d70015;   /* 5.38:1 sobre blanco */
   --color-ok: #14602c;    /* 7.67:1 sobre blanco */
 }

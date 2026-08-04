@@ -18,8 +18,7 @@ export default function NoEncontrado() {
       {/* `self-start` NO es decorativo: como hijo directo de un flex column, el
           `align-items: stretch` de default estiraba el logo a todo el ancho y
           lo deformaba. En /login no pasa porque ahí va dentro de un div. */}
-      {/* eslint-disable-next-line @next/next/no-img-element -- logo estático, no next/image en el resto del repo */}
-      <img src="/images/logo.png" alt="Likida" className="h-6 w-auto self-start" />
+      <span role="img" aria-label="Likida" className="h-6  self-start block" style={{ aspectRatio: '726 / 149', background: 'var(--marca)', WebkitMaskImage: "url(/images/logo.png)", maskImage: "url(/images/logo.png)", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskPosition: "left center", maskPosition: "left center" }} />
 
       <div className="max-w-3xl">
         <p

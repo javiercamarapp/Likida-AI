@@ -31,7 +31,7 @@ export default function CompliancePage() {
         </section>
 
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <EstadoVacio icono={<FileWarning width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+          <EstadoVacio icono={<FileWarning width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             Dado que la app sí procesa datos fiscales/personales (RFC, montos, imágenes de comprobantes), esto sube
             de prioridad en cuanto haya un cliente real — no antes, para no construir un sistema de compliance para
             datos que hoy son solo del tenant demo.

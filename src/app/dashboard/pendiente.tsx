@@ -42,7 +42,7 @@ export default function SeccionPendiente({
             Todavía no existe
           </h2>
           <div className="mt-3">
-            <EstadoVacio icono={<Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <EstadoVacio icono={<Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               {falta}
             </EstadoVacio>
           </div>

@@ -34,7 +34,7 @@ function Insignia({ Icono, tamaño = 'md' }: { Icono: typeof Truck; tamaño?: 's
   const icon = tamaño === 'sm' ? 15 : 17;
   return (
     <div className={`${box} rounded-lg flex items-center justify-center shrink-0`} style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-      <Icono width={icon} height={icon} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+      <Icono width={icon} height={icon} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
     </div>
   );
 }
@@ -154,22 +154,22 @@ export default async function Admin({
                 vez de repetirse por tile. */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
               <KpiTile
-                icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta={r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
                 valor={r.tenants} formato="entero"
               />
               <KpiTile
-                icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Gastado en IA" valor={r.costoIaUsd} formato="usd"
                 tendencia={r.tendenciaCosto} sparkline={chipsCosto}
               />
               <KpiTile
-                icono={<Cpu width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                icono={<Cpu width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Tokens usados" valor={r.tokensIn + r.tokensOut} formato="numero"
                 tendencia={r.tendenciaTokens} sparkline={chipsTokens}
               />
               <KpiTile
-                icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Viajes procesados" valor={r.viajesProcesados} formato="entero"
               />
             </div>
@@ -291,7 +291,7 @@ export default async function Admin({
                             <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
                               style={t.role === 'user'
                                 ? { background: 'var(--bg)', border: '1px solid var(--line)' }
-                                : { background: 'var(--ink)', color: 'var(--bg)' }}>
+                                : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                               {t.content}
                             </div>
                           </div>

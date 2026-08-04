@@ -47,8 +47,7 @@ export default function DashboardChrome({
       <div className="min-h-dvh flex items-start gap-3 p-3 relative z-10">
         <aside className="glass-panel w-[64px] lg:w-[208px] shrink-0 flex flex-col h-[calc(100dvh-1.5rem)] sticky top-3 self-start overflow-hidden">
           <div className="px-3 py-3 flex items-center justify-center lg:justify-start gap-1.5">
-            {/* eslint-disable-next-line @next/next/no-img-element -- logo estático, no next/image en el resto del repo */}
-            <img src="/images/logo.png" alt="Likida" className="h-[18px] w-auto" />
+            <span role="img" aria-label="Likida" className="h-[18px]  block" style={{ aspectRatio: '726 / 149', background: 'var(--marca)', WebkitMaskImage: "url(/images/logo.png)", maskImage: "url(/images/logo.png)", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskPosition: "left center", maskPosition: "left center" }} />
             <span className="hidden lg:inline text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
               {ROL_BADGE[rol] ?? rol.toUpperCase()}
             </span>
@@ -60,7 +59,7 @@ export default function DashboardChrome({
 
           <div className="px-2 pb-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>
             <div className="flex items-center justify-center lg:justify-start gap-2 px-2 py-2">
-              <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-semibold" style={{ background: 'var(--ink)', color: 'var(--bg)' }}>
+              <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-semibold" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                 {(nombre ?? 'F')[0].toUpperCase()}
               </div>
               <Link href="/cuenta" className="hidden lg:block text-[13px] font-medium hover:opacity-70 transition-opacity truncate">

@@ -98,7 +98,7 @@ export default function RailAsistente() {
               <Link key={a.titulo} href={a.href}
                 className="flex items-center gap-2 p-2 rounded-lg hairline transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_6%,transparent)]">
                 <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                  <a.Icono width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+                  <a.Icono width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
                 </div>
                 <span className="min-w-0">
                   <span className="block text-[13px] font-medium truncate leading-tight">{a.titulo}</span>

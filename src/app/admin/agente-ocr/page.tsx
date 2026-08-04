@@ -52,11 +52,11 @@ export default async function AgenteOcrPage() {
           <TituloSeccion>Costo real</TituloSeccion>
           <div className="grid grid-cols-2 gap-3 mt-3">
             <KpiTile
-              icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Gastado en OCR" valor={ocr ? ocr.costoUsd : 0} formato="usd"
             />
             <KpiTile
-              icono={<Repeat width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              icono={<Repeat width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Llamadas de OCR" valor={ocr ? ocr.n : 0} formato="entero"
             />
           </div>

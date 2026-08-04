@@ -113,7 +113,7 @@ export default function CommandPalette() {
             resultados.map(({ href, nombre, Icono }, i) => (
               <button key={href} type="button" onClick={() => ir(href)}
                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-left transition-colors"
-                style={i === activo ? { background: 'var(--ink)', color: 'white' } : undefined}
+                style={i === activo ? { background: 'var(--marca)', color: 'white' } : undefined}
                 onMouseEnter={() => setActivo(i)}
               >
                 <Icono width={15} height={15} strokeWidth={1.75} style={{ color: i === activo ? 'white' : 'var(--muted)' }} />

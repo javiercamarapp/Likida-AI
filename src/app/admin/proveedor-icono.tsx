@@ -42,7 +42,7 @@ export function IconoProveedor({ modelo }: { modelo: string }) {
   const proveedor = modelo.includes('/') ? modelo.split('/')[0] : modelo;
   const letra = proveedor.charAt(0).toUpperCase();
   return (
-    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold" style={{ background: 'var(--ink)', color: 'white' }}>
+    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold" style={{ background: 'var(--marca)', color: 'white' }}>
       {letra}
     </div>
   );

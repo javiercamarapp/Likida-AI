@@ -74,16 +74,16 @@ export default async function CombustibleCasetasPage({
             <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-              <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Gastado en combustible" valor={diesel?.total ?? 0} formato="mxn"
                 nota={diesel ? `${diesel.n} cargas registradas` : 'Sin cargas registradas todavía'} />
-              <KpiTile icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              <KpiTile icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Gastado en casetas" valor={caseta?.total ?? 0} formato="mxn"
                 nota={caseta ? `${caseta.n} casetas registradas` : 'Sin casetas registradas todavía'} />
-              <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Litros elegibles para el estímulo" valor={acred?.litrosDiesel ?? 0} formato="litros"
                 nota="LIF 2026, Art. 20-A" />
-              <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Sin CFDI (combustible y casetas)" valor={pctSinCfdi ?? 0} formato="porcentaje"
                 vacio={pctSinCfdi === null ? 'Sin comprobantes de estos conceptos todavía' : undefined}
                 nota={pctSinCfdi === null ? undefined : `${sinCfdi} de ${combustibleYCasetas.length} sin factura — es deducible que se pierde`} />
@@ -103,7 +103,7 @@ export default async function CombustibleCasetasPage({
             </div>
           ) : (
             <ChartCard titulo="Gasto por concepto" tamano="S">
-              <EstadoVacio icono={<Fuel width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+              <EstadoVacio icono={<Fuel width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Hace falta más de un concepto de gasto registrado para comparar.
               </EstadoVacio>
             </ChartCard>
@@ -118,7 +118,7 @@ export default async function CombustibleCasetasPage({
             <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo revisar.</div>
           ) : anomaliasCombustible.length === 0 ? (
             <div className="mt-3">
-              <EstadoVacio icono={<Copy width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+              <EstadoVacio icono={<Copy width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Ningún comprobante de combustible o caseta aparece cargado en más de un viaje.
               </EstadoVacio>
             </div>

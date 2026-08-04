@@ -56,7 +56,7 @@ export default async function ConfiguracionPage({
             </h2>
             <div className="card p-4 mt-3 flex items-start gap-3">
               <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                <Building2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+                <Building2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
               </div>
               <div>
                 <div className="text-sm font-mono">{config.empresa.rfc}</div>
@@ -97,7 +97,7 @@ export default async function ConfiguracionPage({
             </h3>
             {unidades.length === 0 ? (
               <div className="mt-3">
-                <EstadoVacio icono={<Fuel width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+                <EstadoVacio icono={<Fuel width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                   Ninguna placa tiene calibración propia todavía — todas usan el rendimiento por defecto de arriba.
                   Esto NO es un registro de unidades (no existe): es solo el consumo esperado por placa.
                 </EstadoVacio>
@@ -135,7 +135,7 @@ export default async function ConfiguracionPage({
             </p>
             {cuentas.length === 0 ? (
               <div className="mt-3">
-                <EstadoVacio icono={<BookOpen width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+                <EstadoVacio icono={<BookOpen width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                   Sin catálogo configurado.
                 </EstadoVacio>
               </div>

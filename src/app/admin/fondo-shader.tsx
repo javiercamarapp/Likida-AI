@@ -92,7 +92,14 @@ void main() {
   float grain = (rand(gl_FragCoord.xy + u_time * 60.0) - 0.5) * 0.09;
   gray = clamp(gray + grain, 0.0, 1.0);
 
-  gl_FragColor = vec4(vec3(gray), 1.0);
+  // La paleta pasó a blanco + naranja, así que el fondo deja de ser gris.
+  // gray se sigue calculando igual —es la FORMA (la nube, el degradado, el
+  // grano)— y solo se mapea al final sobre una rampa de naranja: la luz sube
+  // hacia crema y la sombra baja a naranja quemado, nunca a negro. Teñir aquí
+  // y no en el cálculo mantiene intacto el look fílmico de la referencia.
+  vec3 sombra = vec3(0.180, 0.063, 0.020);
+  vec3 luz    = vec3(0.996, 0.933, 0.867);
+  gl_FragColor = vec4(mix(sombra, luz, gray), 1.0);
 }
 `;
 

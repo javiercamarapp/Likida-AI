@@ -44,7 +44,7 @@ export default async function FlotasPage() {
         </div>
         {flotasOrdenadas.length === 0 ? (
           <div className="px-5 pt-3 pb-5">
-            <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               Sin flotas dadas de alta todavía.
             </EstadoVacio>
           </div>
