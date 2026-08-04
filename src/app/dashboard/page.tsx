@@ -10,7 +10,7 @@ import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { estadoPanel } from './estado';
 import { BarChartSimple } from '../admin/charts';
-import { GlobalFilter } from '../admin/ui/global-filter';
+import { GlobalFilter, resolverRango } from '../admin/ui/global-filter';
 import { KpiTile } from '../admin/ui/kit';
 import CifraGrande from './cifra-grande';
 import AvanceCierre from './avance-cierre';
@@ -69,15 +69,15 @@ export async function InicioContenido({
   // contralor piensa su corte.
   //
   // Si en el demo el panel abre en ceros con datos existiendo, es esto: se
-  // cambia el default de vuelta a '30' en esta línea.
-  const rango = sp?.rango === '30' ? '30' : sp?.rango === 'todo' ? 'todo' : '7';
-  const ventanaDias = rango === '30' ? 30 : 7;
+  // cambia el default de vuelta a '30' en esta línea — y el filtro se entera
+  // solo, que es justo lo que antes no pasaba (ver `resolverRango`).
+  const r = resolverRango(sp?.rango, '7');
+  const { rango, ventanaDias, ventana } = r;
   const sufijo = sufijoTenant(sp);
 
   // El filtro de arriba mueve TODO, no solo la gráfica: con 'todo' se pasa
   // `undefined` (sin corte) y con 7/30 la misma ventana a las tres consultas,
   // para que los rótulos "del periodo" digan la verdad.
-  const ventana = rango === 'todo' ? undefined : ventanaDias;
   const [acred, kpis, anomalias, porDia, viajes] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId, ventana)),
     safe<DashboardKpis>(() => getKpis(tenantId, ventana)),
@@ -208,7 +208,7 @@ export async function InicioContenido({
                 <TituloSeccion>
                   Liquidaciones cerradas — {rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`}
                 </TituloSeccion>
-                <GlobalFilter base="/dashboard" pordefecto="30" activo={rango} extra={sp?.tenant ? { tenant: sp.tenant } : sp?.vista ? { vista: sp.vista } : undefined} />
+                <GlobalFilter base="/dashboard" r={r} extra={sp?.tenant ? { tenant: sp.tenant } : sp?.vista ? { vista: sp.vista } : undefined} />
               </div>
               {rango === 'todo' ? (
                 <div className="flex flex-col items-center justify-center" style={{ height: 160 }}>

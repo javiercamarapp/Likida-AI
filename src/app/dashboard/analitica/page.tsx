@@ -4,7 +4,7 @@ import { getKpis, getGastoPorConcepto, getLiquidacionesPorDia, type DashboardKpi
 import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeExportar } from '@/lib/auth/permisos';
-import { GlobalFilter } from '../../admin/ui/global-filter';
+import { GlobalFilter, resolverRango } from '../../admin/ui/global-filter';
 import { EstadoVacio, ChartCard } from '../../admin/ui/kit';
 import { HBars } from '../../admin/ui/graficas';
 import { BarChartSimple } from '../../admin/charts';
@@ -33,12 +33,10 @@ export default async function AnaliticaPage({
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/analitica', sp);
 
-  // Mismo default de 30 días que Inicio — y el mismo que declara el
-  // `pordefecto` del filtro de abajo: si los dos no coinciden, el pill activo
-  // salta solo al hacer clic.
-  const rango = sp?.rango === '7' ? '7' : sp?.rango === 'todo' ? 'todo' : '30';
-  const ventanaDias = rango === '7' ? 7 : 30;
-  const ventana = rango === 'todo' ? undefined : ventanaDias;
+  // 30 días por defecto. El filtro recibe este mismo objeto, así que ya no hay
+  // dos declaraciones del default que puedan discrepar (ver `resolverRango`).
+  const r = resolverRango(sp?.rango, '30');
+  const { rango, ventanaDias, ventana } = r;
 
   const [kpis, porConcepto, porDia] = await Promise.all([
     safe<DashboardKpis>(() => getKpis(tenantId, ventana)),
@@ -59,7 +57,7 @@ export default async function AnaliticaPage({
             <span className="text-xs" style={{ color: 'var(--muted)' }}>Lo que se puede medir con los datos que hay</span>
           </div>
         </div>
-        <GlobalFilter base="/dashboard/analitica" pordefecto="30" activo={rango} extra={extra} />
+        <GlobalFilter base="/dashboard/analitica" r={r} extra={extra} />
       </header>
 
       <div className="glass-panel overflow-hidden">
