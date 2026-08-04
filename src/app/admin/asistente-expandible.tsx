@@ -52,26 +52,26 @@ export default function AsistenteExpandible({
         }`}
         style={expandido ? undefined : { width: ANCHO_ASIDE, transition: `width ${DURACION}` }}
       >
-        <div className="flex items-center gap-2 px-4 pt-4 shrink-0">
-          <Sparkles width={15} height={15} strokeWidth={1.75} />
-          <span className="font-semibold text-sm">Asistente de negocio</span>
+        <div className="flex items-center gap-2 px-3.5 pt-3.5 shrink-0">
+          <Sparkles width={14} height={14} strokeWidth={1.75} />
+          <span className="font-semibold text-[13px]">Asistente de negocio</span>
           <button type="button" onClick={() => setExpandido((v) => !v)}
             aria-label={expandido ? 'Contraer chat' : 'Expandir chat a pantalla completa'}
-            className="ml-auto w-7 h-7 rounded-lg hairline flex items-center justify-center hover:opacity-70 transition-opacity"
+            className="ml-auto w-6 h-6 rounded-md hairline flex items-center justify-center hover:opacity-70 transition-opacity"
             style={{ background: 'var(--surface)' }}>
             {expandido
-              ? <Minimize2 width={13} height={13} strokeWidth={1.75} />
-              : <Maximize2 width={13} height={13} strokeWidth={1.75} />}
+              ? <Minimize2 width={12} height={12} strokeWidth={1.75} />
+              : <Maximize2 width={12} height={12} strokeWidth={1.75} />}
           </button>
         </div>
 
         {!expandido && (
-          <div className="flex-1 min-w-0 overflow-y-auto px-4 pt-2 space-y-4">
+          <div className="flex-1 min-w-0 overflow-y-auto px-3.5 pt-2 space-y-2.5">
             {asideTop}
           </div>
         )}
 
-        <div className={expandido ? 'flex-1 min-w-0 flex flex-col px-4 pb-4 pt-2 overflow-hidden' : 'shrink-0 px-4 py-3 border-t'}
+        <div className={expandido ? 'flex-1 min-w-0 flex flex-col px-3.5 pb-3.5 pt-2 overflow-hidden' : 'shrink-0 px-3.5 py-2.5 border-t'}
           style={expandido ? undefined : { borderColor: 'var(--line)' }}>
           {expandido ? (
             <div className="flex-1 min-w-0 flex flex-col overflow-hidden">

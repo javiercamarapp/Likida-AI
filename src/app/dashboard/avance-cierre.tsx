@@ -56,7 +56,7 @@ export default function AvanceCierre({ viajes, ahoraMs }: { viajes: ViajeRow[]; 
   }, [viajes, periodo, ahoraMs]);
 
   return (
-    <div className="px-5 pb-4">
+    <div className="mt-2.5 max-w-md">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-baseline gap-2 min-w-0">
           <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
@@ -98,7 +98,7 @@ export default function AvanceCierre({ viajes, ahoraMs }: { viajes: ViajeRow[]; 
         />
       </div>
 
-      <p className="text-[11px] mt-1.5" style={{ color: 'var(--muted)' }}>
+      <p className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
         {datos.dentro === 0
           ? 'No hay viajes iniciados en este periodo.'
           : `${datos.cerrados} de ${datos.dentro} viaje${datos.dentro === 1 ? '' : 's'} iniciado${datos.dentro === 1 ? '' : 's'} ya está${datos.cerrados === 1 ? '' : 'n'} liquidado${datos.cerrados === 1 ? '' : 's'}.`}
