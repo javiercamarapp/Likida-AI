@@ -63,8 +63,15 @@ export async function InicioOperacion({
   }
 
   return (
-    <main className="flex flex-col gap-3">
-      <div className="glass-panel overflow-hidden">
+    // EL SCROLL VIVE DENTRO DE CADA PANEL, no en la columna.
+    //
+    // Con la columna scrolleando, un panel más alto que la pantalla se
+    // CORTA a media fila: se ve la mitad de un KPI y el borde redondeado
+    // del recuadro nunca aparece, como si la interfaz estuviera rota.
+    // Con `h-full` + `min-h-0` en la cadena, cada panel cierra donde debe y
+    // lo que no cabe se desplaza adentro.
+    <main className="flex flex-col gap-3 h-full">
+      <div className="glass-panel overflow-hidden shrink-0">
         <div className="px-5 pt-3 pb-3 flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1">
             <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
@@ -114,9 +121,9 @@ export async function InicioOperacion({
         <TableroCifras t={tablero} />
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-        <section className="glass-panel overflow-hidden">
-          <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 flex-1 min-h-0">
+        <section className="glass-panel overflow-hidden flex flex-col min-h-0">
+          <div className="px-5 pt-4 pb-2 flex items-center gap-2 shrink-0">
             <CircleSlash width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
             <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
               Sin asignar
@@ -134,8 +141,8 @@ export async function InicioOperacion({
               </EstadoVacio>
             </div>
           ) : (
-            <ul className="pb-3">
-              {sinAsignar.slice(0, 5).map((v) => (
+            <ul className="pb-3 flex-1 min-h-0 overflow-y-auto">
+              {sinAsignar.map((v) => (
                 <li key={v.id} className="px-5 py-2 border-t flex items-center gap-3 text-sm" style={{ borderColor: 'var(--line)' }}>
                   <span className="font-medium">{v.folio ?? '—'}</span>
                   <span className="truncate" style={{ color: 'var(--muted)' }}>
@@ -144,17 +151,12 @@ export async function InicioOperacion({
                   <span className="ml-auto shrink-0 text-[12px]" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio)}</span>
                 </li>
               ))}
-              {sinAsignar.length > 5 && (
-                <li className="px-5 pt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
-                  y {sinAsignar.length - 5} más en Despacho.
-                </li>
-              )}
             </ul>
           )}
         </section>
 
-        <section className="glass-panel overflow-hidden">
-          <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+        <section className="glass-panel overflow-hidden flex flex-col min-h-0">
+          <div className="px-5 pt-4 pb-2 flex items-center gap-2 shrink-0">
             <UserCog width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
             <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
               Carga por operador
@@ -163,7 +165,7 @@ export async function InicioOperacion({
           {carga === null ? (
             <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la carga.</div>
           ) : (
-            <TablaCarga carga={carga.slice(0, 6)} />
+            <div className="flex-1 min-h-0 overflow-y-auto"><TablaCarga carga={carga} /></div>
           )}
         </section>
       </div>
