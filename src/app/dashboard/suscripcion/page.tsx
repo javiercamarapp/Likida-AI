@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
-import { CreditCard, ExternalLink, TriangleAlert } from 'lucide-react';
+import { revalidatePath } from 'next/cache';
+import { CreditCard, ExternalLink, TriangleAlert, FileText } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAdministrar } from '@/lib/auth/permisos';
@@ -9,11 +10,15 @@ import {
   getPlanes, getSuscripcion, getFacturasSaas, getUso,
   type Plan, type Suscripcion, type FacturaSaas, type UsoDelPlan,
 } from '@/lib/saas/suscripcion';
-import { crearCheckout, crearPortal, stripeConfigurado, modoStripe } from '@/lib/saas/stripe';
+import { crearSuscripcionPorTransferencia, crearPortal, stripeConfigurado, modoStripe } from '@/lib/saas/stripe';
+import {
+  getDatosFiscales, guardarDatosFiscales, estanCompletos, REGIMENES, USOS_CFDI,
+  type DatosFiscalesFlota,
+} from '@/lib/saas/fiscal';
 import { mxn } from '@/lib/utils';
 import { fechaMx } from '../formato';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
-import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
+import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 import { Uso, TarjetaPlan } from './vista';
 
 export const dynamic = 'force-dynamic';
@@ -68,6 +73,8 @@ export default async function SuscripcionPage({
     safe<FacturaSaas[]>(() => getFacturasSaas(tenantId)),
   ]);
 
+  const fiscales = await safe<DatosFiscalesFlota | null>(() => getDatosFiscales(tenantId));
+  const puedeFacturar = estanCompletos(fiscales);
   const planActual = planes?.find((p) => p.clave === suscripcion?.planClave) ?? null;
   const uso = await safe<UsoDelPlan>(() => getUso(tenantId, planActual));
 
@@ -87,33 +94,77 @@ export default async function SuscripcionPage({
    * try: los dos redirigen LANZANDO, y atraparlos convertiría el envío a Stripe
    * en un aviso rojo — el cliente vería "no se pudo" de un cobro que sí iba.
    */
+  /**
+   * Contrata el plan PARA PAGARSE POR TRANSFERENCIA.
+   *
+   * No es un checkout: la documentación de Stripe dice que las transferencias
+   * bancarias no son compatibles con Checkout en modo suscripción. Se crea la
+   * suscripción con `send_invoice` y Stripe emite la factura con la CLABE y la
+   * referencia; el webhook `invoice.paid` avisa cuando el dinero cae.
+   *
+   * SE EXIGEN LOS DATOS FISCALES ANTES. Cobrarle a una flota a la que después
+   * no le puedes facturar es el peor orden posible: ya tienes su dinero y su
+   * contador no tiene con qué deducirlo.
+   */
   async function accionContratar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const { t, email, rol: r } = await tenantDelAction();
     if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede contratar o cambiar de plan.' };
 
     const clave = String(fd.get('plan') ?? '');
-    let destino: string;
+    let destino: string | null;
     try {
+      const f = await getDatosFiscales(t);
+      if (!estanCompletos(f)) {
+        return { error: 'Antes de contratar hay que capturar los datos fiscales de arriba: sin ellos no se te puede emitir el CFDI de la mensualidad.' };
+      }
       const p = (await getPlanes()).find((x) => x.clave === clave);
       if (!p) return { error: 'Ese plan ya no existe.' };
       if (!p.stripePriceId) {
         return { error: `El plan ${p.nombre} todavía no tiene precio configurado en Stripe. Avísale a Likida.` };
       }
       const s = await getSuscripcion(t);
-      const base = process.env.NEXT_PUBLIC_APP_URL ?? '';
-      destino = await crearCheckout({
+      const r2 = await crearSuscripcionPorTransferencia({
         priceId: p.stripePriceId,
         tenantId: t,
-        email: email ?? undefined,
         customerId: s?.stripeCustomerId ?? undefined,
-        urlExito: `${base}/dashboard/suscripcion?ok=contratado`,
-        urlCancelar: `${base}/dashboard/suscripcion`,
+        fiscales: {
+          rfc: f!.rfc!, razonSocial: f!.razonSocial!, regimenFiscal: f!.regimenFiscal!,
+          codigoPostal: f!.codigoPostal!, email: email ?? '',
+        },
       });
+      destino = r2.urlFactura;
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'abrir el pago') };
+      return { error: mensajeParaPantalla(e, 'generar la factura para transferencia') };
+    }
+
+    revalidatePath('/dashboard/suscripcion');
+    // Sin URL la suscripción SÍ quedó creada: se dice, en vez de fingir que
+    // falló y provocar que la contrate dos veces.
+    if (!destino) {
+      return { ok: 'Suscripción creada. Stripe te va a mandar la factura con los datos para la transferencia por correo.' };
     }
     redirect(destino);
+  }
+
+  /** Guarda con qué datos se le va a facturar a esta flota. */
+  async function accionFiscales(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const { t, rol: r } = await tenantDelAction();
+    if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede cambiar los datos fiscales.' };
+    try {
+      await guardarDatosFiscales(t, {
+        rfc: String(fd.get('rfc') ?? ''),
+        razonSocial: String(fd.get('razonSocial') ?? ''),
+        regimenFiscal: String(fd.get('regimenFiscal') ?? ''),
+        codigoPostal: String(fd.get('codigoPostal') ?? ''),
+        usoCfdi: String(fd.get('usoCfdi') ?? ''),
+      });
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'guardar los datos fiscales') };
+    }
+    revalidatePath('/dashboard/suscripcion');
+    return { ok: 'Datos fiscales guardados. Con estos se te va a emitir el CFDI de cada mensualidad.' };
   }
 
   async function accionPortal(): Promise<ResultadoAccion> {
@@ -216,6 +267,48 @@ export default async function SuscripcionPage({
           </section>
         )}
 
+        {/* ── Datos fiscales ── */}
+        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex items-center gap-2 mb-1">
+            <FileText width={15} height={15} strokeWidth={1.75} />
+            <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
+              Datos para tu factura
+            </h2>
+            {puedeFacturar
+              ? <StatusPill estado="ok">Completos</StatusPill>
+              : <StatusPill estado="warn">Faltan</StatusPill>}
+          </div>
+          <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+            Con estos se emite el CFDI de cada mensualidad. Cópialos <strong>tal cual</strong> de tu Constancia de
+            Situación Fiscal: el SAT los compara contra tu RFC y rechaza el timbrado por diferencias que se ven
+            inofensivas.
+          </p>
+
+          {!puedeContratar ? (
+            <EstadoVacio>
+              Solo el dueño de la flota puede capturarlos.
+              {!puedeFacturar && ' Todavía faltan, así que no se puede facturar la mensualidad.'}
+            </EstadoVacio>
+          ) : (
+            <FormaConAviso accion={accionFiscales} boton="Guardar datos fiscales">
+              <Campo nombre="rfc" etiqueta="RFC" requerido valorInicial={fiscales?.rfc ?? ''}
+                placeholder="TIN010101AB1" ayuda="Se valida el dígito verificador." />
+              <Campo nombre="razonSocial" etiqueta="Razón social" requerido
+                valorInicial={fiscales?.razonSocial ?? ''} placeholder="TRANSPORTES INNOVATIVOS SA DE CV"
+                ayuda="Exacta, como en tu constancia." />
+              <Campo nombre="codigoPostal" etiqueta="Código postal fiscal" requerido
+                valorInicial={fiscales?.codigoPostal ?? ''} placeholder="97000" />
+              <Selector nombre="regimenFiscal" etiqueta="Régimen fiscal" requerido
+                valorInicial={fiscales?.regimenFiscal ?? '601'}
+                opciones={REGIMENES.map((r) => ({ valor: r.clave, texto: `${r.clave} — ${r.nombre}` }))} />
+              <Selector nombre="usoCfdi" etiqueta="Uso del CFDI" requerido
+                valorInicial={fiscales?.usoCfdi ?? 'G03'}
+                opciones={USOS_CFDI.map((u) => ({ valor: u.clave, texto: `${u.clave} — ${u.nombre}` }))}
+                ayuda="G03 es como se deduce una suscripción de software." />
+            </FormaConAviso>
+          )}
+        </section>
+
         {/* ── Planes ── */}
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
@@ -241,8 +334,12 @@ export default async function SuscripcionPage({
                       <p className="text-xs m-0" style={{ color: 'var(--muted)' }}>
                         Solo el dueño de la flota puede cambiar de plan.
                       </p>
+                    ) : !puedeFacturar ? (
+                      <p className="text-xs m-0" style={{ color: 'var(--muted)' }}>
+                        Captura primero tus datos fiscales, arriba.
+                      </p>
                     ) : (
-                      <FormaConAviso accion={accionContratar} boton={suscripcion ? `Cambiar a ${p.nombre}` : `Contratar ${p.nombre}`} columnas="md:grid-cols-1">
+                      <FormaConAviso accion={accionContratar} boton={suscripcion ? `Cambiar a ${p.nombre}` : `Contratar por transferencia`} columnas="md:grid-cols-1">
                         <input type="hidden" name="plan" value={p.clave} />
                       </FormaConAviso>
                     )}
@@ -283,7 +380,8 @@ export default async function SuscripcionPage({
                   <tr style={{ color: 'var(--muted)' }} className="text-left">
                     <th className="py-2.5 pr-4 font-medium">Periodo</th>
                     <th className="py-2.5 pr-4 font-medium text-right">Monto</th>
-                    <th className="py-2.5 font-medium">Estado</th>
+                    <th className="py-2.5 pr-4 font-medium">Estado</th>
+                    <th className="py-2.5 font-medium">CFDI</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -291,10 +389,23 @@ export default async function SuscripcionPage({
                     <tr key={f.id} className="border-t" style={{ borderColor: 'var(--line)' }}>
                       <td className="py-2.5 pr-4">{fechaMx(f.periodoInicio)} — {fechaMx(f.periodoFin)}</td>
                       <td className="py-2.5 pr-4 text-right tabular">{mxn(f.monto)}</td>
-                      <td className="py-2.5">
+                      <td className="py-2.5 pr-4">
                         <StatusPill estado={f.estado === 'pagada' ? 'ok' : f.estado === 'fallida' ? 'bad' : 'neutral'}>
                           {f.estado === 'pagada' ? 'Pagada' : f.estado === 'fallida' ? 'Falló el cobro' : f.estado === 'pendiente' ? 'Pendiente' : 'Cancelada'}
                         </StatusPill>
+                        {f.estado !== 'pagada' && f.urlPago && (
+                          <a href={f.urlPago} target="_blank" rel="noopener noreferrer"
+                            className="block text-xs underline mt-1">Ver datos para transferir</a>
+                        )}
+                      </td>
+                      <td className="py-2.5">
+                        {/* Cobrada SIN timbrar es un estado real y hay que verlo:
+                            el dinero entró y el cliente no puede deducirlo. */}
+                        {f.cfdiUuid
+                          ? <span className="font-mono text-xs">{f.cfdiUuid.slice(0, 8)}…</span>
+                          : f.estado === 'pagada'
+                            ? <StatusPill estado="warn">Sin timbrar</StatusPill>
+                            : <span style={{ color: 'var(--muted)' }}>—</span>}
                       </td>
                     </tr>
                   ))}

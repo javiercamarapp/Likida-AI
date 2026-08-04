@@ -162,6 +162,9 @@ async function aplicar(evt: EventoStripe): Promise<void> {
       await aplicarFactura({
         tenantId,
         stripeInvoiceId: obj.id as string,
+        // Donde el cliente ve la CLABE y la referencia de su transferencia.
+        // Se guarda también en el cobro fallido: es justo cuando la necesita.
+        urlPago: (obj.hosted_invoice_url as string) ?? null,
         periodoInicio: ini ? new Date(ini * 1000).toISOString().slice(0, 10) : hoy,
         periodoFin: fin ? new Date(fin * 1000).toISOString().slice(0, 10) : hoy,
         // `amount_paid`/`amount_due` vienen en centavos. Dividir mal es un error

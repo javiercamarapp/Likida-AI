@@ -188,6 +188,94 @@ export async function crearCheckout(opciones: {
   return s.url;
 }
 
+// ── Cobro por TRANSFERENCIA (SPEI) ─────────────────────────────────────────
+
+export interface DatosFiscales {
+  rfc: string;
+  razonSocial: string;
+  regimenFiscal: string;
+  codigoPostal: string;
+  email: string;
+}
+
+/**
+ * Crea la suscripción que la flota paga por TRANSFERENCIA, no con tarjeta.
+ *
+ * POR QUÉ ESTE CAMINO Y NO EL CHECKOUT. Medido el 4-ago-2026 en siete empresas
+ * del mercado —Handle, Nowports, Yalo, leadsales y las tres de rastreo de
+ * flotas—: ninguna publica precio ni tiene pasarela en su sitio. Se cotiza, se
+ * factura y se cobra por SPEI. Un contralor no paga la mensualidad con tarjeta.
+ *
+ * Y ES QUE NO SE PUEDE HACER CON CHECKOUT, aunque se quisiera: la propia
+ * documentación de Stripe dice que las transferencias bancarias NO son
+ * compatibles con Checkout en modo suscripción. El camino es
+ * `collection_method: send_invoice` — Stripe emite la factura con la CLABE y la
+ * referencia, y el webhook `invoice.paid` avisa cuando el dinero llega.
+ *
+ * LOS DATOS FISCALES SE EXIGEN ANTES DE COBRAR, no después. Cobrarle a alguien
+ * a quien luego no le puedes facturar es el peor orden posible: ya tienes su
+ * dinero y no lo puede deducir. El RFC va como `tax_id` del customer para que
+ * la factura de Stripe ya salga a su nombre.
+ *
+ * OJO: esto NO emite el CFDI. Stripe cobra; el CFDI lo timbra un PAC, y eso es
+ * una integración aparte que necesita el CSD del SAT de Likida.
+ */
+export async function crearSuscripcionPorTransferencia(opciones: {
+  priceId: string;
+  tenantId: string;
+  fiscales: DatosFiscales;
+  customerId?: string;
+  /** Días que tiene la flota para transferir antes de que la factura venza. */
+  diasParaPagar?: number;
+}): Promise<{ subscriptionId: string; customerId: string; urlFactura: string | null }> {
+  const { fiscales, diasParaPagar = 15 } = opciones;
+
+  let customerId = opciones.customerId;
+  if (!customerId) {
+    const c = await pedir<{ id: string }>('/customers', {
+      cuerpo: {
+        name: fiscales.razonSocial,
+        email: fiscales.email,
+        address: { postal_code: fiscales.codigoPostal, country: 'MX' },
+        // `mx_rfc` es el tipo de tax id que Stripe usa para México: hace que su
+        // propia factura salga con el RFC del receptor.
+        tax_id_data: [{ type: 'mx_rfc', value: fiscales.rfc }],
+        metadata: { tenant_id: opciones.tenantId, regimen_fiscal: fiscales.regimenFiscal },
+      },
+      idempotencia: `customer-${opciones.tenantId}`,
+    });
+    customerId = c.id;
+  }
+
+  const s = await pedir<{
+    id: string;
+    latest_invoice: { hosted_invoice_url?: string | null } | string | null;
+  }>('/subscriptions', {
+    cuerpo: {
+      customer: customerId,
+      items: [{ price: opciones.priceId }],
+      collection_method: 'send_invoice',
+      days_until_due: diasParaPagar,
+      payment_settings: {
+        payment_method_types: ['customer_balance'],
+        payment_method_options: {
+          customer_balance: {
+            funding_type: 'bank_transfer',
+            bank_transfer: { type: 'mx_bank_transfer' },
+          },
+        },
+      },
+      metadata: { tenant_id: opciones.tenantId },
+      'expand[]': 'latest_invoice',
+    },
+    idempotencia: `sub-transfer-${opciones.tenantId}-${opciones.priceId}`,
+  });
+
+  const inv = s.latest_invoice;
+  const urlFactura = inv && typeof inv === 'object' ? (inv.hosted_invoice_url ?? null) : null;
+  return { subscriptionId: s.id, customerId, urlFactura };
+}
+
 /** El portal donde el cliente cambia su tarjeta o cancela, sin escribirle a nadie. */
 export async function crearPortal(customerId: string, urlVolver: string): Promise<string> {
   const s = await pedir<{ url: string }>('/billing_portal/sessions', {
