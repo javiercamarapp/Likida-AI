@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Logo } from './logo';
 
 // Sin esta página, una URL mal escrita mostraba el 404 crudo de Next: pantalla
 // negra con texto de framework. Delante de un comprador eso se lee como "esto
@@ -18,7 +19,7 @@ export default function NoEncontrado() {
       {/* `self-start` NO es decorativo: como hijo directo de un flex column, el
           `align-items: stretch` de default estiraba el logo a todo el ancho y
           lo deformaba. En /login no pasa porque ahí va dentro de un div. */}
-      <span role="img" aria-label="Likida" className="h-6  self-start block" style={{ aspectRatio: '726 / 149', background: 'var(--marca)', WebkitMaskImage: "url(/images/logo.png)", maskImage: "url(/images/logo.png)", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskPosition: "left center", maskPosition: "left center" }} />
+      <Logo alto="h-6" className="self-start" />
 
       <div className="max-w-3xl">
         <p

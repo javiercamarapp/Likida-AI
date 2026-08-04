@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { supabaseServer } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+import { Logo } from '../logo';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,7 +116,7 @@ export default async function Login({
     <main className="min-h-screen flex bg-white">
       <div className="flex w-full flex-col lg:w-1/2">
         <div className="flex items-center px-6 py-6 md:px-10 lg:px-12 lg:py-12">
-          <span role="img" aria-label="Likida" className="h-6  block" style={{ aspectRatio: '726 / 149', background: 'var(--marca)', WebkitMaskImage: "url(/images/logo.png)", maskImage: "url(/images/logo.png)", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskPosition: "left center", maskPosition: "left center" }} />
+          <Logo alto="h-6" />
         </div>
 
         <div className="flex flex-1 items-center justify-center px-6 pb-16 md:px-10">

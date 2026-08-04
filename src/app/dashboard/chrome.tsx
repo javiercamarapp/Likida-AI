@@ -4,6 +4,7 @@ import FondoShader from '../admin/fondo-shader';
 import SidebarNav from './sidebar-nav';
 import AvisoRol from './aviso-rol';
 import RailAsistente from './rail';
+import { Logo } from '../logo';
 
 /**
  * El marco visual de /dashboard — fondo shader, sidebar glass con el logo,
@@ -47,7 +48,7 @@ export default function DashboardChrome({
       <div className="min-h-dvh flex items-start gap-3 p-3 relative z-10">
         <aside className="glass-panel w-[64px] lg:w-[208px] shrink-0 flex flex-col h-[calc(100dvh-1.5rem)] sticky top-3 self-start overflow-hidden">
           <div className="px-3 py-3 flex items-center justify-center lg:justify-start gap-1.5">
-            <span role="img" aria-label="Likida" className="h-[18px]  block" style={{ aspectRatio: '726 / 149', background: 'var(--marca)', WebkitMaskImage: "url(/images/logo.png)", maskImage: "url(/images/logo.png)", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskPosition: "left center", maskPosition: "left center" }} />
+            <Logo alto="h-[18px]" />
             <span className="hidden lg:inline text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
               {ROL_BADGE[rol] ?? rol.toUpperCase()}
             </span>
