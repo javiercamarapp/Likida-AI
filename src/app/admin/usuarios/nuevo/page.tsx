@@ -64,7 +64,7 @@ export default async function NuevoUsuario() {
             </select>
           </div>
           <button type="submit" className="w-full text-sm px-4 py-2.5 rounded-lg font-medium transition-opacity hover:opacity-85"
-            style={{ background: 'var(--ink)', color: 'white' }}>
+            style={{ background: 'var(--marca)', color: 'white' }}>
             Crear usuario
           </button>
           <p className="text-xs" style={{ color: 'var(--muted)' }}>

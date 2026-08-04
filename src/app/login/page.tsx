@@ -115,8 +115,7 @@ export default async function Login({
     <main className="min-h-screen flex bg-white">
       <div className="flex w-full flex-col lg:w-1/2">
         <div className="flex items-center px-6 py-6 md:px-10 lg:px-12 lg:py-12">
-          {/* eslint-disable-next-line @next/next/no-img-element -- logo estático, no next/image en el resto del repo */}
-          <img src="/images/logo.png" alt="Likida" className="h-6 w-auto" />
+          <span role="img" aria-label="Likida" className="h-6  block" style={{ aspectRatio: '726 / 149', background: 'var(--marca)', WebkitMaskImage: "url(/images/logo.png)", maskImage: "url(/images/logo.png)", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskPosition: "left center", maskPosition: "left center" }} />
         </div>
 
         <div className="flex flex-1 items-center justify-center px-6 pb-16 md:px-10">
@@ -150,16 +149,16 @@ export default async function Login({
 
                 <div className="my-6 flex items-center gap-4">
                   <span className="h-px flex-1 bg-[#e5e5e5]" />
-                  <span className="font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-[#6b6b6b]">o</span>
+                  <span className="text-[11px] font-medium tracking-[0.1em] text-[#6b6b6b]">o</span>
                   <span className="h-px flex-1 bg-[#e5e5e5]" />
                 </div>
 
                 <form action={entrarConEmail} className="flex flex-col gap-4">
                   <input type="hidden" name="next" value={next} />
                   <input name="email" type="email" required placeholder="tu@flota.com"
-                    className="rounded-lg border border-[#e5e5e5] bg-white px-3.5 py-2.5 text-[14px] text-[#0a0a0a] outline-none transition-colors placeholder:text-[#6b6b6b99] focus:border-[#0a0a0a]" />
+                    className="rounded-lg border border-[#e5e5e5] bg-white px-3.5 py-2.5 text-[14px] text-[#0a0a0a] outline-none transition-colors placeholder:text-[#6b6b6b99] focus:border-[var(--marca)]" />
                   <button type="submit"
-                    className="mt-1 inline-flex w-full items-center justify-center rounded-full bg-[#0a0a0a] px-5 py-3 text-[14px] font-medium text-white transition-colors duration-300 hover:bg-[#272628]">
+                    className="mt-1 inline-flex w-full items-center justify-center rounded-full bg-[var(--marca)] px-5 py-3 text-[14px] font-medium text-white transition-colors duration-300 hover:bg-[#9a3412]">
                     Continuar con email
                   </button>
                 </form>

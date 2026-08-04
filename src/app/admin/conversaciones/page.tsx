@@ -27,11 +27,11 @@ export default async function ConversacionesPage() {
       <div className="glass-panel p-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <KpiTile
-            icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+            icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
             etiqueta="Conversaciones activas" valor={conversaciones.length} formato="entero"
           />
           <KpiTile
-            icono={<MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+            icono={<MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
             etiqueta="Mensajes totales en estas conversaciones" valor={totalMensajes} formato="entero"
           />
         </div>
@@ -55,7 +55,7 @@ export default async function ConversacionesPage() {
           Todas las conversaciones
         </h2>
         {conversaciones.length === 0 ? (
-          <EstadoVacio icono={<MessageCircle width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+          <EstadoVacio icono={<MessageCircle width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             Sin conversaciones activas.
           </EstadoVacio>
         ) : (
@@ -79,7 +79,7 @@ export default async function ConversacionesPage() {
                         <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
                           style={t.role === 'user'
                             ? { background: 'var(--bg)', border: '1px solid var(--line)' }
-                            : { background: 'var(--ink)', color: 'var(--bg)' }}>
+                            : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                           {t.content}
                         </div>
                       </div>

@@ -74,13 +74,13 @@ export default async function ValorAhorroPage({
               Lo que Likida hizo
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-              <KpiTile icono={<ScanText width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              <KpiTile icono={<ScanText width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Comprobantes leídos por el Agente OCR" valor={valor.documentosProcesados} formato="entero" destacar
                 nota="Conteo real — comprobantes que entraron por WhatsApp y no se teclearon a mano" />
-              <KpiTile icono={<Clock width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              <KpiTile icono={<Clock width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Horas de captura ahorradas (estimado)" valor={valor.horasAhorradasEstimadas} formato="numero"
                 nota={`ESTIMACIÓN: ${valor.documentosProcesados} comprobantes × ${MINUTOS_CAPTURA_MANUAL} min de captura manual ÷ 60. Los ${MINUTOS_CAPTURA_MANUAL} min son un supuesto, no una medición.`} />
-              <KpiTile icono={<Bot width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              <KpiTile icono={<Bot width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Acciones resueltas por los agentes" valor={totalAcciones} formato="entero"
                 nota="Conteo real — cada llamada de IA registrada (OCR, cuadre, WhatsApp)" />
             </div>
@@ -96,13 +96,13 @@ export default async function ValorAhorroPage({
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-                  <KpiTile icono={<Search width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<Search width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Observado por el cuadre" valor={kpis.diferenciaDetectada} formato="mxn"
                     nota="Gastos sobre política + duplicados que el motor marcó" />
-                  <KpiTile icono={<Link2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<Link2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="En comprobantes repetidos entre viajes" valor={dineroAnomalias} formato="mxn"
                     nota={anomalias === null ? 'No se pudo revisar' : `${anomalias.length} coincidencias detectadas — no es un veredicto`} />
-                  <KpiTile icono={<ReceiptText width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<ReceiptText width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Total puesto a revisión" valor={dineroObservado} formato="mxn"
                     nota="Suma de los dos anteriores — dinero señalado para que lo revises, no dinero cobrado" />
                 </div>
@@ -165,9 +165,9 @@ export default async function ValorAhorroPage({
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-3 mt-3">
-                  <KpiTile icono={<Link2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<Link2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Llegaron sin viaje" valor={valor.huerfanosTotales} formato="entero" />
-                  <KpiTile icono={<Link2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<Link2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Amarrados a su viaje" valor={valor.huerfanosResueltos} formato="entero"
                     nota="Comprobantes que se habrían perdido y acabaron en su liquidación" />
                 </div>

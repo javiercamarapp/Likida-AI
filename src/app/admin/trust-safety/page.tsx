@@ -25,7 +25,7 @@ export default function TrustSafetyPage() {
 
       <div className="glass-panel overflow-hidden">
         <section className="p-5">
-          <EstadoVacio icono={<ShieldAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+          <EstadoVacio icono={<ShieldAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             Intentos de jailbreak bloqueados, fugas de PII detectadas, cuentas bloqueadas por abuso/spam, rate
             limiting por cuenta — Likida no tiene un pipeline de detección de esto hoy.
           </EstadoVacio>

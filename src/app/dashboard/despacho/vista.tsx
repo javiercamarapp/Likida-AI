@@ -13,7 +13,7 @@ import type { TableroOperacion, ViajeSinAsignar, CargaOperador, UnidadRow } from
 // una copia con los mismos estilos, que solo se verificaría a sí misma.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const ICONO = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--ink)' } } as const;
+const ICONO = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--marca)' } } as const;
 
 export function TableroCifras({ t }: { t: TableroOperacion }) {
   return (
@@ -79,7 +79,7 @@ export function TablaSinAsignar({
                     {unidadesLibres.map((u) => <option key={u.id} value={u.id}>{u.numeroEconomico}</option>)}
                   </select>
                   <button type="submit" className="text-sm font-medium rounded-lg px-3 py-1.5"
-                    style={{ background: 'var(--ink)', color: 'var(--panel)' }}>
+                    style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                     Despachar
                   </button>
                 </form>
@@ -96,7 +96,7 @@ export function TablaCarga({ carga }: { carga: CargaOperador[] }) {
   if (carga.length === 0) {
     return (
       <div className="px-5 pb-5">
-        <EstadoVacio icono={<UserCog width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+        <EstadoVacio icono={<UserCog width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           Todavía no hay operadores en esta flota. Se dan de alta solos cuando el chofer manda su primer mensaje por
           WhatsApp.
         </EstadoVacio>
@@ -127,7 +127,7 @@ export function TablaCarga({ carga }: { carga: CargaOperador[] }) {
               <td className="px-5 py-3 w-40">
                 <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--canvas)' }}>
                   <div className="h-full rounded-full"
-                    style={{ width: `${Math.round((c.enCurso / cargaMax) * 100)}%`, background: 'var(--ink)' }} />
+                    style={{ width: `${Math.round((c.enCurso / cargaMax) * 100)}%`, background: 'var(--marca)' }} />
                 </div>
               </td>
               <td className="px-5 py-3 text-right tabular">{c.enCurso}</td>
@@ -174,7 +174,7 @@ export function FormaAlta({
       </div>
       <div className="flex items-end">
         <button type="submit" className="text-sm font-medium rounded-lg px-4 py-2 w-full"
-          style={{ background: 'var(--ink)', color: 'var(--panel)' }}>
+          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           Crear viaje
         </button>
       </div>

@@ -5,7 +5,7 @@ import type { PodRow } from '@/lib/cuadra/operacion';
 
 // Bloques visuales de POD, fuera de la página para poder mirar el render.
 
-const ICONO = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--ink)' } } as const;
+const ICONO = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--marca)' } } as const;
 
 /** `null` NO es 'pendiente'. Nadie lo ha pedido todavía, que es distinto de
  *  haberlo pedido y estar esperando — y es justo la diferencia que decide si
@@ -52,7 +52,7 @@ export function TablaPod({
   if (pods.length === 0) {
     return (
       <div className="px-5 pb-5">
-        <EstadoVacio icono={<PackageCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+        <EstadoVacio icono={<PackageCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           No hay viajes en curso, así que no hay entrega que perseguir. La evidencia se sigue mientras el viaje vive:
           una vez liquidado deja de aparecer aquí.
         </EstadoVacio>

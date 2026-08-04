@@ -72,15 +72,15 @@ export default async function DocumentosPage({
                 La bandeja
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                <KpiTile icono={<ScanText width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<ScanText width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Comprobantes procesados" valor={docs.length} formato="entero" />
-                <KpiTile icono={<FileCheck2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<FileCheck2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Con CFDI amarrado" valor={conCfdi} formato="entero"
                   nota="El resto son tickets sin factura — normal, no un error" />
-                <KpiTile icono={<ShieldAlert width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<ShieldAlert width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Con lectura de baja confianza" valor={bajaConfianza} formato="entero"
                   nota={`Bajo ${Math.round(CONFIANZA_BAJA * 100)}% — el agente prefiere preguntar antes que asumir`} />
-                <KpiTile icono={<IconoImagen width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<IconoImagen width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Con foto guardada" valor={conFoto} formato="entero" />
               </div>
             </section>
@@ -92,7 +92,7 @@ export default async function DocumentosPage({
             </div>
             {docs.length === 0 ? (
               <div className="px-5 pb-5">
-                <EstadoVacio icono={<ScanText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+                <EstadoVacio icono={<ScanText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                   Todavía no ha entrado ningún comprobante. En cuanto un operador mande la primera foto por
                   WhatsApp, aparece aquí con lo que el agente leyó.
                 </EstadoVacio>

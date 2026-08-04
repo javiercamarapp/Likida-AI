@@ -23,8 +23,8 @@ export function Sparkline({ valores, alto = 24 }: { valores: number[]; alto?: nu
   const [ux, uy] = puntos[puntos.length - 1];
   return (
     <svg width="100%" height={alto} viewBox={`0 0 ${ANCHO_VB} ${alto}`} preserveAspectRatio="none" className="block">
-      <path d={d} fill="none" stroke="var(--ink)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} vectorEffect="non-scaling-stroke" />
-      <circle cx={ux} cy={uy} r={2.5} fill="var(--ink)" />
+      <path d={d} fill="none" stroke="var(--marca)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} vectorEffect="non-scaling-stroke" />
+      <circle cx={ux} cy={uy} r={2.5} fill="var(--marca)" />
     </svg>
   );
 }
@@ -65,12 +65,12 @@ export function AreaChartSimple({
         <line key={t} x1={PAD_IZQ} x2={ANCHO - PAD_DER} y1={PAD_SUP + h * t} y2={PAD_SUP + h * t}
           stroke="var(--line)" strokeWidth={1} />
       ))}
-      <path d={area} fill="var(--ink)" opacity={0.08} />
-      <path d={linea} fill="none" stroke="var(--ink)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={area} fill="var(--marca)" opacity={0.08} />
+      <path d={linea} fill="none" stroke="var(--marca)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       {xy.map(([x, y], i) => (
         <g key={i} className="group cursor-default">
           <circle cx={x} cy={y} r={9} fill="transparent" />
-          <circle cx={x} cy={y} r={3.5} fill="var(--ink)" stroke="var(--bg)" strokeWidth={2}
+          <circle cx={x} cy={y} r={3.5} fill="var(--marca)" stroke="var(--bg)" strokeWidth={2}
             className="opacity-0 group-hover:opacity-100 transition-opacity" />
           {mostrarEtiqueta(i) && (
             <text x={x} y={ALTO - 6} textAnchor="middle" fontSize={10} fill="var(--muted)">
@@ -78,7 +78,7 @@ export function AreaChartSimple({
             </text>
           )}
           <g className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            <rect x={x - 34} y={y - 30} width={68} height={20} rx={5} fill="var(--ink)" />
+            <rect x={x - 34} y={y - 30} width={68} height={20} rx={5} fill="var(--marca)" />
             <text x={x} y={y - 16} textAnchor="middle" fontSize={11} fill="var(--bg)" fontWeight={600}>
               {etiquetaValor(datos[i].valor)}
             </text>
@@ -126,10 +126,10 @@ export function BarChartSimple({
         {datos.map((d, i) => (
           <div key={d.dia} className="flex-1 h-full flex items-end justify-center group relative cursor-default">
             {d.valor > 0 && (
-              <div className="w-full max-w-14 rounded-t-[4px]" style={{ height: `${pcts[i]}%`, background: 'var(--ink)', opacity: 0.82, minHeight: 3 }} />
+              <div className="w-full max-w-14 rounded-t-[4px]" style={{ height: `${pcts[i]}%`, background: 'var(--marca)', opacity: 0.82, minHeight: 3 }} />
             )}
             <div className="absolute left-1/2 -translate-x-1/2 px-2 py-1 rounded-md text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10"
-              style={{ bottom: `calc(${pcts[i]}% + 8px)`, background: 'var(--ink)', color: 'var(--bg)' }}>
+              style={{ bottom: `calc(${pcts[i]}% + 8px)`, background: 'var(--marca)', color: 'var(--marca-fg)' }}>
               {etiquetaValor(d.valor)}
             </div>
           </div>
@@ -145,13 +145,13 @@ export function BarChartSimple({
         <svg width="100%" height="100%" className="absolute inset-0 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
           <polyline
             points={pcts.map((p, i) => `${xPct(i)},${100 - p}`).join(' ')}
-            fill="none" stroke="var(--ink)" strokeWidth={1.5} strokeOpacity={0.4}
+            fill="none" stroke="var(--marca)" strokeWidth={1.5} strokeOpacity={0.4}
             vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"
           />
         </svg>
         {pcts.map((p, i) => (
           <div key={i} className="absolute w-[7px] h-[7px] rounded-full pointer-events-none"
-            style={{ left: `${xPct(i)}%`, bottom: `${p}%`, transform: 'translate(-50%, 50%)', background: 'var(--ink)', boxShadow: '0 0 0 2px var(--surface)' }} />
+            style={{ left: `${xPct(i)}%`, bottom: `${p}%`, transform: 'translate(-50%, 50%)', background: 'var(--marca)', boxShadow: '0 0 0 2px var(--surface)' }} />
         ))}
       </div>
       <div className="flex gap-2 mt-2">
@@ -243,7 +243,7 @@ export function Dona({ segmentos }: { segmentos: Array<{ etiqueta: string; valor
             const anguloIni = anguloIniBase + gap / 2;
             const anguloFin = Math.max(anguloIni, anguloFinBase - gap / 2);
             return (
-              <path key={s.etiqueta} d={pathRebanada(anguloIni, anguloFin)} fill="var(--ink)" opacity={pasos[i]} />
+              <path key={s.etiqueta} d={pathRebanada(anguloIni, anguloFin)} fill="var(--marca)" opacity={pasos[i]} />
             );
           })}
         </svg>
@@ -251,7 +251,7 @@ export function Dona({ segmentos }: { segmentos: Array<{ etiqueta: string; valor
       <div className="space-y-2 min-w-0">
         {segmentos.map((s, i) => (
           <div key={s.etiqueta} className="flex items-center gap-2 text-sm">
-            <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: 'var(--ink)', opacity: pasos[i] }} />
+            <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: 'var(--marca)', opacity: pasos[i] }} />
             <span className="font-medium truncate">{s.etiqueta}</span>
             <span className="shrink-0" style={{ color: 'var(--muted)' }}>{Math.round((s.valor / total) * 100)}%</span>
           </div>

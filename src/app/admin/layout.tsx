@@ -64,8 +64,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             reverso `lg:hidden`. */}
         <aside className="glass-panel w-[72px] lg:w-[232px] shrink-0 flex flex-col h-[calc(100dvh-2rem)] sticky top-4 self-start overflow-hidden">
           <div className="px-4 py-4 flex items-center justify-center lg:justify-start gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element -- logo estático, no next/image en el resto del repo */}
-            <img src="/images/logo.png" alt="Likida" className="h-5 w-auto" />
+            <span role="img" aria-label="Likida" className="h-5  block" style={{ aspectRatio: '726 / 149', background: 'var(--marca)', WebkitMaskImage: "url(/images/logo.png)", maskImage: "url(/images/logo.png)", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskPosition: "left center", maskPosition: "left center" }} />
             <span className="hidden lg:inline text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
               ADMIN
             </span>

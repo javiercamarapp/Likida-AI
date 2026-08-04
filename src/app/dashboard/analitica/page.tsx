@@ -103,7 +103,7 @@ export default async function AnaliticaPage({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
               <a href="/api/export/liquidaciones" download className="card p-4 flex items-start gap-3 hover:shadow-md transition-shadow">
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                  <Table2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+                  <Table2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
                 </div>
                 <div>
                   <div className="text-sm font-medium">Liquidaciones en CSV</div>
@@ -114,7 +114,7 @@ export default async function AnaliticaPage({
               </a>
               <Link href="/dashboard/cuadre" className="card p-4 flex items-start gap-3 hover:shadow-md transition-shadow">
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                  <FileText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+                  <FileText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
                 </div>
                 <div>
                   <div className="text-sm font-medium">PDF por liquidación</div>
@@ -127,7 +127,7 @@ export default async function AnaliticaPage({
             </div>
           ) : (
             <div className="mt-3">
-              <EstadoVacio icono={<Download width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+              <EstadoVacio icono={<Download width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Tu rol no tiene permiso de exportar. Pídeselo al administrador de la flota.
               </EstadoVacio>
             </div>

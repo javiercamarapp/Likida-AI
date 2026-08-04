@@ -22,7 +22,7 @@ export default function CalidadEvalsPage() {
 
       <div className="glass-panel overflow-hidden">
         <section className="p-5">
-          <EstadoVacio icono={<FlaskConical width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+          <EstadoVacio icono={<FlaskConical width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             Score de calidad, % de baja confianza, alucinaciones detectadas, CSAT, feedback 👍/👎, drift de calidad,
             evals automáticos por criterio, cola de revisión priorizada — Likida no tiene un pipeline de evaluación
             ni una tabla de feedback hoy.

@@ -69,11 +69,11 @@ export default async function CrecimientoPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
             <KpiTile
-              icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Viajes procesados" valor={r.viajesProcesados} formato="entero"
             />
             <KpiTile
-              icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Tokens usados" valor={r.tokensIn + r.tokensOut} formato="numero"
               tendencia={r.tendenciaTokens} sparkline={chipsTokens}
             />

@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 function Insignia({ Icono }: { Icono: typeof Settings2 }) {
   return (
     <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-      <Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+      <Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
     </div>
   );
 }

@@ -91,13 +91,13 @@ export default async function CuadrePage({
           ) : (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                <KpiTile icono={<ReceiptText width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<ReceiptText width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Liquidaciones cerradas" valor={kpis.viajesLiquidados} formato="entero" />
-                <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Monto comprobado" valor={kpis.montoComprobado} formato="mxn" />
-                <KpiTile icono={<AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Con diferencia o por revisar" valor={kpis.conDiferencias + kpis.porRevisar} formato="entero" />
-                <KpiTile icono={<Copy width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<Copy width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Dinero observado por el motor" valor={kpis.diferenciaDetectada} formato="mxn"
                   nota="Sobre política + duplicados — lo que el cuadre marcó, no un cargo" />
               </div>
@@ -166,7 +166,7 @@ export default async function CuadrePage({
           <div className="px-5 pb-5" style={{ color: 'var(--muted)' }}>No se pudo cargar el listado.</div>
         ) : liqs.length === 0 ? (
           <div className="px-5 pb-5">
-            <EstadoVacio icono={<ReceiptText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <EstadoVacio icono={<ReceiptText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               Aún no hay liquidaciones cerradas. En cuanto un operador cierre su primer viaje por WhatsApp, aparece aquí.
             </EstadoVacio>
           </div>

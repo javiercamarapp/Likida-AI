@@ -79,7 +79,7 @@ export default async function UsuariosPage({
             </div>
             {usuarios.length === 0 ? (
               <div className="px-5 pb-5">
-                <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+                <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                   No hay cuentas dadas de alta en esta flota todavía.
                 </EstadoVacio>
               </div>

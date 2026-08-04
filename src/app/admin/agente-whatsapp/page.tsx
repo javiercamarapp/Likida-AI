@@ -37,11 +37,11 @@ export default async function AgenteWhatsappPage() {
           <TituloSeccion>Costo real</TituloSeccion>
           <div className="grid grid-cols-2 gap-3 mt-3">
             <KpiTile
-              icono={<Smartphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              icono={<Smartphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Gastado en WhatsApp" valor={whatsapp ? whatsapp.costoUsd : 0} formato="usd"
             />
             <KpiTile
-              icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+              icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Llamadas de WhatsApp" valor={whatsapp ? whatsapp.n : 0} formato="entero"
             />
           </div>
@@ -72,7 +72,7 @@ export default async function AgenteWhatsappPage() {
                           <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
                             style={t.role === 'user'
                               ? { background: 'var(--bg)', border: '1px solid var(--line)' }
-                              : { background: 'var(--ink)', color: 'var(--bg)' }}>
+                              : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                             {t.content}
                           </div>
                         </div>

@@ -5,7 +5,7 @@ import type { IncidenciaRow } from '@/lib/cuadra/operacion';
 // Bloques visuales de Incidencias, fuera de la página para poder mirar el
 // render sin sesión (mismo motivo que en Despacho y Unidades).
 
-const ICONO = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--ink)' } } as const;
+const ICONO = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--marca)' } } as const;
 
 /** Los dominios los fija la 0047. Un valor fuera sale con su clave cruda. */
 export const TIPOS: Record<string, string> = {
@@ -66,7 +66,7 @@ export function TablaIncidencias({
   if (incidencias.length === 0) {
     return (
       <div className="px-5 pb-5">
-        <EstadoVacio icono={<CircleCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+        <EstadoVacio icono={<CircleCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           Sin incidencias registradas. Cuando algo se salga de lo normal —un retraso, una avería, un faltante— se
           levanta abajo y queda con dueño y reloj.
         </EstadoVacio>
@@ -179,7 +179,7 @@ export function FormaIncidencia({
       </div>
       <div className="flex items-end md:col-start-3 xl:col-start-6">
         <button type="submit" className="text-sm font-medium rounded-lg px-4 py-2 w-full"
-          style={{ background: 'var(--ink)', color: 'var(--panel)' }}>
+          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           Levantar
         </button>
       </div>

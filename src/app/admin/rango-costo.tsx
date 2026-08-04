@@ -26,7 +26,7 @@ export default function GraficaCostoConRango({ porDia, anidado = false }: { porD
           {([[7, '7d'], [30, '30d'], [0, 'Todo']] as const).map(([v, label]) => (
             <button key={v} type="button" onClick={() => setDias(v)}
               className="px-2.5 py-1 rounded-md transition-colors"
-              style={dias === v ? { background: 'var(--ink)', color: 'white' } : { color: 'var(--muted)' }}>
+              style={dias === v ? { background: 'var(--marca)', color: 'white' } : { color: 'var(--muted)' }}>
               {label}
             </button>
           ))}

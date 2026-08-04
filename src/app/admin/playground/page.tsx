@@ -27,7 +27,7 @@ export default function PlaygroundPage() {
 
       <div className="glass-panel overflow-hidden">
         <section className="p-6">
-          <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+          <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             <span className="block text-sm font-semibold">Esta función no existe en Likida hoy.</span>
             <span className="block text-sm mt-2" style={{ color: 'var(--muted)' }}>
               Cuando exista, el Playground va a servir para probar un agente en vivo con una entrada de prueba
@@ -61,7 +61,7 @@ export default function PlaygroundPage() {
             ].map(({ Icono, nombre, href }) => (
               <a key={nombre} href={href} className="card p-3.5 flex items-center gap-3 hover:shadow-md transition-shadow">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-                  <Icono width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />
+                  <Icono width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
                 </div>
                 <span className="text-sm font-medium">{nombre}</span>
               </a>

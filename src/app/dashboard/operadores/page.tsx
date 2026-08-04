@@ -18,7 +18,7 @@ function BarraComprobado({ pct }: { pct: number | null }) {
   return (
     <div className="flex items-center gap-2 justify-end">
       <div className="h-1.5 rounded-full overflow-hidden shrink-0" style={{ width: 64, background: 'var(--canvas)' }}>
-        <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct)}%`, background: 'var(--ink)' }} />
+        <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct)}%`, background: 'var(--marca)' }} />
       </div>
       <span className="tabular text-sm w-11 text-right">{pct}%</span>
     </div>
@@ -70,13 +70,13 @@ export default async function OperadoresPage({
                 La plantilla
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                <KpiTile icono={<Users width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<Users width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Operadores activos" valor={activos} formato="entero" />
-                <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Anticipo entregado" valor={anticipoTotal} formato="mxn" />
-                <KpiTile icono={<CheckCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<CheckCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Comprobado contra ese anticipo" valor={comprobadoTotal} formato="mxn" />
-                <KpiTile icono={<CheckCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                <KpiTile icono={<CheckCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="% comprobado de la flota" valor={pctGlobal ?? 0} formato="porcentaje"
                   vacio={pctGlobal === null ? 'Todavía no se ha entregado ningún anticipo' : undefined} />
               </div>
@@ -89,7 +89,7 @@ export default async function OperadoresPage({
             </div>
             {ops.length === 0 ? (
               <div className="px-5 pb-5">
-                <EstadoVacio icono={<UserCog width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+                <EstadoVacio icono={<UserCog width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                   Aún no hay operadores dados de alta en esta flota.
                 </EstadoVacio>
               </div>

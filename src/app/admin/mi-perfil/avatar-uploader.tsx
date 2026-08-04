@@ -38,7 +38,7 @@ export default function AvatarUploader({
           <img src={mostrar} alt={nombre} className="w-16 h-16 rounded-full object-cover" />
         ) : (
           <span className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-semibold"
-            style={{ background: 'var(--ink)', color: 'white' }}>
+            style={{ background: 'var(--marca)', color: 'white' }}>
             {nombre.charAt(0).toUpperCase()}
           </span>
         )}

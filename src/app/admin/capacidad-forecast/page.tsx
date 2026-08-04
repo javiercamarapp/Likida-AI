@@ -69,12 +69,12 @@ export default async function CapacidadForecastPage() {
                 )}
                 <div className="flex flex-col gap-3 justify-center">
                   <KpiTile
-                    icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                    icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta={`Costo diario promedio, últimos ${proyeccion.diasVentana} día${proyeccion.diasVentana === 1 ? '' : 's'}`}
                     valor={proyeccion.promedioDiario} formato="usd"
                   />
                   <KpiTile
-                    icono={<TrendingUp width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                    icono={<TrendingUp width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Proyección a 30 días"
                     valor={proyeccion.proyeccionMensual} formato="usd"
                   />

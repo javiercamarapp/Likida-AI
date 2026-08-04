@@ -7,7 +7,7 @@ import type { UnidadRow } from '@/lib/cuadra/operacion';
 // en Despacho: la página no se renderiza sin sesión, y el render hay que
 // mirarlo. El preview temporal importa ESTO, no una copia.
 
-const ICONO = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--ink)' } } as const;
+const ICONO = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--marca)' } } as const;
 
 /** Los cuatro estados de `unidad_estado_dominio` (0047). Un quinto valor sale
  *  con su clave cruda en vez de caer a un `undefined` o a una etiqueta
@@ -66,7 +66,7 @@ export function TablaUnidades({
   if (unidades.length === 0) {
     return (
       <div className="px-5 pb-5">
-        <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+        <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           Todavía no hay unidades dadas de alta. Da de alta la primera abajo — con el número económico basta, el
           resto se puede llenar después.
         </EstadoVacio>
@@ -157,7 +157,7 @@ export function FormaUnidad({ accion }: { accion: (fd: FormData) => Promise<void
       </div>
       <div className="flex items-end">
         <button type="submit" className="text-sm font-medium rounded-lg px-4 py-2 w-full"
-          style={{ background: 'var(--ink)', color: 'var(--panel)' }}>
+          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           Dar de alta
         </button>
       </div>

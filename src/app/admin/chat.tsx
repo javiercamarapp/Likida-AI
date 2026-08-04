@@ -95,7 +95,7 @@ export default function ChatNegocio({ resumen, compacto = false }: { resumen: Re
           className="flex-1 min-w-0 text-sm px-3 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
         <button type="submit" aria-label="Enviar"
           className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-opacity hover:opacity-85"
-          style={{ background: 'var(--ink)', color: 'white' }}>
+          style={{ background: 'var(--marca)', color: 'white' }}>
           <Send width={15} height={15} strokeWidth={2} />
         </button>
       </form>

@@ -123,7 +123,7 @@ export default async function PoliticasPage({
           </section>
 
           <div className="px-5 pt-4 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}>
+            <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
               Esta pantalla es de lectura: editar los topes desde aquí todavía no existe (hoy se cambian en la
               configuración del tenant). Los viáticos por ruta/día y el plazo de comprobación del anticipo tampoco
               están en el esquema como reglas configurables.

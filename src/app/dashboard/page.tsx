@@ -211,13 +211,13 @@ export async function InicioContenido({
                 <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 mt-2.5">
-                  <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" destacar
                     nota="LIF 2026, Art. 20-A — su contador aplica la cuota semanal vigente" />
-                  <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="IVA acreditable" valor={acred.iva} formato="mxn"
                     nota="LIVA, Art. 5 — CFDI con IVA desglosado" />
-                  <KpiTile icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Peaje (50%)" valor={acred.peaje} formato="mxn"
                     nota="Estímulo de autopistas · LIF 2026, Art. 20-A" />
                 </div>
@@ -236,13 +236,13 @@ export async function InicioContenido({
                 <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mt-2.5">
-                  <KpiTile icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Viajes liquidados" valor={kpis.viajesLiquidados} formato="entero" />
-                  <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Monto comprobado" valor={kpis.montoComprobado} formato="mxn" />
-                  <KpiTile icono={<AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Con diferencia" valor={kpis.conDiferencias + kpis.porRevisar} formato="entero" />
-                  <KpiTile icono={<Percent width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--ink)' }} />}
+                  <KpiTile icono={<Percent width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Tasa de cuadre" valor={kpis.tasaCuadre} formato="porcentaje" />
                 </div>
               )}
