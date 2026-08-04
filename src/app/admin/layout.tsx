@@ -11,7 +11,7 @@ import SidebarNav from './sidebar-nav';
 import SidebarNavIconos from './sidebar-nav-iconos';
 import Fondo from '../fondo';
 import AsistenteExpandible from './asistente-expandible';
-import { MARCO_FILA, MARCO_SIDEBAR } from '../marco';
+import { MARCO_FILA, MARCO_SIDEBAR, MARCO_COLUMNA, MARCO_SCROLL } from '../marco';
 import CommandPalette from './command-palette';
 import BuscadorTrigger from './buscador-trigger';
 import { Logo } from '../logo';
@@ -121,8 +121,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             /dashboard, que ya vivía en su marco. El `resumen` ya se traía
             arriba para las alertas de la campana, así que no cuesta un
             fetch extra. */}
-        <div className="flex-1 min-w-0 h-[calc(100dvh-2rem)] overflow-y-auto">
-          <AsistenteExpandible main={children} resumen={r} />
+        <div className={MARCO_COLUMNA}>
+          <div className={MARCO_SCROLL}>
+            <AsistenteExpandible main={children} resumen={r} />
+          </div>
         </div>
       </div>
     </div>
