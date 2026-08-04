@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Send } from 'lucide-react';
+import { Send, ArrowUp, Search } from 'lucide-react';
 import type { DashboardKpis, Acreditables } from '@/lib/cuadra/analytics';
 import { mxn, litros } from '@/lib/formato';
+import { Logo } from '../logo';
 
 /**
  * Mismo criterio que admin/chat.tsx: coincidencia de palabras clave contra
@@ -43,11 +44,20 @@ function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acredita
 }
 
 export default function ChatFlota({
-  kpis, acred, compacto = false,
+  kpis, acred, compacto = false, variante = 'panel',
 }: {
   kpis: DashboardKpis | null;
   acred: Acreditables | null;
   compacto?: boolean;
+  /**
+   * `panel` — la caja de siempre. La usa el rail del Asistente, que es angosto
+   *   y ya vive DENTRO de un recuadro: otro hero ahí saldría apretado.
+   * `hero` — la página completa `/dashboard/chat`: composición centrada con un
+   *   solo recuadro (el de escribir), al estilo de usehandle.ai.
+   * El default es `panel` a propósito: así el rail no cambia de aspecto por
+   * un rediseño que solo pidió la página.
+   */
+  variante?: 'panel' | 'hero';
 }) {
   const [historial, setHistorial] = useState<Array<{ q: string; a: string }>>([]);
   const [texto, setTexto] = useState('');
@@ -96,6 +106,105 @@ export default function ChatFlota({
       </form>
     </>
   );
+
+  if (variante === 'hero') {
+    const vacio = historial.length === 0;
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center px-4 py-10">
+        <div className="w-full max-w-2xl flex flex-col items-center">
+          {/* Encabezado. Se retira en cuanto hay respuestas: a partir de ahí lo
+              que importa es la conversación, no la portada. */}
+          {vacio && (
+            <>
+              <Logo alto="h-7" className="mb-6" />
+              <h1 className="text-[26px] leading-tight font-medium tracking-tight text-center">
+                Pregunta a tus datos
+              </h1>
+              <p className="mt-2 mb-8 text-sm text-center max-w-md" style={{ color: 'var(--muted)' }}>
+                Lo comprobado, las diferencias, el diésel, el IVA y el peaje — con la cifra que
+                ya calculó el motor.
+              </p>
+            </>
+          )}
+
+          {!vacio && (
+            <div className="w-full mb-6 max-h-[46vh] overflow-y-auto space-y-4 text-left">
+              {historial.map((h, i) => (
+                <div key={i} className="text-sm">
+                  <div className="font-medium">{h.q}</div>
+                  <div className="mt-0.5" style={{ color: 'var(--muted)' }}>{h.a}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* EL recuadro — el único de la página. */}
+          <form
+            onSubmit={(e) => { e.preventDefault(); preguntar(texto); }}
+            className="w-full rounded-2xl px-4 pt-3.5 pb-3 transition-shadow focus-within:shadow-lg"
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--line)',
+              boxShadow: 'var(--shadow-card)',
+            }}
+          >
+            <input
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder="Pregunta sobre tu operación…"
+              aria-label="Pregunta sobre tu operación"
+              className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed"
+            />
+            <div className="flex items-center justify-between mt-3">
+              {/* Lo que esta caja hace, dicho en la caja. No hay un segundo modo:
+                  poner uno apagado prometería algo que no existe. */}
+              <span
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full"
+                style={{ background: 'var(--canvas)', color: 'var(--ink2)' }}
+              >
+                <Search width={11} height={11} strokeWidth={2.25} />
+                Consulta
+              </span>
+              <button
+                type="submit"
+                aria-label="Enviar"
+                disabled={!texto.trim()}
+                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-opacity disabled:cursor-default"
+                style={{
+                  background: 'var(--marca)',
+                  color: 'var(--marca-fg)',
+                  opacity: texto.trim() ? 1 : 0.35,
+                }}
+              >
+                <ArrowUp width={15} height={15} strokeWidth={2.5} />
+              </button>
+            </div>
+          </form>
+
+          <div className="flex flex-wrap justify-center gap-2 mt-4">
+            {PREGUNTAS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => preguntar(p)}
+                className="text-xs px-3 py-1.5 rounded-full hairline transition-colors"
+                style={{ color: 'var(--ink2)' }}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+
+          {/* El límite va a la vista, pero sin otro recuadro: es una nota, no una
+              tarjeta. Quitarlo dejaría creer que la caja consulta la base. */}
+          <p className="mt-8 text-[11px] leading-relaxed text-center max-w-lg" style={{ color: 'var(--faint)' }}>
+            Responde con cifras ya calculadas en el servidor. No traduce preguntas libres a
+            consultas de base de datos, a propósito. Todavía no devuelve gráficas ni tablas.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (compacto) {
     return (

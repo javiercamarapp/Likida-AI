@@ -1,7 +1,5 @@
-import { Sparkles } from 'lucide-react';
 import { getKpis, getAcreditables, type DashboardKpis, type Acreditables } from '@/lib/cuadra/analytics';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { EstadoVacio } from '../../admin/ui/kit';
 import ChatFlota from '../chat';
 
 export const dynamic = 'force-dynamic';
@@ -34,30 +32,13 @@ export default async function ChatPage({
     safe<Acreditables>(() => getAcreditables(tenantId)),
   ]);
 
+  // Un solo recuadro: el de escribir. El encabezado y la nota de límites
+  // siguen ahí —son obligatorios, no decorativos— pero como texto sobre el
+  // lienzo, no como dos tarjetas más. Los tres `glass-panel` apilados hacían
+  // que la página se leyera como un formulario y no como una pregunta.
   return (
-    <div className="flex flex-col gap-4 h-full">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4 shrink-0">
-        <Sparkles width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Chatea con tus Datos</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Pregunta en español sobre lo que tu flota ya comprobó
-          </span>
-        </div>
-      </header>
-
-      <div className="flex-1 min-h-[420px]">
-        <ChatFlota kpis={kpis} acred={acred} />
-      </div>
-
-      <div className="glass-panel p-5 shrink-0">
-        <EstadoVacio>
-          Contesta sobre lo comprobado, diferencias, diésel, IVA, peaje y tu tasa de cuadre — que es lo que hay
-          medido. No traduce preguntas libres a consultas de base de datos a propósito: eso abriría una línea
-          directa desde un cuadro de texto hasta tus datos y los de otras flotas. Generar una gráfica o una tabla
-          como respuesta todavía no existe.
-        </EstadoVacio>
-      </div>
+    <div className="h-full min-h-[560px]">
+      <ChatFlota kpis={kpis} acred={acred} variante="hero" />
     </div>
   );
 }
