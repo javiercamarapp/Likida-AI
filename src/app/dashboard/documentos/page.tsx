@@ -7,6 +7,12 @@ import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { fechaMx } from '../formato';
 import { KpiTile, EstadoVacio, StatusPill, type Estado } from '../../admin/ui/kit';
 import { getPorFacturar, resumen as resumirFacturas, type TicketPorFacturar } from '@/lib/cuadra/facturacion/pendientes';
+import { avisarPorFacturar } from '@/lib/cuadra/facturacion/avisar';
+import { requireSessionTenant } from '@/lib/auth/guard';
+import { puedeAsignar } from '@/lib/auth/permisos';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { mensajeParaPantalla } from '@/lib/cuadra/errores';
+import { FormaConAviso, Campo, type ResultadoAccion } from '../../admin/ui/forma';
 import { PorFacturar } from './por-facturar';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +61,34 @@ export default async function DocumentosPage({
   // El módulo de facturación (60 comercios, plazos, reconocedor) llevaba
   // construido desde el 27-jul sin que ninguna pantalla lo usara. Aquí se conecta.
   const porFacturar = await safe<TicketPorFacturar[]>(() => getPorFacturar(tenantId));
+
+  /**
+   * Le avisa al encargado qué falta por facturar, por WhatsApp.
+   *
+   * Repite el permiso adentro como el resto del panel, y `requireSessionTenant`
+   * va FUERA del try porque redirige lanzando.
+   */
+  async function accionAvisar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await requireSessionTenant('/dashboard/documentos');
+    if (!puedeAsignar(s.rol)) return { error: 'Tu rol no puede mandar avisos de facturación.' };
+
+    let t = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
+      if (data) t = data.id as string;
+    }
+
+    try {
+      const r = await avisarPorFacturar({ tenantId: t, telefono: String(fd.get('telefono') ?? '').trim() });
+      if (r.enviado) return { ok: `Aviso enviado: ${r.tickets} comprobante(s) por facturar.` };
+      // NO se finge que salió. Un aviso que falla callado deja al encargado sin
+      // saber que tiene tickets venciéndose.
+      return { error: `${r.motivo} El aviso decía: "${r.texto.slice(0, 140)}${r.texto.length > 140 ? '…' : ''}"` };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'mandar el aviso') };
+    }
+  }
 
   const conCfdi = docs?.filter((d) => d.cfdiUuid).length ?? 0;
   const bajaConfianza = docs?.filter((d) => d.ocrConfianza !== null && d.ocrConfianza < CONFIANZA_BAJA).length ?? 0;
@@ -159,7 +193,21 @@ export default async function DocumentosPage({
               {porFacturar === null ? (
                 <div className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer qué falta por facturar.</div>
               ) : (
-                <PorFacturar tickets={porFacturar} resumen={resumirFacturas(porFacturar)} veDinero={veDinero} />
+                <>
+                  <PorFacturar tickets={porFacturar} resumen={resumirFacturas(porFacturar)} veDinero={veDinero} />
+                  {porFacturar.length > 0 && (
+                    <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
+                      <h3 className="text-xs font-medium mb-2" style={{ color: 'var(--muted)' }}>
+                        Avisarle al encargado por WhatsApp
+                      </h3>
+                      <FormaConAviso accion={accionAvisar} boton="Mandar aviso">
+                        <Campo nombre="telefono" etiqueta="WhatsApp del encargado" requerido
+                          placeholder="999 370 0779"
+                          ayuda="Va UN mensaje con lo que urge, no uno por ticket." />
+                      </FormaConAviso>
+                    </div>
+                  )}
+                </>
               )}
             </section>
 
