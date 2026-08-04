@@ -1064,3 +1064,56 @@ begin
   raise exception E'AVATARES_RLS  escribe-en-su-carpeta=%  escribe-en-carpeta-ajena=%   (esperado true / false — ajeno=true sería la fuga)',
     ok_propio, ok_ajeno;
 end $$;
+
+-- ── 28. Las tablas de operación no se le abren al chofer (mig. 0047) ─────────
+-- La 0047 mete cuatro tablas nuevas de golpe. Tres son de oficina (unidad,
+-- mantenimiento, incidencia) y una es del chofer a medias (pod: la sube él,
+-- pero solo la suya). El riesgo es el de siempre con una tabla nueva en un
+-- esquema multi-tenant — nacer con `tenant_data` a secas, que NO mira el rol,
+-- y regalarle al chofer las placas, las averías y las entregas de toda la
+-- flota. Es exactamente el IDOR que la 0045 cerró para viaje/gasto/liquidacion,
+-- y una tabla nueva es justo donde se vuelve a abrir sin que nadie lo note.
+--
+-- Se impersona a un chofer (mismo mecanismo del bloque 26) y se cuenta.
+-- Esperado: 0 unidades, 0 mantenimientos, 0 incidencias, y de POD exactamente
+-- 1 — el suyo — nunca 2.
+--
+-- Corrido el 3-ago contra la base real, salida:
+--   unidades=0  mantenimientos=0  incidencias=0  pods-visibles=1  pod-ajeno-por-id=0
+do $$
+declare
+  v_t uuid; v_o1 uuid; v_o2 uuid; v_v1 uuid; v_v2 uuid;
+  v_un uuid; v_u1 uuid := gen_random_uuid();
+  n_unidad int; n_mant int; n_inc int; n_pod int; n_pod_ajeno int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF OPERACION RLS') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Uno', '520000009040') returning id into v_o1;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Dos', '520000009041') returning id into v_o2;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o1) returning id into v_v1;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o2) returning id into v_v2;
+
+  insert into unidad (tenant_id, numero_economico, placas) values (v_t, 'C2-08', 'ABC-123-A') returning id into v_un;
+  insert into mantenimiento (tenant_id, unidad_id, tipo, descripcion) values (v_t, v_un, 'preventivo', 'servicio 20 mil km');
+  insert into incidencia (tenant_id, viaje_id, unidad_id, tipo, prioridad) values (v_t, v_v2, v_un, 'averia', 'alta');
+  -- Un POD por chofer. `storage_path` va lleno porque el estado 'subido' lo
+  -- exige (constraint pod_subido_tiene_archivo).
+  insert into pod (tenant_id, viaje_id, operador_id, estado, storage_path)
+    values (v_t, v_v1, v_o1, 'subido', 'pod/uno.jpg'), (v_t, v_v2, v_o2, 'subido', 'pod/dos.jpg');
+
+  insert into app_user (id, tenant_id, email, rol, operador_id)
+    values (v_u1, v_t, 'zzz-verif-chofer-op@likida.test', 'operador', v_o1);
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
+
+  select count(*) into n_unidad from unidad where tenant_id = v_t;
+  select count(*) into n_mant   from mantenimiento where tenant_id = v_t;
+  select count(*) into n_inc    from incidencia where tenant_id = v_t;
+  select count(*) into n_pod    from pod where tenant_id = v_t;
+  select count(*) into n_pod_ajeno from pod where viaje_id = v_v2;  -- el del OTRO chofer, por id directo
+
+  reset role;
+
+  raise exception E'OPERACION_RLS  unidades=%  mantenimientos=%  incidencias=%  pods-visibles=%  pod-ajeno-por-id=%   (esperado 0 / 0 / 0 / 1 / 0 — cualquier otra cosa es fuga al chofer)',
+    n_unidad, n_mant, n_inc, n_pod, n_pod_ajeno;
+end $$;
