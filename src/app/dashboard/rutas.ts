@@ -1,7 +1,7 @@
 import {
   LayoutGrid, TrendingUp, LineChart, Sparkles, DollarSign, Users2, Fuel,
   Truck, Wrench, UserCog, Map, Calculator, ScanText, ReceiptText, FileText, Landmark, Send,
-  LifeBuoy, Users, ScrollText, Settings,
+  LifeBuoy, Users, ScrollText, Settings, TriangleAlert,
 } from 'lucide-react';
 
 /**
@@ -31,6 +31,7 @@ export const OPERACION: Item[] = [
   // solo leerla, y la que se abre en la mañana antes que ninguna otra.
   { href: '/dashboard/despacho', nombre: 'Despacho', Icono: Send },
   { href: '/dashboard/viajes', nombre: 'Viajes', Icono: Truck },
+  { href: '/dashboard/incidencias', nombre: 'Incidencias', Icono: TriangleAlert },
   { href: '/dashboard/unidades', nombre: 'Unidades', Icono: Wrench },
   { href: '/dashboard/operadores', nombre: 'Operadores', Icono: UserCog },
   { href: '/dashboard/mapa', nombre: 'Mapa en vivo', Icono: Map },
