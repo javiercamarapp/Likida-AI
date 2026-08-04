@@ -72,6 +72,32 @@ describe('el mapa de rutas no se queda atrás del sidebar', () => {
     const invisibles = todas.filter((i) => !puedeVerRuta('flota_admin', i.href)).map((i) => i.href);
     expect(invisibles).toEqual([]);
   });
+
+  // ── Plan & Facturación (0052/0055) ───────────────────────────────────────
+  //
+  // SE PRUEBA EL CAMINO, NO EL RENDER. Que la pantalla se pinte no prueba que
+  // alguien pueda llegar a ella: una ruta sin área declarada cae a `undefined`
+  // y `puedeVerRuta` la niega a TODOS, dueño incluido, sin un solo error — la
+  // página simplemente rebota. Ya pasó una vez.
+  describe('/dashboard/suscripcion', () => {
+    it('el dueño y el contador SÍ llegan', () => {
+      // El contador la necesita: las facturas de Likida son gasto de la flota y
+      // van en su contabilidad. Es el mismo criterio que la RLS de la 0052, que
+      // las abre a `ve_finanzas()`.
+      expect(puedeVerRuta('flota_admin', '/dashboard/suscripcion')).toBe(true);
+      expect(puedeVerRuta('contador', '/dashboard/suscripcion')).toBe(true);
+      expect(puedeVerRuta('superadmin', '/dashboard/suscripcion')).toBe(true);
+    });
+
+    it('el encargado NO — es la mensualidad de la flota, o sea dinero', () => {
+      expect(puedeVerRuta('encargado', '/dashboard/suscripcion')).toBe(false);
+    });
+
+    it('está en el sidebar, no solo en el mapa de áreas', () => {
+      // Sin esto, la página existiría y sería alcanzable solo tecleando la URL.
+      expect(todas.some((i) => i.href === '/dashboard/suscripcion')).toBe(true);
+    });
+  });
 });
 
 describe('"Ver como" solo puede QUITAR visibilidad', () => {

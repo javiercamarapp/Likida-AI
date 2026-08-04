@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { PackageCheck } from 'lucide-react';
+import { PackageCheck, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 import { getPods, marcarPodPedido, rechazarPod, type PodRow } from '@/lib/cuadra/operacion';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
 import { sufijoTenant } from '../sufijo';
@@ -36,7 +37,7 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 export default async function PodPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; ok?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; ok?: string; envio?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/pod', sp);
@@ -55,14 +56,40 @@ export default async function PodPage({
     return s.tenantId;
   }
 
+  /**
+   * Pide el POD — y ahora SÍ le manda el mensaje al chofer.
+   *
+   * SE REGISTRA AUNQUE EL ENVÍO FALLE, y ese orden importa. Lo que el encargado
+   * necesita saber es a quién ya le insistió; si el registro dependiera de que
+   * WhatsApp acepte, un fallo de Meta borraría ese rastro y volvería a pedirlo
+   * mañana como si nada.
+   *
+   * PERO EL FALLO SE DICE. Antes esta pantalla explicaba que no mandaba nada;
+   * ahora que manda, callar un rechazo sería peor que la nota anterior: el
+   * encargado creería que el chofer ya fue avisado. `?envio=` lleva el motivo
+   * traducido — la plantilla sin aprobar y el número fuera de la lista de
+   * pruebas se leen igual de crípticos en crudo y se arreglan distinto.
+   */
   async function accionPedir(formData: FormData) {
     'use server';
     const t = await tenantDelAction();
     const viajeId = String(formData.get('viajeId') ?? '');
     if (!viajeId) redirect(`/dashboard/pod${sufijo}`);
-    await marcarPodPedido(t, viajeId, String(formData.get('operadorId') ?? '') || null);
+
+    const operadorId = String(formData.get('operadorId') ?? '') || null;
+    await marcarPodPedido(t, viajeId, operadorId);
+
+    let envio = 'sin_telefono';
+    const telefono = String(formData.get('telefono') ?? '').trim();
+    const folio = String(formData.get('folio') ?? '').trim();
+    if (telefono) {
+      const r = await sendTemplate(telefono, 'pod_pendiente', { parametros: folio ? [folio] : [] });
+      envio = r.ok ? 'ok' : `err:${motivoDeFalloWhatsApp(r.error, r.codigo)}`;
+    }
+
     revalidatePath('/dashboard/pod');
-    redirect(`/dashboard/pod${sufijo ? `${sufijo}&` : '?'}ok=pedido`);
+    const sep = sufijo ? `${sufijo}&` : '?';
+    redirect(`/dashboard/pod${sep}ok=pedido&envio=${encodeURIComponent(envio)}`);
   }
 
   async function accionRechazar(formData: FormData) {
@@ -85,9 +112,33 @@ export default async function PodPage({
             Qué entrega no ha llegado, de quién es, y cuál llegó pero no sirve
           </span>
         </div>
-        {sp.ok === 'pedido' && <StatusPill estado="ok">Marcado como pedido</StatusPill>}
+        {sp.ok === 'pedido' && sp.envio === 'ok' && <StatusPill estado="ok">Mensaje enviado al chofer</StatusPill>}
+        {sp.ok === 'pedido' && sp.envio === 'sin_telefono' && <StatusPill estado="warn">Anotado — el chofer no tiene teléfono</StatusPill>}
+        {sp.ok === 'pedido' && sp.envio?.startsWith('err:') && <StatusPill estado="bad">Anotado, pero no se envió</StatusPill>}
         {sp.ok === 'rechazado' && <StatusPill estado="ok">Evidencia rechazada</StatusPill>}
       </header>
+
+      {/* EL MOTIVO, NO SOLO QUE FALLÓ. "No se envió" sin decir por qué deja al
+          encargado sin nada que hacer; con el motivo sabe si es cosa de Meta
+          (plantilla en revisión), de la cuenta (número fuera de la lista de
+          pruebas) o suya (el chofer no tiene teléfono). */}
+      {sp.envio?.startsWith('err:') && (
+        <div className="glass-panel px-5 py-3 flex items-start gap-2.5 text-sm" style={{ color: 'var(--bad)' }}>
+          <TriangleAlert width={16} height={16} strokeWidth={2} className="shrink-0 mt-0.5" />
+          <span>
+            Quedó anotado que se pidió, pero el mensaje NO salió: {sp.envio.slice(4)}
+          </span>
+        </div>
+      )}
+      {sp.envio === 'sin_telefono' && sp.ok === 'pedido' && (
+        <div className="glass-panel px-5 py-3 flex items-start gap-2.5 text-sm" style={{ color: 'var(--warn)' }}>
+          <TriangleAlert width={16} height={16} strokeWidth={2} className="shrink-0 mt-0.5" />
+          <span>
+            Quedó anotado, pero ese viaje no trae chofer con teléfono registrado, así que no había a quién
+            escribirle. Se le registra el número en Operadores.
+          </span>
+        </div>
+      )}
 
       {pods === null ? (
         <div className="glass-panel p-8 text-sm" style={{ color: 'var(--muted)' }}>
@@ -114,10 +165,11 @@ export default async function PodPage({
       <div className="px-1">
         <EstadoVacio>
           La foto de la entrega se guarda pero no se muestra aquí: conservar un documento y exhibírselo a una
-          persona no son el mismo acto, y es el mismo criterio que ya se aplicó a los comprobantes. Tampoco hay
-          botón que le mande el recordatorio al chofer — pedir algo por WhatsApp fuera de la ventana de 24 horas
-          necesita una plantilla aprobada por Meta, y la cuenta todavía no tiene ninguna propia. Lo que sí queda
-          registrado es que ya se pidió, para distinguirlo de lo que nadie ha solicitado.
+          persona no son el mismo acto, y es el mismo criterio que ya se aplicó a los comprobantes.
+          <br /><br />
+          Pedir el POD ahora SÍ le manda el mensaje al chofer, con la plantilla <code>pod_pendiente</code>. Si Meta
+          lo rechaza —plantilla sin aprobar, o número fuera de la lista de pruebas mientras la cuenta siga en modo
+          prueba— se dice arriba con el motivo: queda anotado que se pidió, pero no se finge que el chofer se enteró.
         </EstadoVacio>
       </div>
     </div>

@@ -84,6 +84,11 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/cuadre': 'dinero',
   '/dashboard/facturacion': 'dinero',
   '/dashboard/cobranza': 'dinero',
+  // Lo que Likida le cobra a la flota (0052). Es `dinero` y no
+  // `administracion` porque el contador necesita las facturas de Likida para su
+  // propia contabilidad — es el mismo criterio que la RLS de la 0052, que las
+  // abre a `ve_finanzas()`. CONTRATAR sí es del dueño, y eso se gatea adentro.
+  '/dashboard/suscripcion': 'dinero',
 
   // Administración de la cuenta — solo el dueño
   '/dashboard/usuarios': 'administracion',

@@ -1351,3 +1351,41 @@ begin
   raise exception E'VISTA_SALDO  via-tabla=%  via-vista=%  anon-ejecuta-ve_finanzas=%   (esperado 1 / 1 / false — un 2 en la vista es la factura de OTRA flota)',
     n_tabla, n_vista, anon_puede;
 end $$;
+
+-- ── 34. El payload de Stripe no se le enseña a un usuario del panel (mig. 0055) ──
+--
+-- 0055 — el payload de Stripe no se le enseña a un usuario del panel.
+--
+-- `evento_stripe` guarda el evento crudo: ids de cliente, montos, correo de
+-- facturación de OTRAS flotas. Es de Likida, no del cliente. La tabla tiene RLS
+-- activo y UNA sola policy (superadmin), así que un flota_admin autenticado
+-- tiene que ver CERO filas — no por no tener el link, sino porque la base se lo
+-- niega aunque pegue directo a PostgREST.
+--
+-- Se comprueba de paso que el índice único del price existe: dos planes con el
+-- mismo price de Stripe cobrarían lo mismo diciendo cosas distintas.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  tA uuid; uA uuid := gen_random_uuid();
+  n_eventos int; hay_indice boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF STRIPE') returning id into tA;
+  insert into app_user (id, tenant_id, email, rol)
+    values (uA, tA, 'zzz-verif-stripe@likida.test', 'flota_admin');
+  insert into evento_stripe (id, tipo, payload)
+    values ('evt_zzz_verif', 'invoice.paid', '{"secreto":"de otra flota"}'::jsonb);
+
+  select exists(
+    select 1 from pg_indexes
+    where schemaname = 'public' and indexname = 'plan_stripe_price_unico'
+  ) into hay_indice;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', uA)::text, true);
+  select count(*) into n_eventos from evento_stripe;
+  reset role;
+
+  raise exception E'EVENTO_STRIPE  filas-que-ve-flota_admin=%  indice-price-unico=%   (esperado 0 / true)',
+    n_eventos, hay_indice;
+end $$;

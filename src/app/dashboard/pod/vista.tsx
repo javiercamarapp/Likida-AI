@@ -87,6 +87,13 @@ export function TablaPod({
                     <form action={accionPedir}>
                       <input type="hidden" name="viajeId" value={p.viajeId} />
                       <input type="hidden" name="operadorId" value={p.operadorId ?? ''} />
+                      {/* El teléfono y el folio viajan en el formulario para que
+                          el action pueda MANDAR la plantilla sin volver a
+                          consultar el viaje. Un chofer sin teléfono deja el
+                          campo vacío y el action lo dice en pantalla en vez de
+                          fingir que se envió. */}
+                      <input type="hidden" name="telefono" value={p.telefono ?? ''} />
+                      <input type="hidden" name="folio" value={p.folio ?? ''} />
                       <button type="submit" className="text-sm rounded-lg px-2.5 py-1.5" style={CONTROL}>
                         Marcar como pedido
                       </button>

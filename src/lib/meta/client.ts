@@ -103,6 +103,97 @@ export async function sendText(to: string, body: string): Promise<string | null>
   return id ?? null;
 }
 
+/**
+ * Envía una PLANTILLA aprobada — lo único que WhatsApp permite cuando Likida
+ * INICIA la conversación.
+ *
+ * POR QUÉ EXISTE Y `sendText` NO BASTA. WhatsApp solo deja mandar texto libre
+ * dentro de la ventana de 24 h desde el último mensaje DEL USUARIO. Fuera de
+ * ella, `sendText` no falla de forma obvia: Meta contesta un error que
+ * `sendText` traga con un `logger.error` y un `null`, así que el panel daba por
+ * mandado un recordatorio que nunca salió. Todo lo que Likida inicia —pedir un
+ * POD, avisar de un anticipo, recordar un cierre— tiene que ir por aquí.
+ *
+ * DEVUELVE EL ERROR, NO LO TRAGA. `sendText` devuelve `null` tanto si falló
+ * como si no se llamó, y esa ambigüedad ya costó veinte minutos una vez. Aquí
+ * el que llama necesita distinguir "la plantilla no está aprobada" de "el
+ * número no está en la lista de pruebas" para poder DECIRLO en pantalla: un
+ * botón que falla en silencio es peor que no tenerlo.
+ *
+ * `idioma` es `es_MX` y no `es`: son plantillas distintas en Meta y pedir la
+ * que no existe devuelve (#132001) con el mensaje sin enviar.
+ */
+export async function sendTemplate(
+  to: string,
+  plantilla: string,
+  opciones: { idioma?: string; parametros?: string[] } = {},
+): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }> {
+  const { idioma = 'es_MX', parametros = [] } = opciones;
+
+  const componentes = parametros.length > 0
+    ? [{ type: 'body', parameters: parametros.map((t) => ({ type: 'text', text: t })) }]
+    : undefined;
+
+  let res: Response;
+  try {
+    res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: destinatarioWhatsApp(to),
+        type: 'template',
+        template: { name: plantilla, language: { code: idioma }, components: componentes },
+      }),
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    logger.error('wa.sendTemplate.red', { plantilla, error });
+    return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}` };
+  }
+
+  if (!res.ok) {
+    const crudo = await res.text().catch(() => '');
+    let codigo: number | undefined;
+    let mensaje = `HTTP ${res.status}`;
+    try {
+      const j = JSON.parse(crudo) as { error?: { message?: string; code?: number } };
+      codigo = j.error?.code;
+      if (j.error?.message) mensaje = j.error.message;
+    } catch { /* el crudo ya va en el log */ }
+    logger.error('wa.sendTemplate', { plantilla, status: res.status, codigo, body: crudo.slice(0, 400) });
+    return { ok: false, error: mensaje, codigo };
+  }
+
+  const id = await idDeRespuesta(res);
+  logger.info('wa.sendTemplate.ok', { plantilla, id });
+  return { ok: true, id: id ?? null };
+}
+
+/**
+ * Traduce el error de Meta a algo que el encargado pueda accionar.
+ *
+ * Los dos que de verdad van a pasar en el demo son el 132001 (la plantilla no
+ * existe o no está aprobada) y el 131030 (el número no está en la lista de
+ * pruebas de la cuenta). Los dos se leen igual de crípticos en crudo y tienen
+ * arreglos completamente distintos.
+ */
+export function motivoDeFalloWhatsApp(error: string, codigo?: number): string {
+  switch (codigo) {
+    case 132001:
+      return 'La plantilla no está aprobada todavía en Meta. Mientras siga en revisión, este mensaje no puede salir.';
+    case 131030:
+      return 'Ese número no está en la lista de pruebas de la cuenta de WhatsApp. Mientras la cuenta esté en modo prueba, solo entrega a los teléfonos dados de alta a mano en Meta.';
+    case 131047:
+      return 'Pasaron más de 24 h desde el último mensaje del chofer y la plantilla no pudo abrir la conversación.';
+    case 190:
+      return 'El token de WhatsApp expiró. Hay que renovarlo en Meta.';
+    default:
+      return `WhatsApp lo rechazó: ${error}`;
+  }
+}
+
 /** El wamid que devuelve Meta, para poder seguir el mensaje del lado de ellos. */
 async function idDeRespuesta(res: Response): Promise<string | undefined> {
   try {
