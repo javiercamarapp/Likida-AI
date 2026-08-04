@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { LayoutGrid, ChevronDown } from 'lucide-react';
 import { type Item, INICIO, NEGOCIO, OPERACION, DOCUMENTOS_DINERO, GESTION } from './rutas';
+import { puedeVerRuta } from '@/lib/auth/visibilidad';
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] transition-colors';
 const ICONO = { width: 16, height: 16, strokeWidth: 1.75, color: 'var(--muted)' } as const;
@@ -14,6 +15,11 @@ const ICONO = { width: 16, height: 16, strokeWidth: 1.75, color: 'var(--muted)' 
 function Seccion({ titulo, items, defaultAbierto = false, sufijo }: { titulo: string; items: Item[]; defaultAbierto?: boolean; sufijo: string }) {
   const pathname = usePathname();
   const [abierto, setAbierto] = useState(() => defaultAbierto || items.some((it) => it.href === pathname));
+
+  // Una sección que quedó sin un solo item para este rol no se pinta: un
+  // encabezado "Documentos & Dinero" con nada debajo le anuncia al encargado
+  // justo lo que no puede ver.
+  if (items.length === 0) return null;
 
   return (
     <div>
@@ -47,24 +53,48 @@ function Seccion({ titulo, items, defaultAbierto = false, sufijo }: { titulo: st
  * query string), así que para ellos `sufijo` siempre es vacío y esto no
  * hace nada distinto de un link normal.
  */
-export default function SidebarNav() {
+export default function SidebarNav({ rol }: { rol: string }) {
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
   const vista = sp.get('vista');
-  const sufijo = tenant ? `?tenant=${tenant}` : vista ? `?vista=${vista}` : '';
+  // EL SUPERADMIN QUE LLEGA A UNA SUBPÁGINA SIN PARÁMETRO SE EXPULSABA SOLO.
+  //
+  // `/dashboard` a secas rebota a /admin cuando el rol es superadmin y no
+  // trae `?tenant=` ni `?vista=demo` (tenant-efectivo.ts, `esRaiz`): es su
+  // consola, no la de un cliente. Pero las SUBpáginas no rebotan — caen al
+  // tenant demo sin más. Así que entrar directo a /dashboard/despacho (link
+  // pegado, bookmark) dejaba el sufijo vacío, y el link de "Resumen"
+  // apuntaba a /dashboard pelón: el propio sidebar te sacaba del panel que
+  // estabas viendo. Para superadmin sin parámetro se asume `?vista=demo`,
+  // que es el tenant al que las subpáginas ya lo mandaron.
+  //
+  // Para los otros cuatro roles esto no cambia nada: nunca traen ninguno de
+  // los dos params y su sufijo sigue siendo vacío.
+  const sufijo = tenant
+    ? `?tenant=${tenant}`
+    : vista ? `?vista=${vista}`
+    : rol === 'superadmin' ? '?vista=demo' : '';
+
+  // Se filtra con la MISMA función que gatea la página (`visibilidad.ts`).
+  // Dos listas separadas —una para pintar y otra para autorizar— se
+  // desincronizan, y el modo de falla es el peor: el link existe, el clic
+  // rebota, y el usuario cree que la app está rota.
+  const visibles = (items: Item[]) => items.filter((it) => puedeVerRuta(rol, it.href));
 
   return (
     <>
-      <div>
-        <Link href={`/dashboard${sufijo}`} className={`${ITEM} font-medium`}>
-          <LayoutGrid {...ICONO} /> Resumen
-        </Link>
-      </div>
-      <Seccion titulo="Inicio" items={INICIO} defaultAbierto sufijo={sufijo} />
-      <Seccion titulo="Negocio" items={NEGOCIO} sufijo={sufijo} />
-      <Seccion titulo="Operación" items={OPERACION} sufijo={sufijo} />
-      <Seccion titulo="Documentos & Dinero" items={DOCUMENTOS_DINERO} sufijo={sufijo} />
-      <Seccion titulo="Gestión" items={GESTION} sufijo={sufijo} />
+      {puedeVerRuta(rol, '/dashboard') && (
+        <div>
+          <Link href={`/dashboard${sufijo}`} className={`${ITEM} font-medium`}>
+            <LayoutGrid {...ICONO} /> Resumen
+          </Link>
+        </div>
+      )}
+      <Seccion titulo="Inicio" items={visibles(INICIO)} defaultAbierto sufijo={sufijo} />
+      <Seccion titulo="Negocio" items={visibles(NEGOCIO)} sufijo={sufijo} />
+      <Seccion titulo="Operación" items={visibles(OPERACION)} sufijo={sufijo} />
+      <Seccion titulo="Documentos & Dinero" items={visibles(DOCUMENTOS_DINERO)} sufijo={sufijo} />
+      <Seccion titulo="Gestión" items={visibles(GESTION)} sufijo={sufijo} />
     </>
   );
 }
