@@ -68,9 +68,22 @@ export default function RailAsistente() {
   ];
 
   return (
+    // EXPANDIDO SE SALE DEL FLUJO, no crece dentro de él.
+    //
+    // Antes pedía `width: 100%` siendo hermano flex del sidebar (208px,
+    // `shrink-0`) y del contenido: 208 + 100% + gaps no cabe, el rail se
+    // desbordaba a la derecha y el botón de contraer —pegado al borde con
+    // `ml-auto`— quedaba FUERA de la pantalla. El síntoma no era "no
+    // responde" sino "no lo veo", y por eso no se podía cerrar.
+    //
+    // `fixed inset-3` lo saca del cálculo del flex: ocupa el viewport, que
+    // es lo que "pantalla completa" quiere decir, y el botón siempre cae
+    // dentro. z-20 para quedar sobre el contenido (z-10 en chrome.tsx).
     <aside
-      className="glass-panel shrink-0 hidden xl:flex flex-col sticky top-4 self-start h-[calc(100dvh-2rem)]"
-      style={{ width: expandido ? '100%' : ANCHO, transition: `width ${DURACION}` }}
+      className={`glass-panel shrink-0 hidden xl:flex flex-col ${
+        expandido ? 'fixed inset-3 z-20' : 'sticky top-4 self-start h-[calc(100dvh-2rem)]'
+      }`}
+      style={expandido ? undefined : { width: ANCHO, transition: `width ${DURACION}` }}
     >
       <div className="flex items-center gap-2 px-3.5 pt-3.5 shrink-0">
         <Sparkles width={14} height={14} strokeWidth={1.75} />

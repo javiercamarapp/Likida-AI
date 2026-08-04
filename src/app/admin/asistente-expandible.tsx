@@ -39,9 +39,15 @@ export default function AsistenteExpandible({
         {main}
       </div>
 
+      {/* Mismo arreglo que en dashboard/rail.tsx: expandido SALE del flujo.
+          Pedir `width: 100%` dentro de un flex que también carga el sidebar
+          de 232px desbordaba el panel a la derecha y se llevaba el botón de
+          contraer fuera de la pantalla. */}
       <aside
-        className="glass-panel shrink-0 hidden xl:flex flex-col sticky top-0 self-start h-[calc(100dvh-2rem)]"
-        style={{ width: expandido ? '100%' : ANCHO_ASIDE, transition: `width ${DURACION}` }}
+        className={`glass-panel shrink-0 hidden xl:flex flex-col ${
+          expandido ? 'fixed inset-4 z-20' : 'sticky top-0 self-start h-[calc(100dvh-2rem)]'
+        }`}
+        style={expandido ? undefined : { width: ANCHO_ASIDE, transition: `width ${DURACION}` }}
       >
         <div className="flex items-center gap-2 px-4 pt-4 shrink-0">
           <Sparkles width={15} height={15} strokeWidth={1.75} />
