@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import FondoShader from '../admin/fondo-shader';
 import SidebarNav from './sidebar-nav';
+import AvisoRol from './aviso-rol';
 import RailAsistente from './rail';
 
 /**
@@ -80,7 +81,10 @@ export default function DashboardChrome({
           </div>
         </aside>
 
-        <div className="flex-1 min-w-0 h-[calc(100dvh-1.5rem)] overflow-y-auto">{children}</div>
+        <div className="flex-1 min-w-0 h-[calc(100dvh-1.5rem)] overflow-y-auto">
+          <AvisoRol rolReal={rol} />
+          {children}
+        </div>
 
         {/* El rail, fijo a la derecha en las 20 páginas. */}
         <RailAsistente />

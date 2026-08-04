@@ -74,10 +74,22 @@ export default async function FlotasPage() {
                           entra con su propia sesión y `?tenant=` resuelve el
                           tenant, validado contra la tabla real (ver
                           dashboard/page.tsx). */}
-                      <Link href={`/dashboard?tenant=${f.id}`} target="_blank"
-                        className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
-                        <ExternalLink width={12} height={12} strokeWidth={1.75} /> Ver dashboard
-                      </Link>
+                      {/* DOS PUERTAS, no una. El dueño y el jefe de tráfico
+                          comparten la misma URL y ven cosas distintas
+                          (visibilidad.ts): sin el segundo link no había forma
+                          de comprobar qué ve cada quien sin la contraseña de
+                          los dos. `?rol=` solo QUITA visibilidad y solo se
+                          honra si la sesión real es superadmin. */}
+                      <div className="inline-flex items-center gap-1.5">
+                        <Link href={`/dashboard?tenant=${f.id}`} target="_blank"
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
+                          <ExternalLink width={12} height={12} strokeWidth={1.75} /> Panel de dueño
+                        </Link>
+                        <Link href={`/dashboard/despacho?tenant=${f.id}&rol=encargado`} target="_blank"
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
+                          <ExternalLink width={12} height={12} strokeWidth={1.75} /> Panel de jefe de flota
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -19,7 +19,7 @@
 // `requireSessionTenant` ya hace, sin sorpresas.
 import { redirect } from 'next/navigation';
 import { requireSessionTenant } from './guard';
-import { puedeVerRuta, inicioDe } from './visibilidad';
+import { puedeVerRuta, inicioDe, rolEfectivo } from './visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { SessionTenant } from './session';
 
@@ -33,10 +33,16 @@ export interface TenantEfectivo extends SessionTenant {
 
 export async function resolverTenantEfectivo(
   destino: string,
-  sp: { vista?: string; tenant?: string } | undefined,
+  sp: { vista?: string; tenant?: string; rol?: string } | undefined,
   opts: { esRaiz?: boolean } = {},
 ): Promise<TenantEfectivo> {
-  const sesion = await requireSessionTenant(destino);
+  const sesionReal = await requireSessionTenant(destino);
+
+  // "Ver como": un superadmin puede mirar el panel con los ojos de otro rol
+  // (`?rol=encargado`) para comparar qué ve cada quien. Solo QUITA visibilidad
+  // y solo si la sesión real es superadmin — ver `rolEfectivo`.
+  const rol = rolEfectivo(sesionReal.rol, sp?.rol);
+  const sesion = { ...sesionReal, rol };
 
   // ¿ESTA PANTALLA EXISTE PARA ESTE ROL? — antes de resolver nada más.
   //
@@ -48,13 +54,17 @@ export async function resolverTenantEfectivo(
   // /dashboard con datos ya pasan por esta función.
   if (!puedeVerRuta(sesion.rol, destino)) redirect(inicioDe(sesion.rol));
 
-  if (opts.esRaiz && sesion.rol === 'superadmin' && sp?.vista !== 'demo' && !sp?.tenant) {
+  // `?rol=` cuenta como intención de ver el panel del cliente, igual que
+  // `?vista=demo` — si no, "ver como encargado" desde la raíz rebotaba a
+  // /admin y la comparación era imposible justo en la pantalla de inicio,
+  // que es la que más cambia entre un rol y otro.
+  if (opts.esRaiz && sesionReal.rol === 'superadmin' && sp?.vista !== 'demo' && !sp?.tenant && !sp?.rol) {
     redirect('/admin');
   }
 
   let tenantId = sesion.tenantId;
   let tenantNombre: string | null = null;
-  if (sesion.rol === 'superadmin' && sp?.tenant) {
+  if (sesionReal.rol === 'superadmin' && sp?.tenant) {
     const { data: t } = await supabaseAdmin().from('tenant').select('id, nombre').eq('id', sp.tenant).maybeSingle();
     if (t) {
       tenantId = t.id as string;

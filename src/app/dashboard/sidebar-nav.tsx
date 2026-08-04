@@ -70,20 +70,32 @@ export default function SidebarNav({ rol }: { rol: string }) {
   //
   // Para los otros cuatro roles esto no cambia nada: nunca traen ninguno de
   // los dos params y su sufijo sigue siendo vacío.
-  const sufijo = tenant
+  const base = tenant
     ? `?tenant=${tenant}`
     : vista ? `?vista=${vista}`
     : rol === 'superadmin' ? '?vista=demo' : '';
+
+  // "Ver como" (`?rol=`) tiene que viajar en CADA link igual que `?tenant=`:
+  // si un solo link lo pierde, el siguiente clic te devuelve a tu propia
+  // vista de superadmin y la comparación se rompe sin avisar.
+  const rolVista = sp.get('rol');
+  const sufijo = rolVista ? `${base}${base ? '&' : '?'}rol=${rolVista}` : base;
+
+  // El rol con el que se FILTRA el menú es el previsualizado, no el real —
+  // pero solo si el real es superadmin, misma regla que `rolEfectivo` aplica
+  // del lado del servidor. Duplicarla aquí es a propósito: este componente es
+  // cliente y no puede llamar a la del servidor, y las dos son la misma línea.
+  const rolMenu = rol === 'superadmin' && rolVista ? rolVista : rol;
 
   // Se filtra con la MISMA función que gatea la página (`visibilidad.ts`).
   // Dos listas separadas —una para pintar y otra para autorizar— se
   // desincronizan, y el modo de falla es el peor: el link existe, el clic
   // rebota, y el usuario cree que la app está rota.
-  const visibles = (items: Item[]) => items.filter((it) => puedeVerRuta(rol, it.href));
+  const visibles = (items: Item[]) => items.filter((it) => puedeVerRuta(rolMenu, it.href));
 
   return (
     <>
-      {puedeVerRuta(rol, '/dashboard') && (
+      {puedeVerRuta(rolMenu, '/dashboard') && (
         <div>
           <Link href={`/dashboard${sufijo}`} className={`${ITEM} font-medium`}>
             <LayoutGrid {...ICONO} /> Resumen

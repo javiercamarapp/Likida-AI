@@ -107,6 +107,31 @@ export function puedeVerRuta(rol: string, href: string): boolean {
  * lo rebotaría otra vez — un bucle de redirects, que es peor que la fuga que
  * se quería evitar.
  */
+/** Los roles que un superadmin puede PREVISUALIZAR con `?rol=`. */
+const PREVISUALIZABLES = new Set(['flota_admin', 'encargado', 'contador']);
+
+/**
+ * Qué rol manda para decidir visibilidad — el de la sesión, salvo que un
+ * superadmin esté mirando el panel "como" otro.
+ *
+ * Existe porque los tres roles de oficina comparten la MISMA URL: no había
+ * forma de comparar qué ve el dueño contra qué ve el jefe de tráfico sin
+ * tener la contraseña de los dos. Y las cuentas de prueba nunca recibieron
+ * su magic link (el remitente sandbox de Resend rechaza los alias).
+ *
+ * SOLO PUEDE QUITAR, NUNCA DAR. Se honra únicamente si el rol REAL de la
+ * sesión es superadmin —que ya ve las tres áreas—, así que el resultado es
+ * siempre un subconjunto de lo que esa sesión podía ver. Para cualquier otro
+ * rol el parámetro se ignora en silencio: si se honrara, `?rol=flota_admin`
+ * en la barra de direcciones sería una escalada de privilegios de un solo
+ * teclazo.
+ */
+export function rolEfectivo(rolReal: string, rolPedido?: string | null): string {
+  if (rolReal !== 'superadmin') return rolReal;
+  if (!rolPedido || !PREVISUALIZABLES.has(rolPedido)) return rolReal;
+  return rolPedido;
+}
+
 export function inicioDe(rol: string): string {
   if (puedeVerArea(rol, 'operacion')) return '/dashboard';
   if (puedeVerArea(rol, 'dinero')) return '/dashboard/cuadre';

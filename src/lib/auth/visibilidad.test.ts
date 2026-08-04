@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { areasDe, puedeVerArea, puedeVerRuta, areaDeRuta, inicioDe } from './visibilidad';
+import { areasDe, puedeVerArea, puedeVerRuta, areaDeRuta, inicioDe, rolEfectivo } from './visibilidad';
 import { INICIO, NEGOCIO, OPERACION, DOCUMENTOS_DINERO, GESTION } from '@/app/dashboard/rutas';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -71,6 +71,36 @@ describe('el mapa de rutas no se queda atrás del sidebar', () => {
   it('el dueño ve todas las del sidebar', () => {
     const invisibles = todas.filter((i) => !puedeVerRuta('flota_admin', i.href)).map((i) => i.href);
     expect(invisibles).toEqual([]);
+  });
+});
+
+describe('"Ver como" solo puede QUITAR visibilidad', () => {
+  it('un superadmin puede mirarse el panel como encargado', () => {
+    expect(rolEfectivo('superadmin', 'encargado')).toBe('encargado');
+    expect(puedeVerRuta(rolEfectivo('superadmin', 'encargado'), '/dashboard/cobranza')).toBe(false);
+  });
+
+  it('NO es una escalada: a un encargado el parámetro no le da nada', () => {
+    // Si esto devolviera 'flota_admin', `?rol=flota_admin` en la barra de
+    // direcciones sería subir de privilegio con un teclazo.
+    expect(rolEfectivo('encargado', 'flota_admin')).toBe('encargado');
+    expect(rolEfectivo('contador', 'superadmin')).toBe('contador');
+    expect(rolEfectivo('operador', 'flota_admin')).toBe('operador');
+  });
+
+  it('un superadmin no puede previsualizarse como superadmin ni como chofer', () => {
+    // 'superadmin' no está en la lista: pedirlo no cambia nada (ya lo es).
+    // 'operador' tampoco: su panel es /mis-viajes, no éste, y fingirlo aquí
+    // enseñaría una vista que no existe para ese rol.
+    expect(rolEfectivo('superadmin', 'superadmin')).toBe('superadmin');
+    expect(rolEfectivo('superadmin', 'operador')).toBe('superadmin');
+  });
+
+  it('un valor basura se ignora en silencio, no rompe la página', () => {
+    expect(rolEfectivo('superadmin', 'gerente')).toBe('superadmin');
+    expect(rolEfectivo('superadmin', '')).toBe('superadmin');
+    expect(rolEfectivo('superadmin', null)).toBe('superadmin');
+    expect(rolEfectivo('superadmin', undefined)).toBe('superadmin');
   });
 });
 
