@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { CreditCard, ExternalLink, TriangleAlert, FileText } from 'lucide-react';
+import { CreditCard, ExternalLink, TriangleAlert, FileText, Landmark } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAdministrar } from '@/lib/auth/permisos';
@@ -11,6 +11,7 @@ import {
   type Plan, type Suscripcion, type FacturaSaas, type UsoDelPlan,
 } from '@/lib/saas/suscripcion';
 import { crearSuscripcionPorTransferencia, crearPortal, stripeConfigurado, modoStripe } from '@/lib/saas/stripe';
+import { datosBancarios } from '@/lib/saas/transferencia';
 import {
   getDatosFiscales, guardarDatosFiscales, estanCompletos, REGIMENES, USOS_CFDI,
   type DatosFiscalesFlota,
@@ -19,7 +20,7 @@ import { mxn } from '@/lib/utils';
 import { fechaMx } from '../formato';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
-import { Uso, TarjetaPlan } from './vista';
+import { Uso, TarjetaPlan, InstruccionesTransferencia } from './vista';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +75,10 @@ export default async function SuscripcionPage({
   ]);
 
   const fiscales = await safe<DatosFiscalesFlota | null>(() => getDatosFiscales(tenantId));
+  const banco = datosBancarios();
+  // La factura que hay que pagar AHORA. Es la que manda en esta pantalla: si
+  // hay uno pendiente, lo primero que el cliente necesita es a dónde transferir.
+  const porPagar = facturas?.find((f) => f.estado === 'pendiente' || f.estado === 'fallida') ?? null;
   const puedeFacturar = estanCompletos(fiscales);
   const planActual = planes?.find((p) => p.clave === suscripcion?.planClave) ?? null;
   const uso = await safe<UsoDelPlan>(() => getUso(tenantId, planActual));
@@ -210,6 +215,45 @@ export default async function SuscripcionPage({
       )}
 
       <div className="glass-panel overflow-hidden">
+        {/* ── Cómo pagar: lo primero cuando hay algo pendiente ── */}
+        {porPagar && (
+          <section className="p-5 border-b" style={{ borderColor: 'var(--line)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Landmark width={15} height={15} strokeWidth={1.75} />
+              <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
+                Cómo pagar tu mensualidad
+              </h2>
+              <StatusPill estado="warn">Pendiente</StatusPill>
+            </div>
+            {banco === null ? (
+              <div className="mt-3">
+                <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--warn)' }} />}>
+                  Los datos para transferir todavía no están configurados, así que no se muestran a medias — una
+                  cuenta incompleta manda el dinero al vacío. Escríbele a Likida para que te los pase.
+                </EstadoVacio>
+              </div>
+            ) : !porPagar.referencia ? (
+              <div className="mt-3">
+                <EstadoVacio>
+                  Esta factura no trae referencia de pago. Pídesela a Likida antes de transferir: sin ella no se
+                  puede saber de qué mes es tu depósito.
+                </EstadoVacio>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <InstruccionesTransferencia
+                  beneficiario={banco.beneficiario} banco={banco.banco} clabe={banco.clabe}
+                  monto={porPagar.monto} moneda={porPagar.moneda} referencia={porPagar.referencia}
+                />
+                <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
+                  Un banco no nos avisa cuando entra un depósito, así que tu factura pasa a &quot;pagada&quot; en
+                  cuanto Likida lo ve en el estado de cuenta — normalmente el mismo día hábil.
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* ── Estado ── */}
         <section className="p-5">
           <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>

@@ -1426,3 +1426,39 @@ begin
   raise exception E'DATOS_FISCALES  regimen-invalido-rechazado=%  cp-invalido-rechazado=%  timbre-incoherente-rechazado=%   (esperado true / true / true)',
     regimen_malo, cp_malo, timbre_malo;
 end $$;
+
+-- ── 36. No se cobra dos veces el mismo mes, ni se marca pagada sin firma (mig. 0057) ──
+--
+-- Cobrar por transferencia no tiene webhook: alguien marca la factura a mano. Y
+-- eso abre dos formas de perder dinero o credibilidad que solo la base puede
+-- cerrar:
+--
+--   1. Apretar "emitir" dos veces le cobra el mismo mes DOS VECES a la misma
+--      flota, y las dos facturas se ven legítimas. Lo impide el índice único
+--      (tenant_id, periodo_inicio, periodo_fin).
+--   2. Una factura "pagada" sin saber QUIÉN la marcó es la palabra de alguien
+--      sin nada detrás. Lo impide el check de conciliación coherente.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid; dup boolean := false; sin_firma boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF COBRO') returning id into t;
+
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, estado, metodo_cobro, referencia)
+    values (t, '2026-08-01', '2026-08-31', 2400, 'pendiente', 'transferencia', 'LKZZZ202608');
+
+  begin
+    insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, estado, metodo_cobro, referencia)
+      values (t, '2026-08-01', '2026-08-31', 2400, 'pendiente', 'transferencia', 'LKZZZ202608B');
+  exception when unique_violation then dup := true;
+  end;
+
+  begin
+    update factura_saas set conciliada_en = now() where tenant_id = t;   -- sin conciliada_por
+  exception when check_violation then sin_firma := true;
+  end;
+
+  raise exception E'COBRO_TRANSFERENCIA  segundo-cobro-del-mes-rechazado=%  pagada-sin-firma-rechazada=%   (esperado true / true)',
+    dup, sin_firma;
+end $$;
