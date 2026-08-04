@@ -532,8 +532,35 @@ export async function generateWithTools(opts: {
   let costo = 0;
   let activeModel = model; // cambia a fallback si el primario cae (persiste el resto del ciclo)
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // CACHÉ DE PROMPT — dejar de pagar por reenviar lo mismo en cada vuelta.
+  //
+  // MEDIDO el 4-ago-2026 sobre las 4 liquidaciones reales: el ciclo NO gasta 6
+  // llamadas fijas, escala con los comprobantes (2, 4, 8 y 10), y la entrada
+  // crece con la conversación hasta 21,224 tokens. Una liquidación de 21
+  // comprobantes reenvía ~72,000 tokens de entrada en 8 vueltas — y el system
+  // prompt con las reglas fiscales viaja idéntico en TODAS.
+  //
+  // Anthropic cobra la lectura de caché al 10% de la entrada normal, así que
+  // marcar el prefijo estable convierte ese reenvío en calderilla. NO cambia
+  // el modelo, ni el prompt, ni la salida: es el mismo Sonnet dando la misma
+  // respuesta. Es la única optimización del cuadre que no toca la calidad, y
+  // por eso es la que se hace aquí — el modelo se queda.
+  //
+  // El breakpoint va en el SYSTEM, que es el bloque grande e invariante. Los
+  // mensajes que siguen sí cambian entre vueltas y no se marcan.
+  //
+  // `as any` porque `cache_control` es una extensión de Anthropic vía
+  // OpenRouter; el tipo del SDK de OpenAI no la contempla. Un modelo que no la
+  // entienda la ignora — no rompe.
+  const soportaCache = /anthropic\//.test(model);
+  const sistema = soportaCache
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? ({ role: 'system', content: [{ type: 'text', text: opts.system, cache_control: { type: 'ephemeral' } }] } as any)
+    : { role: 'system' as const, content: opts.system };
+
   const convo: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: 'system', content: opts.system },
+    sistema,
     ...opts.messages,
   ];
   const crossRound = new Map<string, ToolExecResult>();
