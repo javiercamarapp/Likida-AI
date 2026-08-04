@@ -172,5 +172,11 @@ export default function FondoShader() {
   // quedaba invisible aunque el shader corriera perfecto. z-index 0 (el
   // default) + el contenido real con `position: relative` (ver layout.tsx)
   // alcanza para que el contenido quede encima sin necesitar negativos.
-  return <canvas ref={ref} className="fixed inset-0 w-full h-full" aria-hidden />;
+  // `pointer-events-none`: el canvas es DECORATIVO (`aria-hidden`) pero cubre
+  // el viewport entero, así que sin esto se queda con cualquier clic que caiga
+  // donde el contenido no lo tape. El contenido va en z-10 y normalmente gana,
+  // pero eso depende de que cada capa de arriba mantenga su stacking context —
+  // una condición que se rompe sola con el tiempo. Un fondo no debe poder
+  // recibir un clic en ningún caso.
+  return <canvas ref={ref} className="fixed inset-0 w-full h-full pointer-events-none" aria-hidden />;
 }
