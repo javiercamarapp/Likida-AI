@@ -54,6 +54,8 @@ export interface FacturaSaas {
   urlPago: string | null;
   /** Folio fiscal. `null` = cobrada pero SIN TIMBRAR: pagó y no puede deducir. */
   cfdiUuid: string | null;
+  /** Lo que el cliente escribe en el concepto de su transferencia (0057). */
+  referencia: string | null;
 }
 
 function fila<T>(r: { data: unknown; error: { message: string } | null }, consulta: string): T | null {
@@ -120,7 +122,7 @@ export async function getSuscripcion(tenantId: string): Promise<Suscripcion | nu
 export async function getFacturasSaas(tenantId: string, limite = 12): Promise<FacturaSaas[]> {
   const r = await supabaseAdmin()
     .from('factura_saas')
-    .select('id, periodo_inicio, periodo_fin, monto, moneda, estado, pagada_en, url_pago, cfdi_uuid')
+    .select('id, periodo_inicio, periodo_fin, monto, moneda, estado, pagada_en, url_pago, cfdi_uuid, referencia')
     .eq('tenant_id', tenantId)
     .order('periodo_fin', { ascending: false })
     .limit(limite);
@@ -136,6 +138,7 @@ export async function getFacturasSaas(tenantId: string, limite = 12): Promise<Fa
     pagadaEn: (f.pagada_en as string) || null,
     urlPago: (f.url_pago as string) || null,
     cfdiUuid: (f.cfdi_uuid as string) || null,
+    referencia: (f.referencia as string) || null,
   }));
 }
 

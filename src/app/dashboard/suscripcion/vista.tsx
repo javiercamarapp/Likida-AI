@@ -85,3 +85,52 @@ export function TarjetaPlan({
     </div>
   );
 }
+
+/**
+ * A dónde y cómo transfiere la flota.
+ *
+ * LA REFERENCIA ES LO MÁS IMPORTANTE DE ESTE BLOQUE y por eso va destacada: es
+ * lo único que permite casar el depósito con esta factura. Sin ella llegan
+ * transferencias de "TRANSPORTES ..." sin saber de qué mes son, y alguien tiene
+ * que adivinar o hablarle al cliente.
+ *
+ * La CLABE se enseña COMPLETA a propósito, aunque el resto del sistema la trate
+ * como dato sensible: el cliente la necesita entera para poder transferir. Lo
+ * que no puede pasar es que viva en el código de un repo público.
+ */
+export function InstruccionesTransferencia({
+  beneficiario, banco, clabe, monto, moneda, referencia,
+}: {
+  beneficiario: string;
+  banco: string;
+  clabe: string;
+  monto: number;
+  moneda: string;
+  referencia: string;
+}) {
+  const filas: Array<[string, string, boolean?]> = [
+    ['Beneficiario', beneficiario],
+    ['Banco', banco],
+    ['CLABE', clabe, true],
+    ['Monto', `${mxn(monto)} ${moneda}`],
+    ['Referencia (ponla en el concepto)', referencia, true],
+  ];
+  return (
+    <div className="card p-4">
+      <table className="w-full text-sm">
+        <tbody>
+          {filas.map(([k, v, mono]) => (
+            <tr key={k} className="border-b last:border-0" style={{ borderColor: 'var(--line)' }}>
+              <td className="py-2 pr-4 align-top" style={{ color: 'var(--muted)', width: '45%' }}>{k}</td>
+              <td className={`py-2 font-medium ${mono ? 'font-mono tracking-wide' : ''}`}>{v}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
+        Sin la referencia en el concepto no podemos saber de qué mes es tu pago, y la factura se queda como
+        pendiente aunque el dinero ya haya salido de tu cuenta.
+      </p>
+    </div>
+  );
+}

@@ -1,15 +1,18 @@
 import { revalidatePath } from 'next/cache';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd, mxn } from '@/lib/utils';
-import { DollarSign, Calculator, CreditCard, TriangleAlert } from 'lucide-react';
+import { DollarSign, Calculator, CreditCard, TriangleAlert, Landmark } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { mensajeParaPantalla } from '@/lib/cuadra/administracion';
 import { getPlanes, guardarPriceDePlan, type Plan } from '@/lib/saas/suscripcion';
 import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
+import {
+  datosBancarios, emitirMensualidad, conciliar, getPorCobrar, type FacturaPorCobrar,
+} from '@/lib/saas/transferencia';
 import { AreaChartSimple, Dona } from '../charts';
 import { IconoProveedor } from '../proveedor-icono';
 import { ChartCard, EstadoVacio, KpiTile, StatusPill } from '../ui/kit';
-import { FormaConAviso, Campo, type ResultadoAccion } from '../ui/forma';
+import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../ui/forma';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +62,54 @@ const FASE_LABEL: Record<string, string> = {
  * magnitudes no-negativas por fase/modelo. `Dona` y la lista con
  * `IconoProveedor` ya son el mejor ajuste real para esa forma de dato.
  */
+/**
+ * Emite la mensualidad de una flota.
+ *
+ * El periodo es el MES EN CURSO y se calcula aquí, no se captura: una fecha
+ * tecleada a mano es la forma más fácil de cobrar dos veces el mismo mes con
+ * periodos que no cuadran, y el índice único de la 0057 solo protege si las
+ * fechas son las mismas.
+ */
+async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  'use server';
+  await requireSuperadmin();
+  const tenantId = String(fd.get('tenantId') ?? '');
+  if (!tenantId) return { error: 'Elige una flota.' };
+
+  const hoy = new Date();
+  const ini = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), 1));
+  const fin = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() + 1, 0));
+
+  try {
+    const r = await emitirMensualidad(
+      tenantId, ini.toISOString().slice(0, 10), fin.toISOString().slice(0, 10),
+    );
+    revalidatePath('/admin/costos-facturacion');
+    revalidatePath('/dashboard/suscripcion');
+    return { ok: `Mensualidad emitida por ${mxn(r.monto)}. La flota ya ve a dónde transferir, con la referencia ${r.referencia}.` };
+  } catch (e) {
+    return { error: mensajeParaPantalla(e, 'emitir la mensualidad') };
+  }
+}
+
+/**
+ * Da una factura por pagada. Es el paso que ningún webhook puede hacer: BBVA no
+ * le avisa a la app, así que alguien mira el estado de cuenta y lo marca — y
+ * queda registrado quién y con qué movimiento.
+ */
+async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  'use server';
+  const s = await requireSuperadmin();
+  try {
+    await conciliar(String(fd.get('facturaId') ?? ''), String(fd.get('referenciaBanco') ?? ''), s.userId);
+    revalidatePath('/admin/costos-facturacion');
+    revalidatePath('/dashboard/suscripcion');
+    return { ok: 'Factura marcada como pagada, con su referencia del banco.' };
+  } catch (e) {
+    return { error: mensajeParaPantalla(e, 'conciliar el pago') };
+  }
+}
+
 export default async function CostosFacturacionPage() {
   const r = await getResumenNegocio();
   const costoPorViaje = r.viajesProcesados > 0 ? r.costoIaUsd / r.viajesProcesados : null;
@@ -71,6 +122,10 @@ export default async function CostosFacturacionPage() {
   if (hayStripe) {
     try { planes = await getPlanes(); } catch { planes = []; }
   }
+
+  const banco = datosBancarios();
+  let porCobrar: FacturaPorCobrar[] = [];
+  try { porCobrar = await getPorCobrar(); } catch { porCobrar = []; }
 
   return (
     <div className="flex flex-col gap-4">
@@ -165,6 +220,81 @@ export default async function CostosFacturacionPage() {
               </div>
             </ChartCard>
           )}
+        </section>
+
+        {/* ── Cobro por transferencia ── */}
+        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex items-center gap-2 mb-1">
+            <Landmark width={15} height={15} strokeWidth={1.75} />
+            <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
+              Cobro por transferencia
+            </h2>
+            {banco
+              ? <StatusPill estado="ok">Cuenta ···{banco.clabeUltimos4}</StatusPill>
+              : <StatusPill estado="bad">Sin cuenta configurada</StatusPill>}
+          </div>
+
+          {!banco ? (
+            <div className="mt-3">
+              <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
+                Faltan <code>LIKIDA_CLABE</code>, <code>LIKIDA_BANCO</code> y <code>LIKIDA_BENEFICIARIO</code> en el
+                entorno, o la CLABE no pasa su dígito verificador. Sin las tres, la pantalla del cliente no enseña
+                instrucciones de pago — una cuenta a medias manda el dinero al vacío.
+              </EstadoVacio>
+            </div>
+          ) : (
+            <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+              Las flotas transfieren a {banco.beneficiario} · {banco.banco} · CLABE terminada en{' '}
+              <span className="font-mono">{banco.clabeUltimos4}</span>. Un banco no manda webhooks: cuando veas el
+              depósito, márcalo aquí con su referencia.
+            </p>
+          )}
+
+          <div className="mt-3">
+            <h3 className="text-xs font-medium mb-2" style={{ color: 'var(--muted)' }}>Emitir la mensualidad de este mes</h3>
+            <FormaConAviso accion={accionEmitir} boton="Emitir">
+              <Selector nombre="tenantId" etiqueta="Flota" requerido
+                opciones={[{ valor: '', texto: 'Elige…' }, ...r.flotas.map((f) => ({ valor: f.id, texto: f.nombre }))]} />
+            </FormaConAviso>
+          </div>
+
+          <div className="mt-5">
+            <h3 className="text-xs font-medium mb-2" style={{ color: 'var(--muted)' }}>Por cobrar</h3>
+            {porCobrar.length === 0 ? (
+              <EstadoVacio>Nada pendiente de cobro. Aparece aquí en cuanto emitas una mensualidad.</EstadoVacio>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ color: 'var(--muted)' }} className="text-left">
+                      <th className="py-2.5 pr-4 font-medium">Flota</th>
+                      <th className="py-2.5 pr-4 font-medium">Periodo</th>
+                      <th className="py-2.5 pr-4 font-medium">Referencia</th>
+                      <th className="py-2.5 pr-4 font-medium text-right">Monto</th>
+                      <th className="py-2.5 font-medium">Marcar pagada</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {porCobrar.map((f) => (
+                      <tr key={f.id} className="border-t align-top" style={{ borderColor: 'var(--line)' }}>
+                        <td className="py-2.5 pr-4 font-medium">{f.tenantNombre}</td>
+                        <td className="py-2.5 pr-4" style={{ color: 'var(--muted)' }}>{f.periodoInicio} — {f.periodoFin}</td>
+                        <td className="py-2.5 pr-4 font-mono text-xs">{f.referencia ?? '—'}</td>
+                        <td className="py-2.5 pr-4 text-right tabular">{mxn(f.monto)}</td>
+                        <td className="py-2.5" style={{ minWidth: 260 }}>
+                          <FormaConAviso accion={accionConciliar} boton="Marcar pagada" columnas="md:grid-cols-1">
+                            <input type="hidden" name="facturaId" value={f.id} />
+                            <Campo nombre="referenciaBanco" etiqueta="Referencia del banco" requerido
+                              placeholder="Folio del movimiento" />
+                          </FormaConAviso>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </section>
 
         {/* ── Planes y precios ── */}
