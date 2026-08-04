@@ -31,7 +31,7 @@ vi.mock('@/lib/logger', () => ({ logger }));
 
 vi.mock('./config', () => ({ getConfig: vi.fn() }));
 
-const { crearFlota, crearOperador, guardarPolitica, reabrirViaje, DatoInvalido } =
+const { crearFlota, crearOperador, guardarPolitica, reabrirViaje, DatoInvalido, armarPolitica, mensajeParaPantalla } =
   await import('./administracion');
 
 /** Nodo encadenable: `.select().eq().in().limit().maybeSingle()` → `resultado`. */
@@ -205,5 +205,77 @@ describe('reabrirViaje', () => {
   it('un folio de otra flota no se reabre', async () => {
     from.mockImplementation(() => ({ select: () => cadena({ data: null, error: null }) }));
     await expect(reabrirViaje('t-1', 'VJ-DE-OTRA', true)).rejects.toThrow(/No existe el viaje/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LO QUE LAS PANTALLAS DE ALTA PONEN ENCIMA (4-ago-2026).
+//
+// Las cuatro funciones de arriba ya existían y estaban probadas; lo que no
+// existía era la PANTALLA. Al cablearlas aparecieron dos piezas nuevas con su
+// propio modo de fallo silencioso, y las dos viven aquí y no en la vista
+// justamente para poder fijarlas.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('armarPolitica — lo que se guarda es la política ENTERA', () => {
+  it('vacío es SIN TOPE y 0 es TOPE DE CERO: no se confunden', () => {
+    // Number('') da 0. Si se confundieran, un campo que el dueño dejó en blanco
+    // PROHIBIRÍA el concepto entero sin que nadie lo pidiera.
+    const r = armarPolitica([
+      { concepto: 'caseta', tope: '', exigeCfdi: true },
+      { concepto: 'diesel', tope: '0', exigeCfdi: false },
+    ]);
+    expect(r.find((p) => p.concepto === 'caseta')!.topeMonto).toBeUndefined();
+    expect(r.find((p) => p.concepto === 'diesel')!.topeMonto).toBe(0);
+  });
+
+  it('CONSERVA las reglas por ruta, que el formulario no manda', () => {
+    // fusionarConfig reemplaza el arreglo completo: lo que no vuelva aquí, se
+    // borró. Sin esta reposición, guardar cualquier tope le borraba a la flota
+    // sus reglas por ruta en silencio.
+    const porRuta = [{ concepto: 'caseta', ruta: 'GDL-MTY', topeMonto: 900 }];
+    const r = armarPolitica([{ concepto: 'diesel', tope: '5000', exigeCfdi: true }], porRuta);
+    expect(r).toContainEqual({ concepto: 'caseta', ruta: 'GDL-MTY', topeMonto: 900 });
+    expect(r).toHaveLength(2);
+  });
+
+  it('un renglón que no dice nada no se guarda', () => {
+    expect(armarPolitica([{ concepto: 'otro', tope: '', exigeCfdi: false }])).toEqual([]);
+  });
+
+  it('un tope negativo o no numérico se rechaza con el concepto en el mensaje', () => {
+    expect(() => armarPolitica([{ concepto: 'diesel', tope: '-5', exigeCfdi: false }])).toThrow(DatoInvalido);
+    expect(() => armarPolitica([{ concepto: 'caseta', tope: 'mil', exigeCfdi: false }])).toThrow(/caseta/);
+  });
+
+  it('sin renglones y sin reglas de ruta devuelve una política vacía, no revienta', () => {
+    expect(armarPolitica([])).toEqual([]);
+  });
+});
+
+describe('mensajeParaPantalla — qué ve quien llenó el formulario', () => {
+  beforeEach(() => logger.error.mockClear());
+
+  it('un DatoInvalido se enseña VERBATIM: es lo único que dice qué corregir', () => {
+    const e = new DatoInvalido('Ese teléfono ya está registrado en OTRA flota.');
+    expect(mensajeParaPantalla(e, 'registrar al operador')).toBe('Ese teléfono ya está registrado en OTRA flota.');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('cualquier otro error NO filtra el mensaje de Postgres, pero sí se loguea', () => {
+    // El texto crudo describe la forma del esquema y no le dice nada a un dueño
+    // de flota. Callarlo del todo sería peor: dejaría a alguien creyendo que el
+    // alta se hizo.
+    const salida = mensajeParaPantalla(new Error('duplicate key value violates unique constraint "operador_pkey"'), 'registrar al operador');
+    expect(salida).not.toMatch(/constraint|duplicate key/);
+    expect(salida).toMatch(/registrar al operador/);
+    expect(salida).toMatch(/falla del sistema/);
+    expect(logger.error).toHaveBeenCalledWith('administracion.falla', expect.objectContaining({
+      operacion: 'registrar al operador',
+    }));
+  });
+
+  it('algo que ni siquiera es Error tampoco tumba la pantalla', () => {
+    expect(mensajeParaPantalla('se cayó', 'dar de alta la flota')).toMatch(/dar de alta la flota/);
   });
 });
