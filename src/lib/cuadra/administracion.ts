@@ -1,0 +1,335 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// LO QUE HASTA HOY SE HACÍA CON SQL A MANO.
+//
+// Cuatro operaciones sostenían el alta de cualquier cliente nuevo y ninguna
+// tenía pantalla: dar de alta una flota, registrar el teléfono de un operador,
+// editar la política de gastos y reabrir un viaje liquidado. Mientras vivieran
+// en un editor de SQL, Javier era el cuello de botella del segundo cliente —
+// y cada alta era una oportunidad de teclear el tenant equivocado.
+//
+// TODAS ESCRIBEN EN LA BITÁCORA (0053). Son las operaciones que cambian a quién
+// pertenece qué y cuánto se le permite gastar; sin rastro, un cambio de tope no
+// se distingue de un error del motor tres semanas después.
+//
+// ESTE MÓDULO NO DECIDE PERMISOS. Los server actions que lo llaman repiten el
+// chequeo de rol adentro (patrón de `dashboard/despacho/page.tsx`), porque el
+// gateo de la UI solo decide si se pinta el formulario.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { esRfcValido, rfcChecksumOk } from './intake/cfdi';
+import { variantesTelefono } from './conv';
+import { destinatarioWhatsApp } from '@/lib/meta/client';
+import { getConfig } from './config';
+import type { PoliticaGasto } from './cuadre/engine';
+import { logger } from '@/lib/logger';
+
+/** Error de captura: el mensaje es para enseñárselo a quien llenó el formulario. */
+export class DatoInvalido extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'DatoInvalido';
+  }
+}
+
+/**
+ * Deja constancia. Best-effort A PROPÓSITO: si la bitácora falla, el alta ya
+ * ocurrió y tirarla dejaría el sistema peor —una flota a medio crear— que sin
+ * el registro. El fallo se loguea para que no se pierda en silencio.
+ */
+async function anotar(
+  tenantId: string | null,
+  accion: string,
+  entidad: string,
+  entidadId: string,
+  detalle?: Record<string, unknown>,
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
+    tenant_id: tenantId,
+    actor_id: actor?.id ?? null,
+    actor_email: actor?.email ?? null,
+    accion,
+    entidad,
+    entidad_id: entidadId,
+    detalle: detalle ?? null,
+  });
+  if (error) logger.warn('bitacora.no_escribio', { accion, err: error.message });
+}
+
+// ── 1. Dar de alta una flota ───────────────────────────────────────────────
+
+export interface NuevaFlota {
+  nombre: string;
+  rfc?: string;
+  ciudad?: string;
+  /** Correo del primer administrador. Sin él la flota nace sin quién entre. */
+  emailAdmin?: string;
+  nombreAdmin?: string;
+}
+
+/**
+ * Crea el tenant y, si se dio correo, su primer `flota_admin`.
+ *
+ * EL RFC SE RECHAZA AQUÍ SI ESTÁ MAL, y es la única oportunidad barata de
+ * hacerlo. `getConfig()` ya detecta un RFC con dígito verificador inválido,
+ * pero para entonces solo puede escribir un `logger.error` y seguir con la
+ * validación de receptor APAGADA: la flota cree que el sistema comprueba a
+ * nombre de quién vienen sus facturas, y no. Un dato mal tecleado el día del
+ * alta se arregla en dos segundos; descubierto tres meses después, ya contaminó
+ * todas las liquidaciones.
+ */
+export async function crearFlota(
+  f: NuevaFlota,
+  actor?: { id?: string; email?: string },
+): Promise<{ tenantId: string; userId?: string }> {
+  const nombre = f.nombre.trim();
+  if (nombre.length < 3) throw new DatoInvalido('El nombre de la flota necesita al menos 3 caracteres.');
+
+  let rfc: string | undefined;
+  if (f.rfc?.trim()) {
+    rfc = f.rfc.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '');
+    if (!esRfcValido(rfc) || !rfcChecksumOk(rfc)) {
+      throw new DatoInvalido(
+        `El RFC "${f.rfc}" no pasa el dígito verificador. Revísalo: con un RFC inválido, ` +
+        `la validación de facturas a nombre de la flota queda apagada y ninguna se rechaza por estar a nombre de otro.`,
+      );
+    }
+  }
+
+  const admin = supabaseAdmin();
+  const { data, error } = await admin
+    .from('tenant')
+    .insert({ nombre, rfc: rfc ?? null, ciudad: f.ciudad?.trim() || null })
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    // El nombre no es único por constraint, pero un duplicado exacto casi
+    // siempre es un doble clic, no dos flotas que se llaman igual.
+    throw new Error(`crearFlota: ${error.message}`);
+  }
+  const tenantId = data?.id as string | undefined;
+  if (!tenantId) throw new Error('crearFlota: el insert no devolvió id');
+
+  await anotar(tenantId, 'flota.creada', 'tenant', tenantId, { nombre, rfc: rfc ?? null }, actor);
+
+  let userId: string | undefined;
+  if (f.emailAdmin?.trim()) {
+    const { provisionarUsuario } = await import('@/lib/auth/provisionar');
+    const r = await provisionarUsuario(tenantId, f.emailAdmin.trim().toLowerCase(), f.nombreAdmin, 'flota_admin');
+    userId = r.userId;
+    await anotar(tenantId, 'usuario.provisionado', 'app_user', userId, { rol: 'flota_admin' }, actor);
+  }
+
+  return { tenantId, userId };
+}
+
+// ── 2. Registrar un operador ───────────────────────────────────────────────
+
+export interface NuevoOperador {
+  nombre: string;
+  telefono: string;
+  numeroEmpleado?: string;
+  licencia?: string;
+  licenciaTipo?: string;
+  /** ISO `AAAA-MM-DD`. */
+  licenciaVence?: string;
+}
+
+/**
+ * Registra un operador y su teléfono de WhatsApp.
+ *
+ * EL TELÉFONO SE COMPRUEBA CONTRA TODAS LAS FLOTAS, no solo contra ésta, y eso
+ * no es exceso de celo: `resolveOperador()` busca por teléfono SIN filtrar por
+ * tenant. Si dos flotas registran el mismo número, la resolución devuelve una
+ * fila arbitraria y con ella se decide el `tenant_id` con el que se escriben el
+ * gasto y la liquidación — dinero de una flota anotado en la de otra, y en
+ * silencio. El propio `conv.ts` lo advierte; aquí es donde se puede impedir.
+ *
+ * Se guarda en la forma que Meta usa para ENVIAR (`52` + 10 dígitos, sin el 1),
+ * que es la que `destinatarioWhatsApp` produce. La lectura sigue aceptando
+ * todas las variantes.
+ */
+export async function crearOperador(
+  tenantId: string,
+  o: NuevoOperador,
+  actor?: { id?: string; email?: string },
+): Promise<string> {
+  const nombre = o.nombre.trim();
+  if (nombre.length < 3) throw new DatoInvalido('El nombre del operador necesita al menos 3 caracteres.');
+
+  const soloDigitos = o.telefono.replace(/[^\d]/g, '');
+  if (soloDigitos.length < 10) {
+    throw new DatoInvalido(`El teléfono "${o.telefono}" tiene ${soloDigitos.length} dígitos; un número mexicano necesita 10 más la lada 52.`);
+  }
+  // 10 dígitos sueltos = número nacional sin lada: se le antepone 52. Con más,
+  // se respeta lo tecleado y solo se quita el "1" que Meta ya no usa al enviar.
+  const telefono = destinatarioWhatsApp(soloDigitos.length === 10 ? `52${soloDigitos}` : soloDigitos);
+
+  const admin = supabaseAdmin();
+  const { data: choque, error: errBusca } = await admin
+    .from('operador')
+    .select('id, tenant_id, nombre, activo')
+    .in('telefono', variantesTelefono(telefono))
+    .limit(2);
+
+  // Fallar cerrado: sin poder comprobar el duplicado NO se da de alta. Seguir
+  // sería justo el caso que esta comprobación existe para impedir.
+  if (errBusca) throw new Error(`crearOperador: no se pudo comprobar el teléfono — ${errBusca.message}`);
+
+  if (choque && choque.length > 0) {
+    const c = choque[0] as { tenant_id: string; nombre: string };
+    throw new DatoInvalido(
+      c.tenant_id === tenantId
+        ? `Ese teléfono ya está registrado en esta flota, a nombre de ${c.nombre}.`
+        : `Ese teléfono ya está registrado en OTRA flota. Dos operadores con el mismo número harían que sus comprobantes se anoten en la flota equivocada.`,
+    );
+  }
+
+  const { data, error } = await admin
+    .from('operador')
+    .insert({
+      tenant_id: tenantId,
+      nombre,
+      telefono,
+      numero_empleado: o.numeroEmpleado?.trim() || null,
+      licencia: o.licencia?.trim() || null,
+      licencia_tipo: o.licenciaTipo?.trim() || null,
+      licencia_vence: o.licenciaVence || null,
+    })
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw new Error(`crearOperador: ${error.message}`);
+  const id = data?.id as string | undefined;
+  if (!id) throw new Error('crearOperador: el insert no devolvió id');
+
+  await anotar(tenantId, 'operador.creado', 'operador', id, { nombre, telefono }, actor);
+  return id;
+}
+
+// ── 3. Editar la política de gastos ────────────────────────────────────────
+
+/**
+ * Guarda la política de la flota en `tenant.config.politica`.
+ *
+ * LEE-MODIFICA-ESCRIBE sobre `config`, nunca `update({config: {politica}})`.
+ * `config` es un jsonb con MÁS cosas dentro (estímulos, hidrocarburos,
+ * validación); escribir el objeto entero con solo la política se lleva por
+ * delante los topes fiscales, y el motor los lee con `if (x != null)` — así que
+ * no truena: se SALTA el bloque. Es exactamente el bug que documenta
+ * `fusionarConfig`, y su modo de fallo es una liquidación que declara todo
+ * deducible sin un solo error en el log.
+ *
+ * `politica_gasto` (la tabla) está muerta desde hace tiempo. La política viva es
+ * ésta.
+ */
+export async function guardarPolitica(
+  tenantId: string,
+  politica: PoliticaGasto[],
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  if (!Array.isArray(politica)) throw new DatoInvalido('La política tiene que ser una lista de conceptos.');
+
+  for (const p of politica) {
+    if (!p.concepto?.trim()) throw new DatoInvalido('Hay un renglón de la política sin concepto.');
+    if (p.topeMonto != null) {
+      if (!Number.isFinite(p.topeMonto) || p.topeMonto < 0) {
+        throw new DatoInvalido(`El tope de "${p.concepto}" tiene que ser un número mayor o igual a 0.`);
+      }
+      // Un tope de 0 es una decisión válida (no se permite el concepto), pero
+      // se distingue de "sin tope", que es `undefined`. Escribir 0 creyendo que
+      // es "sin límite" prohibiría el gasto entero.
+    }
+  }
+
+  const admin = supabaseAdmin();
+  const { data, error: errLee } = await admin.from('tenant').select('config').eq('id', tenantId).maybeSingle();
+  if (errLee) throw new Error(`guardarPolitica: no se pudo leer la config — ${errLee.message}`);
+
+  const actual = (data?.config as Record<string, unknown> | null) ?? {};
+  const nueva = { ...actual, politica };
+
+  const { error } = await admin.from('tenant').update({ config: nueva }).eq('id', tenantId);
+  if (error) throw new Error(`guardarPolitica: ${error.message}`);
+
+  await anotar(tenantId, 'politica.editada', 'tenant', tenantId, { conceptos: politica.length }, actor);
+}
+
+/** La política vigente de la flota, ya fusionada con la base. */
+export async function politicaVigente(tenantId: string): Promise<PoliticaGasto[]> {
+  return (await getConfig(tenantId)).politica;
+}
+
+// ── 4. Reabrir un viaje liquidado ──────────────────────────────────────────
+
+/**
+ * Reabre un viaje ya liquidado para que vuelva a aceptar comprobantes.
+ *
+ * NO BASTA CAMBIAR `viaje.estatus`, y esto costó cuatro "ya lo reabrí" que no
+ * reabrían nada: el trigger de la 0036 mira si EXISTE una fila de `liquidacion`,
+ * no el estatus. Mientras esa fila esté, no entra ni un gasto. La fila se
+ * regenera sola al próximo `listo` (es un upsert).
+ *
+ * ES DESTRUCTIVO y por eso pide `confirmar`. Se pierde la liquidación anterior
+ * —incluida la liga a su PDF— y ese PDF pudo haberse entregado ya. Quien reabre
+ * tiene que saber que el papel que el operador tiene en la mano dejará de
+ * cuadrar con lo que el sistema diga después.
+ */
+export async function reabrirViaje(
+  tenantId: string,
+  folio: string,
+  confirmar: boolean,
+  actor?: { id?: string; email?: string },
+): Promise<{ pdfPerdido: string | null }> {
+  if (!confirmar) {
+    throw new DatoInvalido('Reabrir borra la liquidación anterior y su PDF. Hay que confirmarlo explícitamente.');
+  }
+
+  const admin = supabaseAdmin();
+  const { data: viaje, error: errViaje } = await admin
+    .from('viaje')
+    .select('id, estatus')
+    .eq('tenant_id', tenantId)   // el tenant SIEMPRE en el where: el folio no es único global
+    .eq('folio', folio)
+    .maybeSingle();
+
+  if (errViaje) throw new Error(`reabrirViaje: ${errViaje.message}`);
+  if (!viaje) throw new DatoInvalido(`No existe el viaje ${folio} en esta flota.`);
+
+  const viajeId = viaje.id as string;
+
+  const { data: liq } = await admin
+    .from('liquidacion')
+    .select('id, pdf_url')
+    .eq('viaje_id', viajeId)
+    .maybeSingle();
+
+  const pdfPerdido = (liq?.pdf_url as string | null) ?? null;
+
+  // 1) La fila de liquidación PRIMERO. Es la que el trigger mira.
+  if (liq) {
+    const { error } = await admin.from('liquidacion').delete().eq('viaje_id', viajeId);
+    if (error) throw new Error(`reabrirViaje: no se pudo borrar la liquidación — ${error.message}`);
+  }
+
+  // 2) El estatus después: si el paso 1 falla, el viaje se queda liquidado y
+  //    coherente, en vez de abierto pero incapaz de recibir un gasto.
+  const { error: errEstatus } = await admin
+    .from('viaje')
+    .update({ estatus: 'abierto' })
+    .eq('id', viajeId);
+  if (errEstatus) throw new Error(`reabrirViaje: no se pudo abrir el viaje — ${errEstatus.message}`);
+
+  // 3) La conversación de WhatsApp, para que el operador no siga hablando con
+  //    el hilo de un viaje que ya se cerró.
+  const { error: errConv } = await admin
+    .from('wa_conversacion')
+    .update({ viaje_id: null })
+    .eq('viaje_id', viajeId);
+  if (errConv) logger.warn('reabrirViaje.conversacion', { folio, err: errConv.message });
+
+  await anotar(tenantId, 'viaje.reabierto', 'viaje', viajeId, { folio, pdfPerdido }, actor);
+  return { pdfPerdido };
+}
