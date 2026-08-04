@@ -10,7 +10,9 @@ import ChatFlota from './chat';
 import type { DashboardKpis, Acreditables } from '@/lib/cuadra/analytics';
 import { mxn } from '@/lib/formato';
 
-const ANCHO = 300;
+// El ancho vive en `marco.ts`, compartido con /admin: eran 300 aquí y 276
+// allá, así que el asistente cambiaba de tamaño al saltar de panel.
+import { ANCHO_ASISTENTE, MARCO_ASISTENTE, MARCO_ASISTENTE_EXPANDIDO } from '../marco';
 const DURACION = '480ms cubic-bezier(0.22, 1, 0.36, 1)';
 
 interface Datos {
@@ -41,6 +43,16 @@ export default function RailAsistente() {
   const [datos, setDatos] = useState<Datos | null>(null);
   const [cargando, setCargando] = useState(true);
 
+  // La marca que el CSS lee para retirar la columna del centro (globals.css).
+  // Se limpia al desmontar: si el rail desaparece con la marca puesta, el
+  // contenido se queda invisible para siempre y la página se ve vacía.
+  useEffect(() => {
+    const raiz = document.documentElement;
+    if (expandido) raiz.dataset.asistente = 'expandido';
+    else delete raiz.dataset.asistente;
+    return () => { delete raiz.dataset.asistente; };
+  }, [expandido]);
+
   // Sin `setCargando(true)` síncrono aquí: llamar setState en el cuerpo del
   // efecto encadena un render de más (regla `react-hooks/set-state-in-effect`).
   // El estado ya arranca en `true`, y al cambiar de tenant el `finally` lo
@@ -70,20 +82,20 @@ export default function RailAsistente() {
   return (
     // EXPANDIDO SE SALE DEL FLUJO, no crece dentro de él.
     //
-    // Antes pedía `width: 100%` siendo hermano flex del sidebar (208px,
-    // `shrink-0`) y del contenido: 208 + 100% + gaps no cabe, el rail se
-    // desbordaba a la derecha y el botón de contraer —pegado al borde con
-    // `ml-auto`— quedaba FUERA de la pantalla. El síntoma no era "no
-    // responde" sino "no lo veo", y por eso no se podía cerrar.
+    // Antes pedía `width: 100%` siendo hermano flex del sidebar y del
+    // contenido: sidebar + 100% + gaps no cabe, el rail se desbordaba a la
+    // derecha y el botón de contraer —pegado al borde con `ml-auto`— quedaba
+    // FUERA de la pantalla. El síntoma no era "no responde" sino "no lo veo",
+    // y por eso no se podía cerrar.
     //
-    // `fixed inset-3` lo saca del cálculo del flex: ocupa el viewport, que
-    // es lo que "pantalla completa" quiere decir, y el botón siempre cae
-    // dentro. z-20 para quedar sobre el contenido (z-10 en chrome.tsx).
+    // Expandido se vuelve `fixed`, así sale del cálculo del flex: ocupa el
+    // viewport, que es lo que "pantalla completa" quiere decir, y el botón
+    // siempre cae dentro (ver MARCO_ASISTENTE_EXPANDIDO en marco.ts).
     <aside
       className={`glass-panel shrink-0 hidden xl:flex flex-col ${
-        expandido ? 'fixed inset-3 z-20' : 'sticky top-4 self-start h-[calc(100dvh-2rem)]'
+        expandido ? MARCO_ASISTENTE_EXPANDIDO : MARCO_ASISTENTE
       }`}
-      style={expandido ? undefined : { width: ANCHO, transition: `width ${DURACION}` }}
+      style={expandido ? undefined : { width: ANCHO_ASISTENTE, transition: `width ${DURACION}` }}
     >
       <div className="flex items-center gap-2 px-3.5 pt-3.5 shrink-0">
         <Sparkles width={14} height={14} strokeWidth={1.75} />

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import Fondo from '../fondo';
+import { MARCO_FILA, MARCO_SIDEBAR, MARCO_COLUMNA, CLASE_COLUMNA_CENTRO } from '../marco';
 import SidebarNav from './sidebar-nav';
 import AvisoRol from './aviso-rol';
 import RailAsistente from './rail';
@@ -42,11 +43,8 @@ export default function DashboardChrome({
   return (
     <div className="min-h-dvh" style={{ fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>
       <Fondo />
-      {/* `gap-3 p-3` (antes 4): con el rail fijo en TODAS las páginas la
-          columna del centro perdió ~300px, así que cada píxel de margen que
-          no aporta se recorta. El sidebar baja de 232 a 208 por lo mismo. */}
-      <div className="min-h-dvh flex items-start gap-3 p-3 relative z-10">
-        <aside className="glass-panel w-[64px] lg:w-[208px] shrink-0 flex flex-col h-[calc(100dvh-1.5rem)] sticky top-3 self-start overflow-hidden">
+            <div className={MARCO_FILA}>
+        <aside className={MARCO_SIDEBAR}>
           <div className="px-3 py-3 flex items-center justify-center lg:justify-start gap-1.5">
             <Logo alto="h-[18px]" />
             <span className="hidden lg:inline text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
@@ -81,7 +79,7 @@ export default function DashboardChrome({
           </div>
         </aside>
 
-        <div className="flex-1 min-w-0 h-[calc(100dvh-1.5rem)] overflow-y-auto">
+        <div className={`${MARCO_COLUMNA} ${CLASE_COLUMNA_CENTRO}`}>
           <AvisoRol rolReal={rol} />
           {children}
         </div>

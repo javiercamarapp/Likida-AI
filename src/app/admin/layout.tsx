@@ -10,6 +10,7 @@ import PerfilMenu from './perfil';
 import SidebarNav from './sidebar-nav';
 import SidebarNavIconos from './sidebar-nav-iconos';
 import Fondo from '../fondo';
+import { MARCO_FILA, MARCO_SIDEBAR } from '../marco';
 import CommandPalette from './command-palette';
 import BuscadorTrigger from './buscador-trigger';
 import { Logo } from '../logo';
@@ -56,14 +57,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           `sticky` del header cuando el navegador recalcula al hacer scroll.
           `dvh` (dynamic viewport height) sigue el viewport visual real. */}
       <CommandPalette />
-      <div className="min-h-dvh flex items-start gap-4 p-4 relative z-10">
+      <div className={MARCO_FILA}>
         {/* `w-[72px] lg:w-[232px]` — colapsa a solo íconos entre `md` y
             `lg` (§G del complemento: "Sidebar colapsa a íconos en
             pantallas medianas"), responsive por CSS, no un toggle manual.
             `SidebarNav` (con texto, acordeón) se oculta con `hidden
             lg:block`; `SidebarNavIconos` (lista plana con tooltip) es su
             reverso `lg:hidden`. */}
-        <aside className="glass-panel w-[72px] lg:w-[232px] shrink-0 flex flex-col h-[calc(100dvh-2rem)] sticky top-4 self-start overflow-hidden">
+        <aside className={MARCO_SIDEBAR}>
           <div className="px-4 py-4 flex items-center justify-center lg:justify-start gap-2">
             <Logo alto="h-5" />
             <span className="hidden lg:inline text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
