@@ -3,6 +3,7 @@ import { getDocumentos, type DocumentoRow } from '@/lib/cuadra/analytics';
 import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { fechaMx } from '../formato';
 import { KpiTile, EstadoVacio, StatusPill, type Estado } from '../../admin/ui/kit';
 
@@ -43,7 +44,11 @@ export default async function DocumentosPage({
   searchParams: Promise<{ vista?: string; tenant?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId } = await resolverTenantEfectivo('/dashboard/documentos', sp);
+  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/documentos', sp);
+  // Área `operacion`: el encargado entra. El importe del comprobante es dinero y
+  // la matriz de roles (0044) no se lo da — puede ver QUÉ documentos llegaron y
+  // si el SAT los valida, que es su trabajo, sin ver por cuánto son.
+  const veDinero = puedeVerArea(rol, 'dinero');
   const docs = await safe<DocumentoRow[]>(() => getDocumentos(tenantId));
 
   const conCfdi = docs?.filter((d) => d.cfdiUuid).length ?? 0;
@@ -106,7 +111,7 @@ export default async function DocumentosPage({
                       <th className="px-5 py-2.5 font-medium">Fecha</th>
                       <th className="px-5 py-2.5 font-medium">Folio</th>
                       <th className="px-5 py-2.5 font-medium">RFC emisor</th>
-                      <th className="px-5 py-2.5 font-medium text-right">Importe</th>
+                      {veDinero && <th className="px-5 py-2.5 font-medium text-right">Importe</th>}
                       <th className="px-5 py-2.5 font-medium text-right">Confianza</th>
                       <th className="px-5 py-2.5 font-medium">SAT</th>
                     </tr>
@@ -121,7 +126,7 @@ export default async function DocumentosPage({
                           <td className="px-5 py-3" style={{ color: 'var(--muted)' }}>{fechaMx(d.fecha)}</td>
                           <td className="px-5 py-3 font-mono text-xs" style={{ color: 'var(--muted)' }}>{d.folio ?? '—'}</td>
                           <td className="px-5 py-3 font-mono text-xs" style={{ color: 'var(--muted)' }}>{d.rfcEmisor ?? '—'}</td>
-                          <td className="px-5 py-3 text-right tabular">{mxn(d.monto)}</td>
+                          {veDinero && <td className="px-5 py-3 text-right tabular">{mxn(d.monto)}</td>}
                           <td className="px-5 py-3 text-right tabular" style={baja ? { color: 'var(--warn)' } : undefined}>
                             {d.ocrConfianza === null ? '—' : `${Math.round(d.ocrConfianza * 100)}%`}
                           </td>
