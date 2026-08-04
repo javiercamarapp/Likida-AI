@@ -407,6 +407,13 @@ export interface OperadorDetalle {
   /** % de anticipo comprobado, o `null` si nunca recibió anticipo (dividir
    *  entre cero daría 0% y se leería como "no comprobó nada"). */
   pctComprobado: number | null;
+  /** Licencia del chofer (0053). `null` = NO CAPTURADA, que no es lo mismo que
+   *  vencida: la pantalla dice "sin registrar" y no marca a nadie. Inventar una
+   *  fecha haría salir vigente o vencido a quien no lo es. */
+  licencia: string | null;
+  licenciaTipo: string | null;
+  /** ISO `AAAA-MM-DD`. */
+  licenciaVence: string | null;
 }
 
 /** Operadores con su anticipo abierto y qué tanto comprobaron — el cruce que
@@ -415,8 +422,12 @@ export interface OperadorDetalle {
 export async function getOperadoresDetalle(tenantId: string): Promise<OperadorDetalle[]> {
   const admin = supabaseAdmin();
   const [ops, viajes, liqs] = await Promise.all([
-    traerTodo<{ id: unknown; nombre: unknown; telefono: unknown; numero_empleado: unknown; activo: unknown }>(
-      (desde, hasta) => admin.from('operador').select('id, nombre, telefono, numero_empleado, activo')
+    traerTodo<{
+      id: unknown; nombre: unknown; telefono: unknown; numero_empleado: unknown; activo: unknown;
+      licencia: unknown; licencia_tipo: unknown; licencia_vence: unknown;
+    }>(
+      (desde, hasta) => admin.from('operador')
+        .select('id, nombre, telefono, numero_empleado, activo, licencia, licencia_tipo, licencia_vence')
         .eq('tenant_id', tenantId).order('id').range(desde, hasta),
       'getOperadoresDetalle.operador',
     ),
@@ -460,6 +471,9 @@ export async function getOperadoresDetalle(tenantId: string): Promise<OperadorDe
       anticipoTotal: round2(a.anticipo),
       comprobadoTotal: round2(a.comprobado),
       pctComprobado: a.anticipo > 0 ? Math.round((a.comprobado / a.anticipo) * 100) : null,
+      licencia: (o.licencia as string) || null,
+      licenciaTipo: (o.licencia_tipo as string) || null,
+      licenciaVence: (o.licencia_vence as string) || null,
     };
   }).sort((x, y) => y.viajes - x.viajes);
 }

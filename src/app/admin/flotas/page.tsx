@@ -1,12 +1,53 @@
 import Link from 'next/link';
+import { revalidatePath } from 'next/cache';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
-import { Truck, ExternalLink } from 'lucide-react';
+import { Truck, ExternalLink, Plus } from 'lucide-react';
+import { requireSuperadmin } from '@/lib/auth/guard';
+import { crearFlota, mensajeParaPantalla } from '@/lib/cuadra/administracion';
 import ContadorRetro from '../contador-retro';
 import { HBars } from '../ui/graficas';
 import { ChartCard, EstadoVacio } from '../ui/kit';
+import { FormaConAviso, Campo, type ResultadoAccion } from '../ui/forma';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Dar de alta una flota — hasta hoy, un INSERT tecleado a mano.
+ *
+ * Repite `requireSuperadmin` adentro aunque el layout de /admin ya gatee: un
+ * server action es su propio endpoint y no pasa por el layout. Va FUERA del
+ * try porque redirige lanzando, y atraparlo convertiría "no eres superadmin"
+ * en un aviso rojo dentro de una consola que no debería estar sirviéndose.
+ */
+async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  'use server';
+  const s = await requireSuperadmin();
+
+  const nombre = String(fd.get('nombre') ?? '').trim();
+  const emailAdmin = String(fd.get('emailAdmin') ?? '').trim();
+  try {
+    const { userId } = await crearFlota(
+      {
+        nombre,
+        rfc: String(fd.get('rfc') ?? ''),
+        ciudad: String(fd.get('ciudad') ?? ''),
+        emailAdmin,
+        nombreAdmin: String(fd.get('nombreAdmin') ?? ''),
+      },
+      { id: s.userId },
+    );
+
+    revalidatePath('/admin/flotas');
+    return {
+      ok: userId
+        ? `"${nombre}" dada de alta, con ${emailAdmin} como administrador. Ya puede entrar a su panel.`
+        : `"${nombre}" dada de alta. Todavía no tiene a nadie que pueda entrar: falta darle de alta un usuario.`,
+    };
+  } catch (e) {
+    return { error: mensajeParaPantalla(e, 'dar de alta la flota') };
+  }
+}
 
 /**
  * Flotas / Clientes — versión dedicada y con más aire de la sección
@@ -111,6 +152,29 @@ export default async function FlotasPage() {
             </ChartCard>
           </div>
         )}
+
+        <section className="px-5 pt-5 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex items-center gap-2 mb-3">
+            <Plus width={15} height={15} strokeWidth={1.75} />
+            <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
+              Dar de alta una flota
+            </h2>
+          </div>
+          <FormaConAviso accion={accionCrearFlota} boton="Dar de alta">
+            <Campo nombre="nombre" etiqueta="Nombre de la flota" requerido placeholder="Transportes Innovativos" />
+            <Campo nombre="rfc" etiqueta="RFC" placeholder="Opcional"
+              ayuda="Se rechaza si no pasa el dígito verificador." />
+            <Campo nombre="ciudad" etiqueta="Ciudad" placeholder="Opcional" />
+            <Campo nombre="emailAdmin" etiqueta="Correo del administrador" tipo="email" placeholder="dueño@flota.mx"
+              ayuda="Sin él, la flota nace sin quién pueda entrar." />
+            <Campo nombre="nombreAdmin" etiqueta="Nombre del administrador" placeholder="Opcional" />
+          </FormaConAviso>
+          <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
+            El RFC se valida en el alta porque es la única oportunidad barata: con uno inválido, el motor apaga la
+            comprobación de a nombre de quién vienen las facturas y ninguna se rechaza por estar a nombre de otro. La
+            flota creería que se está revisando.
+          </p>
+        </section>
 
         <div className="px-5 pt-4 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <EstadoVacio>
