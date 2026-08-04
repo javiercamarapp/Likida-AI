@@ -50,6 +50,10 @@ export interface FacturaSaas {
   moneda: string;
   estado: 'pendiente' | 'pagada' | 'fallida' | 'cancelada';
   pagadaEn: string | null;
+  /** Donde el cliente ve la CLABE para transferir. */
+  urlPago: string | null;
+  /** Folio fiscal. `null` = cobrada pero SIN TIMBRAR: pagó y no puede deducir. */
+  cfdiUuid: string | null;
 }
 
 function fila<T>(r: { data: unknown; error: { message: string } | null }, consulta: string): T | null {
@@ -116,7 +120,7 @@ export async function getSuscripcion(tenantId: string): Promise<Suscripcion | nu
 export async function getFacturasSaas(tenantId: string, limite = 12): Promise<FacturaSaas[]> {
   const r = await supabaseAdmin()
     .from('factura_saas')
-    .select('id, periodo_inicio, periodo_fin, monto, moneda, estado, pagada_en')
+    .select('id, periodo_inicio, periodo_fin, monto, moneda, estado, pagada_en, url_pago, cfdi_uuid')
     .eq('tenant_id', tenantId)
     .order('periodo_fin', { ascending: false })
     .limit(limite);
@@ -130,6 +134,8 @@ export async function getFacturasSaas(tenantId: string, limite = 12): Promise<Fa
     moneda: (f.moneda as string) ?? 'MXN',
     estado: f.estado as FacturaSaas['estado'],
     pagadaEn: (f.pagada_en as string) || null,
+    urlPago: (f.url_pago as string) || null,
+    cfdiUuid: (f.cfdi_uuid as string) || null,
   }));
 }
 
@@ -334,6 +340,7 @@ export async function aplicarFactura(datos: {
   monto: number;
   moneda: string;
   pagada: boolean;
+  urlPago?: string | null;
 }): Promise<void> {
   const { error } = await supabaseAdmin().from('factura_saas').upsert(
     {
@@ -345,6 +352,7 @@ export async function aplicarFactura(datos: {
       estado: datos.pagada ? 'pagada' : 'fallida',
       pagada_en: datos.pagada ? new Date().toISOString() : null,
       stripe_invoice_id: datos.stripeInvoiceId,
+      url_pago: datos.urlPago ?? null,
     },
     { onConflict: 'stripe_invoice_id' },
   );

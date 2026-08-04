@@ -1389,3 +1389,40 @@ begin
   raise exception E'EVENTO_STRIPE  filas-que-ve-flota_admin=%  indice-price-unico=%   (esperado 0 / true)',
     n_eventos, hay_indice;
 end $$;
+
+-- ── 35. Los datos fiscales del CFDI son catálogo del SAT, no texto libre (mig. 0056) ──
+--
+-- El CFDI 4.0 exige del receptor RFC, razón social, régimen, código postal y
+-- uso. Los dos últimos son CLAVES de catálogo del SAT: una clave inventada la
+-- rechaza el PAC al timbrar —cuando ya cobraste— o peor, la acepta y emite un
+-- comprobante que el contador del cliente no puede usar.
+--
+-- Se comprueba que los CHECK rechacen de verdad, y que `factura_saas` no pueda
+-- quedar "timbrada" a medias: un UUID sin fecha, o al revés, haría ver como
+-- facturado un cobro que no lo está.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid; regimen_malo boolean := false; cp_malo boolean := false; timbre_malo boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF FISCAL') returning id into t;
+
+  begin
+    update tenant set regimen_fiscal = '999' where id = t;
+  exception when check_violation then regimen_malo := true;
+  end;
+
+  begin
+    update tenant set codigo_postal_fiscal = 'CP970' where id = t;
+  exception when check_violation then cp_malo := true;
+  end;
+
+  begin
+    insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, estado, cfdi_uuid)
+      values (t, current_date, current_date, 100, 'pagada', 'uuid-sin-fecha');
+  exception when check_violation then timbre_malo := true;
+  end;
+
+  raise exception E'DATOS_FISCALES  regimen-invalido-rechazado=%  cp-invalido-rechazado=%  timbre-incoherente-rechazado=%   (esperado true / true / true)',
+    regimen_malo, cp_malo, timbre_malo;
+end $$;
