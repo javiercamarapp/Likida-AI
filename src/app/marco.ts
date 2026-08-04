@@ -28,8 +28,15 @@ export const MARCO_COLUMNA = 'flex-1 min-w-0 h-[calc(100dvh-2rem)] overflow-y-au
 /** Ancho del asistente contraído, en px. */
 export const ANCHO_ASISTENTE = 276;
 
-/** El asistente contraído: pegado a la derecha, con su propio alto. */
-export const MARCO_ASISTENTE = 'sticky top-4 self-start h-[calc(100dvh-2rem)]';
+/** El asistente contraído: pegado a la derecha, con su propio alto.
+ *
+ *  SIN `top-`: lo pone cada llamador porque los dos paneles lo montan a
+ *  distinta profundidad. En /dashboard es hermano directo de la fila con
+ *  `p-4`, así que necesita `top-4` para alinear con el sidebar. En /admin
+ *  vive DENTRO de la columna de contenido, que ya trae ese padding, así que
+ *  un `top-4` ahí lo baja 16 px de más y queda desalineado con el sidebar —
+ *  que es exactamente lo que pasó al unificar las medidas. */
+export const MARCO_ASISTENTE = 'sticky self-start h-[calc(100dvh-2rem)]';
 
 /** El asistente expandido SALE del flujo (ver rail.tsx): pedir `width: 100%`
  *  siendo hermano flex del sidebar desbordaba el panel y se llevaba el botón

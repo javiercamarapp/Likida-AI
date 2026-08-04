@@ -93,7 +93,7 @@ export default function RailAsistente() {
     // siempre cae dentro (ver MARCO_ASISTENTE_EXPANDIDO en marco.ts).
     <aside
       className={`glass-panel shrink-0 hidden xl:flex flex-col ${
-        expandido ? MARCO_ASISTENTE_EXPANDIDO : MARCO_ASISTENTE
+        expandido ? MARCO_ASISTENTE_EXPANDIDO : `${MARCO_ASISTENTE} top-4`
       }`}
       style={expandido ? undefined : { width: ANCHO_ASISTENTE, transition: `width ${DURACION}` }}
     >

@@ -25,3 +25,20 @@ export function fechaLarga(fecha: Date = new Date()): string {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ_MX,
   });
 }
+
+/**
+ * La hora del servidor en milisegundos.
+ *
+ * Existe para que las páginas server no llamen `Date.now()` directo en el
+ * render: `react-hooks/purity` lo marca como impuro —con razón para un
+ * componente cliente, que puede re-renderizar y dar otro resultado—, pero una
+ * página `force-dynamic` se construye una vez por petición y ahí leer el
+ * reloj es exactamente lo correcto. Mismo patrón que `saludo()` y
+ * `fechaLarga()`, que llevan haciéndolo desde el principio.
+ *
+ * Lo que NO debe hacer es llamarse desde un componente cliente: ahí la
+ * objeción del linter sí aplica.
+ */
+export function ahoraMs(): number {
+  return Date.now();
+}
