@@ -66,7 +66,7 @@ export default function BotonAceptar({
         {pendiente ? 'Registrando…' : 'Acepto este viaje'}
       </button>
 
-      <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
+      <p className="text-base text-center" style={{ color: 'var(--muted)' }}>
         Tu oficina ve que ya lo aceptaste y deja de insistirte.
       </p>
     </form>

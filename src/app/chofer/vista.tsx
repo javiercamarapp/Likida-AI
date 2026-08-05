@@ -77,7 +77,7 @@ export function Pastilla({ tono, children }: { tono: 'ok' | 'warn' | 'bad' | 'ne
   }[tono];
   return (
     <span
-      className="text-sm font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5 shrink-0"
+      className="text-base font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5 shrink-0"
       style={{ background: c.bg, color: c.fg }}
     >
       {children}
@@ -96,7 +96,7 @@ export function Cifra({
 }) {
   return (
     <div>
-      <div className="text-sm" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
+      <div className="text-base" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
       <div
         className={`${tamano === 'L' ? 'text-4xl' : 'text-2xl'} font-semibold tracking-tight tabular mt-0.5`}
         style={{ color: tono ?? 'var(--ink)' }}
@@ -114,7 +114,7 @@ export function ViajeDeHoy({ viaje, unidad }: { viaje: ViajeChofer; unidad: stri
     <Tarjeta>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm" style={{ color: 'var(--muted)' }}>Folio</div>
+          <div className="text-base" style={{ color: 'var(--muted)' }}>Folio</div>
           <div className="text-xl font-semibold tabular truncate">{viaje.folio ?? 'Sin folio'}</div>
         </div>
         <Pastilla tono={viaje.estatus === 'abierto' ? 'ok' : 'neutral'}>
@@ -136,14 +136,14 @@ export function ViajeDeHoy({ viaje, unidad }: { viaje: ViajeChofer; unidad: stri
 
       <div className="mt-5 grid grid-cols-2 gap-4">
         <div>
-          <div className="text-sm" style={{ color: 'var(--muted)' }}>Unidad</div>
+          <div className="text-base" style={{ color: 'var(--muted)' }}>Unidad</div>
           <div className="text-lg font-medium tabular flex items-center gap-2 mt-0.5">
             <Truck width={18} height={18} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
             {unidad ?? <span style={{ color: 'var(--faint)' }}>Sin capturar</span>}
           </div>
         </div>
         <div>
-          <div className="text-sm" style={{ color: 'var(--muted)' }}>Anticipo</div>
+          <div className="text-base" style={{ color: 'var(--muted)' }}>Anticipo</div>
           <div className="text-lg font-medium tabular mt-0.5">
             {viaje.anticipo > 0
               ? mxn(viaje.anticipo)
@@ -184,35 +184,44 @@ export function ViajeAceptado({ cuando }: { cuando: string | null }) {
 // ── 2. Mi liquidación en vivo ────────────────────────────────────────────
 
 /**
- * El anillo de comprobado contra anticipo.
+ * La barra de comprobado contra anticipo.
  *
- * SIN ANTICIPO NO SE DIBUJA ARCO. Un anillo vacío se lee como "llevas 0%", y
- * lo que pasa es otra cosa: que nadie capturó contra qué medir. Ese caso lo
- * atiende `SaldoSinAnticipo`, con palabras.
+ * ── POR QUÉ BARRA Y NO ANILLO ────────────────────────────────────────────
+ *
+ * La primera versión era un anillo con el monto en medio, y se descartó
+ * MIRÁNDOLA: con el viaje real VJ-2026-0848 ($28,477.15 comprobados) el número
+ * se salía del hueco del anillo y se montaba encima del trazo. Un anillo tiene
+ * un ancho útil fijo, y aquí adentro va una cifra en pesos que puede medir seis
+ * dígitos o tres. La barra crece a lo ancho de la tarjeta y el monto va afuera,
+ * en su renglón, donde ninguna cifra lo puede reventar.
+ *
+ * SIN ANTICIPO NO SE DIBUJA BARRA. Una barra vacía se lee como "llevas 0%", y
+ * lo que pasa es otra cosa: que nadie capturó contra qué medir.
  */
-export function Anillo({ avance, centro, pie }: { avance: number; centro: string; pie: string }) {
-  const R = 68;
-  const GROSOR = 16;
-  const circunferencia = 2 * Math.PI * R;
-  // Se topa en 1 para DIBUJAR (un arco de 1.5 vueltas no se lee), pero el
-  // porcentaje de abajo va sin topar: comprobar de más es información.
-  const pintado = Math.min(Math.max(avance, 0), 1) * circunferencia;
-
+export function Barra({ avance }: { avance: number }) {
+  const pct = Math.min(Math.max(avance, 0), 1) * 100;
+  const pasado = avance > 1;
   return (
-    <div className="relative w-[180px] h-[180px] mx-auto">
-      <svg width="180" height="180" viewBox="0 0 180 180" role="img" aria-label={`${centro}, ${pie}`}>
-        <circle cx="90" cy="90" r={R} fill="none" stroke="var(--line2)" strokeWidth={GROSOR} />
-        <circle
-          cx="90" cy="90" r={R} fill="none"
-          stroke="var(--marca)" strokeWidth={GROSOR} strokeLinecap="round"
-          strokeDasharray={`${pintado} ${circunferencia}`}
-          transform="rotate(-90 90 90)"
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <div className="text-3xl font-semibold tracking-tight tabular">{centro}</div>
-        <div className="text-sm mt-1" style={{ color: 'var(--muted)' }}>{pie}</div>
-      </div>
+    <div
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(pct)}
+      aria-valuetext={`${Math.round(avance * 100)}% del anticipo`}
+      className="w-full rounded-full overflow-hidden"
+      style={{ height: 16, background: 'var(--line2)' }}
+    >
+      <div
+        className="h-full rounded-full"
+        style={{
+          width: `${pct}%`,
+          // Rayado cuando se pasó del anticipo: la barra llena y la barra
+          // desbordada se verían idénticas, y no son lo mismo.
+          background: pasado
+            ? 'repeating-linear-gradient(45deg, var(--marca) 0 8px, var(--g4) 8px 16px)'
+            : 'var(--marca)',
+        }}
+      />
     </div>
   );
 }
@@ -222,16 +231,17 @@ export function SaldoEnVivo({ r }: { r: ResumenLiquidacion }) {
 
   return (
     <Tarjeta>
-      {conAnticipo ? (
-        <Anillo
-          avance={r.avance!}
-          centro={mxn(r.comprobado)}
-          pie={`de ${mxn(r.anticipo)}`}
-        />
-      ) : (
-        <div className="text-center py-2">
-          <div className="text-4xl font-semibold tracking-tight tabular">{mxn(r.comprobado)}</div>
-          <div className="text-base mt-1" style={{ color: 'var(--muted)' }}>comprobado</div>
+      <div className="text-base" style={{ color: 'var(--muted)' }}>Llevas comprobado</div>
+      <div className="text-4xl font-semibold tracking-tight tabular mt-1">{mxn(r.comprobado)}</div>
+      <div className="text-base mt-1" style={{ color: 'var(--muted)' }}>
+        {conAnticipo
+          ? <>de {mxn(r.anticipo)} de anticipo · <span className="tabular">{Math.round(r.avance! * 100)}%</span></>
+          : 'sin anticipo registrado contra qué medirlo'}
+      </div>
+
+      {conAnticipo && (
+        <div className="mt-4">
+          <Barra avance={r.avance!} />
         </div>
       )}
 
@@ -293,7 +303,7 @@ export function FilaComprobante({ c }: { c: ComprobanteChofer }) {
 
       <div className="min-w-0 flex-1">
         <div className="text-base font-medium truncate">{etiquetaConcepto(c.concepto)}</div>
-        <div className="text-sm mt-0.5 tabular" style={{ color: 'var(--muted)' }}>
+        <div className="text-base mt-0.5 tabular" style={{ color: 'var(--muted)' }}>
           {fechaMx(c.fecha)}
         </div>
       </div>
@@ -329,7 +339,10 @@ export function FilaViaje({ v }: { v: ViajeHistorial }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-base font-semibold tabular truncate">{v.folio ?? 'Sin folio'}</div>
-          <div className="text-sm mt-0.5 truncate" style={{ color: 'var(--muted)' }}>
+          {/* La ruta ENVUELVE, no se recorta: con `truncate`, "Mérida, YUC →
+              Campeche, CAM" salía como "Mérida, YUC → Campeche,…" y el destino
+              —que es la mitad del renglón— quedaba adivinándose. */}
+          <div className="text-base mt-0.5 leading-snug" style={{ color: 'var(--muted)' }}>
             {v.origen && v.destino ? `${v.origen} → ${v.destino}` : 'Ruta sin capturar'}
           </div>
         </div>
@@ -338,7 +351,7 @@ export function FilaViaje({ v }: { v: ViajeHistorial }) {
         </Pastilla>
       </div>
 
-      <div className="mt-3 text-sm tabular" style={{ color: 'var(--muted)' }}>
+      <div className="mt-3 text-base tabular" style={{ color: 'var(--muted)' }}>
         {fechaMx(v.fechaInicio)}
       </div>
 
@@ -346,11 +359,11 @@ export function FilaViaje({ v }: { v: ViajeHistorial }) {
         <>
           <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-3" style={{ borderColor: 'var(--line)' }}>
             <div>
-              <div className="text-sm" style={{ color: 'var(--muted)' }}>Comprobado</div>
+              <div className="text-base" style={{ color: 'var(--muted)' }}>Comprobado</div>
               <div className="text-lg font-medium tabular">{mxn(liq.comprobado)}</div>
             </div>
             <div>
-              <div className="text-sm" style={{ color: 'var(--muted)' }}>Anticipo</div>
+              <div className="text-base" style={{ color: 'var(--muted)' }}>Anticipo</div>
               <div className="text-lg font-medium tabular">{mxn(liq.anticipo)}</div>
             </div>
           </div>
@@ -376,7 +389,7 @@ export function FilaViaje({ v }: { v: ViajeHistorial }) {
               Ver mi liquidación (PDF)
             </a>
           ) : (
-            <p className="mt-4 text-sm" style={{ color: 'var(--faint)' }}>
+            <p className="mt-4 text-base" style={{ color: 'var(--faint)' }}>
               Esta liquidación todavía no tiene PDF.
             </p>
           )}

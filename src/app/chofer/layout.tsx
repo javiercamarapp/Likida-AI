@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { requireOperador } from '@/lib/auth/guard';
+import { getSessionTenant } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { MarcoChofer } from './marco';
 
@@ -38,6 +39,19 @@ export const dynamic = 'force-dynamic';
 export const viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' as const };
 
 export default async function ChoferLayout({ children }: { children: React.ReactNode }) {
+  // ── EL "SIN SESIÓN" SE ATIENDE AQUÍ, Y NO ES DUPLICAR LA PUERTA ─────────
+  //
+  // `requireOperador()` arma su redirect con `/login?next=%2Fmis-viajes`
+  // ESCRITO A MANO (guard.ts:50). Todo /chofer aterrizaría, después de
+  // iniciar sesión, en la pantalla vieja de solo lectura — y el chofer llega
+  // por un enlace de WhatsApp que apunta a una pantalla concreta, así que la
+  // ruta de vuelta es justamente lo que no se puede perder. Aquí solo se
+  // corrige el DESTINO del rebote; las tres reglas de autorización (hay
+  // sesión, el rol es operador, tiene `operador_id`) las sigue decidiendo
+  // `requireOperador`, una línea más abajo.
+  const sesion = await getSessionTenant();
+  if (!sesion) redirect(`/login?next=${encodeURIComponent('/chofer')}`);
+
   const { nombre } = await requireOperador();
 
   async function cerrarSesion() {

@@ -41,8 +41,8 @@ export function MarcoChofer({
             <form action={cerrarSesion}>
               <button
                 type="submit"
-                className="text-sm font-medium px-3 rounded-lg"
-                style={{ minHeight: 40, background: 'var(--canvas)', border: '1px solid var(--line)' }}
+                className="text-base font-medium px-3 rounded-lg"
+                style={{ minHeight: 44, background: 'var(--canvas)', border: '1px solid var(--line)' }}
               >
                 Salir
               </button>

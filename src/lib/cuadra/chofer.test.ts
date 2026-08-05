@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 
 // `supabase/server` importa `next/headers`, que fuera de una petición de Next
@@ -256,12 +257,67 @@ describe('toda consulta de chofer.ts está acotada al chofer de la sesión', () 
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// NINGUNA PANTALLA DE /chofer PUEDE NACER SIN PUERTA.
+//
+// El layout gatea, pero un layout de Next NO se vuelve a ejecutar en cada
+// navegación entre segmentos hijos, y la página necesita el `operadorId` de
+// todas formas. Lo que esta prueba impide es lo que pasó en /dashboard: que
+// una pantalla nueva se agregue con la consulta y sin el gate, y que nadie lo
+// note hasta que alguien teclee la URL.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el gateo por rol de /chofer', () => {
+  const DIR = fileURLToPath(new URL('../../app/chofer/', import.meta.url));
+  const paginas = execSync(`find ${DIR} -name 'page.tsx'`, { encoding: 'utf8' })
+    .split('\n').filter(Boolean);
+  const layout = readFileSync(`${DIR}layout.tsx`, 'utf8');
+
+  it('hay páginas que revisar', () => {
+    expect(paginas.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('el layout exige rol operador', () => {
+    expect(sinComentarios(layout)).toMatch(/await requireOperador\(\)/);
+  });
+
+  it('CADA página exige rol operador por su cuenta', () => {
+    const sinPuerta = paginas.filter((f) => !/await requireOperador\(\)/.test(sinComentarios(readFileSync(f, 'utf8'))));
+    expect(sinPuerta, 'estas páginas de /chofer se sirven sin comprobar el rol').toEqual([]);
+  });
+
+  it('ninguna usa `requireSessionTenant`, que deja pasar a los roles de oficina', () => {
+    // `requireSessionTenant` solo pide "hay sesión con tenant": un flota_admin
+    // o un contador la pasan, y verían el panel del chofer como si fueran él.
+    for (const f of [...paginas, `${DIR}layout.tsx`]) {
+      expect(sinComentarios(readFileSync(f, 'utf8')), f).not.toMatch(/requireSessionTenant/);
+    }
+  });
+
+  it('ninguna toma el operador ni el tenant de la URL', () => {
+    // El `operadorId` sale SIEMPRE de la sesión. En el momento en que se
+    // aceptara por query string, `?operador=<uuid>` sería el panel de otro
+    // chofer — el mismo IDOR que la 0045 cerró en la base.
+    for (const f of paginas) {
+      const codigo = sinComentarios(readFileSync(f, 'utf8'));
+      expect(codigo, f).not.toMatch(/searchParams/);
+    }
+  });
+});
+
 describe('chofer.ts no reimplementa lo que ya existe', () => {
   it('el saldo lo calcula `estadoDelViaje`, no una suma nueva', () => {
     expect(CODIGO).toMatch(/import \{ estadoDelViaje/);
     // Una segunda suma de `monto` aquí es cómo el panel y el WhatsApp acabarían
     // contestando distinto a la misma pregunta.
     expect(CODIGO).not.toMatch(/\.reduce\(/);
+  });
+
+  it('el embebido de `liquidacion` nombra su FK', () => {
+    // La 0028 dejó DOS llaves foráneas entre `viaje` y `liquidacion`, y con
+    // dos caminos PostgREST se niega a elegir: `liquidacion(...)` a secas
+    // devuelve PGRST201 y la consulta entera falla. Sin esto, "Mis viajes" se
+    // cae para todos los choferes a la vez.
+    expect(CODIGO).toMatch(/liquidacion!liquidacion_viaje_id_fkey\(/);
   });
 
   it('no enlaza la ruta de PDF que no comprueba de quién es la liquidación', () => {

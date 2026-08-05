@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { areasDe, puedeVerArea, puedeVerRuta, areaDeRuta, inicioDe, rolEfectivo } from './visibilidad';
-import { INICIO, NEGOCIO, OPERACION, DOCUMENTOS_DINERO, GESTION } from '@/app/dashboard/rutas';
+import { INICIO, NEGOCIO, OPERACION, FISCAL, DOCUMENTOS_DINERO, GESTION } from '@/app/dashboard/rutas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // El encargado entraba al mismo panel que el dueño y veía TODO: rentabilidad,
@@ -40,6 +40,12 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
     '/dashboard/clientes', '/dashboard/cotizador', '/dashboard/cuadre',
     '/dashboard/valor-ahorro', '/dashboard/combustible-casetas',
     '/dashboard/usuarios', '/dashboard/configuracion', '/dashboard/politicas',
+    // El panel del contador es área `dinero`: al jefe de tráfico se le niega
+    // entero, igual que rentabilidad. Enseñarle las deducciones perdidas de la
+    // flota es enseñarle sus finanzas por otra puerta.
+    '/dashboard/contador', '/dashboard/contador/deducciones', '/dashboard/contador/cfdi',
+    '/dashboard/contador/combustible', '/dashboard/contador/retenciones',
+    '/dashboard/contador/liquidaciones',
   ];
   it.each(PROHIBIDAS)('%s le está negada al encargado', (href) => {
     expect(puedeVerRuta('encargado', href)).toBe(false);
@@ -55,11 +61,30 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
   });
 });
 
+describe('el contador llega a su panel — y la operación le sigue cerrada', () => {
+  const SUYAS = FISCAL.map((i) => i.href);
+  it.each(SUYAS)('%s es del contador', (href) => {
+    expect(puedeVerRuta('contador', href)).toBe(true);
+  });
+
+  it('su aterrizaje es una de esas seis, no el cuadre ni /dashboard', () => {
+    expect(SUYAS).toContain(inicioDe('contador'));
+  });
+
+  const OPERACION_PROHIBIDA = [
+    '/dashboard', '/dashboard/despacho', '/dashboard/viajes', '/dashboard/mapa',
+    '/dashboard/pod', '/dashboard/operadores', '/dashboard/unidades',
+  ];
+  it.each(OPERACION_PROHIBIDA)('%s le sigue negada al contador aunque teclee la URL', (href) => {
+    expect(puedeVerRuta('contador', href)).toBe(false);
+  });
+});
+
 describe('el mapa de rutas no se queda atrás del sidebar', () => {
   // Es la prueba que importa a futuro: una pantalla nueva que alguien agregue
   // al sidebar y olvide clasificar quedaría SIN área, y `puedeVerRuta` la
   // negaría a todos — incluido el dueño. Falla aquí, no en producción.
-  const todas = [...INICIO, ...NEGOCIO, ...OPERACION, ...DOCUMENTOS_DINERO, ...GESTION];
+  const todas = [...INICIO, ...NEGOCIO, ...OPERACION, ...FISCAL, ...DOCUMENTOS_DINERO, ...GESTION];
   it('toda ruta del sidebar tiene área declarada', () => {
     const huerfanas = todas.filter((i) => areaDeRuta(i.href) === undefined).map((i) => i.href);
     expect(
