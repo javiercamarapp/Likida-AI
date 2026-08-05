@@ -10,8 +10,6 @@
 //   · `DEMO_TENANT_ID` ausente → el panel cae al tenant de `supabase/seed.sql` y
 //     pinta CERO liquidaciones, sin un solo log. En el demo del 6 de agosto eso
 //     se lee como "el producto no guardó nada". Es el caso de manual del rubro.
-//   · `DASHBOARD_PASSCODE` ausente → `proxy.ts` no bloquea `/dashboard`: el panel
-//     del contralor queda abierto y tampoco avisa.
 //   · `CUADRA_WHATSAPP_MSG_USD` ausente → el costo por liquidación se calcula con
 //     un default, y esa cifra es la que decide el precio del producto.
 //   · `NEXT_PUBLIC_APP_URL` ausente → `login/page.tsx` cae a `https://likida.ai`
@@ -19,10 +17,15 @@
 //     desplegado. El correo llega, el link abre, y la sesión se completa en otro
 //     sitio: no hay error en ninguna parte, simplemente nadie entra.
 //
-// No duplica `verificarEntornoCritico()` de `cuadra/startup.ts`, que revisa
-// `DASHBOARD_SECRET` (una variable que sí es un agujero de seguridad, no una
-// respuesta silenciosamente equivocada). Si aquella crece hasta cubrir estas,
-// este archivo sobra.
+// `DASHBOARD_PASSCODE` YA NO VIVE AQUÍ. Hasta el 5-ago-2026 esta lista traía
+// «`DASHBOARD_PASSCODE` ausente → `proxy.ts` no bloquea `/dashboard`» — y era
+// falso desde que `proxy.ts` se reescribió para gatear con Supabase Auth: el
+// passcode y `/acceso` quedaron sin ningún llamador (`tokenMatches` sin uso
+// fuera de sus propias pruebas) y se borraron enteros (auditoría 10,
+// seguridad, hallazgo BAJO). El gate real de `/dashboard` no depende de
+// ninguna variable de entorno silenciosa — está en el matcher de sesión de
+// `proxy.ts` (`RUTAS_CON_SESION`) y no tiene un interruptor que se pueda
+// olvidar poner.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
@@ -30,7 +33,6 @@ import { faltantes } from '@/lib/env';
 
 const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   { nombre: 'DEMO_TENANT_ID', consecuencia: 'el panel consulta el tenant del seed y pinta cero liquidaciones' },
-  { nombre: 'DASHBOARD_PASSCODE', consecuencia: 'proxy.ts no bloquea /dashboard' },
   { nombre: 'CUADRA_WHATSAPP_MSG_USD', consecuencia: 'el costo por liquidación usa el default 0.008' },
   {
     nombre: 'NEXT_PUBLIC_APP_URL',

@@ -9,23 +9,6 @@ const ZERO = '00000000-0000-0000-0000-000000000000';
  * caía en SILENCIO — aquí se deja un error ruidoso. Best-effort: no tumba el
  * arranque (demo-safe; sin env/DB en build no rompe). 2.1.
  */
-/**
- * Variables de entorno sin las cuales algo falla EN SILENCIO o, peor, parece
- * funcionar sin hacerlo.
- *
- * `DASHBOARD_SECRET` es el caso claro: sin él, el HMAC de la cookie del panel se
- * derivaba del propio passcode y una cookie capturada permitía crackearlo
- * offline. Ahora `passcode.ts` lanza en producción — este check hace que el aviso
- * salga al ARRANCAR y no la primera vez que alguien intente entrar al panel.
- */
-export function verificarEntornoCritico(): void {
-  if (process.env.NODE_ENV !== 'production') return;
-  if (!process.env.DASHBOARD_SECRET) {
-    logger.error('startup.entorno', {
-      msg: 'FALTA DASHBOARD_SECRET: el panel va a fallar al intentar entrar. Sin él, el HMAC de la cookie se deriva del propio passcode y una cookie capturada permite crackearlo offline. Ponlo en las variables de entorno del despliegue.',
-    });
-  }
-}
 
 /**
  * ¿El error dice "eso no existe", o dice "no pude preguntar"?
@@ -63,7 +46,6 @@ function reportarProbe(error: { code?: string; message?: string }, faltaMsg: str
 }
 
 export async function verificarMigracionesCriticas(): Promise<void> {
-  verificarEntornoCritico();
   try {
     const admin = supabaseAdmin();
     // NINGÚN `return` temprano entre los sondeos. Los cuatro salían al primer

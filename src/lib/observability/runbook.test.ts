@@ -97,7 +97,7 @@ describe('DEPLOY.md pide lo que hace falta para que el sistema no arranque ciego
 
   it('nombra las variables cuya ausencia es silenciosa', () => {
     const texto = deploy();
-    for (const v of ['SENTRY_DSN', 'DASHBOARD_SECRET', 'DASHBOARD_PASSCODE', 'DEMO_TENANT_ID']) {
+    for (const v of ['SENTRY_DSN', 'DEMO_TENANT_ID']) {
       expect(texto, `DEPLOY.md no menciona ${v}`).toContain(v);
     }
   });
