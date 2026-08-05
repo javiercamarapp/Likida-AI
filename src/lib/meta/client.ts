@@ -103,6 +103,103 @@ export async function sendText(to: string, body: string): Promise<string | null>
   return id ?? null;
 }
 
+// ── BOTONES INTERACTIVOS ────────────────────────────────────────────────────
+//
+// Límites de Meta, verificados en la documentación oficial de Cloud API
+// ("Interactive reply buttons messages", consultada el 4-ago-2026). No son
+// preferencias nuestras: pasarse de cualquiera de ellos hace que Meta rechace
+// el mensaje ENTERO, no que lo recorte.
+const MAX_BOTONES = 3;
+const MAX_TITULO_BOTON = 20;    // caracteres del rótulo que ve el chofer
+const MAX_ID_BOTON = 256;       // el id que nos devuelve el webhook al apretarlo
+const MAX_CUERPO_BOTONES = 1024;
+
+export interface BotonAcuse { id: string; titulo: string }
+
+/**
+ * Lo que hace que Meta rechace un mensaje de botones, dicho ANTES de mandarlo.
+ *
+ * Devuelve el meta del log —no una excepción— porque el contrato de `sendButtons`
+ * es el de `sendText`: `null` y una línea en el log, nunca un throw.
+ */
+function motivoBotonesInvalidos(cuerpo: string, botones: BotonAcuse[]): Record<string, unknown> | null {
+  if (botones.length === 0 || botones.length > MAX_BOTONES) {
+    return { motivo: 'cantidad', botones: botones.length, max: MAX_BOTONES };
+  }
+  if (cuerpo.length > MAX_CUERPO_BOTONES) {
+    return { motivo: 'cuerpo_largo', largo: cuerpo.length, max: MAX_CUERPO_BOTONES };
+  }
+  const titulosVistos = new Set<string>();
+  for (const b of botones) {
+    if (!b.id.trim()) return { motivo: 'id_vacio', titulo: b.titulo };
+    if (b.id.length > MAX_ID_BOTON) return { motivo: 'id_largo', largo: b.id.length, max: MAX_ID_BOTON };
+    if (!b.titulo.trim()) return { motivo: 'titulo_vacio', id: b.id };
+    if (b.titulo.length > MAX_TITULO_BOTON) {
+      return { motivo: 'titulo_largo', id: b.id, titulo: b.titulo, largo: b.titulo.length, max: MAX_TITULO_BOTON };
+    }
+    // Meta exige que los títulos sean ÚNICOS dentro del mensaje. Y aunque no lo
+    // exigiera: dos botones con el mismo rótulo y distinto id son la misma cosa
+    // para el chofer, que decide por lo que lee, no por el id que no ve.
+    if (titulosVistos.has(b.titulo)) return { motivo: 'titulo_repetido', titulo: b.titulo };
+    titulosVistos.add(b.titulo);
+  }
+  return null;
+}
+
+/**
+ * Manda botones de respuesta rápida (`interactive` / `button`). Devuelve el wamid
+ * si Meta ACEPTÓ el mensaje, o `null` si lo rechazó — mismo contrato que
+ * `sendText`, y con la misma advertencia: aceptado no es entregado.
+ *
+ * ═══ SOLO DENTRO DE LA VENTANA DE 24 H ═══
+ * Un mensaje interactivo NO es una plantilla. WhatsApp lo entrega únicamente
+ * dentro de las 24 h desde el último mensaje DEL USUARIO, exactamente igual que
+ * el texto libre de `sendText`. Fuera de esa ventana Meta responde 131047
+ * ("Re-engagement message") y esto devuelve `null` sin que nada más lo delate:
+ * quien lo llame para INICIAR una conversación —recordar un cierre, pedir un
+ * POD— va a ver un envío que no sale y no va a entender por qué. Para eso está
+ * `sendTemplate`, que es lo único que abre la ventana.
+ *
+ * ═══ UN TÍTULO QUE NO CABE NO SE MANDA RECORTADO ═══
+ * Meta ya rechaza el mensaje entero cuando un título pasa de 20 caracteres, así
+ * que truncar no evitaría el fallo: solo cambiaría cuál es. Y las dos formas de
+ * "arreglarlo" en silencio hacen daño donde más duele:
+ *   · un título recortado le enseña al chofer un botón DISTINTO del que se
+ *     programó ("No cerrar todavía" → "No cerrar todaví"), y él aprieta lo que
+ *     lee mientras el sistema recibe el id de otra cosa;
+ *   · un cuerpo recortado puede partir una cifra a la mitad ($12,450 → $12,4),
+ *     que es la regla que este producto no rompe.
+ * Por eso se valida ANTES de llamar a Meta y se falla cerrado, dejando en el log
+ * el botón culpable y su largo: el mismo `null` que da un rechazo de Meta, pero
+ * ya diagnosticado.
+ */
+export async function sendButtons(to: string, cuerpo: string, botones: BotonAcuse[]): Promise<string | null> {
+  const invalido = motivoBotonesInvalidos(cuerpo, botones);
+  if (invalido) { logger.error('wa.sendButtons.invalido', invalido); return null; }
+
+  const res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: destinatarioWhatsApp(to),   // el "1" mexicano rebota igual aquí
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: cuerpo },
+        action: { buttons: botones.map((b) => ({ type: 'reply', reply: { id: b.id, title: b.titulo } })) },
+      },
+    }),
+    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+  });
+  if (!res.ok) { logger.error('wa.sendButtons', { status: res.status, body: await res.text().catch(() => '') }); return null; }
+  // El ÉXITO también deja rastro (misma lección que `sendText`): sin esta línea,
+  // "se envió" y "nunca se llamó" se ven igual en los logs.
+  const id = await idDeRespuesta(res);
+  logger.info('wa.sendButtons.ok', { id, botones: botones.length });
+  return id ?? null;
+}
+
 /**
  * Envía una PLANTILLA aprobada — lo único que WhatsApp permite cuando Likida
  * INICIA la conversación.

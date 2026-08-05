@@ -264,7 +264,12 @@ describe('cuando por fin hay viaje, se pregunta antes de adjuntar', () => {
   it('un error leyendo la sala de espera no le impide usar su viaje', async () => {
     // `getHuerfanos` devuelve [] ante un fallo de lectura, a propósito.
     getHuerfanos.mockResolvedValue([]);
-    await processInbound(texto('cuánto llevo'));
+    // La frase era "cuánto llevo" y dejó de servir aquí: ahora ESA pregunta se
+    // contesta desde la base sin pasar por el agente (`consulta_chofer.ts`), así
+    // que el test se caía por la razón equivocada. Lo que prueba —que un fallo
+    // leyendo la sala de espera no bloquea el camino normal— no cambió; hacía
+    // falta un mensaje sin significado propio para poder seguir probándolo.
+    await processInbound(texto('hola, una pregunta'));
     expect(runAgent).toHaveBeenCalled();
   });
 });

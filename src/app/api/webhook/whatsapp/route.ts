@@ -145,6 +145,14 @@ interface WaWebhook {
           text?: { body: string };
           image?: { id: string };
           document?: { id: string };
+          // El chofer apretó un botón. Meta manda `type: 'interactive'` y dentro
+          // un `interactive.type` que dice CUÁL de los interactivos fue:
+          // `button_reply` (botones de respuesta rápida) o `list_reply` (lista
+          // desplegable). Son formas distintas y no se pueden tratar igual.
+          interactive?: {
+            type?: string;
+            button_reply?: { id?: string; title?: string };
+          };
         }>;
         // Acuses de ENTREGA. Meta los manda por el mismo webhook y con el mismo
         // `field: 'messages'`, en un arreglo aparte. Ver `extractStatuses`.
@@ -174,6 +182,27 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
         if (m.type === 'text' && m.text) out.push({ ...base, type: 'text', text: m.text.body });
         else if (m.type === 'image' && m.image) out.push({ ...base, type: 'image', mediaId: m.image.id });
         else if (m.type === 'document' && m.document) out.push({ ...base, type: 'document', mediaId: m.document.id });
+        // BOTÓN APRETADO → entra como TEXTO con el id del botón por cuerpo.
+        //
+        // Antes caía en `other` y se perdía: el chofer apretaba, el webhook
+        // devolvía 200 y nadie contestaba nunca.
+        //
+        // POR QUÉ TEXTO Y NO UN TIPO NUEVO. El `id` es el dato que importa —lo
+        // elegimos nosotros al armar el botón, no lo escribe el chofer— y el
+        // procesador ya sabe leer texto: es el mismo camino que recorre cuando
+        // el operador teclea la respuesta a mano, con su idempotencia por
+        // `waMessageId` intacta. Un tipo nuevo obligaría a tocar `InboundMessage`
+        // y cada rama que la consume para no ganar nada: `title` es el rótulo
+        // que le enseñamos, derivable del id, y guardarlo invitaría a decidir
+        // por lo que el chofer VE en vez de por lo que el botón VALE.
+        //
+        // Se exige el id no vacío: sin él no hay nada que leer y un `text: ''`
+        // le llegaría al procesador como un mensaje en blanco del operador.
+        else if (m.type === 'interactive' && m.interactive?.type === 'button_reply' && m.interactive.button_reply?.id) {
+          out.push({ ...base, type: 'text', text: m.interactive.button_reply.id });
+        }
+        // Cualquier otro interactivo (`list_reply`, `nfm_reply`…) NO se traga
+        // como si fuera un botón: su forma es distinta y hoy no se manda ninguno.
         else out.push({ ...base, type: 'other' });
       }
     }

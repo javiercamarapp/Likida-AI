@@ -13,6 +13,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { notificarAsignacion } from './notificar';
+import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { traerTodo } from './pg';
 
@@ -482,7 +484,72 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
   if (error) throw new Error(`crearViaje: ${error.message}`);
   const id = (data as { id?: unknown } | null)?.id;
   if (!id) throw new Error('crearViaje: el insert no devolvió id');
+
+  // AVISAR AL CHOFER, EN CUANTO EXISTE EL VIAJE.
+  //
+  // Hasta hoy el viaje se creaba y el chofer se enteraba por teléfono, o no se
+  // enteraba: el jefe daba por hecho que había arrancado y se descubría cuando
+  // no llegaban fotos.
+  //
+  // BEST-EFFORT A PROPÓSITO. Si WhatsApp está caído o la plantilla no está
+  // aprobada, el viaje YA está creado y esa es la operación que el jefe pidió.
+  // Tirarla porque no salió un mensaje cambiaría un problema de aviso por uno
+  // de despacho. El fallo se loguea y el aviso se puede reintentar desde el
+  // panel.
+  if (v.operadorId) await avisarAlChofer(tenantId, v.operadorId, id as string).catch(() => {});
+
   return id as string;
+}
+
+/**
+ * Le manda al chofer el aviso de su viaje. Resuelve el teléfono aquí para que
+ * quien llame no tenga que conocer la tabla `operador`.
+ */
+export async function avisarAlChofer(tenantId: string, operadorId: string, viajeId: string): Promise<void> {
+  const admin = supabaseAdmin();
+  const [{ data: op }, { data: viaje }] = await Promise.all([
+    admin.from('operador').select('telefono').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(),
+    admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id').eq('id', viajeId).maybeSingle(),
+  ]);
+  if (!op?.telefono || !viaje) return;
+
+  let unidad: string | null = null;
+  if (viaje.unidad_id) {
+    const { data: u } = await admin.from('unidad').select('numero_economico').eq('id', viaje.unidad_id).maybeSingle();
+    unidad = (u?.numero_economico as string) ?? null;
+  }
+
+  const r = await notificarAsignacion({
+    telefono: op.telefono as string,
+    tenantId,
+    viaje: {
+      folio: viaje.folio as string | null,
+      origen: viaje.origen as string | null,
+      destino: viaje.destino as string | null,
+      fechaInicio: viaje.fecha_inicio as string | null,
+      anticipo: viaje.anticipo === null ? null : Number(viaje.anticipo),
+      unidad,
+    },
+  });
+  if (!r.enviado) {
+    // ERROR, no WARN, y la razón importa: `avisado_en` es lo ÚNICO que hace
+    // visible este viaje para la escalación de las 5 h. Si el aviso no salió, no
+    // se marca —el reloj mide "desde que se le dijo al chofer", y nadie le
+    // dijo—, así que este viaje NO va a escalar solo. Queda en el panel y en
+    // este log, que es de donde alguien lo tiene que sacar.
+    logger.error('viaje.aviso_no_salio', { viajeId, motivo: r.motivo, escalaSolo: false });
+    return;
+  }
+
+  // Marca el arranque del reloj. Sin esto, `viajesSinAceptar()` no lo ve nunca:
+  // filtra por `avisado_en no es null`.
+  const { error } = await admin
+    .from('viaje')
+    .update({ avisado_en: new Date().toISOString(), avisos_enviados: 1 })
+    .eq('id', viajeId)
+    .eq('tenant_id', tenantId)
+    .is('avisado_en', null); // el primer aviso manda: un reaviso no reinicia el plazo
+  if (error) logger.warn('viaje.avisado_en_no_se_marcó', { viajeId, err: error.message });
 }
 
 /** Empatar viaje ↔ unidad. `null` la desasigna. */
