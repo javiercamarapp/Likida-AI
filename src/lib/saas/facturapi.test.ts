@@ -51,7 +51,7 @@ describe('timbrarMensualidad', () => {
     }));
 
     await timbrarMensualidad({
-      receptor: RECEPTOR, monto: 4900,
+      receptor: RECEPTOR, subtotal: 4900,
       periodoInicio: '2026-08-01', periodoFin: '2026-08-31', referencia: 'LKABCD202608',
     });
 
@@ -70,10 +70,10 @@ describe('timbrarMensualidad', () => {
 
   it('rechaza timbrar $0 y datos fiscales incompletos', async () => {
     process.env.FACTURAPI_SECRET_KEY = 'sk_test_abc';
-    await expect(timbrarMensualidad({ receptor: RECEPTOR, monto: 0, periodoInicio: 'a', periodoFin: 'b' }))
+    await expect(timbrarMensualidad({ receptor: RECEPTOR, subtotal: 0, periodoInicio: 'a', periodoFin: 'b' }))
       .rejects.toThrow(/\$0/);
     await expect(timbrarMensualidad({
-      receptor: { ...RECEPTOR, codigoPostal: '' }, monto: 100, periodoInicio: 'a', periodoFin: 'b',
+      receptor: { ...RECEPTOR, codigoPostal: '' }, subtotal: 100, periodoInicio: 'a', periodoFin: 'b',
     })).rejects.toThrow(/datos fiscales/);
   });
 
@@ -82,12 +82,12 @@ describe('timbrarMensualidad', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
       JSON.stringify({ message: 'El RFC del receptor no está registrado en el SAT' }), { status: 400 },
     )));
-    await expect(timbrarMensualidad({ receptor: RECEPTOR, monto: 100, periodoInicio: 'a', periodoFin: 'b' }))
+    await expect(timbrarMensualidad({ receptor: RECEPTOR, subtotal: 100, periodoInicio: 'a', periodoFin: 'b' }))
       .rejects.toThrow(/no está registrado en el SAT/);
   });
 
   it('sin llave configurada NO inventa una factura', async () => {
-    await expect(timbrarMensualidad({ receptor: RECEPTOR, monto: 100, periodoInicio: 'a', periodoFin: 'b' }))
+    await expect(timbrarMensualidad({ receptor: RECEPTOR, subtotal: 100, periodoInicio: 'a', periodoFin: 'b' }))
       .rejects.toThrow(/FACTURAPI_SECRET_KEY/);
   });
 });
@@ -104,7 +104,7 @@ describe('el candado de producción', () => {
     const llamo = vi.fn();
     vi.stubGlobal('fetch', llamo);
 
-    await expect(timbrarMensualidad({ receptor: RECEPTOR, monto: 100, periodoInicio: 'a', periodoFin: 'b' }))
+    await expect(timbrarMensualidad({ receptor: RECEPTOR, subtotal: 100, periodoInicio: 'a', periodoFin: 'b' }))
       .rejects.toThrow(/sk_live/);
     // Y no se gastó una llamada.
     expect(llamo).not.toHaveBeenCalled();
@@ -116,7 +116,7 @@ describe('el candado de producción', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
       JSON.stringify({ id: 'inv_1', uuid: 'AAAA-BBBB', total: 116 }), { status: 200 },
     )));
-    const r = await timbrarMensualidad({ receptor: RECEPTOR, monto: 100, periodoInicio: 'a', periodoFin: 'b' });
+    const r = await timbrarMensualidad({ receptor: RECEPTOR, subtotal: 100, periodoInicio: 'a', periodoFin: 'b' });
     expect(r.uuid).toBe('AAAA-BBBB');
   });
 
@@ -126,7 +126,7 @@ describe('el candado de producción', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
       JSON.stringify({ id: 'inv_2', uuid: 'CCCC-DDDD', total: 116 }), { status: 200 },
     )));
-    const r = await timbrarMensualidad({ receptor: RECEPTOR, monto: 100, periodoInicio: 'a', periodoFin: 'b' });
+    const r = await timbrarMensualidad({ receptor: RECEPTOR, subtotal: 100, periodoInicio: 'a', periodoFin: 'b' });
     expect(r.uuid).toBe('CCCC-DDDD');
   });
 });

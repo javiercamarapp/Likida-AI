@@ -130,11 +130,13 @@ export interface CfdiTimbrado {
 /**
  * Timbra la mensualidad de una flota.
  *
- * EL MONTO VA CON `tax_included: false` Y EL IVA APARTE. Facturapi calcula el
- * 16% encima del precio. Mandarlo con el IVA ya adentro y decir que no lo está
- * —o al revés— produce una factura por un total distinto al que se cobró, y esa
- * diferencia la encuentra el contador del cliente al conciliar contra su estado
- * de cuenta.
+ * EL PARÁMETRO SE LLAMA `subtotal` Y NO `monto`, y el nombre es el arreglo.
+ * Se llamaba `monto`, su JSDoc decía "Subtotal SIN IVA", y el llamador le
+ * pasaba `factura_saas.monto` — que era el número que la pantalla le pedía al
+ * cliente transferir. Con `tax_included: false` Facturapi le suma el 16% a lo
+ * que reciba: plan de $10,000 → depósito de $10,000 → CFDI de $11,600. Un
+ * comentario no impide que le pasen la cifra equivocada; un nombre que no se
+ * puede confundir con "lo que se cobró", sí.
  *
  * `payment_form: '03'` porque Likida cobra por transferencia. Poner "por
  * definir" (99) cuando el pago YA ocurrió es incorrecto ante el SAT y complica
@@ -142,16 +144,23 @@ export interface CfdiTimbrado {
  */
 export async function timbrarMensualidad(datos: {
   receptor: ReceptorCfdi;
-  /** Subtotal SIN IVA. */
-  monto: number;
+  /** LA BASE, sin IVA. Facturapi le suma el 16% encima (`tax_included: false`). */
+  subtotal: number;
+  /**
+   * El total que el cliente YA transfirió, para contrastarlo con el total que
+   * devuelve el PAC. No cambia nada del timbrado: es la única forma de que una
+   * diferencia salga en el log el mismo día en vez de aparecer meses después
+   * en la conciliación del contador del cliente.
+   */
+  totalEsperado?: number;
   periodoInicio: string;
   periodoFin: string;
   /** Para poder rastrear el CFDI de vuelta a la factura de Likida. */
   referencia?: string;
 }): Promise<CfdiTimbrado> {
-  const { receptor, monto } = datos;
+  const { receptor, subtotal } = datos;
 
-  if (!(monto > 0)) {
+  if (!(subtotal > 0)) {
     throw new DatoInvalido('No se puede timbrar una factura de $0.');
   }
   if (!receptor.rfc || !receptor.razonSocial || !receptor.regimenFiscal || !receptor.codigoPostal) {
@@ -182,7 +191,7 @@ export async function timbrarMensualidad(datos: {
             description: descripcion,
             product_key: CLAVE_PROD_SERV_SOFTWARE,
             unit_key: CLAVE_UNIDAD_SERVICIO,
-            price: monto,
+            price: subtotal,
             // El IVA lo calcula Facturapi encima del precio. Ver la nota de arriba.
             tax_included: false,
           },
@@ -195,7 +204,18 @@ export async function timbrarMensualidad(datos: {
     },
   });
 
-  logger.info('facturapi.timbrada', { uuid: factura.uuid, referencia: datos.referencia });
+  logger.info('facturapi.timbrada', { uuid: factura.uuid, referencia: datos.referencia, total: factura.total });
+
+  // EL CFDI YA EXISTE: aquí no se puede tirar la operación, solo dejar rastro.
+  // Si el total del PAC no es el que se cobró, alguien tiene que enterarse hoy
+  // —hay 24h de plazo cómodo para cancelar— y no cuando el contador del cliente
+  // cruce su estado de cuenta contra su papel de trabajo en la declaración.
+  if (datos.totalEsperado !== undefined && Math.abs(factura.total - datos.totalEsperado) > 0.01) {
+    logger.error('facturapi.total_no_cuadra', {
+      uuid: factura.uuid, referencia: datos.referencia,
+      totalCfdi: factura.total, totalCobrado: datos.totalEsperado, subtotalEnviado: subtotal,
+    });
+  }
 
   return {
     id: factura.id,
