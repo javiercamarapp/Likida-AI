@@ -639,11 +639,17 @@ export async function releaseMessageClaim(waMessageId: string): Promise<void> {
  * ser resuelto y el canal le decía "no te tengo registrado".
  */
 export async function buscarTenantPorTelefono(telefono: string): Promise<string | null> {
+  // AUDITORÍA 13, MEDIO (legal): sin `order` ni `.limit(2)`, un teléfono en DOS
+  // flotas elegía un tenant ARBITRARIO y le decía al titular que el responsable
+  // era la empresa equivocada. Mismo criterio que `resolveOperador`: ante la
+  // ambigüedad se niega (null → el caller le pide identificar la flota).
   const { data, error } = await acotada(supabaseAdmin()
     .from('operador')
     .select('tenant_id')
     .in('telefono', variantesTelefono(telefono))
-    .limit(1), 'buscarTenantPorTelefono');
+    .limit(2), 'buscarTenantPorTelefono');
   if (error) throw new Error(`buscarTenantPorTelefono: ${error.message}`);
-  return (data?.[0]?.tenant_id as string | undefined) ?? null;
+  const filas = data ?? [];
+  if (filas.length !== 1) return null;
+  return (filas[0]?.tenant_id as string | undefined) ?? null;
 }
