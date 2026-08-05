@@ -50,6 +50,7 @@ const TITULOS = readFileSync('supabase/verificaciones.sql', 'utf8')
  * revienta ruidosamente o va lento, no se corrompe en silencio.
  */
 const EXENTAS: Record<string, string> = {
+  '0080': 'columna operador.rfc: dato opcional capturado por la flota. La rama buena de RLISR 57 se prueba en TS (engine/desde_db); si la columna falta, getOperador falla ruidoso.',
   '0001': 'esquema base: si falta, no arranca nada. Un bloque no aporta información que el primer INSERT no dé.',
   '0003': 'tabla de costos de LLM: telemetría. No hay garantía que romper.',
   '0004': 'columna de config fiscal. El bloque 7 (0026) sí comprueba lo que importa: que esa config no pueda apagar un tope de dinero.',

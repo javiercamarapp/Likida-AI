@@ -257,7 +257,7 @@ export default async function Detalle({
               {d.litrosDiesel > 0 && <Tot label="Diésel elegible para el estímulo" value={litros(d.litrosDiesel)} ok />}
               {d.ieps > 0 && <Tot label="IEPS de diésel (vs ISR)" value={mxn(d.ieps)} ok />}
               {d.iva > 0 && <Tot label="IVA acreditable" value={mxn(d.iva)} ok />}
-              {d.peaje > 0 && <Tot label="Peaje 50%" value={mxn(d.peaje)} ok />}
+              {d.peaje > 0 && <Tot label="Peaje 50%" value={mxn(d.peaje)} ok nota="Sujeto a elegibilidad" />}
             </div>
           </section>
         )}
@@ -387,12 +387,16 @@ function etiquetaGasto(g: { concepto: string; ocrExtra?: Record<string, unknown>
   return delMotor === g.concepto ? (CONCEPTO[g.concepto] ?? g.concepto) : delMotor;
 }
 
-function Tot({ label, value, accent, ok }: { label: string; value: string; accent?: boolean; ok?: boolean }) {
+function Tot({ label, value, accent, ok, nota }: { label: string; value: string; accent?: boolean; ok?: boolean; nota?: string }) {
   const color = ok ? 'var(--color-ok)' : accent ? 'var(--accent)' : 'var(--ink)';
   return (
     <div className="card p-6">
       <div className="text-3xl font-semibold tracking-tight tabular" style={{ color }}>{value}</div>
       <div className="text-sm mt-1.5" style={{ color: 'var(--muted)' }}>{label}</div>
+      {/* AUDITORÍA 12, ALTO (fiscal): el peaje acreditable no es automático —
+          el motor no verifica ninguna de las condiciones de la ficha (ingresos
+          < $300M, autopistas de cuota). El PDF ya lo decía; el panel no. */}
+      {nota && <div className="text-xs mt-1" style={{ color: 'var(--faint)' }}>{nota}</div>}
     </div>
   );
 }

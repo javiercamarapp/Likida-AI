@@ -147,6 +147,8 @@ export interface Viaje {
   anticipo: number;
   fechaInicio?: string;
   fechaFin?: string;
+  /** El operador asignado — para resolver su RFC (RLISR 57, mig. 0080). */
+  operadorId?: string;
 }
 
 export interface Operador {
@@ -154,4 +156,6 @@ export interface Operador {
   nombre: string;
   telefono: string;
   terminal?: string;
+  /** RFC del trabajador (mig. 0080) — para la rama buena de RLISR 57. */
+  rfc?: string | null;
 }

@@ -93,7 +93,7 @@ export function resumenCuadre(
     // (`formato.ts`) — una sola fuente de formato, no tres copias a mano.
     if (liq.litrosDieselAcreditables > 0) lines.push(`• Diésel elegible para el estímulo de IEPS: ${litros(liq.litrosDieselAcreditables)}`);
     if (liq.ivaAcreditable > 0) lines.push(`• IVA: ${mxn(liq.ivaAcreditable)}`);
-    if (liq.peajeAcreditable > 0) lines.push(`• Peaje 50%: ${mxn(liq.peajeAcreditable)}`);
+    if (liq.peajeAcreditable > 0) lines.push(`• Peaje 50%: ${mxn(liq.peajeAcreditable)} (sujeto a elegibilidad)`);
   }
 
   // El descargo va SOLO al contralor: es quien toma decisiones fiscales con

@@ -4,7 +4,7 @@
 
 import { cuadrarViaje } from './engine';
 import { ventanaDelViaje } from './fecha_dudosa';
-import { getViaje, getGastos } from '../repo';
+import { getViaje, getGastos, getOperador } from '../repo';
 import { getConfig } from '../config';
 import type { Liquidacion } from '@/types/cuadra';
 
@@ -33,6 +33,16 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     getConfig(tenantId),
   ]);
   if (!viaje) throw new Error('viaje no encontrado');
+  // AUDITORÍA 12, MEDIO (fiscal): `operadorRfc` no tenía productor — la rama
+  // buena de RLISR 57 (viático timbrado al RFC del operador, trabajador
+  // subordinado) era inalcanzable y todo viático a su nombre caía en 'revisar'.
+  // El RFC vive en operador.rfc (mig. 0080); null = no capturado, y el motor
+  // ya maneja ese caso con el aviso honesto en vez de quitar la deducción.
+  const operador = viaje.operadorId
+    ? await getOperador(viaje.operadorId, tenantId).catch(() => null)
+    : null;
+  const operadorRfc = operador?.rfc ?? undefined;
+
   // La ventana la calcula `ventanaDelViaje`, que es la MISMA que usa el intake
   // para decidir si le pide otra foto al operador. Calculadas por separado se
   // separan en silencio, y el operador acaba mandando fotos que el cuadre no
@@ -53,6 +63,7 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     estimulos: config.estimulos,
     fechaMin,
     fechaMax,
+    operadorRfc,
     // El motor es puro y no lee el reloj: la fecha se le inyecta aquí, que es
     // el borde con el mundo. Sin esto el aviso de "ticket por facturar" nunca
     // correría en producción aunque sus pruebas estén verdes.
