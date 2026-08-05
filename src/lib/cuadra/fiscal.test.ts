@@ -487,3 +487,22 @@ describe('esCombustible / esDieselConIeps', () => {
     expect(esDieselConIeps(gasto({ claveProdServ: null }), OPTS)).toBe(false);
   });
 });
+
+// ── AUDITORÍA 13 · ALTO: el panel acreditaba IVA de CFDIs sin confirmar ─────
+describe('AUDITORÍA 13 — el estándar del motor se propaga al panel del contador', () => {
+  it('un CFDI con estado SAT pendiente NO acredita IVA en el panel (el motor ya no lo hace)', () => {
+    const r = resumirFiscal([gasto({ estadoSat: 'pendiente', ivaTraslado: 137.93 })], OPTS);
+    expect(r.ivaAcreditable).toBe(0);
+    expect(r.porValidar).toBeGreaterThan(0);   // la cola sigue siendo visible
+  });
+
+  it('un CFDI no_encontrado (UUID fabricado) tampoco acredita', () => {
+    const r = resumirFiscal([gasto({ estadoSat: 'no_encontrado', ivaTraslado: 50 })], OPTS);
+    expect(r.ivaAcreditable).toBe(0);
+  });
+
+  it('el CFDI VIGENTE sí acredita (no-regresión)', () => {
+    const r = resumirFiscal([gasto({ estadoSat: 'vigente', ivaTraslado: 137.93 })], OPTS);
+    expect(r.ivaAcreditable).toBe(137.93);
+  });
+});
