@@ -14,6 +14,16 @@ const manrope = Manrope({ subsets: ['latin'], variable: '--font-display' });
 export const metadata: Metadata = {
   title: 'Likida — Liquidación de viajes',
   description: 'Automatiza el cierre diario de operaciones logísticas por WhatsApp.',
+  // Verificación de dominio de Meta (Business Manager → Seguridad de la marca →
+  // Dominios). Meta exige que la etiqueta esté en el `<head>` del HTML que
+  // devuelve el SERVIDOR: si la inyecta JavaScript en el cliente, la
+  // verificación falla. `metadata.other` la emite en el HTML prerenderizado.
+  //
+  // Va en el layout raíz porque el rastreador solo mira la home (likida.ai/),
+  // no las rutas internas.
+  other: {
+    'facebook-domain-verification': '5i7bo25fbjsm9oqoildqrlroq1aow5',
+  },
 };
 
 // FALTABA, Y SE VE MIRANDO LA PÁGINA EN UN TELÉFONO. Sin `<meta name="viewport">`
