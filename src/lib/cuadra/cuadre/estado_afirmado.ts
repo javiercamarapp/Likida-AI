@@ -39,13 +39,24 @@
 // estos patrones fallaba entera por eso, sobre las cinco frases que el auditor
 // transcribió. En un producto escrito íntegramente en español es una trampa que
 // va a volver: se usa `(?![\wáéíóúñ])` cuando hace falta cerrar la palabra.
+//
+// "YA" NO ES EL FENÓMENO, ES UN ADORNO. La primera versión exigía la palabra "ya"
+// al arranque de cada patrón porque las cinco frases que el auditor transcribió
+// para escribir estos patrones la llevaban las cinco — el detector se ajustó a la
+// muestra, no al hecho gramatical. "Listo, quedó liquidado tu viaje" afirma un
+// cierre consumado sin decir "ya", y pasaba intacta con `toolCalls: []`. Lo que
+// de verdad distingue una afirmación ("cerré", "quedó cerrado") de lo que no lo es
+// ("cierro", "voy a cerrar", "cierre") es el PRETÉRITO, no un adverbio opcional
+// que puede o no estar. "ya" se deja como prefijo OPCIONAL, nunca requerido.
 const AFIRMA_CIERRE: RegExp[] = [
-  // "ya quedó cerrada", "ya está liquidado", "ya quedó lista tu liquidación"
-  /\bya\s+(?:qued[óo]|est[áa]|dej[ée])[^.!?]{0,40}(?:cerrad|liquidad|list)/i,
-  // "ya cerré", "ya te lo cerré", "ya la cerramos"
-  /\bya\s+(?:te\s+)?(?:lo\s+|la\s+)?(?:cerr[ée]|cerramos|liquid[ée])(?![\wáéíóúñ])/i,
-  // "tu viaje ya está liquidado" / "tu liquidación ya está lista"
-  /(?:viaje|liquidaci[óo]n)[^.!?]{0,30}ya\s+est[áa][^.!?]{0,20}(?:cerrad|liquidad|list)/i,
+  // "quedó cerrada", "ya está liquidado", "quedó lista tu liquidación"
+  /\b(?:ya\s+)?(?:qued[óo]|est[áa]|dej[ée])[^.!?]{0,40}(?:cerrad|liquidad|list)/i,
+  // "cerré", "ya te lo cerré", "la cerramos", "liquidé", "liquidó" — pretérito,
+  // con o sin "ya". NO casa con "cierro"/"cierre" (presente/subjuntivo: raíz
+  // "cier-", no "cerr-") ni con "cerrar" (infinitivo: termina en "-ar").
+  /\b(?:ya\s+)?(?:te\s+|le\s+)?(?:lo\s+|la\s+)?(?:cerr|liquid)(?:é|ó|amos|aron)(?![\wáéíóúñ])/i,
+  // "tu viaje está liquidado" / "tu liquidación ya está lista"
+  /(?:viaje|liquidaci[óo]n)[^.!?]{0,30}(?:ya\s+)?est[áa][^.!?]{0,20}(?:cerrad|liquidad|list)/i,
   // "no tienes nada pendiente" — afirma el estado final por la puerta de atrás
   /\bno\s+tienes\s+nada\s+pendiente/i,
 ];
@@ -53,10 +64,12 @@ const AFIRMA_CIERRE: RegExp[] = [
 /**
  * Formas en que afirma haber ENVIADO el PDF o haberlo hecho llegar al contralor.
  * Se separa del cierre porque el PDF puede fallar con la liquidación cerrada de
- * verdad, y ahí el texto correcto es otro.
+ * verdad, y ahí el texto correcto es otro. Mismo defecto que `AFIRMA_CIERRE`
+ * antes del arreglo: "ya" era obligatorio y no debería serlo — es el pretérito
+ * de mandar/enviar/reenviar el que afirma el hecho, con o sin ese adverbio.
  */
 const AFIRMA_ENVIO: RegExp[] = [
-  /\bya\s+(?:te\s+|le\s+)?(?:lo\s+|la\s+)?(?:mand[ée]|envi[ée]|reenvi[ée])(?![\wáéíóúñ])/i,
+  /\b(?:ya\s+)?(?:te\s+|le\s+)?(?:lo\s+|la\s+)?(?:mand|envi|reenvi)(?:é|ó|amos|aron)(?![\wáéíóúñ])/i,
   /\bte\s+(?:lo|la)\s+(?:acabo\s+de\s+)?(?:mandar|enviar)(?![\wáéíóúñ])/i,
 ];
 
