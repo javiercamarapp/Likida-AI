@@ -50,7 +50,10 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
   getOpenViaje: (...a: unknown[]) => getOpenViaje(...a),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
-  loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
+  // `cierreSinComprobantes: true` deja pasar el freno de "cierre sin
+  // comprobantes" (processor.ts): este archivo prueba el mutex del viaje, no
+  // ese freno, y con `false` el "listo" nunca llegaba a correr el agente.
+  loadConversation: vi.fn(async () => ({ id: 'c1', turns: [], cierreSinComprobantes: true })),
   saveConversation: vi.fn(), claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
   acquireViajeLock: (...a: unknown[]) => acquireViajeLock(...a),
   releaseViajeLock: vi.fn(), releaseMessageClaim: (...a: unknown[]) => releaseMessageClaim(...a),

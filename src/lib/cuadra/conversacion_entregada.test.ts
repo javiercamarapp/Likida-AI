@@ -56,7 +56,15 @@ describe('la conversación guarda lo que el operador leyó', () => {
   it('pero los turnos del OPERADOR sí se guardan siempre', () => {
     // Ésos sí ocurrieron. Perderlos borraría lo único que él sí mandó, y el
     // arreglo se habría comido el problema en vez de resolverlo.
-    const i = P.indexOf('await saveConversation(');
+    //
+    // El archivo ganó más llamadas a `saveConversation` desde que se escribió
+    // esta prueba (el atajo de "¿arrancas viaje?", el freno de cierre sin
+    // comprobantes): el PRIMER `indexOf` ya no encuentra la del cierre. Se
+    // ancla en `closed ? null : viajeId`, único de esa llamada, y se busca
+    // hacia atrás el `saveConversation(` que la contiene.
+    const anchor = P.indexOf('closed ? null : viajeId');
+    expect(anchor, 'se esperaba encontrar la llamada de saveConversation del cierre').toBeGreaterThan(-1);
+    const i = P.lastIndexOf('await saveConversation(', anchor);
     expect(P.slice(i, i + 200)).toContain(': turns');
   });
 
