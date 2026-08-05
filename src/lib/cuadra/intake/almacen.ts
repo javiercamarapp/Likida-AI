@@ -16,6 +16,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '../presupuesto';
 import { logger } from '@/lib/logger';
 
 /** `image/jpeg` → `jpg`. Lo que Meta manda es jpeg o png. */
@@ -44,7 +45,24 @@ export async function subirComprobante(
 ): Promise<string | undefined> {
   try {
     const ruta = `${tenantId}/${viajeId}/${nombre}.${extension(dataUrl)}`;
-    const { error } = await supabaseAdmin().storage
+    // ── ERA LA ÚNICA LLAMADA DEL CAMINO SIN TECHO, Y LA DEL PAYLOAD MÁS GRANDE ─
+    //
+    // `acotada` puso techo a cada consulta y RPC de Supabase; ésta se quedó
+    // fuera porque no pasa por `repo.ts`. Sin él hereda el default de undici
+    // —300 000 ms— contra un `maxDuration` de 120: un socket aceptado que no
+    // contesta se lleva la invocación ENTERA, y con ella las otras veintiuna
+    // fotos de la ráfaga que corren en el mismo `after()`. Meta ya tiene su 200
+    // y no reintenta, así que esas veintiuna se pierden por el cuelgue de una.
+    //
+    // OJO CON LO QUE ESTE TECHO **NO** HACE: `upload()` de storage-js no acepta
+    // `AbortSignal` (su `FileOptions` solo lleva cacheControl, contentType,
+    // upsert, duplex, metadata y headers — verificado en el paquete instalado),
+    // así que aquí solo actúa la red de seguridad de `acotada`: la carrera
+    // contra el temporizador. El socket puede quedarse colgado por su cuenta,
+    // pero la invocación deja de esperarlo, que es lo que cuesta dinero. Lo
+    // otro se arregla dándole un `fetch` propio al cliente admin, y eso vive
+    // fuera de este archivo.
+    const { error } = await acotada(supabaseAdmin().storage
       .from('comprobantes')
       .upload(ruta, bytes(dataUrl), {
         contentType: dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/jpeg',
@@ -52,7 +70,7 @@ export async function subirComprobante(
         // su propio objeto. Sin esto, el segundo intento falla con 409 y el
         // gasto se queda sin imagen por un motivo que no es un error.
         upsert: true,
-      });
+      }), 'subirComprobante');
     if (error) {
       logger.warn('comprobante.subida_falló', { viaje: viajeId, err: error.message });
       return undefined;

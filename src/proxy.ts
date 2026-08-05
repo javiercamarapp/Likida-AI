@@ -33,15 +33,33 @@ function withSecurityHeaders(res: NextResponse): NextResponse {
   return res;
 }
 
+/**
+ * Los prefijos que exigen sesión. Se compara con `startsWith` y no por
+ * segmento exacto a propósito: sobrar en este gate solo cuesta un login de
+ * más, faltar sirve una pantalla del panel a quien no inició sesión.
+ *
+ * Se exporta para que `proxy.test.ts` pueda comprobar que TODA sección con
+ * `requireOperador`/`requireSessionTenant` está nombrada aquí — /chofer nació
+ * sin estar en esta lista y el único aviso fue un comentario en su layout.
+ */
+export const RUTAS_CON_SESION = ['/dashboard', '/mis-viajes', '/chofer', '/admin'] as const;
+
 export async function proxy(req: NextRequest) {
   let res = NextResponse.next({ request: req });
   const path = req.nextUrl.pathname;
 
-  // /mis-viajes es el panel del chofer y /admin la consola de negocio de
-  // Javier (requireOperador / requireSuperadmin, guard.ts): mismo gate de
-  // sesión que /dashboard, la distinción de ROL vive en la página, no aquí
-  // — esta capa solo pregunta "¿hay sesión?".
-  if (path.startsWith('/dashboard') || path.startsWith('/mis-viajes') || path.startsWith('/admin')) {
+  // /chofer es el panel móvil del chofer, /mis-viajes su antecesor de solo
+  // lectura, y /admin la consola de negocio de Javier (requireOperador /
+  // requireSuperadmin, guard.ts): mismo gate de sesión que /dashboard, la
+  // distinción de ROL vive en la página, no aquí — esta capa solo pregunta
+  // "¿hay sesión?".
+  //
+  // /chofer FALTABA. Su layout ya llama a `requireOperador()`, pero eso lo
+  // dejaba con UNA sola capa: la promesa de este archivo es que las dos
+  // tengan que fallar a la vez. Y es la capa que ve la URL COMPLETA, así que
+  // es la única que puede devolver al chofer exactamente a la pantalla del
+  // enlace de WhatsApp que abrió, query string incluido.
+  if (RUTAS_CON_SESION.some((p) => path.startsWith(p))) {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

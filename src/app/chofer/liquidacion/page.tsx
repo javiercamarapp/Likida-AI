@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default async function MiLiquidacion() {
-  const s = await requireOperador();
+  const s = await requireOperador('/chofer/liquidacion');
 
   if (!s.tenantId) {
     return (

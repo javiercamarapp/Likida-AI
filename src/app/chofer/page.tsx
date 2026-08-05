@@ -25,7 +25,7 @@ export const dynamic = 'force-dynamic';
  */
 async function aceptar(): Promise<EstadoAceptar> {
   'use server';
-  const s = await requireOperador();
+  const s = await requireOperador('/chofer');
   if (!s.tenantId) return { error: 'Tu cuenta todavía no está ligada a una flota. Avísale a tu oficina.' };
 
   const viaje = await viajeEnCurso(s.tenantId, s.operadorId);
@@ -49,7 +49,7 @@ async function aceptar(): Promise<EstadoAceptar> {
 }
 
 export default async function Hoy() {
-  const s = await requireOperador();
+  const s = await requireOperador('/chofer');
 
   // `app_user.tenant_id` es nullable: una cuenta de chofer creada sin flota
   // pasaría la puerta y todas las consultas saldrían vacías — que en pantalla

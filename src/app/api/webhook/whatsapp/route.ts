@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
-import { verifyWebhookChallenge, verifySignature } from '@/lib/meta/client';
+import { verifyWebhookChallenge, verifySignature, sendText } from '@/lib/meta/client';
 import { processInbound, type InboundMessage } from '@/lib/cuadra/processor';
 import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
@@ -8,6 +8,52 @@ import { flushObservabilidad } from '@/lib/observability/sentry';
 
 const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
 const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
+
+// ── CUÁNTOS MENSAJES SE PROCESAN A LA VEZ ───────────────────────────────────
+//
+// NADA ACOTABA ESTO. Era `Promise.all(permitidos.map(processInbound))`: si Meta
+// entrega 22 fotos en un POST, arrancan las 22 llamadas de visión a la vez y
+// las 22 comparten los 120 s de UNA invocación. Cada foto pide su propio tope
+// de 25 s creyendo que es suyo, y no lo es.
+//
+// Y el final es el peor que tiene este producto: Vercel mata la invocación al
+// llegar a `maxDuration`, el `finally` del intake NO corre —así que el `+1` de
+// la barrera queda escrito—, el claim de `wa_mensaje_procesado` queda tomado, y
+// Meta YA recibió su 200 aquí abajo, así que no reintenta. Se pierden las N
+// fotos sin una línea de log: ni un error, ni un aviso al operador. Desde su
+// lado mandó veintidós fotos y no pasó nada.
+//
+// Con un pool el reloj de cada foto vuelve a significar algo: cinco corriendo
+// dan ~5 × 25 s de trabajo en vuelo, y la sexta arranca cuando una termina, con
+// el presupuesto ya gastado descontado por `crearPresupuesto`.
+//
+// ¿POR QUÉ 5? Vercel da 1–2 vCPU a esta función y el lector de códigos de
+// barras (zxing-wasm) es SÍNCRONO: bloquea el event loop mientras decodifica, y
+// con él bloquea los `setTimeout` de los que dependen el abort del OCR y la red
+// de seguridad de `acotada`. Medido en una M2 de 8 núcleos, 20 fotos en
+// paralelo bloquean hasta 1.7 s de golpe. Cinco lo dejan por debajo del medio
+// segundo sin alargar la ráfaga: el cuello de botella real es la llamada de
+// visión, que es red y no CPU.
+const MAX_EN_PARALELO = 5;
+
+/**
+ * Corre `fn` sobre `items` con como mucho `limite` en vuelo.
+ *
+ * `i++` es seguro sin candado porque JavaScript no interrumpe una expresión a
+ * media evaluación: cada obrero se lleva un índice distinto. Nunca lanza —
+ * `fn` trae su propio catch— para que un fallo no cancele a los demás obreros.
+ */
+async function conPool<T>(items: T[], limite: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let siguiente = 0;
+  const obrero = async () => {
+    for (;;) {
+      const i = siguiente++;
+      if (i >= items.length) return;
+      await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limite, items.length) }, obrero));
+}
 
 export const runtime = 'nodejs';
 // ME-13 / AUDIT_V3 orquestación: el procesamiento corre en after() y su presupuesto
@@ -55,25 +101,62 @@ export async function POST(req: NextRequest) {
   }
 
   const messages = extractMessages(payload);
-  // Rate limit por TELÉFONO (no por IP: todo Meta viene de sus IPs).
-  const permitidos = messages.filter((m) => {
-    const ok = rateLimit(`wa:${m.from}`, MSGS_POR_MIN, 60_000);
-    if (!ok) logger.warn('wa.ratelimit', { from: m.from });
-    return ok;
-  });
+  // ── RATE LIMIT POR TELÉFONO (no por IP: todo Meta viene de sus IPs) ────────
+  //
+  // LO QUE DESCARTA AQUÍ SE PIERDE PARA SIEMPRE. Estos mensajes YA pasaron el
+  // HMAC, o sea que son de Meta y son de un chofer dado de alta; y abajo se
+  // devuelve 200, así que Meta no reintenta. El único rastro era un `warn` sin
+  // `waMessageId`: imposible saber después QUÉ comprobante se tiró.
+  //
+  // La cola de verdad —reencolar y procesarlos luego— es infraestructura que
+  // hoy no existe (FASE 3, deuda documentada en GUIA_BUILD.md). Lo que sí se
+  // puede hacer sin ella son las dos cosas que convierten una pérdida silenciosa
+  // en una visible: dejar el id en el log, y DECÍRSELO al operador para que
+  // pueda reenviar. Un comprobante que el chofer sabe que no entró vale mucho
+  // más que uno que cree que sí.
+  const permitidos: InboundMessage[] = [];
+  const descartados: InboundMessage[] = [];
+  for (const m of messages) {
+    if (rateLimit(`wa:${m.from}`, MSGS_POR_MIN, 60_000)) { permitidos.push(m); continue; }
+    descartados.push(m);
+    // ERROR y no warn: es un comprobante perdido, no una curiosidad operativa.
+    logger.error('wa.ratelimit', { from: m.from, id: m.waMessageId, tipo: m.type });
+  }
 
   // 1.3: Meta PUEDE entregar varios mensajes (fotos) en UN POST → comparten los
-  // 60s de UNA invocación. Se procesan en UN solo after() con Promise.all para
-  // GARANTIZAR concurrencia (no depender de si Next corre N after() en serie).
-  // Con la barrera de intake las fotos ya corren en paralelo → un lote de 8 cabe
-  // holgado en 60s (medido: 8 en paralelo ≈ 3.5s vs 24s en serie).
-  if (permitidos.length) {
+  // 120s de UNA invocación. Se procesan en UN solo after() para GARANTIZAR la
+  // concurrencia (no depender de si Next corre N after() en serie), pero con un
+  // POOL y no con `Promise.all` a pelo: ver `MAX_EN_PARALELO` arriba para por
+  // qué un lote sin techo se pierde entero y en silencio.
+  if (permitidos.length || descartados.length) {
+    if (permitidos.length > MAX_EN_PARALELO) {
+      // Deja rastro de que hubo ráfaga grande ANTES de procesarla: si la
+      // invocación muere, esta línea es lo único que dice cuántos entraron.
+      logger.info('wa.rafaga', { mensajes: permitidos.length, pool: MAX_EN_PARALELO });
+    }
     after(async () => {
-      await Promise.all(
-        permitidos.map((m) =>
-          processInbound(m).catch((e) => logger.error('processInbound', { err: e instanceof Error ? e.message : String(e) })),
-        ),
+      await conPool(permitidos, MAX_EN_PARALELO, (m) =>
+        processInbound(m).catch((e) => logger.error('processInbound', { err: e instanceof Error ? e.message : String(e) })),
       );
+
+      // ── LO QUE SE DESCARTÓ SE DICE ─────────────────────────────────────────
+      //
+      // Va DESPUÉS del procesamiento y no antes: primero se atiende lo que sí
+      // entró. UNA línea por teléfono, no una por mensaje — el mismo criterio
+      // que el resumen de ráfaga, y por la misma razón: quien acaba de mandar
+      // treinta fotos no necesita treinta disculpas.
+      //
+      // Nunca lanza: avisar de una pérdida no puede convertirse en una segunda.
+      for (const telefono of new Set(descartados.map((m) => m.from))) {
+        const cuantos = descartados.filter((m) => m.from === telefono).length;
+        try {
+          await sendText(telefono,
+            `Me llegaron demasiados mensajes muy seguidos y ${cuantos === 1 ? 'uno no lo' : `${cuantos} no los`} alcancé a procesar 😕. ` +
+            `Espera un minuto y ${cuantos === 1 ? 'reenvíamelo' : 'reenvíamelos'}, por favor — sin ${cuantos === 1 ? 'ese' : 'esos'} no puedo cuadrar bien tu viaje. 🙏`);
+        } catch (e) {
+          logger.error('wa.ratelimit_aviso_falló', { from: telefono, err: e instanceof Error ? e.message : String(e) });
+        }
+      }
       // EL MECANISMO EXISTÍA Y NADIE LO LLAMABA (auditoría 6, operabilidad).
       //
       // `flushObservabilidad` se escribió para ESTE punto exacto —su comentario

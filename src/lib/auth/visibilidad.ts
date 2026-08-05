@@ -29,9 +29,9 @@ export type Area = 'operacion' | 'dinero' | 'administracion';
 /**
  * Qué áreas ve cada rol del dominio de `app_user.rol` (0044).
  *
- * `operador` NO aparece: su vista es /mis-viajes con RLS propia (0045), no
- * este panel. Un rol desconocido cae al `??` de `areasDe` y no ve nada:
- * fail closed, igual que `permisos.ts`.
+ * `operador` NO aparece: su vista es /chofer con RLS propia (0045), no este
+ * panel. Un rol desconocido cae al `??` de `areasDe` y no ve nada: fail
+ * closed, igual que `permisos.ts`.
  */
 const AREAS_POR_ROL: Record<string, readonly Area[]> = {
   superadmin: ['operacion', 'dinero', 'administracion'],
@@ -120,6 +120,24 @@ export function puedeVerRuta(rol: string, href: string): boolean {
 }
 
 /**
+ * Los roles cuyo panel NO ES ÉSTE, con la dirección del suyo.
+ *
+ * Está aparte de `AREAS_POR_ROL` a propósito, y la separación es la que
+ * impide que arreglar el rebote se convierta en una fuga: darle un área al
+ * chofer para que `inicioDe` supiera a dónde mandarlo le abriría de paso
+ * TODAS las rutas de esa área en `puedeVerRuta` — que es exactamente la
+ * pantalla que no puede ver. Aquí no gana visibilidad de nada: solo se
+ * declara la puerta de salida.
+ */
+const PANEL_PROPIO: Record<string, string> = {
+  // El chofer. Antes caía al `/sin-acceso` de abajo porque no tenía áreas y
+  // no había un panel suyo al que mandarlo; desde que existe /chofer, decirle
+  // "no tienes acceso" a alguien que SÍ tiene panel es mentira, y la lee
+  // justo cuando teclea /dashboard por costumbre o llega por un enlace viejo.
+  operador: '/chofer',
+};
+
+/**
  * A dónde mandar a un rol que no puede ver donde está parado.
  *
  * No es `/dashboard` fijo: para el contador, `/dashboard` es de operación y
@@ -152,6 +170,13 @@ export function rolEfectivo(rolReal: string, rolPedido?: string | null): string 
 }
 
 export function inicioDe(rol: string): string {
+  // PRIMERO el panel ajeno: un rol que vive fuera de /dashboard no se rebota
+  // adentro ni por accidente. Hoy solo aplica al chofer, que no tiene áreas,
+  // así que el orden no cambia nada — lo cambiaría el día que alguien le dé
+  // un área a un rol de esta tabla, y ese es justo el día en que importa.
+  const propio = PANEL_PROPIO[rol];
+  if (propio) return propio;
+
   if (puedeVerArea(rol, 'operacion')) return '/dashboard';
   // El contador aterriza en SU panel, no en el cuadre. Antes caía en
   // `/dashboard/cuadre` porque era la primera página de `dinero` que existía;

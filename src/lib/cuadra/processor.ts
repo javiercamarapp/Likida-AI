@@ -24,6 +24,9 @@ import {
   mensajeAdjuntados, esAfirmacion, esNegacion,
 } from '@/lib/cuadra/intake/huerfanos';
 import { decidirFoto } from '@/lib/cuadra/intake/decidir';
+import {
+  anotarFoto, anotarIncidencia, pedirTurnoDeConfirmacion, cerrarRafaga, lineaIncidencias,
+} from '@/lib/cuadra/intake/rafaga';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/cuadra/privacidad';
 import { violaIndice, llegoTarde } from '@/lib/cuadra/pg_errores';
 import { mxn, fechaMx } from '@/lib/formato';
@@ -50,7 +53,8 @@ import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALi
 import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText } from '@/lib/meta/client';
 import {
   decidirAcuse, mensajeConfirmar, mensajeRefoto, esPeticionDeFoto,
-  mensajeCorregir, mensajeConfirmado, leerBoton, type LecturaTicket,
+  mensajeCorregir, mensajeConfirmado, leerBoton, mensajeDemasiadasDudas,
+  MAX_CONFIRMACIONES_SEGUIDAS, type LecturaTicket,
 } from './acuse_ticket';
 import { estadoDelViaje, responderConsulta } from './consulta_chofer';
 import { resolverCuentaOficina } from './contactos';
@@ -172,11 +176,31 @@ async function atenderPrivacidad(tenantId: string, operadorId: string, telefono:
 // ejecutaba ninguna prueba (auditoría 6, rubro pruebas). Llegar a ella por
 // `processInbound` exige montar la cadena entera, y entonces lo que se mide es
 // la cadena, no esta decisión.
+/**
+ * CUATRO desenlaces, no dos, y la diferencia se le dice al operador.
+ *
+ * Devolvía un booleano, y el llamador traducía TODO el `false` a «tu empresa
+ * aún no ha terminado de configurar su aviso de privacidad». Pero `sendText`
+ * SÍ lanza ante un fallo de red o un timeout —lleva `AbortSignal.timeout` y no
+ * tiene try/catch— y ese throw caía en el catch de aquí abajo, que devolvía
+ * `false` igual. O sea: un blip de red de tres segundos se le presentaba al
+ * chofer como un error administrativo de su patrón, con la foto descartada y
+ * el mensaje marcado como procesado. Le echaba la culpa a su jefe de un
+ * problema nuestro, y encima le quitaba el comprobante.
+ *
+ *   · `puesto`        → se puede tratar (se mandó ahora o ya se había mandado).
+ *   · `sin_datos`     → la flota no terminó su alta. ES administrativo, y es lo
+ *                       único que justifica mandar al operador con su patrón.
+ *   · `no_entregado`  → Meta rechazó el envío (destinatario fuera de lista…).
+ *   · `error`         → red, timeout o base. Transitorio: se reintenta.
+ */
+export type ResultadoAviso = 'puesto' | 'sin_datos' | 'no_entregado' | 'error';
+
 export async function ponerAvisoADisposicion(
   tenantId: string,
   operadorId: string,
   telefono: string,
-): Promise<boolean> {
+): Promise<ResultadoAviso> {
   try {
     const datos = await getDatosResponsable(tenantId);
     if (!datos) {
@@ -184,14 +208,14 @@ export async function ponerAvisoADisposicion(
       // NO se manda un aviso a medias: uno con el responsable equivocado —o sin
       // él— no dice a quién reclamarle, que es justo para lo que sirve.
       logger.error('privacidad.tenant_sin_datos_responsable', { tenantId });
-      return false;
+      return 'sin_datos';
     }
     const texto = avisoSimplificado(datos);
-    if (!texto) return false;
+    if (!texto) return 'sin_datos';
     // El claim vive en SQL: el primer mensaje puede llegar por dos caminos a la
     // vez, y sin él el operador recibiría el aviso dos o tres veces seguidas.
     // Ya se le puso a disposición antes: se puede tratar, y no se repite.
-    if (!(await reclamarEnvioAviso(tenantId, operadorId, versionAviso(texto)))) return true;
+    if (!(await reclamarEnvioAviso(tenantId, operadorId, versionAviso(texto)))) return 'puesto';
     // La reserva va ANTES de enviar (si no, el aviso sale dos o tres veces), pero
     // la CONSTANCIA solo vale si el mensaje salió de verdad. `sendText` devolvía
     // `void` y no lanza al fallar, así que la fila se escribía igual: el 28-jul la
@@ -202,7 +226,7 @@ export async function ponerAvisoADisposicion(
     if (!id) {
       logger.error('privacidad.aviso_no_entregado', { tenantId, operadorId });
       await liberarEnvioAviso(tenantId, operadorId);   // que el siguiente mensaje reintente
-      return false;
+      return 'no_entregado';
     }
     // LA CONSTANCIA VA AQUÍ, y no antes. Hasta la 0033 la escribía la reserva, y
     // por eso deshacerla borraba la prueba de un aviso ANTERIOR que sí se había
@@ -210,11 +234,13 @@ export async function ponerAvisoADisposicion(
     // pasaba a decir que el operador nunca recibió ninguno.
     await confirmarEnvioAviso(tenantId, operadorId, versionAviso(texto));
     logger.info('privacidad.aviso_enviado', { tenantId, operadorId, id });
-    return true;
+    return 'puesto';
   } catch (e) {
-    // Si la 0018 no está aplicada, las columnas no existen y esto truena.
+    // Si la 0018 no está aplicada, las columnas no existen y esto truena. Y por
+    // aquí sale también el throw de `sendText` ante red o timeout: es un fallo
+    // NUESTRO y transitorio, no la flota sin dar de alta su aviso.
     logger.error('privacidad.aviso_error', { tenantId, operadorId, err: e instanceof Error ? e.message : String(e) });
-    return false;
+    return 'error';
   }
 }
 
@@ -411,16 +437,29 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // El obligado es el RESPONSABLE, o sea la flota. Likida solo pone el
     // mecanismo: sin él la flota no puede cumplir aunque quiera.
     const avisoPuesto = await ponerAvisoADisposicion(op.tenantId, op.operadorId, msg.from);
-    if (!avisoPuesto) {
+    if (avisoPuesto !== 'puesto') {
       // SIN AVISO NO HAY TRATAMIENTO. Antes se seguía de largo: la foto se
       // descargaba y se mandaba a un modelo externo sin el aviso que lo ampare.
-      // Solo ocurre si la flota no tiene razón social o domicilio capturados —o
-      // sea, si nunca terminó de darse de alta—, y entonces lo correcto es
-      // detenerse y decirlo, no tratar los datos igual.
-      logger.error('privacidad.tratamiento_bloqueado', { tenant: op.tenantId, operador: op.operadorId });
+      //
+      // LO QUE SE LE DICE DEPENDE DE POR QUÉ NO SE PUDO, y ese es el arreglo.
+      // «tu empresa aún no ha terminado de configurar su aviso de privacidad»
+      // se le soltaba también cuando el que falló fue NUESTRO envío —`sendText`
+      // lanza ante red o timeout—, así que un blip de tres segundos le llegaba
+      // al chofer como un error administrativo de su patrón, con la foto
+      // descartada. Le echábamos la culpa a su jefe de un problema nuestro.
+      logger.error('privacidad.tratamiento_bloqueado', {
+        tenant: op.tenantId, operador: op.operadorId, motivo: avisoPuesto,
+      });
       try {
-        await sendText(msg.from, 'No puedo procesar tus comprobantes todavía: tu empresa aún no ha terminado de configurar su aviso de privacidad. Avísale a tu flota. 🙏');
+        await sendText(msg.from, avisoPuesto === 'sin_datos'
+          ? 'No puedo procesar tus comprobantes todavía: tu empresa aún no ha terminado de configurar su aviso de privacidad. Avísale a tu flota. 🙏'
+          : 'Se me trabó tantito antes de poder recibir tu comprobante 😕. No es cosa tuya ni de tu empresa. Reenvíamelo en un minuto, por favor. 🙏');
       } catch { /* best-effort */ }
+      // Y EL CLAIM SE LIBERA cuando el fallo es nuestro y transitorio: el
+      // mensaje NO se procesó, así que no puede quedar contado como procesado.
+      // Con `sin_datos` no se libera a propósito — reintentar no va a dar de
+      // alta a la flota, y el aviso se le vuelve a dar en el siguiente mensaje.
+      if (avisoPuesto !== 'sin_datos' && msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
       return;
     }
 
@@ -466,6 +505,24 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
         return;
       }
+      // La foto YA cuenta para la barrera, así que también cuenta para el
+      // resumen: `vistas` es el "de tus N fotos" del mensaje de cierre. Va aquí
+      // y no más abajo para que una foto que se cae en la descarga también se
+      // cuente — el operador la mandó, y el resumen tiene que cuadrar con lo
+      // que él mandó, no con lo que nosotros logramos procesar.
+      //
+      // `incrementado === 1` marca además el ARRANQUE de una ráfaga: no había
+      // nada en vuelo, así que lo que quedara anotado es de una anterior que
+      // murió sin cerrarse y no puede sumarse a ésta.
+      anotarFoto(viajeId, incrementado === 1);
+      // ¿ESTA FOTO LLEGÓ SOLA? El contador es atómico, así que `1` significa
+      // exactamente eso: no hay otra en vuelo. Es la única situación en la que
+      // contestarle por la foto NO produce una avalancha, y es la que preserva
+      // el comportamiento de una foto suelta tal cual estaba.
+      //
+      // En ráfaga se anota y se calla; el `finally` lo dice todo junto. Ver
+      // `intake/rafaga.ts` para por qué esa es la forma correcta aquí.
+      const llegoSola = incrementado === 1;
       try {
         const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
         if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
@@ -585,12 +642,58 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // nuestro (truncamiento, provider caído), la misma foto falla igual:
         // decirle "mándala con mejor luz" lo manda a un bucle y le echa la culpa
         // de un bug nuestro.
+        // ── FALLO NUESTRO: EL COMPROBANTE NO SE PIERDE ───────────────────────
+        //
+        // Era el ÚNICO camino de pérdida que no guardaba nada. Los otros dos
+        // —la foto sin viaje abierto y la que llega tras liquidar— pasan por
+        // `guardarHuerfano` y se le ofrecen al operador en su siguiente viaje;
+        // éste se despedía con "hay que capturarlo aparte" y tiraba la foto.
+        //
+        // Y ese trámite NO EXISTE: `addGasto` es el único insert sobre `gasto`
+        // en todo el repo y sus tres llamadores viven en este archivo, todos en
+        // el camino de WhatsApp. No hay alta manual en el panel, ni en una API,
+        // ni en ningún lado. O sea que el mensaje mandaba al operador a hacer
+        // algo imposible con un papel que nadie iba a capturar — verificado el
+        // 4-ago-2026 antes de tocar esta rama.
+        //
+        // Encima el disparador es SISTÉMICO: `fallo_tecnico` es un 429, un
+        // truncamiento o el proveedor caído, así que en una ráfaga de 22 no
+        // falla una, fallan las 22. Perderlas todas y decírselo 22 veces era el
+        // peor par posible.
         if (decision.accion === 'avisar_falla') {
-          await say('Tuve un problema de mi lado al procesar ese comprobante ⚙️ — no es tu foto. Guarda el ticket: ese gasto NO quedó registrado y hay que capturarlo aparte.');
+          // AHORA SÍ SE ESPERA LA SUBIDA. Aquí abajo la promesa se quedaba
+          // flotando: la ruta del objeto se descartaba y, si la invocación se
+          // congelaba antes de que resolviera, no quedaba ni la imagen.
+          const ruta = await subida;
+          const guardado = await guardarHuerfano(op.tenantId, op.operadorId, {
+            gasto: ruta ? { ...gasto, imagenUrl: ruta } : gasto,
+            // El motivo REAL sería `fallo_ocr`. La unión de tipos vive en
+            // `repo.ts`, que esta ronda no toca, y la columna hoy no decide
+            // nada —se escribe y nadie la lee—: `sin_viaje` describe el hecho
+            // operativo (no aterrizó en ninguna liquidación) sin inventar un
+            // valor que la base no espera. Queda anotado como pendiente.
+            motivo: 'sin_viaje', rutaImagen: ruta,
+          });
+          logger.warn('foto.fallo_tecnico_guardado', { viaje: viajeId, tenant: op.tenantId, guardado, conImagen: Boolean(ruta) });
+          // SE ANOTA SIEMPRE, se DICE solo si llegó sola. Anotarla también cuando
+          // ya se contestó por ella es lo que hace que el resumen cuadre con lo
+          // que el operador mandó: "de tus 22 fotos, 22 se me trabaron" en vez de
+          // un mensaje suelto más un resumen que dice 21 y parece otra cosa.
+          anotarIncidencia(viajeId, { tipo: 'fallo_tecnico' });
+          if (llegoSola) {
+            await say(guardado
+              ? 'Se me trabó a mí al leer ese comprobante ⚙️ — no es tu foto. Ya lo guardé, así que *no se pierde*. ¿Me lo reenvías en un momento? Si no alcanza a entrar en este viaje, te lo ofrezco en el siguiente. 📸'
+              : 'Se me trabó a mí al leer ese comprobante ⚙️ y tampoco lo pude guardar. Conserva el ticket y reenvíamelo en un rato, por favor. 🙏');
+          }
           return;
         }
         if (decision.accion === 'pedir_reenvio') {
-          await say('Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?');
+          // Mismo criterio: una gasolinera mal iluminada de noche no arruina una
+          // foto, arruina las veintidós. Se consolidan en el resumen.
+          anotarIncidencia(viajeId, { tipo: 'ilegible' });
+          if (llegoSola) {
+            await say('Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?');
+          }
           return;
         }
         // Acercamiento del protocolo de dos fotos: hizo lo correcto, no se le
@@ -805,16 +908,27 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         if (dudosa) {
           const extra = (gasto.ocrExtra ?? {}) as Record<string, unknown>;
           logger.info('foto.fecha_dudosa', { viaje: viajeId, motivo: dudosa, fecha: gasto.fecha });
-          await say(mensajePideFechaOtraVez({
-            etiqueta: etiquetaConcepto(gasto.concepto, extra),
+          // TAMBIÉN ES SISTÉMICO, y por eso entra al mismo resumen: el reloj mal
+          // puesto de una terminal, o un ticket de año viejo mal impreso, salen
+          // igual en todo el fajo de esa gasolinera. Con 22 fotos eran 22 de
+          // estos mensajes —y son de los largos—, uno detrás de otro.
+          anotarIncidencia(viajeId, {
+            tipo: 'fecha_dudosa',
             monto: gasto.monto,
-            folio: gasto.folio,
-            emisor: extra.emisor as string | undefined,
-            estacion: extra.estacion as string | undefined,
-            fecha: gasto.fecha!,
-            fechaImpresa: extra.fechaImpresa as string | undefined,
-            ejercicioHoy: ventana?.hoy ? Number(ventana.hoy.slice(0, 4)) : null,
-          }, dudosa));
+            etiqueta: etiquetaConcepto(gasto.concepto, extra),
+          });
+          if (llegoSola) {
+            await say(mensajePideFechaOtraVez({
+              etiqueta: etiquetaConcepto(gasto.concepto, extra),
+              monto: gasto.monto,
+              folio: gasto.folio,
+              emisor: extra.emisor as string | undefined,
+              estacion: extra.estacion as string | undefined,
+              fecha: gasto.fecha!,
+              fechaImpresa: extra.fechaImpresa as string | undefined,
+              ejercicioHoy: ventana?.hoy ? Number(ventana.hoy.slice(0, 4)) : null,
+            }, dudosa));
+          }
         }
         // MANDAR UN COMPROBANTE ES ACEPTAR EL VIAJE.
         //
@@ -863,15 +977,44 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           logger.info('foto.acuse', { viaje: viajeId, peldano: d.peldano, porque: d.porque });
 
           if (d.peldano === 'confirmar') {
-            const estado = await estadoDelViaje(op.tenantId, viajeId);
-            const m = mensajeConfirmar(gasto.id, lectura, estado);
-            // Si el botón no sale —fuera de la ventana de 24 h, Meta caído— se
-            // degrada a texto en vez de perderse: `sendButtons` devuelve null sin
-            // lanzar, y quedarse sin confirmación es peor que quedarse sin botón.
-            const enviado = await sendButtons(msg.from, m.cuerpo, m.botones);
-            if (!enviado) await say(`${m.cuerpo}\n\nContéstame *sí* o *no*.`);
+            // ── EL TOPE ESTABA ESCRITO Y NO ESTABA CABLEADO ────────────────────
+            //
+            // `MAX_CONFIRMACIONES_SEGUIDAS` existía desde que se escribió este
+            // módulo, con su párrafo explicando que doce tickets térmicos
+            // arrugados producen doce mensajes con botones —"justo el ruido que
+            // este módulo existe para evitar"— y ni un solo `import`. La
+            // constante describía una protección que nadie aplicaba.
+            //
+            // El turno se pide ANTES de mandar: es lo que hace que el tope
+            // cuente confirmaciones ENVIADAS y no fotos vistas.
+            const turno = pedirTurnoDeConfirmacion(viajeId);
+            if (turno > MAX_CONFIRMACIONES_SEGUIDAS) {
+              // Pasado el tope no se calla: se anota, y el resumen del cierre
+              // dice cuántas quedaron sin confirmar. Un tope que no se anuncia
+              // se lee como "todo salió bien", que es la peor lectura posible.
+              logger.info('foto.acuse_sobre_tope', { viaje: viajeId, turno, tope: MAX_CONFIRMACIONES_SEGUIDAS });
+              anotarIncidencia(viajeId, { tipo: 'duda', monto: gasto.monto, etiqueta: lectura.concepto });
+            } else {
+              const estado = await estadoDelViaje(op.tenantId, viajeId);
+              const m = mensajeConfirmar(gasto.id, lectura, estado);
+              // Si el botón no sale —fuera de la ventana de 24 h, Meta caído— se
+              // degrada a texto en vez de perderse: `sendButtons` devuelve null sin
+              // lanzar, y quedarse sin confirmación es peor que quedarse sin botón.
+              const enviado = await sendButtons(msg.from, m.cuerpo, m.botones);
+              if (!enviado) await say(`${m.cuerpo}\n\nContéstame *sí* o *no*.`);
+            }
           } else if (d.peldano === 'refoto') {
-            await say(mensajeRefoto(d.porque));
+            // Mismo tope y mismo contador: para el chofer, "confírmame esto" y
+            // "mándamela otra vez" son el mismo ruido, y en una ráfaga de doce
+            // tickets malos llegan mezclados. Contarlos por separado dejaría
+            // pasar ocho mensajes en vez de cuatro.
+            const turno = pedirTurnoDeConfirmacion(viajeId);
+            if (turno > MAX_CONFIRMACIONES_SEGUIDAS) {
+              logger.info('foto.refoto_sobre_tope', { viaje: viajeId, turno, tope: MAX_CONFIRMACIONES_SEGUIDAS });
+              anotarIncidencia(viajeId, { tipo: 'duda', monto: gasto.monto, etiqueta: lectura.concepto });
+            } else {
+              await say(mensajeRefoto(d.porque));
+            }
           }
         } catch (e) {
           // Best-effort: el gasto YA está guardado. Un acuse que no sale es
@@ -927,14 +1070,45 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // contador es atómico, así que exactamente una invocación lo ve. Y solo
         // se resume si de verdad hubo RÁFAGA (`incrementado > 1`): para una foto
         // suelta, su propio camino ya habló y esto sería un mensaje de más.
+        //
+        // `quedan === null` TAMBIÉN cierra, y eso es nuevo. Significa que la RPC
+        // no contestó, así que no se sabe si quedaba alguna en vuelo — y con la
+        // libreta de la ráfaga ya llena, no cerrar equivale a tragarse el único
+        // aviso de que tres comprobantes no entraron. El peor caso de cerrar de
+        // más es un resumen partido en dos mensajes; el de no cerrar es el
+        // silencio, que es exactamente lo que esta ronda vino a quitar.
         try {
-          if (quedan === 0 && incrementado > 1) {
+          const ultima = quedan === 0 || quedan === null;
+          // Lo que se anotó mientras la ráfaga corría. Se cierra SIEMPRE que
+          // ésta sea la última —aunque no haya nada anotado— para no dejar la
+          // libreta viva sobre un viaje cuya ráfaga ya terminó.
+          const rafaga = ultima ? cerrarRafaga(viajeId) : null;
+          const incidencias = rafaga ? lineaIncidencias(rafaga.vistas, rafaga.incidencias) : null;
+          // HUBO RÁFAGA si por aquí pasó más de una foto (`vistas`) o si el
+          // contador vio más de una en vuelo (`incrementado`). Se miran las dos
+          // porque cada una ve una mitad: `incrementado` es el instante en que
+          // ESTA foto se registró —la primera de una ráfaga simultánea ve 1— y
+          // `vistas` es todo lo que pasó por este proceso.
+          //
+          // Con UNA sola foto no se resume: su propio camino ya habló, y decirlo
+          // dos veces es el mismo ruido que esto vino a quitar.
+          if (ultima && rafaga && (rafaga.vistas > 1 || incrementado > 1)) {
             const puestos = await getGastos(viajeId, op.tenantId);
             const total = puestos.reduce((s, g) => s + (g.monto > 0 ? g.monto : 0), 0);
-            logger.info('foto.resumen_rafaga', { viaje: viajeId, gastos: puestos.length });
+            // Las que se pasaron del tope de botones llevan su propia frase, que
+            // es la que `mensajeDemasiadasDudas` ya escribía y nadie llamaba.
+            const dudas = rafaga.incidencias.filter((i) => i.tipo === 'duda').length;
+            const cola = dudas
+              ? `\n\n${mensajeDemasiadasDudas(dudas, await estadoDelViaje(op.tenantId, viajeId).catch(() => null))}`
+              : '';
+            logger.info('foto.resumen_rafaga', {
+              viaje: viajeId, gastos: puestos.length,
+              vistas: rafaga.vistas, incidencias: rafaga.incidencias.length,
+            });
             await sendText(msg.from,
               `📸 Ya revisé tus fotos. En este viaje llevo *${puestos.length} ${puestos.length === 1 ? 'comprobante' : 'comprobantes'}* por *${mxn(total)}*.\n\n` +
-              `Si te falta alguno, mándalo otra vez. Cuando termines, escribe *listo*. 👍`);
+              (incidencias ? `${incidencias}\n\n` : '') +
+              `Si te falta alguno, mándalo otra vez. Cuando termines, escribe *listo*. 👍${cola}`);
           }
         } catch (e) {
           // Best-effort puro: el resumen es información, no el dinero.
@@ -1183,7 +1357,16 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // Todo este bloque es best-effort: `getHuerfanos` devuelve [] ante un error
     // de lectura, y no poder leer la sala de espera NO puede impedirle al
     // operador cerrar el viaje que sí tiene.
-    const enEspera = await getHuerfanos(op.tenantId, op.operadorId);
+    // SOLO SE OFRECE LO QUE TIENE MONTO. Desde que el fallo técnico de OCR
+    // guarda huérfano (arriba), la sala de espera puede contener comprobantes
+    // cuyo monto NO se pudo leer: el `gasto` que dejó `extraerComprobante` en
+    // esa rama trae `monto: 0`. Adjuntarlos metería una línea de $0.00 en la
+    // liquidación del contralor —una cifra que no es una medición— y el
+    // ofrecimiento le enseñaría al operador "• Otro · $0.00", que no le dice
+    // nada. Se conservan (la foto y la fila son la evidencia de que existió) y
+    // se recuperan reenviando la foto, que es lo que su propio mensaje le pide.
+    const enEspera = (await getHuerfanos(op.tenantId, op.operadorId))
+      .filter((h) => h.gasto.monto > 0);
     if (enEspera.length) {
       const ofrecidos = enEspera.filter((h) => h.ofrecidoEn);
       const comoLista = (hs: typeof enEspera) => hs.map((h) => ({
