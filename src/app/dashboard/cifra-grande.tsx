@@ -32,14 +32,14 @@ import { resolverFormato, type FormatoPreset } from '../admin/ui/formato-preset'
 export default function CifraGrande({
   valor, etiqueta, formato = 'mxn', nota,
 }: {
-  valor: number;
+  valor?: number;
   etiqueta: string;
   formato?: FormatoPreset;
   /** Segunda línea opcional, aún más discreta (la ventana de tiempo, la base legal). */
   nota?: string;
 }) {
   const reducido = usePrefersReducedMotion();
-  const mostrado = useCountUp(valor, !reducido);
+  const mostrado = useCountUp(valor ?? 0, !reducido);
   const fmt = resolverFormato(formato);
 
   return (
@@ -53,7 +53,11 @@ export default function CifraGrande({
           letterSpacing: '-0.035em',
         }}
       >
-        {fmt(mostrado)}
+        {/* AUDITORÍA 13, MEDIO: con la consulta caída el panel servía $0.00 —
+            el cero-que-se-lee-como-medición en la cifra más grande. Sin dato
+            se enseña un guion (la doctrina de 'un rótulo tiene que ser
+            verdad'), no un cero. */}
+        {valor === undefined ? '—' : fmt(mostrado)}
       </div>
       <div
         className="text-[10px] font-semibold uppercase mt-2 whitespace-nowrap"
