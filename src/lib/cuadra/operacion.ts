@@ -473,6 +473,29 @@ export interface NuevoViaje {
   unidadId?: string | null;
 }
 
+/**
+ * Comprueba que una unidad sea del tenant, ANTES de escribirla en `viaje`.
+ *
+ * ── LA UNIDAD TIENE QUE SER DE ESTA FLOTA (auditoría 10, MEDIO) ────────────
+ *
+ * Mismo patrón que `operadorId` (arriba): el `.eq('tenant_id', tenantId)` del
+ * INSERT/UPDATE acota QUÉ VIAJE se toca, nunca A QUÉ UNIDAD se le asigna.
+ * `unidad` no tiene ninguna policy de RLS que la exponga a un USUARIO de otro
+ * tenant por su cuenta (no hay login de "operador de unidad" análogo al del
+ * chofer) — por eso es MEDIO y no ALTO — pero el propio `flota_admin` de A,
+ * que ya sabe o adivina el UUID de una unidad de B, podía hacer que su PROPIO
+ * panel pintara número económico, placas, marca y modelo de esa unidad vía el
+ * join que pinta `/dashboard/despacho`.
+ */
+async function unidadPropia(tenantId: string, unidadId: string): Promise<boolean> {
+  const filas = await traerTodo<{ id: unknown }>(
+    (d, h) => supabaseAdmin().from('unidad').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', unidadId).order('id').range(d, h),
+    'unidadPropia',
+  );
+  return filas.length > 0;
+}
+
 /** Devuelve el id del viaje creado. */
 export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<string> {
   // ── EL OPERADOR TIENE QUE SER DE ESTA FLOTA (auditoría 10, ALTO) ──────────
@@ -495,6 +518,11 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
       'crearViaje.operadorPropio',
     );
     if (propio.length === 0) throw new Error('crearViaje: el operador no pertenece a esta flota');
+  }
+
+  // Mismo candado, para `unidadId` (auditoría 10, MEDIO) — ver `unidadPropia`.
+  if (v.unidadId && !(await unidadPropia(tenantId, v.unidadId))) {
+    throw new Error('crearViaje: la unidad no pertenece a esta flota');
   }
 
   const { data, error } = await acotada(supabaseAdmin().from('viaje').insert({
@@ -617,8 +645,18 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
   if (error) logger.warn('viaje.avisado_en_no_se_marcó', { viajeId, err: error.message });
 }
 
-/** Empatar viaje ↔ unidad. `null` la desasigna. */
+/**
+ * Empatar viaje ↔ unidad. `null` la desasigna (no hay unidad que comprobar,
+ * así que el candado de abajo se salta a propósito para ese caso).
+ *
+ * Mismo candado que `crearViaje` (auditoría 10, MEDIO): la unidad tiene que
+ * ser de este tenant ANTES de escribirla — ver `unidadPropia`.
+ */
 export async function asignarUnidad(tenantId: string, viajeId: string, unidadId: string | null): Promise<void> {
+  if (unidadId && !(await unidadPropia(tenantId, unidadId))) {
+    throw new Error('asignarUnidad: la unidad no pertenece a esta flota');
+  }
+
   const { error } = await acotada(supabaseAdmin().from('viaje')
     .update({ unidad_id: unidadId })
     .eq('id', viajeId).eq('tenant_id', tenantId), 'asignarUnidad');
