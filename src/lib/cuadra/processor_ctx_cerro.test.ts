@@ -24,7 +24,10 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
   getOpenViaje: vi.fn(async () => 'v1'),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
-  loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
+  // `cierreSinComprobantes: true` deja pasar el freno de "cierre sin
+  // comprobantes" (processor.ts): este archivo prueba que `ctxCerro` sobrevive
+  // a un fallo posterior al cierre exitoso, no ese freno.
+  loadConversation: vi.fn(async () => ({ id: 'c1', turns: [], cierreSinComprobantes: true })),
   saveConversation: (...a: unknown[]) => saveConversation(...a),
   claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
   acquireViajeLock: vi.fn(async () => true), releaseViajeLock: vi.fn(),

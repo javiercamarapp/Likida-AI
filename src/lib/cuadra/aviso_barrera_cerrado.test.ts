@@ -22,7 +22,10 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
   getOpenViaje: vi.fn(async () => 'v1'),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
-  loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
+  // `cierreSinComprobantes: true` deja pasar el freno de "cierre sin
+  // comprobantes" (processor.ts): este archivo prueba el aviso de barrera
+  // vencida, no ese freno, y con `false` el "listo" nunca llegaba al agente.
+  loadConversation: vi.fn(async () => ({ id: 'c1', turns: [], cierreSinComprobantes: true })),
   saveConversation: vi.fn(),
   claimMessage: vi.fn(async () => 'nuevo' as const),
   acquireViajeLock: vi.fn(async () => true), releaseViajeLock: vi.fn(),

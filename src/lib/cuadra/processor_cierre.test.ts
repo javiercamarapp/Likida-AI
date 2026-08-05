@@ -70,7 +70,11 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
   getOpenViaje: (t: string, o: string) => getOpenViaje(t, o),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
-  loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
+  // `cierreSinComprobantes: true` simula que el freno de "cierre sin
+  // comprobantes" (processor.ts) ya preguntó una vez: estas pruebas cubren lo
+  // que pasa DESPUÉS del cierre (PDF, log, lock), no el freno mismo, y con
+  // `false` el "listo" nunca llegaba al agente que dicen probar.
+  loadConversation: vi.fn(async () => ({ id: 'c1', turns: [], cierreSinComprobantes: true })),
   saveConversation: (...a: unknown[]) => saveConversation(...a),
   claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
   acquireViajeLock: vi.fn(async () => true),

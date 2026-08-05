@@ -118,7 +118,11 @@ describe('loadConversation — el insert que pierde la carrera', () => {
     maybeSingle.mockResolvedValueOnce({ data: null, error: null });
     insertSingle.mockResolvedValue({ data: { id: 'c-nueva', viaje_id: 'v1', estado: { turns: [] } }, error: null });
     const r = await loadConversation('t1', '+52', 'v1');
-    expect(r).toEqual({ id: 'c-nueva', turns: [] });
+    // `desdeFila` ahora también trae las MarcasConversacion (intentosConfirmacion,
+    // cierreSinComprobantes): sin marcas guardadas, una fila nueva cae a sus
+    // valores por defecto — no a `undefined`, porque `saveConversation` las
+    // arrastra tal cual y un `undefined` ahí borraría el contador la primera vez.
+    expect(r).toEqual({ id: 'c-nueva', turns: [], intentosConfirmacion: 0, cierreSinComprobantes: false });
     expect(maybeSingle).toHaveBeenCalledTimes(1);
   });
 
