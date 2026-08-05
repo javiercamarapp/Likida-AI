@@ -6,14 +6,39 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // flotas a la vez, y por eso vive fuera de analytics.ts (que es
 // tenant-scoped en cada línea) — mezclar los dos hace fácil que alguien
 // copie un patrón de aquí a una consulta de cliente y filtre de menos.
-type Resp = { data: unknown; error: { message: string } | null };
+type Resp = { data: unknown; error: { message: string } | null; count?: number | null };
 const respuestas = new Map<string, Resp>();
+/** Los `range(desde, hasta)` que pidió cada tabla — para comprobar que se
+ *  pagina UNA vez cuando el `count` ya dijo que no falta nada. */
+const rangos = new Map<string, Array<[number, number]>>();
 
+// El mock pagina COMO POSTGREST: `range` rebana, y `count` solo viene si la
+// consulta lo pidió con `.select(cols, { count: 'exact' })`. Un mock que
+// devolviera la tabla entera en cada `range` describiría una base que no
+// existe —`range(1000, 1999)` sobre tres filas devuelve `[]`, no las tres— y
+// es justo esa ficción la que dejaba pasar el recorte silencioso.
 function crearBuilder(tabla: string) {
   const resp = (): Resp => respuestas.get(tabla) ?? { data: [], error: null };
+  let pidioConteo = false;
   const b: Record<string, unknown> = {};
   const self = () => b;
-  for (const m of ['select', 'eq', 'order', 'limit']) b[m] = self;
+  for (const m of ['eq', 'order', 'limit']) b[m] = self;
+  b.select = (_cols?: unknown, opts?: { count?: string }) => {
+    if (opts?.count === 'exact') pidioConteo = true;
+    return b;
+  };
+  b.range = (desde: number, hasta: number) => {
+    const r = resp();
+    if (!rangos.has(tabla)) rangos.set(tabla, []);
+    rangos.get(tabla)!.push([desde, hasta]);
+    if (r.error) return Promise.resolve(r);
+    const todas = (r.data ?? []) as unknown[];
+    return Promise.resolve({
+      data: todas.slice(desde, hasta + 1),
+      error: null,
+      count: pidioConteo ? todas.length : null,
+    });
+  };
   b.then = (ok: (v: Resp) => unknown, fail?: (e: unknown) => unknown) => Promise.resolve(resp()).then(ok, fail);
   return b;
 }
@@ -23,7 +48,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: strin
 const { getResumenNegocio, getConversacionesActivas } = await import('./negocio');
 
 describe('getResumenNegocio', () => {
-  beforeEach(() => { respuestas.clear(); });
+  beforeEach(() => { respuestas.clear(); rangos.clear(); });
 
   it('suma costo/tokens de TODOS los tenants y agrupa por fase', async () => {
     respuestas.set('tenant', { data: [{ id: 't1', nombre: 'Transportes Innovativos', plan: 'demo' }], error: null });
@@ -115,6 +140,44 @@ describe('getResumenNegocio', () => {
     respuestas.set('llm_costo', { data: null, error: { message: 'fetch failed' } });
     await expect(getResumenNegocio()).rejects.toThrow('fetch failed');
   });
+
+  // ── El día que crezca de verdad es el mes 1 ───────────────────────────────
+  //
+  // `llm_costo` recibe una fila POR LLAMADA al modelo. Sin paginar, PostgREST
+  // recortaba a `max_rows` en silencio y esta consola —donde se decide el
+  // precio del producto— reportaba una fracción del gasto de IA sin marca de
+  // estar incompleta.
+  it('pagina `llm_costo`: la fila 1,001 entra en el total', async () => {
+    const filas = Array.from({ length: 1_001 }, () => ({
+      tenant_id: 't1', fase: 'ocr', modelo: 'm', tokens_in: 1, tokens_out: 0,
+      costo_usd: 0.01, created_at: '2026-08-01T10:00:00Z',
+    }));
+    respuestas.set('llm_costo', { data: filas, error: null });
+    const r = await getResumenNegocio('2026-08-02');
+    expect(r.porFase[0].n).toBe(1_001);
+    expect(r.costoIaUsd).toBe(10.01);
+    expect(rangos.get('llm_costo')).toEqual([[0, 999], [1000, 1999]]);
+  });
+
+  it('pide el total en la primera página, así que una tabla chica cuesta UNA consulta', async () => {
+    respuestas.set('gasto', { data: [{ created_at: '2026-08-01T08:00:00Z' }], error: null });
+    await getResumenNegocio('2026-08-02');
+    expect(rangos.get('gasto')).toEqual([[0, 999]]);
+  });
+
+  it('si la lectura no cabe en las 100 páginas, LANZA — no reporta una fracción del gasto', async () => {
+    // 150,000 filas es lo que produce una flota con volumen real en un año.
+    // Enseñar el costo de las primeras 100,000 como si fuera el total es
+    // exactamente la cifra con la que se pondría mal el precio.
+    respuestas.set('llm_costo', {
+      data: Array.from({ length: 150_000 }, () => ({
+        tenant_id: 't1', fase: 'ocr', modelo: 'm', tokens_in: 1, tokens_out: 0,
+        costo_usd: 0.01, created_at: '2026-08-01T10:00:00Z',
+      })),
+      error: null,
+    });
+    await expect(getResumenNegocio('2026-08-02')).rejects.toThrow(/lectura incompleta/);
+  });
 });
 
 // `estado` SÍ trae el historial de mensajes (`{ turns: ConvTurn[] }`, misma
@@ -122,7 +185,7 @@ describe('getResumenNegocio', () => {
 // como decía el comentario anterior de la función. Se corrigió tras verlo
 // mal renderizado (JSON crudo desbordando la tarjeta).
 describe('getConversacionesActivas', () => {
-  beforeEach(() => { respuestas.clear(); });
+  beforeEach(() => { respuestas.clear(); rangos.clear(); });
 
   it('trae los turnos reales, más reciente primero, con el nombre de la flota', async () => {
     respuestas.set('wa_conversacion', {

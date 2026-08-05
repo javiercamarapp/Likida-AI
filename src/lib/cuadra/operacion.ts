@@ -16,7 +16,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { notificarAsignacion } from './notificar';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
-import { traerTodo } from './pg';
+import { conteo, traerTodo } from './pg';
 
 /** Los tres estatus que `viaje` de verdad admite (`viaje_estatus_dominio`,
  *  0025). Un cuarto valor no se traduce ni se esconde: se cuenta aparte. */
@@ -49,22 +49,22 @@ export async function getCargaOperadores(tenantId: string): Promise<CargaOperado
   const admin = supabaseAdmin();
   const [ops, viajes, pods, incidencias] = await Promise.all([
     traerTodo<{ id: unknown; nombre: unknown; telefono: unknown; activo: unknown }>(
-      (d, h) => admin.from('operador').select('id, nombre, telefono, activo')
+      (d, h) => admin.from('operador').select('id, nombre, telefono, activo', conteo(d))
         .eq('tenant_id', tenantId).order('id').range(d, h),
       'getCargaOperadores.operador',
     ),
     traerTodo<{ id: unknown; operador_id: unknown; estatus: unknown }>(
-      (d, h) => admin.from('viaje').select('id, operador_id, estatus')
+      (d, h) => admin.from('viaje').select('id, operador_id, estatus', conteo(d))
         .eq('tenant_id', tenantId).order('id').range(d, h),
       'getCargaOperadores.viaje',
     ),
     traerTodo<{ viaje_id: unknown; estado: unknown }>(
-      (d, h) => admin.from('pod').select('viaje_id, estado')
+      (d, h) => admin.from('pod').select('viaje_id, estado', conteo(d))
         .eq('tenant_id', tenantId).order('id').range(d, h),
       'getCargaOperadores.pod',
     ),
     traerTodo<{ viaje_id: unknown; estado: unknown }>(
-      (d, h) => admin.from('incidencia').select('viaje_id, estado')
+      (d, h) => admin.from('incidencia').select('viaje_id, estado', conteo(d))
         .eq('tenant_id', tenantId).order('id').range(d, h),
       'getCargaOperadores.incidencia',
     ),
@@ -122,7 +122,7 @@ export interface ViajeSinAsignar {
 export async function getViajesSinAsignar(tenantId: string): Promise<ViajeSinAsignar[]> {
   const filas = await traerTodo<Record<string, unknown>>(
     (d, h) => supabaseAdmin().from('viaje')
-      .select('id, folio, origen, destino, fecha_inicio, estatus')
+      .select('id, folio, origen, destino, fecha_inicio, estatus', conteo(d))
       .eq('tenant_id', tenantId).is('operador_id', null)
       .neq('estatus', 'liquidado')
       .order('id').range(d, h),
@@ -164,12 +164,12 @@ export async function getUnidades(tenantId: string, hoy = new Date()): Promise<U
   const [unidades, ordenes] = await Promise.all([
     traerTodo<Record<string, unknown>>(
       (d, h) => admin.from('unidad')
-        .select('id, numero_economico, placas, marca, modelo, anio, estado, km_actual, poliza_vence, permiso_sict_vence, verificacion_vence, activo')
+        .select('id, numero_economico, placas, marca, modelo, anio, estado, km_actual, poliza_vence, permiso_sict_vence, verificacion_vence, activo', conteo(d))
         .eq('tenant_id', tenantId).order('numero_economico').range(d, h),
       'getUnidades.unidad',
     ),
     traerTodo<{ unidad_id: unknown; estado: unknown }>(
-      (d, h) => admin.from('mantenimiento').select('unidad_id, estado')
+      (d, h) => admin.from('mantenimiento').select('unidad_id, estado', conteo(d))
         .eq('tenant_id', tenantId).neq('estado', 'cerrada').order('id').range(d, h),
       'getUnidades.mantenimiento',
     ),
@@ -249,16 +249,21 @@ export async function getIncidencias(tenantId: string, ahora = new Date()): Prom
   const [incidencias, viajes, unidades] = await Promise.all([
     traerTodo<Record<string, unknown>>(
       (d, h) => admin.from('incidencia')
-        .select('id, viaje_id, unidad_id, tipo, prioridad, estado, descripcion, sla_horas, abierta_en, resuelta_en')
-        .eq('tenant_id', tenantId).order('abierta_en', { ascending: false }).range(d, h),
+        .select('id, viaje_id, unidad_id, tipo, prioridad, estado, descripcion, sla_horas, abierta_en, resuelta_en', conteo(d))
+        // `id` DESEMPATA. `abierta_en` sola no es única —dos incidencias
+        // abiertas en el mismo segundo empatan— y `range` pagina por posición:
+        // ante un empate en la frontera de página, Postgres puede devolver la
+        // misma fila dos veces y saltarse otra. Era la única consulta paginada
+        // de este módulo sin desempate.
+        .eq('tenant_id', tenantId).order('abierta_en', { ascending: false }).order('id').range(d, h),
       'getIncidencias.incidencia',
     ),
     traerTodo<{ id: unknown; folio: unknown }>(
-      (d, h) => admin.from('viaje').select('id, folio').eq('tenant_id', tenantId).order('id').range(d, h),
+      (d, h) => admin.from('viaje').select('id, folio', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h),
       'getIncidencias.viaje',
     ),
     traerTodo<{ id: unknown; numero_economico: unknown }>(
-      (d, h) => admin.from('unidad').select('id, numero_economico').eq('tenant_id', tenantId).order('id').range(d, h),
+      (d, h) => admin.from('unidad').select('id, numero_economico', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h),
       'getIncidencias.unidad',
     ),
   ]);
@@ -317,17 +322,17 @@ export async function getPods(tenantId: string): Promise<PodRow[]> {
   const admin = supabaseAdmin();
   const [viajes, pods, operadores] = await Promise.all([
     traerTodo<{ id: unknown; folio: unknown; operador_id: unknown; estatus: unknown }>(
-      (d, h) => admin.from('viaje').select('id, folio, operador_id, estatus')
+      (d, h) => admin.from('viaje').select('id, folio, operador_id, estatus', conteo(d))
         .eq('tenant_id', tenantId).order('id').range(d, h),
       'getPods.viaje',
     ),
     traerTodo<Record<string, unknown>>(
-      (d, h) => admin.from('pod').select('id, viaje_id, estado, nota, capturado_en')
+      (d, h) => admin.from('pod').select('id, viaje_id, estado, nota, capturado_en', conteo(d))
         .eq('tenant_id', tenantId).order('id').range(d, h),
       'getPods.pod',
     ),
     traerTodo<{ id: unknown; nombre: unknown; telefono: unknown }>(
-      (d, h) => admin.from('operador').select('id, nombre, telefono')
+      (d, h) => admin.from('operador').select('id, nombre, telefono', conteo(d))
         .eq('tenant_id', tenantId).order('id').range(d, h),
       'getPods.operador',
     ),
@@ -419,19 +424,19 @@ export async function getTableroOperacion(tenantId: string): Promise<TableroOper
   const admin = supabaseAdmin();
   const [viajes, unidades, incidencias, pods] = await Promise.all([
     traerTodo<{ id: unknown; operador_id: unknown; estatus: unknown }>(
-      (d, h) => admin.from('viaje').select('id, operador_id, estatus').eq('tenant_id', tenantId).order('id').range(d, h),
+      (d, h) => admin.from('viaje').select('id, operador_id, estatus', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h),
       'getTableroOperacion.viaje',
     ),
     traerTodo<{ estado: unknown }>(
-      (d, h) => admin.from('unidad').select('estado').eq('tenant_id', tenantId).eq('activo', true).order('id').range(d, h),
+      (d, h) => admin.from('unidad').select('estado', conteo(d)).eq('tenant_id', tenantId).eq('activo', true).order('id').range(d, h),
       'getTableroOperacion.unidad',
     ),
     traerTodo<{ estado: unknown }>(
-      (d, h) => admin.from('incidencia').select('estado').eq('tenant_id', tenantId).neq('estado', 'resuelta').order('id').range(d, h),
+      (d, h) => admin.from('incidencia').select('estado', conteo(d)).eq('tenant_id', tenantId).neq('estado', 'resuelta').order('id').range(d, h),
       'getTableroOperacion.incidencia',
     ),
     traerTodo<{ viaje_id: unknown; estado: unknown }>(
-      (d, h) => admin.from('pod').select('viaje_id, estado').eq('tenant_id', tenantId).order('id').range(d, h),
+      (d, h) => admin.from('pod').select('viaje_id, estado', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h),
       'getTableroOperacion.pod',
     ),
   ]);
@@ -507,15 +512,53 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
  */
 export async function avisarAlChofer(tenantId: string, operadorId: string, viajeId: string): Promise<void> {
   const admin = supabaseAdmin();
-  const [{ data: op }, { data: viaje }] = await Promise.all([
+  // SILENCIOSA POR PARTIDA DOBLE, hasta hoy. Estas dos lecturas desestructuraban
+  // solo `data`, así que un fallo de Supabase se volvía `op = null` → `!op?.
+  // telefono` → `return` limpio: el aviso no salía Y no quedaba una línea de
+  // log. Y como `avisado_en` es lo ÚNICO que hace visible el viaje para la
+  // escalación de las 5 h (`viajesSinAceptar` filtra por él), ese viaje no
+  // escalaba NUNCA: nadie le dijo al chofer y nadie se iba a enterar.
+  //
+  // La segunda lectura además era asimétrica dentro de su propio `Promise.all`:
+  // la de `operador` acotaba por `tenant_id` y la de `viaje` no. Hoy no había
+  // fuga porque `viajeId` viene de un insert propio o de una consulta ya
+  // acotada, pero el día que llegue de la entrada del usuario, un id de la flota
+  // B le manda a un chofer de la flota A el anticipo de un viaje ajeno.
+  const [{ data: op, error: errOp }, { data: viaje, error: errViaje }] = await Promise.all([
     admin.from('operador').select('telefono').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(),
-    admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id').eq('id', viajeId).maybeSingle(),
+    admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id')
+      .eq('tenant_id', tenantId).eq('id', viajeId).maybeSingle(),
   ]);
-  if (!op?.telefono || !viaje) return;
+  const errLectura = errOp ?? errViaje;
+  if (errLectura) {
+    // Se LANZA en vez de volver en silencio: los dos llamadores ya saben qué
+    // hacer con una excepción —`crearViaje` la traga a propósito (el viaje ya
+    // existe) y `escalarViajesSinAceptar` la anota en `fallos`—, mientras que un
+    // `return` los deja creyendo que el chofer fue avisado.
+    logger.error('viaje.aviso_no_se_pudo_leer', { viajeId, operadorId, err: errLectura.message, escalaSolo: false });
+    throw new Error(`avisarAlChofer: no se pudo leer a quién avisar — ${errLectura.message}`);
+  }
+  if (!op?.telefono || !viaje) {
+    // Aquí sí es un dato: el operador no tiene teléfono capturado, o el viaje no
+    // es de esta flota. No es un error del sistema, pero tampoco puede pasar sin
+    // rastro — este viaje tampoco va a escalar solo.
+    logger.warn('viaje.aviso_sin_destinatario', { viajeId, operadorId, hayViaje: !!viaje, hayTelefono: !!op?.telefono, escalaSolo: false });
+    return;
+  }
 
   let unidad: string | null = null;
   if (viaje.unidad_id) {
-    const { data: u } = await admin.from('unidad').select('numero_economico').eq('id', viaje.unidad_id).maybeSingle();
+    const { data: u, error: errUnidad } = await admin.from('unidad').select('numero_economico')
+      .eq('tenant_id', tenantId).eq('id', viaje.unidad_id).maybeSingle();
+    // `unidad = null` imprime el aviso SIN número económico, o sea "no traes
+    // unidad asignada" — y aquí se sabe que sí la trae, porque `viaje.unidad_id`
+    // no es null. Mandar ese mensaje marcaría `avisado_en` (el viaje deja de
+    // escalar) con un chofer que no sabe qué camión sacar. Se falla cerrado: sin
+    // aviso, el panel lo sigue enseñando como no avisado, que es la verdad.
+    if (errUnidad) {
+      logger.error('viaje.aviso_unidad_ilegible', { viajeId, err: errUnidad.message, escalaSolo: false });
+      throw new Error(`avisarAlChofer: no se pudo leer la unidad del viaje — ${errUnidad.message}`);
+    }
     unidad = (u?.numero_economico as string) ?? null;
   }
 

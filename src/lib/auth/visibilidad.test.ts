@@ -136,7 +136,12 @@ describe('a dónde se rebota a cada quien', () => {
   });
 
   it('al contador NO a /dashboard — lo rebotaría otra vez y sería un bucle', () => {
-    expect(inicioDe('contador')).toBe('/dashboard/cuadre');
+    // Cambió de `/dashboard/cuadre` a `/dashboard/contador` cuando dejó de ser
+    // "la primera página de dinero que había" y pasó a existir una hecha para
+    // él. Lo que se prueba no es CUÁL es, sino las dos propiedades que hacen
+    // que el rebote no sea un bucle: no es `/dashboard`, y su propio rol la ve.
+    expect(inicioDe('contador')).not.toBe('/dashboard');
+    expect(inicioDe('contador')).toBe('/dashboard/contador');
     expect(puedeVerRuta('contador', inicioDe('contador'))).toBe(true);
   });
 

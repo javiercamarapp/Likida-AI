@@ -69,8 +69,20 @@ describe('detectarAnomalias — ya no se recorta en silencio a 1,000 filas', () 
     expect(rangosLlamados[0]).toEqual([0, 999]);
   });
 
-  it('con menos de 1,000 filas, una sola página basta (no pagina de más)', async () => {
+  it('con menos de 1,000 filas pide una segunda página VACÍA, que es la prueba del final', async () => {
+    // Antes esto esperaba UNA sola página, y esa expectativa era el bug con
+    // otra cara: daba por hecho que una página corta significa "ya no hay más".
+    // No lo significa — `max_rows` es un ajuste del proyecto y bajarlo a 500
+    // hace que la primera página venga corta con miles de filas detrás. Sin
+    // `count`, la única prueba de que no falta nada es una página vacía, y esa
+    // segunda consulta es lo que cuesta no pedirlo (ver `conteo()` en pg.ts).
     totalFilas = filasGasto(5);
+    await detectarAnomalias('t1');
+    expect(rangosLlamados).toEqual([[0, 999], [5, 1004]]);
+  });
+
+  it('sin filas, una sola consulta: la página 0 vacía ya prueba el final', async () => {
+    totalFilas = [];
     await detectarAnomalias('t1');
     expect(rangosLlamados).toHaveLength(1);
   });

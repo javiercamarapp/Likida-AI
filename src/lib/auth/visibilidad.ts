@@ -76,6 +76,20 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/soporte': 'operacion',
 
   // Dinero — lo que el encargado no ve
+  //
+  // El panel del CONTADOR. Es `dinero` y no un área nueva a propósito: el
+  // contador ya tiene exactamente esa área y nada más, así que un cuarto valor
+  // en el enum solo serviría para esconderle estas pantallas al dueño, que
+  // también las quiere. Lo que hace al panel del contador de SOLO LECTURA no
+  // es el área: es que ninguna de sus páginas expone una acción (ver
+  // `permisos.ts` — `puedeAsignar`/`puedeAdministrar` ya le dicen que no).
+  '/dashboard/contador': 'dinero',
+  '/dashboard/contador/deducciones': 'dinero',
+  '/dashboard/contador/cfdi': 'dinero',
+  '/dashboard/contador/combustible': 'dinero',
+  '/dashboard/contador/retenciones': 'dinero',
+  '/dashboard/contador/liquidaciones': 'dinero',
+
   '/dashboard/valor-ahorro': 'dinero',
   '/dashboard/rentabilidad': 'dinero',
   '/dashboard/clientes': 'dinero',
@@ -139,6 +153,11 @@ export function rolEfectivo(rolReal: string, rolPedido?: string | null): string 
 
 export function inicioDe(rol: string): string {
   if (puedeVerArea(rol, 'operacion')) return '/dashboard';
-  if (puedeVerArea(rol, 'dinero')) return '/dashboard/cuadre';
+  // El contador aterriza en SU panel, no en el cuadre. Antes caía en
+  // `/dashboard/cuadre` porque era la primera página de `dinero` que existía;
+  // ahora existe una hecha para él, y es la que abre en la mañana. La rama
+  // sigue siendo por ÁREA y no por nombre de rol: cualquier rol futuro que
+  // solo vea dinero aterriza aquí sin que haya que acordarse de agregarlo.
+  if (puedeVerArea(rol, 'dinero')) return '/dashboard/contador';
   return '/sin-acceso';
 }

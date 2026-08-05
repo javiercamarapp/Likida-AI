@@ -9,12 +9,19 @@
 // para que nadie copie un patrón de aquí a una consulta de cliente y filtre
 // de menos.
 //
-// Sin paginación: hoy son 131 filas de llm_costo y 1 tenant. El día que
-// crezca de verdad, esto necesita el mismo `traerTodo` que ya usa
-// analytics.ts — no antes.
+// PAGINADO DESDE EL 4-AGO-2026. El comentario anterior decía "hoy son 131
+// filas de llm_costo y 1 tenant; el día que crezca de verdad, esto necesita el
+// mismo `traerTodo` que ya usa analytics.ts — no antes". Ese día es el mes 1:
+// `llm_costo` recibe una fila POR LLAMADA al modelo (OCR de cada foto, cuadre,
+// router), así que una sola flota operando en serio lo pasa de mil en semanas.
+// Y estas cuatro consultas iban SIN paginar y SIN `limit`, cruzando todos los
+// tenants: PostgREST las recortaba a `max_rows` en silencio y la consola de
+// superadmin reportaba una fracción del gasto de IA —la cifra con la que se
+// decide el precio del producto— sin marca de que estuviera incompleta.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { conteo, traerTodo } from '@/lib/cuadra/pg';
 import { round2 } from '@/lib/formato';
 
 export interface ResumenNegocio {
@@ -58,24 +65,31 @@ export async function getResumenNegocio(
   ventanaDias: number = 7,
 ): Promise<ResumenNegocio> {
   const admin = supabaseAdmin();
-  const [tenantsRes, viajesRes, costoRes, gastoRes] = await Promise.all([
-    admin.from('tenant').select('id, nombre, plan'),
-    admin.from('viaje').select('id, tenant_id'),
-    admin.from('llm_costo').select('tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd, created_at'),
-    admin.from('gasto').select('created_at'),
+  // `traerTodo` cubre los DOS bordes de PostgREST de una vez: el error que llega
+  // por valor (una base caída se leía "0 tenants, $0 gastados", indistinguible
+  // de que Likida de verdad no tenga nada) y el recorte silencioso a `max_rows`.
+  // Y si la lectura no se puede completar, LANZA — la consola de superadmin
+  // enseña su estado de error en vez de una cifra de gasto que no se midió.
+  const [tenantsData, viajesData, filas, gastosData] = await Promise.all([
+    traerTodo<{ id: string; nombre: string; plan: string }>(
+      (d, h) => admin.from('tenant').select('id, nombre, plan', conteo(d)).order('id').range(d, h),
+      'getResumenNegocio/tenant',
+    ),
+    traerTodo<{ tenant_id: string }>(
+      (d, h) => admin.from('viaje').select('id, tenant_id', conteo(d)).order('id').range(d, h),
+      'getResumenNegocio/viaje',
+    ),
+    traerTodo<{ tenant_id: string; fase: string; modelo: string; tokens_in: number; tokens_out: number; costo_usd: number; created_at: string }>(
+      (d, h) => admin.from('llm_costo')
+        .select('tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd, created_at', conteo(d))
+        .order('id').range(d, h),
+      'getResumenNegocio/llm_costo',
+    ),
+    traerTodo<{ created_at: string }>(
+      (d, h) => admin.from('gasto').select('created_at', conteo(d)).order('id').range(d, h),
+      'getResumenNegocio/gasto',
+    ),
   ]);
-  // Los cuatro fallan POR VALOR (supabase-js), no lanzando: sin este chequeo
-  // explícito, una base caída se lee "0 tenants, $0 gastados" — que es
-  // indistinguible de que Likida de verdad no tiene nada, el mismo error que
-  // ya se cerró para el panel de una flota (analytics.ts).
-  if (tenantsRes.error) throw new Error(`getResumenNegocio/tenant: ${tenantsRes.error.message}`);
-  if (viajesRes.error) throw new Error(`getResumenNegocio/viaje: ${viajesRes.error.message}`);
-  if (costoRes.error) throw new Error(`getResumenNegocio/llm_costo: ${costoRes.error.message}`);
-  if (gastoRes.error) throw new Error(`getResumenNegocio/gasto: ${gastoRes.error.message}`);
-
-  const filas = (costoRes.data ?? []) as Array<
-    { tenant_id: string; fase: string; modelo: string; tokens_in: number; tokens_out: number; costo_usd: number; created_at: string }
-  >;
   const porFaseMap = new Map<string, { n: number; costoUsd: number }>();
   const porModeloMap = new Map<string, { n: number; costoUsd: number }>();
   const porDiaMap = new Map<string, { costoUsd: number; tokens: number }>();
@@ -135,14 +149,14 @@ export async function getResumenNegocio(
   };
 
   const viajesPorTenant = new Map<string, number>();
-  for (const v of (viajesRes.data ?? []) as Array<{ tenant_id: string }>) {
+  for (const v of viajesData) {
     viajesPorTenant.set(v.tenant_id, (viajesPorTenant.get(v.tenant_id) ?? 0) + 1);
   }
   // Últimos 7 días, siempre las 7 fechas (0 donde no hubo facturas) — el
   // mismo criterio de `cortes()` de arriba, para que "hoy" sea inyectable
   // en las pruebas en vez de depender del reloj real.
   const facturasPorDiaMap = new Map<string, number>();
-  for (const g of (gastoRes.data ?? []) as Array<{ created_at: string }>) {
+  for (const g of gastosData) {
     const dia = g.created_at.slice(0, 10);
     facturasPorDiaMap.set(dia, (facturasPorDiaMap.get(dia) ?? 0) + 1);
   }
@@ -151,8 +165,7 @@ export async function getResumenNegocio(
     return { dia, n: facturasPorDiaMap.get(dia) ?? 0 };
   });
 
-  const flotasBase = (tenantsRes.data ?? []) as Array<{ id: string; nombre: string; plan: string }>;
-  const flotas = flotasBase.map((t) => ({
+  const flotas = tenantsData.map((t) => ({
     ...t,
     viajes: viajesPorTenant.get(t.id) ?? 0,
     costoIaUsd: round2(costoPorTenant.get(t.id) ?? 0),
@@ -160,7 +173,7 @@ export async function getResumenNegocio(
   return {
     tenants: flotas.length,
     flotas,
-    viajesProcesados: (viajesRes.data ?? []).length,
+    viajesProcesados: viajesData.length,
     costoIaUsd: round2(costoIaUsd),
     tokensIn,
     tokensOut,
@@ -168,7 +181,7 @@ export async function getResumenNegocio(
     porModelo,
     porDia,
     facturasPorDia,
-    facturasTotal: (gastoRes.data ?? []).length,
+    facturasTotal: gastosData.length,
     tendenciaCosto: tendencia('costoUsd'),
     tendenciaTokens: tendencia('tokens'),
   };
@@ -186,10 +199,15 @@ export interface CostoPorFaseModelo { fase: string; modelo: string; n: number; c
  */
 export async function getCostoPorFaseModelo(): Promise<CostoPorFaseModelo[]> {
   const admin = supabaseAdmin();
-  const { data, error } = await admin.from('llm_costo').select('fase, modelo, costo_usd');
-  if (error) throw new Error(`getCostoPorFaseModelo: ${error.message}`);
+  // La misma tabla, el mismo recorte: sin paginar, esto sumaba las primeras
+  // `max_rows` filas de `llm_costo` y presentaba el resultado como el costo por
+  // fase y modelo de Likida entera.
+  const data = await traerTodo<{ fase: string; modelo: string; costo_usd: number }>(
+    (d, h) => admin.from('llm_costo').select('fase, modelo, costo_usd', conteo(d)).order('id').range(d, h),
+    'getCostoPorFaseModelo',
+  );
   const map = new Map<string, { fase: string; modelo: string; n: number; costoUsd: number }>();
-  for (const f of (data ?? []) as Array<{ fase: string; modelo: string; costo_usd: number }>) {
+  for (const f of data) {
     const key = `${f.fase}::${f.modelo}`;
     const cur = map.get(key) ?? { fase: f.fase, modelo: f.modelo, n: 0, costoUsd: 0 };
     cur.n += 1;
@@ -256,12 +274,17 @@ export interface MiembroEquipo {
  */
 export async function getEquipo(): Promise<MiembroEquipo[]> {
   const admin = supabaseAdmin();
-  const { data, error } = await admin
-    .from('app_user')
-    .select('id, tenant_id, rol, nombre, email, operador_id, tenant:tenant_id(nombre)')
-    .order('rol', { ascending: true });
-  if (error) throw new Error(`getEquipo: ${error.message}`);
-  return (data ?? []).map((u) => ({
+  // Paginado como el resto del archivo. El orden es `rol, id` y no solo `rol`:
+  // el rol se repite muchísimo, y paginar por un campo con empates puede
+  // repetir o saltarse filas entre páginas. `id` desempata.
+  const data = await traerTodo<Record<string, unknown>>(
+    (d, h) => admin
+      .from('app_user')
+      .select('id, tenant_id, rol, nombre, email, operador_id, tenant:tenant_id(nombre)', conteo(d))
+      .order('rol', { ascending: true }).order('id').range(d, h),
+    'getEquipo',
+  );
+  return data.map((u) => ({
     id: u.id as string,
     email: u.email as string,
     nombre: (u.nombre as string | null) ?? null,

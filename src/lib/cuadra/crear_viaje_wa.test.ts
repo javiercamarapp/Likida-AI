@@ -393,6 +393,20 @@ function pagina(filas: Array<{ id: string; nombre: string }>) {
   return Promise.resolve({ data: filas, error: null });
 }
 
+/**
+ * La tabla entera cabe en una página — y DESPUÉS viene el vacío.
+ *
+ * Devolver siempre la misma página describía una base imposible:
+ * `range(1000, 1999)` sobre una tabla de dos filas no devuelve otra vez las
+ * dos, devuelve `[]`. `traerTodo` dejó de dar por hecho que una página corta
+ * significa "ya terminamos" —`max_rows` puede ser 500 y entonces la primera
+ * página corta es una mentira—, así que ahora pide la siguiente hasta que
+ * llegue vacía, y el mock tiene que poder contestarla.
+ */
+function paginaUnica(filas: Array<{ id: string; nombre: string }>) {
+  range.mockReturnValueOnce(pagina(filas)).mockReturnValue(pagina([]));
+}
+
 describe('resolverOperadorPorNombre', () => {
   beforeEach(() => {
     range.mockReset();
@@ -403,16 +417,16 @@ describe('resolverOperadorPorNombre', () => {
   it('encuentra por apellido aunque el jefe escriba sin acentos', () => {
     // `ilike '%ramirez%'` en Postgres es sensible a acentos y habría devuelto
     // cero sobre un chofer que SÍ está dado de alta.
-    range.mockReturnValue(pagina([
+    paginaUnica([
       { id: 'o-1', nombre: 'José Ramírez Soto' },
       { id: 'o-2', nombre: 'Ana López' },
-    ]));
+    ]);
     return expect(resolverOperadorPorNombre('t-1', 'Ramirez'))
       .resolves.toEqual({ operadorId: 'o-1', nombre: 'José Ramírez Soto' });
   });
 
   it('acota a la flota y a los activos', async () => {
-    range.mockReturnValue(pagina([{ id: 'o-1', nombre: 'Ana López' }]));
+    paginaUnica([{ id: 'o-1', nombre: 'Ana López' }]);
     await resolverOperadorPorNombre('t-1', 'López');
     expect(from).toHaveBeenCalledWith('operador');
     expect(eqTenant).toHaveBeenCalledWith('tenant_id', 't-1');
@@ -420,10 +434,10 @@ describe('resolverOperadorPorNombre', () => {
   });
 
   it('DOS «Martínez» activos no se desempatan: lanza con los candidatos', async () => {
-    range.mockReturnValue(pagina([
+    paginaUnica([
       { id: 'o-1', nombre: 'Pedro Martínez' },
       { id: 'o-2', nombre: 'Luis Martínez Ruiz' },
-    ]));
+    ]);
     const err = await resolverOperadorPorNombre('t-1', 'Martínez').catch((e) => e);
     expect(err).toBeInstanceOf(OperadorNombreAmbiguo);
     expect(err.candidatos).toEqual([
@@ -440,28 +454,28 @@ describe('resolverOperadorPorNombre', () => {
   it('el nombre completo exacto gana sobre el parcial', async () => {
     // Con "Juan Pérez" y "Juan Pérez López" en la misma flota, escribir "Juan
     // Pérez" no es ambiguo: es el nombre completo de uno de los dos.
-    range.mockReturnValue(pagina([
+    paginaUnica([
       { id: 'o-1', nombre: 'Juan Pérez' },
       { id: 'o-2', nombre: 'Juan Pérez López' },
-    ]));
+    ]);
     await expect(resolverOperadorPorNombre('t-1', 'Juan Pérez'))
       .resolves.toEqual({ operadorId: 'o-1', nombre: 'Juan Pérez' });
   });
 
   it('no hace parecidos: «Martin» no encuentra a «Martínez»', async () => {
-    range.mockReturnValue(pagina([{ id: 'o-1', nombre: 'Pedro Martínez' }]));
+    paginaUnica([{ id: 'o-1', nombre: 'Pedro Martínez' }]);
     await expect(resolverOperadorPorNombre('t-1', 'Martin')).resolves.toBeNull();
   });
 
   it('un nombre que no existe da null, no el único chofer que hay', async () => {
-    range.mockReturnValue(pagina([{ id: 'o-1', nombre: 'Ana López' }]));
+    paginaUnica([{ id: 'o-1', nombre: 'Ana López' }]);
     await expect(resolverOperadorPorNombre('t-1', 'Hernández')).resolves.toBeNull();
   });
 
   it('un texto sin una sola palabra útil da null', async () => {
     // "de la" son todas palabras vacías: sin este corte, "todas coinciden" sería
     // literalmente cierto y con un solo chofer en la flota devolvería ESE.
-    range.mockReturnValue(pagina([{ id: 'o-1', nombre: 'Ana López' }]));
+    paginaUnica([{ id: 'o-1', nombre: 'Ana López' }]);
     await expect(resolverOperadorPorNombre('t-1', 'de la')).resolves.toBeNull();
     await expect(resolverOperadorPorNombre('t-1', '')).resolves.toBeNull();
     // Ni siquiera se consultó la base.
@@ -487,11 +501,17 @@ describe('resolverOperadorPorNombre', () => {
     const relleno = Array.from({ length: 1000 }, (_, i) => ({ id: `o-${i}`, nombre: `Relleno ${i}` }));
     range
       .mockReturnValueOnce(pagina(relleno))
-      .mockReturnValueOnce(pagina([{ id: 'o-1001', nombre: 'Sebastián Quiroga' }]));
+      .mockReturnValueOnce(pagina([{ id: 'o-1001', nombre: 'Sebastián Quiroga' }]))
+      .mockReturnValue(pagina([]));
     await expect(resolverOperadorPorNombre('t-1', 'Quiroga'))
       .resolves.toEqual({ operadorId: 'o-1001', nombre: 'Sebastián Quiroga' });
-    expect(range).toHaveBeenCalledTimes(2);
+    // TRES páginas, no dos: la tercera vuelve vacía y es la que DEMUESTRA que
+    // no falta nadie. Esta consulta no pide `count`, y sin él una página corta
+    // no distingue "ya no hay choferes" de "el servidor no da más de N".
+    // El cursor avanza por filas leídas (1001), no por número de página.
+    expect(range).toHaveBeenCalledTimes(3);
     expect(range).toHaveBeenNthCalledWith(1, 0, 999);
     expect(range).toHaveBeenNthCalledWith(2, 1000, 1999);
+    expect(range).toHaveBeenNthCalledWith(3, 1001, 2000);
   });
 });

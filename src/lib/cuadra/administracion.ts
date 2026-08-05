@@ -354,17 +354,33 @@ export async function reabrirViaje(
 
   const viajeId = viaje.id as string;
 
-  const { data: liq } = await admin
+  // EL `error` DE ESTA LECTURA ERA EL PEOR DEL ARCHIVO. Sin comprobarlo, un
+  // fallo de red dejaba `liq` en `null` y a partir de ahí todo se leía al revés:
+  // el `if (liq)` se saltaba el borrado, el viaje SÍ se ponía en `abierto`, y se
+  // reportaba `pdfPerdido: null` —que en pantalla significa "no perdiste nada"—
+  // cuando lo que pasó fue que no se pudo mirar. El resultado es un viaje
+  // abierto con su liquidación viva: la 0036 no deja entrar ni un gasto, y con
+  // `liquidacion_viaje_uidx` (0005) el siguiente cierre choca contra la fila que
+  // nadie sabe que sigue ahí. "Ya lo reabrí" sobre algo que no se reabrió es
+  // exactamente el fallo que esta función existe para cerrar.
+  //
+  // El `tenant_id` va en el where aunque `viajeId` ya se resolvió acotado: es
+  // defensa en profundidad, y hace que la consulta se lea sola sin tener que
+  // rastrear de dónde vino el id (auditoría de aislamiento entre flotas).
+  const { data: liq, error: errLiq } = await admin
     .from('liquidacion')
     .select('id, pdf_url')
+    .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId)
     .maybeSingle();
+  if (errLiq) throw new Error(`reabrirViaje: no se pudo leer la liquidación de ${folio} — ${errLiq.message}`);
 
   const pdfPerdido = (liq?.pdf_url as string | null) ?? null;
 
   // 1) La fila de liquidación PRIMERO. Es la que el trigger mira.
   if (liq) {
-    const { error } = await admin.from('liquidacion').delete().eq('viaje_id', viajeId);
+    const { error } = await admin.from('liquidacion').delete()
+      .eq('tenant_id', tenantId).eq('viaje_id', viajeId);
     if (error) throw new Error(`reabrirViaje: no se pudo borrar la liquidación — ${error.message}`);
   }
 
@@ -373,6 +389,7 @@ export async function reabrirViaje(
   const { error: errEstatus } = await admin
     .from('viaje')
     .update({ estatus: 'abierto' })
+    .eq('tenant_id', tenantId)
     .eq('id', viajeId);
   if (errEstatus) throw new Error(`reabrirViaje: no se pudo abrir el viaje — ${errEstatus.message}`);
 
@@ -381,6 +398,7 @@ export async function reabrirViaje(
   const { error: errConv } = await admin
     .from('wa_conversacion')
     .update({ viaje_id: null })
+    .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId);
   if (errConv) logger.warn('reabrirViaje.conversacion', { folio, err: errConv.message });
 
