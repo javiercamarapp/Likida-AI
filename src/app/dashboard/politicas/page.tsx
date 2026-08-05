@@ -8,6 +8,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
 import { FormaConAviso, type ResultadoAccion, ESTILO_CONTROL } from '../../admin/ui/forma';
 
@@ -80,8 +81,7 @@ export default async function PoliticasPage({
     }
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
-      const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
-      if (data) t = data.id as string;
+      t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
 
     // `armarPolitica` repone las reglas por ruta, que este formulario no edita

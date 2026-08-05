@@ -12,6 +12,7 @@ import { etiquetaEstatus } from '../estatus';
 import { puedeExportar, puedeAsignar, puedeAdministrar } from '@/lib/auth/permisos';
 import { listOperadores, reasignarOperador } from '@/lib/cuadra/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { revalidatePath } from 'next/cache';
 import { RotateCcw } from 'lucide-react';
 import { reabrirViaje, mensajeParaPantalla } from '@/lib/cuadra/administracion';
@@ -54,11 +55,8 @@ export default async function Detalle({
   let tenantId = tenantIdDemo;
   let volverQS = '';
   if (rol === 'superadmin' && sp?.tenant) {
-    const { data: t } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
-    if (t) {
-      tenantId = t.id as string;
-      volverQS = `?tenant=${tenantId}`;
-    }
+    tenantId = await resolverTenantPedido(supabaseAdmin(), tenantId, sp.tenant);
+    volverQS = `?tenant=${tenantId}`;
   }
 
   // `vista` y `rol` TIENEN QUE VIAJAR EN LA VUELTA, y esta página era la única
@@ -101,8 +99,7 @@ export default async function Detalle({
     }
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
-      const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
-      if (data) t = data.id as string;
+      t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
 
     try {
@@ -127,8 +124,7 @@ export default async function Detalle({
     if (!puedeAsignar(r)) redirect(`/dashboard/${id}${volverQS}`);
     let t = tDemo;
     if (r === 'superadmin' && sp?.tenant) {
-      const { data: tFila } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
-      if (tFila) t = tFila.id as string;
+      t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
     const operadorId = String(formData.get('operadorId') ?? '');
     if (!operadorId) redirect(`/dashboard/${id}${volverQS}`);

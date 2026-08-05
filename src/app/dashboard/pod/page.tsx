@@ -5,6 +5,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 import { getPods, marcarPodPedido, rechazarPod, type PodRow } from '@/lib/cuadra/operacion';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
@@ -50,8 +51,7 @@ export default async function PodPage({
     const s = await requireSessionTenant('/dashboard/pod');
     if (!puedeAsignar(s.rol)) redirect(`/dashboard/pod${sufijo}`);
     if (s.rol === 'superadmin' && sp?.tenant) {
-      const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
-      if (data) return data.id as string;
+      return await resolverTenantPedido(supabaseAdmin(), s.tenantId, sp.tenant);
     }
     return s.tenantId;
   }
