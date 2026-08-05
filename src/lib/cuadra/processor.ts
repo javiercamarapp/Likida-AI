@@ -36,7 +36,8 @@ import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, acotada } from '@/lib/cuadra/
 import { conceptoDesdeClave } from '@/lib/cuadra/intake/concepto';
 import { getConfig } from '@/lib/cuadra/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/cuadra/intake/emparejar';
-import { parseCfdiXml } from '@/lib/cuadra/intake/cfdi_xml';
+import { parseCfdiXml, esConsolidado } from '@/lib/cuadra/intake/cfdi_xml';
+import { guardarYConciliarConsolidado, mensajeConsolidadoRecibido } from '@/lib/cuadra/intake/consolidado';
 import {
   addGasto, getGastos, updateGastoCfdiXml, saveCfdiXmlRaw, gastoExistePorHash, gastoPorHash, ubicarGastoPorHash, corregirFechaGasto,
   guardarHuerfano, getHuerfanos, resolverHuerfanos, marcarHuerfanosOfrecidos, getViaje,
@@ -365,6 +366,38 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       });
 
       if (cuenta) {
+        // ── AUDITORÍA 10, CRÍTICO FISCAL — EL XML CONSOLIDADO DE LA OFICINA ──
+        //
+        // El monedero de combustible y el TAG de casetas mandan SU CFDI al
+        // correo de la OFICINA, no al del chofer — es la oficina quien lo
+        // reenvía. Hasta hoy este bloque respondía el mismo texto genérico a
+        // CUALQUIER mensaje, documento incluido: un XML consolidado que la
+        // oficina reenviara aquí se perdía en silencio, sin siquiera un
+        // "no sé qué hacer con esto".
+        //
+        // Alcance DELIBERADAMENTE angosto: solo se atiende el documento que
+        // el parser reconoce como CONSOLIDADO (`lineas.length > 1` —
+        // `esConsolidado`). Un XML de un solo concepto mandado por error desde
+        // la oficina sigue sin tener dueño (no hay viaje/operador de
+        // contexto para el camino de ticket 1:1) y cae al mensaje genérico de
+        // abajo — ampliar ESE caso es una decisión de producto aparte.
+        if (cuenta.tenantId && msg.type === 'document' && msg.mediaId) {
+          try {
+            const xmlText = await downloadMediaAsText(msg.mediaId);
+            const xml = xmlText ? parseCfdiXml(xmlText) : null;
+            if (xml?.uuid && esConsolidado(xml)) {
+              logger.info('oficina.xml_consolidado', { tenant: cuenta.tenantId, user: cuenta.userId, uuid: xml.uuid, lineas: xml.lineas.length });
+              const resumen = await guardarYConciliarConsolidado(cuenta.tenantId, xml, xmlText!);
+              await sendText(msg.from, mensajeConsolidadoRecibido(resumen));
+              return;
+            }
+          } catch (e) {
+            // Best-effort: si algo truena aquí, cae al mensaje genérico de
+            // abajo en vez de dejar al remitente sin ninguna respuesta.
+            logger.error('oficina.xml_consolidado_error', { tenant: cuenta.tenantId, err: e instanceof Error ? e.message : String(e) });
+          }
+        }
+
         const quien = cuenta.nombre ? `${cuenta.nombre}` : 'Qué tal';
         // Se le dice lo que SÍ puede hacer hoy por aquí y se le manda al panel
         // para lo demás. Prometerle por WhatsApp algo que todavía no existe
@@ -414,6 +447,19 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       if (msg.type === 'document' && msg.mediaId) {
         const xmlText = await downloadMediaAsText(msg.mediaId);
         const xml = xmlText ? parseCfdiXml(xmlText) : null;
+        // ── AUDITORÍA 10, CRÍTICO FISCAL — CONSOLIDADO SIN VIAJE ABIERTO ────
+        // Un CFDI de monedero/TAG ampara MUCHOS días y MUCHOS viajes — nunca
+        // pertenece a "el viaje abierto de este operador", así que esta rama
+        // (justamente la de "no hay viaje abierto") es, si acaso, la más
+        // natural para recibirlo: no hace falta viaje de contexto porque el
+        // consolidado nunca lo usó. Va ANTES del camino de ticket 1:1 de
+        // abajo, que asume 1 CFDI = 1 gasto.
+        if (xml?.uuid && esConsolidado(xml)) {
+          const resumen = await guardarYConciliarConsolidado(op.tenantId, xml, xmlText!);
+          logger.info('xml.consolidado_sin_viaje', { tenant: op.tenantId, operador: op.operadorId, uuid: xml.uuid, ...resumen });
+          await sendText(msg.from, mensajeConsolidadoRecibido(resumen));
+          return;
+        }
         if (xml?.uuid) {
           await saveCfdiXmlRaw(op.tenantId, xml.uuid, null, xmlText!);
           logger.info('xml.sin_viaje_abierto', { tenant: op.tenantId, operador: op.operadorId, uuid: xml.uuid });
@@ -1271,6 +1317,23 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         const xml = xmlText ? parseCfdiXml(xmlText) : null;
         if (!xml || !xml.uuid) {
           await say('Recibí un documento, pero necesito el *XML* del CFDI (el archivo .xml que te manda la gasolinera por correo), no el PDF. ¿Me lo reenvías? 📎');
+          return;
+        }
+
+        // ── AUDITORÍA 10, CRÍTICO FISCAL — CONSOLIDADO, NO TICKET 1:1 ───────
+        // Un CFDI de monedero/TAG ampara MUCHAS transacciones de MUCHOS días
+        // — nunca es "el ticket de este viaje". El camino de abajo
+        // (`emparejarXmlConTicket` + `getGastos(viajeId,...)`) asume 1 CFDI =
+        // 1 gasto DE ESTE viaje, así que un consolidado tiene que resolverse
+        // ANTES, contra el `gasto` del TENANT completo, no solo del viaje
+        // abierto. NO toma `xmlLock` (ese mutex protege la escritura de ESTE
+        // viaje contra otro XML del mismo viaje en la misma ráfaga; el
+        // consolidado escribe en gastos de otros viajes, y su propia
+        // idempotencia por `(tenant_id, cfdi_uuid)` es la que lo protege).
+        if (esConsolidado(xml)) {
+          const resumen = await guardarYConciliarConsolidado(op.tenantId, xml, xmlText!);
+          logger.info('xml.consolidado', { tenant: op.tenantId, viaje: viajeId, uuid: xml.uuid, ...resumen });
+          await sendText(msg.from, mensajeConsolidadoRecibido(resumen));
           return;
         }
 

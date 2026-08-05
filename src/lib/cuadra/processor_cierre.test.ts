@@ -117,7 +117,11 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/logger', () => ({ logger }));
 vi.mock('@/lib/cuadra/intake/cfdi_xml', () => ({
-  parseCfdiXml: () => ({ uuid: 'uuid-abc', total: 100, fecha: '2026-05-01' }),
+  // `lineas: []` — un CFDI de un solo concepto, NO consolidado (auditoría 10).
+  // Sin este campo `esConsolidado` (que sí es real, no mockeado) truena contra
+  // `undefined.length` y el processor cae al catch genérico.
+  parseCfdiXml: () => ({ uuid: 'uuid-abc', total: 100, fecha: '2026-05-01', lineas: [] }),
+  esConsolidado: (xml: { lineas: unknown[] }) => xml.lineas.length > 1,
 }));
 
 const { processInbound } = await import('./processor');
