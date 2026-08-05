@@ -1,4 +1,4 @@
--- 0066 — Borrar una flota era O(n²). Los índices que le faltan a las FK.
+-- 0071 — Borrar una flota era O(n²). Los índices que le faltan a las FK.
 --
 -- AUDITORÍA DE DATOS, CRÍTICO. Medido contra esta base, con una flota sembrada
 -- de 2,000 viajes y ~34,000 filas hijas:
