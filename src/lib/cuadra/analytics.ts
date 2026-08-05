@@ -319,6 +319,15 @@ export interface ViajeRow {
   id: string; folio: string; origen: string | null; destino: string | null;
   estatus: string; anticipo: number; operadorNombre: string | null;
   fechaInicio: string | null; intakePendientes: number;
+  // Las cuatro marcas de la confirmación del chofer (mig. 0058). Se leen en
+  // `dashboard/confirmacion.ts`; aquí solo se traen. Un `null` en `avisadoEn`
+  // NO significa lo mismo que un 0 en `avisosEnviados`: el primero es "no hay
+  // registro del aviso" y el segundo es un conteo real, así que la columna
+  // nullable se conserva nullable en vez de aplanarse a cero.
+  avisadoEn: string | null;
+  aceptadoEn: string | null;
+  escaladoEn: string | null;
+  avisosEnviados: number;
 }
 
 /** Los viajes de la flota, el más reciente primero. `viaje` NO tiene columna
@@ -328,7 +337,7 @@ export interface ViajeRow {
 export async function getViajes(tenantId: string, limite = 100): Promise<ViajeRow[]> {
   const res = await supabaseAdmin()
     .from('viaje')
-    .select('id, folio, origen, destino, estatus, anticipo, fecha_inicio, intake_pendientes, operador:operador_id(nombre)')
+    .select('id, folio, origen, destino, estatus, anticipo, fecha_inicio, intake_pendientes, avisado_en, aceptado_en, escalado_en, avisos_enviados, operador:operador_id(nombre)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(limite);
@@ -343,6 +352,10 @@ export async function getViajes(tenantId: string, limite = 100): Promise<ViajeRo
     operadorNombre: ((v.operador as { nombre?: string } | null)?.nombre) ?? null,
     fechaInicio: (v.fecha_inicio as string) || null,
     intakePendientes: Number(v.intake_pendientes ?? 0),
+    avisadoEn: (v.avisado_en as string) || null,
+    aceptadoEn: (v.aceptado_en as string) || null,
+    escaladoEn: (v.escalado_en as string) || null,
+    avisosEnviados: Number(v.avisos_enviados ?? 0),
   }));
 }
 

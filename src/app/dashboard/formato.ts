@@ -24,4 +24,4 @@
 // `formato.ts`. Es lo que le faltaba al hallazgo para no volver por cuarta vez.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export { TZ_MX, litros, fechaMx } from '@/lib/formato';
+export { TZ_MX, litros, fechaMx, fechaHoraMx } from '@/lib/formato';
