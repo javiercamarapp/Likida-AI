@@ -442,14 +442,19 @@ export async function GET(req: Request) {
             // sesión de portal — una flota con 2+ portales distintos podía
             // consumir ~294 s en UN solo `conNavegador` sin ningún corte
             // interno y morir en la tercera sesión. Aquí se consulta el reloj
-            // antes de cada portal nuevo: lo que no alcanza a intentarse NO se
-            // marca, y se recoge entero en la corrida siguiente.
+            // ANTES de cada portal nuevo (excepto el primero: el navegador ya
+            // está abierto y su sesión ya se pagó — procesar el portal
+            // principal de la flota es siempre mejor que no procesar nada). Lo
+            // que no alcanza a intentarse NO se marca, y se recoge entero en
+            // la corrida siguiente.
+            let primerPortal = true;
             for (const [comercio, delPortal] of porPortal) {
-              if (Date.now() - inicioLote >= PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS) {
+              if (!primerPortal && Date.now() - inicioLote >= PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS) {
                 sinTiempo += delPortal.length;
                 logger.warn('cron.facturar.sin_tiempo_portal', { tenant: tenantId, comercio, tickets: delPortal.length });
                 break;
               }
+              primerPortal = false;
               await correrLote(tenantId, comercio, delPortal);
             }
           });
