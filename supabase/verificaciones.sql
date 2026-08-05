@@ -1717,3 +1717,275 @@ begin
   raise exception E'INDICES_PAGINACION  el-planeador-los-usa=%/%   %   (esperado 9/9)',
     usados, total, coalesce(nullif(fallos, ''), '- todos');
 end $$;
+
+-- ── 41. El resumen de costo de IA suma lo MISMO que sumaba JavaScript (mig. 0062) ──
+--
+-- La 0062 movió a SQL la agregación de `llm_costo` que `getResumenNegocio` hacía
+-- trayendo la tabla entera a memoria. Mover una suma de dinero de un lenguaje a
+-- otro es exactamente el cambio que puede salir mal SIN QUE NADA FALLE: la
+-- consola sigue pintando una cifra, solo que otra. Y es la cifra con la que se
+-- pone el precio del producto.
+--
+-- ESTE BLOQUE NO COMPRUEBA QUE LA FUNCIÓN EXISTA. Comprueba que sus seis partes
+-- cuadran, y por TRES caminos independientes:
+--
+--   1. la función (un `Seq Scan` + `MixedAggregate` con `grouping sets`),
+--   2. seis `group by` sueltos —otro plan, otro algoritmo— con el mismo filtro,
+--   3. la identidad aritmética `Σ(1..N)·0.000001 = N(N+1)/2 · 0.000001`, que no
+--      depende de Postgres ni de JavaScript y por eso es la única capaz de
+--      atrapar un error que los DOS caminos de SQL cometieran igual.
+--
+-- Se siembran 124,000 filas A PROPÓSITO: 120,000 pasan el techo de `traerTodo`
+-- (100,000 filas, `src/lib/cuadra/pg.ts`), o sea que este bloque agrega en SQL
+-- justo la lectura que el camino viejo ya no puede completar. Con mil filas la
+-- verificación pasaría en verde sin tocar el motivo de la migración.
+--
+-- Los valores son conocidos, no aleatorios: `costo_usd = g × 0.000001` para
+-- g = 1..120,000. Así el total tiene forma cerrada (7,200.060000) y un error de
+-- una millonésima se ve.
+--
+-- DE REGALO, LA MEDIDA DE LO QUE SE GANÓ: se reporta `deriva-float`, la
+-- diferencia entre sumar esas mismas filas en `float8` —lo que hacía el
+-- JavaScript, `costoIaUsd += Number(f.costo_usd)`— y el total exacto. No es una
+-- aserción (el tamaño del error depende del orden en que el planeador sume), es
+-- la evidencia de por qué la suma se quedó en `numeric` de punta a punta.
+--
+-- LA TRAMPA DE `viaje.operador_id` NO APLICA AQUÍ: la única FK NOT NULL de
+-- `llm_costo` es `tenant_id` (mig. 0003); `viaje_id` y `liquidacion_id` son
+-- nullables. Con crear los dos tenants basta — no hace falta operador ni viaje.
+--
+-- Los permisos se leen del CATÁLOGO y no atacando la API, por lo mismo que el
+-- bloque 16: un `do $$` corre como el dueño y probar con un INSERT probaría el
+-- privilegio de quien corre la prueba, no la garantía.
+--
+-- Todo se revierte con el `raise`. Deja ~124 mil tuplas muertas que autovacuum
+-- recoge; es el mismo precio que ya paga el bloque 40.
+--
+-- ── CORRIDO EL 5-AGO-2026 CONTRA EL PROYECTO LIKIDA. SALIDA REAL: ───────────
+--
+--   41  total-cerrado=t  tokens=t  fase=t  modelo=t  fase+modelo=t  dia=t
+--       tenant=t  sin-ventana=t  ventana-vacia=t  borde-semiabierto=t
+--       hay-filas-en-el-borde=28000
+--       es-definer=f  anon=f  authenticated=f  service_role=t
+--       esperado-cerrado=7202.0600000000000000   deriva-float8=0.0000000004100000
+--
+-- `deriva-float8` es la evidencia, no una aserción: sumar esas 124,000 filas en
+-- punto flotante se aleja 4.1 × 10⁻¹⁰ del total exacto. Con 790 mil filas al año
+-- ese error crece y siempre en la misma dirección; por eso la suma se quedó en
+-- `numeric` hasta el final.
+--
+-- ── FALSIFICADO, que es lo que separa esto de un verde de adorno ────────────
+-- Se corrió el mismo bloque con la función ROTA a propósito, dentro de la misma
+-- transacción que lo revierte todo (`create or replace function` es
+-- transaccional, así que la rotura se deshace con el `raise`):
+--
+--   · función que suma solo un SUBCONJUNTO de la tabla (el recorte silencioso)
+--       → total-cerrado=f   devolvió 1542.882858 donde esperaba 1800.030000
+--   · `porFase` sin el guardia `g_modelo = 1`, así que las filas del corte
+--     (fase, modelo) se cuelan y cada fase se cuenta dos veces
+--       → fase=f   `porFase` con 6 entradas donde debía haber 2
+--   · corte de fecha CERRADO (`<=` en vez de `<`)
+--       → borde-semiabierto=f   devolvió n=12000 donde esperaba n=8000
+--
+-- Y una rotura que este bloque NO atrapa, dicha en voz alta para que nadie la
+-- crea cubierta: sumar en `float8` con 60,000 filas devuelve exactamente
+-- 1800.03 —el `::numeric` redondea la deriva— y el bloque pasa en verde. La
+-- suma en punto flotante no falla en pequeño: falla en grande, que es donde
+-- este bloque siembra 124,000 filas y donde `deriva-float8` deja de ser cero.
+--
+-- ── Y COMPROBADO CONTRA EL CAMINO VIEJO, CON DATOS REALES ──────────────────
+-- Aparte del bloque, se trajeron las 131 filas reales de `llm_costo` y se
+-- sumaron en JavaScript con el código EXACTO que la 0062 sustituye (`costoIaUsd
+-- += Number(f.costo_usd)`, los cuatro `Map`, el mismo `round2`). Las nueve
+-- partes salieron idénticas —total, tokens, porFase, porModelo, porFaseModelo,
+-- porDia y porTenant— con el mismo total, 1.832202000000. Es la prueba que un
+-- bloque de SQL no puede darse solo: que el lenguaje al que se mudó la suma
+-- devuelve lo mismo que el que la hacía.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  ta uuid; tb uuid;
+  filas_a int := 120000;   -- > 100,000: el techo donde `traerTodo` ya lanza
+  filas_b int := 4000;
+  d0 timestamptz := timestamptz '2099-01-01 00:00:00+00';  -- lejos de los datos reales
+  ventana_fin timestamptz;
+  j jsonb; j_todo jsonb; j_vacia jsonb; j_borde jsonb;
+  cerrado numeric; deriva numeric;
+  ok_cerrado boolean; ok_fase boolean; ok_modelo boolean; ok_fasemodelo boolean;
+  ok_dia boolean; ok_tenant boolean; ok_tokens boolean;
+  ok_todo boolean; ok_vacia boolean; ok_borde boolean;
+  hay_borde bigint;
+  anon_ok boolean; auth_ok boolean; svc_ok boolean; definer boolean;
+begin
+  ventana_fin := d0 + interval '30 days';
+
+  insert into tenant (nombre) values ('ZZZ VERIF AGG A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF AGG B') returning id into tb;
+
+  -- Valores CONOCIDOS: costo = g millonésimas, cinco días, dos fases, dos modelos.
+  insert into llm_costo (tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd, created_at)
+  select ta,
+         case when g % 2 = 0 then 'ocr' else 'cuadre' end,
+         case when g % 3 = 0 then 'zzz-caro' else 'zzz-barato' end,
+         g % 7, g % 11,
+         (g * 0.000001)::numeric(10,6),
+         d0 + ((g % 5) || ' days')::interval
+  from generate_series(1, filas_a) g;
+
+  -- Segunda flota, para que `porTenant` tenga contra qué separar.
+  insert into llm_costo (tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd, created_at)
+  select tb, 'router', 'zzz-barato', 1, 1, 0.000500, d0 + interval '2 days'
+  from generate_series(1, filas_b) g;
+
+  analyze llm_costo;
+
+  j := resumen_costo_ia(d0, ventana_fin);
+
+  -- ── CAMINO 3: la aritmética, que no sabe de motores ───────────────────────
+  cerrado := 0.000001::numeric * filas_a::numeric * (filas_a + 1)::numeric / 2
+             + filas_b::numeric * 0.000500::numeric;
+  ok_cerrado := (j -> 'totales' ->> 'costoUsd')::numeric = cerrado
+                and (j -> 'totales' ->> 'n')::bigint = (filas_a + filas_b)::bigint;
+
+  -- Lo que el JavaScript hacía: acumular en punto flotante. Se reporta, no se afirma.
+  deriva := (select sum(costo_usd::float8) from llm_costo
+              where created_at >= d0 and created_at < ventana_fin)::numeric - cerrado;
+
+  ok_tokens := (j -> 'totales' ->> 'tokensIn')::bigint
+                 = (select sum(tokens_in) from llm_costo where created_at >= d0 and created_at < ventana_fin)
+             and (j -> 'totales' ->> 'tokensOut')::bigint
+                 = (select sum(tokens_out) from llm_costo where created_at >= d0 and created_at < ventana_fin);
+
+  -- ── CAMINO 2: seis `group by` sueltos, mismo filtro, otro plan ────────────
+  ok_fase := (j -> 'porFase') = coalesce((
+    select jsonb_agg(jsonb_build_object('fase', s.fase, 'n', s.cuantas, 'costoUsd', s.costo)
+                     order by s.costo desc, s.fase)
+      from (select fase, count(*) cuantas, sum(costo_usd) costo from llm_costo
+             where created_at >= d0 and created_at < ventana_fin group by fase) s), '[]'::jsonb);
+
+  ok_modelo := (j -> 'porModelo') = coalesce((
+    select jsonb_agg(jsonb_build_object('modelo', s.modelo, 'n', s.cuantas, 'costoUsd', s.costo)
+                     order by s.costo desc, s.modelo)
+      from (select modelo, count(*) cuantas, sum(costo_usd) costo from llm_costo
+             where created_at >= d0 and created_at < ventana_fin group by modelo) s), '[]'::jsonb);
+
+  ok_fasemodelo := (j -> 'porFaseModelo') = coalesce((
+    select jsonb_agg(jsonb_build_object('fase', s.fase, 'modelo', s.modelo, 'n', s.cuantas, 'costoUsd', s.costo)
+                     order by s.costo desc, s.fase, s.modelo)
+      from (select fase, modelo, count(*) cuantas, sum(costo_usd) costo from llm_costo
+             where created_at >= d0 and created_at < ventana_fin group by fase, modelo) s), '[]'::jsonb);
+
+  ok_dia := (j -> 'porDia') = coalesce((
+    select jsonb_agg(jsonb_build_object('dia', to_char(s.d, 'YYYY-MM-DD'),
+                                        'costoUsd', s.costo, 'tokens', s.t_in + s.t_out)
+                     order by s.d)
+      from (select (created_at at time zone 'UTC')::date d, sum(costo_usd) costo,
+                   sum(tokens_in) t_in, sum(tokens_out) t_out
+              from llm_costo where created_at >= d0 and created_at < ventana_fin
+             group by 1) s), '[]'::jsonb);
+
+  ok_tenant := (j -> 'porTenant') = coalesce((
+    select jsonb_agg(jsonb_build_object('tenantId', s.tid, 'costoUsd', s.costo) order by s.costo desc)
+      from (select tenant_id tid, sum(costo_usd) costo from llm_costo
+             where created_at >= d0 and created_at < ventana_fin group by tenant_id) s), '[]'::jsonb);
+
+  -- ── Sin ventana: tiene que cuadrar contra la tabla ENTERA, datos reales incluidos ──
+  j_todo := resumen_costo_ia(null, null);
+  ok_todo := (j_todo -> 'totales' ->> 'costoUsd')::numeric = (select sum(costo_usd) from llm_costo)
+         and (j_todo -> 'totales' ->> 'n')::bigint = (select count(*) from llm_costo);
+
+  -- ── Una ventana sin filas da CEROS MEDIDOS y arreglos vacíos, no null ──────
+  -- Es el estado "Likida recién arrancando": el panel tiene que pintar $0, no
+  -- reventar ni enseñar un hueco.
+  j_vacia := resumen_costo_ia(d0 + interval '100 years', d0 + interval '101 years');
+  ok_vacia := (j_vacia -> 'totales' ->> 'n')::bigint = 0
+          and (j_vacia -> 'totales' ->> 'costoUsd')::numeric = 0
+          and j_vacia -> 'porFase' = '[]'::jsonb
+          and j_vacia -> 'porDia' = '[]'::jsonb
+          and j_vacia -> 'porTenant' = '[]'::jsonb;
+
+  -- ── El corte es SEMIABIERTO: la fila del borde no se cuenta dos veces ──────
+  -- Sin filas exactamente en el borde esto pasaría por vacío, así que primero se
+  -- comprueba que las hay (`hay-filas-en-el-borde`).
+  hay_borde := (select count(*) from llm_costo where created_at = d0 + interval '2 days');
+  j_borde := resumen_costo_ia(d0, d0 + interval '2 days');
+  ok_borde := (j_borde -> 'totales' ->> 'n')::bigint =
+              (select count(*) from llm_costo where created_at >= d0 and created_at < d0 + interval '2 days');
+
+  -- ── Permisos, leídos del catálogo ─────────────────────────────────────────
+  select p.prosecdef,
+         has_function_privilege('anon', p.oid, 'execute'),
+         has_function_privilege('authenticated', p.oid, 'execute'),
+         has_function_privilege('service_role', p.oid, 'execute')
+    into definer, anon_ok, auth_ok, svc_ok
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'resumen_costo_ia';
+
+  delete from tenant where nombre like 'ZZZ VERIF AGG %';
+
+  raise exception E'RESUMEN_COSTO_IA  total-cerrado=%  tokens=%  fase=%  modelo=%  fase+modelo=%  dia=%  tenant=%  sin-ventana=%  ventana-vacia=%  borde-semiabierto=%  hay-filas-en-el-borde=%\n                  es-definer=%  anon=%  authenticated=%  service_role=%\n                  esperado-cerrado=%   deriva-float8=%\n                  (esperado t×10 / borde>0 / f / f / f / t)',
+    ok_cerrado, ok_tokens, ok_fase, ok_modelo, ok_fasemodelo, ok_dia, ok_tenant,
+    ok_todo, ok_vacia, ok_borde, hay_borde,
+    definer, anon_ok, auth_ok, svc_ok,
+    cerrado, deriva;
+end $$;
+
+-- ── 41. Lo que faltaba para operar de verdad (mig. 0063) ──
+--
+-- Tres huecos de tres auditorías distintas. Ninguno se nota con 8 viajes de
+-- prueba; los tres muerden el primer día con una flota real.
+--
+-- 1. LA COLA DE FACTURACIÓN SE BLOQUEABA A SÍ MISMA. El cron elegía los 8 más
+--    viejos sin CFDI, y `facturarAlVuelo` no marcaba nada cuando la decisión
+--    era "no procede". Esos 8 se re-elegían para siempre: a 660 comprobantes
+--    diarios, la facturación automática dejaba de alcanzar comprobantes NUEVOS
+--    en la primera hora. Se marca el INTENTO, no el resultado — un ticket que
+--    no procede hoy puede proceder mañana, así que la marca ordena la cola en
+--    vez de sacarlo de ella. Se comprueba que el planeador USE el índice nuevo.
+--
+-- 2. Retenciones: `gasto` solo guardaba impuestos trasladados, así que el 4%
+--    de IVA del autotransporte no se podía mostrar sin inventarlo.
+--
+-- 3. `portal_credencial` guarda USUARIO y REFERENCIA al secreto, jamás el
+--    secreto. El check no es criptografía, es un pasamanos contra el error
+--    honesto: el día que alguien pegue la contraseña real en `secreto_ref`, la
+--    base lo rechaza. Y la tabla queda con RLS y SIN políticas a propósito —
+--    solo la toca el proceso de facturación con service-role; ni el contador
+--    ni el dueño tienen por qué ver con qué usuario entra el robot.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid; o uuid; v uuid; r record; plan text := '';
+  rechaza_secreto boolean := false; sin_politicas boolean; rls_on boolean; usa_indice boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0063') returning id into t;
+  insert into operador (tenant_id, nombre, telefono) values (t,'ZZZ','5215557777777') returning id into o;
+  insert into viaje (tenant_id, operador_id, estatus) values (t,o,'abierto') returning id into v;
+
+  begin
+    insert into portal_credencial (tenant_id, comercio, usuario, secreto_ref)
+      values (t, 'oxxo_gas', 'flota@x.mx', 'MiC0ntra$ena!');
+  exception when check_violation then rechaza_secreto := true;
+  end;
+  insert into portal_credencial (tenant_id, comercio, usuario, secreto_ref)
+    values (t, 'oxxo_gas', 'flota@x.mx', 'PORTAL_OXXOGAS_PASS');
+
+  select relrowsecurity into rls_on from pg_class where oid='public.portal_credencial'::regclass;
+  select count(*)=0 into sin_politicas from pg_policies where tablename='portal_credencial';
+
+  insert into gasto (tenant_id, viaje_id, concepto, monto, created_at, cfdi_uuid, autofactura_intentada_en)
+  select t, v, 'diesel', 100, now()-(g||' minutes')::interval,
+         case when g%3=0 then gen_random_uuid()::text else null end,
+         case when g%5=0 then now()-(g||' hours')::interval else null end
+  from generate_series(1,9000) g;
+  analyze gasto;
+
+  for r in execute 'explain select id from gasto where cfdi_uuid is null
+                    order by autofactura_intentada_en nulls first, created_at limit 8'
+  loop plan := plan || r."QUERY PLAN" || ' | '; end loop;
+  usa_indice := plan ilike '%gasto_por_facturar_idx%';
+
+  delete from tenant where id = t;
+  raise exception E'FALTA_PARA_OPERAR  rechaza-contrasena=%  rls=%  sin-politicas=%  cola-usa-indice=%   (esperado 4x true)',
+    rechaza_secreto, rls_on, sin_politicas, usa_indice;
+end $$;

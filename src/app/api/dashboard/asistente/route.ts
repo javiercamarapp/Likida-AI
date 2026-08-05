@@ -15,6 +15,7 @@
 // la tabla antes de usarse.
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSessionTenant } from '@/lib/auth/session';
+import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getKpis, getAcreditables, detectarAnomalias } from '@/lib/cuadra/analytics';
 
@@ -25,6 +26,22 @@ const TENANT_DEMO = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111
 export async function GET(req: NextRequest) {
   const sesion = await getSessionTenant();
   if (!sesion) return NextResponse.json({ error: 'sin sesion' }, { status: 401 });
+
+  // ── EL ROL, NO SOLO LA FLOTA ──────────────────────────────────────────────
+  //
+  // Faltaba, y era el mismo IDOR que ya se cerró en los dos endpoints de
+  // export: se acotaba el tenant y nunca se preguntaba quién pedía. Este
+  // handler devuelve IVA e IEPS acreditables, litros de diésel, el comprobado
+  // total y las diferencias de TODAS las liquidaciones de la flota, leídos con
+  // `supabaseAdmin()` — que salta RLS.
+  //
+  // Quién lo alcanzaba con un `curl`: el ENCARGADO, que es justo el rol para el
+  // que existe `visibilidad.ts` y al que la matriz de la 0044 le esconde las
+  // finanzas en la pantalla; y el OPERADOR, que solo debe ver lo suyo. El proxy
+  // no ayuda: su matcher excluye `/api`, así que esta línea es la única puerta.
+  if (!puedeVerArea(sesion.rol, 'dinero')) {
+    return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
+  }
 
   let tenantId = sesion.tenantId;
   if (!tenantId) {
