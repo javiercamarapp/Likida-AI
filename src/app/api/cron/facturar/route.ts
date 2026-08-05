@@ -140,15 +140,21 @@ const PRESUPUESTO_LOTE_MS = maxDuration * 1000;
  * flotas no consultaba el reloj antes de abrir el siguiente navegador.
  *
  * Ahora sí lo consulta: antes de cada `conNavegador` nuevo, si ya pasaron
- * `PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS` = 240 s desde que arrancó la
+ * `PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS` = 150 s desde que arrancó la
  * invocación, el lote se corta AHÍ —no se abre la sesión— y lo que falta queda
  * SIN marcar como intentado, para la corrida siguiente (mismo principio que
- * `falloDeArranque` usa para un Chromium que no arranca). 60 s de colchón: menos
- * de la mitad del peor caso de una sesión, pero de sobra para que la que YA
- * está abierta termine de escribir sus resultados y la ruta alcance a
- * responder.
+ * `falloDeArranque` usa para un Chromium que no arranca).
+ *
+ * AUDITORÍA 12, ALTO (rendimiento): el margen anterior (60 s) era menos de la
+ * mitad del peor caso de UNA sesión (~147 s sumando cada tope de
+ * `pagina_playwright.ts`/`capufe.ts`), así que una sesión podía arrancar a
+ * t=239.9 s y ser matada por Vercel a los 300 s, a media sesión — en modo
+ * `emitir`, con el CFDI ya timbrado sin que `cfdi_uuid` se alcance a escribir.
+ * El margen ahora cubre el peor caso de la sesión que YA está abierta: la
+ * nueva no se abre si quedan menos de 150 s, y la que corre tiene espacio
+ * para terminar y responder.
  */
-const MARGEN_LOTE_MS = 60_000;
+const MARGEN_LOTE_MS = 150_000;
 
 /** Una fila de `gasto` como la trae la consulta de la cola. */
 interface FilaCola {
@@ -431,7 +437,19 @@ export async function GET(req: Request) {
             // EN SERIE, no en paralelo. Varias pestañas a la vez contra el mismo
             // portal agotan la memoria de la función y, peor, se parecen a un
             // ataque desde el lado del portal — que responde bloqueando la IP.
+            //
+            // AUDITORÍA 12, ALTO: el corte de :406 era POR FLOTA, no por
+            // sesión de portal — una flota con 2+ portales distintos podía
+            // consumir ~294 s en UN solo `conNavegador` sin ningún corte
+            // interno y morir en la tercera sesión. Aquí se consulta el reloj
+            // antes de cada portal nuevo: lo que no alcanza a intentarse NO se
+            // marca, y se recoge entero en la corrida siguiente.
             for (const [comercio, delPortal] of porPortal) {
+              if (Date.now() - inicioLote >= PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS) {
+                sinTiempo += delPortal.length;
+                logger.warn('cron.facturar.sin_tiempo_portal', { tenant: tenantId, comercio, tickets: delPortal.length });
+                break;
+              }
               await correrLote(tenantId, comercio, delPortal);
             }
           });
