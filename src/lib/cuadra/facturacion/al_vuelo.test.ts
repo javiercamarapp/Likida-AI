@@ -24,17 +24,34 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //     facturar es un problema fiscal del cliente.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const { facturarConAgente, adaptadorDe } = vi.hoisted(() => ({
+const { facturarConAgente, adaptadorDe, facturarLoteConAgente } = vi.hoisted(() => ({
   facturarConAgente: vi.fn(),
   adaptadorDe: vi.fn(),
+  facturarLoteConAgente: vi.fn(),
 }));
-vi.mock('./agente', () => ({ facturarConAgente, adaptadorDe }));
+/**
+ * Se doblan las TRES puertas al portal y NADA MÁS.
+ *
+ * `pideCaptcha` se deja REAL a propósito: es la que decide si un ticket sale de
+ * la cola automática y entra al camino de una persona. Doblarla dejaría que la
+ * prueba afirmara ese ruteo mientras el predicado de verdad dice otra cosa —o
+ * sea probaría el doble. Es una función pura de una línea; no hay nada que
+ * aislar.
+ */
+vi.mock('./agente', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./agente')>()),
+  facturarConAgente, adaptadorDe, facturarLoteConAgente,
+}));
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
-/** Lo que devuelve el SELECT del gasto. */
-let lectura: { data: Record<string, unknown> | null; error: { message: string } | null };
+/**
+ * Lo que devuelve el SELECT del gasto. `facturarAlVuelo` lee UNA fila
+ * (`.maybeSingle()`); `facturarLoteAlVuelo` lee VARIAS (`.in('id', …)`) — el
+ * mismo doble sirve a los dos porque los dos leen de `nodo.then` directo.
+ */
+let lectura: { data: Record<string, unknown> | Record<string, unknown>[] | null; error: { message: string } | null };
 /** Lo que devuelve el UPDATE que guarda el UUID. */
 let resultadoUpdate: { error: { message: string } | null };
 /** Lo que devuelve el UPDATE que sella el intento. */
@@ -44,7 +61,9 @@ const updates: Array<{ fila: Record<string, unknown>; por: Array<[string, unknow
 
 function cadenaLectura() {
   const nodo: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'is', 'limit', 'order']) {
+  // `.in()` es lo que usa `facturarLoteAlVuelo` para leer TODO el lote en un
+  // solo viaje (`facturarAlVuelo` lee uno con `.eq('id', …)` y no lo necesita).
+  for (const m of ['select', 'eq', 'is', 'in', 'limit', 'order']) {
     nodo[m] = (...a: unknown[]) => { filtros.push([m, a]); return nodo; };
   }
   nodo.maybeSingle = () => Promise.resolve(lectura);
@@ -60,11 +79,45 @@ function cadenaLectura() {
  * escribir la consulta sin el filtro de flota para que la prueba pasara — o sea
  * el doble dictando que se pueda escribir en la fila de otra empresa.
  */
+/**
+ * Los ids que "ganan" el claim de `reclamarIntentos`. `null` = todos los que
+ * se pidieron por `.in('id', …)` (el caso normal: nadie más compite por ellos).
+ * Se pone en `[]` para simular que otra corrida ya se los llevó — el UPDATE
+ * condicional no devuelve filas sin que eso sea un error.
+ */
+let idsReclamados: string[] | null = null;
+
 function cadenaUpdate(fila: Record<string, unknown>, resultado: () => { error: { message: string } | null }) {
   const por: Array<[string, unknown]> = [];
   updates.push({ fila, por });
   const nodo: Record<string, unknown> = {};
   nodo.eq = (col: string, val: unknown) => { por.push([col, val]); return nodo; };
+  // `.in()` porque el sello del intento se pone para TODO el lote en un solo
+  // viaje a la base: ocho updates para ordenar la cola serían presupuesto del
+  // cron gastado en contabilidad propia. El doble lo acepta igual que `.eq`
+  // —registra columna y valor— para que las pruebas puedan seguir mirando que
+  // la escritura va acotada por flota.
+  nodo.in = (col: string, val: unknown) => { por.push([col, val]); return nodo; };
+  // `.is()`/`.or()` del claim de `reclamarIntentos` (AUD-9): no son parte del
+  // acotamiento por flota que `por` existe para vigilar, así que no se
+  // registran ahí — son no-ops que solo mantienen la cadena.
+  nodo.is = () => nodo;
+  nodo.or = () => nodo;
+  // El claim termina en `.select('id')` y espera FILAS de vuelta —las que
+  // ganaron la carrera—, no solo `{error}` como las demás escrituras de este
+  // módulo. Sin esto el `data` que lee `reclamarIntentos` sale `undefined`, el
+  // Set de ganadores queda vacío SIEMPRE, y todo el módulo se comporta como si
+  // cada corrida perdiera su propia carrera.
+  nodo.select = () => {
+    nodo.then = (r: (v: unknown) => unknown) => Promise.resolve((() => {
+      const { error } = resultado();
+      if (error) return { data: null, error };
+      const pedidos = (por.find(([col]) => col === 'id')?.[1] as string[] | undefined) ?? [];
+      const ganados = idsReclamados ?? pedidos;
+      return { data: ganados.map((id) => ({ id })), error: null };
+    })()).then(r);
+    return nodo;
+  };
   nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(resultado()).then(r);
   return nodo;
 }
@@ -79,7 +132,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({ from: (...a: unknown[]) => from(...(a as [string])) }),
 }));
 
-const { decidirAutofactura, facturarAlVuelo, CONFIANZA_MINIMA_AUTOFACTURA } = await import('./al_vuelo');
+const { decidirAutofactura, facturarAlVuelo, facturarLoteAlVuelo, CONFIANZA_MINIMA_AUTOFACTURA } = await import('./al_vuelo');
 const { armar } = await import('./pendientes');
 
 const HOY = '2026-08-04';
@@ -112,11 +165,16 @@ beforeEach(() => {
   lectura = { data: g(), error: null };
   resultadoUpdate = { error: null };
   resultadoSello = { error: null };
+  idsReclamados = null;
   filtros.length = 0;
   updates.length = 0;
   from.mockClear();
   facturarConAgente.mockReset();
   facturarConAgente.mockResolvedValue({ modo: 'emitir', ok: true, capturado: {}, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666' });
+  // Sin este reset, la primera prueba que de verdad ejercite `facturarLoteAlVuelo`
+  // (antes de esta ronda, ninguna lo hacía) deja su llamada registrada para
+  // SIEMPRE: `facturarLoteConAgente` nunca se limpiaba porque nunca se llamaba.
+  facturarLoteConAgente.mockReset();
   adaptadorDe.mockReset();
   adaptadorDe.mockReturnValue(ADAPTADOR);
   for (const f of Object.values(logger)) f.mockReset();
@@ -393,12 +451,20 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
   it('emitido y guardado: devuelve el UUID', async () => {
     const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
 
-    expect(r).toEqual({ intentado: true, facturado: true, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666' });
+    expect(r).toEqual({
+      intentado: true, facturado: true, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666',
+      capturado: {}, captura: undefined,
+    });
     // Acotado por id Y por tenant: el `select` ya probó que la fila es de esta
     // flota, pero una escritura sin el filtro es la forma de que un `gastoId`
     // venido de fuera acabe marcando la fila de otra empresa.
+    //
+    // `cfdi_orden: 1` es de la 0065: un gasto que factura solo es el primero (y
+    // el único) de su CFDI. Lo que reparte 2, 3, 4… es el lote de CAPUFE, y esa
+    // es exactamente la posición que sigue chocando si el mismo CFDI entra otra
+    // vez por el camino de ingesta.
     expect(sinSello()).toEqual([{
-      fila: { cfdi_uuid: 'B0800A68-1111-2222-3333-444455556666' },
+      fila: { cfdi_uuid: 'B0800A68-1111-2222-3333-444455556666', cfdi_orden: 1 },
       por: [['id', 'g-1'], ['tenant_id', 't-1']],
     }]);
     expect(logger.info).toHaveBeenCalledWith('autofactura.ok', expect.objectContaining({ gastoId: 'g-1' }));
@@ -413,7 +479,12 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
 
     const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
 
-    expect(r).toEqual({ intentado: true, facturado: true, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666' });
+    expect(r).toMatchObject({ intentado: true, facturado: true, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666' });
+    // Y SALE DE LA COLA AUTOMÁTICA (mig. 0065). Es la mitad que faltaba: sin
+    // esto, el gasto se ve sin CFDI, el cron lo vuelve a elegir la hora
+    // siguiente y emite un SEGUNDO documento por el mismo consumo — el problema
+    // fiscal que este caso existe para no tener.
+    expect(r.bloqueado).toContain('YA SE EMITIÓ');
     // Y NO se reintenta: una sola visita al portal.
     expect(facturarConAgente).toHaveBeenCalledTimes(1);
     // El UUID queda en el log, que es lo único que permite recuperarlo a mano.
@@ -430,7 +501,10 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
 
     const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
 
-    expect(r).toEqual({ intentado: true, facturado: false, detalle: 'el portal no cargó' });
+    expect(r).toEqual({
+      intentado: true, facturado: false, detalle: 'el portal no cargó',
+      capturado: {}, captura: undefined,
+    });
     expect(sinSello()).toEqual([]);
   });
 
@@ -443,9 +517,15 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
 
     const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY });
 
+    // Y VUELVE LO QUE SE HABRÍA ESCRITO. Es lo único que hace que el ensayo
+    // sirva de algo: el modo por defecto del cron nunca devuelve folio, así que
+    // sin `capturado` (y sin la captura de pantalla) la corrida entera se
+    // resumía en una frase que no distingue un formulario bien llenado de uno
+    // con el RFC en el campo del correo.
     expect(r).toEqual({
       intentado: true, facturado: false,
       detalle: 'ensayo: se llenó el portal y no se emitió',
+      capturado: { referencia: '286188' }, captura: undefined,
     });
     expect(r.cfdiUuid).toBeUndefined();
     expect(sinSello()).toEqual([]);
@@ -502,12 +582,12 @@ describe('facturarAlVuelo · sella el intento, proceda o no', () => {
 
     expect(r.motivo).toBe('confianza_baja');
     expect(facturarConAgente).not.toHaveBeenCalled();
-    expect(sellos()).toEqual([{ fila: SELLO, por: [['id', 'g-1'], ['tenant_id', 't-1']] }]);
+    expect(sellos()).toEqual([{ fila: SELLO, por: [['id', ['g-1']], ['tenant_id', 't-1']] }]);
   });
 
   it('lo marca también cuando procede y el portal factura', async () => {
     await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA });
-    expect(sellos()).toEqual([{ fila: SELLO, por: [['id', 'g-1'], ['tenant_id', 't-1']] }]);
+    expect(sellos()).toEqual([{ fila: SELLO, por: [['id', ['g-1']], ['tenant_id', 't-1']] }]);
   });
 
   it('lo marca también cuando el portal se reconoce pero nadie sabe operarlo', async () => {
@@ -527,7 +607,7 @@ describe('facturarAlVuelo · sella el intento, proceda o no', () => {
     await expect(facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA }))
       .rejects.toThrow('playwright crashed');
 
-    expect(sellos()).toEqual([{ fila: SELLO, por: [['id', 'g-1'], ['tenant_id', 't-1']] }]);
+    expect(sellos()).toEqual([{ fila: SELLO, por: [['id', ['g-1']], ['tenant_id', 't-1']] }]);
   });
 
   it('NO sella lo que no se pudo leer: "no contestó la base" no es un intento', async () => {
@@ -548,17 +628,67 @@ describe('facturarAlVuelo · sella el intento, proceda o no', () => {
     expect(updates).toEqual([]);
   });
 
-  it('si el sello no se guarda, el intento sigue y queda dicho en el log', async () => {
-    // El sello ordena la cola, no autoriza nada: tumbar por él un intento que
-    // podía facturar sería cambiar un problema de orden por uno fiscal. Pero se
-    // dice, porque perderlo se manifiesta como "el cron no factura" y sin este
-    // rastro se diagnostica en el sitio equivocado.
+  it('EL DOBLE CFDI: si otra corrida ganó el claim, no se abre el portal', async () => {
+    // LA PRUEBA QUE JUSTIFICA TODO EL CAMBIO.
+    //
+    // Vercel Cron entrega at-least-once, y el candado era un `if
+    // (data.cfdi_uuid)` en memoria con una sesión de navegador de 10-60 s
+    // detrás. Dos corridas solapadas leían las dos `cfdi_uuid IS NULL`, las dos
+    // sellaban, las dos manejaban el portal, y las dos emitían: DOS CFDI del
+    // mismo ticket. Hoy lo tapa que el modo por defecto es `ensayo` — o sea que
+    // el defecto se estrena el día que se ponga en `emitir`.
+    //
+    // `idsReclamados = []` es el UPDATE condicional devolviendo CERO filas, que
+    // es como Postgres dice "otro proceso llegó primero". No es un error: es el
+    // resultado normal de perder una carrera.
+    idsReclamados = [];
+
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA });
+
+    expect(r.motivo).toBe('ya_en_proceso');
+    expect(r.intentado).toBe(false);
+    expect(r.facturado).toBe(false);
+    // Lo que de verdad importa: el portal NO se tocó. Todo lo demás es
+    // contabilidad; esto es lo irreversible ante el SAT.
+    expect(facturarConAgente).not.toHaveBeenCalled();
+  });
+
+  it('el claim va acotado por flota Y exige que el CFDI siga vacío', async () => {
+    // El UPDATE tiene que llevar `id` + `tenant_id` (no se escribe en la fila de
+    // otra empresa) y las condiciones de la carrera. Si alguien quitara el
+    // `.is('cfdi_uuid', null)`, el claim dejaría de ser una carrera contra un
+    // ticket ya facturado y volveríamos al defecto por otra puerta.
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA });
+
+    const claim = sellos()[0];
+    expect(claim.fila).toEqual({ autofactura_intentada_en: AHORA });
+    expect(claim.por).toEqual([['id', ['g-1']], ['tenant_id', 't-1']]);
+  });
+
+  it('si el CLAIM no se puede confirmar, NO se factura: falla cerrado y lo dice', async () => {
+    // ESTE TEST CAMBIÓ DE SENTIDO A PROPÓSITO.
+    //
+    // Antes decía "si el sello no se guarda, el intento SIGUE", con el argumento
+    // de que el sello ordenaba la cola y no autorizaba nada. Eso era cierto
+    // mientras el sello fuera solo un sello — pero el candado contra el doble
+    // CFDI era un `if (data.cfdi_uuid)` en memoria, y entre esa lectura y la
+    // escritura del UUID hay una sesión de navegador de 10-60 s. Con Vercel Cron
+    // entregando at-least-once, dos corridas solapadas leían las dos
+    // `cfdi_uuid IS NULL`, las dos sellaban y las dos emitían: DOS CFDI del
+    // mismo ticket, con el SAT ya enterado.
+    //
+    // Ahora el UPDATE condicional ES la carrera, así que "seguir sin haber
+    // confirmado el claim" es exactamente el camino por el que se emite el
+    // segundo CFDI. Se falla CERRADO. El problema de orden en la cola se
+    // resuelve solo en la corrida siguiente; un CFDI de más, no.
     resultadoSello = { error: { message: 'deadlock detected' } };
 
     const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA });
 
-    expect(r.facturado).toBe(true);
-    expect(logger.warn).toHaveBeenCalledWith('autofactura.sello_sin_guardar', {
+    expect(r.facturado).toBe(false);
+    expect(r.intentado).toBe(false);
+    expect(r.motivo).toBe('ya_en_proceso');
+    expect(logger.warn).toHaveBeenCalledWith('autofactura.claim_sin_guardar', {
       gastoId: 'g-1', err: 'deadlock detected',
     });
   });
@@ -568,5 +698,71 @@ describe('facturarAlVuelo · sella el intento, proceda o no', () => {
     const [s] = sellos();
     expect(typeof s.fila.autofactura_intentada_en).toBe('string');
     expect(Number.isFinite(Date.parse(s.fila.autofactura_intentada_en as string))).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// facturarLoteAlVuelo — LA MISMA CARRERA, PERO ESTE ES EL CAMINO QUE DE VERDAD
+// CORRE EN PRODUCCIÓN.
+//
+// `route.ts` del cron llama `facturarLoteAlVuelo`, no `facturarAlVuelo` — el
+// lote es el camino real (ver el bloque de comentarios arriba de la función:
+// "la sesión se paga una vez"). Antes de esta ronda el archivo tenía CERO
+// pruebas para esta función: `route.test.ts` la dobla por completo
+// (`vi.mock('@/lib/cuadra/facturacion/al_vuelo', …)`), así que la lógica real
+// del claim dentro del lote —el mismo `reclamarIntentos` que arriba se probó
+// para UN gasto— nunca se había ejercitado. Auditoría 10, backend: hueco de
+// cobertura en el camino fiscal irreversible que de verdad ejecuta el cron.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('facturarLoteAlVuelo · la misma carrera del claim, pero por lote', () => {
+  const g2 = (o: Record<string, unknown> = {}) => g({ id: 'g-2', folio: '999999', ...o });
+
+  it('EL DOBLE CFDI, por lote: el gasto que otra corrida ya se ganó no entra al portal, y el resto del lote sigue', async () => {
+    // Dos tickets en el lote. `idsReclamados = ['g-1']` simula el UPDATE
+    // condicional devolviendo SOLO la fila que esta corrida ganó — 'g-2' lo
+    // tomó otro proceso entre la lectura del lote y el claim (el escenario que
+    // el propio código describe en el comentario de `facturarLoteAlVuelo`:
+    // "Lo que no esté ahí lo tomó otro proceso y no se toca").
+    lectura = { data: [g(), g2()], error: null };
+    idsReclamados = ['g-1'];
+    facturarLoteConAgente.mockResolvedValueOnce({
+      modo: 'emitir', ok: true, capturado: {},
+      porGasto: [{ gastoId: 'g-1', incluido: true, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666' }],
+    });
+
+    const r = await facturarLoteAlVuelo({
+      tenantId: 't-1', comercio: 'enerser', gastoIds: ['g-1', 'g-2'], modo: 'emitir', hoy: HOY, ahora: AHORA,
+    });
+
+    // El portal SOLO vio el ticket que ganó el claim — 'g-2' nunca entró a la
+    // sesión, que es justo lo que evita el segundo CFDI.
+    expect(facturarLoteConAgente).toHaveBeenCalledTimes(1);
+    const { tickets } = facturarLoteConAgente.mock.calls[0][0] as { tickets: Array<{ gastoId: string }> };
+    expect(tickets.map((t) => t.gastoId)).toEqual(['g-1']);
+
+    const deG2 = r.porGasto.find((p) => p.gastoId === 'g-2');
+    expect(deG2).toMatchObject({ intentado: false, facturado: false, motivo: 'ya_en_proceso' });
+
+    const deG1 = r.porGasto.find((p) => p.gastoId === 'g-1');
+    expect(deG1).toMatchObject({ intentado: true, facturado: true, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666' });
+  });
+
+  it('si NADIE del lote gana el claim, el navegador nunca se abre — cero filas no es un error', async () => {
+    // El caso extremo del mismo hallazgo: la corrida entera llegó tarde. Las
+    // dos filas las tomó otro proceso; `idsReclamados = []` es el UPDATE
+    // condicional devolviendo cero filas para las dos.
+    lectura = { data: [g(), g2()], error: null };
+    idsReclamados = [];
+
+    const r = await facturarLoteAlVuelo({
+      tenantId: 't-1', comercio: 'enerser', gastoIds: ['g-1', 'g-2'], modo: 'emitir', hoy: HOY, ahora: AHORA,
+    });
+
+    expect(facturarLoteConAgente).not.toHaveBeenCalled();
+    expect(r.facturados).toBe(0);
+    expect(r.porGasto).toEqual([
+      { gastoId: 'g-1', intentado: false, facturado: false, motivo: 'ya_en_proceso' },
+      { gastoId: 'g-2', intentado: false, facturado: false, motivo: 'ya_en_proceso' },
+    ]);
   });
 });

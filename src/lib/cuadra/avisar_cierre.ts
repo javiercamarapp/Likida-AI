@@ -113,9 +113,20 @@ export async function avisarCierreAlJefe(args: {
   if (args.urlPdf) {
     // En su propio try: el texto ya salió, y perder el adjunto no debe borrar
     // el aviso que sí llegó.
+    //
+    // `sendDocument` YA NO LANZA (ver `meta/client.ts`, misma ronda): un
+    // rechazo de Meta o un fallo de red devuelven `{ok:false}` en vez de la
+    // excepción que este `catch` esperaba atrapar. Sin revisar `r.ok`, un PDF
+    // que nunca llegó pasaba SIN un solo log —el `catch` de abajo es letra
+    // muerta para ese caso— y esta función seguía devolviendo `enviado: true`
+    // sobre un documento que el jefe nunca recibió y que es justo el que
+    // archiva para su contador. Se revisa el resultado explícitamente; el
+    // `try/catch` se conserva como red por si el día de mañana algo de aquí sí
+    // lanza.
     try {
-      await sendDocument(tel, args.urlPdf, `liquidacion-${resumen.folio}.pdf`,
+      const r = await sendDocument(tel, args.urlPdf, `liquidacion-${resumen.folio}.pdf`,
         `Liquidación de ${resumen.operador} — ${resumen.folio}`);
+      if (!r.ok) logger.warn('cierre.pdf_al_jefe_falló', { viaje: args.viajeId, err: r.error });
     } catch (e) {
       logger.warn('cierre.pdf_al_jefe_falló', { viaje: args.viajeId, err: e instanceof Error ? e.message : String(e) });
     }
