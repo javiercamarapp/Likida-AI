@@ -2923,3 +2923,46 @@ begin
   raise exception E'52  mismo-indice-rebota=%  anon=%  service_role=%  FALSIFICADO (sin indice): duplicado-entra=%   (esperado t / 0 / 1 / t)',
     choco_indice, n_anon, n_service, sin_indice_entra;
 end $$;
+
+-- ── 53. cfdi_consolidado_linea admite 'sin_match', y solo eso — nada más (mig. 0077) ──
+--
+-- La 0077 amplía el check constraint de `estatus` para admitir un tercer
+-- valor: 'sin_match' (un humano ya revisó la línea, vía `resolverLineaAMano`
+-- en `intake/consolidado.ts`, y ningún gasto capturado le corresponde). La
+-- garantía que solo la base puede demostrar es doble: que el valor NUEVO
+-- entra, y que el constraint sigue siendo una LISTA CERRADA — que al
+-- reescribirlo no se abrió por accidente a cualquier texto.
+--
+-- Corrida REAL contra el proyecto Likida, 5-ago-2026 (0 tenants ZZZ de sobra
+-- después — la excepción final revirtió todo):
+--
+--   53  sin_match-entra=t  basura-rebota=t  (esperado t / t)
+do $$
+declare
+  t uuid; x uuid;
+  sin_match_entra boolean := false;
+  basura_rebota boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF B53 '||gen_random_uuid()) returning id into t;
+  insert into cfdi_xml (tenant_id, cfdi_uuid, xml, tiene_multiples_conceptos, total_conceptos)
+    values (t, 'UUID-VERIF-0077', '<cfdi/>', true, 1) returning id into x;
+
+  -- 1. 'sin_match' SÍ entra — la garantía que trae esta migración.
+  begin
+    insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, estatus)
+      values (t, x, 1, 'ecc12', 100, 'sin_match');
+    sin_match_entra := true;
+  exception when others then sin_match_entra := false;
+  end;
+
+  -- 2. Un valor cualquiera SIGUE rebotando — el constraint es una lista
+  --    cerrada, no se abrió al reescribirlo.
+  begin
+    insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, estatus)
+      values (t, x, 2, 'ecc12', 100, 'basura');
+  exception when check_violation then basura_rebota := true;
+  end;
+
+  delete from tenant where id = t;
+  raise exception '53  sin_match-entra=%  basura-rebota=%  (esperado t / t)', sin_match_entra, basura_rebota;
+end $$;
