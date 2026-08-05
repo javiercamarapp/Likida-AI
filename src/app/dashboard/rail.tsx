@@ -18,6 +18,7 @@ interface Datos {
   kpis: DashboardKpis | null;
   acred: Acreditables | null;
   anomalias: Array<{ detalle: string; monto: number }> | null;
+  errorCarga?: boolean;
 }
 
 /**
@@ -66,6 +67,10 @@ export default function RailAsistente() {
   const kpis = datos?.kpis ?? null;
   const acred = datos?.acred ?? null;
   const anomalias = datos?.anomalias ?? null;
+  // AUDITORÍA 12, BAJO (backend): el server ahora distingue "no hay datos" de
+  // "no se pudo leer" (errorCarga). Un bache de Supabase ya no deja el widget
+  // en blanco sin rastro: se dice que no se pudo leer, en vez de pintar nada.
+  const errorCarga = datos?.errorCarga ?? false;
 
 
   return (
@@ -109,7 +114,14 @@ export default function RailAsistente() {
 
           {/* Smart Insight — solo con un hallazgo REAL. Un recuadro verde que
               dice "todo bien" cuando no se revisó nada entrena a ignorarlo. */}
-          {anomalias && anomalias.length > 0 ? (
+          {errorCarga ? (
+            <div className="rounded-lg p-2.5" style={{ background: 'color-mix(in srgb, var(--color-warn) 10%, transparent)' }}>
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--color-warn)' }}>
+                <Sparkles width={11} height={11} strokeWidth={2} /> Smart Insight
+              </div>
+              <p className="text-[13px] leading-snug">No se pudieron leer las cifras ahora mismo. Recarga en un momento.</p>
+            </div>
+          ) : anomalias && anomalias.length > 0 ? (
             <div className="rounded-lg p-2.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
               <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--color-ok)' }}>
                 <Sparkles width={11} height={11} strokeWidth={2} /> Smart Insight
