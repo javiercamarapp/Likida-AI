@@ -152,3 +152,18 @@ describe('tieneCifrasDeDinero — auditoría 8, la palabra inocente ya no apaga 
     ]) expect(tieneCifrasDeDinero(t), t).toBe(false);
   });
 });
+
+// ── AUDITORÍA 13 · MEDIO: el portón cerraba en "once" — 1-10 pasaba ─────────
+describe('AUDITORÍA 13 — cardinales 1-10 (el cierre parcial de la 12)', () => {
+  it('atrapa "diez", "cinco" y "uno" sueltos — el español natural de WhatsApp', () => {
+    for (const t of ['Te sobran diez del anticipo.', 'Me faltan cinco para completar.', 'Quedó uno a tu favor.']) {
+      expect(tieneCifrasDeDinero(t), t).toBe(true);
+    }
+  });
+
+  it('sigue sin marcar los sustantivos comunes ("tres comprobantes")', () => {
+    for (const t of ['Ya recibí tus tres comprobantes.', 'Van cinco fotos, ¿te falta alguna?']) {
+      expect(tieneCifrasDeDinero(t), t).toBe(false);
+    }
+  });
+});
