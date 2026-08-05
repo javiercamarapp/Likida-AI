@@ -74,14 +74,31 @@ export function decidirAutofactura(
     return { procede: false, motivo: 'sin_adaptador', detalle: t.comercio?.clave };
   }
 
-  // La confianza es del OCR, no del portal. `null` NO se trata como alta: un
-  // comprobante sin confianza registrada es uno del que no sabemos nada, y
-  // emitir sobre eso es exactamente lo que este umbral existe para impedir.
-  if (confianzaOcr === null || confianzaOcr < CONFIANZA_MINIMA_AUTOFACTURA) {
+  // La confianza es del OCR, no del portal. Lo que NO es un número se trata como
+  // ausencia, nunca como confianza alta.
+  //
+  // AQUÍ HUBO UN AGUJERO QUE EMITÍA FACTURAS REALES. La comprobación era
+  // `confianzaOcr === null || confianzaOcr < 0.9`, y con `NaN` las DOS dan
+  // `false` —`NaN === null` es false y `NaN < 0.9` también—, así que caía por
+  // abajo a `procede: true`. No era teórico: el llamador hace
+  // `Number(data.ocr_confianza)`, que devuelve `NaN` con una columna vacía o con
+  // texto. Un comprobante del que no sabíamos NADA autorizaba timbrar un CFDI
+  // irreversible ante el SAT.
+  //
+  // `Number.isFinite` cierra los tres casos de una vez (null, undefined, NaN) y
+  // no se puede volver a abrir por un lado: no hay valor no-numérico que lo pase.
+  if (!Number.isFinite(confianzaOcr as number)) {
+    return { procede: false, motivo: 'confianza_baja', detalle: 'sin confianza registrada' };
+  }
+  const confianza = confianzaOcr as number;
+  if (confianza < CONFIANZA_MINIMA_AUTOFACTURA) {
     return {
       procede: false,
       motivo: 'confianza_baja',
-      detalle: confianzaOcr === null ? 'sin confianza registrada' : `confianza ${confianzaOcr.toFixed(2)}`,
+      // Tres decimales, no dos: `(0.899).toFixed(2)` imprime "0.90", o sea el
+      // rechazo declaraba una confianza IGUAL al mínimo aceptable y la pantalla
+      // de "por facturar" quedaba contradiciéndose sola.
+      detalle: `confianza ${confianza.toFixed(3)}`,
     };
   }
 
@@ -149,7 +166,16 @@ export async function facturarAlVuelo(args: {
     modo: args.modo ?? 'ensayo',
   });
 
-  if (!r.ok || !r.cfdiUuid) {
+  // UN ENSAYO EXITOSO NO ES UN FALLO. En `ensayo` el agente llena el portal y se
+  // detiene antes de emitir, así que devuelve `ok: true` SIN `cfdiUuid` — y como
+  // ensayo es el modo POR DEFECTO, la condición `!r.ok || !r.cfdiUuid` mandaba
+  // al log de fallos el camino normal, con `error: undefined`. Quien fuera a
+  // averiguar "por qué no se factura nada" encontraba fallos que no ocurrieron.
+  if (r.ok && !r.cfdiUuid) {
+    logger.info('autofactura.ensayo', { gastoId: args.gastoId, capturado: Object.keys(r.capturado).length });
+    return { intentado: true, facturado: false, detalle: 'ensayo: se llenó el portal y no se emitió' };
+  }
+  if (!r.ok) {
     logger.warn('autofactura.fallo', { gastoId: args.gastoId, error: r.error });
     return { intentado: true, facturado: false, detalle: r.error };
   }

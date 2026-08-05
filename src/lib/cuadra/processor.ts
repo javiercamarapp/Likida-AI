@@ -54,6 +54,8 @@ import {
 } from './acuse_ticket';
 import { estadoDelViaje, responderConsulta } from './consulta_chofer';
 import { resolverCuentaOficina } from './contactos';
+import { atenderConfirmacion, aceptarPorActividad } from './confirmar_viaje';
+import { avisarCierreAlJefe } from './avisar_cierre';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 
@@ -814,6 +816,16 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
             ejercicioHoy: ventana?.hoy ? Number(ventana.hoy.slice(0, 4)) : null,
           }, dudosa));
         }
+        // MANDAR UN COMPROBANTE ES ACEPTAR EL VIAJE.
+        //
+        // Cierra un hueco que habría salido en el primer demo: el chofer que
+        // ignora la pregunta de confirmación y se pone a trabajar. Sin esto, a
+        // las 5 h la escalación le dice al jefe "tu chofer no confirmó" mientras
+        // el chofer lleva ocho tickets mandados, y el jefe le habla para
+        // regañarlo por algo que sí hizo. Una foto es una aceptación más fuerte
+        // que un "va": es trabajo hecho.
+        await aceptarPorActividad(op.tenantId, viajeId);
+
         // ── ¿SE LE CONTESTA POR ESTA FOTO? ───────────────────────────────────
         //
         // Tres peldaños, en `acuse_ticket.ts`. Aquí solo llegan comprobantes que
@@ -1113,6 +1125,52 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       logger.info('consulta.estado', { viaje: viajeId });
       await say(respEstado);
       return;
+    }
+
+    // ── ¿ESTÁ CONFIRMANDO SU VIAJE? ──────────────────────────────────────────
+    //
+    // Va DESPUÉS de la consulta de estado y ANTES del agente. El orden importa:
+    // un viaje que el chofer no ha aceptado tampoco lo puede haber terminado,
+    // así que su "listo" aquí significa "listo para arrancar", no "ya acabé".
+    //
+    // `decidirInicio` es puro y no elige por él: con dos viajes asignados y un
+    // "sí" pelón devuelve `ambiguo` y vuelve a preguntar. Arrancar el que no era
+    // mete los comprobantes de una ruta en la liquidación de otra, y eso se
+    // descubre hasta el cuadre, con el papel ya entregado.
+    //
+    // TODO EL BLOQUE VA EN try/catch, Y NO CONTRADICE "fallar cerrado". Esa
+    // regla protege de AFIRMAR algo falso; aquí no se afirma nada: es un atajo
+    // delante del agente, y si no se puede consultar, el mensaje sigue su camino
+    // normal y lo contesta el agente. Lanzar rompería CADA mensaje de CADA
+    // chofer mientras la base tosa —incluidos los de quienes ya arrancaron su
+    // viaje y no tienen nada que confirmar—, que es un daño mucho mayor que
+    // perder una confirmación recuperable (el viaje escala a las 5 h y se ve en
+    // el panel).
+    try {
+      const conv0 = await loadConversation(op.tenantId, msg.from, viajeId);
+      // Cuántas veces se le ha preguntado ya. Sin este conteo, "se repregunta
+      // UNA vez" no se puede cumplir: `decidirInicio` no tiene memoria, y a
+      // alguien manejando se le acabaría preguntando en bucle.
+      const intento = conv0.turns.filter(
+        (t) => t.role === 'assistant' && /confirma|¿cu[áa]l de|arranco/i.test(String(t.content ?? '')),
+      ).length + 1;
+
+      const c = await atenderConfirmacion({
+        tenantId: op.tenantId,
+        operadorId: op.operadorId,
+        texto: msg.text,
+        viajeActual: viajeId,
+        intento,
+      });
+      if (c.mensaje) {
+        logger.info('viaje.inicio', { viaje: c.viajeConfirmado ?? viajeId, intento });
+        await say(c.mensaje);
+        return;
+      }
+    } catch (e) {
+      logger.error('viaje.confirmacion_no_consultada', {
+        viaje: viajeId, err: e instanceof Error ? e.message : String(e),
+      });
     }
 
     // ── COMPROBANTES QUE ESPERABAN VIAJE (mig. 0040) ─────────────────────────
@@ -1546,6 +1604,28 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         if (error || !data?.signedUrl) throw new Error(error?.message ?? 'storage no devolvió URL firmada');
         await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
         await registrarCostoWhatsApp(op.tenantId, viajeId);
+
+        // ── Y LA OFICINA SE ENTERA, CON EL PDF ───────────────────────────────
+        //
+        // Cierra el circuito: el trabajo entró por WhatsApp y el resultado sale
+        // por WhatsApp. Si para tener el PDF hubiera que entrar a una pantalla,
+        // la mitad de las veces nadie entra — y la liquidación existe pero no la
+        // mira quien tiene que firmarla.
+        //
+        // BEST-EFFORT DURO: la liquidación YA está cerrada y el chofer YA tiene
+        // su PDF. Un jefe sin teléfono registrado o un WhatsApp caído no pueden
+        // costar una liquidación, así que esto no puede lanzar hacia arriba.
+        // SE ESPERA, no se deja flotando. En serverless una promesa suelta puede
+        // quedarse a medias cuando la invocación termina: el aviso al jefe
+        // saldría "a veces", que es peor que no salir nunca porque nadie lo
+        // reproduce. El try/catch es lo que impide que este await cueste el
+        // cierre; son dos lecturas y un envío, no un presupuesto.
+        try {
+          const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId, urlPdf: data.signedUrl });
+          if (!rj.enviado) logger.warn('cierre.jefe_no_avisado', { viaje: viajeId, motivo: rj.motivo });
+        } catch (e) {
+          logger.error('cierre.aviso_jefe_falló', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+        }
       } catch (e) {
         // Ruidoso a propósito: la liquidación SÍ quedó cerrada en la base, así que
         // esto no es recuperable por reintento y nadie lo va a notar salvo por el log.

@@ -39,22 +39,105 @@ export type TipoConsulta = 'saldo' | 'faltantes' | 'ultimo' | 'ayuda';
  * verdad nunca lo ve. Ante la duda, no se contesta aquí.
  */
 export function interpretarPregunta(texto: string): TipoConsulta | null {
-  const t = texto.trim().toLowerCase();
-  if (!t || t.length > 120) return null;
+  const t = normalizar(texto);
+  // Una consulta de estado es CORTA. El chatter de un chofer no lo es, y esa
+  // diferencia hace casi todo el trabajo de separar los dos.
+  if (!t || t.length > 45) return null;
 
-  // "cuánto llevo", "cuanto va", "como voy", "cuánto he comprobado"
-  if (/\b(cu[áa]nto|como|c[óo]mo)\b.*\b(llevo|voy|va|comprobado|gastado|abonado)\b/.test(t)) return 'saldo';
-  if (/\bmi\s+saldo\b|\bsaldo\b/.test(t)) return 'saldo';
-
-  // "me falta algo", "qué me falta", "falta algo"
-  if (/\bfalta(n|rme)?\b|\bpendiente/.test(t)) return 'faltantes';
-
-  // "qué recibiste", "cuál fue el último", "llegó mi ticket"
-  if (/\b([úu]ltimo|recib(iste|ido)|lleg[óo])\b/.test(t)) return 'ultimo';
-
-  if (/^\s*(ayuda|help|men[úu]|opciones|qu[ée] puedo)\b/.test(t)) return 'ayuda';
+  for (const [tipo, patron] of PATRONES) {
+    if (patron.test(t)) return tipo;
+  }
   return null;
 }
+
+/**
+ * Minúsculas, sin acentos, sin puntuación y sin cortesías.
+ *
+ * SIN ACENTOS a propósito, y no por comodidad: `\b` en JavaScript se calcula con
+ * [A-Za-z0-9_], así que una "ú" NO cuenta como letra y `\búltimo\b` jamás casa
+ * con la forma acentuada — que es la correcta. Es la misma trampa que ya se
+ * pisó con "terminé" en el procesador. Quitando el acento de una vez, el
+ * problema deja de existir en lugar de esquivarse patrón por patrón.
+ */
+function normalizar(texto: string): string {
+  let t = texto
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[¿?¡!.,;:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // EN LAZO, no en una pasada. Con un solo `replace`, "oye jefe cuanto llevo"
+  // perdía "oye" y se quedaba con "jefe cuanto llevo" — sin reconocer. Y
+  // "buenas tardes jefe, ¿cuánto llevo?" fallaba por lo mismo: es la forma
+  // EDUCADA de preguntar, o sea la que más escribe un operador a su patrón, y
+  // era justo la que no funcionaba.
+  for (let i = 0; i < 3; i++) {
+    const antes = t;
+    t = t
+      .replace(/^(oye|hola|hey|jefe|patron|disculpa|perdon|buenas|buenos|dias|tardes|noches|que onda|una pregunta|pregunta|amigo)\s+/, '')
+      .replace(/\s+(porfa|por favor|porfavor|gracias|plis|bro|jefe)$/, '');
+    if (t === antes) break;
+  }
+  return t.trim();
+}
+
+/**
+ * Colas que no cambian la pregunta: "cuánto llevo **en total**", "**hasta
+ * ahorita**", "**del anticipo**".
+ *
+ * LISTA CERRADA, nunca `.*`. Una cola libre reabriría justo lo que el anclaje
+ * cerró: "cuanto llevo de camino" no es una consulta de saldo, y con un comodín
+ * lo sería. Cada sufijo está aquí porque alguien lo escribe, no por si acaso.
+ */
+const COLA = '(?: (hasta ahorita|hasta ahora|hasta el momento|en total|total|hoy|acumulado|comprobado|gastado|abonado|de gasto|de gastos|de dinero|del viaje|del anticipo|de anticipo|con el anticipo|en el viaje|por comprobar|por mandar|mas))*';
+
+/**
+ * Patrones ANCLADOS AL MENSAJE COMPLETO, no buscados dentro de él.
+ *
+ * Esta es la decisión que define el módulo. La primera versión buscaba palabras
+ * sueltas —"falta", "saldo", "llegó"— y se tragaba veinticinco frases reales de
+ * operador que nunca llegaban al agente: "ya me falta poco para llegar",
+ * "se me acabó el saldo del celular", "no llego a tiempo". La peor contestaba
+ * "el último que recibí fue diesel por $400" a un chofer que estaba avisando
+ * que no llegaba.
+ *
+ * El daño de un falso positivo es asimétrico: un mensaje que este módulo
+ * atiende por error NUNCA llega al agente, así que el chofer se queda sin
+ * respuesta a lo que de verdad preguntó. Perder una consulta legítima solo
+ * cuesta que la conteste el agente — más caro, pero correcto. Por eso se ancla.
+ *
+ * NO SE RECONOCEN "ayudame" NI "necesito ayuda", y es deliberado: en boca de un
+ * operador de carretera eso es un auxilio, no una petición de menú. Contestarle
+ * con la lista de opciones a alguien que se quedó tirado sería el peor mensaje
+ * que este producto puede mandar. Van al agente, que sí puede leer el contexto.
+ */
+const PATRONES: Array<[TipoConsulta, RegExp]> = [
+  ['faltantes', new RegExp(
+    `^(y )?(que |algo )?me (falta|hace falta)(n)?( algo| alguno| alguna)?${COLA}$`
+    + `|^(y )?falta algo( mas)?$`
+    + `|^(y )?que me (falta|hace falta)${COLA}$`
+    + `|^tengo (algo )?pendiente$`
+    + `|^me falta(n)? (comprobantes?|tickets?)$`)],
+  ['saldo', new RegExp(
+    `^(y )?(cuanto|cuanto dinero|que tanto|que) (llevo|voy|vamos)${COLA}$`
+    + `|^(y )?(como|que tal) (voy|vamos|va)${COLA}$`
+    + `|^(y )?(mi |cual es mi |el )?saldo( actual| del viaje| del anticipo)?$`
+    + `|^(y )?cuanto (me falta|me queda|llevo|voy)${COLA}$`
+    + `|^(y )?cuanto he (comprobado|gastado|mandado|abonado)${COLA}$`)],
+  ['ultimo', new RegExp(
+    `^(y )?(cual (fue|es) )?(el )?ultimo( comprobante| ticket| gasto| que te mande)?$`
+    + `|^que (recibiste|te llego|tienes)$`
+    + `|^(ya )?(te )?llego( mi| el| la)? (ticket|foto|comprobante|xml)$`
+    + `|^(ya )?te llego$`
+    + `|^(y )?cuantos( comprobantes| tickets| gastos)? (llevo|van|tengo|llevamos)$`
+    + `|^(y )?cuantas fotos (van|llevo|tengo)$`)],
+  ['ayuda', new RegExp(
+    `^(ayuda|menu|opciones|help)$`
+    + `|^(el |un )?menu de opciones$`
+    + `|^que (puedo (hacer|preguntar|mandar)|opciones tengo)$`
+    + `|^como (funciona|le hago)$`)],
+];
 
 export interface EstadoViaje {
   anticipo: number;
@@ -68,11 +151,23 @@ export interface EstadoViaje {
 
 export async function estadoDelViaje(tenantId: string, viajeId: string): Promise<EstadoViaje | null> {
   const admin = supabaseAdmin();
-  const [{ data: viaje }, { data: gastos }] = await Promise.all([
+  const [rViaje, rGastos] = await Promise.all([
     admin.from('viaje').select('anticipo').eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(),
     admin.from('gasto').select('concepto, monto, ocr_confianza, created_at')
       .eq('viaje_id', viajeId).eq('tenant_id', tenantId).order('created_at', { ascending: false }),
   ]);
+
+  // FALLAR CERRADO. supabase-js reporta el error POR VALOR, así que sin
+  // comprobarlo una base caída se lee como "no hay gastos" — y este módulo le
+  // diría al chofer "llevas $0.00 de $10,600, te faltan $10,600" habiendo
+  // mandado veinte tickets. Es la peor forma de equivocarse que tiene el
+  // producto: una cifra falsa que suena a medición. Se lanza y quien llama
+  // decide qué decir; callar es preferible a mentir.
+  if (rViaje.error) throw new Error(`estadoDelViaje/viaje: ${rViaje.error.message}`);
+  if (rGastos.error) throw new Error(`estadoDelViaje/gastos: ${rGastos.error.message}`);
+
+  const viaje = rViaje.data;
+  const gastos = rGastos.data;
   if (!viaje) return null;
 
   const lista = gastos ?? [];
@@ -122,14 +217,29 @@ export function armarRespuesta(tipo: TipoConsulta, e: EstadoViaje | null): strin
       const partes: string[] = [];
       if (e.anticipo > 0 && falta > 0) partes.push(`Te faltan ${mxn(falta)} por comprobar.`);
       if (e.enRevision > 0) partes.push(`${e.enRevision} foto(s) se leyeron mal; si puedes, vuelve a mandarlas.`);
-      if (partes.length === 0) return 'Por mi parte no falta nada. Cuando acabes, escribe que terminaste y cierro tu liquidación.';
-      return partes.join(' ');
+      if (partes.length > 0) return partes.join(' ');
+
+      // SIN ANTICIPO NO SE AFIRMA QUE NO FALTA NADA. "Por mi parte no falta
+      // nada" es una afirmación sobre el saldo, y con `anticipo === 0` no hay
+      // saldo contra qué medirlo — la rama de arriba lo reconoce explícitamente.
+      // Decir las dos cosas en la misma conversación es contradecirse, y el
+      // chofer cerraría el viaje creyendo que comprobó todo.
+      if (e.anticipo <= 0) {
+        return `Llevo ${e.comprobantes} comprobante(s) tuyos por ${mxn(e.comprobado)}. Este viaje no tiene anticipo registrado, así que no te puedo decir si te falta algo — eso lo revisa tu oficina.`;
+      }
+      return 'Por mi parte no falta nada. Cuando acabes, escribe que terminaste y cierro tu liquidación.';
     }
 
-    case 'ultimo':
-      return e.ultimoConcepto
-        ? `El último que recibí fue ${e.ultimoConcepto} por ${mxn(e.ultimoMonto ?? 0)}. Van ${e.comprobantes} en total.`
-        : 'Todavía no me llega ningún comprobante de este viaje.';
+    case 'ultimo': {
+      if (!e.ultimoConcepto) return 'Todavía no me llega ningún comprobante de este viaje.';
+      // Sin monto NO se imprime `$0.00`: un cero que parece medición es
+      // justamente la cifra inventada que este producto no imprime. Se dice el
+      // concepto y se calla lo que no se sabe.
+      const cuanto = e.ultimoMonto !== null && Number.isFinite(e.ultimoMonto)
+        ? ` por ${mxn(e.ultimoMonto)}`
+        : ' (sin monto legible)';
+      return `El último que recibí fue ${e.ultimoConcepto}${cuanto}. Van ${e.comprobantes} en total.`;
+    }
 
     case 'ayuda':
       return 'Mándame la foto de cada ticket y te la voy acusando. Puedes preguntarme "¿cuánto llevo?" cuando quieras. Cuando acabes, escribe que terminaste y te mando tu liquidación en PDF.';
