@@ -1,7 +1,7 @@
-import { Fuel, Route as RouteIcon, Receipt, Copy } from 'lucide-react';
+import { Fuel, Route as RouteIcon, Receipt, Copy, FileStack } from 'lucide-react';
 import {
-  getGastoPorConcepto, getAcreditables, detectarAnomalias, getDocumentos,
-  type GastoPorConcepto, type Acreditables, type Anomalia, type DocumentoRow,
+  getGastoPorConcepto, getAcreditables, detectarAnomalias, getDocumentos, getConciliacionConsolidado,
+  type GastoPorConcepto, type Acreditables, type Anomalia, type DocumentoRow, type ConciliacionConsolidado,
 } from '@/lib/cuadra/analytics';
 import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import { mxn } from '@/lib/utils';
@@ -17,6 +17,18 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 /**
+ * `getConciliacionConsolidado` YA usa `null` con un significado real ("este
+ * tenant nunca mandó un consolidado"), así que envolverlo con `safe()` a
+ * secas confundiría eso con "la consulta falló" — justo la trampa que
+ * CLAUDE.md pide evitar (fallar cerrado y DECIRLO, no disfrazarlo de "no hay
+ * nada"). `ok: false` es el único caso de error real.
+ */
+async function safeConciliacion(tenantId: string): Promise<{ ok: true; datos: ConciliacionConsolidado | null } | { ok: false }> {
+  try { return { ok: true, datos: await getConciliacionConsolidado(tenantId) }; }
+  catch { return { ok: false }; }
+}
+
+/**
  * Combustible & Casetas (PASO 11) — el gasto real de `gasto`, agrupado.
  *
  * El rendimiento km/l NO se calcula aquí aunque el PASO 11 lo pida: `viaje`
@@ -26,8 +38,20 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * apariencia de medición y sin nada detrás.
  *
  * La detección de "ordeña" que sí existe es la de comprobantes repetidos
- * entre viajes (`detectarAnomalias`, probada) — no el cruce contra el estado
- * de cuenta del monedero, que necesita una integración que no está conectada.
+ * entre viajes (`detectarAnomalias`, probada).
+ *
+ * ── AUDITORÍA 10 — EL CRUCE DEL CFDI CONSOLIDADO YA EXISTE (5-ago-2026) ────
+ * Diésel por monedero y peaje por TAG (~54% del gasto real, INEGI EAT 2024)
+ * llegan como UN CFDI que ampara muchos días de consumo, no un ticket por
+ * transacción. `intake/consolidado.ts` recibe ese XML por el MISMO WhatsApp
+ * por el que ya llega cualquier otro CFDI, separa sus líneas y las liga por
+ * fecha+monto contra los tickets que el operador ya fotografió — o las deja
+ * en una cola para que un contador las revise, cuando el match no es único.
+ * `getConciliacionConsolidado` es ese resumen. Lo que SIGUE sin existir: una
+ * conexión directa al portal del monedero/TAG que traiga el CFDI sola —hoy
+ * depende de que alguien en la flota lo reenvíe— y, para las líneas que NO
+ * traen ECC12 (TAG sin ese complemento), el estándar del CFDI no da fecha por
+ * transacción, así que esas quedan en la cola casi siempre (ver `cfdi_xml.ts`).
  */
 export default async function CombustibleCasetasPage({
   searchParams,
@@ -37,11 +61,12 @@ export default async function CombustibleCasetasPage({
   const sp = await searchParams;
   const { tenantId } = await resolverTenantEfectivo('/dashboard/combustible-casetas', sp);
 
-  const [porConcepto, acred, anomalias, docs] = await Promise.all([
+  const [porConcepto, acred, anomalias, docs, conciliacion] = await Promise.all([
     safe<GastoPorConcepto[]>(() => getGastoPorConcepto(tenantId)),
     safe<Acreditables>(() => getAcreditables(tenantId)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
     safe<DocumentoRow[]>(() => getDocumentos(tenantId, 1000)),
+    safeConciliacion(tenantId),
   ]);
 
   const diesel = porConcepto?.find((c) => c.concepto === 'diesel');
@@ -142,6 +167,40 @@ export default async function CombustibleCasetasPage({
           )}
         </section>
 
+        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+            CFDI consolidado (monedero y TAG)
+          </h2>
+          {!conciliacion.ok ? (
+            <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
+          ) : conciliacion.datos === null ? (
+            <div className="mt-3">
+              <EstadoVacio icono={<FileStack width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                Todavía no llega ningún CFDI consolidado de esta flota (el que factura el diésel de un monedero o
+                el peaje de un TAG por periodo completo, no ticket por ticket). En cuanto alguien lo reenvíe por
+                WhatsApp, aquí se ve cuánto quedó ligado solo contra cuánto necesita revisión.
+              </EstadoVacio>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <KpiTile icono={<FileStack width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+                  etiqueta="Líneas ligadas automáticamente" valor={conciliacion.datos.conciliadas} formato="numero"
+                  nota={`de ${conciliacion.datos.cfdis} CFDI consolidado${conciliacion.datos.cfdis === 1 ? '' : 's'} recibido${conciliacion.datos.cfdis === 1 ? '' : 's'}`} />
+                <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+                  etiqueta="Por revisar a mano" valor={conciliacion.datos.porConciliar} formato="numero"
+                  nota={conciliacion.datos.porConciliar === 0 ? 'Todo lo que llegó, concilió solo' : 'Sin candidato único por fecha/monto — nadie adivinó'} />
+              </div>
+              {conciliacion.datos.porConciliar > 0 && (
+                <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                  Una línea queda aquí cuando no hubo exactamente un ticket que cuadrara por fecha y monto —cero
+                  candidatos, o más de uno—: se prefiere pedir una revisión a adivinar cuál gasto es.
+                </p>
+              )}
+            </>
+          )}
+        </section>
+
         <div className="px-5 pt-4 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <EstadoVacio>
             El rendimiento en km/l no aparece porque nadie captura el kilometraje: `viaje` no lo guarda, y el
@@ -149,8 +208,9 @@ export default async function CombustibleCasetasPage({
             campo. Dividir el gasto entre un kilometraje inventado daría un número con cara de medición.
             <br /><br />
             El cruce del estado de cuenta del monedero de combustible y del TAG de casetas contra el CFDI —el que
-            detecta la ordeña de verdad, litros comprados contra litros ingresados— necesita esas dos
-            integraciones conectadas, y hoy no lo están.
+            detecta la ordeña de verdad, litros comprados contra litros ingresados— YA EXISTE para lo que llega
+            por WhatsApp (ver la sección de arriba). Lo que sigue faltando es una conexión directa al portal del
+            monedero/TAG que traiga ese CFDI sola, sin depender de que alguien en la flota lo reenvíe.
           </EstadoVacio>
         </div>
       </div>
