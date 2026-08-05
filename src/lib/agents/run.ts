@@ -16,6 +16,14 @@ export interface RunAgentResult {
   costUsd: number;
   tokensIn: number;
   tokensOut: number;
+  /**
+   * Pass-through de `generateWithTools`: costo partido por modelo real de cada
+   * ronda. `model`/`costUsd` arriba siguen siendo el resumen de una fila; esto
+   * es lo que le permite a `processor.ts` registrar una fila de `llm_costo` POR
+   * MODELO cuando el ciclo cruzó de proveedor a medio camino (auditoría 10,
+   * MEDIO reincidente).
+   */
+  costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>;
 }
 
 export async function runAgent(opts: {
@@ -54,6 +62,7 @@ export async function runAgent(opts: {
       costUsd: res.cost,
       tokensIn: res.tokensIn,
       tokensOut: res.tokensOut,
+      costoPorModelo: res.costoPorModelo,
     };
   } finally {
     if (timer) clearTimeout(timer);
