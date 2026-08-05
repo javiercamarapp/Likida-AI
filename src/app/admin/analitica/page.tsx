@@ -117,9 +117,9 @@ export default async function AnaliticaPage() {
           <ChartCard titulo="Distribuciones y comparativas" tamano="S">
             <EstadoVacio>
               Histogramas de mensajes por conversación, mapa de calor hora×día y comparativas por cliente
-              necesitan más historia y más de un tenant para decir algo real — hoy Likida tiene 1 flota y
-              pocos días de datos, así que estas vistas se muestran en cuanto haya suficiente para que no
-              sean solo ruido.
+              necesitan más historia y más de un tenant para decir algo real — hoy Likida tiene {r.tenants}
+              {' '}flota{r.tenants === 1 ? '' : 's'} y pocos días de datos, así que estas vistas se muestran
+              en cuanto haya suficiente para que no sean solo ruido.
             </EstadoVacio>
           </ChartCard>
         </section>

@@ -1,4 +1,5 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
+import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { usd } from '@/lib/utils';
 import { TrendingUp, CheckCircle2, DollarSign } from 'lucide-react';
 import { AreaChartSimple } from '../charts';
@@ -19,6 +20,10 @@ export default async function CrecimientoPage() {
   const r = await getResumenNegocio();
   const datosCosto = r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }));
   const chipsTokens = r.porDia.slice(-8).map((d) => d.tokens);
+  // AUDITORÍA 10, ALTO — el H1 y el párrafo de abajo decían "Con 1 flota
+  // dada de alta" y "solo existe el tenant demo" como texto fijo: con la
+  // base en 0 tenants (5-ago-2026) seguían afirmando que había una.
+  const esSoloDemo = r.tenants === 1 && r.flotas[0]?.id === tenantDemo();
 
   const sinInstrumentacion = [
     'DAU / WAU / MAU',
@@ -38,12 +43,18 @@ export default async function CrecimientoPage() {
       <div className="glass-panel overflow-hidden">
         <div className="p-6">
           <h1 className="text-base font-semibold tracking-tight">
-            Con 1 flota dada de alta, todavía no hay &quot;crecimiento&quot; que medir
+            {r.tenants === 0
+              ? 'Sin flotas dadas de alta, todavía no hay "crecimiento" que medir'
+              : `Con ${r.tenants} flota${r.tenants === 1 ? '' : 's'} dada${r.tenants === 1 ? '' : 's'} de alta, todavía no hay "crecimiento" que medir`}
           </h1>
           <p className="text-sm mt-1.5 leading-relaxed" style={{ color: 'var(--muted)' }}>
-            No hay historial de altas de flota que graficar (solo existe el tenant demo), y Likida no
+            {r.tenants === 0
+              ? 'No hay ninguna flota dada de alta para graficar su historial de altas'
+              : esSoloDemo
+                ? 'No hay historial de altas de flota que graficar (solo existe el tenant demo)'
+                : 'No hay historial de altas de flota que graficar todavía'}, y Likida no
             tiene instrumentación de producto — ningún conteo de usuarios activos ni embudo de registro.
-            Con n=1 cualquier tendencia de crecimiento sería un número inventado, no una señal real.
+            Con {r.tenants === 0 ? 'cero flotas' : `n=${r.tenants}`} cualquier tendencia de crecimiento sería un número inventado, no una señal real.
           </p>
         </div>
 
