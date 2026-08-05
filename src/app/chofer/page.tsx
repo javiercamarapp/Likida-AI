@@ -92,7 +92,7 @@ export default async function Hoy() {
             <ChevronRight width={20} height={20} strokeWidth={2} style={{ color: 'var(--muted)' }} />
           </Link>
 
-          <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
+          <p className="text-base leading-relaxed" style={{ color: 'var(--muted)' }}>
             Los comprobantes se siguen mandando por WhatsApp: aquí solo los
             consultas.
           </p>

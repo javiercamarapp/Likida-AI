@@ -152,16 +152,37 @@ export async function Contenido({ tenantId, sp }: { tenantId: string; sp: Params
                     <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
                   </div>
                   <div className="text-sm">
-                    <p>
-                      IVA que se puede documentar como perdido:{' '}
-                      <strong className="tabular">{mxn(resumen.ivaPerdidoDocumentado)}</strong>.
-                    </p>
+                    {/* UN `$0.00` AQUÍ SERÍA LA MENTIRA MÁS CARA DE LA PANTALLA.
+                        Cuando ningún comprobante desglosa IVA, el resultado no es
+                        "se perdió cero de IVA" —eso diría que no había IVA que
+                        perder— sino "no hay UN SOLO peso de IVA que se pueda
+                        documentar". Se dice con palabras, sin cifra, porque la
+                        cifra se copiaría. Con desglose sí se imprime: ahí el
+                        número está en el papel. */}
+                    {resumen.ivaPerdidoDocumentado > 0 ? (
+                      <p>
+                        IVA que se puede documentar como perdido:{' '}
+                        <strong className="tabular">{mxn(resumen.ivaPerdidoDocumentado)}</strong>
+                        {resumen.sinDesgloseDeIva > 0 && <> — y es un piso, no el total.</>}
+                      </p>
+                    ) : (
+                      <p>
+                        <strong>No se puede documentar ni un peso del IVA perdido.</strong>
+                      </p>
+                    )}
                     <p className="text-xs mt-1.5" style={{ color: 'var(--muted)' }}>
-                      Es la suma del IVA que los comprobantes traen DESGLOSADO, y nada más.
-                      {resumen.sinDesgloseDeIva > 0 && (
-                        <> Los otros {resumen.sinDesgloseDeIva} no lo desglosan: su IVA existe en el papel, pero
-                        aquí no se afirma. Multiplicar el total por 16% daría una cifra que no está en ningún
-                        comprobante — y esa cifra se teclea en una declaración.</>
+                      {resumen.sinDesgloseDeIva > 0 ? (
+                        <>
+                          {resumen.sinDesgloseDeIva === resumen.filas.length
+                            ? `Ninguno de los ${resumen.sinDesgloseDeIva} comprobantes con observación desglosa el IVA: `
+                            : `${resumen.sinDesgloseDeIva} de los ${resumen.filas.length} comprobantes con observación no desglosan el IVA: `}
+                          ese impuesto existe en el papel, pero sin el comprobante no se puede citar. Multiplicar
+                          el total por 16% daría una cifra que no está en ningún documento — y esa cifra se teclea en
+                          una declaración. El dinero en juego sí está medido: es el monto de arriba.
+                        </>
+                      ) : (
+                        <>Es la suma del IVA que los comprobantes traen DESGLOSADO. Todos los de esta lista lo
+                        traen, así que la cifra está completa.</>
                       )}
                     </p>
                   </div>

@@ -65,11 +65,11 @@ export default async function MisComprobantes() {
       {r && (
         <Tarjeta className="flex items-baseline justify-between gap-3">
           <div>
-            <div className="text-sm" style={{ color: 'var(--muted)' }}>Comprobado</div>
+            <div className="text-base" style={{ color: 'var(--muted)' }}>Comprobado</div>
             <div className="text-2xl font-semibold tracking-tight tabular mt-0.5">{mxn(r.comprobado)}</div>
           </div>
           <div className="text-right">
-            <div className="text-sm" style={{ color: 'var(--muted)' }}>
+            <div className="text-base" style={{ color: 'var(--muted)' }}>
               {r.comprobantes === 1 ? 'Comprobante' : 'Comprobantes'}
             </div>
             <div className="text-2xl font-semibold tracking-tight tabular mt-0.5">{r.comprobantes}</div>
@@ -86,7 +86,7 @@ export default async function MisComprobantes() {
         <>
           <ListaComprobantes comprobantes={lista} />
           {r && r.comprobantes > lista.length && (
-            <p className="text-sm text-center" style={{ color: 'var(--faint)' }}>
+            <p className="text-base text-center" style={{ color: 'var(--faint)' }}>
               Se muestran los {lista.length} más recientes de {r.comprobantes}.
             </p>
           )}

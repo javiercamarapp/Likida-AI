@@ -50,7 +50,7 @@ export default async function MisViajes() {
           {/* Solo cuando la lista TOPA. Ponerlo siempre convertiría "tienes 3
               viajes" en "se muestran 3", que se lee como que hay más. */}
           {viajes.length === TOPE_HISTORIAL && (
-            <p className="text-sm text-center" style={{ color: 'var(--faint)' }}>
+            <p className="text-base text-center" style={{ color: 'var(--faint)' }}>
               Se muestran tus {TOPE_HISTORIAL} viajes más recientes.
             </p>
           )}

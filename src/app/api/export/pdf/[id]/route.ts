@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { resolverTenantApi } from '@/lib/auth/tenant-api';
+import { puedeExportar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -37,6 +38,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const t = await resolverTenantApi(req.url);
   if (!t.ok) return new NextResponse(t.motivo, { status: t.status });
   const tenantId = t.tenantId;
+
+  // ── QUIÉN PUEDE DESCARGAR, NO SOLO DE QUÉ FLOTA ──────────────────────────
+  //
+  // Faltaba esto y era un IDOR: la ruta autorizaba por SESIÓN y por TENANT, y
+  // ahí se detenía. Cualquier usuario de la flota —incluido un OPERADOR, que
+  // solo debe ver lo suyo— bajaba el PDF de la liquidación de cualquier
+  // compañero con nada más que el id en la URL.
+  //
+  // `puedeExportar` ya excluía a `operador`; la ruta nunca se lo preguntó. Es
+  // el patrón que este repo tiene documentado como el fallo más común del
+  // código escrito por agentes: se acota el tenant y se olvida el rol.
+  if (!puedeExportar(t.rol)) {
+    logger.warn('export.rol_sin_permiso', { rol: t.rol });
+    return new NextResponse('Tu rol no puede descargar este documento.', { status: 403 });
+  }
 
   const { id } = await params;
   const admin = supabaseAdmin();

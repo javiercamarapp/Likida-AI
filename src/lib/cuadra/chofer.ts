@@ -359,12 +359,24 @@ export const TOPE_HISTORIAL = 20;
  * `liquidacion` en la práctica, pero PostgREST devuelve la relación como
  * arreglo o como objeto según cómo infiera la cardinalidad — se normalizan los
  * dos casos porque de esa diferencia ya dependió una pantalla en blanco.
+ *
+ * ── EL FK VA NOMBRADO, Y SIN ESO LA CONSULTA NO CORRE ────────────────────
+ *
+ * La 0028 le puso a `liquidacion` una SEGUNDA llave foránea hacia `viaje`
+ * —la compuesta `(viaje_id, tenant_id)`, para que no se pueda colgar una
+ * liquidación de un viaje de otra flota—, así que hoy hay dos caminos entre
+ * las dos tablas y PostgREST se niega a elegir: `liquidacion(...)` a secas
+ * devuelve PGRST201 "Could not embed because more than one relationship was
+ * found". Comprobado contra la base real el 4-ago-2026: sin nombrar el FK, 0
+ * filas y error; nombrándolo, las 5 del operador de prueba.
  */
 export async function misViajes(tenantId: string, operadorId: string): Promise<ViajeHistorial[]> {
   const sb = await supabaseServer();
   const { data, error } = await sb
     .from('viaje')
-    .select(`${CAMPOS_VIAJE}, liquidacion(total_comprobado, total_anticipo, diferencia, estatus, pdf_url)`)
+    .select(
+      `${CAMPOS_VIAJE}, liquidacion!liquidacion_viaje_id_fkey(total_comprobado, total_anticipo, diferencia, estatus, pdf_url)`,
+    )
     .eq('tenant_id', tenantId)
     .eq('operador_id', operadorId)
     .order('created_at', { ascending: false })

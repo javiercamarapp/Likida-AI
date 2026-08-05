@@ -206,17 +206,17 @@ export async function Contenido({ tenantId, sp, rol }: { tenantId: string; sp: P
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ color: 'var(--muted)' }} className="text-left">
-                    <th className="px-5 py-2.5 font-medium">Fecha</th>
-                    <th className="px-5 py-2.5 font-medium">Concepto</th>
-                    <th className="px-5 py-2.5 font-medium">RFC emisor</th>
-                    <th className="px-5 py-2.5 font-medium">UUID</th>
-                    <th className="px-5 py-2.5 font-medium">Validación SAT</th>
-                    <th className="px-5 py-2.5 font-medium">Deducible</th>
-                    <th className="px-5 py-2.5 font-medium">Forma de pago</th>
-                    <th className="px-5 py-2.5 font-medium text-right">Subtotal</th>
-                    <th className="px-5 py-2.5 font-medium text-right">IVA</th>
-                    <th className="px-5 py-2.5 font-medium text-right">IEPS</th>
-                    <th className="px-5 py-2.5 font-medium text-right">Total</th>
+                    <th className="pl-5 pr-3 py-2.5 font-medium whitespace-nowrap">Fecha</th>
+                    <th className="px-3 py-2.5 font-medium">Concepto</th>
+                    <th className="px-3 py-2.5 font-medium">RFC emisor</th>
+                    <th className="px-3 py-2.5 font-medium">UUID</th>
+                    <th className="px-3 py-2.5 font-medium">SAT</th>
+                    <th className="px-3 py-2.5 font-medium">Deducible</th>
+                    <th className="px-3 py-2.5 font-medium">Pago</th>
+                    <th className="px-3 py-2.5 font-medium text-right">Subtotal</th>
+                    <th className="px-3 py-2.5 font-medium text-right">IVA</th>
+                    <th className="px-3 py-2.5 font-medium text-right">IEPS</th>
+                    <th className="pl-3 pr-5 py-2.5 font-medium text-right">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -225,38 +225,38 @@ export async function Contenido({ tenantId, sp, rol }: { tenantId: string; sp: P
                     const dominante = opts ? causaDominante(g, opts) : null;
                     return (
                       <tr key={g.id} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                        <td className="px-5 py-3 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
+                        <td className="pl-5 pr-3 py-3 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
                           {g.fecha ? fechaMx(g.fecha) : <SinDato titulo="Sin fecha legible en el comprobante" />}
                         </td>
-                        <td className="px-5 py-3">{etiquetaConcepto(g.concepto)}</td>
-                        <td className="px-5 py-3 font-mono text-xs" style={{ color: 'var(--muted)' }}>
+                        <td className="px-3 py-3 whitespace-nowrap">{etiquetaConcepto(g.concepto)}</td>
+                        <td className="px-3 py-3 font-mono text-xs" style={{ color: 'var(--muted)' }}>
                           {g.rfcEmisor ?? <SinDato />}
                         </td>
-                        <td className="px-5 py-3 font-mono text-[11px]" style={{ color: 'var(--muted)' }}
+                        <td className="px-3 py-3 font-mono text-[11px]" style={{ color: 'var(--muted)' }}
                           title={g.cfdiUuid ?? undefined}>
                           {g.cfdiUuid ? `${g.cfdiUuid.slice(0, 8)}…` : <SinDato titulo="Ticket sin timbrar" />}
                         </td>
-                        <td className="px-5 py-3"><StatusPill estado={v.estado}>{v.label}</StatusPill></td>
-                        <td className="px-5 py-3">
+                        <td className="px-3 py-3"><StatusPill estado={v.estado}>{v.label}</StatusPill></td>
+                        <td className="px-3 py-3">
                           {dominante
                             ? <StatusPill estado={dominante.gravedad === 'perdida' ? 'bad' : dominante.gravedad === 'en_riesgo' ? 'warn' : 'neutral'}>
-                                {dominante.titulo}
+                                <span className="whitespace-nowrap">{dominante.titulo}</span>
                               </StatusPill>
                             : <StatusPill estado="ok">Sin observación</StatusPill>}
                         </td>
-                        <td className="px-5 py-3 text-xs" style={{ color: 'var(--muted)' }}>
+                        <td className="px-3 py-3 text-xs" style={{ color: 'var(--muted)' }}>
                           {g.formaPago ? etiquetaFormaPago(g.formaPago) : <SinDato titulo="Sin forma de pago capturada" />}
                         </td>
-                        <td className="px-5 py-3 text-right tabular">
+                        <td className="px-3 py-3 text-right tabular">
                           {g.subTotal === null ? <SinDato titulo="No se leyó el subtotal" /> : mxn(g.subTotal)}
                         </td>
-                        <td className="px-5 py-3 text-right tabular">
+                        <td className="px-3 py-3 text-right tabular">
                           {g.ivaTraslado === null ? <SinDato titulo="El comprobante no desglosa IVA" /> : mxn(g.ivaTraslado)}
                         </td>
-                        <td className="px-5 py-3 text-right tabular">
+                        <td className="px-3 py-3 text-right tabular">
                           {g.iepsTraslado === null ? <SinDato titulo="El comprobante no desglosa IEPS" /> : mxn(g.iepsTraslado)}
                         </td>
-                        <td className="px-5 py-3 text-right tabular font-medium">{mxn(g.monto)}</td>
+                        <td className="pl-3 pr-5 py-3 text-right tabular font-medium whitespace-nowrap">{mxn(g.monto)}</td>
                       </tr>
                     );
                   })}

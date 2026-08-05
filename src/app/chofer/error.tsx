@@ -43,7 +43,7 @@ export default function ChoferError({
         Volver a intentar
       </button>
       {error.digest && (
-        <p className="mt-4 text-sm select-all" style={{ color: 'var(--faint)' }}>
+        <p className="mt-4 text-base select-all" style={{ color: 'var(--faint)' }}>
           Código: <span className="tabular">{error.digest}</span>
         </p>
       )}
