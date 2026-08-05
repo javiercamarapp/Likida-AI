@@ -2085,8 +2085,20 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // copia el mismo número aquí en vez del que se copió de más viejo.
         const { data, error } = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 60), 'createSignedUrl');
         if (error || !data?.signedUrl) throw new Error(error?.message ?? 'storage no devolvió URL firmada');
-        await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
-        await registrarCostoWhatsApp(op.tenantId, viajeId);
+        // AUDITORÍA 12, ALTO (backend, reincidente de ronda 10): `sendDocument`
+        // NO lanza — devuelve { ok: false, error } cuando Meta rechaza el
+        // documento. Sin comprobar el resultado, un PDF rechazado por Meta se
+        // leía como entregado: el chofer se queda esperando su liquidación y en
+        // los logs no hay NADA. Mismo criterio que `pdf.contralor_no_generado`
+        // dos bloques arriba: la reparación es hacerlo RUIDOSO.
+        const enviado = await sendDocument(msg.from, data.signedUrl, 'liquidacion.pdf', 'Aquí está tu liquidación 📄');
+        if (!enviado.ok) {
+          logger.error('pdf.no_entregado', {
+            viaje: viajeId, tenant: op.tenantId, codigo: enviado.codigo, error: enviado.error,
+          });
+        } else {
+          await registrarCostoWhatsApp(op.tenantId, viajeId);
+        }
 
         // ── Y LA OFICINA SE ENTERA, CON EL PDF ───────────────────────────────
         //
