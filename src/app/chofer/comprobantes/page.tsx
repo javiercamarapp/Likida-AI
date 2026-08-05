@@ -1,7 +1,7 @@
 import { requireOperador } from '@/lib/auth/guard';
 import { mxn } from '@/lib/formato';
 import { viajeEnCurso, resumenDelViaje, misComprobantes } from '@/lib/cuadra/chofer';
-import { Titulo, Pendiente, Tarjeta, ListaComprobantes } from '../vista';
+import { Titulo, Pendiente, Tarjeta, ListaComprobantes, SinViajeParaComprobantes } from '../vista';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,17 +38,7 @@ export default async function MisComprobantes() {
   }
 
   const viaje = await viajeEnCurso(s.tenantId, s.operadorId);
-  if (!viaje) {
-    return (
-      <>
-        <Titulo>Mis comprobantes</Titulo>
-        <Pendiente>
-          No traes ningún viaje abierto. Los comprobantes de tus viajes cerrados
-          quedaron en su liquidación, en Viajes.
-        </Pendiente>
-      </>
-    );
-  }
+  if (!viaje) return <SinViajeParaComprobantes />;
 
   const [r, lista] = await Promise.all([
     resumenDelViaje(s.tenantId, viaje),

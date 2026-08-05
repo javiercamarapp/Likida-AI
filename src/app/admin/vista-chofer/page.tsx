@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Smartphone } from 'lucide-react';
 import { MarcoChofer } from '../../chofer/marco';
-import { Titulo, Pendiente, SinViaje } from '../../chofer/vista';
+import {
+  Titulo, SinViaje, SinViajeParaSaldo, SinViajeParaComprobantes, SinViajesRegistrados,
+} from '../../chofer/vista';
 import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -23,14 +25,25 @@ export const dynamic = 'force-dynamic';
 // no puede pagarse con la puerta: se monta aquí, DENTRO de /admin, que ya está
 // cerrado con `requireSuperadmin` en su layout.
 //
-// ── LO QUE SE MONTA SON LOS COMPONENTES REALES ───────────────────────────
+// ── LO QUE SE MONTA SON LOS COMPONENTES REALES — LOS CUATRO, NO SOLO TRES ──
 //
-// `MarcoChofer` (con su `ruta`, que existe justo para esto), `Titulo`,
-// `Pendiente`, `SinViaje` y la barra de pestañas salen de `src/app/chofer/*`.
-// Lo ÚNICO espejeado son los cuatro textos de "no hay nada todavía", que viven
-// inline en `chofer/*/page.tsx` detrás de `requireOperador` y no se exportan
-// —y ese archivo no se toca en esta tarea—: si alguien los reescribe allá,
-// esta copia queda atrás. El marco y los componentes, no.
+// `MarcoChofer` (con su `ruta`, que existe justo para esto) y las cuatro
+// pantallas de "no hay nada todavía" (`SinViaje`, `SinViajeParaSaldo`,
+// `SinViajeParaComprobantes`, `SinViajesRegistrados`) salen TODAS de
+// `chofer/vista.tsx` — se importan, no se copian.
+//
+// AUDITORÍA 10, BAJO — hasta antes de esto, solo `SinViaje` (la pestaña
+// "Hoy") se importaba; las otras tres se mirroreaban a mano aquí abajo, y el
+// espejo YA había divergido: le faltaba `<EnlaceViajes/>` ("Ver mis viajes"),
+// el botón que `/chofer/liquidacion` real agrega cuando no hay viaje abierto.
+// Una copia se lee bien hasta que alguien cambia el original y nadie se
+// acuerda de tocar la copia — que es exactamente lo que pasó. Ahora las
+// cuatro pantallas están exportadas junto a `Titulo`/`Pendiente` en
+// `vista.tsx` (el mismo archivo cuyo propio docstring dice: "el preview
+// temporal importa EL MISMO componente que ve el chofer en vez de una copia
+// — una copia solo se verifica a sí misma"), así que esta página ya no tiene
+// NADA que mirrorear: si `/chofer` cambia un texto o un botón, este preview
+// lo hereda solo.
 //
 // ── LAS PESTAÑAS DE ADENTRO NO NAVEGAN ───────────────────────────────────
 //
@@ -50,40 +63,13 @@ const PESTANAS: Pestana[] = [
 ];
 
 /** El estado de cada pantalla cuando el chofer no trae viaje abierto — que es
- *  exactamente lo que hay con la base vacía. Texto espejeado de
- *  `chofer/<seccion>/page.tsx` (ver el bloque de arriba). */
+ *  exactamente lo que hay con la base vacía. Las CUATRO son el componente
+ *  real de `chofer/vista.tsx`, no un espejo (ver el bloque de arriba). */
 function Contenido({ clave }: { clave: string }) {
   switch (clave) {
-    case 'saldo':
-      return (
-        <>
-          <Titulo>Mi saldo</Titulo>
-          <Pendiente>
-            No traes ningún viaje abierto, así que no hay saldo en curso. Lo de tus
-            viajes cerrados está en Viajes.
-          </Pendiente>
-        </>
-      );
-    case 'tickets':
-      return (
-        <>
-          <Titulo>Mis comprobantes</Titulo>
-          <Pendiente>
-            No traes ningún viaje abierto. Los comprobantes de tus viajes cerrados
-            quedaron en su liquidación, en Viajes.
-          </Pendiente>
-        </>
-      );
-    case 'viajes':
-      return (
-        <>
-          <Titulo>Mis viajes</Titulo>
-          <Pendiente>
-            Todavía no tienes viajes registrados a tu nombre. Aparecen aquí en
-            cuanto tu oficina te asigne el primero.
-          </Pendiente>
-        </>
-      );
+    case 'saldo': return <SinViajeParaSaldo />;
+    case 'tickets': return <SinViajeParaComprobantes />;
+    case 'viajes': return <SinViajesRegistrados />;
     default:
       return (
         <>

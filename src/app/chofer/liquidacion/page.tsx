@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { requireOperador } from '@/lib/auth/guard';
 import { viajeEnCurso, resumenDelViaje } from '@/lib/cuadra/chofer';
-import { Titulo, Pendiente, SaldoEnVivo, TOQUE } from '../vista';
+import { Titulo, Pendiente, SaldoEnVivo, SinViajeParaSaldo, TOQUE } from '../vista';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,18 +35,7 @@ export default async function MiLiquidacion() {
   }
 
   const viaje = await viajeEnCurso(s.tenantId, s.operadorId);
-  if (!viaje) {
-    return (
-      <>
-        <Titulo>Mi saldo</Titulo>
-        <Pendiente>
-          No traes ningún viaje abierto, así que no hay saldo en curso. Lo de tus
-          viajes cerrados está en Viajes.
-        </Pendiente>
-        <EnlaceViajes />
-      </>
-    );
-  }
+  if (!viaje) return <SinViajeParaSaldo />;
 
   const r = await resumenDelViaje(s.tenantId, viaje);
   if (!r) {
@@ -77,18 +66,5 @@ export default async function MiLiquidacion() {
         <ChevronRight width={20} height={20} strokeWidth={2} style={{ color: 'var(--muted)' }} />
       </Link>
     </>
-  );
-}
-
-function EnlaceViajes() {
-  return (
-    <Link
-      href="/chofer/viajes"
-      className="card px-4 flex items-center justify-between gap-3 text-base font-medium"
-      style={{ minHeight: TOQUE.principal }}
-    >
-      Ver mis viajes
-      <ChevronRight width={20} height={20} strokeWidth={2} style={{ color: 'var(--muted)' }} />
-    </Link>
   );
 }
