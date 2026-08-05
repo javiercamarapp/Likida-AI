@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
-import { decidirInicio, type ViajeAsignado } from './inicio_viaje';
+import { decidirInicio, type EstadoInicio, type ViajeAsignado } from './inicio_viaje';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PEGAMENTO ENTRE "SE LE AVISÓ" Y "DIJO QUE SÍ".
@@ -132,6 +132,18 @@ export interface ResultadoConfirmacion {
   mensaje: string | null;
   /** El viaje que quedó arrancado, si lo hubo. */
   viajeConfirmado?: string;
+  /**
+   * En qué quedó la máquina de `inicio_viaje.ts`. `undefined` = no se llegó a
+   * consultar (no había nada que confirmar).
+   *
+   * SE DEVUELVE PARA QUE EL LLAMADOR PUEDA CONTAR LOS INTENTOS. Sin esto, la
+   * única forma de saber si se le volvió a preguntar era mirar el TEXTO del
+   * mensaje con un regex — y ese regex no empataba con ninguno de los mensajes
+   * reales, así que el contador nunca subía y el freno del segundo intento
+   * (`dudar`, `intento >= 2`) era inalcanzable: el chofer recibía "Perdón, no te
+   * entendí" indefinidamente. El estado es un dato, no una lectura del texto.
+   */
+  estado?: EstadoInicio;
 }
 
 /**
@@ -176,9 +188,9 @@ export async function atenderConfirmacion(args: {
     // el filtro de la base es lo que impide que se marque el viaje de otro.
     const ok = await marcarAceptado(args.tenantId, d.viajeElegido, args.operadorId);
     logger.info('viaje.confirmado_por_chofer', { viajeId: d.viajeElegido, primeraVez: ok });
-    return { mensaje: d.mensaje, viajeConfirmado: d.viajeElegido };
+    return { mensaje: d.mensaje, viajeConfirmado: d.viajeElegido, estado: d.estado };
   }
 
   logger.info('viaje.confirmacion', { estado: d.estado, asignados: viajes.length });
-  return { mensaje: d.mensaje };
+  return { mensaje: d.mensaje, estado: d.estado };
 }

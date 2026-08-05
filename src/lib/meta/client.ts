@@ -299,24 +299,73 @@ async function idDeRespuesta(res: Response): Promise<string | undefined> {
   } catch { return undefined; }
 }
 
-/** Envía un documento (PDF de liquidación) por link público o media id. */
-export async function sendDocument(to: string, link: string, filename: string, caption?: string): Promise<void> {
-  const res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: destinatarioWhatsApp(to),   // el PDF rebotaba igual que el texto
-      type: 'document',
-      document: { link, filename, caption },
-    }),
-    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-  });
-  if (!res.ok) { logger.error('wa.sendDocument', { status: res.status, body: await res.text().catch(() => '') }); return; }
+/**
+ * Envía un documento (PDF de liquidación) por link público o media id.
+ *
+ * DEVUELVE EL MISMO CONTRATO QUE `sendTemplate`, y no `void`, que es lo que
+ * devolvía antes. El PDF es EL entregable del producto, y era justo el único
+ * envío del archivo que no le decía al llamador si había salido:
+ *
+ *   · un rechazo de Meta (`!res.ok`) se registraba y se devolvía NORMAL, así
+ *     que `processor.ts` cobraba el mensaje en la línea siguiente
+ *     (`registrarCostoWhatsApp`) aunque el chofer no hubiera recibido nada, y
+ *     `avisarCierreAlJefe` contestaba `{enviado:true}` sin una sola
+ *     confirmación;
+ *   · y un fallo de RED sí lanzaba, porque el `fetch` no estaba en try/catch —
+ *     o sea que las dos mitades del mismo fallo se comportaban al revés.
+ *
+ * Ahora las dos devuelven `{ok:false, error, codigo}` y ninguna lanza, igual
+ * que `sendTemplate`. Los llamadores que hacen `await sendDocument(...)` sin
+ * mirar el resultado siguen compilando sin cambios: el arreglo es
+ * retrocompatible a propósito, porque los dos call sites viven en archivos de
+ * otros agentes (`processor.ts:1840` y `avisar_cierre.ts:117`). Lo que este
+ * cambio hace es DAR la información; queda pendiente que esos dos la usen —
+ * ver la nota en el reporte.
+ */
+export async function sendDocument(
+  to: string,
+  link: string,
+  filename: string,
+  caption?: string,
+): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }> {
+  let res: Response;
+  try {
+    res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: destinatarioWhatsApp(to),   // el PDF rebotaba igual que el texto
+        type: 'document',
+        document: { link, filename, caption },
+      }),
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    logger.error('wa.sendDocument.red', { filename, error });
+    return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}` };
+  }
+
+  if (!res.ok) {
+    const crudo = await res.text().catch(() => '');
+    let codigo: number | undefined;
+    let mensaje = `HTTP ${res.status}`;
+    try {
+      const j = JSON.parse(crudo) as { error?: { message?: string; code?: number } };
+      codigo = j.error?.code;
+      if (j.error?.message) mensaje = j.error.message;
+    } catch { /* el crudo ya va en el log */ }
+    logger.error('wa.sendDocument', { filename, status: res.status, codigo, body: crudo.slice(0, 400) });
+    return { ok: false, error: mensaje, codigo };
+  }
+
   // Igual que en `sendText`: el envío del PDF es EL entregable, y su éxito no
   // dejaba ninguna huella. Meta acepta el mensaje y descarga el `link` después,
   // por su cuenta; sin el wamid no hay forma de preguntarle qué pasó con él.
-  logger.info('wa.sendDocument.ok', { id: await idDeRespuesta(res), filename });
+  const id = await idDeRespuesta(res);
+  logger.info('wa.sendDocument.ok', { id, filename });
+  return { ok: true, id: id ?? null };
 }
 
 /**

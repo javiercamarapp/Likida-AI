@@ -89,3 +89,57 @@ describe('extraerComprobante — motivo del fallo', () => {
     expect(r.gasto.formaPago).toBe('01');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 10, rubro pruebas — `ocr_confianza` salió 0.950 IDÉNTICO en ocho
+// gastos examinados por otro agente el mismo día. Investigado: en producción
+// NO está hardcodeado (`ocr.ts:385` hace `ocrConfianza: data.confianza`, un
+// paso directo de lo que el modelo de visión respondió), pero NINGUNA prueba
+// de esta suite lo verificaba. Confirmado por mutación (restaurada de
+// inmediato tras medir, `git diff` vacío): cambiar esa línea a un
+// `ocrConfianza: 0.95` hardcodeado dejaba las 36 pruebas de
+// `ocr_motivo.test.ts` + `ocr_varias_fotos.test.ts` + `rfc_emisor_puntuado.test.ts`
+// + `arnes_ticket_real.test.ts` exactamente igual de verdes — los tres
+// fixtures de esos archivos (`respuesta()`) hardcodean `confianza: 0.95` (o
+// 0.98) y ningún `it()` lee `r.gasto.ocrConfianza`. Si el 0.95 idéntico que
+// vio el otro agente resulta ser un patrón real del modelo (no un bug de nuestro
+// código — que las pruebas de abajo confirman que NO es), esta suite no lo
+// habría distinguido de un bug real que sí lo fuera.
+describe('extraerComprobante — ocr_confianza SE LEE del modelo, no se inventa (AUDITORÍA 10)', () => {
+  beforeEach(() => { generateStructured.mockReset(); });
+
+  it('confianza baja (0.42) llega intacta a gasto.ocrConfianza — no se redondea ni se sustituye', async () => {
+    generateStructured.mockResolvedValue(respuesta({ confianza: 0.42 }));
+    const r = await extraerComprobante(IMG);
+    expect(r.gasto.ocrConfianza).toBe(0.42);
+  });
+
+  it('confianza alta (0.99) llega intacta — dos valores DISTINTOS en dos llamadas dan dos ocrConfianza DISTINTOS', async () => {
+    generateStructured.mockResolvedValueOnce(respuesta({ confianza: 0.99 }));
+    const alta = await extraerComprobante(IMG);
+    generateStructured.mockResolvedValueOnce(respuesta({ confianza: 0.15 }));
+    const baja = await extraerComprobante(IMG);
+    expect(alta.gasto.ocrConfianza).toBe(0.99);
+    expect(baja.gasto.ocrConfianza).toBe(0.15);
+    // La afirmación que de verdad mata un hardcodeo: si `ocr.ts` fijara
+    // `ocrConfianza` a una constante, esto fallaría aunque las dos de arriba
+    // pasaran cada una por separado con `toBe` sobre el mismo número fijo.
+    expect(alta.gasto.ocrConfianza).not.toBe(baja.gasto.ocrConfianza);
+  });
+
+  it('confianza 0 (el modelo no confía nada) también pasa tal cual — no hay piso implícito', async () => {
+    generateStructured.mockResolvedValue(respuesta({ confianza: 0 }));
+    const r = await extraerComprobante(IMG);
+    expect(r.gasto.ocrConfianza).toBe(0);
+  });
+
+  it('un fallo técnico (catch de arriba) SÍ hardcodea 0 a propósito — no hay comprobante del que leer confianza', async () => {
+    generateStructured.mockImplementation(() => {
+      throw new StructuredError('JSON parse falló', undefined, 'x', {
+        model: 'x', tokensIn: 1, tokensOut: 1, cost: 0,
+      });
+    });
+    const r = await extraerComprobante(IMG);
+    expect(r.gasto.ocrConfianza).toBe(0);
+  });
+});
