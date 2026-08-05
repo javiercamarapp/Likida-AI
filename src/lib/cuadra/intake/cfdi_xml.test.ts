@@ -28,6 +28,16 @@ const CON_COMPLEMENTO_ALT = base(`
 const SIN_COMPLEMENTO = base('');
 
 describe('parseCfdiXml', () => {
+  it('lee la Cantidad del concepto 1:1 — los litros que el estímulo necesita (auditoría 12, ALTO fiscal)', () => {
+    const r = parseCfdiXml(base(''))!;
+    // El camino 1:1 no usaba la Cantidad: la liquidación del demo salía con
+    // 0 litros sobre un XML que dice Cantidad="40" ClaveUnidad="LTR".
+    expect(r.claveUnidad).toBe('LTR');
+    expect(r.cantidad).toBe(40);
+    // Y el concepto individual también la trae (fuente para el consolidado).
+    expect(r.conceptos[0]?.cantidad).toBe(40);
+  });
+
   it('extrae encabezado, UUID, RFCs, tipo y concepto de combustible', () => {
     const r = parseCfdiXml(SIN_COMPLEMENTO)!;
     expect(r).not.toBeNull();
