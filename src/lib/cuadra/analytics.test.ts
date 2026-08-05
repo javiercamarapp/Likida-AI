@@ -70,7 +70,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const cuadrarDesdeDB = vi.fn();
 vi.mock('./cuadre/desde_db', () => ({ cuadrarDesdeDB: (...a: unknown[]) => cuadrarDesdeDB(...a) }));
 
-const { getKpis, getAcreditables, detectarAnomalias, getLiquidacionDetalle, getValorAhorro } =
+const { getKpis, getAcreditables, detectarAnomalias, getLiquidacionDetalle, getValorAhorro, getConciliacionConsolidado, getLineasPorConciliar } =
   await import('./analytics');
 
 const TENANT = 't1';
@@ -455,6 +455,96 @@ describe('getValorAhorro — se agrega en SQL, y un fallo nunca se pinta como ce
   ])('una respuesta de `gasto` con otra forma (%s) LANZA, no pinta 0 documentos', async (_caso, data) => {
     rpcs.set('resumen_documentos_tenant', { data, error: null });
     await expect(getValorAhorro(TENANT)).rejects.toThrow(/otra forma/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CFDI CONSOLIDADO — la cola de `cfdi_consolidado_linea` (auditoría 10) y
+// su resolución a mano (5-ago-2026). `resolverLineaAMano` (`intake/
+// consolidado.ts`, probada con su propio doble en `consolidado.test.ts`) es
+// quien la cierra; aquí se prueba la LECTURA que arma la pantalla.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('getConciliacionConsolidado — "sin_match" no es lo mismo que "por revisar"', () => {
+  it('una línea sin_match (ya la revisó un humano) no cuenta como porConciliar', async () => {
+    respuestas.set('cfdi_consolidado_linea', {
+      data: [
+        { estatus: 'conciliada', cfdi_xml_id: 'x1' },
+        { estatus: 'por_conciliar', cfdi_xml_id: 'x1' },
+        { estatus: 'sin_match', cfdi_xml_id: 'x2' },
+      ],
+      error: null, count: 3,
+    });
+    const r = await getConciliacionConsolidado(TENANT);
+    // Si `sin_match` se contara como pendiente, `porConciliar` saldría 2 —el
+    // número que este panel enseña nunca bajaría aunque el contador sí
+    // estuviera resolviendo la cola.
+    expect(r).toEqual({ conciliadas: 1, porConciliar: 1, sinMatch: 1, cfdis: 2 });
+  });
+
+  it('null cuando el tenant nunca mandó un consolidado — no es "0 pendientes"', async () => {
+    respuestas.set('cfdi_consolidado_linea', { data: [], error: null });
+    expect(await getConciliacionConsolidado(TENANT)).toBeNull();
+  });
+});
+
+describe('getLineasPorConciliar — la cola, con el folio del viaje de cada candidato', () => {
+  it('un candidato con gasto vivo trae el folio de SU viaje, no un UUID', async () => {
+    respuestas.set('cfdi_consolidado_linea', {
+      data: [{
+        id: 'linea-1', cfdi_xml_id: 'xml-1', indice: 2, fuente: 'ecc12', fecha: '2026-04-03',
+        monto: 2904.05, descripcion: null, estacion_rfc: 'EST010101AAA', folio_operacion: 'OP-100234',
+        candidatos: [{ gastoId: 'g1', monto: 2904.05, fecha: '2026-04-03' }],
+      }],
+      error: null, count: 1,
+    });
+    respuestas.set('cfdi_xml', { data: [{ id: 'xml-1', cfdi_uuid: 'uuid-real' }], error: null });
+    respuestas.set('gasto', { data: [{ id: 'g1', viaje_id: 'v1' }], error: null });
+    respuestas.set('viaje', { data: [{ id: 'v1', folio: 'VJ-104' }], error: null });
+
+    const r = await getLineasPorConciliar(TENANT);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({
+      id: 'linea-1', cfdiUuid: 'uuid-real', indice: 2, fecha: '2026-04-03', monto: 2904.05,
+      estacionRfc: 'EST010101AAA', folioOperacion: 'OP-100234',
+    });
+    expect(r[0].candidatos).toEqual([{ gastoId: 'g1', monto: 2904.05, fecha: '2026-04-03', viajeFolio: 'VJ-104' }]);
+  });
+
+  it('un candidato cuyo gasto ya no existe (borrado desde que el JOIN corrió) trae viajeFolio null, no lanza', async () => {
+    respuestas.set('cfdi_consolidado_linea', {
+      data: [{
+        id: 'linea-1', cfdi_xml_id: 'xml-1', indice: 1, fuente: 'ecc12', fecha: '2026-04-03',
+        monto: 100, descripcion: null, estacion_rfc: null, folio_operacion: null,
+        candidatos: [{ gastoId: 'g-borrado', monto: 100, fecha: '2026-04-03' }],
+      }],
+      error: null, count: 1,
+    });
+    respuestas.set('cfdi_xml', { data: [{ id: 'xml-1', cfdi_uuid: 'uuid-real' }], error: null });
+    respuestas.set('gasto', { data: [], error: null }); // el gasto ya no está
+
+    const r = await getLineasPorConciliar(TENANT);
+    expect(r[0].candidatos).toEqual([{ gastoId: 'g-borrado', monto: 100, fecha: '2026-04-03', viajeFolio: null }]);
+  });
+
+  it('cero candidatos (TAG sin ECC12: sin fecha, `candidatos` NULL) → arreglo vacío, no lanza', async () => {
+    respuestas.set('cfdi_consolidado_linea', {
+      data: [{
+        id: 'linea-1', cfdi_xml_id: 'xml-1', indice: 1, fuente: 'concepto_base', fecha: null,
+        monto: 310, descripcion: null, estacion_rfc: null, folio_operacion: null, candidatos: null,
+      }],
+      error: null, count: 1,
+    });
+    respuestas.set('cfdi_xml', { data: [{ id: 'xml-1', cfdi_uuid: 'uuid-real' }], error: null });
+
+    const r = await getLineasPorConciliar(TENANT);
+    expect(r[0].candidatos).toEqual([]);
+    expect(r[0].fecha).toBeNull();
+  });
+
+  it('la cola vacía devuelve un arreglo vacío', async () => {
+    respuestas.set('cfdi_consolidado_linea', { data: [], error: null });
+    expect(await getLineasPorConciliar(TENANT)).toEqual([]);
   });
 });
 
