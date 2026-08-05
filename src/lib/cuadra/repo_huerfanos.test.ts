@@ -75,6 +75,17 @@ describe('guardarHuerfano — inserta con los datos del gasto y del motivo', () 
     expect((insert?.args[0] as { ruta_imagen: unknown }).ruta_imagen).toBeNull();
   });
 
+  it('«fallo_ocr» llega tal cual a la columna: es `text` a secas, sin CHECK que traducir', async () => {
+    // El motivo se agregó el 4-ago-2026 para las dos ramas de `fallo_tecnico`
+    // del processor, que escribían `sin_viaje` —el efecto— y escondían la causa
+    // (se cayó NUESTRO OCR). La 0040 declara `motivo text not null` sin enum ni
+    // constraint, así que el valor honesto entra sin migración; esta prueba es
+    // la que se pondrá roja el día que alguien le ponga un CHECK a la columna.
+    await guardarHuerfano('t1', 'o1', { gasto: GASTO, motivo: 'fallo_ocr' });
+    const insert = llamadas.find((l) => l.metodo === 'insert');
+    expect((insert?.args[0] as { motivo: unknown }).motivo).toBe('fallo_ocr');
+  });
+
   it('un fallo de la base se registra y devuelve false — no lanza (best-effort documentado)', async () => {
     respuesta = { data: null, error: { message: 'timeout' } };
     const ok = await guardarHuerfano('t1', 'o1', { gasto: GASTO, motivo: 'sin_viaje' });

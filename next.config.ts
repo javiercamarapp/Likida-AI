@@ -5,7 +5,12 @@ const nextConfig: NextConfig = {
   // lee de node_modules en tiempo de ejecución (ver cfdi.ts). Si el bundler se
   // lo lleva, el binario deja de estar donde `require.resolve` lo busca y el
   // decodificador truena EN EL DEPLOY, no en local — el modo de fallo caro.
-  serverExternalPackages: ['sharp', 'zxing-wasm', 'pdf-lib'],
+  // `playwright-core` entra aquí desde que `/api/cron/facturar` lo alcanza (vía
+  // `facturacion/adaptadores/pagina_playwright.ts`). Resuelve su driver y sus
+  // utilidades con `require` calculados en runtime; bundlearlo deja esas rutas
+  // apuntando a archivos que no existen y el fallo aparece EN EL DEPLOY, no en
+  // local, que es el modo caro. Misma razón que `zxing-wasm`.
+  serverExternalPackages: ['sharp', 'zxing-wasm', 'pdf-lib', 'playwright-core'],
   // El `.wasm` del lector se lee de disco en runtime (ver cfdi.ts), sin ningún
   // import que el tracer pueda seguir — así que hay que meterlo a la fuerza al
   // bundle de la función. Sin esto el webhook despliega "bien" y truena al

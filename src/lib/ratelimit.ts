@@ -18,6 +18,17 @@
 //  · El CAP DE BODY mira SOLO `content-length`. Una petición sin esa cabecera
 //    (`Transfer-Encoding: chunked`) devuelve `false` = "cabe". Ver la nota de
 //    `bodyExcede`.
+//
+//  · UN `false` DE AQUÍ NO AUTORIZA A TIRAR NADA. Lo que este módulo dice es
+//    "en esta instancia y en esta ventana ya no cabe", no "esto sobra". La
+//    diferencia se pagó en el webhook de WhatsApp (4-ago-2026): ante un `false`
+//    descartaba el mensaje y contestaba 200, y como un 200 le dice a Meta que
+//    quedó entregado, cada exceso era un comprobante perdido para siempre.
+//    Ahora contesta 429 y Meta lo vuelve a entregar. Quien llame a `rateLimit`
+//    sobre una entrada YA AUTENTICADA tiene que hacer lo mismo: aplazar con un
+//    código que provoque reintento, nunca descartar en silencio. Descartar solo
+//    es aceptable donde el que insiste es un desconocido (`acceso:`, `login:`),
+//    y ahí el descarte ES el objetivo.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Sellos de tiempo vivos de una llave, y cuándo deja de importar la llave. */

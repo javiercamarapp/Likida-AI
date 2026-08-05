@@ -27,41 +27,50 @@ import type { FabricaDePagina } from './playwright_base';
 //      y así se puede probar entero sin Chromium.
 //   2. LOS DATOS FISCALES DE LA FLOTA, que son por tenant.
 //
-// ── EL PELIGRO DE ESTE ARCHIVO: EL REGISTRO ES GLOBAL Y EL RFC NO ────────
+// ── EL PELIGRO DE ESTE ARCHIVO ERA QUE EL REGISTRO FUERA GLOBAL ──────────
 //
-// `ADAPTADORES` en `agente.ts` es un `Map` de módulo con clave `comercio`. O sea
-// UNO por portal para todo el proceso — y en una función caliente de Vercel ese
-// proceso atiende a varias flotas seguidas. Si la flota A registra CAPUFE con su
-// RFC y después llega un ticket de la flota B sin registrar nada, `adaptadorDe`
-// devuelve el adaptador de A y el CFDI se emite CON EL RFC DE OTRA EMPRESA. Es
-// irreversible y es exactamente la clase de fuga entre tenants que este repo
-// persigue en todos lados.
+// `ADAPTADORES` en `agente.ts` ERA un `Map` de módulo con clave `comercio`. O
+// sea UNO por portal para todo el proceso — y en una función caliente de Vercel
+// ese proceso atiende a varias flotas seguidas. Si la flota A registraba CAPUFE
+// con su RFC y después llegaba un ticket de la flota B, `adaptadorDe('capufe')`
+// devolvía el adaptador de A y el CFDI se emitía CON EL RFC DE OTRA EMPRESA.
 //
-// Mientras `agente.ts` no lleve el tenant en la clave, la defensa vive aquí y
-// son tres piezas:
+// ESO YA NO PUEDE PASAR: el tenant va EN LA CLAVE del registro, y las firmas lo
+// exigen sin default (`registrarAdaptador(tenantId, a)`,
+// `adaptadorDe(tenantId, comercio)`). Quien lo olvide no compila.
 //
-//   · `registrarPortales` SIEMPRE sobrescribe. Nunca "si ya está, lo dejo": esa
-//     optimización es justo el bug.
-//   · `exigirTenantRegistrado(tenantId)` LANZA si el registro vigente es de otra
-//     flota. Quien vaya a llamar a `facturarConAgente` debería llamarla antes.
+// Lo de aquí deja de ser la defensa y pasa a ser lo que siempre debió ser: el
+// CICLO DE VIDA de un lote. Sigue habiendo tres piezas y siguen valiendo:
+//
+//   · `registrarPortales` SIEMPRE sobrescribe. Nunca "si ya está, lo dejo": los
+//     datos fiscales de una flota cambian (cambia de régimen, corrige su CP) y
+//     un adaptador viejo cacheado factura con lo anterior.
+//   · `exigirTenantRegistrado(tenantId)` LANZA si el lote abierto es de otra
+//     flota. Ya no evita el CFDI ajeno —eso lo evita la clave— pero sí caza al
+//     llamador que factura fuera de su lote, que es un bug igual.
 //   · `conPortales()` deja un CENTINELA al terminar: un adaptador que no factura
-//     nada y dice por qué. Así una llamada fuera de su lote falla cerrado en vez
-//     de facturar con el receptor del lote anterior.
+//     nada y dice POR QUÉ. Sin él, `adaptadorDe` devolvería `null` y el mensaje
+//     sería "todavía no hay adaptador para capufe" — que es el mismo texto que
+//     se enseña cuando el portal de verdad no está escrito, y manda a buscar el
+//     problema al sitio equivocado.
 //
-// ── LO QUE FALTA PARA QUE EL CRON DEJE DE SER UN NO-OP ───────────────────
+// ── DE DÓNDE SALE UN LOTE ────────────────────────────────────────────────
 //
-// Una línea en `src/app/api/cron/facturar/route.ts` (y otra en `al_vuelo.ts`):
-// traer los datos fiscales de la flota del gasto y envolver el lote en
-// `conPortales`. No se hace aquí porque esos archivos son de otro agente en esta
-// misma sesión. El esqueleto es:
+// `src/app/api/cron/facturar/route.ts`. Agrupa los gastos por flota y por
+// portal, y por cada flota abre UN Chromium y envuelve su lote:
 //
-//     await conPortales(
-//       { flota: { tenantId, ...datosFiscales, correo }, abrirPagina },
-//       async () => { …facturar los tickets de ESA flota… },
-//     );
+//     await conNavegador(async (abrirPagina) => {
+//       await conPortales(
+//         { flota: { tenantId, ...datosFiscales, correo }, abrirPagina },
+//         async () => { …facturar los tickets de ESA flota… },
+//       );
+//     });
 //
-// donde `abrirPagina` sale de `conNavegador()` en `pagina_playwright.ts`, para
-// que todo el lote comparta un solo Chromium.
+// UN NAVEGADOR POR FLOTA, no uno para toda la corrida: `SesionNavegador`
+// comparte UN BrowserContext entre sus pestañas, o sea las cookies. CAPUFE
+// reconoce la sesión entre códigos —que es lo que se quiere dentro de una
+// flota— y por lo mismo podría recordar el RFC de la anterior si dos flotas
+// compartieran contexto.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -95,18 +104,6 @@ export interface ResultadoRegistro {
 }
 
 /**
- * QUÉ PORTALES SABE OPERAR EL CÓDIGO, independientemente de si hoy están
- * registrados para alguien.
- *
- * Existe aparte de `portalesAutomatizados()` a propósito: aquella responde "qué
- * puedo hacer AHORA con la flota que está cargada", y esta "qué sé hacer". La
- * segunda es la que sirve para una pantalla de configuración; confundirlas es
- * cómo se acaba enseñándole al cliente una capacidad que su flota no tiene
- * habilitada.
- */
-export const PORTALES_CONOCIDOS: readonly string[] = obtenerConocidos();
-
-/**
  * LA TABLA. Agregar un portal es agregar una entrada aquí y nada más.
  *
  * `revisar` va SEPARADO de `registrar` porque no todos los portales piden los
@@ -123,7 +120,7 @@ const TABLA: ReadonlyArray<{
     comercio: 'capufe',
     revisar: (op) => revisarReceptor(op.flota),
     registrar: (op) => {
-      registrarCapufe({
+      registrarCapufe(op.flota.tenantId, {
         ...op.capufe,
         abrirPagina: op.abrirPagina,
         // Se copian los campos uno por uno y no con un spread de `op.flota`: así
@@ -143,14 +140,19 @@ const TABLA: ReadonlyArray<{
 ];
 
 /**
- * Se deriva de `TABLA` en vez de escribirse a mano: una segunda lista es una
- * lista que alguien va a olvidar de actualizar al agregar el segundo portal.
- * Va en función para poder declararse ARRIBA sin caer en la zona muerta de
- * `TABLA`, que es donde se lee.
+ * QUÉ PORTALES SABE OPERAR EL CÓDIGO, independientemente de si hoy están
+ * registrados para alguien.
+ *
+ * Se deriva de `TABLA` y por eso vive DEBAJO de ella: una segunda lista escrita
+ * a mano es una lista que alguien olvida al agregar el segundo portal.
+ *
+ * Existe aparte de `portalesAutomatizados()` a propósito: aquella responde "qué
+ * puedo hacer AHORA con la flota que está cargada", y esta "qué sé hacer". La
+ * segunda es la que sirve para una pantalla de configuración; confundirlas es
+ * cómo se acaba enseñándole al cliente una capacidad que su flota no tiene
+ * habilitada.
  */
-function obtenerConocidos(): readonly string[] {
-  return TABLA.map((p) => p.comercio);
-}
+export const PORTALES_CONOCIDOS: readonly string[] = TABLA.map((p) => p.comercio);
 
 /** De qué flota son los adaptadores que están puestos ahora mismo. */
 let flotaVigente: string | null = null;
@@ -167,21 +169,23 @@ let flotaVigente: string | null = null;
 export function registrarPortales(op: OpcionesRegistro): ResultadoRegistro {
   const registrados: string[] = [];
   const problemas: string[] = [];
+  const tenantId = op.flota.tenantId;
 
   for (const portal of TABLA) {
     const falta = portal.revisar(op);
     if (falta.length > 0) {
       problemas.push(`${portal.comercio}: ${falta.join('; ')}`);
-      // Y se pone un centinela EN SU LUGAR. Si el proceso venía con el adaptador
-      // de otra flota puesto, dejarlo ahí sería facturarle a la flota anterior
-      // con los tickets de esta.
-      registrarAdaptador(centinela(portal.comercio, `Los datos fiscales de esta flota no sirven para facturar en ${portal.comercio}: ${falta.join('; ')}.`));
-      ESTADO.set(portal.comercio, 'centinela');
+      // Y se pone un centinela EN SU LUGAR. Si esta flota venía de un lote
+      // anterior con datos fiscales buenos y ahora ya no los tiene —se los
+      // borraron, se corrigieron a medias—, dejar el adaptador viejo puesto sería
+      // facturar con los datos de antes.
+      registrarAdaptador(tenantId, centinela(portal.comercio, `Los datos fiscales de esta flota no sirven para facturar en ${portal.comercio}: ${falta.join('; ')}.`));
+      ESTADO.set(marca(tenantId, portal.comercio), 'centinela');
       continue;
     }
     // Siempre sobrescribe. Ver el encabezado: "si ya está, lo dejo" es el bug.
     portal.registrar(op);
-    ESTADO.set(portal.comercio, 'vivo');
+    ESTADO.set(marca(tenantId, portal.comercio), 'vivo');
     registrados.push(portal.comercio);
   }
 
@@ -217,20 +221,27 @@ export function exigirTenantRegistrado(tenantId: string): void {
 }
 
 /**
- * Deja el registro inservible a propósito.
+ * Deja el registro DE ESA FLOTA inservible a propósito.
  *
- * No se puede BORRAR —`agente.ts` no exporta forma de quitar del `Map`— así que
- * se sustituye por un centinela, que es mejor de todos modos: `adaptadorDe`
- * sigue devolviendo algo y ese algo explica qué falta, en vez de convertirse en
- * el "todavía no hay adaptador para capufe" que ya se enseña cuando el portal
- * de verdad no existe.
+ * Se sustituye por un centinela en vez de borrarlo (`olvidarAdaptadores`
+ * existe y borra de verdad) porque el centinela dice POR QUÉ: `adaptadorDe`
+ * sigue devolviendo algo y ese algo explica que el lote cerró, en vez de
+ * convertirse en el "todavía no hay adaptador para capufe" que se enseña cuando
+ * el portal de verdad no está escrito. Son dos problemas distintos y se
+ * arreglan en sitios distintos.
+ *
+ * Lo que deja atrás es un objeto minúsculo por portal y por flota vista en este
+ * proceso. Con un portal en la tabla eso es una entrada por flota y por
+ * invocación caliente: no hace falta más ceremonia. Si algún día la tabla crece
+ * y el proceso vive horas, `olvidarAdaptadores(tenantId)` de `agente.ts` libera
+ * el cajón entero.
  */
-export function olvidarPortales(): void {
+export function olvidarPortales(tenantId: string): void {
   for (const portal of TABLA) {
-    registrarAdaptador(centinela(portal.comercio, `El lote de facturación ya cerró: hay que volver a registrar ${portal.comercio} con los datos fiscales de la flota antes de facturar otra vez.`));
-    ESTADO.set(portal.comercio, 'centinela');
+    registrarAdaptador(tenantId, centinela(portal.comercio, `El lote de facturación ya cerró: hay que volver a registrar ${portal.comercio} con los datos fiscales de la flota antes de facturar otra vez.`));
+    ESTADO.set(marca(tenantId, portal.comercio), 'centinela');
   }
-  flotaVigente = null;
+  if (flotaVigente === tenantId) flotaVigente = null;
 }
 
 /**
@@ -248,25 +259,35 @@ export async function conPortales<T>(
   try {
     return await fn(registro);
   } finally {
-    olvidarPortales();
+    olvidarPortales(op.flota.tenantId);
   }
 }
 
 /**
- * Los que están operables AHORA MISMO, sin contar centinelas.
+ * Los que están operables AHORA MISMO PARA ESA FLOTA, sin contar centinelas.
  *
- * Se cruza contra el registro de verdad (`portalesAutomatizados()`) en vez de
- * devolver una lista propia: una segunda lista que se mantenga a mano se
+ * Se cruza contra el registro de verdad (`portalesAutomatizados(tenantId)`) en
+ * vez de devolver una lista propia: una segunda lista que se mantenga a mano se
  * desincroniza, y entonces esto afirmaría capacidades que el `Map` no tiene.
  */
-export function portalesVivos(): string[] {
-  return portalesAutomatizados().filter((c) => ESTADO.get(c) !== 'centinela');
+export function portalesVivos(tenantId: string): string[] {
+  return portalesAutomatizados(tenantId).filter((c) => ESTADO.get(marca(tenantId, c)) !== 'centinela');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Qué dejó puesto ESTE módulo en el registro global. */
+/**
+ * Qué dejó puesto ESTE módulo en el registro, por flota y portal.
+ *
+ * El separador es un byte NULO y no un `|` ni un `:`: ningún identificador de
+ * este sistema puede contener uno, así que la llave no se puede fabricar desde
+ * fuera. Con un separador imprimible, un id que lo trajera haría que dos flotas
+ * compartieran entrada y `portalesVivos` mentiría sobre cuál está operable — la
+ * misma confusión que este archivo acaba de cerrar una capa más abajo.
+ */
 const ESTADO = new Map<string, 'vivo' | 'centinela'>();
+
+const marca = (tenantId: string, comercio: string) => `${tenantId}\u0000${comercio}`;
 
 /**
  * Un adaptador que no factura y dice por qué.

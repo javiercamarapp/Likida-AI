@@ -1,4 +1,5 @@
 import { getSessionTenant } from './session';
+import { tenantDemo } from './tenant-demo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -25,7 +26,6 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 // con datos de otra flota es peor que un botón muerto.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const TENANT_DEMO = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-111111111111';
 
 export type ResultadoTenantApi =
   | { ok: true; tenantId: string; rol: string }
@@ -49,7 +49,7 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
     if (s.rol !== 'superadmin') {
       return { ok: false, status: 403, motivo: 'Tu cuenta no está asignada a una flota.' };
     }
-    tenantId = TENANT_DEMO();
+    tenantId = tenantDemo();
   }
 
   const pedido = new URL(url).searchParams.get('tenant');

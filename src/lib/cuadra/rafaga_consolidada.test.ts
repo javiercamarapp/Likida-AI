@@ -195,9 +195,12 @@ describe('un fallo técnico de OCR ya no pierde el comprobante', () => {
     await processInbound({ from: '5219993700779', type: 'image', mediaId: 'm1', waMessageId: 'wa1' });
 
     expect(guardarHuerfano).toHaveBeenCalledTimes(1);
-    const [, , h] = guardarHuerfano.mock.calls[0] as unknown as [string, string, { rutaImagen?: string; gasto: { imagenUrl?: string } }];
+    const [, , h] = guardarHuerfano.mock.calls[0] as unknown as [string, string, { rutaImagen?: string; motivo: string; gasto: { imagenUrl?: string } }];
     expect(h.rutaImagen, 'la subida se descartaba sin esperarla').toBe('t1/v1/foto.jpg');
     expect(h.gasto.imagenUrl).toBe('t1/v1/foto.jpg');
+    // El motivo dice la CAUSA, no el efecto: escribía `sin_viaje` habiendo
+    // viaje abierto, que es exactamente lo que no pasó (4-ago-2026).
+    expect(h.motivo).toBe('fallo_ocr');
   });
 
   it('y el texto ya NO lo manda a un trámite que no existe', async () => {

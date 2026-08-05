@@ -15,13 +15,13 @@
 // la tabla antes de usarse.
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSessionTenant } from '@/lib/auth/session';
+import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getKpis, getAcreditables, detectarAnomalias } from '@/lib/cuadra/analytics';
 
 export const dynamic = 'force-dynamic';
 
-const TENANT_DEMO = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-111111111111';
 
 export async function GET(req: NextRequest) {
   const sesion = await getSessionTenant();
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   let tenantId = sesion.tenantId;
   if (!tenantId) {
     if (sesion.rol !== 'superadmin') return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
-    tenantId = TENANT_DEMO();
+    tenantId = tenantDemo();
   }
 
   // Un `?tenant=` solo lo honra un superadmin, y solo si existe de verdad.

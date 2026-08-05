@@ -37,8 +37,10 @@ vi.mock('@/lib/logger', () => ({ logger }));
 let lectura: { data: Record<string, unknown> | null; error: { message: string } | null };
 /** Lo que devuelve el UPDATE que guarda el UUID. */
 let resultadoUpdate: { error: { message: string } | null };
+/** Lo que devuelve el UPDATE que sella el intento. */
+let resultadoSello: { error: { message: string } | null };
 const filtros: Array<[string, unknown[]]> = [];
-const updates: Array<{ fila: Record<string, unknown>; por: [string, unknown] }> = [];
+const updates: Array<{ fila: Record<string, unknown>; por: Array<[string, unknown]> }> = [];
 
 function cadenaLectura() {
   const nodo: Record<string, unknown> = {};
@@ -50,11 +52,27 @@ function cadenaLectura() {
   return nodo;
 }
 
+/**
+ * El UPDATE admite `.eq()` ENCADENADO, no uno solo.
+ *
+ * No es cosmética del doble: las dos escrituras de este módulo van acotadas por
+ * `id` Y por `tenant_id`. Un doble que solo aceptara un `eq` obligaría a
+ * escribir la consulta sin el filtro de flota para que la prueba pasara — o sea
+ * el doble dictando que se pueda escribir en la fila de otra empresa.
+ */
+function cadenaUpdate(fila: Record<string, unknown>, resultado: () => { error: { message: string } | null }) {
+  const por: Array<[string, unknown]> = [];
+  updates.push({ fila, por });
+  const nodo: Record<string, unknown> = {};
+  nodo.eq = (col: string, val: unknown) => { por.push([col, val]); return nodo; };
+  nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(resultado()).then(r);
+  return nodo;
+}
+
 const from = vi.fn((tabla: string) => ({
   select: (...a: unknown[]) => { filtros.push([`select ${tabla}`, a]); return cadenaLectura(); },
-  update: (f: Record<string, unknown>) => ({
-    eq: (col: string, val: unknown) => { updates.push({ fila: f, por: [col, val] }); return Promise.resolve(resultadoUpdate); },
-  }),
+  update: (f: Record<string, unknown>) =>
+    cadenaUpdate(f, () => ('autofactura_intentada_en' in f ? resultadoSello : resultadoUpdate)),
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -83,9 +101,17 @@ const ticket = (o: Record<string, unknown> = {}) => armar(g(o) as Parameters<typ
 
 const ADAPTADOR = { comercio: 'enerser', portal: 'x', facturar: vi.fn() };
 
+/** El sello del intento, que va en CADA llamada que llega a decidir. */
+const AHORA = '2026-08-04T18:00:00.000Z';
+const SELLO = { autofactura_intentada_en: AHORA };
+/** Los updates que NO son el sello: es lo que las pruebas viejas medían. */
+const sinSello = () => updates.filter((u) => !('autofactura_intentada_en' in u.fila));
+const sellos = () => updates.filter((u) => 'autofactura_intentada_en' in u.fila);
+
 beforeEach(() => {
   lectura = { data: g(), error: null };
   resultadoUpdate = { error: null };
+  resultadoSello = { error: null };
   filtros.length = 0;
   updates.length = 0;
   from.mockClear();
@@ -368,7 +394,13 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
     const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
 
     expect(r).toEqual({ intentado: true, facturado: true, cfdiUuid: 'B0800A68-1111-2222-3333-444455556666' });
-    expect(updates).toEqual([{ fila: { cfdi_uuid: 'B0800A68-1111-2222-3333-444455556666' }, por: ['id', 'g-1'] }]);
+    // Acotado por id Y por tenant: el `select` ya probó que la fila es de esta
+    // flota, pero una escritura sin el filtro es la forma de que un `gastoId`
+    // venido de fuera acabe marcando la fila de otra empresa.
+    expect(sinSello()).toEqual([{
+      fila: { cfdi_uuid: 'B0800A68-1111-2222-3333-444455556666' },
+      por: [['id', 'g-1'], ['tenant_id', 't-1']],
+    }]);
     expect(logger.info).toHaveBeenCalledWith('autofactura.ok', expect.objectContaining({ gastoId: 'g-1' }));
   });
 
@@ -399,7 +431,7 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
     const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
 
     expect(r).toEqual({ intentado: true, facturado: false, detalle: 'el portal no cargó' });
-    expect(updates).toEqual([]);
+    expect(sinSello()).toEqual([]);
   });
 
   it('un `ok` sin UUID no se cuenta como facturado, y se dice que fue un ensayo', async () => {
@@ -416,7 +448,7 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
       detalle: 'ensayo: se llenó el portal y no se emitió',
     });
     expect(r.cfdiUuid).toBeUndefined();
-    expect(updates).toEqual([]);
+    expect(sinSello()).toEqual([]);
   });
 
   it('UN ENSAYO EXITOSO NO ES UN FALLO: no ensucia el log de fallos', async () => {
@@ -441,6 +473,100 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
     facturarConAgente.mockRejectedValue(new Error('playwright crashed'));
     await expect(facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY }))
       .rejects.toThrow('playwright crashed');
+    expect(sinSello()).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL SELLO DEL INTENTO — lo que impide que la cola se bloquee a sí misma
+//
+// `gasto.autofactura_intentada_en` entró en la 0063 exactamente para esto: el
+// cron ordena por `autofactura_intentada_en nulls first, created_at` y toma
+// ocho. Sin escribir la columna, los ocho gastos más viejos que NO proceden
+// —portal con cuenta, confianza baja, un campo que falta— salen elegidos en
+// CADA corrida, para siempre, y los que sí se pueden facturar no entran nunca.
+//
+// Desde fuera eso se ve como un cron que corre cada hora y no factura nada, o
+// sea el mismo verde engañoso que persigue todo este módulo, una capa más
+// abajo. Y la columna existía sin que nadie la escribiera.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('facturarAlVuelo · sella el intento, proceda o no', () => {
+  it('LO MARCA AUNQUE NO PROCEDA — es el caso entero', async () => {
+    // El ticket de confianza baja no se puede facturar hoy, pero SÍ se intentó.
+    // Sin el sello vuelve a salir el primero en la corrida siguiente, y en la
+    // siguiente, tapando a los que sí se pueden facturar.
+    lectura = { data: g({ ocr_confianza: 0.5 }), error: null };
+
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY, ahora: AHORA });
+
+    expect(r.motivo).toBe('confianza_baja');
+    expect(facturarConAgente).not.toHaveBeenCalled();
+    expect(sellos()).toEqual([{ fila: SELLO, por: [['id', 'g-1'], ['tenant_id', 't-1']] }]);
+  });
+
+  it('lo marca también cuando procede y el portal factura', async () => {
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA });
+    expect(sellos()).toEqual([{ fila: SELLO, por: [['id', 'g-1'], ['tenant_id', 't-1']] }]);
+  });
+
+  it('lo marca también cuando el portal se reconoce pero nadie sabe operarlo', async () => {
+    adaptadorDe.mockReturnValue(null);
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY, ahora: AHORA });
+    expect(r.motivo).toBe('sin_adaptador');
+    expect(sellos()).toHaveLength(1);
+  });
+
+  it('el sello va ANTES del portal: si el agente revienta, ya está puesto', async () => {
+    // Si se pusiera después, un portal caído dejaría a sus ocho tickets sin
+    // sellar y volverían a acaparar el lote entero en la corrida siguiente —
+    // justo cuando el portal sigue caído. La cola se atoraría sola contra el
+    // fallo que menos rápido se arregla.
+    facturarConAgente.mockRejectedValue(new Error('playwright crashed'));
+
+    await expect(facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA }))
+      .rejects.toThrow('playwright crashed');
+
+    expect(sellos()).toEqual([{ fila: SELLO, por: [['id', 'g-1'], ['tenant_id', 't-1']] }]);
+  });
+
+  it('NO sella lo que no se pudo leer: "no contestó la base" no es un intento', async () => {
+    lectura = { data: null, error: { message: 'timeout' } };
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY, ahora: AHORA });
     expect(updates).toEqual([]);
+  });
+
+  it('NO sella un gasto de otra flota', async () => {
+    lectura = { data: null, error: null };
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 'OTRA', hoy: HOY, ahora: AHORA });
+    expect(updates).toEqual([]);
+  });
+
+  it('NO sella uno que ya tiene CFDI: no hay nada que intentar', async () => {
+    lectura = { data: g({ cfdi_uuid: 'B0800A68-YA-EXISTE' }), error: null };
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY, ahora: AHORA });
+    expect(updates).toEqual([]);
+  });
+
+  it('si el sello no se guarda, el intento sigue y queda dicho en el log', async () => {
+    // El sello ordena la cola, no autoriza nada: tumbar por él un intento que
+    // podía facturar sería cambiar un problema de orden por uno fiscal. Pero se
+    // dice, porque perderlo se manifiesta como "el cron no factura" y sin este
+    // rastro se diagnostica en el sitio equivocado.
+    resultadoSello = { error: { message: 'deadlock detected' } };
+
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA });
+
+    expect(r.facturado).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith('autofactura.sello_sin_guardar', {
+      gastoId: 'g-1', err: 'deadlock detected',
+    });
+  });
+
+  it('sin `ahora` el sello es una marca de tiempo ISO de verdad', async () => {
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY });
+    const [s] = sellos();
+    expect(typeof s.fila.autofactura_intentada_en).toBe('string');
+    expect(Number.isFinite(Date.parse(s.fila.autofactura_intentada_en as string))).toBe(true);
   });
 });

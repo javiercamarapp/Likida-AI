@@ -84,6 +84,22 @@ export interface PaginaPortal {
 export type FabricaDePagina = () => Promise<PaginaPortal>;
 
 /**
+ * Cuánto se le da a un portal para enseñar el UUID DESPUÉS de apretar emitir.
+ *
+ * 20 s, y el número sale de lo que pasa detrás del botón: estos portales no
+ * imprimen un folio propio, mandan el comprobante a timbrar a un PAC y esperan
+ * su respuesta. No está medido contra ninguno de verdad —no se puede medir sin
+ * emitir un CFDI real— así que se elige por el lado seguro: quedarse corto aquí
+ * no cuesta un timbrado de más, cuesta que una emisión BUENA se reporte como
+ * "puede que el CFDI ya exista" y mande a una persona a revisar algo que salió
+ * bien. Son 20 de los 300 s del cron, y solo los paga el ticket que sí emitió.
+ */
+export const ESPERA_UUID_MS = 20_000;
+
+/** Cada cuánto se vuelve a mirar mientras se espera el UUID. */
+export const INTERVALO_UUID_MS = 250;
+
+/**
  * Dónde vive cada cosa EN ESTE portal.
  *
  * Va todo junto —campos, botón, UUID y cuadro de error— a propósito: cuando un
@@ -115,6 +131,21 @@ export interface OpcionesAdaptador {
    * número se ignora: ahí siempre es un intento y nada más.
    */
   reintentosEnEnsayo?: number;
+  /** TOPE de espera al UUID tras apretar emitir. Ver `ESPERA_UUID_MS`. */
+  esperaUuidMs?: number;
+  /** Cada cuánto se vuelve a mirar mientras se espera. */
+  intervaloMs?: number;
+  /** Reloj inyectable: la prueba no espera de verdad. */
+  dormir?: (ms: number) => Promise<void>;
+  /**
+   * Reloj inyectable para el tope POR TIEMPO del UUID.
+   *
+   * Hace falta además de `dormir` porque en producción el que gasta el
+   * presupuesto no es la pausa: es cada `leerTexto`, que contra un selector
+   * ausente tarda su propio tope (3 s por default en `pagina_playwright.ts`).
+   * Contando solo vueltas, el sondeo duraría vueltas × 3 s.
+   */
+  ahora?: () => number;
 }
 
 /** Fallo con mensaje ya escrito para una persona. Se distingue del inesperado. */
@@ -132,10 +163,19 @@ export abstract class AdaptadorPlaywrightBase implements AdaptadorPortal {
 
   protected readonly abrirPagina: FabricaDePagina;
   private readonly reintentosEnEnsayo: number;
+  /** Protegidos: el adaptador que sobrescribe `facturar` los necesita igual. */
+  protected readonly esperaUuidMs: number;
+  protected readonly intervaloMs: number;
+  protected readonly dormir: (ms: number) => Promise<void>;
+  protected readonly ahora: () => number;
 
   constructor(op: OpcionesAdaptador) {
     this.abrirPagina = op.abrirPagina;
     this.reintentosEnEnsayo = Math.max(0, Math.trunc(op.reintentosEnEnsayo ?? 0));
+    this.esperaUuidMs = Math.max(1, op.esperaUuidMs ?? ESPERA_UUID_MS);
+    this.intervaloMs = Math.max(1, op.intervaloMs ?? INTERVALO_UUID_MS);
+    this.dormir = op.dormir ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this.ahora = op.ahora ?? (() => Date.now());
   }
 
   /**
@@ -244,13 +284,24 @@ export abstract class AdaptadorPlaywrightBase implements AdaptadorPortal {
       captura = (await this.capturaSegura(pagina)) ?? captura;
 
       const rechazoPost = await this.leerRechazo(pagina, mapeo);
-      const uuid = mapeo.uuid ? (await pagina.leerTexto(mapeo.uuid))?.trim() : undefined;
+      const { uuid, aparecio } = mapeo.uuid
+        ? await this.esperarUuid(pagina, mapeo.uuid)
+        : { uuid: null, aparecio: false };
 
       if (!uuid) {
         // NO se vuelve a intentar y se dice por qué. El CFDI puede existir: lo
         // barato es que una persona lo mire en el portal; lo caro es un segundo
         // CFDI que después hay que cancelar.
-        return this.fallo(modo, `Se apretó emitir en ${this.portal} y no se pudo confirmar el UUID${rechazoPost ? ` (el portal dice: "${rechazoPost}")` : ''}. PUEDE QUE EL CFDI YA EXISTA: revisar el portal antes de volver a intentar — un segundo intento lo duplicaría.`, { capturado, captura });
+        //
+        // Se separa "no apareció" de "apareció vacío": el primero manda a mirar
+        // el mapeo, el segundo a mirar el portal. Con un solo texto, la mitad de
+        // las veces se busca en el sitio equivocado.
+        const porQue = !mapeo.uuid
+          ? 'el adaptador no declara dónde vive el UUID en este portal'
+          : aparecio
+            ? `el contenedor del UUID (\`${mapeo.uuid}\`) apareció y siguió VACÍO tras ~${this.esperaUuidMs} ms`
+            : `el contenedor del UUID (\`${mapeo.uuid}\`) no apareció en ~${this.esperaUuidMs} ms`;
+        return this.fallo(modo, `Se apretó emitir en ${this.portal} y no se pudo confirmar el UUID — ${porQue}${rechazoPost ? ` (el portal dice: "${rechazoPost}")` : ''}. PUEDE QUE EL CFDI YA EXISTA: revisar el portal antes de volver a intentar — un segundo intento lo duplicaría.`, { capturado, captura });
       }
 
       return { modo, ok: true, capturado, captura, cfdiUuid: uuid };
@@ -301,6 +352,44 @@ export abstract class AdaptadorPlaywrightBase implements AdaptadorPortal {
     if (faltan.length > 0) {
       throw new FalloDePortal(`${this.portal} ya no tiene estos selectores: ${faltan.join('; ')}. Hay que actualizar el mapeo de "${this.comercio}".`);
     }
+  }
+
+  /**
+   * EL UUID, SONDEADO. No una lectura y ya.
+   *
+   * Esto leía el selector UNA vez, justo después del clic, y ahí el folio no
+   * está: el portal manda el comprobante a timbrar a un PAC y pinta el resultado
+   * cuando vuelve. El modo de fallo peor no era esperar poco, era el portal que
+   * PRE-PINTA el contenedor vacío —cualquier plantilla que declare
+   * `<span class="uuid"></span>` lo hace—: `leerTexto` devuelve `''`, `''` es
+   * falsy, y una emisión EXITOSA se reportaba como "PUEDE QUE EL CFDI YA
+   * EXISTA". Eso manda a revisar a mano algo que salió bien e invita a
+   * reintentar una emisión que ya ocurrió.
+   *
+   * DOS TOPES: por vueltas (para la prueba, donde `dormir` no duerme) y por
+   * tiempo (para producción, donde lo caro es cada `leerTexto` contra un
+   * selector ausente). Devuelve además si el contenedor llegó a existir.
+   */
+  protected async esperarUuid(pagina: PaginaPortal, selector: string): Promise<{ uuid: string | null; aparecio: boolean }> {
+    const limite = this.ahora() + this.esperaUuidMs;
+    const vueltas = Math.max(1, Math.ceil(this.esperaUuidMs / this.intervaloMs));
+    let aparecio = false;
+
+    for (let i = 0; i < vueltas; i++) {
+      // `leerTexto` distingue `null` (el selector no resuelve) de `''` (existe y
+      // está vacío) — y esa diferencia es justo la que aquí no se puede aplanar.
+      const bruto = await pagina.leerTexto(selector);
+      if (bruto !== null) {
+        aparecio = true;
+        const v = bruto.trim();
+        if (v) return { uuid: v, aparecio: true };
+      }
+      if (i === vueltas - 1 || this.ahora() >= limite) break;
+      await this.dormir(this.intervaloMs);
+    }
+
+    logger.warn('agente.portal.uuid_sin_confirmar', { comercio: this.comercio, aparecio, esperaMs: this.esperaUuidMs });
+    return { uuid: null, aparecio };
   }
 
   /** Lo que el portal dice de lo capturado. Vacío o ausente = no dijo nada. */

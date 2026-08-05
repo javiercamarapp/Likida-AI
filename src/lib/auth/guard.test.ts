@@ -17,8 +17,20 @@ describe('requireSessionTenant', () => {
     expect(redirect).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/dashboard/abc-123')}`);
   });
 
-  it('con sesión pero sin tenant y sin alta en app_user (rol default flota_admin), manda a /sin-acceso', async () => {
+  it('con sesión y rol pero sin tenant asignado, manda a /sin-acceso', async () => {
     getSessionTenant.mockResolvedValue({ userId: 'u-1', tenantId: null, rol: 'flota_admin', nombre: null });
+    await expect(requireSessionTenant('/dashboard')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/sin-acceso');
+  });
+
+  // El título de la prueba de arriba decía «sin alta en app_user (rol default
+  // flota_admin)»: ese default se quitó el 4-ago-2026. Una sesión sin fila
+  // legible ya no trae rol del dominio, trae `SIN_ROL` — y esa forma también
+  // tiene que rebotar. Quién produce ese valor se prueba en `session.test.ts`,
+  // que encadena el módulo real con estas puertas; aquí `getSessionTenant` está
+  // mockeado y por eso no puede ver el default.
+  it('con sesión pero SIN fila legible en app_user (SIN_ROL), también a /sin-acceso', async () => {
+    getSessionTenant.mockResolvedValue({ userId: 'u-9', tenantId: null, rol: 'sin_rol', nombre: null });
     await expect(requireSessionTenant('/dashboard')).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/sin-acceso');
   });

@@ -131,6 +131,8 @@ export async function facturarAlVuelo(args: {
   /** En 'ensayo' llena el portal y NO emite. El default es deliberado. */
   modo?: 'ensayo' | 'emitir';
   hoy?: string;
+  /** Reloj inyectable para el sello del intento. La prueba no depende del suyo. */
+  ahora?: string;
 }): Promise<ResultadoAutofactura> {
   const admin = supabaseAdmin();
   const { data, error } = await admin
@@ -141,18 +143,40 @@ export async function facturarAlVuelo(args: {
     .maybeSingle();
 
   if (error || !data) {
+    // No se marca nada: o la fila no es de esta flota, o la base no contestó.
+    // Sellar un intento sobre un gasto que no se pudo leer sería empujar al
+    // final de la cola algo que quizá ni existe.
     return { intentado: false, facturado: false, detalle: error?.message ?? 'no existe' };
   }
   if (data.cfdi_uuid) {
     return { intentado: false, facturado: false, motivo: 'ya_facturado' };
   }
 
+  // EL SELLO VA AQUÍ, ANTES DE DECIDIR, Y SE PONE PROCEDA O NO.
+  //
+  // `gasto.autofactura_intentada_en` entró en la 0063 para exactamente esto: la
+  // cola del cron ordena por `autofactura_intentada_en nulls first, created_at`
+  // y toma ocho. Sin escribirla, los ocho gastos más viejos que NO proceden
+  // —portal con cuenta, confianza baja, un campo que falta— salen elegidos en
+  // cada corrida, para siempre, y los que sí se pueden facturar nunca entran al
+  // lote. La cola se bloquea a sí misma y desde fuera se ve como un cron que
+  // corre cada hora y no factura nada.
+  //
+  // Va ANTES de la decisión y no después del portal a propósito: si el portal
+  // revienta —y `facturarConAgente` puede lanzar— el sello ya está puesto, así
+  // que un portal caído no vuelve a acaparar el lote entero en la corrida
+  // siguiente.
+  await marcarIntento(admin, args.gastoId, args.tenantId, args.ahora);
+
   const hoy = args.hoy ?? new Date().toISOString().slice(0, 10);
   const t = armar(data as Parameters<typeof armar>[0], hoy);
   const decision = decidirAutofactura(
     t,
     data.ocr_confianza === null ? null : Number(data.ocr_confianza),
-    t.comercio ? adaptadorDe(t.comercio.clave) !== null : false,
+    // El registro va POR FLOTA: preguntar por el comercio a secas devolvía el
+    // adaptador de quien hubiera facturado antes en esta misma instancia, con
+    // SUS datos fiscales dentro.
+    t.comercio ? adaptadorDe(args.tenantId, t.comercio.clave) !== null : false,
   );
 
   if (!decision.procede) {
@@ -161,6 +185,7 @@ export async function facturarAlVuelo(args: {
   }
 
   const r = await facturarConAgente({
+    tenantId: args.tenantId,
     comercio: t.comercio!.clave,
     campos: t.campos,
     modo: args.modo ?? 'ensayo',
@@ -186,11 +211,40 @@ export async function facturarAlVuelo(args: {
   const { error: errGuardar } = await admin
     .from('gasto')
     .update({ cfdi_uuid: r.cfdiUuid })
-    .eq('id', args.gastoId);
+    .eq('id', args.gastoId)
+    // Acotado por tenant además de por id, aunque el `select` de arriba ya probó
+    // que la fila es de esta flota. Cuesta nada y cierra el camino de que un
+    // `gastoId` que venga de fuera escriba un UUID en la fila de otra empresa.
+    .eq('tenant_id', args.tenantId);
   if (errGuardar) {
     logger.error('autofactura.uuid_sin_guardar', { gastoId: args.gastoId, uuid: r.cfdiUuid, err: errGuardar.message });
   }
 
   logger.info('autofactura.ok', { gastoId: args.gastoId, uuid: r.cfdiUuid });
   return { intentado: true, facturado: true, cfdiUuid: r.cfdiUuid };
+}
+
+/**
+ * Sella que este gasto YA SE INTENTÓ, proceda o no.
+ *
+ * Un fallo aquí NO tumba el intento: el sello ordena la cola, no autoriza nada.
+ * Lo que sí hace es dejar rastro, porque la consecuencia de perderlo es lenta y
+ * silenciosa —la cola se vuelve a atorar con los mismos ocho— y sin este `warn`
+ * se diagnosticaría como "el cron no factura" en vez de "el sello no se guarda".
+ */
+async function marcarIntento(
+  admin: ReturnType<typeof supabaseAdmin>,
+  gastoId: string,
+  tenantId: string,
+  ahora?: string,
+): Promise<void> {
+  const { error } = await admin
+    .from('gasto')
+    .update({ autofactura_intentada_en: ahora ?? new Date().toISOString() })
+    .eq('id', gastoId)
+    .eq('tenant_id', tenantId);
+
+  if (error) {
+    logger.warn('autofactura.sello_sin_guardar', { gastoId, err: error.message });
+  }
 }

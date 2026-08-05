@@ -57,6 +57,17 @@ interface OpcDoble {
   conPreVuelo?: boolean;
   /** El clic se registra y DESPUÉS revienta: el fallo ambiguo de verdad. */
   clicRevienta?: boolean;
+  /**
+   * Cuántas lecturas del UUID pasan antes de que el folio esté. Imita al PAC:
+   * el portal manda a timbrar y pinta el resultado cuando le contestan.
+   */
+  uuidVueltas?: number;
+  /**
+   * El portal PRE-PINTA el contenedor del UUID: existe desde el principio y
+   * está vacío, así que `leerTexto` devuelve `''` y no `null`. Esa diferencia
+   * es la que hacía que una emisión BUENA se reportara como fallo.
+   */
+  uuidPrepintado?: boolean;
 }
 
 /** El doble. Registra todo lo que se le hizo, para poder afirmarlo. */
@@ -66,6 +77,7 @@ class PaginaDoble implements PaginaPortal {
   clics: string[] = [];
   capturas = 0;
   cerradas = 0;
+  vecesQueLeyoUuid = 0;
   existe?: (selector: string) => Promise<boolean>;
   private readonly presentes: string[];
 
@@ -95,6 +107,14 @@ class PaginaDoble implements PaginaPortal {
   }
 
   async leerTexto(sel: string) {
+    if (sel === MAPEO.uuid) {
+      // Las dos formas de "todavía no": `''` (contenedor pintado y vacío) y
+      // `null` (el selector no resuelve). Aplanarlas borraría el caso que rompía.
+      const todavia = this.o.uuidPrepintado ? '' : null;
+      this.vecesQueLeyoUuid += 1;
+      if (this.vecesQueLeyoUuid <= (this.o.uuidVueltas ?? 0)) return todavia;
+      return this.o.textos?.[sel] ?? todavia;
+    }
     return this.o.textos?.[sel] ?? null;
   }
 
@@ -121,7 +141,7 @@ class PortalDePrueba extends AdaptadorPlaywrightBase {
   }
 }
 
-function montar(o: OpcDoble & { reintentos?: number; mapeo?: MapeoPortal } = {}) {
+function montar(o: OpcDoble & { reintentos?: number; mapeo?: MapeoPortal; esperaUuidMs?: number } = {}) {
   const paginas: PaginaDoble[] = [];
   const abrirPagina = vi.fn(async () => {
     const p = new PaginaDoble(o);
@@ -129,7 +149,16 @@ function montar(o: OpcDoble & { reintentos?: number; mapeo?: MapeoPortal } = {})
     return p;
   });
   const adaptador = new PortalDePrueba(
-    { abrirPagina, reintentosEnEnsayo: o.reintentos },
+    {
+      abrirPagina,
+      reintentosEnEnsayo: o.reintentos,
+      // El reloj no avanza en la prueba: lo que se prueba es que PREGUNTA hasta
+      // que el folio aparece, no cuánto duerme. Sin esto, el sondeo del UUID
+      // gasta sus 20 s reales y se lleva por delante el tope de la prueba.
+      dormir: async () => {},
+      intervaloMs: 1,
+      esperaUuidMs: o.esperaUuidMs ?? 10,
+    },
     o.mapeo ?? MAPEO,
   );
   return { adaptador, paginas, abrirPagina, primera: () => paginas[0] };
@@ -225,6 +254,49 @@ describe('modo emitir', () => {
     // Y NO se vuelve a intentar: el segundo intento es el que lo duplica.
     expect(m.abrirPagina).toHaveBeenCalledTimes(1);
     expect(m.primera().clics).toEqual(['#emitir']);
+  });
+
+  it('EL UUID SE SONDEA: un contenedor pre-pintado VACÍO no convierte un éxito en fallo', async () => {
+    // Esto leía el selector UNA vez, justo después del clic. El folio no está
+    // ahí en ese instante —el portal manda a timbrar a un PAC— y, si además el
+    // contenedor viene pre-pintado, `leerTexto` devuelve `''`, que es falsy: una
+    // emisión EXITOSA se reportaba como "PUEDE QUE EL CFDI YA EXISTA", lo que
+    // manda a revisar a mano algo que salió bien e invita a reintentar una
+    // emisión que ya ocurrió.
+    const m = montar({
+      uuidPrepintado: true,
+      uuidVueltas: 3,
+      textos: { '.uuid': 'B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F' },
+    });
+
+    const r = await m.adaptador.facturar(CAMPOS, 'emitir');
+
+    expect(r.ok).toBe(true);
+    expect(r.cfdiUuid).toBe('B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F');
+    expect(m.primera().vecesQueLeyoUuid).toBe(4);
+    // Sondear no es reintentar: el botón se aprieta UNA vez.
+    expect(m.primera().clics).toEqual(['#emitir']);
+  });
+
+  it('distingue "no apareció" de "apareció vacío": se arreglan en sitios distintos', async () => {
+    const ausente = await montar({ textos: {} }).adaptador.facturar(CAMPOS, 'emitir');
+    expect(ausente.error).toMatch(/no apareció/);
+
+    const vacio = await montar({ textos: {}, uuidPrepintado: true }).adaptador.facturar(CAMPOS, 'emitir');
+    expect(vacio.error).toMatch(/siguió VACÍO/);
+
+    expect(ausente.error).not.toBe(vacio.error);
+  });
+
+  it('el sondeo tiene TECHO: no gira para siempre esperando un folio que no llega', async () => {
+    // 6 ms de tope / 1 ms de intervalo = seis vueltas. Sin techo, un portal que
+    // nunca pinta el folio se lleva la invocación entera y con ella el resto del
+    // lote.
+    const m = montar({ textos: {}, uuidPrepintado: true, esperaUuidMs: 6 });
+    const r = await m.adaptador.facturar(CAMPOS, 'emitir');
+
+    expect(r.ok).toBe(false);
+    expect(m.primera().vecesQueLeyoUuid).toBe(6);
   });
 
   it('si el portal rechaza lo capturado, no se aprieta emitir', async () => {
