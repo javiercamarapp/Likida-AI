@@ -28,8 +28,12 @@ const insert = vi.fn();
 const update = vi.fn();
 const select = vi.fn();
 const from = vi.fn();
+const rpc = vi.fn();
 vi.mock('@/lib/supabase/admin', () => ({
-  supabaseAdmin: () => ({ from: (...a: unknown[]) => from(...(a as [])) }),
+  supabaseAdmin: () => ({
+    from: (...a: unknown[]) => from(...(a as [])),
+    rpc: (...a: unknown[]) => rpc(...a),
+  }),
 }));
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -47,12 +51,19 @@ const { registrarCosto, registrarCostoWhatsApp, vincularCostosALiquidacion, getR
   await import('./costos');
 
 beforeEach(() => {
-  for (const f of [insert, update, select, from]) f.mockReset();
+  for (const f of [insert, update, select, from, rpc]) f.mockReset();
   for (const f of Object.values(logger)) f.mockReset();
   insert.mockResolvedValue({ error: null });
   from.mockImplementation(() => ({ insert, update, select }));
+  rpc.mockResolvedValue({ data: RESUMEN_VACIO, error: null });
   vi.unstubAllEnvs();
 });
+
+/** Lo que devuelve `resumen_costo_ia_tenant` para una flota sin ni una llamada. */
+const RESUMEN_VACIO = {
+  totales: { n: 0, viajes: 0, costoUsd: 0, tokensIn: 0, tokensOut: 0 },
+  porFase: [],
+};
 
 describe('registrarCosto — un insert que rebota no puede pasar callado', () => {
   const costo = {
@@ -199,14 +210,15 @@ describe('getResumenCosto — cero, sin datos y no medido son tres cosas distint
   const t = '11111111-1111-1111-1111-111111111111';
 
   it('con filas devuelve las cifras y el promedio por liquidación', async () => {
-    select.mockReturnValue(cadena({
-      data: [
-        { viaje_id: 'v1', fase: 'ocr', tokens_in: 100, tokens_out: 10, costo_usd: '0.01' },
-        { viaje_id: 'v1', fase: 'cuadre', tokens_in: 200, tokens_out: 20, costo_usd: '0.03' },
-        { viaje_id: 'v2', fase: 'cuadre', tokens_in: 200, tokens_out: 20, costo_usd: '0.04' },
-      ],
+    // Lo que antes eran tres filas de `llm_costo` llega ya agregado por la 0064,
+    // SIN redondear: el redondeo a seis decimales sigue siendo de `round6()`.
+    rpc.mockResolvedValue({
+      data: {
+        totales: { n: 3, viajes: 2, costoUsd: 0.08, tokensIn: 500, tokensOut: 50 },
+        porFase: [{ fase: 'cuadre', n: 2, costoUsd: 0.07 }, { fase: 'ocr', n: 1, costoUsd: 0.01 }],
+      },
       error: null,
-    }));
+    });
     const r = await getResumenCosto(t);
     expect(r.estado).toBe('medido');
     if (r.estado !== 'medido') throw new Error('inalcanzable');
@@ -214,13 +226,14 @@ describe('getResumenCosto — cero, sin datos y no medido son tres cosas distint
     expect(r.liquidaciones).toBe(2);
     expect(r.costoPromedioPorLiquidacion).toBe(0.04);
     expect(r.porFase).toEqual({ ocr: 0.01, cuadre: 0.07 });
+    expect(r.registros).toBe(3);
   });
 
   it('la consulta FALLA → `no_medido`, y no hay ninguna cifra que pintar', async () => {
     // ANTES: `const { data } = await ...` descartaba el error, `data` era null y
     // el panel pintaba totalUsd 0, liquidaciones 0, promedio 0. El tipo ahora lo
     // impide: `totalUsd` no existe fuera de `estado: 'medido'`.
-    select.mockReturnValue(cadena({ data: null, error: { message: 'relation "llm_costo" does not exist' } }));
+    rpc.mockResolvedValue({ data: null, error: { message: 'relation "llm_costo" does not exist' } });
     const r = await getResumenCosto(t);
     expect(r.estado).toBe('no_medido');
     expect(r).not.toHaveProperty('totalUsd');
@@ -228,7 +241,7 @@ describe('getResumenCosto — cero, sin datos y no medido son tres cosas distint
   });
 
   it('la consulta funciona y no hay una sola fila → `sin_registros`, no $0.00', async () => {
-    select.mockReturnValue(cadena({ data: [], error: null }));
+    rpc.mockResolvedValue({ data: RESUMEN_VACIO, error: null });
     const r = await getResumenCosto(t);
     expect(r.estado).toBe('sin_registros');
   });
@@ -236,10 +249,15 @@ describe('getResumenCosto — cero, sin datos y no medido son tres cosas distint
   it('hay costo pero ninguna fila trae viaje → el promedio es null, no 0', async () => {
     // Dividir entre cero viajes daría 0 y eso se lee como "cada liquidación sale
     // gratis". No hay a qué atribuirlo: la respuesta honesta es "no se puede".
-    select.mockReturnValue(cadena({
-      data: [{ viaje_id: null, fase: 'router', tokens_in: 10, tokens_out: 1, costo_usd: '0.002' }],
+    // (`count(distinct viaje_id)` en SQL ignora los NULL, igual que el
+    // `new Set(...).filter(Boolean)` que sustituye.)
+    rpc.mockResolvedValue({
+      data: {
+        totales: { n: 1, viajes: 0, costoUsd: 0.002, tokensIn: 10, tokensOut: 1 },
+        porFase: [{ fase: 'router', n: 1, costoUsd: 0.002 }],
+      },
       error: null,
-    }));
+    });
     const r = await getResumenCosto(t);
     if (r.estado !== 'medido') throw new Error('debería haber cifras');
     expect(r.totalUsd).toBe(0.002);
@@ -247,8 +265,55 @@ describe('getResumenCosto — cero, sin datos y no medido son tres cosas distint
   });
 
   it('una excepción de red tampoco se convierte en ceros', async () => {
-    select.mockImplementation(() => { throw new Error('fetch failed'); });
+    rpc.mockImplementation(() => { throw new Error('fetch failed'); });
     expect((await getResumenCosto(t)).estado).toBe('no_medido');
+  });
+
+  // ── EL QUINTO CAMINO (5-ago-2026) ─────────────────────────────────────────
+  //
+  // Esta consulta NO paginaba: `.select(...).eq('tenant_id', …)` a secas.
+  // PostgREST recorta a `max_rows` (1,000) en silencio, así que a partir de la
+  // llamada 1,001 de una flota el total se quedaba corto y se entregaba con
+  // `estado: 'medido'` — una cifra INCOMPLETA con la etiqueta de medida, que es
+  // el modo de fallo que todo este archivo dice venir a evitar.
+  it('790 mil llamadas al modelo dan el total COMPLETO, no las primeras mil', async () => {
+    rpc.mockResolvedValue({
+      data: {
+        totales: { n: 790_000, viajes: 10_950, costoUsd: 7_900.123456, tokensIn: 3_950_000, tokensOut: 790_000 },
+        porFase: [{ fase: 'ocr', n: 790_000, costoUsd: 7_900.123456 }],
+      },
+      error: null,
+    });
+    const r = await getResumenCosto(t);
+    if (r.estado !== 'medido') throw new Error('debería haber cifras');
+    expect(r.registros).toBe(790_000);
+    expect(r.totalUsd).toBe(7_900.123456);
+    expect(r.liquidaciones).toBe(10_950);
+  });
+
+  it('no lee NI UNA fila de `llm_costo`: la agrega en SQL, acotada al tenant', async () => {
+    await getResumenCosto(t);
+    // Ninguna lectura por filas de la tabla.
+    expect(from).not.toHaveBeenCalledWith('llm_costo');
+    // Y el tenant viaja como argumento: sin él, la 0064 no resuelve la firma y
+    // PostgREST responde 404 — el olvido falla ruidoso, no devuelve la base
+    // entera de todas las flotas.
+    expect(rpc).toHaveBeenCalledWith('resumen_costo_ia_tenant', { p_tenant: t, p_desde: null, p_hasta: null });
+  });
+
+  // Una rama sin la 0064 aplicada devuelve algo que no es este objeto. Leerlo
+  // con `?? 0` pintaría "$0.00 de costo de IA" con etiqueta de medido, que es
+  // justo el bug de arriba con otra cara.
+  it.each([
+    ['null', null],
+    ['un objeto vacío', {}],
+    ['totales sin viajes', { totales: { n: 3, costoUsd: 1 }, porFase: [] }],
+    ['sin porFase', { totales: { n: 3, viajes: 1, costoUsd: 1, tokensIn: 0, tokensOut: 0 } }],
+  ])('una respuesta con otra forma (%s) → `no_medido`, no ceros con etiqueta de medidos', async (_caso, data) => {
+    rpc.mockResolvedValue({ data, error: null });
+    const r = await getResumenCosto(t);
+    expect(r.estado).toBe('no_medido');
+    expect(r).not.toHaveProperty('totalUsd');
   });
 });
 

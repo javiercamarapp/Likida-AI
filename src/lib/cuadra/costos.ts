@@ -249,41 +249,97 @@ export type ResumenCosto =
   | { estado: 'sin_registros' }
   | { estado: 'no_medido'; err: string };
 
-/** Resumen de costo del tenant (para el panel: margen real). */
-export async function getResumenCosto(tenantId: string): Promise<ResumenCosto> {
-  let filas: Array<Record<string, unknown>>;
+// ═══════════════════════════════════════════════════════════════════════════
+// EL QUINTO CAMINO, Y EL ÚNICO QUE YA ESTABA MAL EN VEZ DE ESPERAR A CRECER
+//
+// Los cuatro de arriba se cerraron en la auditoría 5. Este se encontró el
+// 5-ago-2026 al mover a SQL la agregación de /admin (mig. 0062), y es peor que
+// los cuatro juntos porque no necesita que pase nada para dar una cifra falsa:
+//
+//     .from('llm_costo').select('viaje_id, fase, …').eq('tenant_id', tenantId)
+//
+// Sin `traerTodo`, sin `range`, sin `count`. PostgREST recorta a `max_rows`
+// (1,000) EN SILENCIO. A partir de la llamada 1,001 de una flota —semanas, no
+// años— `totalUsd` y `costoPromedioPorLiquidacion` se quedaban cortos, y se
+// entregaban con `estado: 'medido'`, que es una AFIRMACIÓN. Toda la unión
+// discriminada de abajo existe para que un cero no medido no se pueda pintar, y
+// esta consulta la burlaba por el otro lado: entregando una cifra INCOMPLETA
+// con la etiqueta de buena.
+//
+// Se arregla agregando en SQL (`resumen_costo_ia_tenant`, mig. 0064), no
+// paginando: traer 790 mil filas al año para sumarlas en JavaScript sigue
+// siendo el patrón equivocado aunque ya no se recorten.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Lo que devuelve `resumen_costo_ia_tenant()` (mig. 0064). Costos SIN
+ *  redondear —los redondea `round6()` aquí abajo, que es quien siempre lo hizo. */
+export interface ResumenCostoIaTenant {
+  totales: { n: number; viajes: number; costoUsd: number; tokensIn: number; tokensOut: number };
+  porFase: Array<{ fase: string; n: number; costoUsd: number }>;
+}
+
+/**
+ * La agregación de `llm_costo` de UNA flota. La comparten `getResumenCosto` (de
+ * aquí) y `getValorAhorro` (analytics.ts), que antes leían la misma tabla por su
+ * cuenta: uno para sumar el costo y el otro para contar por fase.
+ *
+ * Vive en este módulo porque es el que escribe `llm_costo`, y en UN solo sitio
+ * por la misma razón que `pg.ts` da para haber extraído sus dos bordes: una
+ * segunda copia es una segunda oportunidad de escribirla mal.
+ *
+ * Devuelve `null` con el motivo cuando no se pudo leer O cuando la respuesta no
+ * tiene la forma esperada. Ese segundo caso es nuevo y hace falta justo por
+ * haber movido esto a la base: si la 0064 no está aplicada, `data` llega como
+ * otra cosa y cada `?? 0` de abajo pintaría un cero que nadie midió.
+ */
+export async function traerResumenCostoIaTenant(
+  tenantId: string,
+  etiqueta: string,
+): Promise<{ ok: ResumenCostoIaTenant } | { err: string }> {
   try {
     const { data, error } = await acotada(supabaseAdmin()
-      .from('llm_costo')
-      .select('viaje_id, fase, tokens_in, tokens_out, costo_usd')
-      .eq('tenant_id', tenantId), 'getResumenCosto');
-    if (error) return ilegible(tenantId, error.message);
-    filas = (data ?? []) as Array<Record<string, unknown>>;
+      .rpc('resumen_costo_ia_tenant', { p_tenant: tenantId, p_desde: null, p_hasta: null }), etiqueta);
+    if (error) return { err: error.message };
+    const r = data as Partial<ResumenCostoIaTenant> | null;
+    const t = r?.totales;
+    if (
+      !t || typeof t.n !== 'number' || typeof t.viajes !== 'number'
+      || typeof t.costoUsd !== 'number' || typeof t.tokensIn !== 'number'
+      || typeof t.tokensOut !== 'number' || !Array.isArray(r?.porFase)
+    ) {
+      return { err: 'resumen_costo_ia_tenant devolvió otra forma (¿migración 0064 sin aplicar?)' };
+    }
+    return { ok: r as ResumenCostoIaTenant };
   } catch (e) {
-    return ilegible(tenantId, e instanceof Error ? e.message : String(e));
+    return { err: e instanceof Error ? e.message : String(e) };
   }
+}
 
-  if (filas.length === 0) return { estado: 'sin_registros' };
+/** Resumen de costo del tenant (para el panel: margen real). */
+export async function getResumenCosto(tenantId: string): Promise<ResumenCosto> {
+  const res = await traerResumenCostoIaTenant(tenantId, 'getResumenCosto');
+  if ('err' in res) return ilegible(tenantId, res.err);
+  const { totales, porFase: fases } = res.ok;
 
-  const numero = (v: unknown) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
-  const totalUsd = filas.reduce((s, r) => s + numero(r.costo_usd), 0);
-  const viajes = new Set(filas.map((r) => r.viaje_id).filter(Boolean));
+  // `n === 0` es la prueba de que la consulta corrió y no hay NI UNA fila. Antes
+  // era `filas.length === 0`, que sobre una lectura recortada podía ser cierto
+  // por la razón equivocada.
+  if (totales.n === 0) return { estado: 'sin_registros' };
+
   const porFase: Record<string, number> = {};
-  for (const r of filas) porFase[r.fase as string] = round6((porFase[r.fase as string] ?? 0) + numero(r.costo_usd));
+  for (const f of fases) porFase[f.fase] = round6(f.costoUsd);
   return {
     estado: 'medido',
-    totalUsd: round6(totalUsd),
-    liquidaciones: viajes.size,
+    totalUsd: round6(totales.costoUsd),
+    liquidaciones: totales.viajes,
     // Dividir entre cero viajes daba 0, y un promedio de $0 por liquidación se
     // lee como "cada liquidación sale gratis". Si no hay denominador, no hay
-    // promedio.
-    costoPromedioPorLiquidacion: viajes.size ? round6(totalUsd / viajes.size) : null,
-    tokensIn: filas.reduce((s, r) => s + numero(r.tokens_in), 0),
-    tokensOut: filas.reduce((s, r) => s + numero(r.tokens_out), 0),
-    registros: filas.length,
+    // promedio. (`count(distinct viaje_id)` ignora los NULL solo, igual que el
+    // `new Set(...).filter(Boolean)` que sustituye.)
+    costoPromedioPorLiquidacion: totales.viajes ? round6(totales.costoUsd / totales.viajes) : null,
+    tokensIn: totales.tokensIn,
+    tokensOut: totales.tokensOut,
+    registros: totales.n,
     porFase,
   };
 }
