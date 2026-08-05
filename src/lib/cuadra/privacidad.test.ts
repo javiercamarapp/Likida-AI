@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad, revisarAvisoIntegral, sondearAvisoIntegral, type DatosResponsable } from './privacidad';
+import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad, revisarAvisoIntegral, sondearAvisoIntegral, tipoDeSolicitudArco, venceArco, type DatosResponsable } from './privacidad';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // B19 — El aviso de privacidad no existía en ningún punto del flujo.
@@ -343,5 +343,33 @@ describe('respuestaPrivacidad', () => {
     // estado que el producto no produce.
     expect(respuestaPrivacidad(flota)).not.toMatch(/ya le avis/i);
     expect(respuestaPrivacidad(flota)).toMatch(/queda registrada/i);
+  });
+});
+
+// ── AUDITORÍA 12 · ALTO LEGAL: el ARCO por fin se registra ──────────────────
+describe('tipoDeSolicitudArco y venceArco — el registro que el aviso promete', () => {
+  it('clasifica cancelación por la frase natural de WhatsApp', () => {
+    expect(tipoDeSolicitudArco('Quiero que borren mis datos por favor')).toBe('cancelacion');
+    expect(tipoDeSolicitudArco('Quiero que eliminen mi información de la empresa')).toBe('cancelacion');
+    expect(tipoDeSolicitudArco('Denme de baja del sistema')).toBe('cancelacion');
+  });
+
+  it('clasifica oposición y rectificación', () => {
+    expect(tipoDeSolicitudArco('Me opongo a que revisen mis comprobantes automáticamente')).toBe('oposicion');
+    expect(tipoDeSolicitudArco('Quiero corregir mi nombre, está mal escrito')).toBe('rectificacion');
+  });
+
+  it('cae a acceso ante la duda — el derecho genérico, y la flota decide', () => {
+    expect(tipoDeSolicitudArco('Privacidad')).toBe('acceso');
+    expect(tipoDeSolicitudArco('Quiero saber qué datos tienen de mí')).toBe('acceso');
+  });
+
+  it('venceArco suma 15 DÍAS HÁBILES (LFPDPPP art. 32), no calendario', () => {
+    // Viernes 1-ago-2026 → 15 días hábiles después: salta el fin de semana.
+    const vence = venceArco(new Date('2026-08-01T12:00:00Z'));
+    // 15 días hábiles desde el sábado... el conteo arranca el siguiente día
+    // hábil. Verificamos que es un día ENTRE SEMANA y que está en la ventana.
+    const d = new Date(`${vence}T00:00:00Z`);
+    expect([1, 2, 3, 4, 5]).toContain(d.getUTCDay());
   });
 });

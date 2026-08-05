@@ -856,3 +856,38 @@ export async function getAcumuladoCombustible(
 
   return { efectivo: Math.round(efectivo * 100) / 100, totalCombustible: Math.round(totalCombustible * 100) / 100 };
 }
+
+/**
+ * Registra una solicitud ARCO (auditoría 12, ALTO legal). El aviso promete
+ * "queda registrada tu solicitud" y la tabla `solicitud_arco` (0053) existía
+ * sin un solo insert — la flota, que es la responsable con 15 días hábiles
+ * para contestar (LFPDPPP art. 32), no tenía NADA que ver.
+ *
+ * Best-effort con rastro ruidoso: un fallo aquí no puede tumbar la respuesta
+ * al titular, pero el log de error es lo que permite saber a la mañana
+ * siguiente que la flota se quedó sin su constancia.
+ */
+export async function registrarSolicitudArco(opts: {
+  tenantId: string;
+  operadorId: string | null;
+  titularRef: string;
+  tipo: string;
+  canal: string;
+}): Promise<boolean> {
+  const { venceArco } = await import('./privacidad');
+  const { data, error } = await acotada(supabaseAdmin().from('solicitud_arco').insert({
+    tenant_id: opts.tenantId,
+    operador_id: opts.operadorId,
+    titular_ref: opts.titularRef,
+    tipo: opts.tipo,
+    canal: opts.canal,
+    estado: 'recibida',
+    vence_en: venceArco(new Date()),
+  }).select('id').maybeSingle(), 'registrarSolicitudArco');
+  if (error) {
+    logger.error('arco.no_registrada', { tenant: opts.tenantId, err: error.message });
+    return false;
+  }
+  logger.info('arco.registrada', { tenant: opts.tenantId, tipo: opts.tipo, id: (data as { id?: string } | null)?.id });
+  return true;
+}
