@@ -24,6 +24,7 @@ const AHORA = new Date('2026-08-04T20:00:00.000Z'); // 14:00 en CDMX
 function viaje(p: Partial<MarcasViaje> = {}): MarcasViaje {
   return {
     estatus: 'abierto',
+    operadorNombre: 'Luis Ramírez',
     avisadoEn: null,
     aceptadoEn: null,
     escaladoEn: null,
@@ -45,7 +46,17 @@ describe('SIN AVISAR — el estado que hoy no se veía y nunca escala solo', () 
     // "el chofer no se enteró" NO: pudo llamarle el jefe por teléfono.
     const c = confirmacionDeViaje(viaje(), AHORA);
     expect(c.detalle).toBe('la escalación no lo ve');
-    expect(c.detalle).not.toMatch(/chofer/i);
+    expect(c.detalle).not.toMatch(/no se enteró|no contestó/i);
+  });
+
+  it('un viaje abierto SIN CHOFER dice que le falta chofer, no que falta el aviso', () => {
+    // Se vio mirando el render: los dos casos caen en la misma píldora roja y
+    // se arreglan distinto. Mandar al jefe a revisar por qué "no salió el
+    // aviso" de un viaje que nunca tuvo a quién avisarle es mandarlo a buscar
+    // algo que no existe: lo que falta es asignarlo en Despacho.
+    const c = confirmacionDeViaje(viaje({ operadorNombre: null }), AHORA);
+    expect(c.clave).toBe('sin_avisar');
+    expect(c.detalle).toBe('sin chofer · la escalación no lo ve');
   });
 
   it('el mismo NULL en un viaje que ya avanzó NO es alarma: es un dato que falta', () => {
@@ -68,16 +79,23 @@ describe('SIN AVISAR — el estado que hoy no se veía y nunca escala solo', () 
   });
 });
 
-describe('ESPERANDO CONFIRMACIÓN — avisado y sin respuesta', () => {
+describe('POR CONFIRMAR — avisado y sin respuesta', () => {
   it('enseña hace cuánto se le avisó, no solo que se le avisó', () => {
     const c = confirmacionDeViaje(
       viaje({ avisadoEn: '2026-08-04T16:40:00.000Z', avisosEnviados: 1 }),
       AHORA,
     );
     expect(c.clave).toBe('esperando');
-    expect(c.label).toBe('Esperando confirmación');
     expect(c.estado).toBe('warn');
     expect(c.detalle).toBe('avisado hace 3 h 20 min · 1 aviso');
+  });
+
+  it('la etiqueta cabe en la tarjeta, que recorta con `truncate`', () => {
+    // "Esperando confirmación" salía como "Esperando confirma…" en el render.
+    // Un rótulo cortado no es un rótulo: el largo es parte de que sea verdad.
+    const c = confirmacionDeViaje(viaje({ avisadoEn: '2026-08-04T19:00:00.000Z' }), AHORA);
+    expect(c.label).toBe('Por confirmar');
+    expect(c.label.length).toBeLessThanOrEqual(14);
   });
 
   it('cuenta los avisos en plural cuando se insistió', () => {

@@ -22,9 +22,25 @@ export const maxDuration = 300;
 // y lo que se pierde no es la factura: es el procesamiento de las fotos, que es
 // el camino del que depende la liquidación.
 //
-// El objetivo de facturar al vuelo se conserva igual: correr cada 15 minutos
-// deja el ticket facturado el mismo día, mucho antes de los 7-15 días que dan
-// las gasolineras, que es el plazo real que había que ganarle.
+// ── ESTO ES LA RED DE SEGURIDAD, NO EL CAMINO PRINCIPAL ──────────────────
+//
+// El camino principal es al CERRAR el viaje, agrupando por portal. La razón
+// salió de mirar el portal de CAPUFE, no de teoría: pide los datos fiscales UNA
+// vez y luego acepta N códigos en la misma sesión. Ocho casetas de un viaje son
+// ~128 s de navegador en memoria de una en una, contra ~48 s en una sola
+// sesión. Lo caro es ABRIR el navegador, no llenar el campo.
+//
+// Y hay una razón mejor que el costo: al cierre, los montos dudosos ya pasaron
+// por el botón de confirmación del chofer (`acuse_ticket.ts`). Facturar al
+// instante es facturar una lectura de OCR que nadie validó, y el portal lo
+// advierte en rojo en su propia página: una vez emitida no se corrige.
+//
+// Este cron recoge lo que se quedó suelto: viajes que no cerraron, portales que
+// estaban caídos, tickets que llegaron tarde. Cada hora basta — el plazo real
+// son 7-15 días en gasolineras y el mes fiscal en casetas. Correr cada 2
+// minutos sería 720 invocaciones diarias casi todas vacías, y como los tickets
+// llegan de uno en uno, cada uno abriría su propio navegador: el caso caro,
+// repetido setecientas veces.
 //
 // ── EL MODO POR DEFECTO ES ENSAYO, Y NO SE CAMBIA DESDE EL CÓDIGO ────────
 //

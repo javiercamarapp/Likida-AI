@@ -39,10 +39,12 @@
 import { fechaHoraMx } from '@/lib/formato';
 import type { Estado } from '../admin/ui/kit';
 
-/** Las cuatro columnas de la 0058 más el estatus, que es lo que decide si un
- *  viaje sin aviso sigue vivo o ya arrancó por otro lado. */
+/** Las cuatro columnas de la 0058, más el estatus —que decide si un viaje sin
+ *  aviso sigue vivo o ya arrancó por otro lado— y el chofer, que decide qué
+ *  hacer con la alarma (asignar no es lo mismo que reavisar). */
 export interface MarcasViaje {
   estatus: string;
+  operadorNombre: string | null;
   avisadoEn: string | null;
   aceptadoEn: string | null;
   escaladoEn: string | null;
@@ -135,7 +137,12 @@ export function confirmacionDeViaje(v: MarcasViaje, ahora: Date = new Date()): C
         clave: 'sin_avisar',
         label: 'Sin avisar',
         estado: 'bad',
-        detalle: 'la escalación no lo ve',
+        // SE MIRÓ EN EL RENDER: un viaje abierto SIN CHOFER también cae aquí, y
+        // decirle al jefe solo "la escalación no lo ve" lo manda a revisar un
+        // aviso que nunca tuvo a quién salir. Los dos casos son la misma
+        // ceguera y se arreglan distinto: uno se asigna en Despacho, al otro
+        // hay que reavisarle. La píldora es la misma; el detalle, no.
+        detalle: v.operadorNombre ? 'la escalación no lo ve' : 'sin chofer · la escalación no lo ve',
       };
     }
     return {
@@ -157,7 +164,12 @@ export function confirmacionDeViaje(v: MarcasViaje, ahora: Date = new Date()): C
 
   return {
     clave: 'esperando',
-    label: 'Esperando confirmación',
+    // "Por confirmar" y no "Esperando confirmación": SE MIRÓ EN EL RENDER y la
+    // etiqueta larga salía cortada —"Esperando confirma…"— en la tarjeta, que
+    // recorta con `truncate`. Un rótulo cortado no es un rótulo. Tampoco "Sin
+    // contestar", que empieza igual que "Sin avisar" y se confunden de reojo,
+    // que es como se leen cuatro cifras en fila.
+    label: 'Por confirmar',
     estado: 'warn',
     detalle: conAvisos(`avisado ${transcurrido(v.avisadoEn, ahora)}`, v.avisosEnviados),
   };

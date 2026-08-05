@@ -30,6 +30,14 @@ import { areaDeRuta } from '@/lib/auth/visibilidad';
 // página con dos roles, y estas son Server Components con sesión—. Sirve para
 // el caso que se dio cuatro veces: dinero puesto ahí sin acordarse del
 // encargado. Es un despertador, no una demostración.
+//
+// EL HUECO QUE SE TAPÓ EL 4-AGO-2026: miraba SOLO `page.tsx`. Media docena de
+// pantallas ya parten su render en un `vista.tsx` hermano —para poder mirarlo
+// sin sesión— y la tabla que imprime el anticipo puede vivir allá. Mover una
+// columna de pesos de un archivo al otro apagaba el despertador sin cambiar una
+// sola cifra en pantalla. Los dos archivos se leen como UNA superficie: la
+// puerta sigue viviendo en la página (es la que tiene el rol) y las cifras
+// pueden estar en cualquiera de los dos.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const DIR = fileURLToPath(new URL('.', import.meta.url));
@@ -39,8 +47,13 @@ const DINERO = /\bmxn\(|\busd\(|formato="mxn"|formato="usd"/;
 /** La puerta. Basta con que la mencione: el detalle es del autor. */
 const PUERTA = /puedeVerArea\(/;
 
-function rutasDeOperacion(): Array<{ ruta: string; archivo: string }> {
-  const salida: Array<{ ruta: string; archivo: string }> = [];
+/** La página y su `vista.tsx` hermano, concatenados. */
+function superficie(archivos: string[]): string {
+  return archivos.filter((f) => existsSync(f)).map((f) => readFileSync(f, 'utf8')).join('\n');
+}
+
+function rutasDeOperacion(): Array<{ ruta: string; archivos: string[] }> {
+  const salida: Array<{ ruta: string; archivos: string[] }> = [];
   for (const entrada of readdirSync(DIR, { withFileTypes: true })) {
     if (!entrada.isDirectory()) continue;
     // `[id]` es dinámica: no está en el mapa de rutas y se gatea a mano dentro
@@ -49,10 +62,12 @@ function rutasDeOperacion(): Array<{ ruta: string; archivo: string }> {
     const archivo = `${DIR}${entrada.name}/page.tsx`;
     if (!existsSync(archivo)) continue;
     const ruta = `/dashboard/${entrada.name}`;
-    if (areaDeRuta(ruta) === 'operacion') salida.push({ ruta, archivo });
+    if (areaDeRuta(ruta) === 'operacion') {
+      salida.push({ ruta, archivos: [archivo, `${DIR}${entrada.name}/vista.tsx`] });
+    }
   }
   // La raíz también es `operacion`.
-  salida.push({ ruta: '/dashboard', archivo: `${DIR}page.tsx` });
+  salida.push({ ruta: '/dashboard', archivos: [`${DIR}page.tsx`, `${DIR}inicio-operacion.tsx`] });
   return salida;
 }
 
@@ -63,8 +78,8 @@ describe('pantallas de operación y las cifras de dinero', () => {
     expect(PAGINAS.length).toBeGreaterThan(5);
   });
 
-  for (const { ruta, archivo } of PAGINAS) {
-    const fuente = readFileSync(archivo, 'utf8');
+  for (const { ruta, archivos } of PAGINAS) {
+    const fuente = superficie(archivos);
     if (!DINERO.test(fuente)) continue;
 
     it(`${ruta} enseña pesos, así que tiene que gatearlos con puedeVerArea`, () => {
