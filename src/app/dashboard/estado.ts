@@ -37,3 +37,30 @@ export function estadoPanel(s: SeccionesPanel): EstadoPanel {
   if ((s.kpis?.viajesLiquidados ?? 0) === 0 && (s.liquidaciones?.length ?? 0) === 0) return 'vacio';
   return 'datos';
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 10, ALTO — el call site de `dashboard/page.tsx` le pasaba a
+// `s.liquidaciones` el arreglo `porDia` (`getLiquidacionesPorDia`), que
+// SIEMPRE tiene 7 o 30 elementos —uno por día, muchos en cero— así que
+// `.length` nunca es 0 y la rama 'vacio' de arriba era código muerto: el
+// panel pintaba "0% tasa de cuadre" como si fuera una medición.
+//
+// La función de arriba ya estaba bien probada con la forma correcta de dato
+// (`estado.test.ts`); el bug vivía un escalón antes, en QUÉ arreglo se le
+// manda. Esta función fija esa forma: recibe los VIAJES reales de la flota
+// (ya se cargan en la página para `AvanceCierre`, mismo criterio — "no una
+// consulta nueva") y cuenta los que de verdad están `liquidado`, igual que
+// `avance-cierre.tsx` cuenta `cerrados`. Un arreglo con actividad
+// (`abierto`/`en_cuadre`) pero CERO liquidados sigue dando `length === 0`
+// aquí — a diferencia de `porDia`, que nunca puede.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Los viajes reales, filtrados a los que ya están `liquidado` — la forma que
+ *  `estadoPanel` necesita en `liquidaciones` para poder detectar un tenant de
+ *  verdad vacío. `null` se propaga (consulta caída → sección caída). */
+export function liquidacionesDeViajes(
+  viajes: Array<{ estatus: string }> | null,
+): unknown[] | null {
+  if (viajes === null) return null;
+  return viajes.filter((v) => v.estatus === 'liquidado');
+}

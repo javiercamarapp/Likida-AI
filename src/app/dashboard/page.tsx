@@ -8,7 +8,7 @@ import {
 import { saludo, fechaLarga, ahoraMs } from '@/lib/saludo';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { estadoPanel } from './estado';
+import { estadoPanel, liquidacionesDeViajes } from './estado';
 import { BarChartSimple } from '../admin/charts';
 import { GlobalFilter, resolverRango } from '../admin/ui/global-filter';
 import { KpiTile } from '../admin/ui/kit';
@@ -96,10 +96,14 @@ export async function InicioContenido({
   const etiquetaVentana = rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`;
 
   // `liquidaciones` ya no se carga en esta página (se fue a /dashboard/cuadre),
-  // así que el estado se decide con lo que SÍ vive aquí. `estadoPanel` sigue
-  // siendo la misma función probada: se le pasa `porDia` en el lugar de la
-  // lista, que es la sección equivalente de esta pantalla.
-  const estado = estadoPanel({ acreditables: acred, kpis, liquidaciones: porDia, anomalias });
+  // así que el estado se decide con lo que SÍ vive aquí. AUDITORÍA 10, ALTO:
+  // antes se le pasaba `porDia` (getLiquidacionesPorDia) en este lugar —
+  // SIEMPRE tiene 7 o 30 elementos, uno por día, así que `.length` nunca daba
+  // 0 y la rama 'vacio' de `estadoPanel` era inalcanzable ("0% tasa de
+  // cuadre" se pintaba siempre). `liquidacionesDeViajes` filtra los VIAJES
+  // reales (ya cargados abajo para `AvanceCierre`) a los que de verdad están
+  // `liquidado` — un arreglo que sí puede quedar vacío.
+  const estado = estadoPanel({ acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias });
 
   const alertas: Array<{ texto: string; href: string }> = [];
   if (kpis && kpis.porRevisar > 0) {
