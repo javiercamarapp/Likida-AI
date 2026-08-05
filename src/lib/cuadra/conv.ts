@@ -558,7 +558,7 @@ const TTL_INTAKE_MS = 10 * 60_000;
  * Espera a que NO haya OCR de fotos en vuelo para el viaje (contador = 0). Es la
  * barrera que garantiza que el "listo" cuadre sobre TODOS los gastos, no parciales.
  * NUNCA espera indefinido: tope configurable (env CUADRA_INTAKE_ESPERA_MS, default
- * 20s — NO 60s: el presupuesto de la función es maxDuration=60 y por debajo de
+ * 20s — NO 60s: el presupuesto de la función es maxDuration=120 (webhook) y por debajo de
  * esta barrera todavía corren el lock y el agente). Devuelve true si se vació,
  * false si venció el tope (→ el caller avisa al operador y cuadra con lo que
  * alcanzó). El decremento vive en el `finally` del intake, así que un OCR que
