@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { llegoTarde, violaIndice } from '@/lib/cuadra/pg_errores';
 import { armar, type TicketPorFacturar } from './pendientes';
 import { enrutar } from './enrutar';
+import { modoEfectivo } from './modo';
 import {
   facturarConAgente,
   facturarLoteConAgente,
@@ -40,6 +41,19 @@ import {
 // Lo que no cumpla se acumula en la pantalla de "por facturar" para una
 // persona. Es el mismo criterio de todo el repo: la máquina hace lo que puede
 // demostrar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CANDADO DEL MANDATO (auditoría 10, legal + fiscal, hallazgo ALTO).
+//
+// `args.modo` puede pedir 'emitir', pero lo que de verdad llega al agente pasa
+// SIEMPRE por `modoEfectivo()` (`./modo.ts`): sin
+// `FACTURACION_MANDATO_ACEPTADO=si` puesto a mano, un `emitir` se trata como
+// `ensayo` y se grita en el log. Ver `modo.ts` para el porqué completo — en
+// corto: todavía no existe la cláusula que autorice al sistema a presentar el
+// RFC del cliente ante el portal de un tercero en su nombre, y esto evita que
+// `FACTURACION_MODO=emitir` la atropelle por accidente, "una variable de
+// entorno de distancia" de la revisión legal que falta.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Debajo de esto no se factura solo: la lectura no es lo bastante segura. */
@@ -225,7 +239,7 @@ export async function facturarAlVuelo(args: {
     tenantId: args.tenantId,
     comercio: t.comercio!.clave,
     campos: t.campos,
-    modo: args.modo ?? 'ensayo',
+    modo: modoEfectivo(args.modo ?? 'ensayo'),
   });
 
   // Un CAPTCHA, o un emitir que no se pudo confirmar, NO se reintentan: salen de
@@ -407,7 +421,7 @@ export async function facturarLoteAlVuelo(args: {
     tenantId: args.tenantId,
     comercio: args.comercio,
     tickets,
-    modo: args.modo ?? 'ensayo',
+    modo: modoEfectivo(args.modo ?? 'ensayo'),
   });
 
   // ── El reparto del UUID. `cfdi_orden` va 1..N EN EL ORDEN EN QUE ENTRARON al

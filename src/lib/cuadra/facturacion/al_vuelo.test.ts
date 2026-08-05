@@ -178,6 +178,11 @@ beforeEach(() => {
   adaptadorDe.mockReset();
   adaptadorDe.mockReturnValue(ADAPTADOR);
   for (const f of Object.values(logger)) f.mockReset();
+  // El candado del mandato (auditoría 10) se prueba en SU PROPIO describe, más
+  // abajo. En todas las demás pruebas de este archivo se da por aceptado, para
+  // que sigan probando lo que ya probaban: si `modo:'emitir'` llega o no llega
+  // al agente, no si el mandato está firmado.
+  process.env.FACTURACION_MANDATO_ACEPTADO = 'si';
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -352,6 +357,89 @@ describe('facturarAlVuelo · el modo, que es lo que emite o no', () => {
     await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY });
     const [{ campos }] = facturarConAgente.mock.calls[0] as [{ campos: Array<{ clave: string; valor: string | null }> }];
     expect(campos.find((c) => c.clave === 'referencia')?.valor).toBe('286188');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CANDADO DEL MANDATO — auditoría 10, legal + fiscal, hallazgo ALTO.
+//
+// `legal.md` y `fiscal.md` documentan, cada uno desde su rubro, el mismo hueco:
+// no existe una cláusula que autorice al sistema a presentar el RFC del
+// cliente ante el portal de un tercero y apretar "emitir" en su nombre,
+// mientras `/terminos` dice hoy "Likida no timbra facturas". El candado NO
+// redacta esa cláusula —eso le toca a Javier con su abogado—, solo evita que
+// `FACTURACION_MODO=emitir` tenga efecto mientras no exista: hace falta
+// TAMBIÉN `FACTURACION_MANDATO_ACEPTADO=si`, puesta a mano.
+//
+// Estas pruebas NO doblan `modoEfectivo` — es una función pura de `./modo.ts`
+// y se ejercita real, igual que `pideCaptcha` arriba: doblarla probaría el
+// doble, no el candado.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('facturarAlVuelo · el candado del mandato (auditoría 10)', () => {
+  it('SIN el mandato aceptado, `emitir` se trata como `ensayo` — y se grita en el log', async () => {
+    delete process.env.FACTURACION_MANDATO_ACEPTADO;
+
+    // OJO: el doble de `facturarConAgente` (beforeEach) devuelve SIEMPRE un
+    // `cfdiUuid`, sin mirar el `modo` que se le pasó — no distingue ensayo de
+    // emitir. Por eso lo que prueba el candado es EL ARGUMENTO con el que se
+    // llamó al agente, no lo que el agente contestó.
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+
+    const [llamada] = facturarConAgente.mock.calls[0] as [{ modo: string }];
+    expect(llamada.modo).toBe('ensayo');
+    // No es un fallo silencioso: el motivo exacto queda en el log, con la
+    // fuente del hallazgo, para que quien active el modo sin saber de esto se
+    // entere de inmediato de por qué no está emitiendo.
+    expect(logger.error).toHaveBeenCalledWith('autofactura.mandato_no_aceptado', {
+      detalle: 'FACTURACION_MODO=emitir ignorado: falta FACTURACION_MANDATO_ACEPTADO — ver docs/auditoria-10/legal.md',
+    });
+  });
+
+  it('CON `FACTURACION_MANDATO_ACEPTADO=si`, `emitir` sí llega al agente como `emitir`', async () => {
+    process.env.FACTURACION_MANDATO_ACEPTADO = 'si';
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    const [llamada] = facturarConAgente.mock.calls[0] as [{ modo: string }];
+    expect(llamada.modo).toBe('emitir');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('un valor que NO sea exactamente "si" no cuenta como aceptado — "SI", "true", "1"', async () => {
+    for (const valor of ['SI', 'true', '1', 'sí', ' si ']) {
+      facturarConAgente.mockClear();
+      logger.error.mockClear();
+      process.env.FACTURACION_MANDATO_ACEPTADO = valor;
+
+      await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+
+      const [llamada] = facturarConAgente.mock.calls[0] as [{ modo: string }];
+      expect(llamada.modo, `«${valor}» no debería aceptar el mandato`).toBe('ensayo');
+    }
+  });
+
+  it('el modo `ensayo` NUNCA necesita el mandato: sin él, sigue llegando como `ensayo` y sin gritar', async () => {
+    delete process.env.FACTURACION_MANDATO_ACEPTADO;
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY });
+    const [llamada] = facturarConAgente.mock.calls[0] as [{ modo: string }];
+    expect(llamada.modo).toBe('ensayo');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('el candado también cubre el LOTE, no solo el ticket suelto', async () => {
+    delete process.env.FACTURACION_MANDATO_ACEPTADO;
+    lectura = { data: [g()], error: null };
+    facturarLoteConAgente.mockResolvedValueOnce({
+      modo: 'ensayo', ok: true, capturado: {},
+      porGasto: [{ gastoId: 'g-1', incluido: true }],
+    });
+
+    await facturarLoteAlVuelo({
+      tenantId: 't-1', comercio: 'enerser', gastoIds: ['g-1'], modo: 'emitir', hoy: HOY,
+    });
+
+    const [llamada] = facturarLoteConAgente.mock.calls[0] as [{ modo: string }];
+    expect(llamada.modo).toBe('ensayo');
+    expect(logger.error).toHaveBeenCalledWith('autofactura.mandato_no_aceptado', expect.any(Object));
   });
 });
 
