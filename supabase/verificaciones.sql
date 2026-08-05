@@ -3047,7 +3047,8 @@ end $$;
 --
 -- Corrida real esperada:
 --   update-operador=0  update-app_user=0  insert-bitacora=f
---   lee-app_user-ajeno=0  admin-inserta-bitacora=t
+--   lee-app_user-ajeno=1 (su PROPIA fila — session.ts:70 la necesita; la del
+--   admin NO la ve)  admin-inserta-bitacora=t
 do $$
 declare
   v_t uuid; v_o1 uuid; v_o2 uuid; v_v uuid; v_u1 uuid := gen_random_uuid(); v_admin uuid := gen_random_uuid();
@@ -3100,6 +3101,6 @@ begin
   reset role;
 
   delete from tenant where id = v_t;
-  raise exception E'RLS_0079  update-operador=% update-app_user=% insert-bitacora=% lee-app_user-ajeno=% admin-inserta-bitacora=%   (esperado 0/0/f/0/t)',
+  raise exception E'RLS_0079  update-operador=% update-app_user=% insert-bitacora=% lee-app_user-ajeno=% admin-inserta-bitacora=%   (esperado 0/0/f/1/t)',
     n_operador_updated, n_self_updated, bitacora_chofer_ok, n_appuser_visibles, bitacora_admin_ok;
 end $$;
