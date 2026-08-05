@@ -44,7 +44,11 @@ vi.mock('@/lib/logger', () => ({ logger }));
 
 const S = SELECTORES_CAPUFE;
 
-/** Los nueve que revisa el pre-vuelo. */
+/**
+ * Los ocho que revisa el pre-vuelo, más `botonEmitir` — que YA NO es de ese
+ * grupo: con el formulario en blanco ese botón no existe, así que se revisa
+ * aparte, cuando debería estar (`hayBotonDeEmitir`, en `capufe.ts`).
+ */
 const TODOS = [
   S.rfc, S.nombre, S.codigoPostal, S.regimenFiscal, S.usoCfdi, S.correo,
   S.codigo, S.botonValidar, S.botonEmitir,
@@ -819,13 +823,24 @@ describe('el UUID se SONDEA, no se lee una vez', () => {
 
 // ═══════════════════════════════════════════════════════════════════════════
 describe('pre-vuelo de selectores', () => {
-  it('con el botón de emitir movido falla ANTES de escribir, sin emitir para averiguarlo', async () => {
+  it('con el botón de emitir movido, el fallo sale AL LLEGAR A ÉL — después de llenar y agregar, nunca antes de emitir', async () => {
+    // `botonEmitir` salió de esta lista (ver el comentario de `preVuelo` en
+    // capufe.ts): revisarlo con el formulario en blanco abortaba SIEMPRE,
+    // porque ese botón no existe hasta que hay filas en "CÓDIGOS AGREGADOS".
+    // La comprobación se movió a `hayBotonDeEmitir`, que corre cuando el
+    // botón SÍ debería estar — después de llenar el receptor y agregar los
+    // códigos. Lo que esta prueba protege no es que no se escriba nada: es
+    // que NUNCA se apriete emitir sin haber confirmado que el botón está.
     const m = montar({ presentes: TODOS.filter((s) => s !== S.botonEmitir) });
     const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'ensayo');
 
     expect(r.ok).toBe(false);
     expect(r.error).toContain(S.botonEmitir);
-    expect(m.primera().escritos).toEqual([]);
+    // Sí llegó a llenar el receptor y a agregar el código...
+    expect(m.primera().escritos.map((e) => e.sel)).toEqual([S.rfc, S.nombre, S.codigoPostal, S.correo, S.codigo]);
+    // ...pero JAMÁS tocó el botón de emitir.
+    expect(m.primera().clics).not.toContain(S.botonEmitir);
+    expect(m.primera().emitido).toBe(false);
   });
 
   it('los reporta TODOS juntos, no uno por corrida', async () => {

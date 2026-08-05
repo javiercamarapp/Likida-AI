@@ -51,7 +51,21 @@ vi.mock('@/lib/supabase/admin', () => ({
 const facturarAlVuelo = vi.fn(async (a: { gastoId: string }) => ({
   intentado: true, facturado: false, detalle: `ensayo de ${a.gastoId}`,
 }));
-vi.mock('@/lib/cuadra/facturacion/al_vuelo', () => ({ facturarAlVuelo }));
+/**
+ * Los tickets CON portal automatizable van por AQUÍ, no por `facturarAlVuelo`:
+ * es el camino que agrupa por portal dentro de la flota (ver el comentario de
+ * `correrLote` en `route.ts`). El default de este archivo (`fila()`) es un
+ * ticket de CAPUFE, así que hasta las pruebas de un solo ticket pasan por el
+ * lote.
+ */
+const facturarLoteAlVuelo = vi.fn(async (a: { gastoIds: string[] }) => ({
+  porGasto: a.gastoIds.map((gastoId) => ({
+    intentado: true, facturado: false, detalle: `ensayo de ${gastoId}`, gastoId,
+  })),
+  facturados: 0,
+  bloqueados: [] as Array<{ gastoId: string; motivo: string }>,
+}));
+vi.mock('@/lib/cuadra/facturacion/al_vuelo', () => ({ facturarAlVuelo, facturarLoteAlVuelo }));
 
 /** Qué datos fiscales tiene cada flota. */
 let fiscalPorFlota: Record<string, { flota: unknown; falta: string[] }>;
@@ -107,6 +121,7 @@ beforeEach(() => {
   navegadoresAbiertos.length = 0;
   fiscalPorFlota = { 't-1': { flota: FISCAL, falta: [] }, 't-2': { flota: { ...FISCAL, tenantId: 't-2' }, falta: [] } };
   facturarAlVuelo.mockClear();
+  facturarLoteAlVuelo.mockClear();
   getFiscalDeFlota.mockClear();
   conNavegador.mockClear();
   conPortales.mockClear();
@@ -160,7 +175,11 @@ describe('un navegador por flota, no uno por ticket', () => {
 
     expect(conNavegador).toHaveBeenCalledTimes(1);
     expect(conPortales).toHaveBeenCalledTimes(1);
-    expect(facturarAlVuelo).toHaveBeenCalledTimes(3);
+    // Los tres comparten portal, así que van en UN lote, no en tres llamadas
+    // sueltas a `facturarAlVuelo`.
+    expect(facturarAlVuelo).not.toHaveBeenCalled();
+    expect(facturarLoteAlVuelo).toHaveBeenCalledTimes(1);
+    expect((facturarLoteAlVuelo.mock.calls[0][0] as { gastoIds: string[] }).gastoIds).toEqual(['g-1', 'g-2', 'g-3']);
     expect(cuerpo.corrio).toBe(true);
     expect(cuerpo.intentados).toBe(3);
   });
@@ -197,10 +216,13 @@ describe('un navegador por flota, no uno por ticket', () => {
 
     await pedir();
 
-    const orden = facturarAlVuelo.mock.calls.map((c) => (c[0] as { gastoId: string }).gastoId);
-    // El de portal desconocido se despacha primero, sin navegador; los dos de
-    // CAPUFE van seguidos, dentro del lote.
-    expect(orden).toEqual(['sin-portal', 'capufe-1', 'capufe-2']);
+    // El de portal desconocido se despacha primero, sin navegador, por
+    // `facturarAlVuelo` suelto.
+    expect(facturarAlVuelo).toHaveBeenCalledTimes(1);
+    expect((facturarAlVuelo.mock.calls[0][0] as { gastoId: string }).gastoId).toBe('sin-portal');
+    // Los dos de CAPUFE van juntos y en orden, en UN lote.
+    expect(facturarLoteAlVuelo).toHaveBeenCalledTimes(1);
+    expect((facturarLoteAlVuelo.mock.calls[0][0] as { gastoIds: string[] }).gastoIds).toEqual(['capufe-1', 'capufe-2']);
   });
 
   it('sin ticket de portal automatizable NO se abre navegador', async () => {
@@ -293,7 +315,8 @@ describe('el modo', () => {
     const cuerpo = await (await pedir()).json();
 
     expect(cuerpo.modo).toBe('ensayo');
-    expect((facturarAlVuelo.mock.calls[0][0] as unknown as { modo: string }).modo).toBe('ensayo');
+    // El ticket default es de CAPUFE: va por el lote, no por `facturarAlVuelo`.
+    expect((facturarLoteAlVuelo.mock.calls[0][0] as unknown as { modo: string }).modo).toBe('ensayo');
   });
 
   it('solo emite con FACTURACION_MODO=emitir puesto a mano en el ambiente', async () => {
@@ -302,7 +325,7 @@ describe('el modo', () => {
     delete process.env.FACTURACION_MODO;
 
     expect(cuerpo.modo).toBe('emitir');
-    expect((facturarAlVuelo.mock.calls[0][0] as unknown as { modo: string }).modo).toBe('emitir');
+    expect((facturarLoteAlVuelo.mock.calls[0][0] as unknown as { modo: string }).modo).toBe('emitir');
   });
 
   it('cualquier otro valor es ensayo', async () => {
