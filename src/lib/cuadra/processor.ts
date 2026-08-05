@@ -47,7 +47,13 @@ import {
   intakeDelta, esperarIntake, ConsultaFallida, OperadorAmbiguo, type ConvTurn,
 } from '@/lib/cuadra/conv';
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/cuadra/costos';
-import { sendText, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText } from '@/lib/meta/client';
+import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText } from '@/lib/meta/client';
+import {
+  decidirAcuse, mensajeConfirmar, mensajeRefoto, esPeticionDeFoto,
+  mensajeCorregir, mensajeConfirmado, leerBoton, type LecturaTicket,
+} from './acuse_ticket';
+import { estadoDelViaje, responderConsulta } from './consulta_chofer';
+import { resolverCuentaOficina } from './contactos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 
@@ -250,6 +256,36 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
   try {
     const op = await resolveOperador(msg.from);
     if (!op) {
+      // ── ¿ES UNA CUENTA DE OFICINA? ───────────────────────────────────────
+      //
+      // Antes esto era un callejón sin salida: cualquier número que no fuera
+      // chofer recibía "no te tengo registrado como operador" y ahí terminaba.
+      // El costo real no era la frase, era esto: los avisos que Likida MANDA a
+      // la oficina —"tu chofer no aceptó el viaje", "tienes tickets por
+      // vencer"— llegaban a un número que el sistema no reconocía de vuelta. El
+      // jefe podía contestar "cámbialo a Pérez" y nadie estaba escuchando. Un
+      // aviso que no se puede contestar no es una conversación, es una alerta.
+      const cuenta = await resolverCuentaOficina(msg.from).catch((e) => {
+        // Ambigüedad o base caída. No se afirma que no existe: eso es justo la
+        // confusión que `resolveOperador` ya corrigió arriba.
+        logger.error('oficina.no_resuelta', { err: e instanceof Error ? e.message : String(e) });
+        return null;
+      });
+
+      if (cuenta) {
+        const quien = cuenta.nombre ? `${cuenta.nombre}` : 'Qué tal';
+        // Se le dice lo que SÍ puede hacer hoy por aquí y se le manda al panel
+        // para lo demás. Prometerle por WhatsApp algo que todavía no existe
+        // —reasignar un viaje contestando este mensaje— sería peor que no
+        // contestarle: lo haría esperar una acción que nadie va a ejecutar.
+        logger.info('oficina.mensaje', { user: cuenta.userId, rol: cuenta.rol });
+        await sendText(msg.from,
+          `${quien}, te reconozco como ${cuenta.rol === 'contador' ? 'contador' : 'parte del equipo'} de tu flota en Likida 👋\n\n` +
+          `Por aquí te aviso cuando un chofer no confirma su viaje y cuando haya comprobantes por facturar. ` +
+          `Para asignar viajes, reasignar chofer o ver liquidaciones, entra a ${process.env.NEXT_PUBLIC_APP_URL ?? 'tu panel'}.`);
+        return;
+      }
+
       await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Likida. 🚛');
       return;
     }
@@ -778,6 +814,60 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
             ejercicioHoy: ventana?.hoy ? Number(ventana.hoy.slice(0, 4)) : null,
           }, dudosa));
         }
+        // ── ¿SE LE CONTESTA POR ESTA FOTO? ───────────────────────────────────
+        //
+        // Tres peldaños, en `acuse_ticket.ts`. Aquí solo llegan comprobantes que
+        // YA se guardaron: la foto ilegible se atajó mucho antes, sin insertar.
+        //
+        // El SILENCIO es el peldaño bueno, y no por ahorrar mensajes. Un viaje
+        // trae ~22 comprobantes; acusarlos todos hace que el chofer deje de
+        // leerlos al quinto, y entonces el único que importaba —el del monto
+        // dudoso— se pierde entre los que no. Callar en los buenos es lo que
+        // hace que el del malo se lea.
+        try {
+          const extraAcuse = (gasto.ocrExtra ?? {}) as Record<string, unknown>;
+          const lectura: LecturaTicket = {
+            montoMxn: gasto.monto,
+            concepto: etiquetaConcepto(gasto.concepto, extraAcuse),
+            fecha: gasto.fecha ?? null,
+            confianza: gasto.ocrConfianza ?? null,
+            deCfdi: Boolean(gasto.cfdiUuid),
+            esRepeticion: false,
+          };
+          let d = decidirAcuse(lectura);
+
+          // Solo si íbamos a callar vale la pena preguntar si le debíamos una
+          // respuesta: si se le pidió otra foto, se le contesta aunque la
+          // segunda salga perfecta. Callar tras un "mándame otra" se lee como
+          // "volvió a fallar", y manda una tercera.
+          if (d.peldano === 'silencio' && !lectura.deCfdi) {
+            const conv = await loadConversation(op.tenantId, msg.from, viajeId);
+            const ultimo = [...conv.turns].reverse().find((t) => t.role === 'assistant');
+            if (ultimo && esPeticionDeFoto(String(ultimo.content ?? ''))) {
+              lectura.esRepeticion = true;
+              d = decidirAcuse(lectura);
+            }
+          }
+          logger.info('foto.acuse', { viaje: viajeId, peldano: d.peldano, porque: d.porque });
+
+          if (d.peldano === 'confirmar') {
+            const estado = await estadoDelViaje(op.tenantId, viajeId);
+            const m = mensajeConfirmar(gasto.id, lectura, estado);
+            // Si el botón no sale —fuera de la ventana de 24 h, Meta caído— se
+            // degrada a texto en vez de perderse: `sendButtons` devuelve null sin
+            // lanzar, y quedarse sin confirmación es peor que quedarse sin botón.
+            const enviado = await sendButtons(msg.from, m.cuerpo, m.botones);
+            if (!enviado) await say(`${m.cuerpo}\n\nContéstame *sí* o *no*.`);
+          } else if (d.peldano === 'refoto') {
+            await say(mensajeRefoto(d.porque));
+          }
+        } catch (e) {
+          // Best-effort: el gasto YA está guardado. Un acuse que no sale es
+          // molesto; tumbar aquí dispararía el reproceso del webhook, y con él
+          // el de la foto — que sí cuesta dinero.
+          logger.warn('foto.acuse_falló', { err: e instanceof Error ? e.message : String(e) });
+        }
+
         // ACUSE UNA SOLA VEZ POR VIAJE, no "cuando el contador va de 0 a 1".
         //
         // Esa era la condición anterior, y el comentario decía otra cosa: creía
@@ -989,6 +1079,42 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       return;
     }
 
+    // ── BOTÓN APRETADO ───────────────────────────────────────────────────────
+    //
+    // Llega como TEXTO con el id del botón —así lo mapea el webhook— y se atiende
+    // ANTES que nada: es la respuesta a una pregunta concreta que hicimos, no
+    // algo que el agente deba interpretar. Mandarle "ok:<uuid>" al modelo cuesta
+    // una llamada y puede contestar cualquier cosa.
+    const boton = leerBoton(msg.text);
+    if (boton) {
+      const est = viajeId ? await estadoDelViaje(op.tenantId, viajeId) : null;
+      if (boton.accion === 'ok') {
+        logger.info('acuse.confirmado', { viaje: viajeId, gasto: boton.gastoId });
+        await say(mensajeConfirmado(est));
+      } else {
+        // NO se toca el gasto. El chofer dijo que el monto está mal, pero no dijo
+        // cuál es el bueno: corregirlo a un número inventado sería peor que
+        // dejarlo mal leído, y ponerlo en cero le quitaría un gasto que sí hizo.
+        // Se le pide la cifra y la corrección entra por el camino normal del
+        // agente, que ya sabe corregir un comprobante.
+        logger.warn('acuse.rechazado', { viaje: viajeId, gasto: boton.gastoId });
+        await say(mensajeCorregir());
+      }
+      return;
+    }
+
+    // ── "¿CUÁNTO LLEVO?" ─────────────────────────────────────────────────────
+    //
+    // Se contesta con una consulta y una plantilla, SIN modelo. No es por
+    // ahorrar: la cifra sale de la base, y un modelo en medio no puede mejorarla
+    // pero sí puede equivocarla. `null` = no era una consulta, sigue al agente.
+    const respEstado = await responderConsulta(msg.text, op.tenantId, viajeId);
+    if (respEstado) {
+      logger.info('consulta.estado', { viaje: viajeId });
+      await say(respEstado);
+      return;
+    }
+
     // ── COMPROBANTES QUE ESPERABAN VIAJE (mig. 0040) ─────────────────────────
     //
     // Ya hay viaje, así que por fin hay dónde ponerlos. NO se adjuntan solos: un
@@ -1055,7 +1181,15 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // cierre: interceptar un "listo" con una pregunta lo obligaría a
       // escribirlo dos veces, y en una sala eso se ve como que no entendió.
       // Perder la oferta este turno no cuesta nada — se le vuelve a hacer.
-      const pareceCierre = /^\s*(listo|ya|ya est[aá]|termin[ée]|termine|acab[ée]|cierra|cerrar|eso es todo|es todo)\b/i.test(msg.text);
+      // Cubre las conjugaciones que de verdad escribe un chofer: "terminé",
+      // "termine", "termino", "terminó", y lo mismo con "acabar". La lista
+      // anterior pedía la é o la e finales, así que "termino ruta" —de las más
+      // comunes— caía fuera y se le interrumpía el cierre con una pregunta.
+      // La frontera es `(?!\p{L})` con bandera `u`, NO `\b`: en JavaScript `\b`
+      // se calcula con [A-Za-z0-9_], así que una "é" NO cuenta como letra y
+      // "terminé" —la forma correcta y la más escrita— nunca casaba. La lista
+      // vieja pedía además la e final, dejando fuera "termino ruta".
+      const pareceCierre = /^\s*(listo|ya|ya est[aá]|termin[éeoó]|acab[éeoó]|cierra|cerrar|eso es todo|es todo|ya qued[óo])(?!\p{L})/iu.test(msg.text);
       if (!ofrecidos.length && !pareceCierre) {
         const viaje = await getViaje(viajeId, op.tenantId).catch(() => null);
         await marcarHuerfanosOfrecidos(op.tenantId, enEspera.map((h) => h.id));

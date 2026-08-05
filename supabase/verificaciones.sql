@@ -1462,3 +1462,87 @@ begin
   raise exception E'COBRO_TRANSFERENCIA  segundo-cobro-del-mes-rechazado=%  pagada-sin-firma-rechazada=%   (esperado true / true)',
     dup, sin_firma;
 end $$;
+
+-- ── 37. Un viaje no se puede aceptar sin haberse avisado (mig. 0058) ──
+--
+-- `avisado_en` no es un dato informativo: es lo ÚNICO que hace visible un viaje
+-- para la escalación de las 5 h (`viajesSinAceptar` filtra por "avisado_en no es
+-- null"). Un viaje con `aceptado_en` puesto y `avisado_en` vacío significa que
+-- alguien marcó la aceptación a mano, y a partir de ahí el reloj no tiene origen:
+-- ni escala ni se puede auditar cuánto tardó el chofer en contestar.
+--
+-- Se comprueba también que el índice parcial exista. Sin él la escalación hace
+-- un recorrido completo de `viaje` en cada corrida del cron — invisible con
+-- ocho viajes de prueba, caro con el histórico de una flota de 700 unidades.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid; o uuid; v uuid; rechazado boolean := false; hay_indice boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF AVISO') returning id into t;
+  -- `viaje.operador_id` es NOT NULL: un viaje sin chofer no existe en este
+  -- modelo. Se descubrió corriendo este mismo bloque, que fue para lo que se
+  -- escribió.
+  insert into operador (tenant_id, nombre, telefono)
+    values (t, 'ZZZ Verif', '5215559999999') returning id into o;
+  insert into viaje (tenant_id, operador_id, estatus) values (t, o, 'abierto') returning id into v;
+
+  begin
+    update viaje set aceptado_en = now() where id = v;   -- sin avisado_en
+  exception when check_violation then rechazado := true;
+  end;
+
+  select exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and tablename = 'viaje' and indexname = 'viaje_sin_aceptar_idx'
+  ) into hay_indice;
+
+  delete from tenant where id = t;
+
+  raise exception E'CONFIRMACION_VIAJE  aceptar-sin-aviso-rechazado=%  indice-parcial=%   (esperado true / true)',
+    rechazado, hay_indice;
+end $$;
+
+-- ── 38. El teléfono de una cuenta es único GLOBAL, no por flota (mig. 0059) ──
+--
+-- Es la llave con la que se enruta un mensaje entrante: WhatsApp trae solo el
+-- número, y es ese número el que determina de qué flota se está hablando. Si dos
+-- tenants pudieran registrar el mismo teléfono, el agente tendría que adivinar —
+-- y adivinar aquí escribe la operación de una flota en la de otra, en silencio.
+--
+-- Ojo con la asimetría deliberada frente a `operador`, que sí es único POR flota:
+-- ahí el desempate existe (`resolveOperador` se niega ante dos filas y lanza
+-- OperadorAmbiguo). Para las cuentas de oficina se prefirió que la base lo haga
+-- imposible en vez de detectarlo tarde.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t1 uuid; t2 uuid; u1 uuid := gen_random_uuid(); u2 uuid := gen_random_uuid();
+  rechazado boolean := false; dos_nulos boolean := true;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF TEL A') returning id into t1;
+  insert into tenant (nombre) values ('ZZZ VERIF TEL B') returning id into t2;
+
+  insert into app_user (id, tenant_id, email, rol, telefono)
+    values (u1, t1, 'zzz-verif-a@likida.test', 'flota_admin', '5215550000001');
+
+  begin
+    -- mismo número, OTRA flota: tiene que reventar
+    insert into app_user (id, tenant_id, email, rol, telefono)
+      values (u2, t2, 'zzz-verif-b@likida.test', 'flota_admin', '5215550000001');
+  exception when unique_violation then rechazado := true;
+  end;
+
+  -- ...pero el índice es PARCIAL: dos cuentas sin teléfono conviven sin problema,
+  -- que es el caso normal (se entra por correo, el teléfono es opcional).
+  begin
+    insert into app_user (id, tenant_id, email, rol) values (gen_random_uuid(), t1, 'zzz-verif-c@likida.test', 'contador');
+    insert into app_user (id, tenant_id, email, rol) values (gen_random_uuid(), t2, 'zzz-verif-d@likida.test', 'contador');
+  exception when unique_violation then dos_nulos := false;
+  end;
+
+  delete from tenant where id in (t1, t2);
+
+  raise exception E'TELEFONO_CUENTA  duplicado-entre-flotas-rechazado=%  dos-sin-telefono-permitido=%   (esperado true / true)',
+    rechazado, dos_nulos;
+end $$;
