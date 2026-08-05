@@ -553,6 +553,8 @@ export async function getGastoPorConcepto(tenantId: string): Promise<GastoPorCon
 
 export interface OperadorDetalle {
   operadorId: string; nombre: string; telefono: string | null; numeroEmpleado: string | null;
+  /** RFC del trabajador (mig. 0080) — para la rama buena de RLISR 57. */
+  rfc: string | null;
   activo: boolean; viajes: number; anticipoTotal: number; comprobadoTotal: number;
   /** % de anticipo comprobado, o `null` si nunca recibió anticipo (dividir
    *  entre cero daría 0% y se leería como "no comprobó nada"). */
@@ -574,10 +576,10 @@ export async function getOperadoresDetalle(tenantId: string): Promise<OperadorDe
   const [ops, viajes, liqs] = await Promise.all([
     traerTodo<{
       id: unknown; nombre: unknown; telefono: unknown; numero_empleado: unknown; activo: unknown;
-      licencia: unknown; licencia_tipo: unknown; licencia_vence: unknown;
+      licencia: unknown; licencia_tipo: unknown; licencia_vence: unknown; rfc: unknown;
     }>(
       (desde, hasta) => admin.from('operador')
-        .select('id, nombre, telefono, numero_empleado, activo, licencia, licencia_tipo, licencia_vence')
+        .select('id, nombre, telefono, numero_empleado, activo, licencia, licencia_tipo, licencia_vence, rfc')
         .eq('tenant_id', tenantId).order('id').range(desde, hasta),
       'getOperadoresDetalle.operador',
     ),
@@ -616,6 +618,7 @@ export async function getOperadoresDetalle(tenantId: string): Promise<OperadorDe
       nombre: o.nombre as string,
       telefono: (o.telefono as string) || null,
       numeroEmpleado: (o.numero_empleado as string) || null,
+      rfc: (o.rfc as string | null) ?? null,
       activo: Boolean(o.activo),
       viajes: a.viajes,
       anticipoTotal: round2(a.anticipo),

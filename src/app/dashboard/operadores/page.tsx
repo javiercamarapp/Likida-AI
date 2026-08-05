@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import { UserCog, Wallet, CheckCheck, Users, UserPlus } from 'lucide-react';
 import { getOperadoresDetalle, type OperadorDetalle } from '@/lib/cuadra/analytics';
 import { crearOperador, mensajeParaPantalla } from '@/lib/cuadra/administracion';
+import { actualizarRfcOperador } from '@/lib/cuadra/repo';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
@@ -150,6 +151,31 @@ export default async function OperadoresPage({
     return { ok: `${nombre} quedó registrado. Ya puede mandar sus comprobantes por WhatsApp desde ese número.` };
   }
 
+  // AUDITORÍA 13, MEDIO (fiscal): la rama buena de RLISR 57 (viático timbrado
+  // al RFC del operador subordinado → deducción válida) era inalcanzable porque
+  // nadie escribía operador.rfc. Este action captura el RFC del trabajador.
+  async function accionRfc(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await requireSessionTenant('/dashboard/operadores');
+    if (!puedeAdministrar(s.rol)) {
+      return { error: 'Tu rol no puede editar operadores. Pídeselo al dueño de la flota.' };
+    }
+    let t = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
+    }
+    const operadorId = String(fd.get('operadorId') ?? '');
+    const rfc = String(fd.get('rfc') ?? '').trim().toUpperCase();
+    if (!operadorId) return { error: 'Falta el operador.' };
+    try {
+      await actualizarRfcOperador(t, operadorId, rfc || null);
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'guardar el RFC') };
+    }
+    revalidatePath('/dashboard/operadores');
+    return { ok: rfc ? `RFC ${rfc} guardado para RLISR 57.` : 'RFC quitado.' };
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
@@ -214,6 +240,7 @@ export default async function OperadoresPage({
                       {veDinero && <th className="px-5 py-2.5 font-medium text-right">Anticipo</th>}
                       {veDinero && <th className="px-5 py-2.5 font-medium text-right">Comprobado</th>}
                       {veDinero && <th className="px-5 py-2.5 font-medium text-right">% comprobado</th>}
+                      <th className="px-5 py-2.5 font-medium">RFC (RLISR 57)</th>
                       <th className="px-5 py-2.5 font-medium">Estado</th>
                     </tr>
                   </thead>
@@ -229,6 +256,16 @@ export default async function OperadoresPage({
                           )}
                         </td>
                         <td className="px-5 py-3 font-mono text-xs" style={{ color: 'var(--muted)' }}>{o.telefono ?? '—'}</td>
+                        <td className="px-5 py-3">
+                          <FormaConAviso accion={accionRfc} boton="Guardar" columnas="130px auto">
+                            <input type="hidden" name="operadorId" value={o.operadorId} />
+                            <input
+                              name="rfc" defaultValue={o.rfc ?? ''} placeholder="RFC del trabajador"
+                              className="input-mono text-xs" style={{ width: 130 }}
+                              maxLength={13} autoCapitalize="characters"
+                            />
+                          </FormaConAviso>
+                        </td>
                         <td className="px-5 py-3"><Licencia o={o} hoy={hoy} /></td>
                         <td className="px-5 py-3 text-right tabular">{o.viajes}</td>
                         {veDinero && <td className="px-5 py-3 text-right tabular">{o.anticipoTotal > 0 ? mxn(o.anticipoTotal) : '—'}</td>}

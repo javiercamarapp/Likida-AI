@@ -892,3 +892,17 @@ export async function registrarSolicitudArco(opts: {
   logger.info('arco.registrada', { tenant: opts.tenantId, tipo: opts.tipo, id: (data as { id?: string } | null)?.id });
   return true;
 }
+
+/**
+ * Captura el RFC del trabajador (mig. 0080) — el dato que hace alcanzable la
+ * rama buena de RLISR 57 (viático timbrado al RFC del operador subordinado).
+ * AUDITORÍA 13, MEDIO: la columna existía y nadie la escribía.
+ */
+export async function actualizarRfcOperador(tenantId: string, operadorId: string, rfc: string | null): Promise<void> {
+  const { error } = await acotada(supabaseAdmin()
+    .from('operador')
+    .update({ rfc: rfc?.trim() || null })
+    .eq('id', operadorId)
+    .eq('tenant_id', tenantId), 'actualizarRfcOperador');
+  if (error) throw new Error(`actualizarRfcOperador: ${error.message}`);
+}
