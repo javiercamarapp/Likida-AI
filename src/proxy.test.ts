@@ -152,3 +152,40 @@ describe('toda sección con puerta propia está nombrada en el matcher', () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 10: CSP reincidente desde al menos la ronda 8 — nunca se había
+// escrito. Cada directiva sale de recorrer qué carga esta app de verdad, no
+// de una plantilla genérica: ver el comentario junto a `CSP` en `proxy.ts`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('proxy · Content-Security-Policy', () => {
+  beforeEach(() => { usuario = null; });
+
+  it('toda página pública lleva el header, con las directivas que la app necesita', async () => {
+    const res = await pedir('/login');
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).toBeTruthy();
+    expect(csp).toContain("default-src 'self'");
+    // Las fotos de comprobante y el avatar son URLs de Storage que el
+    // navegador pide directo (chofer.ts:424, admin/mi-perfil/page.tsx:52).
+    expect(csp).toContain('https://*.supabase.co');
+    // Los dos `fetch(` de componentes cliente son a rutas propias; Sentry,
+    // WhatsApp y Stripe son server-only — nada más necesita connect-src.
+    expect(csp).toContain("connect-src 'self'");
+    // Cero <iframe> en el repo, y refuerzo de X-Frame-Options por CSP.
+    expect(csp).toContain("frame-src 'none'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("object-src 'none'");
+  });
+
+  it('el redirect a /login (sesión rechazada) también lleva CSP, no solo lo que sí se sirve', async () => {
+    const res = await pedir('/dashboard');
+    expect(res.headers.get('Content-Security-Policy')).toBeTruthy();
+  });
+
+  it('una respuesta CON sesión también lleva CSP', async () => {
+    usuario = { id: 'u-1' };
+    const res = await pedir('/dashboard');
+    expect(res.headers.get('Content-Security-Policy')).toBeTruthy();
+  });
+});

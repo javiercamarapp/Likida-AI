@@ -22,11 +22,60 @@ import { createServerClient } from '@supabase/ssr';
 // silencio en cualquier respuesta autenticada. Y el redirect a /login es
 // OTRO objeto de respuesta aparte de `res`: sin este helper aplicado también
 // ahí, la página de login nunca llevaba cabeceras de seguridad tampoco.
+/**
+ * CSP — reincidente desde al menos la auditoría 8 (nunca se había escrito).
+ * No es una plantilla genérica: cada directiva sale de recorrer qué carga
+ * esta app de verdad (`command grep` de `fetch(`, `<img`, `<script`,
+ * `<iframe>`, `createBrowserClient`, `next/font` — auditoría 10):
+ *
+ * - `script-src 'unsafe-inline'`: el App Router de Next inyecta scripts
+ *   inline para revelar streaming/Suspense (`self.__next_f.push(...)`).
+ *   No hay infraestructura de nonce en este repo (ni un solo `next/script`
+ *   ni un `<script>` propio en `src/app`), así que exigir nonce hoy
+ *   rompería CADA página — se documenta como deuda, no como descuido.
+ * - `style-src 'unsafe-inline'`: **1,178** `style={{...}}` en 125 archivos
+ *   (`command grep -rc "style={{" src --include="*.tsx"`), el mecanismo con
+ *   el que este repo aplica `var(--muted)` y el resto del sistema de
+ *   diseño. Es un atributo `style=""`, no un `<style>` — ni nonce ni hash
+ *   lo cubren (son dinámicos, calculados en cada render), así que sin
+ *   `unsafe-inline` la mitad del panel se pinta sin color.
+ * - `img-src https://*.supabase.co`: los avatares y las fotos de
+ *   comprobante son URLs firmadas/públicas de Storage
+ *   (`chofer.ts:424`, `admin/mi-perfil/page.tsx:52`) — el navegador las
+ *   pide directo, sin pasar por `/api`.
+ * - `connect-src 'self'` y nada más: los dos `fetch(` que existen en
+ *   componentes cliente (`dashboard/rail.tsx`, `demo/page.tsx`) son a rutas
+ *   propias. Sentry vive SOLO en `SENTRY_DSN` (server, sin
+ *   `NEXT_PUBLIC_SENTRY_DSN` ni `instrumentation-client.ts`) — el navegador
+ *   nunca le habla. WhatsApp (Graph API) es server-only. Stripe se navega
+ *   por `redirect()` de un server action (top-level, no XHR) — no hay
+ *   Stripe.js ni Elements embebidos.
+ * - `frame-src 'none'`: cero `<iframe>` en el repo.
+ * - `frame-ancestors 'none'`: mismo candado que `X-Frame-Options: DENY`,
+ *   pero por CSP — cinturón y tirantes, como el resto de este archivo.
+ *
+ * Verificado, no supuesto: `docs/auditoria-10/seguridad.md`.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https://*.supabase.co",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "frame-src 'none'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ');
+
 function withSecurityHeaders(res: NextResponse): NextResponse {
   res.headers.set('X-Content-Type-Options', 'nosniff');
   res.headers.set('X-Frame-Options', 'DENY');
   res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.headers.set('Content-Security-Policy', CSP);
   if (process.env.NODE_ENV === 'production') {
     res.headers.set('Strict-Transport-Security', 'max-age=31536000');
   }
