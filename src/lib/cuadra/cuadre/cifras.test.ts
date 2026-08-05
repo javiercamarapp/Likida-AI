@@ -155,10 +155,15 @@ describe('tieneCifrasDeDinero — auditoría 8, la palabra inocente ya no apaga 
 
 // ── AUDITORÍA 13 · MEDIO: el portón cerraba en "once" — 1-10 pasaba ─────────
 describe('AUDITORÍA 13 — cardinales 1-10 (el cierre parcial de la 12)', () => {
-  it('atrapa "diez", "cinco" y "uno" sueltos — el español natural de WhatsApp', () => {
-    for (const t of ['Te sobran diez del anticipo.', 'Me faltan cinco para completar.', 'Quedó uno a tu favor.']) {
+  it('atrapa "diez" y "cinco" sueltos — el español natural de WhatsApp', () => {
+    // "uno"/"un" se excluyen A PROPÓSITO: "en UN momento" y "una hora" disparan
+    // demasiado (NO_ES_DINERO no los cubre); el 1 nunca es monto de dinero en
+    // este dominio. La frontera útil arranca en 2.
+    for (const t of ['Te sobran diez del anticipo.', 'Me faltan cinco para completar.', 'Quedaron ocho a tu favor.']) {
       expect(tieneCifrasDeDinero(t), t).toBe(true);
     }
+    expect(tieneCifrasDeDinero('Ya te lo mando en un momento.')).toBe(false);
+    expect(tieneCifrasDeDinero('Quedó uno a tu favor.')).toBe(false);
   });
 
   it('sigue sin marcar los sustantivos comunes ("tres comprobantes")', () => {
