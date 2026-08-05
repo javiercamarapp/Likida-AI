@@ -70,7 +70,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 const {
   getCargaOperadores, getViajesSinAsignar, getUnidades, getIncidencias,
-  getTableroOperacion, cambiarEstadoIncidencia, crearViaje, getPods, rechazarPod,
+  getTableroOperacion, cambiarEstadoIncidencia, crearViaje, asignarUnidad, getPods, rechazarPod,
 } = await import('./operacion');
 
 beforeEach(() => { TABLAS = {}; FALLAN = {}; escrituras.length = 0; });
@@ -357,6 +357,56 @@ describe('escrituras', () => {
     // Mutación: sin esta aserción, borrar el candado y dejar pasar el INSERT
     // seguiría verde en la prueba de arriba.
     expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
+  });
+
+  // AUDITORÍA 10, MEDIO — mismo patrón que operadorId, hermano documentado y
+  // sin arreglar en la ronda pasada: `unidadId` se escribía tal cual en el
+  // INSERT/UPDATE de `viaje`, sin comprobar que la unidad fuera de ESTE
+  // tenant. `unidad` no tiene RLS que la exponga a un chofer de otra flota
+  // (por eso es MEDIO, no ALTO), pero un flota_admin que adivine el UUID de
+  // una unidad ajena podía hacer que su PROPIO panel pintara número
+  // económico, placas, marca y modelo de esa unidad vía el join de
+  // /dashboard/despacho.
+  it('crearViaje ACEPTA un unidadId que sí pertenece al tenant', async () => {
+    TABLAS = { unidad: [{ id: 'u-1' }] };
+    await crearViaje('t-1', { folio: 'VJ-12', unidadId: 'u-1' });
+    const w = escrituras.find((e) => e.tabla === 'viaje')!;
+    expect(w.valores).toMatchObject({ tenant_id: 't-1', unidad_id: 'u-1' });
+  });
+
+  it('AUDITORÍA 10: crearViaje RECHAZA un unidadId de OTRA flota, y no inserta el viaje', async () => {
+    TABLAS = { unidad: [] };
+    await expect(crearViaje('t-1', { folio: 'VJ-13', unidadId: 'u-de-otra-flota' })).rejects.toThrow(
+      'crearViaje: la unidad no pertenece a esta flota',
+    );
+    expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
+  });
+
+  it('asignarUnidad ACEPTA una unidad que sí pertenece al tenant', async () => {
+    TABLAS = { unidad: [{ id: 'u-1' }] };
+    await asignarUnidad('t-1', 'v-1', 'u-1');
+    const w = escrituras.find((e) => e.tabla === 'viaje')!;
+    expect(w.valores).toEqual({ unidad_id: 'u-1' });
+    expect(w.filtros).toEqual([['id', 'v-1'], ['tenant_id', 't-1']]);
+  });
+
+  it('AUDITORÍA 10: asignarUnidad RECHAZA una unidad de OTRA flota, y no toca el viaje', async () => {
+    // Mismo id, pero la consulta acotada por tenant_id no la trae — como
+    // reasignarOperador/getOperador en repo.ts.
+    TABLAS = { unidad: [] };
+    await expect(asignarUnidad('t-1', 'v-1', 'u-de-otra-flota')).rejects.toThrow(
+      'asignarUnidad: la unidad no pertenece a esta flota',
+    );
+    // Mutación: sin esta aserción, borrar el candado y dejar pasar el UPDATE
+    // seguiría verde en la prueba de arriba.
+    expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
+  });
+
+  it('asignarUnidad(..., null) desasigna sin comprobar nada — no hay unidad que verificar', async () => {
+    TABLAS = {};
+    await asignarUnidad('t-1', 'v-1', null);
+    const w = escrituras.find((e) => e.tabla === 'viaje')!;
+    expect(w.valores).toEqual({ unidad_id: null });
   });
 
   it('rechazar un POD NO borra el archivo — solo cambia el estado y anota', async () => {
