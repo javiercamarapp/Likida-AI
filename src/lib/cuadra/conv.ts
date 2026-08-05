@@ -630,3 +630,20 @@ export async function releaseMessageClaim(waMessageId: string): Promise<void> {
     logger.warn('wa.release_claim', { err: e instanceof Error ? e.message : String(e) });
   }
 }
+
+/**
+ * Devuelve el tenant de un teléfono SIN el filtro de `activo` — para atender
+ * el medio ARCO de un operador DADO DE BAJA (auditoría 12, MEDIO legal):
+ * `resolveOperador` filtra `activo = true`, así que quien ya no trabaja en la
+ * flota —la población más probable de ejercer cancelación/oposición— no podía
+ * ser resuelto y el canal le decía "no te tengo registrado".
+ */
+export async function buscarTenantPorTelefono(telefono: string): Promise<string | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('operador')
+    .select('tenant_id')
+    .in('telefono', variantesTelefono(telefono))
+    .limit(1), 'buscarTenantPorTelefono');
+  if (error) throw new Error(`buscarTenantPorTelefono: ${error.message}`);
+  return (data?.[0]?.tenant_id as string | undefined) ?? null;
+}
