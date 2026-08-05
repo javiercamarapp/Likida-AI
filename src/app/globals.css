@@ -62,7 +62,7 @@
      la librería compartida). --g1..--g5 es la rampa de gris para gráficas
      — identidad por opacidad/paso, nunca por color, sigue siendo monocromo. */
   --panel: var(--surface);
-  --canvas: #f4f4f5;
+  --canvas: #f9f9fa;
   --canvas2: #fafafa;
   --ink2: #3f3f46;
   /* AUDITORÍA 10, MEDIO — medido sobre los píxeles: #a1a1aa daba 2.56:1
@@ -99,9 +99,9 @@
      resto de la app (auditados AA arriba). Estos también pasan AA sobre
      blanco (--ok 5.02:1, --warn 5.02:1, --bad 6.47:1 — misma fórmula de
      luminancia WCAG de la nota de arriba, no a ojo). */
-  --ok: #15803d;
+  --ok: #137a38;
   --okbg: #e7f5ec;
-  --warn: #a16207;
+  --warn: #9a5c00;
   --warnbg: #fbf3e0;
   --bad: #b91c1c;
   --badbg: #fbeaea;

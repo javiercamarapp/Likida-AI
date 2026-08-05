@@ -1,6 +1,5 @@
 'use client';
 
-import { useInView } from './use-in-view';
 import { usePrefersReducedMotion } from './prefers-reduced-motion';
 import { resolverFormato, type FormatoPreset } from './formato-preset';
 
@@ -26,9 +25,13 @@ const EASE = 'cubic-bezier(.2,.7,.3,1)';
 export function Gauge({
   valor, etiqueta, formato = 'porcentaje',
 }: { valor: number; etiqueta?: string; formato?: FormatoPreset }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const pct = Math.max(0, Math.min(100, valor));
   const fmt = resolverFormato(formato);
 
@@ -52,7 +55,7 @@ export function Gauge({
   const largoAprox = Math.PI * R + 20;
 
   return (
-    <div ref={ref} className="flex flex-col items-center">
+    <div className="flex flex-col items-center">
       <svg viewBox="0 0 200 110" className="w-full" style={{ maxWidth: 220 }}>
         <path d={arco(ANGULO_INI, ANGULO_INI + ANGULO_TOTAL)} fill="none" stroke="var(--g1)" strokeWidth={GROSOR} strokeLinecap="round" />
         <path d={arco(ANGULO_INI, anguloValor)} fill="none" stroke="var(--g5)" strokeWidth={GROSOR} strokeLinecap="round"
@@ -74,14 +77,18 @@ export function Gauge({
 export function HBars({
   datos, formato = 'numero',
 }: { datos: Array<{ etiqueta: string; valor: number }>; formato?: FormatoPreset }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const max = Math.max(...datos.map((d) => d.valor), 1);
   const fmt = resolverFormato(formato);
 
   return (
-    <div ref={ref} className="space-y-2.5">
+    <div className="space-y-2.5">
       {datos.map((d, i) => (
         <div key={d.etiqueta} className="flex items-center gap-3">
           <div className="w-28 shrink-0 text-xs truncate text-right" style={{ color: 'var(--muted)' }}>{d.etiqueta}</div>
@@ -106,9 +113,13 @@ export function HBars({
 export function MultiLine({
   series, categorias,
 }: { series: Array<{ nombre: string; valores: number[] }>; categorias: string[] }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const ANCHO = 640, ALTO = 220, PAD = 24;
   const n = categorias.length;
   const max = Math.max(...series.flatMap((s) => s.valores), 1);
@@ -120,7 +131,7 @@ export function MultiLine({
   }
 
   return (
-    <div ref={ref}>
+    <div>
       <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} className="w-full h-auto">
         {[0, 0.5, 1].map((t) => (
           <line key={t} x1={PAD} x2={ANCHO - PAD} y1={PAD + t * (ALTO - 2 * PAD)} y2={PAD + t * (ALTO - 2 * PAD)} stroke="var(--line)" strokeWidth={1} />
@@ -158,15 +169,19 @@ export function MultiLine({
 export function StackedBars({
   categorias, series,
 }: { categorias: string[]; series: Array<{ nombre: string; valores: number[] }> }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const totales = categorias.map((_, i) => series.reduce((s, ser) => s + ser.valores[i], 0));
   const max = Math.max(...totales, 1);
   const pasos = series.length <= 1 ? [1] : series.map((_, i) => 0.3 + (0.7 * i) / (series.length - 1));
 
   return (
-    <div ref={ref}>
+    <div>
       <div className="flex items-end gap-3" style={{ height: 160 }}>
         {categorias.map((cat, ci) => {
           const alturaTotalPct = (totales[ci] / max) * 100;
@@ -208,13 +223,17 @@ export function StackedBars({
 /** Pasos secuenciales, cada uno % del primero — conversión con % entre
  *  pasos consecutivos. */
 export function Funnel({ pasos }: { pasos: Array<{ etiqueta: string; valor: number }> }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const base = pasos[0]?.valor || 1;
 
   return (
-    <div ref={ref} className="space-y-2.5">
+    <div className="space-y-2.5">
       {pasos.map((p, i) => {
         const pct = Math.max(3, (p.valor / base) * 100);
         const anterior = i > 0 ? pasos[i - 1].valor || 1 : null;
@@ -248,9 +267,13 @@ export function Funnel({ pasos }: { pasos: Array<{ etiqueta: string; valor: numb
 export function Waterfall({
   pasos, formato = 'numero',
 }: { pasos: Array<{ etiqueta: string; delta: number; esTotal?: boolean }>; formato?: FormatoPreset }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const fmt = resolverFormato(formato);
 
   // Acumulado calculado con `reduce` empujando a un arreglo nuevo (no
@@ -267,7 +290,7 @@ export function Waterfall({
   const max = Math.max(...barras.map((b) => b.hasta), 1);
 
   return (
-    <div ref={ref} className="pb-6">
+    <div className="pb-6">
       <div className="flex items-end gap-2" style={{ height: 160 }}>
         {barras.map((b, i) => {
           const topPct = (1 - b.hasta / max) * 100;
@@ -298,14 +321,18 @@ export function Waterfall({
 
 /** Distribución — barras contiguas (bins), sin huecos entre sí. */
 export function Histogram({ buckets }: { buckets: Array<{ rango: string; conteo: number }> }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const max = Math.max(...buckets.map((b) => b.conteo), 1);
   const paso = Math.max(1, Math.ceil(buckets.length / 6));
 
   return (
-    <div ref={ref}>
+    <div>
       <div className="flex items-end gap-px" style={{ height: 160 }}>
         {buckets.map((b, i) => (
           <div key={b.rango} className="flex-1 h-full flex items-end" title={`${b.rango}: ${b.conteo}`}>
@@ -334,14 +361,18 @@ export function Histogram({ buckets }: { buckets: Array<{ rango: string; conteo:
 export function Heatmap({
   filas, columnas, valores, formato = 'numero',
 }: { filas: string[]; columnas: string[]; valores: number[][]; formato?: FormatoPreset }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const max = Math.max(...valores.flat(), 1);
   const fmt = resolverFormato(formato);
 
   return (
-    <div ref={ref} className="overflow-x-auto">
+    <div className="overflow-x-auto">
       <table className="border-collapse">
         <thead>
           <tr>
@@ -379,15 +410,19 @@ export function Heatmap({
 // ── CalendarHeatmap (tipo GitHub) ────────────────────────────────────────
 
 export function CalendarHeatmap({ dias }: { dias: Array<{ fecha: string; valor: number }> }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const max = Math.max(...dias.map((d) => d.valor), 1);
   const semanas: (typeof dias)[] = [];
   for (let i = 0; i < dias.length; i += 7) semanas.push(dias.slice(i, i + 7));
 
   return (
-    <div ref={ref} className="flex gap-1 overflow-x-auto">
+    <div className="flex gap-1 overflow-x-auto">
       {semanas.map((semana, si) => (
         <div key={si} className="flex flex-col gap-1">
           {semana.map((d) => (
@@ -410,14 +445,18 @@ export function CalendarHeatmap({ dias }: { dias: Array<{ fecha: string; valor: 
 export function MarginDivergingBars({
   datos, formato = 'porcentajeSigno',
 }: { datos: Array<{ etiqueta: string; valor: number }>; formato?: FormatoPreset }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const max = Math.max(...datos.map((d) => Math.abs(d.valor)), 1);
   const fmt = resolverFormato(formato);
 
   return (
-    <div ref={ref} className="space-y-2">
+    <div className="space-y-2">
       {datos.map((d, i) => {
         const pct = (Math.abs(d.valor) / max) * 50;
         const positivo = d.valor >= 0;
@@ -450,9 +489,13 @@ export function MarginDivergingBars({
 export function ParetoBars({
   datos, formato = 'numero',
 }: { datos: Array<{ etiqueta: string; valor: number }>; formato?: FormatoPreset }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista || reducido;
+  // AUDITORÍA 12, MEDIO (frontend): `animar = enVista || reducido` servía la
+  // pista vacía en el HTML (enVista=false en el server y antes de cruzar el
+  // viewport) — un 0% leído como medición contra el número real que viaja
+  // debajo. La gráfica nace con su valor real; las transiciones CSS animan
+  // los cambios de valor posteriores.
+  const animar = true;
   const fmt = resolverFormato(formato);
   const ordenado = [...datos].sort((a, b) => b.valor - a.valor);
   const total = ordenado.reduce((s, d) => s + d.valor, 0) || 1;
@@ -468,7 +511,7 @@ export function ParetoBars({
   const largoAprox = 400;
 
   return (
-    <div ref={ref}>
+    <div>
       <div className="relative" style={{ height: 160 }}>
         <div className="absolute inset-0 flex items-end gap-2">
           {conCumulativo.map((d, i) => (
