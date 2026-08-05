@@ -47,20 +47,36 @@ describe('getConciliacionConsolidado', () => {
       { estatus: 'por_conciliar', cfdi_xml_id: 'x1' },
       { estatus: 'por_conciliar', cfdi_xml_id: 'x2' },
     ];
-    expect(await getConciliacionConsolidado('t1')).toEqual({ conciliadas: 2, porConciliar: 2, cfdis: 2 });
+    expect(await getConciliacionConsolidado('t1')).toEqual({ conciliadas: 2, porConciliar: 2, sinMatch: 0, cfdis: 2 });
   });
 
   it('todo conciliado: porConciliar en 0, no ausente', async () => {
     filas = [{ estatus: 'conciliada', cfdi_xml_id: 'x1' }];
-    expect(await getConciliacionConsolidado('t1')).toEqual({ conciliadas: 1, porConciliar: 0, cfdis: 1 });
+    expect(await getConciliacionConsolidado('t1')).toEqual({ conciliadas: 1, porConciliar: 0, sinMatch: 0, cfdis: 1 });
+  });
+
+  // AUDITORÍA 10, la resolución a mano (5-ago-2026): `sin_match` es lo que
+  // deja `resolverLineaAMano` (`intake/consolidado.ts`) cuando un humano YA
+  // revisó la línea y ningún gasto capturado le corresponde. No es lo mismo
+  // que `por_conciliar` —esa SÍ sigue pendiente de que alguien la mire— y
+  // contarla ahí haría que "por revisar a mano" no bajara nunca aunque el
+  // contador sí estuviera vaciando la cola.
+  it('sin_match se cuenta aparte — no infla porConciliar ni se pierde', async () => {
+    filas = [
+      { estatus: 'conciliada', cfdi_xml_id: 'x1' },
+      { estatus: 'por_conciliar', cfdi_xml_id: 'x1' },
+      { estatus: 'sin_match', cfdi_xml_id: 'x1' },
+      { estatus: 'sin_match', cfdi_xml_id: 'x2' },
+    ];
+    expect(await getConciliacionConsolidado('t1')).toEqual({ conciliadas: 1, porConciliar: 1, sinMatch: 2, cfdis: 2 });
   });
 
   it('pagina de verdad: más de 1,000 líneas no se recortan en silencio', async () => {
     filas = Array.from({ length: 1_200 }, (_, i) => ({
-      estatus: i < 1_100 ? 'conciliada' : 'por_conciliar',
+      estatus: i < 1_100 ? 'conciliada' : i < 1_150 ? 'por_conciliar' : 'sin_match',
       cfdi_xml_id: `x${i % 5}`,
     }));
     const r = await getConciliacionConsolidado('t1');
-    expect(r).toEqual({ conciliadas: 1_100, porConciliar: 100, cfdis: 5 });
+    expect(r).toEqual({ conciliadas: 1_100, porConciliar: 50, sinMatch: 50, cfdis: 5 });
   });
 });

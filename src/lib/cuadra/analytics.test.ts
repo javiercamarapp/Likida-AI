@@ -70,7 +70,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const cuadrarDesdeDB = vi.fn();
 vi.mock('./cuadre/desde_db', () => ({ cuadrarDesdeDB: (...a: unknown[]) => cuadrarDesdeDB(...a) }));
 
-const { getKpis, getAcreditables, detectarAnomalias, getLiquidacionDetalle, getValorAhorro, getConciliacionConsolidado, getLineasPorConciliar } =
+const { getKpis, getAcreditables, detectarAnomalias, getLiquidacionDetalle, getValorAhorro, getLineasPorConciliar } =
   await import('./analytics');
 
 const TENANT = 't1';
@@ -462,31 +462,13 @@ describe('getValorAhorro — se agrega en SQL, y un fallo nunca se pinta como ce
 // EL CFDI CONSOLIDADO — la cola de `cfdi_consolidado_linea` (auditoría 10) y
 // su resolución a mano (5-ago-2026). `resolverLineaAMano` (`intake/
 // consolidado.ts`, probada con su propio doble en `consolidado.test.ts`) es
-// quien la cierra; aquí se prueba la LECTURA que arma la pantalla.
+// quien la cierra; `getConciliacionConsolidado` (el resumen agregado, con
+// `sinMatch` aparte de `porConciliar`) tiene su propio archivo dedicado,
+// `analytics_consolidado.test.ts` — ahí el mock SÍ pagina de verdad
+// (`traerTodo` con `range()` real), que es el borde que importa para una
+// consulta que puede pasar de 1,000 filas. Aquí se prueba la LECTURA de la
+// cola en sí, `getLineasPorConciliar`, que arma lo que ve el contador.
 // ═══════════════════════════════════════════════════════════════════════════
-
-describe('getConciliacionConsolidado — "sin_match" no es lo mismo que "por revisar"', () => {
-  it('una línea sin_match (ya la revisó un humano) no cuenta como porConciliar', async () => {
-    respuestas.set('cfdi_consolidado_linea', {
-      data: [
-        { estatus: 'conciliada', cfdi_xml_id: 'x1' },
-        { estatus: 'por_conciliar', cfdi_xml_id: 'x1' },
-        { estatus: 'sin_match', cfdi_xml_id: 'x2' },
-      ],
-      error: null, count: 3,
-    });
-    const r = await getConciliacionConsolidado(TENANT);
-    // Si `sin_match` se contara como pendiente, `porConciliar` saldría 2 —el
-    // número que este panel enseña nunca bajaría aunque el contador sí
-    // estuviera resolviendo la cola.
-    expect(r).toEqual({ conciliadas: 1, porConciliar: 1, sinMatch: 1, cfdis: 2 });
-  });
-
-  it('null cuando el tenant nunca mandó un consolidado — no es "0 pendientes"', async () => {
-    respuestas.set('cfdi_consolidado_linea', { data: [], error: null });
-    expect(await getConciliacionConsolidado(TENANT)).toBeNull();
-  });
-});
 
 describe('getLineasPorConciliar — la cola, con el folio del viaje de cada candidato', () => {
   it('un candidato con gasto vivo trae el folio de SU viaje, no un UUID', async () => {
