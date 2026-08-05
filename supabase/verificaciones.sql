@@ -2853,3 +2853,73 @@ begin
   raise exception E'51  desglose-a-medias-rechazado=%  negativo-rechazado=%  descuadrado-rechazado=%  borde-de-tolerancia-acepta=%  exacto-acepta=%   (esperado t/t/t/t/t)',
     incoherente, negativo, descuadrado, ok_borde_tolerancia, ok_exacto;
 end $$;
+
+-- ── 52. La cola del CFDI consolidado: única por línea, y cerrada a un anónimo (mig. 0076) ──
+--
+-- Dos garantías nuevas de `cfdi_consolidado_linea`, la tabla donde vive el JOIN
+-- de auditoría 10 (diésel por monedero y peaje por TAG, ~54% del gasto real de
+-- una flota, INEGI EAT 2024 — ver `docs/auditoria-10/fiscal.md`).
+--
+--   1. `unique (cfdi_xml_id, indice)`. WhatsApp/Meta SÍ reintenta el webhook, y
+--      un reenvío del mismo XML no puede duplicar una línea: dos filas por el
+--      mismo movimiento inflarían el conteo de "conciliadas" que ve el
+--      contador en el panel, y le mentiría dos veces sobre el mismo peso.
+--      `intake/consolidado.ts` además depende de esto para su idempotencia:
+--      `guardarYConciliarConsolidado` usa `upsert(..., onConflict:
+--      'cfdi_xml_id,indice')`, así que sin el índice el upsert haría un
+--      INSERT liso y duplicaría en silencio.
+--   2. RLS sin policy para `anon` — misma clase de fuga que la 0040
+--      (`comprobante_huerfano`, bloque 23): esta tabla guarda folios de
+--      operación, montos y el RFC de estaciones de servicio REALES (no el del
+--      monedero) de TODAS las flotas.
+--
+-- Corrida REAL contra el proyecto Likida, 5-ago-2026 (0 tenants ZZZ y 0 filas
+-- de sobra después — la excepción final revirtió todo):
+--
+--   52  mismo-indice-rebota=t  anon=0  service_role=1
+--       FALSIFICADO (sin indice): duplicado-entra=t   (esperado t / 0 / 1 / t)
+do $$
+declare
+  t uuid; x uuid;
+  choco_indice boolean := false;
+  sin_indice_entra boolean := false;
+  n_anon int; n_service int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF B52 '||gen_random_uuid()) returning id into t;
+  insert into cfdi_xml (tenant_id, cfdi_uuid, xml, tiene_multiples_conceptos, total_conceptos)
+    values (t, 'UUID-VERIF-0076', '<cfdi/>', true, 2) returning id into x;
+
+  insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, estatus)
+    values (t, x, 1, 'ecc12', 100, 'conciliada');
+
+  -- 1. La MISMA línea (cfdi_xml_id, indice) no entra dos veces.
+  begin
+    insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, estatus)
+      values (t, x, 1, 'ecc12', 999, 'por_conciliar');
+  exception when unique_violation then choco_indice := true;
+  end;
+
+  -- 2. Cerrada a un anónimo.
+  begin
+    set local role anon;
+    select count(*) into n_anon from cfdi_consolidado_linea where tenant_id = t;
+    reset role;
+  exception when insufficient_privilege then
+    reset role;
+    n_anon := -1;
+  end;
+  select count(*) into n_service from cfdi_consolidado_linea where tenant_id = t;
+
+  -- ═══ FALSIFICACIÓN: sin el índice único, el duplicado SÍ entraría ═══
+  alter table cfdi_consolidado_linea drop constraint cfdi_consolidado_linea_cfdi_xml_id_indice_key;
+  begin
+    insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, estatus)
+      values (t, x, 1, 'ecc12', 999, 'por_conciliar');
+    sin_indice_entra := true;
+  exception when others then sin_indice_entra := false;
+  end;
+
+  delete from tenant where id = t;
+  raise exception E'52  mismo-indice-rebota=%  anon=%  service_role=%  FALSIFICADO (sin indice): duplicado-entra=%   (esperado t / 0 / 1 / t)',
+    choco_indice, n_anon, n_service, sin_indice_entra;
+end $$;
