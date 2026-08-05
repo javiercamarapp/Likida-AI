@@ -18,23 +18,40 @@ const escrituras: Array<{ tabla: string; op: string; valores?: unknown; filtros:
  * Constructor encadenable: todo método devuelve el mismo objeto, y `range`
  * (que es donde `traerTodo` cierra la consulta) resuelve con las filas de la
  * tabla. `single()` cierra las escrituras.
+ *
+ * `range` REBANA y `count` solo llega si la consulta lo pidió — igual que
+ * PostgREST. Un mock que devolviera la tabla entera en cada página describe
+ * una base que no existe y hace pasar por bueno el recorte silencioso que
+ * `traerTodo` vino a cerrar.
  */
 function constructor(tabla: string) {
   const filtros: Array<[string, unknown]> = [];
   const registro: { tabla: string; op: string; valores?: unknown; filtros: Array<[string, unknown]> } =
     { tabla, op: 'select', filtros };
+  let pidioConteo = false;
 
   const resultado = () => FALLAN[tabla]
     ? { data: null, error: { message: FALLAN[tabla] } }
     : { data: TABLAS[tabla] ?? [], error: null };
 
   const api: Record<string, unknown> = {
-    select: () => api,
+    select: (_cols?: unknown, opts?: { count?: string }) => {
+      if (opts?.count === 'exact') pidioConteo = true;
+      return api;
+    },
     eq: (c: string, v: unknown) => { filtros.push([c, v]); return api; },
     is: (c: string, v: unknown) => { filtros.push([c, v]); return api; },
     neq: (c: string, v: unknown) => { filtros.push([`!${c}`, v]); return api; },
     order: () => api,
-    range: () => Promise.resolve(resultado()),
+    range: (desde: number, hasta: number) => {
+      if (FALLAN[tabla]) return Promise.resolve(resultado());
+      const todas = TABLAS[tabla] ?? [];
+      return Promise.resolve({
+        data: todas.slice(desde, hasta + 1),
+        error: null,
+        count: pidioConteo ? todas.length : null,
+      });
+    },
     insert: (v: unknown) => { registro.op = 'insert'; registro.valores = v; escrituras.push(registro); return api; },
     update: (v: unknown) => { registro.op = 'update'; registro.valores = v; escrituras.push(registro); return api; },
     single: () => Promise.resolve(

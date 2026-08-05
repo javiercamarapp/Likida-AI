@@ -1600,3 +1600,120 @@ begin
   raise exception E'INDICE_FACTURACION  el-planeador-usa-el-indice=%   plan=%   (esperado true)',
     usa_indice, plan;
 end $$;
+
+-- ── 40. Los índices de paginación se USAN, no solo existen (mig. 0061) ──
+--
+-- `traerTodo()` (src/lib/cuadra/pg.ts) pagina SIEMPRE con `.order('id')`, en 50
+-- llamadas del repo. No existía un solo índice `(tenant_id, id)`: los que había
+-- sirven para filtrar por tenant, no para entregar ordenado por id dentro de él
+-- (`gasto_id_tenant_key` es `(id, tenant_id)`, con las columnas al revés). El
+-- planeador filtraba y luego ORDENABA todas las filas del tenant para devolver
+-- una página de mil — repetido en cada una de las 100 páginas.
+--
+-- Igual que el bloque 39, ESTE BLOQUE NO COMPRUEBA QUE LOS ÍNDICES EXISTAN.
+-- Comprueba que el planeador los ELIJA. Un índice que está y no se usa se ve
+-- idéntico en `pg_indexes` y cuesta lo mismo de mantener en cada insert.
+--
+-- Se piden DOS condiciones por caso, no una: que el plan nombre el índice Y que
+-- no quede ningún `Sort Key`. Solo la primera no basta — el planeador puede
+-- tomar el índice únicamente para filtrar y dejar el sort en pie, que es
+-- exactamente el defecto que la 0061 vino a quitar.
+--
+-- DOS TRAMPAS QUE ESTE BLOQUE ESQUIVA A PROPÓSITO:
+--
+--  1. Volumen. Sobre tabla vacía el recorrido completo es de verdad más barato
+--     y el planeador lo prefiere: la verificación pasaría en verde sin probar
+--     nada. Por eso se cargan ~75 mil filas y se hace ANALYZE antes del EXPLAIN.
+--
+--  2. Tenant único. Si un solo tenant tiene el 100% de las filas, el filtro por
+--     tenant_id no descarta nada y el planeador se conforma con recorrer la PK
+--     filtrando — sin `Sort`, en verde, y sin usar el índice nuevo. Se midió:
+--     con un tenant el plan sale limpio solo. Por eso se siembran DIEZ tenants
+--     y se consulta el primero, que es la forma real de la base multi-tenant.
+--
+-- Falsificado: corriendo este mismo bloque con los 9 índices tirados dentro de
+-- la transacción da 0/9. Con ellos, 9/9. Todo se revierte con el `raise`.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid; o uuid; v uuid; objetivo uuid; i int;
+  r record; chk record;
+  plan text; usados int := 0; total int := 0; fallos text := '';
+begin
+  for i in 1..10 loop
+    insert into tenant (nombre) values ('ZZZ VERIF PAG '||i) returning id into t;
+    if i = 1 then objetivo := t; end if;
+    insert into operador (tenant_id, nombre, telefono)
+      values (t, 'ZZZ Pag '||i, '52155577700'||lpad(i::text,2,'0')) returning id into o;
+
+    insert into viaje (tenant_id, operador_id, estatus, created_at)
+      select t, o, 'liquidado', now() - (g||' minutes')::interval from generate_series(1,800) g;
+
+    -- Un viaje se queda SIN liquidación a propósito: es el que hospeda los
+    -- gastos, porque `trg_gasto_no_tras_liquidar` (mig. 0036) rechaza cualquier
+    -- gasto sobre un viaje ya liquidado.
+    select id into v from viaje where tenant_id = t limit 1;
+    insert into liquidacion (tenant_id, viaje_id)
+      select tenant_id, id from viaje where tenant_id = t and id <> v;
+    insert into pod (tenant_id, viaje_id, estado)
+      select tenant_id, id, 'pendiente' from viaje where tenant_id = t and id <> v;
+
+    insert into gasto (tenant_id, viaje_id, concepto, monto, created_at, ocr_extra)
+      select t, v, 'diesel', 100, now() - (g||' minutes')::interval, '{}'::jsonb
+      from generate_series(1,2000) g;
+    insert into llm_costo (tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd)
+      select t, 'ocr', 'haiku', 100, 50, 0.001 from generate_series(1,2500) g;
+    insert into comprobante_huerfano (tenant_id, operador_id, gasto, motivo)
+      select t, o, '{}'::jsonb, 'sin_viaje' from generate_series(1,300) g;
+    insert into incidencia (tenant_id, tipo, prioridad, estado)
+      select t, 'retraso', 'media', 'abierta' from generate_series(1,300) g;
+  end loop;
+
+  analyze gasto; analyze viaje; analyze liquidacion; analyze llm_costo;
+  analyze pod; analyze incidencia; analyze comprobante_huerfano;
+
+  for chk in
+    select * from (values
+      ('gasto/id',       'gasto_paginacion_idx',
+       format('select id from gasto where tenant_id=%L order by id limit 1000 offset 1000', objetivo)),
+      ('viaje/id',       'viaje_paginacion_idx',
+       format('select id from viaje where tenant_id=%L order by id limit 1000 offset 500', objetivo)),
+      ('liquidacion/id', 'liquidacion_paginacion_idx',
+       format('select id from liquidacion where tenant_id=%L order by id limit 1000 offset 500', objetivo)),
+      ('llm_costo/id',   'llm_costo_paginacion_idx',
+       format('select fase from llm_costo where tenant_id=%L order by id limit 1000 offset 1000', objetivo)),
+      ('huerfano/id',    'comprobante_huerfano_paginacion_idx',
+       format('select resuelto_en from comprobante_huerfano where tenant_id=%L order by id limit 1000 offset 0', objetivo)),
+      ('pod/id',         'pod_paginacion_idx',
+       format('select estado from pod where tenant_id=%L order by id limit 1000 offset 500', objetivo)),
+      ('incidencia/id',  'incidencia_paginacion_idx',
+       format('select estado from incidencia where tenant_id=%L order by id limit 1000 offset 0', objetivo)),
+      -- Las dos bandejas que NO paginan: ordenan por fecha para enseñar 100.
+      ('gasto/created',  'gasto_reciente_idx',
+       format('select id, concepto, monto from gasto where tenant_id=%L order by created_at desc limit 100', objetivo)),
+      ('viaje/created',  'viaje_reciente_idx',
+       format('select id, folio, estatus from viaje where tenant_id=%L order by created_at desc limit 100', objetivo))
+    ) as v(caso, indice, consulta)
+  loop
+    total := total + 1;
+    plan := '';
+    -- EXPLAIN devuelve VARIAS filas: hay que recorrerlas. Un `execute ... into`
+    -- se queda con la primera, que suele ser el `Limit` y no dice qué scan hubo.
+    for r in execute 'explain ' || chk.consulta loop
+      plan := plan || r."QUERY PLAN" || ' | ';
+    end loop;
+
+    -- `position()` y no `like`: el nombre del índice lleva guiones bajos, que en
+    -- LIKE son comodín de un carácter y harían pasar un índice parecido.
+    if position(chk.indice in plan) > 0 and position('Sort Key' in plan) = 0 then
+      usados := usados + 1;
+    else
+      fallos := fallos || E'\n  · ' || chk.caso || ' NO usa ' || chk.indice || ' -> ' || plan;
+    end if;
+  end loop;
+
+  delete from tenant where nombre like 'ZZZ VERIF PAG %';
+
+  raise exception E'INDICES_PAGINACION  el-planeador-los-usa=%/%   %   (esperado 9/9)',
+    usados, total, coalesce(nullif(fallos, ''), '- todos');
+end $$;

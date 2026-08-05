@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { TenantContext } from '@/lib/agents/types';
 import { acotada } from './presupuesto';
+import { violaIndice } from './pg_errores';
 
 export interface ResolvedOperador {
   tenantId: string;
@@ -141,7 +142,16 @@ export async function getOpenViaje(tenantId: string, operadorId: string): Promis
 }
 
 export async function getTenantContext(tenantId: string): Promise<TenantContext> {
-  const { data } = await acotada(supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).maybeSingle(), 'getTenantContext');
+  const { data, error } = await acotada(supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).maybeSingle(), 'getTenantContext');
+  // El `|| 'la flota'` de abajo es un default para una flota SIN nombre
+  // capturado, no una tapadera para una base que no contestó. Sin este chequeo
+  // los dos casos se veían igual, y el segundo sale impreso en el aviso de
+  // privacidad que el operador lee en su primer contacto: "Likida procesa esta
+  // información por cuenta de la flota" en vez del nombre de su empresa. Un
+  // texto legal con el nombre del responsable borrado no es una degradación
+  // cosmética. Misma decisión que sus vecinas `resolveOperador` y
+  // `getOpenViaje`: no se sabe, se dice.
+  if (error) throw new ConsultaFallida(`getTenantContext: ${error.message}`);
   return {
     tenantId,
     nombreFlota: (data?.nombre as string) || 'la flota',
@@ -193,22 +203,66 @@ export async function loadConversation(tenantId: string, telefono: string, viaje
   // operador SÍ leyó se perdía — el agente arrancaba el siguiente mensaje sin
   // memoria de lo que ya se dijo.
   if (error) throw new ConsultaFallida(`loadConversation: ${error.message}`);
-  if (data) {
-    const estado = (data.estado as { turns?: ConvTurn[] }) || {};
-    // El historial pertenece al viaje en el que se dijo. Si la fila viene de otro
-    // viaje —o de ninguno, porque el anterior ya cerró— se empieza limpio.
-    const mismoViaje = viajeId !== null && data.viaje_id === viajeId;
-    if (!mismoViaje && (estado.turns?.length ?? 0) > 0) {
-      logger.info('conv.historial_descartado', { telefono, de: data.viaje_id ?? null, a: viajeId });
-    }
-    return { id: data.id as string, turns: mismoViaje ? (estado.turns ?? []).slice(-MAX_TURNS) : [] };
-  }
-  const { data: created } = await acotada(admin
+  if (data) return desdeFila(data, viajeId, telefono);
+
+  // EL INSERT PIERDE UNA CARRERA QUE EL PRODUCTO PROVOCA A DIARIO.
+  //
+  // El caso normal —un operador mandando 22 fotos seguidas— arranca varias
+  // invocaciones concurrentes de `after()` para el MISMO (tenant, teléfono).
+  // Todas leen arriba, ninguna encuentra fila, todas insertan: una gana y las
+  // demás chocan contra `wa_conversacion_tenant_tel_uidx` (23505). Sin mirar
+  // `error`, `created` quedaba `undefined` y se devolvía `id: ''`, con lo que el
+  // `saveConversation` posterior hacía `.eq('id', '')` —cero filas actualizadas—
+  // y el turno del asistente que el operador SÍ leyó desaparecía. El agente
+  // arrancaba el siguiente mensaje sin memoria de lo que ya se había dicho.
+  //
+  // No es un upsert porque el upsert PISARÍA el `estado` de la fila que ganó:
+  // sobrescribir con `{ turns: [] }` borra justamente el historial que se está
+  // tratando de conservar. Chocar y releer devuelve la fila real, con sus turnos.
+  const { data: creada, error: errInsert } = await acotada(admin
     .from('wa_conversacion')
     .insert({ tenant_id: tenantId, telefono, viaje_id: viajeId, estado: { turns: [] } })
-    .select('id')
+    .select('id, estado, viaje_id')
     .single(), 'loadConversation.insert');
-  return { id: (created?.id as string) ?? '', turns: [] };
+  if (!errInsert && creada) return desdeFila(creada, viajeId, telefono);
+  // Cualquier otro fallo —red, permisos, un choque contra OTRO índice— no es
+  // esta carrera y tragárselo escondería un bug distinto.
+  if (errInsert && !violaIndice(errInsert, 'wa_conversacion_tenant_tel_uidx')) {
+    throw new ConsultaFallida(`loadConversation.insert: ${errInsert.message}`);
+  }
+
+  const { data: ganadora, error: errRelectura } = await acotada(admin
+    .from('wa_conversacion')
+    .select('id, estado, viaje_id')
+    .eq('tenant_id', tenantId)
+    .eq('telefono', telefono)
+    .maybeSingle(), 'loadConversation.relectura');
+  if (errRelectura) throw new ConsultaFallida(`loadConversation.relectura: ${errRelectura.message}`);
+  // Chocó con el índice y aun así no está: la fila no se puede nombrar, y
+  // devolver `id: ''` es exactamente lo que hacía perderse el historial en
+  // silencio. Se lanza para que el llamador sepa que no hay dónde guardar.
+  if (!ganadora) throw new ConsultaFallida('loadConversation: la conversación chocó con el índice único y no apareció al releerla');
+  logger.info('conv.carrera_insert', { telefono, viaje: viajeId });
+  return desdeFila(ganadora, viajeId, telefono);
+}
+
+/**
+ * Una fila de `wa_conversacion` → lo que el agente necesita.
+ *
+ * El historial pertenece al viaje en el que se dijo. Si la fila viene de otro
+ * viaje —o de ninguno, porque el anterior ya cerró— se empieza limpio.
+ */
+function desdeFila(
+  fila: { id: unknown; estado: unknown; viaje_id: unknown },
+  viajeId: string | null,
+  telefono: string,
+): { id: string; turns: ConvTurn[] } {
+  const estado = (fila.estado as { turns?: ConvTurn[] }) || {};
+  const mismoViaje = viajeId !== null && fila.viaje_id === viajeId;
+  if (!mismoViaje && (estado.turns?.length ?? 0) > 0) {
+    logger.info('conv.historial_descartado', { telefono, de: (fila.viaje_id as string | null) ?? null, a: viajeId });
+  }
+  return { id: fila.id as string, turns: mismoViaje ? (estado.turns ?? []).slice(-MAX_TURNS) : [] };
 }
 
 /**

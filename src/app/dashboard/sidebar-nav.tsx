@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { LayoutGrid, ChevronDown } from 'lucide-react';
-import { type Item, INICIO, NEGOCIO, OPERACION, DOCUMENTOS_DINERO, GESTION } from './rutas';
+import { type Item, INICIO, NEGOCIO, OPERACION, FISCAL, DOCUMENTOS_DINERO, GESTION } from './rutas';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] transition-colors';
@@ -103,6 +103,9 @@ export default function SidebarNav({ rol }: { rol: string }) {
         </div>
       )}
       <Seccion titulo="Inicio" items={visibles(INICIO)} defaultAbierto sufijo={sufijo} />
+      {/* Abierta de entrada: para el contador es TODO su panel, y una sección
+          plegada de entrada le esconde su propio trabajo detrás de un clic. */}
+      <Seccion titulo="Fiscal" items={visibles(FISCAL)} defaultAbierto sufijo={sufijo} />
       <Seccion titulo="Negocio" items={visibles(NEGOCIO)} sufijo={sufijo} />
       <Seccion titulo="Operación" items={visibles(OPERACION)} sufijo={sufijo} />
       <Seccion titulo="Documentos & Dinero" items={visibles(DOCUMENTOS_DINERO)} sufijo={sufijo} />

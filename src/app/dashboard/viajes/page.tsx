@@ -1,5 +1,5 @@
 import { Truck, MapPin, Wallet, Clock } from 'lucide-react';
-import { getViajes, type ViajeRow } from '@/lib/cuadra/analytics';
+import { getViajes, contarViajes, getViajesSinLiquidar, type ViajeRow } from '@/lib/cuadra/analytics';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { KpiTile, EstadoVacio } from '../../admin/ui/kit';
@@ -41,12 +41,25 @@ export default async function ViajesPage({
   const veDinero = puedeVerArea(rol, 'dinero');
   const viajes = await safe<ViajeRow[]>(() => getViajes(tenantId));
 
+  // EL TOTAL SE CUENTA, NO SE DEDUCE DE LA LISTA. `getViajes` trae 100, y el
+  // KPI enseñaba `viajes.length` como si fuera el total: con los 8 viajes de
+  // prueba coincidían, pero a 30 viajes diarios el panel diría "100" para
+  // siempre a partir del cuarto día. Un rótulo que dice "registrados" tiene que
+  // contar los registrados.
+  const [totalViajes, abiertosReales] = await Promise.all([
+    safe<number | null>(() => contarViajes(tenantId)),
+    safe<Array<{ id: string; anticipo: number }>>(() => getViajesSinLiquidar(tenantId)),
+  ]);
+  const totalAbiertos = abiertosReales ? abiertosReales.length : null;
+
   // "Sin liquidar" son los DOS estatus previos al cierre (`abierto` y
   // `en_cuadre`), no solo `abierto`: contar uno solo dejaría fuera justo los
   // viajes que están a media liquidación, que son los que el dueño persigue.
+  // La suma sale de TODOS los viajes sin liquidar, no de la ventana de 100.
+  // Si la consulta falla se cae a la ventana, que subestima — pero `safe` ya
+  // dejó el rastro y una cifra corta se nota; una cifra inventada, no.
   const sinLiquidar = viajes?.filter((v) => v.estatus !== 'liquidado') ?? [];
-  const abiertos = sinLiquidar.length;
-  const anticipoAbierto = sinLiquidar.reduce((s, v) => s + v.anticipo, 0);
+  const anticipoAbierto = (abiertosReales ?? sinLiquidar).reduce((s, v) => s + v.anticipo, 0);
   const conPendientes = viajes?.filter((v) => v.intakePendientes > 0).length ?? 0;
 
   // UN SOLO RELOJ PARA TODA LA TABLA. Llamar `new Date()` dentro de cada fila
@@ -75,9 +88,11 @@ export default async function ViajesPage({
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
                 <KpiTile icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Viajes registrados" valor={viajes.length} formato="entero" />
+                  etiqueta="Viajes registrados" valor={totalViajes ?? 0} formato="entero"
+                  vacio={totalViajes === null ? 'No se pudo contar' : undefined} />
                 <KpiTile icono={<MapPin width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Abiertos (sin liquidar)" valor={abiertos} formato="entero" />
+                  etiqueta="Abiertos (sin liquidar)" valor={totalAbiertos ?? 0} formato="entero"
+                  vacio={totalAbiertos === null ? 'No se pudo contar' : undefined} />
                 {veDinero && (
                   <KpiTile icono={<Wallet width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                     etiqueta="Anticipo en viajes abiertos" valor={anticipoAbierto} formato="mxn" />

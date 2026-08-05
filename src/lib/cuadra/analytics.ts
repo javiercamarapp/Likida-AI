@@ -9,6 +9,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
 import { filasImprimibles } from './liquidacion/omitidos';
 import { round2 } from '@/lib/formato';
+import { logger } from '@/lib/logger';
 
 // Los dos bordes de PostgREST (error por valor, y el recorte silencioso a
 // 1,000 filas) viven en `pg.ts` desde que `operacion.ts` los necesitó también.
@@ -334,6 +335,68 @@ export interface ViajeRow {
  *  de unidad ni de POD (no existen en el esquema), así que la tabla enseña lo
  *  que sí hay — inventar columnas vacías haría ver el producto más completo y
  *  la pantalla más inútil. */
+/**
+ * Cuántos viajes tiene la flota EN TOTAL.
+ *
+ * Existe porque `getViajes` trae 100 y el KPI enseñaba `viajes.length` como si
+ * fuera el total. Con 8 viajes de prueba coincidían y nadie lo notaba; a 30
+ * viajes diarios, el panel diría "100" para siempre a partir del cuarto día.
+ * Es el rótulo que miente, que es la regla que define este producto.
+ *
+ * `head: true` no trae ni una fila: solo el conteo, en un viaje a la base.
+ */
+export async function contarViajes(
+  tenantId: string,
+  /** Acota a estos estatus. Sin esto, cuenta todos. */
+  estatus?: string[],
+): Promise<number | null> {
+  let q = supabaseAdmin()
+    .from('viaje')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId);
+  // El índice `idx_viaje_tenant` es (tenant_id, estatus), así que este filtro
+  // sale del mismo índice que ya sirve al conteo total.
+  if (estatus?.length) q = q.in('estatus', estatus);
+  const { count, error } = await q;
+
+  // `null` ≠ 0, y la diferencia importa: un cero se lee como "esta flota no ha
+  // hecho viajes" y sería una afirmación falsa. Quien llame enseña "—" y dice
+  // que no se pudo contar.
+  if (error) {
+    logger.warn('contarViajes', { tenantId, err: error.message });
+    return null;
+  }
+  return count ?? null;
+}
+
+/**
+ * Los viajes SIN LIQUIDAR, todos, sin ventana.
+ *
+ * `getViajes` trae los 100 más recientes, y de ahí se sacaban el conteo de
+ * abiertos y —peor— la SUMA DEL ANTICIPO ABIERTO. A 30 viajes diarios, cien
+ * viajes son tres días y medio: un viaje que lleve cinco abiertos cae fuera de
+ * la ventana y su anticipo desaparece de una cifra de dinero, sin que nada lo
+ * indique. Ese es el recorte silencioso que `traerTodo` existe para impedir.
+ *
+ * No hay riesgo de traer demasiado: lo abierto está acotado por la operación
+ * —una flota tiene decenas de viajes vivos, no miles— y hay un índice único
+ * que impide dos abiertos por operador (mig. 0029). Lo que crece sin techo es
+ * el histórico liquidado, y eso no entra aquí.
+ */
+export async function getViajesSinLiquidar(tenantId: string): Promise<Array<{ id: string; anticipo: number }>> {
+  const filas = await traerTodo<{ id: unknown; anticipo: unknown }>(
+    (desde, hasta) => supabaseAdmin()
+      .from('viaje')
+      .select('id, anticipo')
+      .eq('tenant_id', tenantId)
+      .in('estatus', ['abierto', 'en_cuadre'])
+      .order('id')
+      .range(desde, hasta),
+    'getViajesSinLiquidar',
+  );
+  return filas.map((v) => ({ id: v.id as string, anticipo: Number(v.anticipo ?? 0) }));
+}
+
 export async function getViajes(tenantId: string, limite = 100): Promise<ViajeRow[]> {
   const res = await supabaseAdmin()
     .from('viaje')

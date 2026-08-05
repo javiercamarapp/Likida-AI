@@ -206,6 +206,75 @@ describe('reabrirViaje', () => {
     from.mockImplementation(() => ({ select: () => cadena({ data: null, error: null }) }));
     await expect(reabrirViaje('t-1', 'VJ-DE-OTRA', true)).rejects.toThrow(/No existe el viaje/);
   });
+
+  // ── El `error` que faltaba comprobar era el peor del archivo ──────────────
+  //
+  // Sin mirarlo, un fallo de red dejaba `liq` en `null` y a partir de ahí todo
+  // se leía al revés: el `if (liq)` se saltaba el borrado, el viaje SÍ pasaba a
+  // `abierto`, y se devolvía `pdfPerdido: null` —que en pantalla significa "no
+  // perdiste nada"— cuando lo que pasó es que no se pudo mirar. Queda un viaje
+  // abierto con su liquidación viva: la 0036 no deja entrar ni un gasto y con
+  // `liquidacion_viaje_uidx` (0005) el siguiente cierre choca.
+  it('si NO SE PUDO LEER la liquidación, no abre el viaje ni promete que no había PDF', async () => {
+    const tocadas: string[] = [];
+    from.mockImplementation((tabla: string) => {
+      if (tabla === 'viaje') {
+        return {
+          select: () => cadena({ data: { id: 'v-1', estatus: 'liquidado' }, error: null }),
+          update: () => { tocadas.push('viaje.update'); return cadena({ error: null }); },
+        };
+      }
+      if (tabla === 'liquidacion') {
+        return {
+          select: () => cadena({ data: null, error: { message: '57014 statement timeout' } }),
+          delete: () => { tocadas.push('liquidacion.delete'); return cadena({ error: null }); },
+        };
+      }
+      return { update: () => cadena({ error: null }), insert: () => Promise.resolve({ error: null }) };
+    });
+
+    await expect(reabrirViaje('t-1', 'VJ-2026-0848', true)).rejects.toThrow(/57014/);
+    // Lo importante NO es que lance: es que el viaje siga liquidado y coherente.
+    expect(tocadas).toEqual([]);
+  });
+
+  it('TODA escritura del reabrir lleva el tenant en el where, no solo el id del viaje', async () => {
+    // Hoy `viajeId` sale de una consulta ya acotada, así que no hay fuga. Pero
+    // un `.eq('id', viajeId)` a secas se lee como seguro sin serlo, y el día que
+    // ese id venga de la entrada del usuario, borra la liquidación de otra flota.
+    const filtros: Record<string, Array<[string, unknown]>> = {};
+    const cadenaConFiltros = (clave: string, resultado: unknown) => {
+      const nodo: Record<string, unknown> = {};
+      filtros[clave] = [];
+      nodo.select = () => nodo;
+      nodo.eq = (c: string, v: unknown) => { filtros[clave].push([c, v]); return nodo; };
+      nodo.maybeSingle = () => Promise.resolve(resultado);
+      nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(resultado).then(r);
+      return nodo;
+    };
+    from.mockImplementation((tabla: string) => {
+      if (tabla === 'viaje') {
+        return {
+          select: () => cadenaConFiltros('viaje.select', { data: { id: 'v-1', estatus: 'liquidado' }, error: null }),
+          update: () => cadenaConFiltros('viaje.update', { error: null }),
+        };
+      }
+      if (tabla === 'liquidacion') {
+        return {
+          select: () => cadenaConFiltros('liq.select', { data: { id: 'l-1', pdf_url: 'x.pdf' }, error: null }),
+          delete: () => cadenaConFiltros('liq.delete', { error: null }),
+        };
+      }
+      if (tabla === 'wa_conversacion') return { update: () => cadenaConFiltros('conv.update', { error: null }) };
+      return { insert: () => Promise.resolve({ error: null }) };
+    });
+
+    await reabrirViaje('t-1', 'VJ-2026-0848', true);
+
+    for (const clave of ['viaje.select', 'liq.select', 'liq.delete', 'viaje.update', 'conv.update']) {
+      expect(filtros[clave], `${clave} sin tenant_id`).toContainEqual(['tenant_id', 't-1']);
+    }
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
