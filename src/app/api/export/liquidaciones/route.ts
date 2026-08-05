@@ -4,6 +4,7 @@ import { toCsv, toLiquidacionRows } from '@/lib/cuadra/export';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { puedeExportar } from '@/lib/auth/permisos';
+import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -32,6 +33,21 @@ export async function GET(req: Request) {
   // `puedeExportar` ya excluía a `operador`; la ruta nunca se lo preguntó. Es
   // el patrón que este repo tiene documentado como el fallo más común del
   // código escrito por agentes: se acota el tenant y se olvida el rol.
+
+  // LA PUERTA DE UN EXPORT ES LA DEL DATO, NO LA DEL VERBO.
+  //
+  // `puedeExportar` incluye al ENCARGADO, pero la matriz de la 0044 le da solo
+  // el área `operacion` y la base lo excluye de `ve_finanzas()`. Este archivo
+  // es DINERO: folio, operador, anticipo, comprobado y diferencia por viaje.
+  //
+  // La contradicción vivía dentro de una sola pantalla: `/dashboard/analitica`
+  // le escondía la gráfica con "tu rol no ve cifras de dinero" y tres pulgadas
+  // más abajo le pintaba el botón que se las daba enteras en CSV.
+  if (!puedeVerArea(t.rol, 'dinero')) {
+    logger.warn('export.area_sin_permiso', { rol: t.rol });
+    return new NextResponse('Tu rol no ve las cifras de dinero de la flota.', { status: 403 });
+  }
+
   if (!puedeExportar(t.rol)) {
     logger.warn('export.rol_sin_permiso', { rol: t.rol });
     return new NextResponse('Tu rol no puede descargar este documento.', { status: 403 });
