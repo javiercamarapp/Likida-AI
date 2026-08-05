@@ -98,6 +98,20 @@ describe('tieneCifrasDeDinero — las evasiones que se colaban', () => {
       expect(tieneCifrasDeDinero(t), t).toBe(true);
   });
 
+  // AUDITORÍA 12, MEDIO: cardinales SUELTOS (sin "pesos"/"mil" pegado) —
+  // "ochocientos", "trece", "quinientos" — el español natural de WhatsApp.
+  // Antes pasaban intactos: una cifra que nadie calculó llegaba al teléfono
+  // de quien liquida.
+  it('atrapa cardinales sueltos — el español natural de WhatsApp', () => {
+    for (const t of [
+      'Te sobran ochocientos del anticipo.',
+      'Me faltan trece para completar.',
+      'Quedaron quinientos a tu favor.',
+      'Te quedan mil por comprobar.',
+      'El viaje cerró con veinticuatro de diferencia.',
+    ]) expect(tieneCifrasDeDinero(t), t).toBe(true);
+  });
+
   it('sigue sin marcar lo que NO es dinero', () => {
     // Un falso positivo aquí sustituiría un mensaje conversacional por el
     // resumen del cuadre, y eso se ve mal en la demo.
