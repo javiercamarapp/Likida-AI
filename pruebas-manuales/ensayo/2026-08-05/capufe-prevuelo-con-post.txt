@@ -1,0 +1,166 @@
+══════════════════════════════════════════════════════════════════════════════
+PRE-VUELO CAPUFE — SOLO LECTURA
+══════════════════════════════════════════════════════════════════════════════
+URL      https://facturacioncapufe.com.mx/Capufe/facturacionrapida
+Fecha    2026-08-05T04:27:32.959Z
+Abrió    sí, en 1803 ms
+Título   Caminos y Puentes Federales
+URL real https://facturacioncapufe.com.mx/Capufe/facturacionrapida
+
+── 1. ¿HAY CAPTCHA QUE BLOQUEE? ────────────────────────────────────────────
+      ausente  iframe[src*="recaptcha/api2/anchor"]
+      ausente  iframe[src*="recaptcha/api2/bframe"]
+      ausente  iframe[title*="recaptcha" i]
+      ausente  .g-recaptcha
+      ausente  .h-captcha
+      ausente  img[src*="captcha" i]
+   scripts de captcha: https://www.gstatic.com/recaptcha/releases/w_Yb7dGGXaKesJ7BMiqFJqBG/recaptcha__es_419.js, https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit
+   badge v3 (.grecaptcha-badge): 0
+   campos ocultos con pinta de token: ninguno
+   iframes: ninguno
+   ⇒ ✅ Ningún captcha bloqueante en pantalla. Si carga v3 invisible, el adaptador NO aborta por eso (a propósito).
+
+── 2. LOS SELECTORES DE `SELECTORES_CAPUFE`, UNO POR UNO ────────────────────
+   ✅ RFC
+        #rfc
+        casan: 1   →  <input name="receptor.rfc" id="rfc" placeholder="RFC">
+   ✅ Nombre o razón social
+        #nombre
+        casan: 1   →  <input name="receptor.nombre" id="nombre" placeholder="Nombre o Razón Social">
+   ✅ Código postal
+        #domicilioFiscalReceptor
+        casan: 1   →  <input name="receptor.domicilioFiscalReceptor" id="domicilioFiscalReceptor" maxlength="5" placeholder="Domicilio Fiscal (Código Postal)">
+   ✅ Régimen fiscal (select)
+        select[name="receptor.regimenFiscalReceptor"]
+        casan: 1   →  <select name="receptor.regimenFiscalReceptor">
+   ✅ Uso del CFDI (select)
+        select[name="receptor.usoCfdi"]
+        casan: 1   →  <select name="receptor.usoCfdi">
+   ✅ Correo
+        #correo
+        casan: 1   →  <input name="receptor.correo" id="correo" placeholder="Correo electrónico">
+   ✅ Código del ticket
+        #codigo
+        casan: 1   →  <input name="ticket.codigo" id="codigo" placeholder="Código de 18 caracteres">
+   ✅ Checkbox de partidos políticos (NUNCA se marca)
+        #cb1
+        casan: 1   →  <input type="checkbox" id="cb1">
+        (Se comprueba para saber que sigue siendo ESE checkbox, no para usarlo. `clicSeguro()` lo prohíbe por nombre.)
+   ⚠️  Buscador del régimen (xpath hacia atrás)
+        xpath=//select[@name="receptor.regimenFiscalReceptor"]/preceding-sibling::input[1]
+        casan: 0
+        (Es el camino de respaldo si la página no ofrece `selectOption`. Falta = no hay buscador delante del select.)
+   ⚠️  Buscador del uso de CFDI (xpath hacia atrás)
+        xpath=//select[@name="receptor.usoCfdi"]/preceding-sibling::input[1]
+        casan: 0
+   ✅ Botón "Validar Código"
+        button:has-text("Validar Código")
+        casan: 1   →  <button type="submit"> "Validar Código"
+        (APUESTA: se eligió por texto.)
+   ❌ Botón de emitir
+        button:has-text("Facturar")
+        casan: 0
+        (APUESTA: se eligió por texto ("Facturar").)
+   ✅ Tabla CÓDIGOS AGREGADOS
+        table:has-text("Plaza de cobro")
+        casan: 1   →  <table> "CódigoPlaza de cobroFechaCosto"
+        (Puede no existir hasta que se valida el primer código. Si existe, abajo va el ORDEN REAL de sus columnas.)
+   ·   Cuadro de error
+        .alert-danger, .ui-messages-error, .invalid-feedback
+        casan: 0
+        (Con el formulario en blanco no hay error que enseñar. Ausente aquí NO prueba nada.)
+   ·   Contenedor del UUID
+        .uuid
+        casan: 0
+        (Solo aparece DESPUÉS de emitir. No se puede verificar sin emitir un CFDI real.)
+
+── 2.5 LOS CATÁLOGOS DE LOS DOS <select> ───────────────────────────────────
+   Régimen fiscal: 0 opciones con valor
+      ⚠️  siguió VACÍO — el AJAX que lo puebla no llegó (¿bloqueado por el candado de POST?)
+   Uso del CFDI: 0 opciones con valor
+      ⚠️  siguió VACÍO — el AJAX que lo puebla no llegó (¿bloqueado por el candado de POST?)
+
+   ¿apareció algún captcha ya con la página armada?
+
+── 3. LO QUE HAY DE VERDAD EN LA PÁGINA ─────────────────────────────────────
+   inputs: 8 · selects: 2 · tablas: 1 · botones: 3
+   ¿aparece "CÓDIGOS AGREGADOS"? sí
+
+   BOTONES (el texto REAL, que es lo que casa `:has-text`):
+     · "Aviso de Privacidad"  <button>
+     · "Validar Código"  <button type=submit>
+         class="p-button p-component p-button-rounded p-button-success p-button-text-i"
+     · "Activar cámara escanear QR"  <button type=submit>
+         class="p-button p-component p-button-rounded p-button-warning p-button-text-i"
+
+   TABLAS (y el ORDEN REAL de sus columnas):
+     · <table class=""> filas en tbody: 0
+       columnas: 1=(vacía) | 2=Código | 3=Plaza de cobro | 4=Fecha | 5=Costo
+       contexto: CódigoPlaza de cobroFechaCosto
+
+   SELECTS (y qué tienen delante — el patrón del buscador):
+     · name="receptor.regimenFiscalReceptor" id="" opciones=1 primera=""
+       hermano previo: (ninguno)
+     · name="receptor.usoCfdi" id="" opciones=1 primera=""
+       hermano previo: (ninguno)
+
+   CANDIDATOS A CUADRO DE ERROR:
+     (ninguno visible con el formulario en blanco)
+
+   CANDIDATOS A CONTENEDOR DE UUID/FOLIO:
+     (ninguno — se pinta al emitir, no antes)
+
+── 3.5 EL BOTÓN DE EMITIR, BUSCADO EN LOS .js DEL PORTAL ───────────────────
+   2 archivo(s) de JS del portal, 2.5 MB
+   con "Facturar": ""Facturar conceptos"", ""Facturar"", ""Facturar sus c\xf3digos""
+   con "Emitir"/"Timbrar"/"Generar factura": ""Timbrar Xml'"
+   endpoints /sinregistro/: "sinregistro/autenticar", "sinregistro/autenticar_invitado", "sinregistro/ticket", "sinregistro/receptor", "sinregistro/usocfdi", "sinregistro/documentos", "sinregistro/ine", "sinregistro/regimen"
+   endpoints del backend: (nada)
+   endpoints de catálogos: "regimen/usocfdi_rfc", "regimen/buscar_regimen_fiscal_uso_cfdi"
+
+── 4. RED ──────────────────────────────────────────────────────────────────
+   peticiones NO-GET abortadas: 0
+   peticiones fallidas (no por nosotros): 1
+     · POST https://www.facturacionquadrum.com.mx/Notificaciones/notificacion/consultarNotificacionQuadrumApps.json — net::ERR_FAILED
+
+── 5. VEREDICTO ────────────────────────────────────────────────────────────
+   ❌ 1 selector(es) que el adaptador da por seguros NO existen:
+      · Botón de emitir → `button:has-text("Facturar")`
+      Se corrigen sin tocar lógica: `OpcionesCapufe.selectores` los sobrescribe uno por uno.
+   ⚠️  2 de respaldo no están (no es fatal, pero se pierde ese camino):
+      · Buscador del régimen (xpath hacia atrás) → `xpath=//select[@name="receptor.regimenFiscalReceptor"]/preceding-sibling::input[1]`
+      · Buscador del uso de CFDI (xpath hacia atrás) → `xpath=//select[@name="receptor.usoCfdi"]/preceding-sibling::input[1]`
+   · El cuadro de error y el UUID NO se pueden verificar aquí: el primero necesita un
+     error del portal y el segundo un CFDI emitido. Quedan pendientes a propósito.
+
+── TEXTO DE LA PÁGINA (recorte) ────────────────────────────────────────────
+Facturar sus códigos
+Recuperar una factura, por código alfanúmerico
+Aviso de Privacidad
+"Una vez emitida la factura no se podrá remitir a un RFC diferente ni corregir datos"
+Capturar datos fiscales
+* RFC:
+* Nombre o Razón Social:
+* Domicilio Fiscal Receptor (Código postal):
+* Regimen Fiscal:
+* Uso del CFDI:
+* Correo:
+Complemento para la facturación de partidos políticos
+Capturar códigos
+* Concepto a facturar (Ticket):
+Validar Código
+Activar cámara escanear QR
+CÓDIGOS AGREGADOS
+	
+Código	
+Plaza de cobro	
+Fecha	Costo
+Redes sociales
+ Facebook
+Contacto
+Calle Montecito 38, Piso 25 22, Napoles DF, CP 03810
+Envíanos un email
+contacto@quadrum.com.mx
+soportecapufe@quadrum.mx
+
+captura: pruebas-manuales/ensayo/2026-08-05/portal-1785904074089-i2cput.jpg
