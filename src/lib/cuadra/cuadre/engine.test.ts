@@ -800,6 +800,43 @@ describe('cuadrarViaje — soporte de la alimentación (LISR 28-V) y RFC del vi�
     expect(r.diferencias.some((d) => d.tipo === 'alimentacion_sin_soporte')).toBe(false);
   });
 
+  // AUDITORÍA 10, MEDIO REINCIDENTE — un hospedaje de $1 SIN TIMBRAR bastaba
+  // para apagar la advertencia sobre una comida de $700 sin soporte real. El
+  // propio motor ya clasificaba ese hospedaje en `por_confirmar` (ver
+  // `cubetaDe`) y aun así lo usaba como amparo válido.
+  it('H1: un hospedaje de monto TRIVIAL y SIN CFDI no ampara nada — la advertencia sigue', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h1e', anticipo: 701, politica: [], estimulos: EST,
+      gastos: [
+        g({ concepto: 'alimentacion', monto: 700, fecha: '2026-05-01', formaPago: '04' }),
+        g({ concepto: 'hospedaje', monto: 1, fecha: '2026-05-01', formaPago: '04' }),
+      ],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'alimentacion_sin_soporte')).toBe(true);
+  });
+
+  it('H1: un hospedaje TRIVIAL pero YA TIMBRADO sí ampara (es un CFDI real, aunque chico)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h1f', anticipo: 701, politica: [], estimulos: EST,
+      gastos: [
+        g({ concepto: 'alimentacion', monto: 700, fecha: '2026-05-01', formaPago: '04' }),
+        g({ concepto: 'hospedaje', monto: 1, fecha: '2026-05-01', formaPago: '04', cfdiUuid: 'u' }),
+      ],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'alimentacion_sin_soporte')).toBe(false);
+  });
+
+  it('H1: un hospedaje de monto normal SIN TIMBRAR sigue amparando (sigue siendo un comprobante real en tránsito)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'h1g', anticipo: 1100, politica: [], estimulos: EST,
+      gastos: [
+        g({ concepto: 'alimentacion', monto: 400, fecha: '2026-05-01', formaPago: '04' }),
+        g({ concepto: 'hospedaje', monto: 500, fecha: '2026-05-01', formaPago: '04' }),
+      ],
+    });
+    expect(r.diferencias.some((d) => d.tipo === 'alimentacion_sin_soporte')).toBe(false);
+  });
+
   it('H1: se marca para revisión, NO se declara no deducible', () => {
     // No vemos toda la contabilidad de la flota: el comprobante de hospedaje puede
     // existir fuera de esta liquidación. Declararlo no deducible sería el mismo

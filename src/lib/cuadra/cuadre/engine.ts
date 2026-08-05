@@ -620,9 +620,18 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // El matiz cambia según de dónde salga la fecha: sin verificar, la ventana
       // del comercio puede ser MENOR; verificada, la ventana es la del comercio
       // y el ejercicio sigue siendo el plazo de la ley.
+      //
+      // AUDITORÍA 10, MEDIO REINCIDENTE (fiscal) — el matiz legal ("no es la
+      // ley, puedes exigir dentro del ejercicio") solo salía en la rama
+      // VERIFICADA, y `plazoVerificado: false` es el default de 33 de 37
+      // comercios del catálogo: la rama minoritaria era la única que decía la
+      // verdad completa. El dato de que el plazo real es el ejercicio no
+      // depende de que YA se haya verificado el plazo de ESE comercio — es
+      // información fiscal que aplica igual en los dos casos, así que ahora
+      // se dice en los dos.
       const cierreComercio = comercio?.plazoVerificado
         ? ` (plazo del portal de ${comercio.nombre}, no de la ley: legalmente puedes exigir la factura dentro del ejercicio)`
-        : ', y la ventana del comercio puede ser menor';
+        : ' (la ventana del comercio no está verificada y puede ser menor; de cualquier forma, legalmente puedes exigir la factura dentro del ejercicio)';
       // SI LA FECHA ESTÁ EN DUDA, EL PLAZO TAMBIÉN. Las dos observaciones salen
       // del MISMO dato, y una de ellas manda a la oficina a hacer algo.
       //
@@ -641,7 +650,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         : c.vencido
         ? `se pasó el plazo de facturación. El comercio ya no suele facturarlo en su portal, pero legalmente puedes exigirlo dentro del ejercicio (Conciliación de Factura del SAT)`
         : c.urgente
-          ? `quedan ${c.diasRestantes} día(s) para timbrarlo${comercio?.plazoVerificado ? `${cierreComercio}` : ' — y la ventana del comercio puede ser menor, así que hazlo antes'}`
+          ? `quedan ${c.diasRestantes} día(s) para timbrarlo, hazlo antes${cierreComercio}`
           : `puedes timbrarlo hasta el ${c.fechaLimite} (${c.diasRestantes} días)${cierreComercio}`;
       // Con comercio reconocido el aviso deja de ser genérico: dice a qué portal
       // ir y qué datos hay que teclear, que es la diferencia entre un recordatorio
@@ -678,7 +687,24 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // el 28-jul-2026 sobre tickets reales: tres guías de Paquetexpress bastaban
     // para que esta advertencia desapareciera sobre una comida de $1,050. El
     // motor daba por amparado lo que la ley no ampara, y callando.
-    const haySoporte = vivos.some((g) => g.concepto === 'hospedaje' || g.concepto === 'transporte');
+    // AUDITORÍA 10, MEDIO REINCIDENTE (fiscal) — `haySoporte` miraba solo el
+    // concepto, nunca si ese hospedaje/transporte era un gasto real. Un
+    // hospedaje de $1 SIN TIMBRAR —que el propio motor ya clasifica en `por
+    // confirmar`, ver `cubetaDe` arriba— bastaba para apagar la advertencia
+    // sobre una comida de $700 sin soporte de verdad.
+    //
+    // No basta con exigir CFDI a secas: un hospedaje de $1,000 sin timbrar
+    // TODAVÍA es un comprobante real en camino a facturarse (la prueba "con
+    // hospedaje en el viaje, la alimentación queda soportada" lo fija así a
+    // propósito, y exigir CFDI ahí le quitaría el amparo a la mayoría de los
+    // hospedajes reales, que llegan sin timbrar). Lo que NO es real es un
+    // monto TRIVIAL sin CFDI: ahí no hay comprobante fiscal ni nada que se
+    // pueda llamar de verdad documentación comprobatoria — es un placeholder o
+    // un ticket ilegible, y las dos señales (monto trivial Y sin CFDI) tienen
+    // que darse juntas para descalificarlo.
+    const MONTO_TRIVIAL_MXN = 50; // muy por debajo de cualquier hospedaje/transporte real de los datos vistos
+    const esAmparoReal = (g: Gasto) => g.monto > MONTO_TRIVIAL_MXN || Boolean(g.cfdiUuid);
+    const haySoporte = vivos.some((g) => (g.concepto === 'hospedaje' || g.concepto === 'transporte') && esAmparoReal(g));
     const comidas = haySoporte ? [] : vivos.filter((g) => g.concepto === 'alimentacion');
     if (comidas.length) {
       // UNA sola observación, no una por comida.
