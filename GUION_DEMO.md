@@ -69,8 +69,10 @@ captura?"* — te da el tamaño y te da el nombre de quien va a usar esto.
 > liquidación ya no la puedo alterar sin que se note, pero tampoco tiro tu
 > ticket"*.
 >
-> **Lo que sigue sin existir es reabrir un viaje ya liquidado.** No se puede ni
-> desde WhatsApp ni desde el panel; hoy se hace por SQL. Y `update viaje set
+> **Reabrir un viaje ya liquidado SÍ se puede desde el panel: el botón está en
+el detalle de la liquidación, con confirmación explícita y permiso por rol.
+Hasta el 4-ago-2026 este guion decía que se hacía por SQL — seguirlo en la
+sala habría significado abrir un editor de base de datos enfrente del cliente. Y `update viaje set
 > estatus='abierto'` NO basta: el trigger mira si existe la liquidación, no el
 > estatus, así que hay que borrar esa fila (se regenera sola al próximo `listo`).
 > Aprendido a golpes ese mismo día — cuatro "ya lo reabrí" que no reabrían nada.

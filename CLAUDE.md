@@ -9,7 +9,8 @@ entrega la liquidación en PDF.
 - `/admin` — la consola de Javier (superadmin). Costo de IA, flotas, agentes.
   Cruza TODOS los tenants a propósito (`lib/admin/negocio.ts` es la única
   función con ese permiso).
-- `/dashboard` — el panel del CLIENTE (flota_admin y su equipo). 20 páginas,
+- `/dashboard` — el panel del CLIENTE (flota_admin, contador, encargado). ~31
+  páginas,
   todas filtradas al tenant. Reusa los componentes de `/admin` (`ui/kit`,
   `ui/graficas`, `charts`) — no hay una segunda librería de UI.
 
@@ -44,15 +45,19 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
 - `viaje.estatus` solo admite `abierto | en_cuadre | liquidado` (constraint
   `viaje_estatus_dominio`). `app_user.rol`: superadmin, flota_admin, contador,
   operador, encargado.
-- No existen: tabla de clientes, de vehículos, de facturas emitidas, GPS, ni
-  kilómetros por viaje. Por eso no hay margen, OTIF, km/l ni Carta Porte.
+- `cliente`, `unidad`, `tarifa`, `factura_emitida`, `pago_recibido`, `posicion` y
+  `geocerca` SÍ EXISTEN (migs. 0047-0050), y `viaje` tiene `km_recorridos` e
+  `ingreso_flete`. Lo que pasa es que están VACÍAS: nadie las escribe todavía.
+  Esa distinción importa — hasta el 4-ago-2026 esta línea decía "no existen", y
+  eso le prohibía a cada agente nuevo construir sobre tablas ya aplicadas.
+  Antes de usar cualquiera, mira si tiene filas; si no, la pantalla dice qué falta.
 - `requireSessionTenant(destino)` arma su redirect a /login con un string fijo,
   así que **pierde el query string** — por eso existe `dashboard/sufijo.ts`.
 
 ## Cómo se verifica
 
 1. `npx tsc --noEmit -p .` y `npx eslint src/` — limpios.
-2. `npx vitest run` — 1,616 pruebas.
+2. `npx vitest run` — ~2,880 pruebas (la cifra crece; no la cites de memoria).
 3. **Mirar el render.** Medir no sustituye a mirar. Las páginas están detrás de
    sesión, así que para verlas: `npm run build` compila todas, y para un
    screenshot se levanta un preview temporal bajo `src/app/zzz-preview-*` que
