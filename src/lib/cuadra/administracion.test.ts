@@ -31,6 +31,17 @@ vi.mock('@/lib/logger', () => ({ logger }));
 
 vi.mock('./config', () => ({ getConfig: vi.fn() }));
 
+// `acquireViajeLock`/`releaseViajeLock` se mockean y `variantesTelefono` se deja
+// REAL (`crearOperador` lo necesita) — mismo patrón que `xml_race_mutex.test.ts`
+// usa para probar el mutex del lado de `processor.ts`.
+const acquireViajeLock = vi.fn();
+const releaseViajeLock = vi.fn();
+vi.mock('./conv', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  acquireViajeLock: (...a: unknown[]) => acquireViajeLock(...a),
+  releaseViajeLock: (...a: unknown[]) => releaseViajeLock(...a),
+}));
+
 const { crearFlota, crearOperador, guardarPolitica, reabrirViaje, DatoInvalido, armarPolitica, mensajeParaPantalla } =
   await import('./administracion');
 
@@ -46,6 +57,8 @@ function cadena(resultado: unknown) {
 beforeEach(() => {
   from.mockReset();
   for (const f of Object.values(logger)) f.mockReset();
+  acquireViajeLock.mockReset().mockResolvedValue(true);
+  releaseViajeLock.mockReset();
 });
 
 describe('crearFlota', () => {
@@ -274,6 +287,93 @@ describe('reabrirViaje', () => {
     for (const clave of ['viaje.select', 'liq.select', 'liq.delete', 'viaje.update', 'conv.update']) {
       expect(filtros[clave], `${clave} sin tenant_id`).toContainEqual(['tenant_id', 't-1']);
     }
+  });
+
+  // ── AUDITORÍA 10 — el mismo mutex que protege el resto del ciclo de vida ────
+  //
+  // Sin `acquireViajeLock`, borrar la liquidación (paso 1) y poner el viaje en
+  // `abierto` (paso 2) son dos escrituras sueltas que un cierre en vuelo
+  // (`guardar_liquidacion_tx`) puede intercalar: si ese cierre inserta una
+  // liquidación NUEVA entre los dos pasos de aquí, el resultado es un viaje que
+  // la pantalla enseña como `abierto` pero con una liquidación viva — la 0036
+  // bloquea entonces cualquier gasto nuevo. El unique(viaje_id) no evita el
+  // intercalado borrar→re-crear, solo que convivan DOS liquidaciones a la vez.
+
+  it('toma el mutex del viaje ANTES de leer la liquidación y lo libera DESPUÉS de escribir', async () => {
+    const orden: string[] = [];
+    acquireViajeLock.mockImplementation(async (...a: unknown[]) => { orden.push('lock'); return true; });
+    releaseViajeLock.mockImplementation(async (...a: unknown[]) => { orden.push('unlock'); });
+    from.mockImplementation((tabla: string) => {
+      if (tabla === 'viaje') {
+        return {
+          select: () => cadena({ data: { id: 'v-1', estatus: 'liquidado' }, error: null }),
+          update: () => { orden.push('viaje.update'); return cadena({ error: null }); },
+        };
+      }
+      if (tabla === 'liquidacion') {
+        return {
+          select: () => { orden.push('liq.select'); return cadena({ data: { id: 'l-1', pdf_url: 'x.pdf' }, error: null }); },
+          delete: () => { orden.push('liq.delete'); return cadena({ error: null }); },
+        };
+      }
+      if (tabla === 'wa_conversacion') return { update: () => { orden.push('conv.update'); return cadena({ error: null }); } };
+      return { insert: () => Promise.resolve({ error: null }) };
+    });
+
+    await reabrirViaje('t-1', 'VJ-2026-0848', true);
+
+    expect(acquireViajeLock).toHaveBeenCalledWith('v-1');
+    expect(orden).toEqual(['lock', 'liq.select', 'liq.delete', 'viaje.update', 'conv.update', 'unlock']);
+  });
+
+  it('con el mutex OCUPADO, NO borra la liquidación ni toca el viaje — evita la carrera en vez de correrla', async () => {
+    acquireViajeLock.mockResolvedValue(false);
+    let liqTocada = false;
+    from.mockImplementation((tabla: string) => {
+      if (tabla === 'viaje') {
+        return { select: () => cadena({ data: { id: 'v-1', estatus: 'liquidado' }, error: null }) };
+      }
+      if (tabla === 'liquidacion') {
+        return {
+          select: () => { liqTocada = true; return cadena({ data: { id: 'l-1', pdf_url: 'x.pdf' }, error: null }); },
+          delete: () => { liqTocada = true; return cadena({ error: null }); },
+        };
+      }
+      return { update: () => cadena({ error: null }), insert: () => Promise.resolve({ error: null }) };
+    });
+
+    let capturado: unknown;
+    try {
+      await reabrirViaje('t-1', 'VJ-2026-0848', true);
+    } catch (e) {
+      capturado = e;
+    }
+    expect(capturado).toBeInstanceOf(DatoInvalido);
+    expect((capturado as Error).message).toMatch(/procesando|un momento|espera/i);
+    expect(liqTocada, 'sin exclusividad, ni siquiera leer la liquidación es seguro').toBe(false);
+    expect(releaseViajeLock, 'nunca se tomó: no hay nada que soltar').not.toHaveBeenCalled();
+  });
+
+  it('libera el mutex aunque una escritura truene a medio camino', async () => {
+    acquireViajeLock.mockResolvedValue(true);
+    from.mockImplementation((tabla: string) => {
+      if (tabla === 'viaje') {
+        return {
+          select: () => cadena({ data: { id: 'v-1', estatus: 'liquidado' }, error: null }),
+          update: () => cadena({ error: { message: 'timeout' } }),
+        };
+      }
+      if (tabla === 'liquidacion') {
+        return {
+          select: () => cadena({ data: { id: 'l-1', pdf_url: 'x.pdf' }, error: null }),
+          delete: () => cadena({ error: null }),
+        };
+      }
+      return { insert: () => Promise.resolve({ error: null }) };
+    });
+
+    await expect(reabrirViaje('t-1', 'VJ-2026-0848', true)).rejects.toThrow(/timeout/);
+    expect(releaseViajeLock, 'un lock que no se suelta bloquea el próximo reabrir/cierre del mismo viaje').toHaveBeenCalledWith('v-1');
   });
 });
 

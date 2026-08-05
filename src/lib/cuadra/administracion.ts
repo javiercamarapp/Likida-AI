@@ -18,7 +18,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { esRfcValido, rfcChecksumOk } from './intake/cfdi';
-import { variantesTelefono } from './conv';
+import { variantesTelefono, acquireViajeLock, releaseViajeLock } from './conv';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { getConfig } from './config';
 import type { PoliticaGasto } from './cuadre/engine';
@@ -330,6 +330,27 @@ export function armarPolitica(
  * —incluida la liga a su PDF— y ese PDF pudo haberse entregado ya. Quien reabre
  * tiene que saber que el papel que el operador tiene en la mano dejará de
  * cuadrar con lo que el sistema diga después.
+ *
+ * TOMA `acquireViajeLock` (auditoría 10, MEDIO de concurrencia) — el MISMO
+ * mutex por viaje que `processor.ts` toma antes de cerrar (líneas 1290, 1646)
+ * o de emparejar un XML. Sin él hay una carrera real, no solo teórica: borrar
+ * la fila de `liquidacion` (paso 1) y poner `viaje.estatus = 'abierto'` (paso 2)
+ * son DOS statements sueltos, cada uno su propia transacción — no la función
+ * `guardar_liquidacion_tx` (0013), que sólo es atómica CONSIGO MISMA. Si un
+ * "listo" que ya estaba en vuelo (mensaje reclamado antes de que se reabriera)
+ * llega a `guardar_liquidacion_tx` justo entre esos dos pasos, su INSERT ya no
+ * choca contra nada —la liquidación vieja se acaba de borrar— y crea una NUEVA
+ * antes de que el paso 2 de aquí alcance a correr. El resultado, si el paso 2
+ * gana la carrera: `viaje.estatus = 'abierto'` con una liquidación VIVA
+ * apuntando al mismo viaje — el trigger de la 0036 (`gasto_no_tras_liquidar`,
+ * que sólo mira si la fila EXISTE, no el estatus) bloquea entonces cualquier
+ * gasto nuevo sobre un viaje que la pantalla enseña como abierto. Es exactamente
+ * el mismo síntoma que el comentario de abajo describe para el bug del `error`
+ * sin comprobar, pero producido por una carrera real en vez de por un bug de
+ * lectura. `liquidacion_viaje_uidx` (0005) sólo impide que DOS liquidaciones
+ * convivan para el mismo viaje; no impide el intercalado borrar→re-crear.
+ * `acquireViajeLock` cierra la ventana por completo: mientras se reabre, ningún
+ * cierre puede estar corriendo sobre el mismo viaje, y viceversa.
  */
 export async function reabrirViaje(
   tenantId: string,
@@ -354,54 +375,69 @@ export async function reabrirViaje(
 
   const viajeId = viaje.id as string;
 
-  // EL `error` DE ESTA LECTURA ERA EL PEOR DEL ARCHIVO. Sin comprobarlo, un
-  // fallo de red dejaba `liq` en `null` y a partir de ahí todo se leía al revés:
-  // el `if (liq)` se saltaba el borrado, el viaje SÍ se ponía en `abierto`, y se
-  // reportaba `pdfPerdido: null` —que en pantalla significa "no perdiste nada"—
-  // cuando lo que pasó fue que no se pudo mirar. El resultado es un viaje
-  // abierto con su liquidación viva: la 0036 no deja entrar ni un gasto, y con
-  // `liquidacion_viaje_uidx` (0005) el siguiente cierre choca contra la fila que
-  // nadie sabe que sigue ahí. "Ya lo reabrí" sobre algo que no se reabrió es
-  // exactamente el fallo que esta función existe para cerrar.
-  //
-  // El `tenant_id` va en el where aunque `viajeId` ya se resolvió acotado: es
-  // defensa en profundidad, y hace que la consulta se lea sola sin tener que
-  // rastrear de dónde vino el id (auditoría de aislamiento entre flotas).
-  const { data: liq, error: errLiq } = await admin
-    .from('liquidacion')
-    .select('id, pdf_url')
-    .eq('tenant_id', tenantId)
-    .eq('viaje_id', viajeId)
-    .maybeSingle();
-  if (errLiq) throw new Error(`reabrirViaje: no se pudo leer la liquidación de ${folio} — ${errLiq.message}`);
-
-  const pdfPerdido = (liq?.pdf_url as string | null) ?? null;
-
-  // 1) La fila de liquidación PRIMERO. Es la que el trigger mira.
-  if (liq) {
-    const { error } = await admin.from('liquidacion').delete()
-      .eq('tenant_id', tenantId).eq('viaje_id', viajeId);
-    if (error) throw new Error(`reabrirViaje: no se pudo borrar la liquidación — ${error.message}`);
+  // Mutex ANTES de leer, igual que el brazo del XML en processor.ts: leer sin
+  // exclusividad ya es parte de la carrera (la liquidación que se lee aquí
+  // podría dejar de existir un instante después, por un cierre en vuelo).
+  const lock = await acquireViajeLock(viajeId);
+  if (!lock) {
+    throw new DatoInvalido(
+      `El viaje ${folio} está siendo procesado en este momento (un cierre o un XML en curso). ` +
+      `Espera unos segundos y vuelve a intentar reabrirlo.`,
+    );
   }
 
-  // 2) El estatus después: si el paso 1 falla, el viaje se queda liquidado y
-  //    coherente, en vez de abierto pero incapaz de recibir un gasto.
-  const { error: errEstatus } = await admin
-    .from('viaje')
-    .update({ estatus: 'abierto' })
-    .eq('tenant_id', tenantId)
-    .eq('id', viajeId);
-  if (errEstatus) throw new Error(`reabrirViaje: no se pudo abrir el viaje — ${errEstatus.message}`);
+  try {
+    // EL `error` DE ESTA LECTURA ERA EL PEOR DEL ARCHIVO. Sin comprobarlo, un
+    // fallo de red dejaba `liq` en `null` y a partir de ahí todo se leía al revés:
+    // el `if (liq)` se saltaba el borrado, el viaje SÍ se ponía en `abierto`, y se
+    // reportaba `pdfPerdido: null` —que en pantalla significa "no perdiste nada"—
+    // cuando lo que pasó fue que no se pudo mirar. El resultado es un viaje
+    // abierto con su liquidación viva: la 0036 no deja entrar ni un gasto, y con
+    // `liquidacion_viaje_uidx` (0005) el siguiente cierre choca contra la fila que
+    // nadie sabe que sigue ahí. "Ya lo reabrí" sobre algo que no se reabrió es
+    // exactamente el fallo que esta función existe para cerrar.
+    //
+    // El `tenant_id` va en el where aunque `viajeId` ya se resolvió acotado: es
+    // defensa en profundidad, y hace que la consulta se lea sola sin tener que
+    // rastrear de dónde vino el id (auditoría de aislamiento entre flotas).
+    const { data: liq, error: errLiq } = await admin
+      .from('liquidacion')
+      .select('id, pdf_url')
+      .eq('tenant_id', tenantId)
+      .eq('viaje_id', viajeId)
+      .maybeSingle();
+    if (errLiq) throw new Error(`reabrirViaje: no se pudo leer la liquidación de ${folio} — ${errLiq.message}`);
 
-  // 3) La conversación de WhatsApp, para que el operador no siga hablando con
-  //    el hilo de un viaje que ya se cerró.
-  const { error: errConv } = await admin
-    .from('wa_conversacion')
-    .update({ viaje_id: null })
-    .eq('tenant_id', tenantId)
-    .eq('viaje_id', viajeId);
-  if (errConv) logger.warn('reabrirViaje.conversacion', { folio, err: errConv.message });
+    const pdfPerdido = (liq?.pdf_url as string | null) ?? null;
 
-  await anotar(tenantId, 'viaje.reabierto', 'viaje', viajeId, { folio, pdfPerdido }, actor);
-  return { pdfPerdido };
+    // 1) La fila de liquidación PRIMERO. Es la que el trigger mira.
+    if (liq) {
+      const { error } = await admin.from('liquidacion').delete()
+        .eq('tenant_id', tenantId).eq('viaje_id', viajeId);
+      if (error) throw new Error(`reabrirViaje: no se pudo borrar la liquidación — ${error.message}`);
+    }
+
+    // 2) El estatus después: si el paso 1 falla, el viaje se queda liquidado y
+    //    coherente, en vez de abierto pero incapaz de recibir un gasto.
+    const { error: errEstatus } = await admin
+      .from('viaje')
+      .update({ estatus: 'abierto' })
+      .eq('tenant_id', tenantId)
+      .eq('id', viajeId);
+    if (errEstatus) throw new Error(`reabrirViaje: no se pudo abrir el viaje — ${errEstatus.message}`);
+
+    // 3) La conversación de WhatsApp, para que el operador no siga hablando con
+    //    el hilo de un viaje que ya se cerró.
+    const { error: errConv } = await admin
+      .from('wa_conversacion')
+      .update({ viaje_id: null })
+      .eq('tenant_id', tenantId)
+      .eq('viaje_id', viajeId);
+    if (errConv) logger.warn('reabrirViaje.conversacion', { folio, err: errConv.message });
+
+    await anotar(tenantId, 'viaje.reabierto', 'viaje', viajeId, { folio, pdfPerdido }, actor);
+    return { pdfPerdido };
+  } finally {
+    await releaseViajeLock(viajeId);
+  }
 }
