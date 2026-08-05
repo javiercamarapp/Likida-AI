@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tieneCifrasDeDinero, cifrasSinRespaldo } from './cifras';
+import { tieneCifrasDeDinero, cifrasSinRespaldo, cardinalesEnPalabras } from './cifras';
 
 describe('tieneCifrasDeDinero', () => {
   it('marca las formas de dinero que sí escribe el agente', () => {
@@ -165,5 +165,27 @@ describe('AUDITORÍA 13 — cardinales 1-10 (el cierre parcial de la 12)', () =>
     for (const t of ['Ya recibí tus tres comprobantes.', 'Van cinco fotos, ¿te falta alguna?']) {
       expect(tieneCifrasDeDinero(t), t).toBe(false);
     }
+  });
+});
+
+// ── AUDITORÍA 13 · MEDIO: el cotejo contra la política ve los cardinales ────
+describe('AUDITORÍA 13 — cardinales en palabras dentro del cotejo', () => {
+  it('un cardinal que NO coincide con nada respaldado sale como cifra sin respaldo', () => {
+    const fuera = cifrasSinRespaldo('Te sobran ochocientos del anticipo y el tope del diésel es 850.', [
+      { politica: { topes: { diesel: 850, caseta: 1500 } } },
+    ]);
+    expect(fuera).toContain(800);
+  });
+
+  it('un cardinal que SÍ coincide con lo que la tool devolvió queda respaldado', () => {
+    const fuera = cifrasSinRespaldo('Te sobran ochocientos del anticipo y el tope del diésel es 800.', [
+      { politica: { topes: { diesel: 800 } } },
+    ]);
+    expect(fuera).toEqual([]);
+  });
+
+  it('los compuestos simples se convierten ("treinta y dos" → 32)', () => {
+    expect(cardinalesEnPalabras('me faltan treinta y dos para completar')).toContain(32);
+    expect(cardinalesEnPalabras('son mil ochocientos pesos')).toContain(1800);
   });
 });

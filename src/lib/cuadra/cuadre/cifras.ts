@@ -170,5 +170,58 @@ export function cifrasSinRespaldo(texto: string, resultados: unknown[]): number[
     if (respaldo.some((r) => Math.abs(r - n) <= TOL)) continue;
     if (!fuera.includes(n)) fuera.push(n);
   }
+  // AUDITORÍA 13, MEDIO: los cardinales en palabras también se cotejan — un
+  // "ochocientos" que NO coincide con nada respaldado sale como cifra sin
+  // respaldo (antes ni se extraía y pasaba en silencio).
+  for (const n of cardinalesEnPalabras(texto)) {
+    if (respaldo.some((r) => Math.abs(r - n) <= TOL)) continue;
+    if (!fuera.includes(n)) fuera.push(n);
+  }
   return fuera;
+}
+
+/**
+ * Valor numérico de cada cardinal del vocabulario de CARDINAL_SUELTO.
+ * AUDITORÍA 13, MEDIO: `cifrasSinRespaldo` extraía solo dígitos — un cardinal
+ * en palabras dentro de una oración mixta ("te sobran ochocientos … y el tope
+ * es 800") no se cotejaba: si NO coincidía con nada, pasaba en silencio.
+ */
+const VALOR_CARDINAL: Record<string, number> = {
+  un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10,
+  once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciséis: 16, dieciseis: 16, diecisiete: 17,
+  dieciocho: 18, diecinueve: 19, veinte: 20, veintiún: 21, veintiuno: 21, veintidós: 22, veintidos: 22,
+  veintitrés: 23, veintitres: 23, veinticuatro: 24, veinticinco: 25, veintiséis: 26, veintiseis: 26,
+  veintisiete: 27, veintiocho: 28, veintinueve: 29,
+  treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90,
+  cien: 100, ciento: 100, doscientos: 200, doscientas: 200, trescientos: 300, trescientas: 300,
+  cuatrocientos: 400, cuatrocientas: 400, quinientos: 500, quinientas: 500, seiscientos: 600, seiscientas: 600,
+  setecientos: 700, setecientas: 700, ochocientos: 800, ochocientas: 800, novecientos: 900, novecientas: 900,
+  mil: 1000,
+};
+
+/** Los cardinales del texto, convertidos a número. Compuestos simples se
+ *  suman por aproximación ("treinta y dos" → 30+2=32); sin parseador completo
+ *  es mejor verificar de más (un compuesto mal sumado cae a 'fuera'). */
+export function cardinalesEnPalabras(texto: string): number[] {
+  const out: number[] = [];
+  const tokens = texto.toLowerCase().match(/[a-záéíóúñ]+/g) ?? [];
+  let i = 0;
+  while (i < tokens.length) {
+    const v = VALOR_CARDINAL[tokens[i]];
+    if (v === undefined) { i++; continue; }
+    // Compuesto simple: "treinta y dos", "doscientos cincuenta", "mil ochocientos".
+    let suma = v;
+    let j = i + 1;
+    let siguiente = tokens[j];
+    while (j < tokens.length && (siguiente === 'y' || VALOR_CARDINAL[siguiente] !== undefined)) {
+      if (siguiente === 'y') { j++; siguiente = tokens[j]; continue; }
+      const vj = VALOR_CARDINAL[siguiente];
+      // "mil ochocientos": mil + 800 = 1800; "doscientos cincuenta": 200+50.
+      suma = vj > suma || v >= 1000 ? suma + vj : (suma >= 100 ? suma + vj : vj + suma);
+      j++; siguiente = tokens[j];
+    }
+    out.push(suma);
+    i = j;
+  }
+  return out;
 }
