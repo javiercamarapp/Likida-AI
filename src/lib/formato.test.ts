@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { mxn, litros, fechaMx, round2 } from './formato';
+import { mxn, litros, fechaMx, fechaHoraMx, round2 } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -51,6 +51,39 @@ describe('el formato del dinero', () => {
     // 31-jul 19:30 en México (CST, UTC−6) = 01:30 UTC del 1-ago.
     expect(fechaMx('2026-08-01T01:30:00.000Z')).toContain('31');
     expect(fechaMx('2026-08-01T01:30:00.000Z')).toContain('jul');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA HORA, no solo el día. La confirmación del chofer (mig. 0058) se decide por
+// horas —el plazo de escalación son 5— y `fechaMx` solo imprime el día, así que
+// "confirmó el 4 de agosto" no le sirve a nadie para decidir si cambia de
+// personal. Es la misma función de siempre con hora, en la misma zona, en el
+// mismo archivo: una hora formateada a mano en el componente es exactamente
+// como se divergieron `mxn()` y `litros()` tres rondas seguidas.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('fechaHoraMx: el día Y la hora del cliente', () => {
+  it('las 20:00 de CDMX no saltan al día siguiente ni a otra hora', () => {
+    expect(fechaHoraMx('2026-08-05T02:00:00.000+00:00')).toBe('04 ago 2026, 20:00');
+  });
+
+  it('la medianoche se imprime 00:00, no 24:00', () => {
+    // `hour12: false` puede dar "24:00" según la versión de ICU, y las 24:00 no
+    // son una hora que exista: por eso el `hourCycle: 'h23'` explícito.
+    expect(fechaHoraMx('2026-08-05T06:00:00.000+00:00')).toBe('05 ago 2026, 00:00');
+  });
+
+  it('a un valor de SOLO FECHA no se le inventa una hora', () => {
+    // No tiene hora que enseñar, y convertirlo además lo correría un día
+    // (medianoche UTC leída en UTC−6 cae el día anterior).
+    expect(fechaHoraMx('2026-08-04')).toBe('04 ago 2026');
+  });
+
+  it('ausente o ilegible se pinta como guion, no como "Invalid Date"', () => {
+    expect(fechaHoraMx(null)).toBe('—');
+    expect(fechaHoraMx(undefined)).toBe('—');
+    expect(fechaHoraMx('')).toBe('—');
+    expect(fechaHoraMx('no es una fecha')).toBe('—');
   });
 });
 

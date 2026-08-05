@@ -1546,3 +1546,57 @@ begin
   raise exception E'TELEFONO_CUENTA  duplicado-entre-flotas-rechazado=%  dos-sin-telefono-permitido=%   (esperado true / true)',
     rechazado, dos_nulos;
 end $$;
+
+-- ── 39. La cola de facturación NO recorre la tabla entera (mig. 0060) ──
+--
+-- El cron de facturación busca `cfdi_uuid is null`. El único índice que tocaba
+-- esa columna era PARCIAL sobre lo contrario (`where cfdi_uuid is not null`),
+-- así que Postgres no lo podía usar para los nulos: cada corrida recorría la
+-- tabla completa y la ordenaba por fecha para quedarse con ocho filas.
+--
+-- ESTE BLOQUE NO COMPRUEBA QUE EL ÍNDICE EXISTA — comprueba que el PLANEADOR LO
+-- ELIJA, que es lo único que importa. Un índice que está y no se usa se ve igual
+-- de bien en `pg_indexes` y cuesta lo mismo de mantener.
+--
+-- Por eso se cargan 3,000 filas y se hace ANALYZE antes del EXPLAIN: sobre una
+-- tabla vacía el planeador siempre prefiere el recorrido completo —es más
+-- barato de verdad— y la verificación pasaría en verde sin probar nada. Es el
+-- mismo modo de falla que el falso verde del `curl` que miraba el código HTTP y
+-- no el cuerpo. Todo se revierte con el `raise`.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid; o uuid; v uuid; r record; plan text := ''; usa_indice boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF INDICE') returning id into t;
+  insert into operador (tenant_id, nombre, telefono)
+    values (t, 'ZZZ Indice', '5215558888888') returning id into o;
+  insert into viaje (tenant_id, operador_id, estatus) values (t, o, 'abierto') returning id into v;
+
+  -- 3,000 pendientes y 3,000 ya facturados: la mezcla importa, porque el indice
+  -- es parcial y su ventaja esta justo en no cargar con los facturados.
+  insert into gasto (tenant_id, viaje_id, concepto, monto, created_at, cfdi_uuid, ocr_extra)
+  select t, v, 'diesel', 100,
+         now() - (g || ' minutes')::interval,
+         case when g % 2 = 0 then null else gen_random_uuid()::text end,
+         '{}'::jsonb
+  from generate_series(1, 6000) g;
+
+  analyze gasto;
+
+  -- EXPLAIN devuelve VARIAS filas: hay que recorrerlas. Un `execute ... into`
+  -- se queda con la primera, que suele ser el `Limit` y no dice que scan hubo.
+  for r in execute 'explain select id, tenant_id from gasto
+                    where cfdi_uuid is null and ocr_extra is not null
+                    order by created_at asc limit 9'
+  loop
+    plan := plan || r."QUERY PLAN" || ' | ';
+  end loop;
+
+  usa_indice := plan ilike '%gasto_por_facturar_idx%';
+
+  delete from tenant where id = t;
+
+  raise exception E'INDICE_FACTURACION  el-planeador-usa-el-indice=%   plan=%   (esperado true)',
+    usa_indice, plan;
+end $$;
