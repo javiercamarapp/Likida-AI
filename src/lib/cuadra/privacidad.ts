@@ -601,7 +601,7 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
  */
 export function tipoDeSolicitudArco(texto: string): 'acceso' | 'rectificacion' | 'cancelacion' | 'oposicion' {
   const t = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  if (/\b(?:borr|elimin|suprim|dar\s+de\s+baja|quita\s+mis datos|ya\s+no\s+usen|ya\s+no\s+traten)\w*\b/.test(t)) return 'cancelacion';
+  if (/\b(?:borr|elimin|suprim|(?:dar|darme|dame|denme)\s+de\s+baja|quita\s+mis datos|ya\s+no\s+usen|ya\s+no\s+traten)\w*\b/.test(t)) return 'cancelacion';
   if (OPOSICION.some((r) => r.test(t)) || (OPOSICION_AMBIGUA.some((r) => r.test(t)) && (!OBJETO_DE_PAPEL.test(t) || RECHAZA_AUTOMATIZADO.test(t)))) return 'oposicion';
   if (/\b(?:correg|rectific|actualiza\s+mis datos|cambia\s+mi)\w*\b/.test(t)) return 'rectificacion';
   if (/\b(?:ver\s+mis datos|acceder|acceso\s+a\s+mis datos|que\s+datos\s+tienen|que\s+datos\s+guardan)\b/.test(t)) return 'acceso';
