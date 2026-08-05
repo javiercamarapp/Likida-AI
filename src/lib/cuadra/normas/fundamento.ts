@@ -19,6 +19,7 @@
 // mensaje sea menos preciso; dejar pasar una inventada cuesta la venta.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import type { ConceptoGasto } from '@/types/cuadra';
 import { NORMAS, IDS_NORMA, esVinculante } from './indice';
 
 /** Marca de una cita que parece normativa pero no está en el índice. */
@@ -196,6 +197,68 @@ function temaDe(oracion: string, patrones: RegExp[]): Set<string> {
 /** Al menos dos palabras de tema compartidas, fuera de la cita. */
 const UMBRAL_TEMA = 2;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EL SUJETO DE LA AFIRMACIÓN — AUDITORÍA 10, ALTO agéntico (rondas 8, 9 y 10).
+//
+// La comparación por palabras cierra la FRASE del ejemplo de la ronda 9 y no la
+// CLASE, porque el vocabulario compartido lo puso el propio sistema en el turno
+// anterior: el modelo que reformula la frase del motor aplicándola a OTRO gasto
+// obtiene la memoria justamente POR reformularla bien.
+//
+//   historial (motor):  "Diésel pagado en EFECTIVO — cuenta contra el tope del
+//                        15% del combustible del ejercicio (RFA 2026 regla 2.9)"
+//   modelo, sin tool:   "Tu CASETA pagada en efectivo cuenta contra el tope del
+//                        15% del combustible del ejercicio (RFA 2026 regla 2.9)"
+//
+// Siete palabras compartidas contra un umbral de dos: pasaba entera, y la regla
+// 2.9 de la RFA 2026 es el tope del 15% del COMBUSTIBLE en efectivo — ni una
+// caseta ni una comida están dentro.
+//
+// Así que la memoria deja de atarse solo al vocabulario y se ata al SUJETO: de
+// qué gasto habla la afirmación. Si la oración de hoy nombra un gasto que la de
+// ayer no nombraba, no es la misma afirmación, por muchas palabras que compartan.
+//
+// El sujeto solo VETA, nunca concede: cuando la oración de ayer no nombra gasto
+// alguno ("el pago en efectivo tiene tope conforme al artículo 27 fr. III"), no
+// hay conflicto que detectar y sigue mandando la comparación de palabras.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Las palabras con las que se nombra un gasto en la prosa que escribe el modelo,
+ * agrupadas por el `ConceptoGasto` del producto. Las claves van SIN acento y en
+ * minúscula porque es como salen de `palabrasClave`.
+ *
+ * Los grupos son los conceptos que ya existen —no una taxonomía nueva—: lo que
+ * decide es si dos oraciones hablan del MISMO gasto, y "diésel", "combustible" y
+ * "gasolina" son el mismo para este producto.
+ */
+const SUJETO_DE_GASTO: Record<string, ConceptoGasto> = {
+  diesel: 'diesel', combustible: 'diesel', combustibles: 'diesel',
+  gasolina: 'diesel', gasolinas: 'diesel', gasolinera: 'diesel',
+  magna: 'diesel', premium: 'diesel',
+  caseta: 'caseta', casetas: 'caseta', peaje: 'caseta', peajes: 'caseta',
+  telepeaje: 'caseta', iave: 'caseta', autopista: 'caseta', autopistas: 'caseta',
+  comida: 'alimentacion', comidas: 'alimentacion', alimento: 'alimentacion',
+  alimentos: 'alimentacion', alimentacion: 'alimentacion',
+  restaurante: 'alimentacion', desayuno: 'alimentacion', cena: 'alimentacion',
+  hospedaje: 'hospedaje', hotel: 'hospedaje', hoteles: 'hospedaje',
+  motel: 'hospedaje', alojamiento: 'hospedaje',
+  transporte: 'transporte', taxi: 'transporte', autobus: 'transporte',
+  vuelo: 'transporte',
+  flete: 'flete', fletes: 'flete', paqueteria: 'flete',
+  viatico: 'viaticos', viaticos: 'viaticos',
+};
+
+/** Los gastos que una oración nombra. Vacío si no nombra ninguno. */
+function sujetosDe(palabras: Set<string>): Set<ConceptoGasto> {
+  const out = new Set<ConceptoGasto>();
+  for (const w of palabras) {
+    const c = SUJETO_DE_GASTO[w];
+    if (c) out.add(c);
+  }
+  return out;
+}
+
 /**
  * `true` si la cita `id`, tal como aparece en `reply`, está hablando del MISMO
  * asunto que la trajo en `historial`. Sin historial, o sin palabras de tema en
@@ -208,8 +271,18 @@ function citaEsMismoTema(id: string, reply: string, historial: string): boolean 
   if (!oracionActual) return false;
   const temaActual = temaDe(oracionActual, patrones);
   if (temaActual.size === 0) return false;
+  const sujetoActual = sujetosDe(temaActual);
   return oracionesConCita(historial, patrones).some((h) => {
     const temaHistorico = temaDe(h, patrones);
+    // EL SUJETO VETA ANTES DE CONTAR PALABRAS. Si la oración de ayer nombraba
+    // un gasto y la de hoy nombra OTRO, no es la misma afirmación: el modelo
+    // movió la norma de gasto, que es exactamente lo que la memoria no puede
+    // certificar. Cuando la de ayer no nombra ninguno no hay conflicto que
+    // detectar y decide la comparación de palabras, como hasta ahora.
+    const sujetoHistorico = sujetosDe(temaHistorico);
+    if (sujetoHistorico.size) {
+      for (const s of sujetoActual) if (!sujetoHistorico.has(s)) return false;
+    }
     let compartidas = 0;
     for (const w of temaActual) if (temaHistorico.has(w)) compartidas++;
     return compartidas >= UMBRAL_TEMA;
@@ -380,7 +453,7 @@ export function guardiaFundamento(reply: string, permitidas: string[], historial
     for (const p of patronesDe(id)) {
       texto = texto.replace(new RegExp(p.source, 'gi'), (m) => {
         guardado.push(m);
-        return `\u0000${guardado.length - 1}\u0000`;
+        return ` ${guardado.length - 1} `;
       });
     }
   }
@@ -420,7 +493,7 @@ export function guardiaFundamento(reply: string, permitidas: string[], historial
   }
 
   // ── 5. Se devuelven las protegidas a su sitio ─────────────────────────────
-  texto = texto.replace(/\u0000(\d+)\u0000/g, (_m, n) => guardado[Number(n)]);
+  texto = texto.replace(/ (\d+) /g, (_m, n) => guardado[Number(n)]);
 
   return { reply: limpiar(texto), forzado: true, quitadas: sobran };
 }
