@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { getSessionTenant } from './session';
 import { tenantDemo } from './tenant-demo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -63,4 +64,27 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
   }
 
   return { ok: true, tenantId, rol: s.rol };
+}
+
+/**
+ * Resuelve el `?tenant=` de superadmin distinguiendo "ese uuid no existe"
+ * (fallback silencioso a la sesión — correcto para un enlace viejo) de "no
+ * pude preguntar" (error de red — el `data` es null en los DOS casos, y
+ * escribir en silencio en el tenant de la sesión escribía en la flota
+ * EQUIVOCADA). Auditoría 12, BAJO backend: los ~14 sitios que resolvían el
+ * pedido a mano sin mirar `error` hoy usan esto.
+ */
+export async function resolverTenantPedido(
+  admin: ReturnType<typeof supabaseAdmin>,
+  tenantDeSesion: string,
+  pedido: string | null | undefined,
+): Promise<string> {
+  if (!pedido) return tenantDeSesion;
+  const { data, error } = await admin.from('tenant').select('id').eq('id', pedido).maybeSingle();
+  if (error) {
+    // Fail-loud: un parpadeo de red no puede convertirse en escribir en la
+    // flota equivocada. El error llega a la UI, no a la base.
+    throw new Error('No se pudo verificar la flota pedida. Intenta de nuevo.');
+  }
+  return (data?.id as string | undefined) ?? tenantDeSesion;
 }

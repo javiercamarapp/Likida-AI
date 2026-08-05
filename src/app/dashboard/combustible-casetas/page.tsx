@@ -14,6 +14,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { KpiTile, EstadoVacio, ChartCard, StatusPill } from '../../admin/ui/kit';
 import { HBars } from '../../admin/ui/graficas';
 import { Dona } from '../../admin/charts';
@@ -113,8 +114,8 @@ export default async function CombustibleCasetasPage({
       redirect(`/dashboard/combustible-casetas${sufijo}`);
     }
     if (s.rol === 'superadmin' && sp?.tenant) {
-      const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
-      if (data) return { tenantId: data.id as string, userId: s.userId };
+      const t = await resolverTenantPedido(supabaseAdmin(), s.tenantId, sp.tenant);
+      return { tenantId: t, userId: s.userId };
     }
     return { tenantId: s.tenantId, userId: s.userId };
   }

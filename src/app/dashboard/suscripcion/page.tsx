@@ -5,6 +5,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { mensajeParaPantalla } from '@/lib/cuadra/administracion';
 import {
   getPlanes, getSuscripcion, getFacturasSaas, getUso,
@@ -87,8 +88,7 @@ export default async function SuscripcionPage({
     const s = await requireSessionTenant('/dashboard/suscripcion');
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
-      const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
-      if (data) t = data.id as string;
+      t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
     const { data: u } = await supabaseAdmin().from('app_user').select('email').eq('id', s.userId).maybeSingle();
     return { t, email: (u?.email as string) ?? null, rol: s.rol };

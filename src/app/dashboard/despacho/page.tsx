@@ -6,6 +6,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { listOperadores, reasignarOperador } from '@/lib/cuadra/repo';
 import {
   getTableroOperacion, getViajesSinAsignar, getCargaOperadores, getUnidades,
@@ -65,8 +66,7 @@ export default async function DespachoPage({
     const s = await requireSessionTenant(destino);
     if (!puedeAsignar(s.rol)) redirect(`${destino}${sufijo}`);
     if (s.rol === 'superadmin' && sp?.tenant) {
-      const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
-      if (data) return data.id as string;
+      return await resolverTenantPedido(supabaseAdmin(), s.tenantId, sp.tenant);
     }
     return s.tenantId;
   }

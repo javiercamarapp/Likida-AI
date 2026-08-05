@@ -11,6 +11,7 @@ import { avisarPorFacturar } from '@/lib/cuadra/facturacion/avisar';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { mensajeParaPantalla } from '@/lib/cuadra/errores';
 import { FormaConAviso, Campo, type ResultadoAccion } from '../../admin/ui/forma';
 import { PorFacturar } from './por-facturar';
@@ -75,8 +76,7 @@ export default async function DocumentosPage({
 
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
-      const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
-      if (data) t = data.id as string;
+      t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
 
     try {
