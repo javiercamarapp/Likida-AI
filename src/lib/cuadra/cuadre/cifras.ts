@@ -29,6 +29,19 @@ const DINERO_EN_PALABRAS =
   /\b(?:un|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos)\s+(?:mil|millones?|pesos?)\b/i;
 
 /**
+ * Cardinales SUELTOS (sin "pesos"/"mil" pegado). AUDITORÍA 12, MEDIO: "te
+ * sobran ochocientos del anticipo" o "me faltan trece" — español natural de
+ * WhatsApp — no casaban el patrón de arriba (exige mil/pesos) ni los dígitos,
+ * y una cifra que nadie calculó salía al teléfono de quien liquida. La
+ * ambigüedad ("tres comprobantes") la resuelve el chequeo por cláusula de
+ * `tieneCifrasDeDinero`, con el vocabulario de NO_ES_DINERO; la doctrina del
+ * archivo prefiere marcar (el reemplazo es el cuadre determinístico del motor,
+ * correcto y útil) a dejar pasar.
+ */
+const CARDINAL_SUELTO =
+  /\b(?:once|doce|trece|catorce|quince|diecis[ée]is|diecisiete|dieciocho|diecinueve|veinti(?:ún|uno|dos|tr[ée]s|cuatro|cinco|s[ée]is|siete|ocho|nueve)|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien(?:to)?|doscient[oa]s?|trescient[oa]s?|cuatrocient[oa]s?|quinient[oa]s?|seiscient[oa]s?|setecient[oa]s?|ochocient[oa]s?|novecient[oa]s?|mil)\b/i;
+
+/**
  * Contextos donde un número de 2+ dígitos NO es dinero. Sin esto, "van 8 fotos"
  * o un folio dispararían el reemplazo y el operador recibiría el cuadre en
  * respuesta a un "¿ya llegaron mis fotos?".
@@ -73,7 +86,9 @@ export function tieneCifrasDeDinero(texto: string): boolean {
   // vive en una cláusula sin ninguna palabra de la lista).
   const sinAnios = texto.replace(ANIO, ' ');
   const clausulas = sinAnios.split(SEPARADOR_DE_CLAUSULA);
-  return clausulas.some((c) => NUMERO_SUELTO.test(c) && !NO_ES_DINERO.test(c));
+  return clausulas.some((c) =>
+    (NUMERO_SUELTO.test(c) || CARDINAL_SUELTO.test(c)) && !NO_ES_DINERO.test(c),
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
