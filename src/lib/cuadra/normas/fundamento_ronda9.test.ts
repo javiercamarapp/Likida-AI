@@ -52,6 +52,25 @@ describe('la memoria de guardiaFundamento es por TEMA, no por id', () => {
     expect(r.forzado).toBe(true);
   });
 
+  // AUDITORÍA 12, ALTO (reincidente de la clase 8-9-10): la memoria solo
+  // evaluaba la PRIMERA oración del reply con la cita. Una respuesta
+  // multi-oración pasaba la segunda cabalgando sobre el permiso de la
+  // primera — la cita real aplicada al gasto equivocado. Este es el escenario
+  // del auditor de la ronda 12, con el orden invertido (diésel válido delante,
+  // caseta inválida detrás): la caseta tiene que perder la cita aunque la
+  // oración de diésel venga primero.
+  it('AUDITORÍA 12: con dos oraciones, la segunda sobre OTRO gasto pierde la cita', () => {
+    const r = guardiaFundamento(
+      'Tu diésel pagado en efectivo cuenta contra el tope del 15% del combustible (RFA 2026 regla 2.9). Tu caseta de peaje también se pagó en efectivo y aplica la misma regla 2.9 de la RFA 2026.',
+      [],
+      HISTORIAL_DIESEL,
+    );
+    // La primera oración es memoria legítima; la segunda (caseta) no puede
+    // certificarse. Fail-closed: se quita la cita, nunca se la deja pasar.
+    expect(r.forzado).toBe(true);
+    expect(r.reply).not.toMatch(/caseta[^.]*regla 2\.9|regla 2\.9[^.]*caseta/i);
+  });
+
   it('la memoria sigue funcionando para una tool call de ESTE turno, sin depender del historial', () => {
     const r = guardiaFundamento('El diésel en efectivo se limita al 15% (RFA 2026 regla 2.9).', ['rfa-2026-2.9'], '');
     expect(r.forzado).toBe(false);

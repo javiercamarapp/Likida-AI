@@ -263,29 +263,40 @@ function sujetosDe(palabras: Set<string>): Set<ConceptoGasto> {
  * `true` si la cita `id`, tal como aparece en `reply`, está hablando del MISMO
  * asunto que la trajo en `historial`. Sin historial, o sin palabras de tema en
  * ninguno de los dos lados, no hay nada que comparar y la memoria no aplica.
+ *
+ * AUDITORÍA 12, ALTO (reincidente de la clase 8-9-10): antes se evaluaba SOLO
+ * la primera oración del reply que traía la cita. Una respuesta multi-oración
+ * ("Tu diésel… aplica la regla 2.9. Tu caseta… aplica la regla 2.9.") pasaba
+ * la segunda cabalgando sobre el permiso de la primera — la cita real aplicada
+ * al gasto equivocado, con tool ausente. Ahora TODAS las oraciones con la cita
+ * tienen que pasar el veto de sujeto; si alguna nombra un gasto distinto al
+ * del historial, la cita no se admite (fail-closed: se pierde una repetición
+ * legítima antes que certificar una falsa).
  */
 function citaEsMismoTema(id: string, reply: string, historial: string): boolean {
   if (!historial) return false;
   const patrones = patronesDe(id);
-  const oracionActual = oracionesConCita(reply, patrones)[0];
-  if (!oracionActual) return false;
-  const temaActual = temaDe(oracionActual, patrones);
-  if (temaActual.size === 0) return false;
-  const sujetoActual = sujetosDe(temaActual);
-  return oracionesConCita(historial, patrones).some((h) => {
-    const temaHistorico = temaDe(h, patrones);
-    // EL SUJETO VETA ANTES DE CONTAR PALABRAS. Si la oración de ayer nombraba
-    // un gasto y la de hoy nombra OTRO, no es la misma afirmación: el modelo
-    // movió la norma de gasto, que es exactamente lo que la memoria no puede
-    // certificar. Cuando la de ayer no nombra ninguno no hay conflicto que
-    // detectar y decide la comparación de palabras, como hasta ahora.
-    const sujetoHistorico = sujetosDe(temaHistorico);
-    if (sujetoHistorico.size) {
-      for (const s of sujetoActual) if (!sujetoHistorico.has(s)) return false;
-    }
-    let compartidas = 0;
-    for (const w of temaActual) if (temaHistorico.has(w)) compartidas++;
-    return compartidas >= UMBRAL_TEMA;
+  const oraciones = oracionesConCita(reply, patrones);
+  if (oraciones.length === 0) return false;
+  return oraciones.every((oracionActual) => {
+    const temaActual = temaDe(oracionActual, patrones);
+    if (temaActual.size === 0) return false; // cita pelada, sin tema → no se admite
+    const sujetoActual = sujetosDe(temaActual);
+    return oracionesConCita(historial, patrones).some((h) => {
+      const temaHistorico = temaDe(h, patrones);
+      // EL SUJETO VETA ANTES DE CONTAR PALABRAS. Si la oración de ayer nombraba
+      // un gasto y la de hoy nombra OTRO, no es la misma afirmación: el modelo
+      // movió la norma de gasto, que es exactamente lo que la memoria no puede
+      // certificar. Cuando la de ayer no nombra ninguno no hay conflicto que
+      // detectar y decide la comparación de palabras, como hasta ahora.
+      const sujetoHistorico = sujetosDe(temaHistorico);
+      if (sujetoHistorico.size) {
+        for (const s of sujetoActual) if (!sujetoHistorico.has(s)) return false;
+      }
+      let compartidas = 0;
+      for (const w of temaActual) if (temaHistorico.has(w)) compartidas++;
+      return compartidas >= UMBRAL_TEMA;
+    });
   });
 }
 
