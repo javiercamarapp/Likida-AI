@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { toCsv, toLiquidacionRows } from '@/lib/cuadra/export';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
-import { getSessionTenant } from '@/lib/auth/session';
+import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -14,9 +14,12 @@ export const runtime = 'nodejs';
 export async function GET(req: Request) {
   if (!rateLimit(`export:${clientIp(req)}`, 10, 60_000)) return new NextResponse('Demasiadas peticiones', { status: 429 });
 
-  const s = await getSessionTenant();
-  if (!s || !s.tenantId) return new NextResponse('No autorizado', { status: 401 });
-  const tenantId = s.tenantId;
+  // Ver la nota de `tenant-api.ts`: esto le devolvía 401 al superadmin, y
+  // además ignoraba el `?tenant=` de la pantalla — o sea que aun arreglando el
+  // 401 habría exportado la flota equivocada, que es peor que no exportar.
+  const t = await resolverTenantApi(req.url);
+  if (!t.ok) return new NextResponse(t.motivo, { status: t.status });
+  const tenantId = t.tenantId;
 
   const { data, error } = await supabaseAdmin()
     .from('liquidacion')

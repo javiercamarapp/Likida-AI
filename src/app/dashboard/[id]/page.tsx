@@ -32,7 +32,7 @@ const CONCEPTO: Record<string, string> = {
 
 export default async function Detalle({
   params, searchParams,
-}: { params: Promise<{ id: string }>; searchParams: Promise<{ tenant?: string }> }) {
+}: { params: Promise<{ id: string }>; searchParams: Promise<{ tenant?: string; vista?: string; rol?: string }> }) {
   // Segunda capa (ver dashboard/page.tsx). El id va en la ruta de vuelta para
   // que tras el passcode aterrice en la liquidación que pidió.
   const { id: idParaVolver } = await params;
@@ -59,6 +59,23 @@ export default async function Detalle({
       tenantId = t.id as string;
       volverQS = `?tenant=${tenantId}`;
     }
+  }
+
+  // `vista` y `rol` TIENEN QUE VIAJAR EN LA VUELTA, y esta página era la única
+  // que no los leía. La cadena rota: el sidebar de /admin ofrece "Ver panel de
+  // flota (demo)" → `/dashboard?vista=demo`; el cuadre sí arrastra el sufijo
+  // hasta el detalle; el detalle lo perdía; y entonces "← Panel" caía en
+  // `/dashboard` pelón, donde `resolverTenantEfectivo` ve a un superadmin sin
+  // vista ni tenant y REDIRIGE A /admin.
+  //
+  // O sea: un clic en "← Panel" durante el demo proyecta la consola interna
+  // —"MRR meta $1,000,000" marcando $0, "Likida todavía no tiene clientes"—
+  // delante del director de operaciones de la flota.
+  if (!volverQS) {
+    const partes: string[] = [];
+    if (sp?.vista) partes.push(`vista=${encodeURIComponent(sp.vista)}`);
+    if (sp?.rol) partes.push(`rol=${encodeURIComponent(sp.rol)}`);
+    if (partes.length) volverQS = `?${partes.join('&')}`;
   }
 
   const d = await getLiquidacionDetalle(id, tenantId);
