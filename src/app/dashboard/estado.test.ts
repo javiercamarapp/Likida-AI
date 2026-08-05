@@ -116,3 +116,23 @@ describe('dashboard/page.tsx: el call site de estadoPanel', () => {
     expect(PAGINA).toMatch(/liquidacionesDeViajes/);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 10, MEDIO — "ESTÍMULOS ACREDITABLES" y "LIQUIDACIONES" están
+// ventaneadas por el `GlobalFilter` (reciben `ventana`) pero el título no lo
+// decía: con el default de 7 días, "IVA acreditable $12,480" se leía como el
+// total de la flota. La gráfica de arriba, en la misma pantalla, ya dice su
+// periodo ("Liquidaciones cerradas — últimos N días"); estas dos secciones
+// ahora hacen lo mismo, con la misma variable `etiquetaVentana`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('dashboard/page.tsx: las secciones filtradas dicen su periodo', () => {
+  const PAGINA = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
+
+  it('"Estímulos acreditables" lleva la ventana activa en el título', () => {
+    expect(PAGINA).toMatch(/Estímulos acreditables — \{etiquetaVentana\}/);
+  });
+
+  it('"Liquidaciones" lleva la ventana activa en el título', () => {
+    expect(PAGINA).toMatch(/Liquidaciones — \{etiquetaVentana\}/);
+  });
+});

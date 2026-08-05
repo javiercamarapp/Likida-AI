@@ -65,7 +65,19 @@
   --canvas: #f4f4f5;
   --canvas2: #fafafa;
   --ink2: #3f3f46;
-  --faint: #a1a1aa;
+  /* AUDITORÍA 10, MEDIO — medido sobre los píxeles: #a1a1aa daba 2.56:1
+     contra blanco, por debajo del 4.5:1 que AA pide para texto normal (esto
+     SIEMPRE pinta texto de 12px o menos — notas de KpiTile, subtítulos de
+     ChartCard, citas legales, ejes de gráfica —, nunca texto grande, así que
+     no hay excepción de "texto grande" que lo salve). Se revisaron los ~40
+     usos antes de tocar el token: casi todos son texto real que un
+     contralor puede necesitar leer (la cita "LIF 2026, Art. 20-A", "Sin
+     capturar", "plazo sin verificar"), no relleno decorativo — no hay una
+     intención distinta entre "nota de KpiTile" y "cita legal" que justifique
+     dos tokens. #73737c pasa AA contra blanco (4.70:1) y contra --bg
+     (4.54:1) con margen, y se queda MÁS CLARO que --muted (#6b7280, 4.83:1)
+     para conservar el orden de la jerarquía: ink > ink2 > muted > faint. */
+  --faint: #73737c;
   --line2: #e4e4e7;
 
   --g1: #fdebd9;

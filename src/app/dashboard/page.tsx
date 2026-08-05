@@ -135,7 +135,11 @@ export async function InicioContenido({
             <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
               {saludo()}, {nombre ?? 'flota'}
             </h1>
-            <p className="text-[13px] mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
+            {/* Ya viene capitalizada de `fechaLarga()` (solo el primer
+                carácter) — `capitalize` de Tailwind capitalizaba TODAS las
+                palabras, incluidos los dos "de" ("Martes, 4 De Agosto De
+                2026"). Auditoría 10, BAJO. */}
+            <p className="text-[13px] mt-0.5" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
             {tenantNombre && (
               <span className="inline-block mt-1 text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
                 viendo como superadmin · {tenantNombre}
@@ -254,7 +258,13 @@ export async function InicioContenido({
 
             {/* ── Estímulos acreditables ── */}
             <section className="p-4 border-t" style={{ borderColor: 'var(--line)' }}>
-              <TituloSeccion>Estímulos acreditables</TituloSeccion>
+              {/* AUDITORÍA 10, MEDIO — el `GlobalFilter` de arriba SÍ mueve
+                  esta consulta (recibe `ventana`), pero el título no lo
+                  decía: con el default de 7 días, "IVA acreditable $12,480"
+                  se leía como el total de la flota, no como el corte de la
+                  semana. Mismo periodo que ya lleva la gráfica de arriba
+                  ("Liquidaciones cerradas — últimos N días"). */}
+              <TituloSeccion>Estímulos acreditables — {etiquetaVentana}</TituloSeccion>
               {acred === null ? (
                 <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
               ) : (
@@ -275,7 +285,9 @@ export async function InicioContenido({
             {/* ── Liquidaciones ── */}
             <section className="p-4 border-t" style={{ borderColor: 'var(--line)' }}>
               <div className="flex items-center justify-between gap-4">
-                <TituloSeccion>Liquidaciones</TituloSeccion>
+                {/* Mismo hallazgo que "Estímulos acreditables": ventaneada
+                    por `ventana` y sin decirlo. */}
+                <TituloSeccion>Liquidaciones — {etiquetaVentana}</TituloSeccion>
                 <Link href={`/dashboard/cuadre${sufijo}`} className="text-xs font-medium px-2.5 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity shrink-0">
                   Ver detalle →
                 </Link>

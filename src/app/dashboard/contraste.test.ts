@@ -76,6 +76,32 @@ describe('modo claro: lo que se proyecta en la sala', () => {
     expect(token('@theme', '--color-ok')).toBe(token(':root[data-theme="light"]', '--color-ok'));
     expect(token('@theme', '--color-bad')).toBe(token(':root[data-theme="light"]', '--color-bad'));
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 10, MEDIO — "las citas legales están a 2.56:1". `--faint`
+  // (#a1a1aa) medía 2.56:1 contra blanco, muy por debajo del 4.5:1 de AA — y
+  // pinta texto de 12px o menos en 40 sitios: notas de KpiTile, subtítulos
+  // de ChartCard, citas legales ("LIF 2026, Art. 20-A"), ejes de gráfica.
+  // Ninguno es "texto grande" (≥24px), así que ninguno tiene la excepción de
+  // 3:1 — todos necesitan el umbral completo. `--faint` vive en el bloque
+  // `:root { }` (no en `[data-theme="light/dark"]`, a diferencia de
+  // --color-ok/--color-bad), así que se lee de ahí directamente.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('--faint pasa AA como texto (era 2.56:1 — notas, citas legales, ejes de gráfica)', () => {
+    const faint = token(':root', '--faint');
+    expect(contraste(faint, SUPERFICIE)).toBeGreaterThanOrEqual(AA_TEXTO);
+    expect(contraste(faint, FONDO)).toBeGreaterThanOrEqual(AA_TEXTO);
+  });
+
+  it('--faint se queda MÁS CLARO que --muted — conserva la jerarquía visual', () => {
+    // No es solo "que pase AA": si quedara igual o más oscuro que --muted,
+    // dejaría de leerse como el nivel MÁS secundario de los dos. `--muted`
+    // dentro de `:root {}` es `var(--color-muted)` (no un hex directo), así
+    // que el valor real se lee de `@theme`, donde SÍ está en hex.
+    const faint = token(':root', '--faint');
+    const muted = token('@theme', '--color-muted');
+    expect(contraste(faint, SUPERFICIE)).toBeLessThan(contraste(muted, SUPERFICIE));
+  });
 });
 
 describe('modo oscuro: el mismo token, el otro color', () => {

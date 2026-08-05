@@ -20,9 +20,18 @@ import type { ViajeRow } from '@/lib/cuadra/analytics';
 
 type Periodo = 'semana' | 'mes' | 'todo';
 
+// AUDITORÍA 10, MEDIO — este filtro decía "Semana | Mes | Todo" y, 130 px
+// abajo en la misma pantalla, `GlobalFilter` dice "7d | 30d | Todo" sobre
+// las mismas ventanas (7 y 30 días). Dos vocabularios para la misma medida
+// en la misma pantalla: la captura mostraba "Mes" apretado arriba y
+// "últimos 7 días" escrito abajo, como si fueran cosas distintas. Gana el
+// vocabulario de `GlobalFilter` porque es el que de verdad mueve las tres
+// consultas de la página — esta barra solo mueve su propio cálculo local,
+// así que es la que se ajusta. Los `id` internos ('semana'/'mes') no
+// cambian: solo son claves de estado, nunca se enseñan.
 const PERIODOS: Array<{ id: Periodo; label: string; dias: number | null }> = [
-  { id: 'semana', label: 'Semana', dias: 7 },
-  { id: 'mes', label: 'Mes', dias: 30 },
+  { id: 'semana', label: '7d', dias: 7 },
+  { id: 'mes', label: '30d', dias: 30 },
   { id: 'todo', label: 'Todo', dias: null },
 ];
 
@@ -87,16 +96,26 @@ export default function AvanceCierre({ viajes, ahoraMs }: { viajes: ViajeRow[]; 
         </div>
       </div>
 
-      <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--canvas)' }}>
-        <div
-          className="h-full rounded-full motion-reduce:transition-none"
-          style={{
-            width: `${datos.pct ?? 0}%`,
-            background: 'var(--marca)',
-            transition: 'width 620ms cubic-bezier(0.22, 1, 0.36, 1)',
-          }}
-        />
-      </div>
+      {/* AUDITORÍA 10, BAJO — sin viajes en el periodo, esto dibujaba la
+          pista Y la barra a `width: 0%`: una barra vacía a lo ancho del
+          panel. `chofer/vista.tsx` (Barra) ya tiene la regla escrita para
+          esta misma situación: "SIN ANTICIPO NO SE DIBUJA BARRA. Una barra
+          vacía se lee como 'llevas 0%'". Aquí es "sin viajes" en vez de
+          "sin anticipo", pero es la misma barra fantasma — se aplica la
+          misma regla: sin `pct` (nada que medir), no se dibuja ni la pista.
+          El pie de página ("No hay viajes iniciados…") ya dice por qué. */}
+      {datos.pct !== null && (
+        <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--canvas)' }}>
+          <div
+            className="h-full rounded-full motion-reduce:transition-none"
+            style={{
+              width: `${datos.pct}%`,
+              background: 'var(--marca)',
+              transition: 'width 620ms cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+          />
+        </div>
+      )}
 
       <p className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
         {datos.dentro === 0

@@ -59,9 +59,20 @@ export function mxn(n: number): string {
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
 
-/** Dólares, para el costo interno de los modelos — nunca para el cliente. */
+/**
+ * Dólares, para el costo interno de los modelos — nunca para el cliente.
+ *
+ * AUDITORÍA 10, BAJO — `mxn(1.83)` y `usd(1.83)` daban el mismo string,
+ * "$1.83": los dos estilos de moneda de Intl usan el símbolo genérico "$".
+ * En /admin, "Gastado en IA" y "Costo de IA" son dólares en la misma
+ * pantalla que enseña pesos en todo lo demás, y nada en el texto avisaba
+ * cuál era cuál. El prefijo "US$" es el símbolo real que ya se usa para
+ * distinguir moneda de EUA de otras monedas con signo "$" (MXN, CAD, ARS…);
+ * `mxn()` se queda con el símbolo genérico porque es el que espera un
+ * contador MEXICANO leyendo pesos.
+ */
 export function usd(n: number): string {
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }).replace('$', 'US$');
 }
 
 /** Un entero con separador de millares, sin moneda ni unidad — tokens, conteos. */
