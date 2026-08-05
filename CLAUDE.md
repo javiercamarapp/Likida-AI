@@ -67,7 +67,21 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
 
 ## Despliegue
 
-Vercel redeploya PRODUCCIÓN en cada push a `master`. `NEXT_PUBLIC_APP_URL` debe
-ser `https://app.likida.ai`; si no coincide con el Site URL de Supabase (Auth →
-URL Configuration), el login deja la cookie en otro dominio y el usuario queda
-fuera de su propia cuenta.
+**El push a `master` ya NO despliega solo.** Desde el 5-ago-2026, `vercel.json`
+trae un `ignoreCommand` que construye únicamente si el mensaje del commit
+contiene `[deploy]`. Antes se redesplegaba producción en cada push: 30 builds en
+12 horas, ~$26 USD/mes de puro build, casi todos publicando arreglos de auditoría
+que no urgían.
+
+- **Para publicar:** escribe `[deploy]` en el mensaje del commit, o usa
+  **Redeploy** en el panel de Vercel sobre el último deployment.
+- **Los pushes a GitHub no cambian.** La gráfica de contribuciones cuenta
+  commits, no builds; puedes seguir subiendo a `master` todo el día.
+- **El modo de falla es silencioso:** si olvidas la bandera, el push se ve
+  normal en GitHub y el sitio se queda con la versión anterior sin avisar.
+  Antes de enseñarle algo a alguien, confirma que el último deployment
+  corresponda a tu último commit.
+
+`NEXT_PUBLIC_APP_URL` debe ser `https://app.likida.ai`; si no coincide con el
+Site URL de Supabase (Auth → URL Configuration), el login deja la cookie en otro
+dominio y el usuario queda fuera de su propia cuenta.
