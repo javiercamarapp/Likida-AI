@@ -108,7 +108,9 @@ export default async function Admin({
               <h1 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
                 {saludo()}, {nombre ?? 'Javier'}
               </h1>
-              <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
+              {/* Ya viene capitalizada de `fechaLarga()` — ver auditoría 10,
+                  BAJO (dashboard/page.tsx tiene la nota completa). */}
+              <p className="text-sm mt-0.5" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
             </div>
             {/* MRR real: $0 — Likida no cobra a ningún cliente todavía.
                 No es un placeholder, es el número verdadero de hoy. 7

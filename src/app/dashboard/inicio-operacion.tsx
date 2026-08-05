@@ -83,7 +83,9 @@ export async function InicioOperacion({
             <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
               {saludo()}, {nombre ?? 'jefe'}
             </h1>
-            <p className="text-[13px] mt-0.5 capitalize" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
+            {/* Ya viene capitalizada de `fechaLarga()` — ver auditoría 10,
+                BAJO (dashboard/page.tsx tiene la nota completa). */}
+            <p className="text-[13px] mt-0.5" style={{ color: 'var(--muted)' }}>{fechaLarga()}</p>
             {tenantNombre && (
               <span className="inline-block mt-1 text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
                 viendo como superadmin · {tenantNombre}

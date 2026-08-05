@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { mxn, litros, fechaMx, fechaHoraMx, round2 } from './formato';
+import { mxn, usd, litros, fechaMx, fechaHoraMx, round2 } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -51,6 +51,34 @@ describe('el formato del dinero', () => {
     // 31-jul 19:30 en México (CST, UTC−6) = 01:30 UTC del 1-ago.
     expect(fechaMx('2026-08-01T01:30:00.000Z')).toContain('31');
     expect(fechaMx('2026-08-01T01:30:00.000Z')).toContain('jul');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 10, BAJO — `mxn(1.83)` y `usd(1.83)` daban el MISMO string,
+// "$1.83": los dos `Intl.NumberFormat` de moneda usan el signo genérico "$".
+// En /admin, "Gastado en IA" y "Costo de IA" son dólares en la misma pantalla
+// que todo lo demás muestra en pesos, y nada en el texto distinguía cuál era
+// cuál. `usd()` ahora antepone "US$" — el símbolo real que se usa para no
+// confundir dólares con las otras monedas que también usan "$".
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el formato del dinero — pesos y dólares NO se escriben igual', () => {
+  it('mxn() y usd() del mismo número ya NO son el string idéntico', () => {
+    expect(mxn(1.83)).not.toBe(usd(1.83));
+  });
+
+  it('usd() lleva el prefijo US$', () => {
+    expect(usd(1234.5)).toBe('US$1,234.50');
+    expect(usd(0)).toBe('US$0.00');
+  });
+
+  it('mxn() se queda con el signo genérico, el que espera un contador mexicano', () => {
+    expect(mxn(1234.5)).toBe('$1,234.50');
+  });
+
+  it('un dólar negativo se sigue leyendo como negativo', () => {
+    expect(usd(-12.5)).toContain('-');
+    expect(usd(-12.5)).toContain('US$12.50');
   });
 });
 

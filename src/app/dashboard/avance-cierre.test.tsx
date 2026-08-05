@@ -1,0 +1,65 @@
+import { describe, it, expect } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
+import AvanceCierre from './avance-cierre';
+import type { ViajeRow } from '@/lib/cuadra/analytics';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 10 — dos hallazgos en el mismo componente.
+//
+// MEDIO: "Semana | Mes | Todo" contra "7d | 30d | Todo" de `GlobalFilter",
+// 130px abajo en la misma pantalla — dos vocabularios para la misma medida.
+// Ahora los dos hablan igual.
+//
+// BAJO: sin viajes en el periodo, el componente dibujaba la pista Y la
+// barra a `width:0%` — una barra vacía, justo lo que `chofer/vista.tsx`
+// (Barra) prohíbe con estas palabras: "SIN ANTICIPO NO SE DIBUJA BARRA.
+// Una barra vacía se lee como 'llevas 0%'."
+// ═══════════════════════════════════════════════════════════════════════════
+
+const AHORA = Date.parse('2026-08-05T12:00:00.000Z');
+
+let contador = 0;
+function viaje(fechaInicio: string | null, estatus: string): ViajeRow {
+  contador += 1;
+  return {
+    id: `v${contador}`, folio: `VJ-${contador}`, origen: null, destino: null,
+    estatus, anticipo: 0, operadorNombre: null, fechaInicio, intakePendientes: 0,
+    avisadoEn: null, aceptadoEn: null, escaladoEn: null, avisosEnviados: 0,
+  };
+}
+
+describe('AvanceCierre — mismo vocabulario que GlobalFilter', () => {
+  it('el filtro dice "7d" y "30d", no "Semana" y "Mes"', () => {
+    const html = renderToStaticMarkup(<AvanceCierre viajes={[]} ahoraMs={AHORA} />);
+    expect(html).toContain('7d');
+    expect(html).toContain('30d');
+    expect(html).not.toContain('Semana');
+    expect(html).not.toContain('>Mes<');
+  });
+});
+
+describe('AvanceCierre — sin viajes en el periodo, no se dibuja una barra vacía', () => {
+  it('con actividad, la barra (role="progressbar") SÍ se dibuja', () => {
+    const viajes = [viaje('2026-08-04', 'liquidado'), viaje('2026-08-03', 'abierto')];
+    const html = renderToStaticMarkup(<AvanceCierre viajes={viajes} ahoraMs={AHORA} />);
+    expect(html).toContain('h-2 rounded-full overflow-hidden');
+  });
+
+  it('sin ningún viaje, la pista/barra NO se dibuja — antes salía a width:0%', () => {
+    const html = renderToStaticMarkup(<AvanceCierre viajes={[]} ahoraMs={AHORA} />);
+    expect(html).not.toContain('h-2 rounded-full overflow-hidden');
+    expect(html).not.toMatch(/width:\s*0%/);
+    expect(html).toContain('No hay viajes iniciados en este periodo.');
+  });
+
+  it('con viajes que existen pero caen FUERA de la ventana por defecto (30d), tampoco se dibuja', () => {
+    // El default del componente es 'mes' (30d): un viaje de hace 65 días no
+    // cae DENTRO del periodo activo, así que `dentro` sigue en 0 aunque el
+    // arreglo `viajes` no esté vacío — el mismo caso que `estado.test.ts`
+    // ya marcó como el más traicionero (actividad real, cero en la ventana).
+    const viejo = [viaje('2026-06-01', 'liquidado')];
+    const html = renderToStaticMarkup(<AvanceCierre viajes={viejo} ahoraMs={AHORA} />);
+    expect(html).not.toMatch(/width:\s*0%/);
+    expect(html).toContain('No hay viajes iniciados en este periodo.');
+  });
+});

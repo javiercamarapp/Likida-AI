@@ -20,10 +20,24 @@ export function saludo(fecha: Date = new Date()): string {
   return 'Buenas noches';
 }
 
+/**
+ * "Martes, 4 de agosto de 2026" — capitalizada solo al INICIO, como se
+ * escribe una fecha en español.
+ *
+ * AUDITORÍA 10, BAJO — `toLocaleDateString('es-MX', ...)` da la fecha toda
+ * en minúsculas ("martes, 4 de agosto de 2026"), y los tres paneles que la
+ * pintan la subían con la clase CSS `capitalize` de Tailwind. Esa clase
+ * capitaliza CADA palabra, sin saber que "de" es una preposición: el
+ * resultado era "Martes, 4 De Agosto De 2026", con los dos "de" mal
+ * capitalizados en la línea más visible de la pantalla. Se capitaliza aquí,
+ * en JS, una sola vez — solo el primer carácter — para que ningún panel
+ * tenga que volver a adivinarlo con CSS.
+ */
 export function fechaLarga(fecha: Date = new Date()): string {
-  return fecha.toLocaleDateString('es-MX', {
+  const cruda = fecha.toLocaleDateString('es-MX', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ_MX,
   });
+  return cruda.charAt(0).toUpperCase() + cruda.slice(1);
 }
 
 /**

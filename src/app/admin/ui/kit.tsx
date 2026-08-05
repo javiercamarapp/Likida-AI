@@ -57,7 +57,15 @@ export function KpiTile({
         </div>
         <div className="min-w-0">
           <div className="text-xl font-semibold tracking-tight tabular leading-tight">{fmt(mostrado)}</div>
-          <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
+          {/* AUDITORÍA 10, MEDIO — `truncate` (una sola línea + "…") cortaba
+              la palabra que carga el significado fiscal: "IVA acreditable
+              document…" perdía justo "documentado". `line-clamp-2` deja
+              envolver a una segunda línea antes de recortar — a los anchos
+              medidos (~1100 px de contenido real, sidebar + rail
+              descontados) dos líneas alcanzan para las etiquetas más largas
+              del producto; solo un rótulo patológicamente largo llegaría a
+              perder algo, y ahí sigue habiendo un tope. */}
+          <div className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
         </div>
       </div>
       {vacio ? (
@@ -129,7 +137,10 @@ export function ChartCard({
         : { background: 'var(--panel)', border: '1px solid var(--line)', boxShadow: 'var(--shadow-card)' }}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <h3 className="text-xs font-semibold uppercase tracking-wide truncate" style={{ color: 'var(--muted)' }}>{titulo}</h3>
+          {/* Mismo criterio que `KpiTile.etiqueta`: "El gasto del periodo, por
+              su suerte fiscal" se cortaba a media palabra con `truncate` —
+              `line-clamp-2` lo deja envolver antes de recortar. */}
+          <h3 className="text-xs font-semibold uppercase tracking-wide line-clamp-2" style={{ color: 'var(--muted)' }}>{titulo}</h3>
           {subtitulo && <p className="text-xs mt-0.5" style={{ color: 'var(--faint)' }}>{subtitulo}</p>}
         </div>
         {accion}

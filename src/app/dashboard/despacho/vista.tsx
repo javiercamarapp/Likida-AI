@@ -21,7 +21,15 @@ export function TableroCifras({ t }: { t: TableroOperacion }) {
       <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
         Estado de la operación
       </h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mt-3">
+      {/* AUDITORÍA 10, MEDIO — `xl:grid-cols-6` asumía que el ancho de la
+          VENTANA es el ancho disponible para la grilla. No lo es: el sidebar
+          (232 px) más el rail del asistente (276 px) más los paddings del
+          marco dejan ~1100 px de contenido real a 1440 px de ventana. Seis
+          columnas ahí dejaban ~85 px de texto por tile — menos que a
+          `md:grid-cols-3`, la variante que se supone que xl mejora. Se
+          detiene en 3: "Sin evidencia de entrega" y "Unidades disponibles"
+          entran completas en dos líneas en vez de cortarse a la mitad. */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
         <KpiTile icono={<Truck {...ICONO} />} etiqueta="Viajes activos" valor={t.viajesActivos} formato="entero" />
         <KpiTile icono={<CircleSlash {...ICONO} />} etiqueta="Por asignar" valor={t.porAsignar} formato="entero"
           destacar={t.porAsignar > 0} nota="Sin chofer y todavía sin liquidar" />
