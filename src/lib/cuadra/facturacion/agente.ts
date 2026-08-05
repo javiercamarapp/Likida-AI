@@ -44,6 +44,34 @@ export interface ResultadoAgente {
   error?: string;
   /** Captura de la pantalla final, para poder MIRAR qué pasó. */
   captura?: string;
+  /**
+   * El portal pidió CAPTCHA. NO es "no pude", es "no se puede".
+   *
+   * Vive en el resultado GENÉRICO —y no solo en el del adaptador que lo
+   * detecta— porque quien tiene que actuar es el que enruta, y ese no sabe de
+   * qué portal viene el resultado. Ver `pideCaptcha()`.
+   */
+  requiereCaptcha?: boolean;
+  /**
+   * SE APRETÓ EMITIR Y NO SE PUDO CONFIRMAR EL UUID. El CFDI puede existir.
+   *
+   * Es la señal más cara del archivo. Sin ella, el ticket vuelve a la cola y en
+   * la corrida siguiente se emite un SEGUNDO CFDI por el mismo consumo — que es
+   * el daño que ni el ensayo ni el `ok:false` alcanzan a evitar, porque desde
+   * fuera un "no se confirmó" se ve idéntico a un "no se emitió".
+   */
+  emisionSinConfirmar?: boolean;
+}
+
+/**
+ * ¿El resultado dice "no se puede" en vez de "no pude"?
+ *
+ * Lo que separa reintentar para siempre de avisarle a una persona. Es una
+ * función y no una lectura suelta del campo para que exista UN solo sitio donde
+ * se decide qué cuenta como bloqueo permanente, el día que haya un segundo.
+ */
+export function pideCaptcha(r: Pick<ResultadoAgente, 'requiereCaptcha'>): boolean {
+  return r.requiereCaptcha === true;
 }
 
 /**
@@ -66,6 +94,235 @@ export interface AdaptadorPortal {
    * mirar el ticket ni adivina nada, solo sabe dónde va cada valor en SU portal.
    */
   facturar(campos: CampoListo[], modo: ModoAgente): Promise<ResultadoAgente>;
+  /**
+   * OPCIONAL: N tickets en UNA sesión. Ver el bloque "EL LOTE" de abajo.
+   *
+   * Un portal que no lo implemente no se rompe ni se queda atrás: quien llama
+   * usa SIEMPRE `facturarLoteConAgente`, y ahí el lote de un adaptador sin este
+   * método se resuelve llamando a `facturar` una vez por ticket — exactamente lo
+   * que se hacía antes, con el mismo resultado y sin que el llamador sepa cuál
+   * de los dos caminos tomó.
+   */
+  facturarLote?(tickets: TicketDeLote[], modo: ModoAgente): Promise<ResultadoLoteAgente>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL LOTE: N TICKETS, UNA SESIÓN, Y A VECES UN SOLO CFDI.
+//
+// ── DE DÓNDE SALE ────────────────────────────────────────────────────────
+//
+// CAPUFE no es "un formulario, un CFDI": se capturan los datos fiscales UNA
+// vez, se validan N códigos contra la misma pantalla y al final se emite UNA
+// factura con todos. Ocho casetas de un viaje son UNA sesión, no ocho. Medido
+// en `pagina_playwright.ts`: la sesión (navegar, seis datos fiscales, dos
+// catálogos por AJAX) cuesta ~1.2 s y se pagaba una vez POR TICKET. Y el costo
+// de tiempo es el menor de los dos: ocho sesiones idénticas seguidas contra el
+// mismo portal se parecen, desde el lado del portal, a un robot.
+//
+// ── POR QUÉ NO SE EXTENDIÓ `facturar()` Y YA ─────────────────────────────
+//
+// Porque `CampoListo[]` describe UN ticket y no tiene dónde decir de qué gasto
+// salió cada valor. Sin eso, el resultado de ocho códigos no se puede repartir
+// entre ocho gastos, que es justo lo que hay que escribir en la base. `facturar`
+// se queda igual —los adaptadores de un ticket no cambian ni una línea— y el
+// lote entra por un método NUEVO y OPCIONAL.
+//
+// ── LA PARTE QUE IMPORTA: EL UUID VIVE POR GASTO, NO POR LOTE ────────────
+//
+// `ResultadoLoteAgente` NO tiene un `cfdiUuid`. Lo tiene cada entrada de
+// `porGasto`, y varias pueden traer EL MISMO. Esa forma es la que hace que los
+// dos caminos sean el mismo para quien escribe en la base:
+//
+//   · portal de un ticket  → N entradas con N uuid distintos,
+//   · portal de lote       → N entradas con UN uuid repetido.
+//
+// Un `cfdiUuid` a nivel de lote habría obligado al llamador a preguntar "¿este
+// adaptador emite una factura o N?" antes de guardar nada — o sea a saber de
+// CAPUFE. Con esto no lo pregunta nunca: lee `porGasto` y escribe lo que diga.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Un ticket dentro de un lote: de qué gasto salió y sus campos ya resueltos. */
+export interface TicketDeLote {
+  /** La fila de `gasto` a la que se le va a escribir el resultado. */
+  gastoId: string;
+  campos: CampoListo[];
+}
+
+/** Qué le pasó a UN gasto dentro del lote. */
+export interface ResultadoPorGasto {
+  gastoId: string;
+  /**
+   * Quedó DENTRO de la factura. En `ensayo` significa "habría quedado": el
+   * portal lo aceptó y el botón de emitir no se tocó.
+   */
+  incluido: boolean;
+  /**
+   * El CFDI que ampara ESTE gasto. Varios gastos pueden compartirlo — es una
+   * factura de varias casetas, no varias facturas.
+   */
+  cfdiUuid?: string;
+  /** Por qué no entró, o qué hay que mirar aunque haya entrado. */
+  motivo?: string;
+}
+
+export interface ResultadoLoteAgente {
+  modo: ModoAgente;
+  /**
+   * Entró algo. Se DERIVA de `porGasto` y no lo declara el adaptador: un
+   * `ok: true` con cero gastos incluidos es la clase de verde que este repo
+   * paga caro.
+   */
+  ok: boolean;
+  /** Uno por ticket de ENTRADA, sin faltar ninguno. Lo garantiza `completar()`. */
+  porGasto: ResultadoPorGasto[];
+  /** Los datos fiscales que se escribieron en el portal, una vez por sesión. */
+  capturado: Record<string, string>;
+  /** La pantalla, para poder MIRAR qué se habría enviado. */
+  captura?: string;
+  requiereCaptcha?: boolean;
+  emisionSinConfirmar?: boolean;
+  error?: string;
+  /** Salió bien pero hay algo que mirar (rechazos parciales, costos ilegibles). */
+  aviso?: string;
+}
+
+/**
+ * Corre el agente sobre UN LOTE de tickets del mismo portal y la misma flota.
+ *
+ * Es el único camino que debe usar quien factura: decide solo si el adaptador
+ * sabe hacer lotes o hay que llamarlo ticket por ticket, y devuelve la misma
+ * forma en los dos casos.
+ *
+ * FALLA CERRADO en lo que puede escribir en la base: `completar()` se queda
+ * SOLO con los gastos que se mandaron, y a los que el adaptador no reportó los
+ * da por NO incluidos. Un adaptador que devolviera un gastoId inventado —o que
+ * olvidara uno— no puede hacer que se escriba un UUID sobre una fila que nadie
+ * mandó al portal.
+ */
+export async function facturarLoteConAgente(args: {
+  tenantId: string;
+  comercio: string;
+  tickets: TicketDeLote[];
+  modo?: ModoAgente;
+}): Promise<ResultadoLoteAgente> {
+  const modo: ModoAgente = args.modo ?? 'ensayo';
+  const a = adaptadorDe(args.tenantId, args.comercio);
+
+  if (!a) {
+    return completar(
+      { modo, porGasto: [], capturado: {}, error: `Todavía no hay adaptador para "${args.comercio}" en esta flota. Ese portal se factura a mano hasta que lo haya.` },
+      args.tickets,
+      modo,
+    );
+  }
+  if (args.tickets.length === 0) {
+    return completar({ modo, porGasto: [], capturado: {}, error: 'No se recibió ningún ticket para el lote. No se abrió el portal.' }, [], modo);
+  }
+
+  try {
+    const bruto = a.facturarLote
+      ? await a.facturarLote(args.tickets, modo)
+      : await unoPorUno(args.tenantId, args.comercio, args.tickets, modo);
+    logger.info('agente.facturacion.lote', {
+      tenant: args.tenantId, comercio: args.comercio, modo,
+      tickets: args.tickets.length, enLote: Boolean(a.facturarLote),
+    });
+    return completar(bruto, args.tickets, modo);
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    logger.error('agente.facturacion.lote.fallo', { tenant: args.tenantId, comercio: args.comercio, modo, error });
+    // NO se reintenta, por lo mismo de siempre: en `emitir` un reintento tras un
+    // fallo ambiguo es cómo se acaba con dos CFDI por el mismo consumo.
+    return completar({ modo, porGasto: [], capturado: {}, error }, args.tickets, modo);
+  }
+}
+
+/**
+ * El lote de un adaptador que solo sabe de a uno. UNA sesión por ticket, que es
+ * lo que ese portal necesita de todas formas.
+ *
+ * Pasa por `facturarConAgente` y no por `a.facturar` directo para que las reglas
+ * de un ticket —campos requeridos vacíos, el error tal cual— vivan en UN sitio.
+ */
+async function unoPorUno(
+  tenantId: string,
+  comercio: string,
+  tickets: TicketDeLote[],
+  modo: ModoAgente,
+): Promise<Omit<ResultadoLoteAgente, 'ok'>> {
+  const porGasto: ResultadoPorGasto[] = [];
+  let capturado: Record<string, string> = {};
+  let captura: string | undefined;
+  let requiereCaptcha = false;
+  let emisionSinConfirmar = false;
+  const errores: string[] = [];
+
+  for (const t of tickets) {
+    const r = await facturarConAgente({ tenantId, comercio, campos: t.campos, modo });
+    // El último que llegó a escribir algo es el que se enseña: son sesiones
+    // distintas, así que no hay una pantalla del lote que valga por todas.
+    if (Object.keys(r.capturado).length > 0) capturado = r.capturado;
+    if (r.captura) captura = r.captura;
+    if (pideCaptcha(r)) requiereCaptcha = true;
+    if (r.emisionSinConfirmar) emisionSinConfirmar = true;
+    if (r.error) errores.push(`${t.gastoId}: ${r.error}`);
+
+    porGasto.push({
+      gastoId: t.gastoId,
+      // En `emitir` un ok sin UUID no es una factura: es un portal que no la
+      // confirmó, y escribirle un uuid vacío al gasto sería peor que no escribir.
+      incluido: r.ok && (modo === 'ensayo' || Boolean(r.cfdiUuid)),
+      ...(r.cfdiUuid ? { cfdiUuid: r.cfdiUuid } : {}),
+      ...(r.error ? { motivo: r.error } : {}),
+    });
+  }
+
+  return {
+    modo, porGasto, capturado, captura,
+    ...(requiereCaptcha ? { requiereCaptcha } : {}),
+    ...(emisionSinConfirmar ? { emisionSinConfirmar } : {}),
+    ...(errores.length > 0 ? { error: errores.join(' · ') } : {}),
+  };
+}
+
+/**
+ * Reconcilia lo que devolvió el adaptador contra lo que se le mandó.
+ *
+ * Tres cosas, y las tres son de fallar cerrado:
+ *  1. Cada ticket de entrada aparece EXACTAMENTE una vez en la salida.
+ *  2. Un gastoId que no se mandó se descarta —con log—, aunque venga con uuid.
+ *  3. `ok` se deriva de los incluidos, no lo declara el adaptador.
+ */
+function completar(
+  bruto: Omit<ResultadoLoteAgente, 'ok'>,
+  tickets: TicketDeLote[],
+  modo: ModoAgente,
+): ResultadoLoteAgente {
+  const pedidos = new Set(tickets.map((t) => t.gastoId));
+  const porId = new Map<string, ResultadoPorGasto>();
+  const colados: string[] = [];
+
+  for (const p of bruto.porGasto) {
+    if (!pedidos.has(p.gastoId)) { colados.push(p.gastoId); continue; }
+    // El PRIMERO manda: un adaptador que reporte dos veces el mismo gasto no
+    // puede mejorar su propio veredicto en la segunda pasada.
+    if (!porId.has(p.gastoId)) porId.set(p.gastoId, p);
+  }
+  if (colados.length > 0) {
+    logger.error('agente.lote.gasto_ajeno', { colados: colados.join(','), pedidos: tickets.length });
+  }
+
+  const porGasto = tickets.map((t) =>
+    porId.get(t.gastoId) ?? {
+      gastoId: t.gastoId,
+      incluido: false,
+      motivo: bruto.error
+        ? `No se llegó a intentar en el portal: ${bruto.error}`
+        : 'El adaptador no dijo qué pasó con este ticket, así que se cuenta como no facturado.',
+    },
+  );
+
+  return { ...bruto, modo, porGasto, ok: porGasto.some((p) => p.incluido) };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

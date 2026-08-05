@@ -301,7 +301,7 @@ export abstract class AdaptadorPlaywrightBase implements AdaptadorPortal {
           : aparecio
             ? `el contenedor del UUID (\`${mapeo.uuid}\`) apareció y siguió VACÍO tras ~${this.esperaUuidMs} ms`
             : `el contenedor del UUID (\`${mapeo.uuid}\`) no apareció en ~${this.esperaUuidMs} ms`;
-        return this.fallo(modo, `Se apretó emitir en ${this.portal} y no se pudo confirmar el UUID — ${porQue}${rechazoPost ? ` (el portal dice: "${rechazoPost}")` : ''}. PUEDE QUE EL CFDI YA EXISTA: revisar el portal antes de volver a intentar — un segundo intento lo duplicaría.`, { capturado, captura });
+        return this.fallo(modo, `Se apretó emitir en ${this.portal} y no se pudo confirmar el UUID — ${porQue}${rechazoPost ? ` (el portal dice: "${rechazoPost}")` : ''}. PUEDE QUE EL CFDI YA EXISTA: revisar el portal antes de volver a intentar — un segundo intento lo duplicaría.`, { capturado, captura, emisionSinConfirmar: true });
       }
 
       return { modo, ok: true, capturado, captura, cfdiUuid: uuid };
@@ -311,7 +311,11 @@ export abstract class AdaptadorPlaywrightBase implements AdaptadorPortal {
         ? `SE APRETÓ EMITIR y después falló. ${detalle} PUEDE QUE EL CFDI YA EXISTA: revisar el portal antes de volver a intentar.`
         : detalle;
       logger.error('agente.portal.fallo', { comercio: this.comercio, modo, seApreto });
-      return this.fallo(modo, error, { capturado, captura });
+      // `emisionSinConfirmar` es lo que impide que el reintento de la corrida
+      // siguiente emita un SEGUNDO CFDI por el mismo consumo: aquí no se sabe si
+      // el formulario alcanzó a irse, y esa duda tiene que viajar como bandera,
+      // no como una frase dentro del error.
+      return this.fallo(modo, error, { capturado, captura, ...(seApreto ? { emisionSinConfirmar: true } : {}) });
     } finally {
       if (pagina?.cerrar) {
         try {

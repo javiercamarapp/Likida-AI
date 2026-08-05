@@ -10,13 +10,29 @@ const nextConfig: NextConfig = {
   // utilidades con `require` calculados en runtime; bundlearlo deja esas rutas
   // apuntando a archivos que no existen y el fallo aparece EN EL DEPLOY, no en
   // local, que es el modo caro. Misma razón que `zxing-wasm`.
-  serverExternalPackages: ['sharp', 'zxing-wasm', 'pdf-lib', 'playwright-core'],
+  // `@sparticuz/chromium` va por DOS razones, y las dos aparecen solo en el
+  // deploy: (1) su `getBinPath()` calcula la carpeta `bin/` desde
+  // `import.meta.url`, así que si el bundler mueve el módulo la ruta apunta a
+  // un sitio donde no están los `.br` —el propio paquete lanza ahí un error que
+  // dice "you must externalize @sparticuz/chromium"—; (2) es ESM puro con
+  // efecto de módulo (pone LD_LIBRARY_PATH y FONTCONFIG_PATH al importarse),
+  // y eso hay que dejarlo pasar tal cual.
+  serverExternalPackages: ['sharp', 'zxing-wasm', 'pdf-lib', 'playwright-core', '@sparticuz/chromium'],
   // El `.wasm` del lector se lee de disco en runtime (ver cfdi.ts), sin ningún
   // import que el tracer pueda seguir — así que hay que meterlo a la fuerza al
   // bundle de la función. Sin esto el webhook despliega "bien" y truena al
   // decodificar el primer código, que es el modo de fallo caro.
+  //
+  // Los `bin/*.br` de `@sparticuz/chromium` son el MISMO caso: 66 MB de
+  // archivos que ningún `import` menciona. El paquete los abre en runtime con
+  // una ruta calculada (`dirname(import.meta.url) + "/../bin"`), y el tracer no
+  // sigue eso. Sin este include el deploy sale "bien" y el cron responde 503
+  // diciendo que el paquete no dio binario — el modo de fallo caro otra vez.
+  // Va SOLO en la función del cron: es la única que abre un navegador, y meter
+  // 66 MB en todas las demás las acercaría al límite de 250 MB sin motivo.
   outputFileTracingIncludes: {
     '/api/webhook/whatsapp': ['./node_modules/zxing-wasm/dist/reader/*.wasm'],
+    '/api/cron/facturar': ['./node_modules/@sparticuz/chromium/bin/**'],
   },
   // Cinturón, además del tirante. `cfdi.ts` lee el `.wasm` de disco en runtime y
   // eso hace que el tracer considere alcanzable cualquier archivo bajo el

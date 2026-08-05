@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page, type Locator } from 'playwright-core';
@@ -185,8 +186,319 @@ export const BANDERAS_CONTENEDOR: readonly string[] = [
   '--hide-scrollbars',
 ];
 
-/** Ruta al binario de Chromium cuando no está donde Playwright lo busca. */
-const CHROMIUM_DEL_ENTORNO = process.env.CUADRA_CHROMIUM_PATH || undefined;
+// ═══════════════════════════════════════════════════════════════════════════
+// DE DÓNDE SALE EL BINARIO — TRES CAMINOS, Y EL ORDEN NO ES CAPRICHO
+//
+// `playwright-core` NO trae Chromium: lo baja `npx playwright install chromium`
+// a la caché de la MÁQUINA (`~/Library/Caches/ms-playwright`), y esa caché no
+// existe dentro del contenedor de una función. Por eso hay tres orígenes
+// posibles y se prueban en este orden:
+//
+//   (a) EXPLÍCITO — `OpcionesNavegador.executablePath` o `CUADRA_CHROMIUM_PATH`.
+//       Va primero porque es la única puerta de escape que no depende de que
+//       adivinemos bien: el día que haya un binario en una capa, en una imagen
+//       propia o en `/opt`, se pone la ruta y nada más tiene voto. Si apunta a
+//       algo que NO existe no se aborta: se anota el fallo y se sigue con (b).
+//       Una variable mal escrita en el panel de Vercel no debe dejar sin
+//       facturar a nadie cuando había un camino bueno detrás — pero SÍ tiene
+//       que salir en el diagnóstico, y sale.
+//
+//   (b) SERVERLESS — `@sparticuz/chromium`. Trae el binario comprimido en
+//       brotli, lo descomprime en `/tmp` la primera vez (~190 MB, ~0.8 s
+//       medidos en esta Mac) y DEVUELVE LA RUTA: `await
+//       chromium.executablePath()`. O sea que no se puede escribir como
+//       literal en una variable de entorno, y por eso este camino es código y
+//       no configuración.
+//
+//       Se intenta SOLO en linux/x64, que es la ABI del binario que publica el
+//       paquete en npm (para arm64 hay que ir por `@sparticuz/chromium-min` +
+//       una capa; lo dice su README). Sin ese candado, en la Mac de Javier se
+//       descomprimirían 190 MB en /tmp para después fallar con un ELF de Linux
+//       —y el Chromium local, que sí sirve, se quedaría a un paso sin que nadie
+//       lo intentara—.
+//
+//   (c) PLAYWRIGHT LOCAL — el de la caché de la máquina. Es el de desarrollo.
+//       No se pasa `executablePath`: se deja que Playwright resuelva SOLO,
+//       porque con `headless: true` él elige `chrome-headless-shell` y no el
+//       Chromium completo, y forzarle la ruta del completo cambiaría —sin
+//       pedirlo— el binario contra el que corren las 28 pruebas del motor.
+//       La ruta se sondea igual, pero únicamente para poder decir en el
+//       diagnóstico si estaba o no.
+//
+// LO QUE SE GANA CON QUE ESTO SEA UNA LISTA Y NO UN `??`: cuando no arranca,
+// el error dice los TRES intentos con su motivo. La diferencia entre "Executable
+// doesn't exist" —que manda a instalar algo en una máquina que no es la que
+// falla— y "en Vercel se intentó el serverless y el paquete no estaba en el
+// bundle" es media jornada de trabajo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type ViaEjecutable = 'explicito' | 'serverless' | 'playwright' | 'inyectado';
+
+export interface IntentoEjecutable {
+  via: ViaEjecutable;
+  /** ¿Este camino dio un binario utilizable? */
+  ok: boolean;
+  /** La ruta que dio, si dio alguna. */
+  ruta?: string;
+  /** Por qué sirvió, o por qué no. Se escribe para que lo lea una persona. */
+  porQue: string;
+}
+
+export interface ResolucionEjecutable {
+  /** El camino que ganó. `null` = ninguno; el arranque va a fallar. */
+  via: ViaEjecutable | null;
+  /**
+   * Lo que se le pasa a `chromium.launch`. `undefined` NO es un fallo: es
+   * "que Playwright resuelva", que es el caso (c).
+   */
+  executablePath: string | undefined;
+  /** Las banderas que trae el paquete serverless. Vacío si no vino de (b). */
+  banderasDelPaquete: readonly string[];
+  /** Los tres caminos, en orden, con su resultado. Esto es el diagnóstico. */
+  intentos: IntentoEjecutable[];
+}
+
+/** Lo que `@sparticuz/chromium` promete. Verificado contra su `build/index.js`. */
+interface ChromiumServerless {
+  args: string[];
+  executablePath(input?: string): Promise<string>;
+}
+
+/**
+ * El mundo de afuera, inyectable. Sin esto, el camino (b) solo se podría probar
+ * dentro de un contenedor Linux — o sea, nunca desde la máquina donde se escribe.
+ */
+export interface EntornoEjecutable {
+  plataforma: string;
+  arquitectura: string;
+  existe: (ruta: string) => boolean;
+  /** Carga el paquete serverless. Lanza si no está instalado. */
+  cargarServerless: () => Promise<ChromiumServerless>;
+  /** La ruta que Playwright usaría en esta máquina. Lanza si no hay browser. */
+  rutaDePlaywright: () => string;
+}
+
+export const ENTORNO_REAL: EntornoEjecutable = {
+  plataforma: process.platform,
+  arquitectura: process.arch,
+  existe: existsSync,
+  cargarServerless: async () => {
+    // Import DINÁMICO a propósito. El paquete tiene efecto de módulo —al
+    // importarse pone LD_LIBRARY_PATH, HOME y FONTCONFIG_PATH cuando detecta
+    // Amazon Linux 2023, que es lo que hay debajo de una función de Vercel— y
+    // no hay razón para pagar eso en la Mac, donde el camino (b) ni se intenta.
+    const mod = (await import('@sparticuz/chromium')) as { default: ChromiumServerless };
+    return mod.default;
+  },
+  rutaDePlaywright: () => chromium.executablePath(),
+};
+
+/** El nombre de una bandera, sin su valor: `--disk-cache-size=33554432` → `--disk-cache-size`. */
+function nombreDeBandera(bandera: string): string {
+  const i = bandera.indexOf('=');
+  return i === -1 ? bandera : bandera.slice(0, i);
+}
+
+/**
+ * Banderas cuyo valor es una LISTA. Repetir una de estas no es un duplicado
+ * inofensivo: Chromium se queda con la ÚLTIMA aparición y tira la anterior
+ * entera, así que dos fuentes que las usan se pisan en silencio. Se unen.
+ */
+const BANDERAS_ACUMULATIVAS = new Set(['--disable-features', '--enable-features', '--disable-blink-features', '--enable-blink-features']);
+
+/**
+ * LO QUE TRAE `@sparticuz/chromium` Y AQUÍ NO SE USA.
+ *
+ * Su lista está afinada para Puppeteer en Lambda, y tres de sus banderas son
+ * activamente malas con Playwright. Se descartan por NOMBRE y con el motivo a
+ * la vista, porque el día que el paquete cambie la lista esto hay que releerlo.
+ */
+export const BANDERAS_DEL_PAQUETE_DESCARTADAS: ReadonlyMap<string, string> = new Map([
+  [
+    '--single-process',
+    // Playwright no lo soporta: habla CDP contra el proceso navegador y crea
+    // targets, y en modo un-solo-proceso eso truena. El README del paquete
+    // recomienda pasar `chromium.args` tal cual a Playwright; se le lleva la
+    // contraria a sabiendas, porque no puedo desplegar para comprobarlo y el
+    // costo de equivocarse es un demo sin facturación. Lo que se pierde es
+    // memoria (un proceso en vez de varios), no funcionalidad. Para volver a
+    // ponerlo: `banderasExtra: ["--single-process"]`.
+    'Playwright no soporta el modo de un solo proceso (crea targets por CDP y ahí truena).',
+  ],
+  [
+    '--headless',
+    // Viene como `--headless='shell'` — con las comillas dentro del string, que
+    // es una fuga del shell del que se copió. Playwright ya pone `--headless`
+    // según `headless: true`, y el binario del paquete ES chrome-headless-shell,
+    // así que el valor no aporta y el duplicado sí puede confundir el parseo.
+    'La pone Playwright según `headless`, y el paquete la manda mal escrita (`--headless=\'shell\'`).',
+  ],
+  [
+    '--disable-features',
+    // AQUÍ ESTÁ EL DAÑO SILENCIOSO. Playwright arranca con su propia
+    // `--disable-features=…` (AvoidUnnecessaryBeforeUnloadCheckSync, PaintHolding,
+    // HttpsUpgrades, ThirdPartyStoragePartitioning, Translate…) y esa lista es
+    // parte de cómo Playwright se comporta: PaintHolding afecta a las capturas,
+    // HttpsUpgrades a la navegación. Como las banderas del usuario se AÑADEN
+    // detrás de las suyas y Chromium se queda con la última aparición, pasar
+    // otra `--disable-features` BORRA la de Playwright completa. Lo que trae el
+    // paquete (site-per-process, IsolateOrigins, AudioServiceOutOfProcess) es
+    // ahorro de memoria; no vale perder por ello el comportamiento del driver.
+    'Pisaría la lista de Playwright entera: Chromium se queda con la última aparición del switch.',
+  ],
+  ['--enable-features', 'Mismo motivo que `--disable-features`: pisa la de Playwright. `SharedArrayBuffer` no le hace falta a un formulario.'],
+  // Las tres de abajo aflojan la seguridad del navegador. Vienen de recetas de
+  // scraping, donde leer respuestas de otro origen es el trabajo. Aquí el
+  // trabajo es teclear en un formulario HTTPS: no compran nada y sí amplían lo
+  // que un portal comprometido puede tocar. Ya se acepta `--no-sandbox` por
+  // obligación del entorno; esto no es obligatorio.
+  ['--disable-web-security', 'Apaga el mismo-origen. No hace falta para llenar un formulario y amplía lo que un portal comprometido alcanza.'],
+  ['--disable-site-isolation-trials', 'Va de la mano de apagar site-per-process, que tampoco se apaga.'],
+  ['--allow-running-insecure-content', 'El portal es HTTPS; permitir contenido mixto solo agrega superficie.'],
+]);
+
+/**
+ * LO NUESTRO QUE ESTORBA CUANDO EL PAQUETE PONE SU PROPIA PILA GRÁFICA.
+ *
+ * `--disable-gpu` está en `BANDERAS_CONTENEDOR` porque en un contenedor pelado
+ * Chromium intenta inicializar una GPU que no hay. Pero `@sparticuz/chromium`
+ * SÍ trae una: extrae SwiftShader (ANGLE por software) y pide usarla con
+ * `--use-gl=angle --use-angle=swiftshader`. Las dos cosas juntas se
+ * contradicen: `--disable-gpu` gana y deja el SwiftShader recién descomprimido
+ * sin usar.
+ *
+ * Se le cede al paquete, y no solo por coherencia: reCAPTCHA puntúa el
+ * navegador y un Chromium sin WebGL se parece más a un robot que uno con
+ * WebGL por software. Este portal carga reCAPTCHA.
+ */
+export const BANDERAS_NUESTRAS_QUE_CEDEN_AL_PAQUETE: ReadonlyMap<string, string> = new Map([
+  ['--disable-gpu', 'El paquete serverless trae SwiftShader y pide usarlo (`--use-gl=angle`); apagar la GPU lo dejaría descomprimido y sin usar.'],
+]);
+
+/**
+ * Une las banderas nuestras con las del paquete: sin duplicados y sin que una
+ * borre a la otra.
+ *
+ * Tres reglas, en este orden:
+ *  1. Si el paquete trae banderas, se quitan las nuestras que lo contradicen.
+ *  2. Se descartan las suyas que rompen a Playwright o aflojan la seguridad.
+ *  3. Ante el mismo nombre de bandera gana la PRIMERA (o sea, la nuestra: son
+ *     las que tienen un fallo concreto escrito al lado). Salvo las de lista,
+ *     que se unen en vez de elegir.
+ */
+export function componerBanderas(nuestras: readonly string[], delPaquete: readonly string[] = []): string[] {
+  const hayPaquete = delPaquete.length > 0;
+  const salida: string[] = [];
+  const donde = new Map<string, number>();
+
+  const meter = (bandera: string) => {
+    const nombre = nombreDeBandera(bandera);
+    const ya = donde.get(nombre);
+    if (ya === undefined) {
+      donde.set(nombre, salida.length);
+      salida.push(bandera);
+      return;
+    }
+    if (BANDERAS_ACUMULATIVAS.has(nombre)) {
+      const valores = new Set([
+        ...(salida[ya].slice(nombre.length + 1).split(',')),
+        ...(bandera.slice(nombre.length + 1).split(',')),
+      ].filter(Boolean));
+      salida[ya] = `${nombre}=${[...valores].join(',')}`;
+      return;
+    }
+    // Un duplicado idéntico es ruido y se calla. Uno con OTRO valor significa
+    // que dos fuentes quieren cosas distintas, y eso hay que verlo.
+    if (salida[ya] !== bandera) {
+      logger.warn('portal.bandera_en_conflicto', { gana: salida[ya], descartada: bandera });
+    }
+  };
+
+  for (const b of nuestras) {
+    if (hayPaquete && BANDERAS_NUESTRAS_QUE_CEDEN_AL_PAQUETE.has(nombreDeBandera(b))) continue;
+    meter(b);
+  }
+  for (const b of delPaquete) {
+    if (BANDERAS_DEL_PAQUETE_DESCARTADAS.has(nombreDeBandera(b))) continue;
+    meter(b);
+  }
+  return salida;
+}
+
+/**
+ * Los tres caminos, en orden, sin arrancar nada.
+ *
+ * Se puede llamar por su cuenta para diagnosticar: dice qué binario se usaría
+ * HOY en esta máquina y qué falló en los caminos que no se tomaron.
+ */
+export async function resolverEjecutable(
+  explicito?: string,
+  entorno: EntornoEjecutable = ENTORNO_REAL,
+): Promise<ResolucionEjecutable> {
+  const intentos: IntentoEjecutable[] = [];
+
+  // ── (a) EXPLÍCITO ────────────────────────────────────────────────────────
+  const puesto = explicito ?? process.env.CUADRA_CHROMIUM_PATH ?? '';
+  if (!puesto.trim()) {
+    intentos.push({ via: 'explicito', ok: false, porQue: 'no hay `CUADRA_CHROMIUM_PATH` ni `executablePath`' });
+  } else if (!entorno.existe(puesto)) {
+    intentos.push({ via: 'explicito', ok: false, ruta: puesto, porQue: `se pidió esa ruta y NO existe en esta máquina` });
+    logger.warn('portal.chromium_explicito_no_existe', { ruta: puesto });
+  } else {
+    intentos.push({ via: 'explicito', ok: true, ruta: puesto, porQue: 'ruta puesta a mano y el archivo está' });
+    return { via: 'explicito', executablePath: puesto, banderasDelPaquete: [], intentos };
+  }
+
+  // ── (b) SERVERLESS ───────────────────────────────────────────────────────
+  const abi = `${entorno.plataforma}/${entorno.arquitectura}`;
+  if (entorno.plataforma !== 'linux' || entorno.arquitectura !== 'x64') {
+    intentos.push({
+      via: 'serverless',
+      ok: false,
+      porQue: `no se intentó: el binario de @sparticuz/chromium es linux/x64 y esta máquina es ${abi}`,
+    });
+  } else {
+    try {
+      const paquete = await entorno.cargarServerless();
+      const ruta = await paquete.executablePath();
+      if (!entorno.existe(ruta)) {
+        intentos.push({ via: 'serverless', ok: false, ruta, porQue: 'el paquete dijo una ruta y ahí no quedó nada (¿se llenó /tmp?)' });
+      } else {
+        intentos.push({ via: 'serverless', ok: true, ruta, porQue: '@sparticuz/chromium descomprimió su binario' });
+        return { via: 'serverless', executablePath: ruta, banderasDelPaquete: paquete.args, intentos };
+      }
+    } catch (e) {
+      // Aquí caen las dos causas que importan y se distinguen solas por el
+      // mensaje: el paquete no está instalado / no viajó en el bundle
+      // (ERR_MODULE_NOT_FOUND, o el "input directory does not exist" que lanza
+      // él mismo cuando un bundler le movió el `bin/`), o la descompresión
+      // falló (/tmp lleno).
+      intentos.push({ via: 'serverless', ok: false, porQue: `@sparticuz/chromium no dio binario: ${texto(e)}` });
+    }
+  }
+
+  // ── (c) PLAYWRIGHT LOCAL ─────────────────────────────────────────────────
+  try {
+    const sondeo = entorno.rutaDePlaywright();
+    if (entorno.existe(sondeo)) {
+      // `undefined` a propósito: ver el encabezado. Playwright elige el binario
+      // que corresponde a `headless`, y ese no siempre es este.
+      intentos.push({ via: 'playwright', ok: true, ruta: sondeo, porQue: 'hay browser en la caché de Playwright; lo resuelve él' });
+      return { via: 'playwright', executablePath: undefined, banderasDelPaquete: [], intentos };
+    }
+    intentos.push({ via: 'playwright', ok: false, ruta: sondeo, porQue: 'no hay browser en la caché de Playwright (falta `npx playwright install chromium`)' });
+  } catch (e) {
+    intentos.push({ via: 'playwright', ok: false, porQue: `playwright-core no supo decir su ruta: ${texto(e)}` });
+  }
+
+  return { via: null, executablePath: undefined, banderasDelPaquete: [], intentos };
+}
+
+/** Los tres intentos en una línea por camino, para meterlo en un error o en un log. */
+export function describirResolucion(r: ResolucionEjecutable): string {
+  const linea = (i: IntentoEjecutable) => `${i.via}: ${i.ok ? 'SÍ' : 'no'} — ${i.porQue}${i.ruta ? ` [${i.ruta}]` : ''}`;
+  return r.intentos.map(linea).join(' · ');
+}
 
 /**
  * Tamaño máximo del data-uri de una captura, en caracteres de base64.
@@ -572,12 +884,15 @@ export class PaginaPlaywright implements PaginaPortal {
 
 export interface OpcionesNavegador {
   /**
-   * Ruta al binario. En la Mac y en CI, Playwright lo encuentra solo en su
-   * caché. En Vercel hay que decírselo (ver el final del archivo).
+   * Ruta al binario, a mano. Es el camino (a) de `resolverEjecutable`: gana
+   * sobre `CUADRA_CHROMIUM_PATH`, sobre el paquete serverless y sobre la caché
+   * de Playwright. Si no se pasa, se resuelve solo.
    */
   executablePath?: string;
   /** Banderas. Por default las de contenedor; se agregan, no se reemplazan. */
   banderasExtra?: readonly string[];
+  /** El mundo de afuera para resolver el binario. Se inyecta en las pruebas. */
+  entorno?: EntornoEjecutable;
   /**
    * HEADLESS SIEMPRE. La opción existe para poder mirar el navegador desde la
    * Mac mientras se depura un portal nuevo, y para nada más: con `false` en
@@ -614,22 +929,46 @@ export class SesionNavegador {
 
   static async abrir(op: OpcionesNavegador = {}): Promise<SesionNavegador> {
     const lanzar = op.lanzar ?? ((o) => chromium.launch(o));
-    const navegador = await acotar(
-      () =>
-        lanzar({
-          // El default es `true`, pero se escribe: es la diferencia entre correr
-          // y no correr en el contenedor, y no debe depender de un default ajeno.
-          headless: op.headless ?? true,
-          args: [...BANDERAS_CONTENEDOR, ...(op.banderasExtra ?? [])],
-          // Redundante con `--no-sandbox`, y aun así se pone: Playwright lo
-          // consulta por su cuenta para decidir cómo arranca el proceso.
-          chromiumSandbox: false,
-          executablePath: op.executablePath ?? CHROMIUM_DEL_ENTORNO,
-          timeout: TOPE_LANZAR_MS,
-        }),
-      TOPE_LANZAR_MS,
-      'arrancar Chromium',
-    );
+
+    // Se resuelve ANTES de arrancar, y el resultado se guarda entero: si el
+    // arranque falla, el error lleva los tres caminos con su motivo. Sin esto,
+    // lo único que se ve en el log de Vercel es "Executable doesn't exist at
+    // /home/sbx_user…", que manda a instalar algo en una máquina a la que nadie
+    // tiene acceso.
+    const resolucion = await resolverEjecutable(op.executablePath, op.entorno);
+    const args = componerBanderas([...BANDERAS_CONTENEDOR, ...(op.banderasExtra ?? [])], resolucion.banderasDelPaquete);
+    logger.info('portal.chromium_resuelto', {
+      via: resolucion.via,
+      ruta: resolucion.executablePath,
+      banderas: args.length,
+      delPaquete: resolucion.banderasDelPaquete.length,
+    });
+
+    let navegador: Browser;
+    try {
+      navegador = await acotar(
+        () =>
+          lanzar({
+            // El default es `true`, pero se escribe: es la diferencia entre correr
+            // y no correr en el contenedor, y no debe depender de un default ajeno.
+            headless: op.headless ?? true,
+            args,
+            // Redundante con `--no-sandbox`, y aun así se pone: Playwright lo
+            // consulta por su cuenta para decidir cómo arranca el proceso.
+            chromiumSandbox: false,
+            executablePath: resolucion.executablePath,
+            timeout: TOPE_LANZAR_MS,
+          }),
+        TOPE_LANZAR_MS,
+        'arrancar Chromium',
+      );
+    } catch (e) {
+      logger.error('portal.chromium_no_arranco', { via: resolucion.via, intentos: describirResolucion(resolucion) });
+      throw new Error(
+        `No arrancó Chromium (${texto(e)}). De dónde se intentó sacar el binario, en orden — ${describirResolucion(resolucion)}.`,
+        { cause: e },
+      );
+    }
 
     try {
       const contexto = await navegador.newContext({
@@ -750,24 +1089,35 @@ export async function conNavegador<T>(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LO QUE FALTA PARA QUE ESTO CORRA EN VERCEL
+// QUÉ MIRAR EN EL PRIMER DESPLIEGUE CON CHROMIUM
 //
-// `playwright-core` NO trae el binario de Chromium: lo baja `npx playwright
-// install chromium` a la caché de la máquina, y esa caché no existe en el
-// contenedor de la función. Hoy, tal cual, `chromium.launch()` en Vercel falla
-// con "Executable doesn't exist".
+// El binario ya lo trae `@sparticuz/chromium` (camino (b) de arriba) y el
+// arranque ya no depende de que nadie escriba una ruta. Lo que NO se puede
+// verificar desde esta máquina es lo que pasa DENTRO del contenedor, así que
+// queda escrito qué mirar, en orden, la primera vez:
 //
-// Los dos caminos, y ninguno es una línea de código:
+//   1. `portal.chromium_resuelto` en los logs de la función. Tiene que decir
+//      `via: "serverless"`. Si dice `"playwright"` es que el contenedor es
+//      arm64 (no debería) y si dice `null` es que el paquete no viajó en el
+//      bundle — ahí se revisa `serverExternalPackages` y el
+//      `outputFileTracingIncludes` de `next.config.ts`, que es lo que mete los
+//      `bin/*.br` a la fuerza.
+//   2. EL TAMAÑO. El límite por función de Vercel es 250 MB SIN COMPRIMIR, no
+//      los 5 GB de "large functions" — esos son un opt-in
+//      (`VERCEL_SUPPORT_LARGE_FUNCTIONS=1`) para proyectos que ya existían.
+//      `@sparticuz/chromium` son 67 MB y `playwright-core` 13 MB.
+//   3. /tmp. El binario se descomprime a ~190 MB ahí dentro y sobrevive entre
+//      invocaciones calientes (por eso la segunda corrida arranca más rápido).
+//      Súmale el perfil que Playwright crea por lanzamiento: por eso
+//      `conNavegador` cierra en un `finally` —cerrar es lo que borra ese
+//      perfil— y por eso importa que siga siendo así.
+//   4. La MEMORIA. El paquete pide 512 MB como mínimo y recomienda 1600+.
+//      Aquí, además, se le quitó `--single-process`, así que Chromium usa
+//      varios procesos y gasta más que en la receta del paquete.
 //
-//   1. Un Chromium empaquetado para serverless (`@sparticuz/chromium` o
-//      `playwright-aws-lambda`): se pone su `executablePath` en
-//      `CUADRA_CHROMIUM_PATH` o en `OpcionesNavegador.executablePath`. Pesa
-//      ~50 MB comprimido y entra de sobra en los 5 GB que admite Fluid Compute.
-//   2. Un navegador REMOTO (Browserless, Browserbase): se cambia `chromium.launch`
-//      por `chromium.connectOverCDP(url)`. Es lo que hay que hacer el día que el
-//      portal empiece a bloquear la IP de Vercel, porque también da IP de salida
-//      distinta.
-//
-// El resto del archivo no cambia con ninguno de los dos: lo único que se toca es
-// cómo se consigue el `Browser` en `SesionNavegador.abrir`.
+// La otra ruta, para el día que el portal bloquee la IP de Vercel, sigue siendo
+// un navegador REMOTO (Browserless, Browserbase): se cambia `chromium.launch`
+// por `chromium.connectOverCDP(url)` y también cambia la IP de salida. El resto
+// del archivo no se toca: lo único que se mueve es cómo se consigue el
+// `Browser` en `SesionNavegador.abrir`.
 // ═══════════════════════════════════════════════════════════════════════════

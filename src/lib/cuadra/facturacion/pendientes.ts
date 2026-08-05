@@ -51,6 +51,16 @@ export interface TicketPorFacturar {
   caducidad: Caducidad;
   /** El plazo del comercio está verificado contra su portal, o es el default. */
   plazoVerificado: boolean;
+  /**
+   * La máquina se rindió con este ticket A PROPÓSITO, y por eso tiene que
+   * hacerlo una persona. `null` = sigue en la cola automática.
+   *
+   * No es lo mismo que "falló": un fallo se reintenta la hora siguiente. Esto es
+   * un CAPTCHA, o una emisión que no se pudo confirmar —donde reintentar
+   * duplicaría el CFDI—, o un viaje ya liquidado al que la base no deja pegarle
+   * el folio. En los tres, la corrida siguiente daría exactamente lo mismo.
+   */
+  bloqueo: { motivo: string; desde: string } | null;
 }
 
 /**
@@ -87,6 +97,12 @@ interface FilaGasto {
   id: string; concepto: string; monto: number; fecha: string | null;
   folio: string | null; rfc_emisor: string | null; cfdi_uuid: string | null;
   ocr_extra: Record<string, unknown> | null;
+  // OPCIONALES porque `armar()` la llaman tres sitios con proyecciones
+  // distintas —el cron trae su propia consulta— y un campo obligatorio aquí
+  // obligaría a las tres a pedir columnas que no todas necesitan. La ausencia se
+  // lee como "no está bloqueado", que es lo que era antes de que existieran.
+  autofactura_bloqueada_en?: string | null;
+  autofactura_bloqueo?: string | null;
 }
 
 /**
@@ -102,7 +118,7 @@ export async function getPorFacturar(
 ): Promise<TicketPorFacturar[]> {
   const { data, error } = await supabaseAdmin()
     .from('gasto')
-    .select('id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra')
+    .select('id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra, autofactura_bloqueada_en, autofactura_bloqueo')
     .eq('tenant_id', tenantId)
     .is('cfdi_uuid', null)
     .order('fecha', { ascending: true, nullsFirst: false })
@@ -151,6 +167,13 @@ export function armar(g: FilaGasto, hoy: string): TicketPorFacturar {
     camposPendientes: Boolean(c?.camposPendientes),
     plazoVerificado: Boolean(c?.plazoVerificado),
     caducidad,
+    // Hacen falta LAS DOS columnas: una marca sin motivo dejaría al encargado
+    // con un ticket que "lo tiene que hacer usted" y sin saber por qué. La base
+    // lo impide con un check, y aquí se vuelve a exigir para que una proyección
+    // que solo pida una de las dos no invente un bloqueo mudo.
+    bloqueo: g.autofactura_bloqueada_en && g.autofactura_bloqueo
+      ? { motivo: g.autofactura_bloqueo, desde: g.autofactura_bloqueada_en }
+      : null,
   };
 }
 

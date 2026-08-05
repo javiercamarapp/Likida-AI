@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { facturarAlVuelo, type ResultadoAutofactura } from '@/lib/cuadra/facturacion/al_vuelo';
+import { facturarAlVuelo, facturarLoteAlVuelo, type ResultadoAutofactura } from '@/lib/cuadra/facturacion/al_vuelo';
 import { armar } from '@/lib/cuadra/facturacion/pendientes';
 import { getFiscalDeFlota } from '@/lib/cuadra/facturacion/flota_fiscal';
+import { avisarPorFacturar } from '@/lib/cuadra/facturacion/avisar';
+import { telefonoJefeDe } from '@/lib/cuadra/contactos';
 import { conPortales, PORTALES_CONOCIDOS } from '@/lib/cuadra/facturacion/adaptadores/registro';
 import { conNavegador } from '@/lib/cuadra/facturacion/adaptadores/pagina_playwright';
 import { logger } from '@/lib/logger';
@@ -73,15 +75,17 @@ export const maxDuration = 300;
 // antes de que alguien se entere. Se emite SOLO si `FACTURACION_MODO=emitir`
 // está puesto a mano en el ambiente — una decisión de Javier, no un default.
 //
-// ── HOY NO HAY CHROMIUM EN VERCEL, Y ESTA RUTA LO DICE EN ROJO ───────────
+// ── SI CHROMIUM NO ARRANCA, ESTA RUTA LO DICE EN ROJO ────────────────────
 //
 // `playwright-core` no trae el binario y el contenedor de la función no tiene la
-// caché de Playwright: `chromium.launch()` falla con "Executable doesn't exist"
-// hasta que `CUADRA_CHROMIUM_PATH` apunte a un Chromium empaquetado para
-// serverless. Cuando eso pasa esta ruta responde **503**, no 200, y NO marca los
-// tickets como intentados: se recogen enteros en la corrida en que sí se pueda.
-// Un 200 con la lista vacía dejaría el cron verde en el panel de Vercel para
-// siempre, que es el modo de fallo que este archivo existe para no tener.
+// caché de Playwright. El binario lo pone `@sparticuz/chromium`, y
+// `resolverEjecutable()` prueba tres orígenes en orden —ruta explícita, paquete
+// serverless, caché local— antes de rendirse. Cuando ninguno da, el error que
+// sube trae LOS TRES INTENTOS con su motivo, y esta ruta responde **503**, no
+// 200, y NO marca los tickets como intentados: se recogen enteros en la corrida
+// en que sí se pueda. Un 200 con la lista vacía dejaría el cron verde en el
+// panel de Vercel para siempre, que es el modo de fallo que este archivo existe
+// para no tener.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -111,6 +115,75 @@ interface Renglon extends ResultadoAutofactura {
   gastoId: string;
   tenantId: string;
   comercio: string | null;
+}
+
+/**
+ * El aviso al encargado por lo que la máquina ya no va a intentar sola.
+ *
+ * Reusa `avisarPorFacturar` —el mismo mensaje, la misma plantilla, la misma
+ * bitácora— en vez de escribir un segundo canal de avisos: lo que hace que un
+ * ticket bloqueado entre en ese mensaje es `enrutar()`, que ahora lo manda por
+ * 'mensaje' con el motivo. Aquí solo se decide A QUIÉN y CUÁNDO.
+ *
+ * NUNCA tumba la corrida: para cuando esto se llama, todo lo que había que
+ * facturar ya se facturó y se guardó. Un WhatsApp que no salió es un aviso
+ * perdido —y se dice en la respuesta—, no una corrida perdida.
+ */
+async function avisarALasPersonas(
+  bloqueadosPorFlota: Map<string, Array<{ gastoId: string; motivo: string }>>,
+  hoy: string,
+): Promise<Array<{ tenantId: string; enviado: boolean; tickets?: number; motivo?: string }>> {
+  const avisos: Array<{ tenantId: string; enviado: boolean; tickets?: number; motivo?: string }> = [];
+
+  for (const [tenantId] of bloqueadosPorFlota) {
+    try {
+      const telefono = await telefonoJefeDe(tenantId);
+      if (!telefono) {
+        // No es un fallo del envío: es una flota sin encargado ni dueño con
+        // teléfono. Se dice con esas palabras porque el arreglo es capturarlo,
+        // no reintentar.
+        logger.warn('cron.facturar.sin_a_quien_avisar', { tenant: tenantId });
+        avisos.push({ tenantId, enviado: false, motivo: 'esa flota no tiene encargado ni dueño con teléfono registrado, así que no hay a quién avisarle' });
+        continue;
+      }
+      const r = await avisarPorFacturar({ tenantId, telefono, hoy });
+      avisos.push({ tenantId, enviado: r.enviado, tickets: r.tickets, motivo: r.motivo });
+    } catch (e) {
+      const motivo = e instanceof Error ? e.message : String(e);
+      logger.error('cron.facturar.aviso_fallo', { tenant: tenantId, error: motivo });
+      avisos.push({ tenantId, enviado: false, motivo });
+    }
+  }
+  return avisos;
+}
+
+/**
+ * LA CAPTURA VIAJA SOLO SI SE PIDE, Y SIEMPRE SE DICE QUE EXISTE.
+ *
+ * En `ensayo` —el modo por defecto— la captura es la ÚNICA evidencia de qué se
+ * habría enviado: un ensayo sin ella solo dice que ningún selector reventó, no
+ * que el RFC haya quedado en el campo del RFC. Así que no se tira.
+ *
+ * Pero es un data-uri de ~120 KB por sesión, y ocho en un JSON de respuesta son
+ * ~1 MB que además acaba en los logs de Vercel. Regla:
+ *
+ *   · es una RUTA en disco (`CUADRA_CAPTURAS_DIR` puesto, que es lo que uno
+ *     quiere en la Mac para poder mirar el .jpg) → viaja siempre, pesa nada.
+ *   · es un data-uri → viaja solo con `?captura=1`, y si no, se dice su tamaño
+ *     y cómo pedirla. Una evidencia que existe y no se anuncia es una evidencia
+ *     que nadie va a buscar.
+ */
+function sinCapturas(renglones: Renglon[], req: Request): unknown[] {
+  const pedidas = new URL(req.url).searchParams.get('captura') === '1';
+  return renglones.map((r) => {
+    if (!r.captura || pedidas || !r.captura.startsWith('data:')) return r;
+    const { captura, ...resto } = r;
+    return {
+      ...resto,
+      capturaKb: Math.round(captura.length / 1024),
+      capturaComoVerla: 'vuelve a llamar con ?captura=1 para que venga el JPEG, o pon CUADRA_CAPTURAS_DIR para que se escriba en disco',
+    };
+  });
 }
 
 export async function GET(req: Request) {
@@ -145,6 +218,12 @@ export async function GET(req: Request) {
       .select('id, tenant_id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra')
       .is('cfdi_uuid', null)
       .not('ocr_extra', 'is', null)
+      // LOS BLOQUEADOS NO ENTRAN (mig. 0065). Un portal que pidió CAPTCHA, o una
+      // emisión que no se pudo confirmar, no se arreglan reintentando: el
+      // primero daría lo mismo cada hora, y el segundo emitiría un SEGUNDO CFDI
+      // por el mismo consumo. Salen por el otro camino —el aviso al encargado,
+      // más abajo— y siguen visibles en la pantalla de "por facturar".
+      .is('autofactura_bloqueada_en', null)
       // EL ORDEN DE LA 0063. Los nunca intentados primero y después los más
       // antiguos: sin esto, ocho tickets que no proceden se llevan el lote en
       // cada corrida y los nuevos no entran nunca.
@@ -185,7 +264,11 @@ export async function GET(req: Request) {
       registrados?: string[];
       problemas?: string[];
       falta?: string[];
+      /** Cuántas SESIONES de portal se abrieron, contra cuántos tickets. */
+      sesiones?: number;
     }> = [];
+    /** Flota → los gastos que ESTA corrida sacó de la cola automática. */
+    const bloqueadosPorFlota = new Map<string, Array<{ gastoId: string; motivo: string }>>();
 
     const correr = async (g: FilaCola) => {
       // Se vuelve a leer el gasto dentro de `facturarAlVuelo` a propósito: es el
@@ -195,6 +278,34 @@ export async function GET(req: Request) {
       // impide emitir un segundo CFDI por el mismo ticket.
       const r = await facturarAlVuelo({ gastoId: g.id, tenantId: g.tenant_id, modo, hoy });
       resultados.push({ gastoId: g.id, tenantId: g.tenant_id, comercio: comercioDe.get(g.id) ?? null, ...r });
+      if (r.bloqueado) anotarBloqueo(g.tenant_id, g.id, r.bloqueado);
+    };
+
+    const anotarBloqueo = (tenantId: string, gastoId: string, motivo: string) => {
+      bloqueadosPorFlota.set(tenantId, [...(bloqueadosPorFlota.get(tenantId) ?? []), { gastoId, motivo }]);
+    };
+
+    /**
+     * TODOS los tickets de un portal, en UNA sesión.
+     *
+     * Es el cambio de esta ronda y la razón por la que existe `facturarLoteAlVuelo`:
+     * antes esto era `for (const g of tickets) await correr(g)`, o sea una sesión
+     * de portal por ticket. En CAPUFE eso son ocho veces los datos fiscales, ocho
+     * veces los dos catálogos por AJAX (~1.2 s cada vez) y —lo que de verdad
+     * importa— ocho sesiones idénticas seguidas contra el mismo portal, que es el
+     * patrón que hace que un portal empiece a pedir CAPTCHA.
+     *
+     * El adaptador que no sepa hacer lotes NO se queda atrás: `facturarLoteConAgente`
+     * lo llama ticket por ticket y devuelve la misma forma. El cron no pregunta.
+     */
+    const correrLote = async (tenantId: string, comercio: string, tickets: FilaCola[]) => {
+      const r = await facturarLoteAlVuelo({
+        tenantId, comercio, gastoIds: tickets.map((g) => g.id), modo, hoy,
+      });
+      for (const p of r.porGasto) {
+        resultados.push({ tenantId, comercio, ...p });
+      }
+      for (const b of r.bloqueados) anotarBloqueo(tenantId, b.gastoId, b.motivo);
     };
 
     // ── 1. Lo que no necesita navegador. Se despacha primero: si Chromium no
@@ -243,13 +354,25 @@ export async function GET(req: Request) {
               tickets: tickets.length,
               registrados: registro.registrados,
               problemas: registro.problemas,
+              // Un portal, una sesión. Es el número que dice si el lote sirvió
+              // de algo: ocho tickets de CAPUFE tienen que salir con `sesiones: 1`.
+              sesiones: porPortal.size,
             });
             // EN SERIE, no en paralelo. Varias pestañas a la vez contra el mismo
             // portal agotan la memoria de la función y, peor, se parecen a un
             // ataque desde el lado del portal — que responde bloqueando la IP.
-            // El orden es el del agrupamiento: todos los de un portal seguidos.
-            for (const g of tickets) await correr(g);
+            for (const [comercio, delPortal] of porPortal) {
+              await correrLote(tenantId, comercio, delPortal);
+            }
           });
+        }, {
+          // En la Mac se escriben los JPEG y `captura()` devuelve la RUTA, que
+          // es lo que hace falta para MIRAR qué se habría enviado. En Vercel no
+          // se pone: `/tmp` no sobrevive a la invocación, así que ahí la captura
+          // vuelve a ser el data-uri y viaja con `?captura=1`.
+          pagina: process.env.CUADRA_CAPTURAS_DIR
+            ? { directorioCapturas: process.env.CUADRA_CAPTURAS_DIR }
+            : undefined,
         });
       } catch (e) {
         const detalle = e instanceof Error ? e.message : String(e);
@@ -272,7 +395,10 @@ export async function GET(req: Request) {
         modo,
         motivo:
           'No se pudo arrancar Chromium, así que los tickets de portal NO se intentaron y quedan sin marcar para la próxima corrida. ' +
-          '`playwright-core` no trae el binario y el contenedor de la función no tiene la caché de Playwright: hay que poner en `CUADRA_CHROMIUM_PATH` la ruta a un Chromium empaquetado para serverless (@sparticuz/chromium o equivalente), o cambiar a un navegador remoto por CDP.',
+          'El campo `error` trae los TRES caminos que se probaron para conseguir el binario, en orden: la ruta explícita ' +
+          '(`CUADRA_CHROMIUM_PATH`), el paquete serverless (`@sparticuz/chromium`, que descomprime el suyo en /tmp) y la caché ' +
+          'local de Playwright. Si el que falla es el serverless, lo primero que hay que mirar es si sus `bin/*.br` viajaron en ' +
+          'el bundle de esta función (`outputFileTracingIncludes` en `next.config.ts`). La otra salida es un navegador remoto por CDP.',
         error: falloDeArranque,
         portalesConocidos: PORTALES_CONOCIDOS,
         // Lo que sí se alcanzó a hacer sin navegador, para que el 503 no se lea
@@ -282,9 +408,24 @@ export async function GET(req: Request) {
         sinIntentar,
         quedaron,
         flotas,
-        detalle: resultados,
+        detalle: sinCapturas(resultados, req),
       }, { status: 503 });
     }
+
+    // ── 3. LO QUE YA NO LO HACE LA MÁQUINA, LO HACE UNA PERSONA.
+    //
+    // Aquí se cierra la señal de CAPTCHA. `pideCaptcha()` existía desde el
+    // adaptador y no la consumía nadie: un portal que pide CAPTCHA se veía como
+    // un fallo más en el detalle del cron, y la hora siguiente se volvía a
+    // intentar contra el mismo muro. Ahora esos gastos salieron de la cola
+    // (`autofactura_bloqueada_en`), `enrutar()` los manda con el encargado y
+    // esto es lo que lo despierta.
+    //
+    // SOLO CUANDO ALGO SE BLOQUEÓ EN ESTA CORRIDA, no cada hora mientras siga
+    // bloqueado: el cron corre 24 veces al día y un aviso repetido de lo mismo
+    // enseña a ignorar el canal — que es justo lo que no puede pasar con el
+    // canal por el que también llegan los tickets que vencen.
+    const avisos = await avisarALasPersonas(bloqueadosPorFlota, hoy);
 
     logger.info('cron.facturar.ok', { modo, intentados: resultados.length, facturados, quedaron, flotas: flotas.length });
 
@@ -299,9 +440,12 @@ export async function GET(req: Request) {
       // Es lo que dice si el problema se arregla configurando al cliente o
       // tocando código.
       flotas,
+      // Los que salieron de la cola automática, y si el aviso a la persona salió.
+      bloqueados: [...bloqueadosPorFlota].map(([tenantId, b]) => ({ tenantId, cuantos: b.length, detalle: b })),
+      avisos,
       // El detalle va en la respuesta: "requiere_cuenta" o "confianza_baja" por
       // ticket es lo que dice si el problema se arregla configurando o mirando.
-      detalle: resultados,
+      detalle: sinCapturas(resultados, req),
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);

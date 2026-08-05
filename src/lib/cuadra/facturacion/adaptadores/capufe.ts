@@ -7,7 +7,14 @@ import {
   type OpcionesAdaptador,
   type PaginaPortal,
 } from './playwright_base';
-import { registrarAdaptador, type ModoAgente, type ResultadoAgente } from '../agente';
+import {
+  registrarAdaptador,
+  type ModoAgente,
+  type ResultadoAgente,
+  type ResultadoLoteAgente,
+  type ResultadoPorGasto,
+  type TicketDeLote,
+} from '../agente';
 import type { CampoListo } from '../pendientes';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -110,11 +117,41 @@ export const MENSAJE_CAPTCHA = 'este portal pide CAPTCHA, hay que facturarlo a m
 /** Centavo. Por debajo de esto no hay discrepancia, hay coma flotante. */
 const TOLERANCIA_PESOS = 0.01;
 
-/** Columnas de "CÓDIGOS AGREGADOS", en el orden en que las pinta el portal. */
-const COL_CODIGO = 1;
-const COL_PLAZA = 2;
-const COL_FECHA = 3;
-const COL_COSTO = 4;
+/**
+ * LAS COLUMNAS DE "CÓDIGOS AGREGADOS" SE LEEN DEL ENCABEZADO, NO SE SUPONEN.
+ *
+ * Esto empezó siendo `Código=1, Plaza=2, Fecha=3, Costo=4`, tomado del texto
+ * del portal. El pre-vuelo contra la página real (5-ago-2026,
+ * `pruebas-manuales/capufe-prevuelo.prueba.ts`) midió otra cosa:
+ *
+ *     1=(vacía) | 2=Código | 3=Plaza de cobro | 4=Fecha | 5=Costo
+ *
+ * Hay una PRIMERA COLUMNA SIN TÍTULO —el hueco que PrimeNG deja para su botón
+ * de quitar la fila—, así que las cuatro posiciones estaban corridas una.
+ * Con eso, `buscarFila` habría comparado el código contra una celda vacía: NINGÚN
+ * código habría casado nunca, todos se habrían reportado "CAPUFE no lo puso en
+ * CÓDIGOS AGREGADOS", y no se habría emitido una sola factura. Falla cerrado,
+ * pero falla siempre.
+ *
+ * Cambiar los números a 2-3-4-5 sería sustituir una suposición por otra. Se lee
+ * el `<thead>`, que es la única fuente que se corrige sola si el portal agrega,
+ * quita o reordena una columna.
+ */
+const COL_POR_DEFECTO = { codigo: 1, plaza: 2, fecha: 3, costo: 4 } as const;
+
+/** Hasta dónde se busca encabezado. Cinco columnas hoy; el margen es por si crece. */
+const MAX_COLUMNAS = 12;
+
+/** Cómo se llama cada columna en el portal. Por subcadena y sin acentos ni caja. */
+const NOMBRE_DE_COLUMNA: Array<[keyof typeof COL_POR_DEFECTO, RegExp]> = [
+  ['codigo', /codigo/],
+  ['plaza', /plaza/],
+  ['fecha', /fecha/],
+  ['costo', /costo|importe|monto|total/],
+];
+
+/** Sin acentos y en minúsculas, para comparar encabezados sin depender de cómo los escriban. */
+const plano = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
 export interface SelectoresCapufe {
   rfc: string;
@@ -140,22 +177,54 @@ export interface SelectoresCapufe {
 }
 
 /**
- * Lo que se leyó del DOM real el 4-ago-2026, y lo que todavía es una apuesta.
+ * MEDIDO CONTRA EL PORTAL REAL EL 5-AGO-2026, uno por uno, sin escribir nada.
  *
- * VERIFICADO contra la página (id + name, copiados del DOM):
- *   #rfc, #nombre, #domicilioFiscalReceptor (maxlength=5), #correo, #codigo,
- *   #cb1, y los dos `select[name="receptor.…"]`.
+ * El arnés que lo midió es `pruebas-manuales/capufe-prevuelo.prueba.ts` y su
+ * reporte queda en `pruebas-manuales/ensayo/<fecha>/capufe-prevuelo.txt`. Vale
+ * la pena volver a correrlo antes de cada temporada de facturación: es una
+ * visita de lectura y cuesta dos segundos.
  *
- * NO VERIFICADO —y por eso todo esto se puede sobrescribir con `selectores`
- * sin tocar una línea de lógica—: los dos botones, la tabla, el cuadro de
- * error, el UUID y los buscadores de los desplegables. Se eligieron selectores
- * por TEXTO y por estructura, no por clases del framework, porque el texto
- * ("Validar Código", "Plaza de cobro") es lo que el portal enseña y lo que
- * menos cambia; una clase generada sobrevive menos que un rediseño.
+ * RESUELVEN EN LA PÁGINA EN BLANCO (9):
+ *   #rfc · #nombre · #domicilioFiscalReceptor (maxlength=5) · #correo ·
+ *   #codigo · #cb1 · los dos `select[name="receptor.…"]` ·
+ *   `button:has-text("Validar Código")` · `table:has-text("Plaza de cobro")`
+ *   Todos casan UNA sola vez: ninguno es ambiguo.
  *
- * El pre-vuelo revisa todos ANTES de escribir el primero y los reporta juntos:
- * si esta apuesta salió mal, la primera corrida contra el portal real lo dice
- * de una vez y no en cinco vueltas.
+ * NO RESUELVEN, Y CADA UNO POR SU RAZÓN:
+ *
+ *   · `botonEmitir` — NO EXISTE hasta que hay filas en "CÓDIGOS AGREGADOS".
+ *     Con la página en blanco los únicos botones son "Aviso de Privacidad",
+ *     "Validar Código" y "Activar cámara escanear QR". Buscando en los `.js`
+ *     del propio portal (2.5 MB de plantillas compiladas) aparecen las
+ *     etiquetas "Facturar conceptos" y "Facturar", así que
+ *     `button:has-text("Facturar")` debería casar por subcadena cuando el
+ *     botón se pinte — pero eso NO está verificado en el DOM y no se puede
+ *     verificar sin agregar un código real. Es la apuesta que queda viva.
+ *
+ *   · `buscadorRegimen` / `buscadorUso` — los dos `<select>` NO tienen ningún
+ *     hermano previo: el patrón de "desplegable con buscador" no está en esta
+ *     página. No es un problema: son el camino de RESPALDO, y
+ *     `PaginaPlaywright` ofrece `seleccionar()` (`selectOption`), que es el
+ *     bueno. Se dejan por si el portal los reintroduce.
+ *
+ *   · `error` — se descubrió por accidente y de la mejor manera: al bloquear el
+ *     POST de autenticación de invitado, el portal pintó SU cuadro de error
+ *     real, y no es ninguno de los que había aquí. Es el growl de PrimeNG:
+ *     `.p-growl-message-error`, dentro de `.p-growl-item`. Se conservan los
+ *     tres de antes porque no estorban y el portal podría usarlos en otra
+ *     pantalla; se ponen los de PrimeNG PRIMERO.
+ *
+ *   · `uuid` — imposible de verificar sin emitir un CFDI de verdad, que es
+ *     justo lo que este arnés no hace. Sigue siendo una apuesta, y es la que
+ *     hay que mirar en la PRIMERA emisión real.
+ *
+ * Se eligen selectores por TEXTO y por estructura, no por clases del framework:
+ * el texto ("Validar Código", "Plaza de cobro") es lo que el portal enseña y lo
+ * que menos cambia. La excepción es el cuadro de error, donde la clase de
+ * PrimeNG es lo único que hay.
+ *
+ * Todo esto se puede sobrescribir con `OpcionesCapufe.selectores` sin tocar una
+ * línea de lógica.
  */
 export const SELECTORES_CAPUFE: SelectoresCapufe = {
   rfc: '#rfc',
@@ -166,15 +235,18 @@ export const SELECTORES_CAPUFE: SelectoresCapufe = {
   correo: '#correo',
   codigo: '#codigo',
   complementoPartidos: '#cb1',
-  // CSS no sabe mirar hacia atrás; el buscador está ANTES del select. Playwright
-  // sí, por xpath. Si el portal cambia el orden, se sobrescribe y ya.
+  // CSS no sabe mirar hacia atrás; el buscador estaría ANTES del select.
+  // Playwright sí, por xpath. Hoy NO resuelve —esos `<select>` no tienen
+  // hermano previo—, y es el camino de respaldo: ver el bloque de arriba.
   buscadorRegimen: 'xpath=//select[@name="receptor.regimenFiscalReceptor"]/preceding-sibling::input[1]',
   buscadorUso: 'xpath=//select[@name="receptor.usoCfdi"]/preceding-sibling::input[1]',
   botonValidar: 'button:has-text("Validar Código")',
   botonEmitir: 'button:has-text("Facturar")',
   // Por el encabezado, no por un id que no vi: es la tabla que trae esa columna.
   tabla: 'table:has-text("Plaza de cobro")',
-  error: '.alert-danger, .ui-messages-error, .invalid-feedback',
+  // PrimeNG primero: es lo que el portal pintó de verdad cuando falló una
+  // petición suya (medido el 5-ago). Los otros tres se quedan de red.
+  error: '.p-growl-message-error, .p-growl-item, .alert-danger, .ui-messages-error, .invalid-feedback',
   uuid: '.uuid',
   captcha: [],
   opcionDelBuscador: (valor: string) => `[role="option"]:has-text("${valor}")`,
@@ -368,6 +440,8 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
   private readonly vueltas: number;
   private readonly emitirAunConDiscrepancia: boolean;
   private readonly maxFilasTabla: number;
+  /** Posición de cada columna, leída del encabezado UNA vez por sesión. */
+  private columnas: Record<keyof typeof COL_POR_DEFECTO, number> | null = null;
 
   constructor(op: OpcionesCapufe) {
     // `intervaloMs`, `dormir`, `ahora` y `esperaUuidMs` los guarda la base
@@ -425,6 +499,93 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
       [{ codigo: campoCodigo.valor, montoEsperado: Number.isFinite(monto) ? monto : null }],
       m,
     );
+  }
+
+  /**
+   * EL LOTE, en el contrato genérico de `agente.ts`.
+   *
+   * Es la traducción entre dos vocabularios y nada más: el genérico habla
+   * `CampoListo[]` y gastos, CAPUFE habla códigos de 18 caracteres. Toda la
+   * lógica —una sesión, un botón por código, la tabla que se lee, el CAPTCHA que
+   * aborta, la discrepancia que no emite— sigue viviendo en `facturarVarios`.
+   *
+   * EL UUID SE REPARTE SOLO ENTRE LOS QUE ENTRARON. Un código que el portal
+   * rechazó no está en esa factura: escribirle el UUID sería marcar como
+   * facturado un consumo que nadie facturó, y ese es el error que después nadie
+   * encuentra porque la fila se ve igual de completa que las buenas.
+   */
+  async facturarLote(tickets: TicketDeLote[], modo?: ModoAgente): Promise<ResultadoLoteAgente> {
+    const m: ModoAgente = modo === 'emitir' ? 'emitir' : 'ensayo';
+
+    // Lo que se puede rechazar sin gastar un lugar en la sesión, se rechaza
+    // aquí: mismo criterio que `facturar()` para un ticket suelto.
+    const previos = new Map<string, string>();
+    const paraElPortal: TicketCapufe[] = [];
+
+    for (const t of tickets) {
+      const vacios = t.campos.filter((c) => c.requerido && !c.valor);
+      if (vacios.length > 0) {
+        previos.set(t.gastoId, `Faltan datos que CAPUFE exige: ${vacios.map((c) => c.etiqueta).join(', ')}. No se mandó al portal.`);
+        continue;
+      }
+      const codigo = t.campos.find((c) => c.clave === 'codigo' && c.valor)?.valor;
+      if (!codigo) {
+        previos.set(t.gastoId, `Este ticket no trae el código de ${LARGO_CODIGO} caracteres que pide CAPUFE. Sin él no hay nada que validar.`);
+        continue;
+      }
+      const bruto = t.campos.find((c) => c.clave === 'monto' && c.valor)?.valor;
+      const monto = bruto === undefined || bruto === null ? NaN : Number(bruto);
+      paraElPortal.push({
+        codigo,
+        montoEsperado: Number.isFinite(monto) ? monto : null,
+        gastoId: t.gastoId,
+      });
+    }
+
+    const lote = paraElPortal.length > 0
+      ? await this.facturarVarios(paraElPortal, m)
+      : this.falloSinAbrir(m, `Ninguno de los ${tickets.length} tickets trae lo que CAPUFE pide. No se abrió el portal.`);
+
+    // El UUID solo existe cuando se emitió Y el portal lo confirmó. En `ensayo`
+    // no hay ninguno y eso NO es un fallo: es el modo haciendo su trabajo.
+    const uuid = lote.ok ? lote.cfdiUuid : undefined;
+    const porCodigo = new Map<string, ResultadoCodigo>();
+    for (const r of lote.codigos) if (r.gastoId) porCodigo.set(r.gastoId, r);
+
+    const porGasto: ResultadoPorGasto[] = tickets.map((t): ResultadoPorGasto => {
+      const antes = previos.get(t.gastoId);
+      if (antes) return { gastoId: t.gastoId, incluido: false, motivo: antes };
+
+      const r = porCodigo.get(t.gastoId);
+      if (!r) {
+        return {
+          gastoId: t.gastoId,
+          incluido: false,
+          motivo: lote.error ?? 'La sesión de CAPUFE terminó sin decir qué pasó con este código.',
+        };
+      }
+      const entro = r.estado === 'agregado';
+      return {
+        gastoId: t.gastoId,
+        incluido: entro && (m === 'ensayo' || Boolean(uuid)),
+        ...(entro && uuid ? { cfdiUuid: uuid } : {}),
+        ...(r.motivo ? { motivo: r.motivo } : {}),
+      };
+    });
+
+    return {
+      modo: m,
+      // `ok` lo deriva `agente.ts` de los incluidos; aquí se declara para
+      // cumplir el tipo y se recalcula allá.
+      ok: lote.ok,
+      porGasto,
+      capturado: lote.capturado,
+      captura: lote.captura,
+      ...(lote.requiereCaptcha ? { requiereCaptcha: true } : {}),
+      ...(lote.emisionSinConfirmar ? { emisionSinConfirmar: true } : {}),
+      ...(lote.error ? { error: lote.error } : {}),
+      ...(lote.aviso ? { aviso: lote.aviso } : {}),
+    };
   }
 
   /**
@@ -524,14 +685,25 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
 
       if (modo === 'ensayo') {
         // AQUÍ SE DETIENE. Datos fiscales puestos, códigos agregados, captura
-        // tomada y el botón de emitir sin tocar.
-        return agregados.length > 0
-          ? { ...base, ok: true }
-          : { ...base, ok: false, error: `Ninguno de los ${porIntentar.length} códigos entró a "CÓDIGOS AGREGADOS" en CAPUFE. ${this.detalleRechazos(resultados)}` };
+        // tomada y el botón de emitir MIRADO PERO SIN TOCAR — que es lo único
+        // que hace que un ensayo "ok" signifique algo sobre la emisión.
+        if (agregados.length === 0) {
+          return { ...base, ok: false, error: `Ninguno de los ${porIntentar.length} códigos entró a "CÓDIGOS AGREGADOS" en CAPUFE. ${this.detalleRechazos(resultados)}` };
+        }
+        if (!(await this.hayBotonDeEmitir(pagina))) {
+          return { ...base, ok: false, error: this.faltaElBoton(agregados.length) };
+        }
+        return { ...base, ok: true };
       }
 
       if (agregados.length === 0) {
         return { ...base, ok: false, error: `No se aprieta emitir: ningún código entró a "CÓDIGOS AGREGADOS". ${this.detalleRechazos(resultados)}` };
+      }
+
+      // ANTES de marcar que se apretó: si el botón no está, no se apretó nada y
+      // decir lo contrario mandaría a revisar un CFDI que no existe.
+      if (!(await this.hayBotonDeEmitir(pagina))) {
+        return { ...base, ok: false, error: this.faltaElBoton(agregados.length) };
       }
 
       if (discrepancias.length > 0 && !this.emitirAunConDiscrepancia) {
@@ -569,6 +741,9 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
         return {
           ...fin,
           ok: false,
+          // La bandera, no solo el texto: quien recoge esto tiene que sacar
+          // estos gastos de la cola automática, y no puede hacerlo leyendo prosa.
+          emisionSinConfirmar: true,
           error: `Se apretó emitir en CAPUFE y no se pudo confirmar el UUID — ${porQue}${rechazoPost ? ` (el portal dice: "${rechazoPost}")` : ''}. PUEDE QUE EL CFDI YA EXISTA: revisar el portal antes de volver a intentar — un segundo intento lo duplicaría, y esta factura trae ${resultados.filter((r) => r.estado === 'agregado').length} casetas.`,
         };
       }
@@ -587,6 +762,7 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
       return {
         ...parcial,
         ok: false,
+        ...(seApreto ? { emisionSinConfirmar: true } : {}),
         error: seApreto
           ? `SE APRETÓ EMITIR y después falló. ${detalle} PUEDE QUE EL CFDI YA EXISTA: revisar el portal antes de volver a intentar.`
           : detalle,
@@ -609,10 +785,22 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
   /**
    * Los selectores que se van a usar, verificados de golpe ANTES de escribir.
    *
-   * Incluye el botón de emitir aunque el ensayo no lo apriete —mismo criterio
-   * que la base: es el único selector cuyo fallo, sin esto, solo se descubre
-   * emitiendo—. No incluye la tabla ni el cuadro de error, que legítimamente
-   * no existen con el formulario en blanco.
+   * EL BOTÓN DE EMITIR YA NO ESTÁ EN ESTA LISTA, y es un cambio con evidencia
+   * detrás. Estaba aquí por el criterio de la base —"es el único selector cuyo
+   * fallo, sin esto, solo se descubre emitiendo"—, que es correcto en un portal
+   * de un solo formulario. CAPUFE no es eso: el pre-vuelo real del 5-ago-2026
+   * midió que con la página en blanco los ÚNICOS botones son "Aviso de
+   * Privacidad", "Validar Código" y "Activar cámara escanear QR". El de emitir
+   * no existe hasta que hay algo en "CÓDIGOS AGREGADOS".
+   *
+   * O sea que revisarlo aquí no protegía de nada: abortaba SIEMPRE, en la
+   * primera línea, con "el portal ya no tiene el botón de emitir". La
+   * comprobación no se pierde, se mueve a donde el botón sí debe existir
+   * (`hayBotonDeEmitir`): al final del ensayo y justo antes del clic. Sigue sin
+   * hacer falta emitir para descubrir que el selector se movió.
+   *
+   * Tampoco incluye la tabla ni el cuadro de error, que legítimamente no
+   * existen con el formulario en blanco.
    */
   private async preVuelo(pagina: PaginaCapufe): Promise<void> {
     const existe = pagina.existe;
@@ -627,7 +815,6 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
       ['el correo', this.sel.correo],
       ['el código del ticket', this.sel.codigo],
       ['el botón "Validar Código"', this.sel.botonValidar],
-      ['el botón de emitir', this.sel.botonEmitir],
     ];
 
     const faltan: string[] = [];
@@ -724,18 +911,61 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
     pagina: PaginaCapufe,
     codigo: string,
   ): Promise<{ plaza: string | null; fecha: string | null; costoBruto: string | null } | null> {
+    const col = await this.columnasDeLaTabla(pagina);
     const buscado = codigo.trim().toUpperCase();
     for (let i = 1; i <= this.maxFilasTabla; i++) {
-      const celda = await pagina.leerTexto(this.celda(i, COL_CODIGO));
+      const celda = await pagina.leerTexto(this.celda(i, col.codigo));
       if (celda === null) return null; // se acabaron las filas
       if (celda.trim().toUpperCase() !== buscado) continue;
       return {
-        plaza: (await pagina.leerTexto(this.celda(i, COL_PLAZA)))?.trim() ?? null,
-        fecha: (await pagina.leerTexto(this.celda(i, COL_FECHA)))?.trim() ?? null,
-        costoBruto: (await pagina.leerTexto(this.celda(i, COL_COSTO)))?.trim() ?? null,
+        plaza: (await pagina.leerTexto(this.celda(i, col.plaza)))?.trim() ?? null,
+        fecha: (await pagina.leerTexto(this.celda(i, col.fecha)))?.trim() ?? null,
+        costoBruto: (await pagina.leerTexto(this.celda(i, col.costo)))?.trim() ?? null,
       };
     }
     return null;
+  }
+
+  /**
+   * En qué posición está cada columna, PREGUNTÁNDOSELO AL ENCABEZADO.
+   *
+   * Se resuelve una vez por sesión y se guarda: son cuatro o cinco lecturas, y
+   * repetirlas por cada uno de los ocho códigos sería pagarlas cuarenta veces.
+   *
+   * Si la tabla no expone `<thead>` —ninguna página de prueba lo hace, y algún
+   * portal podría no tenerlo— se usan las posiciones por defecto y SE DICE en
+   * el log. Y si el encabezado está pero le falta un nombre, se avisa y se
+   * conserva el default de ESA columna: mejor eso que abortar un lote entero
+   * porque alguien renombró "Costo" a "Importe".
+   */
+  private async columnasDeLaTabla(pagina: PaginaCapufe): Promise<Record<keyof typeof COL_POR_DEFECTO, number>> {
+    if (this.columnas) return this.columnas;
+
+    const encabezados: string[] = [];
+    for (let i = 1; i <= MAX_COLUMNAS; i++) {
+      const t = await pagina.leerTexto(`${this.sel.tabla} thead th:nth-child(${i})`);
+      if (t === null) break; // se acabaron las columnas
+      encabezados.push(plano(t));
+    }
+
+    const col = { ...COL_POR_DEFECTO } as Record<keyof typeof COL_POR_DEFECTO, number>;
+    if (encabezados.length === 0) {
+      logger.warn('capufe.tabla_sin_encabezado', { tabla: this.sel.tabla });
+      this.columnas = col;
+      return col;
+    }
+
+    const faltan: string[] = [];
+    for (const [clave, re] of NOMBRE_DE_COLUMNA) {
+      const i = encabezados.findIndex((h) => re.test(h));
+      if (i === -1) faltan.push(clave);
+      else col[clave] = i + 1;
+    }
+    if (faltan.length > 0) logger.warn('capufe.columna_sin_encabezado', { faltan, encabezados });
+    logger.info('capufe.columnas', { ...col, encabezados });
+
+    this.columnas = col;
+    return col;
   }
 
   private celda(fila: number, columna: number): string {
@@ -843,6 +1073,24 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
       return (await pagina.existe.call(pagina, `${selector} option[value="${valor}"]:checked`)) ? valor : '';
     }
     return null;
+  }
+
+  /**
+   * ¿Está el botón de emitir? Se pregunta CUANDO DEBE ESTAR: con los códigos ya
+   * en la tabla, no con el formulario en blanco (ver `preVuelo`).
+   *
+   * Sin `existe()` se devuelve `true` y que hable el clic: el contrato de la
+   * base solo exige cinco métodos, y negarse a emitir porque la página no
+   * ofrece un método OPCIONAL sería inventar un requisito.
+   */
+  private async hayBotonDeEmitir(pagina: PaginaCapufe): Promise<boolean> {
+    const existe = pagina.existe;
+    if (!existe) return true;
+    return await existe.call(pagina, this.sel.botonEmitir);
+  }
+
+  private faltaElBoton(agregados: number): string {
+    return `Los ${agregados} código(s) SÍ entraron a "CÓDIGOS AGREGADOS", pero el botón de emitir (\`${this.sel.botonEmitir}\`) no está en la página. No se apretó nada. En CAPUFE ese botón solo aparece cuando la tabla tiene filas, así que o el portal no lo pintó todavía, o cambió su texto y hay que corregir \`botonEmitir\` en el mapeo (se puede sin tocar lógica, con \`OpcionesCapufe.selectores\`).`;
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -1006,13 +1254,14 @@ export function revisarReceptor(r: DatosReceptorCapufe): string[] {
 /**
  * ¿El resultado dice "no se puede" en vez de "no pude"?
  *
- * Lo que separa reintentar para siempre de avisarle a una persona. Se exporta
- * como función y no como campo suelto para que el que enruta no tenga que saber
- * que este adaptador devuelve un resultado más ancho que `ResultadoAgente`.
+ * VIVE EN `agente.ts` Y AQUÍ SOLO SE REEXPORTA. Nació en este archivo porque
+ * este portal fue el primero en detectar un CAPTCHA, pero quien tiene que
+ * ACTUAR es el que enruta —`al_vuelo.ts`, el cron— y ese no debe importar un
+ * adaptador concreto para preguntar algo que ya es parte del contrato genérico
+ * (`ResultadoAgente.requiereCaptcha`). El nombre se conserva aquí para que nada
+ * de lo que ya lo importaba tenga que cambiar.
  */
-export function pideCaptcha(r: ResultadoAgente): boolean {
-  return (r as Partial<ResultadoLoteCapufe>).requiereCaptcha === true;
-}
+export { pideCaptcha } from '../agente';
 
 /**
  * Construye el adaptador y lo deja registrado PARA ESA FLOTA.
