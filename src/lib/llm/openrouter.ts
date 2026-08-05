@@ -52,6 +52,15 @@ const DEFAULT_MAX_TOKENS = 4000;
 // Fallback cross-provider por modelo. El primario cae a un proveedor distinto
 // para que un provider caído nunca sea un error visible para el operador.
 const FALLBACK: Record<string, string> = {
+  // ESTA TABLA SE INDEXA POR SLUG, así que apuntar `CUADRA_MODEL_OCR` a un
+  // modelo que no esté aquí APAGA el respaldo entre proveedores EN SILENCIO.
+  // Pasó el 4-ago-2026: se cambió el OCR a `gemini-3.1-flash-lite` —medido 12×
+  // más barato y más certero— y `PRICES` sí se actualizó, pero esta tabla no.
+  // Durante unas horas, un Gemini caído significaba dos intentos al mismo
+  // proveedor muerto y un "tu foto salió ilegible" para el chofer, en vez de
+  // caer a Anthropic. Quien cambie un modelo por variable de entorno tiene que
+  // pasar por aquí: no hay error, no hay log, solo deja de haber plan B.
+  'google/gemini-3.1-flash-lite': 'anthropic/claude-haiku-4.5',
   'google/gemini-3.6-flash': 'anthropic/claude-haiku-4.5',
   'google/gemini-3.5-flash-lite': 'openai/gpt-5.6-luna',
   'anthropic/claude-sonnet-5': 'openai/gpt-5.6-terra',
