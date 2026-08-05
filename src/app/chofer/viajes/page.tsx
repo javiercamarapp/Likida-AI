@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default async function MisViajes() {
-  const s = await requireOperador();
+  const s = await requireOperador('/chofer/viajes');
 
   if (!s.tenantId) {
     return (

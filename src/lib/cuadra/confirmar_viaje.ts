@@ -58,15 +58,43 @@ export async function viajesPorConfirmar(tenantId: string, operadorId: string): 
  * ("va" y luego una foto) llegan como dos invocaciones del webhook, y sin el
  * guardia la segunda reescribiría la hora de aceptación. La hora que vale es la
  * primera — es la que mide cuánto tardó en contestar.
+ *
+ * ── `operadorId` ES OPCIONAL EN LA FIRMA Y OBLIGATORIO EN LA PRÁCTICA ─────
+ *
+ * Corre con `supabaseAdmin()` (salta RLS) y hasta ahora filtraba por
+ * `(id, tenant_id)` y nada más. Eso le bastaba a su único llamador —el
+ * webhook, donde el viaje ya lo eligió `viajesPorConfirmar` a partir del
+ * TELÉFONO de quien escribió, así que el uuid nunca viene de fuera—, pero
+ * deja la función lista para el error caro: el día que un formulario web
+ * mande el `viajeId`, un chofer marcaría como aceptado el viaje de un
+ * compañero cambiando un uuid, y la escalación de las 5 h dejaría de avisarle
+ * al jefe que ESE otro nunca contestó.
+ *
+ * Se acota por operador SIEMPRE que se sepa quién es. `atenderConfirmacion`
+ * ya lo tiene en sus args y desde hoy lo pasa; `aceptarPorActividad` lo
+ * acepta y lo reenvía, aunque su llamador de `processor.ts` todavía no se lo
+ * dé —ese archivo no se toca en esta tarea—, así que ahí el filtro sigue sin
+ * aplicarse y sigue estando bien: el viaje viene de `getOpenViaje(tenantId,
+ * operadorId)`, no de la red.
+ *
+ * Opcional en el TIPO para no romper a ese llamador. Un `undefined` NO se
+ * traduce a `.eq('operador_id', undefined)`: la rama se salta entera, porque
+ * un `.eq()` contra undefined no filtra menos, filtra mal.
  */
-export async function marcarAceptado(tenantId: string, viajeId: string): Promise<boolean> {
-  const { data, error } = await supabaseAdmin()
+export async function marcarAceptado(
+  tenantId: string,
+  viajeId: string,
+  operadorId?: string,
+): Promise<boolean> {
+  let q = supabaseAdmin()
     .from('viaje')
     .update({ aceptado_en: new Date().toISOString() })
     .eq('id', viajeId)
-    .eq('tenant_id', tenantId)
-    .is('aceptado_en', null)
-    .select('id');
+    .eq('tenant_id', tenantId);
+
+  if (operadorId) q = q.eq('operador_id', operadorId);
+
+  const { data, error } = await q.is('aceptado_en', null).select('id');
 
   if (error) {
     logger.warn('viaje.no_se_marcó_aceptado', { viajeId, err: error.message });
@@ -80,10 +108,19 @@ export async function marcarAceptado(tenantId: string, viajeId: string): Promise
  *
  * Best-effort y silencioso: el gasto ya está guardado y el chofer ya tuvo su
  * acuse. Que esto falle no puede costarle el comprobante.
+ *
+ * `operadorId` es opcional porque `processor.ts` (que no se toca aquí) llama
+ * con dos argumentos. Cuando llegue, se reenvía y el UPDATE queda acotado
+ * también por chofer; mientras tanto, ahí el `viajeId` sale de
+ * `getOpenViaje(tenantId, operadorId)` y no de un formulario.
  */
-export async function aceptarPorActividad(tenantId: string, viajeId: string): Promise<void> {
+export async function aceptarPorActividad(
+  tenantId: string,
+  viajeId: string,
+  operadorId?: string,
+): Promise<void> {
   try {
-    const marcado = await marcarAceptado(tenantId, viajeId);
+    const marcado = await marcarAceptado(tenantId, viajeId, operadorId);
     if (marcado) logger.info('viaje.aceptado_por_actividad', { viajeId });
   } catch (e) {
     logger.warn('viaje.aceptar_por_actividad_falló', { viajeId, err: e instanceof Error ? e.message : String(e) });
@@ -134,7 +171,10 @@ export async function atenderConfirmacion(args: {
   });
 
   if (d.estado === 'confirmado' && d.viajeElegido) {
-    const ok = await marcarAceptado(args.tenantId, d.viajeElegido);
+    // `args.operadorId` va al UPDATE aunque `viajesPorConfirmar` ya filtró por
+    // él: si un día `decidirInicio` devolviera un id que no salió de esa lista,
+    // el filtro de la base es lo que impide que se marque el viaje de otro.
+    const ok = await marcarAceptado(args.tenantId, d.viajeElegido, args.operadorId);
     logger.info('viaje.confirmado_por_chofer', { viajeId: d.viajeElegido, primeraVez: ok });
     return { mensaje: d.mensaje, viajeConfirmado: d.viajeElegido };
   }

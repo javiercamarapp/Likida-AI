@@ -173,4 +173,42 @@ describe('a dónde se rebota a cada quien', () => {
   it('un rol sin áreas va a /sin-acceso, no a un bucle', () => {
     expect(inicioDe('desconocido')).toBe('/sin-acceso');
   });
+
+  // ── EL CHOFER TENÍA PANEL Y SE LE DECÍA QUE NO TENÍA ACCESO ─────────────
+  //
+  // `operador` no está en `AREAS_POR_ROL` (correcto: /dashboard no es suyo),
+  // así que `inicioDe` caía al `/sin-acceso` del final. Un chofer que tecleara
+  // /dashboard por costumbre, o que llegara por un enlace viejo, leía "no
+  // tienes acceso" teniendo /chofer — y ese texto le dice que pida su alta,
+  // que es exactamente lo que no le falta.
+  it('al chofer a /chofer, que sí es suyo — no a /sin-acceso', () => {
+    expect(inicioDe('operador')).toBe('/chofer');
+    expect(inicioDe('operador')).not.toBe('/sin-acceso');
+  });
+
+  it('mandarlo a /chofer NO le abrió ninguna pantalla de /dashboard', () => {
+    // Es la mitad que importa del arreglo. Darle un área para que `inicioDe`
+    // supiera a dónde mandarlo le habría abierto de paso TODAS las rutas de
+    // esa área: la salida se declara aparte (`PANEL_PROPIO`) justo por esto.
+    expect(areasDe('operador')).toEqual([]);
+    expect(puedeVerArea('operador', 'operacion')).toBe(false);
+    expect(puedeVerArea('operador', 'dinero')).toBe(false);
+    expect(puedeVerArea('operador', 'administracion')).toBe(false);
+  });
+
+  const TODAS_LAS_RUTAS = [
+    ...INICIO, ...NEGOCIO, ...OPERACION, ...FISCAL, ...DOCUMENTOS_DINERO, ...GESTION,
+  ].map((i) => i.href);
+
+  it.each(TODAS_LAS_RUTAS)('%s le sigue negada al chofer aunque teclee la URL', (href) => {
+    expect(puedeVerRuta('operador', href)).toBe(false);
+  });
+
+  it('su destino no es una ruta de este panel, así que no puede haber bucle', () => {
+    // El bucle del contador se evitó eligiendo una ruta que su rol SÍ ve.
+    // Aquí se evita al revés: la salida está fuera de /dashboard, y por lo
+    // tanto fuera del gate que lo rebotó.
+    expect(inicioDe('operador').startsWith('/dashboard')).toBe(false);
+    expect(areaDeRuta(inicioDe('operador'))).toBeUndefined();
+  });
 });

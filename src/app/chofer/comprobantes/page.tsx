@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default async function MisComprobantes() {
-  const s = await requireOperador();
+  const s = await requireOperador('/chofer/comprobantes');
 
   if (!s.tenantId) {
     return (

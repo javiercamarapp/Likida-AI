@@ -64,7 +64,7 @@ describe('la constancia del aviso solo se conserva si el mensaje salió', () => 
   it('con envío exitoso, la reserva se queda y NO se libera', async () => {
     sendText.mockResolvedValue('wamid.OK1');
     const ok = await ponerAvisoADisposicion('t1', 'op1', '5219990000001');
-    expect(ok).toBe(true);
+    expect(ok).toBe('puesto');
     expect(liberarEnvioAviso).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith('privacidad.aviso_enviado', expect.objectContaining({ id: 'wamid.OK1' }));
   });
@@ -97,7 +97,10 @@ describe('la constancia del aviso solo se conserva si el mensaje salió', () => 
     sendText.mockResolvedValue(null);
     const ok = await ponerAvisoADisposicion('t1', 'op1', '5219990000002');
 
-    expect(ok, 'sin aviso puesto a disposición no puede haber tratamiento').toBe(false);
+    // `no_entregado` y no un `false` pelón: Meta RECHAZÓ el envío, que no es lo
+    // mismo que «la flota no capturó su aviso» ni que un blip de red nuestro. Los
+    // tres devolvían el mismo `false` y el operador recibía el mismo texto.
+    expect(ok, 'sin aviso puesto a disposición no puede haber tratamiento').toBe('no_entregado');
     expect(liberarEnvioAviso).toHaveBeenCalledWith('t1', 'op1');
     expect(logger.error).toHaveBeenCalledWith('privacidad.aviso_no_entregado', expect.anything());
   });
@@ -110,14 +113,14 @@ describe('la constancia del aviso solo se conserva si el mensaje salió', () => 
     // Segundo mensaje: la reserva está libre, se vuelve a intentar y ahora sí sale.
     sendText.mockResolvedValue('wamid.OK2');
     const ok = await ponerAvisoADisposicion('t1', 'op1', '5219990000003');
-    expect(ok).toBe(true);
+    expect(ok).toBe('puesto');
     expect(liberarEnvioAviso).toHaveBeenCalledTimes(1); // no se liberó de nuevo
   });
 
   it('si ya se le había puesto a disposición, no se reenvía ni se libera', async () => {
     reclamarEnvioAviso.mockResolvedValue(false);
     const ok = await ponerAvisoADisposicion('t1', 'op1', '5219990000004');
-    expect(ok).toBe(true);
+    expect(ok).toBe('puesto');
     expect(sendText).not.toHaveBeenCalled();
     expect(liberarEnvioAviso).not.toHaveBeenCalled();
   });
@@ -127,14 +130,17 @@ describe('la constancia del aviso solo se conserva si el mensaje salió', () => 
     // art. 15 y no se pueden fingir.
     getDatosResponsable.mockResolvedValue(null);
     const ok = await ponerAvisoADisposicion('t1', 'op1', '5219990000005');
-    expect(ok).toBe(false);
+    expect(ok).toBe('sin_datos');   // el ÚNICO caso administrativo de la flota
     expect(sendText).not.toHaveBeenCalled();
   });
 
   it('un fallo inesperado tampoco deja una constancia en pie', async () => {
     sendText.mockImplementation(() => { throw new Error('boom'); });
     const ok = await ponerAvisoADisposicion('t1', 'op1', '5219990000006');
-    expect(ok).toBe(false);
+    // `error`, no `sin_datos`: `sendText` lanza ante red o timeout y ese throw
+    // sale por aquí. Confundirlos es lo que le echaba a la flota la culpa de un
+    // fallo nuestro.
+    expect(ok).toBe('error');
     expect(logger.error).toHaveBeenCalledWith('privacidad.aviso_error', expect.anything());
   });
 });

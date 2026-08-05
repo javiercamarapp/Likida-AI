@@ -417,6 +417,64 @@ export async function intakeDelta(viajeId: string, delta: number): Promise<numbe
 }
 
 /**
+ * Cuántos OCR hay en vuelo, SIN escribir. `null` = no se pudo consultar.
+ *
+ * ── POR QUÉ EXISTE: EL SONDEO ERA UNA ESCRITURA ────────────────────────────
+ *
+ * `esperarIntake` sondeaba con `intakeDelta(viajeId, 0)`, y `intake_delta` es un
+ * UPDATE aunque el delta sea 0 (mig. 0011/0031: la fila se reescribe entera para
+ * poder aplicar el `greatest(0, …)` de forma atómica). O sea que la barrera
+ * hacía un UPDATE cada 500 ms sobre la MISMA fila de `viaje` que las 22 fotos de
+ * la ráfaga están actualizando con sus `+1`/`-1`. Es la RPC más llamada del
+ * sistema, y cada sondeo compite por el mismo row lock que el trabajo de verdad.
+ *
+ * ── LO QUE NO SE PUEDE PERDER AL CAMBIARLO ─────────────────────────────────
+ *
+ * La 0031 dice, con todas sus letras, que el olvido del contador muerto ocurre
+ * TAMBIÉN en el sondeo: sin eso, el primer "listo" después de una invocación
+ * muerta ve un `+1` huérfano, espera la barrera completa y le miente al operador
+ * diciéndole que su liquidación salió corta. Ese olvido lo hacía la escritura.
+ *
+ * Por eso este SELECT trae las DOS columnas y aplica la misma regla de los 10
+ * minutos del lado del cliente: un contador vivo con sello vencido —o sin
+ * sello— es basura de un proceso que no volvió, y vale 0. El `-1` de la foto y
+ * el `+1` que sella siguen siendo la RPC, que es donde la atomicidad importa;
+ * lo único que deja de escribir es la pregunta.
+ */
+export async function intakePendientes(viajeId: string): Promise<number | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('viaje')
+    .select('intake_pendientes, intake_pendientes_en')
+    .eq('id', viajeId)
+    .maybeSingle(), 'intakePendientes');
+  if (error) {
+    // Mismo contrato que `intakeDelta`: `null` es "no sé", y "no sé" NO abre la
+    // barrera. Devolver 0 aquí sería el fallo que su comentario documenta.
+    logger.warn('intake.sondeo', { viaje: viajeId, code: error.code, msg: error.message });
+    return null;
+  }
+  // La fila no existe (viaje borrado a media ráfaga): no hay nada en vuelo que
+  // esperar, y quedarse esperando a un viaje que no está sería colgar al
+  // operador hasta el tope.
+  if (!data) return 0;
+  const n = typeof data.intake_pendientes === 'number' ? data.intake_pendientes : 0;
+  if (n <= 0) return 0;
+  const sello = data.intake_pendientes_en ? Date.parse(String(data.intake_pendientes_en)) : NaN;
+  if (!Number.isFinite(sello) || Date.now() - sello > TTL_INTAKE_MS) {
+    logger.info('intake.contador_vencido', { viaje: viajeId, pendientes: n });
+    return 0;
+  }
+  return n;
+}
+
+/**
+ * Los 10 minutos de la 0031. Un `+1` más viejo que esto es de un proceso que no
+ * volvió: el tope de la función son 120 s, así que son 5× el peor caso legítimo.
+ * El número vive aquí Y en la migración; `barrera.test.ts` fija la regla.
+ */
+const TTL_INTAKE_MS = 10 * 60_000;
+
+/**
  * Espera a que NO haya OCR de fotos en vuelo para el viaje (contador = 0). Es la
  * barrera que garantiza que el "listo" cuadre sobre TODOS los gastos, no parciales.
  * NUNCA espera indefinido: tope configurable (env CUADRA_INTAKE_ESPERA_MS, default
@@ -429,7 +487,10 @@ export async function esperarIntake(
   timeoutMs?: number,
   // probe inyectable SOLO para test (default = el contador real). No cambia el
   // comportamiento en runtime; permite probar la gracia anti-carrera sin DB.
-  probe: (id: string) => Promise<number | null> = (id) => intakeDelta(id, 0),
+  //
+  // El default era `intakeDelta(id, 0)` — una ESCRITURA por sondeo, cada 500 ms,
+  // sobre la misma fila que la ráfaga está actualizando. Ver `intakePendientes`.
+  probe: (id: string) => Promise<number | null> = intakePendientes,
 ): Promise<boolean> {
   // Default 20s, NO 60s. El presupuesto de la función es maxDuration=60 y por
   // debajo de esta barrera todavía corren el lock (12s) y el agente (40s): con

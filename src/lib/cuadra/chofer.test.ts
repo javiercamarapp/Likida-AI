@@ -276,12 +276,18 @@ describe('el gateo por rol de /chofer', () => {
     expect(paginas.length).toBeGreaterThanOrEqual(4);
   });
 
+  // Acepta argumento: `requireOperador(destino)` recibe la ruta de vuelta a
+  // /login (guard.ts) en vez de la constante `/mis-viajes` que traía escrita a
+  // mano. Lo que esta prueba fija es que la PUERTA esté llamada, no con qué
+  // argumento — el destino lo comprueban `guard.test.ts` y `rutas.test.ts`.
+  const PUERTA = /await requireOperador\(/;
+
   it('el layout exige rol operador', () => {
-    expect(sinComentarios(layout)).toMatch(/await requireOperador\(\)/);
+    expect(sinComentarios(layout)).toMatch(PUERTA);
   });
 
   it('CADA página exige rol operador por su cuenta', () => {
-    const sinPuerta = paginas.filter((f) => !/await requireOperador\(\)/.test(sinComentarios(readFileSync(f, 'utf8'))));
+    const sinPuerta = paginas.filter((f) => !PUERTA.test(sinComentarios(readFileSync(f, 'utf8'))));
     expect(sinPuerta, 'estas páginas de /chofer se sirven sin comprobar el rol').toEqual([]);
   });
 

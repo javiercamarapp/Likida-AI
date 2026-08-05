@@ -18,11 +18,82 @@
 // tenants: PostgREST las recortaba a `max_rows` en silencio y la consola de
 // superadmin reportaba una fracción del gasto de IA —la cifra con la que se
 // decide el precio del producto— sin marca de que estuviera incompleta.
+//
+// Y AGREGADO EN SQL DESDE EL 5-AGO-2026 (mig. 0062). Paginar arregló el recorte
+// silencioso pero no el fondo: `traerTodo` LANZA al agotar sus 100 páginas
+// (100,000 filas), y `llm_costo` recibe ~2,000 filas diarias. 100,000 / 2,000 =
+// **día 50**. La consola no iba a mentir, iba a dejar de cargar, y la fecha se
+// puede calcular con una división. `resumen_costo_ia()` suma en la base y cruza
+// la red UNA fila: el tamaño del payload pasa a depender del número de GRUPOS
+// (fases, modelos, días, flotas), no del número de llamadas al modelo.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, traerTodo } from '@/lib/cuadra/pg';
 import { round2 } from '@/lib/formato';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA AGREGACIÓN DE `llm_costo`, EN SQL
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Lo que devuelve `resumen_costo_ia()` (mig. 0062): las seis agregaciones de
+ * `llm_costo` en un solo `jsonb`, calculadas en UN recorrido de la tabla.
+ *
+ * Los costos vienen SIN REDONDEAR, en la precisión completa del `numeric(10,6)`
+ * sumado en la base. El redondeo a centavos sigue siendo de `round2()`
+ * (formato.ts), que es el único sitio del repo donde se redondea dinero;
+ * redondear en los dos lados sería redondear dos veces.
+ */
+interface ResumenCostoIa {
+  /** `n` distingue "no hay NI UNA llamada registrada" de "las llamadas costaron
+   *  $0" — la misma distinción que exige `ResumenCosto` en costos.ts. */
+  totales: { n: number; costoUsd: number; tokensIn: number; tokensOut: number };
+  porFase: Array<{ fase: string; n: number; costoUsd: number }>;
+  porModelo: Array<{ modelo: string; n: number; costoUsd: number }>;
+  porFaseModelo: Array<{ fase: string; modelo: string; n: number; costoUsd: number }>;
+  /** DISPERSA: solo los días con actividad, igual que cuando se agrupaba en JS. */
+  porDia: Array<{ dia: string; costoUsd: number; tokens: number }>;
+  porTenant: Array<{ tenantId: string; costoUsd: number }>;
+}
+
+/**
+ * Llama a la agregación y **falla cerrado**.
+ *
+ * Dos comprobaciones, no una. La primera es la de siempre: supabase-js reporta
+ * el error POR VALOR, así que sin mirar `.error` una base caída se leería como
+ * "$0 de gasto de IA".
+ *
+ * La segunda es nueva y hace falta justo por haber movido esto a la base: si la
+ * función no existe todavía (una rama sin la 0062 aplicada) o devuelve otra
+ * forma, `data` llega como algo que no es este objeto y cada `?? 0` de abajo
+ * pintaría un cero que nadie midió. Por eso se valida la FORMA antes de leerla:
+ * el modo de fallo que importa aquí no es "se cayó", es "bajó sola".
+ */
+async function traerResumenCostoIa(
+  desde: string | null = null,
+  hasta: string | null = null,
+): Promise<ResumenCostoIa> {
+  const { data, error } = await supabaseAdmin()
+    .rpc('resumen_costo_ia', { p_desde: desde, p_hasta: hasta });
+  if (error) throw new Error(`resumen_costo_ia: ${error.message}`);
+
+  const r = data as Partial<ResumenCostoIa> | null;
+  const t = r?.totales;
+  if (
+    !t || typeof t.n !== 'number' || typeof t.costoUsd !== 'number'
+    || typeof t.tokensIn !== 'number' || typeof t.tokensOut !== 'number'
+    || !Array.isArray(r?.porFase) || !Array.isArray(r?.porModelo)
+    || !Array.isArray(r?.porFaseModelo) || !Array.isArray(r?.porDia)
+    || !Array.isArray(r?.porTenant)
+  ) {
+    throw new Error(
+      'resumen_costo_ia: la respuesta no tiene la forma esperada (¿migración 0062 sin aplicar?). '
+      + 'No se devuelve un resumen a medias: un cero aquí se lee como "la IA salió gratis".',
+    );
+  }
+  return r as ResumenCostoIa;
+}
 
 export interface ResumenNegocio {
   tenants: number;
@@ -59,6 +130,11 @@ export interface ResumenNegocio {
  * (7d/30d) — solo afecta `facturasPorDia`; el resto de los números
  * (costoIaUsd, tendencias, etc.) son totales o comparativos de 7 días fijos
  * a propósito, no se re-derivan por ventana todavía.
+ *
+ * Esa deuda NO la salda la 0062. `resumen_costo_ia()` acepta `p_desde`/`p_hasta`
+ * y aquí se le mandan NULL a propósito: acotar el costo de IA a la ventana
+ * cambiaría la cifra con la que se pone el precio del producto, y eso es un
+ * cambio de producto, no de rendimiento. El día que se decida, es un argumento.
  */
 export async function getResumenNegocio(
   hoy: string = new Date().toISOString().slice(0, 10),
@@ -70,7 +146,13 @@ export async function getResumenNegocio(
   // de que Likida de verdad no tenga nada) y el recorte silencioso a `max_rows`.
   // Y si la lectura no se puede completar, LANZA — la consola de superadmin
   // enseña su estado de error en vez de una cifra de gasto que no se midió.
-  const [tenantsData, viajesData, filas, gastosData] = await Promise.all([
+  //
+  // `llm_costo` YA NO SE TRAE: se agrega en la base (mig. 0062). Era la tabla
+  // que más rápido crece —una fila por llamada al modelo, ~790 mil al año— y la
+  // única de las cuatro que iba a rebasar las 100,000 filas de `traerTodo` en el
+  // primer par de meses. `gasto` es la siguiente en la fila (~240 mil al año) y
+  // sigue viniendo entera: cuando le toque, el camino ya está trazado.
+  const [tenantsData, viajesData, costoIa, gastosData] = await Promise.all([
     traerTodo<{ id: string; nombre: string; plan: string }>(
       (d, h) => admin.from('tenant').select('id, nombre, plan', conteo(d)).order('id').range(d, h),
       'getResumenNegocio/tenant',
@@ -79,56 +161,29 @@ export async function getResumenNegocio(
       (d, h) => admin.from('viaje').select('id, tenant_id', conteo(d)).order('id').range(d, h),
       'getResumenNegocio/viaje',
     ),
-    traerTodo<{ tenant_id: string; fase: string; modelo: string; tokens_in: number; tokens_out: number; costo_usd: number; created_at: string }>(
-      (d, h) => admin.from('llm_costo')
-        .select('tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd, created_at', conteo(d))
-        .order('id').range(d, h),
-      'getResumenNegocio/llm_costo',
-    ),
+    traerResumenCostoIa(),
     traerTodo<{ created_at: string }>(
       (d, h) => admin.from('gasto').select('created_at', conteo(d)).order('id').range(d, h),
       'getResumenNegocio/gasto',
     ),
   ]);
-  const porFaseMap = new Map<string, { n: number; costoUsd: number }>();
-  const porModeloMap = new Map<string, { n: number; costoUsd: number }>();
-  const porDiaMap = new Map<string, { costoUsd: number; tokens: number }>();
-  const costoPorTenant = new Map<string, number>();
-  let costoIaUsd = 0, tokensIn = 0, tokensOut = 0;
-  for (const f of filas) {
-    costoPorTenant.set(f.tenant_id, (costoPorTenant.get(f.tenant_id) ?? 0) + Number(f.costo_usd));
-    const costo = Number(f.costo_usd);
-    const tokens = Number(f.tokens_in) + Number(f.tokens_out);
-    costoIaUsd += costo;
-    tokensIn += Number(f.tokens_in);
-    tokensOut += Number(f.tokens_out);
-
-    const fase = porFaseMap.get(f.fase) ?? { n: 0, costoUsd: 0 };
-    fase.n += 1; fase.costoUsd += costo;
-    porFaseMap.set(f.fase, fase);
-
-    const modelo = porModeloMap.get(f.modelo) ?? { n: 0, costoUsd: 0 };
-    modelo.n += 1; modelo.costoUsd += costo;
-    porModeloMap.set(f.modelo, modelo);
-
-    // `created_at` es UTC; el corte por día aquí es aproximado a propósito
-    // (no es un dato fiscal, es una gráfica de tendencia) — el mismo criterio
-    // fino de `fechaMx` sería trabajo de más para una vista que solo enseña
-    // si el gasto sube o baja semana a semana.
-    const dia = f.created_at.slice(0, 10);
-    const d = porDiaMap.get(dia) ?? { costoUsd: 0, tokens: 0 };
-    d.costoUsd += costo; d.tokens += tokens;
-    porDiaMap.set(dia, d);
-  }
-  const porFase = [...porFaseMap.entries()]
-    .map(([fase, v]) => ({ fase, n: v.n, costoUsd: round2(v.costoUsd) }))
-    .sort((a, b) => b.costoUsd - a.costoUsd);
-  const porModelo = [...porModeloMap.entries()]
-    .map(([modelo, v]) => ({ modelo, n: v.n, costoUsd: round2(v.costoUsd) }))
-    .sort((a, b) => b.costoUsd - a.costoUsd);
-  const porDia = [...porDiaMap.entries()]
-    .map(([dia, v]) => ({ dia, costoUsd: round2(v.costoUsd), tokens: v.tokens }))
-    .sort((a, b) => a.dia.localeCompare(b.dia));
+  const costoIaUsd = costoIa.totales.costoUsd;
+  const tokensIn = costoIa.totales.tokensIn;
+  const tokensOut = costoIa.totales.tokensOut;
+  const costoPorTenant = new Map<string, number>(
+    costoIa.porTenant.map((t) => [t.tenantId, t.costoUsd]),
+  );
+  // El orden ya viene de SQL (costo desc, y el día ascendente), así que aquí
+  // solo se redondea. Reordenar en JS sobre la cifra YA redondeada es lo que
+  // hacía la versión anterior, y con dos fases que redondeen al mismo centavo
+  // el desempate quedaba a merced del orden de un `Map`.
+  const porFase = costoIa.porFase.map((f) => ({ ...f, costoUsd: round2(f.costoUsd) }));
+  const porModelo = costoIa.porModelo.map((m) => ({ ...m, costoUsd: round2(m.costoUsd) }));
+  // `dia` es el corte UTC que hace la 0062 (`created_at at time zone 'UTC'`),
+  // el mismo que daba el viejo `created_at.slice(0, 10)`: es una gráfica de
+  // tendencia, no un dato fiscal, y moverlo a hora de México cambiaría la serie
+  // histórica sin que nadie lo pidiera.
+  const porDia = costoIa.porDia.map((d) => ({ ...d, costoUsd: round2(d.costoUsd) }));
 
   // Tendencia real, no de adorno: si la ventana ANTERIOR está vacía (Likida
   // lleva menos de 7 días con actividad), "creció ∞%" no dice nada — se
@@ -196,27 +251,19 @@ export interface CostoPorFaseModelo { fase: string; modelo: string; n: number; c
  * OCR, desglosado por modelo?"), algo que `porFase`/`porModelo` no pueden
  * responder solos porque cada uno agrupa por un solo eje. Mismo dato real
  * de siempre, solo agrupado más fino — nada nuevo que instrumentar.
+ *
+ * Sale del MISMO `resumen_costo_ia()` que `getResumenNegocio` (mig. 0062), como
+ * un sexto corte del `grouping sets`. Antes esto volvía a arrastrar `llm_costo`
+ * entera por segunda vez en las páginas que piden las dos cosas (Model Ops,
+ * Agente OCR): dos recorridos de la tabla que más rápido crece para pintar una
+ * sola pantalla. Ahora el corte (fase, modelo) sale del recorrido que ya se
+ * estaba pagando; el costo extra es una llave de hash más sobre ~60 grupos.
  */
 export async function getCostoPorFaseModelo(): Promise<CostoPorFaseModelo[]> {
-  const admin = supabaseAdmin();
-  // La misma tabla, el mismo recorte: sin paginar, esto sumaba las primeras
-  // `max_rows` filas de `llm_costo` y presentaba el resultado como el costo por
-  // fase y modelo de Likida entera.
-  const data = await traerTodo<{ fase: string; modelo: string; costo_usd: number }>(
-    (d, h) => admin.from('llm_costo').select('fase, modelo, costo_usd', conteo(d)).order('id').range(d, h),
-    'getCostoPorFaseModelo',
-  );
-  const map = new Map<string, { fase: string; modelo: string; n: number; costoUsd: number }>();
-  for (const f of data) {
-    const key = `${f.fase}::${f.modelo}`;
-    const cur = map.get(key) ?? { fase: f.fase, modelo: f.modelo, n: 0, costoUsd: 0 };
-    cur.n += 1;
-    cur.costoUsd += Number(f.costo_usd);
-    map.set(key, cur);
-  }
-  return [...map.values()]
-    .map((v) => ({ ...v, costoUsd: round2(v.costoUsd) }))
-    .sort((a, b) => b.costoUsd - a.costoUsd);
+  const { porFaseModelo } = await traerResumenCostoIa();
+  // Ya viene ordenado por costo desc (y fase, modelo como desempate estable):
+  // aquí solo se redondea a centavos.
+  return porFaseModelo.map((v) => ({ ...v, costoUsd: round2(v.costoUsd) }));
 }
 
 export interface TurnoConversacion { role: 'user' | 'assistant'; content: string }

@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { requireOperador } from '@/lib/auth/guard';
-import { getSessionTenant } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { MarcoChofer } from './marco';
 
@@ -23,9 +22,10 @@ export const dynamic = 'force-dynamic';
 // Que la autorización viva junto a la consulta que protege es lo que impide que
 // una página nueva de /chofer nazca sin puerta.
 //
-// El proxy (src/proxy.ts) todavía no nombra /chofer en su matcher —ahí están
-// /dashboard, /mis-viajes y /admin—, así que hoy la única capa de sesión es
-// esta. Queda anotado en el reporte: ese archivo no es de esta tarea.
+// EL PROXY YA NOMBRA /chofer (src/proxy.ts, `RUTAS_CON_SESION`), así que esta
+// vuelve a ser la SEGUNDA capa y no la única. La diferencia importa para el
+// "sin sesión": el proxy ve la URL completa y devuelve al chofer a la pantalla
+// exacta del enlace de WhatsApp que abrió; aquí solo se conoce `/chofer`.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -39,20 +39,12 @@ export const dynamic = 'force-dynamic';
 export const viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' as const };
 
 export default async function ChoferLayout({ children }: { children: React.ReactNode }) {
-  // ── EL "SIN SESIÓN" SE ATIENDE AQUÍ, Y NO ES DUPLICAR LA PUERTA ─────────
-  //
-  // `requireOperador()` arma su redirect con `/login?next=%2Fmis-viajes`
-  // ESCRITO A MANO (guard.ts:50). Todo /chofer aterrizaría, después de
-  // iniciar sesión, en la pantalla vieja de solo lectura — y el chofer llega
-  // por un enlace de WhatsApp que apunta a una pantalla concreta, así que la
-  // ruta de vuelta es justamente lo que no se puede perder. Aquí solo se
-  // corrige el DESTINO del rebote; las tres reglas de autorización (hay
-  // sesión, el rol es operador, tiene `operador_id`) las sigue decidiendo
-  // `requireOperador`, una línea más abajo.
-  const sesion = await getSessionTenant();
-  if (!sesion) redirect(`/login?next=${encodeURIComponent('/chofer')}`);
-
-  const { nombre } = await requireOperador();
+  // El destino del rebote se PASA, ya no se corrige a mano con un
+  // `getSessionTenant()` de más: `requireOperador(destino)` (guard.ts) arma
+  // `/login?next=<destino>` con lo que reciba. Antes tenía la constante
+  // `%2Fmis-viajes` escrita adentro y todo /chofer aterrizaba, tras iniciar
+  // sesión, en la pantalla vieja de solo lectura.
+  const { nombre } = await requireOperador('/chofer');
 
   async function cerrarSesion() {
     'use server';

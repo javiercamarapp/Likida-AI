@@ -47,16 +47,48 @@ describe('requireSessionTenant', () => {
 describe('requireOperador', () => {
   beforeEach(() => { redirect.mockClear(); getSessionTenant.mockReset(); });
 
-  it('sin sesión, manda a /login', async () => {
+  it('sin sesión y sin destino, manda a /login con el default de siempre', async () => {
     getSessionTenant.mockResolvedValue(null);
     await expect(requireOperador()).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/mis-viajes')}`);
   });
 
-  it('rol distinto de operador (flota_admin, encargado, contador, superadmin) manda a /dashboard — es SU panel, no el de un chofer', async () => {
+  // ── LA LIGA PROFUNDA DE WHATSAPP PERDÍA SU RUTA DE VUELTA ──────────────
+  //
+  // El rebote era `/login?next=%2Fmis-viajes` ESCRITO A MANO. El chofer llega
+  // por un enlace que apunta a una pantalla concreta ("mira tu saldo",
+  // /chofer/liquidacion), así que después de iniciar sesión aterrizaba en la
+  // pantalla vieja de solo lectura en vez de en la que le mandaron.
+  it.each([
+    '/chofer',
+    '/chofer/liquidacion',
+    '/chofer/comprobantes',
+    '/chofer/viajes',
+  ])('sin sesión, conserva el destino %s', async (destino) => {
+    getSessionTenant.mockResolvedValue(null);
+    await expect(requireOperador(destino)).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(`/login?next=${encodeURIComponent(destino)}`);
+  });
+
+  it('el destino se CODIFICA: una ruta con query no rompe el `next`', async () => {
+    getSessionTenant.mockResolvedValue(null);
+    await expect(requireOperador('/chofer/viajes?ver=todos')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/login?next=%2Fchofer%2Fviajes%3Fver%3Dtodos');
+  });
+
+  it('rol distinto de operador (flota_admin, encargado, superadmin) manda a /dashboard — es SU panel, no el de un chofer', async () => {
     getSessionTenant.mockResolvedValue({ userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana', operadorId: null });
     await expect(requireOperador()).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/dashboard');
+  });
+
+  it('al CONTADOR no se le manda a /dashboard, que es de operación y lo rebotaría otra vez', async () => {
+    // El rebote era '/dashboard' fijo. Para el contador esa ruta es área
+    // `dinero`→no: `resolverTenantEfectivo` lo rebota de vuelta y quedaba un
+    // ping-pong de redirects. `inicioDe` ya sabía la respuesta correcta.
+    getSessionTenant.mockResolvedValue({ userId: 'u-4', tenantId: 't-1', rol: 'contador', nombre: 'Luz', operadorId: null });
+    await expect(requireOperador('/chofer')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/dashboard/contador');
   });
 
   it('operador sin operador_id ligado (alta a medias) manda a /sin-acceso', async () => {
@@ -70,6 +102,26 @@ describe('requireOperador', () => {
     getSessionTenant.mockResolvedValue(s);
     await expect(requireOperador()).resolves.toEqual(s);
     expect(redirect).not.toHaveBeenCalled();
+  });
+
+  // ── EL ALTA A MEDIAS QUE SÍ PASA LA PUERTA ──────────────────────────────
+  //
+  // Esta puerta exige `operador_id`, no `tenant_id`, y eso es correcto: hay
+  // panel que enseñar. Pero significa que un chofer con `tenant_id` nulo
+  // ENTRA, y quien lo atiende del otro lado es la página. Se fija aquí para
+  // que el día que alguien "arregle" esto agregando un `if (!s.tenantId)
+  // redirect('/sin-acceso')` sepa que está cambiando el contrato con /chofer.
+  it('un operador SIN tenant pasa la puerta — el aviso de alta incompleta es de la página', async () => {
+    const s = { userId: 'u-5', tenantId: null, rol: 'operador', nombre: 'Juan', operadorId: 'o-9' };
+    getSessionTenant.mockResolvedValue(s);
+    await expect(requireOperador('/chofer')).resolves.toEqual(s);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it('un operador sin tenant NO se manda a /login: ya inició sesión', async () => {
+    getSessionTenant.mockResolvedValue({ userId: 'u-5', tenantId: null, rol: 'operador', nombre: 'Juan', operadorId: 'o-9' });
+    await requireOperador('/chofer');
+    expect(redirect).not.toHaveBeenCalledWith(expect.stringContaining('/login'));
   });
 });
 

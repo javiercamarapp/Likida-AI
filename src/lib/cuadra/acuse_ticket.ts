@@ -225,12 +225,18 @@ export function leerBoton(texto: string): { accion: 'ok' | 'mal'; gastoId: strin
  *
  * Dice CUÁNTOS quedaron sin confirmar en vez de callarlos: un tope que no se
  * anuncia se lee como "todo salió bien", que es la peor lectura posible.
+ *
+ * ARRANCABA CON «Recibí todo, pero…», y eso dejó de ser cierto en cuanto esta
+ * frase pasó a viajar dentro del resumen de ráfaga: el párrafo de arriba puede
+ * estar diciéndole que tres fotos no se leyeron y dos se trabaron, y entonces
+ * «recibí todo» lo contradice en el mismo mensaje. Se escribe de forma que sea
+ * verdad sola y acompañada.
  */
 export function mensajeDemasiadasDudas(cuantos: number, estado: EstadoViaje | null): string {
   const saldo = lineaDeSaldo(estado);
   return [
-    `Recibí todo, pero ${cuantos} comprobante(s) no los pude leer con seguridad 🔍.`,
-    'Los dejo marcados para que tu oficina los revise; si puedes, reenvía esas fotos con mejor luz.',
+    `Y hay ${cuantos} ${cuantos === 1 ? 'comprobante que no pude leer' : 'comprobantes que no pude leer'} con seguridad 🔍.`,
+    `Los dejo marcados para que tu oficina los revise; si puedes, ${cuantos === 1 ? 'reenvía esa foto' : 'reenvía esas fotos'} con mejor luz.`,
     saldo,
   ].filter(Boolean).join(' ');
 }
