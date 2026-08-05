@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { type ClavePeriodo, type Periodo, PERIODO_POR_DEFECTO } from '@/lib/cuadra/fiscal';
+import { fechaMx } from '@/lib/formato';
 
 /**
  * El selector de periodo del panel fiscal — mismo lenguaje visual que
@@ -53,9 +54,15 @@ export function SelectorPeriodo({
  * el selector, con el rango REAL escrito debajo.
  *
  * El rango se imprime siempre, con sus fechas, y no solo el nombre del
- * periodo. "Ejercicio 2026" es una etiqueta; "1 ene 2026 – 31 dic 2026" es lo
- * que el contador puede cruzar contra su papel de trabajo sin preguntarle a
- * nadie qué incluye.
+ * periodo. "Ejercicio 2026" es una etiqueta; "01 ene 2026 – 31 dic 2026" es
+ * lo que el contador puede cruzar contra su papel de trabajo sin preguntarle
+ * a nadie qué incluye.
+ *
+ * AUDITORÍA 10, BAJO (frontend) — el rango se imprimía en ISO crudo
+ * ("2026-01-01 – 2026-12-31"): el único formato de fecha del producto que NO
+ * pasaba por `fechaMx()`, la única representación fiscal que CLAUDE.md exige
+ * ("El formato de cifras vive solo en `lib/formato.ts`"). Un contador que lee
+ * ISO en una pantalla y "01 ene 2026" en las otras 30 lee dos productos.
  */
 export function EncabezadoFiscal({
   icono, titulo, subtitulo, base, periodo, extra,
@@ -79,7 +86,7 @@ export function EncabezadoFiscal({
       <div className="flex flex-col items-end gap-1 shrink-0">
         <SelectorPeriodo base={base} activo={periodo.clave} extra={extra} />
         <span className="text-xs tabular" style={{ color: 'var(--faint)' }}>
-          {periodo.desde ? `${periodo.desde} – ${periodo.hasta}` : 'Sin corte de fechas'}
+          {periodo.desde ? `${fechaMx(periodo.desde)} – ${fechaMx(periodo.hasta)}` : 'Sin corte de fechas'}
         </span>
       </div>
     </header>

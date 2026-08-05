@@ -1,4 +1,5 @@
 import NavInferior from './nav';
+import { Logo } from '../logo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL MARCO DEL PANEL DEL CHOFER — barra de arriba, columna y pestañas.
@@ -8,6 +9,12 @@ import NavInferior from './nav';
 // sin sesión, así que el preview temporal tendría que copiarlo para poder
 // mirarlo — y una copia solo se verifica a sí misma. Aquí la autorización
 // queda de un lado y el marco del otro, y lo que se mira es lo que se sirve.
+//
+// AUDITORÍA 10, BAJO (frontend) — el header traía un `<span>` de texto plano
+// "Likida" en vez del lockup `<Logo/>` que ya pintan `/admin` (`layout.tsx`) y
+// `/dashboard` (`chrome.tsx`): la única de las tres consolas sin ícono ni la
+// tipografía de marca. Mismo componente, no una copia — una copia diverge la
+// próxima vez que alguien retoque el logo.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function MarcoChofer({
@@ -33,7 +40,7 @@ export function MarcoChofer({
         }}
       >
         <div className="px-4 h-14 flex items-center justify-between gap-3">
-          <span className="font-semibold tracking-tight text-lg">Likida</span>
+          <Logo alto="h-5" />
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-base truncate" style={{ color: 'var(--muted)' }}>
               {nombre ?? 'Mi cuenta'}
