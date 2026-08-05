@@ -67,39 +67,40 @@ insert into terminal (id, tenant_id, nombre, ciudad) values
   ('22222222-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', 'Nuevo Laredo', 'Nuevo Laredo, TAM')
 on conflict (id) do nothing;
 
--- ── Operadores  🔴 INVENTADO: nombres y teléfonos de fantasía ───────────────
---    ⚠️ Para el demo por WhatsApp REAL, el teléfono DEBE ser el número de
---    prueba dado de alta en Meta. Reemplaza estos placeholders.
+-- ── Operadores  🔴 INVENTADO: nombres de fantasía ───────────────────────
+--    ⚠️ OP-101 (el del viaje demo) usa el teléfono de Javier (529993700779) —
+--    el del demo por WhatsApp real, número de prueba de Meta. Los otros cuatro
+--    son placeholders; reemplaza con teléfonos reales cuando los tengas.
 insert into operador (id, tenant_id, terminal_id, nombre, telefono, numero_empleado, activo) values
-  ('33333333-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000001', 'Juan Pérez Ramírez',      '+521111111101', 'OP-101', true),  -- 🔴 INVENTADO
+  ('33333333-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000001', 'Juan Pérez Ramírez',      '529993700779', 'OP-101', true),  -- 🔴 nombre INVENTADO; teléfono = el del demo
   ('33333333-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000001', 'Miguel Ángel Torres',     '+521111111102', 'OP-102', true),  -- 🔴 INVENTADO
   ('33333333-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000002', 'José Luis Hernández',     '+521111111103', 'OP-103', true),  -- 🔴 INVENTADO
   ('33333333-0000-0000-0000-000000000004', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000003', 'Ricardo Gómez Vázquez',   '+521111111104', 'OP-104', true),  -- 🔴 INVENTADO
   ('33333333-0000-0000-0000-000000000005', '11111111-1111-1111-1111-111111111111', '22222222-0000-0000-0000-000000000002', 'Fernando Aguilar Cruz',   '+521111111105', 'OP-105', true)   -- 🔴 INVENTADO
 on conflict (id) do nothing;
 
+-- ── Cuentas web del panel ───────────────────────────────────────────────
+--    NO se siembran app_user aquí A PROPÓSITO: `app_user.id` debe ser el id
+--    de `auth.users` (provisionar.ts), y eso solo se crea desde la app — el
+--    seed no puede fabricar sesiones. Para el demo: entra a /admin con tu
+--    superadmin (ya existe en la base) y da de alta al contralor del demo con
+--    el botón de equipo (flota_admin sobre el tenant 11111111-…). El chofer
+--    web (rol=operador ligado a OP-101) se provisiona igual cuando se quiera.
+
 -- ═══════════════════════════════════════════════════════════════════════════
--- POLÍTICA DE GASTOS  ⚠️  ESTA TABLA NO LA LEE NADIE  ⚠️
+-- POLÍTICA DE GASTOS (la VIVA) — tenant.config.politica
 --
--- Aquí decía "el motor de cuadre usa `tope_monto` por comprobante y
--- `requiere_cfdi`", y es FALSO desde hace tiempo: la política viva sale de
--- `tenant.config.politica` (ver `DEMO_CONFIG` en src/lib/cuadra/config.ts).
---
--- Se nota en estas mismas filas: aquí abajo el viático se llama `viaticos` y en
--- la config viva se llama `alimentacion`. Son dos listas que ya se separaron.
---
--- Estas filas se conservan porque la tabla sigue en pie con su check de dominio
--- (mig. 0025) por si alguien la revive, pero cambiar un tope AQUÍ no cambia
--- ninguna liquidación. El sitio real es `tenant.config`.
--- Nota de corredor Silao→Laredo (~800 km one-way): casetas esperadas del
--- trayecto ≈ 6-8 plazas, ~$2,800 total 🔴 INVENTADO — documentar el set real.
--- ═══════════════════════════════════════════════════════════════════════════
-insert into politica_gasto (tenant_id, concepto, ruta, tope_monto, requiere_cfdi, notas) values
-  ('11111111-1111-1111-1111-111111111111', 'diesel',   null, 4000, false, '🔴 INVENTADO: tope por carga de diésel'),
-  ('11111111-1111-1111-1111-111111111111', 'caseta',   null, 1500, false, '🔴 INVENTADO: tope por caseta'),
-  ('11111111-1111-1111-1111-111111111111', 'viaticos', null, 800,  false, '🔴 INVENTADO: tope de viáticos/comida'),
-  ('11111111-1111-1111-1111-111111111111', 'factura',  null, null, true,  '🔴 INVENTADO: facturas requieren CFDI válido')
-on conflict do nothing;
+-- La tabla politica_gasto está MUERTA (CLAUDE.md): el motor lee
+-- `tenant.config.politica` vía getConfig(). Si config es NULL se usa
+-- DEMO_CONFIG (src/lib/cuadra/config.ts) que ya trae estos topes — pero se
+-- escriben AQUÍ explícitos para que el seed sea autosuficiente y el cambio
+-- sea visible en un solo lugar. Arrays reemplazan en la mezcla (regla de
+-- config.ts), así que esto define LA política del tenant.
+-- 🔴 INVENTADO: topes y set de casetas — documentar los reales del corredor.
+update tenant set config = jsonb_set(
+  coalesce(config, '{}'::jsonb), '{politica}',
+  '[{"concepto":"diesel","topeMonto":4000},{"concepto":"caseta","topeMonto":1500},{"concepto":"alimentacion","topeMonto":800},{"concepto":"hospedaje","topeMonto":2500},{"concepto":"transporte","topeMonto":800},{"concepto":"flete"},{"concepto":"factura","requiereCfdi":true}]'::jsonb)
+) where id = '11111111-1111-1111-1111-111111111111';
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- VIAJE DEMO (abierto) — Silao → Nuevo Laredo, listo para cuadrar por WhatsApp.
@@ -128,6 +129,22 @@ insert into gasto (id, tenant_id, viaje_id, concepto, monto, folio, cfdi_uuid, r
    'caseta', 1400, 'CA-4471', 'c8f4a2b3-2d5e-4f70-9b01-234567890abc', null, 'TIN010101AAA',
    'vigente', null, null, null, 'I', null, null, true, '04', 1206.90, null, 193.10, current_date - 1, 0.96)
 on conflict (id) do nothing;
+
+-- 🔴 DEMO: el resto del viaje, para que comprobado = anticipo (10,600) y la
+-- ÚNICA diferencia sea la de política ($200 del diésel sobre tope). Sin estos,
+-- el cuadre saldría con un sobrante de $5,000 que no está en el guion. Son
+-- casetas del corredor + alimentación/transporte/hospedaje dentro de tope.
+insert into gasto (id, tenant_id, viaje_id, concepto, monto, folio, fecha, ocr_confianza) values
+  ('55555555-0000-0000-0000-000000000011', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'caseta',       1100, 'CA-4480', current_date - 1, 0.95),
+  ('55555555-0000-0000-0000-000000000012', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'caseta',        950, 'CA-4491', current_date - 1, 0.95),
+  ('55555555-0000-0000-0000-000000000013', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'caseta',        750, 'CA-4502', current_date - 1, 0.94),
+  ('55555555-0000-0000-0000-000000000014', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'alimentacion',  800, 'AL-3301', current_date - 1, 0.93),
+  ('55555555-0000-0000-0000-000000000015', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'transporte',    600, 'TR-2201', current_date - 1, 0.92),
+  ('55555555-0000-0000-0000-000000000016', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'hospedaje',   1000, 'HS-1101', current_date - 1, 0.94)
+on conflict (id) do nothing;
+-- Totales: diésel 4200 (comprobado 4000, $200 sobre política) + casetas
+-- 1400+1100+950+750 = 4200 + alimentacion 800 + transporte 600 + hospedaje 1000
+-- = comprobado $10,600 = anticipo. Diferencia única: $200 sobre política.
 
 -- 🔴 DEMO: XML crudo del diésel (CFF 30) — con complemento HidroYPetro real.
 insert into cfdi_xml (tenant_id, gasto_id, cfdi_uuid, xml) values (
