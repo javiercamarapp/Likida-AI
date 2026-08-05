@@ -195,3 +195,28 @@ describe('el texto de reemplazo no puede negar un cierre que SÍ ocurrió', () =
     expect(r.reply).toContain('Todavía no he cerrado');
   });
 });
+
+// ── AUDITORÍA 13 · MEDIO: regresiones del fix de la 12 ─────────────────────
+describe('AUDITORÍA 13 — el fix de la 12 sin sus regresiones', () => {
+  it('una mentira de cierre con "no" ACCESORIO sí se caza (antes pasaba)', () => {
+    const r = guardiaEstado(
+      'Ya quedó cerrada tu liquidación, no te preocupes. En un momento te llega el PDF.',
+      NO_CERRO,
+    );
+    expect(r.forzado).toBe(true);
+    expect(r.reply).toContain('Todavía no he cerrado');
+  });
+
+  it('la pregunta SIN "¿" (estilo WhatsApp) no se tacha como afirmación', () => {
+    const r = guardiaEstado('Ya quedó cerrada mi liquidación?', NO_CERRO);
+    expect(r.forzado).toBe(false);
+    expect(r.reply).toContain('Ya quedó cerrada mi liquidación?');
+  });
+
+  it('la negación PEGADA al verbo sigue saltando (el caso que la 12 cerró)', () => {
+    for (const t of ['Tu liquidación no quedó cerrada todavía, faltan tus fotos.']) {
+      const r = guardiaEstado(t, NO_CERRO);
+      expect(r.forzado).toBe(false);
+    }
+  });
+});
