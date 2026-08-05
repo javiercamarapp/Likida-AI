@@ -31,13 +31,22 @@ export default function AsistenteExpandible({
 
   return (
     <div className="flex items-start relative" style={{ gap: expandido ? 0 : 16, transition: `gap ${DURACION}` }}>
+      {/* AUDITORÍA 12, ALTO (frontend): antes era
+          `width: expandido ? 0 : calc(100% - 292px)` — restaba el ancho del
+          asistente SIEMPRE, pero el aside es `hidden xl:flex` (display:none
+          bajo 1280): la banda de 292 px quedaba vacía justo en el rango de un
+          proyector de sala. Con flex (crece hasta llenar lo disponible) el
+          aside manda cuando se ve y no ocupa nada cuando está hidden — la
+          misma regla que /dashboard ya usa (chrome.tsx) y que marco.ts
+          promete para los dos paneles. */}
       <div
+        className="min-w-0"
         style={{
-          width: expandido ? 0 : `calc(100% - ${ANCHO_ASIDE + 16}px)`,
+          flex: expandido ? '0 1 0%' : '1 1 0%',
           minWidth: 0,
           opacity: expandido ? 0 : 1,
           overflow: 'hidden',
-          transition: `width ${DURACION}, opacity 250ms ease`,
+          transition: `flex-grow ${DURACION}, flex-basis ${DURACION}, opacity 250ms ease`,
         }}
       >
         {main}
