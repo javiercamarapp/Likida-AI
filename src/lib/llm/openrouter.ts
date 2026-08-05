@@ -65,7 +65,33 @@ const FALLBACK: Record<string, string> = {
   'google/gemini-3.5-flash-lite': 'openai/gpt-5.6-luna',
   'anthropic/claude-sonnet-5': 'openai/gpt-5.6-terra',
   'anthropic/claude-opus-5': 'anthropic/claude-sonnet-5',
+  // Mismo hueco, dormido: `53492a3` (4-ago-2026) agregó estos tres a PRICES
+  // como candidatos del MISMO benchmark de OCR que dio 3.1-flash-lite (ver
+  // arriba) — no son de texto (chat/router), son de VISIÓN. Si algún día
+  // `CUADRA_MODEL_OCR` apunta a uno de ellos, el respaldo tiene que seguir
+  // leyendo imagen: mismo criterio que 3.6-flash y 3.1-flash-lite
+  // (claude-haiku-4.5 hace visión), no el de 3.5-flash-lite (texto puro →
+  // gpt-5.6-luna, que no necesita leer un comprobante).
+  'google/gemini-2.5-flash-lite': 'anthropic/claude-haiku-4.5',
+  'google/gemini-2.5-flash': 'anthropic/claude-haiku-4.5',
+  'google/gemini-3-flash-preview': 'anthropic/claude-haiku-4.5',
 };
+
+/**
+ * Modelos de `PRICES` AISLADOS de la red de respaldo: ni tienen su propia
+ * entrada en `FALLBACK` (pueden ser el primario y caer a otro proveedor) ni
+ * aparecen como destino de la de alguien más (son ya el plan B de otro
+ * modelo, y ahí termina la cadena a propósito — encadenar fallback tras
+ * fallback no tiene fin). Un modelo AISLADO es el mismo bug que `cc2d6b8`,
+ * dormido: `FALLBACK[model] ?? null` cae a `null` en cuanto ese modelo se
+ * vuelva el override activo de un rol — sin error, sin log, solo deja de
+ * haber plan B. Exportado solo para que la prueba de cobertura lo enumere
+ * sin exponer las tablas completas.
+ */
+export function modelosAisladosDeFallback(): string[] {
+  const enLaRed = new Set([...Object.keys(FALLBACK), ...Object.values(FALLBACK)]);
+  return Object.keys(PRICES).filter((modelo) => !enLaRed.has(modelo));
+}
 
 export function isTransientError(err: unknown): boolean {
   // POR TIPO ANTES QUE POR TEXTO. El SDK de OpenAI aplasta CUALQUIER fallo de
