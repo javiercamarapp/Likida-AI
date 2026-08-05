@@ -12,8 +12,15 @@ import { logger } from '@/lib/logger';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 // Un lote abre UN navegador por flota y una sesión de portal por ticket: 10-60 s
-// cada una. El presupuesto es para eso, y por eso el lote va acotado (ver
-// TOPE_POR_CORRIDA).
+// en el caso típico, hasta ~147 s en el peor caso medido (arranque de Chromium +
+// navegar + los campos fiscales + validar + leer + capturar, cada paso a su
+// propio tope en pagina_playwright.ts/capufe.ts). TOPE_POR_CORRIDA limita
+// CUÁNTOS TICKETS entran a la cola, pero no CUÁNTAS FLOTAS —y por tanto cuántos
+// navegadores— entran en un lote: ocho tickets de ocho flotas distintas son ocho
+// sesiones independientes, y esas SÍ rebasan los 300 s de aquí abajo. Por eso el
+// `for` de flotas (más abajo) comprueba el reloj contra MARGEN_LOTE_MS antes de
+// abrir cada navegador nuevo, y corta el lote ahí en vez de dejar que Vercel mate
+// la invocación a medio camino.
 export const maxDuration = 300;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -86,17 +93,62 @@ export const maxDuration = 300;
 // en que sí se pueda. Un 200 con la lista vacía dejaría el cron verde en el
 // panel de Vercel para siempre, que es el modo de fallo que este archivo existe
 // para no tener.
+//
+// ── EL LOTE SE CORTA POR RELOJ, NO SE ESTIRA HASTA QUE VERCEL MATE LA FUNCIÓN ─
+//
+// TOPE_POR_CORRIDA acota tickets, no sesiones de navegador: ocho tickets de
+// ocho flotas distintas son ocho navegadores, y a ~147 s el peor caso de UNA
+// sesión, dos flotas ya rebasan `maxDuration`. Si Vercel mata la invocación A
+// MEDIO CAMINO de una sesión de portal en modo `emitir`, el CFDI puede haber
+// quedado timbrado en el SAT sin que `cfdi_uuid` se alcanzara a escribir de
+// vuelta — el claim expira en `CLAIM_MINUTOS` y ese mismo ticket vuelve a la
+// cola arriesgando una segunda emisión. Por eso el `for` de flotas comprueba el
+// reloj contra MARGEN_LOTE_MS antes de CADA `conNavegador` nuevo: si no alcanza
+// el tiempo para otra sesión completa, el lote se corta ahí, esa flota queda
+// SIN marcar (`sinTiempo`) para la corrida siguiente, y la respuesta lo dice.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Cuántos tickets por corrida.
+ * Cuántos tickets por corrida, no cuántas sesiones de navegador.
  *
- * A 60 s el peor caso, ocho llenan el presupuesto de 300 s con margen. Lo que
- * no entra queda para la siguiente corrida, una hora después — y eso se DICE en
- * la respuesta: un tope que no se anuncia se lee como "ya se facturó todo", que
- * es la lectura más cara posible.
+ * Ocho tickets de LA MISMA flota comparten un navegador y caben con margen.
+ * Pero si esos ocho pertenecen a ocho flotas distintas —posible: son 96
+ * empresas censadas como prospecto, y basta que unas pocas operen ya con 1-2
+ * tickets pendientes cada una—, son ocho sesiones independientes, y ningún
+ * valor de TOPE_POR_CORRIDA arregla eso solo: lo que de verdad frena el lote a
+ * tiempo es MARGEN_LOTE_MS, abajo. Lo que no entra en la cola, o lo que sí
+ * entró pero no alcanzó tiempo, queda para la corrida siguiente, una hora
+ * después — y eso se DICE en la respuesta (`quedaron`, `sinTiempo`): un tope
+ * que no se anuncia se lee como "ya se facturó todo", la lectura más cara
+ * posible.
  */
 const TOPE_POR_CORRIDA = 8;
+
+/** `maxDuration` de arriba, en milisegundos — la MISMA constante, no una copia. */
+const PRESUPUESTO_LOTE_MS = maxDuration * 1000;
+
+/**
+ * Colchón sobre el presupuesto de la invocación antes de abrir la SIGUIENTE
+ * sesión de navegador.
+ *
+ * Antes de este arreglo, el comentario de `TOPE_POR_CORRIDA` decía "a 60 s el
+ * peor caso, ocho llenan 300 s con margen" — 8 × 60 s = 480 s, 180 s de MÁS. El
+ * auditor de rendimiento lo encontró (`docs/auditoria-10/rendimiento.md`,
+ * hallazgo ALTO): el peor caso medido de UNA sola sesión de portal —un ticket,
+ * sumando cada tope de `pagina_playwright.ts` y `capufe.ts`— es ~147 s. Con
+ * solo DOS flotas en ese escenario ya se rebasan los 300 s, y el `for` de
+ * flotas no consultaba el reloj antes de abrir el siguiente navegador.
+ *
+ * Ahora sí lo consulta: antes de cada `conNavegador` nuevo, si ya pasaron
+ * `PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS` = 240 s desde que arrancó la
+ * invocación, el lote se corta AHÍ —no se abre la sesión— y lo que falta queda
+ * SIN marcar como intentado, para la corrida siguiente (mismo principio que
+ * `falloDeArranque` usa para un Chromium que no arranca). 60 s de colchón: menos
+ * de la mitad del peor caso de una sesión, pero de sobra para que la que YA
+ * está abierta termine de escribir sus resultados y la ruta alcance a
+ * responder.
+ */
+const MARGEN_LOTE_MS = 60_000;
 
 /** Una fila de `gasto` como la trae la consulta de la cola. */
 interface FilaCola {
@@ -211,6 +263,9 @@ export async function GET(req: Request) {
   }
 
   const hoy = new Date().toISOString().slice(0, 10);
+  // Arranca AQUÍ, no dentro del `try`: es el reloj contra el que se mide
+  // MARGEN_LOTE_MS, y tiene que cubrir la consulta de la cola también.
+  const inicioLote = Date.now();
 
   try {
     const { data, error } = await supabaseAdmin()
@@ -316,6 +371,9 @@ export async function GET(req: Request) {
     // ── 2. Una flota, un navegador, su registro de portales.
     let falloDeArranque: string | null = null;
     let sinIntentar = 0;
+    /** Tickets con flota y portal listos, que no se intentaron porque ya no
+     *  quedaba tiempo para otra sesión de navegador completa. */
+    let sinTiempo = 0;
 
     for (const [tenantId, porPortal] of porFlota) {
       const tickets = [...porPortal.values()].flat();
@@ -337,6 +395,18 @@ export async function GET(req: Request) {
         logger.warn('cron.facturar.flota_sin_datos_fiscales', { tenant: tenantId, falta: falta.join('; ') });
         flotas.push({ tenantId, tickets: tickets.length, falta });
         for (const g of tickets) await correr(g);
+        continue;
+      }
+
+      // EL PRESUPUESTO DE TIEMPO: no abrir una sesión que no le va a dar tiempo.
+      // Se comprueba AQUÍ, ya con datos fiscales confirmados, para no cortar una
+      // flota que de todos modos no iba a abrir navegador. Mismo principio que
+      // `falloDeArranque`: lo que no alcanza a intentarse NO se marca, y se
+      // recoge entero en la corrida siguiente.
+      if (Date.now() - inicioLote >= PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS) {
+        sinTiempo += tickets.length;
+        logger.warn('cron.facturar.sin_tiempo', { tenant: tenantId, tickets: tickets.length });
+        flotas.push({ tenantId, tickets: tickets.length, falta: ['no se intentó: no quedaba presupuesto de tiempo en esta corrida'] });
         continue;
       }
 
@@ -406,6 +476,7 @@ export async function GET(req: Request) {
         intentados: resultados.length,
         facturados,
         sinIntentar,
+        sinTiempo,
         quedaron,
         flotas,
         detalle: sinCapturas(resultados, req),
@@ -427,7 +498,7 @@ export async function GET(req: Request) {
     // canal por el que también llegan los tickets que vencen.
     const avisos = await avisarALasPersonas(bloqueadosPorFlota, hoy);
 
-    logger.info('cron.facturar.ok', { modo, intentados: resultados.length, facturados, quedaron, flotas: flotas.length });
+    logger.info('cron.facturar.ok', { modo, intentados: resultados.length, facturados, quedaron, sinTiempo, flotas: flotas.length });
 
     return NextResponse.json({
       corrio: true,
@@ -436,6 +507,10 @@ export async function GET(req: Request) {
       intentados: resultados.length,
       facturados,
       quedaron,
+      // Flotas con portal listo que no se intentaron porque ya no quedaba
+      // presupuesto de tiempo en esta corrida. Se recogen enteras la próxima —
+      // ver MARGEN_LOTE_MS.
+      sinTiempo,
       // Por flota: qué portales quedaron operables y qué le falta a la que no.
       // Es lo que dice si el problema se arregla configurando al cliente o
       // tocando código.

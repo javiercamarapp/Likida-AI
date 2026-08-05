@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON DE FACTURACIÓN — el cable, que es donde estaba el agujero.
@@ -22,6 +22,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //      corrida siguiente.
 //   4. La cola se pide en el orden de la 0063, o los mismos ocho tickets que no
 //      proceden se llevan todas las corridas.
+//   5. Antes de abrir CADA navegador nuevo se comprueba el reloj contra el
+//      presupuesto de la invocación (`MARGEN_LOTE_MS` en `route.ts`). Si ya no
+//      alcanza para otra sesión completa, el lote se corta ahí —no se abre la
+//      sesión— y esa flota queda sin marcar, igual que cuando Chromium no
+//      arranca. Es el hallazgo ALTO de `docs/auditoria-10/rendimiento.md`: el
+//      comentario decía "ocho sesiones caben con margen en 300s" y eran 480s.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const SECRETO = 'cron-secreto-de-prueba';
@@ -76,11 +82,21 @@ vi.mock('@/lib/cuadra/facturacion/flota_fiscal', () => ({ getFiscalDeFlota }));
 /** `null` = Chromium arranca. Un string = no arranca, con ese mensaje. */
 let navegadorRoto: string | null = null;
 const navegadoresAbiertos: number[] = [];
+/**
+ * Cuánto "tarda" cada sesión de navegador, en el orden en que se abren (FIFO).
+ * Vacío por default: el reloj no avanza y ninguna prueba existente se entera
+ * de este mecanismo. Lo usa el presupuesto de tiempo del lote (más abajo) para
+ * simular, sin esperar de verdad, que una sesión se comió los segundos que dice
+ * el peor caso medido en `docs/auditoria-10/rendimiento.md`.
+ */
+const duracionSesionesMs: number[] = [];
 const conNavegador = vi.fn(async (fn: (abrir: unknown) => Promise<unknown>) => {
   // `conNavegador` arranca Chromium ANTES de correr el cuerpo. Si lanza aquí, el
   // cuerpo no se ejecuta — que es justo lo que la ruta usa para distinguir "no
   // hay navegador" de "el lote falló".
   if (navegadorRoto) throw new Error(navegadorRoto);
+  const dura = duracionSesionesMs.shift();
+  if (dura) vi.setSystemTime(Date.now() + dura);
   navegadoresAbiertos.push(Date.now());
   return fn(async () => ({}));
 });
@@ -119,6 +135,7 @@ beforeEach(() => {
   consulta.length = 0;
   navegadorRoto = null;
   navegadoresAbiertos.length = 0;
+  duracionSesionesMs.length = 0;
   fiscalPorFlota = { 't-1': { flota: FISCAL, falta: [] }, 't-2': { flota: { ...FISCAL, tenantId: 't-2' }, falta: [] } };
   facturarAlVuelo.mockClear();
   facturarLoteAlVuelo.mockClear();
@@ -305,6 +322,70 @@ describe('cuando Chromium no arranca —que es HOY, en Vercel—', () => {
   it('lo grita en el log: sin esto el 503 se ve en Vercel y no dice por qué', async () => {
     await pedir();
     expect(logger.error).toHaveBeenCalledWith('cron.facturar.sin_navegador', expect.objectContaining({ sinIntentar: 1 }));
+  });
+});
+
+describe('el presupuesto de tiempo del lote', () => {
+  // El comentario de `maxDuration` decía "a 60s el peor caso, ocho llenan 300s
+  // con margen" — 8 × 60s = 480s, 180s de MÁS (hallazgo ALTO de
+  // docs/auditoria-10/rendimiento.md). El `for` de flotas no consultaba el
+  // reloj antes de abrir el siguiente navegador, así que nada impedía entrar a
+  // una sesión número dos o tres sin tiempo real para terminarla.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('corta el lote ANTES de abrir una sesión que no le va a dar tiempo, en vez de abrirla y dejarla a medias', async () => {
+    // Dos flotas con ticket de portal. La primera sesión "tarda" 250s —dentro
+    // del peor caso real que documenta la auditoría (~147s por sesión, y basta
+    // que una se acerque a ese techo)—, así que cuando el `for` llega a la
+    // segunda flota ya pasaron 250s de los 300s de `maxDuration`: no alcanzan
+    // los 60s de colchón (`MARGEN_LOTE_MS`) que hacen falta para abrir otra.
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    duracionSesionesMs.push(250_000);
+
+    cola = {
+      data: [fila({ id: 'g-1', tenant_id: 't-1' }), fila({ id: 'g-2', tenant_id: 't-2' })],
+      error: null,
+    };
+
+    const cuerpo = await (await pedir()).json();
+
+    // Solo se abrió UN navegador: el de la segunda flota se cortó ANTES de
+    // abrirse. Si el arreglo fuera "abrirla y dejarla a medias", este número
+    // sería 2.
+    expect(conNavegador).toHaveBeenCalledTimes(1);
+    expect(facturarLoteAlVuelo).toHaveBeenCalledTimes(1);
+    expect((facturarLoteAlVuelo.mock.calls[0][0] as unknown as { tenantId: string }).tenantId).toBe('t-1');
+
+    // La segunda flota queda SIN marcar como intentada: se recoge entera en la
+    // corrida siguiente, mismo principio que un Chromium que no arranca.
+    expect(cuerpo.corrio).toBe(true);
+    expect(cuerpo.intentados).toBe(1);
+    expect(cuerpo.sinTiempo).toBe(1);
+    const flotaCortada = (cuerpo.flotas as Array<{ tenantId: string; falta?: string[] }>)
+      .find((f) => f.tenantId === 't-2');
+    expect(flotaCortada?.falta?.[0]).toContain('tiempo');
+  });
+
+  it('sin el corte de tiempo, dos flotas rápidas SÍ se intentan las dos: el corte es por presupuesto, no por tener varias flotas', async () => {
+    // Control negativo: confirma que lo que cortó la prueba de arriba fue el
+    // reloj y no, por ejemplo, un límite oculto de "una flota por corrida".
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    duracionSesionesMs.push(5_000); // una sesión rápida, muy lejos del colchón
+
+    cola = {
+      data: [fila({ id: 'g-1', tenant_id: 't-1' }), fila({ id: 'g-2', tenant_id: 't-2' })],
+      error: null,
+    };
+
+    const cuerpo = await (await pedir()).json();
+
+    expect(conNavegador).toHaveBeenCalledTimes(2);
+    expect(cuerpo.sinTiempo).toBe(0);
+    expect(cuerpo.intentados).toBe(2);
   });
 });
 
