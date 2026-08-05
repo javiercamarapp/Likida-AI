@@ -34,3 +34,9 @@ pruebas-manuales/imagenes/
 # Material de referencia de sitios de terceros (scrape para clonar diseño):
 # HTML/CSS/capturas ajenas, no van al repo.
 .firecrawl/
+
+# Previews temporales para mirar el render (CLAUDE.md). Son RUTAS VIVAS fuera
+# del gateo por rol: el 4-ago dos llegaron a producción por un `git add -A`.
+# `src/app/sin_previews.test.ts` los caza en la suite; esto los caza antes.
+zzz-*/
+zzz-*.mjs
