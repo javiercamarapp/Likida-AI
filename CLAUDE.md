@@ -68,12 +68,13 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
 ## Despliegue
 
 **El push a `master` ya NO despliega solo.** Desde el 5-ago-2026, `vercel.json`
-trae un `ignoreCommand` que construye únicamente si el mensaje del commit
-contiene `[deploy]`. Antes se redesplegaba producción en cada push: 30 builds en
+trae un `ignoreCommand` que construye únicamente si **el asunto** (la primera
+línea) del commit lleva la bandera. Lee solo el asunto a propósito: leyendo el
+mensaje completo, cualquier commit que *mencione* desplegar disparaba un build. Antes se redesplegaba producción en cada push: 30 builds en
 12 horas, ~$26 USD/mes de puro build, casi todos publicando arreglos de auditoría
 que no urgían.
 
-- **Para publicar:** escribe `[deploy]` en el mensaje del commit, o usa
+- **Para publicar:** pon la bandera en la PRIMERA LÍNEA del commit, o usa
   **Redeploy** en el panel de Vercel sobre el último deployment.
 - **Los pushes a GitHub no cambian.** La gráfica de contribuciones cuenta
   commits, no builds; puedes seguir subiendo a `master` todo el día.
