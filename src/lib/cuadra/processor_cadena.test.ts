@@ -128,8 +128,9 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   intakeDelta: vi.fn(async () => 0), esperarIntake: vi.fn(async () => true),
 }));
 const registrarCosto = vi.fn();
+const registrarCostoWhatsApp = vi.fn();
 vi.mock('@/lib/cuadra/costos', () => ({
-  registrarCosto, registrarCostoWhatsApp: vi.fn(),
+  registrarCosto, registrarCostoWhatsApp,
   faseDeModelo: vi.fn(() => 'cuadre'), vincularCostosALiquidacion: vi.fn(),
 }));
 
@@ -225,7 +226,7 @@ const listo = { from: DESDE_META, type: 'text' as const, text: 'listo', waMessag
 
 beforeEach(() => {
   subidos.clear(); salientes.length = 0;
-  create.mockReset(); saveLiquidacion.mockClear(); registrarCosto.mockClear();
+  create.mockReset(); saveLiquidacion.mockClear(); registrarCosto.mockClear(); registrarCostoWhatsApp.mockClear();
   logger.info.mockReset(); logger.warn.mockReset(); logger.error.mockReset();
   vi.stubGlobal('fetch', fetchSpy);
   fetchSpy.mockClear();
@@ -386,5 +387,31 @@ describe('AUDITORÍA 10 — registrarCosto escribe UNA fila por modelo real del 
 
     expect(registrarCosto).toHaveBeenCalledTimes(1);
     expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ modelo: 'anthropic/claude-sonnet-5' }));
+  });
+});
+
+// ── AUDITORÍA 12 · ALTO BACKEND: UN PDF QUE META RECHAZA NO PUEDE SER SILENCIO ──
+// `sendDocument` NO lanza: devuelve { ok: false, error } cuando Meta rechaza
+// el documento. Antes, `await sendDocument(...)` a secas leía el rechazo como
+// entrega — el chofer se quedaba esperando su liquidación sin una línea de
+// log. Esta prueba rompe la Graph API para los documents y exige el error
+// ruidoso (`pdf.no_entregado`), el mismo criterio que `pdf.contralor_no_generado`.
+describe('AUDITORÍA 12 — el PDF del operador rechazado por Meta deja rastro', () => {
+  it('un 400 de Meta para el documento registra pdf.no_entregado', async () => {
+    fetchSpy.mockImplementation(async (url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      if (body.type === 'document') {
+        return new Response(JSON.stringify({ error: { message: 'documento rechazado por la plataforma' } }),
+          { status: 400, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ messages: [{ id: 'wamid.TEST' }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    try {
+      await processInbound(listo);
+      expect(logger.error).toHaveBeenCalledWith('pdf.no_entregado', expect.objectContaining({ viaje: 'v1' }));
+    } finally {
+      fetchSpy.mockReset();
+    }
   });
 });
