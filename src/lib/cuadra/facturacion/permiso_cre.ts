@@ -62,6 +62,29 @@
 // El permiso sirve para lo que ninguna de esas tres resuelve: la ESTACIÓN
 // concreta cuando el portal es una IP con puerto o un DNS dinámico. Es una capa
 // de contexto, no de decisión.
+//
+// ── AUDITORÍA 10, BAJO (fiscal), tercera ronda sin consumidor — por qué se ──
+// ── CONSERVA y no se borra ──────────────────────────────────────────────────
+//
+// Sigue sin una sola llamada fuera de su propia prueba. Se decidió CONSERVAR,
+// no borrar, porque hay un consumidor concreto escrito en el roadmap, no uno
+// hipotético inventado para justificar no borrar: `docs/investigacion/
+// ROADMAP-INTEGRACIONES.md` Fase 3 es "los tres sistemas de Pemex" —GORM/
+// Brentec, FacturacionEstacion, FacturaGAS—, y Pemex es el 46.6% del padrón
+// (6,171 de 12,625, medido aquí mismo, arriba) sin un solo portal ni dominio
+// central: ninguna de las tres señales que usa `identificarComercio` (dominio
+// del QR, RFC del emisor, texto impreso) puede decir "esto es Pemex" antes de
+// intentar alguno de los tres sistemas. El permiso impreso en el ticket sí
+// puede, con el mismo límite que ya documenta este archivo arriba: es
+// contexto, no decisión, porque la marca de la tabla se probó mal una de dos
+// veces (La Gas → PEMEX, con la fuente equivocada en el origen).
+//
+// No se conectó esta ronda porque Fase 3 todavía no arranca: la ingeniería de
+// esta semana fue a Fase 1 (CAPUFE) y al consolidado de monedero/TAG — ver el
+// hallazgo [CRÍTICO] de `docs/auditoria-10/fiscal.md`. Cuando arranque Fase 3,
+// el punto de entrada es `identificarPorPermiso` sobre el texto OCR del
+// ticket, ANTES de intentar los tres sistemas — nunca dentro de
+// `identificarComercio` como señal dura de routing, por la razón de arriba.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import PERMISOS from './permisos_cre.json';

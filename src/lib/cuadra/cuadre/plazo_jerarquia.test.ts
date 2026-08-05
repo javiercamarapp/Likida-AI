@@ -68,8 +68,17 @@ describe('el plazo del comercio se dice como política, no como ley', () => {
 
   it('sin plazo verificado se conserva el matiz de siempre: la ventana puede ser menor', () => {
     const nota = avisos(ticketOfficeDepot({ rfcEmisor: 'CCO8605231N4', monto: 41.5 }), '2026-07-28')[0].nota;
-    expect(nota).toContain('la ventana del comercio puede ser menor');
-    expect(nota).not.toContain('no de la ley');
+    expect(nota).toContain('la ventana del comercio no está verificada y puede ser menor');
+    expect(nota).not.toContain('no de la ley'); // esa frase solo aplica cuando SÍ hay un portal verificado que citar
+  });
+
+  // AUDITORÍA 10, MEDIO REINCIDENTE — el matiz legal se apagaba precisamente en
+  // la rama minoritaria de comercios VERIFICADOS (33 de 37 caen sin verificar).
+  // El dato de que el plazo real es el ejercicio completo no depende de si YA
+  // se verificó el plazo del comercio: aplica igual en los dos casos.
+  it('sin plazo verificado TAMBIÉN se dice que la ley da el ejercicio completo', () => {
+    const nota = avisos(ticketOfficeDepot({ rfcEmisor: 'CCO8605231N4', monto: 41.5 }), '2026-07-28')[0].nota;
+    expect(nota).toContain('legalmente puedes exigir la factura dentro del ejercicio');
   });
 
   it('la rama VENCIDA sigue diciendo lo que ya decía', () => {
