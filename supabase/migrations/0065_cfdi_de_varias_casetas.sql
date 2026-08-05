@@ -68,3 +68,30 @@ alter table public.gasto add constraint gasto_cfdi_orden_positivo
 drop index if exists public.uq_gasto_cfdi_uuid;
 create unique index uq_gasto_cfdi_uuid on public.gasto (tenant_id, cfdi_uuid, cfdi_orden)
   where cfdi_uuid is not null;
+
+-- ── 3. Las columnas de bloqueo de la cola (completan la reconstrucción) ────
+--
+-- ⚠️ NOTA DE LA AUDITORÍA 12 (5-ago-2026): la reconstrucción del 4-ago OLVIDÓ
+-- dos columnas y su CHECK — el código (`cron/facturar/route.ts:281`,
+-- `facturacion/pendientes.ts:121,174-175`, `facturacion/al_vuelo.ts:561`) y el
+-- bloque 44 de verificaciones.sql las consumen como si existieran, y en la
+-- base real existen (la migración original las traía), pero el repo no podía
+-- reproducir el esquema desde cero. Este bloque las completa.
+--
+-- `autofactura_bloqueada_en` / `autofactura_bloqueo`: cuando el cron marca un
+-- gasto como NO reintentable (CAPTCHA, emisión sin confirmar), lo escribe
+-- `bloquearGasto` (`al_vuelo.ts`) con ambas columnas a la vez. El CHECK
+-- garantiza la coherencia que el bloque 44 presupone: una marca de tiempo sin
+-- motivo (o un motivo sin marca) no se guarda — mandaría a una persona a
+-- facturar algo sin decirle por qué falló.
+alter table public.gasto add column if not exists autofactura_bloqueada_en timestamptz;
+alter table public.gasto add column if not exists autofactura_bloqueo text;
+
+comment on column public.gasto.autofactura_bloqueada_en is
+  'Cuando el cron de facturacion marco este gasto como no reintentable (CAPTCHA, emision sin confirmar). NULL = sigue en la cola. El parcial `gasto_por_facturar_idx` de la 0063 y la consulta del cron filtran por esto.';
+comment on column public.gasto.autofactura_bloqueo is
+  'El motivo del bloqueo, para la pantalla del contralor. Siempre a la par de autofactura_bloqueada_en (CHECK gasto_bloqueo_coherente): sin motivo no se bloquea.';
+
+alter table public.gasto drop constraint if exists gasto_bloqueo_coherente;
+alter table public.gasto add constraint gasto_bloqueo_coherente
+  check ((autofactura_bloqueada_en is null) = (autofactura_bloqueo is null));
