@@ -83,7 +83,7 @@ const ES_VIATICO = ['alimentacion', 'hospedaje', 'transporte', 'viaticos'];
 export type Cubeta = 'deducible' | 'no_deducible' | 'por_confirmar';
 
 const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope'];
-const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable'];
+const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente'];
 
 /**
  * LA ÚNICA definición de en qué cubeta cae un gasto. Vive aquí, exportada, para
@@ -889,7 +889,14 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // SÍ es deducible hasta el 15% (RFA 2026 regla 2.9), pero NO acredita IEPS —
   // la facilidad salva un beneficio, no los dos. Sacarlo de aquí acreditaría un
   // IEPS que la facilidad no concede.
-  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido'];
+  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente'];
+  // AUDITORÍA 12, ALTO (fiscal, reincidente de la 11): `cfdi_pendiente` entra
+  // aquí y en POR_CONFIRMAR — con el SAT caído o en timeout, "no se pudo
+  // verificar" es el MISMO tercer estado que el motor ya aplica a EFOS, al RFC
+  // y al complemento: nunca deducible, nunca acreditable. Antes caía en
+  // deducible con IVA en verde, y una tarde con el ConsultaCFDIService lento
+  // producía liquidaciones enteras afirmadas en verde sin un solo UUID
+  // confirmado.
   const peajeFactor = input.estimulos?.peajeFactor ?? 0.5;
   // `iepsAcreditable` se queda en 0 a propósito y por eso es const: el estímulo
   // del LIF 20-A no es una cifra que este motor pueda calcular (necesita la cuota
