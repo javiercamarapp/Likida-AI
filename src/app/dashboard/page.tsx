@@ -156,7 +156,7 @@ export async function InicioContenido({
               cifra dos veces en pantalla— sino lo que el motor SEÑALÓ, que es
               lo único aquí que solo Likida pone sobre la mesa. */}
           <CifraGrande
-            valor={kpis?.diferenciaDetectada ?? 0}
+            valor={kpis ? kpis.diferenciaDetectada : undefined}
             formato="mxn"
             etiqueta="Señalado por el motor"
             nota={`Sobre política y duplicados · ${etiquetaVentana}`}
