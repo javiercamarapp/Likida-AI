@@ -22,7 +22,11 @@ function constructor(tabla: string) {
       escrituras.push({ tabla, valores: v, op: 'insert' });
       return { error: insertError };
     },
-    update: () => ({ error: null }),
+    update: (v: Record<string, unknown>) => {
+      escrituras.push({ tabla, valores: v, op: 'update' });
+      return api;
+    },
+    then: (res: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(res),
   };
   return api;
 }
@@ -76,11 +80,14 @@ describe('estadoDesdeStripe — el mapeo del dominio', () => {
 
 describe('aplicarSuscripcion — el pago que activa el plan', () => {
   it('aplica una suscripción con el estado mapeado de Stripe', async () => {
-    const r = await aplicarSuscripcion({
+    await aplicarSuscripcion({
       tenantId: 't-1', planClave: 'basico', stripeCustomerId: 'cus-1',
-      stripeSubscriptionId: 'sub-1', estadoStripe: 'active', periodoInicio: '2026-08-01', periodoFin: '2026-08-31',
+      stripeSubscriptionId: 'sub-1', estado: 'activa', periodoFin: '2026-08-31',
     });
-    expect(r).toMatchObject({ estado: 'activa' });
-    expect(escrituras[0].valores).toMatchObject({ tenant_id: 't-1', plan_clave: 'basico', estado: 'activa' });
+    const w = escrituras.find((e) => e.tabla === 'suscripcion' && e.op === 'insert')!;
+    expect(w.valores).toMatchObject({
+      tenant_id: 't-1', plan_clave: 'basico', estado: 'activa',
+      stripe_subscription_id: 'sub-1', stripe_customer_id: 'cus-1', cancelada_en: null,
+    });
   });
 });
