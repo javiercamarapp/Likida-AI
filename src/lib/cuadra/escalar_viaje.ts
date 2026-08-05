@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { avisarAlChofer } from './operacion';
 import { telefonosJefe } from './contactos';
-import { sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
+import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL VIAJE QUE NADIE ACEPTÓ.
@@ -34,7 +34,16 @@ import { sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 /** Cuánto se espera antes de insistir. Decisión de Javier, 4-ago-2026. */
 export const HORAS_PARA_ESCALAR = 5;
 
-/** Plantilla de Meta para avisarle al jefe. Tiene que estar aprobada. */
+/**
+ * Plantilla de Meta para avisarle al jefe. Tiene que estar aprobada.
+ *
+ * ES EL PLAN B, NO EL MENSAJE. Su cuerpo aprobado se escribió para OTRO evento
+ * (el recordatorio de cierre de una liquidación) y aquí se manda con dos
+ * parámetros —nombre y folio— dentro de una frase que habla de otra cosa. El
+ * texto que de verdad describe lo que pasó es `armarAvisoJefe`, y sale por
+ * `sendText`; esta plantilla queda para cuando ese texto no puede salir, que es
+ * lo único que WhatsApp permite fuera de la ventana de 24 h.
+ */
 const PLANTILLA_JEFE = 'recordatorio_cierre';
 
 export interface ViajeSinAceptar {
@@ -43,6 +52,8 @@ export interface ViajeSinAceptar {
   folio: string | null;
   operadorId: string | null;
   operadorNombre: string | null;
+  /** Para poder mandarle el recordatorio en texto. `null` = no lo tiene capturado. */
+  operadorTelefono: string | null;
   avisadoEn: string;
   avisosEnviados: number;
 }
@@ -57,7 +68,7 @@ export async function viajesSinAceptar(ahora: Date = new Date()): Promise<ViajeS
 
   const { data, error } = await supabaseAdmin()
     .from('viaje')
-    .select('id, tenant_id, folio, operador_id, avisado_en, avisos_enviados, operador(nombre)')
+    .select('id, tenant_id, folio, operador_id, avisado_en, avisos_enviados, operador(nombre, telefono)')
     .eq('estatus', 'abierto')
     .is('aceptado_en', null)
     .is('escalado_en', null)
@@ -67,15 +78,17 @@ export async function viajesSinAceptar(ahora: Date = new Date()): Promise<ViajeS
 
   if (error) throw new Error(`viajesSinAceptar: ${error.message}`);
 
+  type Rel = { nombre?: string; telefono?: string };
   return (data ?? []).map((v) => {
-    const rel = v.operador as { nombre?: string } | Array<{ nombre?: string }> | null;
-    const nombre = Array.isArray(rel) ? rel[0]?.nombre : rel?.nombre;
+    const rel = v.operador as Rel | Rel[] | null;
+    const op = Array.isArray(rel) ? rel[0] : rel;
     return {
       id: v.id as string,
       tenantId: v.tenant_id as string,
       folio: (v.folio as string) ?? null,
       operadorId: (v.operador_id as string) ?? null,
-      operadorNombre: nombre ?? null,
+      operadorNombre: op?.nombre ?? null,
+      operadorTelefono: op?.telefono ?? null,
       avisadoEn: v.avisado_en as string,
       avisosEnviados: Number(v.avisos_enviados ?? 0),
     };
@@ -91,6 +104,30 @@ export function armarAvisoJefe(v: ViajeSinAceptar): string {
     'Le insistimos una vez más.',
     'Si no va a poder, conviene reasignarlo desde Despacho.',
   ].join(' ');
+}
+
+/**
+ * El recordatorio para el CHOFER, y por qué no es la asignación otra vez.
+ *
+ * Lo que se le reenviaba era la plantilla de asignación IDÉNTICA a la que ya
+ * recibió: mismo texto, misma ruta, mismo anticipo, sin una palabra que dijera
+ * que es la segunda vez. Quien la lee no puede distinguirla de un duplicado del
+ * sistema, así que no produce la única acción que se le está pidiendo —
+ * contestar—, y encima al jefe se le está diciendo al mismo tiempo que "le
+ * insistimos una vez más".
+ *
+ * Dice CUÁNTO lleva y qué contestar. No regaña: puede estar manejando, sin
+ * señal, o el viaje puede no ser suyo — y para eso el "no" es una respuesta
+ * igual de útil que el "sí".
+ */
+export function armarRecordatorioChofer(v: ViajeSinAceptar): string {
+  const viaje = v.folio ? `tu viaje *${v.folio}*` : 'el viaje que te asignaron';
+  return [
+    `Te recuerdo ${viaje}: lo tienes asignado desde hace ${HORAS_PARA_ESCALAR} horas y todavía no me confirmas si lo arrancas. 🚛`,
+    '',
+    'Contéstame *sí* si ya vas, o *no* si no te toca — con cualquiera de las dos le aviso a tu encargado.',
+    'Mientras no me confirmes no puedo anotar tus gastos: se irían al viaje equivocado.',
+  ].join('\n');
 }
 
 export interface ResultadoEscalacion {
@@ -132,9 +169,24 @@ export async function escalarViajesSinAceptar(args: {
   for (const v of viajes) {
     // 1) Insistirle al chofer. Best-effort: que falle no puede impedir que el
     //    jefe se entere, que es la mitad importante.
+    //
+    //    EL RECORDATORIO PRIMERO, LA PLANTILLA DESPUÉS. El texto de
+    //    `armarRecordatorioChofer` dice que es la segunda vez y qué contestar;
+    //    la plantilla de asignación no dice ninguna de las dos cosas, pero es lo
+    //    ÚNICO que WhatsApp entrega cuando ya pasaron 24 h desde el último
+    //    mensaje del chofer — y ese es justo el caso probable de alguien que
+    //    lleva cinco horas sin contestar. Así que se intenta el texto bueno y se
+    //    cae a la plantilla solo cuando Meta lo rechaza (`sendText` devuelve
+    //    `null`).
     if (v.operadorId) {
       try {
-        await avisarAlChofer(v.tenantId, v.operadorId, v.id);
+        let recordado = false;
+        if (v.operadorTelefono) {
+          recordado = Boolean(await sendText(v.operadorTelefono, armarRecordatorioChofer(v)));
+        }
+        // Sin teléfono en la fila o con el texto rechazado: la plantilla. Ella
+        // resuelve el teléfono por su cuenta y marca lo que tenga que marcar.
+        if (!recordado) await avisarAlChofer(v.tenantId, v.operadorId, v.id);
         r.reintentados++;
       } catch (e) {
         r.fallos.push(`reaviso ${v.folio ?? v.id}: ${e instanceof Error ? e.message : 'error'}`);
@@ -153,10 +205,22 @@ export async function escalarViajesSinAceptar(args: {
       // lote ni se miraría. Una invariante que solo aguanta fallos por valor no
       // es una invariante.
       try {
-        const env = await sendTemplate(tel, PLANTILLA_JEFE, {
-          parametros: [v.operadorNombre ?? 'Tu chofer', v.folio ?? 'sin folio'],
-        });
-        if (!env.ok) r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivoDeFalloWhatsApp(env.error, env.codigo)}`);
+        // EL TEXTO QUE SÍ SE ESCRIBIÓ PARA ESTO. `armarAvisoJefe` existía con
+        // sus pruebas y no lo llamaba nadie: salía la plantilla
+        // `recordatorio_cierre`, cuyo cuerpo aprobado habla de OTRO evento, con
+        // el nombre y el folio metidos como parámetros. El jefe leía un
+        // recordatorio de cierre sobre un viaje que ni siquiera arrancó.
+        //
+        // La plantilla se conserva como plan B porque fuera de la ventana de
+        // 24 h es lo único que WhatsApp entrega — y el jefe puede llevar días
+        // sin escribirle al número.
+        const enviado = await sendText(tel, armarAvisoJefe(v));
+        if (!enviado) {
+          const env = await sendTemplate(tel, PLANTILLA_JEFE, {
+            parametros: [v.operadorNombre ?? 'Tu chofer', v.folio ?? 'sin folio'],
+          });
+          if (!env.ok) r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivoDeFalloWhatsApp(env.error, env.codigo)}`);
+        }
       } catch (e) {
         r.fallos.push(`jefe ${v.folio ?? v.id}: ${e instanceof Error ? e.message : 'error inesperado al enviar'}`);
       }

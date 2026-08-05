@@ -26,7 +26,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // fallo es que el código de Meta se traduzca a algo que alguien pueda accionar.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const { sendTemplate, avisarAlChofer, telefonosJefe } = vi.hoisted(() => ({
+const { sendText, sendTemplate, avisarAlChofer, telefonosJefe } = vi.hoisted(() => ({
+  sendText: vi.fn(),
   sendTemplate: vi.fn(),
   avisarAlChofer: vi.fn(),
   telefonosJefe: vi.fn(),
@@ -34,6 +35,7 @@ const { sendTemplate, avisarAlChofer, telefonosJefe } = vi.hoisted(() => ({
 
 vi.mock('@/lib/meta/client', async (original) => ({
   ...(await original<Record<string, unknown>>()),
+  sendText,
   sendTemplate,
 }));
 vi.mock('./operacion', () => ({ avisarAlChofer }));
@@ -105,6 +107,11 @@ beforeEach(() => {
   filtros.length = 0;
   updates.length = 0;
   from.mockClear();
+  sendText.mockReset();
+  // `null` por defecto: fuera de la ventana de 24 h, que es el caso probable de
+  // alguien que lleva 5 horas sin contestar. Así se ejerce la ruta real —texto
+  // rechazado, cae a la plantilla— en vez de dejar el mock siempre en éxito.
+  sendText.mockResolvedValue(null);
   sendTemplate.mockReset();
   sendTemplate.mockResolvedValue({ ok: true, id: 'wamid.TEST' });
   avisarAlChofer.mockReset();
@@ -196,7 +203,8 @@ describe('viajesSinAceptar', () => {
 
 const VIAJE = {
   id: 'v-1', tenantId: 't-1', folio: 'VJ-104', operadorId: 'o-1',
-  operadorNombre: 'Juan Pérez', avisadoEn: '2026-08-04T08:00:00.000Z', avisosEnviados: 1,
+  operadorNombre: 'Juan Pérez', operadorTelefono: '5219993700779',
+  avisadoEn: '2026-08-04T08:00:00.000Z', avisosEnviados: 1,
 };
 
 describe('armarAvisoJefe', () => {
