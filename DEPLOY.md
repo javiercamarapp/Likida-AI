@@ -98,14 +98,18 @@ fallar — reenviar no arregla un token vencido, así que el bucle no termina so
 
 Están todas en `.env.example`, que es el inventario completo y está verificado
 contra el código por la suite (`src/lib/observability/runbook.test.ts`). Las
-cuatro que hay que revisar a mano porque **si faltan el sistema arranca igual**:
+dos que hay que revisar a mano porque **si faltan el sistema arranca igual**:
 
 | Variable | Qué pasa si falta |
 |---|---|
 | `SENTRY_DSN` | No hay alerta de nada. Los errores mueren en el runtime log. |
-| `DASHBOARD_SECRET` | El HMAC de la cookie se deriva del passcode: crackeable offline. |
-| `DASHBOARD_PASSCODE` | `proxy.ts` **no bloquea** `/dashboard`: el panel queda abierto. |
 | `DEMO_TENANT_ID` | El panel consulta el tenant del seed y pinta **cero liquidaciones**, sin log. |
+
+El gate de `/dashboard` no depende de ninguna variable de entorno: es la
+sesión de Supabase Auth, verificada en `proxy.ts` (`RUTAS_CON_SESION`). El
+passcode compartido (`DASHBOARD_PASSCODE`/`DASHBOARD_SECRET`, la ruta
+`/acceso`) se borró el 5-ago-2026 — llevaba desde que `proxy.ts` se reescribió
+sin ningún llamador real (auditoría 10, seguridad).
 
 Para listarlas: `vercel env ls production`.
 
@@ -124,8 +128,7 @@ proyecto, empuja las envs de `.env.local` a production + preview (salta las
 `WHATSAPP_*` vacías) y fija `NEXT_PUBLIC_APP_URL` al dominio real.
 
 **No** copies solo "las envs de `.env.example` que tengan valor": ese atajo fue
-el que dejó fuera el passcode del panel y el tenant. El inventario de arriba es
-el que manda.
+el que dejó fuera el tenant del demo. El inventario de arriba es el que manda.
 
 ### Meta / WhatsApp
 
@@ -148,3 +151,37 @@ el que manda.
   El operador recibe aviso; el procedimiento de reenvío no está escrito.
 - **La retención exacta de los runtime logs** en este plan, ni si hace falta un
   log drain antes del demo.
+
+---
+
+## Publicar un cambio (cambió el 5-ago-2026)
+
+**El push a `master` ya no despliega solo.** `vercel.json` trae un
+`ignoreCommand` que solo construye cuando **el asunto del commit** —la primera
+línea, no el cuerpo— lleva la bandera `[deploy]`.
+
+```
+fix(cuadre): redondeo de casetas [deploy]     -> construye y publica
+fix(cuadre): redondeo de casetas              -> llega a GitHub, NO publica
+```
+
+Antes se redesplegaba en cada push: 30 builds en 12 horas, ~$26 USD/mes de puro
+tiempo de build, casi todos publicando arreglos de auditoría que no urgían.
+La gráfica de contribuciones de GitHub cuenta commits, no builds, así que
+seguir subiendo a `master` todo el día no cuesta nada.
+
+**El modo de falla es silencioso.** Si olvidas la bandera, el push se ve normal
+en GitHub y producción se queda atrás sin avisar. Antes de enseñarle el producto
+a alguien:
+
+```bash
+git log -1 --format='%h %s'                      # tu último commit
+vercel inspect likida.ai --scope likida | head   # qué está publicado
+```
+
+Si no coinciden, la salida rápida es **Redeploy** en el panel sobre el último
+deployment, que no requiere commit nuevo.
+
+Lee solo el asunto a propósito: con el mensaje completo, cualquier commit que
+*mencionara* la palabra en el cuerpo disparaba un build. Pasó el mismo día que
+se puso la regla.
