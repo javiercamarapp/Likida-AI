@@ -109,13 +109,21 @@ describe('cuadrarViaje', () => {
     expect(r.diferencias.some((d) => d.tipo === 'cfdi_cancelado')).toBe(true);
   });
 
-  it('SAT pendiente NO tumba: continúa como revisar', () => {
+  it('SAT pendiente NO tumba: continúa como revisar — y NO se afirma deducible (auditoría 12)', () => {
     const r = cuadrarViaje({
       viajeId: 'v8', anticipo: 1000, politica,
-      gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F3', cfdiUuid: 'u3', estadoSat: 'pendiente' })],
+      gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F3', cfdiUuid: 'u3', estadoSat: 'pendiente', ivaTraslado: 96.55 })],
     });
     expect(r.diferencias.some((d) => d.tipo === 'cfdi_pendiente')).toBe(true);
     expect(r.estatus).toBe('revisar');
+    // AUDITORÍA 12, ALTO (reincidente de la 11): "no se pudo verificar" es el
+    // mismo tercer estado que el motor aplica a EFOS/RFC/complemento — nunca
+    // deducible, nunca acreditable. Antes caía en deducible con IVA en verde
+    // cuando el SAT estaba caído; una tarde con el servicio lento afirmaba
+    // liquidaciones enteras sin un solo UUID confirmado.
+    const cubetas = r.totalPorConfirmar ?? 0;
+    expect(cubetas).toBeGreaterThan(0);
+    expect(r.ivaAcreditable ?? 0).toBe(0);
   });
 
   // 1.9: EFOS con código no concluyente → bandeja, NUNCA fraude.
