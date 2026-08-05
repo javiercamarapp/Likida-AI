@@ -14,11 +14,19 @@ if [ -z "$DB" ]; then
   exit 1
 fi
 
-echo "▸ Aplicando migraciones…"
-for f in supabase/migrations/*.sql; do
-  echo "  → $(basename "$f")"
-  psql "$DB" -v ON_ERROR_STOP=1 -q -f "$f"
-done
+# AUDITORÍA 13, ALTO (operabilidad): correr TODAS las migraciones contra una
+# base ya migrada reventaba (objetos que ya existen). Si la base ya tiene el
+# esquema (migración 0001 aplicada), solo se siembran los DATOS; el esquema se
+# aplica con el camino documentado (Supabase MCP / `supabase db push`).
+if psql "$DB" -q -tAc "select 1 from information_schema.tables where table_schema='public' and table_name='viaje'" | grep -q 1; then
+  echo "▸ Esquema ya aplicado — solo se siembran los DATOS (para el esquema usa el MCP o 'supabase db push')."
+else
+  echo "▸ Aplicando migraciones…"
+  for f in supabase/migrations/*.sql; do
+    echo "  → $(basename "$f")"
+    psql "$DB" -v ON_ERROR_STOP=1 -q -f "$f"
+  done
+fi
 
 echo "▸ Creando bucket privado 'liquidaciones'…"
 psql "$DB" -q -c "insert into storage.buckets (id, name, public) values ('liquidaciones','liquidaciones', false) on conflict (id) do nothing;" \
