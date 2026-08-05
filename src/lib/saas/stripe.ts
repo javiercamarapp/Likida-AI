@@ -121,6 +121,17 @@ export interface PrecioStripe {
   moneda: string;
   recurrente: boolean;
   activo: boolean;
+  /**
+   * ¿`montoMensual` ya trae el IVA?
+   *
+   * `true` = sí (`tax_behavior: 'inclusive'`), `false` = el IVA va encima
+   * (`'exclusive'`), `null` = Stripe NO lo declara (`'unspecified'`, que es el
+   * default cuando nadie configuró impuestos en el price).
+   *
+   * `null` no es "no lleva IVA": es "no se sabe", y con eso no se puede ni
+   * cobrar ni timbrar. Ver `lib/saas/iva.ts`.
+   */
+  ivaIncluido: boolean | null;
 }
 
 /**
@@ -130,6 +141,13 @@ export interface PrecioStripe {
  *
  * `unit_amount` viene en la unidad mínima (centavos). Dividir mal es un error
  * de dos órdenes de magnitud que se ve plausible: $24.00 en vez de $2,400.00.
+ *
+ * SE TRAE TAMBIÉN EL `tax_behavior`, Y ES LA MITAD QUE FALTABA. El monto solo
+ * no dice cuánto cobrar: $10,000 con el IVA adentro y $10,000 con el IVA aparte
+ * son $10,000 y $11,600 en la cuenta del cliente. Ese campo es la única fuente
+ * que puede resolverlo —está en el price, junto al monto— y por eso viaja con
+ * él en vez de capturarse aparte, exactamente por el mismo motivo que el monto
+ * no se teclea: dos cifras capturadas por separado divergen.
  */
 export async function leerPrecio(priceId: string): Promise<PrecioStripe> {
   const p = await pedir<{
@@ -138,6 +156,7 @@ export async function leerPrecio(priceId: string): Promise<PrecioStripe> {
     currency: string;
     active: boolean;
     recurring: { interval: string } | null;
+    tax_behavior?: string | null;
   }>(`/prices/${encodeURIComponent(priceId)}`, { metodo: 'GET' });
 
   return {
@@ -146,6 +165,10 @@ export async function leerPrecio(priceId: string): Promise<PrecioStripe> {
     moneda: p.currency.toUpperCase(),
     recurrente: p.recurring !== null,
     activo: p.active,
+    // Cualquier valor que no sea uno de los dos explícitos cae en `null`. Un
+    // `tax_behavior` nuevo de Stripe que aquí se leyera como "exclusive" por
+    // descarte volvería a producir el CFDI de más.
+    ivaIncluido: p.tax_behavior === 'inclusive' ? true : p.tax_behavior === 'exclusive' ? false : null,
   };
 }
 

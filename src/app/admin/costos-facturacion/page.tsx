@@ -9,7 +9,9 @@ import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/st
 import {
   datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrar, type FacturaPorCobrar,
 } from '@/lib/saas/transferencia';
+import { etiquetaIva } from '@/lib/saas/iva';
 import { facturapiConfigurado, modoFacturapi } from '@/lib/saas/facturapi';
+import { logger } from '@/lib/logger';
 import { AreaChartSimple, Dona } from '../charts';
 import { IconoProveedor } from '../proveedor-icono';
 import { ChartCard, EstadoVacio, KpiTile, StatusPill } from '../ui/kit';
@@ -32,10 +34,25 @@ async function accionPrecio(_previo: ResultadoAccion, fd: FormData): Promise<Res
   const clave = String(fd.get('plan') ?? '');
   const price = String(fd.get('price') ?? '');
   try {
-    const { montoMensual, moneda } = await guardarPriceDePlan(clave, price);
+    const { montoMensual, moneda, ivaIncluido } = await guardarPriceDePlan(clave, price);
     revalidatePath('/admin/costos-facturacion');
     revalidatePath('/dashboard/suscripcion');
-    return { ok: `Plan ${clave}: ${mxn(montoMensual)} ${moneda} al mes, leído de Stripe. Ya se puede contratar.` };
+    // El criterio del IVA se dice en el mismo mensaje que el monto: son la misma
+    // pregunta ("cuánto se cobra") y verlos juntos es lo que permite notar que
+    // falta uno. Sin criterio no se puede emitir, y eso se dice aquí y no
+    // cuando alguien apriete "Emitir" y no entienda por qué se negó.
+    if (ivaIncluido === null) {
+      return {
+        ok: `Plan ${clave}: ${mxn(montoMensual)} ${moneda} al mes, leído de Stripe. OJO: ese price no declara si el `
+          + 'precio incluye IVA (tax_behavior = "unspecified"), así que TODAVÍA NO SE PUEDE EMITIR la mensualidad — '
+          + 'no se sabría si cobrar el precio o el precio × 1.16. Ponle "inclusive" o "exclusive" en Stripe y vuelve '
+          + 'a guardar el price.',
+      };
+    }
+    return {
+      ok: `Plan ${clave}: ${mxn(montoMensual)} ${moneda} al mes ${ivaIncluido ? 'IVA INCLUIDO' : 'MÁS IVA'}, leído `
+        + 'de Stripe. Ya se puede contratar.',
+    };
   } catch (e) {
     return { error: mensajeParaPantalla(e, 'guardar el precio del plan') };
   }
@@ -87,7 +104,13 @@ async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<Res
     );
     revalidatePath('/admin/costos-facturacion');
     revalidatePath('/dashboard/suscripcion');
-    return { ok: `Mensualidad emitida por ${mxn(r.monto)}. La flota ya ve a dónde transferir, con la referencia ${r.referencia}.` };
+    // Se dicen las TRES cifras. El total es lo que la flota transfiere y el
+    // desglose es lo que va a salir en su CFDI: verlos juntos en la misma frase
+    // es lo que permite cachar el día uno que el IVA quedó del lado equivocado.
+    return {
+      ok: `Mensualidad emitida por ${mxn(r.monto)} (base ${mxn(r.subtotal)} + IVA ${mxn(r.iva)}). La flota ya ve a `
+        + `dónde transferir, con la referencia ${r.referencia}.`,
+    };
   } catch (e) {
     return { error: mensajeParaPantalla(e, 'emitir la mensualidad') };
   }
@@ -129,16 +152,25 @@ export default async function CostosFacturacionPage() {
 
   const hayStripe = stripeConfigurado();
   const modo = modoStripe();
-  // Sin Stripe no se pide la lista: la sección entera se reemplaza por el aviso
-  // de qué falta, y una consulta que nadie va a mirar solo puede fallar.
-  let planes: Plan[] = [];
+
+  // ── `null` ES "NO SE PUDO LEER", `[]` ES "NO HAY NADA" ────────────────────
+  //
+  // Los dos `catch` de aquí devolvían `[]`, y con eso la pantalla decía "Nada
+  // pendiente de cobro" con la base caída. Esa frase es una AFIRMACIÓN sobre el
+  // dinero que Likida tiene por cobrar, y es exactamente la que hace que nadie
+  // vaya a cobrar. `getPorCobrar` ya falla cerrado (lanza si PostgREST devuelve
+  // error); el `catch` deshacía ese trabajo un piso más arriba.
+  //
+  // Sin Stripe no se piden los planes: la sección entera se reemplaza por el
+  // aviso de qué falta, y una consulta que nadie va a mirar solo puede fallar.
+  let planes: Plan[] | null = hayStripe ? null : [];
   if (hayStripe) {
-    try { planes = await getPlanes(); } catch { planes = []; }
+    try { planes = await getPlanes(); } catch (e) { logger.error('admin.planes', { err: e instanceof Error ? e.message : String(e) }); }
   }
 
   const banco = datosBancarios();
-  let porCobrar: FacturaPorCobrar[] = [];
-  try { porCobrar = await getPorCobrar(); } catch { porCobrar = []; }
+  let porCobrar: FacturaPorCobrar[] | null = null;
+  try { porCobrar = await getPorCobrar(); } catch (e) { logger.error('admin.por_cobrar', { err: e instanceof Error ? e.message : String(e) }); }
 
   return (
     <div className="flex flex-col gap-4">
@@ -273,7 +305,12 @@ export default async function CostosFacturacionPage() {
 
           <div className="mt-5">
             <h3 className="text-xs font-medium mb-2" style={{ color: 'var(--muted)' }}>Por cobrar</h3>
-            {porCobrar.length === 0 ? (
+            {porCobrar === null ? (
+              <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
+                No se pudo leer lo que está por cobrarse. Esto NO quiere decir que no haya nada pendiente: quiere decir
+                que no se sabe. Recarga en un momento.
+              </EstadoVacio>
+            ) : porCobrar.length === 0 ? (
               <EstadoVacio>Nada pendiente de cobro. Aparece aquí en cuanto emitas una mensualidad.</EstadoVacio>
             ) : (
               <div className="overflow-x-auto">
@@ -283,7 +320,7 @@ export default async function CostosFacturacionPage() {
                       <th className="py-2.5 pr-4 font-medium">Flota</th>
                       <th className="py-2.5 pr-4 font-medium">Periodo</th>
                       <th className="py-2.5 pr-4 font-medium">Referencia</th>
-                      <th className="py-2.5 pr-4 font-medium text-right">Monto</th>
+                      <th className="py-2.5 pr-4 font-medium text-right">Total a transferir</th>
                       <th className="py-2.5 font-medium">Marcar pagada</th>
                     </tr>
                   </thead>
@@ -293,7 +330,19 @@ export default async function CostosFacturacionPage() {
                         <td className="py-2.5 pr-4 font-medium">{f.tenantNombre}</td>
                         <td className="py-2.5 pr-4" style={{ color: 'var(--muted)' }}>{f.periodoInicio} — {f.periodoFin}</td>
                         <td className="py-2.5 pr-4 font-mono text-xs">{f.referencia ?? '—'}</td>
-                        <td className="py-2.5 pr-4 text-right tabular">{mxn(f.monto)}</td>
+                        {/* El total manda (es lo que entra al banco) y el
+                            desglose va debajo: es lo que va a salir en el CFDI,
+                            y verlos juntos es lo que deja cachar un IVA del
+                            lado equivocado antes de timbrar. Sin desglose se
+                            dice, porque esa factura NO se va a poder timbrar. */}
+                        <td className="py-2.5 pr-4 text-right tabular">
+                          {mxn(f.monto)}
+                          <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>
+                            {f.subtotal === null || f.iva === null
+                              ? 'sin desglose: no se puede timbrar'
+                              : `${mxn(f.subtotal)} + IVA ${mxn(f.iva)}`}
+                          </span>
+                        </td>
                         <td className="py-2.5" style={{ minWidth: 260 }}>
                           <FormaConAviso accion={accionConciliar} boton="Marcar pagada" columnas="md:grid-cols-1">
                             <input type="hidden" name="facturaId" value={f.id} />
@@ -350,20 +399,40 @@ export default async function CostosFacturacionPage() {
                   </EstadoVacio>
                 </div>
               )}
+              {planes === null ? (
+                <div className="mt-3">
+                  <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
+                    No se pudieron leer los planes. Una grilla vacía diría que no hay planes configurados, y no es lo
+                    mismo: es que no se sabe. Recarga en un momento.
+                  </EstadoVacio>
+                </div>
+              ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
                 {planes.map((p) => (
                   <div key={p.clave} className="card p-4 flex flex-col gap-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-medium">{p.nombre}</span>
-                      {p.stripePriceId
-                        ? <StatusPill estado="ok">Se puede contratar</StatusPill>
-                        : <StatusPill estado="neutral">Sin precio</StatusPill>}
+                      {/* El criterio del IVA gatea el cobro igual que el price:
+                          un plan con precio y sin criterio NO se puede emitir, y
+                          "Se puede contratar" ahí sería falso. */}
+                      {!p.stripePriceId
+                        ? <StatusPill estado="neutral">Sin precio</StatusPill>
+                        : p.precioIvaIncluido === null
+                          ? <StatusPill estado="bad">IVA sin declarar</StatusPill>
+                          : <StatusPill estado="ok">Se puede contratar</StatusPill>}
                     </div>
                     <div className="text-xl font-semibold tabular">
                       {p.precioMensual === null
                         ? <span className="text-sm font-normal" style={{ color: 'var(--muted)' }}>Sin configurar</span>
-                        : <>{mxn(p.precioMensual)}<span className="text-xs font-normal" style={{ color: 'var(--muted)' }}> /mes</span></>}
+                        : <>{mxn(p.precioMensual)}<span className="text-xs font-normal" style={{ color: 'var(--muted)' }}> /mes {etiquetaIva(p.precioIvaIncluido)}</span></>}
                     </div>
+                    {p.precioMensual !== null && p.precioIvaIncluido === null && (
+                      <p className="text-xs m-0" style={{ color: 'var(--bad)' }}>
+                        Su price de Stripe no dice si el precio trae el IVA (<code>tax_behavior</code> =
+                        {' '}<code>unspecified</code>). Emitir la mensualidad está bloqueado: no se sabe si cobrar
+                        {' '}{mxn(p.precioMensual)} o {mxn(p.precioMensual * 1.16)}.
+                      </p>
+                    )}
                     <FormaConAviso accion={accionPrecio} boton="Guardar price" columnas="md:grid-cols-1">
                       <input type="hidden" name="plan" value={p.clave} />
                       <Campo nombre="price" etiqueta="Price ID de Stripe" requerido
@@ -372,9 +441,12 @@ export default async function CostosFacturacionPage() {
                   </div>
                 ))}
               </div>
+              )}
               <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-                El monto <strong>no se teclea</strong>: se lee de Stripe al guardar el price. Dos cifras capturadas
-                aparte pueden divergir, y esa diferencia la descubre el cliente en su estado de cuenta.
+                El monto <strong>no se teclea</strong>: se lee de Stripe al guardar el price, junto con su{' '}
+                <code>tax_behavior</code> — de qué lado del precio está el IVA es la otra mitad de &quot;cuánto se
+                cobra&quot;, y capturada aparte diverge igual que el monto. Sin ese dato no se emite nada: un CFDI
+                por 16% de más solo se corrige cancelándolo ante el SAT.
               </p>
             </>
           )}

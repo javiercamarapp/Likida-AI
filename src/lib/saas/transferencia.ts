@@ -3,6 +3,7 @@ import { DatoInvalido } from '@/lib/cuadra/errores';
 import { logger } from '@/lib/logger';
 import { facturapiConfigurado, timbrarMensualidad, enviarPorCorreo } from './facturapi';
 import { getDatosFiscales, estanCompletos } from './fiscal';
+import { desglosarPrecio, desgloseCuadra } from './iva';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COBRAR POR TRANSFERENCIA A LA CUENTA DE LIKIDA.
@@ -85,7 +86,11 @@ export interface FacturaPorCobrar {
   tenantNombre: string;
   periodoInicio: string;
   periodoFin: string;
+  /** EL TOTAL A TRANSFERIR, con IVA. Es la cifra que ve el cliente. */
   monto: number;
+  /** Base sin IVA. `null` = sin desglose: no se puede timbrar. */
+  subtotal: number | null;
+  iva: number | null;
   moneda: string;
   estado: string;
   referencia: string | null;
@@ -99,6 +104,19 @@ export interface FacturaPorCobrar {
  * tiene precio configurado, no se emite nada — cobrar una cifra inventada es el
  * peor error posible de este módulo.
  *
+ * Y TAMPOCO INVENTA DE QUÉ LADO ESTÁ EL IVA, que es el mismo error un escalón
+ * más abajo. Antes escribía `monto = precio_mensual`, la pantalla le pedía al
+ * cliente ESA cifra, y el timbrado tomaba la misma como "subtotal sin IVA" y le
+ * sumaba el 16%: el cliente transfería $10,000 y el CFDI salía por $11,600. Ver
+ * `lib/saas/iva.ts`. Si el plan no declara el criterio, aquí NO se emite: es la
+ * puerta barata: no emitir cuesta un mensaje en /admin; timbrar mal cuesta
+ * cancelar un CFDI que ya existe ante el SAT.
+ *
+ * `monto` queda SIEMPRE como el total con IVA —lo que el cliente transfiere— y
+ * el desglose se congela en `subtotal`/`iva`. Congelarlo importa: entre emitir
+ * y timbrar pueden pasar semanas y alguien puede cambiar el price del plan;
+ * recalcular al timbrar aplicaría el criterio nuevo a un cobro viejo.
+ *
  * El índice único `(tenant_id, periodo_inicio, periodo_fin)` de la 0057 impide
  * cobrar el mismo mes dos veces; aquí se traduce ese choque a un mensaje que se
  * entiende, en vez de dejar salir el error de Postgres.
@@ -107,27 +125,54 @@ export async function emitirMensualidad(
   tenantId: string,
   periodoInicio: string,
   periodoFin: string,
-): Promise<{ id: string; referencia: string; monto: number }> {
+): Promise<{ id: string; referencia: string; monto: number; subtotal: number; iva: number }> {
   const admin = supabaseAdmin();
 
   const { data: sus, error: errSus } = await admin
     .from('suscripcion')
-    .select('id, plan_clave, plan(precio_mensual, moneda, nombre)')
+    .select('id, plan_clave, plan(precio_mensual, moneda, nombre, precio_iva_incluido)')
     .eq('tenant_id', tenantId)
     .in('estado', ['prueba', 'activa', 'morosa', 'pausada'])
     .maybeSingle();
   if (errSus) throw new Error(`emitirMensualidad.suscripcion: ${errSus.message}`);
   if (!sus) throw new DatoInvalido('Esa flota no tiene una suscripción activa. Primero asígnale un plan.');
 
-  const rel = sus.plan as { precio_mensual?: number | string | null; moneda?: string; nombre?: string }
-    | Array<{ precio_mensual?: number | string | null; moneda?: string; nombre?: string }> | null;
+  type FilaPlan = {
+    precio_mensual?: number | string | null;
+    moneda?: string;
+    nombre?: string;
+    precio_iva_incluido?: boolean | null;
+  };
+  const rel = sus.plan as FilaPlan | FilaPlan[] | null;
   const plan = Array.isArray(rel) ? rel[0] : rel;
   const precio = plan?.precio_mensual;
+  const nombrePlan = plan?.nombre ?? sus.plan_clave;
 
   if (precio === null || precio === undefined) {
     throw new DatoInvalido(
-      `El plan "${plan?.nombre ?? sus.plan_clave}" no tiene precio configurado, así que no hay monto que cobrar. Ponle precio antes de emitir.`,
+      `El plan "${nombrePlan}" no tiene precio configurado, así que no hay monto que cobrar. Ponle precio antes de emitir.`,
     );
+  }
+
+  // La moneda se guardaba y no la miraba nadie. `mxn()` imprime TODO como pesos,
+  // así que una mensualidad en dólares se ve idéntica a una en pesos y el
+  // cliente descubre la diferencia cuando ya transfirió.
+  const moneda = plan?.moneda ?? 'MXN';
+  if (moneda !== 'MXN') {
+    throw new DatoInvalido(
+      `El plan "${nombrePlan}" está en ${moneda} y todo el cobro por transferencia está en pesos: la pantalla lo ` +
+      'imprimiría con signo de peso y la flota transferiría la cifra equivocada. Configura el plan en MXN.',
+    );
+  }
+
+  // LANZA `DatoInvalido` si el plan no declara el criterio del IVA: sin él no se
+  // sabe si el cliente debe transferir el precio o el precio × 1.16.
+  let d;
+  try {
+    d = desglosarPrecio(Number(precio), plan?.precio_iva_incluido ?? null);
+  } catch (e) {
+    if (e instanceof DatoInvalido) throw new DatoInvalido(`Plan "${nombrePlan}": ${e.message}`);
+    throw e;
   }
 
   const referencia = referenciaDe(tenantId, periodoInicio);
@@ -138,8 +183,10 @@ export async function emitirMensualidad(
       suscripcion_id: sus.id,
       periodo_inicio: periodoInicio,
       periodo_fin: periodoFin,
-      monto: Number(precio),
-      moneda: plan?.moneda ?? 'MXN',
+      monto: d.total,
+      subtotal: d.subtotal,
+      iva: d.iva,
+      moneda,
       estado: 'pendiente',
       metodo_cobro: 'transferencia',
       referencia,
@@ -154,7 +201,7 @@ export async function emitirMensualidad(
     throw new Error(`emitirMensualidad: ${error.message}`);
   }
 
-  return { id: data!.id as string, referencia, monto: Number(precio) };
+  return { id: data!.id as string, referencia, monto: d.total, subtotal: d.subtotal, iva: d.iva };
 }
 
 /**
@@ -213,6 +260,14 @@ export async function conciliar(
  * mensualidad obliga a cancelar uno, y una cancelación fuera de plazo se le
  * queda al cliente en su contabilidad. El índice único de la 0056 es la última
  * red, pero la primera es esta comprobación.
+ *
+ * SE NIEGA A TIMBRAR SIN DESGLOSE. `factura_saas.monto` es el TOTAL con IVA, y
+ * lo que Facturapi espera como precio del concepto es la BASE (timbra con
+ * `tax_included: false`, o sea que le suma el 16% a lo que reciba). Mandarle el
+ * total produce un CFDI 16% más alto que el depósito. Una factura sin
+ * `subtotal`/`iva` guardados —las anteriores a la 0065 y las que registra el
+ * webhook de Stripe— no dice cuál de las dos cifras era, así que aquí se para:
+ * un CFDI mal emitido es irreversible y no timbrar no lo es.
  */
 export async function timbrarFactura(facturaId: string): Promise<{ uuid: string } | { pendiente: string }> {
   if (!facturapiConfigurado()) {
@@ -222,13 +277,35 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
   const admin = supabaseAdmin();
   const { data: f, error } = await admin
     .from('factura_saas')
-    .select('id, tenant_id, estado, monto, periodo_inicio, periodo_fin, referencia, cfdi_uuid')
+    .select('id, tenant_id, estado, monto, subtotal, iva, moneda, periodo_inicio, periodo_fin, referencia, cfdi_uuid')
     .eq('id', facturaId)
     .maybeSingle();
   if (error) throw new Error(`timbrarFactura.leer: ${error.message}`);
   if (!f) throw new DatoInvalido('Esa factura ya no existe.');
   if (f.cfdi_uuid) throw new DatoInvalido(`Esa factura ya está timbrada (UUID ${String(f.cfdi_uuid).slice(0, 8)}…). Timbrarla otra vez crearía un segundo CFDI que habría que cancelar.`);
   if (f.estado !== 'pagada') throw new DatoInvalido('Solo se timbra lo que ya está pagado.');
+
+  const total = Number(f.monto);
+  const subtotal = f.subtotal === null || f.subtotal === undefined ? null : Number(f.subtotal);
+  const iva = f.iva === null || f.iva === undefined ? null : Number(f.iva);
+
+  if (subtotal === null || iva === null) {
+    throw new DatoInvalido(
+      'Esta factura no trae el desglose de IVA guardado, así que no se sabe si el monto cobrado ya lo incluía. ' +
+      'Timbrar a ciegas emite un CFDI que puede salir 16% arriba o abajo del depósito, y eso solo se corrige ' +
+      'cancelándolo ante el SAT. Emítela de nuevo desde /admin con el plan ya declarando su criterio de IVA, o ' +
+      'timbra esta a mano en Facturapi.',
+    );
+  }
+  // La base ya lo garantiza con un CHECK; se vuelve a comprobar aquí porque una
+  // corrección a mano en Supabase no pasa por este código y el timbrado no se
+  // puede deshacer.
+  if (!desgloseCuadra(total, subtotal, iva)) {
+    throw new DatoInvalido(
+      `El desglose de esta factura no cuadra: subtotal ${subtotal} + IVA ${iva} no da el total ${total} que se cobró. ` +
+      'No se timbra un CFDI por una cifra que no es la que entró al banco.',
+    );
+  }
 
   const fiscales = await getDatosFiscales(f.tenant_id as string);
   if (!estanCompletos(fiscales)) {
@@ -241,7 +318,11 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
       regimenFiscal: fiscales!.regimenFiscal!, codigoPostal: fiscales!.codigoPostal!,
       usoCfdi: fiscales!.usoCfdi!,
     },
-    monto: Number(f.monto),
+    // LA BASE, no el total: Facturapi timbra con `tax_included: false`.
+    subtotal,
+    // Para que, si el PAC devuelve otro total, quede en el log con nombre y
+    // apellido en vez de descubrirse cuando el contador del cliente concilie.
+    totalEsperado: total,
     periodoInicio: f.periodo_inicio as string,
     periodoFin: f.periodo_fin as string,
     referencia: (f.referencia as string) ?? undefined,
@@ -266,7 +347,7 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
 export async function getPorCobrar(): Promise<FacturaPorCobrar[]> {
   const { data, error } = await supabaseAdmin()
     .from('factura_saas')
-    .select('id, tenant_id, periodo_inicio, periodo_fin, monto, moneda, estado, referencia, cfdi_uuid, tenant(nombre)')
+    .select('id, tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva, moneda, estado, referencia, cfdi_uuid, tenant(nombre)')
     .in('estado', ['pendiente', 'fallida'])
     .order('periodo_fin', { ascending: false })
     .limit(50);
@@ -282,6 +363,8 @@ export async function getPorCobrar(): Promise<FacturaPorCobrar[]> {
       periodoInicio: f.periodo_inicio as string,
       periodoFin: f.periodo_fin as string,
       monto: Number(f.monto),
+      subtotal: f.subtotal === null || f.subtotal === undefined ? null : Number(f.subtotal),
+      iva: f.iva === null || f.iva === undefined ? null : Number(f.iva),
       moneda: (f.moneda as string) ?? 'MXN',
       estado: f.estado as string,
       referencia: (f.referencia as string) || null,

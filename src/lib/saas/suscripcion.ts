@@ -24,6 +24,14 @@ export interface Plan {
   /** NULL = sin precio configurado. NUNCA se inventa: se lee de Stripe. */
   precioMensual: number | null;
   moneda: string;
+  /**
+   * ¿`precioMensual` ya trae el IVA?
+   *
+   * `null` = nadie lo declaró, y entonces NO se emite ni se timbra: no se sabe
+   * si el cliente debe transferir el precio o el precio × 1.16. Ver
+   * `lib/saas/iva.ts`; se llena solo desde el `tax_behavior` del price.
+   */
+  precioIvaIncluido: boolean | null;
   limiteViajesMes: number | null;
   limiteOperadores: number | null;
   stripePriceId: string | null;
@@ -46,7 +54,13 @@ export interface FacturaSaas {
   id: string;
   periodoInicio: string;
   periodoFin: string;
+  /** EL TOTAL QUE SE TRANSFIERE, con IVA. Es lo que se enseña en pantalla. */
   monto: number;
+  /** Base sin IVA. `null` = factura sin desglose (anterior a la 0065, o de
+   *  Stripe): no se puede timbrar sin saber cuál de las dos cifras era. */
+  subtotal: number | null;
+  /** IVA trasladado. `null` va siempre junto con `subtotal` null. */
+  iva: number | null;
   moneda: string;
   estado: 'pendiente' | 'pagada' | 'fallida' | 'cancelada';
   pagadaEn: string | null;
@@ -67,7 +81,7 @@ function fila<T>(r: { data: unknown; error: { message: string } | null }, consul
 export async function getPlanes(): Promise<Plan[]> {
   const r = await supabaseAdmin()
     .from('plan')
-    .select('clave, nombre, precio_mensual, moneda, limite_viajes_mes, limite_operadores, stripe_price_id, orden')
+    .select('clave, nombre, precio_mensual, moneda, precio_iva_incluido, limite_viajes_mes, limite_operadores, stripe_price_id, orden')
     .eq('activo', true)
     .order('orden');
 
@@ -78,6 +92,11 @@ export async function getPlanes(): Promise<Plan[]> {
     // `null` y `0` son cosas distintas: sin configurar vs. gratis.
     precioMensual: p.precio_mensual === null ? null : Number(p.precio_mensual),
     moneda: (p.moneda as string) ?? 'MXN',
+    // Igual que arriba: `null` y `false` son cosas distintas. `undefined` (una
+    // base sin la 0065 aplicada) cae en `null`, que es el lado que no cobra.
+    precioIvaIncluido: p.precio_iva_incluido === null || p.precio_iva_incluido === undefined
+      ? null
+      : Boolean(p.precio_iva_incluido),
     limiteViajesMes: p.limite_viajes_mes === null ? null : Number(p.limite_viajes_mes),
     limiteOperadores: p.limite_operadores === null ? null : Number(p.limite_operadores),
     stripePriceId: (p.stripe_price_id as string) || null,
@@ -122,7 +141,7 @@ export async function getSuscripcion(tenantId: string): Promise<Suscripcion | nu
 export async function getFacturasSaas(tenantId: string, limite = 12): Promise<FacturaSaas[]> {
   const r = await supabaseAdmin()
     .from('factura_saas')
-    .select('id, periodo_inicio, periodo_fin, monto, moneda, estado, pagada_en, url_pago, cfdi_uuid, referencia')
+    .select('id, periodo_inicio, periodo_fin, monto, subtotal, iva, moneda, estado, pagada_en, url_pago, cfdi_uuid, referencia')
     .eq('tenant_id', tenantId)
     .order('periodo_fin', { ascending: false })
     .limit(limite);
@@ -133,6 +152,8 @@ export async function getFacturasSaas(tenantId: string, limite = 12): Promise<Fa
     periodoInicio: f.periodo_inicio as string,
     periodoFin: f.periodo_fin as string,
     monto: Number(f.monto),
+    subtotal: f.subtotal === null || f.subtotal === undefined ? null : Number(f.subtotal),
+    iva: f.iva === null || f.iva === undefined ? null : Number(f.iva),
     moneda: (f.moneda as string) ?? 'MXN',
     estado: f.estado as FacturaSaas['estado'],
     pagadaEn: (f.pagada_en as string) || null,
@@ -193,11 +214,26 @@ export async function getUso(tenantId: string, plan: Plan | null, hoy = new Date
  *
  * Se rechaza un price que no sea recurrente: un pago único puesto como
  * mensualidad cobra una vez y deja a la flota con el plan activo para siempre.
+ *
+ * SE RECHAZA TAMBIÉN LO QUE NO SEA MXN. Todo el producto imprime dinero con
+ * `mxn()`, así que un price en USD se pintaría idéntico a uno en pesos: la
+ * pantalla diría "$10,000" de un cobro de 10,000 DÓLARES. La moneda se guardaba
+ * pero no la miraba nadie, y la única señal de la diferencia era un texto de
+ * confirmación que se lee una vez y se cierra.
+ *
+ * EL `tax_behavior` VIAJA CON EL MONTO. Se copia como `precio_iva_incluido` por
+ * la misma razón que el monto no se teclea: es la otra mitad de "cuánto se
+ * cobra", y capturada aparte divergiría. Un price con `tax_behavior:
+ * 'unspecified'` SÍ se guarda —el precio es real y la pantalla lo enseña— pero
+ * queda con el criterio en `null`, y con eso `emitirMensualidad` se niega. Se
+ * prefiere guardar y bloquear a rechazar el guardado: así /admin puede decir
+ * qué falta en vez de dejar el plan como si no tuviera precio, que es otro
+ * problema y se ve igual.
  */
 export async function guardarPriceDePlan(
   planClave: string,
   priceId: string,
-): Promise<{ montoMensual: number; moneda: string }> {
+): Promise<{ montoMensual: number; moneda: string; ivaIncluido: boolean | null }> {
   const limpio = priceId.trim();
   if (!limpio) throw new DatoInvalido('Falta el ID del price de Stripe.');
   if (!limpio.startsWith('price_')) {
@@ -211,14 +247,26 @@ export async function guardarPriceDePlan(
   if (!precio.activo) {
     throw new DatoInvalido('Ese price está archivado en Stripe: no se puede cobrar con él.');
   }
+  if (precio.moneda !== 'MXN') {
+    throw new DatoInvalido(
+      `Ese price cobra en ${precio.moneda}, no en pesos. Todo el panel imprime con formato de peso mexicano, así que ` +
+      `un price en ${precio.moneda} se vería idéntico a uno en MXN y el cliente descubriría la diferencia en su ` +
+      'estado de cuenta. Crea el price en MXN.',
+    );
+  }
 
   const r = await supabaseAdmin()
     .from('plan')
-    .update({ stripe_price_id: precio.id, precio_mensual: precio.montoMensual, moneda: precio.moneda })
+    .update({
+      stripe_price_id: precio.id,
+      precio_mensual: precio.montoMensual,
+      moneda: precio.moneda,
+      precio_iva_incluido: precio.ivaIncluido,
+    })
     .eq('clave', planClave);
 
   if (r.error) throw new Error(`guardarPriceDePlan: ${r.error.message}`);
-  return { montoMensual: precio.montoMensual, moneda: precio.moneda };
+  return { montoMensual: precio.montoMensual, moneda: precio.moneda, ivaIncluido: precio.ivaIncluido };
 }
 
 // ── Escritura desde el webhook ─────────────────────────────────────────────
@@ -334,23 +382,42 @@ export async function aplicarSuscripcion(datos: {
   if (t.error) logger.warn('stripe.tenant_plan', { err: t.error.message });
 }
 
-/** Registra una factura de Likida a la flota. Idempotente por el índice único. */
+/**
+ * Registra una factura de Likida a la flota. Idempotente por el índice único.
+ *
+ * `subtotal`/`iva` son OPCIONALES y por default quedan en `null`: la factura de
+ * Stripe trae el total cobrado, y de dónde salió su IVA lo sabe Stripe, no este
+ * código. Una factura sin desglose NO se puede timbrar (`timbrarFactura` se
+ * niega), que es lo correcto: el CFDI de esa mensualidad tendría que salir de
+ * la misma aritmética con la que se cobró, y aquí no está.
+ */
 export async function aplicarFactura(datos: {
   tenantId: string;
   stripeInvoiceId: string;
   periodoInicio: string;
   periodoFin: string;
+  /** El TOTAL cobrado, con impuestos. */
   monto: number;
+  /** Base sin IVA, si se conoce. Va junto con `iva` o no va ninguno. */
+  subtotal?: number | null;
+  iva?: number | null;
   moneda: string;
   pagada: boolean;
   urlPago?: string | null;
 }): Promise<void> {
+  // El CHECK `factura_saas_desglose_coherente` (0065) exige que los dos vayan
+  // juntos: medio desglose se vería tan completo como uno entero.
+  const hayDesglose = datos.subtotal !== null && datos.subtotal !== undefined
+    && datos.iva !== null && datos.iva !== undefined;
+
   const { error } = await supabaseAdmin().from('factura_saas').upsert(
     {
       tenant_id: datos.tenantId,
       periodo_inicio: datos.periodoInicio,
       periodo_fin: datos.periodoFin,
       monto: datos.monto,
+      subtotal: hayDesglose ? datos.subtotal : null,
+      iva: hayDesglose ? datos.iva : null,
       moneda: datos.moneda,
       estado: datos.pagada ? 'pagada' : 'fallida',
       pagada_en: datos.pagada ? new Date().toISOString() : null,

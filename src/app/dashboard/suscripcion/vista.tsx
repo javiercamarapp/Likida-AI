@@ -1,6 +1,7 @@
 import { StatusPill } from '../../admin/ui/kit';
 import { mxn } from '@/lib/utils';
 import type { Plan } from '@/lib/saas/suscripcion';
+import { etiquetaIva } from '@/lib/saas/iva';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Los bloques visuales de Plan & Facturación, separados de la página.
@@ -50,6 +51,12 @@ export function Uso({ etiqueta, usado, limite }: { etiqueta: string; usado: numb
  *    de ofrecer un botón que reventaría al hacer clic.
  *  · el plan actual → se marca y no se ofrece contratar de nuevo.
  *
+ * EL PRECIO NUNCA VA SOLO: al lado va si INCLUYE IVA o si el IVA va encima.
+ * "$10,000/mes" a secas son $10,000 o $11,600 en la cuenta del cliente, y esos
+ * $1,600 los descubría al conciliar. Cuando nadie lo declaró se dice eso mismo
+ * ("IVA sin declarar") en vez de callarlo — y el cobro está bloqueado detrás.
+ * Ver `lib/saas/iva.ts`.
+ *
  * El botón lo pone la página (necesita el server action); aquí va como
  * `children` para que el preview pueda pintar la tarjeta sin uno.
  */
@@ -69,7 +76,7 @@ export function TarjetaPlan({
       <div className="text-2xl font-semibold tabular">
         {plan.precioMensual === null
           ? <span className="text-sm font-normal" style={{ color: 'var(--muted)' }}>Sin precio configurado</span>
-          : <>{mxn(plan.precioMensual)}<span className="text-xs font-normal" style={{ color: 'var(--muted)' }}> /mes</span></>}
+          : <>{mxn(plan.precioMensual)}<span className="text-xs font-normal" style={{ color: 'var(--muted)' }}> /mes {etiquetaIva(plan.precioIvaIncluido)}</span></>}
       </div>
       <ul className="text-xs list-none p-0 m-0 flex flex-col gap-1" style={{ color: 'var(--muted)' }}>
         <li>{plan.limiteViajesMes === null ? 'Viajes sin límite' : `Hasta ${plan.limiteViajesMes} viajes al mes`}</li>
@@ -99,12 +106,16 @@ export function TarjetaPlan({
  * que no puede pasar es que viva en el código de un repo público.
  */
 export function InstruccionesTransferencia({
-  beneficiario, banco, clabe, monto, moneda, referencia,
+  beneficiario, banco, clabe, monto, subtotal, iva, moneda, referencia,
 }: {
   beneficiario: string;
   banco: string;
   clabe: string;
+  /** EL TOTAL, con IVA: es lo que se transfiere. */
   monto: number;
+  /** Base sin IVA. `null` = la factura no trae desglose guardado. */
+  subtotal?: number | null;
+  iva?: number | null;
   moneda: string;
   referencia: string;
 }) {
@@ -112,7 +123,13 @@ export function InstruccionesTransferencia({
     ['Beneficiario', beneficiario],
     ['Banco', banco],
     ['CLABE', clabe, true],
-    ['Monto', `${mxn(monto)} ${moneda}`],
+    // "Monto" a secas no dice si el IVA está dentro, y ese es justo el número
+    // que el contralor cruza contra el total del CFDI. Se rotula como TOTAL y,
+    // cuando hay desglose, se enseña de qué se compone.
+    ['Total a transferir', `${mxn(monto)} ${moneda}`],
+    ...(subtotal !== null && subtotal !== undefined && iva !== null && iva !== undefined
+      ? [['Se desglosa como', `${mxn(subtotal)} + ${mxn(iva)} de IVA`] as [string, string]]
+      : []),
     ['Referencia (ponla en el concepto)', referencia, true],
   ];
   return (
