@@ -23,7 +23,7 @@
 insert into tenant (id, nombre, rfc, ciudad, plan,
                     razon_social, domicilio_fiscal, url_aviso_privacidad) values
   ('11111111-1111-1111-1111-111111111111', 'Transportes Innovativos',
-   'TIN010101AAA',                 -- 🔴 INVENTADO: RFC real de Innovativos
+   'GMX0902279I1',                 -- RFC real de un tercero que dio permiso (GUION_DEMO) — pasa el dígito verificador; con el genérico del SAT todas las facturas saldrían "a revisión"
    'Silao, Guanajuato', 'demo',
    -- 🔴 INVENTADOS los dos primeros. La razón social va TAL CUAL esté en el
    -- RFC y el domicilio es el FISCAL (la ciudad de arriba no sirve: no es un
@@ -119,37 +119,25 @@ on conflict (id) do nothing;
 
 -- 🔴 DEMO: diésel con CFDI de estación completo (IEPS/IVA desglosados +
 -- complemento HidroYPetro) → deducible y ACREDITABLE, y aún $200 sobre tope.
+-- GUION: el viaje abre con ESTOS 2 gastos precargados; el resto de las fotos
+-- (≈$5,000 en casetas/viáticos dentro de tope) se mandan EN VIVO durante la
+-- demo para que el cuadre cierre en comprobado = anticipo y la ÚNICA
+-- diferencia sea la de política (diésel $200 sobre tope).
 insert into gasto (id, tenant_id, viaje_id, concepto, monto, folio, cfdi_uuid, rfc_emisor, rfc_receptor,
   estado_sat, efos, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos,
   cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, ieps_traslado, iva_traslado, fecha, ocr_confianza) values
   ('55555555-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001',
-   'diesel', 4200, 'DS-8801', 'b7e3f1a2-1c4d-4e6f-8a90-1234567890ab', 'ENE160518AB1', 'TIN010101AAA',
+   'diesel', 4200, 'DS-8801', 'b7e3f1a2-1c4d-4e6f-8a90-1234567890ab', 'ENE160518AB1', 'GMX0902279I1',
    'vigente', false, '15101505', 'LTR', 'I', true, false, true, '03', 3210.00, 408.62, 581.38, current_date - 1, 0.97),
   ('55555555-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001',
-   'caseta', 1400, 'CA-4471', 'c8f4a2b3-2d5e-4f70-9b01-234567890abc', null, 'TIN010101AAA',
+   'caseta', 1400, 'CA-4471', 'c8f4a2b3-2d5e-4f70-9b01-234567890abc', null, 'GMX0902279I1',
    'vigente', null, null, null, 'I', null, null, true, '04', 1206.90, null, 193.10, current_date - 1, 0.96)
 on conflict (id) do nothing;
-
--- 🔴 DEMO: el resto del viaje, para que comprobado = anticipo (10,600) y la
--- ÚNICA diferencia sea la de política ($200 del diésel sobre tope). Sin estos,
--- el cuadre saldría con un sobrante de $5,000 que no está en el guion. Son
--- casetas del corredor + alimentación/transporte/hospedaje dentro de tope.
-insert into gasto (id, tenant_id, viaje_id, concepto, monto, folio, fecha, ocr_confianza) values
-  ('55555555-0000-0000-0000-000000000011', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'caseta',       1100, 'CA-4480', current_date - 1, 0.95),
-  ('55555555-0000-0000-0000-000000000012', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'caseta',        950, 'CA-4491', current_date - 1, 0.95),
-  ('55555555-0000-0000-0000-000000000013', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'caseta',        750, 'CA-4502', current_date - 1, 0.94),
-  ('55555555-0000-0000-0000-000000000014', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'alimentacion',  800, 'AL-3301', current_date - 1, 0.93),
-  ('55555555-0000-0000-0000-000000000015', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'transporte',    600, 'TR-2201', current_date - 1, 0.92),
-  ('55555555-0000-0000-0000-000000000016', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001', 'hospedaje',   1000, 'HS-1101', current_date - 1, 0.94)
-on conflict (id) do nothing;
--- Totales: diésel 4200 (comprobado 4000, $200 sobre política) + casetas
--- 1400+1100+950+750 = 4200 + alimentacion 800 + transporte 600 + hospedaje 1000
--- = comprobado $10,600 = anticipo. Diferencia única: $200 sobre política.
 
 -- 🔴 DEMO: XML crudo del diésel (CFF 30) — con complemento HidroYPetro real.
 insert into cfdi_xml (tenant_id, gasto_id, cfdi_uuid, xml) values (
   '11111111-1111-1111-1111-111111111111', '55555555-0000-0000-0000-000000000001', 'b7e3f1a2-1c4d-4e6f-8a90-1234567890ab',
-  '<?xml version="1.0" encoding="UTF-8"?><cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:hidrocarburospetroliferos="http://www.sat.gob.mx/hidrocarburospetroliferos" Version="4.0" Serie="DS" Folio="8801" Fecha="2026-05-15T09:14:00" FormaPago="03" SubTotal="3210.00" Moneda="MXN" Total="4200.00" TipoDeComprobante="I" MetodoPago="PUE" LugarExpedicion="36100"><cfdi:Emisor Rfc="ENE160518AB1" Nombre="Estacion de Servicio Demo SA de CV" RegimenFiscal="601"/><cfdi:Receptor Rfc="TIN010101AAA" Nombre="Transportes Innovativos" DomicilioFiscalReceptor="36100" RegimenFiscalReceptor="601" UsoCFDI="G03"/><cfdi:Conceptos><cfdi:Concepto ClaveProdServ="15101505" ClaveUnidad="LTR" Cantidad="113.00" Descripcion="Diesel" ValorUnitario="28.41" Importe="3210.00" ObjetoImp="02"><cfdi:ComplementoConcepto><hidrocarburospetroliferos:HidroYPetro Version="1.0" TipoPermiso="PER20" NumeroPermiso="PL/12345/EXP/ES/2020" ClaveHYP="PR07" SubProductoHYP="SP14"/></cfdi:ComplementoConcepto></cfdi:Concepto></cfdi:Conceptos><cfdi:Impuestos TotalImpuestosTrasladados="990.00"><cfdi:Traslados><cfdi:Traslado Base="3210.00" Impuesto="003" TipoFactor="Cuota" TasaOCuota="6.1740" Importe="408.62"/><cfdi:Traslado Base="3618.62" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="581.38"/></cfdi:Traslados></cfdi:Impuestos><cfdi:Complemento><tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="b7e3f1a2-1c4d-4e6f-8a90-1234567890ab" FechaTimbrado="2026-05-15T09:14:05"/></cfdi:Complemento></cfdi:Comprobante>'
+  '<?xml version="1.0" encoding="UTF-8"?><cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:hidrocarburospetroliferos="http://www.sat.gob.mx/hidrocarburospetroliferos" Version="4.0" Serie="DS" Folio="8801" Fecha="2026-05-15T09:14:00" FormaPago="03" SubTotal="3210.00" Moneda="MXN" Total="4200.00" TipoDeComprobante="I" MetodoPago="PUE" LugarExpedicion="36100"><cfdi:Emisor Rfc="ENE160518AB1" Nombre="Estacion de Servicio Demo SA de CV" RegimenFiscal="601"/><cfdi:Receptor Rfc="GMX0902279I1" Nombre="Transportes Innovativos" DomicilioFiscalReceptor="36100" RegimenFiscalReceptor="601" UsoCFDI="G03"/><cfdi:Conceptos><cfdi:Concepto ClaveProdServ="15101505" ClaveUnidad="LTR" Cantidad="113.00" Descripcion="Diesel" ValorUnitario="28.41" Importe="3210.00" ObjetoImp="02"><cfdi:ComplementoConcepto><hidrocarburospetroliferos:HidroYPetro Version="1.0" TipoPermiso="PER20" NumeroPermiso="PL/12345/EXP/ES/2020" ClaveHYP="PR07" SubProductoHYP="SP14"/></cfdi:ComplementoConcepto></cfdi:Concepto></cfdi:Conceptos><cfdi:Impuestos TotalImpuestosTrasladados="990.00"><cfdi:Traslados><cfdi:Traslado Base="3210.00" Impuesto="003" TipoFactor="Cuota" TasaOCuota="6.1740" Importe="408.62"/><cfdi:Traslado Base="3618.62" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="581.38"/></cfdi:Traslados></cfdi:Impuestos><cfdi:Complemento><tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="b7e3f1a2-1c4d-4e6f-8a90-1234567890ab" FechaTimbrado="2026-05-15T09:14:05"/></cfdi:Complemento></cfdi:Comprobante>'
 ) on conflict (tenant_id, cfdi_uuid) do nothing;
 
 -- ── Historial para que el dashboard no salga vacío 🔴 INVENTADO ─────────────
