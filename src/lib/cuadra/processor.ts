@@ -1821,7 +1821,24 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       agentTools = res.toolCalls;
       closed = res.toolCalls.some((t) => t.toolName === 'guardar_liquidacion' && !t.error);
       ctxCerro = closed;
-      await registrarCosto({ tenantId: op.tenantId, viajeId, fase: faseDeModelo(res.model, 'cuadre'), modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.costUsd });
+      // AUDITORÍA 10, MEDIO REINCIDENTE: si el ciclo cruzó de proveedor a medio
+      // camino (primario en 3 rondas + fallback en la 4ª), `res.model` es solo
+      // el modelo de la ÚLTIMA ronda — una sola fila con esa etiqueta le
+      // atribuye TODO el gasto a un modelo que solo respondió una parte.
+      // `res.costoPorModelo` viene de `generateWithTools` partido por modelo
+      // real; con más de uno, se registra UNA FILA POR MODELO. Con uno solo
+      // (el caso normal, sin fallback) o si el campo no viene —algún mock
+      // viejo en pruebas— se conserva EXACTO el camino de siempre: una fila,
+      // `res.model`.
+      const modelosDelCiclo = Object.keys(res.costoPorModelo ?? {});
+      if (modelosDelCiclo.length > 1) {
+        for (const modelo of modelosDelCiclo) {
+          const c = res.costoPorModelo[modelo];
+          await registrarCosto({ tenantId: op.tenantId, viajeId, fase: faseDeModelo(modelo, 'cuadre'), modelo, tokensIn: c.tokensIn, tokensOut: c.tokensOut, costoUsd: c.cost });
+        }
+      } else {
+        await registrarCosto({ tenantId: op.tenantId, viajeId, fase: faseDeModelo(res.model, 'cuadre'), modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.costUsd });
+      }
       if (closed) {
         const call = res.toolCalls.find((t) => t.toolName === 'guardar_liquidacion' && !t.error);
         const liqId = (call?.result as { liquidacion_id?: string } | undefined)?.liquidacion_id;

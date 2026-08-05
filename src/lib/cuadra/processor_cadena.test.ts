@@ -127,8 +127,9 @@ vi.mock('@/lib/cuadra/conv', async (original) => ({
   releaseViajeLock: vi.fn(), releaseMessageClaim: vi.fn(),
   intakeDelta: vi.fn(async () => 0), esperarIntake: vi.fn(async () => true),
 }));
+const registrarCosto = vi.fn();
 vi.mock('@/lib/cuadra/costos', () => ({
-  registrarCosto: vi.fn(), registrarCostoWhatsApp: vi.fn(),
+  registrarCosto, registrarCostoWhatsApp: vi.fn(),
   faseDeModelo: vi.fn(() => 'cuadre'), vincularCostosALiquidacion: vi.fn(),
 }));
 
@@ -224,7 +225,7 @@ const listo = { from: DESDE_META, type: 'text' as const, text: 'listo', waMessag
 
 beforeEach(() => {
   subidos.clear(); salientes.length = 0;
-  create.mockReset(); saveLiquidacion.mockClear();
+  create.mockReset(); saveLiquidacion.mockClear(); registrarCosto.mockClear();
   logger.info.mockReset(); logger.warn.mockReset(); logger.error.mockReset();
   vi.stubGlobal('fetch', fetchSpy);
   fetchSpy.mockClear();
@@ -340,5 +341,50 @@ describe('la cadena cuando el storage falla: ni se envía un PDF que no existe, 
     expect(dicho).toMatch(/no pude generarte el PDF|panel/i);
     // Y la liquidación SÍ quedó cerrada: el cierre es real, lo que falta es el papel.
     expect(saveLiquidacion).toHaveBeenCalled();
+  });
+});
+
+// ── AUDITORÍA 10 · MEDIO REINCIDENTE: LA FILA DE COSTO, PARTIDA POR MODELO ──
+// `0a199dc` hizo que `generateWithTools` devuelva `costoPorModelo` (un mapa por
+// modelo real cuando el ciclo cruza de proveedor), y `processor.ts` la consume
+// para registrar UNA fila de `llm_costo` POR MODELO en vez de una sola con la
+// etiqueta de la última ronda. El desglose ya lo cubre
+// `openrouter_fallback_costo.test.ts`; esto cubre el lado del CONSUMIDOR: que
+// `processInbound` parta la fila. Sin el cableado, `res.model` (el de la última
+// ronda) atribuía TODO el gasto a un modelo que solo respondió una parte.
+//
+// Slugs del camino vivo (`models.ts` + `FALLBACK` en `openrouter.ts`):
+// `cuadre` → `anthropic/claude-sonnet-5`, fallback → `openai/gpt-5.6-terra`.
+describe('AUDITORÍA 10 — registrarCosto escribe UNA fila por modelo real del ciclo', () => {
+  it('ciclo mixto (primario + fallback): dos filas, cada una con SU modelo', async () => {
+    // Ronda 1: el primario responde y pide cuadrar. Ronda 2: el primario cae
+    // (el mismo patrón de `caido()` de openrouter_fallback_costo.test.ts) y
+    // `complete` mueve `activeModel` al fallback antes de reintentar. Ronda 3
+    // (ya en fallback): pide cerrar. Ronda 4: termina.
+    create.mockReset();
+    create
+      .mockResolvedValueOnce(conTool('cuadrar_viaje'))
+      .mockRejectedValueOnce(new Error('503 Service Unavailable: provider caído'))
+      .mockResolvedValueOnce(conTool('guardar_liquidacion'))
+      .mockResolvedValueOnce(final(NARRACION_INVENTADA));
+
+    await processInbound(listo);
+
+    // El ciclo cruzó de proveedor a medio camino: `res.model` es el de la
+    // última ronda y solo esa etiqueta mentiría. Lo que el hallazgo exigía:
+    // dos filas, cada una con el modelo que de verdad la respondió.
+    expect(registrarCosto).toHaveBeenCalledTimes(2);
+    expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ modelo: 'anthropic/claude-sonnet-5' }));
+    expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ modelo: 'openai/gpt-5.6-terra' }));
+    // Y la cadena no se descarriló por la caída: cerró y salió el PDF.
+    expect(saveLiquidacion).toHaveBeenCalled();
+  });
+
+  it('ciclo en un solo modelo: conserva la fila única (no-regresión)', async () => {
+    // El beforeEach ya deja `create` con dos rondas, ambas del primario.
+    await processInbound(listo);
+
+    expect(registrarCosto).toHaveBeenCalledTimes(1);
+    expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ modelo: 'anthropic/claude-sonnet-5' }));
   });
 });
