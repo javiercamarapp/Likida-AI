@@ -43,6 +43,7 @@ import {
   guardarHuerfano, getHuerfanos, resolverHuerfanos, marcarHuerfanosOfrecidos, getViaje,
   enriquecerGastoConCodigo, guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente,
   getDatosResponsable, reclamarEnvioAviso, confirmarEnvioAviso, liberarEnvioAviso,
+  registrarSolicitudArco,
 } from '@/lib/cuadra/repo';
 import {
   resolveOperador, getOpenViaje, getTenantContext,
@@ -141,13 +142,24 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
  * Nunca lanza: dejar sin respuesta a quien ejerce un derecho es peor que
  * cualquier fallo que se pueda registrar.
  */
-async function atenderPrivacidad(tenantId: string, operadorId: string, telefono: string): Promise<void> {
+async function atenderPrivacidad(tenantId: string, operadorId: string, telefono: string, texto: string): Promise<void> {
   try {
     const datos = await getDatosResponsable(tenantId);
     if (datos) {
       await sendText(telefono, respuestaPrivacidad(datos));
-      // Rastro para la flota: es ELLA quien tiene que resolver el ARCO.
-      logger.info('privacidad.solicitud_operador', { tenantId, operadorId });
+      // AUDITORÍA 12, ALTO (legal): el aviso promete "queda registrada tu
+      // solicitud" y antes NO se registraba nada — `solicitud_arco` (0053)
+      // existía sin un solo insert y la flota (la responsable, 15 días hábiles
+      // para contestar, LFPDPPP art. 32) no tenía constancia que atender. El
+      // tipo se clasifica del texto; la flota decide la calificación exacta.
+      const { tipoDeSolicitudArco } = await import('@/lib/cuadra/privacidad');
+      await registrarSolicitudArco({
+        tenantId,
+        operadorId,
+        titularRef: telefono,
+        tipo: tipoDeSolicitudArco(texto),
+        canal: 'whatsapp',
+      });
       return;
     }
     // Sin datos del responsable no se puede decir a quién reclamarle. Se le dice
@@ -423,7 +435,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // Estaba después del corte, así que la promesa del aviso era falsa en el caso
     // más probable de ejercerla. Lo cazó la auditoría 3.
     if (msg.type === 'text' && msg.text && pideAtencionPrivacidad(msg.text)) {
-      await atenderPrivacidad(op.tenantId, op.operadorId, msg.from);
+      await atenderPrivacidad(op.tenantId, op.operadorId, msg.from, msg.text);
       return;
     }
 

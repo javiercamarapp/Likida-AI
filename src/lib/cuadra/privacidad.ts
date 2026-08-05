@@ -589,3 +589,36 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
     },
   ];
 }
+
+/**
+ * Clasifica el derecho ARCO que está ejerciendo el texto (auditoría 12, ALTO
+ * legal). El aviso promete que la solicitud "queda registrada" y el código no
+ * registraba nada — `solicitud_arco` existe (0053) y nadie la insertaba. Sin
+ * un tipo no se puede insertar (el CHECK `arco_tipo_dominio` exige uno de los
+ * cuatro). La clasificación es por palabras clave, best-effort: ante la duda
+ * cae a 'acceso', que es el derecho genérico, y la flota —la responsable— es
+ * quien decide la calificación exacta.
+ */
+export function tipoDeSolicitudArco(texto: string): 'acceso' | 'rectificacion' | 'cancelacion' | 'oposicion' {
+  const t = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/\b(?:borr|elimin|suprim|dar\s+de\s+baja|quita\s+mis datos|ya\s+no\s+usen|ya\s+no\s+traten)\w*\b/.test(t)) return 'cancelacion';
+  if (OPOSICION.some((r) => r.test(t)) || (OPOSICION_AMBIGUA.some((r) => r.test(t)) && (!OBJETO_DE_PAPEL.test(t) || RECHAZA_AUTOMATIZADO.test(t)))) return 'oposicion';
+  if (/\b(?:correg|rectific|actualiza\s+mis datos|cambia\s+mi)\w*\b/.test(t)) return 'rectificacion';
+  if (/\b(?:ver\s+mis datos|acceder|acceso\s+a\s+mis datos|que\s+datos\s+tienen|que\s+datos\s+guardan)\b/.test(t)) return 'acceso';
+  return 'acceso';
+}
+
+/** 15 días hábiles (LFPDPPP art. 32): el plazo para responder al titular. */
+const DIAS_HABILES_ARCO = 15;
+
+/** Suma `n` días hábiles a `desde` (lunes a viernes). */
+export function venceArco(desde: Date, diasHabiles = DIAS_HABILES_ARCO): string {
+  const d = new Date(desde);
+  let faltan = diasHabiles;
+  while (faltan > 0) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const dia = d.getUTCDay();
+    if (dia !== 0 && dia !== 6) faltan--;
+  }
+  return d.toISOString().slice(0, 10);
+}
