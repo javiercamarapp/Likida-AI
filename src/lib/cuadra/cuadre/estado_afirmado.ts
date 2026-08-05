@@ -106,6 +106,51 @@ export interface ResultadoEstado {
 }
 
 /**
+ * ¿Una oración AFIRMA un hecho consumado según `patrones`?
+ *
+ * AUDITORÍA 12, MEDIO: el detector corría sobre el reply ENTERO y marcaba
+ * negaciones ciertas ("tu liquidación NO quedó cerrada todavía, faltan tus
+ * fotos"), preguntas ("¿Ya quedó cerrada?") y futuro ("Mañana cerramos tu
+ * liquidación") — el comentario del archivo decía que el detector era
+ * "deliberadamente estrecho" y no lo era: un falso positivo tacha un mensaje
+ * CORRECTO y tira la información que el operador necesita (p. ej. "faltan tus
+ * fotos"). Ahora:
+ *  - se evalúa ORACIÓN por oración (no el reply completo);
+ *  - una oración interrogativa (¿) se salta;
+ *  - una negación pegada al verbo ("no quedó cerrada") se salta — el "no
+ *    tienes nada pendiente" del patrón 4 no lleva negación antes del verbo,
+ *    así que sigue afirmando;
+ *  - "cerramos/liquidamos" (la terminación -amos, pretérito O presente/futuro)
+ *    solo afirma si la oración NO trae marcador de futuro (mañana, cuando…).
+ */
+function afirmaHechoConsumado(reply: string, patrones: RegExp[]): boolean {
+  const PREGUNTA = /¿/;
+  const NEGACION = /\b(?:no|nunca|jamás|tampoco)\b/i;
+  const FUTURO = /\b(?:mañana|cuando|después|en\s+cuanto|pronto|luego|al\s+rato|apenas)\b/i;
+  // El patrón 4 ("no tienes nada pendiente") ES una negación que afirma el
+  // cierre: se exime del salto por negación.
+  const AFIRMA_NEGANDO = /\bno\s+tienes\s+nada\s+pendiente/i;
+  for (const oracion of reply.split(/(?<=[.!?])\s+|\n/)) {
+    if (!oracion.trim()) continue;
+    if (PREGUNTA.test(oracion)) continue;
+    // Negación CIERTA en la oración ("no quedó cerrada", "no está liquidado",
+    // "no te mandé el PDF"): desmentirla sería tachar la verdad y tirar la
+    // información que hace actuar al operador. La doctrina del archivo dice
+    // "se prefiere el segundo error": mejor dejar pasar una mentira que tachar
+    // un mensaje correcto.
+    if (NEGACION.test(oracion) && !AFIRMA_NEGANDO.test(oracion)) continue;
+    for (const r of patrones) {
+      const m = r.exec(oracion);
+      if (!m) continue;
+      // -amos: "cerramos" es pretérito o presente/futuro según el contexto.
+      if (/amos(?!\w)/i.test(m[0]) && FUTURO.test(oracion)) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Sustituye el texto cuando afirma un estado que NO ocurrió.
  *
  * No tacha la frase ni la parchea: cuando el modelo afirma un hecho falso, el
@@ -115,10 +160,10 @@ export interface ResultadoEstado {
  */
 export function guardiaEstado(reply: string, real: EstadoReal): ResultadoEstado {
   const motivos: string[] = [];
-  if (!real.cerro && AFIRMA_CIERRE.some((r) => r.test(reply))) motivos.push('cierre_no_ocurrido');
+  if (!real.cerro && afirmaHechoConsumado(reply, AFIRMA_CIERRE)) motivos.push('cierre_no_ocurrido');
   // `=== false` y no `!real.entrego`: `'pendiente'` es truthy, pero apoyarse en
   // eso dejaría el caso correcto dependiendo de una casualidad del lenguaje.
-  if (real.entrego === false && AFIRMA_ENVIO.some((r) => r.test(reply))) motivos.push('envio_no_ocurrido');
+  if (real.entrego === false && afirmaHechoConsumado(reply, AFIRMA_ENVIO)) motivos.push('envio_no_ocurrido');
   if (motivos.length === 0) return { reply, forzado: false, motivos: [] };
 
   // EL TEXTO TIENE QUE CORRESPONDER AL MOTIVO. Había uno solo para los dos, así
