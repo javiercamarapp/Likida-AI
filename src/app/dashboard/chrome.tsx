@@ -47,9 +47,19 @@ export default function DashboardChrome({
         <aside className={MARCO_SIDEBAR}>
           <div className="px-3 py-3 flex items-center justify-center lg:justify-start gap-1.5">
             <Logo alto="h-[18px]" />
-            <span className="hidden lg:inline text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
-              {ROL_BADGE[rol] ?? rol.toUpperCase()}
-            </span>
+            {/* La insignia usa el rol REAL de la sesión, no el previsualizado.
+                Para un superadmin eso significa que el panel que se presenta
+                como "el de Transportes Innovativos" lleva SUPERADMIN escrito
+                junto al logo durante todo el demo — y con `?rol=encargado` se
+                contradice con la cinta que dice "estás viendo como Jefe de
+                tráfico". Se esconde solo en ese caso: para los roles reales
+                (flota_admin, contador, encargado) la insignia sí dice la
+                verdad y se queda, porque ahí sirve. */}
+            {rol !== 'superadmin' && (
+              <span className="hidden lg:inline text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
+                {ROL_BADGE[rol] ?? rol.toUpperCase()}
+              </span>
+            )}
           </div>
 
           <nav className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">

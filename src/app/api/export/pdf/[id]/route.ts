@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
-import { getSessionTenant } from '@/lib/auth/session';
+import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -29,9 +29,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return new NextResponse('Demasiadas peticiones', { status: 429 });
   }
 
-  const s = await getSessionTenant();
-  if (!s || !s.tenantId) return new NextResponse('No autorizado', { status: 401 });
-  const tenantId = s.tenantId;
+  // `getSessionTenant()` a secas le devolvía 401 al SUPERADMIN: su
+  // `app_user.tenant_id` es `null` por diseño (0001), y el fallback a la flota
+  // demo vivía solo en `guard.ts`, que una API no puede usar porque redirige.
+  // En pantalla eso era apretar "Descargar PDF" y abrir una pestaña en blanco
+  // que dice "No autorizado" — el minuto 4 del guion del demo.
+  const t = await resolverTenantApi(req.url);
+  if (!t.ok) return new NextResponse(t.motivo, { status: t.status });
+  const tenantId = t.tenantId;
 
   const { id } = await params;
   const admin = supabaseAdmin();
