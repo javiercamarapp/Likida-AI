@@ -3104,3 +3104,45 @@ begin
   raise exception E'RLS_0079  update-operador=% update-app_user=% insert-bitacora=% lee-app_user-ajeno=% admin-inserta-bitacora=%   (esperado 0/0/f/1/t)',
     n_operador_updated, n_self_updated, bitacora_chofer_ok, n_appuser_visibles, bitacora_admin_ok;
 end $$;
+
+-- ── 56. El POD del chofer queda en SU flota (mig. 0081) ─────────────────────
+-- `operador_sube_su_pod` es la única escritura RLS del chofer. Antes solo
+-- verificaba que el viaje fuera suyo; un chofer podía insertar el POD con
+-- tenant_id de OTRA flota y la fila quedaba cruzada. Se siembran dos tenants,
+-- se impersona al chofer del A, y se intenta: POD con el tenant CORRECTO (debe
+-- entrar) y POD con el tenant de B (debe rebotar).
+--
+-- Corrida real esperada:
+--   pod-en-su-flota=t  pod-en-flota-ajena=f
+do $$
+declare
+  v_a uuid; v_b uuid; v_o uuid; v_v uuid; v_u uuid := gen_random_uuid();
+  pod_propio boolean := false; pod_ajeno boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF POD A') returning id into v_a;
+  insert into tenant (nombre) values ('ZZZ VERIF POD B') returning id into v_b;
+  insert into operador (tenant_id, nombre, telefono) values (v_a, 'Chofer POD', '520000009070') returning id into v_o;
+  insert into viaje (tenant_id, operador_id) values (v_a, v_o) returning id into v_v;
+  insert into app_user (id, tenant_id, email, rol, operador_id)
+    values (v_u, v_a, 'zzz-verif-pod@likida.test', 'operador', v_o);
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u)::text, true);
+
+  begin
+    insert into pod (tenant_id, viaje_id, operador_id, estado) values (v_a, v_v, v_o, 'pendiente');
+    pod_propio := true;
+  exception when insufficient_privilege then pod_propio := false;
+  end;
+
+  begin
+    insert into pod (tenant_id, viaje_id, operador_id, estado) values (v_b, v_v, v_o, 'pendiente');
+    pod_ajeno := true;
+  exception when insufficient_privilege then pod_ajeno := false;
+  end;
+
+  reset role;
+  delete from tenant where id in (v_a, v_b);
+  raise exception E'POD_TENANT  pod-en-su-flota=%  pod-en-flota-ajena=%   (esperado true / false — ajeno=true sería la fuga)',
+    pod_propio, pod_ajeno;
+end $$;
