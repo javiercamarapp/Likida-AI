@@ -3,6 +3,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { round2 } from '@/lib/formato';
 import type { DatosIntegral } from './privacidad';
 import { acotada } from './presupuesto';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/cuadra';
@@ -854,7 +855,7 @@ export async function getAcumuladoCombustible(
     throw new Error(`getAcumuladoCombustible: solo se leyeron ${leidas} de ${esperadas} cargas del ejercicio ${ejercicio}`);
   }
 
-  return { efectivo: Math.round(efectivo * 100) / 100, totalCombustible: Math.round(totalCombustible * 100) / 100 };
+  return { efectivo: round2(efectivo), totalCombustible: round2(totalCombustible) };
 }
 
 /**
