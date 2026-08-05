@@ -8,14 +8,23 @@
 # Luego:  bash scripts/deploy-vercel.sh
 #
 # Empuja TODAS las variables de .env.local a Vercel (production + preview),
-# saltando las vacías (p. ej. WHATSAPP_* si aún no tienes las creds de Meta) y
-# NEXT_PUBLIC_APP_URL (se fija al dominio real, no a localhost).
+# saltando las vacías (p. ej. WHATSAPP_* si aún no tienes las creds de Meta),
+# NEXT_PUBLIC_APP_URL (se fija al dominio CANÓNICO https://app.likida.ai, no a
+# la URL efímera del deployment — ver CLAUDE.md: la cookie de Supabase Auth se
+# escribe en el dominio que esta variable diga, y un subdominio aleatorio deja
+# a nadie con sesión) y las dos del passcode muerto (DASHBOARD_PASSCODE /
+# DASHBOARD_SECRET, borradas con /acceso el 5-ago: empujarlas las perpetuaría).
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 command -v vercel >/dev/null || { echo "❌ Falta Vercel CLI:  npm i -g vercel"; exit 1; }
 [ -f .env.local ] || { echo "❌ Falta .env.local"; exit 1; }
+
+# AUDITORÍA 12, MEDIO (operabilidad): el dominio CANÓNICO, no $url del deploy.
+# DEPLOY.md lo documenta y el script lo violaba: horneaba el subdominio efímero
+# en el bundle del cliente y el login quedaba fuera de la cuenta sin un error.
+APP_URL_PRODUCCION='https://app.likida.ai'
 
 echo "▸ Vinculando el proyecto (crea 'likida' si no existe)…"
 vercel link
@@ -35,7 +44,9 @@ while IFS= read -r line || [ -n "$line" ]; do
   val="${line#*=}"
   val="${val%%#*}"                                   # quita comentario inline
   val="$(printf '%s' "$val" | sed 's/[[:space:]]*$//')"  # quita espacios finales
-  [ "$name" = "NEXT_PUBLIC_APP_URL" ] && continue    # se fija al dominio real abajo
+  [ "$name" = "NEXT_PUBLIC_APP_URL" ] && continue     # se fija al dominio canónico abajo
+  [ "$name" = "DASHBOARD_PASSCODE" ] && continue      # muerto (passcode borrado 5-ago)
+  [ "$name" = "DASHBOARD_SECRET" ] && continue        # muerto (passcode borrado 5-ago)
   push_env "$name" "$val" production
   push_env "$name" "$val" preview
 done < .env.local
@@ -44,9 +55,9 @@ echo "▸ Deploy a producción…"
 url="$(vercel --prod --yes)"
 echo "✅ Desplegado: $url"
 
-echo "▸ Fijando NEXT_PUBLIC_APP_URL=$url …"
+echo "▸ Fijando NEXT_PUBLIC_APP_URL=$APP_URL_PRODUCCION …"
 vercel env rm NEXT_PUBLIC_APP_URL production -y >/dev/null 2>&1 || true
-printf '%s' "$url" | vercel env add NEXT_PUBLIC_APP_URL production >/dev/null
+printf '%s' "$APP_URL_PRODUCCION" | vercel env add NEXT_PUBLIC_APP_URL production >/dev/null
 echo "  ✓ (redeploy para que tome el valor:  vercel --prod --yes)"
 
 cat <<EOF
