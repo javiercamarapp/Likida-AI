@@ -1,16 +1,37 @@
-import { Fuel, Route as RouteIcon, Receipt, Copy, FileStack } from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
+import { Fuel, Route as RouteIcon, Receipt, Copy, FileStack, CircleCheck } from 'lucide-react';
 import {
   getGastoPorConcepto, getAcreditables, detectarAnomalias, getDocumentos, getConciliacionConsolidado,
+  getLineasPorConciliar,
   type GastoPorConcepto, type Acreditables, type Anomalia, type DocumentoRow, type ConciliacionConsolidado,
+  type LineaPorConciliar,
 } from '@/lib/cuadra/analytics';
+import { resolverLineaAMano, type ResolucionLineaManual } from '@/lib/cuadra/intake/consolidado';
 import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { KpiTile, EstadoVacio, ChartCard } from '../../admin/ui/kit';
+import { requireSessionTenant } from '@/lib/auth/guard';
+import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { KpiTile, EstadoVacio, ChartCard, StatusPill } from '../../admin/ui/kit';
 import { HBars } from '../../admin/ui/graficas';
 import { Dona } from '../../admin/charts';
+import { sufijoTenant } from '../sufijo';
+import { LineasPorConciliar, NINGUNO_VALOR } from './vista-consolidado';
 
 export const dynamic = 'force-dynamic';
+
+/** Los mensajes de `ResultadoResolverLinea.motivo` en lenguaje de contador —
+ *  ninguno de los cinco es genérico: cada uno le dice a la persona que acaba
+ *  de hacer clic exactamente por qué su clic no cerró la línea. */
+const MOTIVO_ERROR: Record<string, string> = {
+  linea_no_encontrada: 'Esa línea ya no existe.',
+  ya_resuelta: 'Alguien más ya la resolvió — revisa el estado actual.',
+  candidato_no_ofrecido: 'Ese candidato no es uno de los que el sistema ofreció.',
+  gasto_ya_no_disponible: 'El gasto elegido ya quedó ligado a otra línea mientras revisabas.',
+  error_bd: 'No se pudo guardar — intenta de nuevo.',
+};
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try { return await fn(); } catch { return null; }
@@ -47,27 +68,73 @@ async function safeConciliacion(tenantId: string): Promise<{ ok: true; datos: Co
  * por el que ya llega cualquier otro CFDI, separa sus líneas y las liga por
  * fecha+monto contra los tickets que el operador ya fotografió — o las deja
  * en una cola para que un contador las revise, cuando el match no es único.
- * `getConciliacionConsolidado` es ese resumen. Lo que SIGUE sin existir: una
- * conexión directa al portal del monedero/TAG que traiga el CFDI sola —hoy
- * depende de que alguien en la flota lo reenvíe— y, para las líneas que NO
- * traen ECC12 (TAG sin ese complemento), el estándar del CFDI no da fecha por
- * transacción, así que esas quedan en la cola casi siempre (ver `cfdi_xml.ts`).
+ * `getConciliacionConsolidado` es ese resumen. Lo que SÍ EXISTE desde esta
+ * ronda (5-ago-2026, el otro lado del mismo hallazgo): la sección de abajo
+ * donde un contador/dueño resuelve a mano cada línea de la cola —elige el
+ * candidato correcto o declara que ninguno aplica— vía `resolverLineaAMano`.
+ * Lo que SIGUE sin existir: una conexión directa al portal del monedero/TAG
+ * que traiga el CFDI sola —hoy depende de que alguien en la flota lo
+ * reenvíe—, un aviso proactivo (WhatsApp o correo) cuando la cola crece —hoy
+ * hay que abrir este panel para enterarse—, y, para las líneas que NO traen
+ * ECC12 (TAG sin ese complemento), el estándar del CFDI no da fecha por
+ * transacción, así que esas quedan en la cola casi siempre y sin candidato
+ * (ver `cfdi_xml.ts`) — la única resolución posible para ellas es "ninguno
+ * aplica" o esperar a que alguien identifique el viaje por otro medio.
  */
 export default async function CombustibleCasetasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; ok?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId } = await resolverTenantEfectivo('/dashboard/combustible-casetas', sp);
+  const sufijo = sufijoTenant(sp);
 
-  const [porConcepto, acred, anomalias, docs, conciliacion] = await Promise.all([
+  const [porConcepto, acred, anomalias, docs, conciliacion, lineasPendientes] = await Promise.all([
     safe<GastoPorConcepto[]>(() => getGastoPorConcepto(tenantId)),
     safe<Acreditables>(() => getAcreditables(tenantId)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
     safe<DocumentoRow[]>(() => getDocumentos(tenantId, 1000)),
     safeConciliacion(tenantId),
+    safe<LineaPorConciliar[]>(() => getLineasPorConciliar(tenantId)),
   ]);
+
+  /**
+   * A qué tenant escribe la Server Action. Mismo patrón que
+   * `incidencias/page.tsx`: `requireSessionTenant` da la sesión REAL (no la
+   * previsualizada por `resolverTenantEfectivo`, que solo aplica a la
+   * LECTURA de esta página), y se revalida `puedeVerRuta` aquí porque una
+   * Server Action es un endpoint POST alcanzable por su cuenta — el gateo de
+   * la página (arriba) no la protege.
+   */
+  async function tenantYUsuarioDelAction() {
+    const s = await requireSessionTenant('/dashboard/combustible-casetas');
+    if (!puedeVerRuta(s.rol, '/dashboard/combustible-casetas')) {
+      redirect(`/dashboard/combustible-casetas${sufijo}`);
+    }
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', sp.tenant).maybeSingle();
+      if (data) return { tenantId: data.id as string, userId: s.userId };
+    }
+    return { tenantId: s.tenantId, userId: s.userId };
+  }
+
+  async function accionResolverLinea(formData: FormData) {
+    'use server';
+    const { tenantId: t, userId } = await tenantYUsuarioDelAction();
+    const lineaId = String(formData.get('lineaId') ?? '');
+    const eleccion = String(formData.get('eleccion') ?? '');
+    if (!lineaId || !eleccion) redirect(`/dashboard/combustible-casetas${sufijo}`);
+
+    const resolucion: ResolucionLineaManual = eleccion === NINGUNO_VALOR
+      ? { tipo: 'sin_match' }
+      : { tipo: 'ligar', gastoId: eleccion };
+    const r = await resolverLineaAMano(t, lineaId, resolucion, userId);
+
+    revalidatePath('/dashboard/combustible-casetas');
+    const ok = r.ok ? 'resuelta' : `error_${r.motivo ?? 'error_bd'}`;
+    redirect(`/dashboard/combustible-casetas${sufijo ? `${sufijo}&` : '?'}ok=${ok}`);
+  }
 
   const diesel = porConcepto?.find((c) => c.concepto === 'diesel');
   const caseta = porConcepto?.find((c) => c.concepto === 'caseta');
@@ -82,12 +149,18 @@ export default async function CombustibleCasetasPage({
     <div className="flex flex-col gap-4">
       <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
         <Fuel width={16} height={16} strokeWidth={1.75} />
-        <div>
+        <div className="flex-1">
           <span className="text-sm font-medium block">Combustible & Casetas</span>
           <span className="text-xs" style={{ color: 'var(--muted)' }}>
             Los dos conceptos que más pesan en un viaje, y qué tanto están facturados
           </span>
         </div>
+        {sp.ok === 'resuelta' && <StatusPill estado="ok">Línea resuelta</StatusPill>}
+        {sp.ok?.startsWith('error_') && (
+          <StatusPill estado="bad">
+            {MOTIVO_ERROR[sp.ok.slice('error_'.length)] ?? 'No se pudo resolver la línea.'}
+          </StatusPill>
+        )}
       </header>
 
       <div className="glass-panel overflow-hidden">
@@ -183,19 +256,34 @@ export default async function CombustibleCasetasPage({
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-3 mt-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
                 <KpiTile icono={<FileStack width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Líneas ligadas automáticamente" valor={conciliacion.datos.conciliadas} formato="numero"
                   nota={`de ${conciliacion.datos.cfdis} CFDI consolidado${conciliacion.datos.cfdis === 1 ? '' : 's'} recibido${conciliacion.datos.cfdis === 1 ? '' : 's'}`} />
                 <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Por revisar a mano" valor={conciliacion.datos.porConciliar} formato="numero"
-                  nota={conciliacion.datos.porConciliar === 0 ? 'Todo lo que llegó, concilió solo' : 'Sin candidato único por fecha/monto — nadie adivinó'} />
+                  nota={conciliacion.datos.porConciliar === 0 ? 'Todo lo que llegó, concilió solo' : 'Elige el candidato correcto abajo, o marca que ninguno aplica'} />
+                <KpiTile icono={<CircleCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+                  etiqueta="Revisadas, sin gasto que corresponda" valor={conciliacion.datos.sinMatch} formato="numero"
+                  nota="Un humano ya las miró — quedan documentadas, sin viaje" />
               </div>
+
               {conciliacion.datos.porConciliar > 0 && (
-                <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-                  Una línea queda aquí cuando no hubo exactamente un ticket que cuadrara por fecha y monto —cero
-                  candidatos, o más de uno—: se prefiere pedir una revisión a adivinar cuál gasto es.
-                </p>
+                lineasPendientes === null ? (
+                  <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>
+                    No se pudo cargar la lista para resolver a mano — los conteos de arriba sí son reales, pero
+                    la lista con los candidatos de cada línea no cargó. Recarga la página.
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                      Una línea queda aquí cuando no hubo exactamente un ticket que cuadrara por fecha y monto —cero
+                      candidatos, o más de uno—: se prefiere pedir una revisión a adivinar cuál gasto es. Elige el
+                      viaje correcto o marca &ldquo;ninguno de estos&rdquo; para dejarla documentada.
+                    </p>
+                    <LineasPorConciliar lineas={lineasPendientes} accion={accionResolverLinea} />
+                  </>
+                )
               )}
             </>
           )}

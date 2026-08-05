@@ -149,6 +149,38 @@ export interface ResumenConciliacion {
 }
 
 /**
+ * Escribe `cfdi_uuid` + `cfdi_orden` en el `gasto` que gana el match — el
+ * ÚNICO lugar que decide qué significa "ligar" una línea del consolidado a
+ * un gasto. Lo usan los dos caminos: el JOIN automático de
+ * `guardarYConciliarConsolidado` y la resolución a mano de
+ * `resolverLineaAMano`. Dos copias de este `update` habrían sido dos
+ * oportunidades de que una se quedara sin el guardia `.is('cfdi_uuid', null)`
+ * y ligara el mismo comprobante dos veces.
+ *
+ * El guardia existe porque entre "se calculó el candidato" y "se escribe" hay
+ * una ventana: en el camino automático son milisegundos (mismo request); en
+ * el manual pueden ser MINUTOS —lo que tarda un contador en mirar la pantalla
+ * y hacer clic—, tiempo de sobra para que otra línea, u otro humano resolviendo
+ * en paralelo, ya se haya llevado ese mismo gasto. Devuelve `false`, no lanza:
+ * el llamador decide qué hacer con eso (best-effort en el automático, un error
+ * explícito para el humano en el manual).
+ */
+async function ligarLineaAGasto(tenantId: string, cfdiUuid: string, orden: number, gastoId: string): Promise<boolean> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('gasto')
+    .update({ cfdi_uuid: cfdiUuid, cfdi_orden: orden })
+    .eq('id', gastoId)
+    .eq('tenant_id', tenantId)
+    .is('cfdi_uuid', null)
+    .select('id'), 'consolidado.ligar_gasto');
+  if (error) {
+    logger.error('consolidado.ligar_gasto_error', { tenant: tenantId, gasto: gastoId, err: error.message });
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
+/**
  * Guarda el CFDI consolidado, corre el JOIN contra el `gasto` del tenant y
  * deja rastro de las dos cosas: lo que ligó solo y lo que le tocó a un
  * humano. Idempotente por `(tenant_id, cfdi_uuid)` / `(cfdi_xml_id, indice)`:
@@ -226,14 +258,15 @@ export async function guardarYConciliarConsolidado(
 
   for (const r of resultados) {
     if (r.estatus !== 'conciliada' || !r.gastoId) continue;
-    const { error } = await acotada(supabaseAdmin()
-      .from('gasto')
-      .update({ cfdi_uuid: xml.uuid, cfdi_orden: r.linea.indice })
-      .eq('id', r.gastoId)
-      .eq('tenant_id', tenantId), 'consolidado.marcar_gasto');
     // Best-effort por línea: que UNA falle no debe perder el resto del
-    // consolidado ni la fila de auditoría que se escribe abajo.
-    if (error) logger.error('consolidado.marcar_gasto_error', { tenant: tenantId, gasto: r.gastoId, err: error.message });
+    // consolidado ni la fila de auditoría que se escribe abajo. `ligarLineaAGasto`
+    // ya loguea su propio error; un `false` sin error (el guardia negó la fila)
+    // también se registra aquí porque ese caso, en el camino automático, no
+    // debería ocurrir nunca —el candidato salió de una lectura con
+    // `.is('cfdi_uuid', null)` milisegundos antes— y si ocurre es señal de una
+    // carrera real que vale la pena ver en el log.
+    const ligado = await ligarLineaAGasto(tenantId, xml.uuid, r.linea.indice, r.gastoId);
+    if (!ligado) logger.error('consolidado.marcar_gasto_no_disponible', { tenant: tenantId, gasto: r.gastoId });
   }
 
   const filasLinea = resultados.map((r) => ({
@@ -260,6 +293,118 @@ export async function guardarYConciliarConsolidado(
 
   const conciliadas = resultados.filter((r) => r.estatus === 'conciliada').length;
   return { cfdiXmlId, totalLineas: resultados.length, conciliadas, porConciliar: resultados.length - conciliadas };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA RESOLUCIÓN A MANO — el otro lado del hallazgo CRÍTICO de auditoría 10.
+//
+// `guardarYConciliarConsolidado` deja las líneas ambiguas o sin candidato en
+// `cfdi_consolidado_linea` con `estatus = 'por_conciliar'` y sus candidatos
+// en JSON — pero hasta esta ronda no había ninguna función (ni pantalla) que
+// pudiera CERRAR esa línea. Un contador que abría el panel de Combustible &
+// Casetas veía "3 por revisar" y no tenía dónde revisarlas: quedaban ahí para
+// siempre, un contador que no lee árabe leyendo un número que nunca baja.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type ResolucionLineaManual =
+  | { tipo: 'ligar'; gastoId: string }
+  | { tipo: 'sin_match' };
+
+export interface ResultadoResolverLinea {
+  ok: boolean;
+  /** Presente solo cuando `ok === false` — por qué no se pudo cerrar. */
+  motivo?: 'linea_no_encontrada' | 'ya_resuelta' | 'candidato_no_ofrecido' | 'gasto_ya_no_disponible' | 'error_bd';
+}
+
+/**
+ * La resolución A MANO de una línea que el JOIN automático no pudo ligar
+ * sola. Un contador ve LOS MISMOS candidatos que calculó `conciliarLineas`
+ * (columna `candidatos`, JSON — no se vuelve a correr el matcher) y elige
+ * uno —liga la línea al gasto, con EXACTAMENTE el mismo mecanismo que el
+ * camino automático (`ligarLineaAGasto`, no una copia)— o declara que
+ * ninguno corresponde (`estatus = 'sin_match'`, migración 0077), lo que la
+ * saca de la cola sin inventarle un gasto que no tiene.
+ *
+ * SOLO SE PUEDE ELEGIR UN CANDIDATO QUE EL JOIN AUTOMÁTICO YA OFRECIÓ (la
+ * propia columna `candidatos` de la línea): esta función no es un buscador
+ * libre de gastos. Es una decisión de diseño, no un descuido — un buscador
+ * libre necesitaría su propia UI de búsqueda y su propia superficie de
+ * error, y el caso real (0, 2 o 3 candidatos por ambigüedad de fecha/monto)
+ * no lo pide. Si el gasto correcto NUNCA apareció como candidato —porque
+ * cayó fuera de la ventana de fecha del JOIN (`VENTANA_DIAS_FECHA`)— hoy no
+ * hay forma de ligarlo desde este panel; se documenta como límite conocido
+ * en `docs/auditoria-10/fiscal.md`, no se resuelve aquí.
+ *
+ * Vuelve a comprobar `estatus === 'por_conciliar'` antes de escribir, con el
+ * mismo `estatus = 'por_conciliar'` repetido en el `WHERE` del UPDATE: dos
+ * personas mirando el mismo panel al mismo tiempo (o un humano resolviendo
+ * mientras un reenvío de WhatsApp corre el JOIN automático otra vez) no
+ * pueden cerrar la misma línea dos veces — la segunda escritura no encuentra
+ * fila que actualizar y vuelve `ya_resuelta`, no un éxito silencioso que
+ * pisa al primero.
+ */
+export async function resolverLineaAMano(
+  tenantId: string,
+  lineaId: string,
+  resolucion: ResolucionLineaManual,
+  resueltoPor: string,
+): Promise<ResultadoResolverLinea> {
+  const { data: fila, error: errFila } = await acotada(supabaseAdmin()
+    .from('cfdi_consolidado_linea')
+    .select('id, cfdi_xml_id, indice, estatus, candidatos')
+    .eq('id', lineaId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle(), 'consolidado.leer_linea');
+  if (errFila) return { ok: false, motivo: 'error_bd' };
+  if (!fila) return { ok: false, motivo: 'linea_no_encontrada' };
+  if (fila.estatus !== 'por_conciliar') return { ok: false, motivo: 'ya_resuelta' };
+
+  if (resolucion.tipo === 'sin_match') {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('cfdi_consolidado_linea')
+      .update({ estatus: 'sin_match', resuelto_por: resueltoPor, resuelto_en: new Date().toISOString() })
+      .eq('id', lineaId).eq('tenant_id', tenantId).eq('estatus', 'por_conciliar')
+      .select('id'), 'consolidado.marcar_sin_match');
+    if (error) return { ok: false, motivo: 'error_bd' };
+    if (!data || data.length === 0) return { ok: false, motivo: 'ya_resuelta' };
+    return { ok: true };
+  }
+
+  // tipo === 'ligar' — el candidato tiene que ser uno de los que ya se ofrecieron.
+  const candidatos = (fila.candidatos as CandidatoConciliacion[] | null) ?? [];
+  const elegido = candidatos.find((c) => c.gastoId === resolucion.gastoId);
+  if (!elegido) return { ok: false, motivo: 'candidato_no_ofrecido' };
+
+  const { data: filaXml, error: errXml } = await acotada(supabaseAdmin()
+    .from('cfdi_xml')
+    .select('cfdi_uuid')
+    .eq('id', fila.cfdi_xml_id as string)
+    .eq('tenant_id', tenantId)
+    .maybeSingle(), 'consolidado.leer_cfdi_xml');
+  if (errXml || !filaXml?.cfdi_uuid) return { ok: false, motivo: 'error_bd' };
+
+  const ligado = await ligarLineaAGasto(tenantId, filaXml.cfdi_uuid as string, fila.indice as number, resolucion.gastoId);
+  if (!ligado) return { ok: false, motivo: 'gasto_ya_no_disponible' };
+
+  const { data: actualizado, error: errUpdate } = await acotada(supabaseAdmin()
+    .from('cfdi_consolidado_linea')
+    .update({ estatus: 'conciliada', gasto_id: resolucion.gastoId, resuelto_por: resueltoPor, resuelto_en: new Date().toISOString() })
+    .eq('id', lineaId).eq('tenant_id', tenantId).eq('estatus', 'por_conciliar')
+    .select('id'), 'consolidado.marcar_conciliada_a_mano');
+  if (errUpdate) {
+    // El gasto YA quedó ligado (paso anterior) pero la línea no se pudo
+    // marcar — inconsistencia rara (carrera) que se deja en el log en vez de
+    // deshacer el `update` del gasto: revertirlo sin saber por qué falló el
+    // segundo `update` podría desligar un gasto que otra línea ya reclamó
+    // mientras tanto. Se documenta, no se adivina.
+    logger.error('consolidado.marcar_conciliada_a_mano_error', { tenant: tenantId, linea: lineaId, gasto: resolucion.gastoId, err: errUpdate.message });
+    return { ok: false, motivo: 'error_bd' };
+  }
+  if (!actualizado || actualizado.length === 0) {
+    logger.error('consolidado.marcar_conciliada_a_mano_carrera', { tenant: tenantId, linea: lineaId, gasto: resolucion.gastoId });
+    return { ok: false, motivo: 'ya_resuelta' };
+  }
+  return { ok: true };
 }
 
 /**

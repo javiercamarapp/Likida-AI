@@ -897,6 +897,11 @@ export function derivoLaConfig(
 export interface ConciliacionConsolidado {
   conciliadas: number;
   porConciliar: number;
+  /** Un humano ya la miró y ningún gasto capturado le correspondía —
+   *  `estatus = 'sin_match'` (migración 0077). Documentada, cerrada, y NO
+   *  cuenta como `porConciliar`: contarla ahí haría que "revisar a mano" no
+   *  bajara nunca aunque el contador sí estuviera resolviendo la cola. */
+  sinMatch: number;
   /** Cuántos CFDI consolidados distintos aportaron esas líneas — un contador
    *  que ve "12 pendientes" quiere saber si es un XML grande o varios chicos. */
   cfdis: number;
@@ -905,8 +910,9 @@ export interface ConciliacionConsolidado {
 /**
  * Resumen de `cfdi_consolidado_linea` (auditoría 10, `intake/consolidado.ts`)
  * para la pantalla de Combustible & Casetas: cuánto del diésel-por-monedero y
- * peaje-por-TAG que YA llegó por WhatsApp quedó ligado solo contra el JOIN, y
- * cuánto le toca revisar a un humano.
+ * peaje-por-TAG que YA llegó por WhatsApp quedó ligado solo contra el JOIN,
+ * cuánto le toca revisar a un humano, y cuánto un humano ya revisó sin
+ * encontrarle gasto (`resolverLineaAMano`, `intake/consolidado.ts`).
  *
  * `null` si el tenant nunca ha mandado un consolidado — no es lo mismo que
  * "0 pendientes": la pantalla debe distinguir "no hay nada que mostrar" de
@@ -920,6 +926,113 @@ export async function getConciliacionConsolidado(tenantId: string): Promise<Conc
   );
   if (filas.length === 0) return null;
   const conciliadas = filas.filter((f) => f.estatus === 'conciliada').length;
+  const sinMatch = filas.filter((f) => f.estatus === 'sin_match').length;
   const cfdis = new Set(filas.map((f) => f.cfdi_xml_id as string)).size;
-  return { conciliadas, porConciliar: filas.length - conciliadas, cfdis };
+  return { conciliadas, porConciliar: filas.length - conciliadas - sinMatch, sinMatch, cfdis };
+}
+
+export interface CandidatoLineaConsolidado {
+  gastoId: string;
+  monto: number;
+  fecha: string | null;
+  /** Folio del viaje al que pertenece ese gasto candidato — `null` cuando el
+   *  gasto ya no existe (borrado) o su viaje no tiene folio capturado. La
+   *  pantalla lo enseña para que un contador reconozca el viaje sin tener
+   *  que abrir cada gasto ("viaje VJ-104", no un UUID). */
+  viajeFolio: string | null;
+}
+
+export interface LineaPorConciliar {
+  id: string;
+  /** El folio fiscal del CFDI consolidado del que salió esta línea. */
+  cfdiUuid: string | null;
+  /** 1-based, el orden en que apareció en el XML (mig. 0076). */
+  indice: number;
+  fuente: 'ecc12' | 'concepto_base';
+  fecha: string | null;
+  monto: number;
+  descripcion: string | null;
+  estacionRfc: string | null;
+  folioOperacion: string | null;
+  candidatos: CandidatoLineaConsolidado[];
+}
+
+/**
+ * La cola real: las líneas de `cfdi_consolidado_linea` que el JOIN automático
+ * (`guardarYConciliarConsolidado`) NO pudo ligar solo, enriquecidas con lo que
+ * un humano necesita para decidir — el folio fiscal del CFDI y, por cada
+ * candidato, el folio del VIAJE al que pertenece (la columna `candidatos` solo
+ * guarda `gastoId`/`monto`/`fecha`; el folio se resuelve aquí con dos
+ * consultas más, no se duplica en la tabla).
+ *
+ * `resolverLineaAMano` (`intake/consolidado.ts`) es quien cierra cada línea
+ * que esta función lista.
+ */
+export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorConciliar[]> {
+  const filas = await traerTodo<{
+    id: unknown; cfdi_xml_id: unknown; indice: unknown; fuente: unknown; fecha: unknown;
+    monto: unknown; descripcion: unknown; estacion_rfc: unknown; folio_operacion: unknown;
+    candidatos: unknown;
+  }>(
+    (desde, hasta) => supabaseAdmin().from('cfdi_consolidado_linea')
+      .select('id, cfdi_xml_id, indice, fuente, fecha, monto, descripcion, estacion_rfc, folio_operacion, candidatos', conteo(desde))
+      .eq('tenant_id', tenantId).eq('estatus', 'por_conciliar')
+      .order('created_at').order('id').range(desde, hasta),
+    'getLineasPorConciliar',
+  );
+  if (filas.length === 0) return [];
+
+  type CandidatoCrudo = { gastoId: string; monto: number; fecha: string | null };
+  const candidatosPorFila = filas.map((f) => (f.candidatos as CandidatoCrudo[] | null) ?? []);
+
+  const cfdiXmlIds = [...new Set(filas.map((f) => f.cfdi_xml_id as string))];
+  const gastoIds = [...new Set(candidatosPorFila.flat().map((c) => c.gastoId))];
+
+  const resXml = await supabaseAdmin().from('cfdi_xml').select('id, cfdi_uuid')
+    .eq('tenant_id', tenantId).in('id', cfdiXmlIds);
+  const filasXml = exigir(resXml, 'getLineasPorConciliar.cfdi_xml') ?? [];
+  const uuidPorXmlId = new Map(filasXml.map((r) => [r.id as string, (r.cfdi_uuid as string) || null]));
+
+  // Los candidatos ya no existen como filas "disponibles" — pueden estar
+  // ligados a OTRA línea desde entonces — así que aquí solo se pide su
+  // `viaje_id` para el folio; monto y fecha se enseñan del JSON guardado
+  // (lo que el JOIN vio en su momento, no lo que el gasto diga hoy).
+  let folioPorGastoId = new Map<string, string | null>();
+  if (gastoIds.length > 0) {
+    const resGasto = await supabaseAdmin().from('gasto').select('id, viaje_id')
+      .eq('tenant_id', tenantId).in('id', gastoIds);
+    const filasGasto = exigir(resGasto, 'getLineasPorConciliar.gasto') ?? [];
+    const viajeIdPorGasto = new Map(filasGasto.map((g) => [g.id as string, (g.viaje_id as string) || null]));
+
+    const viajeIds = [...new Set(filasGasto.map((g) => g.viaje_id as string).filter((v): v is string => !!v))];
+    let folioPorViajeId = new Map<string, string | null>();
+    if (viajeIds.length > 0) {
+      const resViaje = await supabaseAdmin().from('viaje').select('id, folio')
+        .eq('tenant_id', tenantId).in('id', viajeIds);
+      const filasViaje = exigir(resViaje, 'getLineasPorConciliar.viaje') ?? [];
+      folioPorViajeId = new Map(filasViaje.map((v) => [v.id as string, (v.folio as string) || null]));
+    }
+    folioPorGastoId = new Map(gastoIds.map((gid) => {
+      const viajeId = viajeIdPorGasto.get(gid);
+      return [gid, viajeId ? (folioPorViajeId.get(viajeId) ?? null) : null];
+    }));
+  }
+
+  return filas.map((f, i) => ({
+    id: f.id as string,
+    cfdiUuid: uuidPorXmlId.get(f.cfdi_xml_id as string) ?? null,
+    indice: Number(f.indice),
+    fuente: f.fuente as 'ecc12' | 'concepto_base',
+    fecha: (f.fecha as string) || null,
+    monto: Number(f.monto),
+    descripcion: (f.descripcion as string) || null,
+    estacionRfc: (f.estacion_rfc as string) || null,
+    folioOperacion: (f.folio_operacion as string) || null,
+    candidatos: candidatosPorFila[i].map((c) => ({
+      gastoId: c.gastoId,
+      monto: Number(c.monto),
+      fecha: c.fecha ?? null,
+      viajeFolio: folioPorGastoId.get(c.gastoId) ?? null,
+    })),
+  }));
 }
