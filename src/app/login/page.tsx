@@ -12,11 +12,14 @@ function siteUrl(): string {
 }
 
 /**
- * Mismo límite por IP que el passcode que este login reemplaza (10 / 5 min,
- * `app/acceso/page.tsx`): quitarlo al cambiar de mecanismo habría sido una
- * regresión. Aquí pesa MÁS que allá — cada intento del camino de email manda
- * un correo real por el SMTP de Supabase, que tiene cuota diaria: quemarla
- * deja el panel sin la única vía de entrada que hoy funciona.
+ * Mismo límite por IP que traía el passcode compartido que este login
+ * reemplazó (10 / 5 min; la ruta `/acceso` y `auth/passcode.ts` se borraron
+ * el 5-ago-2026, ver auditoría 10 seguridad — llevaban desde que este login
+ * los reemplazó sin ningún llamador real): quitar el límite al cambiar de
+ * mecanismo habría sido una regresión. Aquí pesa MÁS que allá — cada intento
+ * del camino de email manda un correo real por el SMTP de Supabase, que
+ * tiene cuota diaria: quemarla deja el panel sin la única vía de entrada que
+ * hoy funciona.
  */
 async function dentroDelLimite(llave: string): Promise<boolean> {
   const h = await headers();

@@ -6,14 +6,17 @@
 //
 //  · NO es un límite global. `buckets` vive en el proceso. En Vercel cada
 //    instancia concurrente arranca con el suyo vacío, así que el techo real de
-//    `acceso:` no es 10 intentos / 5 min: es 10 × (instancias que el atacante
+//    `login:` no es 10 intentos / 5 min: es 10 × (instancias que el atacante
 //    consiga abrir en paralelo). Contra fuerza bruta distribuida esto ESTORBA,
-//    no cierra. Lo que cierra es que el passcode no sea adivinable, y eso se
-//    exige en `auth/passcode.ts`, no aquí.
+//    no cierra. Lo que cierra el acceso al panel es Supabase Auth (magic link
+//    / OAuth), no este límite — aquí solo se protege la cuota de correo del
+//    SMTP.
 //    Para un límite de verdad hace falta un backend compartido (Upstash, ya en
 //    `.env`), y eso obliga a que `rateLimit` sea `async` — hoy no puede serlo
-//    porque `src/app/acceso/page.tsx:20` la llama en un `if` síncrono y un
-//    `Promise` ahí es siempre truthy: el límite quedaría apagado en silencio.
+//    porque varios llamadores (`login/page.tsx:24`,
+//    `api/webhook/whatsapp/route.ts:145`, las rutas de export) la usan en un
+//    `if` síncrono y un `Promise` ahí es siempre truthy: el límite quedaría
+//    apagado en silencio.
 //
 //  · El CAP DE BODY mira SOLO `content-length`. Una petición sin esa cabecera
 //    (`Transfer-Encoding: chunked`) devuelve `false` = "cabe". Ver la nota de

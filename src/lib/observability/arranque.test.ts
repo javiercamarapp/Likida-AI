@@ -20,7 +20,6 @@ afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 function ponerTodo() {
   vi.stubEnv('VERCEL_ENV', 'production');
   vi.stubEnv('DEMO_TENANT_ID', '11111111-1111-1111-1111-111111111111');
-  vi.stubEnv('DASHBOARD_PASSCODE', 'algo');
   vi.stubEnv('CUADRA_WHATSAPP_MSG_USD', '0.008');
   vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://likidaai.vercel.app');
 }
@@ -54,17 +53,6 @@ describe('avisarConfiguracionSilenciosa', () => {
     const linea = spy.mock.calls.map((c) => String(c[0])).join('\n');
     expect(linea).toContain('startup.config_silenciosa');
     expect(linea).toContain('NEXT_PUBLIC_APP_URL');
-  });
-
-  it('grita cuando falta DASHBOARD_PASSCODE: el panel queda abierto', async () => {
-    ponerTodo();
-    vi.stubEnv('DASHBOARD_PASSCODE', '');
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { avisarConfiguracionSilenciosa } = await import('./arranque');
-
-    avisarConfiguracionSilenciosa();
-
-    expect(spy.mock.calls.map((c) => String(c[0])).join('\n')).toContain('DASHBOARD_PASSCODE');
   });
 
   it('con todo puesto deja constancia y no alarma', async () => {
