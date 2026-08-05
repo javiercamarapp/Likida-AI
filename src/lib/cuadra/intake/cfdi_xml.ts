@@ -9,6 +9,43 @@
 // "Complemento Concepto para la facturación de Hidrocarburos y Petrolíferos",
 // vigente 24-abr-2026 (regla 2.7.1.48 RMF; CFF 29 y 29-A). La DECISIÓN de
 // deducibilidad la toma el motor determinístico, no este parser.
+//
+// ═══ AUDITORÍA 10, CRÍTICO FISCAL — LÍNEAS DE UN CONSOLIDADO ══════════════
+//
+// Diésel por monedero (Edenred, Efectivale…) y peaje por TAG (IAVE, PASE,
+// TeleVía) son ~54% del gasto real de una flota (INEGI EAT 2024) y llegan
+// como UN SOLO CFDI que ampara MUCHAS transacciones de MUCHOS días — no un
+// ticket por transacción. Hasta hoy este parser asumía 1 CFDI = 1 concepto
+// "representativo" (`claveProdServ`/`complementoHidrocarburos` de arriba), que
+// es correcto para un ticket suelto pero tira al piso la granularidad de un
+// consolidado.
+//
+// `lineas` la agrega SIN inventar lo que el estándar no da. Dos fuentes reales,
+// verificadas contra el XSD oficial y guías técnicas de PAC (5-ago-2026), NO
+// contra memoria:
+//
+//   1. ECC12 ("Estado de Cuenta de Combustibles", monedero electrónico) — vive
+//      en `cfdi:Comprobante/cfdi:Complemento/ecc12:EstadoDeCuentaCombustible`
+//      (HERMANO del Timbre, NO dentro de un Concepto). Cada
+//      `ecc12:ConceptoEstadoDeCuentaCombustible` SÍ trae `Fecha` (dateTime real
+//      de la compra), `Rfc` (el de la gasolinera real, distinto del emisor —que
+//      es el monedero—), `ClaveEstacion`, `Importe` y `FolioOperacion`. Aquí la
+//      granularidad por transacción EXISTE en el estándar, completa.
+//
+//   2. Sin ECC12, con VARIOS `cfdi:Concepto` base (típico de una factura de TAG
+//      que agrupa varias casetas en un mismo CFDI, o de un CFDI con "quiero un
+//      CFDI por código" desactivado): cada Concepto trae su propio `Importe` y
+//      `Descripcion`, pero el estándar CFDI 4.0 **NO declara una fecha por
+//      concepto** — solo hay una `Fecha` a nivel comprobante, la de EMISIÓN del
+//      documento entero. No se intenta adivinar la fecha de una caseta leyendo
+//      texto libre de `Descripcion`: el formato de esa descripción lo decide
+//      cada emisor y no hay catálogo del SAT que lo estandarice. `linea.fecha`
+//      queda `undefined` a propósito — es la limitación real, no una que este
+//      código deba disimular.
+//
+// Quien concilia estas líneas contra `gasto` (JOIN, no adivinanza) vive en
+// `intake/consolidado.ts`, que respeta la ausencia de fecha: sin fecha, nunca
+// intenta un match automático.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { XMLParser } from 'fast-xml-parser';
@@ -17,6 +54,31 @@ export interface CfdiConceptoXml {
   claveProdServ?: string;
   claveUnidad?: string;
   complemento: boolean; // el concepto trae hidrocarburosPetroliferos
+}
+
+/** De dónde salió una línea de un consolidado — ver el bloque de arriba. */
+export type FuenteLineaCfdi = 'ecc12' | 'concepto_base';
+
+/**
+ * Una transacción dentro de un CFDI consolidado. `indice` es 1-based y es el
+ * orden en que aparece en el XML — es lo que se vuelve `gasto.cfdi_orden`
+ * (migración 0065) cuando la línea concilia contra un gasto real.
+ */
+export interface CfdiLineaXml {
+  indice: number;
+  fuente: FuenteLineaCfdi;
+  /** ISO. SOLO presente cuando `fuente === 'ecc12'`: el estándar no da fecha
+   *  por concepto base (ver el comentario del archivo). */
+  fecha?: string;
+  monto: number;
+  descripcion?: string;
+  /** ecc12 únicamente: RFC de la gasolinera REAL (no el del monedero, que es
+   *  el emisor del CFDI completo). */
+  estacionRfc?: string;
+  estacionClave?: string;
+  /** ecc12 únicamente: folio de ESA operación individual (no del CFDI). */
+  folioOperacion?: string;
+  cantidad?: number;
 }
 
 export interface CfdiXmlData {
@@ -39,6 +101,20 @@ export interface CfdiXmlData {
   // Esquema ALTERNO (monedero electrónico ECC o Carta Porte): la regla 2.7.1.48
   // NO aplica a estos; el motor NO debe declararlos no deducibles por complemento.
   esquemaAlterno: boolean;
+  /** Transacciones del consolidado (ver bloque de arriba). `[]` en un CFDI
+   *  normal de un solo concepto — ese caso lo sigue cubriendo `total`/`fecha`
+   *  de arriba, sin necesidad de esta lista. */
+  lineas: CfdiLineaXml[];
+}
+
+/** ¿Este CFDI ampara MÁS de una transacción? Único criterio: `lineas.length >
+ *  1` — objetivo y barato, sin tocar la base. `false` en un CFDI normal aunque
+ *  traiga 2+ `Concepto` de UN SOLO consumo (p.ej. producto + IEPS desglosado
+ *  en conceptos separados es raro pero posible); ese caso lo sigue resolviendo
+ *  el camino de ticket 1:1 existente, y forzarlo por la cola de conciliación
+ *  sería más trabajo humano, no menos. */
+export function esConsolidado(xml: Pick<CfdiXmlData, 'lineas'>): boolean {
+  return xml.lineas.length > 1;
 }
 
 // Familia SAT de petrolíferos (pista del parser para elegir el concepto de
@@ -138,6 +214,43 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       return Number.isNaN(n) ? undefined : n;
     };
 
+    // ── LÍNEAS DEL CONSOLIDADO (auditoría 10) ─────────────────────────────
+    // ECC12: `EstadoDeCuentaCombustible` es HERMANO del Timbre dentro de
+    // `Complemento` — no vive dentro de un `Concepto`. Ver el bloque de
+    // arriba del archivo para la cita de dónde salió esta estructura.
+    const eccNode = toArr(complemento.EstadoDeCuentaCombustible as Record<string, unknown>[] | undefined)[0]
+      ?? (complemento.EstadoDeCuentaCombustible as Record<string, unknown> | undefined);
+    const eccConceptosRaw = toArr(
+      (eccNode?.Conceptos as Record<string, unknown> | undefined)?.ConceptoEstadoDeCuentaCombustible as Record<string, unknown>[] | undefined,
+    );
+    const lineasEcc: CfdiLineaXml[] = eccConceptosRaw.map((c, i) => ({
+      indice: i + 1,
+      fuente: 'ecc12',
+      fecha: (c['@_Fecha'] as string) || undefined,
+      monto: num(c['@_Importe']) ?? 0,
+      descripcion: (c['@_NombreCombustible'] as string) || undefined,
+      estacionRfc: (c['@_Rfc'] as string)?.toUpperCase() || undefined,
+      estacionClave: (c['@_ClaveEstacion'] as string) || undefined,
+      folioOperacion: (c['@_FolioOperacion'] as string) || undefined,
+      cantidad: num(c['@_Cantidad']),
+    }));
+
+    // Sin ECC12: si hay VARIOS Concepto base, cada uno es su propia línea —
+    // pero SIN fecha (el estándar no la da a ese nivel; ver el comentario
+    // grande de arriba). Con un solo Concepto no hace falta esta lista: el
+    // camino de ticket 1:1 ya cubre ese caso con `total`/`fecha` de arriba.
+    const lineasConceptoBase: CfdiLineaXml[] = conceptosRaw.length > 1
+      ? conceptosRaw.map((c, i) => ({
+          indice: i + 1,
+          fuente: 'concepto_base' as const,
+          monto: num(c['@_Importe']) ?? 0,
+          descripcion: (c['@_Descripcion'] as string) || undefined,
+          cantidad: num(c['@_Cantidad']),
+        }))
+      : [];
+
+    const lineas: CfdiLineaXml[] = lineasEcc.length > 0 ? lineasEcc : lineasConceptoBase;
+
     // Impuestos trasladados a nivel comprobante: 002=IVA, 003=IEPS.
     const impuestos = (comp.Impuestos ?? {}) as Record<string, unknown>;
     const traslados = toArr(
@@ -169,6 +282,7 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       claveUnidad: rep?.claveUnidad,
       complementoHidrocarburos: rep?.complemento ?? false,
       esquemaAlterno,
+      lineas,
     };
   } catch {
     return null;
