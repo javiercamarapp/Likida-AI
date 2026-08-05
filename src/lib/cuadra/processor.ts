@@ -50,6 +50,7 @@ import {
   loadConversation, saveConversation, claimMessage,
   acquireViajeLock, releaseViajeLock, releaseMessageClaim,
   intakeDelta, esperarIntake, ConsultaFallida, OperadorAmbiguo, type ConvTurn,
+  buscarTenantPorTelefono,
 } from '@/lib/cuadra/conv';
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/cuadra/costos';
 import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText } from '@/lib/meta/client';
@@ -142,7 +143,7 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
  * Nunca lanza: dejar sin respuesta a quien ejerce un derecho es peor que
  * cualquier fallo que se pueda registrar.
  */
-async function atenderPrivacidad(tenantId: string, operadorId: string, telefono: string, texto: string): Promise<void> {
+async function atenderPrivacidad(tenantId: string, operadorId: string | null, telefono: string, texto: string): Promise<void> {
   try {
     const datos = await getDatosResponsable(tenantId);
     if (datos) {
@@ -359,6 +360,27 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
   let ctxViaje: string | null = null;
   let ctxCerro = false;
   try {
+    // ── EL MEDIO ARCO RESPONDE SIEMPRE, incluso a quien YA no es operador ──
+    // AUDITORÍA 12, MEDIO (legal): el chequeo vivía dentro de `if (op)`, así
+    // que un operador DADO DE BAJA (activo=false — la única forma de inactivar
+    // del panel) escribía PRIVACIDAD y recibía "no te tengo registrado". La
+    // población más probable de ejercer cancelación/oposición es exactamente
+    // la que el canal rechazaba. El tenant se busca por teléfono SIN el filtro
+    // de activo, o por cuenta de oficina; sin ninguna de las dos, se le dice la
+    // verdad en vez de callar.
+    if (msg.type === 'text' && msg.text && pideAtencionPrivacidad(msg.text)) {
+      const tenantId =
+        (await buscarTenantPorTelefono(msg.from).catch(() => null))
+        ?? (await resolverCuentaOficina(msg.from).catch(() => null))?.tenantId
+        ?? null;
+      if (tenantId) {
+        await atenderPrivacidad(tenantId, null, msg.from, msg.text);
+      } else {
+        await sendText(msg.from, 'Claro. No te tengo identificado con una flota en Likida, así que no sé a qué empresa reclamarle. Si trabajaste con una flota que usa Likida, pídeles que te confirmen qué hicieron con tus datos. 🙏');
+      }
+      return;
+    }
+
     const op = await resolveOperador(msg.from);
     if (!op) {
       // ── ¿ES UNA CUENTA DE OFICINA? ───────────────────────────────────────
@@ -433,7 +455,10 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // quiere que dejen de tratar sus datos es probable que YA no tenga viajes.
     //
     // Estaba después del corte, así que la promesa del aviso era falsa en el caso
-    // más probable de ejercerla. Lo cazó la auditoría 3.
+    // más probable de ejercerla. Lo cazó la auditoría 3. (El chequeo global de
+    // arriba —antes de la resolución de identidad— ya lo atiende, incluido al
+    // operador dado de baja: este bloque queda como red redundante por si el
+    // de arriba cambia de orden.)
     if (msg.type === 'text' && msg.text && pideAtencionPrivacidad(msg.text)) {
       await atenderPrivacidad(op.tenantId, op.operadorId, msg.from, msg.text);
       return;
