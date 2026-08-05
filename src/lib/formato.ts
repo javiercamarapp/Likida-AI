@@ -123,3 +123,33 @@ export function fechaMx(iso?: string | null): string {
     timeZone: soloFecha ? 'UTC' : TZ_MX,
   });
 }
+
+/**
+ * Fecha CON hora, en hora de México: `04 ago 2026, 14:32`.
+ *
+ * La necesitó la confirmación del chofer (mig. 0058): a un contralor le basta
+ * el día en que se cerró una liquidación, pero a un jefe de tráfico no le sirve
+ * saber que el chofer confirmó "el 4 de agosto" — la decisión de cambiar de
+ * personal se toma por horas, y el plazo de escalación son 5.
+ *
+ * Vive aquí y no en el componente por la misma razón que `fechaMx`: una hora
+ * formateada a mano en la pantalla se separa de la de al lado en la siguiente
+ * ronda. `h23` es explícito porque `hour12: false` puede imprimir "24:00" para
+ * la medianoche según la versión de ICU, y "24:00" no es una hora que exista.
+ *
+ * Un valor de SOLO FECHA (`2026-08-04`) no tiene hora que enseñar, y darle una
+ * sería inventarla: cae en `fechaMx`, que además lo formatea en UTC para que no
+ * se corra un día. Las cuatro columnas de la 0058 son `timestamptz`, así que en
+ * la práctica esa rama no se usa; existe para que no pueda mentir si se usa.
+ */
+export function fechaHoraMx(iso?: string | null): string {
+  if (!iso) return '—';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso.trim())) return fechaMx(iso);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('es-MX', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    timeZone: TZ_MX,
+  });
+}

@@ -242,7 +242,22 @@ export function armarRespuesta(tipo: TipoConsulta, e: EstadoViaje | null): strin
     }
 
     case 'ayuda':
-      return 'Mándame la foto de cada ticket y te la voy acusando. Puedes preguntarme "¿cuánto llevo?" cuando quieras. Cuando acabes, escribe que terminaste y te mando tu liquidación en PDF.';
+      // ARRANCA RECONOCIENDO LA OTRA LECTURA, y no es adorno.
+      //
+      // "ayuda" a secas se reconoce como petición de menú, pero en boca de un
+      // operador en carretera puede ser un auxilio — y contestarle una lista de
+      // opciones a alguien que se quedó tirado sería el peor mensaje que este
+      // producto puede mandar. Las formas explícitas ("ayúdame", "auxilio",
+      // "ayuda me quedé tirado") ya caen al agente a propósito; lo que queda es
+      // el "ayuda" pelón, que es ambiguo de verdad.
+      //
+      // En lugar de apostar por una de las dos lecturas, se atienden las dos en
+      // dos renglones. Cuesta una línea y quita el único caso donde este atajo
+      // podía hacer daño de verdad.
+      return 'Si traes una emergencia en carretera, háblale directo a tu jefe de flota — por aquí no te puedo auxiliar. 🚨\n\n'
+        + 'Si querías saber qué hago: mándame la foto de cada ticket y te los voy acusando. '
+        + 'Puedes preguntarme "¿cuánto llevo?" cuando quieras. '
+        + 'Cuando acabes, escribe que terminaste y te mando tu liquidación en PDF.';
   }
 }
 
