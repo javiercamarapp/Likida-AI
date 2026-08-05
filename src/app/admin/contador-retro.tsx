@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /** Un dígito: tablero fijo con el valor actual + una "hoja" que gira
  *  (rotateX) mostrando el valor ANTERIOR cayendo hacia adelante, al
@@ -71,10 +71,23 @@ export default function ContadorRetro({
   etiqueta: string;
   tamaño?: 'md' | 'lg';
 }) {
-  const [mostrado, setMostrado] = useState(0);
+  const [mostrado, setMostrado] = useState(valor);
+  const montadoRef = useRef(false);
 
   useEffect(() => {
-    if (valor <= 0) return; // ya arranca en 0 (useState(0))
+    // AUDITORÍA 12, ALTO (frontend) — arrancaba en `useState(0)`: en el
+    // servidor no corre NINGÚN useEffect, así que el HTML servido decía
+    // "0000" sin importar el valor real — el mismo cero que se lee como
+    // medición que CLAUDE.md prohíbe y que la ronda 10 cerró en KpiTile.
+    // El estado arranca en el valor REAL (mismo useState inicial en
+    // servidor y primer render del cliente), y la animación de conteo solo
+    // corre cuando `valor` CAMBIA después de montado (filtro, datos
+    // nuevos) — que es cuando animar tiene algo real que mostrar.
+    if (!montadoRef.current) {
+      montadoRef.current = true;
+      return;
+    }
+    if (valor <= 0) return; // el estado ya arranca en el valor real (0)
     const pasos = Math.min(valor, 30);
     const incremento = Math.max(1, Math.round(valor / pasos));
     let actual = 0;
