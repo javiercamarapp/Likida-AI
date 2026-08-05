@@ -2966,3 +2966,71 @@ begin
   delete from tenant where id = t;
   raise exception '53  sin_match-entra=%  basura-rebota=%  (esperado t / t)', sin_match_entra, basura_rebota;
 end $$;
+
+-- ── 54. El chofer no ve ni escribe lo que no es suyo (mig. 0078) ────────────
+-- La 0045 cerró viaje/gasto/liquidacion; la 0078 cierra las que quedaron:
+-- operador, terminal, politica_gasto, wa_conversacion, llm_costo, cfdi_xml,
+-- cfdi_consolidado_linea — y deja `tenant` en SOLO lectura por RLS (la app
+-- escribe por service_role). Se siembran filas en las tablas, se impersona
+-- a un chofer (mismo mecanismo del bloque 26/28) y se cuenta: esperado 0 en
+-- las siete (leer lo de la flota = fuga) y 0 filas afectadas al intentar
+-- editar el tenant (la regla que lo juzga). De paso se verifica que un
+-- flota_admin SIGUE viendo lo suyo (no se rompió la oficina).
+--
+-- Corrida real esperada:
+--   operador=0 terminal=0 politica=0 wa=0 llm=0 cfdi_xml=0 cola=0
+--   tenant-update=0 (un UPDATE que no toca nada)  tenant-select=1
+--   admin-ve-operador=2
+do $$
+declare
+  v_t uuid; v_o1 uuid; v_o2 uuid; v_v uuid; v_x uuid; v_u1 uuid := gen_random_uuid(); v_admin uuid := gen_random_uuid();
+  n_operador int; n_terminal int; n_politica int; n_wa int; n_llm int; n_xml int; n_cola int;
+  n_tenant_updated int; n_tenant_visibles int; n_admin_operador int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF RLS 0078 '||gen_random_uuid()) returning id into v_t;
+  insert into terminal (tenant_id, nombre) values (v_t, 'Terminal ZZZ');
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Uno', '520000009050') returning id into v_o1;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Dos', '520000009051') returning id into v_o2;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o1) returning id into v_v;
+  insert into wa_conversacion (tenant_id, operador_id, telefono) values (v_t, v_o1, '520000009050');
+  insert into llm_costo (tenant_id, viaje_id, fase, modelo, costo_usd) values (v_t, v_v, 'cuadre', 'zzz', 0.01);
+  insert into cfdi_xml (tenant_id, cfdi_uuid, xml, tiene_multiples_conceptos, total_conceptos)
+    values (v_t, 'ZZZ-0078-1', '<cfdi/>', true, 1) returning id into v_x;
+  insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, estatus)
+    values (v_t, v_x, 1, 'ecc12', 100, 'por_conciliar');
+  insert into politica_gasto (tenant_id, concepto, tope_monto) values (v_t, 'diesel', 4000);
+  insert into app_user (id, tenant_id, email, rol, operador_id)
+    values (v_u1, v_t, 'zzz-verif-chofer@likida.test', 'operador', v_o1);
+  insert into app_user (id, tenant_id, email, rol)
+    values (v_admin, v_t, 'zzz-verif-admin@likida.test', 'flota_admin');
+
+  -- ── El chofer, impersonado ─────────────────────────────────────────────
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
+
+  select count(*) into n_operador from operador where tenant_id = v_t;
+  select count(*) into n_terminal from terminal where tenant_id = v_t;
+  select count(*) into n_politica from politica_gasto where tenant_id = v_t;
+  select count(*) into n_wa from wa_conversacion where tenant_id = v_t;
+  select count(*) into n_llm from llm_costo where tenant_id = v_t;
+  select count(*) into n_xml from cfdi_xml where tenant_id = v_t;
+  select count(*) into n_cola from cfdi_consolidado_linea where tenant_id = v_t;
+  select count(*) into n_tenant_visibles from tenant where id = v_t;
+
+  -- Editar el tenant (rfc/politica de la flota) tiene que tocar CERO filas:
+  -- `tenant_self` ahora es for select, no hay policy de escritura.
+  update tenant set rfc = 'XAXX010101000' where id = v_t;
+  GET DIAGNOSTICS n_tenant_updated = ROW_COUNT;
+
+  reset role;
+
+  -- ── Regresión: el flota_admin sigue viendo a su flota ──────────────────
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_admin)::text, true);
+  select count(*) into n_admin_operador from operador where tenant_id = v_t;
+  reset role;
+
+  delete from tenant where id = v_t;   -- cascade limpia el resto
+  raise exception E'RLS_0078  operador=% terminal=% politica=% wa=% llm=% cfdi_xml=% cola=% tenant-update=% tenant-select=% admin-ve-operador=%   (esperado 0/0/0/0/0/0/0/0/1/2)',
+    n_operador, n_terminal, n_politica, n_wa, n_llm, n_xml, n_cola, n_tenant_updated, n_tenant_visibles, n_admin_operador;
+end $$;
