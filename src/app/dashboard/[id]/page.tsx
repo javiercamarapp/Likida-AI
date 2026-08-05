@@ -1,5 +1,5 @@
 import { requireSessionTenant } from '@/lib/auth/guard';
-import { puedeVerArea, inicioDe } from '@/lib/auth/visibilidad';
+import { puedeVerArea, inicioDe, rolEfectivo } from '@/lib/auth/visibilidad';
 import Link from 'next/link';
 import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
 import { notFound, redirect } from 'next/navigation';
@@ -37,7 +37,14 @@ export default async function Detalle({
   // Segunda capa (ver dashboard/page.tsx). El id va en la ruta de vuelta para
   // que tras el passcode aterrice en la liquidación que pidió.
   const { id: idParaVolver } = await params;
-  const { tenantId: tenantIdDemo, rol } = await requireSessionTenant(`/dashboard/${idParaVolver}`);
+  const { tenantId: tenantIdDemo, rol: rolReal } = await requireSessionTenant(`/dashboard/${idParaVolver}`);
+  // AUDITORÍA 13, MEDIO (arquitectura): esta página era la única de datos que
+  // no pasaba por rolEfectivo — la previsualización 'ver como' (?rol=contador)
+  // gateaba con el rol REAL (superadmin) y el formulario 'Reasignar'/'Reabrir'
+  // (acciones destructivas) se pintaban y se EJECUTABAN como superadmin. El rol
+  // efectivo solo QUITA visibilidad; las escrituras re-chequean abajo con el
+  // rol real.
+  const rol = rolEfectivo(rolReal, (await searchParams).rol);
 
   // ESTA PANTALLA ES DINERO, no la ficha operativa del viaje: enseña
   // comprobado contra anticipo, la deducibilidad y el desglose de IVA/IEPS.
@@ -54,7 +61,7 @@ export default async function Detalle({
   // llevaría a un 404 (la liquidación no existe bajo el tenant equivocado).
   let tenantId = tenantIdDemo;
   let volverQS = '';
-  if (rol === 'superadmin' && sp?.tenant) {
+  if (rolReal === 'superadmin' && sp?.tenant) {
     tenantId = await resolverTenantPedido(supabaseAdmin(), tenantId, sp.tenant);
     volverQS = `?tenant=${tenantId}`;
   }
