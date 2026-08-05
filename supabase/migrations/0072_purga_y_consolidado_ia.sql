@@ -1,4 +1,4 @@
--- 0067 — Nada se purgaba. Lo que se borra, lo que NO, y por qué.
+-- 0072 — Nada se purgaba. Lo que se borra, lo que NO, y por qué.
 --
 -- AUDITORÍA DE DATOS, CRÍTICO. Dos tablas crecen sin techo y ninguna tenía una
 -- sola línea que las recortara. La auditoría además tenía razón en cuál revienta

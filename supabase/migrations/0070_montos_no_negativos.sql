@@ -1,4 +1,4 @@
--- 0065 — Las dos columnas del camino del dinero que aceptaban NEGATIVOS.
+-- 0070 — Las dos columnas del camino del dinero que aceptaban NEGATIVOS.
 --
 -- AUDITORÍA DE DATOS, CRÍTICO. El esquema YA protegía lo demás:
 --   · `pago_recibido.monto > 0`   (pago_monto_positivo)
