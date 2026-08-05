@@ -202,9 +202,39 @@ export function esPeticionDeFoto(ultimoMensajeNuestro: string): boolean {
   return t.includes('🔍') && /reenv[íi]as|reenviar|otra foto|mejor luz|buena luz/.test(t);
 }
 
-/** Lo que se contesta cuando aprieta "No, corregir". */
+/**
+ * Lo que se contesta cuando aprieta "No, corregir".
+ *
+ * ── EL TEXTO ANTERIOR OFRECÍA DOS SALIDAS Y LAS DOS FALLABAN ─────────────
+ *
+ * Decía: «Escríbeme el total correcto (por ejemplo: 1240.50) o mándame otra
+ * foto del ticket».
+ *
+ *   · ESCRIBIR EL MONTO no corregía nada. El agente tiene exactamente tres
+ *     tools —`consultar_politica`, `cuadrar_viaje`, `guardar_liquidacion`— y
+ *     NINGUNA toca un gasto (verificado en `tools.ts`, 4-ago-2026). Peor: un
+ *     mensaje con una cifra hace que `guardiaCifras` sustituya la respuesta por
+ *     el cuadre real de la base… que sigue trayendo el monto MALO. O sea que la
+ *     corrección se leía como aplicada y el número equivocado volvía confirmado.
+ *   · MANDAR OTRA FOTO lo cobra DOS VECES. La llave con la que
+ *     `copiasDeComprobante` (`cuadre/engine.ts`) deduplica es
+ *     `concepto|folio|MONTO`, y el monto es justo lo que cambia cuando la
+ *     segunda lectura sale bien: dos llaves distintas, dos gastos, el mismo
+ *     consumo sumado dos veces al comprobado del chofer.
+ *
+ * Así que este mensaje se limita a lo que es verdad hoy: que no se dio por
+ * bueno, que desde aquí no se puede cambiar el monto, y —sobre todo— que NO
+ * mande otra foto de ese mismo ticket, que es la única de las dos salidas que
+ * además cuesta dinero.
+ *
+ * Cuando exista la corrección de verdad (marcar el gasto para revisión y que el
+ * cuadre lo levante, sin inventar el monto) este texto cambia con ella.
+ */
 export function mensajeCorregir(): string {
-  return 'Va, no lo doy por bueno. Escríbeme el total correcto (por ejemplo: 1240.50) o mándame otra foto del ticket. 🙏';
+  return 'Anotado: ese monto no está bien 👍.\n\n' +
+    'Todavía no puedo cambiarlo desde aquí, y *no me mandes otra foto de ese mismo ticket* — ' +
+    'entraría como un gasto aparte y se te contaría dos veces.\n\n' +
+    'Guarda el papel y enséñaselo a tu oficina para que lo revisen contra tu liquidación. 🙏';
 }
 
 /** Lo que se contesta cuando aprieta "Sí, está bien". */

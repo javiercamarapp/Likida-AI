@@ -20,6 +20,45 @@ export interface ConvTurn {
 }
 
 /**
+ * LO QUE LA CONVERSACIÓN RECUERDA ADEMÁS DE LOS TURNOS.
+ *
+ * Viven en el MISMO jsonb (`wa_conversacion.estado`) y se descartan junto con
+ * los turnos cuando cambia el viaje: son estado de ESTA charla sobre ESTE
+ * viaje, no del viaje —el viaje tiene sus propias columnas—.
+ *
+ * ── POR QUÉ NO SE DEDUCEN DEL TEXTO ──────────────────────────────────────
+ *
+ * Las dos cosas que el pipeline necesita recordar entre mensajes se deducían
+ * leyendo el TEXTO de los turnos con un regex. Un regex se desincroniza del
+ * texto en cuanto alguien lo edita, y eso YA PASÓ: el contador de intentos de
+ * confirmación era
+ *
+ *     turns.filter(t => t.role === 'assistant' && /confirma|¿cu[áa]l de|arranco/i.test(t.content))
+ *
+ * y esa expresión no empata con NINGUNO de los mensajes que `inicio_viaje.ts`
+ * manda de verdad ("¿Arrancas este viaje?", "✅ Va, arrancamos:", "Sí, pero
+ * ¿cuál? Traes 2."). El contador valía 1 para siempre, el freno del segundo
+ * intento era inalcanzable, y el chofer recibía "Perdón, no te entendí" sin
+ * final. Un número contado por su cuenta no se puede romper editando una frase.
+ */
+export interface MarcasConversacion {
+  /**
+   * Cuántas veces se le ha preguntado ya CUÁL viaje arranca.
+   *
+   * `decidirInicio` es puro y no tiene memoria: sin este número, "se repregunta
+   * UNA vez" no se puede cumplir.
+   */
+  intentosConfirmacion?: number;
+  /**
+   * Ya se le advirtió que iba a cerrar SIN comprobantes y aun así insistió.
+   *
+   * Es lo que hace que el freno del cierre pregunte una vez y no se convierta
+   * en el mismo bucle que ya costó el hallazgo de arriba.
+   */
+  cierreSinComprobantes?: boolean;
+}
+
+/**
  * Las formas en que el MISMO número mexicano puede llegar desde WhatsApp.
  *
  * México arrastra el "1" que Telmex metió entre la lada de país y el número de
@@ -188,7 +227,7 @@ const MAX_TURNS = 12;
  * cerré", no lo tapa nada — es munición para la afirmación de estado falsa. Y
  * encima se pagan tokens de un viaje ajeno en cada turno.
  */
-export async function loadConversation(tenantId: string, telefono: string, viajeId: string | null): Promise<{ id: string; turns: ConvTurn[] }> {
+export async function loadConversation(tenantId: string, telefono: string, viajeId: string | null): Promise<Conversacion> {
   const admin = supabaseAdmin();
   const { data, error } = await acotada(admin
     .from('wa_conversacion')
@@ -256,13 +295,28 @@ function desdeFila(
   fila: { id: unknown; estado: unknown; viaje_id: unknown },
   viajeId: string | null,
   telefono: string,
-): { id: string; turns: ConvTurn[] } {
-  const estado = (fila.estado as { turns?: ConvTurn[] }) || {};
+): Conversacion {
+  const estado = (fila.estado as { turns?: ConvTurn[] } & MarcasConversacion) || {};
   const mismoViaje = viajeId !== null && fila.viaje_id === viajeId;
   if (!mismoViaje && (estado.turns?.length ?? 0) > 0) {
     logger.info('conv.historial_descartado', { telefono, de: (fila.viaje_id as string | null) ?? null, a: viajeId });
   }
-  return { id: fila.id as string, turns: mismoViaje ? (estado.turns ?? []).slice(-MAX_TURNS) : [] };
+  return {
+    id: fila.id as string,
+    turns: mismoViaje ? (estado.turns ?? []).slice(-MAX_TURNS) : [],
+    // LAS MARCAS SIGUEN LA MISMA REGLA QUE LOS TURNOS. Un contador de intentos
+    // del viaje anterior aplicado al de hoy mandaría al chofer con su encargado
+    // a la primera respuesta que no se entienda de un viaje que acaba de
+    // empezar.
+    intentosConfirmacion: mismoViaje ? (estado.intentosConfirmacion ?? 0) : 0,
+    cierreSinComprobantes: mismoViaje ? (estado.cierreSinComprobantes ?? false) : false,
+  };
+}
+
+/** La conversación tal como la usa el pipeline: turnos + lo que hay que recordar. */
+export interface Conversacion extends MarcasConversacion {
+  id: string;
+  turns: ConvTurn[];
 }
 
 /**
@@ -306,10 +360,36 @@ export async function claimMessage(waMessageId: string): Promise<Claim> {
 // propio INSERT choca) no actualizaba nada y no lo decía nadie. Ahora al
 // menos queda un ERROR en el log — se pierde el turno, no el rastro de que se
 // perdió.
-export async function saveConversation(convId: string, turns: ConvTurn[], viajeId: string | null): Promise<void> {
+/**
+ * `marcas` OMITIDAS SE BORRAN, y es a propósito.
+ *
+ * El `estado` se reescribe entero (es un jsonb, no hay UPDATE parcial sin RPC),
+ * así que no hay forma de "no tocar" una marca sin releer la fila —y releerla
+ * abriría una carrera con las fotos, que escriben esta misma fila sin mutex—.
+ * El default es el estado LIMPIO porque es el que corresponde al camino normal:
+ * quien guarda sin marcas es el turno del agente, que corre justamente cuando
+ * no hay ninguna pregunta nuestra pendiente de respuesta. Los atajos que sí
+ * tienen algo pendiente las pasan explícitamente (ver `processor.ts`).
+ */
+export async function saveConversation(
+  convId: string,
+  turns: ConvTurn[],
+  viajeId: string | null,
+  marcas: MarcasConversacion = {},
+): Promise<void> {
   const { error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
-    .update({ estado: { turns: turns.slice(-MAX_TURNS) }, viaje_id: viajeId, updated_at: new Date().toISOString() })
+    .update({
+      estado: {
+        turns: turns.slice(-MAX_TURNS),
+        // Solo las que valen algo: escribir `0`/`false` en cada guardado ensucia
+        // el jsonb de todas las conversaciones para no decir nada.
+        ...(marcas.intentosConfirmacion ? { intentosConfirmacion: marcas.intentosConfirmacion } : {}),
+        ...(marcas.cierreSinComprobantes ? { cierreSinComprobantes: true } : {}),
+      },
+      viaje_id: viajeId,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', convId), 'saveConversation');
   if (error) logger.error('conv.no_se_guardo', { convId, err: error.message });
 }

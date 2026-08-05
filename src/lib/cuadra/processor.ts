@@ -244,6 +244,70 @@ export async function ponerAvisoADisposicion(
   }
 }
 
+/**
+ * Deja constancia EN LA CONVERSACIÓN de que se le pidió otra foto.
+ *
+ * ── POR QUÉ HACE FALTA ───────────────────────────────────────────────────
+ *
+ * `acuse_ticket.ts` declara como su razón de existir que "una repetición
+ * siempre lleva respuesta": si se le pidió otra foto, la segunda se le contesta
+ * aunque salga perfecta, porque callar tras un "mándame otra" se lee como
+ * "volvió a fallar" y manda una tercera. Esa regla se implementa mirando si el
+ * ÚLTIMO turno nuestro fue una petición de foto (`esPeticionDeFoto`).
+ *
+ * Pero el camino de la foto salía siempre con `say(...); return;` y nunca
+ * llegaba al único `saveConversation` del archivo (el del cierre del agente),
+ * así que la petición no entraba al historial: `esRepeticion` era `false`
+ * SIEMPRE y la rama `if (l.esRepeticion) return { peldano: 'confirmar' }` de
+ * `decidirAcuse` era código muerto. La foto que se pidió recibía silencio.
+ *
+ * ── POR QUÉ SOLO ESTA Y NO TODO EL CAMINO DE LA FOTO ─────────────────────
+ *
+ * Las fotos NO toman el mutex del viaje (corren en paralelo a propósito), así
+ * que cada escritura de esta fila es un "el último gana" contra las demás. Se
+ * escribe únicamente lo que un turno POSTERIOR necesita poder ver, que es
+ * exactamente esta petición: el acuse con botones se contesta por el botón, no
+ * por el historial. Y la ventana de carrera es angosta —esto ocurre antes del
+ * `-1` del contador de intake, así que la barrera del "listo" no abre hasta que
+ * esta escritura terminó.
+ *
+ * Best-effort: el gasto YA está guardado. Perder la constancia cuesta un acuse,
+ * tumbar aquí costaría el reproceso del webhook y con él la llamada de visión.
+ */
+async function recordarPeticionDeFoto(
+  tenantId: string, telefono: string, viajeId: string, texto: string,
+): Promise<void> {
+  try {
+    const conv = await loadConversation(tenantId, telefono, viajeId);
+    await saveConversation(
+      conv.id,
+      [...conv.turns, { role: 'assistant', content: texto }],
+      viajeId,
+      { intentosConfirmacion: conv.intentosConfirmacion, cierreSinComprobantes: conv.cierreSinComprobantes },
+    );
+  } catch (e) {
+    logger.warn('foto.refoto_no_recordada', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * ¿Este texto parece un "ya acabé"?
+ *
+ * Vive aquí arriba porque lo usan DOS decisiones: apartarse del ofrecimiento de
+ * huérfanos y el freno del cierre sin comprobantes. Dos copias de esta condición
+ * se separan en silencio.
+ *
+ * Cubre las conjugaciones que de verdad escribe un chofer: "terminé", "termine",
+ * "termino", "terminó", y lo mismo con "acabar". La frontera es `(?!\p{L})` con
+ * bandera `u`, NO `\b`: en JavaScript `\b` se calcula con [A-Za-z0-9_], así que
+ * una "é" NO cuenta como letra y "terminé" —la forma correcta y la más
+ * escrita— nunca casaba. La lista vieja pedía además la e final, dejando fuera
+ * "termino ruta", que es de las más comunes.
+ */
+function pareceCierre(texto: string): boolean {
+  return /^\s*(listo|ya|ya est[aá]|termin[éeoó]|acab[éeoó]|cierra|cerrar|eso es todo|es todo|ya qued[óo])(?!\p{L})/iu.test(texto);
+}
+
 export async function processInbound(msg: InboundMessage): Promise<void> {
   // Idempotencia: si Meta reintenta el webhook, no re-procesar (no duplicar gasto).
   const claim = msg.waMessageId ? await claimMessage(msg.waMessageId) : 'nuevo';
@@ -990,7 +1054,12 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // el chofer lleva ocho tickets mandados, y el jefe le habla para
         // regañarlo por algo que sí hizo. Una foto es una aceptación más fuerte
         // que un "va": es trabajo hecho.
-        await aceptarPorActividad(op.tenantId, viajeId);
+        // `op.operadorId` va al UPDATE: `confirmar_viaje.ts` documenta que este
+        // llamador todavía no lo pasaba y que por eso el filtro por chofer no se
+        // aplicaba. Hoy ya se puede — el viaje viene de `getOpenViaje(tenantId,
+        // operadorId)`, así que el filtro no cambia nada, y deja de estar a un
+        // llamador nuevo de marcar como aceptado el viaje de un compañero.
+        await aceptarPorActividad(op.tenantId, viajeId, op.operadorId);
 
         // ── ¿SE LE CONTESTA POR ESTA FOTO? ───────────────────────────────────
         //
@@ -1065,7 +1134,11 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
               logger.info('foto.refoto_sobre_tope', { viaje: viajeId, turno, tope: MAX_CONFIRMACIONES_SEGUIDAS });
               anotarIncidencia(viajeId, { tipo: 'duda', monto: gasto.monto, etiqueta: lectura.concepto });
             } else {
-              await say(mensajeRefoto(d.porque));
+              const pedida = mensajeRefoto(d.porque);
+              // SE GUARDA LO QUE SE LE PIDIÓ, no solo se manda. Es lo único que
+              // le permite a la SIGUIENTE foto saber que es la repetición que
+              // pedimos y contestarle. Ver `recordarPeticionDeFoto`.
+              if (await say(pedida)) await recordarPeticionDeFoto(op.tenantId, msg.from, viajeId, pedida);
             }
           }
         } catch (e) {
@@ -1377,9 +1450,26 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // Cuántas veces se le ha preguntado ya. Sin este conteo, "se repregunta
       // UNA vez" no se puede cumplir: `decidirInicio` no tiene memoria, y a
       // alguien manejando se le acabaría preguntando en bucle.
-      const intento = conv0.turns.filter(
-        (t) => t.role === 'assistant' && /confirma|¿cu[áa]l de|arranco/i.test(String(t.content ?? '')),
-      ).length + 1;
+      //
+      // ── EL BUCLE ERA REAL, Y ESTABA EN DOS PIEZAS ──────────────────────────
+      //
+      // El conteo se hacía leyendo el TEXTO de los turnos con
+      // `/confirma|¿cu[áa]l de|arranco/i`, y esa expresión no empata con NINGUNO
+      // de los mensajes que este flujo manda: "¿Arrancas este viaje?", "✅ Va,
+      // arrancamos:", "Sí, pero ¿cuál? Traes 2.". Y aunque hubiera empatado, el
+      // atajo de abajo salía con `say(...); return;` sin pasar nunca por
+      // `saveConversation` —el único de todo el archivo, al final del camino del
+      // agente—, así que las preguntas jamás entraban a `conv.turns` y el filtro
+      // corría sobre una lista vacía.
+      //
+      // Dos fallas independientes, un mismo efecto: `intento` valía 1 para
+      // siempre, la rama `intento >= 2` de `dudar()` —el freno que manda con el
+      // encargado— era inalcanzable, y el chofer recibía "Perdón, no te entendí"
+      // indefinidamente.
+      //
+      // Ahora el número lo lleva la conversación (`MarcasConversacion`) y el
+      // turno se guarda aquí abajo. Editar un texto ya no puede romperlo.
+      const intento = (conv0.intentosConfirmacion ?? 0) + 1;
 
       const c = await atenderConfirmacion({
         tenantId: op.tenantId,
@@ -1389,8 +1479,30 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         intento,
       });
       if (c.mensaje) {
-        logger.info('viaje.inicio', { viaje: c.viajeConfirmado ?? viajeId, intento });
-        await say(c.mensaje);
+        logger.info('viaje.inicio', { viaje: c.viajeConfirmado ?? viajeId, intento, estado: c.estado });
+        const entregado = await say(c.mensaje);
+        // ── EL TURNO SE GUARDA ───────────────────────────────────────────────
+        //
+        // Mismo criterio que el cierre del agente: los turnos del OPERADOR se
+        // guardan siempre (ocurrieron), y el del asistente solo si Meta lo
+        // aceptó — un mensaje rebotado que quedara en el historial haría que el
+        // agente diera por dicho algo que el chofer nunca leyó, y que el
+        // contador de intentos cobrara una pregunta que no salió.
+        const turnos: ConvTurn[] = [...conv0.turns, { role: 'user', content: msg.text }];
+        await saveConversation(
+          conv0.id,
+          entregado ? [...turnos, { role: 'assistant', content: c.mensaje }] : turnos,
+          viajeId,
+          {
+            // Solo cuentan las veces que se le VOLVIÓ A PREGUNTAR. Un "no" o un
+            // viaje confirmado cierran el asunto: dejar el contador arriba haría
+            // que la primera duda del SIGUIENTE viaje lo mandara con el
+            // encargado sin haberle preguntado nunca.
+            intentosConfirmacion:
+              entregado && (c.estado === 'ambiguo' || c.estado === 'esperando_confirmacion') ? intento : 0,
+            cierreSinComprobantes: conv0.cierreSinComprobantes,
+          },
+        );
         return;
       }
     } catch (e) {
@@ -1466,7 +1578,17 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       if (ofrecidos.length && esNegacion(msg.text)) {
         await resolverHuerfanos(op.tenantId, ofrecidos.map((h) => h.id), 'descartado', null);
         logger.info('huerfano.descartados', { viaje: viajeId, cuantos: ofrecidos.length });
-        await say('Va, no los agrego a este viaje 👍. Si alguno sí era de aquí, dime cuál y lo pongo.');
+        // "dime cuál y lo pongo" ERA IMPOSIBLE POR PARTIDA DOBLE, y se decía
+        // JUSTO DESPUÉS de descartarlos: `resolverHuerfanos` acaba de poner
+        // `resuelto_en`, y `getHuerfanos` filtra por `resuelto_en is null`, así
+        // que esos papeles ya no existen para el sistema. Aunque siguieran
+        // existiendo, no hay ningún camino que lea "el de diésel" y adjunte uno
+        // solo: `esAfirmacion` y `esNegacion` son todo o nada a propósito.
+        //
+        // Lo que SÍ funciona es reenviar la foto: entra como alta normal, y como
+        // el huérfano descartado nunca llegó a `gasto`, no hay contra qué
+        // duplicar.
+        await say('Va, no los agrego a este viaje 👍. Ya no te los vuelvo a ofrecer. Si alguno sí era de aquí, mándame otra vez su foto y lo registro.');
         return;
       }
 
@@ -1474,16 +1596,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // cierre: interceptar un "listo" con una pregunta lo obligaría a
       // escribirlo dos veces, y en una sala eso se ve como que no entendió.
       // Perder la oferta este turno no cuesta nada — se le vuelve a hacer.
-      // Cubre las conjugaciones que de verdad escribe un chofer: "terminé",
-      // "termine", "termino", "terminó", y lo mismo con "acabar". La lista
-      // anterior pedía la é o la e finales, así que "termino ruta" —de las más
-      // comunes— caía fuera y se le interrumpía el cierre con una pregunta.
-      // La frontera es `(?!\p{L})` con bandera `u`, NO `\b`: en JavaScript `\b`
-      // se calcula con [A-Za-z0-9_], así que una "é" NO cuenta como letra y
-      // "terminé" —la forma correcta y la más escrita— nunca casaba. La lista
-      // vieja pedía además la e final, dejando fuera "termino ruta".
-      const pareceCierre = /^\s*(listo|ya|ya est[aá]|termin[éeoó]|acab[éeoó]|cierra|cerrar|eso es todo|es todo|ya qued[óo])(?!\p{L})/iu.test(msg.text);
-      if (!ofrecidos.length && !pareceCierre) {
+      // (La condición vive en `pareceCierre`, arriba: la comparte con el freno
+      // del cierre sin comprobantes.)
+      if (!ofrecidos.length && !pareceCierre(msg.text)) {
         const viaje = await getViaje(viajeId, op.tenantId).catch(() => null);
         await marcarHuerfanosOfrecidos(op.tenantId, enEspera.map((h) => h.id));
         logger.info('huerfano.ofrecidos', { viaje: viajeId, cuantos: enEspera.length });
@@ -1548,6 +1663,54 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
 
     const tenant = await getTenantContext(op.tenantId);
     const conv = await loadConversation(op.tenantId, msg.from, viajeId);
+
+    // ── EL CIERRE NO SE HACE SOLO PORQUE ALGUIEN ESCRIBIÓ "YA" ───────────────
+    //
+    // `guardar_liquidacion` cerraba con CERO comprobantes exactamente igual que
+    // con veintidós, y el cierre es IRREVERSIBLE: los triggers de la 0036/0037
+    // bloquean después cualquier alta o corrección sobre ese viaje. Con cero
+    // comprobados la liquidación sale con el anticipo ENTERO en contra del
+    // chofer, y basta un "ya voy" mal leído —`pareceCierre` empata "ya" seguido
+    // de cualquier cosa— o un turno en que el modelo se adelante a la tool.
+    //
+    // El freno pregunta UNA sola vez por viaje. No se vuelve a preguntar aunque
+    // insista, y por eso se guarda la marca: repreguntar en bucle es el otro
+    // modo de falla de este archivo, el que dejó al chofer recibiendo "Perdón,
+    // no te entendí" para siempre.
+    //
+    // EN EL CASO NORMAL NO CUESTA NADA: solo se consulta si el mensaje parece un
+    // cierre, y con un solo comprobante registrado el freno no existe.
+    if (pareceCierre(msg.text) && !conv.cierreSinComprobantes) {
+      // FAIL-OPEN: si no se puede contar, no se frena. Un error de lectura no
+      // puede impedirle cerrar a quien SÍ mandó sus comprobantes; el freno
+      // existe para el caso raro, no para volverse el camino.
+      const cuantos = await getGastos(viajeId, op.tenantId)
+        .then((g) => g.filter((x) => x.monto > 0).length)
+        .catch((e) => {
+          logger.warn('cierre.freno_no_contado', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+          return -1;
+        });
+      if (cuantos === 0) {
+        logger.warn('cierre.sin_comprobantes_preguntado', { viaje: viajeId, tenant: op.tenantId });
+        const aviso = 'Ojo antes de cerrar ⚠️ — no tengo *ningún comprobante* registrado en este viaje.\n\n' +
+          'Si lo cierro así, tu liquidación va a decir que no comprobaste nada y el anticipo completo queda en tu contra. ' +
+          'Y una vez cerrada ya no puedo agregarte tickets.\n\n' +
+          'Si te faltan fotos, mándalas ahora. Si de verdad no traes comprobantes, escríbeme *listo* otra vez y lo cierro así.';
+        const entregado = await say(aviso);
+        const turnos: ConvTurn[] = [...conv.turns, { role: 'user', content: msg.text }];
+        await saveConversation(
+          conv.id,
+          entregado ? [...turnos, { role: 'assistant', content: aviso }] : turnos,
+          viajeId,
+          // La marca solo se pone si el aviso SALIÓ. Si rebotó, el chofer no vio
+          // la advertencia y su siguiente "listo" no puede contar como respuesta
+          // a una pregunta que nunca leyó.
+          { intentosConfirmacion: conv.intentosConfirmacion, cierreSinComprobantes: entregado },
+        );
+        return;
+      }
+    }
+
     const turns: ConvTurn[] = [...conv.turns, { role: 'user', content: msg.text }];
     const history: OpenAI.Chat.ChatCompletionMessageParam[] = turns.map((t) => ({ role: t.role, content: t.content }));
 
@@ -1887,6 +2050,11 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       conv.id,
       entregado ? [...turns, { role: 'assistant', content: reply }] : turns,
       closed ? null : viajeId,
+      // Las marcas se ARRASTRAN, no se recalculan: este turno no las tocó. Si se
+      // omitieran, `saveConversation` las borraría (reescribe el jsonb entero) y
+      // un error transitorio del atajo de confirmación —que cae al agente por su
+      // try/catch— reiniciaría el contador de intentos.
+      { intentosConfirmacion: conv.intentosConfirmacion, cierreSinComprobantes: conv.cierreSinComprobantes },
     );
     if (!entregado) logger.error('wa.respuesta_no_entregada', { tenant: op.tenantId, viaje: viajeId });
   } catch (e) {

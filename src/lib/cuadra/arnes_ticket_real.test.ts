@@ -121,6 +121,16 @@ function afirmarFormaDeExtraccion(r: ExtraerResultado, etiqueta: string): void {
   expect(CONCEPTOS_OCR as readonly string[], etiqueta).toContain(r.gasto.concepto);
   expect(Number.isFinite(r.gasto.monto), `${etiqueta}: monto no finito (${r.gasto.monto})`).toBe(true);
   expect(r.gasto.monto, etiqueta).toBeGreaterThanOrEqual(0);
+  // AUDITORÍA 10, pruebas: `ocrConfianza` nunca se afirmaba aquí. Un ticket
+  // legible siempre pasó por el modelo de visión y trae su "confianza" (0 a
+  // 1, `ocr.ts:63`); solo el camino de `fallo_tecnico` la deja en 0 a
+  // propósito, y ESE camino es justo el que tiene `legible: false`.
+  if (r.legible) {
+    expect(r.gasto.ocrConfianza, `${etiqueta}: legible sin ocrConfianza`).toBeDefined();
+    expect(Number.isFinite(r.gasto.ocrConfianza), `${etiqueta}: ocrConfianza no finito`).toBe(true);
+    expect(r.gasto.ocrConfianza, etiqueta).toBeGreaterThanOrEqual(0);
+    expect(r.gasto.ocrConfianza, etiqueta).toBeLessThanOrEqual(1);
+  }
   // Un ticket legible con monto 0 es el fantasma que ya nos costó un hallazgo
   // falso: se da de alta, entra al cuadre y no se ve en ningún total.
   if (r.legible) expect(r.gasto.monto, `${etiqueta}: legible con monto 0`).toBeGreaterThan(0);
@@ -306,12 +316,22 @@ describe('arnés · los verificadores de forma SÍ pueden fallar', () => {
   // este archivo cierra. Es el control del control.
   const ok: ExtraerResultado = {
     legible: true,
-    gasto: { id: 'g', concepto: 'diesel', monto: 1200, fecha: '2026-05-08' },
+    gasto: { id: 'g', concepto: 'diesel', monto: 1200, fecha: '2026-05-08', ocrConfianza: 0.87 },
     costo: { modelo: 'google/gemini-3.6-flash', tokensIn: 900, tokensOut: 120, costoUsd: 0.0021 },
   };
 
   it('una extracción sana pasa', () => {
     expect(() => afirmarFormaDeExtraccion(ok, 'control')).not.toThrow();
+  });
+
+  it('AUDITORÍA 10: legible SIN ocrConfianza no pasa — el verificador de forma ahora lo exige', () => {
+    const sinConfianza = { ...ok, gasto: { ...ok.gasto, ocrConfianza: undefined } };
+    expect(() => afirmarFormaDeExtraccion(sinConfianza, 'x')).toThrow();
+  });
+
+  it('AUDITORÍA 10: ocrConfianza fuera de [0,1] no pasa', () => {
+    expect(() => afirmarFormaDeExtraccion({ ...ok, gasto: { ...ok.gasto, ocrConfianza: 1.5 } }, 'x')).toThrow();
+    expect(() => afirmarFormaDeExtraccion({ ...ok, gasto: { ...ok.gasto, ocrConfianza: -0.1 } }, 'x')).toThrow();
   });
 
   it('un monto NaN no pasa', () => {
