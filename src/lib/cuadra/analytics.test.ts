@@ -20,37 +20,66 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // en una excepción, que es lo único que el panel sabe leer.
 // ═══════════════════════════════════════════════════════════════════════════
 
-type Resp = { data: unknown; error: { message: string } | null };
+type Resp = { data: unknown; error: { message: string } | null; count?: number | null };
 
 const respuestas = new Map<string, Resp>();
 const ERROR_RED = { message: 'TypeError: fetch failed (ENOTFOUND db.supabase.co)' };
+/** Qué tablas se leyeron POR FILAS — para comprobar que las que se agregan en
+ *  SQL (mig. 0064) ya no se recorren. */
+const tablasLeidas: string[] = [];
 
 /** Imita el query builder de postgrest-js: encadenable y "thenable". */
 function crearBuilder(tabla: string) {
-  const resp = (): Resp => respuestas.get(tabla) ?? { data: [], error: null };
+  tablasLeidas.push(tabla);
+  // `.not(col, 'is', null)` es lo ÚNICO que separa "huérfanos resueltos" de
+  // "huérfanos totales": las dos consultas van a la misma tabla con el mismo
+  // filtro de tenant. Si el mock no lo viera, las dos darían el mismo número y
+  // la prueba pasaría sin distinguir nada.
+  let sufijo = '';
+  const resp = (): Resp => respuestas.get(tabla + sufijo) ?? respuestas.get(tabla) ?? { data: [], error: null };
   const b: Record<string, unknown> = {};
   const self = () => b;
-  for (const m of ['select', 'eq', 'order', 'limit', 'range', 'in', 'gte', 'lte', 'is', 'not']) b[m] = self;
+  for (const m of ['select', 'eq', 'order', 'limit', 'range', 'in', 'gte', 'lte', 'is']) b[m] = self;
+  b.not = () => { sufijo = ':not'; return b; };
   b.maybeSingle = () => Promise.resolve(resp());
   b.single = () => Promise.resolve(resp());
   b.then = (ok: (v: Resp) => unknown, fail?: (e: unknown) => unknown) => Promise.resolve(resp()).then(ok, fail);
   return b;
 }
 
+// ── Las agregaciones que la 0064 movió a la base ───────────────────────────
+const rpcs = new Map<string, Resp>();
+const llamadasRpc: Array<{ fn: string; args: unknown }> = [];
+/** Una flota sin actividad: las dos funciones devuelven ceros MEDIDOS. */
+const RPC_VACIO: Record<string, unknown> = {
+  resumen_documentos_tenant: { procesados: 0, porMes: [] },
+  resumen_costo_ia_tenant: { totales: { n: 0, viajes: 0, costoUsd: 0, tokensIn: 0, tokensOut: 0 }, porFase: [] },
+};
+
 vi.mock('@/lib/supabase/admin', () => ({
-  supabaseAdmin: () => ({ from: (t: string) => crearBuilder(t) }),
+  supabaseAdmin: () => ({
+    from: (t: string) => crearBuilder(t),
+    rpc: (fn: string, args: unknown) => {
+      llamadasRpc.push({ fn, args });
+      return Promise.resolve(rpcs.get(fn) ?? { data: RPC_VACIO[fn] ?? null, error: null });
+    },
+  }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const cuadrarDesdeDB = vi.fn();
 vi.mock('./cuadre/desde_db', () => ({ cuadrarDesdeDB: (...a: unknown[]) => cuadrarDesdeDB(...a) }));
 
-const { getKpis, getAcreditables, detectarAnomalias, getLiquidacionDetalle } = await import('./analytics');
+const { getKpis, getAcreditables, detectarAnomalias, getLiquidacionDetalle, getValorAhorro } =
+  await import('./analytics');
 
 const TENANT = 't1';
 
 beforeEach(() => {
   respuestas.clear();
+  rpcs.clear();
+  llamadasRpc.length = 0;
+  tablasLeidas.length = 0;
   cuadrarDesdeDB.mockReset();
   cuadrarDesdeDB.mockRejectedValue(new Error('viaje no encontrado'));
 });
@@ -297,3 +326,140 @@ describe('el detalle lleva lo que el panel necesita para no contradecir al PDF',
     expect(d?.totalComprobado).toBe(1240);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// getValorAhorro — LA PANTALLA DEL CLIENTE SE ROMPÍA ANTES QUE LA DE JAVIER.
+//
+// No tenía ni una prueba, y era la función con las dos lecturas más caras del
+// repo después de /admin. Las dos se traían la tabla ENTERA de la flota para
+// reducirla a un puñado de números, y `traerTodo` LANZA al pasar de 100,000
+// filas:
+//
+//   · `llm_costo` — una fila por llamada al modelo, ~2,000 al día → día 50
+//   · `gasto`     — ~660 comprobantes al día, ~240 mil al año     → mes 5
+//
+// Se agregan en SQL desde la mig. 0064. Lo que se prueba aquí es que las cifras
+// son las mismas, que la tabla ya no se recorre, y que ningún fallo de lectura
+// se convierte en un cero — que en ESTA pantalla se leería como "el producto no
+// ha hecho nada por tu flota".
+// ═══════════════════════════════════════════════════════════════════════════
+describe('getValorAhorro — se agrega en SQL, y un fallo nunca se pinta como cero', () => {
+  // Una flota con actividad real: 40 comprobantes por OCR en dos meses. Se monta
+  // ENTERA en cada prueba y cada una rompe UNA pieza. Si no, `Promise.all`
+  // rechaza con lo primero que falle —que puede no ser lo que la prueba mira— y
+  // el test pasa en verde por la razón equivocada.
+  beforeEach(() => {
+    rpcs.set('resumen_documentos_tenant', {
+      data: { procesados: 40, porMes: [{ mes: '2026-07', n: 8 }, { mes: '2026-08', n: 32 }] },
+      error: null,
+    });
+    rpcs.set('resumen_costo_ia_tenant', {
+      data: {
+        totales: { n: 131, viajes: 4, costoUsd: 1.832202, tokensIn: 402283, tokensOut: 96264 },
+        // Ordenada por COSTO, que es como la entrega la 0064.
+        porFase: [
+          { fase: 'ocr', n: 57, costoUsd: 1.005012 },
+          { fase: 'cuadre', n: 24, costoUsd: 0.42719 },
+          { fase: 'whatsapp', n: 50, costoUsd: 0.4 },
+        ],
+      },
+      error: null,
+    });
+    respuestas.set('liquidacion', { data: null, error: null, count: 12 });
+    respuestas.set('comprobante_huerfano', { data: null, error: null, count: 7 });
+    respuestas.set('comprobante_huerfano:not', { data: null, error: null, count: 5 });
+  });
+
+  it('las cifras salen de la agregación, y el acumulado corre sobre la serie dispersa', async () => {
+    const r = await getValorAhorro(TENANT);
+    expect(r.documentosProcesados).toBe(40);
+    expect(r.liquidacionesCerradas).toBe(12);
+    expect(r.huerfanosTotales).toBe(7);
+    expect(r.huerfanosResueltos).toBe(5);
+    // Dispersa: solo los meses con actividad, con el acumulado corrido encima.
+    expect(r.acumuladoPorMes).toEqual([
+      { mes: '2026-07', n: 8, acumulado: 8 },
+      { mes: '2026-08', n: 32, acumulado: 40 },
+    ]);
+    // ESTIMACIÓN declarada: 40 × 4 min / 60.
+    expect(r.horasAhorradasEstimadas).toBe(round2Ref(40 * 4 / 60));
+  });
+
+  it('`accionesPorAgente` va por NÚMERO de acciones, no por el costo con que llega de SQL', async () => {
+    // La 0064 entrega `porFase` ordenada por costo (que es lo que quiere
+    // `getResumenCosto`); esta pantalla cuenta acciones. Si no se reordenara,
+    // 'whatsapp' (50 acciones, $0.40) saldría DEBAJO de 'cuadre' (24, $0.43).
+    const r = await getValorAhorro(TENANT);
+    expect(r.accionesPorAgente).toEqual([
+      { fase: 'ocr', n: 57 },
+      { fase: 'whatsapp', n: 50 },
+      { fase: 'cuadre', n: 24 },
+    ]);
+  });
+
+  it('no recorre `gasto` ni `llm_costo`: las agrega, y acotadas al tenant', async () => {
+    await getValorAhorro(TENANT);
+    expect(tablasLeidas).not.toContain('gasto');
+    expect(tablasLeidas).not.toContain('llm_costo');
+    // Las dos llevan el tenant como argumento: sin él la 0064 no resuelve la
+    // firma y PostgREST responde 404 — el olvido falla ruidoso en vez de
+    // devolver los datos de todas las flotas.
+    expect(llamadasRpc).toEqual(
+      expect.arrayContaining([
+        { fn: 'resumen_documentos_tenant', args: { p_tenant: TENANT } },
+        { fn: 'resumen_costo_ia_tenant', args: { p_tenant: TENANT, p_desde: null, p_hasta: null } },
+      ]),
+    );
+  });
+
+  it('sin actividad devuelve ceros MEDIDOS, no un error', async () => {
+    rpcs.set('resumen_documentos_tenant', { data: { procesados: 0, porMes: [] }, error: null });
+    rpcs.set('resumen_costo_ia_tenant', {
+      data: { totales: { n: 0, viajes: 0, costoUsd: 0, tokensIn: 0, tokensOut: 0 }, porFase: [] },
+      error: null,
+    });
+    respuestas.set('liquidacion', { data: null, error: null, count: 0 });
+    respuestas.set('comprobante_huerfano', { data: null, error: null, count: 0 });
+    respuestas.set('comprobante_huerfano:not', { data: null, error: null, count: 0 });
+    const r = await getValorAhorro(TENANT);
+    expect(r.documentosProcesados).toBe(0);
+    expect(r.acumuladoPorMes).toEqual([]);
+    expect(r.accionesPorAgente).toEqual([]);
+    expect(r.horasAhorradasEstimadas).toBe(0);
+  });
+
+  it('un fallo leyendo `gasto` LANZA en vez de decir "0 documentos procesados"', async () => {
+    rpcs.set('resumen_documentos_tenant', { data: null, error: ERROR_RED });
+    await expect(getValorAhorro(TENANT)).rejects.toThrow(/fetch failed/);
+  });
+
+  it('un fallo leyendo `llm_costo` LANZA en vez de decir "0 acciones de IA"', async () => {
+    // Es el peor de los dos: esta pantalla existe para enseñar lo que el
+    // producto hizo por la flota, y un cero por fallo de lectura afirma que no
+    // hizo nada.
+    rpcs.set('resumen_costo_ia_tenant', { data: null, error: ERROR_RED });
+    await expect(getValorAhorro(TENANT)).rejects.toThrow(/fetch failed/);
+  });
+
+  it('un conteo que la base no devuelve NO se convierte en 0', async () => {
+    // `count` nulo significa "no pude contar", y un 0 ahí diría "esta flota
+    // nunca liquidó nada" — una afirmación falsa sobre el trabajo del cliente.
+    respuestas.set('liquidacion', { data: null, error: null, count: null });
+    await expect(getValorAhorro(TENANT)).rejects.toThrow(/no devolvió el conteo/);
+  });
+
+  it.each([
+    ['null', null],
+    ['un objeto vacío', {}],
+    ['sin porMes', { procesados: 40 }],
+  ])('una respuesta de `gasto` con otra forma (%s) LANZA, no pinta 0 documentos', async (_caso, data) => {
+    rpcs.set('resumen_documentos_tenant', { data, error: null });
+    await expect(getValorAhorro(TENANT)).rejects.toThrow(/otra forma/);
+  });
+});
+
+/** El mismo redondeo a centavos de `lib/formato.ts`, para no importar el módulo
+ *  entero en una aserción. */
+function round2Ref(n: number): number {
+  return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100;
+}

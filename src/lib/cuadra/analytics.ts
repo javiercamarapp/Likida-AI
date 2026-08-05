@@ -7,6 +7,11 @@
 import { detectarDuplicadosEntreViajes, type Anomalia } from './duplicados';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
+// La agregación de `llm_costo` de una flota vive en el módulo que ESCRIBE esa
+// tabla (`costos.ts`), y se importa en vez de reescribirse: `getResumenCosto` y
+// `getValorAhorro` necesitan la misma consulta con distinto recorte, y dos
+// copias son dos oportunidades de que una se quede atrás.
+import { traerResumenCostoIaTenant } from './costos';
 import { filasImprimibles } from './liquidacion/omitidos';
 import { round2 } from '@/lib/formato';
 import { logger } from '@/lib/logger';
@@ -263,55 +268,115 @@ export interface ValorAhorro {
   horasAhorradasEstimadas: number;
 }
 
+/** Lo que devuelve `resumen_documentos_tenant()` (mig. 0064). */
+interface ResumenDocumentos {
+  procesados: number;
+  /** DISPERSA: solo los meses con actividad, igual que cuando se agrupaba en JS. */
+  porMes: Array<{ mes: string; n: number }>;
+}
+
+/**
+ * Cuántas filas hay, sin traer ninguna.
+ *
+ * `head: true` con `count: 'exact'` no devuelve ni un renglón: solo el total, en
+ * un viaje a la base. Es el mismo patrón que ya usa `contarViajes` más abajo,
+ * pero LANZA en vez de devolver `null`: aquí el llamador es `getValorAhorro`,
+ * cuyo contrato es que un fallo de lectura sube como excepción y el panel enseña
+ * su estado de error. Un `0` devuelto por un fallo diría "esta flota nunca
+ * liquidó nada", que es una afirmación falsa sobre el trabajo del cliente.
+ *
+ * `noNula` acota a las filas que tengan esa columna con valor — para separar
+ * "huérfanos resueltos" de "huérfanos totales" sin traerse ninguno de los dos.
+ */
+async function contarFilas(tabla: string, tenantId: string, noNula?: string): Promise<number> {
+  let q = supabaseAdmin().from(tabla).select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId);
+  if (noNula) q = q.not(noNula, 'is', null);
+  const { count, error } = await q;
+  if (error) throw new Error(`getValorAhorro/${tabla}: ${error.message}`);
+  // `count` nulo NO es cero: PostgREST solo lo manda si pudo contar. Devolver 0
+  // aquí sería inventar una medición, que es la regla que define este producto.
+  if (typeof count !== 'number') {
+    throw new Error(`getValorAhorro/${tabla}: la base no devolvió el conteo; no se inventa un 0`);
+  }
+  return count;
+}
+
+/**
+ * AGREGADO EN SQL DESDE EL 5-AGO-2026 (mig. 0064).
+ *
+ * Las dos lecturas grandes de esta función se traían la tabla ENTERA del tenant
+ * para reducirla a un puñado de números, y las dos tenían fecha de caducidad
+ * calculable — `traerTodo` LANZA al pasar de 100,000 filas:
+ *
+ *   · `llm_costo` — una fila por llamada al modelo, ~2,000 al día → **día 50**
+ *   · `gasto`     — ~660 comprobantes al día, ~240 mil al año     → **mes 5**
+ *
+ * Y esta pantalla es la del CLIENTE, no la consola de Javier: el que se queda
+ * mirando el error es el comprador. La de `gasto` además traía las filas que NO
+ * habían pasado por OCR solo para que JavaScript las descartara — con un tercio
+ * de captura manual, la mitad del tráfico era de más.
+ *
+ * Los dos conteos chicos (`liquidacion`, `comprobante_huerfano`) también dejaron
+ * de traer filas: son `head: true`. No corrían la misma prisa —~11 mil
+ * liquidaciones al año tardan casi una década en tocar el techo— pero traer una
+ * tabla completa para hacerle `.length` no se sostiene en la misma función donde
+ * se acaba de arreglar exactamente eso.
+ *
+ * El acumulado corrido se sigue calculando aquí: es una lista de decenas de
+ * meses, no era lo que había que mover a la base.
+ */
 export async function getValorAhorro(tenantId: string): Promise<ValorAhorro> {
-  const admin = supabaseAdmin();
-  const [docs, liqs, huerfanos, costos] = await Promise.all([
-    traerTodo<{ created_at: unknown; ocr_confianza: unknown }>(
-      (desde, hasta) => admin.from('gasto').select('created_at, ocr_confianza')
-        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getValorAhorro.gasto',
-    ),
-    traerTodo<{ id: unknown }>(
-      (desde, hasta) => admin.from('liquidacion').select('id')
-        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getValorAhorro.liquidacion',
-    ),
-    traerTodo<{ resuelto_en: unknown }>(
-      (desde, hasta) => admin.from('comprobante_huerfano').select('resuelto_en')
-        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getValorAhorro.huerfano',
-    ),
-    traerTodo<{ fase: unknown }>(
-      (desde, hasta) => admin.from('llm_costo').select('fase')
-        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getValorAhorro.llm_costo',
-    ),
+  const [docs, liquidacionesCerradas, huerfanosTotales, huerfanosResueltos, costoIa] = await Promise.all([
+    traerResumenDocumentos(tenantId),
+    contarFilas('liquidacion', tenantId),
+    contarFilas('comprobante_huerfano', tenantId),
+    contarFilas('comprobante_huerfano', tenantId, 'resuelto_en'),
+    traerResumenCostoIaTenant(tenantId, 'getValorAhorro.llm_costo'),
   ]);
 
-  const procesados = docs.filter((d) => d.ocr_confianza !== null && d.ocr_confianza !== undefined);
+  // Mismo criterio que el resto del archivo: si no se pudo leer, se lanza. Un
+  // "0 acciones de IA" por fallo de lectura se lee como "el producto no hizo
+  // nada por esta flota", en la pantalla que existe para enseñar lo contrario.
+  if ('err' in costoIa) throw new Error(`getValorAhorro.llm_costo: ${costoIa.err}`);
 
-  const porFase = new Map<string, number>();
-  for (const c of costos) porFase.set(c.fase as string, (porFase.get(c.fase as string) ?? 0) + 1);
-
-  const porMes = new Map<string, number>();
-  for (const d of procesados) {
-    const mes = (d.created_at as string).slice(0, 7);
-    porMes.set(mes, (porMes.get(mes) ?? 0) + 1);
-  }
   let corrido = 0;
-  const acumuladoPorMes = [...porMes.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([mes, n]) => { corrido += n; return { mes, n, acumulado: corrido }; });
+  const acumuladoPorMes = docs.porMes.map(({ mes, n }) => {
+    corrido += n;
+    return { mes, n, acumulado: corrido };
+  });
 
   return {
-    documentosProcesados: procesados.length,
-    liquidacionesCerradas: liqs.length,
-    huerfanosResueltos: huerfanos.filter((h) => h.resuelto_en !== null && h.resuelto_en !== undefined).length,
-    huerfanosTotales: huerfanos.length,
-    accionesPorAgente: [...porFase.entries()].map(([fase, n]) => ({ fase, n })).sort((a, b) => b.n - a.n),
+    documentosProcesados: docs.procesados,
+    liquidacionesCerradas,
+    huerfanosResueltos,
+    huerfanosTotales,
+    // El orden lo pone JavaScript y no SQL a propósito: la lista tiene seis
+    // fases como mucho, y la función de la 0064 la entrega ordenada por COSTO
+    // (que es lo que quiere `getResumenCosto`) mientras que esta pantalla la
+    // quiere por NÚMERO DE ACCIONES. Reordenar seis elementos aquí es más barato
+    // que una segunda consulta con otro `order by`.
+    accionesPorAgente: costoIa.ok.porFase
+      .map((f) => ({ fase: f.fase, n: f.n }))
+      .sort((a, b) => b.n - a.n),
     acumuladoPorMes,
-    horasAhorradasEstimadas: round2((procesados.length * MINUTOS_CAPTURA_MANUAL) / 60),
+    horasAhorradasEstimadas: round2((docs.procesados * MINUTOS_CAPTURA_MANUAL) / 60),
   };
+}
+
+/** `resumen_documentos_tenant()` (mig. 0064), con el mismo fallo-cerrado de
+ *  forma que su hermana en `costos.ts`: una respuesta inesperada LANZA en vez de
+ *  dejar que `?? 0` pinte "0 documentos procesados" sobre una tabla llena. */
+async function traerResumenDocumentos(tenantId: string): Promise<ResumenDocumentos> {
+  const { data, error } = await supabaseAdmin().rpc('resumen_documentos_tenant', { p_tenant: tenantId });
+  if (error) throw new Error(`getValorAhorro.gasto: ${error.message}`);
+  const r = data as Partial<ResumenDocumentos> | null;
+  if (!r || typeof r.procesados !== 'number' || !Array.isArray(r.porMes)) {
+    throw new Error(
+      'getValorAhorro.gasto: resumen_documentos_tenant devolvió otra forma (¿migración 0064 sin aplicar?). '
+      + 'No se pinta un 0 de documentos procesados que nadie midió.',
+    );
+  }
+  return r as ResumenDocumentos;
 }
 
 // ── Consultas de las páginas de operación de /dashboard ────────────────────

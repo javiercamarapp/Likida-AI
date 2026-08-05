@@ -1930,7 +1930,7 @@ begin
     cerrado, deriva;
 end $$;
 
--- ── 41. Lo que faltaba para operar de verdad (mig. 0063) ──
+-- ── 42. Lo que faltaba para operar de verdad (mig. 0063) ──
 --
 -- Tres huecos de tres auditorías distintas. Ninguno se nota con 8 viajes de
 -- prueba; los tres muerden el primer día con una flota real.
@@ -1988,4 +1988,232 @@ begin
   delete from tenant where id = t;
   raise exception E'FALTA_PARA_OPERAR  rechaza-contrasena=%  rls=%  sin-politicas=%  cola-usa-indice=%   (esperado 4x true)',
     rechaza_secreto, rls_on, sin_politicas, usa_indice;
+end $$;
+
+-- ── 43. Las agregaciones del panel del CLIENTE cuadran y NO cruzan flotas (mig. 0064) ──
+--
+-- La 0064 movió a SQL dos lecturas que se traían la tabla entera de una flota.
+-- Una de ellas —`getResumenCosto`— no esperaba a crecer: iba SIN paginar, así
+-- que PostgREST la recortaba a `max_rows` (1,000) en silencio y el resultado
+-- salía con `estado: 'medido'`. Una cifra incompleta con la etiqueta de medida.
+--
+-- Este bloque comprueba TRES cosas, y la primera es la que no tenía la 0062:
+--
+--  1. **AISLAMIENTO.** Estas funciones las llama `service_role`, que salta RLS.
+--     El `where tenant_id = p_tenant` es lo ÚNICO que separa a una flota de
+--     otra. Se siembran DOS flotas con números distintos y se exige que las
+--     cifras de la primera no contengan ni un centavo ni una fase de la
+--     segunda. Con una sola flota esta comprobación pasaría siempre sin probar
+--     nada — es la misma trampa del tenant único que ya esquiva el bloque 40.
+--
+--  2. **QUE CUADRAN**, por tres caminos como el bloque 41: la función, unos
+--     `group by` sueltos, y la identidad aritmética `Σ(1..N)·10⁻⁶`.
+--
+--  3. **QUE EL RECORTE ESTABA AHÍ.** Se reproduce el bug: se suma lo que
+--     devolvía la consulta vieja (las primeras 1,000 filas) y se comprueba que
+--     NO es el total. `recorte-daba-menos=t` es la prueba de que esto no era
+--     una mejora de rendimiento sino un número equivocado en pantalla.
+--
+-- TRAMPAS DE SIEMBRA: `viaje.operador_id` es NOT NULL, así que para poner
+-- gastos hace falta tenant → operador → viaje. El viaje se deja ABIERTO porque
+-- `trg_gasto_no_tras_liquidar` (mig. 0036) rechaza gastos sobre uno liquidado.
+-- `llm_costo.fase` tiene dominio (mig. 0025): solo ocr | cuadre | escalacion |
+-- chat | router | whatsapp. `gasto.concepto` también.
+--
+-- Los permisos se leen del CATÁLOGO, por lo mismo que el bloque 16.
+-- Todo se revierte con el `raise`.
+--
+-- ── CORRIDO EL 5-AGO-2026 CONTRA EL PROYECTO LIKIDA. SALIDA REAL: ───────────
+--
+--   RESUMEN_POR_TENANT
+--     costo: cerrado=t  fase=t  viajes=t  tokens=t  AISLADO=t  sin-fase-ajena=t
+--     docs:  procesados=t  porMes=t  AISLADO=t  solo-ocr=t
+--     ventana-vacia=t  borde-semiabierto=t  hay-filas-en-el-borde=1250
+--     EL-RECORTE-DABA-MENOS=t   (1000 filas: 0.500500  ·  total real: 12.5025)
+--     permisos costo: definer=f anon=f auth=f svc=t
+--     permisos docs:  definer=f anon=f auth=f svc=t
+--
+-- **0.500500 de 12.502500 — el 4%.** Ese es el tamaño del bug que había: con
+-- 5,000 llamadas al modelo, el panel del cliente enseñaba el 4% de su costo de
+-- IA, con `estado: 'medido'`. No hacía falta esperar a nada; solo pasar de mil.
+--
+-- ── FALSIFICADO ────────────────────────────────────────────────────────────
+-- Se corrió el mismo bloque con las DOS funciones rotas a propósito, dentro de
+-- la transacción que lo revierte todo (`create or replace function` es
+-- transaccional, así que la rotura se deshace con el `raise`):
+--
+--   · se cae el `where tenant_id = p_tenant` de la función de costo
+--       → AISLADO=f          devolvió $3.501000 (A+B) donde A sola vale $2.001000
+--       → sin-fase-ajena=f   la fase 'router', que solo existe en la flota B,
+--                            apareció en el desglose de la flota A
+--   · `count(viaje_id)` en vez de `count(distinct viaje_id)`
+--       → viajes=f           devolvió 1333 donde debía decir 2
+--   · se cae el `ocr_confianza is not null` de la de documentos
+--       → procesados=f       devolvió 900 donde debía decir 600
+--       → solo-ocr=f         los 300 capturados a mano contados como trabajo del
+--                            Agente OCR
+--
+-- Las dos primeras son la razón por la que este bloque siembra DOS flotas: con
+-- una sola, quitar el filtro por tenant no cambia ni un número y la
+-- verificación pasa en verde sobre una función que ya no aísla nada.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; v1 uuid; v2 uuid; v3 uuid; vb uuid;
+  filas_a int := 5000;    -- > 1,000: pasa el recorte silencioso de PostgREST
+  filas_b int := 4000;
+  gastos_a int := 3000;
+  j_a jsonb; j_b jsonb; d_a jsonb; d_b jsonb; j_vacia jsonb; j_borde jsonb;
+  cerrado numeric; recortado numeric;
+  ok_cerrado boolean; ok_fase boolean; ok_viajes boolean; ok_tokens boolean;
+  ok_aislado boolean; ok_sin_fase_ajena boolean;
+  ok_docs boolean; ok_mes boolean; ok_docs_aislado boolean; ok_solo_ocr boolean;
+  ok_vacia boolean; ok_borde boolean; recorte_daba_menos boolean;
+  hay_borde bigint;
+  def_a boolean; def_d boolean;
+  anon_a boolean; auth_a boolean; svc_a boolean;
+  anon_d boolean; auth_d boolean; svc_d boolean;
+  d0 timestamptz := timestamptz '2099-01-01 00:00:00+00';
+begin
+  -- ── FLOTA A: la que se mide ───────────────────────────────────────────────
+  insert into tenant (nombre) values ('ZZZ VERIF T63 A') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono)
+    values (ta, 'ZZZ T63 A', '5215559990001') returning id into oa;
+  insert into viaje (tenant_id, operador_id, estatus) values (ta, oa, 'abierto') returning id into v1;
+  insert into viaje (tenant_id, operador_id, estatus) values (ta, oa, 'liquidado') returning id into v2;
+  insert into viaje (tenant_id, operador_id, estatus) values (ta, oa, 'liquidado') returning id into v3;
+
+  -- costo = g millonésimas → total con forma cerrada. Dos fases. Y el viaje se
+  -- reparte entre v1, v2 y NULL: `count(distinct viaje_id)` tiene que dar 2,
+  -- porque una fila sin viaje no es una liquidación a la que atribuirle costo.
+  insert into llm_costo (tenant_id, viaje_id, fase, modelo, tokens_in, tokens_out, costo_usd, created_at)
+  select ta,
+         case g % 3 when 0 then v1 when 1 then v2 else null end,
+         case when g % 2 = 0 then 'ocr' else 'cuadre' end,
+         'zzz-modelo', g % 7, g % 11,
+         (g * 0.000001)::numeric(10,6),
+         d0 + ((g % 4) || ' days')::interval
+  from generate_series(1, filas_a) g;
+
+  -- 2 de cada 3 comprobantes pasaron por OCR; el tercio restante entró a mano y
+  -- NO se cuenta. Repartidos en tres meses.
+  insert into gasto (tenant_id, viaje_id, concepto, monto, created_at, ocr_confianza, ocr_extra)
+  select ta, v1, 'diesel', 100,
+         d0 + ((g % 3) || ' months')::interval,
+         case when g % 3 = 0 then null else 0.90 end,
+         '{}'::jsonb
+  from generate_series(1, gastos_a) g;
+
+  -- ── FLOTA B: el ruido que NO puede aparecer en las cifras de A ────────────
+  insert into tenant (nombre) values ('ZZZ VERIF T63 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono)
+    values (tb, 'ZZZ T63 B', '5215559990002') returning id into ob;
+  insert into viaje (tenant_id, operador_id, estatus) values (tb, ob, 'abierto') returning id into vb;
+  insert into llm_costo (tenant_id, viaje_id, fase, modelo, tokens_in, tokens_out, costo_usd, created_at)
+    select tb, vb, 'router', 'zzz-ajeno', 1, 1, 0.001000, d0
+    from generate_series(1, filas_b) g;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, created_at, ocr_confianza, ocr_extra)
+    select tb, vb, 'caseta', 50, d0, 0.99, '{}'::jsonb
+    from generate_series(1, 1000) g;
+
+  analyze llm_costo; analyze gasto;
+
+  j_a := resumen_costo_ia_tenant(ta);
+  j_b := resumen_costo_ia_tenant(tb);
+  d_a := resumen_documentos_tenant(ta);
+  d_b := resumen_documentos_tenant(tb);
+
+  -- ── CAMINO 3: la aritmética ───────────────────────────────────────────────
+  cerrado := 0.000001::numeric * filas_a::numeric * (filas_a + 1)::numeric / 2;
+  ok_cerrado := (j_a -> 'totales' ->> 'costoUsd')::numeric = cerrado
+                and (j_a -> 'totales' ->> 'n')::bigint = filas_a::bigint;
+
+  -- ── 1. AISLAMIENTO: lo de A es SOLO de A ─────────────────────────────────
+  -- Si el filtro por tenant faltara, esto traería A+B y ninguna de las dos
+  -- igualdades se cumpliría.
+  ok_aislado := (j_a -> 'totales' ->> 'costoUsd')::numeric
+                  = (select sum(costo_usd) from llm_costo where tenant_id = ta)
+            and (j_b -> 'totales' ->> 'costoUsd')::numeric
+                  = (select sum(costo_usd) from llm_costo where tenant_id = tb)
+            and (j_a -> 'totales' ->> 'costoUsd')::numeric
+                 <> (select sum(costo_usd) from llm_costo where tenant_id in (ta, tb));
+  -- Y la fase que solo existe en B no puede asomar en el desglose de A.
+  ok_sin_fase_ajena := not exists (
+    select 1 from jsonb_array_elements(j_a -> 'porFase') f where f ->> 'fase' = 'router');
+
+  ok_docs_aislado := (d_a ->> 'procesados')::bigint
+                       = (select count(*) from gasto where tenant_id = ta and ocr_confianza is not null)
+                 and (d_b ->> 'procesados')::bigint
+                       = (select count(*) from gasto where tenant_id = tb and ocr_confianza is not null);
+
+  -- ── 2. CAMINO 2: `group by` sueltos, mismo filtro, otro plan ─────────────
+  ok_fase := (j_a -> 'porFase') = coalesce((
+    select jsonb_agg(jsonb_build_object('fase', s.fase, 'n', s.cuantas, 'costoUsd', s.costo)
+                     order by s.costo desc, s.fase)
+      from (select fase, count(*) cuantas, sum(costo_usd) costo from llm_costo
+             where tenant_id = ta group by fase) s), '[]'::jsonb);
+
+  ok_viajes := (j_a -> 'totales' ->> 'viajes')::bigint =
+               (select count(distinct viaje_id) from llm_costo where tenant_id = ta);
+
+  ok_tokens := (j_a -> 'totales' ->> 'tokensIn')::bigint
+                 = (select sum(tokens_in) from llm_costo where tenant_id = ta)
+             and (j_a -> 'totales' ->> 'tokensOut')::bigint
+                 = (select sum(tokens_out) from llm_costo where tenant_id = ta);
+
+  ok_docs := (d_a ->> 'procesados')::bigint = (gastos_a - gastos_a / 3)::bigint;
+
+  ok_mes := (d_a -> 'porMes') = coalesce((
+    select jsonb_agg(jsonb_build_object('mes', s.mes, 'n', s.cuantas) order by s.mes)
+      from (select to_char(created_at at time zone 'UTC', 'YYYY-MM') mes, count(*) cuantas
+              from gasto where tenant_id = ta and ocr_confianza is not null
+             group by 1) s), '[]'::jsonb);
+
+  -- Los comprobantes SIN `ocr_confianza` no se cuentan: son captura manual, no
+  -- trabajo del Agente OCR. Si el filtro se cayera, `procesados` sería 3,000.
+  ok_solo_ocr := (d_a ->> 'procesados')::bigint
+                 < (select count(*) from gasto where tenant_id = ta);
+
+  -- ── 3. EL RECORTE QUE HABÍA: las primeras 1,000 filas no son el total ─────
+  recortado := (select sum(costo_usd) from (
+                 select costo_usd from llm_costo where tenant_id = ta limit 1000) x);
+  recorte_daba_menos := recortado < cerrado;
+
+  -- ── Ventana vacía: ceros MEDIDOS, no null ────────────────────────────────
+  j_vacia := resumen_costo_ia_tenant(ta, d0 + interval '100 years', d0 + interval '101 years');
+  ok_vacia := (j_vacia -> 'totales' ->> 'n')::bigint = 0
+          and (j_vacia -> 'totales' ->> 'costoUsd')::numeric = 0
+          and (j_vacia -> 'totales' ->> 'viajes')::bigint = 0
+          and j_vacia -> 'porFase' = '[]'::jsonb;
+
+  -- ── El corte de fecha es SEMIABIERTO ─────────────────────────────────────
+  hay_borde := (select count(*) from llm_costo where tenant_id = ta and created_at = d0 + interval '2 days');
+  j_borde := resumen_costo_ia_tenant(ta, d0, d0 + interval '2 days');
+  ok_borde := (j_borde -> 'totales' ->> 'n')::bigint =
+              (select count(*) from llm_costo
+                where tenant_id = ta and created_at >= d0 and created_at < d0 + interval '2 days');
+
+  -- ── Permisos, del catálogo ───────────────────────────────────────────────
+  select p.prosecdef, has_function_privilege('anon', p.oid, 'execute'),
+         has_function_privilege('authenticated', p.oid, 'execute'),
+         has_function_privilege('service_role', p.oid, 'execute')
+    into def_a, anon_a, auth_a, svc_a
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'resumen_costo_ia_tenant';
+
+  select p.prosecdef, has_function_privilege('anon', p.oid, 'execute'),
+         has_function_privilege('authenticated', p.oid, 'execute'),
+         has_function_privilege('service_role', p.oid, 'execute')
+    into def_d, anon_d, auth_d, svc_d
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'resumen_documentos_tenant';
+
+  delete from tenant where nombre like 'ZZZ VERIF T63 %';
+
+  raise exception E'RESUMEN_POR_TENANT\n  costo: cerrado=%  fase=%  viajes=%  tokens=%  AISLADO=%  sin-fase-ajena=%\n  docs:  procesados=%  porMes=%  AISLADO=%  solo-ocr=%\n  ventana-vacia=%  borde-semiabierto=%  hay-filas-en-el-borde=%\n  EL-RECORTE-DABA-MENOS=%   (1000 filas: %  ·  total real: %)\n  permisos costo: definer=% anon=% auth=% svc=%   docs: definer=% anon=% auth=% svc=%\n  (esperado t en todo, f en los definer y en anon/auth)',
+    ok_cerrado, ok_fase, ok_viajes, ok_tokens, ok_aislado, ok_sin_fase_ajena,
+    ok_docs, ok_mes, ok_docs_aislado, ok_solo_ocr,
+    ok_vacia, ok_borde, hay_borde,
+    recorte_daba_menos, recortado, cerrado,
+    def_a, anon_a, auth_a, svc_a, def_d, anon_d, auth_d, svc_d;
 end $$;
