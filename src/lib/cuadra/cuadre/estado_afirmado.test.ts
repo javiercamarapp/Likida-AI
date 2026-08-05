@@ -64,6 +64,25 @@ describe('lo que NO es una afirmación de estado', () => {
       expect(r.reply).toBe(t);
     });
   }
+
+  // AUDITORÍA 12, MEDIO: el detector marcaba negaciones CIERTAS, preguntas y
+  // futuro — "deliberadamente estrecho" era lo que decía su comentario, no lo
+  // que hacía. Un falso positivo tacha un mensaje correcto y tira la
+  // información que hace actuar al operador ("faltan tus fotos").
+  const tampoco = [
+    'Tu liquidación no quedó cerrada todavía, faltan tus fotos.',
+    'Tu viaje no está liquidado, te falta un comprobante.',
+    '¿Ya quedó cerrada mi liquidación?',
+    'Mañana cerramos tu liquidación cuando llegue el último ticket.',
+    'No te mandé el PDF todavía: tu liquidación no se ha cerrado.',
+  ];
+  for (const t of tampoco) {
+    it(`NO tacha una negación/pregunta/futuro correcto: ${t.slice(0, 42)}…`, () => {
+      const r = guardiaEstado(t, NO_CERRO);
+      expect(r.forzado).toBe(false);
+      expect(r.reply).toBe(t);
+    });
+  }
 });
 
 // ── AUDITORÍA 6 · CRÍTICO del rubro agéntico ────────────────────────────────
