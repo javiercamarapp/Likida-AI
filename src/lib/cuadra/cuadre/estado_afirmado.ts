@@ -124,7 +124,7 @@ export interface ResultadoEstado {
  *    solo afirma si la oración NO trae marcador de futuro (mañana, cuando…).
  */
 function afirmaHechoConsumado(reply: string, patrones: RegExp[]): boolean {
-  const PREGUNTA = /¿/;
+  const PREGUNTA = /[¿?]/;  // el "?" final también — en WhatsApp mexicano el ¿ se cae
   const NEGACION = /\b(?:no|nunca|jamás|tampoco)\b/i;
   const FUTURO = /\b(?:mañana|cuando|después|en\s+cuanto|pronto|luego|al\s+rato|apenas)\b/i;
   // El patrón 4 ("no tienes nada pendiente") ES una negación que afirma el
@@ -133,15 +133,20 @@ function afirmaHechoConsumado(reply: string, patrones: RegExp[]): boolean {
   for (const oracion of reply.split(/(?<=[.!?])\s+|\n/)) {
     if (!oracion.trim()) continue;
     if (PREGUNTA.test(oracion)) continue;
-    // Negación CIERTA en la oración ("no quedó cerrada", "no está liquidado",
-    // "no te mandé el PDF"): desmentirla sería tachar la verdad y tirar la
-    // información que hace actuar al operador. La doctrina del archivo dice
-    // "se prefiere el segundo error": mejor dejar pasar una mentira que tachar
-    // un mensaje correcto.
-    if (NEGACION.test(oracion) && !AFIRMA_NEGANDO.test(oracion)) continue;
     for (const r of patrones) {
       const m = r.exec(oracion);
       if (!m) continue;
+      // AUDITORÍA 13, MEDIO (regresión del fix de la 12): el salto por negación
+      // era de ORACIÓN ENTERA — "Ya quedó cerrada tu liquidación, NO te
+      // preocupes" pasaba intacta con cerro:false, porque cualquier "no" en
+      // cualquier posición saltaba la oración. La promesa del fix era "negación
+      // PEGADA AL VERBO": se salta solo cuando el "no" está en la ventana del
+      // verbo — antes del match ("no quedó cerrada") o justo tras el sujeto
+      // ("viaje NO está liquidado", donde el verbo viene después del sujeto y
+      // el match arranca en el sujeto). Un "no" accesorio a +25 caracteres del
+      // verbo no cuenta.
+      const ventana = oracion.slice(Math.max(0, m.index - 25), Math.min(oracion.length, m.index + 18));
+      if (NEGACION.test(ventana) && !AFIRMA_NEGANDO.test(oracion)) continue;
       // -amos: "cerramos" es pretérito o presente/futuro según el contexto.
       if (/amos(?!\w)/i.test(m[0]) && FUTURO.test(oracion)) continue;
       return true;
