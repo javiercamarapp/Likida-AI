@@ -71,6 +71,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const {
   getCargaOperadores, getViajesSinAsignar, getUnidades, getIncidencias,
   getTableroOperacion, cambiarEstadoIncidencia, crearViaje, asignarUnidad, getPods, rechazarPod,
+  marcarPodPedido, crearIncidencia,
 } = await import('./operacion');
 
 beforeEach(() => { TABLAS = {}; FALLAN = {}; escrituras.length = 0; });
@@ -397,7 +398,6 @@ describe('escrituras', () => {
     await expect(asignarUnidad('t-1', 'v-1', 'u-de-otra-flota')).rejects.toThrow(
       'asignarUnidad: la unidad no pertenece a esta flota',
     );
-    // Mutación: sin esta aserción, borrar el candado y dejar pasar el UPDATE
     // seguiría verde en la prueba de arriba.
     expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
   });
@@ -418,5 +418,55 @@ describe('escrituras', () => {
     expect(w.valores).toEqual({ estado: 'rechazado', nota: 'ilegible, no se ve el sello' });
     expect(w.valores).not.toHaveProperty('storage_path');
     expect(w.filtros).toEqual([['id', 'p-1'], ['tenant_id', 't-1']]);
+  });
+});
+
+// ── AUDITORÍA 12 · MEDIO BACKEND: ids referidos tienen que ser de la flota ──
+describe('marcarPodPedido y crearIncidencia — el candado de pertenencia', () => {
+  it('marcarPodPedido ACEPTA un viaje y operador de la flota', async () => {
+    TABLAS = { viaje: [{ id: 'v-1' }], operador: [{ id: 'o-1' }] };
+    await marcarPodPedido('t-1', 'v-1', 'o-1');
+    const w = escrituras.find((e) => e.tabla === 'pod')!;
+    expect(w.valores).toEqual({ tenant_id: 't-1', viaje_id: 'v-1', operador_id: 'o-1', estado: 'pendiente' });
+  });
+
+  it('marcarPodPedido RECHAZA un viaje de OTRA flota y no inserta', async () => {
+    TABLAS = { viaje: [] };   // la consulta acotada por tenant no lo trae
+    await expect(marcarPodPedido('t-1', 'v-ajeno', null)).rejects.toThrow(
+      'marcarPodPedido: el viaje no pertenece a esta flota',
+    );
+    expect(escrituras.filter((e) => e.tabla === 'pod')).toHaveLength(0);
+  });
+
+  it('marcarPodPedido RECHAZA un operador de OTRA flota y no inserta', async () => {
+    TABLAS = { viaje: [{ id: 'v-1' }], operador: [] };
+    await expect(marcarPodPedido('t-1', 'v-1', 'o-ajeno')).rejects.toThrow(
+      'marcarPodPedido: el operador no pertenece a esta flota',
+    );
+    expect(escrituras.filter((e) => e.tabla === 'pod')).toHaveLength(0);
+  });
+
+  it('crearIncidencia ACEPTA viaje y unidad de la flota', async () => {
+    TABLAS = { viaje: [{ id: 'v-1' }], unidad: [{ id: 'u-1' }] };
+    const id = await crearIncidencia('t-1', { viajeId: 'v-1', unidadId: 'u-1', tipo: 'averia' });
+    const w = escrituras.find((e) => e.tabla === 'incidencia')!;
+    expect(w.valores).toMatchObject({ tenant_id: 't-1', viaje_id: 'v-1', unidad_id: 'u-1', tipo: 'averia' });
+    expect(id).toBe('incidencia-nuevo');
+  });
+
+  it('crearIncidencia RECHAZA una unidad de OTRA flota', async () => {
+    TABLAS = { viaje: [{ id: 'v-1' }], unidad: [] };
+    await expect(crearIncidencia('t-1', { viajeId: 'v-1', unidadId: 'u-ajena', tipo: 'averia' })).rejects.toThrow(
+      'crearIncidencia: la unidad no pertenece a esta flota',
+    );
+    expect(escrituras.filter((e) => e.tabla === 'incidencia')).toHaveLength(0);
+  });
+
+  it('crearIncidencia RECHAZA un viaje de OTRA flota', async () => {
+    TABLAS = { viaje: [] };
+    await expect(crearIncidencia('t-1', { viajeId: 'v-ajeno', tipo: 'averia' })).rejects.toThrow(
+      'crearIncidencia: el viaje no pertenece a esta flota',
+    );
+    expect(escrituras.filter((e) => e.tabla === 'incidencia')).toHaveLength(0);
   });
 });

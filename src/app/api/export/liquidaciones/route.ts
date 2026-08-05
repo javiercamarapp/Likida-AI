@@ -6,6 +6,7 @@ import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
+import { traerTodo, conteo, LecturaIncompleta } from '@/lib/cuadra/pg';
 
 export const runtime = 'nodejs';
 
@@ -53,28 +54,32 @@ export async function GET(req: Request) {
     return new NextResponse('Tu rol no puede descargar este documento.', { status: 403 });
   }
 
-  const { data, error } = await supabaseAdmin()
-    .from('liquidacion')
-    .select('created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, viaje:viaje_id(folio, operador:operador_id(nombre))')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false })
-    .limit(5000);
-  // El texto crudo de PostgREST iba en el cuerpo del 500 y del lado del
-  // servidor NO quedaba ninguna línea: el único testigo del fallo era el
-  // navegador del contralor, que no lo guarda. Si cerraba la pestaña, el evento
-  // no existió. Y de paso el mensaje sacaba nombres de columna y detalle del
-  // esquema hacia afuera (auditoría 5, operabilidad, ALTO).
-  //
-  // Se invierte: el detalle se queda dentro y el usuario recibe algo que puede
-  // repetir por teléfono. `tenant` va en el log —el redactor lo huella, no lo
-  // borra— para saber de qué flota era el fallo.
-  if (error) {
-    logger.error('export.liquidaciones', { tenant: tenantId, err: error.message });
+  // AUDITORÍA 12, MEDIO (backend): `.limit(5000)` a secas — un contralor con
+  // 5,001+ liquidaciones bajaba un CSV corto sin que nadie se lo dijera, el
+  // peor tipo de dato que falta: el histórico viejo que cruza contra su ERP.
+  // `traerTodo` pagina hasta probar que trajo TODO (conteo exacto en la primera
+  // página) y lanza `LecturaIncompleta` si no puede demostrarlo — la doctrina
+  // de `pg.ts` que este archivo reintroducía con un techo más alto.
+  let filas: unknown[] = [];
+  try {
+    filas = await traerTodo(
+      (d, h) => supabaseAdmin().from('liquidacion')
+        .select('created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, viaje:viaje_id(folio, operador:operador_id(nombre))', conteo(d))
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .range(d, h),
+      'export.liquidaciones',
+    );
+  } catch (e) {
+    if (e instanceof LecturaIncompleta) {
+      logger.error('export.liquidaciones_incompleto', { tenant: tenantId, leidas: e.leidas });
+      return new NextResponse('La flota tiene más liquidaciones de las que el export puede traer en una pasada. Si esto persiste, avísanos: necesitamos paginar el archivo.', { status: 500 });
+    }
+    logger.error('export.liquidaciones', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     return new NextResponse('No se pudo generar el export. Intenta de nuevo en un momento.', { status: 500 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = toLiquidacionRows((data ?? []) as any);
+  const rows = toLiquidacionRows(filas as never);
   const csv = toCsv(rows);
   return new NextResponse(csv, {
     headers: {
