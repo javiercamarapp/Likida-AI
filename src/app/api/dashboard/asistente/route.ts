@@ -19,6 +19,7 @@ import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getKpis, getAcreditables, detectarAnomalias } from '@/lib/cuadra/analytics';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,8 +58,18 @@ export async function GET(req: NextRequest) {
     if (t) { tenantId = t.id as string; tenantNombre = t.nombre as string; }
   }
 
-  const safe = async <T,>(fn: () => Promise<T>): Promise<T | null> => {
-    try { return await fn(); } catch { return null; }
+  // AUDITORÍA 12, BAJO (backend): `safe` devolvía null en los DOS casos — "no
+  // hay datos" y "no pude leer" — y el rail pintaba nada en ambos. Un bache de
+  // Supabase dejaba el widget en blanco sin rastro en pantalla; solo el logger
+  // del server lo decía. Ahora el error de lectura sale explícito en
+  // `errorCarga` y el rail puede decir "no se pudo leer" (el patrón que ya usa
+  // costos-facturacion). La ausencia real de datos sigue siendo null en la
+  // cifra, nunca un falso vacío.
+  const safe = async <T,>(fn: () => Promise<T>): Promise<{ ok: true; v: T } | { ok: false }> => {
+    try { return { ok: true, v: await fn() }; } catch (e) {
+      logger.error('asistente.lectura', { err: e instanceof Error ? e.message : String(e) });
+      return { ok: false };
+    }
   };
   const [kpis, acred, anomalias] = await Promise.all([
     safe(() => getKpis(tenantId!)),
@@ -69,8 +80,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     nombre: sesion.nombre,
     tenantNombre,
-    kpis,
-    acred,
-    anomalias: anomalias?.map((a) => ({ detalle: a.detalle, monto: a.monto })) ?? null,
+    kpis: kpis.ok ? kpis.v : null,
+    acred: acred.ok ? acred.v : null,
+    anomalias: anomalias.ok ? (anomalias.v?.map((a) => ({ detalle: a.detalle, monto: a.monto })) ?? null) : null,
+    errorCarga: !kpis.ok || !acred.ok || !anomalias.ok,
   });
 }
