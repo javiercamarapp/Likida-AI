@@ -1,5 +1,6 @@
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio';
+import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { usd, numero } from '@/lib/utils';
 import { saludo, fechaLarga } from '@/lib/saludo';
 import Link from 'next/link';
@@ -81,6 +82,12 @@ export default async function Admin({
   ]);
   const chipsCosto = r.porDia.slice(-8).map((d) => d.costoUsd);
   const chipsTokens = r.porDia.slice(-8).map((d) => d.tokens);
+  // AUDITORÍA 10, ALTO — "Flota (solo el demo)" era texto fijo: con la base
+  // en 0 tenants (5-ago-2026) seguía diciendo que había una, y encima
+  // "solo el demo" es una afirmación verificable, no una suposición — se
+  // comprueba contra el id real en vez de asumir que el único tenant que
+  // hay siempre es el demo.
+  const esSoloDemo = r.tenants === 1 && r.flotas[0]?.id === tenantDemo();
 
 
   // `main` y `asideTop` se pasan como children al cliente
@@ -152,7 +159,7 @@ export default async function Admin({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
               <KpiTile
                 icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                etiqueta={r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
+                etiqueta={r.tenants === 0 ? 'Flotas (ninguna dada de alta)' : esSoloDemo ? 'Flota (solo el demo)' : 'Flotas'}
                 valor={r.tenants} formato="entero"
               />
               <KpiTile

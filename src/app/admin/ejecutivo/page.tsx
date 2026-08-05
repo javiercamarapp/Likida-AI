@@ -1,4 +1,5 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
+import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { DollarSign, Truck, CheckCircle2 } from 'lucide-react';
 import ContadorRetro from '../contador-retro';
 import { KpiTile } from '../ui/kit';
@@ -17,6 +18,9 @@ export const dynamic = 'force-dynamic';
 export default async function EjecutivoPage() {
   const r = await getResumenNegocio();
   const chipsCosto = r.porDia.slice(-8).map((d) => d.costoUsd);
+  // AUDITORÍA 10, ALTO — mismo texto fijo de `admin/page.tsx`: "solo el
+  // demo" se comprueba contra el id real, no se asume porque el conteo dé 1.
+  const esSoloDemo = r.tenants === 1 && r.flotas[0]?.id === tenantDemo();
 
   return (
     <div className="flex flex-col gap-4">
@@ -51,7 +55,7 @@ export default async function EjecutivoPage() {
             />
             <KpiTile
               icono={<Truck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-              etiqueta={r.tenants <= 1 ? 'Flota (solo el demo)' : 'Flotas'}
+              etiqueta={r.tenants === 0 ? 'Flotas (ninguna dada de alta)' : esSoloDemo ? 'Flota (solo el demo)' : 'Flotas'}
               valor={r.tenants} formato="entero"
             />
             <KpiTile
