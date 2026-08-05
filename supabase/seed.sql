@@ -99,7 +99,7 @@ on conflict (id) do nothing;
 -- 🔴 INVENTADO: topes y set de casetas — documentar los reales del corredor.
 update tenant set config = jsonb_set(
   coalesce(config, '{}'::jsonb), '{politica}',
-  '[{"concepto":"diesel","topeMonto":4000},{"concepto":"caseta","topeMonto":1500},{"concepto":"alimentacion","topeMonto":800},{"concepto":"hospedaje","topeMonto":2500},{"concepto":"transporte","topeMonto":800},{"concepto":"flete"},{"concepto":"factura","requiereCfdi":true}]'::jsonb)
+  '[{"concepto":"diesel","topeMonto":4000},{"concepto":"caseta","topeMonto":1500},{"concepto":"alimentacion","topeMonto":800},{"concepto":"hospedaje","topeMonto":2500},{"concepto":"transporte","topeMonto":800},{"concepto":"flete"},{"concepto":"factura","requiereCfdi":true}]'::jsonb
 ) where id = '11111111-1111-1111-1111-111111111111';
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -132,7 +132,7 @@ insert into gasto (id, tenant_id, viaje_id, concepto, monto, folio, cfdi_uuid, r
    '{"litros": 113}'::jsonb),
   ('55555555-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001',
    'caseta', 1400, 'CA-4471', 'c8f4a2b3-2d5e-4f70-9b01-234567890abc', null, 'GMX0902279I1',
-   'vigente', null, null, null, 'I', null, null, true, '04', 1206.90, null, 193.10, current_date - 1, 0.96)
+   'vigente', null, null, null, 'I', null, null, true, '04', 1206.90, null, 193.10, current_date - 1, 0.96, null)
 on conflict (id) do nothing;
 
 -- 🔴 DEMO: XML crudo del diésel (CFF 30) — con complemento HidroYPetro real.
