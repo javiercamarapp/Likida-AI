@@ -391,7 +391,11 @@ export async function updateGastoCfdiXml(
   x: { claveProdServ?: string; claveUnidad?: string; tipoComprobante?: string; complementoHidrocarburos?: boolean; esquemaAlterno?: boolean; formaPago?: string; subTotal?: number; iepsTraslado?: number; ivaTraslado?: number;
        // Cuando el XML se pega a un TICKET (que no traía UUID), estos tres campos
        // pasan a ser autoritativos: vienen del comprobante timbrado, no del OCR.
-       uuid?: string; rfcEmisor?: string; rfcReceptor?: string; total?: number; fecha?: string },
+       uuid?: string; rfcEmisor?: string; rfcReceptor?: string; total?: number; fecha?: string;
+       // Auditoría 12 (fiscal, ALTO): @Cantidad del concepto representativo,
+       // litros cuando ClaveUnidad = LTR. El XML es la verdad de referencia del
+       // ticket; si el OCR no leyó litros (o los leyó mal), este los llena.
+       cantidad?: number },
 ): Promise<void> {
   const extra: Record<string, unknown> = {};
   if (x.uuid) extra.cfdi_uuid = x.uuid;
@@ -400,6 +404,16 @@ export async function updateGastoCfdiXml(
   // El monto del CFDI gana sobre el que leyó la visión: no pasó por OCR.
   if (x.total != null && x.total > 0) extra.monto = x.total;
   if (x.fecha) extra.fecha = x.fecha;
+  // Litros del XML: se MERGEAN sobre ocr_extra (no se reemplaza el jsonb —
+  // ahí viven producto, estacion, fechaImpresa… que una escritura a ciegas
+  // borraría). Lectura + fusión + escritura, el patrón del resto del repo.
+  if (x.claveUnidad === 'LTR' && x.cantidad != null && x.cantidad > 0) {
+    const { data: actual } = await acotada(supabaseAdmin().from('gasto')
+      .select('ocr_extra').eq('id', gastoId).eq('tenant_id', tenantId).maybeSingle(), 'updateGastoCfdiXml.leerOcrExtra');
+    const ocrExtra = { ...((actual?.ocr_extra as Record<string, unknown> | null) ?? {}) };
+    ocrExtra.litros = x.cantidad;
+    extra.ocr_extra = ocrExtra;
+  }
   const { error } = await acotada(supabaseAdmin().from('gasto').update({
     ...extra,
     clave_prod_serv: x.claveProdServ ?? null,

@@ -125,10 +125,11 @@ on conflict (id) do nothing;
 -- diferencia sea la de política (diésel $200 sobre tope).
 insert into gasto (id, tenant_id, viaje_id, concepto, monto, folio, cfdi_uuid, rfc_emisor, rfc_receptor,
   estado_sat, efos, clave_prod_serv, clave_unidad, tipo_comprobante, complemento_hidrocarburos,
-  cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, ieps_traslado, iva_traslado, fecha, ocr_confianza) values
+  cfdi_esquema_alterno, xml_verificado, forma_pago, sub_total, ieps_traslado, iva_traslado, fecha, ocr_confianza, ocr_extra) values
   ('55555555-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001',
    'diesel', 4200, 'DS-8801', 'b7e3f1a2-1c4d-4e6f-8a90-1234567890ab', 'ENE160518AB1', 'GMX0902279I1',
-   'vigente', false, '15101505', 'LTR', 'I', true, false, true, '03', 3210.00, 408.62, 581.38, current_date - 1, 0.97),
+   'vigente', false, '15101505', 'LTR', 'I', true, false, true, '03', 3210.00, 408.62, 581.38, current_date - 1, 0.97,
+   '{"litros": 113}'::jsonb),
   ('55555555-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', '44444444-0000-0000-0000-000000000001',
    'caseta', 1400, 'CA-4471', 'c8f4a2b3-2d5e-4f70-9b01-234567890abc', null, 'GMX0902279I1',
    'vigente', null, null, null, 'I', null, null, true, '04', 1206.90, null, 193.10, current_date - 1, 0.96)

@@ -53,6 +53,12 @@ import { XMLParser } from 'fast-xml-parser';
 export interface CfdiConceptoXml {
   claveProdServ?: string;
   claveUnidad?: string;
+  /** Cantidad de la UNIDAD (ClaveUnidad LTR → litros). Se lee aunque el
+   *  camino 1:1 (ticket) no la usara — es el dato que la auditoría 12 pedía:
+   *  el XML de la gasolinera dice Cantidad="113.00" y la liquidación salía
+   *  con 0 litros. Ahora viaja en `CfdiXmlData.cantidad` y el processor lo
+   *  escribe en ocrExtra.litros cuando el concepto es de combustible. */
+  cantidad?: number;
   complemento: boolean; // el concepto trae hidrocarburosPetroliferos
 }
 
@@ -97,6 +103,10 @@ export interface CfdiXmlData {
   // Concepto REPRESENTATIVO (el de combustible si existe, si no el primero):
   claveProdServ?: string;
   claveUnidad?: string;
+  /** @Cantidad del concepto representativo — litros cuando ClaveUnidad = LTR.
+   *  La auditoría 12 (fiscal, ALTO) lo pidió para el camino 1:1: el XML de
+   *  la gasolinera lo trae y la liquidación del demo salía con 0 litros. */
+  cantidad?: number;
   complementoHidrocarburos: boolean; // el representativo trae el complemento
   // Esquema ALTERNO (monedero electrónico ECC o Carta Porte): la regla 2.7.1.48
   // NO aplica a estos; el motor NO debe declararlos no deducibles por complemento.
@@ -178,6 +188,13 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
     const conceptosNode = (comp.Conceptos ?? {}) as Record<string, unknown>;
     const conceptosRaw = toArr(conceptosNode.Concepto as Record<string, unknown>[] | undefined);
 
+    // Se define ANTES del map de conceptos porque `cantidad` (abajo) lo usa.
+    const num = (v: unknown): number | undefined => {
+      if (v == null) return undefined;
+      const n = parseFloat(v as string);
+      return Number.isNaN(n) ? undefined : n;
+    };
+
     const conceptos: CfdiConceptoXml[] = conceptosRaw.map((c) => {
       const cc = (c.ComplementoConcepto ?? {}) as Record<string, unknown>;
       // El nodo raíz del complemento es `HidroYPetro` (estándar CC_HYP_10,
@@ -190,6 +207,7 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       return {
         claveProdServ: (c['@_ClaveProdServ'] as string) || undefined,
         claveUnidad: (c['@_ClaveUnidad'] as string) || undefined,
+        cantidad: num(c['@_Cantidad']),
         complemento: tieneComplemento,
       };
     });
@@ -207,12 +225,6 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
 
     // Representativo: el primer concepto de combustible; si no hay, el primero.
     const rep = conceptos.find((c) => c.claveProdServ?.startsWith(PREFIJO_COMBUSTIBLE)) ?? conceptos[0];
-
-    const num = (v: unknown): number | undefined => {
-      if (v == null) return undefined;
-      const n = parseFloat(v as string);
-      return Number.isNaN(n) ? undefined : n;
-    };
 
     // ── LÍNEAS DEL CONSOLIDADO (auditoría 10) ─────────────────────────────
     // ECC12: `EstadoDeCuentaCombustible` es HERMANO del Timbre dentro de
@@ -280,6 +292,7 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       conceptos,
       claveProdServ: rep?.claveProdServ,
       claveUnidad: rep?.claveUnidad,
+      cantidad: rep?.cantidad,
       complementoHidrocarburos: rep?.complemento ?? false,
       esquemaAlterno,
       lineas,

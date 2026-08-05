@@ -1426,6 +1426,11 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
                 iepsTraslado: xml.iepsTraslado,
                 ivaTraslado: xml.ivaTraslado,
                 xmlVerificado: true,
+                // Auditoría 12 (fiscal, ALTO): el XML 1:1 trae la cantidad
+                // (Cantidad="113.00" ClaveUnidad="LTR") y sin esto el gasto
+                // nacía con 0 litros — el estímulo no se acreditaba.
+                ocrExtra: xml.claveUnidad === 'LTR' && xml.cantidad != null
+                  ? { litros: xml.cantidad } : undefined,
               });
             } catch (e) {
               if (llegoTarde(e)) {
