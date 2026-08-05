@@ -2,7 +2,6 @@
 
 import { useCountUp } from '../admin/ui/use-count-up';
 import { usePrefersReducedMotion } from '../admin/ui/prefers-reduced-motion';
-import { useInView } from '../admin/ui/use-in-view';
 import { resolverFormato, type FormatoPreset } from '../admin/ui/formato-preset';
 
 /**
@@ -16,9 +15,19 @@ import { resolverFormato, type FormatoPreset } from '../admin/ui/formato-preset'
  * Minimalista a propósito: sin caja, sin fondo, sin borde. Solo el número
  * grande en tipografía display, el símbolo de moneda a menor tamaño y en
  * gris (es contexto, no dato), y el rótulo abajo en versalitas espaciadas.
- * La animación es un count-up con ease-out que arranca cuando la cifra
- * entra en pantalla, más un fundido de entrada — se respeta
- * `prefers-reduced-motion`, que entonces la pinta final de una vez.
+ *
+ * AUDITORÍA 10, MEDIO — antes el fundido de entrada dependía de
+ * `useInView` (IntersectionObserver): en el servidor `enVista` arranca en
+ * `false`, así que el `opacity:0` salía en el HTML servido y el número
+ * —el más grande del panel— quedaba invisible hasta que el JS montara,
+ * corriera el observer y confirmara que el elemento ya estaba en pantalla.
+ * Pero esta cifra vive en el ENCABEZADO FIJO (`dashboard/page.tsx`: "no se
+ * va al hacer scroll"): nunca está fuera de vista al cargar, así que ese
+ * fundido "al entrar en viewport" (pensado para gráficas más abajo, §F-bis)
+ * no tenía nada que detectar y solo escondía la cifra mientras tanto. Se
+ * quita: se pinta a opacidad plena desde el HTML servido, mismo criterio
+ * que ya aplica `useCountUp` — el valor real, VISIBLE, sin esperar a que
+ * el JS corra.
  */
 export default function CifraGrande({
   valor, etiqueta, formato = 'mxn', nota,
@@ -29,14 +38,12 @@ export default function CifraGrande({
   /** Segunda línea opcional, aún más discreta (la ventana de tiempo, la base legal). */
   nota?: string;
 }) {
-  const [ref, enVista] = useInView<HTMLDivElement>();
   const reducido = usePrefersReducedMotion();
-  const animar = enVista && !reducido;
-  const mostrado = useCountUp(valor, animar);
+  const mostrado = useCountUp(valor, !reducido);
   const fmt = resolverFormato(formato);
 
   return (
-    <div ref={ref} className="shrink-0 text-right">
+    <div className="shrink-0 text-right">
       <div
         className="tabular leading-none"
         style={{
@@ -44,10 +51,6 @@ export default function CifraGrande({
           fontWeight: 600,
           fontSize: 'clamp(2rem, 3.4vw, 3.25rem)',
           letterSpacing: '-0.035em',
-          // Fundido + subida corta al entrar. `reducido` lo deja quieto.
-          opacity: enVista || reducido ? 1 : 0,
-          transform: enVista || reducido ? 'none' : 'translateY(6px)',
-          transition: reducido ? undefined : 'opacity 520ms ease, transform 520ms cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       >
         {fmt(mostrado)}
