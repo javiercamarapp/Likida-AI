@@ -45,7 +45,7 @@ export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje
     // depende de él (LFT 263-I) y sin traerlo esa sección no se activa NUNCA.
     // Es el mismo patrón que ya costó dos rondas: el dato existe, el consumidor
     // existe, y nadie los conectó.
-    .select('id, folio, origen, destino, anticipo, fecha_inicio, fecha_fin, demora_no_imputable')
+    .select('id, folio, origen, destino, anticipo, fecha_inicio, fecha_fin, demora_no_imputable, operador_id')
     .eq('id', viajeId)
     .eq('tenant_id', tenantId)
     .maybeSingle(), 'getViaje');
@@ -57,6 +57,7 @@ export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje
     // `?? undefined` y no `|| false`: NULL significa "sin determinar", que no es
     // lo mismo que "la demora sí era imputable al operador".
     demoraNoImputable: (data.demora_no_imputable as boolean | null) ?? undefined,
+    operadorId: (data.operador_id as string | null) ?? undefined,
     origen: (data.origen as string) || undefined,
     destino: (data.destino as string) || undefined,
     anticipo: Number(data.anticipo ?? 0),
@@ -68,7 +69,7 @@ export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje
 export async function getOperador(operadorId: string, tenantId: string): Promise<Operador | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('operador')
-    .select('id, nombre, telefono, terminal:terminal_id(nombre)')
+    .select('id, nombre, telefono, rfc, terminal:terminal_id(nombre)')
     .eq('id', operadorId)
     .eq('tenant_id', tenantId)
     .maybeSingle(), 'getOperador');
@@ -79,6 +80,7 @@ export async function getOperador(operadorId: string, tenantId: string): Promise
     id: data.id as string,
     nombre: data.nombre as string,
     telefono: data.telefono as string,
+    rfc: (data.rfc as string | null) ?? undefined,
     terminal: terminal?.nombre,
   };
 }

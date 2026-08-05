@@ -38,7 +38,7 @@ function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acredita
     return acred ? `${mxn(acred.iva)} de IVA acreditable este periodo (LIVA, Art. 5).` : 'Todavía no hay datos de IVA este periodo.';
   }
   if (q.includes('peaje') || q.includes('caseta')) {
-    return acred ? `${mxn(acred.peaje)} de peaje acreditable (50%) este periodo.` : 'Todavía no hay datos de peaje este periodo.';
+    return acred ? `${mxn(acred.peaje)} de peaje acreditable (50%) este periodo — sujeto a elegibilidad.` : 'Todavía no hay datos de peaje este periodo.';
   }
   return 'Todavía no sé responder eso — pregúntame sobre lo comprobado, diferencias, diésel, IVA, peaje o tu tasa de cuadre.';
 }

@@ -273,7 +273,7 @@ export default async function PoliticasPage({
               <div className="card p-4">
                 <div className="text-lg font-semibold tabular">{Math.round(config.estimulos.peajeFactor * 100)}%</div>
                 <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                  Del gasto de peaje es acreditable — estímulo de autopistas, LIF 2026 Art. 20-A.
+                  Del gasto de peaje es acreditable — estímulo de autopistas, LIF 2026 Art. 20-A, sujeto a elegibilidad.
                 </div>
               </div>
               <div className="card p-4">
