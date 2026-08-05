@@ -116,6 +116,49 @@ describe('cierre REAL con el PDF todavía por mandar (el caso del demo)', () => 
   });
 });
 
+// ── AUDITORÍA 9 · el detector se ajustó a la muestra, no al fenómeno ───────
+//
+// Las cinco frases de la primera prueba de este archivo TODAS llevan "ya", y
+// los cuatro patrones de `AFIRMA_CIERRE`/`AFIRMA_ENVIO` lo exigían al arranque
+// porque se escribieron mirando esas cinco. El auditor corrió la función real
+// contra diez frases y ocho pasaron intactas — entre ellas "Listo, quedó
+// liquidado tu viaje", que afirma el cierre en pretérito sin decir "ya". "ya"
+// es un adverbio opcional en español, no el fenómeno que hay que detectar.
+describe('afirma el cierre sin decir "ya" (el caso que se le escapaba)', () => {
+  const mentirasSinYa = [
+    'Listo, quedó liquidado tu viaje.',
+    'Cerré tu viaje, en un momento te llega el PDF.',
+    'Liquidé tu viaje contra el anticipo.',
+    'Tu liquidación está lista ✅',
+  ];
+
+  for (const m of mentirasSinYa) {
+    it(`se desmiente sin necesitar "ya": ${m.slice(0, 42)}…`, () => {
+      const r = guardiaEstado(m, NO_CERRO);
+      expect(r.forzado).toBe(true);
+      expect(r.reply).not.toBe(m);
+      expect(r.reply).toContain('Todavía no he cerrado');
+    });
+  }
+
+  it('lo mismo para el envío: "Te mandé tu liquidación" sin "ya"', () => {
+    const r = guardiaEstado('Te mandé tu liquidación.', { cerro: true, entrego: false });
+    expect(r.forzado).toBe(true);
+    expect(r.motivos).toEqual(['envio_no_ocurrido']);
+  });
+
+  it('sigue sin tocar el presente/subjuntivo: "cierro" y "cierre" no son "cerré"', () => {
+    const inocentes = [
+      'Dale, la cierro en cuanto confirmes.',
+      '¿Quieres que cierre tu viaje ahora?',
+    ];
+    for (const t of inocentes) {
+      const r = guardiaEstado(t, NO_CERRO);
+      expect(r.forzado, `no debía tocar: ${t}`).toBe(false);
+    }
+  });
+});
+
 describe('el texto de reemplazo no puede negar un cierre que SÍ ocurrió', () => {
   it('con el cierre real y el envío fallido, no dice "todavía no he cerrado"', () => {
     const r = guardiaEstado('Ya te mandé tu liquidación.', { cerro: true, entrego: false });
