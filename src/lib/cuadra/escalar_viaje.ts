@@ -24,6 +24,21 @@ import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client
 // días habría aprendido a ignorar el canal — que es el modo de falla que este
 // repo evita en todos sus avisos.
 //
+// ── POR QUÉ EL SELLO ES UN CLAIM, Y NO SOLO UN CIERRE ────────────────────
+//
+// Vercel Cron entrega *at-least-once* (`vercel.json`, cada hora): dos corridas
+// pueden solaparse. `viajesSinAceptar` lee `escalado_en IS NULL`, y si el
+// UPDATE que pone el sello se hiciera hasta el final —después de mandar los
+// mensajes, como este archivo hacía antes—, las dos corridas leerían la misma
+// fila en `NULL`, las dos mandarían el recordatorio al chofer y el aviso al
+// jefe, y las dos escribirían el sello sin pisarse porque ninguna depende de
+// lo que escribió la otra. Es la MISMA carrera que `al_vuelo.ts` cierra
+// contra el doble CFDI (`al_vuelo.ts:590-656`) — aquí el precio de perderla no
+// es un documento fiscal duplicado, es un WhatsApp de más, pero el mecanismo
+// es el mismo: `reclamarEscalacion` mueve la decisión a Postgres con un
+// UPDATE condicional que devuelve solo la fila que de verdad ganó, ANTES de
+// tocar ningún canal.
+//
 // ── POR QUÉ NO SE REASIGNA SOLO ──────────────────────────────────────────
 //
 // Sería fácil buscar otro chofer libre y moverle el viaje. No se hace: quién
@@ -146,6 +161,13 @@ export interface ResultadoEscalacion {
  * "no se ha revisado" de "se revisó y no hubo a quién avisar". El fallo queda en
  * el log y el viaje sigue visible en el panel, que es donde se ve sin depender
  * de WhatsApp.
+ *
+ * EL SELLO SE PONE ANTES DE MANDAR NADA, NO DESPUÉS. Cada viaje se reclama con
+ * `reclamarEscalacion` al entrar al loop; solo si esta corrida ganó el claim
+ * se intenta el recordatorio al chofer y el aviso al jefe. Si otra corrida
+ * solapada ya lo ganó, esta no reintenta ningún mensaje ni lo cuenta como
+ * escalado — es el resultado esperado de la carrera, no un error. Ver el
+ * comentario largo del encabezado del archivo y `reclamarEscalacion` más abajo.
  */
 export async function escalarViajesSinAceptar(args: {
   /**
@@ -165,8 +187,25 @@ export async function escalarViajesSinAceptar(args: {
     ?? await telefonosJefe(viajes.map((v) => v.tenantId));
   const r: ResultadoEscalacion = { revisados: viajes.length, reintentados: 0, escalados: 0, fallos: [] };
   const admin = supabaseAdmin();
+  const ahoraIso = args.ahora?.toISOString();
 
   for (const v of viajes) {
+    // 0) RECLAMAR, ANTES DE MANDAR CUALQUIER MENSAJE. Si el UPDATE condicional
+    //    no devuelve esta fila, otra corrida la ganó entre la lectura de arriba
+    //    y este punto — no se reintenta ningún mensaje y no cuenta como
+    //    escalado ni como fallo: es el resultado esperado de dos corridas
+    //    solapadas, no un error. Ver `reclamarEscalacion`.
+    const claim = await reclamarEscalacion(admin, v, ahoraIso);
+    if (claim.error) {
+      r.fallos.push(`marcar ${v.id}: ${claim.error}`);
+      continue;
+    }
+    if (!claim.ganado) {
+      logger.info('escalacion.ya_en_proceso', { viaje: v.id });
+      continue;
+    }
+    r.escalados++;
+
     // 1) Insistirle al chofer. Best-effort: que falle no puede impedir que el
     //    jefe se entere, que es la mitad importante.
     //
@@ -198,12 +237,13 @@ export async function escalarViajesSinAceptar(args: {
     if (tel) {
       // EN SU PROPIO try/catch. `sendTemplate` hoy atrapa sus errores de red y
       // devuelve `{ok:false}`, así que este catch no se dispara nunca — y por eso
-      // mismo hay que ponerlo: la invariante de abajo ("se marca pase lo que
-      // pase") depende de que aquí no salga una excepción. Con un `await`
+      // mismo hay que ponerlo. El viaje YA quedó marcado por `reclamarEscalacion`
+      // antes de llegar aquí, así que una excepción sin atrapar no lo dejaría sin
+      // marcar; lo que sí haría es tumbar el `for` completo y dejar SIN INTENTAR
+      // el claim de todos los viajes que faltan en el lote. Con un `await`
       // desnudo, el día que esa función lance —un JSON inválido, un timeout que
-      // cambie de forma— el viaje en curso quedaría sin marcar Y el resto del
-      // lote ni se miraría. Una invariante que solo aguanta fallos por valor no
-      // es una invariante.
+      // cambie de forma— eso es lo que pasaría. Una invariante que solo aguanta
+      // fallos por valor no es una invariante.
       try {
         // EL TEXTO QUE SÍ SE ESCRIBIÓ PARA ESTO. `armarAvisoJefe` existía con
         // sus pruebas y no lo llamaba nadie: salía la plantilla
@@ -230,21 +270,54 @@ export async function escalarViajesSinAceptar(args: {
       logger.error('escalacion.sin_telefono_de_jefe', { tenantId: v.tenantId, viaje: v.id });
       r.fallos.push(`${v.folio ?? v.id}: esa flota no tiene teléfono de jefe registrado`);
     }
-
-    // 3) Marcar. Ver la nota de arriba: se marca pase lo que pase con el envío.
-    //
-    // Acotado por tenant aunque `id` sea la PK: es la disciplina del repo
-    // (`acotada`), y un update sin acotar que hoy es inofensivo se copia mañana
-    // a uno que sí puede cruzar flotas.
-    const { error } = await admin
-      .from('viaje')
-      .update({ escalado_en: new Date().toISOString(), avisos_enviados: v.avisosEnviados + 1 })
-      .eq('id', v.id)
-      .eq('tenant_id', v.tenantId);
-    if (error) r.fallos.push(`marcar ${v.id}: ${error.message}`);
-    else r.escalados++;
   }
 
   logger.info('viaje.escalacion', { revisados: r.revisados, escalados: r.escalados, fallos: r.fallos.length });
   return r;
+}
+
+/**
+ * Toma el viaje para ESTA corrida, ANTES de mandar cualquier mensaje. Devuelve
+ * `ganado: true` solo si esta llamada fue la que puso el sello.
+ *
+ * MISMO MECANISMO QUE `reclamarIntentos` DE `al_vuelo.ts`
+ * (`al_vuelo.ts:613-645`): el UPDATE es condicional y devuelve filas — la
+ * condición incluye `escalado_en IS NULL`, que es justo la columna que el
+ * propio UPDATE pisa, así que el primero en llegar deja a los demás sin fila
+ * que actualizar. Cero filas no es un error: es que otra corrida ya ganó.
+ *
+ * SIN VENTANA DE REINTENTO, A DIFERENCIA DE `al_vuelo.ts`. Allá el claim puede
+ * perderse de verdad —el portal truena a media sesión— y hace falta poder
+ * reintentar diez minutos después (`CLAIM_MINUTOS`). Aquí no: el archivo se
+ * marca a propósito aunque el aviso falle (ver el encabezado de
+ * `escalarViajesSinAceptar`), así que el claim y el cierre son la MISMA
+ * escritura — quien gana la fila queda escalado para siempre, sin nada que
+ * expire ni que limpiar.
+ *
+ * Se falla CERRADO: si el UPDATE mismo revienta (no que pierda la carrera,
+ * sino que la base no conteste), no se manda ningún mensaje. Mandarlo sin
+ * saber si el sello quedó puesto es exactamente el riesgo que esto existe
+ * para cerrar.
+ */
+async function reclamarEscalacion(
+  admin: ReturnType<typeof supabaseAdmin>,
+  v: ViajeSinAceptar,
+  ahora?: string,
+): Promise<{ ganado: boolean; error?: string }> {
+  const { data, error } = await admin
+    .from('viaje')
+    .update({ escalado_en: ahora ?? new Date().toISOString(), avisos_enviados: v.avisosEnviados + 1 })
+    .eq('id', v.id)
+    // Acotado por tenant además de por id, aunque `id` sea la PK: es la
+    // disciplina del repo (`acotada`) — un update sin acotar que hoy es
+    // inofensivo se copia mañana a uno que sí puede cruzar flotas.
+    .eq('tenant_id', v.tenantId)
+    .is('escalado_en', null)
+    .select('id');
+
+  if (error) {
+    logger.warn('escalacion.claim_sin_guardar', { viaje: v.id, err: error.message });
+    return { ganado: false, error: error.message };
+  }
+  return { ganado: (data ?? []).length > 0 };
 }

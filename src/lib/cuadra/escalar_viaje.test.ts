@@ -5,21 +5,28 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //
 // Lo que este archivo protege, en orden de importancia:
 //
-//   1. SE ESCALA UNA SOLA VEZ. `escalado_en` se marca AUNQUE EL AVISO AL JEFE
-//      FALLE, y eso parece un bug hasta que se piensa el caso contrario: con un
-//      teléfono de jefe mal capturado, no marcar significa reintentar y fallar
-//      cada hora para siempre, y que el registro no distinga "no revisado" de
-//      "revisado y no había a quién avisar". La prueba lo fija para que nadie
-//      lo "arregle" a la vuelta de seis meses. Y se prueba en las DOS formas de
-//      fallar —por valor (`{ok:false}`) y por excepción—, porque una invariante
-//      que solo aguanta una de las dos no es una invariante.
+//   1. SE ESCALA UNA SOLA VEZ, incluso entre dos corridas SOLAPADAS del cron.
+//      El claim (`reclamarEscalacion`) pone `escalado_en` ANTES de mandar
+//      cualquier mensaje, con el mismo mecanismo que `al_vuelo.ts` usa contra
+//      el doble CFDI: un UPDATE condicional que solo la corrida que gana la
+//      fila puede pasar. La que pierde no reintenta ningún mensaje.
 //
-//   2. UN ERROR NO ES UNA LISTA VACÍA. `viajesSinAceptar` lanza. Sin eso, una
+//   2. SE ESCALA UNA SOLA VEZ dentro de la MISMA corrida. `escalado_en` se
+//      marca AUNQUE EL AVISO AL JEFE FALLE, y eso parece un bug hasta que se
+//      piensa el caso contrario: con un teléfono de jefe mal capturado, no
+//      marcar significa reintentar y fallar cada hora para siempre, y que el
+//      registro no distinga "no revisado" de "revisado y no había a quién
+//      avisar". La prueba lo fija para que nadie lo "arregle" a la vuelta de
+//      seis meses. Y se prueba en las DOS formas de fallar —por valor
+//      (`{ok:false}`) y por excepción—, porque una invariante que solo aguanta
+//      una de las dos no es una invariante.
+//
+//   3. UN ERROR NO ES UNA LISTA VACÍA. `viajesSinAceptar` lanza. Sin eso, una
 //      base caída se leería como "hoy nadie dejó de aceptar" — el cron correría
 //      verde mientras los viajes se pierden, que es el modo de falla que
 //      CLAUDE.md manda cerrar con `exigir()`.
 //
-//   3. EL CORTE DE 5 H SE MIDE CONTRA `ahora` INYECTADO, no contra el reloj de
+//   4. EL CORTE DE 5 H SE MIDE CONTRA `ahora` INYECTADO, no contra el reloj de
 //      quien corre las pruebas.
 //
 // Se mockea `sendTemplate`, no `motivoDeFalloWhatsApp`: lo que hace útil un
@@ -47,8 +54,12 @@ vi.mock('@/lib/logger', () => ({ logger }));
 // ── La base ────────────────────────────────────────────────────────────────
 /** Lo que devuelve el SELECT de viajes vencidos. */
 let lectura: { data: unknown; error: { message: string } | null } = { data: [], error: null };
-/** Lo que devuelve cada UPDATE, en orden. La última se repite si se acaban. */
-let resultadosUpdate: Array<{ error: { message: string } | null }> = [];
+/**
+ * Lo que devuelve cada UPDATE (el claim), en orden. La última se repite si se
+ * acaban. `data` simula lo que el `.select('id')` del claim ve: una fila
+ * significa que esta corrida ganó, `[]` que otra corrida se adelantó.
+ */
+let resultadosUpdate: Array<{ data?: unknown; error: { message: string } | null }> = [];
 /** Cada método de la cadena de lectura, con sus argumentos. */
 const filtros: Array<[string, unknown[]]> = [];
 /** Cada update ejecutado: qué se escribió y con qué filtros. */
@@ -69,10 +80,15 @@ const from = vi.fn((tabla: string) => ({
   // esperarlo: así la prueba ve TODOS los filtros con que se acotó, no el
   // primero. Un mock que se resolviera en el primer `.eq` haría pasar en verde
   // justo el descuido que hay que vigilar — un update sin acotar por tenant.
+  // `.is()` y `.select()` son parte del claim (`reclamarEscalacion`): se
+  // encadenan sin registrarse en `por` porque las pruebas de acotación por
+  // tenant solo verifican los `.eq()`.
   update: (fila: Record<string, unknown>) => {
     const por: Array<[string, unknown]> = [];
     const nodo: Record<string, unknown> = {};
     nodo.eq = (col: string, val: unknown) => { por.push([col, val]); return nodo; };
+    nodo.is = () => nodo;
+    nodo.select = () => nodo;
     nodo.then = (r: (v: unknown) => unknown) => {
       updates.push({ fila, por });
       const res = resultadosUpdate[updates.length - 1] ?? resultadosUpdate.at(-1) ?? { error: null };
@@ -103,7 +119,9 @@ const fila = (o: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   lectura = { data: [], error: null };
-  resultadosUpdate = [{ error: null }];
+  // Por defecto el claim GANA: una fila en `data` es lo que `reclamarEscalacion`
+  // lee como "esta corrida se quedó con el viaje".
+  resultadosUpdate = [{ data: [{ id: 'v-1' }], error: null }];
   filtros.length = 0;
   updates.length = 0;
   from.mockClear();
@@ -312,7 +330,7 @@ describe('escalarViajesSinAceptar', () => {
     expect(r).toMatchObject({ revisados: 1, reintentados: 0, escalados: 1 });
   });
 
-  it('si la marca NO se pudo escribir, no se cuenta como escalado', async () => {
+  it('si el claim (la marca) NO se pudo escribir, no se cuenta como escalado ni se manda nada', async () => {
     // Y esto es lo que hace que el reintento de la siguiente corrida sea
     // correcto: el viaje sigue sin `escalado_en`, así que vuelve a salir en la
     // consulta. Contarlo como escalado aquí sería perderlo.
@@ -324,6 +342,11 @@ describe('escalarViajesSinAceptar', () => {
     expect(r.escalados).toBe(0);
     expect(r.revisados).toBe(1);
     expect(r.fallos.join(' ')).toMatch(/marcar v-1: deadlock detected/);
+    // Se falla CERRADO: sin claim confirmado no se toca ningún canal. Antes el
+    // envío pasaba primero y la marca al final; ahora, si la marca ni siquiera
+    // se pudo intentar con éxito, no se manda el recordatorio ni el aviso.
+    expect(avisarAlChofer).not.toHaveBeenCalled();
+    expect(sendTemplate).not.toHaveBeenCalled();
   });
 
   it('una flota con varios viajes vencidos: se procesan todos, y uno malo no tumba al resto', async () => {
@@ -335,18 +358,64 @@ describe('escalarViajesSinAceptar', () => {
       ],
       error: null,
     };
-    // El del medio no se puede marcar; los otros dos tienen que salir enteros.
-    resultadosUpdate = [{ error: null }, { error: { message: 'deadlock' } }, { error: null }];
+    // El del medio pierde el claim (el UPDATE falla); los otros dos tienen que
+    // salir enteros. Al perder el claim, v-2 tampoco manda NINGÚN mensaje: la
+    // marca va ANTES del envío, no después.
+    resultadosUpdate = [
+      { data: [{}], error: null },
+      { error: { message: 'deadlock' } },
+      { data: [{}], error: null },
+    ];
 
     const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
 
-    expect(sendTemplate).toHaveBeenCalledTimes(3);
-    expect(avisarAlChofer).toHaveBeenCalledTimes(3);
+    expect(sendTemplate).toHaveBeenCalledTimes(2);
+    expect(avisarAlChofer).toHaveBeenCalledTimes(2);
     expect(updates.map((u) => u.por[0][1])).toEqual(['v-1', 'v-2', 'v-3']);
-    // El contador de avisos es POR VIAJE, no global: el segundo llevaba 3.
+    // El contador de avisos es POR VIAJE, no global: el segundo llevaba 3. Se
+    // sigue escribiendo en el mismo UPDATE que intenta el claim, aunque falle.
     expect(updates[1].fila.avisos_enviados).toBe(4);
-    expect(r).toMatchObject({ revisados: 3, reintentados: 3, escalados: 2 });
+    expect(r).toMatchObject({ revisados: 3, reintentados: 2, escalados: 2 });
     expect(r.fallos).toHaveLength(1);
+    expect(r.fallos[0]).toMatch(/marcar v-2: deadlock/);
+  });
+
+  it('DOS CORRIDAS SOLAPADAS sobre el mismo viaje vencido: solo UNA gana el claim y manda el aviso', async () => {
+    // Esto es lo que motiva el fix: Vercel Cron entrega at-least-once, así que
+    // dos corridas pueden llamar `escalarViajesSinAceptar` con el MISMO
+    // `ahora` sobre el MISMO viaje sin que ninguna haya visto todavía el
+    // `escalado_en` que pone la otra — el `lectura` mockeado se queda igual
+    // entre las dos llamadas, exactamente como se vería en la base real si la
+    // segunda corrida leyó antes de que la primera terminara de escribir.
+    lectura = { data: [fila()], error: null };
+
+    // Corrida 1: el UPDATE condicional del claim le devuelve la fila. Gana.
+    resultadosUpdate = [{ data: [{ id: 'v-1' }], error: null }];
+    const r1 = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+
+    expect(r1.escalados).toBe(1);
+    expect(avisarAlChofer).toHaveBeenCalledTimes(1);
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+
+    sendText.mockClear();
+    sendTemplate.mockClear();
+    avisarAlChofer.mockClear();
+
+    // Corrida 2, "solapada": mismo viaje sin escalar en la lectura, mismo
+    // `ahora`. Pero pierde: el claim ya no encuentra `escalado_en IS NULL`
+    // porque la corrida 1 ya lo puso, así que el UPDATE condicional devuelve
+    // cero filas.
+    resultadosUpdate = [{ data: [], error: null }];
+    const r2 = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+
+    expect(r2.escalados).toBe(0);
+    expect(r2.fallos).toEqual([]);   // perder la carrera no es un fallo
+    // Lo que importa: NO reintenta ningún mensaje. Ni el recordatorio al
+    // chofer ni el aviso al jefe (por texto o por plantilla) se mandan una
+    // segunda vez sobre el mismo viaje.
+    expect(avisarAlChofer).not.toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
+    expect(sendTemplate).not.toHaveBeenCalled();
   });
 
   it('cada flota recibe el aviso en SU teléfono, y la que no tiene no le roba el de otra', async () => {
