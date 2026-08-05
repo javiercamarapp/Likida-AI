@@ -19,7 +19,7 @@ import { logger } from '@/lib/logger';
 // Los dos bordes de PostgREST (error por valor, y el recorte silencioso a
 // 1,000 filas) viven en `pg.ts` desde que `operacion.ts` los necesitó también.
 // La explicación larga de POR QUÉ existen está allá, junto al código.
-import { exigir, traerTodo } from './pg';
+import { exigir, traerTodo, conteo } from './pg';
 
 export interface DashboardKpis {
   viajesLiquidados: number;
@@ -892,4 +892,34 @@ export function derivoLaConfig(
   if (antes.size !== ahora.size) return true;
   for (const t of ahora) if (!antes.has(t)) return true;
   return false;
+}
+
+export interface ConciliacionConsolidado {
+  conciliadas: number;
+  porConciliar: number;
+  /** Cuántos CFDI consolidados distintos aportaron esas líneas — un contador
+   *  que ve "12 pendientes" quiere saber si es un XML grande o varios chicos. */
+  cfdis: number;
+}
+
+/**
+ * Resumen de `cfdi_consolidado_linea` (auditoría 10, `intake/consolidado.ts`)
+ * para la pantalla de Combustible & Casetas: cuánto del diésel-por-monedero y
+ * peaje-por-TAG que YA llegó por WhatsApp quedó ligado solo contra el JOIN, y
+ * cuánto le toca revisar a un humano.
+ *
+ * `null` si el tenant nunca ha mandado un consolidado — no es lo mismo que
+ * "0 pendientes": la pantalla debe distinguir "no hay nada que mostrar" de
+ * "todavía no existe esta integración para este tenant".
+ */
+export async function getConciliacionConsolidado(tenantId: string): Promise<ConciliacionConsolidado | null> {
+  const filas = await traerTodo<{ estatus: unknown; cfdi_xml_id: unknown }>(
+    (desde, hasta) => supabaseAdmin().from('cfdi_consolidado_linea').select('estatus, cfdi_xml_id', conteo(desde))
+      .eq('tenant_id', tenantId).order('id').range(desde, hasta),
+    'getConciliacionConsolidado',
+  );
+  if (filas.length === 0) return null;
+  const conciliadas = filas.filter((f) => f.estatus === 'conciliada').length;
+  const cfdis = new Set(filas.map((f) => f.cfdi_xml_id as string)).size;
+  return { conciliadas, porConciliar: filas.length - conciliadas, cfdis };
 }
