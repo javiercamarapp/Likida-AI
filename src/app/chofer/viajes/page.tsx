@@ -1,6 +1,6 @@
 import { requireOperador } from '@/lib/auth/guard';
 import { misViajes, TOPE_HISTORIAL } from '@/lib/cuadra/chofer';
-import { Titulo, Pendiente, ListaViajes } from '../vista';
+import { Titulo, Pendiente, ListaViajes, SinViajesRegistrados } from '../vista';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,27 +34,19 @@ export default async function MisViajes() {
   }
 
   const viajes = await misViajes(s.tenantId, s.operadorId);
+  if (viajes.length === 0) return <SinViajesRegistrados />;
 
   return (
     <>
       <Titulo>Mis viajes</Titulo>
 
-      {viajes.length === 0 ? (
-        <Pendiente>
-          Todavía no tienes viajes registrados a tu nombre. Aparecen aquí en
-          cuanto tu oficina te asigne el primero.
-        </Pendiente>
-      ) : (
-        <>
-          <ListaViajes viajes={viajes} />
-          {/* Solo cuando la lista TOPA. Ponerlo siempre convertiría "tienes 3
-              viajes" en "se muestran 3", que se lee como que hay más. */}
-          {viajes.length === TOPE_HISTORIAL && (
-            <p className="text-base text-center" style={{ color: 'var(--faint)' }}>
-              Se muestran tus {TOPE_HISTORIAL} viajes más recientes.
-            </p>
-          )}
-        </>
+      <ListaViajes viajes={viajes} />
+      {/* Solo cuando la lista TOPA. Ponerlo siempre convertiría "tienes 3
+          viajes" en "se muestran 3", que se lee como que hay más. */}
+      {viajes.length === TOPE_HISTORIAL && (
+        <p className="text-base text-center" style={{ color: 'var(--faint)' }}>
+          Se muestran tus {TOPE_HISTORIAL} viajes más recientes.
+        </p>
       )}
     </>
   );

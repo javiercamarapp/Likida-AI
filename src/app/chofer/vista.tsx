@@ -1,4 +1,5 @@
-import { MapPin, Truck, Camera, FileText, CircleAlert, Check } from 'lucide-react';
+import Link from 'next/link';
+import { MapPin, Truck, Camera, FileText, CircleAlert, Check, ChevronRight } from 'lucide-react';
 import { mxn, fechaMx, fechaHoraMx } from '@/lib/formato';
 import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 import {
@@ -183,6 +184,46 @@ export function ViajeAceptado({ cuando }: { cuando: string | null }) {
 
 // ── 2. Mi liquidación en vivo ────────────────────────────────────────────
 
+/** El botón "Ver mis viajes" — se toca desde `/chofer/liquidacion` cuando no
+ *  hay viaje abierto, y desde el preview de `/admin/vista-chofer` (mismo
+ *  componente, no una copia: AUDITORÍA 10, BAJO, ver el docstring de
+ *  `SinViajeParaSaldo`). */
+export function EnlaceViajes() {
+  return (
+    <Link
+      href="/chofer/viajes"
+      className="card px-4 flex items-center justify-between gap-3 text-base font-medium"
+      style={{ minHeight: TOQUE.principal }}
+    >
+      Ver mis viajes
+      <ChevronRight width={20} height={20} strokeWidth={2} style={{ color: 'var(--muted)' }} />
+    </Link>
+  );
+}
+
+/**
+ * "Mi saldo" sin viaje abierto — lo que ve un chofer recién dado de alta, y
+ * exactamente lo que muestra la base vacía del preview.
+ *
+ * AUDITORÍA 10, BAJO (frontend) — `admin/vista-chofer/page.tsx` mirroreaba
+ * este bloque A MANO en vez de importarlo, y ya había divergido: al espejo le
+ * faltaba `<EnlaceViajes/>`. Exportado aquí, junto a `Titulo`/`Pendiente`/
+ * `SinViaje`, para que el preview importe el componente REAL — una copia
+ * verifica la copia, no lo que el chofer ve.
+ */
+export function SinViajeParaSaldo() {
+  return (
+    <>
+      <Titulo>Mi saldo</Titulo>
+      <Pendiente>
+        No traes ningún viaje abierto, así que no hay saldo en curso. Lo de tus
+        viajes cerrados está en Viajes.
+      </Pendiente>
+      <EnlaceViajes />
+    </>
+  );
+}
+
 /**
  * La barra de comprobado contra anticipo.
  *
@@ -279,6 +320,21 @@ export function SaldoEnVivo({ r }: { r: ResumenLiquidacion }) {
 
 // ── 3. Mis comprobantes ──────────────────────────────────────────────────
 
+/** "Mis comprobantes" sin viaje abierto. Exportado por la misma razón que
+ *  `SinViajeParaSaldo`: el preview de `/admin` lo importa en vez de
+ *  mirrorearlo. */
+export function SinViajeParaComprobantes() {
+  return (
+    <>
+      <Titulo>Mis comprobantes</Titulo>
+      <Pendiente>
+        No traes ningún viaje abierto. Los comprobantes de tus viajes cerrados
+        quedaron en su liquidación, en Viajes.
+      </Pendiente>
+    </>
+  );
+}
+
 export function FilaComprobante({ c }: { c: ComprobanteChofer }) {
   const malLeido = c.estado === 'revisar';
   return (
@@ -329,6 +385,21 @@ export function ListaComprobantes({ comprobantes }: { comprobantes: ComprobanteC
 }
 
 // ── 4. Mis viajes ────────────────────────────────────────────────────────
+
+/** "Mis viajes" sin historial. Exportado por la misma razón que
+ *  `SinViajeParaSaldo`: el preview de `/admin` lo importa en vez de
+ *  mirrorearlo. */
+export function SinViajesRegistrados() {
+  return (
+    <>
+      <Titulo>Mis viajes</Titulo>
+      <Pendiente>
+        Todavía no tienes viajes registrados a tu nombre. Aparecen aquí en
+        cuanto tu oficina te asigne el primero.
+      </Pendiente>
+    </>
+  );
+}
 
 export function FilaViaje({ v }: { v: ViajeHistorial }) {
   const liq = v.liquidacion;
