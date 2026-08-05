@@ -84,6 +84,7 @@ export async function resolverTenantPedido(
   if (error) {
     // Fail-loud: un parpadeo de red no puede convertirse en escribir en la
     // flota equivocada. El error llega a la UI, no a la base.
+    logger.error('tenant.pedido', { err: error.message });
     throw new Error('No se pudo verificar la flota pedida. Intenta de nuevo.');
   }
   return (data?.id as string | undefined) ?? tenantDeSesion;

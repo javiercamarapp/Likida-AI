@@ -22,7 +22,6 @@ function constructor(tabla: string) {
   const filtros: Array<[string, unknown]> = [];
   const en: Array<[string, unknown[]]> = [];
   let pidioConteo = false;
-  let conLimite = false;
   // APLICA los filtros eq/in sobre las filas — un mock que solo registra no
   // puede distinguir 'diesel' de 'caseta' ni el tenant de otro, y las pruebas
   // de dinero necesitan que el filtro haga su trabajo.
@@ -47,13 +46,13 @@ function constructor(tabla: string) {
     },
     maybeSingle: () => Promise.resolve({ data: filtrar()[0] ?? null, error: null }),
     single: () => Promise.resolve({ data: filtrar()[0] ?? null, error: null }),
-    limit: (n: number) => { conLimite = true; void n; return b; },
+    limit: () => b,
     in: (c: string, vs: unknown[]) => { en.push([c, vs]); return b; },
     gte: () => b,
     lte: () => b,
     is: () => b,
     not: () => b,
-    rpc: (r: string, _p?: unknown) => r.startsWith('resumen_documentos')
+    rpc: (r: string): Promise<{ data: unknown; error: null }> => r.startsWith('resumen_documentos')
       ? Promise.resolve({ data: { procesados: 2, porMes: [{ mes: '2026-08', n: 2 }] }, error: null })
       : Promise.resolve({ data: null, error: null }),
     then: (ok: (v: unknown) => unknown, fail?: (e: unknown) => unknown) =>
