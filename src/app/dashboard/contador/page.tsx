@@ -167,7 +167,15 @@ export async function Contenido({ tenantId, sp, tenantExiste = true }: {
 
           {/* ── Deducible contra lo que no ─────────────────────────────── */}
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {/* AUDITORÍA 10, BAJO — sin `items-start`, el `align-items: stretch`
+                por default de CSS grid estiraba "El gasto del periodo" a la
+                altura de "Estado del papel" (que siempre pinta cinco renglones
+                y por eso siempre es la más alta): con `gastoTotal === 0` la
+                tarjeta se quedaba con ~450px de blanco bajo su `EstadoVacio`,
+                que se lee como una sección rota. Cada `ChartCard` ya trae su
+                propio piso (`minHeight` por `tamano`) — con `items-start` mide
+                lo que su contenido necesita, no lo que necesita el vecino. */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-3">
               <ChartCard
                 titulo="El gasto del periodo, por su suerte fiscal"
                 subtitulo="Cada peso en una sola cubeta"
