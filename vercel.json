@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/facturar",
       "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/cron/purgar",
+      "schedule": "15 4 * * *"
     }
   ]
 }
