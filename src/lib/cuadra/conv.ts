@@ -558,9 +558,11 @@ const TTL_INTAKE_MS = 10 * 60_000;
  * Espera a que NO haya OCR de fotos en vuelo para el viaje (contador = 0). Es la
  * barrera que garantiza que el "listo" cuadre sobre TODOS los gastos, no parciales.
  * NUNCA espera indefinido: tope configurable (env CUADRA_INTAKE_ESPERA_MS, default
- * 60s). Devuelve true si se vació, false si venció el tope (→ el caller avisa al
- * operador y cuadra con lo que alcanzó). El decremento vive en el `finally` del
- * intake, así que un OCR que truena igual libera su +1.
+ * 20s — NO 60s: el presupuesto de la función es maxDuration=60 y por debajo de
+ * esta barrera todavía corren el lock y el agente). Devuelve true si se vació,
+ * false si venció el tope (→ el caller avisa al operador y cuadra con lo que
+ * alcanzó). El decremento vive en el `finally` del intake, así que un OCR que
+ * truena igual libera su +1.
  */
 export async function esperarIntake(
   viajeId: string,
@@ -583,10 +585,9 @@ export async function esperarIntake(
   // contador ANTES de que una foto registre su +1 → ve 0 → cuadra sobre parciales.
   // GRACIA inicial: si el contador arranca en 0, se espera una ventana corta para
   // dar tiempo a que las fotos de la ráfaga incrementen antes de confiar en el 0.
-  // FLAG (HARD RULE 3): default 0 = comportamiento actual EXACTO. Se recomienda
-  // ~2000ms para el demo (ver DECISIONES_PENDIENTES / REPORTE_NOCHE).
-  // Default 2s. Con 0 la carrera fotos+"listo" cierra sobre datos parciales, y es
-  // el ÚNICO camino que no le avisa nada al operador: su liquidación sale corta.
+  // FLAG (HARD RULE 3): configurable por env CUADRA_INTAKE_GRACE_MS. Default 2s;
+  // con 0 la carrera fotos+"listo" cierra sobre datos parciales, y es el ÚNICO
+  // camino que no le avisa nada al operador: su liquidación sale corta.
   const grace = Number(process.env.CUADRA_INTAKE_GRACE_MS) || 2_000;
   const start = Date.now();
   // `null` es "no sé", y no puede abrir la barrera. Fail-CLOSED: se sigue

@@ -380,6 +380,17 @@ function orden(estado: string | null): number {
  * necesita para saber a quién insistirle.
  */
 export async function marcarPodPedido(tenantId: string, viajeId: string, operadorId: string | null): Promise<void> {
+  // AUDITORÍA 12, MEDIO (backend): misma familia que crearViaje — el viaje y el
+  // operador tienen que ser DE ESTA FLOTA antes de escribir el POD. La UI solo
+  // ofrece los de la flota, pero el server action recibe los ids tal cual del
+  // POST; un POST directo con el viaje u operador de OTRA flota escribía un
+  // POD con tenant_id = A y viaje_id/operador_id de B.
+  if (!(await viajePropio(tenantId, viajeId))) {
+    throw new Error('marcarPodPedido: el viaje no pertenece a esta flota');
+  }
+  if (operadorId && !(await operadorPropio(tenantId, operadorId))) {
+    throw new Error('marcarPodPedido: el operador no pertenece a esta flota');
+  }
   const { error } = await acotada(supabaseAdmin().from('pod').insert({
     tenant_id: tenantId,
     viaje_id: viajeId,
@@ -492,6 +503,26 @@ async function unidadPropia(tenantId: string, unidadId: string): Promise<boolean
     (d, h) => supabaseAdmin().from('unidad').select('id', conteo(d))
       .eq('tenant_id', tenantId).eq('id', unidadId).order('id').range(d, h),
     'unidadPropia',
+  );
+  return filas.length > 0;
+}
+
+/** Comprueba que un viaje sea del tenant (auditoría 12, MEDIO backend). */
+async function viajePropio(tenantId: string, viajeId: string): Promise<boolean> {
+  const filas = await traerTodo<{ id: unknown }>(
+    (d, h) => supabaseAdmin().from('viaje').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', viajeId).order('id').range(d, h),
+    'viajePropio',
+  );
+  return filas.length > 0;
+}
+
+/** Comprueba que un operador sea del tenant (auditoría 12, MEDIO backend). */
+async function operadorPropio(tenantId: string, operadorId: string): Promise<boolean> {
+  const filas = await traerTodo<{ id: unknown }>(
+    (d, h) => supabaseAdmin().from('operador').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', operadorId).order('id').range(d, h),
+    'operadorPropio',
   );
   return filas.length > 0;
 }
@@ -703,6 +734,16 @@ export interface NuevaIncidencia {
 }
 
 export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Promise<string> {
+  // AUDITORÍA 12, MEDIO (backend): el viaje y la unidad referidos tienen que
+  // ser de ESTA flota antes de insertar — mismo candado que crearViaje
+  // (operadorPropio/unidadPropia), que la UI no puede sustituir porque el
+  // server action recibe los ids tal cual del POST.
+  if (i.viajeId && !(await viajePropio(tenantId, i.viajeId))) {
+    throw new Error('crearIncidencia: el viaje no pertenece a esta flota');
+  }
+  if (i.unidadId && !(await unidadPropia(tenantId, i.unidadId))) {
+    throw new Error('crearIncidencia: la unidad no pertenece a esta flota');
+  }
   const { data, error } = await acotada(supabaseAdmin().from('incidencia').insert({
     tenant_id: tenantId,
     viaje_id: i.viajeId || null,
