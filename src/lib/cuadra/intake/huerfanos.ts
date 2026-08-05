@@ -43,7 +43,16 @@ export function mensajeGuardadoTrasLiquidar(monto: number): string {
     `Pero *no se perdió*: lo guardé y te lo agrego en cuanto abras tu siguiente viaje. 📸`;
 }
 
-/** El ofrecimiento, con lo que trae cada uno para que el operador pueda decir que no. */
+/**
+ * El ofrecimiento, con lo que trae cada uno para que el operador pueda decir que no.
+ *
+ * PEDÍA «contesta *sí* o dime cuáles no van», y eso no existe: `esAfirmacion` y
+ * `esNegacion` son todo o nada A PROPÓSITO —una respuesta parcial («no, el de
+ * diésel no») no se sabe resolver, y tratarla como un no rotundo descartaría los
+ * demás sin que él lo pidiera—. Quien contestaba lo que se le pedía caía en el
+ * hueco: ni sí ni no, así que el mensaje se iba al agente y el ofrecimiento se
+ * quedaba en pie. Se ofrece lo que el código sí sabe hacer.
+ */
 export function mensajeOfrecer(pendientes: Esperando[], ruta?: string): string {
   const total = pendientes.reduce((s, p) => s + p.monto, 0);
   const lista = pendientes.slice(0, 12).map((p) => `• ${p.etiqueta} · *${mxn(p.monto)}*`).join('\n');
@@ -53,7 +62,7 @@ export function mensajeOfrecer(pendientes: Esperando[], ruta?: string): string {
     : `Tengo ${pendientes.length} comprobantes tuyos`;
   return `Ya tienes viaje abierto${ruta ? ` (${ruta})` : ''} ✅\n\n` +
     `${cuantos} que quedaron sin viaje, ${mxn(total)} en total:\n\n${lista}${demas}\n\n` +
-    `¿Los agrego a este viaje? Contesta *sí* o dime cuáles no van. 👍`;
+    `¿${pendientes.length === 1 ? 'Lo agrego' : 'Los agrego'} a este viaje? Contéstame *sí* o *no* — es para todos, todavía no sé separarlos de uno en uno. 👍`;
 }
 
 /**

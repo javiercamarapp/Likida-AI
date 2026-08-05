@@ -24,11 +24,21 @@ import type { TicketPorFacturar, CampoListo } from './pendientes';
 // diferencia entre "hazlo tú" y "ni tú ni yo podemos con lo que hay".
 // ═══════════════════════════════════════════════════════════════════════════
 
+export type MotivoDeMensaje =
+  /** El portal exige sesión y la tiene la persona, no la máquina. */
+  | 'requiere_cuenta'
+  /**
+   * La máquina lo intentó y se topó con algo que no se arregla reintentando:
+   * un CAPTCHA, una emisión sin confirmar, un viaje ya liquidado. Ver
+   * `TicketPorFacturar.bloqueo`.
+   */
+  | 'bloqueado';
+
 export type Ruta =
   /** Sin cuenta y con todos los datos: lo hace la máquina. */
   | { via: 'automatico'; portal: string; campos: CampoListo[] }
-  /** El portal exige cuenta: va con el encargado, con todo listo. */
-  | { via: 'mensaje'; portal: string; motivo: 'requiere_cuenta'; campos: CampoListo[] }
+  /** Lo tiene que hacer una persona. Va con el encargado, con todo listo. */
+  | { via: 'mensaje'; portal: string; motivo: MotivoDeMensaje; campos: CampoListo[]; detalle?: string }
   /** No se puede facturar con lo que hay. Se dice qué falta. */
   | { via: 'incompleto'; falta: string[] };
 
@@ -59,6 +69,28 @@ export function enrutar(t: TicketPorFacturar): Ruta {
   if (t.comercio.requiereCuenta) {
     return { via: 'mensaje', portal: t.comercio.portal, motivo: 'requiere_cuenta', campos: t.campos };
   }
+
+  // EL BLOQUEO VA DESPUÉS DE `vencido` Y DE LOS CAMPOS QUE FALTAN, y antes de
+  // devolverlo al camino automático.
+  //
+  // Después, porque un ticket vencido no se le manda a nadie —ni la persona
+  // puede ya—, y uno al que le falta un dato se dice con lo que falta, que es
+  // más accionable que "lo tiene que hacer usted".
+  //
+  // Antes de `automatico`, porque ESE es el bug que esto cierra: un portal que
+  // pidió CAPTCHA seguía enrutado como automático, así que no entraba en el
+  // aviso al encargado (`avisar.ts` solo manda lo que una persona puede
+  // resolver) y la máquina lo reintentaba cada hora contra el mismo muro.
+  if (t.bloqueo) {
+    return {
+      via: 'mensaje',
+      portal: t.comercio.portal,
+      motivo: 'bloqueado',
+      campos: t.campos,
+      detalle: t.bloqueo.motivo,
+    };
+  }
+
   return { via: 'automatico', portal: t.comercio.portal, campos: t.campos };
 }
 
@@ -91,7 +123,14 @@ export function mensajeParaEncargado(t: TicketPorFacturar, ruta: Extract<Ruta, {
     lineas.push(`${campo.etiqueta}: ${campo.valor ?? '(búscalo en el ticket)'}`);
   }
   lineas.push('');
-  lineas.push('Ese portal pide cuenta, por eso no se pudo hacer solo.');
+  // El cierre DICE CUÁL de las dos cosas pasó. Con un solo texto, un ticket que
+  // el robot intentó y no pudo se leería como "ese portal pide cuenta" —y el
+  // encargado iría a buscar una contraseña que no existe.
+  lineas.push(
+    ruta.motivo === 'requiere_cuenta'
+      ? 'Ese portal pide cuenta, por eso no se pudo hacer solo.'
+      : `Se intentó solo y no se pudo: ${ruta.detalle ?? 'el portal lo bloqueó'}. Reintentarlo daría lo mismo, por eso te llega a ti.`,
+  );
   return lineas.join('\n');
 }
 
