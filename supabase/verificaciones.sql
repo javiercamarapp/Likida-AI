@@ -3034,3 +3034,72 @@ begin
   raise exception E'RLS_0078  operador=% terminal=% politica=% wa=% llm=% cfdi_xml=% cola=% tenant-update=% tenant-select=% admin-ve-operador=%   (esperado 0/0/0/0/0/0/0/0/1/2)',
     n_operador, n_terminal, n_politica, n_wa, n_llm, n_xml, n_cola, n_tenant_updated, n_tenant_visibles, n_admin_operador;
 end $$;
+
+-- ── 55. Las ESCRITURAS del chofer y la familia de la 0079 (migs. 0078+0079) ─
+-- El bloque 54 probó las lecturas del chofer en cero; este prueba las
+-- ESCRITURAS —el escenario titular de la 0078 (modificar teléfonos de la
+-- flota) que el 54 no ejercitaba— y la 0079: el chofer ya no lee `app_user`
+-- de su flota ni inserta en `bitacora_auditoria`. Un UPDATE del chofer sobre
+-- `operador` de SU flota tiene que tocar CERO filas; un UPDATE de su propio
+-- `app_user` (cambiarse el operador_id para robar identidad) también; un
+-- INSERT en `bitacora_auditoria` tiene que rebotar; y la lectura de
+-- `app_user` ajena da 0. El flota_admin sigue insertando bitácora (regresión).
+--
+-- Corrida real esperada:
+--   update-operador=0  update-app_user=0  insert-bitacora=f
+--   lee-app_user-ajeno=0  admin-inserta-bitacora=t
+do $$
+declare
+  v_t uuid; v_o1 uuid; v_o2 uuid; v_v uuid; v_u1 uuid := gen_random_uuid(); v_admin uuid := gen_random_uuid();
+  n_operador_updated int; n_self_updated int; n_appuser_visibles int;
+  bitacora_chofer_ok boolean := false; bitacora_admin_ok boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF RLS 0079 '||gen_random_uuid()) returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Uno', '520000009060') returning id into v_o1;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Dos', '520000009061') returning id into v_o2;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o1) returning id into v_v;
+  insert into app_user (id, tenant_id, email, rol, operador_id)
+    values (v_u1, v_t, 'zzz-verif-chofer2@likida.test', 'operador', v_o1);
+  insert into app_user (id, tenant_id, email, rol)
+    values (v_admin, v_t, 'zzz-verif-admin2@likida.test', 'flota_admin');
+
+  -- ── El chofer, impersonado ─────────────────────────────────────────────
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
+
+  -- El escenario titular de la 0078: modificar el teléfono de un compañero.
+  update operador set telefono = '520000009099' where tenant_id = v_t;
+  GET DIAGNOSTICS n_operador_updated = ROW_COUNT;
+
+  -- Robo de identidad por la puerta de la app: ligar su cuenta a OTRO operador.
+  update app_user set operador_id = v_o2 where id = v_u1;
+  GET DIAGNOSTICS n_self_updated = ROW_COUNT;
+
+  -- Ya no lee a los usuarios de su flota (0079).
+  select count(*) into n_appuser_visibles from app_user where tenant_id = v_t;
+
+  -- Ya no siembra la bitácora (0079).
+  begin
+    insert into bitacora_auditoria (tenant_id, accion, entidad, entidad_id, detalle, actor_email)
+      values (v_t, 'flota.politica.cambiada', 'tenant', v_t, '{"tope_diesel":20000}'::jsonb, 'zzz@likida.test');
+    bitacora_chofer_ok := true;
+  exception when insufficient_privilege then bitacora_chofer_ok := false;
+  end;
+
+  reset role;
+
+  -- ── Regresión: el flota_admin sigue insertando su bitácora ─────────────
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_admin)::text, true);
+  begin
+    insert into bitacora_auditoria (tenant_id, accion, entidad, entidad_id, detalle, actor_email)
+      values (v_t, 'flota.politica.cambiada', 'tenant', v_t, '{"tope_diesel":15000}'::jsonb, 'zzz-admin@likida.test');
+    bitacora_admin_ok := true;
+  exception when others then bitacora_admin_ok := false;
+  end;
+  reset role;
+
+  delete from tenant where id = v_t;
+  raise exception E'RLS_0079  update-operador=% update-app_user=% insert-bitacora=% lee-app_user-ajeno=% admin-inserta-bitacora=%   (esperado 0/0/f/0/t)',
+    n_operador_updated, n_self_updated, bitacora_chofer_ok, n_appuser_visibles, bitacora_admin_ok;
+end $$;
