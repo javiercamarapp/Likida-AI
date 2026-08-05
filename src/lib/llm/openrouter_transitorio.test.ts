@@ -59,3 +59,34 @@ describe('isTransientError — el proveedor caído tiene que contar como transit
     expect(isTransientError(new Error('overloaded'))).toBe(true);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 10 · BAJO REINCIDENTE — un 5XX de un ERROR DE DATO no es un 5XX de
+// PROVEEDOR.
+//
+// `\b5\d\d\b` matchea CUALQUIER subcadena de tres dígitos que empiece en 5 con
+// frontera de palabra a los lados — y "-" y "." NO son caracteres de palabra,
+// así que un folio (`FOLIO-502`) o un monto de un `check constraint`
+// (`monto 503.00 excede el tope`) califican igual que un `502 Bad Gateway` de
+// verdad. Eso cruzaba el fallback a otro proveedor por un dato del negocio, no
+// por una caída.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('isTransientError — un 5XX de un ERROR DE DATO no es un 5XX de proveedor', () => {
+  it('un folio con guion (FOLIO-502) NO dispara el fallback', () => {
+    expect(isTransientError(new Error('el gasto con folio FOLIO-502 no existe'))).toBe(false);
+  });
+
+  it('un monto decimal que empieza en 5XX (check constraint) NO dispara el fallback', () => {
+    expect(isTransientError(new Error('new row violates check constraint: monto 503.00 excede el tope diario'))).toBe(false);
+  });
+
+  it('un importe con signo de pesos ($502) NO dispara el fallback', () => {
+    expect(isTransientError(new Error('no se pudo procesar el pago de $502 pesos'))).toBe(false);
+  });
+
+  it('pero un 5XX de verdad —número suelto, sin guion ni decimal pegado— SIGUE disparando el fallback', () => {
+    expect(isTransientError(new Error('Error 502: Bad Gateway'))).toBe(true);
+    expect(isTransientError(new Error('Gateway Timeout (504)'))).toBe(true);
+    expect(isTransientError(new Error('upstream respondió 503'))).toBe(true);
+  });
+});

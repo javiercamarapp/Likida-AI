@@ -15,6 +15,28 @@ export interface ToolContext {
   viajeId?: string;
   conversationId?: string;
   telefono?: string;
+  /**
+   * BAJO (auditoría 10, reincidente, sin resolver A PROPÓSITO). `run.ts` crea
+   * un `AbortController` con `timeoutMs` y lo pasa aquí, pero NINGÚN handler de
+   * `tools.ts` lo lee — ni `ctx.signal.throwIfAborted()` ni pasarlo a una
+   * llamada cancelable. Documentado en vez de conectado porque hacerlo bien no
+   * es tocar `tools.ts`: cada handler llama funciones de `repo.ts` (y
+   * `cuadre/desde_db.ts`, `config.ts`) que pasan por `acotada()`
+   * (`presupuesto.ts:148`), y esa es la única que de verdad puede cancelar el
+   * socket (`.abortSignal(...)`). Conectar `ctx.signal` bien haría falta
+   * combinarlo ahí con el `AbortSignal.timeout(TOPE_CONSULTA_MS)` propio de
+   * CADA consulta (`AbortSignal.any([...])`) y enhebrarlo por las ~19 funciones
+   * de `repo.ts` que hoy no lo reciben — cambio de rubro backend, no de
+   * tool-calling, y de superficie mucho mayor que un handler.
+   *
+   * MITIGANTE YA ACTIVO: cada consulta de `repo.ts` muere sola a los
+   * `TOPE_CONSULTA_MS` (8s) + `GRACIA_TOPE_MS` (1.5s) exista o no `ctx.signal`
+   * — no hay fuga de conexión ni cuelgue indefinido. Lo que NO cubre el
+   * mitigante: si al turno le quedan, digamos, 2s de presupuesto real
+   * (`run.ts` ya expiró su `AbortController`), una consulta en vuelo sigue
+   * corriendo hasta SU propio tope de 8s en vez de morir con el turno —
+   * trabajo desperdiciado, no un recurso que no se libera.
+   */
   signal?: AbortSignal;
 }
 
@@ -38,6 +60,34 @@ export function toolSchemas(names: string[]): OpenAI.Chat.ChatCompletionTool[] {
     .filter((s): s is OpenAI.Chat.ChatCompletionTool => Boolean(s));
 }
 
+// BAJO (auditoría 10, reincidente) — EL ERROR CRUDO DE POSTGRES NO CRUZA HACIA
+// EL MODELO.
+//
+// `repo.ts` envuelve el error de PostgREST como `Error("saveLiquidacion: " +
+// error.message)` (mismo patrón en ~14 funciones del archivo) y lo LANZA.
+// Sin filtrar aquí, ese `.message` —tal cual lo manda Postgres— llegaba a
+// `ToolExecResult.error` y de ahí, sin más escalas, al `content` del mensaje
+// `role: 'tool'` que el modelo LEE (`openrouter.ts`:
+// `JSON.stringify(exec.success ? exec.result : { error: exec.error })`). Un
+// mensaje de Postgres nombra tablas, columnas y constraints — el mismo criterio
+// que ya aplica el repo para no exponer lo interno (`guardiaFundamento` filtra
+// qué norma se puede citar, `redactarTexto` filtra qué PII sale en los logs)
+// dice que esto tampoco debería cruzar tal cual.
+//
+// Se distingue por VOCABULARIO, no por origen (`err.code` ya se perdió: el
+// `throw new Error(...)` de repo.ts solo conserva `.message`), así que un
+// mensaje de negocio deliberado ("sin viaje activo", "el operador no
+// pertenece a esta flota") pasa intacto — el modelo lo necesita para
+// reaccionar — y solo se acota lo que suena a Postgres de verdad.
+const VOCABULARIO_POSTGRES = /\b(relation|column|constraint|violates|duplicate key|syntax error|permission denied|invalid input syntax|null value in)\b/i;
+
+/** El detalle completo SIGUE en el log (`logger.error`, abajo) — solo se acota lo que ve el modelo. */
+function mensajeParaElModelo(mensaje: string): string {
+  return VOCABULARIO_POSTGRES.test(mensaje)
+    ? 'la operación no se pudo completar por un error interno de datos'
+    : mensaje;
+}
+
 /** Ejecuta una tool por nombre con timing + captura de errores. */
 export async function executeTool(
   name: string,
@@ -53,11 +103,14 @@ export async function executeTool(
     const result = await tool.handler(args, ctx);
     return { success: true, result, durationMs: Date.now() - started };
   } catch (err) {
-    logger.error('tool.error', { name, err: err instanceof Error ? err.message : String(err) });
+    const crudo = err instanceof Error ? err.message : String(err);
+    // El log SÍ se queda con el mensaje completo — es el canal de
+    // observabilidad, no el que lee el modelo.
+    logger.error('tool.error', { name, err: crudo });
     return {
       success: false,
       result: null,
-      error: err instanceof Error ? err.message : String(err),
+      error: mensajeParaElModelo(crudo),
       durationMs: Date.now() - started,
     };
   }

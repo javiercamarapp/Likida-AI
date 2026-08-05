@@ -68,6 +68,48 @@ describe('generateWithTools — precio por ronda, con el modelo de esa ronda', (
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 10 · MEDIO REINCIDENTE — LA ETIQUETA DE MODELO DEL CICLO NO PUEDE
+// SER SOLO LA DE LA ÚLTIMA RONDA.
+//
+// El DINERO ya se sumaba bien ronda a ronda (prueba de arriba). Lo que seguía
+// mal era la FILA que `processor.ts` registra en `llm_costo`: una sola, con
+// `modelo: res.model` — y `res.model` es el modelo que respondió la ÚLTIMA
+// ronda. Un ciclo que corrió 1 ronda en el primario y cayó al fallback en la
+// 2ª quedaba con TODO el gasto atribuido al fallback, aunque parte del dinero
+// se haya ido al primario.
+//
+// `costoPorModelo` es lo que permite partir esa fila: un mapa modelo → lo que
+// costó ESE modelo, para que el llamador registre una fila por modelo real en
+// vez de mentir con una sola etiqueta.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('generateWithTools — costoPorModelo, el desglose que hace la fila auditable', () => {
+  beforeEach(() => { create.mockReset(); });
+
+  it('un ciclo entero en un solo modelo: el desglose trae UNA sola llave', async () => {
+    create.mockResolvedValueOnce(conTool(PRIM, 100, 20)).mockResolvedValueOnce(final(PRIM, 150, 30));
+    const r = await correr();
+    expect(Object.keys(r.costoPorModelo)).toEqual([PRIM]);
+    expect(r.costoPorModelo[PRIM].tokensIn).toBe(250);
+    expect(r.costoPorModelo[PRIM].tokensOut).toBe(50);
+    expect(r.costoPorModelo[PRIM].cost).toBeCloseTo(calcCost(PRIM, 250, 50), 12);
+  });
+
+  it('primario + fallback: el desglose trae las DOS llaves, cada una con SU costo', async () => {
+    create
+      .mockResolvedValueOnce(conTool(PRIM, 100, 20))
+      .mockRejectedValueOnce(caido())
+      .mockResolvedValueOnce(final(FALL, 150, 30));
+    const r = await correr();
+    expect(Object.keys(r.costoPorModelo).sort()).toEqual([FALL, PRIM].sort());
+    expect(r.costoPorModelo[PRIM]).toEqual({ tokensIn: 100, tokensOut: 20, cost: calcCost(PRIM, 100, 20) });
+    expect(r.costoPorModelo[FALL]).toEqual({ tokensIn: 150, tokensOut: 30, cost: calcCost(FALL, 150, 30) });
+    // La suma del desglose tiene que cuadrar con el total ya probado arriba.
+    const suma = Object.values(r.costoPorModelo).reduce((s, c) => s + c.cost, 0);
+    expect(suma).toBeCloseTo(r.cost, 12);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // EL COSTO DEL CICLO QUE SE CAYÓ TAMBIÉN SE PAGÓ.
 //
 // `PartialExecutionError` llevaba las tools ejecutadas pero NO el costo de las

@@ -109,8 +109,17 @@ export function isTransientError(err: unknown): boolean {
     .map((x) => (x instanceof Error ? x.message : typeof x === 'string' ? x : ''))
     .join(' ')
     .toLowerCase();
+  // EL CÓDIGO HTTP TIENE QUE VERSE COMO CÓDIGO, NO COMO SUBCADENA. `\b5\d\d\b`
+  // solo. Un folio (`FOLIO-502`) o un monto de un `check constraint`
+  // (`monto 503.00 excede el tope`) contienen tres dígitos que empiezan en 5 con
+  // frontera de palabra a los dos lados —"-" y "." NO son caracteres de
+  // palabra—, así que el error de UN DATO se leía como el 502/503 de un
+  // PROVEEDOR caído y el fallback cruzaba de proveedor por un ticket, no por una
+  // caída real. Se excluye cuando el dígito viene pegado a `$`/`-` (folio o
+  // importe con signo) o seguido de `.dígito` (importe decimal): un código HTTP
+  // de verdad no aparece así en un mensaje.
   return (
-    /\b(5\d\d|429|408|502|503|504)\b/.test(texto) ||
+    /(?<![$\-\w])(5\d\d|429|408)(?!\.\d)\b/.test(texto) ||
     /timeout|timed out|connection error|fetch failed|network|econnreset|enotfound|rate.?limit|overloaded|capacity/i.test(texto)
   );
 }
@@ -591,7 +600,24 @@ export async function generateWithTools(opts: {
    *  omite temperature (los modelos de razonamiento la ignoran/rechazan). */
   reasoning?: 'low' | 'medium' | 'high';
   signal?: AbortSignal;
-}): Promise<{ finalText: string; toolCalls: ToolCallRecord[]; model: string; tokensIn: number; tokensOut: number; cost: number }> {
+}): Promise<{
+  finalText: string;
+  toolCalls: ToolCallRecord[];
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+  cost: number;
+  /**
+   * El mismo total de `cost`, pero partido por el modelo que de verdad
+   * respondió cada ronda. `model`/`cost` arriba son el resumen de UNA fila para
+   * el llamador que no necesita más — pero cuando el ciclo cruzó de proveedor a
+   * medio camino, esa fila sola miente: dice que TODO corrió en el modelo de la
+   * última ronda. Esto es lo que le permite al llamador (`processor.ts`, vía
+   * `registrarCosto`) escribir una fila de `llm_costo` POR MODELO en vez de
+   * una sola con la etiqueta equivocada.
+   */
+  costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>;
+}> {
   const model = modelFor(opts.role);
   const fallback = FALLBACK[model] ?? null;
   const maxRounds = opts.maxToolRounds ?? 6;
@@ -603,6 +629,17 @@ export async function generateWithTools(opts: {
   // que corre tres rondas en el primario y cae al fallback en la cuarta cobraba
   // las cuatro al precio del fallback.
   let costo = 0;
+  // MEDIO (auditoría 10, reincidente): el desglose que hace atribuible el
+  // costo. `model`/`cost` del return final siguen siendo el resumen de la
+  // ÚLTIMA ronda —lo que ya consumía `processor.ts`—, pero cuando el ciclo
+  // corrió mezclado (primario + fallback) esa etiqueta sola atribuye TODO el
+  // dinero al modelo que solo respondió la ronda final. Este mapa es lo que le
+  // permite al llamador partir la fila en una por modelo real.
+  const costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> = {};
+  const acumularCosto = (m: string, tIn: number, tOut: number, c: number) => {
+    const prev = costoPorModelo[m] ?? { tokensIn: 0, tokensOut: 0, cost: 0 };
+    costoPorModelo[m] = { tokensIn: prev.tokensIn + tIn, tokensOut: prev.tokensOut + tOut, cost: prev.cost + c };
+  };
   let activeModel = model; // cambia a fallback si el primario cae (persiste el resto del ciclo)
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -636,7 +673,15 @@ export async function generateWithTools(opts: {
     sistema,
     ...opts.messages,
   ];
-  const crossRound = new Map<string, ToolExecResult>();
+  // `args` viaja CON el resultado cacheado, no solo el resultado suelto: sin él,
+  // un acierto de caché registraba los args de ESTA llamada junto al `result` de
+  // la llamada ANTERIOR que de verdad llenó la caché — dos cosas que no tienen
+  // por qué coincidir para una tool sin parámetros (el handler los ignora, así
+  // que el modelo puede variarlos entre rondas sin que cambie el efecto; ver
+  // `llaveDeCache`). El registro quedaba describiendo una llamada que nunca
+  // corrió con esos args. Guardar los args ORIGINALES es lo que hace auditable
+  // `ToolCallRecord`: de qué llamada real salió cada resultado.
+  const crossRound = new Map<string, ToolExecResult & { args: Record<string, unknown> }>();
   const llave = llaveDeCache(opts.tools);
 
   // CR-5: completado con fallback cross-provider. Reintentar SÓLO la llamada de
@@ -681,7 +726,9 @@ export async function generateWithTools(opts: {
       tokOut += rOut;
       // `activeModel` ya refleja quién respondió ESTA ronda: `complete` lo mueve
       // al fallback antes de devolver.
-      costo += costoReal(res.usage as { cost?: number } | undefined, activeModel, rIn, rOut);
+      const costoRonda = costoReal(res.usage as { cost?: number } | undefined, activeModel, rIn, rOut);
+      costo += costoRonda;
+      acumularCosto(activeModel, rIn, rOut, costoRonda);
       used = res.model || activeModel;
       const choice = res.choices[0];
       const calls = choice?.message?.tool_calls;
@@ -706,11 +753,25 @@ export async function generateWithTools(opts: {
         // que la respondió. (Antes se precificaba aquí, de una vez, con el
         // modelo activo al final: correcto solo si el ciclo entero corrió en el
         // mismo modelo.)
-        return { finalText: choice?.message?.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo };
+        return { finalText: choice?.message?.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo, costoPorModelo };
+      }
+
+      // LOOP-GUARD: CORTAR ANTES DE GASTAR LA RONDA, NO DESPUÉS.
+      //
+      // Esta es la ÚLTIMA ronda permitida (`round === maxRounds - 1`). Si el
+      // modelo TODAVÍA pide tools en vez de cerrar con texto, no hay una ronda
+      // siguiente que vaya a leer el resultado de esas tools — el ciclo iba a
+      // tirar `LoopGuardError` de todos modos en cuanto el `for` terminara.
+      // Ejecutarlas de todas formas paga una ronda completa (llamadas de red,
+      // y si el modelo pide `guardar_liquidacion`, una MUTACIÓN) por un
+      // resultado que nadie va a consumir. Se corta AQUÍ, antes del
+      // `Promise.all` que las dispara, no después de pagarlas.
+      if (round === maxRounds - 1) {
+        throw new LoopGuardError(maxRounds);
       }
 
       convo.push({ role: 'assistant', content: choice.message.content ?? null, tool_calls: calls });
-      const inRound = new Map<string, Promise<ToolExecResult>>();
+      const inRound = new Map<string, { args: Record<string, unknown>; promise: Promise<ToolExecResult> }>();
 
       const results = await Promise.all(
         calls.map(async (call) => {
@@ -727,19 +788,30 @@ export async function generateWithTools(opts: {
           const key = llave(call.function.name, args);
           if (isReadOnly(call.function.name) && crossRound.has(key)) {
             const c = crossRound.get(key)!;
-            executed.push({ toolName: call.function.name, args, result: c.result, durationMs: c.durationMs, error: c.error });
+            // `c.args`, NO `args`: lo que produjo `c.result` fue la llamada que
+            // llenó la caché, y esa pudo traer args distintos a los de ESTA
+            // invocación (mismo caso de arriba). El registro tiene que decir qué
+            // llamada produjo qué resultado, no la llamada actual con el
+            // resultado de otra.
+            executed.push({ toolName: call.function.name, args: c.args, result: c.result, durationMs: c.durationMs, error: c.error });
             return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify(c.success ? c.result : { error: c.error }) };
           }
-          let p = inRound.get(key);
-          if (!p) { p = opts.toolExecutor(call.function.name, args); inRound.set(key, p); }
-          const exec = await p;
+          // `inRound` dedupea llamadas de la MISMA ronda con la misma llave —el
+          // caso real: "cómo voy, y ciérralo si está bien" pide `cuadrar_viaje`
+          // dos veces en un solo turno. Se guarda junto a la promesa QUÉ args la
+          // dispararon, por la misma razón que en `crossRound`: la segunda
+          // llamada de la ronda puede traer args distintos y de todos modos
+          // reusar la ejecución de la primera.
+          let entry = inRound.get(key);
+          if (!entry) { entry = { args, promise: opts.toolExecutor(call.function.name, args) }; inRound.set(key, entry); }
+          const exec = await entry.promise;
           // Solo se cachea el ÉXITO, igual que la rejilla de mutaciones
           // (`tool-executor.ts`). Guardar el fracaso convierte un blip de un
           // segundo en un fallo permanente del turno: el modelo reintenta, se le
           // sirve el mismo error desde memoria, y nadie vuelve a preguntarle a
           // una base que ya se curó sola.
-          if (isReadOnly(call.function.name) && exec.success) crossRound.set(key, exec);
-          executed.push({ toolName: call.function.name, args, result: exec.result, durationMs: exec.durationMs, error: exec.error });
+          if (isReadOnly(call.function.name) && exec.success) crossRound.set(key, { ...exec, args: entry.args });
+          executed.push({ toolName: call.function.name, args: entry.args, result: exec.result, durationMs: exec.durationMs, error: exec.error });
           return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify(exec.success ? exec.result : { error: exec.error }) };
         }),
       );
