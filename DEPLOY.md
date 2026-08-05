@@ -1,9 +1,17 @@
 # Runbook de producción
 
-Producción: **https://likidaai.vercel.app** — proyecto `likida/likida.ai` en Vercel,
+Producción: **https://app.likida.ai** — proyecto `likida/likida.ai` en Vercel,
 plan Pro. Ya está desplegado y sirviendo WhatsApp real; este documento es para
 **operarlo**, no para levantarlo. El apartado de despliegue está al final porque
 es lo que menos falta se hace a las 3 a.m.
+
+`https://likidaai.vercel.app` sigue siendo un alias válido (verificado con
+`vercel inspect likida.ai` el 4-ago-2026: la lista de Aliases trae los dos, más
+`likida.ai` a secas), pero **`app.likida.ai` es el dominio canónico** — el que
+exige `NEXT_PUBLIC_APP_URL` (CLAUDE.md) para que la cookie de Supabase Auth no
+quede en otro dominio. Usar el alias viejo aquí no rompe nada operativamente,
+pero documentar el dominio equivocado como "producción" sí puede llevar a
+verificar cosas (Meta, Supabase Site URL) contra el sitio que no es.
 
 ---
 
@@ -11,7 +19,7 @@ es lo que menos falta se hace a las 3 a.m.
 
 1. **Los logs.** Todo sale como JSON de una línea por `src/lib/logger.ts`.
    ```
-   vercel logs https://likidaai.vercel.app --since 1h
+   vercel logs https://app.likida.ai --since 1h
    ```
    O el panel: Vercel → proyecto → *Logs* (runtime). Ojo: **la retención de esa
    vista es corta y no hay ningún log drain configurado** — un fallo del sábado
@@ -121,7 +129,7 @@ el que manda.
 
 ### Meta / WhatsApp
 
-- Webhook URL: `https://likidaai.vercel.app/api/webhook/whatsapp`
+- Webhook URL: `https://app.likida.ai/api/webhook/whatsapp`
 - Verify token: el valor de `WHATSAPP_VERIFY_TOKEN`.
 - El `GET` responde el challenge; el `POST` valida HMAC con `WHATSAPP_APP_SECRET`.
 - El webhook responde **200 antes de trabajar** (el trabajo va en `after()`, con
