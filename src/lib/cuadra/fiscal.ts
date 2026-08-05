@@ -488,6 +488,7 @@ export interface ResumenFiscal {
 function ivaSostenible(g: GastoFiscal, o: OpcionesFiscales): boolean {
   if (!g.cfdiUuid) return false;
   if (g.estadoSat === 'cancelado') return false;
+  if (g.estadoSat === 'pendiente' || g.estadoSat === 'no_encontrado') return false;
   if (g.efos === true) return false;
   if (g.formaPago === '01' && !esCombustible(g, o) && g.monto > o.efectivoTopeMxn) return false;
   return true;
