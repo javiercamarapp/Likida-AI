@@ -1,4 +1,5 @@
 import { copiasDeComprobante } from '../cuadre/engine';
+import { round2 } from '@/lib/formato';
 import type { Gasto } from '@/types/cuadra';
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE NO CUPO EN EL PDF.
@@ -34,7 +35,7 @@ export function resumenOmitidos(gastos: Array<{ monto: number }>, mostrados: num
   const plural = fuera.length === 1 ? 'comprobante más' : 'comprobantes más';
   return {
     cuantos: fuera.length,
-    monto: Math.round(monto * 100) / 100,
+    monto: round2(monto),
     texto: `… y ${fuera.length} ${plural} (no caben en esta página)`,
   };
 }
