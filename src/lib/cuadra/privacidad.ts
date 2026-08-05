@@ -608,8 +608,11 @@ export function tipoDeSolicitudArco(texto: string): 'acceso' | 'rectificacion' |
   return 'acceso';
 }
 
-/** 15 días hábiles (LFPDPPP art. 32): el plazo para responder al titular. */
-const DIAS_HABILES_ARCO = 15;
+/** 20 días hábiles: lo que el aviso promete (privacidad.ts:538 y la página).
+ *  La LFPDPPP art. 32 fija 15, pero el DOCUMENTO —la promesa que el titular
+ *  leyó— dice 20; `vence_en` tiene que rastrear la promesa, no un número que
+ *  la contradiga. Si el aviso cambia a 15, que este número lo siga. */
+const DIAS_HABILES_ARCO = 20;
 
 /** Suma `n` días hábiles a `desde` (lunes a viernes). */
 export function venceArco(desde: Date, diasHabiles = DIAS_HABILES_ARCO): string {
