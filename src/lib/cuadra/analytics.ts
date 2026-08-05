@@ -13,7 +13,7 @@ import { cuadrarDesdeDB } from './cuadre/desde_db';
 // copias son dos oportunidades de que una se quede atrás.
 import { traerResumenCostoIaTenant } from './costos';
 import { filasImprimibles } from './liquidacion/omitidos';
-import { round2 } from '@/lib/formato';
+import { round2, TZ_MX } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 
 // Los dos bordes de PostgREST (error por valor, y el recorte silencioso a
@@ -163,7 +163,7 @@ export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
 export async function getLiquidacionesPorDia(
   tenantId: string,
   ventanaDias: number = 7,
-  hoy: string = new Date().toISOString().slice(0, 10),
+  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
 ): Promise<Array<{ dia: string; valor: number }>> {
   const rows = await traerTodo<{ created_at: unknown }>(
     (desde, hasta) => supabaseAdmin()
@@ -174,9 +174,18 @@ export async function getLiquidacionesPorDia(
       .range(desde, hasta),
     'getLiquidacionesPorDia',
   );
+  // AUDITORÍA 12, ALTO (pruebas): `.slice(0,10)` sobre el timestamptz que
+  // PostgREST devuelve en UTC fechaba en el día SIGUIENTE los cierres de la
+  // tarde — una liquidación cerrada el 31-jul a las 20:00 CDMX se guarda como
+  // 2026-08-01T02:00Z y caía en la barra del 1-ago. La gráfica del demo (paso
+  // 4 del guion) movía los cierres de 18:00-23:59 hora local a otro día. El
+  // mismo `.slice` ya se arregló en el detalle (creadoEn viaja crudo y se
+  // formatea en pantalla); aquí el bucket se hace con la zona horaria real.
+  const diaLocal = (iso: string): string =>
+    new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ_MX });
   const porDiaMap = new Map<string, number>();
   for (const r of rows) {
-    const dia = (r.created_at as string).slice(0, 10);
+    const dia = diaLocal(r.created_at as string);
     porDiaMap.set(dia, (porDiaMap.get(dia) ?? 0) + 1);
   }
   const cortes = (diasAtras: number) => {
