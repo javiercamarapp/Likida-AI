@@ -20,9 +20,9 @@
 // sería una pantalla para un caso de uso que todavía no existe.
 // ═══════════════════════════════════════════════════════════════════════════
 import { redirect } from 'next/navigation';
+import { tenantDemo } from './tenant-demo';
 import { getSessionTenant, type SessionTenant } from './session';
 
-const TENANT_DEMO = () => process.env.DEMO_TENANT_ID ?? '11111111-1111-1111-1111-111111111111';
 
 export async function requireSessionTenant(
   destino: string,
@@ -30,7 +30,7 @@ export async function requireSessionTenant(
   const s = await getSessionTenant();
   if (!s) redirect(`/login?next=${encodeURIComponent(destino)}`);
   if (!s.tenantId) {
-    if (s.rol === 'superadmin') return { ...s, tenantId: TENANT_DEMO() };
+    if (s.rol === 'superadmin') return { ...s, tenantId: tenantDemo() };
     redirect('/sin-acceso');
   }
   return s as SessionTenant & { tenantId: string };

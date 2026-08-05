@@ -11,6 +11,7 @@ import { TableroCifras } from './despacho/vista';
 import { TablaCarga } from './despacho/vista';
 import AvanceCierre from './avance-cierre';
 import { sufijoTenant } from './sufijo';
+import { AvisoSinFlota } from './sin-flota';
 import { fechaMx } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -32,12 +33,17 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 export async function InicioOperacion({
-  tenantId, tenantNombre, nombre, sp,
+  tenantId, tenantNombre, nombre, sp, tenantExiste = true,
 }: {
   tenantId: string;
   tenantNombre: string | null;
   nombre: string | null;
   sp: { vista?: string; tenant?: string; rol?: string } | undefined;
+  /** `false` cuando el uuid al que apunta la página no tiene fila en `tenant`
+   *  — ver `sin-flota.tsx`. Aquí importa más que en el Resumen del dueño: sin
+   *  flota, "Todo lo que está en curso ya trae chofer" y "0 viajes activos"
+   *  se leen como una mañana tranquila, no como una base vacía. */
+  tenantExiste?: boolean;
 }) {
   const sufijo = sufijoTenant(sp);
   const [tablero, sinAsignar, carga, incidencias, viajes] = await Promise.all([
@@ -100,6 +106,10 @@ export async function InicioOperacion({
             </div>
           </div>
         </div>
+
+        {!tenantExiste && (
+          <div className="px-5 pb-3"><AvisoSinFlota tenantId={tenantId} /></div>
+        )}
 
         {urgentes.length > 0 && (
           <div className="px-5 pb-3 space-y-1.5">

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
-import { verifyWebhookChallenge, verifySignature, sendText } from '@/lib/meta/client';
+// `sendText` ya no se importa aquí: el único envío que salía de esta ruta era
+// el aviso de rate limit, y ese aviso desapareció con el 429 (los mensajes
+// vuelven solos). Esta ruta solo recibe; quien contesta es el processor.
+import { verifyWebhookChallenge, verifySignature } from '@/lib/meta/client';
 import { processInbound, type InboundMessage } from '@/lib/cuadra/processor';
 import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
@@ -103,24 +106,47 @@ export async function POST(req: NextRequest) {
   const messages = extractMessages(payload);
   // ── RATE LIMIT POR TELÉFONO (no por IP: todo Meta viene de sus IPs) ────────
   //
-  // LO QUE DESCARTA AQUÍ SE PIERDE PARA SIEMPRE. Estos mensajes YA pasaron el
-  // HMAC, o sea que son de Meta y son de un chofer dado de alta; y abajo se
-  // devuelve 200, así que Meta no reintenta. El único rastro era un `warn` sin
-  // `waMessageId`: imposible saber después QUÉ comprobante se tiró.
+  // LO QUE PASA DE ESTE TECHO YA NO SE DESCARTA: SE APLAZA. Es el cambio del
+  // 4-ago-2026 y merece la explicación entera, porque el arreglo obvio —«hacer
+  // una cola»— es el que no se puede sostener.
   //
-  // La cola de verdad —reencolar y procesarlos luego— es infraestructura que
-  // hoy no existe (FASE 3, deuda documentada en GUIA_BUILD.md). Lo que sí se
-  // puede hacer sin ella son las dos cosas que convierten una pérdida silenciosa
-  // en una visible: dejar el id en el log, y DECÍRSELO al operador para que
-  // pueda reenviar. Un comprobante que el chofer sabe que no entró vale mucho
-  // más que uno que cree que sí.
+  // EL PROBLEMA. Estos mensajes YA pasaron el HMAC: son de Meta y de un chofer
+  // dado de alta. Antes se tiraban, se le avisaba al operador y se devolvía
+  // 200 — y un 200 le dice a Meta que el mensaje quedó entregado, así que no
+  // reintenta. Cada descarte era un comprobante perdido para siempre.
+  //
+  // POR QUÉ NO SE ENCOLA. Una cola de verdad (QStash, Redis, una tabla con su
+  // reproceso) es infraestructura que hoy no existe, y una tabla que guarde el
+  // payload crudo SIN un reproceso que la vacíe es peor que no tenerla: se ve
+  // como un respaldo y es un cementerio. Subir el techo tampoco arregla nada —
+  // `buckets` vive en la memoria de CADA instancia (ver `ratelimit.ts`), así
+  // que el techo real ya es 40 × instancias y no hay número que se pueda
+  // afinar con eso.
+  //
+  // LA COLA YA EXISTE Y ES DE META. Un webhook que no contesta 2xx se vuelve a
+  // entregar; uno que contesta 200 no. Ese reintento es durable, tiene backoff
+  // y no lo operamos nosotros. Y reentregar es SEGURO porque la idempotencia ya
+  // está construida: `claimMessage` reclama cada `waMessageId` en
+  // `wa_mensaje_procesado` al entrar a `processInbound`, así que lo ya
+  // procesado vuelve como 'duplicado' y no se hace dos veces.
+  //
+  // POR QUÉ SE PROCESA LO PERMITIDO ANTES DE CONTESTAR 429, y no se devuelve el
+  // lote entero sin tocar: si se descartara todo, un POST con MÁS mensajes que
+  // el techo no podría procesarse NUNCA — cada reentrega volvería a excederlo
+  // igual, para siempre. Atendiendo lo que cabe, cada entrega avanza y deja
+  // menos por hacer, y el claim convierte lo hecho en un no-op.
+  //
+  // LO QUE ESTO NO CIERRA: si Meta acaba dándose por vencido, el comprobante se
+  // pierde y desde aquí no hay forma de enterarse. Por eso el log conserva el
+  // `waMessageId` — es lo único que permite cruzarlo contra la base después.
   const permitidos: InboundMessage[] = [];
-  const descartados: InboundMessage[] = [];
+  const diferidos: InboundMessage[] = [];
   for (const m of messages) {
     if (rateLimit(`wa:${m.from}`, MSGS_POR_MIN, 60_000)) { permitidos.push(m); continue; }
-    descartados.push(m);
-    // ERROR y no warn: es un comprobante perdido, no una curiosidad operativa.
-    logger.error('wa.ratelimit', { from: m.from, id: m.waMessageId, tipo: m.type });
+    diferidos.push(m);
+    // WARN y no ERROR: ya no es un comprobante perdido, es uno que vuelve. Con
+    // el id, porque si Meta se rinde ésta es la única línea que dice cuál era.
+    logger.warn('wa.ratelimit_diferido', { from: m.from, id: m.waMessageId, tipo: m.type });
   }
 
   // 1.3: Meta PUEDE entregar varios mensajes (fotos) en UN POST → comparten los
@@ -128,7 +154,12 @@ export async function POST(req: NextRequest) {
   // concurrencia (no depender de si Next corre N after() en serie), pero con un
   // POOL y no con `Promise.all` a pelo: ver `MAX_EN_PARALELO` arriba para por
   // qué un lote sin techo se pierde entero y en silencio.
-  if (permitidos.length || descartados.length) {
+  //
+  // Con `permitidos` vacío y `diferidos` lleno el `after()` se programa igual:
+  // el pool no hace nada, pero el `flushObservabilidad` del final sí — y sin él
+  // los `wa.ratelimit_diferido` de un lote enteramente aplazado se congelan con
+  // la invocación y no salen nunca.
+  if (permitidos.length || diferidos.length) {
     if (permitidos.length > MAX_EN_PARALELO) {
       // Deja rastro de que hubo ráfaga grande ANTES de procesarla: si la
       // invocación muere, esta línea es lo único que dice cuántos entraron.
@@ -139,24 +170,14 @@ export async function POST(req: NextRequest) {
         processInbound(m).catch((e) => logger.error('processInbound', { err: e instanceof Error ? e.message : String(e) })),
       );
 
-      // ── LO QUE SE DESCARTÓ SE DICE ─────────────────────────────────────────
-      //
-      // Va DESPUÉS del procesamiento y no antes: primero se atiende lo que sí
-      // entró. UNA línea por teléfono, no una por mensaje — el mismo criterio
-      // que el resumen de ráfaga, y por la misma razón: quien acaba de mandar
-      // treinta fotos no necesita treinta disculpas.
-      //
-      // Nunca lanza: avisar de una pérdida no puede convertirse en una segunda.
-      for (const telefono of new Set(descartados.map((m) => m.from))) {
-        const cuantos = descartados.filter((m) => m.from === telefono).length;
-        try {
-          await sendText(telefono,
-            `Me llegaron demasiados mensajes muy seguidos y ${cuantos === 1 ? 'uno no lo' : `${cuantos} no los`} alcancé a procesar 😕. ` +
-            `Espera un minuto y ${cuantos === 1 ? 'reenvíamelo' : 'reenvíamelos'}, por favor — sin ${cuantos === 1 ? 'ese' : 'esos'} no puedo cuadrar bien tu viaje. 🙏`);
-        } catch (e) {
-          logger.error('wa.ratelimit_aviso_falló', { from: telefono, err: e instanceof Error ? e.message : String(e) });
-        }
-      }
+      // AL OPERADOR YA NO SE LE DICE NADA, y eso es parte del arreglo. El aviso
+      // anterior —«espera un minuto y reenvíamelos»— describía una pérdida que
+      // ya no ocurre, y le pedía trabajo que no hace falta: sus fotos vuelven
+      // solas con la reentrega de Meta. Peor todavía, invitaba a mandar otra vez
+      // el mismo fajo, que es lo que llena la ventana del rate limit por
+      // segunda vez. Lo que queda es el `wa.ratelimit_diferido` de arriba, con
+      // su `waMessageId`.
+
       // EL MECANISMO EXISTÍA Y NADIE LO LLAMABA (auditoría 6, operabilidad).
       //
       // `flushObservabilidad` se escribió para ESTE punto exacto —su comentario
@@ -202,6 +223,30 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── EL CÓDIGO DE SALIDA ES LA COLA ────────────────────────────────────────
+  //
+  // 200 = «esto quedó, no lo vuelvas a mandar». Es la afirmación que convertía
+  // cada mensaje pasado de techo en una pérdida definitiva. Mientras quede algo
+  // sin atender se contesta 429: es literalmente lo que pasó (demasiadas
+  // peticiones de ese teléfono para esta invocación) y es el mismo código con
+  // el que el repo ya contesta sus otros topes (`export-fiscal`).
+  //
+  // `Retry-After` va como declaración de cuándo tiene sentido volver —la
+  // ventana del limitador es de 60 s—, no como promesa de que Meta lo lea:
+  // Meta no documenta honrarlo. Lo que sí está documentado, y es de lo que
+  // depende este arreglo, es que un webhook sin 2xx se vuelve a entregar.
+  //
+  // LO QUE CUESTA: la reentrega trae el payload COMPLETO, así que los acuses de
+  // entrega de arriba se vuelven a registrar (`wa.no_entregado`/`wa.estado`
+  // repetidos para el mismo wamid). Son líneas de log, no efectos: no hay
+  // escritura ni envío colgando de ellas. Un comprobante recuperado vale más
+  // que un log limpio.
+  if (diferidos.length) {
+    return NextResponse.json(
+      { received: permitidos.length, diferidos: diferidos.length, estados: estados.length },
+      { status: 429, headers: { 'Retry-After': '60' } },
+    );
+  }
   return NextResponse.json({ received: permitidos.length, estados: estados.length });
 }
 

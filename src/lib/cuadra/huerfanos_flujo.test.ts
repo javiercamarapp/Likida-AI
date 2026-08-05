@@ -156,6 +156,55 @@ describe('el chofer que manda fotos sin viaje abierto', () => {
     expect(salientes.join(' ')).toMatch(/no pude guardar/i);
   });
 
+  // ── LA RAMA GEMELA DEL `avisar_falla` (4-ago-2026) ────────────────────────
+  //
+  // El camino CON viaje abierto ya guardaba el comprobante cuando el que falla
+  // es NUESTRO OCR; éste, el de sin viaje, seguía tirándolo con el mensaje de
+  // «reenvíamela con buena luz», que le echa al chofer la culpa de un 429
+  // nuestro y lo manda a repetir una foto que va a fallar igual.
+  const falloTecnico = () => extraerComprobante.mockResolvedValue({
+    legible: false, motivo: 'fallo_tecnico',
+    gasto: { concepto: 'otro', monto: 0, ocrConfianza: 0 },
+    costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
+  });
+
+  it('si el que se cae es NUESTRO OCR, el comprobante se guarda — no se tira', async () => {
+    falloTecnico();
+    await processInbound(foto);
+    expect(guardarHuerfano).toHaveBeenCalledWith('t1', 'o1', expect.objectContaining({
+      motivo: 'fallo_ocr', rutaImagen: 't1/sin-viaje/HASH.jpg',
+    }));
+    // La imagen viaja DENTRO del gasto también: es la única evidencia que queda
+    // de un papel cuyo monto no se pudo leer.
+    expect(guardarHuerfano.mock.calls[0][2].gasto).toMatchObject({ imagenUrl: 't1/sin-viaje/HASH.jpg' });
+  });
+
+  it('y no le echa la culpa a su foto ni le pide completar un ticket que no leímos', async () => {
+    falloTecnico();
+    await processInbound(foto);
+    const m = salientes.join(' ');
+    expect(m, 'la foto está bien: el 429 es nuestro').not.toMatch(/difícil de leer|buena luz/i);
+    expect(m).toMatch(/no es tu foto/i);
+    expect(m, 'lo único que recupera el monto es el reenvío').toMatch(/reenv/i);
+  });
+
+  it('si además NO se pudo guardar, se lo dice en vez de dejarlo creer que sí', async () => {
+    falloTecnico();
+    guardarHuerfano.mockResolvedValue(false);
+    await processInbound(foto);
+    expect(salientes.join(' ')).toMatch(/tampoco lo pude guardar/i);
+  });
+
+  it('en una ráfaga no da once explicaciones del mismo 429', async () => {
+    // `fallo_tecnico` es sistémico —proveedor caído, truncamiento—: si falló
+    // una foto del fajo, fallaron todas. Mismo criterio que el acuse normal.
+    falloTecnico();
+    getHuerfanos.mockResolvedValue([HUERFANO('a', 0), HUERFANO('b', 0)]);
+    await processInbound(foto);
+    expect(guardarHuerfano).toHaveBeenCalled();
+    expect(salientes).toHaveLength(0);
+  });
+
   it('una foto ilegible se pide otra vez, no se guarda basura', async () => {
     extraerComprobante.mockResolvedValue({
       legible: false, motivo: 'ilegible',
@@ -197,6 +246,25 @@ describe('cuando por fin hay viaje, se pregunta antes de adjuntar', () => {
     expect(m).toContain('Silao→N. Laredo');
     expect(addGasto, 'preguntar no es adjuntar').not.toHaveBeenCalled();
     expect(marcarHuerfanosOfrecidos).toHaveBeenCalledWith('t1', ['a', 'b']);
+  });
+
+  it('el huérfano SIN monto (el del OCR caído) no se ofrece: sería una línea de $0.00', async () => {
+    // Adjuntarlo metería «• Otro · $0.00» en la liquidación que lee el
+    // contralor — una cifra que nadie midió. Se conserva (la fila y la foto son
+    // la evidencia) y se recupera reenviando la foto, que es lo que su propio
+    // mensaje le pidió.
+    getHuerfanos.mockResolvedValue([HUERFANO('a', 0)]);
+    await processInbound(texto('hola'));
+    expect(marcarHuerfanosOfrecidos).not.toHaveBeenCalled();
+    expect(salientes.join(' ')).not.toMatch(/¿Los agrego/);
+    expect(salientes.join(' ')).not.toContain('$0.00');
+  });
+
+  it('y si hay uno con monto y otro sin él, solo se ofrece el que se pudo leer', async () => {
+    getHuerfanos.mockResolvedValue([HUERFANO('a', 0), HUERFANO('b', 2890)]);
+    await processInbound(texto('hola'));
+    expect(marcarHuerfanosOfrecidos).toHaveBeenCalledWith('t1', ['b']);
+    expect(salientes.join(' ')).toContain('$2,890.00');
   });
 
   it('con un «sí» los adjunta y los marca DESPUÉS de insertarlos', async () => {

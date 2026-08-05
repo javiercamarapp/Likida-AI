@@ -17,6 +17,7 @@ import AvanceCierre from './avance-cierre';
 import { InicioOperacion } from './inicio-operacion';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { sufijoTenant } from './sufijo';
+import { AvisoSinFlota } from './sin-flota';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,12 +52,16 @@ function TituloSeccion({ children }: { children: React.ReactNode }) {
  * la pantalla REAL, no una copia que puede haber divergido.
  */
 export async function InicioContenido({
-  tenantId, tenantNombre, nombre, sp,
+  tenantId, tenantNombre, nombre, sp, tenantExiste = true,
 }: {
   tenantId: string;
   tenantNombre: string | null;
   nombre: string | null;
-  sp: { vista?: string; tenant?: string; rango?: string } | undefined;
+  sp: { vista?: string; tenant?: string; rango?: string; rol?: string } | undefined;
+  /** `false` cuando el uuid al que apunta la página no tiene fila en `tenant`
+   *  — ver `sin-flota.tsx`. Default `true` para no cambiar el render de
+   *  ningún cliente real, cuyo tenant existe por llave foránea. */
+  tenantExiste?: boolean;
 }) {
   // Por defecto 7 DÍAS, igual que /admin — decisión de Javier (3-ago-2026).
   //
@@ -151,6 +156,12 @@ export async function InicioContenido({
         </div>
 
 
+        {/* ANTES QUE NINGUNA CIFRA. Lo de abajo son ceros de una flota que no
+            existe, y esa frase tiene que llegar antes que los ceros. */}
+        {!tenantExiste && (
+          <div className="px-5 pb-3.5"><AvisoSinFlota tenantId={tenantId} /></div>
+        )}
+
         {alertas.length > 0 && (
           <div className="px-5 pb-3.5 space-y-1.5">
             {alertas.map((a) => (
@@ -178,9 +189,18 @@ export async function InicioContenido({
         ) : estado === 'vacio' ? (
           <div className="px-5 pb-5 pt-1">
             <div className="card p-10 text-center">
-              <p className="text-lg font-semibold tracking-tight">Aún no hay liquidaciones</p>
+              {/* "Aún no hay liquidaciones" es una afirmación sobre el negocio
+                  de una flota. Sin flota no se puede hacer: no es que el
+                  cliente no haya cerrado su primer viaje, es que no hay
+                  cliente. Misma regla que `estadoPanel` aplica para una
+                  consulta caída, un escalón antes. */}
+              <p className="text-lg font-semibold tracking-tight">
+                {tenantExiste ? 'Aún no hay liquidaciones' : 'No hay flota, así que no hay nada que liquidar'}
+              </p>
               <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>
-                En cuanto un operador cierre su primer viaje por WhatsApp, aquí aparecen los acreditables y el detalle.
+                {tenantExiste
+                  ? 'En cuanto un operador cierre su primer viaje por WhatsApp, aquí aparecen los acreditables y el detalle.'
+                  : 'Esta pantalla es la que verá el dueño de la flota. Con una flota dada de alta y su primer viaje cerrado por WhatsApp, aquí aparecen los acreditables y el detalle.'}
               </p>
               <Link href="/demo" className="inline-block mt-5 px-5 py-2.5 rounded-xl text-sm font-medium"
                 style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Ver el demo</Link>
@@ -291,7 +311,7 @@ export default async function DashboardInicio({
   searchParams: Promise<{ vista?: string; tenant?: string; rango?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, tenantNombre, nombre, rol } = await resolverTenantEfectivo('/dashboard', sp, { esRaiz: true });
+  const { tenantId, tenantNombre, nombre, rol, tenantExiste } = await resolverTenantEfectivo('/dashboard', sp, { esRaiz: true });
 
   // DOS CASAS DISTINTAS EN LA MISMA PUERTA.
   //
@@ -305,8 +325,8 @@ export default async function DashboardInicio({
   // El criterio es "¿ve dinero?" y no "¿es encargado?": un rol nuevo que
   // tampoco vea finanzas cae aquí solo, sin tocar esta línea.
   if (!puedeVerArea(rol, 'dinero')) {
-    return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} sp={sp} />;
+    return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} sp={sp} tenantExiste={tenantExiste} />;
   }
 
-  return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} sp={sp} />;
+  return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} sp={sp} tenantExiste={tenantExiste} />;
 }

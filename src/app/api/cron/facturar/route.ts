@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { facturarAlVuelo } from '@/lib/cuadra/facturacion/al_vuelo';
-import { portalesAutomatizados } from '@/lib/cuadra/facturacion/agente';
+import { facturarAlVuelo, type ResultadoAutofactura } from '@/lib/cuadra/facturacion/al_vuelo';
+import { armar } from '@/lib/cuadra/facturacion/pendientes';
+import { getFiscalDeFlota } from '@/lib/cuadra/facturacion/flota_fiscal';
+import { conPortales, PORTALES_CONOCIDOS } from '@/lib/cuadra/facturacion/adaptadores/registro';
+import { conNavegador } from '@/lib/cuadra/facturacion/adaptadores/pagina_playwright';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-// Cada ticket abre un navegador contra un portal: 10-60 s. El presupuesto es
-// para eso, y por eso el lote va acotado (ver TOPE_POR_CORRIDA).
+// Un lote abre UN navegador por flota y una sesión de portal por ticket: 10-60 s
+// cada una. El presupuesto es para eso, y por eso el lote va acotado (ver
+// TOPE_POR_CORRIDA).
 export const maxDuration = 300;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -42,6 +46,25 @@ export const maxDuration = 300;
 // llegan de uno en uno, cada uno abriría su propio navegador: el caso caro,
 // repetido setecientas veces.
 //
+// ── CÓMO SE ARMA UN LOTE: POR FLOTA, Y DENTRO POR PORTAL ─────────────────
+//
+// 1. Se toman los gastos sin CFDI ordenados por `autofactura_intentada_en nulls
+//    first, created_at` — el índice de la 0063. Ese orden es lo que impide que
+//    los mismos ocho tickets que NO proceden se re-elijan en cada corrida y
+//    bloqueen la cola contra sí misma.
+// 2. Se agrupan POR FLOTA y, dentro de cada flota, POR PORTAL.
+// 3. Los que no tienen portal automatizable se despachan SIN NAVEGADOR: no hay
+//    a dónde entrar, y arrancar Chromium para descubrirlo cuesta segundos.
+// 4. Por cada flota con trabajo de portal se abre UN Chromium
+//    (`conNavegador`) y se registran SUS adaptadores (`conPortales`). Todos sus
+//    tickets comparten ese navegador; sin esto era uno por ticket.
+//
+// UN NAVEGADOR POR FLOTA Y NO UNO PARA LA CORRIDA: `SesionNavegador` comparte un
+// solo BrowserContext entre sus pestañas —o sea las cookies—. Que CAPUFE
+// reconozca la sesión entre códigos es deseable DENTRO de una flota y es
+// exactamente lo que no se quiere entre dos: el portal podría recordar el RFC
+// de la anterior.
+//
 // ── EL MODO POR DEFECTO ES ENSAYO, Y NO SE CAMBIA DESDE EL CÓDIGO ────────
 //
 // Emitir un CFDI es IRREVERSIBLE ante el SAT: cancelarlo fuera de plazo se le
@@ -49,17 +72,46 @@ export const maxDuration = 300;
 // mirando, es justo donde un selector equivocado emite cincuenta facturas malas
 // antes de que alguien se entere. Se emite SOLO si `FACTURACION_MODO=emitir`
 // está puesto a mano en el ambiente — una decisión de Javier, no un default.
+//
+// ── HOY NO HAY CHROMIUM EN VERCEL, Y ESTA RUTA LO DICE EN ROJO ───────────
+//
+// `playwright-core` no trae el binario y el contenedor de la función no tiene la
+// caché de Playwright: `chromium.launch()` falla con "Executable doesn't exist"
+// hasta que `CUADRA_CHROMIUM_PATH` apunte a un Chromium empaquetado para
+// serverless. Cuando eso pasa esta ruta responde **503**, no 200, y NO marca los
+// tickets como intentados: se recogen enteros en la corrida en que sí se pueda.
+// Un 200 con la lista vacía dejaría el cron verde en el panel de Vercel para
+// siempre, que es el modo de fallo que este archivo existe para no tener.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * Cuántos tickets por corrida.
  *
  * A 60 s el peor caso, ocho llenan el presupuesto de 300 s con margen. Lo que
- * no entra queda para la siguiente corrida, quince minutos después — y eso se
- * DICE en la respuesta: un tope que no se anuncia se lee como "ya se facturó
- * todo", que es la lectura más cara posible.
+ * no entra queda para la siguiente corrida, una hora después — y eso se DICE en
+ * la respuesta: un tope que no se anuncia se lee como "ya se facturó todo", que
+ * es la lectura más cara posible.
  */
 const TOPE_POR_CORRIDA = 8;
+
+/** Una fila de `gasto` como la trae la consulta de la cola. */
+interface FilaCola {
+  id: string;
+  tenant_id: string;
+  concepto: string;
+  monto: number;
+  fecha: string | null;
+  folio: string | null;
+  rfc_emisor: string | null;
+  cfdi_uuid: string | null;
+  ocr_extra: Record<string, unknown> | null;
+}
+
+interface Renglon extends ResultadoAutofactura {
+  gastoId: string;
+  tenantId: string;
+  comercio: string | null;
+}
 
 export async function GET(req: Request) {
   const secreto = process.env.CRON_SECRET;
@@ -72,54 +124,181 @@ export async function GET(req: Request) {
   }
 
   const modo = process.env.FACTURACION_MODO === 'emitir' ? 'emitir' as const : 'ensayo' as const;
-  const portales = portalesAutomatizados();
 
-  // Sin un solo adaptador registrado no hay nada que este cron pueda hacer, y se
-  // dice con todas sus letras. Callarlo dejaría un cron en verde en el panel de
-  // Vercel dando la impresión de que la facturación automática está corriendo.
-  if (portales.length === 0) {
+  // Sin un solo portal escrito no hay nada que este cron pueda hacer, y se dice
+  // con todas sus letras. Callarlo dejaría un cron en verde dando la impresión
+  // de que la facturación automática está corriendo.
+  if (PORTALES_CONOCIDOS.length === 0) {
     logger.warn('cron.facturar.sin_adaptadores', {});
     return NextResponse.json({
       corrio: false,
-      motivo: 'No hay ningún adaptador de portal registrado, así que no se puede facturar nada solo todavía.',
+      motivo: 'No hay ningún adaptador de portal escrito, así que no se puede facturar nada solo todavía.',
       pendientes: null,
     });
   }
 
+  const hoy = new Date().toISOString().slice(0, 10);
+
   try {
     const { data, error } = await supabaseAdmin()
       .from('gasto')
-      .select('id, tenant_id')
+      .select('id, tenant_id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra')
       .is('cfdi_uuid', null)
       .not('ocr_extra', 'is', null)
+      // EL ORDEN DE LA 0063. Los nunca intentados primero y después los más
+      // antiguos: sin esto, ocho tickets que no proceden se llevan el lote en
+      // cada corrida y los nuevos no entran nunca.
+      .order('autofactura_intentada_en', { ascending: true, nullsFirst: true })
       .order('created_at', { ascending: true })
       .limit(TOPE_POR_CORRIDA + 1); // uno de más, solo para saber si sobró
 
     if (error) throw new Error(error.message);
 
-    const todos = data ?? [];
+    const todos = (data ?? []) as FilaCola[];
     const lote = todos.slice(0, TOPE_POR_CORRIDA);
     const quedaron = Math.max(0, todos.length - lote.length);
 
-    const resultados = [];
+    // ── Agrupar: flota → portal → tickets. El portal sale de `armar()`, que es
+    // la MISMA función con la que `al_vuelo.ts` reconoce el comercio; derivarlo
+    // aquí por otro camino sería tener dos opiniones sobre a qué portal va un
+    // ticket, y la del cron mandaría el lote al navegador equivocado.
+    const porFlota = new Map<string, Map<string, FilaCola[]>>();
+    const sinPortal: FilaCola[] = [];
+    const comercioDe = new Map<string, string | null>();
+
     for (const g of lote) {
-      // EN SERIE, no en paralelo. Ocho navegadores a la vez contra portales
-      // distintos agota la memoria de la función y, peor, se parece a un ataque
-      // desde el lado del portal — que responde bloqueando la IP.
-      const r = await facturarAlVuelo({
-        gastoId: g.id as string,
-        tenantId: g.tenant_id as string,
-        modo,
-      });
-      resultados.push({ gastoId: g.id, ...r });
+      const clave = armar(g, hoy).comercio?.clave ?? null;
+      comercioDe.set(g.id, clave);
+      if (!clave || !PORTALES_CONOCIDOS.includes(clave)) {
+        sinPortal.push(g);
+        continue;
+      }
+      const porPortal = porFlota.get(g.tenant_id) ?? new Map<string, FilaCola[]>();
+      porPortal.set(clave, [...(porPortal.get(clave) ?? []), g]);
+      porFlota.set(g.tenant_id, porPortal);
+    }
+
+    const resultados: Renglon[] = [];
+    const flotas: Array<{
+      tenantId: string;
+      tickets: number;
+      registrados?: string[];
+      problemas?: string[];
+      falta?: string[];
+    }> = [];
+
+    const correr = async (g: FilaCola) => {
+      // Se vuelve a leer el gasto dentro de `facturarAlVuelo` a propósito: es el
+      // único sitio que decide si se emite y el único que escribe el UUID. Entre
+      // esta consulta y el intento pudo facturarlo otro camino (la pantalla de
+      // "por facturar", el cierre del viaje), y la segunda lectura es lo que
+      // impide emitir un segundo CFDI por el mismo ticket.
+      const r = await facturarAlVuelo({ gastoId: g.id, tenantId: g.tenant_id, modo, hoy });
+      resultados.push({ gastoId: g.id, tenantId: g.tenant_id, comercio: comercioDe.get(g.id) ?? null, ...r });
+    };
+
+    // ── 1. Lo que no necesita navegador. Se despacha primero: si Chromium no
+    // arranca, este trabajo YA quedó hecho y su sello puesto, así que la cola
+    // avanza aunque la parte de portales no se pueda correr todavía.
+    for (const g of sinPortal) await correr(g);
+
+    // ── 2. Una flota, un navegador, su registro de portales.
+    let falloDeArranque: string | null = null;
+    let sinIntentar = 0;
+
+    for (const [tenantId, porPortal] of porFlota) {
+      const tickets = [...porPortal.values()].flat();
+
+      if (falloDeArranque) {
+        // Ya se sabe que no hay navegador. No se vuelve a intentar arrancarlo ni
+        // se marcan estos tickets: quedan enteros para la corrida en que se pueda.
+        sinIntentar += tickets.length;
+        flotas.push({ tenantId, tickets: tickets.length, falta: ['no se intentó: el navegador no arrancó'] });
+        continue;
+      }
+
+      const { flota, falta } = await getFiscalDeFlota(tenantId);
+      if (!flota) {
+        // Sin datos fiscales no se abre navegador: el portal los pide antes que
+        // nada y el intento terminaría igual, con un Chromium gastado de más.
+        // Los tickets SÍ se despachan —`facturarAlVuelo` los sella y reporta— para
+        // que no vuelvan a acaparar el lote de la próxima corrida.
+        logger.warn('cron.facturar.flota_sin_datos_fiscales', { tenant: tenantId, falta: falta.join('; ') });
+        flotas.push({ tenantId, tickets: tickets.length, falta });
+        for (const g of tickets) await correr(g);
+        continue;
+      }
+
+      // POR FLOTA, no global: si el navegador de la primera abrió y el de la
+      // segunda no, lo de la segunda sigue siendo un fallo de arranque. Con una
+      // bandera compartida ese caso se reportaría como 500 y los tickets de la
+      // segunda quedarían marcados como intentados sin haberlo sido.
+      let arranco = false;
+      try {
+        await conNavegador(async (abrirPagina) => {
+          arranco = true;
+          await conPortales({ flota, abrirPagina }, async (registro) => {
+            flotas.push({
+              tenantId,
+              tickets: tickets.length,
+              registrados: registro.registrados,
+              problemas: registro.problemas,
+            });
+            // EN SERIE, no en paralelo. Varias pestañas a la vez contra el mismo
+            // portal agotan la memoria de la función y, peor, se parecen a un
+            // ataque desde el lado del portal — que responde bloqueando la IP.
+            // El orden es el del agrupamiento: todos los de un portal seguidos.
+            for (const g of tickets) await correr(g);
+          });
+        });
+      } catch (e) {
+        const detalle = e instanceof Error ? e.message : String(e);
+        if (arranco) throw e; // el navegador sí abrió: es otro fallo, sube
+
+        // `conNavegador` arranca Chromium ANTES de correr el cuerpo, así que si
+        // el cuerpo nunca se ejecutó, lo que falló fue el arranque.
+        falloDeArranque = detalle;
+        sinIntentar += tickets.length;
+        flotas.push({ tenantId, tickets: tickets.length, falta: ['no se intentó: el navegador no arrancó'] });
+      }
     }
 
     const facturados = resultados.filter((r) => r.facturado).length;
-    logger.info('cron.facturar.ok', { modo, intentados: lote.length, facturados, quedaron });
+
+    if (falloDeArranque) {
+      logger.error('cron.facturar.sin_navegador', { error: falloDeArranque, sinIntentar });
+      return NextResponse.json({
+        corrio: false,
+        modo,
+        motivo:
+          'No se pudo arrancar Chromium, así que los tickets de portal NO se intentaron y quedan sin marcar para la próxima corrida. ' +
+          '`playwright-core` no trae el binario y el contenedor de la función no tiene la caché de Playwright: hay que poner en `CUADRA_CHROMIUM_PATH` la ruta a un Chromium empaquetado para serverless (@sparticuz/chromium o equivalente), o cambiar a un navegador remoto por CDP.',
+        error: falloDeArranque,
+        portalesConocidos: PORTALES_CONOCIDOS,
+        // Lo que sí se alcanzó a hacer sin navegador, para que el 503 no se lea
+        // como "no pasó nada".
+        intentados: resultados.length,
+        facturados,
+        sinIntentar,
+        quedaron,
+        flotas,
+        detalle: resultados,
+      }, { status: 503 });
+    }
+
+    logger.info('cron.facturar.ok', { modo, intentados: resultados.length, facturados, quedaron, flotas: flotas.length });
 
     return NextResponse.json({
-      corrio: true, modo, portales,
-      intentados: lote.length, facturados, quedaron,
+      corrio: true,
+      modo,
+      portalesConocidos: PORTALES_CONOCIDOS,
+      intentados: resultados.length,
+      facturados,
+      quedaron,
+      // Por flota: qué portales quedaron operables y qué le falta a la que no.
+      // Es lo que dice si el problema se arregla configurando al cliente o
+      // tocando código.
+      flotas,
       // El detalle va en la respuesta: "requiere_cuenta" o "confianza_baja" por
       // ticket es lo que dice si el problema se arregla configurando o mirando.
       detalle: resultados,

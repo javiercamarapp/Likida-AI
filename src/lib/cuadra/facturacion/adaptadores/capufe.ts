@@ -304,12 +304,14 @@ export interface OpcionesCapufe extends OpcionesAdaptador {
   receptor: DatosReceptorCapufe;
   /** Corrige cualquier selector que en campo resulte distinto. */
   selectores?: Partial<SelectoresCapufe>;
-  /** TOPE de espera a que el AJAX pueble un `<select>`. No es una pausa. */
+  /**
+   * TOPE de espera a que el AJAX pueble un `<select>`. No es una pausa.
+   *
+   * Va APARTE de `esperaUuidMs` (que hereda de `OpcionesAdaptador`) porque miden
+   * cosas distintas: aquí se espera un catálogo del portal, allá a que el PAC
+   * timbre. Comparten `intervaloMs`, `dormir` y `ahora`, que son el reloj.
+   */
   esperaMaxMs?: number;
-  /** Cada cuánto se vuelve a mirar. */
-  intervaloMs?: number;
-  /** Reloj inyectable: la prueba no espera de verdad. */
-  dormir?: (ms: number) => Promise<void>;
   /**
    * Emitir aunque el costo del portal no cuadre con el del OCR. Default: NO.
    * Se deja la puerta porque un contralor con el papel enfrente puede saber que
@@ -362,19 +364,20 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
 
   private readonly receptor: DatosReceptorCapufe;
   private readonly sel: SelectoresCapufe;
+  /** Vueltas de espera al AJAX de los `<select>`. El del UUID lo lleva la base. */
   private readonly vueltas: number;
-  private readonly intervaloMs: number;
-  private readonly dormir: (ms: number) => Promise<void>;
   private readonly emitirAunConDiscrepancia: boolean;
   private readonly maxFilasTabla: number;
 
   constructor(op: OpcionesCapufe) {
+    // `intervaloMs`, `dormir`, `ahora` y `esperaUuidMs` los guarda la base
+    // —protegidos— y este adaptador los reusa para su propio sondeo de
+    // desplegables. Duplicarlos aquí sería tener dos relojes que se pueden
+    // desajustar: la prueba inyectaría uno y el código usaría el otro.
     super(op);
     this.receptor = op.receptor;
     this.sel = { ...SELECTORES_CAPUFE, captcha: SELECTORES_CAPTCHA, ...op.selectores };
-    this.intervaloMs = Math.max(1, op.intervaloMs ?? 250);
     this.vueltas = Math.max(1, Math.ceil((op.esperaMaxMs ?? 10_000) / this.intervaloMs));
-    this.dormir = op.dormir ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.emitirAunConDiscrepancia = op.emitirAunConDiscrepancia === true;
     this.maxFilasTabla = Math.max(1, op.maxFilasTabla ?? 60);
 
@@ -548,14 +551,25 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
       await this.abortarSiCaptcha(pagina, 'después de apretar emitir');
 
       const rechazoPost = await this.leerAviso(pagina);
-      const uuid = (await pagina.leerTexto(this.sel.uuid))?.trim();
+      const { uuid, aparecio } = await this.esperarUuid(pagina, this.sel.uuid);
       const fin = this.resumen(modo, resultados, capturado, captura);
 
       if (!uuid) {
+        // Se separan los dos fracasos porque se arreglan distinto, y confundirlos
+        // manda a la persona equivocada:
+        //   · nunca apareció  → o el portal no llegó a la pantalla de resultado
+        //     (se revisa el portal), o `.uuid` ya no es el selector (se arregla
+        //     el mapeo).
+        //   · apareció vacío  → el contenedor está pintado y sigue sin folio: el
+        //     timbrado no había vuelto en el tope, o el portal lo enseña en otro
+        //     lado. Revisar el mapeo aquí es perder el tiempo.
+        const porQue = aparecio
+          ? `el contenedor del UUID (\`${this.sel.uuid}\`) apareció y siguió VACÍO tras ~${this.esperaUuidMs} ms: puede que el timbrado no hubiera vuelto todavía, o que el portal enseñe el folio en otro lado`
+          : `el contenedor del UUID (\`${this.sel.uuid}\`) no apareció en ~${this.esperaUuidMs} ms: o el portal no llegó a su pantalla de resultado, o ese selector ya no es el bueno`;
         return {
           ...fin,
           ok: false,
-          error: `Se apretó emitir en CAPUFE y no se pudo confirmar el UUID${rechazoPost ? ` (el portal dice: "${rechazoPost}")` : ''}. PUEDE QUE EL CFDI YA EXISTA: revisar el portal antes de volver a intentar — un segundo intento lo duplicaría, y esta factura trae ${resultados.filter((r) => r.estado === 'agregado').length} casetas.`,
+          error: `Se apretó emitir en CAPUFE y no se pudo confirmar el UUID — ${porQue}${rechazoPost ? ` (el portal dice: "${rechazoPost}")` : ''}. PUEDE QUE EL CFDI YA EXISTA: revisar el portal antes de volver a intentar — un segundo intento lo duplicaría, y esta factura trae ${resultados.filter((r) => r.estado === 'agregado').length} casetas.`,
         };
       }
 
@@ -1001,14 +1015,19 @@ export function pideCaptcha(r: ResultadoAgente): boolean {
 }
 
 /**
- * Construye el adaptador y lo deja registrado.
+ * Construye el adaptador y lo deja registrado PARA ESA FLOTA.
  *
  * No se registra al importar el módulo: el registro necesita una fábrica de
  * páginas y los datos fiscales de la flota, que no existen en tiempo de import.
  * Un `registrarAdaptador()` de nivel de módulo obligaría a inventar ambos.
+ *
+ * EL `tenantId` VA APARTE DEL RECEPTOR, y no por gusto. El receptor es lo que
+ * se teclea EN EL PORTAL —los cinco datos del CFDI 4.0 más el correo—; el
+ * tenantId es un identificador interno nuestro. Un objeto que lleva de todo es
+ * cómo un uuid de nuestra base acaba impreso en un documento fiscal.
  */
-export function registrarCapufe(op: OpcionesCapufe): AdaptadorCapufe {
+export function registrarCapufe(tenantId: string, op: OpcionesCapufe): AdaptadorCapufe {
   const a = new AdaptadorCapufe(op);
-  registrarAdaptador(a);
+  registrarAdaptador(tenantId, a);
   return a;
 }

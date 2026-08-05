@@ -83,9 +83,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </nav>
 
           <div className="px-2.5 pb-2.5 pt-2.5" style={{ borderTop: '1px solid var(--line)' }}>
-            <Link href="/dashboard?vista=demo" title="Ver panel de flota (demo)"
+            {/* Antes iba DIRECTO a `/dashboard?vista=demo`: una sola de las
+                cuatro vistas, la del dueño, y sin `?rol=` — así que aterrizabas
+                en el panel del cliente sin cinta que lo dijera. Ahora apunta al
+                selector, que es donde se eligen las cuatro y donde se dice qué
+                hay (o qué falta) en cada una. */}
+            <Link href="/admin#vistas" title="Entrar a los paneles de los otros roles"
               className={`${ITEM} justify-center lg:justify-start`} style={{ color: 'var(--muted)' }}>
-              <ArrowLeftRight {...ICONO} /> <span className="hidden lg:inline">Ver panel de flota (demo)</span>
+              <ArrowLeftRight {...ICONO} /> <span className="hidden lg:inline">Ver los otros paneles</span>
             </Link>
             {/* El chip de perfil ya NO abre un popup — pedido explícito:
                 quitar el menú, el avatar+nombre lleva directo a

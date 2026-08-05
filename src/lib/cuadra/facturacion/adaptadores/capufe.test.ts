@@ -88,6 +88,17 @@ interface OpcDoble {
   sinValorSeleccionado?: boolean;
   /** El UUID que enseña al emitir. `undefined` = no lo enseña. */
   uuid?: string;
+  /**
+   * Cuántas lecturas del `.uuid` pasan antes de que el folio esté. Imita al PAC:
+   * CAPUFE manda a timbrar y pinta el resultado cuando le contestan.
+   */
+  uuidVueltas?: number;
+  /**
+   * El portal PRE-PINTA el contenedor del UUID: existe desde el principio y
+   * está vacío. Con eso `leerTexto` devuelve `''` y no `null` — la diferencia
+   * que hacía que una emisión buena se reportara como fallo.
+   */
+  uuidPrepintado?: boolean;
   /** Texto del cuadro de error nada más abrir. */
   avisoInicial?: string;
 }
@@ -107,6 +118,7 @@ class PortalDoble implements PaginaCapufe {
   emitido = false;
   seleccionados: Record<string, string> = {};
   vecesQuePreguntoOpciones = 0;
+  vecesQueLeyoUuid = 0;
 
   private aviso: string | null;
   private ultimoCodigo = '';
@@ -208,7 +220,7 @@ class PortalDoble implements PaginaCapufe {
 
   async leerTexto(sel: string): Promise<string | null> {
     if (sel === S.error) return this.aviso;
-    if (sel === S.uuid) return this.emitido ? (this.o.uuid ?? null) : null;
+    if (sel === S.uuid) return this.leerUuid();
 
     const m = /^(.*) tbody tr:nth-child\((\d+)\) td:nth-child\((\d+)\)$/.exec(sel);
     if (m && m[1] === S.tabla) {
@@ -217,6 +229,24 @@ class PortalDoble implements PaginaCapufe {
       return [fila.codigo, fila.plaza, fila.fecha, fila.costo][Number(m[3]) - 1] ?? null;
     }
     return null;
+  }
+
+  /**
+   * El `.uuid`, con las dos formas de "todavía no".
+   *
+   *   pre-pintado → `''`   (el contenedor existe y está vacío)
+   *   sin pintar  → `null` (el selector no resuelve)
+   *
+   * Aplanar las dos en `null` sería borrar de la prueba justo el caso que rompía:
+   * `''` es falsy, así que una emisión BUENA se leía como "no se pudo confirmar
+   * el UUID · PUEDE QUE EL CFDI YA EXISTA".
+   */
+  private leerUuid(): string | null {
+    const todavia = this.o.uuidPrepintado ? '' : null;
+    if (!this.emitido) return todavia;
+    this.vecesQueLeyoUuid += 1;
+    if (this.vecesQueLeyoUuid <= (this.o.uuidVueltas ?? 0)) return todavia;
+    return this.o.uuid ?? todavia;
   }
 
   async captura() {
@@ -244,6 +274,9 @@ function montar(o: OpcDoble & Partial<OpcionesCapufe> = {}) {
     dormir: async () => {},
     intervaloMs: 1,
     esperaMaxMs: 10,
+    // Diez vueltas también para el UUID. En producción son 20 s reales; aquí lo
+    // que importa es que hay TECHO y que se sondea más de una vez.
+    esperaUuidMs: o.esperaUuidMs ?? 10,
     emitirAunConDiscrepancia: o.emitirAunConDiscrepancia,
     selectores: o.selectores,
   });
@@ -711,6 +744,80 @@ describe('modo emitir', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+describe('el UUID se SONDEA, no se lee una vez', () => {
+  it('EL CASO QUE ROMPÍA: el contenedor viene pre-pintado VACÍO y la emisión salió bien', async () => {
+    // Esto leía `.uuid` UNA vez, justo después del clic. Si el portal declara
+    // `<span class="uuid"></span>` de entrada —cualquier plantilla lo hace—,
+    // `leerTexto` devuelve `''`, `''` es falsy, y una emisión EXITOSA se
+    // reportaba como "no se pudo confirmar el UUID · PUEDE QUE EL CFDI YA
+    // EXISTA": una persona mandada a revisar a mano algo que salió bien, e
+    // invitada a reintentar una emisión que YA OCURRIÓ.
+    const m = montar({
+      uuidPrepintado: true,
+      uuidVueltas: 3, // el PAC tarda tres vueltas en contestar
+      uuid: 'AA11BB22-3333-4444-5555-666677778888',
+    });
+
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+
+    expect(r.ok).toBe(true);
+    expect(r.cfdiUuid).toBe('AA11BB22-3333-4444-5555-666677778888');
+    expect(r.error).toBeUndefined();
+    // Y se preguntó más de una vez: con una sola lectura esto sería 1.
+    expect(m.primera().vecesQueLeyoUuid).toBe(4);
+    // El botón se apretó UNA vez. Sondear no es reintentar.
+    expect(m.primera().clics.filter((s) => s === S.botonEmitir)).toHaveLength(1);
+  });
+
+  it('lo mismo sin pre-pintar: el contenedor aparece tarde y el folio se confirma igual', async () => {
+    const m = montar({ uuidVueltas: 2, uuid: 'B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F' });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+
+    expect(r.ok).toBe(true);
+    expect(r.cfdiUuid).toBe('B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F');
+  });
+
+  it('distingue "NO APARECIÓ" de "apareció VACÍO" — se arreglan en sitios distintos', async () => {
+    // No apareció → o el portal no llegó a su pantalla de resultado, o `.uuid`
+    // ya no es el selector: se mira el mapeo.
+    const ausente = montar({ uuid: undefined });
+    const a = await ausente.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    expect(a.ok).toBe(false);
+    expect(a.error).toMatch(/no apareció/);
+    expect(a.error).toMatch(/PUEDE QUE EL CFDI YA EXISTA/);
+
+    // Apareció vacío → el contenedor está bien, el timbrado no volvió. Mandar a
+    // revisar el mapeo aquí es perder el tiempo.
+    const vacio = montar({ uuid: undefined, uuidPrepintado: true });
+    const v = await vacio.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    expect(v.ok).toBe(false);
+    expect(v.error).toMatch(/siguió VACÍO/);
+    expect(v.error).toMatch(/PUEDE QUE EL CFDI YA EXISTA/);
+
+    // Y los dos textos son distintos: si fueran el mismo, la distinción no
+    // existiría para quien lee el resultado.
+    expect(a.error).not.toBe(v.error);
+  });
+
+  it('el sondeo tiene TECHO: no gira para siempre esperando un folio que no llega', async () => {
+    // `esperaUuidMs / intervaloMs` = 6 / 1 → seis vueltas y para. Sin techo, un
+    // portal que nunca pinta el folio se lleva la invocación entera y con ella el
+    // resto del lote.
+    const m = montar({ uuid: undefined, uuidPrepintado: true, esperaUuidMs: 6 });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+
+    expect(r.ok).toBe(false);
+    expect(m.primera().vecesQueLeyoUuid).toBe(6);
+  });
+
+  it('un folio con espacios alrededor se recorta, igual que antes', async () => {
+    const m = montar({ uuidPrepintado: true, uuidVueltas: 1, uuid: '  B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F  ' });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }], 'emitir');
+    expect(r.cfdiUuid).toBe('B0800A68-1F2E-4C3A-9D77-0A1B2C3D4E5F');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 describe('pre-vuelo de selectores', () => {
   it('con el botón de emitir movido falla ANTES de escribir, sin emitir para averiguarlo', async () => {
     const m = montar({ presentes: TODOS.filter((s) => s !== S.botonEmitir) });
@@ -849,18 +956,32 @@ describe('parsearCosto', () => {
 
 // ═══════════════════════════════════════════════════════════════════════════
 describe('registro en el agente', () => {
-  it('queda registrado bajo la clave de `comercios.ts`, que es como lo encuentra el agente', async () => {
+  it('queda registrado bajo la clave de `comercios.ts` Y bajo la flota que lo pidió', async () => {
     const { adaptadorDe, portalesAutomatizados } = await import('../agente');
-    expect(adaptadorDe('capufe')).toBeNull(); // no se registra al importar el módulo
+    expect(adaptadorDe('flota-1', 'capufe')).toBeNull(); // no se registra al importar el módulo
 
-    const a = registrarCapufe({ abrirPagina: async () => new PortalDoble(), receptor: RECEPTOR });
+    const a = registrarCapufe('flota-1', { abrirPagina: async () => new PortalDoble(), receptor: RECEPTOR });
 
-    expect(adaptadorDe('capufe')).toBe(a);
-    expect(portalesAutomatizados()).toContain('capufe');
+    expect(adaptadorDe('flota-1', 'capufe')).toBe(a);
+    expect(portalesAutomatizados('flota-1')).toContain('capufe');
+    // Y la flota de al lado no lo hereda. El adaptador lleva DENTRO los datos
+    // fiscales del receptor: heredarlo es emitir con el RFC de otra empresa.
+    expect(adaptadorDe('flota-2', 'capufe')).toBeNull();
+    expect(portalesAutomatizados('flota-2')).toEqual([]);
+
     // La clave tiene que ser la de `comercios.ts`; con otra, `facturarConAgente`
     // no lo encuentra y el ticket se va por mensaje al encargado para siempre.
     const { COMERCIOS } = await import('../comercios');
     expect(COMERCIOS.some((x) => x.clave === 'capufe')).toBe(true);
+  });
+
+  it('sin tenantId no se puede registrar: lanza en vez de caer a un cajón compartido', () => {
+    // Un cajón por default —cadena vacía, "desconocido"— sería el bug otra vez:
+    // dos flotas leyéndose el adaptador la una a la otra.
+    expect(() => registrarCapufe('', { abrirPagina: async () => new PortalDoble(), receptor: RECEPTOR }))
+      .toThrow(/tenantId/);
+    expect(() => registrarCapufe('   ', { abrirPagina: async () => new PortalDoble(), receptor: RECEPTOR }))
+      .toThrow(/tenantId/);
   });
 });
 

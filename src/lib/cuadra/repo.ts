@@ -242,10 +242,24 @@ export async function gastoPorHash(
 // al operador si va cuando haya viaje al que ponerlo.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * POR QUÉ ese comprobante no aterrizó en una liquidación.
+ *
+ * `fallo_ocr` se agregó el 4-ago-2026 y NO trae migración: la columna es `text`
+ * a secas (0040, línea 40) sin CHECK ni enum, y hoy NADIE la lee para decidir
+ * nada — el ofrecimiento filtra por `gasto.monto`, no por esto. Se escribe para
+ * que la fila diga la verdad de lo que pasó: las dos ramas de `fallo_tecnico`
+ * del processor guardaban `sin_viaje`, que describe el efecto (no aterrizó en
+ * ninguna liquidación) y esconde la causa (se cayó NUESTRO OCR). Con `sin_viaje`
+ * en las dos, contar cuántos comprobantes perdió el proveedor de visión no se
+ * podía hacer con esta tabla.
+ */
+export type MotivoHuerfano = 'sin_viaje' | 'tras_liquidar' | 'fallo_ocr';
+
 export interface Huerfano {
   id: string;
   gasto: Gasto;
-  motivo: 'sin_viaje' | 'tras_liquidar';
+  motivo: MotivoHuerfano;
   creadoEn: string;
   rutaImagen?: string;
   /** Cuándo se le preguntó al operador si van. `undefined` = nunca. */
@@ -255,7 +269,7 @@ export interface Huerfano {
 /** Best-effort: si esto falla, se le dice al operador que no se pudo guardar. */
 export async function guardarHuerfano(
   tenantId: string, operadorId: string,
-  h: { gasto: Gasto; motivo: 'sin_viaje' | 'tras_liquidar'; rutaImagen?: string },
+  h: { gasto: Gasto; motivo: MotivoHuerfano; rutaImagen?: string },
 ): Promise<boolean> {
   const { error } = await acotada(supabaseAdmin().from('comprobante_huerfano').insert({
     tenant_id: tenantId, operador_id: operadorId,
@@ -283,7 +297,7 @@ export async function getHuerfanos(tenantId: string, operadorId: string): Promis
   return data.map((r) => ({
     id: r.id as string,
     gasto: r.gasto as Gasto,
-    motivo: r.motivo as 'sin_viaje' | 'tras_liquidar',
+    motivo: r.motivo as MotivoHuerfano,
     creadoEn: r.creado_en as string,
     rutaImagen: (r.ruta_imagen as string) || undefined,
     ofrecidoEn: (r.ofrecido_en as string) || undefined,

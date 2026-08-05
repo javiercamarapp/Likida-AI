@@ -68,20 +68,88 @@ export interface AdaptadorPortal {
   facturar(campos: CampoListo[], modo: ModoAgente): Promise<ResultadoAgente>;
 }
 
-const ADAPTADORES = new Map<string, AdaptadorPortal>();
+// ═══════════════════════════════════════════════════════════════════════════
+// EL REGISTRO VA POR FLOTA, Y ESO NO ES UNA PRECAUCIÓN: ES EL ARREGLO.
+//
+// Aquí hubo un `Map<string, AdaptadorPortal>` con la clave `comercio` a secas,
+// a nivel de MÓDULO. En una función serverless caliente el módulo sobrevive
+// entre invocaciones, así que ese `Map` era UNO para todo el proceso y el
+// proceso atiende a varias flotas seguidas.
+//
+// La secuencia era exacta: la flota A registra su adaptador de CAPUFE —que
+// lleva DENTRO sus datos fiscales, porque el portal pide RFC, razón social,
+// régimen, CP y uso una vez por sesión—; termina su lote; llega un ticket de la
+// flota B; `adaptadorDe('capufe')` devuelve el de A; y se emite un CFDI con el
+// RFC de A por un gasto de B. Un CFDI no se deshace: cancelarlo fuera de plazo
+// se le queda al cliente en su contabilidad, y el propio portal lo advierte en
+// rojo en su página.
+//
+// Ahora el tenant va EN LA CLAVE. Dos niveles de `Map` y no una llave compuesta
+// (`${tenant}|${comercio}`) a propósito: una llave compuesta depende de que
+// ningún identificador traiga el separador, y el día que lo traiga las dos
+// flotas vuelven a compartir cajón sin que nada avise.
+//
+// LAS FIRMAS PIDEN EL `tenantId` PRIMERO Y SIN DEFAULT. Quien lo olvide no
+// obtiene el adaptador de otro: no compila. Y quien pase una cadena vacía
+// —`undefined` colado por un `as`, un id que no se leyó— tampoco cae en un
+// cajón compartido: se lanza. Ver `exigirTenantId`.
+// ═══════════════════════════════════════════════════════════════════════════
 
-/** Registra el adaptador de un portal. Sin registro, ese portal va por mensaje. */
-export function registrarAdaptador(a: AdaptadorPortal): void {
-  ADAPTADORES.set(a.comercio, a);
+/** flota → comercio → adaptador. */
+const ADAPTADORES = new Map<string, Map<string, AdaptadorPortal>>();
+
+/**
+ * El `tenantId` con el que se abre el cajón, o un error que dice por qué no.
+ *
+ * LANZA en vez de caer a un cajón por default. Un cajón compartido —la cadena
+ * vacía, `'desconocido'`, lo que sea— es literalmente el bug que este archivo
+ * acaba de cerrar: dos flotas volverían a leerse el adaptador la una a la otra.
+ * Un error que sube es ruidoso; un CFDI con el RFC de otra empresa es
+ * irreversible.
+ */
+function exigirTenantId(tenantId: string, quien: string): string {
+  const t = typeof tenantId === 'string' ? tenantId.trim() : '';
+  if (!t) {
+    throw new Error(
+      `${quien}: falta el tenantId. El registro de adaptadores va POR FLOTA porque el adaptador lleva dentro los datos fiscales con los que se timbra; sin tenantId no hay dónde guardarlo ni a quién devolvérselo, y un cajón compartido emitiría el CFDI de una flota con el RFC de otra.`,
+    );
+  }
+  return t;
 }
 
-export function adaptadorDe(comercio: string): AdaptadorPortal | null {
-  return ADAPTADORES.get(comercio) ?? null;
+/**
+ * Registra el adaptador de un portal PARA ESA FLOTA. Sin registro, ese portal
+ * va por mensaje al encargado.
+ */
+export function registrarAdaptador(tenantId: string, a: AdaptadorPortal): void {
+  const t = exigirTenantId(tenantId, 'registrarAdaptador');
+  const porComercio = ADAPTADORES.get(t) ?? new Map<string, AdaptadorPortal>();
+  porComercio.set(a.comercio, a);
+  ADAPTADORES.set(t, porComercio);
 }
 
-/** Cuántos portales sabe operar el agente hoy. */
-export function portalesAutomatizados(): string[] {
-  return [...ADAPTADORES.keys()];
+export function adaptadorDe(tenantId: string, comercio: string): AdaptadorPortal | null {
+  const t = exigirTenantId(tenantId, 'adaptadorDe');
+  return ADAPTADORES.get(t)?.get(comercio) ?? null;
+}
+
+/** Qué portales sabe operar el agente hoy PARA ESA FLOTA. */
+export function portalesAutomatizados(tenantId: string): string[] {
+  const t = exigirTenantId(tenantId, 'portalesAutomatizados');
+  return [...(ADAPTADORES.get(t)?.keys() ?? [])];
+}
+
+/**
+ * Saca a esa flota del registro entera.
+ *
+ * Existe por la memoria: con el tenant en la clave, un proceso caliente que
+ * atiende a cien flotas acumula cien cajones que nadie vuelve a mirar. Quien
+ * cierra un lote (`conPortales`) tiene además su propia forma de dejar el
+ * registro inservible con un mensaje mejor que "no hay adaptador" — ver
+ * `adaptadores/registro.ts`.
+ */
+export function olvidarAdaptadores(tenantId: string): void {
+  ADAPTADORES.delete(exigirTenantId(tenantId, 'olvidarAdaptadores'));
 }
 
 /**
@@ -95,17 +163,22 @@ export function portalesAutomatizados(): string[] {
  *     reintentar solo: en `emitir` un reintento a ciegas puede duplicar el CFDI.
  */
 export async function facturarConAgente(args: {
+  /**
+   * De qué flota es el ticket. OBLIGATORIO: es lo que decide con QUÉ DATOS
+   * FISCALES se llena el portal, o sea de qué empresa sale el CFDI.
+   */
+  tenantId: string;
   comercio: string;
   campos: CampoListo[];
   modo?: ModoAgente;
 }): Promise<ResultadoAgente> {
   const modo: ModoAgente = args.modo ?? 'ensayo';
-  const a = adaptadorDe(args.comercio);
+  const a = adaptadorDe(args.tenantId, args.comercio);
 
   if (!a) {
     return {
       modo, ok: false, capturado: {},
-      error: `Todavía no hay adaptador para "${args.comercio}". Ese portal se factura a mano hasta que lo haya.`,
+      error: `Todavía no hay adaptador para "${args.comercio}" en esta flota. Ese portal se factura a mano hasta que lo haya.`,
     };
   }
 
@@ -119,11 +192,11 @@ export async function facturarConAgente(args: {
 
   try {
     const r = await a.facturar(args.campos, modo);
-    logger.info('agente.facturacion', { comercio: args.comercio, modo, ok: r.ok });
+    logger.info('agente.facturacion', { tenant: args.tenantId, comercio: args.comercio, modo, ok: r.ok });
     return r;
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    logger.error('agente.facturacion.fallo', { comercio: args.comercio, modo, error });
+    logger.error('agente.facturacion.fallo', { tenant: args.tenantId, comercio: args.comercio, modo, error });
     // NO se reintenta. En `emitir`, un reintento a ciegas después de un fallo
     // ambiguo —¿se envió antes de reventar?— es la forma de acabar con dos CFDI
     // por el mismo ticket.

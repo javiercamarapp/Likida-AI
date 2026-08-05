@@ -128,39 +128,51 @@ describe('la ráfaga de un POST se procesa con techo de concurrencia', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LO QUE EL RATE LIMIT DESCARTA YA NO SE PIERDE EN SILENCIO.
+// LO QUE PASA DEL TECHO SE APLAZA — NO SE DESCARTA (4-ago-2026).
 //
-// Estos mensajes YA pasaron el HMAC: son de Meta y de un chofer dado de alta. Y
-// la ruta devuelve 200, así que Meta NO reintenta. El único rastro era un `warn`
-// sin `waMessageId` — imposible saber después qué comprobante se tiró.
+// Estos mensajes YA pasaron el HMAC: son de Meta y de un chofer dado de alta.
+// La ruta contestaba 200 y los tiraba, y un 200 le dice a Meta que quedaron
+// entregados: cada exceso era un comprobante perdido para siempre. La cola que
+// hacía falta no había que construirla — es la reentrega de Meta, y usarla solo
+// pide no mentirle con un 200. Reentregar es seguro porque `claimMessage` ya
+// deduplica por `waMessageId`.
 // ═══════════════════════════════════════════════════════════════════════════
-describe('el rate limit no descarta comprobantes en silencio', () => {
-  it('deja el waMessageId en el log: sin él no se puede saber qué se perdió', async () => {
-    // 41 en un POST contra un tope de 40/min: el último cae.
-    await postear(rafaga(41, '5219990002001'));
-    const tirados = logger.error.mock.calls.filter((c) => c[0] === 'wa.ratelimit');
-    expect(tirados).toHaveLength(1);
-    expect(tirados[0][1]).toMatchObject({ id: 'wamid.5219990002001.40', tipo: 'image' });
+describe('el rate limit aplaza con 429 en vez de descartar con 200', () => {
+  it('EL FALLO: un 200 le dice a Meta que no lo reintente — ahora contesta 429', async () => {
+    // 41 en un POST contra un tope de 40/min: el último no cabe en esta
+    // invocación, así que la respuesta entera pide reentrega.
+    const res = await postear(rafaga(41, '5219990002001'));
+    expect(res.status).toBe(429);
+    expect(await res.json()).toMatchObject({ received: 40, diferidos: 1 });
   });
 
-  it('y se le DICE al operador, que es lo único que le permite reenviarlo', async () => {
-    await postear(rafaga(45, '5219990002002'));
-    // UNA línea por teléfono, no una por mensaje descartado.
-    expect(enviados).toHaveLength(1);
-    expect(enviados[0].to).toBe('5219990002002');
-    expect(enviados[0].texto).toMatch(/reenvíamelos/i);
-    expect(enviados[0].texto).toContain('5');   // 45 − 40 permitidos
+  it('deja el waMessageId en el log: si Meta acaba rindiéndose, es el único rastro', async () => {
+    await postear(rafaga(41, '5219990002002'));
+    const aplazados = logger.warn.mock.calls.filter((c) => c[0] === 'wa.ratelimit_diferido');
+    expect(aplazados).toHaveLength(1);
+    expect(aplazados[0][1]).toMatchObject({ id: 'wamid.5219990002002.40', tipo: 'image' });
   });
 
-  it('el aviso va DESPUÉS de procesar lo que sí entró', async () => {
+  it('lo que SÍ cabía se procesa igual: el 429 no puede volverse un lote que nunca avanza', async () => {
+    // Si se devolviera el lote entero sin tocar, un POST con más mensajes que
+    // el techo volvería a excederlo en CADA reentrega, para siempre. Avanzando
+    // lo que cabe, cada entrega deja menos por hacer.
     await postear(rafaga(45, '5219990002003'));
     expect(atendidos).toHaveLength(40);
-    expect(enviados).toHaveLength(1);
   });
 
-  it('CONTROL — una ráfaga normal no dispara ningún aviso', async () => {
-    await postear(rafaga(22, '5219990002004'));
+  it('y al operador ya no se le pide que reenvíe: sus fotos vuelven solas', async () => {
+    // El aviso viejo describía una pérdida que ya no ocurre, y reenviar el fajo
+    // es justo lo que vuelve a llenar la ventana del limitador.
+    await postear(rafaga(45, '5219990002004'));
     expect(enviados).toHaveLength(0);
-    expect(logger.error).not.toHaveBeenCalledWith('wa.ratelimit', expect.anything());
+  });
+
+  it('CONTROL — una ráfaga que cabe contesta 200 y no aplaza nada', async () => {
+    const res = await postear(rafaga(22, '5219990002005'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ received: 22 });
+    expect(enviados).toHaveLength(0);
+    expect(logger.warn).not.toHaveBeenCalledWith('wa.ratelimit_diferido', expect.anything());
   });
 });

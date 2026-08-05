@@ -13,6 +13,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { KpiTile, EstadoVacio, ChartCard } from '../../admin/ui/kit';
 import { HBars } from '../../admin/ui/graficas';
 import { EncabezadoFiscal, urlDePeriodo } from './periodo';
+import { AvisoSinFlota } from '../sin-flota';
 import { safe, extraDe, opcionesDe, PieDeAlcance, AvisoDeFallo, type Fallo, type ParamsPanel } from './comun';
 
 export const dynamic = 'force-dynamic';
@@ -65,11 +66,18 @@ export default async function PanelFiscalPage({
   searchParams: Promise<ParamsPanel>;
 }) {
   const sp = await searchParams;
-  const { tenantId } = await resolverTenantEfectivo(RUTA, sp);
-  return <Contenido {...{ tenantId, sp }} />;
+  const { tenantId, tenantExiste } = await resolverTenantEfectivo(RUTA, sp);
+  return <Contenido {...{ tenantId, sp, tenantExiste }} />;
 }
 
-export async function Contenido({ tenantId, sp }: { tenantId: string; sp: ParamsPanel; }) {
+export async function Contenido({ tenantId, sp, tenantExiste = true }: {
+  tenantId: string;
+  sp: ParamsPanel;
+  /** `false` cuando el uuid al que apunta la página no tiene fila en `tenant`
+   *  — ver `../sin-flota.tsx`. Es la pantalla donde más pesa: cuatro KPIs
+   *  fiscales en $0.00 no se distinguen de una flota que no dedujo nada. */
+  tenantExiste?: boolean;
+}) {
   const periodo = resolverPeriodo(sp?.p, new Date().toISOString().slice(0, 10));
   const anterior = periodoAnterior(periodo);
   const extra = extraDe(sp);
@@ -109,6 +117,8 @@ export async function Contenido({ tenantId, sp }: { tenantId: string; sp: Params
         subtitulo="Lo que se puede acreditar y deducir de los comprobantes que entraron por WhatsApp"
         base={RUTA} periodo={periodo} extra={extra}
       />
+
+      {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}
 
       {gastos === null || cfg === null ? (
         <AvisoDeFallo fallos={fallos} />

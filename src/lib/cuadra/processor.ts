@@ -377,7 +377,57 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           const ruta = await subirComprobante(op.tenantId, 'sin-viaje', await hashImagen(dataUrl), dataUrl);
           const ex = await extraerComprobante(dataUrl, reloj.senal(25_000));
           await registrarCosto({ tenantId: op.tenantId, viajeId: null, fase: 'ocr', modelo: ex.costo.modelo, tokensIn: ex.costo.tokensIn, tokensOut: ex.costo.tokensOut, costoUsd: ex.costo.costoUsd });
+          // ── FALLO NUESTRO: AQUÍ TAMPOCO SE PIERDE EL COMPROBANTE ────────────
+          //
+          // Es la rama GEMELA del `avisar_falla` de más abajo (el camino CON
+          // viaje abierto), y hasta hoy hacía justo lo que aquélla dejó de
+          // hacer: tirar la foto sin guardar nada y pedirle al operador que la
+          // reenviara «con buena luz y completo el ticket». Dos mentiras en una
+          // frase: la foto está bien —`fallo_tecnico` es un 429, un
+          // truncamiento o el proveedor de visión caído— y no hay nada que
+          // completar, porque no llegamos a leer el ticket. Y el disparador es
+          // SISTÉMICO: si falló una foto de la ráfaga, fallaron las once.
+          //
+          // Este huérfano nace con `monto: 0` (es lo que devuelve
+          // `extraerComprobante` cuando truena) y por eso NO entra al
+          // ofrecimiento —el filtro `monto > 0` de más abajo—: adjuntarlo
+          // metería una línea de $0.00 en la liquidación del contralor, que es
+          // una cifra que nadie midió. Se guarda igual porque la fila y la
+          // imagen son la evidencia de que ese papel existió; el monto solo
+          // vuelve por el reenvío, y por eso el reenvío es lo que se le pide.
+          //
+          // LO QUE ESTO DEJA ABIERTO (igual que la rama gemela, que ya lo
+          // tenía): un huérfano sin monto NUNCA se ofrece, así que nunca se
+          // resuelve y se queda en la sala de espera. `getHuerfanos` lee 50 por
+          // operador ordenados por antigüedad, o sea que un operador que
+          // acumule 50 de éstos —dos o tres caídas del proveedor con ráfagas
+          // largas— dejaría de ver los que SÍ tienen monto. No se resuelve aquí
+          // porque marcarlos 'descartado' escribiría en la base algo que el
+          // operador no dijo; el arreglo va en la lectura (filtrar por monto en
+          // la consulta, o subir el tope) y queda anotado.
+          if (!ex.legible && ex.motivo === 'fallo_tecnico') {
+            const guardado = await guardarHuerfano(op.tenantId, op.operadorId, {
+              gasto: ruta ? { ...ex.gasto, imagenUrl: ruta } : ex.gasto,
+              motivo: 'fallo_ocr', rutaImagen: ruta,
+            });
+            logger.warn('huerfano.fallo_tecnico', {
+              tenant: op.tenantId, operador: op.operadorId, guardado, conImagen: Boolean(ruta),
+            });
+            if (!guardado) {
+              await sendText(msg.from, 'Se me trabó a mí al leer ese comprobante ⚙️ — no es tu foto — y tampoco lo pude guardar. Conserva el ticket y reenvíamelo en un rato, por favor. 🙏');
+              return;
+            }
+            // MISMO CRITERIO QUE EL ACUSE DE ABAJO: se cuenta lo que ya hay en
+            // la sala de espera para no dar once explicaciones idénticas por
+            // una falla que es una sola.
+            const enEspera = await getHuerfanos(op.tenantId, op.operadorId);
+            if (enEspera.length <= 1) {
+              await sendText(msg.from, 'Se me trabó a mí al leer ese comprobante ⚙️ — no es tu foto. Guardé la imagen, así que el papel no se pierde, pero no alcancé a leer el monto: ¿me lo reenvías en un ratito para poder contarlo? 📸');
+            }
+            return;
+          }
           // Ilegible: se le pide otra ANTES de guardar algo que no se puede usar.
+          // Aquí sí es la foto (borrosa, cortada, oscura) y reenviarla SIRVE.
           if (!ex.legible && ex.motivo !== 'solo_codigo' && ex.motivo !== 'solo_pago') {
             await sendText(msg.from, 'Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?');
             return;
@@ -667,12 +717,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           const ruta = await subida;
           const guardado = await guardarHuerfano(op.tenantId, op.operadorId, {
             gasto: ruta ? { ...gasto, imagenUrl: ruta } : gasto,
-            // El motivo REAL sería `fallo_ocr`. La unión de tipos vive en
-            // `repo.ts`, que esta ronda no toca, y la columna hoy no decide
-            // nada —se escribe y nadie la lee—: `sin_viaje` describe el hecho
-            // operativo (no aterrizó en ninguna liquidación) sin inventar un
-            // valor que la base no espera. Queda anotado como pendiente.
-            motivo: 'sin_viaje', rutaImagen: ruta,
+            // `fallo_ocr` y ya no `sin_viaje` (4-ago-2026). La nota anterior
+            // decía que el motivo real era éste y que se dejaba pendiente por
+            // no tocar `repo.ts`; se tocó, y la columna es `text` a secas sin
+            // CHECK (0040), así que el valor honesto entra sin migración.
+            // `sin_viaje` describía el efecto y escondía la causa: la foto no
+            // se quedó fuera por no haber viaje —lo hay—, sino porque se cayó
+            // NUESTRO OCR.
+            motivo: 'fallo_ocr', rutaImagen: ruta,
           });
           logger.warn('foto.fallo_tecnico_guardado', { viaje: viajeId, tenant: op.tenantId, guardado, conImagen: Boolean(ruta) });
           // SE ANOTA SIEMPRE, se DICE solo si llegó sola. Anotarla también cuando

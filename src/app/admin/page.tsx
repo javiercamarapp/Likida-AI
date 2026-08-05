@@ -13,6 +13,7 @@ import ContadorRetro from './contador-retro';
 import { IconoProveedor } from './proveedor-icono';
 import { GlobalFilter, resolverRango } from './ui/global-filter';
 import { KpiTile } from './ui/kit';
+import { SelectorVista } from './selector-vista';
 
 export const dynamic = 'force-dynamic';
 
@@ -107,6 +108,11 @@ export default async function Admin({
                 dígitos = el ancho de "1,000,000", la meta. */}
             <ContadorRetro valor={0} digitos={7} prefijo="$" etiqueta="MRR — meta $1,000,000" tamaño="lg" />
           </div>
+
+          {/* Arriba de todo lo demás a propósito: con la base vacía, entrar a
+              los otros paneles a mirar el frontend es lo que se hace en esta
+              pantalla, y las gráficas de abajo no tienen nada que enseñar. */}
+          <SelectorVista tenants={r.tenants} />
 
           {/* Facturas = filas de `gasto` (cada una pasó por OCR/CFDI) — el
               mismo dato real que ya se usa en Costo por modelo, agrupado
