@@ -105,8 +105,27 @@ export async function listOperadores(tenantId: string): Promise<Array<{ id: stri
  * Mueve un viaje de un chofer a otro. Acotado por tenant en el propio UPDATE
  * (no solo en la página que lo llama): con RLS activa esto es cinturón y
  * tirantes, no el único candado.
+ *
+ * ── EL OPERADOR TIENE QUE SER DE ESTA FLOTA (auditoría 10, ALTO) ───────────
+ *
+ * El `.eq('tenant_id', tenantId)` de abajo acota QUÉ VIAJE se puede tocar —
+ * nunca acotó a QUÉ OPERADOR se le puede asignar. El `<select>` de
+ * `/dashboard/despacho` solo ofrece los de `listOperadores(tenantId)`, pero
+ * eso es una restricción de la UI, no del servidor: un POST directo al server
+ * action (devtools, no hace falta curl) con el `operadorId` de OTRA flota
+ * dejaba `viaje.tenant_id = A` apuntando a un `operador_id` de B.
+ *
+ * La RLS del chofer (`0045_rls_operador.sql`, policy `operador_ve_su_viaje`)
+ * no vuelve a comprobar tenant — solo mira
+ * `operador_id = get_user_operador_id()` —, así que el chofer de B, al entrar
+ * a /chofer, vería ese viaje (y sus gastos y su liquidación) de la flota A.
+ * Mismo patrón que los dos hallazgos que se cerraron esta misma ronda: se
+ * acota el tenant y se olvida el rol/dueño del segundo id.
  */
 export async function reasignarOperador(tenantId: string, viajeId: string, operadorId: string): Promise<void> {
+  const propio = await getOperador(operadorId, tenantId);
+  if (!propio) throw new Error('reasignarOperador: el operador no pertenece a esta flota');
+
   const { error } = await acotada(supabaseAdmin()
     .from('viaje')
     .update({ operador_id: operadorId })

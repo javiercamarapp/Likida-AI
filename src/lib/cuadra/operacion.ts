@@ -475,6 +475,28 @@ export interface NuevoViaje {
 
 /** Devuelve el id del viaje creado. */
 export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<string> {
+  // ── EL OPERADOR TIENE QUE SER DE ESTA FLOTA (auditoría 10, ALTO) ──────────
+  //
+  // El comentario de arriba del módulo afirma que "un id de otro tenant no
+  // debe poder tocarse aunque alguien lo adivine" — cierto para el WHERE de
+  // `reasignarOperador`/`asignarUnidad`, falso aquí: `operadorId` se escribía
+  // tal cual en un INSERT nuevo, sin ningún WHERE que lo pudiera detener. El
+  // `<select>` de /dashboard/despacho solo ofrece los de
+  // `listOperadores(tenantId)`, pero eso es la UI, no el servidor: un POST
+  // directo al server action con el `operadorId` de OTRA flota creaba un
+  // viaje con `tenant_id = A` y `operador_id` de B. La RLS del chofer
+  // (`0045_rls_operador.sql`) no vuelve a comprobar tenant — solo
+  // `operador_id = get_user_operador_id()` —, así que el chofer de B vería
+  // ese viaje (y sus gastos y su liquidación) de la flota A en /chofer.
+  if (v.operadorId) {
+    const propio = await traerTodo<{ id: unknown }>(
+      (d, h) => supabaseAdmin().from('operador').select('id', conteo(d))
+        .eq('tenant_id', tenantId).eq('id', v.operadorId).order('id').range(d, h),
+      'crearViaje.operadorPropio',
+    );
+    if (propio.length === 0) throw new Error('crearViaje: el operador no pertenece a esta flota');
+  }
+
   const { data, error } = await acotada(supabaseAdmin().from('viaje').insert({
     tenant_id: tenantId,
     folio: v.folio || null,

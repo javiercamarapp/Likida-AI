@@ -333,6 +333,32 @@ describe('escrituras', () => {
     await expect(crearViaje('t-1', { folio: 'VJ-9' })).rejects.toThrow('folio duplicado');
   });
 
+  // AUDITORÍA 10, ALTO: `operadorId` se escribía tal cual en el INSERT, sin
+  // comprobar que fuera de ESTE tenant. El `<select>` de /dashboard/despacho
+  // solo ofrece los de `listOperadores(tenantId)`, pero eso es la UI, no el
+  // servidor — un POST directo con el operadorId de otra flota dejaba
+  // `viaje.tenant_id = A` apuntando a un operador de B, y la RLS del chofer
+  // (0045_rls_operador.sql) no vuelve a comprobar tenant al enseñarle sus
+  // viajes, gastos y liquidaciones.
+  it('crearViaje ACEPTA un operadorId que sí pertenece al tenant', async () => {
+    TABLAS = { operador: [{ id: 'o-1' }] };
+    await crearViaje('t-1', { folio: 'VJ-10', operadorId: 'o-1' });
+    const w = escrituras.find((e) => e.tabla === 'viaje')!;
+    expect(w.valores).toMatchObject({ tenant_id: 't-1', operador_id: 'o-1' });
+  });
+
+  it('AUDITORÍA 10: crearViaje RECHAZA un operadorId de OTRA flota, y no inserta el viaje', async () => {
+    // La consulta va acotada por `tenant_id`: si el operador es de otro
+    // tenant, la lectura no lo trae — como en producción.
+    TABLAS = { operador: [] };
+    await expect(crearViaje('t-1', { folio: 'VJ-11', operadorId: 'o-de-otra-flota' })).rejects.toThrow(
+      'crearViaje: el operador no pertenece a esta flota',
+    );
+    // Mutación: sin esta aserción, borrar el candado y dejar pasar el INSERT
+    // seguiría verde en la prueba de arriba.
+    expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
+  });
+
   it('rechazar un POD NO borra el archivo — solo cambia el estado y anota', async () => {
     // Borrar la ruta dejaría la discusión con el chofer sin la prueba de lo
     // que sí mandó. Además, `pod_subido_tiene_archivo` (0047) solo exige
