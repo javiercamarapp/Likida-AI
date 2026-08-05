@@ -2217,3 +2217,639 @@ begin
     recorte_daba_menos, recortado, cerrado,
     def_a, anon_a, auth_a, svc_a, def_d, anon_d, auth_d, svc_d;
 end $$;
+
+
+-- ── 44. Un CFDI ampara VARIAS casetas, y lo bloqueado sale de la cola (mig. 0065) ──
+--
+-- Las dos garantías de la 0065, y la de la 0019 que NO se pudo perder al
+-- tocarla.
+--
+-- CAPUFE emite UNA factura con N códigos, así que N gastos comparten
+-- `cfdi_uuid`. El índice de la 0019 —`unique (tenant_id, cfdi_uuid)`— lo
+-- impedía: la segunda caseta reventaba con 23505 y las otras siete se quedaban
+-- sin folio, volvían a la cola y la hora siguiente se emitía un SEGUNDO CFDI
+-- por el mismo cruce. Fuera de plazo, eso ya no se cancela.
+--
+-- El índice NO se borró: se le agregó `cfdi_orden` como tercera columna. La
+-- garantía que queda es "a lo sumo un gasto por (flota, CFDI) puede ser el
+-- orden 1", y como TODO camino que inserta un gasto con folio usa el default
+-- 1, el caso de la 0019 —el mismo XML entrando dos veces— sigue rebotando. Este
+-- bloque lo comprueba en las dos direcciones, y comprueba también que el
+-- mensaje siga nombrando `uq_gasto_cfdi_uuid`: `processor.ts` discrimina por
+-- ese nombre para saber si el 23505 es benigno, así que renombrarlo tumbaría el
+-- procesamiento de la foto en vez de ignorarla.
+--
+-- Y la cola: los bloqueados —CAPTCHA, emisión sin confirmar— no se reintentan.
+-- El índice parcial lleva el MISMO predicado que la consulta del cron, o se
+-- estarían leyendo cada hora los que ya se sabe que no se pueden.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid; o uuid; v uuid; r record; plan text := '';
+  choco_orden boolean := false; choco_ingesta boolean := false; msg text := '';
+  n_lote int; sin_motivo boolean := false; usa_indice boolean; en_cola int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0065') returning id into t;
+  insert into operador (tenant_id, nombre, telefono) values (t,'ZZZ','5215557770065') returning id into o;
+  insert into viaje (tenant_id, operador_id, estatus) values (t,o,'abierto') returning id into v;
+
+  -- 1. UNA factura de 8 casetas: 8 gastos, un uuid, orden 1..8.
+  insert into gasto (tenant_id, viaje_id, concepto, monto) select t, v, 'caseta', 50 from generate_series(1,8);
+  update gasto g set cfdi_uuid = 'UUID-CAPUFE-LOTE', cfdi_orden = x.n
+    from (select id, row_number() over (order by id) n from gasto where tenant_id = t) x
+   where g.id = x.id;
+  select count(*) into n_lote from gasto where tenant_id = t and cfdi_uuid = 'UUID-CAPUFE-LOTE';
+
+  -- 2. El mismo (uuid, orden) NO entra dos veces.
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, cfdi_uuid, cfdi_orden)
+      values (t, v, 'caseta', 50, 'UUID-CAPUFE-LOTE', 3);
+  exception when unique_violation then choco_orden := true;
+  end;
+
+  -- 3. LA GARANTÍA DE LA 0019: el XML del mismo CFDI llegando por ingesta —que
+  --    siempre escribe el default 1— sigue rebotando, y con el NOMBRE que
+  --    `processor.ts` discrimina.
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, cfdi_uuid)
+      values (t, v, 'caseta', 400, 'UUID-CAPUFE-LOTE');
+  exception when unique_violation then choco_ingesta := true; msg := SQLERRM;
+  end;
+
+  -- 4. Una marca de bloqueo sin motivo no se guarda: mandaría a una persona a
+  --    facturar algo sin decirle por qué falló solo.
+  begin
+    update gasto set autofactura_bloqueada_en = now() where tenant_id = t and cfdi_orden = 2;
+  exception when check_violation then sin_motivo := true;
+  end;
+
+  -- 5. La cola del cron: usa el índice y NO devuelve los bloqueados.
+  insert into gasto (tenant_id, viaje_id, concepto, monto, created_at, autofactura_bloqueada_en, autofactura_bloqueo)
+  select t, v, 'diesel', 100, now()-(g||' minutes')::interval,
+         case when g%4=0 then now() else null end,
+         case when g%4=0 then 'el portal pidió CAPTCHA' else null end
+  from generate_series(1,9000) g;
+  analyze gasto;
+
+  select count(*) into en_cola from gasto
+    where tenant_id = t and cfdi_uuid is null and autofactura_bloqueada_en is null;
+
+  for r in execute 'explain select id from gasto where cfdi_uuid is null and autofactura_bloqueada_en is null
+                    order by autofactura_intentada_en nulls first, created_at limit 8'
+  loop plan := plan || r."QUERY PLAN" || ' | '; end loop;
+  usa_indice := plan ilike '%gasto_por_facturar_idx%';
+
+  delete from tenant where id = t;
+  raise exception E'CFDI_LOTE  gastos-con-el-mismo-uuid=%  mismo-orden-rebota=%  ingesta-repetida-rebota=%  bloqueo-sin-motivo-rebota=%  cola-usa-indice=%  en-cola=%  msg=%   (esperado 8 / t / t / t / t / 6750 / nombra uq_gasto_cfdi_uuid)',
+    n_lote, choco_orden, choco_ingesta, sin_motivo, usa_indice, en_cola, msg;
+end $$;
+
+-- ── 45. Ni un peso negativo en el camino del dinero (mig. 0070) ──────────────
+--
+-- El único check que tenían `gasto.monto` y `viaje.anticipo` era contra `NaN`.
+-- Comprobado ANTES de la 0070: `monto = -99999` ENTRABA. Un comprobante negativo
+-- no suma de menos, RESTA del comprobado, así que infla la diferencia al doble y
+-- el PDF le dice al chofer que debe dinero que no debe.
+--
+-- ESTE BLOQUE SE FALSIFICA A SÍ MISMO. Después de comprobar en verde, TIRA los
+-- dos checks dentro de la misma transacción y vuelve a intentar el -99999. Si el
+-- bloque no puede enseñar el defecto con los checks caídos, es que no estaba
+-- comprobando los checks. Todo se revierte con la excepción final.
+--
+-- OJO con la trampa que este bloque esquiva: hay que usar un OPERADOR DISTINTO
+-- por cada `insert into viaje`, porque `uq_viaje_abierto_por_operador` (0029)
+-- rebota el segundo viaje vivo del mismo chofer — y ese rechazo se leería como
+-- "el check de anticipo funcionó" cuando en realidad el check ni se evaluó.
+--
+-- Corrida REAL contra la base, salida copiada tal cual:
+--
+--   45  rechaza-monto-negativo=t  acepta-monto-cero=t  rechaza-anticipo-negativo=t
+--       acepta-anticipo-cero=t
+--       FALSIFICADO (checks caidos): entra-monto-negativo=t  entra-anticipo-negativo=t
+--
+-- `acepta-monto-cero` y `acepta-anticipo-cero` son `t` A PROPÓSITO: el piso es
+-- `>= 0`, no `> 0`. En `anticipo` el cero es el DEFAULT del esquema —un viaje sin
+-- adelanto es el caso normal— así que un `> 0` habría roto la inserción de la
+-- mitad de los viajes. Ver la 0070 para el argumento de `monto`.
+
+do $$
+declare
+  t uuid; o uuid; v uuid; o2 uuid; o3 uuid; o4 uuid;
+  rechaza_neg bool; acepta_cero bool; rechaza_ant_neg bool; acepta_ant_cero bool;
+  sin_check_entra_neg bool; sin_check_entra_ant bool; msg text;
+begin
+  insert into tenant(nombre) values ('ZZZ VERIF B45 '||gen_random_uuid()) returning id into t;
+  insert into operador(tenant_id,nombre,telefono) values (t,'Op1','5215500000001') returning id into o;
+  insert into operador(tenant_id,nombre,telefono) values (t,'Op2','5215500000002') returning id into o2;
+  insert into operador(tenant_id,nombre,telefono) values (t,'Op3','5215500000003') returning id into o3;
+  insert into operador(tenant_id,nombre,telefono) values (t,'Op4','5215500000004') returning id into o4;
+  insert into viaje(tenant_id,operador_id,estatus) values (t,o,'en_cuadre') returning id into v;
+
+  begin
+    insert into gasto(tenant_id,viaje_id,concepto,monto) values (t,v,'diesel',-99999);
+    rechaza_neg := false;
+  exception when check_violation then rechaza_neg := true; msg := sqlerrm;
+  end;
+  begin
+    insert into gasto(tenant_id,viaje_id,concepto,monto) values (t,v,'diesel',0);
+    acepta_cero := true;
+  exception when others then acepta_cero := false;
+  end;
+  begin   -- operador NUEVO: aislar de uq_viaje_abierto_por_operador (0029)
+    insert into viaje(tenant_id,operador_id,estatus,anticipo) values (t,o2,'en_cuadre',-1);
+    rechaza_ant_neg := false;
+  exception when check_violation then rechaza_ant_neg := true;
+  end;
+  begin
+    insert into viaje(tenant_id,operador_id,estatus,anticipo) values (t,o3,'en_cuadre',0);
+    acepta_ant_cero := true;
+  exception when others then acepta_ant_cero := false;
+  end;
+
+  -- ═══ FALSIFICACIÓN ═══
+  alter table gasto drop constraint gasto_monto_no_negativo;
+  alter table viaje drop constraint viaje_anticipo_no_negativo;
+  begin
+    insert into gasto(tenant_id,viaje_id,concepto,monto) values (t,v,'diesel',-99999);
+    sin_check_entra_neg := true;
+  exception when others then sin_check_entra_neg := false;
+  end;
+  begin
+    insert into viaje(tenant_id,operador_id,estatus,anticipo) values (t,o4,'en_cuadre',-99999);
+    sin_check_entra_ant := true;
+  exception when others then sin_check_entra_ant := false;
+  end;
+
+  raise exception E'45  rechaza-monto-negativo=%  acepta-monto-cero=%  rechaza-anticipo-negativo=%  acepta-anticipo-cero=%\n    FALSIFICADO (checks caidos): entra-monto-negativo=%  entra-anticipo-negativo=%\n    (esperado: t t t t  /  t t)\n    msg=%',
+    rechaza_neg, acepta_cero, rechaza_ant_neg, acepta_ant_cero,
+    sin_check_entra_neg, sin_check_entra_ant, msg;
+end $$;
+
+
+-- ── 46. Borrar una flota dejó de ser O(n²) (mig. 0071) ───────────────────────
+--
+-- Postgres NO indexa el lado que REFERENCIA de una FK. Al borrar una fila padre
+-- el trigger busca a sus hijos, y sin índice eso es un `Seq Scan` de la tabla
+-- hija COMPLETA — una vez POR CADA FILA PADRE. Es `filas_padre × tamaño_hijo`:
+-- cuadrático, invisible con la base vacía, y devastador con datos.
+--
+-- Igual que los bloques 39 y 40, ESTE BLOQUE NO COMPRUEBA QUE LOS ÍNDICES
+-- EXISTAN. Comprueba tres cosas que sí importan:
+--   1. que el PLANEADOR los use (un índice que existe y no se usa es peso muerto),
+--   2. que NO QUEDE ni una FK contra un padre numeroso sin índice utilizable —
+--      leído del catálogo, no de una lista escrita a mano que se desactualiza,
+--   3. que los TRES que se descartaron a propósito sigan descartados.
+--
+-- El punto 2 es el que de verdad cierra el defecto: la auditoría nombró 9
+-- índices, pero el sondeo del catálogo encontró 43 FK sin índice utilizable, y
+-- con solo esos 9 el borrado SEGUÍA siendo cuadrático porque quedaban 10 FK
+-- contra `viaje` sin cubrir.
+--
+-- El criterio del descarte: el costo de un borrado es `(filas del PADRE) ×
+-- (tamaño del HIJO)`. Las FK contra `tenant` tienen UNA fila padre, así que su
+-- trigger corre UNA vez por borrado — un solo `Seq Scan` de una tabla acotada es
+-- correcto, y un índice de más se paga en cada insert para siempre.
+--
+-- Corrida REAL, salida copiada tal cual:
+--
+--   46  plan-con-indice=llm_costo_liquidacion_id_idx   FK-de-padre-numeroso-sin-indice=—
+--       descartados-siguen-sin-indice(a proposito)=campania, terminal, codigo_pendiente
+--       FALSIFICADO: plan-sin-indice=Seq Scan
+--       200 sondeos (75k filas):  con=3.9 ms   sin=1902.6 ms   factor=491.8x
+--
+-- Y la medición de punta a punta, con una flota sembrada de 2,000 viajes y
+-- ~34,000 filas hijas:  `delete from tenant` = 4,696.5 ms → 900.5 ms  (5.2×).
+
+do $$
+declare
+  t uuid; j jsonb; nodo_con text; nodo_sin text; faltan text; descartados text; d timestamptz;
+  ms_con numeric; ms_sin numeric; i int; x int; liq uuid[];
+begin
+  insert into tenant(nombre) values ('ZZZ VERIF B46 '||gen_random_uuid()) returning id into t;
+  insert into llm_costo(tenant_id,liquidacion_id,fase,modelo)
+    select t,null,'ocr','haiku' from generate_series(1,75000);
+  analyze llm_costo;
+  liq := array(select gen_random_uuid() from generate_series(1,200));
+
+  -- 1. EL PLANEADOR LO USA (no solo "existe")
+  execute 'explain (format json) select 1 from only llm_costo where liquidacion_id = $1'
+    using liq[1] into j;
+  nodo_con := coalesce(j->0->'Plan'->>'Index Name', j->0->'Plan'->'Plans'->0->>'Index Name', j->0->'Plan'->>'Node Type');
+  d := clock_timestamp();
+  for i in 1..200 loop select count(*) into x from llm_costo where liquidacion_id = liq[i]; end loop;
+  ms_con := extract(epoch from clock_timestamp()-d)*1000;
+
+  -- 2. NINGUNA FK de padre numeroso se quedó sin índice utilizable.
+  -- Se lee del CATÁLOGO: `indkey` es 0-based, y una FK compuesta cuya PRIMERA
+  -- columna ya está indexada sola tampoco cuenta (el planner entra por ahí).
+  select coalesce(string_agg(tabla||'('||cols||')', ', '), '—') into faltan from (
+    select c.conrelid::regclass::text tabla,
+           (select string_agg(a.attname,',' order by x2.ord)
+              from unnest(c.conkey) with ordinality x2(att,ord)
+              join pg_attribute a on a.attrelid=c.conrelid and a.attnum=x2.att) cols
+      from pg_constraint c
+     where c.connamespace='public'::regnamespace and c.contype='f'
+       and c.confrelid::regclass::text in ('viaje','gasto','liquidacion','operador','unidad','cliente','terminal')
+       and not exists (
+         select 1 from pg_index i where i.indrelid=c.conrelid and i.indpred is null
+            and i.indnatts >= array_length(c.conkey,1)
+            and (select array_agg(i.indkey[k] order by i.indkey[k]) from generate_series(0,array_length(c.conkey,1)-1) k)
+              = (select array_agg(a2 order by a2) from unnest(c.conkey) a2))
+       and not exists (
+         select 1 from pg_index i where i.indrelid=c.conrelid and i.indpred is null
+            and i.indkey[0] = c.conkey[1])
+  ) s;
+
+  -- 3. Los tres DESCARTADOS a propósito siguen sin índice
+  select coalesce(string_agg(t2,', '),'—') into descartados from (
+    select unnest(array['campania','terminal','codigo_pendiente']) t2) z
+   where not exists (select 1 from pg_index i where i.indrelid=z.t2::regclass
+                       and i.indnatts=1 and i.indkey[0]=(select attnum from pg_attribute
+                         where attrelid=z.t2::regclass and attname='tenant_id'));
+
+  -- ═══ FALSIFICACIÓN: sin el índice, el plan cae a Seq Scan ═══
+  drop index llm_costo_liquidacion_id_idx;
+  analyze llm_costo;
+  execute 'explain (format json) select 1 from only llm_costo where liquidacion_id = $1'
+    using liq[1] into j;
+  nodo_sin := j->0->'Plan'->>'Node Type';
+  d := clock_timestamp();
+  for i in 1..200 loop select count(*) into x from llm_costo where liquidacion_id = liq[i]; end loop;
+  ms_sin := extract(epoch from clock_timestamp()-d)*1000;
+
+  raise exception E'46  plan-con-indice=%   FK-de-padre-numeroso-sin-indice=%\n    descartados-siguen-sin-indice(a proposito)=%\n    FALSIFICADO: plan-sin-indice=%\n    200 sondeos (75k filas):  con=% ms   sin=% ms   factor=%x',
+    nodo_con, faltan, descartados, nodo_sin,
+    round(ms_con,1), round(ms_sin,1), round(ms_sin/greatest(ms_con,0.001),1);
+end $$;
+
+
+-- ── 47. Se purga lo efímero y NO se purga la historia de negocio (mig. 0072) ──
+--
+-- Hasta la 0072 no se purgaba NADA. Este bloque comprueba las dos mitades de la
+-- decisión, y la segunda importa más que la primera:
+--
+--   · `wa_mensaje_procesado` SÍ se purga a los 30 días. Es idempotencia pura:
+--     no tiene `tenant_id`, no se puede atribuir a una flota, no responde
+--     ninguna pregunta de negocio.
+--   · `llm_costo` NO se purga. `resumen_costo_ia_tenant()` (0062/0064) suma sus
+--     filas CRUDAS, así que borrarlas haría que esa función contestara —sin
+--     avisar— una cifra MENOR para cualquier periodo purgado. El panel enseñaría
+--     un número distinto del mismo mes según cuándo se mire, que es justo lo que
+--     "nunca inventar una cifra" prohíbe. Se CONSOLIDA a mensual en su lugar.
+--
+-- El bloque comprueba que `llm_costo` sigue INTACTA después de la corrida. Esa
+-- afirmación en negativo es la que hay que sostener: es la que se rompería sola
+-- el día que alguien "complete" la purga sin mirar quién lee la tabla.
+--
+-- Comprueba además que el mes EN CURSO no se consolida (un consolidado parcial
+-- es la cifra engañosa que se quiere evitar), que la consolidación es
+-- IDEMPOTENTE, y que un plazo demasiado corto falla CERRADO con SQLSTATE PU001.
+--
+-- Corrida REAL, salida copiada tal cual:
+--
+--   47  wa: viejos-antes=100  purgados=100  quedan=10
+--       llm_costo INTACTA=87  consolidado=2.000000 == crudo-de-meses-cerrados=2.000000
+--       mes-en-curso-NO-consolidado=t  idempotente=t
+--       plazo-minimo-falla-cerrado=t sqlstate=PU001
+--       json={"diasWa":30,"waPurgados":100,"iaConsolidados":2,"llmCostoPurgado":false}
+--
+-- SOBRE `idx_wa_msg_created`: la auditoría lo dio por muerto. Su forma es
+-- exactamente la de un `delete where created_at < …` — era el índice de ESTA
+-- purga, que no estaba escrita. Medido aparte, en estado ESTACIONARIO (1,000
+-- filas vencidas de 31,000, que es lo que el cron ve cada día) el delete entra
+-- por `idx_wa_msg_created`; en la PRIMERA corrida, que barre casi todo, cae a
+-- `Seq Scan` — y ahí el Seq Scan es lo correcto. Borrarlo habría sido el error.
+
+do $$
+declare
+  t uuid; ahora timestamptz := '2026-08-04 12:00:00+00'; j jsonb; j2 jsonb;
+  quedan_wa int; viejos_antes int; guarda_minimo bool; sqlst text;
+  llm_intactas int; consol_suma numeric; cruda_suma numeric; mes_curso int; idempotente bool;
+begin
+  insert into tenant(nombre) values ('ZZZ VERIF B47 '||gen_random_uuid()) returning id into t;
+
+  insert into wa_mensaje_procesado(wa_message_id, created_at)
+    select 'v'||gen_random_uuid(), ahora - interval '60 days' from generate_series(1,100);
+  insert into wa_mensaje_procesado(wa_message_id, created_at)
+    select 'r'||gen_random_uuid(), ahora - interval '2 days' from generate_series(1,10);
+  select count(*) into viejos_antes from wa_mensaje_procesado where created_at < ahora - interval '30 days';
+
+  -- Dos meses CERRADOS y el mes EN CURSO
+  insert into llm_costo(tenant_id,fase,modelo,tokens_in,tokens_out,costo_usd,created_at)
+    select t,'ocr','haiku',10,5,0.01, '2026-06-15 00:00:00+00' from generate_series(1,50);
+  insert into llm_costo(tenant_id,fase,modelo,tokens_in,tokens_out,costo_usd,created_at)
+    select t,'cuadre','sonnet',20,10,0.05,'2026-07-15 00:00:00+00' from generate_series(1,30);
+  insert into llm_costo(tenant_id,fase,modelo,tokens_in,tokens_out,costo_usd,created_at)
+    select t,'ocr','haiku',10,5,0.01,'2026-08-02 00:00:00+00' from generate_series(1,7);
+
+  j := mantenimiento_de_datos(30, ahora);
+
+  select count(*) into quedan_wa from wa_mensaje_procesado;
+  select count(*) into llm_intactas from llm_costo where tenant_id=t;   -- NADA se borró
+  select coalesce(sum(costo_usd),0) into consol_suma from llm_costo_mensual where tenant_id=t;
+  select coalesce(sum(costo_usd),0) into cruda_suma  from llm_costo
+   where tenant_id=t and created_at < date_trunc('month', ahora at time zone 'UTC');
+  select count(*) into mes_curso from llm_costo_mensual where tenant_id=t and mes='2026-08-01';
+
+  j2 := mantenimiento_de_datos(30, ahora);      -- idempotencia
+  idempotente := (j2->>'iaConsolidados')::int = (j->>'iaConsolidados')::int
+                 and (select count(*) from llm_costo_mensual where tenant_id=t)
+                     = (select count(distinct (date_trunc('month',created_at at time zone 'UTC'), fase, modelo))
+                          from llm_costo where tenant_id=t and created_at < date_trunc('month', ahora at time zone 'UTC'));
+
+  begin
+    perform purgar_wa_mensaje_procesado(3, ahora);
+    guarda_minimo := false;
+  exception when others then guarda_minimo := true; sqlst := sqlstate;
+  end;
+
+  raise exception E'47  wa: viejos-antes=%  purgados=%  quedan=%  (esperado 100 / 100 / 10)\n    llm_costo INTACTA=%  (87, no se purga)   consolidado=% == crudo-de-meses-cerrados=%\n    mes-en-curso-NO-consolidado=%  idempotente=%\n    plazo-minimo-falla-cerrado=% sqlstate=%\n    json=%',
+    viejos_antes, (j->>'waPurgados'), quedan_wa,
+    llm_intactas, consol_suma, cruda_suma, (mes_curso=0), idempotente,
+    guarda_minimo, sqlst, j::text;
+end $$;
+
+
+-- ── 48. Un comprobante huérfano no cruza de flota, ni inventa estado (mig. 0073) ──
+--
+-- La 0028 documentó como CRÍTICA la clase de defecto: con una FK simple contra
+-- `operador(id)`, nada impide que una fila lleve el `tenant_id` de la flota A y
+-- el `operador_id` de la flota B. `comprobante_huerfano` nació en la 0040 —
+-- DESPUÉS de la 0028 — y se saltó el patrón. Comprobado antes de arreglarlo: la
+-- fila cruzada ENTRABA.
+--
+-- Y `motivo`/`resolucion` eran las DOS únicas columnas de estado del esquema sin
+-- su check, aunque la 0040 las documenta y el código ramifica sobre ellas.
+--
+-- LOS VALORES SE TOMARON DEL CÓDIGO DE HOY, NO DE LA 0040. `repo.ts:257` declara
+-- TRES motivos, no los dos que la migración vieja documenta:
+--     export type MotivoHuerfano = 'sin_viaje' | 'tras_liquidar' | 'fallo_ocr';
+-- `fallo_ocr` es reciente —separa "se cayó NUESTRO OCR" de "no aterrizó en
+-- ninguna liquidación", que antes se guardaban los dos como `sin_viaje`— y
+-- cerrar el dominio contra la migración habría roto el camino que lo escribe.
+-- Por eso el bloque prueba los TRES uno por uno: si mañana el código agrega un
+-- cuarto y no toca el check, este bloque se pone rojo antes que producción.
+--
+-- Corrida REAL, salida copiada tal cual:
+--
+--   48  cruza-flotas-rebota=t  los-3-motivos-entran=t  motivo-inventado-rebota=t
+--       resolucion-inventada-rebota=t  cierre-a-medias-rebota=t
+--       FALSIFICADO (FK compuesta caida): cruza-flotas-ENTRA=t
+
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid;
+  cruza_rebota bool; sin_fk_cruza_entra bool;
+  motivos_validos bool := true; motivo_malo_rebota bool; resol_mala_rebota bool;
+  cierre_a_medias_rebota bool; m text;
+begin
+  insert into tenant(nombre) values ('ZZZ VERIF B48 A '||gen_random_uuid()) returning id into ta;
+  insert into tenant(nombre) values ('ZZZ VERIF B48 B '||gen_random_uuid()) returning id into tb;
+  insert into operador(tenant_id,nombre,telefono) values (ta,'A','5215500001001') returning id into oa;
+  insert into operador(tenant_id,nombre,telefono) values (tb,'B','5215500001002') returning id into ob;
+
+  -- tenant_id de A con operador_id de B
+  begin
+    insert into comprobante_huerfano(tenant_id,operador_id,gasto,motivo)
+      values (ta, ob, '{}'::jsonb, 'sin_viaje');
+    cruza_rebota := false;
+  exception when foreign_key_violation then cruza_rebota := true;
+  end;
+
+  -- Los TRES motivos del código de HOY (incluido fallo_ocr)
+  foreach m in array array['sin_viaje','tras_liquidar','fallo_ocr'] loop
+    begin
+      insert into comprobante_huerfano(tenant_id,operador_id,gasto,motivo)
+        values (ta, oa, '{}'::jsonb, m);
+    exception when others then motivos_validos := false;
+    end;
+  end loop;
+
+  begin
+    insert into comprobante_huerfano(tenant_id,operador_id,gasto,motivo)
+      values (ta, oa, '{}'::jsonb, 'inventado');
+    motivo_malo_rebota := false;
+  exception when check_violation then motivo_malo_rebota := true;
+  end;
+  begin
+    insert into comprobante_huerfano(tenant_id,operador_id,gasto,motivo,resuelto_en,resolucion)
+      values (ta, oa, '{}'::jsonb, 'sin_viaje', now(), 'inventada');
+    resol_mala_rebota := false;
+  exception when check_violation then resol_mala_rebota := true;
+  end;
+  begin  -- resuelto_en sin resolucion = fila a medias
+    insert into comprobante_huerfano(tenant_id,operador_id,gasto,motivo,resuelto_en)
+      values (ta, oa, '{}'::jsonb, 'sin_viaje', now());
+    cierre_a_medias_rebota := false;
+  exception when check_violation then cierre_a_medias_rebota := true;
+  end;
+
+  -- ═══ FALSIFICACIÓN ═══
+  alter table comprobante_huerfano drop constraint comprobante_huerfano_operador_tenant_fkey;
+  begin
+    insert into comprobante_huerfano(tenant_id,operador_id,gasto,motivo)
+      values (ta, ob, '{}'::jsonb, 'sin_viaje');
+    sin_fk_cruza_entra := true;
+  exception when others then sin_fk_cruza_entra := false;
+  end;
+
+  raise exception E'48  cruza-flotas-rebota=%  los-3-motivos-entran=%  motivo-inventado-rebota=%\n    resolucion-inventada-rebota=%  cierre-a-medias-rebota=%\n    FALSIFICADO (FK compuesta caida): cruza-flotas-ENTRA=%\n    (esperado t t t t t / t)',
+    cruza_rebota, motivos_validos, motivo_malo_rebota, resol_mala_rebota,
+    cierre_a_medias_rebota, sin_fk_cruza_entra;
+end $$;
+
+
+-- ── 49. Las funciones que resuelven TODO el RLS tienen pg_temp (mig. 0074) ───
+--
+-- `is_superadmin`, `get_user_tenant_ids`, `is_operador` y `get_user_operador_id`
+-- son `SECURITY DEFINER` y son las que TODA política RLS del esquema llama para
+-- decidir qué flota ve cada quien. Tenían `search_path=public` a secas.
+--
+-- Cuando `pg_temp` no está NOMBRADO, Postgres lo antepone igual de forma
+-- implícita: cualquier rol puede crear un objeto temporal en su sesión y ganarle
+-- la resolución de nombre a `public`. En una función que corre con los permisos
+-- de su dueño, eso es un camino a suplantar la respuesta de "¿de qué flotas es
+-- este usuario?". Nombrarlo AL FINAL lo fija en último lugar.
+--
+-- Que `ve_finanzas` y `administra_flota` (0048) SÍ lo tuvieran es la prueba de
+-- que era olvido y no decisión.
+--
+-- CORRECCIÓN A LA AUDITORÍA: `gasto_no_tras_liquidar` NO es `SECURITY DEFINER`
+-- —`prosecdef = false` en el catálogo—, así que corre con los permisos de quien
+-- dispara el INSERT y el riesgo es mucho menor. Pero no tenía NINGÚN
+-- `search_path` (`proconfig` vacío), que es un hueco distinto y más ancho del
+-- que la auditoría describió. Se le fija igual: es el trigger que la 0036 llama
+-- "el peor bug histórico del camino del dinero".
+--
+-- Corrida REAL, salida copiada tal cual:
+--
+--   49  CON pg_temp: administra_flota, gasto_no_tras_liquidar, get_user_operador_id,
+--       get_user_tenant_ids, is_operador, is_superadmin, ve_finanzas
+--       SIN pg_temp: —
+--       FALSIFICADO (se le quita a is_superadmin): sin-pg_temp = is_superadmin
+
+do $$
+declare con_pg_temp text; sin_pg_temp text; tras_falsificar text;
+begin
+  select coalesce(string_agg(proname,', ' order by proname),'—') into con_pg_temp
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in ('is_superadmin','get_user_tenant_ids','is_operador','get_user_operador_id',
+                       've_finanzas','administra_flota','gasto_no_tras_liquidar')
+     and array_to_string(p.proconfig,',') like '%pg_temp%';
+
+  select coalesce(string_agg(proname,', ' order by proname),'—') into sin_pg_temp
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in ('is_superadmin','get_user_tenant_ids','is_operador','get_user_operador_id',
+                       've_finanzas','administra_flota','gasto_no_tras_liquidar')
+     and coalesce(array_to_string(p.proconfig,','),'') not like '%pg_temp%';
+
+  -- ═══ FALSIFICACIÓN: se le quita a una y el bloque tiene que verla ═══
+  alter function public.is_superadmin() set search_path = public;
+  select coalesce(string_agg(proname,', ' order by proname),'—') into tras_falsificar
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public'
+     and p.proname in ('is_superadmin','get_user_tenant_ids','is_operador','get_user_operador_id',
+                       've_finanzas','administra_flota','gasto_no_tras_liquidar')
+     and coalesce(array_to_string(p.proconfig,','),'') not like '%pg_temp%';
+
+  raise exception E'49  CON pg_temp: %\n    SIN pg_temp: %   (esperado —)\n    FALSIFICADO (se le quita a is_superadmin): sin-pg_temp = %',
+    con_pg_temp, sin_pg_temp, tras_falsificar;
+end $$;
+
+
+-- ── 50. El candado se va con su viaje, y las NOT VALID quedaron validadas (mig. 0075) ──
+--
+-- `viaje_lock` es el mutex de un viaje y no tenía FK contra `viaje`: un proceso
+-- que muere entre tomar el candado y soltarlo dejaba una fila permanente, y la
+-- tabla del mutex acumulaba basura que nada limpiaba. Con `ON DELETE CASCADE` el
+-- candado se va con su viaje — que es la única semántica que tiene sentido: un
+-- candado sobre algo que ya no existe no protege nada.
+--
+-- OJO: esto NO arregla el candado colgado de un viaje que SÍ existe. De eso se
+-- encarga `locked_until`, que es el TTL. Arregla la fila huérfana, que es otra
+-- cosa, y decirlo importa para que nadie lea este bloque como más de lo que es.
+--
+-- Y las dos restricciones que llevaban meses en `NOT VALID` —`convalidated =
+-- false` en el catálogo— se validaron: con la base vacía, `VALIDATE` no lee ni
+-- una fila y no puede fallar. Con 240 mil viajes al año, dentro de unos meses ya
+-- no habría sido gratis.
+--
+-- Corrida REAL, salida copiada tal cual:
+--
+--   50  candado-borrado-con-el-viaje=0
+--       constraints: viaje_ingreso_no_negativo=true  viaje_km_sanos=true
+--       FALSIFICADO sin FK: candado-huerfano-que-queda-para-siempre=1
+--       FALSIFICADO not-valid: viaje_km_sanos.convalidated=f
+
+do $$
+declare
+  t uuid; o uuid; v uuid; quedan int; quedan_sin_fk int; validadas text; tras_falsificar bool;
+begin
+  insert into tenant(nombre) values ('ZZZ VERIF B50 '||gen_random_uuid()) returning id into t;
+  insert into operador(tenant_id,nombre,telefono) values (t,'Op','5215500002001') returning id into o;
+  insert into viaje(tenant_id,operador_id,estatus) values (t,o,'en_cuadre') returning id into v;
+
+  insert into viaje_lock(viaje_id, locked_until) values (v, now() + interval '5 min');
+  delete from viaje where id = v;
+  select count(*) into quedan from viaje_lock where viaje_id = v;
+
+  select coalesce(string_agg(conname||'='||convalidated::text, '  '), '—') into validadas
+    from pg_constraint
+   where conrelid='viaje'::regclass and conname in ('viaje_ingreso_no_negativo','viaje_km_sanos');
+
+  -- ═══ FALSIFICACIÓN 1: sin la FK, el candado sobrevive al viaje ═══
+  alter table viaje_lock drop constraint viaje_lock_viaje_id_fkey;
+  insert into viaje(tenant_id,operador_id,estatus) values (t,o,'en_cuadre') returning id into v;
+  insert into viaje_lock(viaje_id, locked_until) values (v, now() + interval '5 min');
+  delete from viaje where id = v;
+  select count(*) into quedan_sin_fk from viaje_lock where viaje_id = v;
+
+  -- ═══ FALSIFICACIÓN 2: re-agregada como NOT VALID, el catálogo lo delata ═══
+  alter table viaje drop constraint viaje_km_sanos;
+  alter table viaje add constraint viaje_km_sanos
+    check (km_recorridos is null or (km_recorridos > 0 and km_recorridos < 20000)) not valid;
+  select convalidated into tras_falsificar from pg_constraint
+   where conrelid='viaje'::regclass and conname='viaje_km_sanos';
+
+  raise exception E'50  candado-borrado-con-el-viaje=%  (esperado 0)\n    constraints: %  (esperado las dos =true)\n    FALSIFICADO sin FK: candado-huerfano-que-queda-para-siempre=%  (esperado 1)\n    FALSIFICADO not-valid: viaje_km_sanos.convalidated=%  (esperado f)',
+    quedan, validadas, quedan_sin_fk, tras_falsificar;
+end $$;
+
+-- ── 51. El desglose de la mensualidad no se puede desincronizar (mig. 0066) ──
+--
+-- `factura_saas.subtotal` y `.iva` se guardan al emitir, no se recalculan al
+-- timbrar (entre emitir y timbrar el precio del plan puede cambiar, y lo que
+-- se timbra tiene que ser lo que se cobró). El CHECK `factura_saas_
+-- desglose_cuadra` es lo único que impide que las tres columnas de dinero
+-- —monto, subtotal, iva— se desincronicen sin que nada avise; los otros dos
+-- (`_coherente`, `_no_negativo`) cierran los bordes: medio desglose guardado,
+-- o un negativo colado.
+--
+-- ESTE BLOQUE EXISTE POR UNA COLISIÓN, no solo por la migración. El archivo
+-- que la trae se llamó primero `0065_iva_de_la_mensualidad.sql`, con el mismo
+-- prefijo que `0065_cfdi_de_varias_casetas.sql` (otro agente, mismo día,
+-- ambos sin commitear). `migraciones_verificadas.test.ts` indexa las
+-- migraciones por los 4 primeros caracteres del nombre de archivo, así que
+-- ambos archivos compartían la misma llave — y el bloque 44 de aquí abajo
+-- (título "...mig. 0065", que SÍ prueba la de CFDI) le prestaba cobertura
+-- FALSA a ésta: el test pasaba en verde sin que ninguna de las tres CHECK de
+-- abajo se hubiera probado nunca. Renumerada a 0066 (auditoría 10, rubro
+-- datos, 4-ago-2026) y este bloque es la cobertura real que faltaba.
+--
+-- Corrida REAL contra el proyecto Likida, 4-ago-2026 (`factura_saas` sin
+-- filas antes y después — la excepción revirtió todo, 0 tenants ZZZ que
+-- quedaron):
+--
+--   51  desglose-a-medias-rechazado=t  negativo-rechazado=t
+--       descuadrado-rechazado=t  borde-de-tolerancia-acepta=t  exacto-acepta=t
+--       (esperado t/t/t/t/t)
+do $$
+declare
+  t uuid;
+  incoherente boolean := false;
+  negativo boolean := false;
+  descuadrado boolean := false;
+  ok_borde_tolerancia boolean := false;
+  ok_exacto boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF B51 '||gen_random_uuid()) returning id into t;
+
+  -- 1. Medio desglose (subtotal sin iva) no se guarda.
+  begin
+    insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva)
+      values (t, '2026-09-01', '2026-09-30', 10000, 8620.69, null);
+  exception when check_violation then incoherente := true;
+  end;
+
+  -- 2. Un negativo no se guarda, aunque el resto del desglose cuadre.
+  begin
+    insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva)
+      values (t, '2026-09-01', '2026-09-30', 8000, 9000, -1000);
+  exception when check_violation then negativo := true;
+  end;
+
+  -- 3. subtotal+iva lejos de monto (mucho más que el centavo del redondeo):
+  --    no se guarda. Suma 9000, faltan 1000 contra el monto de 10000.
+  begin
+    insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva)
+      values (t, '2026-09-01', '2026-09-30', 10000, 8000, 1000);
+  exception when check_violation then descuadrado := true;
+  end;
+
+  -- 4. EN EL BORDE de la tolerancia (diff = 0.01, el límite `<=`): SÍ se
+  --    guarda. 8620.69 + 1379.30 = 9999.99, un centavo menos que 10000 — el
+  --    resto exacto de dividir 10000/1.16 y redondear el subtotal a centavos.
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva)
+    values (t, '2026-09-01', '2026-09-30', 10000, 8620.69, 1379.30);
+  ok_borde_tolerancia := true;
+
+  -- 5. Exacto, sin redondeo de por medio: también se guarda.
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva)
+    values (t, '2026-10-01', '2026-10-31', 5000, 4310.34, 689.66);
+  ok_exacto := true;
+
+  raise exception E'51  desglose-a-medias-rechazado=%  negativo-rechazado=%  descuadrado-rechazado=%  borde-de-tolerancia-acepta=%  exacto-acepta=%   (esperado t/t/t/t/t)',
+    incoherente, negativo, descuadrado, ok_borde_tolerancia, ok_exacto;
+end $$;
