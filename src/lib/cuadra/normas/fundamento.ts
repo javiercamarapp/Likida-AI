@@ -496,11 +496,26 @@ export function guardiaFundamento(reply: string, permitidas: string[], historial
   if (suavizar) {
     // No se borra la información —el plazo es útil—: se le quita el carácter de
     // obligación legal, que es lo que no le corresponde.
-    texto = texto
-      .replace(/\best[áa]s?\s+obligad\w*\s+a\b/gi, 'conviene')
-      .replace(/\best[áa]s?\s+obligad\w*\b/gi, 'conviene')
-      .replace(/\bes\s+obligatorio\b/gi, 'es lo recomendable')
-      .replace(/\b(?:la\s+ley\s+exige|por\s+ley)\b/gi, 'según la política del comercio');
+    //
+    // AUDITORÍA 12, MEDIO: los cuatro replace corrían a ciegas sobre negaciones.
+    // "No estás obligado a facturar en 72 horas" (verdad: el plazo del portal
+    // no es obligación legal) se convertía en "No conviene facturar en 72
+    // horas" (falso: facturar a tiempo es justo lo que se vende). Un reescrito
+    // que cambia el SENTIDO es peor que el texto original. Ahora cada reemplazo
+    // se salta la cláusula si viene negada — un "no/nunca/jamás/tampoco" con el
+    // verbo en medio ("no me parece que estés obligado") NO casa la ventana y
+    // se reescribe, que es el caso que sí es una afirmación disfrazada.
+    const NEGADA = /(?:no|nunca|jamás|tampoco)\s*$/i;
+    const reescribirSalvoNegacion = (patron: RegExp, reemplazo: string): string =>
+      texto.replace(new RegExp(patron.source, 'gi'), (m, ...args) => {
+        const offset = args[args.length - 2] as number;
+        const antes = texto.slice(Math.max(0, offset - 60), offset);
+        return NEGADA.test(antes) ? m : reemplazo;
+      });
+    texto = reescribirSalvoNegacion(/\best[áa]s?\s+obligad\w*\s+a\b/, 'conviene');
+    texto = reescribirSalvoNegacion(/\best[áa]s?\s+obligad\w*\b/, 'conviene');
+    texto = reescribirSalvoNegacion(/\bes\s+obligatorio\b/, 'es lo recomendable');
+    texto = reescribirSalvoNegacion(/\b(?:la\s+ley\s+exige|por\s+ley)\b/, 'según la política del comercio');
   }
 
   // ── 5. Se devuelven las protegidas a su sitio ─────────────────────────────

@@ -89,6 +89,29 @@ describe('guardiaFundamento', () => {
     expect(r.forzado).toBe(true);
     expect(r.reply).not.toMatch(/obligad/i);
   });
+
+  // AUDITORÍA 12, MEDIO: el reescrito corría a ciegas sobre negaciones y
+  // cambiaba el SENTIDO — "No estás obligado" (verdad: el plazo del portal
+  // no es obligación legal) se volvía "No conviene" (falso). La negación
+  // correcta tiene que quedar INTACTA.
+  it('la negación correcta NO se invierte: "no estás obligado" sigue siendo "no estás obligado"', () => {
+    const r = guardiaFundamento(
+      'No estás obligado a facturar en 72 horas, pero conviene hacerlo para no perder el folio.',
+      ['politica-portales-plazos-facturacion'],
+    );
+    expect(r.reply).toMatch(/no estás obligado/i);
+    expect(r.reply).not.toMatch(/no conviene/i);
+    expect(r.reply).toMatch(/conviene hacerlo/i);
+  });
+
+  it('y "no es obligatorio" no se reescribe como "no es lo recomendable"', () => {
+    const r = guardiaFundamento(
+      'El plazo no es obligatorio: es una cortesía del portal.',
+      ['politica-portales-plazos-facturacion'],
+    );
+    expect(r.reply).toMatch(/no es obligatorio/i);
+    expect(r.reply).not.toMatch(/recomendable/i);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
