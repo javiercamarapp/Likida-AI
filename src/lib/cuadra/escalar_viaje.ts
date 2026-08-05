@@ -144,19 +144,39 @@ export async function escalarViajesSinAceptar(args: {
     // 2) Avisarle al jefe, que es quien puede cambiar de personal.
     const tel = telefonos[v.tenantId];
     if (tel) {
-      const env = await sendTemplate(tel, PLANTILLA_JEFE, {
-        parametros: [v.operadorNombre ?? 'Tu chofer', v.folio ?? 'sin folio'],
-      });
-      if (!env.ok) r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivoDeFalloWhatsApp(env.error, env.codigo)}`);
+      // EN SU PROPIO try/catch. `sendTemplate` hoy atrapa sus errores de red y
+      // devuelve `{ok:false}`, así que este catch no se dispara nunca — y por eso
+      // mismo hay que ponerlo: la invariante de abajo ("se marca pase lo que
+      // pase") depende de que aquí no salga una excepción. Con un `await`
+      // desnudo, el día que esa función lance —un JSON inválido, un timeout que
+      // cambie de forma— el viaje en curso quedaría sin marcar Y el resto del
+      // lote ni se miraría. Una invariante que solo aguanta fallos por valor no
+      // es una invariante.
+      try {
+        const env = await sendTemplate(tel, PLANTILLA_JEFE, {
+          parametros: [v.operadorNombre ?? 'Tu chofer', v.folio ?? 'sin folio'],
+        });
+        if (!env.ok) r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivoDeFalloWhatsApp(env.error, env.codigo)}`);
+      } catch (e) {
+        r.fallos.push(`jefe ${v.folio ?? v.id}: ${e instanceof Error ? e.message : 'error inesperado al enviar'}`);
+      }
     } else {
+      // ERROR, no un fallo más: esta flota NUNCA va a recibir la escalación
+      // hasta que alguien capture el teléfono, y el viaje se marca igual.
+      logger.error('escalacion.sin_telefono_de_jefe', { tenantId: v.tenantId, viaje: v.id });
       r.fallos.push(`${v.folio ?? v.id}: esa flota no tiene teléfono de jefe registrado`);
     }
 
     // 3) Marcar. Ver la nota de arriba: se marca pase lo que pase con el envío.
+    //
+    // Acotado por tenant aunque `id` sea la PK: es la disciplina del repo
+    // (`acotada`), y un update sin acotar que hoy es inofensivo se copia mañana
+    // a uno que sí puede cruzar flotas.
     const { error } = await admin
       .from('viaje')
       .update({ escalado_en: new Date().toISOString(), avisos_enviados: v.avisosEnviados + 1 })
-      .eq('id', v.id);
+      .eq('id', v.id)
+      .eq('tenant_id', v.tenantId);
     if (error) r.fallos.push(`marcar ${v.id}: ${error.message}`);
     else r.escalados++;
   }

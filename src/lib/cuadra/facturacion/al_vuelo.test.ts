@@ -11,9 +11,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //   · `decidirAutofactura` es pura y es la puerta. Cada motivo de rechazo tiene
 //     su prueba, y el umbral se prueba en el borde exacto (0.89 / 0.90 / 0.91),
 //     porque un `<=` donde va un `<` no se ve leyendo.
-//   · `confianzaOcr === null` NO es confianza alta. Un comprobante sin confianza
-//     registrada es uno del que no se sabe nada; tratarlo como bueno es
-//     exactamente lo que el umbral existe para impedir.
+//   · LO QUE NO ES UN NÚMERO FINITO NO ES CONFIANZA ALTA. `null`, `undefined` y
+//     `NaN` caen los tres en `confianza_baja`. La comprobación anterior era
+//     `=== null || < 0.9` y con `NaN` las dos daban false, así que un
+//     comprobante del que no se sabía NADA autorizaba timbrar un CFDI. Se
+//     prueba el valor Y la forma: ningún no-numérico puede volver a abrirlo.
 //   · EL MODO POR DEFECTO ES `ensayo`. Esa es la prueba más importante del
 //     archivo: no protege un comportamiento, protege que un cambio futuro no
 //     empiece a emitir facturas reales sin que nadie lo haya pedido.
@@ -120,7 +122,7 @@ describe('decidirAutofactura · el umbral, en el borde', () => {
     expect(decidirAutofactura(ticket(), 0.91, true).procede).toBe(true);
     const d = decidirAutofactura(ticket(), 0.89, true);
     expect(d).toMatchObject({ procede: false, motivo: 'confianza_baja' });
-    expect(d.detalle).toBe('confianza 0.89');
+    expect(d.detalle).toBe('confianza 0.890');
   });
 
   it('`null` NO es confianza alta: sin confianza registrada no se emite nada', () => {
@@ -133,25 +135,59 @@ describe('decidirAutofactura · el umbral, en el borde', () => {
   });
 
   it('0 se rechaza como cifra medida, no como dato ausente', () => {
-    expect(decidirAutofactura(ticket(), 0, true).detalle).toBe('confianza 0.00');
+    // Y se distingue en el texto de "sin confianza registrada": un 0 medido y
+    // un dato ausente son dos problemas distintos en la pantalla de "por
+    // facturar" — uno es una foto mala, el otro un OCR que no corrió.
+    expect(decidirAutofactura(ticket(), 0, true).detalle).toBe('confianza 0.000');
   });
 
-  it('OJO · un 0.899 se rechaza diciendo "confianza 0.90", que es el umbral mismo', () => {
-    // `toFixed(2)` redondea, y el detalle es lo que se lee en la pantalla de
-    // "por facturar": dice que se rechazó por una confianza igual al mínimo
-    // aceptable. Quien lo lea va a creer que la regla está mal, no la lectura.
+  it('el detalle lleva TRES decimales: con dos, el rechazo se contradecía solo', () => {
+    // `(0.899).toFixed(2)` imprime "0.90", o sea el rechazo declaraba una
+    // confianza IGUAL al mínimo aceptable, y quien leyera la pantalla de "por
+    // facturar" creería que la regla está mal, no la lectura.
     expect(decidirAutofactura(ticket(), 0.899, true)).toEqual({
-      procede: false, motivo: 'confianza_baja', detalle: 'confianza 0.90',
+      procede: false, motivo: 'confianza_baja', detalle: 'confianza 0.899',
     });
   });
 
-  it('BUG · un NaN pasa el umbral y AUTORIZA la emisión', () => {
-    // `NaN < 0.9` es false y `NaN === null` es false: la comparación deja pasar
-    // el único valor que no significa nada. Y no es hipotético — el llamador
-    // hace `Number(data.ocr_confianza)`, que da NaN para `undefined` o para
-    // cualquier texto que no sea un número. Ver la reproducción de punta a punta
-    // en «BUG · un gasto sin la columna `ocr_confianza`…» más abajo.
-    expect(decidirAutofactura(ticket(), Number.NaN, true)).toEqual({ procede: true });
+  it('OJO · el redondeo no desapareció, se corrió tres decimales adentro', () => {
+    // `ocr_confianza` es `numeric(4,3)`, así que la base no puede guardar un
+    // 0.8999 y esto no se ve en producción hoy. Queda fijado porque el día que
+    // esa precisión cambie, el detalle vuelve a declarar el umbral exacto como
+    // motivo del rechazo.
+    expect(decidirAutofactura(ticket(), 0.8999, true).detalle).toBe('confianza 0.900');
+  });
+
+  it('NaN es ausencia de dato, NUNCA confianza alta — aquí hubo un agujero que emitía', () => {
+    // El agujero: la comprobación era `confianzaOcr === null || confianzaOcr <
+    // 0.9`, y con `NaN` las DOS dan false —`NaN === null` es false y `NaN < 0.9`
+    // también—, así que caía por abajo a `procede: true`. No era hipotético: el
+    // llamador hace `Number(data.ocr_confianza)`, que devuelve NaN con la
+    // columna vacía o con texto. Un comprobante del que no se sabía NADA
+    // autorizaba timbrar un CFDI irreversible ante el SAT.
+    expect(decidirAutofactura(ticket(), Number.NaN, true)).toEqual({
+      procede: false, motivo: 'confianza_baja', detalle: 'sin confianza registrada',
+    });
+  });
+
+  it('y `undefined` cae en el mismo cajón que `null` y `NaN`', () => {
+    // El tipo dice `number | null`, pero el valor llega de una fila de PostgREST
+    // por un `as`: la única defensa que aguanta es la del valor, no la del tipo.
+    const sinDato = undefined as unknown as number;
+    expect(decidirAutofactura(ticket(), sinDato, true)).toEqual({
+      procede: false, motivo: 'confianza_baja', detalle: 'sin confianza registrada',
+    });
+  });
+
+  it('ningún valor no-numérico puede volver a abrirlo', () => {
+    // La forma de la comprobación importa tanto como el caso: con
+    // `Number.isFinite` no queda ninguna rendija por donde entre algo que no sea
+    // un número finito. Un `!== null` la reabriría entera.
+    for (const v of [Number.NaN, Infinity, -Infinity, null, undefined, '0.99', {}]) {
+      const d = decidirAutofactura(ticket(), v as unknown as number, true);
+      expect(d.procede, `«${String(v)}» no puede autorizar una emisión`).toBe(false);
+      expect(d.motivo).toBe('confianza_baja');
+    }
   });
 });
 
@@ -300,21 +336,30 @@ describe('facturarAlVuelo · lo que NO se intenta', () => {
     expect(facturarConAgente).not.toHaveBeenCalled();
   });
 
-  it('BUG · un gasto sin la columna `ocr_confianza` SE EMITE sin confianza ninguna', async () => {
-    // Reproducción de punta a punta del NaN: la fila llega sin esa clave —un
-    // `select` que la deje fuera, una vista, un renombre de columna como el que
-    // ya mató a `ocr_raw`— y `Number(undefined)` da NaN. NaN no es null y no es
-    // menor que 0.9, así que la puerta se abre y en modo `emitir` esto crea un
-    // CFDI REAL sobre un ticket del que no se sabe nada.
+  it('un gasto sin la columna `ocr_confianza` NO LLEGA AL PORTAL ni en modo emitir', async () => {
+    // Reproducción de punta a punta del agujero del NaN: la fila llega sin esa
+    // clave —un `select` que la deje fuera, una vista, un renombre de columna
+    // como el que ya mató a `ocr_raw`— y `Number(undefined)` da NaN. Antes eso
+    // abría la puerta y en modo `emitir` timbraba un CFDI real sobre un ticket
+    // del que no se sabía nada. Es la prueba que más caro sale perder.
     const sinColumna: Record<string, unknown> = { ...g() };
     delete sinColumna.ocr_confianza;
     lectura = { data: sinColumna, error: null };
 
     const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
 
-    expect(facturarConAgente).toHaveBeenCalledTimes(1);
-    expect((facturarConAgente.mock.calls[0] as [{ modo: string }])[0].modo).toBe('emitir');
-    expect(r.facturado).toBe(true);
+    expect(facturarConAgente).not.toHaveBeenCalled();
+    expect(r).toEqual({
+      intentado: false, facturado: false,
+      motivo: 'confianza_baja', detalle: 'sin confianza registrada',
+    });
+  });
+
+  it('una confianza de texto tampoco: `Number("alta")` es NaN', async () => {
+    lectura = { data: g({ ocr_confianza: 'alta' }), error: null };
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    expect(facturarConAgente).not.toHaveBeenCalled();
+    expect(r.motivo).toBe('confianza_baja');
   });
 });
 
@@ -357,26 +402,36 @@ describe('facturarAlVuelo · lo que pasa después del portal', () => {
     expect(updates).toEqual([]);
   });
 
-  it('un `ok` sin UUID no se cuenta como facturado', async () => {
+  it('un `ok` sin UUID no se cuenta como facturado, y se dice que fue un ensayo', async () => {
     // Es justo lo que devuelve un ensayo: llenó todo y se detuvo antes del
-    // botón. Contarlo como facturado marcaría el gasto y nadie volvería a él.
+    // botón. Contarlo como facturado marcaría el gasto y nadie volvería a él;
+    // devolverlo sin explicación deja a la pantalla de "por facturar" sin saber
+    // por qué ese ticket sigue ahí.
     facturarConAgente.mockResolvedValue({ modo: 'ensayo', ok: true, capturado: { referencia: '286188' } });
 
     const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY });
 
-    expect(r).toMatchObject({ intentado: true, facturado: false });
+    expect(r).toEqual({
+      intentado: true, facturado: false,
+      detalle: 'ensayo: se llenó el portal y no se emitió',
+    });
     expect(r.cfdiUuid).toBeUndefined();
     expect(updates).toEqual([]);
   });
 
-  it('OJO · el ensayo exitoso se registra como "autofactura.fallo"', async () => {
-    // El modo por DEFECTO termina siempre en esta rama: un ensayo que salió bien
-    // deja un warn de fallo con `error: undefined`. El valor devuelto es
-    // correcto; lo que miente es el log, y es el log donde alguien va a buscar
-    // por qué "no se factura nada" cuando en realidad nunca se pidió emitir.
-    facturarConAgente.mockResolvedValue({ modo: 'ensayo', ok: true, capturado: {} });
+  it('UN ENSAYO EXITOSO NO ES UN FALLO: no ensucia el log de fallos', async () => {
+    // El modo por DEFECTO termina siempre en esta rama. Antes caía en
+    // `!r.ok || !r.cfdiUuid` y dejaba un warn `autofactura.fallo` con
+    // `error: undefined` por cada foto que entraba: quien fuera a averiguar
+    // "por qué no se factura nada" encontraba fallos que no ocurrieron, y el
+    // log de fallos deja de servir para lo único que sirve.
+    facturarConAgente.mockResolvedValue({ modo: 'ensayo', ok: true, capturado: { referencia: '286188' } });
+
     await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY });
-    expect(logger.warn).toHaveBeenCalledWith('autofactura.fallo', { gastoId: 'g-1', error: undefined });
+
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('autofactura.ensayo', { gastoId: 'g-1', capturado: 1 });
   });
 
   it('si el agente revienta, el error sube: aquí no se atrapa nada', async () => {

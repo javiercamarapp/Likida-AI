@@ -10,7 +10,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //      teléfono de jefe mal capturado, no marcar significa reintentar y fallar
 //      cada hora para siempre, y que el registro no distinga "no revisado" de
 //      "revisado y no había a quién avisar". La prueba lo fija para que nadie
-//      lo "arregle" a la vuelta de seis meses.
+//      lo "arregle" a la vuelta de seis meses. Y se prueba en las DOS formas de
+//      fallar —por valor (`{ok:false}`) y por excepción—, porque una invariante
+//      que solo aguanta una de las dos no es una invariante.
 //
 //   2. UN ERROR NO ES UNA LISTA VACÍA. `viajesSinAceptar` lanza. Sin eso, una
 //      base caída se leería como "hoy nadie dejó de aceptar" — el cron correría
@@ -47,8 +49,8 @@ let lectura: { data: unknown; error: { message: string } | null } = { data: [], 
 let resultadosUpdate: Array<{ error: { message: string } | null }> = [];
 /** Cada método de la cadena de lectura, con sus argumentos. */
 const filtros: Array<[string, unknown[]]> = [];
-/** Cada update ejecutado: qué se escribió y con qué filtro. */
-const updates: Array<{ fila: Record<string, unknown>; por: [string, unknown] }> = [];
+/** Cada update ejecutado: qué se escribió y con qué filtros. */
+const updates: Array<{ fila: Record<string, unknown>; por: Array<[string, unknown]> }> = [];
 
 function cadenaLectura() {
   const nodo: Record<string, unknown> = {};
@@ -61,12 +63,21 @@ function cadenaLectura() {
 
 const from = vi.fn((tabla: string) => ({
   select: (...a: unknown[]) => { filtros.push([`select ${tabla}`, a]); return cadenaLectura(); },
-  update: (fila: Record<string, unknown>) => ({
-    eq: (col: string, val: unknown) => {
-      updates.push({ fila, por: [col, val] });
-      return Promise.resolve(resultadosUpdate[updates.length - 1] ?? resultadosUpdate.at(-1) ?? { error: null });
-    },
-  }),
+  // El update encadena `.eq()` cuantas veces haga falta y solo se resuelve al
+  // esperarlo: así la prueba ve TODOS los filtros con que se acotó, no el
+  // primero. Un mock que se resolviera en el primer `.eq` haría pasar en verde
+  // justo el descuido que hay que vigilar — un update sin acotar por tenant.
+  update: (fila: Record<string, unknown>) => {
+    const por: Array<[string, unknown]> = [];
+    const nodo: Record<string, unknown> = {};
+    nodo.eq = (col: string, val: unknown) => { por.push([col, val]); return nodo; };
+    nodo.then = (r: (v: unknown) => unknown) => {
+      updates.push({ fila, por });
+      const res = resultadosUpdate[updates.length - 1] ?? resultadosUpdate.at(-1) ?? { error: null };
+      return Promise.resolve(res).then(r);
+    };
+    return nodo;
+  },
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -231,7 +242,7 @@ describe('escalarViajesSinAceptar', () => {
     expect(opciones.parametros).toEqual(['Juan Pérez', 'VJ-104']);
 
     expect(updates).toHaveLength(1);
-    expect(updates[0].por).toEqual(['id', 'v-1']);
+    expect(updates[0].por).toEqual([['id', 'v-1'], ['tenant_id', 't-1']]);
     expect(typeof updates[0].fila.escalado_en).toBe('string');
     expect(updates[0].fila.avisos_enviados).toBe(2);   // el que ya llevaba + este
     expect(r).toEqual({ revisados: 1, reintentados: 1, escalados: 1, fallos: [] });
@@ -262,6 +273,12 @@ describe('escalarViajesSinAceptar', () => {
     expect(avisarAlChofer).toHaveBeenCalledTimes(1);
     expect(r.fallos[0]).toMatch(/no tiene teléfono de jefe registrado/i);
     expect(r.escalados).toBe(1);
+    // Y va al log como ERROR, no como un fallo más de la lista: esa flota no va
+    // a recibir NINGUNA escalación hasta que alguien capture el teléfono, y el
+    // viaje se marca igual — o sea que nadie se va a enterar por otro lado.
+    expect(logger.error).toHaveBeenCalledWith('escalacion.sin_telefono_de_jefe', {
+      tenantId: 't-1', viaje: 'v-1',
+    });
   });
 
   it('si el reaviso al chofer falla, el jefe SE ENTERA igual', async () => {
@@ -317,7 +334,7 @@ describe('escalarViajesSinAceptar', () => {
 
     expect(sendTemplate).toHaveBeenCalledTimes(3);
     expect(avisarAlChofer).toHaveBeenCalledTimes(3);
-    expect(updates.map((u) => u.por[1])).toEqual(['v-1', 'v-2', 'v-3']);
+    expect(updates.map((u) => u.por[0][1])).toEqual(['v-1', 'v-2', 'v-3']);
     // El contador de avisos es POR VIAJE, no global: el segundo llevaba 3.
     expect(updates[1].fila.avisos_enviados).toBe(4);
     expect(r).toMatchObject({ revisados: 3, reintentados: 3, escalados: 2 });
@@ -390,29 +407,40 @@ describe('escalarViajesSinAceptar', () => {
     expect(logger.info).toHaveBeenCalledWith('viaje.escalacion', { revisados: 1, escalados: 1, fallos: 0 });
   });
 
-  it('OJO · el UPDATE no acota por tenant, solo por id', async () => {
-    // El resto del repo escribe `.eq('id', …).eq('tenant_id', …)` (ver
-    // `reasignarOperador` y `acotada`). Aquí el id es la PK, así que hoy no hay
-    // fuga; queda fijado para que se vea la excepción a la regla del repo y no
-    // se copie a un update que sí pueda cruzar flotas.
-    lectura = { data: [fila()], error: null };
-    await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
-    expect(updates[0].por).toEqual(['id', 'v-1']);
+  it('el UPDATE va acotado por tenant, no solo por id', async () => {
+    // El id es la PK, así que hoy esto no evita ninguna fuga. Se acota igual
+    // porque es la disciplina del repo (`acotada`, `reasignarOperador`): un
+    // update sin acotar que hoy es inofensivo es el que mañana se copia a uno
+    // que sí puede cruzar flotas.
+    lectura = { data: [fila({ tenant_id: 't-9' })], error: null };
+    await escalarViajesSinAceptar({ telefonoJefePorTenant: { 't-9': '52999' }, ahora: AHORA });
+    expect(updates[0].por).toContainEqual(['tenant_id', 't-9']);
   });
 
-  it('RIESGO · si `sendTemplate` LANZA, el lote se aborta y el viaje queda sin marcar', async () => {
-    // Hoy `sendTemplate` atrapa sus propios errores de red y devuelve
-    // `{ok:false}`, así que esto no está pasando en producción. Pero el `await`
-    // no tiene try/catch: el día que ese contrato cambie —o que reviente antes
-    // del fetch— se pierde la marca del viaje EN CURSO y ninguno de los
-    // siguientes se procesa. La invariante "se marca pase lo que pase" solo
-    // aguanta los fallos POR VALOR.
+  it('una EXCEPCIÓN de `sendTemplate` tampoco impide marcar ni corta el lote', async () => {
+    // La invariante es "se marca pase lo que pase con el envío", y antes solo
+    // aguantaba los fallos POR VALOR: con un `await` desnudo, una excepción
+    // —JSON inválido, un timeout que cambie de forma— dejaba el viaje EN CURSO
+    // sin marcar y los siguientes sin mirar. Una invariante que solo aguanta
+    // una de las dos formas de fallar no es una invariante.
     sendTemplate.mockRejectedValue(new Error('socket hang up'));
-    lectura = { data: [fila({ id: 'v-1' }), fila({ id: 'v-2' })], error: null };
+    lectura = { data: [fila({ id: 'v-1', folio: 'VJ-1' }), fila({ id: 'v-2', folio: 'VJ-2' })], error: null };
 
-    await expect(escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA }))
-      .rejects.toThrow(/socket hang up/);
-    expect(updates).toEqual([]);
-    expect(avisarAlChofer).toHaveBeenCalledTimes(1);   // el segundo viaje ni se miró
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+
+    // Los dos viajes se procesaron y los dos quedaron marcados.
+    expect(avisarAlChofer).toHaveBeenCalledTimes(2);
+    expect(updates.map((u) => u.por[0][1])).toEqual(['v-1', 'v-2']);
+    expect(r.escalados).toBe(2);
+    // Y el fallo NO se traga: dice a qué viaje y qué pasó.
+    expect(r.fallos).toEqual(['jefe VJ-1: socket hang up', 'jefe VJ-2: socket hang up']);
+  });
+
+  it('una excepción sin mensaje también se reporta, no queda en blanco', async () => {
+    sendTemplate.mockRejectedValue('se cayó');   // ni siquiera es un Error
+    lectura = { data: [fila()], error: null };
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(r.escalados).toBe(1);
+    expect(r.fallos[0]).toMatch(/error inesperado al enviar/);
   });
 });
