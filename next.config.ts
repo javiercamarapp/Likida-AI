@@ -33,6 +33,13 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/webhook/whatsapp': ['./node_modules/zxing-wasm/dist/reader/*.wasm'],
     '/api/cron/facturar': ['./node_modules/@sparticuz/chromium/bin/**'],
+    // El callback de QStash ejecuta la MISMA lógica (procesarLoteEnCola) — su
+    // bundle también necesita el binario de Chromium y el browsers.json de
+    // playwright-core, o revienta con "Cannot find module browsers.json".
+    '/api/cron/facturar/cola': [
+      './node_modules/@sparticuz/chromium/bin/**',
+      './node_modules/playwright-core/browsers.json',
+    ],
   },
   // Cinturón, además del tirante. `cfdi.ts` lee el `.wasm` de disco en runtime y
   // eso hace que el tracer considere alcanzable cualquier archivo bajo el
