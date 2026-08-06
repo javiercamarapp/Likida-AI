@@ -452,7 +452,7 @@ export async function enviarRespuestaArco(telefono: string, respuesta: string): 
   if (res.ok) { logger.info('arco.envio_ok', { telefono }); return { ok: true }; }
   const crudo = await res.text().catch(() => '');
 
-  // 2. Fuera de la ventana, Meta exige plantilla. La plantilla `respuesta_arco`
+  // 2. Fuera de la ventana, Meta exige plantilla. La plantilla `respuesta_arco_v2`
   //    (creada 6-ago-2026) lleva {{1}} = razón social de la flota y {{2}} = la
   //    respuesta; aún en revisión de Meta — falla cerrado si no está aprobada.
   if (res.status === 400 || res.status === 403) {
@@ -463,7 +463,7 @@ export async function enviarRespuestaArco(telefono: string, respuesta: string): 
         const tpl = await envia({
           type: 'template',
           template: {
-            name: 'respuesta_arco', language: { code: 'es_MX' },
+            name: 'respuesta_arco_v2', language: { code: 'es' },
             components: [{ type: 'body', parameters: [{ type: 'text', text: 'la flota' }, { type: 'text', text: respuesta }] }],
           },
         });
