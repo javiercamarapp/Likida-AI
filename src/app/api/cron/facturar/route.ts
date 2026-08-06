@@ -307,7 +307,12 @@ export async function GET(req: Request) {
     if (process.env.UPSTASH_QSTASH_TOKEN && lote.length > 0) {
       try {
         const { Client } = await import('@upstash/qstash');
-        const q = new Client({ token: process.env.UPSTASH_QSTASH_TOKEN });
+        // La región del token (QSTASH_URL, p. ej. https://qstash-us-east-1.upstash.io):
+        // sin ella el cliente global rutearía a otra región y el publish fallaría.
+        const q = new Client({
+          token: process.env.UPSTASH_QSTASH_TOKEN,
+          baseUrl: process.env.QSTASH_URL ?? undefined,
+        });
         const base = process.env.NEXT_PUBLIC_APP_URL ?? `https://${req.headers.get('host')}`;
         const publicacion = await q.publishJSON({
           url: `${base}/api/cron/facturar/cola`,
