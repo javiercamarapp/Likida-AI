@@ -25,6 +25,9 @@ const RUTA = '/dashboard/arco';
 export default async function ArcoPage({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = await searchParams;
   const { tenantId } = await resolverTenantEfectivo(RUTA, sp);
+  // AUDITORÍA 16, ALTO (arquitectura): `Date.now()` en el render rompe la
+  // puerta de pureza del repo; la fecha se inyecta desde el servidor.
+  const hoy = new Date().toISOString().slice(0, 10);
 
   async function accionResponder(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
@@ -44,9 +47,19 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
     }
   }
 
-  const solicitudes = await listarSolicitudesArco(tenantId).catch(() => []);
+  // AUDITORÍA 16, ALTO (operabilidad): fail-cerrado — una base caída NO se
+  // pinta como "Ninguna solicitud registrada" (la regla del repo). El error de
+  // lectura se muestra; solo el vacío REAL es vacío.
+  let solicitudes: Awaited<ReturnType<typeof listarSolicitudesArco>> = [];
+  let errorCarga: string | null = null;
+  try {
+    solicitudes = await listarSolicitudesArco(tenantId);
+  } catch (e) {
+    errorCarga = e instanceof Error ? e.message : String(e);
+  }
   const pendientes = solicitudes.filter((s) => s.estado === 'recibida' || s.estado === 'en_proceso');
-  const vencenPronto = solicitudes.filter((s) => (s.estado === 'recibida' || s.estado === 'en_proceso') && s.venceEn <= new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10));
+  const venceEn = (iso: string) => iso.slice(0, 10);
+  const vencenPronto = solicitudes.filter((s) => (s.estado === 'recibida' || s.estado === 'en_proceso') && venceEn(s.venceEn) <= hoy);
 
   return (
     <div className="flex flex-col gap-4">
@@ -70,7 +83,12 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
           <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
             Solicitudes de tus operadores
           </h2>
-          {solicitudes.length === 0 ? (
+          {errorCarga ? (
+            <div className="rounded-lg p-3 text-sm" style={{ background: 'color-mix(in srgb, var(--color-warn) 10%, transparent)', color: 'var(--color-warn)' }}>
+              No se pudieron leer las solicitudes ahora mismo ({errorCarga.slice(0, 120)}). Recarga en un momento — no hay
+              forma de saber si hay solicitudes pendientes hasta que la base responda.
+            </div>
+          ) : solicitudes.length === 0 ? (
             <EstadoVacio>
               Ninguna solicitud ARCO registrada. Cuando un operador escribe *PRIVACIDAD* por WhatsApp, la solicitud
               queda registrada aquí y tú —la responsable— tienes 20 días hábiles para responder.

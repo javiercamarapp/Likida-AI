@@ -42,7 +42,7 @@ export default async function CompliancePage() {
       return { error: mensajeParaPantalla(e, 'resolver la solicitud') };
     }
     revalidatePath('/admin/compliance');
-    return { ok: 'Solicitud marcada como resuelta. La respuesta se entrega al titular por el canal que la flota defina — Likida no envía mensajes ARCO todavía (anotado para la ronda siguiente).' };
+    return { ok: 'Solicitud marcada como resuelta. La respuesta se intentó enviar al titular por WhatsApp (texto libre o plantilla); si no salió, entrégala por el canal que la flota defina.' };
   }
 
   const { solicitudes, pendientesVencen } = await datosDeCompliance();
@@ -128,8 +128,9 @@ export default async function CompliancePage() {
         <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <EstadoVacio icono={<FileWarning width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             La retención de comprobantes (CFF 30: conservar 5 años) y el catálogo de avisos por versión siguen sin
-            flujo construido — se documenta en lugar de inventarlo. Las solicitudes ARCO sí están operativas: las
-            registra el webhook cuando un operador escribe PRIVACIDAD y se resuelven aquí.
+            flujo construido — se documenta en lugar de inventarlo. Las solicitudes ARCO están operativas: las
+            registra el webhook cuando un operador escribe PRIVACIDAD, se resuelven aquí, y la respuesta se intenta
+            enviar al titular por WhatsApp (plantilla `respuesta_arco` en revisión de Meta).
           </EstadoVacio>
         </section>
       </div>
@@ -156,12 +157,12 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
         'id, tipo, canal, estado, titular_ref, recibida_en, vence_en, resuelta_en, resolucion, tenant_id, operador:operador_id(nombre), flota:tenant_id(nombre)', conteo(d),
       ).order('recibida_en', { ascending: false }).order('id', { ascending: false }).range(d, h),
       'compliance.todas',
-    ).catch(() => []),
+    ),
     traerTodo<{ vence_en: unknown }>(
       (d, h) => supabaseAdmin().from('solicitud_arco').select('vence_en', conteo(d))
         .in('estado', ['recibida', 'en_proceso']).order('id').range(d, h),
       'compliance.pendientes',
-    ).catch(() => []),
+    ),
   ]);
   const mapeadas = solicitudes.map((f) => ({
     id: f.id as string,
