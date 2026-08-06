@@ -16,7 +16,7 @@ const tipos = (() => {
   const src = readFileSync(new URL('../../../types/cuadra.ts', import.meta.url), 'utf8');
   const i = src.indexOf('export type TipoDiferencia');
   const decl = src.slice(i, src.indexOf('\n\n', i));
-  return [...decl.matchAll(/'([a-z_]+)'/g)].map((m) => m[1] as TipoDiferencia);
+  return [...decl.matchAll(/'([a-z_0-9]+)'/g)].map((m) => m[1] as TipoDiferencia);
 })();
 
 describe('cobertura de tipos de diferencia', () => {

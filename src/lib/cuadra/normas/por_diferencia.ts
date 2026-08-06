@@ -31,6 +31,12 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   // consumo no lo trae, y lo declara ella misma.
   comprobante_no_fiscal: ['cff-29-A'],
   combustible_efectivo: ['lisr-27-fr-III', 'rfa-2026-2.9'],
+  // RFA 2026 regla 2.9 (deber ser, docs/fiscal/rfa-2.9-deber-ser.md):
+  // dentro del 15% y elegible → informativo con la misma ficha; el excedente y
+  // la flota no elegible son el mismo 27-III sin excepción.
+  combustible_efectivo_dentro15: ['rfa-2026-2.9'],
+  efectivo_sobre_15: ['lisr-27-fr-III', 'rfa-2026-2.9'],
+  efectivo_no_elegible: ['lisr-27-fr-III'],
   efectivo_sobre_tope: ['lisr-27-fr-III'],
   viatico_excede_fiscal: ['lisr-28-fr-V'],
   alimentacion_sin_soporte: ['lisr-28-fr-V'],

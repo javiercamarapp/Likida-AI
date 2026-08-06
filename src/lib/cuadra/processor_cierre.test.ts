@@ -111,7 +111,15 @@ vi.mock('@/lib/cuadra/costos', () => ({
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
-    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }),
+    from: (tabla: string) => {
+      const b: Record<string, unknown> = {};
+      const self = () => b;
+      for (const m of ['select', 'eq', 'gte', 'lte', 'or', 'order', 'in', 'is', 'limit']) b[m] = self;
+      b.range = async () => ({ data: [], error: null, count: 0 });
+      b.maybeSingle = async () => ({ data: null, error: null });
+      b.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(ok);
+      return b;
+    },
     storage: { from: () => ({ createSignedUrl: (...a: unknown[]) => createSignedUrl(...a), upload: async () => ({ error: null }) }) },
   }),
 }));
