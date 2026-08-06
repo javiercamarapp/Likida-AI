@@ -78,19 +78,18 @@ export default defineConfig({
         'src/app/**/global-error.tsx',
         'src/app/**/not-found.tsx',
       ],
-      // UN TRINQUETE, NO UNA ASPIRACIÓN. Medido el 5-ago-2026 tras la ola de
-      // paneles de la ronda 10 (líneas/statements 65.7 · ramas 85.94 · funciones
-      // 79.04): líneas y funciones BAJARON el umbral con medición, porque el
-      // código nuevo (analytics.ts, paneles, facturación, rastreo) entró sin
-      // pruebas. La puerta sigue cerrada UNA regresión más abajo — bajar de aquí
-      // falla — y el trabajo de subirla de vuelta está rastreado en
-      // docs/auditoria-12/pruebas.md (ALTO 2/3/4: pruebas con datos para
-      // analytics.ts, la capa que alimenta las cifras del panel).
+      // UN TRINQUETE, NO UNA ASPIRACIÓN. Medido el 5-ago-2026 (líneas 68.07 ·
+      // ramas 84.74 · funciones 79.58) tras añadir ~90 pruebas en la ronda 16
+      // (tenant-api, contactos, chofer, estatus, sufijo, stripe, saludo,
+      // suscripcion). El trinquete sube de 64 a 67 con un punto de margen —
+      // bajar de aquí falla. El camino a 78 (el objetivo del trinquete) está
+      // rastreado: faltan los componentes UI (necesitan jsdom + testing-library,
+      // sesión dedicada post-demo) y los módulos grandes (repo.ts, consolidado).
       thresholds: {
-        lines: 64,
-        statements: 64,
+        lines: 67,
+        statements: 67,
         branches: 84,
-        functions: 78,
+        functions: 79,
       },
     },
   },
