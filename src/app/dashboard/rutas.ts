@@ -1,7 +1,7 @@
 import {
   LayoutGrid, TrendingUp, LineChart, Sparkles, DollarSign, Users2, Fuel,
   Truck, Wrench, UserCog, Map, Calculator, ScanText, ReceiptText, FileText, Landmark, Send,
-  LifeBuoy, Users, ScrollText, Settings, TriangleAlert, PackageCheck, CreditCard, Percent,
+  LifeBuoy, Users, ScrollText, Settings, TriangleAlert, PackageCheck, CreditCard, Percent, ShieldCheck,
 } from 'lucide-react';
 
 /**
@@ -65,6 +65,7 @@ export const DOCUMENTOS_DINERO: Item[] = [
 ];
 
 export const GESTION: Item[] = [
+  { href: '/dashboard/arco', nombre: 'Privacidad (ARCO)', Icono: ShieldCheck },
   { href: '/dashboard/soporte', nombre: 'Soporte & Quejas', Icono: LifeBuoy },
   { href: '/dashboard/usuarios', nombre: 'Usuarios & Roles', Icono: Users },
   { href: '/dashboard/politicas', nombre: 'Políticas', Icono: ScrollText },
