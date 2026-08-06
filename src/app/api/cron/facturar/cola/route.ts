@@ -19,8 +19,10 @@ export const maxDuration = 600;
 // ═══════════════════════════════════════════════════════════════════════════
 export async function POST(req: NextRequest) {
   const token = process.env.UPSTASH_QSTASH_TOKEN;
-  if (!token) {
-    logger.error('qstash.cola.sin_token', {});
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+  if (!token || !currentKey || !nextKey) {
+    logger.error('qstash.cola.sin_config', { token: !!token, current: !!currentKey, next: !!nextKey });
     return NextResponse.json({ error: 'QStash no configurado' }, { status: 503 });
   }
 
@@ -28,8 +30,9 @@ export async function POST(req: NextRequest) {
   const raw = await req.text();
   try {
     const { Receiver } = await import('@upstash/qstash');
-    // La API de Receiver usa el token como signing key actual (v2).
-    const receiver = new Receiver({ currentSigningKey: token, nextSigningKey: token });
+    // Las SIGNING KEYS reales de QStash (Settings → Signing Keys) — no el
+    // token: QStash firma con ellas, y verificarlas con el token fallaría.
+    const receiver = new Receiver({ currentSigningKey: currentKey, nextSigningKey: nextKey });
     const valido = await receiver.verify({
       signature: req.headers.get('upstash-signature') ?? '',
       body: raw,
