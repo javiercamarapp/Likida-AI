@@ -430,3 +430,50 @@ export async function downloadMediaAsDataUrl(mediaId: string): Promise<string | 
     return null;
   }
 }
+
+/**
+ * Envía la RESPUESTA de una solicitud ARCO al titular (auditoría 15/16).
+ * Texto libre: funciona dentro de la ventana de 24h desde el mensaje
+ * PRIVACIDAD del titular (Meta permite responder en ese canal sin plantilla).
+ * Fuera de la ventana devuelve false — la flota entrega por otro canal, y la
+ * UI lo dice (no se miente como "recibió su respuesta").
+ */
+export async function enviarRespuestaArco(telefono: string, respuesta: string): Promise<{ ok: boolean; error?: string }> {
+  const envia = (body: Record<string, unknown>) => fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: destinatarioWhatsApp(telefono), ...body }),
+    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+  });
+
+  // 1. Texto libre: funciona DENTRO de la ventana de 24h desde el PRIVACIDAD
+  //    del titular (Meta permite responder en ese canal sin plantilla).
+  const res = await envia({ type: 'text', text: { body: respuesta } });
+  if (res.ok) { logger.info('arco.envio_ok', { telefono }); return { ok: true }; }
+  const crudo = await res.text().catch(() => '');
+
+  // 2. Fuera de la ventana, Meta exige plantilla. La plantilla `respuesta_arco`
+  //    (creada 6-ago-2026) lleva {{1}} = razón social de la flota y {{2}} = la
+  //    respuesta; aún en revisión de Meta — falla cerrado si no está aprobada.
+  if (res.status === 400 || res.status === 403) {
+    try {
+      const j = JSON.parse(crudo) as { error?: { code?: number } };
+      const FUERA_VENTANA = [131047, 131026, 131042];
+      if (j.error?.code && FUERA_VENTANA.includes(j.error.code)) {
+        const tpl = await envia({
+          type: 'template',
+          template: {
+            name: 'respuesta_arco', language: { code: 'es_MX' },
+            components: [{ type: 'body', parameters: [{ type: 'text', text: 'la flota' }, { type: 'text', text: respuesta }] }],
+          },
+        });
+        if (tpl.ok) { logger.info('arco.envio_plantilla_ok', { telefono }); return { ok: true }; }
+        const tplCrudo = await tpl.text().catch(() => '');
+        logger.warn('arco.envio_plantilla_fallido', { telefono, status: tpl.status, body: tplCrudo.slice(0, 200) });
+        return { ok: false, error: 'fuera de la ventana de 24h y la plantilla no está aprobada todavía' };
+      }
+    } catch { /* el crudo no era JSON — se reporta abajo */ }
+  }
+  logger.warn('arco.envio_fallido', { telefono, status: res.status, body: crudo.slice(0, 300) });
+  return { ok: false, error: `HTTP ${res.status}` };
+}

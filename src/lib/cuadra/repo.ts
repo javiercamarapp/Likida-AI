@@ -969,12 +969,35 @@ export async function listarSolicitudesArco(tenantId: string): Promise<Array<{
   }));
 }
 
-/** Marca una solicitud ARCO como resuelta (la flota contesta al titular). */
-export async function resolverSolicitudArco(tenantId: string, solicitudId: string, resolucion: string): Promise<void> {
+/** Marca una solicitud ARCO como resuelta (la flota contesta al titular).
+ *  AUDITORÍA 16: la respuesta se INTENTA enviar al titular por WhatsApp
+ *  (texto libre, ventana de 24h desde su PRIVACIDAD). Si no se puede, la
+ *  solicitud queda resuelta pero la UI lo dice — no se miente. */
+export async function resolverSolicitudArco(
+  tenantId: string, solicitudId: string, resolucion: string,
+): Promise<{ enviada: boolean; error?: string }> {
+  const { data: sol, error: errLee } = await acotada(supabaseAdmin()
+    .from('solicitud_arco').select('titular_ref, operador_id').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
+    'resolverSolicitudArco.leer');
+  if (errLee) throw new Error(`resolverSolicitudArco.leer: ${errLee.message}`);
+  if (!sol) throw new Error('resolverSolicitudArco: la solicitud no existe en esta flota');
+
   const { error } = await acotada(supabaseAdmin()
     .from('solicitud_arco')
     .update({ estado: 'resuelta', resuelta_en: new Date().toISOString(), resolucion })
     .eq('id', solicitudId)
     .eq('tenant_id', tenantId), 'resolverSolicitudArco');
   if (error) throw new Error(`resolverSolicitudArco: ${error.message}`);
+
+  // Envío best-effort: si el titular está fuera de la ventana de 24h o el
+  // número no está whitelisted, el texto no sale — la flota lo entrega aparte.
+  const telefono = (sol.titular_ref as string | null) ?? (sol.operador_id as string | null) ?? null;
+  if (!telefono) return { enviada: false, error: 'sin teléfono del titular' };
+  try {
+    const { enviarRespuestaArco } = await import('@/lib/meta/client');
+    const r = await enviarRespuestaArco(telefono, `Tu solicitud de derechos ARCO fue atendida por la empresa: ${resolucion}`);
+    return r.ok ? { enviada: true } : { enviada: false, error: r.error };
+  } catch (e) {
+    return { enviada: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }

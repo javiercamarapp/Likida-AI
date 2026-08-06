@@ -73,6 +73,7 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/documentos': 'operacion',
   '/dashboard/analitica': 'operacion',
   '/dashboard/chat': 'dinero',
+  '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
 
   // Dinero — lo que el encargado no ve
