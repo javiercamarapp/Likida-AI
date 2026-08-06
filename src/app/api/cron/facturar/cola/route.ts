@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { Receiver } from '@upstash/qstash';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { procesarLoteEnCola, type FilaCola } from '../route';
@@ -29,7 +30,6 @@ export async function POST(req: NextRequest) {
   // Verificar la firma de QStash ANTES de tocar nada.
   const raw = await req.text();
   try {
-    const { Receiver } = await import('@upstash/qstash');
     // Las SIGNING KEYS reales de QStash (Settings → Signing Keys) — no el
     // token: QStash firma con ellas, y verificarlas con el token fallaría.
     const receiver = new Receiver({ currentSigningKey: currentKey, nextSigningKey: nextKey });

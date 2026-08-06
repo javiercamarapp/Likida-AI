@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { Client as QstashClient } from '@upstash/qstash';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { facturarAlVuelo, facturarLoteAlVuelo, type ResultadoAutofactura } from '@/lib/cuadra/facturacion/al_vuelo';
 import { armar } from '@/lib/cuadra/facturacion/pendientes';
@@ -306,10 +307,9 @@ export async function GET(req: Request) {
     // siempre (el que los tests ejercitan).
     if (process.env.UPSTASH_QSTASH_TOKEN && lote.length > 0) {
       try {
-        const { Client } = await import('@upstash/qstash');
         // La región del token (QSTASH_URL, p. ej. https://qstash-us-east-1.upstash.io):
         // sin ella el cliente global rutearía a otra región y el publish fallaría.
-        const q = new Client({
+        const q = new QstashClient({
           token: process.env.UPSTASH_QSTASH_TOKEN,
           baseUrl: process.env.QSTASH_URL ?? undefined,
         });
