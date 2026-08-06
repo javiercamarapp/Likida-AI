@@ -994,8 +994,12 @@ export async function resolverSolicitudArco(
   const telefono = (sol.titular_ref as string | null) ?? (sol.operador_id as string | null) ?? null;
   if (!telefono) return { enviada: false, error: 'sin teléfono del titular' };
   try {
+    // AUDITORÍA 16, MEDIO: la plantilla lleva {{1}} = razón social REAL de la
+    // flota (no el literal "la flota"), {{2}} = la resolución.
+    const { data: tenant } = await acotada(supabaseAdmin().from('tenant').select('razon_social').eq('id', tenantId).maybeSingle(), 'resolverSolicitudArco.tenant');
+    const razonSocial = (tenant?.razon_social as string | null) ?? 'la flota';
     const { enviarRespuestaArco } = await import('@/lib/meta/client');
-    const r = await enviarRespuestaArco(telefono, `Tu solicitud de derechos ARCO fue atendida por la empresa: ${resolucion}`);
+    const r = await enviarRespuestaArco(telefono, `Tu solicitud de derechos ARCO fue atendida por ${razonSocial}: ${resolucion}`);
     return r.ok ? { enviada: true } : { enviada: false, error: r.error };
   } catch (e) {
     return { enviada: false, error: e instanceof Error ? e.message : String(e) };

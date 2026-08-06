@@ -167,6 +167,25 @@ export default async function OperadoresPage({
     const operadorId = String(fd.get('operadorId') ?? '');
     const rfc = String(fd.get('rfc') ?? '').trim().toUpperCase();
     if (!operadorId) return { error: 'Falta el operador.' };
+    // AUDITORÍA 16, MEDIO (tercera ronda): el RFC se validaba con el MISMO
+    // criterio que el de la flota — un RFC mal formado apaga la validación de
+    // RLISR 57 en silencio (la rama buena nunca casa).
+    if (rfc) {
+      const { esRfcValido, rfcChecksumOk } = await import('@/lib/cuadra/intake/cfdi');
+      const limpio = rfc.replace(/[^A-ZÑ&0-9]/g, '');
+      if (!esRfcValido(limpio) || !rfcChecksumOk(limpio)) {
+        return { error: `El RFC "${rfc}" no pasa el dígito verificador — sin él, la rama buena de RLISR 57 (viático a nombre del operador) nunca casa y todo viático suyo sale a revisar.` };
+      }
+      rfc; // usar el limpio abajo
+      const rfcLimpio = limpio;
+      try {
+        await actualizarRfcOperador(t, operadorId, rfcLimpio || null);
+      } catch (e) {
+        return { error: mensajeParaPantalla(e, 'guardar el RFC') };
+      }
+      revalidatePath('/dashboard/operadores');
+      return { ok: `RFC ${rfcLimpio} guardado para RLISR 57.` };
+    }
     try {
       await actualizarRfcOperador(t, operadorId, rfc || null);
     } catch (e) {

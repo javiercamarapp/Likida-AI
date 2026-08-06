@@ -5,6 +5,7 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { revalidatePath } from 'next/cache';
 import { listarSolicitudesArco, resolverSolicitudArco } from '@/lib/cuadra/repo';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mensajeParaPantalla } from '@/lib/cuadra/administracion';
 import { fechaMx } from '@/lib/formato';
 
@@ -31,13 +32,21 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
 
   async function accionResponder(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    // AUDITORÍA 16, MEDIO: el superadmin que previsualiza una flota real
+    // (?tenant=t-otra) no podía resolver — el action usaba el tenant de sesión.
     const s = await requireSessionTenant(RUTA);
+    const sp = await searchParams;
+    let tenantEfectivo = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');
+      tenantEfectivo = await resolverTenantPedido(supabaseAdmin(), tenantEfectivo, sp.tenant);
+    }
     const resolucion = String(fd.get('resolucion') ?? '').trim();
     const solicitudId = String(fd.get('solicitudId') ?? '');
     if (!solicitudId) return { error: 'Falta la solicitud.' };
     if (resolucion.length < 5) return { error: 'Escribe la respuesta que se entrega al titular (qué se resolvió y cómo).' };
     try {
-      const r = await resolverSolicitudArco(s.tenantId, solicitudId, resolucion);
+      const r = await resolverSolicitudArco(tenantEfectivo, solicitudId, resolucion);
       revalidatePath(RUTA);
       return r.enviada
         ? { ok: 'Solicitud resuelta y la respuesta se envió al titular por WhatsApp.' }
