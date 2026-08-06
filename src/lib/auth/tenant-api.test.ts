@@ -16,7 +16,8 @@ function builder(tabla: string) {
 }
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-const getSessionTenant = vi.fn(async () => ({
+type Sesion = { tenantId: string | null; rol: string; userId: string; nombre: string | null };
+const getSessionTenant = vi.fn(async (): Promise<Sesion> => ({
   tenantId: 't-sesion', rol: 'superadmin', userId: 'u-1', nombre: 'Javier',
 }));
 vi.mock('./session', () => ({ getSessionTenant }));
@@ -52,7 +53,7 @@ describe('resolverTenantApi — la puerta del ?tenant= de las APIs', () => {
   });
 
   it('sin sesión → 401', async () => {
-    getSessionTenant.mockResolvedValueOnce(null);
+    getSessionTenant.mockResolvedValueOnce(null as unknown as Sesion);
     const r = await resolverTenantApi('https://x/api');
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.status).toBe(401);

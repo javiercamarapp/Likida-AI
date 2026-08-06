@@ -22,7 +22,8 @@ describe('estadoComprobante — qué se le enseña al chofer de una foto', () =>
 
 describe('resumenLiquidacion — el saldo en vivo del viaje', () => {
   const E = (p: Partial<Parameters<typeof resumenLiquidacion>[0]>) => ({
-    anticipo: 0, comprobado: 0, comprobantes: 0, enRevision: 0, ...p,
+    anticipo: 0, comprobado: 0, comprobantes: 0, enRevision: 0,
+    ultimoConcepto: null, ultimoMonto: null, ...p,
   });
 
   it('falta comprobar cuando comprobado < anticipo', () => {

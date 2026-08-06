@@ -236,7 +236,7 @@ export async function InicioContenido({
                 <TituloSeccion>
                   Liquidaciones cerradas — {rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`}
                 </TituloSeccion>
-                <GlobalFilter base="/dashboard" r={r} extra={sp?.tenant ? { tenant: sp.tenant } : sp?.vista ? { vista: sp.vista } : undefined} />
+                <GlobalFilter base="/dashboard" r={r} extra={sufijoTenantParams(sp)} />
               </div>
               {rango === 'todo' ? (
                 <div className="flex flex-col items-center justify-center" style={{ height: 160 }}>
@@ -315,6 +315,18 @@ export async function InicioContenido({
     </main>
   );
 
+}
+
+/** AUDITORÍA 16, MEDIO: el filtro 7d/30d perdía el ?rol= de la previsualización
+ *  "ver como encargado" y la volteaba al panel del dinero. Se arrastran
+ *  tenant/vista/rol juntos — el mismo criterio que sufijoTenant. */
+function sufijoTenantParams(sp: { tenant?: string; vista?: string; rol?: string } | undefined): Record<string, string> | undefined {
+  if (!sp) return undefined;
+  const out: Record<string, string> = {};
+  if (sp.tenant) out.tenant = sp.tenant;
+  else if (sp.vista) out.vista = sp.vista;
+  if (sp.rol) out.rol = sp.rol;
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** La página real: resuelve quién eres y a qué flota apuntas, y pinta el
