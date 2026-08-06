@@ -7,8 +7,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const TABLAS: Record<string, unknown[]> = {};
 const escrituras: Array<{ tabla: string; valores: Record<string, unknown>; op: string }> = [];
 const errores: Record<string, unknown> = {};
+let suscripcionFila: { tenant_id?: string } | null = null;
 let insertError = null as { code?: string; message?: string } | null;
 
 function constructor(tabla: string) {
@@ -17,7 +19,9 @@ function constructor(tabla: string) {
     eq: () => api,
     is: () => api,
     in: () => api,
-    maybeSingle: () => Promise.resolve({ data: null, error: errores[tabla] ?? null }),
+    order: () => api,
+    limit: () => api,
+    maybeSingle: () => Promise.resolve({ data: tabla === 'suscripcion' ? suscripcionFila : (TABLAS[tabla]?.[0] ?? null), error: errores[tabla] ?? null }),
     insert: (v: Record<string, unknown>) => {
       escrituras.push({ tabla, valores: v, op: 'insert' });
       return { error: insertError };
@@ -34,11 +38,13 @@ function constructor(tabla: string) {
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => constructor(t) }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { marcarEvento, estadoDesdeStripe, aplicarSuscripcion } = await import('./suscripcion');
+const { marcarEvento, estadoDesdeStripe, aplicarSuscripcion, tenantDeCustomer, planDePrice } = await import('./suscripcion');
 
 beforeEach(() => {
   escrituras.length = 0;
   insertError = null;
+  suscripcionFila = null;
+  for (const k of Object.keys(TABLAS)) delete TABLAS[k];
 });
 
 describe('marcarEvento — el candado de idempotencia del webhook', () => {
@@ -89,5 +95,25 @@ describe('aplicarSuscripcion — el pago que activa el plan', () => {
       tenant_id: 't-1', plan_clave: 'basico', estado: 'activa',
       stripe_subscription_id: 'sub-1', stripe_customer_id: 'cus-1', cancelada_en: null,
     });
+  });
+});
+
+// ── COBERTURA (ronda 16): las resoluciones del webhook (tenant/plan) ────────
+describe('tenantDeCustomer y planDePrice — las traducciones del webhook', () => {
+  it('tenantDeCustomer trae el tenant de la suscripción por customer de Stripe', async () => {
+    suscripcionFila = { tenant_id: 't-1' };
+    expect(await tenantDeCustomer('cus-1')).toBe('t-1');
+  });
+
+  it('planDePrice trae la clave del plan por price de Stripe', async () => {
+    TABLAS.plan = [{ clave: 'basico' }];
+    const { planDePrice } = await import('./suscripcion');
+    expect(await planDePrice('price-1')).toBe('basico');
+  });
+
+  it('null cuando no existe (no truena: el webhook decide qué hacer)', async () => {
+    suscripcionFila = null;
+    TABLAS.plan = [];
+    expect(await tenantDeCustomer('cus-no-existe')).toBeNull();
   });
 });
