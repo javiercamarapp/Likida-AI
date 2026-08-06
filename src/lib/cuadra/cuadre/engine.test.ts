@@ -1520,3 +1520,43 @@ describe('RFA 2026 regla 2.9 — la matriz del 15% de combustible en efectivo', 
     expect(r.litrosDieselAcreditables ?? 0).toBe(0);
   });
 });
+
+// ── AUDITORÍA 15 · ALTO: fail-closed real del contador del 15% ──────────────
+describe('AUDITORÍA 15 — el contador caído no puede afirmar "excedente contra $0"', () => {
+  const g15 = (p: Partial<Gasto>): Gasto => g({ concepto: 'diesel', monto: 1000, formaPago: '01', cfdiUuid: `u-${Math.random()}`, ...p });
+  it('contador sin datos (total 0): el efectivo va a POR CONFIRMAR, nunca a "no deducible"', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v15i', anticipo: 3000, politica,
+      facilidad15: true, totalCombustibleEjercicio: 0, efectivoPrevEjercicio: 0,
+      gastos: [g15({ id: 'g15i', monto: 1000, cfdiUuid: 'u-15i' })],
+    });
+    expect(r.diferencias.some((x) => x.tipo === 'combustible_efectivo')).toBe(true);
+    expect(r.diferencias.some((x) => x.tipo === 'efectivo_sobre_15')).toBe(false);
+    expect(r.totalPorConfirmar).toBe(1000);
+    expect(r.totalNoDeducible).toBe(0);
+  });
+
+  it('comprobante de OTRO ejercicio no corre contra el contador de este', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v15j', anticipo: 3000, politica,
+      facilidad15: true, totalCombustibleEjercicio: 10000, efectivoPrevEjercicio: 2000,
+      anioEjercicio: '2026',
+      gastos: [g15({ id: 'g15j', monto: 1000, cfdiUuid: 'u-15j', fecha: '2025-12-20' })],
+    });
+    // El gasto es de dic-2025, el ejercicio es 2026: no se mezcla.
+    expect(r.diferencias.some((x) => x.tipo === 'combustible_efectivo')).toBe(true);
+    expect(r.diferencias.some((x) => x.tipo === 'efectivo_sobre_15')).toBe(false);
+    expect(r.totalPorConfirmar).toBe(1000);
+  });
+
+  it('la nota del contador caído no promete deducción (fail-closed honesto)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v15k', anticipo: 3000, politica,
+      facilidad15: true, totalCombustibleEjercicio: 0,
+      gastos: [g15({ id: 'g15k', monto: 1000, cfdiUuid: 'u-15k' })],
+    });
+    const d = r.diferencias.find((x) => x.tipo === 'combustible_efectivo')!;
+    expect(d.nota).toContain('no se pudo calcular');
+    expect(d.nota).not.toContain('NO se deduce');
+  });
+});

@@ -152,7 +152,18 @@ export async function Contenido({ tenantId, sp }: { tenantId: string; sp: Params
                         {Math.round(UMBRAL_ALERTA * 100)}% — al llegar al tope la deducción ya se perdió y avisar
                         entonces no sirve de nada.
                       </p>
-                      {tope.excedente > 0
+                      {opts?.elegible15 === false ? (
+                        <p style={{ color: 'var(--bad)' }}>
+                          La flota declaró que NO califica a la facilidad del 15% (RFA 2026 regla 2.9) — el
+                          combustible en efectivo no es deducible.
+                        </p>
+                      ) : opts?.elegible15 === undefined ? (
+                        <p style={{ color: 'var(--warn)' }}>
+                          La facilidad del 15% (RFA 2026 regla 2.9) exige que la flota declare su dedicación y
+                          régimen al registrarla; sin esa declaración el efectivo sale a revisión en cada
+                          liquidación. Declárala en la consola de flotas.
+                        </p>
+                      ) : tope.excedente > 0
                         ? <p style={{ color: 'var(--bad)' }}>
                             Excedente del periodo: <strong className="tabular">{mxn(tope.excedente)}</strong>. Rebasar el
                             15% no reduce la deducción en proporción: tira el excedente completo.

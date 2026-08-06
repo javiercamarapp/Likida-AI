@@ -332,9 +332,11 @@ export function causasDe(g: GastoFiscal, o: OpcionesFiscales): Causa[] {
   // flota (mismo criterio que `getAcumuladoCombustible` en repo.ts).
   if (g.formaPago === '01') {
     if (esCombustible(g, o)) {
-      // AUDITORÍA 14, ALTO: el panel ofrecía la válvula del 15% a flotas que el
-      // motor declara no elegibles o sin declarar. Mismo estándar que el motor.
-      push(o.elegible15 === true ? 'combustible_efectivo' : 'efectivo_no_elegible');
+      // AUDITORÍA 14-15, ALTO: mismo estándar que el motor — pero SIN DECLARAR
+      // (elegible15 undefined) NO es "deducción perdida": el motor lo mantiene
+      // "por confirmar" y el panel debe decir lo mismo (en_riesgo), no perdido.
+      if (o.elegible15 === false) push('efectivo_no_elegible');
+      else push('combustible_efectivo');
     } else if (g.monto > o.efectivoTopeMxn) push('efectivo_sobre_tope');
   }
 

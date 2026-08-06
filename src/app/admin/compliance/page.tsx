@@ -42,11 +42,15 @@ export default async function CompliancePage() {
       return { error: mensajeParaPantalla(e, 'resolver la solicitud') };
     }
     revalidatePath('/admin/compliance');
-    return { ok: 'Solicitud marcada como resuelta. El titular recibió su respuesta por WhatsApp.' };
+    return { ok: 'Solicitud marcada como resuelta. La respuesta se entrega al titular por el canal que la flota defina — Likida no envía mensajes ARCO todavía (anotado para la ronda siguiente).' };
   }
 
-  const [solicitudes, conteoPendientes] = await datosDeCompliance();
+  const { solicitudes, pendientesVencen } = await datosDeCompliance();
   const pendientes = solicitudes.filter((s) => s.estado === 'recibida' || s.estado === 'en_proceso');
+  // AUDITORÍA 15, CRÍTICO: la pantalla vive en /admin (superadmin), cuyo
+  // tenant de sesión es null — filtrar por tenant dejaba la pantalla SIEMPRE
+  // vacía. El superadmin ve TODAS las flotas, con una columna de flota. La
+  // flota responsable tendrá su propia ruta en /dashboard (decisión de la 16).
 
   return (
     <div className="flex flex-col gap-4">
@@ -60,7 +64,7 @@ export default async function CompliancePage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <KpiTile icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Solicitudes ARCO por responder" valor={pendientes.length} />
-        <KpiTile icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencen pronto (≤ 5 días hábiles)" valor={conteoPendientes} />
+        <KpiTile icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencen pronto (≤ 5 días hábiles)" valor={pendientesVencen} />
       </div>
 
       <div className="glass-panel overflow-hidden">
@@ -79,6 +83,7 @@ export default async function CompliancePage() {
                 <thead>
                   <tr style={{ color: 'var(--muted)' }} className="text-left">
                     <th className="px-3 py-2.5 font-medium">Recibida</th>
+                    <th className="px-3 py-2.5 font-medium">Flota</th>
                     <th className="px-3 py-2.5 font-medium">Derecho</th>
                     <th className="px-3 py-2.5 font-medium">Titular</th>
                     <th className="px-3 py-2.5 font-medium">Vence</th>
@@ -90,6 +95,7 @@ export default async function CompliancePage() {
                   {solicitudes.map((s) => (
                     <tr key={s.id} className="border-t align-top" style={{ borderColor: 'var(--line)' }}>
                       <td className="px-3 py-3">{fechaMx(s.recibidaEn)}</td>
+                      <td className="px-3 py-3">{s.flotaNombre}</td>
                       <td className="px-3 py-3 font-medium">{ETIQUETA_TIPO[s.tipo] ?? s.tipo}</td>
                       <td className="px-3 py-3">
                         {s.operadorNombre ?? '—'}
@@ -132,20 +138,44 @@ export default async function CompliancePage() {
 }
 
 // ── Datos del server component (sin hooks de cliente) ───────────────────────
-async function datosDeCompliance(): Promise<[Awaited<ReturnType<typeof listarSolicitudesArco>>, number]> {
+interface SolicitudArcoPanel {
+  id: string; tipo: string; estado: string; titularRef: string; recibidaEn: string;
+  venceEn: string; resueltaEn: string | null; resolucion: string | null;
+  operadorNombre: string | null; flotaNombre: string;
+}
+
+async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[]; pendientesVencen: number }> {
   const { getSessionTenant } = await import('@/lib/auth/session');
   const s = await getSessionTenant();
-  if (!s?.tenantId) return [[], 0];
+  if (!s) return { solicitudes: [], pendientesVencen: 0 };
+  // El superadmin ve TODAS las flotas (su tenant es null por diseño). La
+  // columna de flota viene del join con tenant.
   const [solicitudes, pendientes] = await Promise.all([
-    listarSolicitudesArco(s.tenantId).catch(() => []),
-    (async () => {
-      const filas = await traerTodo<{ vence_en: unknown }>(
-        (d, h) => supabaseAdmin().from('solicitud_arco').select('vence_en', conteo(d))
-          .eq('tenant_id', s.tenantId).in('estado', ['recibida', 'en_proceso']).order('id').range(d, h),
-        'compliance.pendientes',
-      );
-      return filas.filter((f) => (f.vence_en as string) <= new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10)).length;
-    })().catch(() => 0),
+    traerTodo<Record<string, unknown>>(
+      (d, h) => supabaseAdmin().from('solicitud_arco').select(
+        'id, tipo, canal, estado, titular_ref, recibida_en, vence_en, resuelta_en, resolucion, tenant_id, operador:operador_id(nombre), flota:tenant_id(nombre)', conteo(d),
+      ).order('recibida_en', { ascending: false }).order('id', { ascending: false }).range(d, h),
+      'compliance.todas',
+    ).catch(() => []),
+    traerTodo<{ vence_en: unknown }>(
+      (d, h) => supabaseAdmin().from('solicitud_arco').select('vence_en', conteo(d))
+        .in('estado', ['recibida', 'en_proceso']).order('id').range(d, h),
+      'compliance.pendientes',
+    ).catch(() => []),
   ]);
-  return [solicitudes, pendientes];
+  const mapeadas = solicitudes.map((f) => ({
+    id: f.id as string,
+    tipo: f.tipo as string,
+    canal: (f.canal as string | null) ?? 'whatsapp',
+    estado: f.estado as string,
+    titularRef: (f.titular_ref as string | null) ?? '',
+    recibidaEn: f.recibida_en as string,
+    venceEn: f.vence_en as string,
+    resueltaEn: (f.resuelta_en as string | null) ?? null,
+    resolucion: (f.resolucion as string | null) ?? null,
+    operadorNombre: ((f.operador as { nombre?: string } | null)?.nombre) ?? null,
+    flotaNombre: ((f.flota as { nombre?: string } | null)?.nombre) ?? '—',
+  }));
+  const vence = pendientes.filter((f) => (f.vence_en as string) <= new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10)).length;
+  return { solicitudes: mapeadas as SolicitudArcoPanel[], pendientesVencen: vence };
 }

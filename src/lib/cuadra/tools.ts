@@ -101,7 +101,11 @@ registerTool('cuadrar_viaje', {
     // contexto valioso, no un requisito para cerrar un viaje.
     let periodo: { estado: string; razon: number; margen: number; excedente: number; aviso: string | null } | undefined;
     try {
-      const ejercicio = new Date().getUTCFullYear();
+      // AUDITORÍA 15, MEDIO (arquitectura): tools.ts usaba el año del PROCESO y
+      // desde_db el año del viaje — dos barridos con dos criterios. Mismo ancla
+      // que el motor: el año del viaje (los comprobantes), no el del reloj.
+      const viajeCtx = await getViaje(ctx.viajeId, ctx.tenantId).catch(() => null);
+      const ejercicio = viajeCtx?.fechaInicio ? Number(viajeCtx.fechaInicio.slice(0, 4)) : new Date().getUTCFullYear();
       const acum = await getAcumuladoCombustible(ctx.tenantId, ejercicio);
       const t = evaluarTope15(acum);
       // AUDITORÍA 14, ALTO: la elegibilidad de la flota (declarada al
