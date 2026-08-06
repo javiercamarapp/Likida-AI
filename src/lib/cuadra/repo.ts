@@ -920,7 +920,11 @@ export async function actualizarRfcOperador(tenantId: string, operadorId: string
  */
 export async function actualizarFacilidad15(tenantId: string, ded: boolean | undefined, reg: boolean | undefined): Promise<void> {
   const admin = supabaseAdmin();
-  const { data: fila } = await acotada(admin.from('tenant').select('config').eq('id', tenantId).maybeSingle(), 'actualizarFacilidad15.leer');
+  // AUDITORÍA 15, MEDIO: sin comprobar el error, un bache de red se leía como
+  // "la flota no tiene config" y se REEMPLAZABA la config entera por una sola
+  // llave — perdiendo política, topes y estímulos en silencio.
+  const { data: fila, error: errLee } = await acotada(admin.from('tenant').select('config').eq('id', tenantId).maybeSingle(), 'actualizarFacilidad15.leer');
+  if (errLee) throw new Error(`actualizarFacilidad15.leer: ${errLee.message}`);
   const actual = { ...((fila?.config as Record<string, unknown> | null) ?? {}) } as Record<string, unknown>;
   if (ded !== undefined && reg !== undefined) {
     actual.facilidadCombustibleEfectivo = { dedicacionExclusivaCarga: ded, regimenElegible: reg };

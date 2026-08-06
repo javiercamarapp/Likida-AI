@@ -111,6 +111,7 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     facilidad15,
     totalCombustibleEjercicio,
     efectivoPrevEjercicio,
+    anioEjercicio,
     // El motor es puro y no lee el reloj: la fecha se le inyecta aquí, que es
     // el borde con el mundo. Sin esto el aviso de "ticket por facturar" nunca
     // correría en producción aunque sus pruebas estén verdes.

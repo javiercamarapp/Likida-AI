@@ -79,6 +79,9 @@ export interface CuadreInput {
   /** Combustible pagado en efectivo de la flota en el ejercicio ANTES de esta
    *  liquidación — el contador ya corrido. El motor suma el de ESTE viaje. */
   efectivoPrevEjercicio?: number;
+  /** El año del ejercicio fiscal de esta liquidación (el de los comprobantes,
+   *  no el del proceso). Un gasto de otro año no corre contra este contador. */
+  anioEjercicio?: string;
 }
 
 function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaGasto[]): PoliticaGasto | undefined {
@@ -300,6 +303,26 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       const etiqueta = etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined);
       const elegible = input.facilidad15;
       if (elegible === true) {
+        // AUDITORÍA 15, ALTO: fail-closed REAL — si el contador del ejercicio no
+        // trajo datos (total <= 0: bache de red, best-effort en desde_db) o el
+        // comprobante es de OTRO ejercicio (viaje de enero con gasto de dic),
+        // NO se puede afirmar "el excedente NO se deduce contra un tope de $0
+        // que no se midió". Ese gasto va a revisión con nota honesta; la
+        // facilidad solo aplica con la base medida.
+        const anioComprobante = g.fecha ? g.fecha.slice(0, 4) : null;
+        const mismoEjercicio = !anioComprobante || anioComprobante === input.anioEjercicio;
+        const total = input.totalCombustibleEjercicio ?? 0;
+        if (!mismoEjercicio || !(total > 0)) {
+          const motivo = !(total > 0)
+            ? 'no se pudo calcular el total de combustible del ejercicio (el contador no respondió) — la facilidad del 15% (RFA 2026 regla 2.9) no se evaluó'
+            : `este comprobante es de ${anioComprobante} y la facilidad se mide contra el ejercicio ${input.anioEjercicio} — se revisa aparte`;
+          diferencias.push({
+            tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0,
+            nota: `${etiqueta} pagado en EFECTIVO — ${motivo}. No se afirma deducible ni no deducible; no acredita IEPS.`,
+            gastoId: g.id,
+          });
+          continue;
+        }
         // Contador del ejercicio: previo (otras liquidaciones) + este viaje.
         // AUDITORÍA 14, MEDIO: el EXCEDENTE se reporta POR COMPROBANTE, no
         // acumulativo — antes, cada gasto posterior al cruce colgaba TODO el
@@ -310,7 +333,6 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         // verdad resta de totalDeducible, y la frontera se cruza UNA vez.
         const previoSinEste = (input.efectivoPrevEjercicio ?? 0) + efectivoAcumuladoEjercicio;
         efectivoAcumuladoEjercicio += g.monto;
-        const total = input.totalCombustibleEjercicio ?? 0;
         const acumulado = (input.efectivoPrevEjercicio ?? 0) + efectivoAcumuladoEjercicio;
         const tope = 0.15 * total;
         // Lo que queda del tope para ESTE comprobante (previo sin este ya
