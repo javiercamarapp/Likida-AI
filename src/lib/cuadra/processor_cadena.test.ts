@@ -149,7 +149,20 @@ vi.mock('@/lib/supabase/admin', () => ({
     // motor no validaba receptor, así que la cadena entera se medía sobre un
     // tenant que en realidad no puede deducir nada. Se le da el RFC de una flota
     // configurada, que es lo que la cadena pretende ejercitar.
-    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { rfc: 'CCO8605231N4', config: null }, error: null }) }) }) }),
+    from: (tabla: string) => {
+      // Cadena genérica: `desde_db` (RFA 2.9) consulta `gasto` del ejercicio con
+      // .eq/.gte/.lte/.or/.range y `getConfig` lee `tenant`. Para tenant se
+      // devuelve la config de prueba; para lo demás, vacío con error null.
+      const b: Record<string, unknown> = {};
+      const self = () => b;
+      for (const m of ['select', 'eq', 'gte', 'lte', 'or', 'order', 'in', 'is', 'limit']) b[m] = self;
+      b.range = async () => ({ data: [], error: null, count: 0 });
+      b.maybeSingle = async () => (tabla === 'tenant'
+        ? { data: { rfc: 'CCO8605231N4', config: null }, error: null }
+        : { data: null, error: null });
+      b.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(ok);
+      return b;
+    },
     storage: {
       from: () => ({
         upload: async (path: string, buf: Buffer) => {

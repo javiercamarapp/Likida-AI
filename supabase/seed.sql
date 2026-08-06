@@ -98,8 +98,12 @@ on conflict (id) do nothing;
 -- config.ts), así que esto define LA política del tenant.
 -- 🔴 INVENTADO: topes y set de casetas — documentar los reales del corredor.
 update tenant set config = jsonb_set(
-  coalesce(config, '{}'::jsonb), '{politica}',
-  '[{"concepto":"diesel","topeMonto":4000},{"concepto":"caseta","topeMonto":1500},{"concepto":"alimentacion","topeMonto":800},{"concepto":"hospedaje","topeMonto":2500},{"concepto":"transporte","topeMonto":800},{"concepto":"flete"},{"concepto":"factura","requiereCfdi":true}]'::jsonb
+  jsonb_set(
+    coalesce(config, '{}'::jsonb), '{politica}',
+    '[{"concepto":"diesel","topeMonto":4000},{"concepto":"caseta","topeMonto":1500},{"concepto":"alimentacion","topeMonto":800},{"concepto":"hospedaje","topeMonto":2500},{"concepto":"transporte","topeMonto":800},{"concepto":"flete"},{"concepto":"factura","requiereCfdi":true}]'::jsonb
+  ),
+  '{facilidadCombustibleEfectivo}',
+  '{"dedicacionExclusivaCarga":true,"regimenElegible":true}'::jsonb   -- RFA 2026 regla 2.9: la flota del demo SÍ califica
 ) where id = '11111111-1111-1111-1111-111111111111';
 
 -- ═══════════════════════════════════════════════════════════════════════════
