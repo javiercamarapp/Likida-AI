@@ -18,8 +18,20 @@ const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
  *
  * En `holgado` devuelve null a propósito: un aviso que sale siempre deja de
  * leerse, y con él dejan de leerse los que importan.
+ *
+ * AUDITORÍA 14, ALTO: la elegibilidad de la RFA 2.9 (declarada por la flota al
+ * registrarse) tiene que llegar AQUÍ. Una flota que no califica o que no
+ * declaró NO puede recibir "te quedan $X antes de perder la deducción": esa
+ * facilidad no existe para ella. `elegible`: true/false/undefined — undefined
+ * = sin declarar, y el aviso dice que falta la declaración.
  */
-export function avisoTope15(r: ResultadoTope15, ejercicio: number): string | null {
+export function avisoTope15(r: ResultadoTope15, ejercicio: number, elegible?: boolean): string | null {
+  if (elegible === false) {
+    return `Diésel en efectivo ${ejercicio}: la flota declaró que NO califica a la facilidad del 15% de la RFA 2026 regla 2.9 (dedicación exclusiva o régimen), así que el efectivo en combustible no es deducible — el motor ya lo marca en cada liquidación.`;
+  }
+  if (elegible === undefined) {
+    return `Diésel en efectivo ${ejercicio}: hay pagos de combustible en efectivo, pero la facilidad del 15% de la RFA 2026 regla 2.9 exige que la flota declare su dedicación y régimen al registrarla. Sin esa declaración el efectivo sale a revisión en cada liquidación.`;
+  }
   switch (r.estado) {
     case 'holgado':
       return null;

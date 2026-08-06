@@ -104,7 +104,15 @@ registerTool('cuadrar_viaje', {
       const ejercicio = new Date().getUTCFullYear();
       const acum = await getAcumuladoCombustible(ctx.tenantId, ejercicio);
       const t = evaluarTope15(acum);
-      periodo = { estado: t.estado, razon: Number(t.razon.toFixed(4)), margen: t.margen, excedente: t.excedente, aviso: avisoTope15(t, ejercicio) };
+      // AUDITORÍA 14, ALTO: la elegibilidad de la flota (declarada al
+      // registrarse) tiene que llegar al aviso — una flota no elegible no
+      // recibe "te quedan $X antes de perder la deducción".
+      const cfg = await getConfig(ctx.tenantId);
+      const f15 = cfg.facilidadCombustibleEfectivo;
+      const elegible = (f15 && f15.dedicacionExclusivaCarga !== undefined && f15.regimenElegible !== undefined)
+        ? (f15.dedicacionExclusivaCarga === true && f15.regimenElegible === true)
+        : undefined;
+      periodo = { estado: t.estado, razon: Number(t.razon.toFixed(4)), margen: t.margen, excedente: t.excedente, aviso: avisoTope15(t, ejercicio, elegible) };
     } catch (e) {
       logger.warn('periodo.combustible_no_disponible', { err: e instanceof Error ? e.message : String(e) });
     }

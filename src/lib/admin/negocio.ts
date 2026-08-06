@@ -97,7 +97,7 @@ async function traerResumenCostoIa(
 
 export interface ResumenNegocio {
   tenants: number;
-  flotas: Array<{ id: string; nombre: string; plan: string; viajes: number; costoIaUsd: number }>;
+  flotas: Array<{ id: string; nombre: string; plan: string; viajes: number; costoIaUsd: number; facilidad15?: { dedicacionExclusivaCarga?: boolean; regimenElegible?: boolean } }>;
   viajesProcesados: number;
   costoIaUsd: number;
   tokensIn: number;
@@ -153,8 +153,8 @@ export async function getResumenNegocio(
   // primer par de meses. `gasto` es la siguiente en la fila (~240 mil al año) y
   // sigue viniendo entera: cuando le toque, el camino ya está trazado.
   const [tenantsData, viajesData, costoIa, gastosData] = await Promise.all([
-    traerTodo<{ id: string; nombre: string; plan: string }>(
-      (d, h) => admin.from('tenant').select('id, nombre, plan', conteo(d)).order('id').range(d, h),
+    traerTodo<{ id: string; nombre: string; plan: string; config: unknown }>(
+      (d, h) => admin.from('tenant').select('id, nombre, plan, config', conteo(d)).order('id').range(d, h),
       'getResumenNegocio/tenant',
     ),
     traerTodo<{ tenant_id: string }>(
@@ -220,11 +220,16 @@ export async function getResumenNegocio(
     return { dia, n: facturasPorDiaMap.get(dia) ?? 0 };
   });
 
-  const flotas = tenantsData.map((t) => ({
-    ...t,
-    viajes: viajesPorTenant.get(t.id) ?? 0,
-    costoIaUsd: round2(costoPorTenant.get(t.id) ?? 0),
-  }));
+  const flotas = tenantsData.map((t) => {
+    const cfg = (t.config as { facilidadCombustibleEfectivo?: { dedicacionExclusivaCarga?: boolean; regimenElegible?: boolean } } | null) ?? null;
+    return {
+      ...t,
+      viajes: viajesPorTenant.get(t.id) ?? 0,
+      costoIaUsd: round2(costoPorTenant.get(t.id) ?? 0),
+      // La declaración del 15% (RFA 2.9) viaja al panel para verse y corregirse.
+      facilidad15: cfg?.facilidadCombustibleEfectivo,
+    };
+  });
   return {
     tenants: flotas.length,
     flotas,
