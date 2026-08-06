@@ -90,7 +90,11 @@ export type TipoDiferencia =
   | 'factura_por_vencer'   // ticket de portal sin timbrar y con la ventana cerrándose
   | 'comprobante_no_fiscal' // el papel dice de sí mismo que no lo es → no ampara deducción (CFF 29-A)
   | 'diesel_desviacion'    // consumo de diésel fuera del rango esperado
-  | 'permiso_cre_no_verificable'; // CFDI de combustible: el permiso CRE del proveedor no se valida (LISR 27-III / RFA 2026 2.9) → a revisión, no baja la cubeta
+  | 'permiso_cre_no_verificable' // CFDI de combustible: el permiso CRE del proveedor no se valida (LISR 27-III / RFA 2026 2.9) → a revisión, no baja la cubeta
+  // RFA 2026 regla 2.9 — la facilidad del 15% de combustible en efectivo (deber ser):
+  | 'combustible_efectivo_dentro15' // efectivo DENTRO del 15% del ejercicio y flota elegible → deducible, con el contador a la vista
+  | 'efectivo_sobre_15'      // efectivo que EXCEDE el 15% del ejercicio → el excedente no deducible
+  | 'efectivo_no_elegible';  // flota declaró que NO califica (dedicación o régimen) → el efectivo no se deduce (LISR 27-III)
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */
 export interface Diferencia {

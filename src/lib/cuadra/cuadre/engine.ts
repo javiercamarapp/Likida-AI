@@ -67,6 +67,18 @@ export interface CuadreInput {
   /** Rango de fecha válido para los comprobantes (ISO YYYY-MM-DD). Fuera → sospechosa. */
   fechaMin?: string;
   fechaMax?: string;
+  /** RFA 2026 regla 2.9 — la facilidad del 15% de combustible en efectivo.
+   *  `true` = flota declaró dedicación exclusiva Y régimen elegible (el motor
+   *  abre la válvula y aplica el contador del 15%). `false` = declaró que NO
+   *  califica (el efectivo en combustible NO se deduce). `undefined` = sin
+   *  declarar (el efectivo sale a revisar, no se afirma nada). */
+  facilidad15?: boolean;
+  /** Total pagado por combustible de la flota en el EJERCICIO (incluido este
+   *  viaje) — la base del 15%. Lo calcula `desde_db.ts` (RFA 2.9). */
+  totalCombustibleEjercicio?: number;
+  /** Combustible pagado en efectivo de la flota en el ejercicio ANTES de esta
+   *  liquidación — el contador ya corrido. El motor suma el de ESTE viaje. */
+  efectivoPrevEjercicio?: number;
 }
 
 function politicaPara(concepto: string, ruta: string | undefined, pol: PoliticaGasto[]): PoliticaGasto | undefined {
@@ -82,7 +94,7 @@ const ES_VIATICO = ['alimentacion', 'hospedaje', 'transporte', 'viaticos'];
 /** En cuál de las tres cubetas de deducibilidad cae un gasto. */
 export type Cubeta = 'deducible' | 'no_deducible' | 'por_confirmar';
 
-const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope'];
+const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
 const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente'];
 
 /**
@@ -249,6 +261,13 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   const gastosSinPermisoCre: Gasto[] = [];
 
   // 1) Por gasto: política, CFDI, confianza, RFC receptor, estatus SAT.
+  // Contador del efectivo DENTRO de esta liquidación (RFA 2.9): se suma por
+  // orden de comprobantes; el acumulado del ejercicio = previo + este viaje.
+  let efectivoAcumuladoEjercicio = 0;
+  // gastoId → qué fracción de él es deducible (lo llena el tope de
+  // alimentación Y la frontera del 15% de la RFA 2.9; el acreditamiento y la
+  // cubeta lo consumen). Un gasto que no esté aquí es deducible al 100%.
+  const proporcionDeducible = new Map<string, number>();
   for (const g of input.gastos) {
     if (duplicados.has(g.id)) continue; // los duplicados se reportan aparte (paso 2)
     // Monto inválido: no se evalúa política sobre él, se manda a revisión. ME-5.
@@ -259,17 +278,67 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     const h = input.hidrocarburos;
     const esCombustible = g.concepto === 'diesel' || (!!h && h.claves.includes(g.claveProdServ ?? ''));
 
-    // Regla 5: el combustible exige pago electrónico (LISR 27-III, 2º párrafo) sin
-    // importar el monto. PERO para el autotransporte de carga federal —que es a
-    // quien le vendemos— la RFA 2026 regla 2.9 lo tiene por CUMPLIDO hasta el 15%
-    // del total pagado por combustible en el ejercicio.
+    // ── REGLA 5 · RFA 2026 regla 2.9 — el 15% de combustible en EFECTIVO ─────
     //
-    // Por eso aquí NO se declara "no deducible": se marca para contarlo contra ese
-    // 15%. Declararlo no deducible le quita al cliente una deducción que la ley le
-    // concede. (El contador del 15% por ejercicio todavía no existe: ver roadmap.)
+    // El combustible exige pago electrónico (LISR 27-III 2º párrafo) salvo que
+    // la flota califique a la facilidad: dedicación EXCLUSIVA al autotransporte
+    // terrestre de carga federal Y régimen (Título II Cap. VII o Título IV Cap.
+    // II Secc. I), y que el efectivo no exceda el 15% del total pagado por
+    // combustible en el ejercicio. El DOF exige además que el CFDI consigne el
+    // permiso CRE vigente del proveedor (lo cubre la regla del complemento, B1).
+    //
+    // Matriz (el deber ser completo, docs/fiscal/rfa-2.9):
+    //   elegible + dentro del 15% → deducible (diferencia informativa con el
+    //                               contador del ejercicio a la vista)
+    //   elegible + excede el 15%  → el EXCEDENTE no deducible
+    //   no elegible               → no deducible (27-III sin excepción)
+    //   sin declarar              → por confirmar (no se afirma nada)
+    //
+    // En ningún caso acredita IEPS (la facilidad salva UN beneficio, no dos).
     const topeEfectivo = input.estimulos?.efectivoTopeMxn ?? 2000;
     if (g.formaPago === '01' && esCombustible) {
-      diferencias.push({ tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0, nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} pagado en EFECTIVO — cuenta contra el tope del 15% del combustible del ejercicio (RFA 2026 regla 2.9). Dentro del 15% sigue siendo deducible; el excedente no. No acredita IEPS en ningún caso.`, gastoId: g.id });
+      const etiqueta = etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined);
+      const elegible = input.facilidad15;
+      if (elegible === true) {
+        // Contador del ejercicio: previo (otras liquidaciones) + este viaje.
+        efectivoAcumuladoEjercicio += g.monto;
+        const total = input.totalCombustibleEjercicio ?? 0;
+        const acumulado = (input.efectivoPrevEjercicio ?? 0) + efectivoAcumuladoEjercicio;
+        const tope = 0.15 * total;
+        if (total > 0 && acumulado <= tope) {
+          const pct = total > 0 ? Math.round((acumulado / total) * 100) : 0;
+          diferencias.push({
+            tipo: 'combustible_efectivo_dentro15', concepto: g.concepto, monto: 0,
+            nota: `${etiqueta} pagado en EFECTIVO — deducible por la facilidad del 15% (RFA 2026 regla 2.9): el ejercicio lleva ${mxn(acumulado)} de ${mxn(total)} de combustible en efectivo (${pct}% del total, tope 15%). No acredita IEPS.`,
+            gastoId: g.id,
+          });
+        } else {
+          // La frontera cruza DENTRO de este comprobante: la parte que aún
+          // cabe en el 15% se deduce, el excedente no. Se reparte por
+          // PROPORCIÓN (el mismo mecanismo del tope de alimentación) para que
+          // las cubetas sigan sumando el comprobado y nunca sea negativo.
+          const excedente = Math.max(0, acumulado - tope);
+          const dentro = Math.max(0, g.monto - excedente);
+          if (g.monto > 0) proporcionDeducible.set(g.id, dentro / g.monto);
+          diferencias.push({
+            tipo: 'efectivo_sobre_15', concepto: g.concepto, monto: excedente,
+            nota: `${etiqueta} pagado en EFECTIVO — el ejercicio ya excede el tope del 15% (${mxn(acumulado)} vs ${mxn(tope)}), así que el excedente de ${mxn(excedente)} NO se deduce (RFA 2026 regla 2.9). No acredita IEPS.`,
+            gastoId: g.id,
+          });
+        }
+      } else if (elegible === false) {
+        diferencias.push({
+          tipo: 'efectivo_no_elegible', concepto: g.concepto, monto: g.monto,
+          nota: `${etiqueta} pagado en EFECTIVO — la flota declaró que NO califica a la facilidad del 15% (dedicación exclusiva o régimen), así que el combustible exige pago electrónico (LISR 27-III) — no deducible.`,
+          gastoId: g.id,
+        });
+      } else {
+        diferencias.push({
+          tipo: 'combustible_efectivo', concepto: g.concepto, monto: 0,
+          nota: `${etiqueta} pagado en EFECTIVO — la facilidad del 15% (RFA 2026 regla 2.9) exige que la flota declare su dedicación y régimen al registrarla; sin esa declaración esto se revisa. No acredita IEPS.`,
+          gastoId: g.id,
+        });
+      }
     } else if (g.formaPago === '01' && !esCombustible && g.monto > topeEfectivo) {
       // Regla 6: gasto no-combustible en efectivo > tope → no deducible.
       diferencias.push({ tipo: 'efectivo_sobre_tope', concepto: g.concepto, monto: 0, nota: `${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} en efectivo excede el tope de ${mxn(topeEfectivo)} (LISR 27-III) — no deducible.`, gastoId: g.id });
@@ -786,11 +855,6 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   //
   // El beneficiario es el operador del viaje: la liquidación es de un solo
   // operador, así que agrupar por día dentro del viaje es la unidad correcta.
-  // gastoId → qué fracción de él es deducible. Lo llena el tope diario de
-  // alimentación; el acreditamiento lo consume. Un gasto que no esté aquí es
-  // deducible al 100%.
-  const proporcionDeducible = new Map<string, number>();
-
   const topeAlimentacion = input.estimulos?.viaticosTopeFiscalDiarioMxn;
   if (topeAlimentacion != null) {
     // 'viaticos' a secas entra por compatibilidad: es lo que emitía el OCR viejo
@@ -889,7 +953,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // SÍ es deducible hasta el 15% (RFA 2026 regla 2.9), pero NO acredita IEPS —
   // la facilidad salva un beneficio, no los dos. Sacarlo de aquí acreditaría un
   // IEPS que la facilidad no concede.
-  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente'];
+  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'combustible_efectivo_dentro15', 'efectivo_sobre_15', 'efectivo_no_elegible', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente'];
   // AUDITORÍA 12, ALTO (fiscal, reincidente de la 11): `cfdi_pendiente` entra
   // aquí y en POR_CONFIRMAR — con el SAT caído o en timeout, "no se pudo
   // verificar" es el MISMO tercer estado que el motor ya aplica a EFOS, al RFC

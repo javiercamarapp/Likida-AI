@@ -139,6 +139,9 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   ocr_baja_confianza: 'panel',         // bandeja de revisión, no decisión de negocio
   viatico_rfc_operador: 'panel',       // hay que confirmar que el nombre es el del operador: se ve, no se decide
   combustible_efectivo: 'panel',       // cuenta contra el 15% del ejercicio (RFA 2026 2.9); no se pierde por viaje
+  combustible_efectivo_dentro15: 'panel', // dentro del 15% y elegible: informativo, el contador vive en el panel
+  efectivo_sobre_15: 'decision',        // el excedente del 15% del ejercicio NO es deducible
+  efectivo_no_elegible: 'decision',     // la flota no califica a la facilidad → no deducible
   complemento_no_verificable: 'panel', // lo resuelve el chofer reenviando el XML, no el jefe
 };
 

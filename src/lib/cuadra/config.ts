@@ -52,6 +52,18 @@ export interface CuadraConfig {
   validacion: {
     fechaToleranciaDiasAntes: number; // la fecha del gasto no puede ser anterior a (inicio del viaje − N días)
   };
+  /** RFA 2026 regla 2.9 — la facilidad del 15% de combustible en efectivo.
+   *  Lo DECLARA el dueño/jefe de flota al registrar la flota (administracion.ts
+   *  crearFlota). `undefined`/campos sin llenar = NO DECLARADA: el motor no
+   *  puede abrir la válvula y el efectivo en combustible sale a revisar.
+   *  Ambas condiciones vienen del DOF (normas/rfa-2026-2.9.yaml). */
+  facilidadCombustibleEfectivo?: {
+    /** ¿Dedicados EXCLUSIVAMENTE al autotransporte terrestre de carga federal? */
+    dedicacionExclusivaCarga?: boolean;
+    /** ¿Tributa en Título II Cap. VII (coordinados) o Título IV Cap. II Secc. I
+     *  (personas físicas con actividad empresarial)? */
+    regimenElegible?: boolean;
+  };
 }
 
 // ── DEFAULTS DE DEMO (🔴 genéricos, NO de un cliente — reemplazables en la sala) ─
