@@ -5,6 +5,7 @@ import { usd } from '@/lib/utils';
 import { Truck, ExternalLink, Plus } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { crearFlota, mensajeParaPantalla } from '@/lib/cuadra/administracion';
+import { actualizarFacilidad15 } from '@/lib/cuadra/repo';
 import ContadorRetro from '../contador-retro';
 import { HBars } from '../ui/graficas';
 import { ChartCard, EstadoVacio } from '../ui/kit';
@@ -34,8 +35,8 @@ async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): Promise
         ciudad: String(fd.get('ciudad') ?? ''),
         emailAdmin,
         nombreAdmin: String(fd.get('nombreAdmin') ?? ''),
-        dedicacionExclusivaCarga: fd.get('dedicacionExclusivaCarga') === 'on',
-        regimenElegible: fd.get('regimenElegible') === 'on',
+        dedicacionExclusivaCarga: fd.get('dedicacionExclusivaCarga') === 'on' ? true : undefined,
+        regimenElegible: fd.get('regimenElegible') === 'on' ? true : undefined,
       },
       { id: s.userId },
     );
@@ -49,6 +50,23 @@ async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): Promise
   } catch (e) {
     return { error: mensajeParaPantalla(e, 'dar de alta la flota') };
   }
+}
+
+// AUDITORÍA 14: la declaración del 15% (RFA 2.9) se puede VER y CORREGIR.
+async function accionFacilidad(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  'use server';
+  await requireSuperadmin();
+  const flotaId = String(fd.get('flotaId') ?? '');
+  const ded = fd.get('ded') === 'si' ? true : fd.get('ded') === 'no' ? false : undefined;
+  const reg = fd.get('reg') === 'si' ? true : fd.get('reg') === 'no' ? false : undefined;
+  if (!flotaId) return { error: 'Falta la flota.' };
+  try {
+    await actualizarFacilidad15(flotaId, ded, reg);
+  } catch (e) {
+    return { error: mensajeParaPantalla(e, 'guardar la declaración') };
+  }
+  revalidatePath('/admin/flotas');
+  return { ok: ded !== undefined ? 'Declaración del 15% actualizada.' : 'Declaración del 15% borrada (sin declarar).' };
 }
 
 /**
@@ -100,6 +118,7 @@ export default async function FlotasPage() {
                   <th className="px-5 py-2.5 font-medium">Plan</th>
                   <th className="px-5 py-2.5 font-medium text-right">Viajes</th>
                   <th className="px-5 py-2.5 font-medium text-right">Costo de IA</th>
+                  <th className="px-5 py-2.5 font-medium">Facilidad 15% (RFA 2.9)</th>
                   <th className="px-5 py-2.5 font-medium text-right"></th>
                 </tr>
               </thead>
@@ -110,6 +129,23 @@ export default async function FlotasPage() {
                     <td className="px-5 py-3" style={{ color: 'var(--muted)' }}>{f.plan}</td>
                     <td className="px-5 py-3 text-right tabular">{f.viajes}</td>
                     <td className="px-5 py-3 text-right tabular">{usd(f.costoIaUsd)}</td>
+                    <td className="px-5 py-3">
+                      <FormaConAviso accion={accionFacilidad} boton="Guardar" columnas="110px auto">
+                        <input type="hidden" name="flotaId" value={f.id} />
+                        <select name="ded" defaultValue={f.facilidad15?.dedicacionExclusivaCarga === true ? 'si' : f.facilidad15?.dedicacionExclusivaCarga === false ? 'no' : ''}
+                          className="text-xs" style={{ width: 110 }}>
+                          <option value="">Carga: —</option>
+                          <option value="si">Carga: Sí</option>
+                          <option value="no">Carga: No</option>
+                        </select>
+                        <select name="reg" defaultValue={f.facilidad15?.regimenElegible === true ? 'si' : f.facilidad15?.regimenElegible === false ? 'no' : ''}
+                          className="text-xs" style={{ width: 110 }}>
+                          <option value="">Régimen: —</option>
+                          <option value="si">Régimen: Sí</option>
+                          <option value="no">Régimen: No</option>
+                        </select>
+                      </FormaConAviso>
+                    </td>
                     <td className="px-5 py-3 text-right">
                       {/* Ve el panel REAL que ve esa flota (mismo /dashboard del
                           cliente), no una copia — "Login as" honesto: sin

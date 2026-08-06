@@ -33,6 +33,7 @@ function constructor() {
     eq() { return b; },
     gte() { return b; },
     lte() { return b; },
+    or() { return b; },
     order() { return b; },
     range(f: number, t: number) { desde = f; hasta = t; return b; },
     then(res: (v: unknown) => void) {

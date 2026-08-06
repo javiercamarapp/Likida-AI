@@ -107,11 +107,16 @@ export async function crearFlota(
   // RFA 2026 regla 2.9: la declaración de dedicación/régimen se guarda en
   // `tenant.config.facilidadCombustibleEfectivo` (jsonb) — el dato que el
   // motor necesita para abrir la válvula del 15% de diésel en efectivo.
-  const facilidad15 = (f.dedicacionExclusivaCarga !== undefined || f.regimenElegible !== undefined)
+  //
+  // AUDITORÍA 14, MEDIO: una casilla sin marcar NO es "declaró que NO califica"
+  // — es SIN DECLARAR. Solo se escribe la config cuando AMBAS son booleanos
+  // explícitos; si faltan, no se escribe nada y el motor trata la flota como
+  // sin declarar (el efectivo sale a revisión, no se afirma nada).
+  const facilidad15 = (typeof f.dedicacionExclusivaCarga === 'boolean' && typeof f.regimenElegible === 'boolean')
     ? {
         facilidadCombustibleEfectivo: {
-          dedicacionExclusivaCarga: f.dedicacionExclusivaCarga ?? null,
-          regimenElegible: f.regimenElegible ?? null,
+          dedicacionExclusivaCarga: f.dedicacionExclusivaCarga,
+          regimenElegible: f.regimenElegible,
         },
       }
     : undefined;

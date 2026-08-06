@@ -195,6 +195,11 @@ export interface OpcionesFiscales {
   clavesCombustible: string[];
   /** c_ClaveProdServ con estímulo de IEPS: SOLO diésel (LIF 2026 20-A-IV). */
   clavesDieselIeps: string[];
+  /** RFA 2026 regla 2.9: ¿la flota califica a la facilidad del 15%?
+   *  true = declaró dedicación exclusiva + régimen; false = declaró que NO;
+   *  undefined = sin declarar. AUDITORÍA 14, ALTO: sin esto el panel ofrecía
+   *  la válvula a flotas que el motor declara no elegibles. */
+  elegible15?: boolean;
 }
 
 // ── Deducibilidad por comprobante ──────────────────────────────────────────
@@ -212,6 +217,8 @@ export type CausaPerdida =
   | 'efectivo_sobre_tope'
   /** Combustible en efectivo: cuenta contra el 15% (RFA 2026 regla 2.9). */
   | 'combustible_efectivo'
+  /** La flota no califica a la facilidad del 15% (RFA 2.9) — no deducible. */
+  | 'efectivo_no_elegible'
   /** Sin CFDI pero el plazo del comercio sigue abierto. */
   | 'sin_cfdi';
 
@@ -269,6 +276,12 @@ const TITULOS: Record<CausaPerdida, Omit<Causa, 'causa'>> = {
     norma: 'RFA 2026 regla 2.9',
     detalle: 'Cuenta contra el 15% del combustible del ejercicio. Dentro del 15% sigue siendo deducible; el excedente no. No acredita IEPS en ningún caso.',
   },
+  efectivo_no_elegible: {
+    gravedad: 'perdida',
+    titulo: 'Combustible en efectivo sin facilidad',
+    norma: 'LISR 27-III / RFA 2026 regla 2.9',
+    detalle: 'La flota no califica a la facilidad del 15% (dedicación exclusiva o régimen no declarados), así que el efectivo en combustible no es deducible aunque tenga CFDI.',
+  },
   sin_cfdi: {
     gravedad: 'recuperable',
     titulo: 'Sin CFDI todavía',
@@ -318,8 +331,11 @@ export function causasDe(g: GastoFiscal, o: OpcionesFiscales): Causa[] {
   // NO se cuenta como efectivo: suponerlo inflaría el numerador contra la
   // flota (mismo criterio que `getAcumuladoCombustible` en repo.ts).
   if (g.formaPago === '01') {
-    if (esCombustible(g, o)) push('combustible_efectivo');
-    else if (g.monto > o.efectivoTopeMxn) push('efectivo_sobre_tope');
+    if (esCombustible(g, o)) {
+      // AUDITORÍA 14, ALTO: el panel ofrecía la válvula del 15% a flotas que el
+      // motor declara no elegibles o sin declarar. Mismo estándar que el motor.
+      push(o.elegible15 === true ? 'combustible_efectivo' : 'efectivo_no_elegible');
+    } else if (g.monto > o.efectivoTopeMxn) push('efectivo_sobre_tope');
   }
 
   return out;
@@ -491,6 +507,10 @@ function ivaSostenible(g: GastoFiscal, o: OpcionesFiscales): boolean {
   if (g.estadoSat === 'pendiente' || g.estadoSat === 'no_encontrado') return false;
   if (g.efos === true) return false;
   if (g.formaPago === '01' && !esCombustible(g, o) && g.monto > o.efectivoTopeMxn) return false;
+  // AUDITORÍA 14, ALTO: el combustible en EFECTIVO no acredita IVA — la
+  // facilidad del 15% (RFA 2.9) solo salva la deducción de ISR, y el motor ya
+  // lo niega (SIN_ACREDITAMIENTO). El panel afirmaba IVA sobre esos CFDIs.
+  if (g.formaPago === '01' && esCombustible(g, o)) return false;
   return true;
 }
 

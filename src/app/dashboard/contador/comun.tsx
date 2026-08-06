@@ -125,10 +125,16 @@ export function extraDe(sp: ParamsPanel | undefined): Record<string, string> {
  * descubriría comparando esta pantalla contra su PDF.
  */
 export function opcionesDe(cfg: CuadraConfig): OpcionesFiscales {
+  const f15 = cfg.facilidadCombustibleEfectivo;
   return {
     efectivoTopeMxn: cfg.estimulos.efectivoTopeMxn,
     clavesCombustible: cfg.hidrocarburos.claves,
     clavesDieselIeps: cfg.estimulos.clavesDieselIeps,
+    // AUDITORÍA 14, ALTO: el panel ofrecía el 15% a flotas no elegibles. La
+    // declaración de la flota (al registrarse) llega hasta aquí.
+    elegible15: (f15 && f15.dedicacionExclusivaCarga !== undefined && f15.regimenElegible !== undefined)
+      ? (f15.dedicacionExclusivaCarga === true && f15.regimenElegible === true)
+      : undefined,
   };
 }
 

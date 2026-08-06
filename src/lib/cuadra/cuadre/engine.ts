@@ -301,11 +301,25 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       const elegible = input.facilidad15;
       if (elegible === true) {
         // Contador del ejercicio: previo (otras liquidaciones) + este viaje.
+        // AUDITORÍA 14, MEDIO: el EXCEDENTE se reporta POR COMPROBANTE, no
+        // acumulativo — antes, cada gasto posterior al cruce colgaba TODO el
+        // excedente acumulado (`excedente = acumulado - tope`), la suma de la
+        // columna no cuadraba con totalNoDeducible, y un ticket de $1,000
+        // imprimía "el excedente de $1,500 NO se deduce". Misma disciplina que
+        // viatico_excede_fiscal: el monto de la diferencia es SOLO lo que de
+        // verdad resta de totalDeducible, y la frontera se cruza UNA vez.
+        const previoSinEste = (input.efectivoPrevEjercicio ?? 0) + efectivoAcumuladoEjercicio;
         efectivoAcumuladoEjercicio += g.monto;
         const total = input.totalCombustibleEjercicio ?? 0;
         const acumulado = (input.efectivoPrevEjercicio ?? 0) + efectivoAcumuladoEjercicio;
         const tope = 0.15 * total;
-        if (total > 0 && acumulado <= tope) {
+        // Lo que queda del tope para ESTE comprobante (previo sin este ya
+        // consumió lo suyo); si ya se cruzó, queda 0.
+        const cupoRestante = Math.max(0, tope - previoSinEste);
+        const dentro = Math.min(g.monto, cupoRestante);
+        const excedenteDeEste = Math.max(0, g.monto - dentro);
+        if (g.monto > 0) proporcionDeducible.set(g.id, dentro / g.monto);
+        if (excedenteDeEste === 0) {
           const pct = total > 0 ? Math.round((acumulado / total) * 100) : 0;
           diferencias.push({
             tipo: 'combustible_efectivo_dentro15', concepto: g.concepto, monto: 0,
@@ -313,16 +327,9 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
             gastoId: g.id,
           });
         } else {
-          // La frontera cruza DENTRO de este comprobante: la parte que aún
-          // cabe en el 15% se deduce, el excedente no. Se reparte por
-          // PROPORCIÓN (el mismo mecanismo del tope de alimentación) para que
-          // las cubetas sigan sumando el comprobado y nunca sea negativo.
-          const excedente = Math.max(0, acumulado - tope);
-          const dentro = Math.max(0, g.monto - excedente);
-          if (g.monto > 0) proporcionDeducible.set(g.id, dentro / g.monto);
           diferencias.push({
-            tipo: 'efectivo_sobre_15', concepto: g.concepto, monto: excedente,
-            nota: `${etiqueta} pagado en EFECTIVO — el ejercicio ya excede el tope del 15% (${mxn(acumulado)} vs ${mxn(tope)}), así que el excedente de ${mxn(excedente)} NO se deduce (RFA 2026 regla 2.9). No acredita IEPS.`,
+            tipo: 'efectivo_sobre_15', concepto: g.concepto, monto: excedenteDeEste,
+            nota: `${etiqueta} pagado en EFECTIVO — el ejercicio lleva ${mxn(acumulado)} de combustible en efectivo contra un tope de ${mxn(tope)} (15% de ${mxn(total)}); el excedente de ${mxn(excedenteDeEste)} de ESTE comprobante NO se deduce (RFA 2026 regla 2.9). No acredita IEPS.`,
             gastoId: g.id,
           });
         }
@@ -1123,7 +1130,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // central del demo. El requisito sigue avisado —ahora con tono `condicionado`
   // en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
   // no puede bajar un estatus que nunca podría volver a subir.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

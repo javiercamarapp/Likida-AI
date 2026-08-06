@@ -1452,6 +1452,41 @@ describe('RFA 2026 regla 2.9 — la matriz del 15% de combustible en efectivo', 
     expect(r.totalDeducible).toBe(100);
   });
 
+  // AUDITORÍA 14, MEDIO: el excedente se reportaba CUMULATIVO (cada gasto
+  // posterior colgaba TODO el excedente). Con 3×$1,000 y tope $1,500, la suma
+  // de la columna tiene que ser $1,500 (el excedente real), nunca $2,000+.
+  it('el excedente es POR COMPROBANTE — la suma de la columna cuadra (auditoría 14)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v15f', anticipo: 5000, politica,
+      facilidad15: true, totalCombustibleEjercicio: 10000, efectivoPrevEjercicio: 0,
+      gastos: [
+        g15({ id: 'g1', monto: 1000 }),
+        g15({ id: 'g2', monto: 1000 }),
+        g15({ id: 'g3', monto: 1000 }),
+      ],
+    });
+    const sobre15 = r.diferencias.filter((x) => x.tipo === 'efectivo_sobre_15');
+    const suma = sobre15.reduce((s, d) => s + (d.monto ?? 0), 0);
+    expect(suma).toBe(1500);                       // el excedente real
+    expect(r.totalNoDeducible).toBe(1500);         // lo mismo que resta
+    expect(sobre15.every((d) => (d.monto ?? 0) <= 1000)).toBe(true);  // nunca > el gasto
+  });
+
+  // AUDITORÍA 14, MEDIO: dinero no deducible no puede salir "cuadrada" (verde).
+  it('el excedente del 15% y la flota no elegible NO salen en estatus cuadrada', () => {
+    const excede = cuadrarViaje({
+      viajeId: 'v15g', anticipo: 3000, politica,
+      facilidad15: true, totalCombustibleEjercicio: 10000, efectivoPrevEjercicio: 2000,
+      gastos: [g15({ id: 'g15g', monto: 1000 })],
+    });
+    expect(excede.estatus).toBe('revisar');
+    const noElegible = cuadrarViaje({
+      viajeId: 'v15h', anticipo: 3000, politica, facilidad15: false,
+      gastos: [g15({ id: 'g15h' })],
+    });
+    expect(noElegible.estatus).toBe('revisar');
+  });
+
   it('flota que NO califica → no deducible (27-III sin excepción)', () => {
     const r = cuadrarViaje({
       viajeId: 'v15c', anticipo: 3000, politica,

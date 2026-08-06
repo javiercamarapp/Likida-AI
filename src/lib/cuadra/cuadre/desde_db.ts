@@ -4,10 +4,10 @@
 
 import { cuadrarViaje } from './engine';
 import { ventanaDelViaje } from './fecha_dudosa';
-import { getViaje, getGastos, getOperador } from '../repo';
+import { getViaje, getGastos, getOperador, getAcumuladoCombustible } from '../repo';
 import { getConfig } from '../config';
-import { traerTodo, conteo } from '../pg';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import type { Liquidacion } from '@/types/cuadra';
 
 /**
@@ -56,37 +56,36 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
   const facilidad15 = (f15 && f15.dedicacionExclusivaCarga !== undefined && f15.regimenElegible !== undefined)
     ? (f15.dedicacionExclusivaCarga === true && f15.regimenElegible === true)
     : undefined;
-  const anioEjercicio = String(new Date().getFullYear());
+  // AUDITORÍA 14, MEDIO: el ejercicio es el de los COMPROBANTES, no el del
+  // proceso — una liquidación de diciembre cerrada en enero declaraba todo el
+  // diésel en efectivo NO deducible contra un tope de $0 (año equivocado).
+  // El ancla es la fecha del viaje; los gastos sin fecha no pueden anclar.
+  const anioEjercicio = String(
+    (viaje.fechaInicio ?? gastos.find((g) => g.fecha)?.fecha ?? new Date().toISOString()).slice(0, 4),
+  );
   const clavesCombustible = config.hidrocarburos?.claves ?? [];
-  const [totalesEjercicio] = await Promise.all([
-    (async () => {
-      const filas = await traerTodo<{ monto: unknown; forma_pago: unknown }>(
-        (desde, hasta) => supabaseAdmin()
-          .from('gasto')
-          .select('monto, forma_pago', conteo(desde))
-          .eq('tenant_id', tenantId)
-          .gte('fecha', `${anioEjercicio}-01-01`)
-          .lte('fecha', `${anioEjercicio}-12-31`)
-          .or(`concepto.eq.diesel,clave_prod_serv.in.(${clavesCombustible.join(',')})`)
-          .order('id')
-          .range(desde, hasta),
-        'desde_db.totalCombustibleEjercicio',
-      );
-      let total = 0, efectivo = 0;
-      for (const f of filas) {
-        const m = Number(f.monto ?? 0);
-        total += m;
-        if (f.forma_pago === '01') efectivo += m;
-      }
-      return { total, efectivo };
-    })(),
-  ]);
+  // AUDITORÍA 14, MEDIO: se REUSA getAcumuladoCombustible (el mismo que usa la
+  // tool de periodo) con las claves del SAT — una sola barrida del ejercicio,
+  // no dos consultas duplicadas con criterios que podían divergir.
+  //
+  // Best-effort a propósito: el contador del 15% es CONTEXTO valioso, no un
+  // requisito para cerrar un viaje. Un fallo aquí no puede tumbar la
+  // liquidación (mismo criterio que la tool de periodo en tools.ts) — el motor
+  // recibe ceros y la rama 'sin datos del ejercicio' marca el efectivo para
+  // revisar, que es el fail-cerrado honesto.
+  let totalesEjercicio = { efectivo: 0, totalCombustible: 0 };
+  try {
+    totalesEjercicio = await getAcumuladoCombustible(tenantId, Number(anioEjercicio), clavesCombustible);
+  } catch (e) {
+    logger.warn('desde_db.contador_15_no_disponible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+  }
   // El efectivo PREVIO excluye los gastos de ESTE viaje (los está procesando
   // el motor; sumarlos doblaría el contador).
   const efectivoDeEsteViaje = gastos
     .filter((g) => g.formaPago === '01' && (g.concepto === 'diesel' || clavesCombustible.includes(g.claveProdServ ?? '')))
     .reduce((s, g) => s + Number(g.monto ?? 0), 0);
   const efectivoPrevEjercicio = Math.max(0, totalesEjercicio.efectivo - efectivoDeEsteViaje);
+  const totalCombustibleEjercicio = totalesEjercicio.totalCombustible;
 
   // La ventana la calcula `ventanaDelViaje`, que es la MISMA que usa el intake
   // para decidir si le pide otra foto al operador. Calculadas por separado se
@@ -110,7 +109,7 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     fechaMax,
     operadorRfc,
     facilidad15,
-    totalCombustibleEjercicio: totalesEjercicio.total,
+    totalCombustibleEjercicio,
     efectivoPrevEjercicio,
     // El motor es puro y no lee el reloj: la fecha se le inyecta aquí, que es
     // el borde con el mundo. Sin esto el aviso de "ticket por facturar" nunca

@@ -802,6 +802,7 @@ export async function liberarEnvioAviso(tenantId: string, operadorId: string): P
 export async function getAcumuladoCombustible(
   tenantId: string,
   ejercicio: number,
+  claves?: string[],
 ): Promise<{ efectivo: number; totalCombustible: number }> {
   const PAGINA = 1_000;
   // 100 páginas son 100 000 cargas de diésel en un ejercicio. Un tenant que las
@@ -822,7 +823,11 @@ export async function getAcumuladoCombustible(
       // pero pedirlo en cada página sí haría contar de más.
       .select('monto, forma_pago', pagina === 0 ? { count: 'exact' } : {})
       .eq('tenant_id', tenantId)
-      .eq('concepto', 'diesel')
+      // AUDITORÍA 14, MEDIO: el criterio de "combustible" era `concepto='diesel'`
+      // a secas; el motor usa además las claves del SAT (15101505/14/15). Tres
+      // contadores con tres criterios = el chat dice 8% y el motor 12%. Ahora
+      // se pasa la misma lista de claves que el motor; sin ella, diesel a secas.
+      .or(claves?.length ? `concepto.eq.diesel,clave_prod_serv.in.(${claves.join(',')})` : 'concepto.eq.diesel')
       .gte('fecha', `${ejercicio}-01-01`)
       .lte('fecha', `${ejercicio}-12-31`)
       .order('fecha')
@@ -905,4 +910,22 @@ export async function actualizarRfcOperador(tenantId: string, operadorId: string
     .eq('id', operadorId)
     .eq('tenant_id', tenantId), 'actualizarRfcOperador');
   if (error) throw new Error(`actualizarRfcOperador: ${error.message}`);
+}
+
+/**
+ * Actualiza la declaración de la facilidad del 15% (RFA 2026 regla 2.9) de una
+ * flota. `undefined` en ambos = sin declarar (borra la llave). AUDITORÍA 14:
+ * la declaración del alta no se podía ver ni corregir.
+ */
+export async function actualizarFacilidad15(tenantId: string, ded: boolean | undefined, reg: boolean | undefined): Promise<void> {
+  const admin = supabaseAdmin();
+  const { data: fila } = await acotada(admin.from('tenant').select('config').eq('id', tenantId).maybeSingle(), 'actualizarFacilidad15.leer');
+  const actual = { ...((fila?.config as Record<string, unknown> | null) ?? {}) } as Record<string, unknown>;
+  if (ded !== undefined && reg !== undefined) {
+    actual.facilidadCombustibleEfectivo = { dedicacionExclusivaCarga: ded, regimenElegible: reg };
+  } else {
+    delete actual.facilidadCombustibleEfectivo;
+  }
+  const { error } = await acotada(admin.from('tenant').update({ config: actual }).eq('id', tenantId), 'actualizarFacilidad15');
+  if (error) throw new Error(`actualizarFacilidad15: ${error.message}`);
 }

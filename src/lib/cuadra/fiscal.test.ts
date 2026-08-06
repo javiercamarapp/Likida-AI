@@ -26,6 +26,9 @@ const OPTS: OpcionesFiscales = {
   efectivoTopeMxn: 2000,
   clavesCombustible: ['15101505', '15101514', '15101515'],
   clavesDieselIeps: ['15101505'],
+  // La mayoría de las pruebas ejercitan la facilidad del 15% (RFA 2.9): sin
+  // esto, el efectivo en combustible cae a efectivo_no_elegible.
+  elegible15: true,
 };
 
 function gasto(over: Partial<GastoFiscal> = {}): GastoFiscal {
