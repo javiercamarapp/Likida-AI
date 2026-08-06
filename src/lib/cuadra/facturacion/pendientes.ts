@@ -1,3 +1,4 @@
+import { traerTodo, conteo } from '../pg';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { identificarComercio } from './identificar';
 import { calcularCaducidad, type Caducidad } from './caducidad';
@@ -116,17 +117,23 @@ export async function getPorFacturar(
   tenantId: string,
   hoy: string = new Date().toISOString().slice(0, 10),
 ): Promise<TicketPorFacturar[]> {
-  const { data, error } = await supabaseAdmin()
-    .from('gasto')
-    .select('id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra, autofactura_bloqueada_en, autofactura_bloqueo')
-    .eq('tenant_id', tenantId)
-    .is('cfdi_uuid', null)
-    .order('fecha', { ascending: true, nullsFirst: false })
-    .limit(500);
-
-  if (error) throw new Error(`getPorFacturar: ${error.message}`);
-
-  return ((data ?? []) as FilaGasto[]).map((g) => armar(g, hoy));
+  // AUDITORÍA 13, MEDIO: `.limit(500)` recortaba en silencio la pantalla "por
+  // facturar" y el aviso de WhatsApp (506 tickets → "Tienes 500 comprobantes
+  // sin factura"). `traerTodo` pagina hasta probar que trajo TODO y lanza
+  // LecturaIncompleta si no puede; el llamador muestra el error en vez de una
+  // cifra baja.
+  const filas = await traerTodo<FilaGasto>(
+    (desde, hasta) => supabaseAdmin()
+      .from('gasto')
+      .select('id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra, autofactura_bloqueada_en, autofactura_bloqueo', conteo(desde))
+      .eq('tenant_id', tenantId)
+      .is('cfdi_uuid', null)
+      .order('fecha', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(desde, hasta),
+    'getPorFacturar',
+  );
+  return filas.map((g) => armar(g, hoy));
 }
 
 export function armar(g: FilaGasto, hoy: string): TicketPorFacturar {

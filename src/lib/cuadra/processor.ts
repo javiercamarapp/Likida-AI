@@ -2133,6 +2133,12 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           logger.error('pdf.no_entregado', {
             viaje: viajeId, tenant: op.tenantId, codigo: enviado.codigo, error: enviado.error,
           });
+          // AUDITORÍA 13, BAJO (residual del cierre de la ronda 12): el rechazo
+          // de Meta dejaba rastro pero SILENCIO en el teléfono del chofer — se
+          // quedaba esperando el PDF que el prompt le prometió. Se le dice la
+          // verdad y a quién pedirlo; la liquidación ya está cerrada y el
+          // contralor la tiene en el panel.
+          await sendText(msg.from, 'Tu liquidación ya quedó cerrada ✅, pero el PDF no se te entregó por un problema del chat. Pídeselo a tu contralor: él ya lo tiene en el panel. 🙏').catch(() => {});
         } else {
           await registrarCostoWhatsApp(op.tenantId, viajeId);
         }

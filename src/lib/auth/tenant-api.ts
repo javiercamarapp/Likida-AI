@@ -30,7 +30,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 
 export type ResultadoTenantApi =
   | { ok: true; tenantId: string; rol: string }
-  | { ok: false; status: 401 | 403; motivo: string };
+  | { ok: false; status: 401 | 403 | 503; motivo: string };
 
 /**
  * Resuelve la flota de una petición de API.
@@ -55,7 +55,16 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
 
   const pedido = new URL(url).searchParams.get('tenant');
   if (pedido && s.rol === 'superadmin') {
-    const { data } = await supabaseAdmin().from('tenant').select('id').eq('id', pedido).maybeSingle();
+    // AUDITORÍA 13, MEDIO (residual del BAJO #8 de la ronda 12): sin revisar
+    // `error`, un bache de red se ve idéntico a "ese uuid no existe" — el
+    // `data` es null en los dos — y el superadmin escribe en el tenant de su
+    // sesión en silencio. Un parpadeo de lectura con escritura posterior
+    // exitosa alcanza a escribir en la flota equivocada.
+    const { data, error } = await supabaseAdmin().from('tenant').select('id').eq('id', pedido).maybeSingle();
+    if (error) {
+      logger.error('tenant.api_pedido', { err: error.message });
+      return { ok: false, status: 503, motivo: 'No se pudo verificar la flota pedida. Intenta de nuevo.' };
+    }
     // Un uuid que no existe se IGNORA en silencio y se sigue con el de la
     // sesión. Fallar aquí convertiría un enlace viejo en un error, y lo que se
     // exporta con el tenant de la sesión es correcto, solo que no era el
