@@ -80,9 +80,12 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     logger.warn('desde_db.contador_15_no_disponible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
   }
   // El efectivo PREVIO excluye los gastos de ESTE viaje (los está procesando
-  // el motor; sumarlos doblaría el contador).
+  // el motor; sumarlos doblaría el contador). AUDITORÍA 16, ALTO (datos): solo
+  // los del MISMO ejercicio — un gasto de otro año (o sin fecha) no está en el
+  // contador y restarlo fabricaba un previo negativo.
   const efectivoDeEsteViaje = gastos
-    .filter((g) => g.formaPago === '01' && (g.concepto === 'diesel' || clavesCombustible.includes(g.claveProdServ ?? '')))
+    .filter((g) => (g.fecha?.slice(0, 4) ?? anioEjercicio) === anioEjercicio
+      && g.formaPago === '01' && (g.concepto === 'diesel' || clavesCombustible.includes(g.claveProdServ ?? '')))
     .reduce((s, g) => s + Number(g.monto ?? 0), 0);
   const efectivoPrevEjercicio = Math.max(0, totalesEjercicio.efectivo - efectivoDeEsteViaje);
   const totalCombustibleEjercicio = totalesEjercicio.totalCombustible;
