@@ -70,8 +70,10 @@ export interface NuevaFlota {
    *  no puede abrir la facilidad del 15% de diésel en efectivo. */
   dedicacionExclusivaCarga?: boolean;
   /** RFA 2026 regla 2.9: ¿tributa en Título II Cap. VII (coordinados) o Título
-   *  IV Cap. II Secc. I (PF con actividad empresarial)? */
-  regimenElegible?: boolean;
+   *  IV Cap. II Secc. I (PF con actividad empresarial)? — se captura como el
+   *  código SAT real (c_RegimenFiscal) en `tenant.regimen_fiscal`, y la
+   *  elegibilidad se DERIVA de él (los códigos 601/612 son los que califican). */
+  regimenFiscal?: string;
 }
 
 /**
@@ -104,25 +106,25 @@ export async function crearFlota(
   }
 
   const admin = supabaseAdmin();
-  // RFA 2026 regla 2.9: la declaración de dedicación/régimen se guarda en
-  // `tenant.config.facilidadCombustibleEfectivo` (jsonb) — el dato que el
-  // motor necesita para abrir la válvula del 15% de diésel en efectivo.
-  //
-  // AUDITORÍA 14, MEDIO: una casilla sin marcar NO es "declaró que NO califica"
-  // — es SIN DECLARAR. Solo se escribe la config cuando AMBAS son booleanos
-  // explícitos; si faltan, no se escribe nada y el motor trata la flota como
-  // sin declarar (el efectivo sale a revisión, no se afirma nada).
-  const facilidad15 = (typeof f.dedicacionExclusivaCarga === 'boolean' && typeof f.regimenElegible === 'boolean')
+  // RFA 2026 regla 2.9: el régimen se captura como el código SAT REAL
+  // (tenant.regimen_fiscal — la columna que la facturación ya lee) y la
+  // elegibilidad se DERIVA de él: los códigos 601 (General de Ley PM —
+  // coordinados) y 612 (PF con actividades empresariales) son los dos títulos
+  // que la regla admite. El booleano `dedicacionExclusivaCarga` se guarda en
+  // la config (el otro requisito, que el alta ya pregunta).
+  const REGIMENES_ELEGIBLES = ['601', '612'];
+  const regimenElegible = f.regimenFiscal ? REGIMENES_ELEGIBLES.includes(f.regimenFiscal) : undefined;
+  const facilidad15 = (typeof f.dedicacionExclusivaCarga === 'boolean' && regimenElegible !== undefined)
     ? {
         facilidadCombustibleEfectivo: {
           dedicacionExclusivaCarga: f.dedicacionExclusivaCarga,
-          regimenElegible: f.regimenElegible,
+          regimenElegible,
         },
       }
     : undefined;
   const { data, error } = await admin
     .from('tenant')
-    .insert({ nombre, rfc: rfc ?? null, ciudad: f.ciudad?.trim() || null, ...(facilidad15 ? { config: facilidad15 } : {}) })
+    .insert({ nombre, rfc: rfc ?? null, ciudad: f.ciudad?.trim() || null, regimen_fiscal: f.regimenFiscal ?? null, ...(facilidad15 ? { config: facilidad15 } : {}) })
     .select('id')
     .maybeSingle();
 

@@ -62,9 +62,10 @@ describe('.env.example no se queda atrás del código', () => {
   });
 
   it('no documenta variables que ya no lee nadie', () => {
-    // `FACTURAPI_KEY`, `UPSTASH_*`, `QSTASH_TOKEN` sobrevivieron a que se
-    // quitaran esas dependencias. Documentación muerta que ensucia el
-    // inventario: al desplegar hay que decidir una por una si hace falta.
+    // `FACTURAPI_KEY` sobrevivió a que se quitara esa dependencia (ronda 16 el
+    // UPSTASH_QSTASH_TOKEN VOLVIÓ vivo: el cron se encola cuando hay token).
+    // Documentación muerta que ensucia el inventario: al desplegar hay que
+    // decidir una por una si hace falta.
     const leidas = leidasPorElCodigo();
     const sobrantes = declaradasEnEjemplo().filter((v) => !leidas.has(v)).sort();
     expect(sobrantes).toEqual([]);
@@ -86,9 +87,12 @@ describe('.env.example no se queda atrás del código', () => {
     // comentado SÍ funcionan, y desde el archivo no se distingue cuál es cuál.
     const texto = readFileSync(join(RAIZ, '.env.example'), 'utf8');
     const leidas = leidasPorElCodigo();
-    for (const v of ['ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'FACTURAPI_KEY', 'QSTASH_TOKEN']) {
+    for (const v of ['ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'FACTURAPI_KEY']) {
       if (!leidas.has(v)) expect(texto).not.toContain(v);
     }
+    // `UPSTASH_QSTASH_TOKEN` SÍ lo lee el cron (ronda 16) — el `QSTASH_TOKEN`
+    // a secas (sin el prefijo) es el que no existe y no debe prometerse.
+    if (!leidas.has('QSTASH_TOKEN')) expect(texto).not.toMatch(/\bQSTASH_TOKEN\b/);
   });
 });
 
