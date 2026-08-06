@@ -31,6 +31,10 @@ export default async function NuevoUsuario() {
     const nombre = String(formData.get('nombre') ?? '').trim() || undefined;
     const rol = formData.get('rol') as RolAppUser;
     if (!tenantId || !email || !rol) redirect('/admin/usuarios/nuevo?error=1');
+    // AUDITORÍA 13, MEDIO: el `<select>` solo ofrece 4 roles (sin superadmin y
+    // sin operador), pero el POST directo podía pedir cualquiera. El superadmin
+    // se crea por SQL directo y el operador con su cuenta ligada a un chofer.
+    if (rol === 'superadmin' || rol === 'operador') redirect('/admin/usuarios/nuevo?error=2');
     await provisionarUsuario(tenantId, email, nombre, rol);
     redirect('/admin?creado=1');
   }

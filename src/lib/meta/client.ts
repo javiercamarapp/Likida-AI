@@ -315,12 +315,9 @@ async function idDeRespuesta(res: Response): Promise<string | undefined> {
  *     o sea que las dos mitades del mismo fallo se comportaban al revés.
  *
  * Ahora las dos devuelven `{ok:false, error, codigo}` y ninguna lanza, igual
- * que `sendTemplate`. Los llamadores que hacen `await sendDocument(...)` sin
- * mirar el resultado siguen compilando sin cambios: el arreglo es
- * retrocompatible a propósito, porque los dos call sites viven en archivos de
- * otros agentes (`processor.ts:1840` y `avisar_cierre.ts:117`). Lo que este
- * cambio hace es DAR la información; queda pendiente que esos dos la usen —
- * ver la nota en el reporte.
+ * que `sendTemplate`. Los DOS call sites ya revisan el resultado (cerrado en
+ * las rondas 12-13): `avisar_cierre.ts` loguea `cierre.pdf_al_jefe_falló` y
+ * `processor.ts` registra `pdf.no_entregado` y le avisa al chofer.
  */
 export async function sendDocument(
   to: string,

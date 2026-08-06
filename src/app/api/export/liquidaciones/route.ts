@@ -66,7 +66,7 @@ export async function GET(req: Request) {
       (d, h) => supabaseAdmin().from('liquidacion')
         .select('created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, viaje:viaje_id(folio, operador:operador_id(nombre))', conteo(d))
         .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false }).order('id', { ascending: false })
         .range(d, h),
       'export.liquidaciones',
     );

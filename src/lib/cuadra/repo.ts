@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { round2 } from '@/lib/formato';
 import type { DatosIntegral } from './privacidad';
 import { acotada } from './presupuesto';
+import { traerTodo, conteo } from './pg';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/cuadra';
 import type { CodigoPendiente } from './intake/emparejar';
 
@@ -928,4 +929,48 @@ export async function actualizarFacilidad15(tenantId: string, ded: boolean | und
   }
   const { error } = await acotada(admin.from('tenant').update({ config: actual }).eq('id', tenantId), 'actualizarFacilidad15');
   if (error) throw new Error(`actualizarFacilidad15: ${error.message}`);
+}
+
+/**
+ * Las solicitudes ARCO del tenant (para la pantalla de cumplimiento de la
+ * flota). AUDITORÍA 14: las solicitudes se registran pero la flota —la
+ * responsable obligada a contestar en 20 días hábiles— no tenía dónde verlas.
+ */
+export async function listarSolicitudesArco(tenantId: string): Promise<Array<{
+  id: string; tipo: string; canal: string; estado: string;
+  titularRef: string; recibidaEn: string; venceEn: string; resueltaEn: string | null;
+  resolucion: string | null; operadorNombre: string | null;
+}>> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (desde, hasta) => supabaseAdmin()
+      .from('solicitud_arco')
+      .select('id, tipo, canal, estado, titular_ref, recibida_en, vence_en, resuelta_en, resolucion, operador:operador_id(nombre)', conteo(desde))
+      .eq('tenant_id', tenantId)
+      .order('recibida_en', { ascending: false })
+      .order('id', { ascending: false })
+      .range(desde, hasta),
+    'listarSolicitudesArco',
+  );
+  return filas.map((f) => ({
+    id: f.id as string,
+    tipo: f.tipo as string,
+    canal: (f.canal as string | null) ?? 'whatsapp',
+    estado: f.estado as string,
+    titularRef: (f.titular_ref as string | null) ?? '',
+    recibidaEn: f.recibida_en as string,
+    venceEn: f.vence_en as string,
+    resueltaEn: (f.resuelta_en as string | null) ?? null,
+    resolucion: (f.resolucion as string | null) ?? null,
+    operadorNombre: ((f.operador as { nombre?: string } | null)?.nombre) ?? null,
+  }));
+}
+
+/** Marca una solicitud ARCO como resuelta (la flota contesta al titular). */
+export async function resolverSolicitudArco(tenantId: string, solicitudId: string, resolucion: string): Promise<void> {
+  const { error } = await acotada(supabaseAdmin()
+    .from('solicitud_arco')
+    .update({ estado: 'resuelta', resuelta_en: new Date().toISOString(), resolucion })
+    .eq('id', solicitudId)
+    .eq('tenant_id', tenantId), 'resolverSolicitudArco');
+  if (error) throw new Error(`resolverSolicitudArco: ${error.message}`);
 }
