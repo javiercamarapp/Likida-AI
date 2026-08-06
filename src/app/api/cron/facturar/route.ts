@@ -157,7 +157,7 @@ const PRESUPUESTO_LOTE_MS = maxDuration * 1000;
 const MARGEN_LOTE_MS = 150_000;
 
 /** Una fila de `gasto` como la trae la consulta de la cola. */
-interface FilaCola {
+export interface FilaCola {
   id: string;
   tenant_id: string;
   concepto: string;
@@ -298,6 +298,58 @@ export async function GET(req: Request) {
     const lote = todos.slice(0, TOPE_POR_CORRIDA);
     const quedaron = Math.max(0, todos.length - lote.length);
 
+    // ── Despacho: QStash (si está configurado) o síncrono ────────────────────
+    // Ronda 16: con UPSTASH_QSTASH_TOKEN el lote se encola y el callback
+    // (POST /cola) lo procesa con su propio presupuesto (10 min) — la
+    // invocación del cron responde en segundos y no corre el riesgo de ser
+    // matada a media sesión de portal. Sin token, el camino síncrono de
+    // siempre (el que los tests ejercitan).
+    if (process.env.UPSTASH_QSTASH_TOKEN && lote.length > 0) {
+      try {
+        const { Client } = await import('@upstash/qstash');
+        const q = new Client({ token: process.env.UPSTASH_QSTASH_TOKEN });
+        const base = process.env.NEXT_PUBLIC_APP_URL ?? `https://${req.headers.get('host')}`;
+        const publicacion = await q.publishJSON({
+          url: `${base}/api/cron/facturar/cola`,
+          body: { lote, quedaron },
+          retries: 2,
+          timeout: 600,
+        });
+        logger.info('cron.facturar.encolado', { messageId: publicacion.messageId, tickets: lote.length });
+        return NextResponse.json({
+          corrio: true,
+          encolado: true,
+          messageId: publicacion.messageId,
+          tickets: lote.length,
+          quedaron,
+        });
+      } catch (e) {
+        logger.error('cron.facturar.encolado_fallo', { err: e instanceof Error ? e.message : String(e) });
+        // Falla-cerrado: si no se pudo encolar, se procesa aquí mismo en vez de
+        // perder el lote.
+        return procesarLoteEnCola(lote, req, hoy, inicioLote, quedaron);
+      }
+    }
+    return procesarLoteEnCola(lote, req, hoy, inicioLote, quedaron);
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    logger.error('cron.facturar.falló', { error });
+    return NextResponse.json({ error }, { status: 500 });
+  }
+}
+
+// ── El procesamiento del lote (compartido: cron síncrono y callback QStash) ──
+// Extraído del GET (ronda 16). La MISMA lógica; el callback de QStash corre con
+// su propio presupuesto (10 min) sin el techo de 300s de una invocación directa.
+export async function procesarLoteEnCola(
+  lote: FilaCola[],
+  req: Request,
+  hoy: string,
+  inicioLote: number,
+  quedaron: number,
+): Promise<NextResponse> {
+  const modo = process.env.FACTURACION_MODO === 'emitir' ? 'emitir' as const : 'ensayo' as const;
+  try {
     // ── Agrupar: flota → portal → tickets. El portal sale de `armar()`, que es
     // la MISMA función con la que `al_vuelo.ts` reconoce el comercio; derivarlo
     // aquí por otro camino sería tener dos opiniones sobre a qué portal va un

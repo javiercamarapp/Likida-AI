@@ -36,7 +36,7 @@ async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): Promise
         emailAdmin,
         nombreAdmin: String(fd.get('nombreAdmin') ?? ''),
         dedicacionExclusivaCarga: fd.get('dedicacionExclusivaCarga') === 'on' ? true : undefined,
-        regimenElegible: fd.get('regimenElegible') === 'on' ? true : undefined,
+        regimenFiscal: String(fd.get('regimenFiscal') ?? '') || undefined,
       },
       { id: s.userId },
     );
@@ -214,11 +214,23 @@ export default async function FlotasPage() {
               </span>
             </label>
             <label className="flex items-start gap-2 text-xs" style={{ color: 'var(--muted)' }}>
-              <input type="checkbox" name="regimenElegible" className="mt-0.5" />
+              <span className="mt-1">Régimen fiscal (c_RegimenFiscal SAT):</span>
+              <select name="regimenFiscal" className="text-xs" defaultValue="">
+                <option value="">Sin declarar</option>
+                <option value="601">601 — General de Ley PM (coordinados)</option>
+                <option value="612">612 — PF con actividades empresariales</option>
+                <option value="605">605 — Sueldos y Salarios</option>
+                <option value="606">606 — Arrendamiento</option>
+                <option value="607">607 — Régimen de Enajenación</option>
+                <option value="608">608 — Demás ingresos</option>
+                <option value="610">610 — Residentes en el Extranjero</option>
+                <option value="611">611 — Ingresos por Dividendos</option>
+                <option value="615">615 — Incorporación Fiscal</option>
+                <option value="616">616 — Otros regímenes</option>
+              </select>
               <span>
-                <b>¿Tributa en coordinados (Título II Cap. VII) o persona física con
-                actividad empresarial (Título IV Cap. II Secc. I)?</b> — las dos
-                condiciones de la regla.
+                — la facilidad del 15% (RFA 2.9) exige 601 o 612; cualquier otro
+                no califica y el efectivo en combustible no se deduce.
               </span>
             </label>
           </FormaConAviso>
