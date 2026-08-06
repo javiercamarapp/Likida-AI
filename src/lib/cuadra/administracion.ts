@@ -65,6 +65,13 @@ export interface NuevaFlota {
   /** Correo del primer administrador. Sin él la flota nace sin quién entre. */
   emailAdmin?: string;
   nombreAdmin?: string;
+  /** RFA 2026 regla 2.9 (se piden AL REGISTRAR): ¿dedicación exclusiva al
+   *  autotransporte terrestre de carga federal? Sin esta declaración el motor
+   *  no puede abrir la facilidad del 15% de diésel en efectivo. */
+  dedicacionExclusivaCarga?: boolean;
+  /** RFA 2026 regla 2.9: ¿tributa en Título II Cap. VII (coordinados) o Título
+   *  IV Cap. II Secc. I (PF con actividad empresarial)? */
+  regimenElegible?: boolean;
 }
 
 /**
@@ -97,9 +104,20 @@ export async function crearFlota(
   }
 
   const admin = supabaseAdmin();
+  // RFA 2026 regla 2.9: la declaración de dedicación/régimen se guarda en
+  // `tenant.config.facilidadCombustibleEfectivo` (jsonb) — el dato que el
+  // motor necesita para abrir la válvula del 15% de diésel en efectivo.
+  const facilidad15 = (f.dedicacionExclusivaCarga !== undefined || f.regimenElegible !== undefined)
+    ? {
+        facilidadCombustibleEfectivo: {
+          dedicacionExclusivaCarga: f.dedicacionExclusivaCarga ?? null,
+          regimenElegible: f.regimenElegible ?? null,
+        },
+      }
+    : undefined;
   const { data, error } = await admin
     .from('tenant')
-    .insert({ nombre, rfc: rfc ?? null, ciudad: f.ciudad?.trim() || null })
+    .insert({ nombre, rfc: rfc ?? null, ciudad: f.ciudad?.trim() || null, ...(facilidad15 ? { config: facilidad15 } : {}) })
     .select('id')
     .maybeSingle();
 

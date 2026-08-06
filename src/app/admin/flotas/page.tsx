@@ -34,6 +34,8 @@ async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): Promise
         ciudad: String(fd.get('ciudad') ?? ''),
         emailAdmin,
         nombreAdmin: String(fd.get('nombreAdmin') ?? ''),
+        dedicacionExclusivaCarga: fd.get('dedicacionExclusivaCarga') === 'on',
+        regimenElegible: fd.get('regimenElegible') === 'on',
       },
       { id: s.userId },
     );
@@ -168,6 +170,21 @@ export default async function FlotasPage() {
             <Campo nombre="emailAdmin" etiqueta="Correo del administrador" tipo="email" placeholder="dueño@flota.mx"
               ayuda="Sin él, la flota nace sin quién pueda entrar." />
             <Campo nombre="nombreAdmin" etiqueta="Nombre del administrador" placeholder="Opcional" />
+            <label className="flex items-start gap-2 text-xs mt-1" style={{ color: 'var(--muted)' }}>
+              <input type="checkbox" name="dedicacionExclusivaCarga" className="mt-0.5" />
+              <span>
+                <b>¿Exclusivamente autotransporte de carga federal?</b> — habilita la
+                facilidad del 15% de diésel en efectivo (RFA 2026 regla 2.9).
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-xs" style={{ color: 'var(--muted)' }}>
+              <input type="checkbox" name="regimenElegible" className="mt-0.5" />
+              <span>
+                <b>¿Tributa en coordinados (Título II Cap. VII) o persona física con
+                actividad empresarial (Título IV Cap. II Secc. I)?</b> — las dos
+                condiciones de la regla.
+              </span>
+            </label>
           </FormaConAviso>
           <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
             El RFC se valida en el alta porque es la única oportunidad barata: con uno inválido, el motor apaga la

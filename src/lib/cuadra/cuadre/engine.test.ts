@@ -1414,3 +1414,74 @@ describe('etiqueta del combustible', () => {
     expect(etiquetaConcepto('alimentacion', undefined)).toBe('Alimentación');
   });
 });
+
+// ── RFA 2026 regla 2.9 — el deber ser completo (matriz del 15%) ─────────────
+describe('RFA 2026 regla 2.9 — la matriz del 15% de combustible en efectivo', () => {
+  // El escenario de la regla: combustible CON factura (cfdiUuid) pagado en
+  // efectivo — sin CFDI, el gasto cae a por_confirmar por la regla del ticket,
+  // y la facilidad del 15% no aplica (no hay comprobante que ampare).
+  const g15 = (p: Partial<Gasto>): Gasto => g({ concepto: 'diesel', monto: 1000, formaPago: '01', cfdiUuid: `u-${Math.random()}`, ...p });
+
+  it('elegible + dentro del 15% → deducible, con el contador del ejercicio', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v15a', anticipo: 3000, politica,
+      facilidad15: true, totalCombustibleEjercicio: 10000, efectivoPrevEjercicio: 500,
+      gastos: [g15({ id: 'g15a', monto: 1000 })],
+    });
+    const d = r.diferencias.find((x) => x.tipo === 'combustible_efectivo_dentro15')!;
+    expect(d).toBeDefined();
+    // efectivo acumulado = 500 previo + 1000 = 1500 ≤ 15%×10000 = 1500 → deducible
+    expect(r.totalDeducible).toBe(1000);
+    expect(r.totalPorConfirmar).toBe(0);
+    expect(d.nota).toContain('$1,500.00 de $10,000.00');
+    expect(d.nota).toContain('15%');
+  });
+
+  it('elegible + excede el 15% → solo el excedente NO se deduce (proporcional)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v15b', anticipo: 3000, politica,
+      facilidad15: true, totalCombustibleEjercicio: 10000, efectivoPrevEjercicio: 1400,
+      gastos: [g15({ id: 'g15b', monto: 1000 })],
+    });
+    // acumulado = 1400 + 1000 = 2400 > 1500 → de ESTE comprobante caben 100
+    // dentro del tope; el excedente 900 no se deduce.
+    const d = r.diferencias.find((x) => x.tipo === 'efectivo_sobre_15')!;
+    expect(d).toBeDefined();
+    expect(d.monto).toBe(900);
+    expect(r.totalNoDeducible).toBe(900);
+    expect(r.totalDeducible).toBe(100);
+  });
+
+  it('flota que NO califica → no deducible (27-III sin excepción)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v15c', anticipo: 3000, politica,
+      facilidad15: false,
+      gastos: [g15({ id: 'g15c' })],
+    });
+    expect(r.diferencias.some((x) => x.tipo === 'efectivo_no_elegible')).toBe(true);
+    expect(r.totalNoDeducible).toBe(1000);
+    expect(r.totalDeducible).toBe(0);
+  });
+
+  it('sin declaración → por confirmar, sin afirmar nada (la nota no promete)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v15d', anticipo: 3000, politica,
+      facilidad15: undefined,
+      gastos: [g15({ id: 'g15d' })],
+    });
+    expect(r.diferencias.some((x) => x.tipo === 'combustible_efectivo')).toBe(true);
+    expect(r.totalPorConfirmar).toBe(1000);
+    const d = r.diferencias.find((x) => x.tipo === 'combustible_efectivo')!;
+    expect(d.nota).toContain('declare su dedicación');
+  });
+
+  it('el efectivo dentro del 15% NO acredita IVA ni IEPS (la facilidad salva UN beneficio)', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v15e', anticipo: 3000, politica,
+      facilidad15: true, totalCombustibleEjercicio: 10000, efectivoPrevEjercicio: 0,
+      gastos: [g15({ id: 'g15e', monto: 1000, ivaTraslado: 160 })],
+    });
+    expect(r.ivaAcreditable ?? 0).toBe(0);
+    expect(r.litrosDieselAcreditables ?? 0).toBe(0);
+  });
+});
