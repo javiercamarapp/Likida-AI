@@ -1,81 +1,114 @@
 # Likida
 
-**Agente de IA por WhatsApp que automatiza el cierre diario de operaciones logísticas en México.**
+**Agente de IA por WhatsApp que liquida viajes de autotransporte federal en México.**
 
-El operador manda por WhatsApp fotos de sus comprobantes de viaje (diésel, casetas, facturas) →
-Likida hace OCR → los cuadra contra el anticipo y la política de la empresa → detecta diferencias y
-faltantes **en el momento** → entrega una liquidación en PDF y un registro listo para ERP.
+El operador manda por WhatsApp fotos de sus comprobantes de viaje (diésel,
+casetas, viáticos) → Likida hace OCR, lee el CFDI, **cuadra contra el anticipo
+y la política de la empresa**, aplica la ley fiscal mexicana y entrega la
+liquidación en PDF con el registro listo para el ERP de la flota.
 
-> Validado con 2,474 vacantes reales: ~350 empresas con este dolor exacto, de transportistas
-> medianos a Nadro, Danone, Lala y GEPP. Primer demo: **Transportes Innovativos, 6 de agosto**.
+> **No reemplaza el ERP: lo alimenta.** El agente hace la captura que hoy es
+> manual y escribe el sistema que la flota ya usa. Es un complemento.
+
+---
+
+## Estado actual (ver `docs/REPORTE-ESTADO.md`)
+
+- **3,149 pruebas verdes** · `tsc` 0 errores · `eslint` 0 errores · build limpio
+- **42 tablas con RLS activo** · 61 bloques de verificación contra la base real
+- **En producción**: app.likida.ai · webhook de WhatsApp verificado · cron de
+  facturación vía QStash con fallback síncrono · datos demo genéricos
+
+---
 
 ## Arquitectura
 
-Chasis prestado de `atiende.ai` (WhatsApp Cloud API, capa LLM, colas, observabilidad) + 3 módulos nuevos:
+```
+WhatsApp Cloud API → webhook → intake (OCR + CFDI) → cuadre (motor fiscal) → liquidación (PDF) → ERP
+```
 
 | Módulo | Ruta | Qué hace |
-|--------|------|----------|
-| **1. Intake** | `src/lib/cuadra/intake` | Recibe fotos por WhatsApp → OCR con Claude visión → JSON estructurado |
-| **2. Cuadre** | `src/lib/cuadra/cuadre` | Concilia gastos vs anticipo + política → detecta diferencias/faltantes |
-| **3. Liquidación** | `src/lib/cuadra/liquidacion` | Genera PDF (pdf-lib) + export a ERP (CSV/JSON) |
+|---|---|---|
+| **Intake** | `src/lib/likida/intake` | Fotografías por WhatsApp → OCR con IA de visión → JSON estructurado + lectura del CFDI |
+| **Cuadre** | `src/lib/likida/cuadre` | Concilia gastos vs anticipo + política + ley fiscal → diferencias, faltantes y veredictos de deducibilidad con fundamento |
+| **Liquidación** | `src/lib/likida/liquidacion` | PDF (pdf-lib) + export a ERP (CSV/JSON) |
+| **Fiscal** | `src/lib/likida/fiscal.ts` y `normas/` | Contadores de la ley: 15% en efectivo (RFA 2.9), viáticos (RLISR 57/152), estímulo de casetas (RMF 9.1.8), IEPS diésel, faja de 50 km |
+| **Facturación** | `src/lib/likida/facturacion` | Portales (CAPUFE, gasolineras) con Playwright, cola QStash, autofactura |
+| **Agentes** | `src/lib/agents` | Conversación por WhatsApp, prompts, dedup de mutaciones |
+| **SaaS** | `src/lib/saas` | Stripe, suscripciones, FacturAPI |
+| **Observabilidad** | `src/lib/observability` | Logger redactado, Sentry (si hay DSN), arranque con sondeo de migraciones |
 
-Superficies web (estilo macOS premium, ver `DESIGN.md`): **dashboard** (liquidaciones por operador/terminal),
-**admin** (política de gastos, flota, usuarios), **portal del cliente** (la flota ve lo suyo) y una **pantalla de demo**.
+Paneles web: **dashboard** (jefe de flota: resumen, despacho, fiscal, ARCO,
+operadores), **admin** (consola de negocio del operador del SaaS: flotas,
+cumplimiento, suscripciones), **portal del chofer** (`/chofer`) y **demo**
+(simulador de la conversación).
 
 ## Stack
-
-Lo que el código usa de verdad, verificable con `grep -rl <paquete> src/`:
 
 | Para qué | Qué |
 |---|---|
 | App | Next.js 16 (App Router) · React 19 · TypeScript estricto |
-| Estilos | Tailwind v4 |
-| Datos | Supabase (Postgres + RLS + RPCs) |
-| IA | **OpenRouter** — Gemini 3.6 Flash para visión, Sonnet 5 para el cuadre, con fallback cross-provider |
+| Estilos | Tailwind v4 · sistema de diseño en `src/app/globals.css` (paleta: `--marca #c2410c`, tinta `#17100d`) |
+| Datos | Supabase (Postgres + RLS + RPCs) — migraciones en `supabase/migrations/` |
+| IA | **OpenRouter** — Gemini 3.6 Flash (visión), Sonnet 5 (cuadre), fallback cross-provider |
 | Canal | WhatsApp Cloud API (Meta) |
-| Comprobantes | zxing-wasm (QR y código de barras) · sharp · fast-xml-parser |
+| Comprobantes | zxing-wasm (QR/barras) · sharp · fast-xml-parser |
+| Facturación en portales | Playwright + `@sparticuz/chromium` (solo en el cron) |
+| Colas | QStash (enqueue + callback con firma) · Postgres para la barrera de intake |
 | Salida | pdf-lib · export CSV/JSON a ERP |
-| Pruebas | Vitest (offline) + arneses `*.prueba.ts` que sí llaman a los modelos |
+| Pruebas | Vitest (offline) + arneses `pruebas-manuales/*.prueba.ts` que sí llaman a los modelos |
 
-Se **quitaron** de `package.json` cinco dependencias con cero uso en el código:
-`@anthropic-ai/sdk` (se habla con OpenRouter, no con Anthropic directo),
-`facturapi`, `@upstash/redis`, `@upstash/qstash` y `axios`. Radix nunca estuvo.
+## Calidad (las puertas que no se negocian)
 
-`@sentry/nextjs` **ya está en uso** (`src/lib/observability/sentry.ts`, import
-dinámico): el logger replica ahí los `warn` y `error` ya redactados, y
-`onRequestError` manda las excepciones con stack. Se enciende solo si hay
-`SENTRY_DSN`; sin esa variable no hay alerta de nada y el arranque lo grita
-(`startup.observabilidad`).
+```bash
+npx tsc --noEmit -p .      # 0 errores
+npx eslint src/            # 0 errores
+npx vitest run             # ~3,150 pruebas · cobertura con trinquete (vitest.config.ts)
+npm run build              # build de producción limpio
+```
 
-Siguen declaradas y **sin usar**: `class-variance-authority`, `date-fns` y
-`lucide-react`.
-
-> Hasta la auditoría 5 este párrafo decía que `@sentry/nextjs` estaba «sin usar
-> todavía (a cablear: hoy no hay observabilidad de errores en producción)». La
-> conclusión era cierta y el motivo falso: el cable existía desde antes, lo que
-> faltaba era el DSN en Vercel. Un documento que acierta por accidente es el que
-> deja de leerse.
-
-> Esta sección describía un stack que no existe, y no salió gratis: una revisión
-> externa calificó cuatro tecnologías que el proyecto no usa —leyó el README, no
-> el código— y hubo que gastar tiempo en desmentirla. Las colas están hechas con
-> Postgres (`intake_delta`, mig. 0011) y el timbrado se va a construir aquí, no
-> con Facturapi.
->
-> Para comprobar cualquiera de estas afirmaciones hay que usar `command grep`, no
-> `grep`: en esta máquina `grep` es una función de shell que envuelve `ugrep -I`
-> y **salta los archivos que parezcan binarios en silencio**, devolviendo "no
-> encontrado" sobre archivos que sí contienen el patrón.
+- **Verificaciones de base**: `supabase/verificaciones.sql` — 61 bloques que
+  prueban lo que solo la DB puede demostrar (mutex de doble liquidación,
+  aislamiento entre flotas, RLS del chofer, triggers de "nada entra tras
+  liquidar"). Cada migración nueva exige un bloque o una exención con razón
+  (`src/lib/likida/migraciones_verificadas.test.ts`).
+- **Fail-closed**: lo que no se puede verificar se marca "por confirmar" —
+  nunca se inventa una cifra, un régimen ni una deducción.
+- **Un rótulo tiene que ser verdad**: los datos de demo se marcan como tales;
+  los RFC de prueba son ficticios con dígito verificador válido.
 
 ## Correr el demo
+
 ```bash
 npm install
 cp .env.example .env.local   # completa las llaves
 npm run dev
 ```
-El flujo del demo: manda 3–4 fotos de comprobantes al número de WhatsApp de prueba →
-Likida responde con la liquidación cuadrada, señala diferencias, y devuelve el PDF.
 
-## Estado
-Sprint 0 — MVP para el demo del 6 de agosto. Ruta crítica (WhatsApp→OCR→cuadre→PDF) primero;
-dashboard/admin/portales encima.
+Flujo del demo: el operador manda fotos de comprobantes al número de WhatsApp
+de prueba → Likida responde con la liquidación cuadrada, señala diferencias y
+devuelve el PDF. También está el simulador en `/demo`.
+
+## Despliegue
+
+- Vercel, alias `app.likida.ai`. El build es **opt-in**: el commit debe llevar
+  `[deploy]` en el asunto (`vercel.json` → `ignoreCommand`).
+- Cron de facturación: `vercel.json` → `/api/cron/facturar` (necesita
+  `CRON_SECRET`), encola a QStash (`UPSTASH_QSTASH_TOKEN`,
+  `QSTASH_CURRENT/NEXT_SIGNING_KEY`, `QSTASH_URL`).
+- Webhook de WhatsApp: apunta a `app.likida.ai/api/webhook/whatsapp`.
+
+## Documentación
+
+```
+docs/
+├── REPORTE-ESTADO.md        ← UN reporte del estado actual del software
+└── conocimiento/            ← fiscal, legal, industria e investigaciones
+    ├── 00-RESUMEN-EJECUTIVO.md      (el marco fiscal en una página)
+    ├── 30-dolores-flota.md          (los 9 dolores de una flota)
+    ├── 34-proceso-liquidacion.md    (el proceso que Likida automatiza)
+    ├── HANDOFF.md                   (arquitectura y estado para agentes)
+    ├── investigacion/               (competencia, portales, decisiones)
+    ├── fase1/  fiscal/  legal/      (normas, RFA 2.9, borrador ToS)
+    └── CONFIGURAR-META.md           (WhatsApp Cloud API, paso a paso)
+```

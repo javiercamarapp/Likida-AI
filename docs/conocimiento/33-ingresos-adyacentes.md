@@ -617,7 +617,7 @@ contradicción, es un cierre de hueco.
 
 ### Documentos internos de Likida citados
 
-- `/Users/javiercamaraportepetit/javiercamarapp/cuadra/GUIA_BUILD.md` (línea 120, sobre
+- `/Users/javiercamaraportepetit/javiercamarapp/likida/GUIA_BUILD.md` (línea 120, sobre
   autofacturación de gasolineras y roadmap de agregadores).
-- `/Users/javiercamaraportepetit/javiercamarapp/cuadra/DOCUMENTO_MAESTRO.md` (§2.6, §4.2, sobre
+- `/Users/javiercamaraportepetit/javiercamarapp/likida/DOCUMENTO_MAESTRO.md` (§2.6, §4.2, sobre
   vía PAC para descarga masiva y tarjetas de flotilla).

@@ -1,7 +1,7 @@
 # Especificación: contadores del EJERCICIO/PERIODO (Fase 1)
 
 > Solo especificación. No se tocó código en este trabajo.
-> Fecha: 28-jul-2026. Repo: `~/javiercamarapp/cuadra`.
+> Fecha: 28-jul-2026. Repo: `~/javiercamarapp/likida`.
 
 ## Por qué esto es un documento aparte de `engine.ts`
 

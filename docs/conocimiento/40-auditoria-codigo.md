@@ -2,7 +2,7 @@
 
 > Ola 2 — 27-jul-2026. Construido sobre la ola 1.
 >
-> Alcance: `javiercamarapp/cuadra/src/lib/cuadra/**` (3,428 líneas sin pruebas, 23 archivos de
+> Alcance: `javiercamarapp/likida/src/lib/cuadra/**` (3,428 líneas sin pruebas, 23 archivos de
 > prueba) leído línea por línea el 27-jul-2026, contrastado contra `00-RESUMEN-EJECUTIVO.md`,
 > `04-iva-ieps-estimulos.md`, `09-liquidacion.md`, `34-proceso-liquidacion.md` y `FISCAL_LEGAL.md`.
 > No se tocó código: esta ola es de investigación y diseño.
@@ -549,7 +549,7 @@ Fase 0 punto 1 del resumen ejecutivo). Verificar antes del 6-ago.
 - `34-proceso-liquidacion.md` §11 y CONFLICTO 1 — tabla de brecha del proceso (no se repite aquí).
 - `FISCAL_LEGAL.md` (en el repo) — §1.1 a §1.6, §3; ver CONFLICTOS B y C.
 
-**Código auditado:** `javiercamarapp/cuadra/src/lib/cuadra/{cuadre,intake,facturacion,liquidacion}/`,
+**Código auditado:** `javiercamarapp/likida/src/lib/cuadra/{cuadre,intake,facturacion,liquidacion}/`,
 `processor.ts`, `repo.ts`, `config.ts`, `analytics.ts`, `tools.ts`, `src/types/cuadra.ts`,
 `supabase/migrations/0012`, `0013`, `0015`, `0016`.
 

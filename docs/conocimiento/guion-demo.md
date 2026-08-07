@@ -1,4 +1,4 @@
-# Guion del demo — 6 de agosto, Transportes Innovativos
+# Guion del demo — 6 de agosto
 
 > Reescrito el **1-ago-2026**. El anterior era del 25-jul, **182 commits atrás**, y
 > te ponía en la boca cifras que el producto dejó de dar a propósito. Todo lo que
@@ -159,7 +159,7 @@ detalle sale vacío. Están ahí solo para que la lista no se vea sola.
 
 Dilo tú antes de que lo pregunten. Cuesta menos.
 
-- El tenant "Transportes Innovativos" tiene **RFC, operadores y política de
+- El tenant demo "FLOTA DEMO SA DE CV" tiene **RFC, operadores y política de
   siembra**. El RFC configurado es real (`GMX0902279I1`, de un tercero que dio
   permiso) **solo para que la validación de receptor funcione** — con el genérico
   del SAT, todas las facturas saldrían "a revisión" y parecería que el producto
