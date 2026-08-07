@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Facturaci&oacute;n Gasolina</title>
+
+  <!-- Google Font: Source Sans Pro -->
+  <!-- <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback"> -->
+  <!-- Jquery Ui -->
+  <!--<link rel="stylesheet" href="../vendor/plugins/jquery-ui/jquery-ui.min.css"> -->
+  <link rel="stylesheet" href="//code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="../vendor/plugins/fontawesome-free/css/all.min.css">
+  <!-- Toastr -->
+  <link rel="stylesheet" href="../vendor/plugins/toastr/toastr.min.css">
+  <!-- Theme style -->
+  <link rel="stylesheet" href="../vendor/dist10/css/adminlte.min.css">
+  <link rel="stylesheet" href="autofactura.css?v=1.0.6">
+
+</head>
+<body class="hold-transition layout-top-nav text-sm">
+<div class="wrapper">
+	<!-- Google Tag Manager -->
+	<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-P2WWG45');</script>
+	<!-- End Google Tag Manager -->
+	
+	<!-- Google Tag Manager (noscript) -->
+	<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-P2WWG45"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>	<!-- End Google Tag Manager (noscript) -->
+	
+	<!-- Google AdSense -->
+	<script src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js" async=""></script>
+		<script>
+		(adsbygoogle = window.adsbygoogle || []).push({
+		google_ad_client: "ca-pub-9709852401893593",
+		enable_page_level_ads: true,
+		overlays: {bottom: true}
+		});
+		</script>	<!-- End Google AdSense -->
+	
+		<input name="dirip" id="dirip" type="hidden" value="">
+		<input name="IdLog" id="IdLog" type="hidden">
+		<input name="IdUsuario" id="IdUsuario" type="hidden" value="">
+
+	  <!-- Header -->
+	  	  <!-- Navbar -->
+	    <nav class="main-header navbar navbar-expand-md navbar-dark navbar-olive">
+    <div class="container">
+      <a href="#" class="navbar-brand">
+        <img src="../images/logos/logo_home3.png" alt="Facturasgas" class="brand-image" width="96" height="45">
+      </a>
+
+      <button class="navbar-toggler order-1" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <div class="collapse navbar-collapse order-3" id="navbarCollapse">
+        <!-- Left navbar links -->
+        <ul class="navbar-nav">
+          <li class="nav-item">
+			<a href="autofactura.php" class="active nav-link">Generar Factura</a>
+          </li>
+          <li class="nav-item">
+            <a href="facturas-search.php" class="nav-link">B&uacute;squeda de Facturas</a>
+          </li>
+          <!-- <li class="nav-item">
+            <a href="facturas-form-cancel.php" class="nav-link">Solicitud de Cancelaci&oacute;n</a>
+          </li> -->
+        </ul>
+      </div>
+    </div>
+  </nav>
+	  <!-- /.navbar -->	  
+	  
+	  <!-- Content Wrapper. Contains page content -->
+	  <div class="content-wrapper">
+		<!-- Content Header (Page header) -->
+		<div class="content-header">
+		  <div class="container">
+			<div class="row mb-0">
+			  <div class="col-sm-12">
+				<!-- <h1 class="m-0"> </h1>  -->
+			  </div>
+			</div>
+		  </div>
+		</div>
+		<!-- /.content-header -->
+	  
+		<form name="clientes_facturas" class="form-horizontal" id="clientes_facturas" role="form" method="post">
+		<!-- Main content -->
+		<div class="content">
+		  <div class="container">
+		  
+		  		  
+		  <div id="dynamic_custom_error">
+		  </div>
+		  
+			<div class="row">
+			  <div class="col-12">
+				<!-- Default box -->
+				<div class="card">
+				  <div class="card-body">
+
+					
+					  <div class="row">
+						<div class="col-md-8 form1">
+						  <div class="form-group row">
+							<label for="RFC" class="col-sm-2 col-form-label">RFC*</label> 
+							<div class="col-sm-6">
+							  <div class="input-group input-group-sm">
+								<input name="RFC" class="form-control form-control-sm popover-help" id="RFC" spellcheck="false" maxlength="20" value="" data-html="true" data-content="Indique RFC al que se emitir&aacute; la factura, por ejemplo EME891231G81. <strong>Para buscar, puede indicar su RFC y hacer click en el icono </strong><i class='fas fa-search'></i>" data-toggle="popover" data-placement="right" size="20" autocomplete="off" required>
+								
+								<span class="input-group-append">
+									<button title="Buscar" class="btn btn-warning btn-flat" id="button_search">
+										<span class="fas fa-search"></span>
+									</button>
+									<button title="Editar" class="btn btn-default btn-flat d-none" id="button_edit">
+										<span class="fas fa-pencil-atl"></span>
+									</button>
+									<button title="Complemento INE" class="btn btn-info btn-flat ine d-none" id="button_add_complemento" data-toggle="modal" data-target="#myModal">
+										<span class="fas fa-th-list fa-check"></span>
+									</button>
+									<button title="Agregar Alias" class="btn btn-default btn-flat d-none" id="button_add_alias">
+										<span class="fas fa-plus-circle"></span>
+									</button>
+									<button title="Guardar datos de facturaci&oacute;n" class="btn btn-primary" id="button_save">
+										<span class="fas fa-download"></span> 
+									</button>
+								</span>
+							  </div>
+							</div>
+						  </div>
+						  <div class="row">
+							<label for="Alias" class="col-sm-2 control-label">Alias</label> 
+							<div class="col-sm-4 popover-help" data-toggle="popover" data-content="Indique el alias del cliente, en caso de que tenga mas de un domicilio  por RFC"><input name="Alias" disabled class="form-control form-control-sm" id="Alias" value="">
+							  <input name="IdCliente" id="IdCliente" type="hidden" value="">
+							  <input name="IdSucursal" id="IdSucursal" type="hidden" value="">
+							  <input name="Tienda" id="Tienda" type="hidden" value="">
+							</div>
+						  </div>
+						  <div class="row mt-1">
+							<label for="RazonSocial" class="col-sm-2 control-label">Razón Social*</label> 
+							<div class="col-sm-10">
+							  <input name="RazonSocial" class="form-control form-control-sm popover-help" id="RazonSocial" maxlength="200" value="" data-content="Indique la Razón social a la que se emitir&aacute; la factura, por ejemplo EMPRESA DE MEXICO" data-toggle="popover" data-placement="right" required>
+							</div>
+						  </div>
+						  <div class="row mt-1">
+							<label for="Email" class="col-sm-2 control-label">Email*</label> 
+							<div class="col-sm-10">
+							  <input name="Email" class="form-control form-control-sm popover-help" id="Email" size="50" maxlength="250" value="" data-content="Indique la direcci&oacute;n de correo electrónico a la que se enviar&aacute; la factura, por ejemplo empresamexico@hotmail.com" data-toggle="popover" data-placement="right" required>
+							</div>
+						  </div>
+						  <div class="row mt-1">
+							<label for="Email_verif" class="col-sm-2 control-label">Confirmar Email*</label> 
+							<div class="col-sm-10">
+							  <input name="Email_verif" class="form-control form-control-sm popover-help" id="Email_verif" autocomplete="off" size="50" maxlength="250" value="" data-content="Vuelva a escribir la direcci&oacute;n de correo electr&oacute;nico para confirmaci&oacute;n" data-toggle="popover" data-placement="right" required>
+							</div>
+							<div class="col-sm-2 popover-help-button" data-toggle="popover" data-content="Mostrar/Ocultar campos de domicilio fiscal" >
+							<input name=" Button_Direccion_old" class="button-image" id="Button_Direccion_old" style="display: none;" type="button" alt="Button1" value="Domicilio">
+							</div>
+						  </div>
+						  <div class="row d-none" id="row_cp">
+							<div class="col-sm-7">
+							  <p class="text-info" style="font-size: 12px;">El SAT ya no requiere la dirección fiscal en las facturas</p>
+							</div>
+						  </div>
+						  <div class="d-none row" id="row_cp">
+							<label for="CodigoPostal" class="col-sm-2 control-label">C.P.&nbsp;</label> 
+							<div class="col-sm-3">
+							  <input name="CodigoPostal" class="form-control form-control-sm popover-help" id="CodigoPostal" maxlength="20" value="" data-content="Indique el Código Postal del receptor.  (Requerido)" data-toggle="popover" data-placement="right" autocomplete="off">
+							</div>
+							<div class="col-sm-7">
+							  <p class="text-info" style="font-size: 12px;">El SAT ya no requiere la dirección fiscal en las facturas</p>
+							</div>
+						  </div>
+						  <div class="d-none row" id="row_calle">
+							<label for="Calle" class="col-sm-2 control-label">Calle</label> 
+							<div class="col-sm-10">
+							  <input name="Calle" class="form-control form-control-sm popover-help" id="Calle" size="50" maxlength="100" value="" data-content="Indique la Calle del domicilio fiscal por ejemplo BUCARELI. (Campo opcional)" data-toggle="popover" data-placement="right">
+							</div>
+						  </div>
+						  <div class="d-none row" id="row_num_ext_int">
+							<label for="NoExterior" class="col-sm-2 control-label">Num. Ext.</label> 
+							<div class="col-sm-4">
+							  <input name="NoExterior" class="form-control form-control-sm popover-help" id="NoExterior" maxlength="100" value="" data-content="Indique el Número Exterior del domicilio fiscal, por ejemplo 1280.  (Campo opcional)" data-toggle="popover" data-placement="right">
+							</div>
+							<label for="NoInterior" class="col-sm-2 control-label">Num. Int.</label> 
+							<div class="col-sm-4">
+							  <input name="NoInterior" class="form-control form-control-sm popover-help" id="NoInterior" maxlength="100" value="" data-content="Indique el Número Interior del domicilio fiscal, por ejemplo B1.  (Campo opcional)" data-toggle="popover" data-placement="right">
+							</div>
+						  </div>
+						  <div class="d-none row" id="row_colonia_referencia">
+							<label for="Colonia" class="col-sm-2 control-label">Colonia</label> 
+							<div class="col-sm-4">
+							  <div class="has-feedback">
+								<input name="Colonia" class="form-control form-control-sm popover-help" id="Colonia" maxlength="100" value="" data-content="Indique la Colonia del domicilio fiscal, por ejemplo INDUSTRIAL.  (Campo opcional)" data-toggle="popover" data-placement="right"><i class="form-control-feedback glyphicon glyphicon-chevron-down" id="icon_show_colonias" style="right: 0px;"></i> 
+							  </div>
+							</div>
+							<label for="Referencia" class="col-sm-2 control-label">Referencia</label> 
+							<div class="col-sm-4">
+							  <input name="Referencia" class="form-control form-control-sm popover-help" id="Referencia" maxlength="100" value="" data-content="Indique referencia del domicilio fiscal, por ejemplo ENTRE CALLE 1 Y CALLE 20.  (Campo opcional)" data-toggle="popover" data-placement="right">
+							</div>
+						  </div>
+						  <div class="d-none row" id="row_localidad_municipio">
+							<label for="Localidad" class="col-sm-2 control-label">Localidad</label> 
+							<div class="col-sm-4">
+							  <input name="Localidad" class="form-control form-control-sm popover-help" id="Localidad" maxlength="100" value="" data-content="Indique la Localidad o Ciudad a la que pertenece, por ejemplo CANCUN.  (Campo opcional)" data-toggle="popover" data-placement="right">
+							</div>
+							<label for="Municipio" class="col-sm-2 control-label">Municipio&nbsp;</label> 
+							<div class="col-sm-4">
+							  <input name="Municipio" class="form-control form-control-sm popover-help" id="Municipio" maxlength="100" value="" data-content="Indique el Municipio o Delegación del domicilio fiscal, por ejemplo BENITO JUAREZ.  (Campo opcional)" data-toggle="popover" data-placement="right">
+							</div>
+						  </div>
+						  <div class="d-none row" id="row_estado_pais">
+							<label for="Estado" class="col-sm-2 control-label">Estado</label> 
+							<div class="col-sm-4">
+							  <input name="Estado" class="form-control form-control-sm popover-help" id="Estado" maxlength="100" value="" data-content="Indique el Estado del domicilio fiscal, por ejemplo VERACRUZ.  (Campo opcional)" data-toggle="popover" data-placement="right">
+							</div>
+							<label for="Pais" class="col-sm-2 control-label">País</label> 
+							<div class="col-sm-4">
+							  <select name="Pais" disabled class="form-control form-control-sm popover-help" id="Pais" data-content="Seleccione el país del domicilio fiscal.  (Campo opcional)" data-toggle="popover" data-placement="right">
+								<option value="MX">MEXICO</option><option value="US">ESTADOS UNIDOS</option>							  </select>
+				 
+							</div>
+						  </div>
+						  <div class="row">
+							<label for="CP" class="col-sm-2 control-label form-inline">Código Postal</label> 
+							<div class="col-sm-4">
+								<input name="CP" class="form-control form-control-sm popover-help" id="CP" value="" data-content="Indique el Código Postal del receptor.  (Requerido)" data-toggle="popover" data-placement="right" required>
+							</div>
+							
+							<label for="CdCfdiRegimen" class="col-sm-2 control-label form-inline">Régimen Fiscal</label> 
+							<div class="col-sm-4">
+							  <select name="CdCfdiRegimen" class="form-control form-control-sm popover-help" id="CdCfdiRegimen" data-content="Seleccione el régimen fiscal del receptor que corresponda con el RFC si es persona física o moral" data-toggle="popover" data-placement="top" required>
+								<option value=""></option>
+								<option value="601" selected>601 - General de Ley Personas Morales</option><option value="603" >603 - Personas Morales con Fines no Lucrativos</option><option value="605" >605 - Sueldos y Salarios e Ingresos Asimilados a Salarios</option><option value="606" >606 - Arrendamiento</option><option value="607" >607 - Régimen de Enajenación o Adquisición de Bienes</option><option value="608" >608 - Demás ingresos</option><option value="610" >610 - Residentes en el Extranjero sin Establecimiento Permanente en México</option><option value="611" >611 - Ingresos por Dividendos (socios y accionistas)</option><option value="612" >612 - Personas Físicas con Actividades Empresariales y Profesionales</option><option value="614" >614 - Ingresos por intereses</option><option value="615" >615 - Régimen de los ingresos por obtención de premios</option><option value="616" >616 - Sin obligaciones fiscales</option><option value="620" >620 - Sociedades Cooperativas de Producción que optan por diferir sus ingresos</option><option value="621" >621 - Incorporación Fiscal</option><option value="622" >622 - Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras</option><option value="623" >623 - Opcional para Grupos de Sociedades</option><option value="624" >624 - Coordinados</option><option value="625" >625 - Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas</option><option value="626" >626 - Régimen Simplificado de Confianza</option>							  </select>
+				 
+							</div>
+						  </div>
+						  <div class="row">
+							<label for="CfdiMetodoPago" class="col-sm-2 control-label">Forma de Pago</label> 
+							<div class="col-sm-4">
+							  <select name="CfdiMetodoPago" class="form-control form-control-sm popover-help" id="CfdiMetodoPago" data-content="Seleccione la Forma de Pago de la Factura.  (Campo opcional)" data-toggle="popover" data-placement="top" required>
+								<option selected value=""></option>
+								<option value="1" >Efectivo</option><option value="2" >Tarjeta de Cr&eacute;dito</option><option value="3" >Tarjeta de D&eacute;bito</option><option value="4" >Tarjeta de Servicios</option><option value="11" >Cheque</option><option value="10" >Transferencia Electr&oacute;nica de Fondos</option>							  </select>
+				 
+							</div>
+							<label for="CdUsoCfdi" class="col-sm-2 control-label form-inline">Uso de Cfdi</label> 
+							<div class="col-sm-4">
+							  <select name="CdUsoCfdi" class="form-control form-control-sm popover-help" id="CdUsoCfdi" data-content="Seleccione el codigo de uso del Cfdi que corresponda con el régimen y la persona física o moral" data-toggle="popover" data-placement="top" required>
+								<option value=""></option>
+								<option value="CN01" >CN01 - Nómina</option><option value="CP01" >CP01 - Pagos</option><option value="D01" >D01 - Honorarios médicos, dentales y gastos hospitalarios.</option><option value="D02" >D02 - Gastos médicos por incapacidad o discapacidad.</option><option value="D03" >D03 - Gastos funerales.</option><option value="D04" >D04 - Donativos.</option><option value="D05" >D05 - Intereses reales efectivamente pagados por créditos hipotecarios (casa habitación).</option><option value="D06" >D06 - Aportaciones voluntarias al SAR.</option><option value="D07" >D07 - Primas por seguros de gastos médicos.</option><option value="D08" >D08 - Gastos de transportación escolar obligatoria.</option><option value="D09" >D09 - Depósitos en cuentas para el ahorro, primas que tengan como base planes de pensiones.</option><option value="D10" >D10 - Pagos por servicios educativos (colegiaturas).</option><option value="G01" >G01 - Adquisición de mercancías.</option><option value="G02" >G02 - Devoluciones, descuentos o bonificaciones.</option><option value="G03" selected>G03 - Gastos en general.</option><option value="I01" >I01 - Construcciones.</option><option value="I02" >I02 - Mobiliario y equipo de oficina por inversiones.</option><option value="I03" >I03 - Equipo de transporte.</option><option value="I04" >I04 - Equipo de computo y accesorios.</option><option value="I05" >I05 - Dados, troqueles, moldes, matrices y herramental.</option><option value="I06" >I06 - Comunicaciones telefónicas.</option><option value="I07" >I07 - Comunicaciones satelitales.</option><option value="I08" >I08 - Otra maquinaria y equipo.</option><option value="S01" >S01 - Sin efectos fiscales.</option>							  </select>
+				 
+							</div>
+						  </div>
+						  <div class="row" style="display: none;">
+							<label for="ZipFile" class="col-sm-2 control-label">Archivo Comprimido ZIP&nbsp;</label> 
+							<div class="col-sm-1">
+							  <input name="ZipFile" class="form-control form-control-sm" id="ZipFile" type="checkbox" value="1">
+							</div>
+						  </div>
+						  <!-- <span class="help-block">Indique el numero de ticket a facturar y haga click en Agregar</span> -->
+						  <div class="row mt-1 d-none">
+							<label for="NotasFactura" class="col-sm-2 control-label">Descripci&oacute;n de adenda</label> 
+							<div class="col-sm-10">
+							  <input name="NotasFactura" class="form-control form-control-sm popover-help" id="NotasFactura" maxlength="255" value="" data-content="Aqu&iacute; puede poner una descripci&oacute;n que se agregar&aacute; en la adenda" data-toggle="popover" data-placement="right">
+							</div>
+						  </div>
+						  <div class="row mt-1">
+							<label class="col-sm-2 control-label">No. Rastreo*</label> 
+							<div class="col-sm-8">
+							  <div class="input-group">
+								<input name="Ticket" class="form-control form-control-sm" id="Ticket" maxlength="1024" value="">
+								<div class="input-group-append">
+									<button class="btn btn-default popover-help btn-sm" type="button" data-toggle="popover" data-content="<div>No. Rastreo que desea facturar, por ejemplo 1234-5678-9101-1<img src='../images/logos/ticket_receipt.jpg'></div>" data-html="true">
+										<i class="fa fa-question-circle"></i>
+									</button>
+									<button class="btn btn-primary btn-sm" type="button" name="Button_Add" id="Button_Add" onclick="addTicket();">Agregar</button>
+								</div>
+							  </div>
+							  <small class="text-danger" id="Ticket_help"></small>
+							</div>
+						  </div>
+						  <div class="row">
+							<label class="col-sm-4 control-label">
+								<div id="show_tickets" data-trigger="hover" data-toggle="popover" data-placement="right" data-content="Haga click sobre el ticket para quitarlo de la factura" class="popover-help-button"></div>
+							</label> 
+							<div class="form-group col-md-8">
+							  <input name="Tickets" id="Tickets" type="hidden" value="">
+							</div>
+						  </div>
+						  <div class="row">
+							<label class="col-sm-3 control-label">*Campo Obligatorio&nbsp; </label> 
+							<!-- BEGIN Button Button_Insert -->
+								<input name="Button_Insert" class="btn btn-success" id="Button_Insert" type="submit" alt="Agregar" value="Solicitar Factura">
+							<!-- END Button Button_Insert -->
+						  </div>
+						  <div class="col-sm-7">
+							<p class="text-primary text-bold" style="font-size: 12px;">Nunca le solicitaremos datos bancarios</p>
+						  </div>
+						</div>
+						<div class="col-md-4 form2" id="advert_div">
+						</div>
+					  </div>
+					
+				  </div>
+				  <!-- /.card-body -->
+
+				  <!--
+				  <div class="card-footer">
+					<p class="text-danger" style="font-size: 14px; font-weight: normal; margin-bottom: 0px;"><span><img src="../images/icons/doble-revision16.png"></span> Favor de verificar bien sus datos, no se permiten cambios ni cancelaciones</p>
+					<p class="text-info" style="font-size: 14px; font-weight: bold; margin-bottom: 0px;"><span><img src="../images/icons/calendar16.png"></span> S&oacute;lo se podr&aacute;n facturar los consumos del mes en curso</p>
+					<p class="text-muted" style="font-size: 14px; font-weight: bold; margin-bottom: 0px;"><span><img src="../images/icons/invoice16.png"></span> Conserve su Ticket para <a href="facturas-search.php">Recuperar su factura</a></p>
+					<div class="row">
+						<div class="col-md-10"><p class="text-muted" style="font-size: 14px; font-weight: normal; margin-bottom: 0px;">La utilizaci&oacute;n de este Sitio Web implica que usted ha le&iacute;do nuestro <a href="../Privacidad.pdf" target="_blank">Aviso de Privacidad</a>.</p></div>
+						<div class="col-md-2 text-right"><p class="text-muted" style="font-size: 14px; font-weight: normal; margin-bottom: 0px;">Ver 1.4.0</p>
+					</div>
+				  </div> -->
+				  <!-- /.card-footer-->
+				<!-- </div> -->
+				<!-- /.card -->
+			  </div>
+			</div>
+		  </div>
+		  </div> <!-- test -->
+		</div>
+	  
+
+		<div class="modal modal-loading">
+		</div>
+		
+		<div tabindex="-1" class="modal" id="myModal" role="dialog" aria-labelledby="myModalLabel">
+			<div class="modal-dialog" role="document">
+			  <div class="modal-content">
+				<div class="modal-header">
+				  <h4 class="modal-title" id="myModalLabel">Complemento INE</h4>
+					<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+					  <span aria-hidden="true">&times;</span>
+					</button>
+				</div>
+				<div class="modal-body">
+				  <div class="container">
+					<div class="form-group">
+					  <label for="IdTipoProceso">Tipo Proceso<span>*</span></label> 
+					  <select name="IdTipoProceso" class="form-control" id="IdTipoProceso">
+						<option selected value=""></option>
+						<option value="3">Campaña</option><option value="1">Ordinario</option><option value="2">Precampaña</option>					  </select>
+	 
+					</div>
+					<div class="form-group">
+					  <label for="IdTipoComite">Tipo Comit&eacute;<span id="IdTipoComiteObl">*</span></label> 
+					  <select name="IdTipoComite" class="form-control" id="IdTipoComite">
+						<option selected value=""></option>
+						<option value="3">Directivo Estatal</option><option value="2">Ejecutivo Estatal</option><option value="1">Ejecutivo Nacional</option>					  </select>
+	 
+					</div>
+					<div class="form-group">
+					  <label for="IdContabilidadNac">Contabilidad</label> <input name="IdContabilidadNac" class="form-control" id="IdContabilidadNac" maxlength="5" value="">
+					</div>
+					<div class="form-row">
+					  <div class="form-group col-md-3">
+						<label for="IdEstadoSel">Entidad<span id="IdEstadoObl">*</span></label> 
+						<select name="IdEstadoSel" class="form-control" id="IdEstadoSel">
+						  <option selected value=""></option>
+							<option value="1">Aguascalientes</option><option value="2">Baja California</option><option value="3">Baja California Sur</option><option value="4">Campeche</option><option value="6">Chihuahua</option><option value="5">Chiapas</option><option value="7">Coahuila de Zaragoza</option><option value="8">Colima</option><option value="9">Ciudad de Mexico</option><option value="10">Durango</option><option value="13">Guerrero</option><option value="12">Guanajuato</option><option value="14">Hidalgo</option><option value="15">Jalisco</option><option value="11">Estado de México</option><option value="16">Michoacán</option><option value="17">Morelos</option><option value="18">Nayarit</option><option value="19">Nuevo León</option><option value="20">Oaxaca</option><option value="21">Puebla</option><option value="22">Querétaro</option><option value="23">Quintana Roo</option><option value="25">Sinaloa</option><option value="24">San Luis Potosí</option><option value="26">Sonora</option><option value="27">Tabasco</option><option value="28">Tamaulipas</option><option value="29">Tlaxcala</option><option value="30">Veracruz</option><option value="31">Yucatán</option><option value="32">Zacatecas</option>						</select>
+					  </div>
+					  <div class="form-group col-md-3">
+						<label for="IdAmbito">Ámbito<span id="IdAmbitoObl">*</span></label> 
+						<select name="IdAmbito_Name" class="form-control" id="IdAmbito">
+						  <option selected value=""></option>
+							<option value="1">Federal</option><option value="2">Local</option>						</select>
+	 
+					  </div>
+					  <div class="form-group col-md-5">
+						<label for="IdContabilidadSel">Id Contabilidad</label> 
+						<div class="input-group">
+						  <input name="IdContabilidadSel" class="form-control" id="IdContabilidadSel" maxlength="6" value="">
+						  <div class="input-group-append">
+							<button class="btn btn-primary" id="btnAddEntidad">Agregar</button>
+						  </div>
+						</div>
+					  </div>
+					</div>
+				  </div>
+				  <div class="container">
+					<table class="table table-bordered table-hover" id="entidades_selected">
+					</table>
+				  </div>
+				</div>
+				<input name="selected_entidades" id="selected_entidades" type="hidden" value="">
+				<input name="selected_contabilidades" id="selected_contabilidades" type="hidden" value="">
+				<input name="selected_ambitos" id="selected_ambitos" type="hidden" value="">
+				<div class="modal-footer">
+				  <button class="btn btn-success" id="btnAceptar">Aceptar</button>
+				  <button class="btn btn-default" id="btnRegresar" data-dismiss="modal">Quitar Complemento</button> 
+				</div>
+			  </div>
+			</div>
+		</div>
+		<!-- end of modal -->
+		</form>
+<!-- fin editar -->
+	</div>
+	<!-- /.content-wrapper -->
+<footer class="main-footer">
+	<span class="text-muted">La utilizaci&oacute;n de este Sitio Web implica que usted ha le&iacute;do nuestro <a href="../Privacidad" target="_blank">Aviso de Privacidad</a>.</span>
+</footer>
+</div>
+<!-- ./wrapper -->
+
+<!-- jQuery -->
+<script src="../vendor/plugins/jquery/jquery.min.js"></script>
+<script src="../vendor/plugins/jquery-ui/jquery-ui.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="../vendor/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="../vendor/plugins/moment/moment-with-locales.js"></script>
+<!-- Toastr -->
+<script src="../vendor/plugins/toastr/toastr.min.js"></script>
+<!-- AdminLTE App -->
+<script src="../vendor/dist10/js/adminlte.min.js"></script>
+<!-- Page  JavaScript -->
+<script src="autofactura.js?v=1.0.7"></script>
+</body>
+</html>

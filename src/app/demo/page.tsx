@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { mxn } from '@/lib/formato';
 
 interface Comprobante { concepto: string; monto: number; folio?: string; cfdiUuid?: string; label: string }
-interface Bubble { from: 'op' | 'cuadra'; text: string }
+interface Bubble { from: 'op' | 'likida'; text: string }
 
 // 🔴 INVENTADO: escenario de demo Silao→Laredo. Anticipo = total comprobado,
 // así la ÚNICA diferencia es el diésel $200 sobre política (luce el diferenciador).
@@ -19,7 +19,7 @@ const PRESETS: Comprobante[] = [
 
 export default function Demo() {
   const [bubbles, setBubbles] = useState<Bubble[]>([
-    { from: 'cuadra', text: `¡Hola! Soy Likida. Ya casi cierras tu viaje Silao → Laredo (anticipo ${mxn(ANTICIPO)}). Mándame las fotos de tus comprobantes.` },
+    { from: 'likida', text: `¡Hola! Soy Likida. Ya casi cierras tu viaje Silao → Laredo (anticipo ${mxn(ANTICIPO)}). Mándame las fotos de tus comprobantes.` },
   ]);
   const [added, setAdded] = useState<Comprobante[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,7 +35,7 @@ export default function Demo() {
     setBubbles((b) => [
       ...b,
       { from: 'op', text: `📎 ${c.label}` },
-      { from: 'cuadra', text: `Recibí tu ${c.concepto} de ${mxn(c.monto)}${c.cfdiUuid ? ' (CFDI validado por QR ✅)' : ''}. ¿Tienes más o ya cerramos?` },
+      { from: 'likida', text: `Recibí tu ${c.concepto} de ${mxn(c.monto)}${c.cfdiUuid ? ' (CFDI validado por QR ✅)' : ''}. ¿Tienes más o ya cerramos?` },
     ]);
   };
 
@@ -57,14 +57,14 @@ export default function Demo() {
         r.diferencia > 0 ? `• Sobró ${mxn(r.diferencia)} (a favor de la empresa)` : r.diferencia < 0 ? `• Pusiste ${mxn(-r.diferencia)} de tu bolsa` : `• Cuadra exacto ✅`,
       ];
       const obs = r.diferencias.filter((d: { tipo: string }) => d.tipo !== 'anticipo');
-      setBubbles((b) => [...b, { from: 'cuadra', text: lines.join('\n') }]);
+      setBubbles((b) => [...b, { from: 'likida', text: lines.join('\n') }]);
       if (obs.length) {
-        setBubbles((b) => [...b, { from: 'cuadra', text: 'Ojo con esto:\n' + obs.map((d: { nota: string }) => `• ${d.nota}`).join('\n') }]);
+        setBubbles((b) => [...b, { from: 'likida', text: 'Ojo con esto:\n' + obs.map((d: { nota: string }) => `• ${d.nota}`).join('\n') }]);
       }
-      setBubbles((b) => [...b, { from: 'cuadra', text: '📄 Te mando tu liquidación en PDF. ¡Buen viaje! 🚛' }]);
+      setBubbles((b) => [...b, { from: 'likida', text: '📄 Te mando tu liquidación en PDF. ¡Buen viaje! 🚛' }]);
     } catch {
       // ME-16: si el cuadre falla (red/servidor), avisar en vez de colgar el demo.
-      setBubbles((b) => [...b, { from: 'cuadra', text: 'Uy, no pude cerrar el cuadre ahorita. Inténtalo de nuevo en un momento.' }]);
+      setBubbles((b) => [...b, { from: 'likida', text: 'Uy, no pude cerrar el cuadre ahorita. Inténtalo de nuevo en un momento.' }]);
     } finally {
       setLoading(false);
     }

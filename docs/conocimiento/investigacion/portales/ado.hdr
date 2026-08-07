@@ -1,0 +1,21 @@
+HTTP/2 200 
+date: Wed, 05 Aug 2026 04:29:54 GMT
+content-type: text/html; charset=UTF-8
+oraclecommercecloud-sandiego: NjcyMDEzNTIwMzgwNjExNjA3OQ==
+x-oracle-dms-rid: 0
+x-content-type-options: nosniff
+commerceplatform-version: version=MjYuMDcgQnVpbGQ6IGplbmtpbnMtQXNzZW1ibGVfQ2xvdWRfQ29tbWVyY2VfRUFSc18tbWFzdGVyLTQxNg==
+oraclecommercecloud-version: 26.07
+x-oracle-dms-ecid: ec9af6d9-9475-4894-8950-d067057c56ae-00443115
+x-xss-protection: 1; mode=block
+strict-transport-security: max-age=31536000; includeSubDomains; preload
+x-request-id: c0ecb110aaedfb62c6374cb6874a1d8b
+vary: Accept-Encoding
+set-cookie: ccstoreroute=295d52c51d66b26d823cd9d8a2ad0835|cc2d3787e8999f4a634b9d592c9e2268; Path=/; Secure; HttpOnly; SameSite=Lax
+set-cookie: JSESSIONID=l5vQL2QpCbdMRz7tHWbC_vXwfpfGv8lHqMDNBwp_I2JPyESZ-F_U!-2034715528; path=/; secure; HttpOnly
+x-middle-request-id: 3162f9bf
+x-envoy-upstream-service-time: 44
+set-cookie: TS01dc4fc6=015231b01f23318e2eb3c5af880222739b2d6bf252b4f2e37a74c4d44f88a02dd7c4e41336abbe052d1e3abdcf217d987d461ac2ec; Path=/; Secure; HttpOnly; SameSite=Strict;
+server: volt-cdn
+x-cache-status: EXPIRED
+

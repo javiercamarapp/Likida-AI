@@ -4,7 +4,7 @@
  * proveedor se lee del prefijo real `proveedor/modelo` (google/gemini-…,
  * anthropic/claude-…, `src/lib/llm/models.ts`); WhatsApp no trae ese
  * prefijo (su fila en `llm_costo` guarda `modelo: 'whatsapp-utility'`,
- * `src/lib/cuadra/costos.ts`), se detecta por substring.
+ * `src/lib/likida/costos.ts`), se detecta por substring.
  *
  * Logos reales de marca, a color — pedido explícito del usuario
  * (reemplaza la insignia monocromo de letra que había antes para estos 3

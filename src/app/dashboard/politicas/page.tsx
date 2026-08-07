@@ -1,8 +1,8 @@
 import { revalidatePath } from 'next/cache';
 import { ScrollText, Info, Route } from 'lucide-react';
-import { getConfig } from '@/lib/cuadra/config';
-import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
-import { guardarPolitica, armarPolitica, mensajeParaPantalla } from '@/lib/cuadra/administracion';
+import { getConfig } from '@/lib/likida/config';
+import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
+import { guardarPolitica, armarPolitica, mensajeParaPantalla } from '@/lib/likida/administracion';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';

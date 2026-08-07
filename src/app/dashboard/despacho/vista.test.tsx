@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TableroCifras } from './vista';
-import type { TableroOperacion } from '@/lib/cuadra/operacion';
+import type { TableroOperacion } from '@/lib/likida/operacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 10, MEDIO — "Sin evidencia de entrega" (40% visible) y "Unidades

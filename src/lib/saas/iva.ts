@@ -1,4 +1,4 @@
-import { DatoInvalido } from '@/lib/cuadra/errores';
+import { DatoInvalido } from '@/lib/likida/errores';
 import { round2 } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════

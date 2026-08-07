@@ -1,0 +1,5 @@
+# Las fichas cosechadas son material intermedio y son ~1,200 archivos. Lo que se
+# commitea es el CONSOLIDADO (`../fichas-pulidas.json` y los .md), no la cosecha
+# cruda: el script la vuelve a generar cuando haga falta, y es reanudable.
+*.json
+!consolidado.json

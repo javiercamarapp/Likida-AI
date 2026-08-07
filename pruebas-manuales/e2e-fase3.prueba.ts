@@ -14,15 +14,15 @@ const DIR = process.env.E2E_DIR!;
 
 describe('fase 3 · casos feos', () => {
   it('corre', async () => {
-    const { crearViaje } = await import('@/lib/cuadra/operacion');
-    const { addGasto, getGastos, gastoExistePorHash, ubicarGastoPorHash, saveLiquidacion } = await import('@/lib/cuadra/repo');
-    const { extraerComprobante } = await import('@/lib/cuadra/intake/ocr');
-    const { hashImagen } = await import('@/lib/cuadra/intake/hash');
-    const { decidirFoto } = await import('@/lib/cuadra/intake/decidir');
-    const { decidirAcuse, CONFIANZA_PROBADA, CONFIANZA_LEGIBLE } = await import('@/lib/cuadra/acuse_ticket');
-    const { cuadrarDesdeDB } = await import('@/lib/cuadra/cuadre/desde_db');
-    const { estadoDelViaje, interpretarPregunta, armarRespuesta } = await import('@/lib/cuadra/consulta_chofer');
-    const { resumenCuadre } = await import('@/lib/cuadra/cuadre/resumen');
+    const { crearViaje } = await import('@/lib/likida/operacion');
+    const { addGasto, getGastos, gastoExistePorHash, ubicarGastoPorHash, saveLiquidacion } = await import('@/lib/likida/repo');
+    const { extraerComprobante } = await import('@/lib/likida/intake/ocr');
+    const { hashImagen } = await import('@/lib/likida/intake/hash');
+    const { decidirFoto } = await import('@/lib/likida/intake/decidir');
+    const { decidirAcuse, CONFIANZA_PROBADA, CONFIANZA_LEGIBLE } = await import('@/lib/likida/acuse_ticket');
+    const { cuadrarDesdeDB } = await import('@/lib/likida/cuadre/desde_db');
+    const { estadoDelViaje, interpretarPregunta, armarRespuesta } = await import('@/lib/likida/consulta_chofer');
+    const { resumenCuadre } = await import('@/lib/likida/cuadre/resumen');
     const { supabaseAdmin } = await import('@/lib/supabase/admin');
 
     const ids = JSON.parse(readFileSync(`${OUT}/ids.json`, 'utf8'));

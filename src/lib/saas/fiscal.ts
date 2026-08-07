@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { esRfcValido, rfcChecksumOk } from '@/lib/cuadra/intake/cfdi';
-import { DatoInvalido } from '@/lib/cuadra/errores';
+import { esRfcValido, rfcChecksumOk } from '@/lib/likida/intake/cfdi';
+import { DatoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS DATOS FISCALES DE LA FLOTA — lo que el CFDI exige del receptor.

@@ -1,6 +1,6 @@
 import { Settings, Fuel, Building2, BookOpen } from 'lucide-react';
-import { getConfig } from '@/lib/cuadra/config';
-import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
+import { getConfig } from '@/lib/likida/config';
+import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { EstadoVacio } from '../../admin/ui/kit';

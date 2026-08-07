@@ -1,7 +1,7 @@
 import { Truck, CircleCheck, Route, Wrench, FileWarning } from 'lucide-react';
 import { KpiTile, EstadoVacio, StatusPill, type Estado } from '../../admin/ui/kit';
 import { numero } from '@/lib/formato';
-import type { UnidadRow } from '@/lib/cuadra/operacion';
+import type { UnidadRow } from '@/lib/likida/operacion';
 
 // Los bloques visuales de Unidades, fuera de la página por la misma razón que
 // en Despacho: la página no se renderiza sin sesión, y el render hay que

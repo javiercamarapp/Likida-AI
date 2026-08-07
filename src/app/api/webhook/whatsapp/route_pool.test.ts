@@ -38,7 +38,7 @@ const processInbound = vi.fn(async (m: { waMessageId?: string }) => {
   enVuelo -= 1;
 });
 
-vi.mock('@/lib/cuadra/processor', () => ({ processInbound: (m: unknown) => processInbound(m as { waMessageId?: string }) }));
+vi.mock('@/lib/likida/processor', () => ({ processInbound: (m: unknown) => processInbound(m as { waMessageId?: string }) }));
 
 /** Lo que la ruta le manda al operador. `verifySignature` se deja REAL. */
 const enviados: Array<{ to: string; texto: string }> = [];

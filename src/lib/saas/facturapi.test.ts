@@ -19,7 +19,7 @@ import {
 
 const RECEPTOR = {
   rfc: 'GMX0902279I1',
-  razonSocial: 'Cliente demo SA DE CV',
+  razonSocial: 'FLOTA DEMO SA DE CV',
   regimenFiscal: '601',
   codigoPostal: '45615',
   usoCfdi: 'G03',

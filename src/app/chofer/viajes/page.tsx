@@ -1,5 +1,5 @@
 import { requireOperador } from '@/lib/auth/guard';
-import { misViajes, TOPE_HISTORIAL } from '@/lib/cuadra/chofer';
+import { misViajes, TOPE_HISTORIAL } from '@/lib/likida/chofer';
 import { Titulo, Pendiente, ListaViajes, SinViajesRegistrados } from '../vista';
 
 export const dynamic = 'force-dynamic';

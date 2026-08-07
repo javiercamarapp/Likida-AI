@@ -1,0 +1,1894 @@
+
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="YB0IGhgCEANaHWADAhYfGys3ODBYFDIh9QMxnVO63D5NJxquYXmdnpYM">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-startup-image" href="/images/portal/cams/icon.png">
+    <link rel="shortcut icon" href="/images/portal/cams/icon.png" type="image/x-icon">
+    <meta name="theme-color" content="rgba(61,122,189,1)">
+    <meta name="msapplication-navbutton-color" content="rgba(61,122,189,1)">
+<title>CAMS · Facturar Ticket</title>
+
+<meta content="Facturación de tickets CAMS" name="description">
+
+<meta content="ticket, factura, facturar, cams" name="keywords">
+
+<meta content="diverza" name="author">
+
+<meta content="index, follow" name="robots">
+
+    <link phx-track-static rel="stylesheet" href="/assets/app-ebeea437f6965590143e3e8a76fb12c8.css?vsn=d">
+    <script defer phx-track-static type="text/javascript" src="/assets/app-26a6495371b96b10c7ec907af4bb929d.js?vsn=d"></script>
+
+    <!-- DATATABLES/ -->
+      <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/bs5/jq-3.6.0/jszip-2.5.0/dt-1.12.1/af-2.4.0/b-2.2.3/b-colvis-2.2.3/b-html5-2.2.3/b-print-2.2.3/cr-1.5.6/date-1.1.2/fc-4.1.0/fh-3.2.4/kt-2.7.0/r-2.3.0/rg-1.2.0/rr-1.2.8/sc-2.0.7/sb-1.3.4/sp-2.0.2/sl-1.4.0/sr-1.1.1/datatables.min.css">
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.36/pdfmake.min.js"></script>
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.36/vfs_fonts.js"></script>
+      <script type="text/javascript" src="https://cdn.datatables.net/v/bs5/jq-3.6.0/jszip-2.5.0/dt-1.12.1/af-2.4.0/b-2.2.3/b-colvis-2.2.3/b-html5-2.2.3/b-print-2.2.3/cr-1.5.6/date-1.1.2/fc-4.1.0/fh-3.2.4/kt-2.7.0/r-2.3.0/rg-1.2.0/rr-1.2.8/sc-2.0.7/sb-1.3.4/sp-2.0.2/sl-1.4.0/sr-1.1.1/datatables.min.js"></script>
+    <!-- /DATATABLES -->
+
+    <!-- DATEPICKER/ -->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js" integrity="sha512-T/tUfKSV1bihCnd+MxKD0Hm1uBBroVYBOYSk1knyvQ9VyZJpc/ALb4P0r6ubwVPSGB2GvjeoMAJJImBG12TiaQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css" integrity="sha512-mSYUmp1HYZDFaVKK//63EcZq4iFWFjxSL+Z3T/aCt4IO9Cejm03q3NKKYN6pFQzY0SBOr8h+eCIAZHPXcpZaNw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/locales/bootstrap-datepicker.es.min.js" integrity="sha512-5pjEAV8mgR98bRTcqwZ3An0MYSOleV04mwwYj2yw+7PBhFVf/0KcE+NEox0XrFiU5+x5t5qidmo5MgBkDD9hEw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- /DATEPICKER -->
+
+    <!-- MASK -->
+    <script src="https://cdn.jsdelivr.net/npm/inputmask"></script>
+    <!-- /MASK -->
+    
+    <!-- MATERIAL-ICONS/ -->
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- /MATERIAL-ICONS -->
+
+    <!-- SELECT2/ -->
+      <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+      <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <!-- /SELECT2 -->
+
+    <!-- SWEETALERT2/ -->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.6.16/sweetalert2.min.js" integrity="sha512-4aFcnPgoxsyUPgn8gNinplVIEoeBizjYPTpmOaUbC3VZQCsRnduAOch9v0Pn30yTeoWq1rIZByAE4/Gg79VPEA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.6.16/sweetalert2.min.css" integrity="sha512-NvuRGlPf6cHpxQqBGnPe7fPoACpyrjhlSNeXVUY7BZAj1nNhuNpRBq3osC4yr2vswUEuHq2HtCsY2vfLNCndYA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <!-- /SWEETALERT2 -->
+
+    <!-- LOCALFORAGE/ -->
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js" integrity="sha512-+BMamP0e7wn39JGL8nKAZ3yAQT2dL5oaXWr4ZYlTGkKOaoXM/Yj7c4oy50Ngz5yoUutAG17flueD4F6QpTlPng==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- /LOCALFORAGE -->
+
+    <!-- TIPPY/ -->
+      <!-- Development -->
+        <script src="https://unpkg.com/@popperjs/core@2/dist/umd/popper.min.js"></script>
+        <script src="https://unpkg.com/tippy.js@6/dist/tippy-bundle.umd.js"></script>
+
+      <!-- Production -->
+        <script src="https://unpkg.com/@popperjs/core@2"></script>
+        <script src="https://unpkg.com/tippy.js@6"></script>
+    <!-- /TIPPY -->
+  </head>
+  <body class="bar">
+    <style style="display:none">
+
+      @import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');
+
+
+      @import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');
+
+      @keyframes append-animate {
+        from {
+          transform: scale(0);
+          opacity: 0;
+          height: 0%;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+          height: 100%;
+        }
+      }
+
+      @keyframes scale-animate {
+        from {
+          transform: scale(0);
+          opacity: 0;
+          height: 0%;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+          height: 100%;
+        }
+      }
+
+      @keyframes fade-animate {
+        from {
+
+          opacity: 0;
+
+        }
+        to {
+
+          opacity: 1;
+
+        }
+      }
+
+      *{
+        transition: box-shadow 0.3s ease-in-out, background-color 0.3s ease-in-out, border 0.3s ease-in-out, color 0.2s ease-in-out, text-shadow 0.3s ease-in-out, height 1s ease-in-out, max-height 1s ease-in-out, min-height 1s ease-in-out, width 1s ease-in-out, max-width 1s ease-in-out, min-width 1s ease-in-out;
+        font-family: Roboto, sans-serif;
+      }
+
+      h1, h2, h3, h4, h5, h6, .title{
+        font-family: Roboto, sans-serif;
+      }
+
+      html {
+
+      }
+
+      body {
+        display:flex;
+        position: relative;
+        height: fit-content;
+        flex-direction: column;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        color: #5E5E63 !important;
+      }
+
+      body > * {
+        display: flex;
+      }
+
+      .copyright{
+        font-family: sans-serif !important;
+        color: white;
+        font-size: 1rem;
+        padding-top: 3px;
+      }
+
+      ::placeholder {
+        opacity: 0.4;
+      }
+
+      input:focus::placeholder {
+        opacity: 0;
+      }
+
+      input:not(:focus)::placeholder {
+        opacity: 0.4;
+      }
+
+      .background{
+        background-color: rgba(255,255,255,1) ;
+        width:100vw;
+        transition: height 0s ease-in-out, max-height 0s ease-in-out, min-height 0s ease-in-out, width 0s ease-in-out, max-width 0s ease-in-out, min-width 0s ease-in-out;
+      }
+
+      .card-header{
+        padding: 0px 0px 0px 0px !important;
+      }
+
+      .space{
+        border-radius: 15px 15px 15px 15px;
+        padding: 25px 25px 15px 25px !important;
+        margin-bottom: 0.5rem !important;
+      }
+
+      .card-portal{
+        border-radius: 15px 15px 15px 15px;
+        padding: 25px 25px 15px 25px !important;
+        background-color: rgba(213,213,213,0.15) ;
+        outline: none !important;
+        border: 0.2rem solid rgba(94,103,111,0.2) !important;
+        box-shadow: 0 0 5px rgba(231,231,231,0.1) !important;
+        margin-bottom: 0.5rem !important;
+      }
+
+      .form{
+        border-radius: 15px 15px 15px 15px;
+        padding: 25px 25px 15px 25px !important;
+        background-color: rgba(213,213,213,0.15) ;
+        outline: none !important;
+        border: 0.2rem solid rgba(94,103,111,0.2) !important;
+        box-shadow: 0 0 5px rgba(231,231,231,0.1) !important;
+        margin-bottom: 0.5rem !important;
+      }
+
+      form{
+        margin: 0px;
+      }
+
+      .search_section_air{
+        height: calc( (100vh - 891px) / 2);
+      }
+
+      .invoice_section_air{
+        height: calc( (100vh - 771px) / 2);
+      }
+
+      .search-ticket-forms {
+        border-radius: 15px 15px 15px 15px ;
+        min-height: 387px ;
+
+          background: url(/images/portal/cams/ticket-mark.png) no-repeat center;
+          background-size: cover;
+
+      }
+
+      .ticket-form{
+        border-radius: 15px 15px 15px 15px ;
+        min-height: 387px ;
+
+          background: url( /images/portal/cams/ticket-mark.png) no-repeat center;
+          background-size: cover;
+
+      }
+
+      .receiver-form{
+        border-radius: 15px 15px 15px 15px ;
+        min-height: 387px ;
+
+      }
+
+      .additionals{
+        background-color: rgba(255,255,255,0.9) ;
+        border: 0.2rem solid #6e797f29 !important;
+        box-shadow: 0 0 5px rgba(255, 255, 255, 0.16) !important;
+      }
+
+      .modal{
+        border-radius: 15px 15px 15px 15px;
+        padding: 25px 25px 15px 25px !important;
+        background-color: white ;
+        outline: none !important;
+        border: 0.2rem solid rgba(94,103,111,0.2) !important;
+        box-shadow: 0 0 5px rgba(231,231,231,0.2) !important;
+        margin-bottom: 0.5rem !important;
+        width: calc(100vw - 13px);
+        max-width: -moz-fit-content;
+        max-width: fit-content;
+      }
+
+      .modal_description{
+        max-width: 360px;
+      }
+
+      .background_modal {
+        margin: 5px 0px 0px 5px;
+        z-index: 200000000;
+        position: fixed;
+        background-color: rgba(69, 85, 96, 0.90) !important;
+        list-style: none;
+        overflow-y: auto;
+        width: 100vw;
+        height: 100vh;
+        top: -5px;
+        left: -5px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+      }
+
+      .campo-combinado {
+        display: flex;
+        border: 0px;
+      }
+
+      .multi-field-left{
+        flex: 1;
+        text-align: center;
+        border: 3px solid #166cc2;
+        padding: 5px;
+        border-radius: 10px;
+      }
+
+      .multi-field-right{
+        flex: 1;
+        text-align: center;
+        border: 3px solid #166cc2;
+        padding: 5px;
+        border-radius: 10px;
+      }
+
+      .campo-combinado input :focus {
+          outline: none; /* Elimina el contorno predeterminado al hacer clic */
+          border-color: #166cc2; /* Puedes cambiar este color según tus preferencias */
+        }
+
+      .separador {
+        pointer-events: none; /* Para que no afecte la interacción del usuario */
+        padding: 10px;
+        padding-top: 1px;
+        color: black;
+        font-size: 20px;
+      }
+
+      .button, button, input[type=button], input[type=reset], input[type=submit] {
+        font-size: larger;
+        border-radius: 15px 15px 15px 15px;
+        transition: all 0.3s ease-out;
+      }
+
+      .button:hover, button:hover, input[type=button]:hover, input[type=reset]:hover, input[type=submit]:hover {
+        transform: scale(1.05);
+        transition: all 0.1s ease-in;
+      }
+
+      .button:focus, button:focus, input[type=button]:focus, input[type=reset]:focus, input[type=submit]:focus {
+        transform: scale(1.05);
+        transition: all 0.1s ease-in;
+      }
+
+      .button:active, button:active, input[type=button]:active, input[type=reset]:active, input[type=submit]:active {
+        transform: scale(0.9);
+        transition: all 0.05s ease-out;
+      }
+
+      .button:disabled, button:disabled, input[type=button]:disabled, input[type=reset]:disabled, input[type=submit]:disabled {
+        background-color: gray !important;
+      }
+
+      .search_button{
+        border: 0.1rem solid rgba(255,255,255, 0.9) !important;
+        box-shadow: 0 0 8px rgba(61,122,189,0) !important;
+        color: white ;
+        background-color: rgba(61,122,189,0.9) ;
+      }
+
+      .search_button:focus{
+        color: white ;
+        background-color: rgba(61,122,189,1) ;
+        outline: none !important;
+        border: 0.1rem solid rgba(255,255,255, 0.36) !important;
+        box-shadow: 0 0 8px rgba(255,255,255, 0.63) !important;
+      }
+
+      .search_button:hover{
+        color: white ;
+        background-color: rgba(61,122,189,1) ;
+        outline: none !important;
+        border: 0.1rem solid rgba(255,255,255, 0.36) !important;
+        box-shadow: 0 0 8px rgba(255,255,255, 0.63) !important;
+      }
+
+      .back_button{
+        border: 0.1rem solid rgba(255,255,255, 0.9) !important;
+        box-shadow: 0 0 8px rgba(61,122,189,0) !important;
+        color: white ;
+        background-color: rgba(61,122,189,0.9) ;
+      }
+
+      .back_button:focus{
+        color: white ;
+        background-color: rgba(61,122,189,1) ;
+        outline: none !important;
+        border: 0.1rem solid rgba(255,255,255, 0.36) !important;
+        box-shadow: 0 0 8px rgba(255,255,255, 0.63) !important;
+      }
+
+      .back_button:hover{
+        color: white ;
+        background-color: rgba(61,122,189,1) ;
+        outline: none !important;
+        border: 0.1rem solid rgba(255,255,255, 0.36) !important;
+        box-shadow: 0 0 8px rgba(255,255,255, 0.63) !important;
+      }
+
+      .continue_button{
+        border: 0.1rem solid rgba(255,255,255, 0.9) !important;
+        box-shadow: 0 0 8px rgba(61,122,189,0) !important;
+        color: white ;
+        background-color: rgba(61,122,189,0.9) ;
+      }
+
+      .continue_button:focus{
+        color: white ;
+        background-color: rgba(61,122,189,1) ;
+        outline: none !important;
+        border: 0.1rem solid rgba(255,255,255, 0.36) !important;
+        box-shadow: 0 0 8px rgba(255,255,255, 0.63) !important;
+      }
+
+      .continue_button:hover{
+        color: white ;
+        background-color: rgba(61,122,189,1) ;
+        outline: none !important;
+        border: 0.1rem solid rgba(255,255,255, 0.36) !important;
+        box-shadow: 0 0 8px rgba(255,255,255, 0.63) !important;
+      }
+
+      .billing_button{
+        border: 0.1rem solid rgba(255,255,255, 0.9) !important;
+        box-shadow: 0 0 8px rgba(61,122,189,0) !important;
+        color: white ;
+        background-color: rgba(61,122,189,0.9) ;
+      }
+
+      .billing_button:focus{
+        color: white ;
+        background-color: rgba(61,122,189,1) ;
+        outline: none !important;
+        border: 0.1rem solid rgba(255,255,255, 0.36) !important;
+        box-shadow: 0 0 8px rgba(255,255,255, 0.63) !important;
+      }
+
+      .billing_button:hover{
+        color: white ;
+        background-color: rgba(61,122,189,1) ;
+        outline: none !important;
+        border: 0.1rem solid rgba(255,255,255, 0.36) !important;
+        box-shadow: 0 0 8px rgba(255,255,255, 0.63) !important;
+      }
+
+      input, select {
+        border-radius: 8px !important;
+        width: 100% !important;
+        background-color: white !important;
+        outline: none !important;
+        border: 0.1rem solid rgba(231,231,231,0.8) !important;
+        box-shadow: 0 0 5px rgba(231,231,231,0.1) !important;
+        font-size: larger;
+      }
+
+      input:focus, select:focus {
+        outline: none !important;
+        border: 0.1rem solid rgba(231,231,231,1) !important;
+        box-shadow: 0 0 5px rgba(231,231,231,0.5) !important;
+      }
+
+      input[type=checkbox], input[type=radio] {
+          width: auto !important;
+          transform: scale(1.2);
+      }
+
+      .margin{
+        margin: 1rem;
+      }
+
+      .rfc{ min-width: 187px; }
+      .receiver_name{ min-width: 288px; }
+      .zip_code{ min-width: 133px; }
+      .address_number{ min-width: 69px; }
+      .street_name{ min-width: 319px; }
+
+      .logo{
+        filter: drop-shadow(0rem 0rem 1rem rgba(255,255,255,0.99)) !important;
+      }
+
+      .logo-column{
+        display: flex !important;
+      }
+
+      .slogan{
+        color: #5E5E63 !important;
+        text-shadow: 0rem 0rem 1rem rgba(255,255,255,0.99)  !important;
+        font-size: 2rem !important;
+      }
+
+      .slogan-column{
+        display: flex !important;
+        align-items: center;
+        flex-direction: row-reverse;
+      }
+
+      .size-components{
+        max-height: 387px ;
+      }
+
+      .ticket{
+        transition: all 0.3s ease-in-out;
+        cursor: zoom-in;
+        transform: scale(0.99) rotate(0.0deg) translateX(0%);
+        filter: drop-shadow(0rem 0rem 1rem rgba(231,231,231,0.6)) grayscale(33%) ;
+
+      }
+
+      .ticket:hover{
+        transition: all 0.4s ease-in-out ;
+        transform: scale(1) rotate(0.5deg) translateX(0%);
+        filter: drop-shadow(0rem 0rem 0.9rem rgba(0,0,0,0.1)) grayscale(0%) ;
+
+      }
+
+      .zoom{
+        cursor: zoom-out !important;
+        transform: translateX(-50%) scale(1.5) rotate(0.5deg) !important;
+        filter: drop-shadow(0rem 0rem 9rem rgba(0,0,0,0.2)) grayscale(0%) !important;
+        transition: all 0.4s ease-in-out  !important;
+      }
+
+      @media (max-width: 1024px) {
+        .rfc{ min-width: auto; }
+        .receiver_name{ min-width: auto; }
+        .zip_code{ min-width: auto; }
+        .address_number{ min-width: auto; }
+        .street_name{ min-width: auto; }
+        .search-ticket-form{ min-height: auto; }
+        .ticket-form{ min-height: auto; height: auto !important;}
+      }
+
+      .ticket_column{
+        max-width: 350px !important;
+      }
+
+      @media (max-width: 636px) {
+        .logo-column{ display: block !important; }
+        .ticket_column{ max-width: 100% !important; }
+        .slogan-column{ flex-direction: column !important; }
+        .zoom{
+          transform: translateX(0%) scale(1.1) rotate(0.5deg) !important;
+          filter: drop-shadow(0rem 0rem 0.9rem rgba(0,0,0,0.2)) grayscale(0%) !important;
+        }
+      }
+
+      .advertising_div
+
+      .scalable{
+
+          animation: fade-animate 1s ease-in-out;
+
+      }
+
+      @media (min-width: 1100px) and (min-height: 1100px) {
+        .scalable { transform: scale(1.1) !important; }
+        .search_section_air{
+          height: calc( (99vh - 891px) / 2);
+        }
+        .invoice_section_air{
+          height: calc( (99vh - 771px) / 2);
+        }
+        body { overflow: hidden; }
+      }
+
+      @media (min-width: 1200px) and (min-height: 1200px) {
+        .scalable { transform: scale(1.2) !important; }
+        .search_section_air{
+          height: calc( (98vh - 891px) / 2);
+        }
+        .invoice_section_air{
+          height: calc( (98vh - 771px) / 2);
+        }
+        body { overflow: hidden; }
+      }
+
+      @media (min-width: 1300px) and (min-height: 1300px) {
+        .scalable { transform: scale(1.3) !important; }
+        .search_section_air{
+          height: calc( (95vh - 891px) / 2);
+        }
+        .invoice_section_air{
+          height: calc( (95vh - 771px) / 2);
+        }
+        body { overflow: hidden; }
+      }
+
+      @media (min-width: 1400px) and (min-height: 1400px) {
+        .scalable { transform: scale(1.4) !important; }
+        .search_section_air{
+          height: calc( (93vh - 891px) / 2);
+        }
+        .invoice_section_air{
+          height: calc( (93vh - 771px) / 2);
+        }
+        body { overflow: hidden; }
+      }
+
+      @media (min-width: 1500px) and (min-height: 1500px) {
+        .scalable { transform: scale(1.5) !important; }
+        .search_section_air{
+          height: calc( (90vh - 891px) / 2);
+        }
+        .invoice_section_air{
+          height: calc( (90vh - 771px) / 2);
+        }
+        body { overflow: hidden; }
+      }
+      @media (min-width: 1600px) and (min-height: 1600px) {
+        .scalable { transform: scale(1.6) !important; }
+        .search_section_air{
+          height: calc( (88vh - 891px) / 2);
+        }
+        .invoice_section_air{
+          height: calc( (88vh - 771px) / 2);
+        }
+        body { overflow: hidden; }
+      }
+
+      @media (min-width: 1700px) and (min-height: 1700px) {
+        .scalable { transform: scale(1.7) !important; }
+        .search_section_air{
+          height: calc( (85vh - 891px) / 2);
+        }
+        .invoice_section_air{
+          height: calc( (85vh - 771px) / 2);
+        }
+        body { overflow: hidden; }
+      }
+
+      @media (min-width: 1800px) and (min-height: 1800px) {
+        .scalable { transform: scale(1.8) !important; }
+        .search_section_air{
+          height: calc( (83vh - 891px) / 2);
+        }
+        .invoice_section_air{
+          height: calc( (83vh - 771px) / 2);
+        }
+        body { overflow: hidden; }
+      }
+
+      @media (min-width: 1900px) and (min-height: 1900px) {
+        .scalable { transform: scale(1.9) !important; }
+        .search_section_air{
+          height: calc( (81vh - 891px) / 2);
+        }
+        .invoice_section_air{
+          height: calc( (81vh - 771px) / 2);
+        }
+        body { overflow: hidden; }
+      }
+
+      .required{
+        border: 0.2rem solid rgba(231,231,231,0.8) !important;
+      }
+
+      .required:focus {
+        outline: none !important;
+        border: 0.2rem solid rgba(231,231,231,1) !important;
+        box-shadow: 0 0 5px rgba(231,231,231,0.5) !important;
+      }
+
+      .help{
+        font-size: small;
+      }
+
+      .invalid-feedback {
+        font-size: 1.3rem;
+        font-weight: bold;
+        color: #a94442 !important;
+        animation: append-animate .3s ease-in-out;
+      }
+
+      .invalid {
+        color: #a94442 !important;
+      }
+
+      .title{
+        color: #5E5E63 !important;
+      }
+
+      .text{
+        color: #5E5E63 !important;
+      }
+
+      a {
+        text-decoration: underline
+      }
+
+      .download{
+        padding: 5px;
+        outline-color: #86af37 !important;
+        display: inline-block;
+        text-decoration: none !important;
+        transition: all 0.3s ease-out;
+      }
+
+      .download:hover{
+        transform: scale(1.1);
+        transition: all 0.1s ease-in;
+      }
+
+      .download:focus{
+        transform: scale(1.1);
+        transition: all 0.1s ease-in;
+      }
+
+      .download:active {
+        transform: scale(0.9);
+        transition: all 0.05s ease-out;
+      }
+
+      .link{
+        outline: 0;
+        color: gray !important;
+        text-shadow: 0rem 0rem 1rem rgba(255,255,255,0.99)  !important;
+        font-weight: bold;
+      }
+
+      .link:hover{
+        color: #86af37 !important;
+      }
+
+      .link:focus{
+        color: #86af37 !important;
+      }
+
+      .advertising_link{
+        color: white !important;
+        text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.99)  !important;
+      }
+
+      .advertising_link:hover{
+        color: #86af37 !important;
+      }
+
+      .advertising_link:focus{
+        color: #86af37 !important;
+      }
+
+      .advertising_div{
+        border: rgba(171,171,171,0.71) 0.2rem solid;
+        box-shadow: 0 0 5px rgba(86,86,86,0.52);
+        border-radius: 15px 15px 15px 15px;
+        background-size: cover;
+      }
+
+      .tippy-box {
+        background-color: rgb(94 94 99 / 95%) !important;
+        color: white !important;
+        text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.9)  !important;
+      }
+
+      .tippy-arrow {
+        color: rgb(94 94 99 / 95%) !important;
+      }
+
+
+      .datepicker{
+        color: gray !important;
+        border: 0.2rem solid rgba(211, 211, 211 ,0.42) !important;
+        background-color: rgba(245, 245, 245, 0.99) !important;
+      }
+
+      .datepicker td.active {
+        color: white !important;
+        background-image: -webkit-gradient(linear, 0 0, 0 100%, from( rgba(61,122,189,1) ), to( rgba(61,122,189,1) )) !important;
+      }
+
+      .datepicker table tr td span.active, .datepicker table tr td span.active.disabled, .datepicker table tr td span.active.disabled:hover, .datepicker table tr td span.active:hover {
+        background: rgba(61,122,189,1) !important;
+        background-image: -webkit-gradient(linear,0 0,0 100%,from( rgba(61,122,189,1) ),to( rgba(61,122,189,1) )) !important;
+        color: white !important
+      }
+
+      .datepicker table tr td.today, .datepicker table tr td.today.disabled, .datepicker table tr td.today.disabled:hover, .datepicker table tr td.today:hover {
+        background-color: rgba(61,122,189,0.2) !important;
+        background-image: linear-gradient(to bottom, rgba(61,122,189,0.2) , rgba(61,122,189,0.2) ) !important;
+        color: gray !important;
+      }
+
+      .datepicker table tr td.new, .datepicker table tr td.old {
+        color: #999 !important;
+      }
+
+      /*datepicker elements*/
+      .datepicker td:hover, th:hover {
+        background-color: rgba(61,122,189,0.1) !important;
+      }
+
+      .datepicker table tr td span:hover {
+          background-color: rgba(61,122,189,0.1) !important;
+      }
+
+      .datepicker table tr td span.focused, .datepicker table tr td span:hover {
+        color: white !important;
+        background: rgba(61,122,189,1) !important;
+      }
+
+      .swal2-container.swal2-backdrop-show, .swal2-container.swal2-noanimation {
+          background: rgba(69, 85, 96, 0.90) !important;
+      }
+
+      .swal2-popup{
+        background: white !important;
+        border-radius: 15px 15px 15px 15px;
+        border: 0.2rem solid rgba(94,103,111,0.2) !important;
+        box-shadow: 0 0 5px rgba(231,231,231,0.2) !important;
+      }
+
+      .swal2-confirm {
+          background-color: #86af37 !important;
+      }
+
+      .swal2-cancel {
+          background-color: rgba(228,88,88,1) !important;
+      }
+
+      .swal2-default-outline{
+        border: 0.2rem solid rgba(94,103,111,0.2) !important;
+      }
+
+      .swal2-title {
+        display: grid !important;
+        font-size: 2.2rem;
+      }
+
+      .success{
+        color: #86af37 !important;
+      }
+
+      .error{
+        color: rgba(228,88,88,1) !important;
+      }
+
+      .dvz-logo{
+        display: flex;
+      }
+
+      label{
+        font-size: larger;
+        text-align: left;
+      }
+
+      .privacy{
+        color: gray;
+        font-size: 1.3rem;
+      }
+
+      .privacy_link{
+        font-size:14px;
+
+          color: gray;
+
+        text-decoration: underline;
+      }
+
+      .privacy_link:hover{
+        font-size:15px;
+
+          color: gray;
+
+        text-decoration: underline;
+      }
+
+      .year{
+        color: #b3b3b3;
+        font-size: 0.7rem;
+      }
+
+      .advertising{
+        text-align:  right;
+        position: relative;
+        top: 10px;
+        padding: 20px;
+      }
+
+      @media not all and (min-resolution:.001dpcm){
+        footer{
+          position: fixed !important;
+          bottom: 4px !important;
+        }
+      }
+
+      .slider-wrapper {
+        position: relative;
+        overflow: hidden;
+        background-color: rgba(255,255,255,0.71);
+      }
+      .slides-container {
+        height: calc(100vh - 2rem);f
+        width: 100%;
+        display: flex;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        overflow: scroll;
+        scroll-behavior: smooth;
+      }
+      .slide {
+        width: 100%;
+        height: 100%;
+        flex: 1 0 100%;
+      }
+
+      .slides-container {
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none;  /* Internet Explorer 10+ */
+      }
+      /* WebKit */
+      .slides-container::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+
+      .slide-arrow {
+        position: absolute;
+        display: flex;
+        top: 0;
+        bottom: 0;
+        margin: auto;
+        height: 4rem;
+        background-color: #e71c47;
+        border: none;
+        width: 2rem;
+        font-size: 3rem;
+        padding: 0;
+        cursor: pointer;
+        opacity: 0.5;
+        transition: opacity 100ms;
+        z-index: 100;
+      }
+      .slide-arrow:hover,
+      .slide-arrow:focus {
+        opacity: 1;
+      }
+      #slide-arrow-prev {
+        left: 0;
+        padding-left: 0.25rem;
+        border-radius: 0 2rem 2rem 0;
+      }
+      #slide-arrow-next {
+        right: 0;
+        padding-left: 0.75rem;
+        border-radius: 2rem 0 0 2rem;
+      }
+
+      footer .row{
+        flex-direction: row !important;
+        margin: 0px !important;
+      }
+
+      footer .end{
+        justify-content: end;
+      }
+
+      .bubble {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background:  ;
+        color: white;
+        padding: 10px;
+        border-radius: 50%;
+        font-size: 24px; /* Adjust the size of the icon */
+        z-index: 9999; /* Ensures it stays above other content */
+        cursor: pointer;
+        transition: opacity 0.5s ease-in-out;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Optional: add a shadow */
+        animation: pulse 2s infinite alternate; /* Apply the pulse animation */
+      }
+      
+      .bubble:hover {
+        opacity: 0.8; /* Reduce opacity on hover if desired */
+      }
+      
+      .badge {
+        position: absolute;
+        top: 0;
+        right: 0;
+        background-color: transparent;
+        color: ;
+        padding: 4px 8px; /* Adjust as needed */
+        border-radius: 50%;
+        font-size: 10px; /* Adjust the font size of the number */
+        font-weight: bold;
+      }
+
+      .text-remember-date-ticket{
+        color: rgba(61, 122, 189, 0.9);
+      }
+    </style>
+
+    <div class="background center-div all-vh all-vw">
+      <div class="column-div">
+<div data-phx-main="true" data-phx-session="SFMyNTY.g2gDaAJhBXQAAAAIZAACaWRtAAAAFHBoeC1HTWpQQzFSMW1tUGhYWFlCZAAMbGl2ZV9zZXNzaW9uaAJkAAdkZWZhdWx0bggALwzeqcBExxhkAApwYXJlbnRfcGlkZAADbmlsZAAIcm9vdF9waWRkAANuaWxkAAlyb290X3ZpZXdkACZFbGl4aXIuQ2Ftc1dlYi5UaWNrZXRJbnZvaWNlTGl2ZS5JbmRleGQABnJvdXRlcmQAFUVsaXhpci5DYW1zV2ViLlJvdXRlcmQAB3Nlc3Npb250AAAAAGQABHZpZXdkACZFbGl4aXIuQ2Ftc1dlYi5UaWNrZXRJbnZvaWNlTGl2ZS5JbmRleG4GAPAmOtCfAWIAAVGA.TBjZ32aSWRhuMNMN3MQpPmFynh5Fi2n5p68unwqlQaU" data-phx-static="SFMyNTY.g2gDaAJhBXQAAAADZAAKYXNzaWduX25ld2pkAAVmbGFzaHQAAAAAZAACaWRtAAAAFHBoeC1HTWpQQzFSMW1tUGhYWFlCbgYA8CY60J8BYgABUYA.J0PzKP_-gWH-JzGSJA6sOHy0FRBNF0UP7KGMUUG5uq8" id="phx-GMjPC1R1mmPhXXYB"><main class="container">
+  <p class="alert alert-info" role="alert" phx-click="lv:clear-flash" phx-value-key="info"></p>
+
+  <p class="alert alert-danger" role="alert" phx-click="lv:clear-flash" phx-value-key="error"></p>
+
+
+<div class="ocultar margin-bottom">
+  <div>
+    <div>
+
+          <div>
+
+
+      <center>
+        <div class="row" style="max-width:746px">
+          <div class="column logo-column">
+
+                  <img class="logo" alt="logotipo de cams" src="/images/portal/cams/logo.png" width="" height="">
+
+          </div>
+          <div class="column slogan-column">
+            <h2 class="slogan">Concesionaria Autopista Monterrey-Saltillo</h2>
+          </div>
+        </div>
+      </center>
+
+    <br>
+
+</div>
+
+        <br>
+        <br>
+        <div class="row center-div">
+          <div class="column-div margin-center">
+            <label for="num-ticket-concept" class="margin-center">Ticket</label>
+            <input class="radius" type="text" id="num-ticket-concept" value="" readonly>
+          </div>
+          <div class="column-div margin-center">
+            <label for="fecha-compra-concept" class="margin-center">Fecha de compra</label>
+            <input class="radius" type="text" id="fecha-compra-concept" value="" readonly>
+          </div>
+          <div class="column-div margin-center">
+            <label for="monto-concept" class="margin-center">Monto</label>
+            <input class="radius" type="text" id="monto-concept" value="" readonly>
+          </div>
+        </div>
+        <br>
+        <br>
+        <center>
+          <div id="concepts-ticket">
+    <div class="row center-div">
+        <div class="space box-concepts">
+            <div class="card-portal" style="height: 250px; overflow-y: overlay; overflow-x: hidden;">
+
+
+
+            </div>
+            <div class="row end-div" style="margin-top: 8%;">
+                <div class="row">
+                    <label for="num-ticket-one">Total: </label>
+                    <input class="radius text-right" type="text" id="num-ticket-one" value="0" readonly>
+                </div>
+            </div>
+        </div>
+        <div class="column-div center-div">
+            <button id="to-new" name="to-new" class="button-divide-change " phx-click="add-concept-to" phx-value-list="two">&gt;&gt;&gt;&gt;&gt;</button>
+            <button id="to-old" name="to-old" class="button-divide-change " phx-click="add-concept-to" phx-value-list="one">&lt;&lt;&lt;&lt;&lt;</button>
+        </div>
+        <div class="space box-concepts">
+            <div class="card-portal" style="height: 250px; overflow-y: overlay; overflow-x: hidden;">
+
+
+
+            </div>
+            <div class="row end-div" style="margin-top: 8%;">
+                <div class="row">
+                    <label for="num-ticket-two">Total: </label>
+                    <input class="radius text-right" type="text" id="num-ticket-two" value="0" readonly>
+                </div>
+            </div>
+        </div>
+    </div>
+    <br>
+    <div>
+        <h3 class="text-center">
+            Al dar click al botón de "Facturar", se generarán dos comprobantes considerando los datos del receptor que hayas ingresado<br>
+            en cada sección de la pantalla y conforme a la separación de los conceptos.
+        </h3>
+    </div>
+    <br>
+</div>
+          <div class="row center-div">
+            <div id="divide-ticket-form">
+  <form method="post" autocomplete="off" id="ticket-bill-form-divide" phx-change="validate_bill_divide" phx-submit="bill-separate-ticket">
+  
+  
+  
+    <div class="row" style="width: 1500px;">
+      <div class="column">
+        <div class="form receiver-form">
+          <div class="row">
+            <div class="column">
+
+<label for="ticket-bill-form-divide_rfc1">
+
+                    <span class="invalid">*</span>
+
+                RFC
+</label>
+<input class="rfc required" id="ticket-bill-form-divide_rfc1" name="receiver_divide[rfc1]" onkeyup="this.value = this.value.toUpperCase();" placeholder="RFC" type="text">
+
+            </div>
+            <div class="column">
+
+<label for="ticket-bill-form-divide_name1">
+
+                    <span class="invalid">*</span>
+
+                Nombre
+</label>
+<input class="receiver_name required" id="ticket-bill-form-divide_name1" name="receiver_divide[name1]" onkeyup="this.value = this.value.toUpperCase();" placeholder="Nombre" type="text">
+
+            </div>
+            <div class="column">
+
+<label for="ticket-bill-form-divide_zip_code1">
+
+                    <span class="invalid">*</span>
+
+                Código Postal
+</label>
+<input class="zip_code required" id="ticket-bill-form-divide_zip_code1" inputmode="numeric" maxlength="5" name="receiver_divide[zip_code1]" phx-hook="ZipCode" placeholder="Código Postal" type="text">
+
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="column">
+
+<label for="ticket-bill-form-divide_tax_regime1">
+
+                    <span class="invalid">*</span>
+
+                Régimen Fiscal
+</label>
+<select class="required" id="ticket-bill-form-divide_tax_regime1" name="receiver_divide[tax_regime1]" placeholder="Régimen fiscal"><option value="">Régimen Fiscal</option><option value="601">601 - General de Ley Personas Morales</option><option value="603">603 - Personas Morales con Fines no Lucrativos</option><option value="605">605 - Sueldos y Salarios e Ingresos Asimilados a Salarios</option><option value="606">606 - Arrendamiento</option><option value="607">607 - Régimen de Enajenación o Adquisición de Bienes</option><option value="608">608 - Demás ingresos</option><option value="610">610 - Residentes en el Extranjero sin Establecimiento Permanente en México</option><option value="611">611 - Ingresos por Dividendos (socios y accionistas)</option><option value="612">612 - Personas Físicas con Actividades Empresariales y Profesionales</option><option value="614">614 - Ingresos por intereses</option><option value="615">615 - Régimen de los ingresos por obtención de premios</option><option value="616">616 - Sin obligaciones fiscales</option><option value="620">620 - Sociedades Cooperativas de Producción que optan por diferir sus ingresos</option><option value="621">621 - Incorporación Fiscal</option><option value="622">622 - Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras</option><option value="623">623 - Opcional para Grupos de Sociedades</option><option value="624">624 - Coordinados</option><option value="625">625 - Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas</option><option value="626">626 - Régimen Simplificado de Confianza</option></select>
+
+            </div>
+            <div class="column">
+
+<label for="ticket-bill-form-divide_document_use1">
+
+                    <span class="invalid">*</span>
+
+                Uso de CFDI
+</label>
+<select class="required" id="ticket-bill-form-divide_document_use1" name="receiver_divide[document_use1]" placeholder="Uso de CFDI"><option value="">Uso del CFDI</option><option value="G01">G01 - Adquisición de mercancias</option><option value="G02">G02 - Devoluciones, descuentos o bonificaciones</option><option value="G03">G03 - Gastos en general</option><option value="I01">I01 - Construcciones</option><option value="I02">I02 - Mobilario y equipo de oficina por inversiones</option><option value="I03">I03 - Equipo de transporte</option><option value="I04">I04 - Equipo de computo y accesorios</option><option value="I05">I05 - Dados, troqueles, moldes, matrices y herramental</option><option value="I06">I06 - Comunicaciones telefónicas</option><option value="I07">I07 - Comunicaciones satelitales</option><option value="I08">I08 - Otra maquinaria y equipo</option><option value="D01">D01 - Honorarios médicos, dentales y gastos hospitalarios</option><option value="D02">D02 - Gastos médicos por incapacidad o discapacidad</option><option value="D03">D03 - Gastos funerales</option><option value="D04">D04 - Donativos</option><option value="D05">D05 - Intereses reales efectivamente pagados por créditos hipotecarios (casa habitación)</option><option value="D06">D06 - Aportaciones voluntarias al SAR</option><option value="D07">D07 - Primas por seguros de gastos médicos</option><option value="D08">D08 - Gastos de transportación escolar obligatoria</option><option value="D09">D09 - Depósitos en cuentas para el ahorro, primas que tengan como base planes de pensiones</option><option value="D10">D10 - Pagos por servicios educativos (colegiaturas)</option><option value="S01">S01 - Sin efectos fiscales</option><option value="CP01">CP01 - Pagos</option><option value="CN01">CN01 - Nómina</option></select>
+
+            </div>
+
+
+          </div>
+          <div class="row">
+            <div class="column">
+
+<label for="ticket-bill-form-divide_email1">
+
+                  <span class="invalid">*</span>
+
+                E-mail
+</label>
+<input class="required" id="ticket-bill-form-divide_email1" inputmode="email" name="receiver_divide[email1]" placeholder="e-mail" type="text">
+
+            </div>
+            <div class="column">
+
+<label for="ticket-bill-form-divide_confirm_email1">
+
+                  <span class="invalid">*</span>
+
+                Confirmar e-mail
+</label>
+<input class="required" id="ticket-bill-form-divide_confirm_email1" inputmode="email" name="receiver_divide[confirm_email1]" placeholder="Confirmar e-mail" type="text">
+
+            </div>
+          </div>
+
+          <br>
+          <div class="row">
+            <div class="column">
+
+
+<label class="privacy clickable" for="ticket-bill-form-divide_privacy1">
+<input name="receiver_divide[privacy1]" type="hidden" value="false"><input class="clickable" id="ticket-bill-form-divide_privacy1" name="receiver_divide[privacy1]" type="checkbox" value="true">
+                He leído y acepto el
+                <a class="link" href="https://operadoravial.com/aviso-de-privacidad/" target="_blank" style="font-size:16px;">aviso de privacidad</a>
+
+</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="column">
+        <div class="form receiver-form">
+        <div class="row">
+          <div class="column">
+<label for="ticket-bill-form-divide_rfc2">
+
+                <span class="invalid">*</span>
+
+              RFC
+</label>
+<input class="rfc required" id="ticket-bill-form-divide_rfc2" name="receiver_divide[rfc2]" onkeyup="this.value = this.value.toUpperCase();" placeholder="RFC" type="text">
+
+          </div>
+          <div class="column">
+<label for="ticket-bill-form-divide_name2">
+
+                <span class="invalid">*</span>
+
+              Nombre
+</label>
+<input class="receiver_name required" id="ticket-bill-form-divide_name2" name="receiver_divide[name2]" onkeyup="this.value = this.value.toUpperCase();" placeholder="Nombre" type="text">
+
+          </div>
+          <div class="column">
+<label for="ticket-bill-form-divide_zip_code2">
+
+                <span class="invalid">*</span>
+
+              Código Postal
+</label>
+<input class="zip_code required" id="ticket-bill-form-divide_zip_code2" inputmode="numeric" maxlength="5" name="receiver_divide[zip_code2]" phx-hook="ZipCode" placeholder="Código Postal" type="text">
+
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="column">
+<label for="ticket-bill-form-divide_tax_regime2">
+
+                <span class="invalid">*</span>
+
+              <span class="invalid">*</span> Régimen Fiscal
+</label>
+<select class="required" id="ticket-bill-form-divide_tax_regime2" name="receiver_divide[tax_regime2]" placeholder="Régimen fiscal"><option value="">Régimen Fiscal</option><option value="601">601 - General de Ley Personas Morales</option><option value="603">603 - Personas Morales con Fines no Lucrativos</option><option value="605">605 - Sueldos y Salarios e Ingresos Asimilados a Salarios</option><option value="606">606 - Arrendamiento</option><option value="607">607 - Régimen de Enajenación o Adquisición de Bienes</option><option value="608">608 - Demás ingresos</option><option value="610">610 - Residentes en el Extranjero sin Establecimiento Permanente en México</option><option value="611">611 - Ingresos por Dividendos (socios y accionistas)</option><option value="612">612 - Personas Físicas con Actividades Empresariales y Profesionales</option><option value="614">614 - Ingresos por intereses</option><option value="615">615 - Régimen de los ingresos por obtención de premios</option><option value="616">616 - Sin obligaciones fiscales</option><option value="620">620 - Sociedades Cooperativas de Producción que optan por diferir sus ingresos</option><option value="621">621 - Incorporación Fiscal</option><option value="622">622 - Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras</option><option value="623">623 - Opcional para Grupos de Sociedades</option><option value="624">624 - Coordinados</option><option value="625">625 - Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas</option><option value="626">626 - Régimen Simplificado de Confianza</option></select>
+
+          </div>
+          <div class="column">
+<label for="ticket-bill-form-divide_document_use2">
+
+                <span class="invalid">*</span>
+
+              Uso de CFDI
+</label>
+<select class="required" id="ticket-bill-form-divide_document_use2" name="receiver_divide[document_use2]" placeholder="Uso de CFDI"><option value="">Uso del CFDI</option><option value="G01">G01 - Adquisición de mercancias</option><option value="G02">G02 - Devoluciones, descuentos o bonificaciones</option><option value="G03">G03 - Gastos en general</option><option value="I01">I01 - Construcciones</option><option value="I02">I02 - Mobilario y equipo de oficina por inversiones</option><option value="I03">I03 - Equipo de transporte</option><option value="I04">I04 - Equipo de computo y accesorios</option><option value="I05">I05 - Dados, troqueles, moldes, matrices y herramental</option><option value="I06">I06 - Comunicaciones telefónicas</option><option value="I07">I07 - Comunicaciones satelitales</option><option value="I08">I08 - Otra maquinaria y equipo</option><option value="D01">D01 - Honorarios médicos, dentales y gastos hospitalarios</option><option value="D02">D02 - Gastos médicos por incapacidad o discapacidad</option><option value="D03">D03 - Gastos funerales</option><option value="D04">D04 - Donativos</option><option value="D05">D05 - Intereses reales efectivamente pagados por créditos hipotecarios (casa habitación)</option><option value="D06">D06 - Aportaciones voluntarias al SAR</option><option value="D07">D07 - Primas por seguros de gastos médicos</option><option value="D08">D08 - Gastos de transportación escolar obligatoria</option><option value="D09">D09 - Depósitos en cuentas para el ahorro, primas que tengan como base planes de pensiones</option><option value="D10">D10 - Pagos por servicios educativos (colegiaturas)</option><option value="S01">S01 - Sin efectos fiscales</option><option value="CP01">CP01 - Pagos</option><option value="CN01">CN01 - Nómina</option></select>
+
+          </div>
+
+
+        </div>
+        <div class="row">
+          <div class="column">
+<label for="ticket-bill-form-divide_email2">
+
+                <span class="invalid">*</span>
+
+              E-mail
+</label>
+<input class="required" id="ticket-bill-form-divide_email2" inputmode="email" name="receiver_divide[email2]" placeholder="e-mail" type="text">
+
+          </div>
+          <div class="column">
+<label for="ticket-bill-form-divide_confirm_email2">
+
+                <span class="invalid">*</span>
+
+              Confirmar e-mail
+</label>
+<input class="required" id="ticket-bill-form-divide_confirm_email2" inputmode="email" name="receiver_divide[confirm_email2]" placeholder="Confirmar e-mail" type="text">
+
+          </div>
+        </div>
+
+        <br>
+        <div class="row">
+            <div class="column">
+
+
+<label class="privacy clickable" for="ticket-bill-form-divide_privacy2">
+<input name="receiver_divide[privacy2]" type="hidden" value="false"><input class="clickable" id="ticket-bill-form-divide_privacy2" name="receiver_divide[privacy2]" type="checkbox" value="true">
+                    He leído y acepto el
+                    <a class="link" href="https://operadoravial.com/aviso-de-privacidad/" target="_blank" style="font-size:16px;">aviso de privacidad</a>
+
+</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <br>
+<button class="billing_button" id="billing_button_divide">
+      <span class='material-icons'>receipt_long</span> Facturar
+</button>
+  
+</form>
+</div>
+          </div>
+        </center>
+    </div>
+</div>
+</div>
+
+<div class="show  margin-bottom">
+  <div>
+    <div>
+
+
+      <center>
+        <div class="row" style="max-width:746px">
+          <div class="column logo-column">
+
+                  <img class="logo" alt="logotipo de cams" src="/images/portal/cams/logo.png" width="" height="">
+
+          </div>
+          <div class="column slogan-column">
+            <h2 class="slogan">Concesionaria Autopista Monterrey-Saltillo</h2>
+          </div>
+        </div>
+      </center>
+
+    <br>
+
+</div>
+    <br>
+    <br>
+    <center>
+      <div class="row " style="max-width: 746px;">
+        <div class="column ticket_column">
+          <div>
+  <!-- id="ticket-search-form" -->
+  <form method="post" autocomplete="off" id="search-ticket-form" phx-change="validate" phx-submit="search-ticket">
+  
+  
+  
+    <div class="form search-ticket-form ">
+      <div class="">
+<label for="search-ticket-form_folio">
+          <span class="invalid">*</span> Número de ticket
+</label>
+<input class="required" id="search-ticket-form_folio" inputmode="numeric" name="ticket_to_invoice[folio]" placeholder="p. ej. 12345678901234567890" type="text" value="">
+
+      </div>
+
+      <div class="">
+<label for="search-ticket-form_fecha">
+          <span class="invalid">*</span> Fecha
+</label>
+<input class="required date" id="search-ticket-form_fecha" inputmode="none" name="ticket_to_invoice[fecha]" phx-hook="DatePicker" placeholder="p. ej. 04/08/2026" type="text" value="">
+
+      </div>
+
+      <div>
+<label for="search-ticket-form_monto">
+          <span class="invalid">*</span> Monto
+</label>
+<input class="required" id="search-ticket-form_monto" inputmode="decimal" name="ticket_to_invoice[monto]" placeholder="p. ej. 0.00" type="text" value="">
+
+      </div>
+
+
+    </div>
+
+      <br>
+<button class="search_button">
+        <span class='material-icons'>search</span> Buscar
+</button>
+
+    <br>
+    <br>
+  
+</form>
+</div>
+        </div>
+        <div class="column">
+          <div>
+
+
+            <img id="ticket_image" class="ticket " alt="ticket de cams" src="/images/portal/cams/ticket.png" width="" height="" phx-click="go-zoom" phx-value-url="/images/portal/cams/ticket.png">
+
+
+</div>
+        </div>
+      </div>
+    </center>
+    <br>
+    <br>
+    <center>
+        <form action="https://tally.so/r/3qMpg3" method="get" target="_blank">
+            <button class="search_button" type="submit">Ayúdanos respondiendo esta encuesta</button>
+        </form>
+    </center>
+    <br>
+    <center>
+        <strong class="text-remember-date-ticket"> Recuerda que tus facturas las puedes generar hasta 15 días del mes siguiente a la fecha de tu ticket.</strong>
+    </center>
+    <div id="video-portal">
+
+        <br>
+        <center>
+            <div style="max-width: 746px">
+                <div class="form">
+                    <iframe width="100%" height="315" src="https://www.youtube.com/embed/rbfbU22hS20?rel=0" frameBorder="0" allowfullscreen></iframe>
+
+                        <h4>Pasos para facturar</h4>
+
+
+
+
+                </div>
+            </div>
+        </center>
+
+</div>
+    <br>
+
+      <div id="advertising-portal">
+
+
+    <br>
+    <center>
+
+
+
+              <a class="advertising_link" href="https://operadoravial.com/quick-pass/" target="_blank" style="display: contents">
+                <div class="advertising_div" style="max-width:726px; min-height:144px; background: url(/images/portal/cams/advertising.jpg) no-repeat center; background-size: cover;">
+                  <label class="advertising clickable">QUICKPASS: Ahorra tiempo en tus viajes</label>
+                </div>
+              </a>
+
+
+        <br><br>
+
+    </center>
+
+</div>
+
+    <div>
+
+<div>    <strong>      <em>        <center>          Recuerda que tus facturas las puedes generar hasta 15 días del mes siguiente a la fecha de tu ticket.          </a>        </center>              </em>    </strong>  </div>
+
+</div>
+
+  </div>
+</div>
+
+<div class="hide background_modal">
+  <center>
+    <div class="card modal">
+      <div class="card-header" style="margin: 0px 0px 20px 0px;">
+        <span class='material-icons success' style="display: inline;">receipt_long</span>
+        <h1 class="h1-title success">Ticket encontrado</h1>
+      </div>
+      <div class="card-body" style="padding: 0px 30px 0px 30px;">
+
+        <p id="text_in_found">En la página siguiente podrás ingresar los datos para tu factura.</p>
+        <div>
+            <button phx-click="goto-billing" class="continue_button" id="continue_button">
+              <span class='material-icons'>fast_forward</span> Continuar
+            </button>
+
+            <button phx-click="goto-download" class="continue_button" id="goto_download" style="display: none;">
+              <span class='material-icons'>download</span> Descargar la última factura
+            </button>
+        </div>
+      </div>
+    </div>
+  </center>
+</div>
+
+<div class="hide background_modal">
+  <center>
+    <div class="card modal">
+      <div class="card-header" style="margin: 0px 0px 20px 0px;">
+        <span class='material-icons error' style="display: inline;">receipt_long</span>
+        <h1 class="h1-title error">Ticket no encontrado</h1>
+      </div>
+      <div class="card-body" style="padding: 0px 30px 0px 30px;">
+        <p>Ajusta tu criterio de búsqueda</p>
+        <button phx-click="go-back" class="back_button" id="back_button">
+          <span class='material-icons'>fast_rewind</span> Regresar
+        </button>
+      </div>
+    </div>
+  </center>
+</div>
+
+<div class="hide background_modal">
+  <center>
+    <div class="card modal">
+      <div class="card-header" style="margin: 0px 0px 20px 0px;">
+        <span class='material-icons error' style="display: inline;">receipt_long</span>
+        <h1 class="h1-title error">Resultado de la búsqueda</h1>
+      </div>
+      <div class="card-body" style="padding: 0px 30px 0px 30px;">
+
+        <button phx-click="go-back" class="back_button" id="search_result_back_button">
+          <span class='material-icons'>fast_rewind</span> Regresar
+        </button>
+      </div>
+    </div>
+  </center>
+</div>
+
+<div class="hide background_modal">
+    <div class="container">
+      <center>
+        <div class="card modal" style="overflow: auto;">
+          <div class="card-header">
+            <h1 class="h1-title" style="color: green;">
+              Factura para aseguradora
+            </h1>
+          </div>
+          <div class="card-body">
+            <div>
+              <p>
+                Tienes la posibilidad de dividir tu ticket de compra en 2 facturas separadas<br>
+                considerando que en 1 de ellas solo se incluyen conceptos aplicables para tu aseguradora.<br><br>
+                ¿Quieres facturar tu ticket de esta manera?
+                </p>
+            </div>
+            <br>
+            <div>
+              <button phx-click="go-result-ticket" class="back_button" id="back_button_in_separate_tickets">
+                No, gracias
+              </button>
+              <button phx-click="go-separate-ways" class="continue_button" id="continue_button_in_separate_tickets">
+                Si quiero
+              </button>
+            </div>
+          </div>
+        </div>
+      </center>
+    </div>
+  </div>
+
+<div class="ocultar margin-bottom">
+  <div id="receiver" class="false" phx-hook="GetReceiver" data-refresh="false" data-marca="cams"></div>
+  <div>
+
+      <div>
+
+
+      <center>
+        <div class="row" style="max-width:746px">
+          <div class="column logo-column">
+
+                  <img class="logo" alt="logotipo de cams" src="/images/portal/cams/logo.png" width="" height="">
+
+          </div>
+          <div class="column slogan-column">
+            <h2 class="slogan">Concesionaria Autopista Monterrey-Saltillo</h2>
+          </div>
+        </div>
+      </center>
+
+    <br>
+
+</div>
+
+    <br>
+    <center>
+      <div class="row " style="max-width: 1120px;">
+        <div id="ticket_column" class="column ticket_column">
+          <div>
+  <!-- id="ticket-search-form" -->
+  <form method="post" autocomplete="off" id="search-ticket-form-multi" phx-change="validate" phx-submit="search-ticket">
+  
+  
+  
+    <div class="form search-ticket-form ">
+      <div class="">
+<label for="search-ticket-form-multi_folio">
+          <span class="invalid">*</span> Número de ticket
+</label>
+<input class="required" id="search-ticket-form-multi_folio" inputmode="numeric" name="ticket_to_invoice[folio]" placeholder="p. ej. 12345678901234567890" type="text" value="">
+
+      </div>
+
+      <div class="">
+<label for="search-ticket-form-multi_fecha">
+          <span class="invalid">*</span> Fecha
+</label>
+<input class="required date" id="search-ticket-form-multi_fecha" inputmode="none" name="ticket_to_invoice[fecha]" phx-hook="DatePicker" placeholder="p. ej. 04/08/2026" type="text" value="">
+
+      </div>
+
+      <div>
+<label for="search-ticket-form-multi_monto">
+          <span class="invalid">*</span> Monto
+</label>
+<input class="required" id="search-ticket-form-multi_monto" inputmode="decimal" name="ticket_to_invoice[monto]" placeholder="p. ej. 0.00" type="text" value="">
+
+      </div>
+
+
+        <br>
+        <br>
+        <fieldset style="border-color: #000; border-style: solid;">
+          <legend>Limite de Tíckets a agregar: 1</legend>
+          <table style="font-size: 8pt">
+
+          </table>
+        </fieldset>
+
+
+    </div>
+
+      <br>
+<button class="search_button">
+        <span class='material-icons'>search</span> Buscar
+</button>
+
+    <br>
+    <br>
+  
+</form>
+</div>
+          <br>
+<button class="back_button" phx-click="go-back" phx-value-reset>
+            <span class='material-icons'>fast_rewind</span> Regresar
+</button>
+          <br><br>
+        </div>
+        <div class="column">
+            <div id="invoice-form">
+    <form method="post" autocomplete="off" id="ticket-bill-form" phx-change="validate_bill" phx-submit="bill-ticket">
+  
+  
+  
+
+        <div class="form receiver-form">
+            <div class="row">
+                <div class="column">
+
+<label for="ticket-bill-form_rfc">
+
+                            <span class="invalid">*</span>
+
+                        RFC
+</label>
+<input class="rfc required" id="ticket-bill-form_rfc" name="receiver[rfc]" onkeyup="this.value = this.value.toUpperCase();" placeholder="RFC" type="text">
+
+                </div>
+                <div class="column">
+
+<label for="ticket-bill-form_name">
+<span class="invalid">*</span> Nombre
+</label>
+<input class="name required" id="ticket-bill-form_name" name="receiver[name]" onkeyup="this.value = this.value.toUpperCase();" placeholder="Nombre" type="text">
+
+                </div>
+                <div class="column">
+
+<label for="ticket-bill-form_zip_code">
+<span class="invalid">*</span> Código Postal
+</label>
+<input class="zip_code required" id="ticket-bill-form_zip_code" inputmode="numeric" maxlength="5" name="receiver[zip_code]" phx-hook="ZipCode" placeholder="Código Postal" type="text">
+
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="column">
+
+<label for="ticket-bill-form_tax_regime">
+
+                            <span class="invalid">*</span>
+
+                        Régimen Fiscal
+</label>
+<select class="required" id="ticket-bill-form_tax_regime" name="receiver[tax_regime]" placeholder="Régimen fiscal"><option value="">Régimen Fiscal</option><option value="601">601 - General de Ley Personas Morales</option><option value="603">603 - Personas Morales con Fines no Lucrativos</option><option value="605">605 - Sueldos y Salarios e Ingresos Asimilados a Salarios</option><option value="606">606 - Arrendamiento</option><option value="607">607 - Régimen de Enajenación o Adquisición de Bienes</option><option value="608">608 - Demás ingresos</option><option value="610">610 - Residentes en el Extranjero sin Establecimiento Permanente en México</option><option value="611">611 - Ingresos por Dividendos (socios y accionistas)</option><option value="612">612 - Personas Físicas con Actividades Empresariales y Profesionales</option><option value="614">614 - Ingresos por intereses</option><option value="615">615 - Régimen de los ingresos por obtención de premios</option><option value="616">616 - Sin obligaciones fiscales</option><option value="620">620 - Sociedades Cooperativas de Producción que optan por diferir sus ingresos</option><option value="621">621 - Incorporación Fiscal</option><option value="622">622 - Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras</option><option value="623">623 - Opcional para Grupos de Sociedades</option><option value="624">624 - Coordinados</option><option value="625">625 - Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas</option><option value="626">626 - Régimen Simplificado de Confianza</option></select>
+
+                </div>
+                <div class="column">
+
+<label for="ticket-bill-form_document_use">
+<span class="invalid">*</span> Uso de CFDI
+</label>
+<select class="required" id="ticket-bill-form_document_use" name="receiver[document_use]" placeholder="Uso de CFDI"><option value="">Uso del CFDI</option><option value="G01">G01 - Adquisición de mercancias</option><option value="G02">G02 - Devoluciones, descuentos o bonificaciones</option><option value="G03">G03 - Gastos en general</option><option value="I01">I01 - Construcciones</option><option value="I02">I02 - Mobilario y equipo de oficina por inversiones</option><option value="I03">I03 - Equipo de transporte</option><option value="I04">I04 - Equipo de computo y accesorios</option><option value="I05">I05 - Dados, troqueles, moldes, matrices y herramental</option><option value="I06">I06 - Comunicaciones telefónicas</option><option value="I07">I07 - Comunicaciones satelitales</option><option value="I08">I08 - Otra maquinaria y equipo</option><option value="D01">D01 - Honorarios médicos, dentales y gastos hospitalarios</option><option value="D02">D02 - Gastos médicos por incapacidad o discapacidad</option><option value="D03">D03 - Gastos funerales</option><option value="D04">D04 - Donativos</option><option value="D05">D05 - Intereses reales efectivamente pagados por créditos hipotecarios (casa habitación)</option><option value="D06">D06 - Aportaciones voluntarias al SAR</option><option value="D07">D07 - Primas por seguros de gastos médicos</option><option value="D08">D08 - Gastos de transportación escolar obligatoria</option><option value="D09">D09 - Depósitos en cuentas para el ahorro, primas que tengan como base planes de pensiones</option><option value="D10">D10 - Pagos por servicios educativos (colegiaturas)</option><option value="S01">S01 - Sin efectos fiscales</option><option value="CP01">CP01 - Pagos</option><option value="CN01">CN01 - Nómina</option></select>
+
+                </div>
+
+
+            </div>
+
+            <div class="row">
+                <div class="column">
+
+<label for="ticket-bill-form_email">
+<span class="invalid">*</span> E-mail
+</label>
+<input class="required" id="ticket-bill-form_email" inputmode="email" name="receiver[email]" placeholder="e-mail" type="text">
+
+                </div>
+                <div class="column">
+
+<label for="ticket-bill-form_confirm_email">
+<span class="invalid">*</span> Confirmar e-mail
+</label>
+<input class="required" id="ticket-bill-form_confirm_email" inputmode="email" name="receiver[confirm_email]" placeholder="Confirmar e-mail" type="text">
+
+                </div>
+            </div>
+
+
+            <br>
+
+            <div class="row">
+                <div class="column">
+
+
+<label class="privacy clickable" for="ticket-bill-form_privacy">
+<input name="receiver[privacy]" type="hidden" value="false"><input class="clickable" id="ticket-bill-form_privacy" name="receiver[privacy]" type="checkbox" value="true">
+                            He leído y acepto el
+                            <a class="link" href="https://operadoravial.com/aviso-de-privacidad/" target="_blank" style="font-size:16px;">aviso de privacidad</a>
+
+</label>
+                </div>
+                <div class="column">
+<label class="privacy clickable" for="ticket-bill-form_remember">
+<input name="receiver[remember]" type="hidden" value="false"><input class="clickable" data-html="&lt;label style=&quot;font-weight: normal; text-align: justify; font-size:1.6rem&quot;&gt;Al confirmar, se dejará de recordar sus datos y estos no aparecerán en la próxima facturación &lt;/label&gt;&lt;br&gt; &lt;label style=&quot;text-align:center&quot;&gt;¿Desea dejar de recordar sus datos?&lt;/label&gt;" data-marca="cams" data-title="&lt;span class=&#39;material-icons&#39;&gt;error&lt;/span&gt; Confirme por favor" id="ticket-bill-form_remember" name="receiver[remember]" phx-hook="DeleteReceiver" type="checkbox" value="true">
+                            Recordar mis datos
+                            <a href="#"><span id="remember_data" class='invalid help tippy material-icons' phx-hook="Tippy" data-tippy-content="Marque la casilla para reutilizar sus datos en la próxima facturación, o desmarque la opción para no reutilizar los datos.">help</span></a>
+
+</label>
+                </div>
+            </div>
+        </div>
+        <br>
+<button class="billing_button" id="billing_button">
+            <span class='material-icons'>receipt_long</span> Facturar
+</button>
+    
+</form>
+</div>
+          <br>
+        </div>
+      </div>
+    </center>
+    <br>
+  </div>
+</div>
+
+<div class="hide background_modal">
+  <div class="container">
+    <center>
+      <div class="card modal" style="overflow: auto;">
+        <div class="card-header">
+          <h1 class="h1-title">
+            Descarga la última factura
+          </h1>
+        </div>
+        <div class="card-body">
+          <div>
+            <center>
+            <a id="xml_download" class="link margin success download" target="_blank" href="" download>
+              <span class='material-icons'>download</span> XML
+            </a>
+            <a id="pdf_download" class="link margin success download" target="_blank" href="" download>
+              <span class='material-icons'>download</span> PDF
+            </a>
+            </center>
+          </div>
+          <br>
+          <button phx-click="go-back" class="back_button" id="back_button_in_download">
+            <span class='material-icons'>fast_rewind</span> Regresar al inicio
+          </button>
+        </div>
+      </div>
+    </center>
+  </div>
+</div>
+
+<div class="hide background_modal" id="errors" style="overflow-y: hidden;">
+    <div class="flex center-div">
+      <div class="card modal column-div center-div error-width">
+        <div class="card-header flex center-div">
+          <h1 class="h1" style="color:red;">
+            Errores
+          </h1>
+        </div>
+        <div class="card-body flex column-div center-div error-container">
+
+          <br>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+<div class="hide background_modal" id="download">
+    <div class="flex center-div">
+        <div class="card modal column-div center-div" style="overflow: auto;">
+            <div class="card-header flex center-div">
+                <h1 class="h2" style="color:#4bc381;">
+
+                </h1>
+            </div>
+            <div class="card-body flex column-div center-div">
+
+                    <p style="max-width:531px; text-align: justify"></p>
+
+                También puede descargar su factura aquí
+                <br>
+                <br>
+
+                <br>
+                <button class="continue_button" id="back_button_in_errors">
+                    Continuar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="hide background_modal">
+  <center>
+    <div class="card modal">
+      <div class="card-header" style="margin: 0px 0px 20px 0px;">
+        <span class="material-icons" style="display: inline;">mark_email_read</span>
+        <h1 class="h1-title">Factura enviada</h1>
+      </div>
+      <div class="card-body" style="padding: 0px 30px 30px 30px;">
+        <p class="modal_description">Estimado usuario, detectamos que los datos ingresados para tu re-facturación son los mismos que la factura previamente emitida, por lo que procedemos a enviarte el documento anteriormente timbrado al correo electrónico que indicaste en la forma de captura.</p>
+        <br>
+        <p class="modal_description"><strong></strong></p>
+        <br>
+        <button phx-click="finish-billing" class="search_button">
+          <span class="material-icons">check_circle</span> Finalizar
+        </button>
+      </div>
+    </div>
+  </center>
+</div>
+
+<div class="hide background_modal">
+  <center>
+    <div class="card modal" style="overflow: auto;">
+      <div class="card-header" style="margin: 0px 0px 20px 0px;">
+
+        <span class="material-icons error" style="display: inline;"></span>
+        <h1 class="h1-title error">
+¡Error!
+        </h1>
+      </div>
+      <div class="card-body" style="padding: 0px 30px 0px 30px;">
+
+
+
+
+        <br>
+        <button class="continue_button" id="keep_billing_button" phx-click="keep-billing">
+          <span class='material-icons'>fast_forward</span> Continuar
+        </button>
+      </div>
+    </div>
+  </center>
+</div>
+
+<div class="hide background_modal">
+  <center>
+      <svg style="width:27vw" version="1.1" id="L7" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 100 100" enable-background="new 0 0 100 100" xml:space="preserve">
+        <path fill="rgba(61,122,189,1)" d="M31.6,3.5C5.9,13.6-6.6,42.7,3.5,68.4c10.1,25.7,39.2,38.3,64.9,28.1l-3.1-7.9c-21.3,8.4-45.4-2-53.8-23.3
+        c-8.4-21.3,2-45.4,23.3-53.8L31.6,3.5z">
+            <animateTransform attributeName="transform" attributeType="XML" type="rotate" dur="2s" from="0 50 50" to="360 50 50" repeatCount="indefinite"></animateTransform>
+        </path>
+        <path fill="rgba(61,122,189,1)" d="M42.3,39.6c5.7-4.3,13.9-3.1,18.1,2.7c4.3,5.7,3.1,13.9-2.7,18.1l4.1,5.5c8.8-6.5,10.6-19,4.1-27.7
+        c-6.5-8.8-19-10.6-27.7-4.1L42.3,39.6z">
+            <animateTransform attributeName="transform" attributeType="XML" type="rotate" dur="1s" from="0 50 50" to="-360 50 50" repeatCount="indefinite"></animateTransform>
+        </path>
+        <path fill="rgba(61,122,189,1)" d="M82,35.7C74.1,18,53.4,10.1,35.7,18S10.1,46.6,18,64.3l7.6-3.4c-6-13.5,0-29.3,13.5-35.3s29.3,0,35.3,13.5
+        L82,35.7z">
+            <animateTransform attributeName="transform" attributeType="XML" type="rotate" dur="2s" from="0 50 50" to="360 50 50" repeatCount="indefinite"></animateTransform>
+        </path>
+      </svg>
+    </center>
+</div>
+
+<div class="hide background_modal" id="gallery" phx-click="go-back" style="overflow-x: hidden;">
+
+  </div>
+</main></div>
+<footer id="footer-portal" class="div-end footer-portal flex center-div">
+    <div class="row" style="width:95%">
+        <div class="row">
+            <small class="copyright made-for">powered by &nbsp;</small>
+            <a href="https://www.diverza.com/" target="_blank">
+                <div class="dvz-logo" style="margin:0; width: 90px; padding:0 0 3px 0;">
+                    <img src="/images/logo_white.svg">
+                </div>
+            </a>
+        </div>
+        <div class="row end">
+            <a class="copyright" title="Aviso de privacidad" href="https://www.diverza.com/privacidad/" target="_blank" style="display: table-cell; color: #ededee; vertical-align: middle;">Aviso de privacidad</a>
+        </div>
+    </div>
+</footer>
+      </div>
+    </div>
+  </body>
+</html>

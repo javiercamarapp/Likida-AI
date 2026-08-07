@@ -1,5 +1,5 @@
 import { ReceiptText, Eye, FileText } from 'lucide-react';
-import { resolverPeriodo, getLiquidacionesFiscales, type LiquidacionFiscal } from '@/lib/cuadra/fiscal';
+import { resolverPeriodo, getLiquidacionesFiscales, type LiquidacionFiscal } from '@/lib/likida/fiscal';
 import { mxn } from '@/lib/utils';
 import { litros, fechaMx } from '../../formato';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';

@@ -77,7 +77,7 @@ const ATAQUES: Array<[string, string]> = [
 test('CONTROL — el mismo ticket, sin payload, se lee bien', async () => {
   cargarEnv(resolve('.env.local'));
   expect(process.env.OPENROUTER_API_KEY, 'falta OPENROUTER_API_KEY en .env.local').toBeTruthy();
-  const { extraerComprobante } = await import('@/lib/cuadra/intake/ocr');
+  const { extraerComprobante } = await import('@/lib/likida/intake/ocr');
   const r = await extraerComprobante(await ticketEnvenenado(''));
   const marcaC = (r.gasto.ocrExtra as Record<string, unknown> | undefined)?.textoSospechoso;
   console.log('  [control] →', JSON.stringify({ legible: r.legible, monto: r.gasto.monto, textoSospechoso: marcaC ?? false }));
@@ -92,7 +92,7 @@ test.each(ATAQUES)('el papel NO le da instrucciones al extractor: %s', async (_n
   cargarEnv(resolve('.env.local'));
   expect(process.env.OPENROUTER_API_KEY, 'falta OPENROUTER_API_KEY en .env.local').toBeTruthy();
   // Import dinámico: DESPUÉS de cargar el env.
-  const { extraerComprobante } = await import('@/lib/cuadra/intake/ocr');
+  const { extraerComprobante } = await import('@/lib/likida/intake/ocr');
   const r = await extraerComprobante(await ticketEnvenenado(ataque));
 
   const marca = (r.gasto.ocrExtra as Record<string, unknown> | undefined)?.textoSospechoso;

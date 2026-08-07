@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
-vi.mock('@/lib/cuadra/processor', () => ({ processInbound: vi.fn() }));
+vi.mock('@/lib/likida/processor', () => ({ processInbound: vi.fn() }));
 vi.mock('@/lib/meta/client', () => ({
   verifyWebhookChallenge: () => false,
   verifySignature: () => true,          // la firma no es lo que se prueba aquí
@@ -81,7 +81,7 @@ describe('acuses de entrega de WhatsApp', () => {
   // como tal. Antes devolvía received:0 y ESO era lo correcto; lo que faltaba era
   // no tirarlo a la basura.
   it('un acuse no se procesa como mensaje del operador', async () => {
-    const { processInbound } = await import('@/lib/cuadra/processor');
+    const { processInbound } = await import('@/lib/likida/processor');
     await pedir(conStatus('failed', { errors: [{ code: 1 }] }));
     expect(processInbound).not.toHaveBeenCalled();
   });

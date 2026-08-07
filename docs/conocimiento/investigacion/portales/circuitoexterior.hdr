@@ -1,0 +1,32 @@
+HTTP/2 200 
+date: Wed, 05 Aug 2026 04:29:53 GMT
+content-type: text/html; charset=UTF-8
+content-length: 37679
+x-frame-options: SAMEORIGIN
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+permissions-policy: microphone=(), camera=(), display-capture=()
+x-xss-protection: 1; mode=block
+expect-ct: max-age=7776000, enforce
+access-control-allow-origin: https://www.circuitoexterior.mx
+access-control-allow-methods: GET,PUT,POST
+access-control-allow-headers: Content-Type, Authorization
+x-content-security-policy: default-src "self"; img-src *; media-src * data:;
+x-content-type-options: nosniff
+content-security-policy: default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; frame-ancestors 'self'; report-to='default'
+referrer-policy: strict-origin-when-cross-origin
+cross-origin-embedder-policy-report-only: unsafe-none; report-to="default"
+cross-origin-embedder-policy: unsafe-none; report-to="default"
+cross-origin-opener-policy-report-only: same-origin; report-to="default"
+cross-origin-opener-policy: same-origin-allow-popups; report-to="default"
+cross-origin-resource-policy: cross-origin
+feature-policy: display-capture 'self'
+x-permitted-cross-domain-policies: none
+link: <https://www.circuitoexterior.mx/wp-json/>; rel="https://api.w.org/"
+link: <https://www.circuitoexterior.mx/wp-json/wp/v2/pages/8>; rel="alternate"; title="JSON"; type="application/json"
+link: <https://www.circuitoexterior.mx/>; rel=shortlink
+vary: Accept-Encoding
+content-encoding: gzip
+x-azure-ref: 20260805T042953Z-15f797798b94nbfdhC1HOUykhg0000000e7g000000007pvc
+x-cache: CONFIG_NOCACHE
+accept-ranges: bytes
+

@@ -1,0 +1,1091 @@
+
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0" /><meta name="author" content="Atio® Group" /><title>
+	BPme Web
+</title><link href="https://fonts.googleapis.com/css?family=Ubuntu:300,400" rel="stylesheet" />
+
+    
+    
+
+    <!-- Latest compiled and minified CSS -->
+    <link href="css/bootstrap.5.1.3.min.css" rel="stylesheet" /><link href="css/fonts.css" rel="stylesheet" /><link href="css/facturaGasStyle.css?v=1.1.0" rel="stylesheet" /><link rel="icon" href="img/favicon.ico" type="image/x-icon" /><link rel="shortcut icon" href="img/favicon.ico" type="image/x-icon" />
+
+    <!--[if lt IE 9]>
+	    <script src="dist/html5shiv.js"></script>
+    <![endif]-->
+    
+<link href="/FacturaGasBPMe/WebResource.axd?d=EFjvvw03I-qWJ1M2kiKipxTqTAy4FATiGRk1xFlomPGPdiUNFCPHcO3mqdTzSe1lr1bPhaFWkYQukgYi6zZhYy5TfeBLPxKNO61_7he5SO5PyY5lbDJEOotf4FuBv8VMXQ_EBhL3yi5sy9qSztM12A2&amp;t=638923241536720558" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /><link href="/FacturaGasBPMe/WebResource.axd?d=iRvtG_52nRe3qtmT7s2t79JQl5l6Cldukkiz6Ipx8m-nlXdC8RoEpdeAoMBpdfuTrNv_-oKSXNE5k3sRgWKI1f2p6ONzZw1wqbiAMtRwNQIGcil5PBqgtZ_VpKMPCxVpkkcSdsvCCp5dgjBcq8kPd0voDZrOSz-g6wmZgZYq7Wo1&amp;t=638923241536720558" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /><link href="/FacturaGasBPMe/WebResource.axd?d=VdPoLqp1pEU6N0-IfFplZAVH3-NPCjBUMFzBiVsYpCUKk-zyJHE5AwgM3zOD1XXBIJCs6tiycE7bF7lQTrjeMr6WUcAAJWgEm6bM5BQagsKcc3iO7StUGX-HUmvPZjcsOGz0S2GdKAjiPntAhAMKwA2&amp;t=638923241536720558" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /><link href="/FacturaGasBPMe/WebResource.axd?d=6d0ORl_GDQ8il0vfaye5YayBfy4ABCwqPixJ8GOZL8T1Nx5_Zct_n0QV5ojyIaYiuTIsa2ec_-eEios-cJOUpUpoynQD_1lVh2at98UAV9SSACQ4WMHaS1-i5snTwPDFCsFsa0mVFNEXRf_P3XJxVg2&amp;t=638923241536720558" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /><link href="/FacturaGasBPMe/WebResource.axd?d=qpDogBCh8B2zFH7Wt5kgoGYdJPfs95BG_E-MFnDq7g0VXUSEehshdrrrejET7QZqtOOqEaVuilsDVbyehuH6iBk4vbcK59GLwrtqUFItNb-Sx5RlEjDx3nxicA4CHmQmKgWGOc07CmAnRZecJQ9yww2&amp;t=638923241536720558" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /><link href="/FacturaGasBPMe/WebResource.axd?d=NZp3oGkpijSHfvYvEXDUvD_7tEWlzr0BnszZ-3eK-ZbGWdO7_i9kSmj7UQsbI2Z62QnTNrwhq010VU9JD0jiDQxKPsM1kn6AvAc764h0tSxQanF4A21TeM7j1GXJx4Br9M_6KlZcGxhphL0dVheP7ihXfq4ejVmlsx0-S0fQDg01&amp;t=638923241536720558" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /></head>
+<body onload="onloadFn()">
+
+    <nav class="navbar navbar-top nav-login">
+        <h3>BP<strong>me</strong> <span>Web</span></h3>
+    </nav>
+    <div class="container-fluid first-cont">
+        
+
+
+        <div class="row">
+            <form method="post" action="./" onsubmit="javascript:return WebForm_OnSubmit();" id="formLogin" data-toggle="validator" role="form" class="mx-auto" style="max-width:680px">
+<div class="aspNetHidden">
+<input type="hidden" name="RadScriptManager1_TSM" id="RadScriptManager1_TSM" value="" />
+<input type="hidden" name="__EVENTTARGET" id="__EVENTTARGET" value="" />
+<input type="hidden" name="__EVENTARGUMENT" id="__EVENTARGUMENT" value="" />
+<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="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" />
+</div>
+
+<script type="text/javascript">
+//<![CDATA[
+var theForm = document.forms['formLogin'];
+if (!theForm) {
+    theForm = document.formLogin;
+}
+function __doPostBack(eventTarget, eventArgument) {
+    if (!theForm.onsubmit || (theForm.onsubmit() != false)) {
+        theForm.__EVENTTARGET.value = eventTarget;
+        theForm.__EVENTARGUMENT.value = eventArgument;
+        theForm.submit();
+    }
+}
+//]]>
+</script>
+
+
+<script src="/FacturaGasBPMe/WebResource.axd?d=pynGkmcFUV13He1Qd6_TZNYT5Fdete45ky0He2-oCqF4nNKaeGPNDfGqNoHvY3LhsOeVDfYj3DfpwuZvtTkp_Q2&amp;t=638901320248157332" type="text/javascript"></script>
+
+
+<script src="/FacturaGasBPMe/ScriptResource.axd?d=1HpV3OVB0CaEXoaafcqmhnKs_UyfM9jKGbcGbd3vF5jMIVGXlVv2uZWOmuTujk166w8CDNMlVvgjp_K483MbdyrADNVimnLf0ZA8lie977mv6skC3-RczCzJgPHTki2PAsTGMkZLGAmLzANameOwPw2&amp;t=ffffffff93d1c106" type="text/javascript"></script>
+<script src="/FacturaGasBPMe/Telerik.Web.UI.WebResource.axd?_TSM_HiddenField_=RadScriptManager1_TSM&amp;compress=1&amp;_TSM_CombinedScripts_=%3b%3bSystem.Web.Extensions%2c+Version%3d4.0.0.0%2c+Culture%3dneutral%2c+PublicKeyToken%3d31bf3856ad364e35%3aen-US%3aa8328cc8-0a99-4e41-8fe3-b58afac64e45%3aea597d4b%3ab25378d2%3bTelerik.Web.UI%2c+Version%3d2024.1.131.45%2c+Culture%3dneutral%2c+PublicKeyToken%3d121fae78165ba3d4%3aen-US%3a9948a144-ff46-44f4-9ae0-6f54d8eaff7b%3a16e4e7cd%3a11e117d7%3af7645509%3a24ee1bba%3af46195d3%3a33715776%3ac128760b%3a874f8ea2%3a19620875%3acda80b3%3a6d43f6d9" type="text/javascript"></script>
+<script type="text/javascript">
+//<![CDATA[
+if (typeof(Sys) === 'undefined') throw new Error('ASP.NET Ajax client-side framework failed to load.');
+//]]>
+</script>
+
+<script type="text/javascript">
+//<![CDATA[
+function WebForm_OnSubmit() {
+if (typeof(ValidatorOnSubmit) == "function" && ValidatorOnSubmit() == false) return false;
+return true;
+}
+//]]>
+</script>
+
+<div class="aspNetHidden">
+
+	<input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="C967CBB8" />
+	<input type="hidden" name="__EVENTVALIDATION" id="__EVENTVALIDATION" value="FTYXez4HvDTcSMeYawPwV3Dg4u2KVauSM+6t1RokmjcqgX4D16smviOk2V3epy/yQuCYUa5sf6tHaHzfKHQYBMGnJ9OS0uB9xWArDs5MgMhVk5AqFRf4zGC+PHczVEjQxJZox6kRj1XbNZy81GNCzwmNRv5+4DcsX5Qv+F1068TpRhYfh5zrT5m1dWMo5XrHQzJnIw5aidVLx46QDiG2Ms3pOcy53Cx7EMAykW5JrcOwMj3vNANH08229y/jekSTADfCJeZx0Kc/aoqBhBrPYg==" />
+</div>
+                <div class="">
+                    <div class="">
+                        <figure class="appImgFg">
+                            <a href="https://www.bp.com/es_mx/mexico/BPme.html" target="_blank">
+                                <img src="img/banner_623x104.jpg" alt="" />
+                            </a>
+                        </figure>
+                        
+                    </div>
+
+
+                    <script type="text/javascript">
+//<![CDATA[
+Sys.WebForms.PageRequestManager._initialize('RadScriptManager1', 'formLogin', ['tloginCaptcha$ctl01',''], ['loginCaptcha$CaptchaLinkButton',''], [], 90, '');
+//]]>
+</script>
+
+
+                    <input type="hidden" name="hiFiUser" id="hiFiUser" />
+                    <input type="hidden" name="hiFiPass" id="hiFiPass" />
+                    <input type="hidden" name="hiFiDefCap" id="hiFiDefCap" value="0" />
+                    <input type="hidden" name="dfExist" id="dfExist" />
+
+
+                    <script type="text/javascript">
+
+                        //Controles telerik
+                        function fillInvisibleTextBox(sender) {
+                            var invisibleTextBox = $get("loginCaptcha_InvisibleTextBox");
+                            if (sender.checked) {
+                                invisibleTextBox.value = "Filled";
+                            }
+                            else {
+                                invisibleTextBox.value = "";
+                            }
+                        }
+
+                        //Recarga imagen Captcha
+                        function RefreshImage() {
+                            var captcha = $find("loginCaptcha");
+                            document.location = $get(captcha.get_id() + "_CaptchaLinkButton").href;
+                        }
+
+                        //Bloquea page load
+                        function pageLoad() {
+                            //Disable autoComplete
+                            var customCaptchaTextbox = $get("txtRadCaptcha");
+                            if (customCaptchaTextbox)
+                                customCaptchaTextbox.setAttribute("autoComplete", "off");
+                        }
+
+
+                        
+
+                        //function addNwTk() {
+                        //    document.location.href = 'connection.aspx';
+                        //    return;
+                        //}
+
+                        function testF(button, args) {
+                            try {
+                                $('.alert').remove();
+                                $(".login-box").append('<div class="spinbx" style="left:46%"><img src="img/loader.gif" /><p>BPme</p></div>');
+                                $('.login-box input').prop('disbaled', true);
+                            } catch (e) {
+                                console.log(e.message);
+                            }
+                        }
+
+                        function toCIP(nav) {
+                            if (nav.isOK) {
+                                document.location.href = nav.error;
+                            } else {
+
+                            }
+                        }
+
+                    </script>
+
+                    <div class="login-box col">
+                        <p id="intro">
+                            <span id="closeIntro" class="icon-close"></span>
+                            Tu seguridad es lo más importante para nosotros ¡Mejoramos BPme!<br />
+                            - SI YA ERES USUARIO ingresa con tu correo registrado y posteriormente solicitaremos tu número de celular.<br />
+                            - SI AÚN NO ERES USUARIO crea tu cuenta registrando tu correo y tu número celular.<br /><br />
+                            Dudas o aclaraciones en: <a href="#" style="cursor: default;">contactanos@bp.com</a>
+                        </p>
+                        <h2 style="text-align:center">Iniciar Sesión</h2>
+                        
+
+                        
+                        <div id="captcha_box" style="display: none; overflow: hidden;" class="col-md-12">
+
+                            <div class="inner_cap_bx" style="text-align: center">
+                                <div id="loginCaptcha" class="RadCaptcha RadCaptcha_Default">
+	<!-- 2024.1.131.45 --><span id="loginCaptcha_ctl00" style="visibility:hidden;">Código captcha incorrecto.</span><div id="loginCaptcha_SpamProtectorPanel">
+		<div id="loginCaptcha_ctl01">
+			<img id="loginCaptcha_CaptchaImageUP" class="imageClass" alt="" src="Telerik.Web.UI.WebResource.axd?type=rca&amp;isc=true&amp;guid=afb8431f-da3b-43eb-aa62-9da44344952f" style="height:50px;width:180px;display:block;" /><a id="loginCaptcha_CaptchaLinkButton" class="rcRefreshImage" title="" href="javascript:__doPostBack(&#39;loginCaptcha$CaptchaLinkButton&#39;,&#39;&#39;)" style="display:block;"></a>
+		</div><p><input name="loginCaptcha$CaptchaTextBox" type="text" maxlength="5" id="loginCaptcha_CaptchaTextBox" /><label for="loginCaptcha_CaptchaTextBox" id="loginCaptcha_CaptchaTextBoxLabel"></label></p>
+	</div><input id="loginCaptcha_ClientState" name="loginCaptcha_ClientState" type="hidden" />
+</div>
+                                <div id="Tooltip1" style="display:none;position:absolute;">
+	Recargar Captcha<input id="Tooltip1_ClientState" name="Tooltip1_ClientState" type="hidden" />
+</div>
+                                <input type="button" id="btnRefreshImage" onclick="RefreshImage(); return false;" value="" />
+
+                            </div>
+
+                            
+                            <div class="btn_add_tk">
+                            </div>
+                        </div>
+                        
+
+                        <div class="boxCaptcha"></div>
+
+                        <div class="btn-box-enter">
+                            <button type="submit" name="loginControl" value="Ingresar" id="loginControl" class="RadButton RadButton_Default rbButton rbRounded rbIconButton"><span class="rbText">Ingresar</span><input id="loginControl_ClientState" name="loginControl_ClientState" type="hidden" /></button>
+
+                            
+
+                            <input class="btn_account" type="button" value="Crear cuenta" onclick="createAccount()" />
+                            
+                        </div>
+
+                    </div>
+                    <div id="lblErrorCode" style="display:none;margin-top:15px;" class="alert alert-danger alert-dismissible fade in col-xs-12 col-md-12" role="alert"></div>
+
+                    <div id="ErrorCode" style="margin-top:15px;"></div>
+
+
+                    <div id="sw-alerts" style="margin-top: 15px;" class="col-xs-12"></div>
+                    <div class="spinbx" style="display: none">
+                        <img src="img/loader.gif" />
+                    </div>
+
+                    <div class="col">
+                        
+                        <figure class="appImgFg" style="margin-top: 15px;">
+                            <a href="https://www.bp.com/es_mx/mexico/BPme.html" target="_blank">
+                                <img src="img/banner_623x90.jpg" alt="" width="" />
+                            </a>
+                        </figure>
+                    </div>
+
+
+                    
+                </div>
+                
+
+
+            
+<script type="text/javascript">
+//<![CDATA[
+var Page_Validators =  new Array(document.getElementById("loginCaptcha_ctl00"));
+//]]>
+</script>
+
+<script type="text/javascript">
+//<![CDATA[
+var loginCaptcha_ctl00 = document.all ? document.all["loginCaptcha_ctl00"] : document.getElementById("loginCaptcha_ctl00");
+loginCaptcha_ctl00.errormessage = "Código captcha incorrecto.";
+loginCaptcha_ctl00.validationGroup = "Group";
+loginCaptcha_ctl00.evaluationfunction = "CustomValidatorEvaluateIsValid";
+//]]>
+</script>
+
+
+<script type="text/javascript">
+//<![CDATA[
+window.__TsmHiddenField = $get('RadScriptManager1_TSM');
+var Page_ValidationActive = false;
+if (typeof(ValidatorOnLoad) == "function") {
+    ValidatorOnLoad();
+}
+
+function ValidatorOnSubmit() {
+    if (Page_ValidationActive) {
+        return ValidatorCommonOnSubmit();
+    }
+    else {
+        return true;
+    }
+}
+        
+document.getElementById('loginCaptcha_ctl00').dispose = function() {
+    Array.remove(Page_Validators, document.getElementById('loginCaptcha_ctl00'));
+}
+Sys.Application.add_init(function() {
+    $create(Telerik.Web.UI.RadCaptcha, {"_audioUrl":"/FacturaGasBPMe/Telerik.Web.UI.WebResource.axd?type=cah\u0026isc=true\u0026guid=afb8431f-da3b-43eb-aa62-9da44344952f","_enableAudio":false,"_persistCode":false,"clientStateFieldID":"loginCaptcha_ClientState"}, null, null, $get("loginCaptcha"));
+});
+Sys.Application.add_init(function() {
+    $create(Telerik.Web.UI.RadToolTip, {"_cssClass":"","_manualCloseButtonText":"Close","clientStateFieldID":"Tooltip1_ClientState","formID":"formLogin","skin":"Default","targetControlID":"btnRefreshImage"}, null, null, $get("Tooltip1"));
+});
+Sys.Application.add_init(function() {
+    $create(Telerik.Web.UI.RadButton, {"_accessKey":"","_hasIcon":false,"_hasImage":false,"_isClientSubmit":false,"_isImageButton":false,"_postBackReference":"WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions('loginControl', '', true, 'Group', '', false, false))","_renderMode":2,"_validationGroup":"Group","clientStateFieldID":"loginControl_ClientState","confirmSettings":{},"iconData":{},"imageData":{},"text":"Ingresar","toggleStatesData":[],"uniqueGroupName":"","uniqueID":"loginControl"}, {"clicking":testF}, null, $get("loginControl"));
+});
+//]]>
+</script>
+</form>
+           
+        </div>
+    </div>
+    <footer class="mx-auto" style="max-width:680px">
+        <div class="" style="margin-top: 25px">
+            <figure>
+                <img src="img/helios_sm.png" alt="British Petroleum" style="width: 70px" />
+            </figure>
+            
+            <p style="font-size:13.5px">
+                <a href="http://www.atiogroup.com.mx/" target="_blank"><strong>Derechos Reservados | 2026</strong></a> 
+                <span>- Versión <em>1.4.1.96 -</em></</span>
+            </p>
+        </div>
+    </footer>
+
+    <style type="text/css">
+        .error {
+            position: absolute;
+            /*bottom: -22px;*/
+            font-size: 11.7px;
+            font-weight: 100;
+            color: #e75454;
+            margin-top: 3px;
+        }
+
+        .valid {
+            color: #2cc4a4;
+        }
+
+        #btnRefreshImage {
+            background: url('img/refresh.png') no-repeat 0 0;
+            background-size: 22px 22px;
+            width: 22px;
+            height: 22px;
+            border: none;
+            display: inline-block;
+            margin: 15px;
+        }
+
+        #loginCaptcha_ctl00 {
+            display: none !important;
+        }
+
+        #loginCaptcha_ctl01 {
+            float: left;
+        }
+
+        #loginCaptcha {
+            width: 200px;
+            margin: 0 auto;
+        }
+
+        #loginCaptcha_CaptchaTextBox {
+            text-transform: uppercase;
+            border: 1px solid #000;
+        }
+
+        #loginControl {
+            width: 40%;
+            height: 38px;
+            margin-top: 25px;
+        }
+        .btn-outline-success {
+            color: #007f00;
+            border-color: #007f00;
+        }
+        .btn-outline-success:hover {
+            color: #fff;
+            background-color: #007f00;
+            border-color: #007f00;
+        }
+    </style>
+    <!-- Modal Create Account -->
+    <div id="create-account" class="modal fade bs-example-modal-sm" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
+        <div class="modal-dialog modal-md" role="document">
+            <div class="modal-content pvPol">
+                <div id="showPvPol" class="col-md-12" style="display: none; background-color: white;">
+                </div>
+                <form id="form_nw_account" data-toggle="validator" role="form" action="/" method="post" class="">
+                    <h3>Alta de Usuario</h3>
+                    <div id="inputNewUser" class="form-group account-box">
+                        <div class="group form-group">
+                            <input id="a_name" type="text" class="clearable" required="required" name="a_name" value="" autocomplete="off" />
+                            <span class="highlight"></span>
+                            <span class="bar"></span>
+                            <label>*Nombre(s)</label>
+                        </div>
+
+                        <div class="group form-group">
+                            <input id="a_lastName" type="text" class="clearable" required="required" name="a_lastName" value="" autocomplete="off" />
+                            <span class="highlight"></span>
+                            <span class="bar"></span>
+                            <label>*Apellido(s)</label>
+                        </div>
+                        <div class="group form-group">
+                            <input id="a_phoneNumber" type="text" name="a_phoneNumber" required="required" class="clearable" value="" autocomplete="off" onkeypress='return event.charCode >= 47 && event.charCode <= 57' maxlength="15" />
+                            <span class="highlight"></span>
+                            <span class="bar"></span>
+                            <label>Teléfono</label>
+                        </div>
+                        <div class="group form-group">
+                            <input id="a_email" type="text" class="clearable" required="required" name="a_email" value="" autocomplete="off" />
+                            <span class="highlight"></span>
+                            <span class="bar"></span>
+                            <label>*Correo electrónico</label>
+                        </div>
+                        <div class="group form-group">
+                            <input id="a_confEmail" type="text" class="clearable" required="required" name="a_confEmail" value="" autocomplete="off" />
+                            <span class="highlight"></span>
+                            <span class="bar"></span>
+                            <label>*Confirmar correo electrónico</label>
+                        </div>
+                        
+                    </div>
+                    <div class="col-md-12" style="margin: 25px 0 0 10px;">
+                        <p style="color: #037d03; font-size: 11.7px;">Los campos marcados con * son requeridos.</p>
+                    </div>
+                    <div id="sw-nwAcc" style="margin-top: 15px;" class="col-xs-12"></div>
+                    <div class="btn-box">
+                        <button type="button" id="btnCreateNwAccount" class="btn-create-account" onclick="addNewUser()">Crear cuenta</button>
+                        <button type="button" class="btn-cancel" data-dismiss="modal" onclick="resetNwUser()">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    
+    <div id="recover-pass" class="modal fade" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true" aria-labelledby="modalrecover-pass">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="recoverPasstLost" action="/" method="post" class="" role="form">
+                    <h3>Contraseña</h3>
+                    <p>Ingrese el correo para el envío de credenciales</p>
+                    <div id="inpPass" class="form-group account-box">
+                        <div class="group form-group">
+                            <input id="r_pass" type="text" class="clearable" required="required" name="r_pass" value="" autocomplete="off" />
+                            <span class="highlight"></span>
+                            <span class="bar"></span>
+                            <label>Confirmar correo electrónico</label>
+                        </div>
+                    </div>
+                    <div id="serveErr" style="margin-top: 15px; display: none" class="col-xs-12"></div>
+                    <div id="sw-rPass" class="p-2"></div>
+                    <div id="rcovPass" class="btn-box">
+                        <button type="button" class="btn-create-account" onclick="getPassLost();">Enviar</button>
+                        <button type="button" class="btn-cancel" data-bs-dismiss="modal" onclick="resetRpass();">Cancelar</button>
+                    </div>
+                    <div id="exitRcovPass" class="btn-box">
+                        <button type="button" class="btn-cancel" data-bs-dismiss="modal" onclick="resetRpass();">Cerrar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    
+    <div id="userTemp" class="modal fade bs-example-modal-sm" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
+        <div class="modal-dialog modal-md" role="document">
+            <div class="modal-content">
+                <form id="fmUserTemp" action="/" method="post" class="">
+                    <h3>Facturar sin Usuario
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+                    </h3>
+
+                    <p>Nota:</p>
+                    <p>Para continuar utilizando BPme es necesario que completes tu registro. Por favor, da click en continuar y sigue las instrucciones.</p>
+
+                    
+                    
+                    <div id="" class="btn-box">
+                        <button type="button" class="btn-cancel" data-dismiss="modal" onclick="javascript:window.location.href='alta_usuarios.aspx'"">Continuar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <script type="text/javascript" src="scripts/jquery-3.6.0.min.js"></script>
+
+    
+
+    <!-- Latest compiled and minified JavaScript -->
+    
+
+  
+
+    <script src="scripts/bootstrap.5.1.3.min.js" type="text/javascript"></script>
+
+    <script type="text/javascript" src="scripts/jquery.validate.min.js"></script>
+    <script type="text/javascript" src="scripts/additional-methods.js"></script>
+
+   
+
+
+    
+    <script  src="scripts/facturaGasScripts.js?v=1.5.4"></script>
+
+
+    <script type="text/javascript">
+
+        //document.ready
+        $(document).ready(function () {
+
+            //login
+            $("").submit("click", function (event) {
+
+                //
+                $("#formLogin").append('<div class="spinbx"><img src="img/loader.gif" /><p>BPme</p></div>');
+                event.preventDefault();
+
+                $(".alert").remove();
+                $(".spinbx").show();
+
+
+                $('#formLogin').validate({
+                    onsubmit: false,
+                    onfocusin: function (element) { $(element).valid(); },
+                    wrapper: 'strong',
+                    rules: {
+                        mailUser: {
+                            minlength: 2,
+                            required: true,
+                            nwemail: true
+                        },
+                        pwdUser: {
+                            required: true
+                        }
+                    },
+                    messages: {
+                        mailUser: {
+                            required: "Ingresa nombre de usuario",
+                            nwemail: "Formato incorrecto usuario@domain.com"
+                        },
+                        pwdUser: {
+                            required: "Revisa tu contraseña",
+                        }
+                    },
+                    highlight: function (element) {
+                        $(element).closest('.control-group').removeClass('success').addClass('error');
+                    },
+                    success: function (element) {
+                        element.text('').addClass('valid')
+                            .closest('.control-group').removeClass('error').addClass('success');
+
+
+                    }
+                });
+
+
+                if ($("#formLogin").valid()) {
+
+                    $("#formLogin :input").attr("disabled", true); //bloquea botones
+                    $("#recovpasslink").attr("data-bs-toggle", ""); //previene modal
+                    $("#linkTemUs").attr("data-toggle", ""); //previene modal
+
+                    var dataForm = {
+                        "src": "",
+                        "mail": $("#mailUser").val(),
+                        "pwd": $("#pwdUser").val()
+                    }
+
+                    //send user Credentials
+                    $.ajax({
+                        type: "POSt",
+                        url: "Default.aspx/logIn",
+                        data: JSON.stringify(dataForm),
+                        contentType: "application/json; charset=utf-8",
+                        dataType: "json",
+                        success: function (response) {
+
+                            try {
+
+                                var obj = JSON.parse(response.d);
+
+                                $(".alert").remove();
+                                $(".spinbx").remove();
+
+                                if (obj.showCaptcha == "True") {
+
+                                    $(".login-box *input").attr("disabled", true);
+
+                                } else {
+
+                                    if (obj.isOK == "True") {
+                                        // LocalStore
+                                        //if ('sessionStorage' in window && window['sessionStorage'] !== null) {
+
+                                        try {
+                                            //Get stored data
+                                            var user = sessionStorage.getItem('userToken');
+                                            var email = sessionStorage.getItem('userEmail');
+
+                                            if (user === null) {
+                                                user = "";
+                                            }
+
+                                            if (email === null) {
+                                                email = "";
+                                            }
+
+                                            user = obj.error;
+                                            email = dataForm.mail;
+
+                                            //Save array
+                                            sessionStorage.setItem("userToken", user);
+                                            sessionStorage.setItem("userEmail", email);
+
+                                            //localStorage.setItem("user", user);
+                                            //localStorage.setItem("useremail", email);
+
+                                            window.location.href = "mainFacturaGas.aspx";
+
+
+                                            //return true;
+
+                                        } catch (e) {
+                                            if (e == QUOTA_EXCEEDED_ERR) {
+                                                //console
+                                            }
+                                        }
+                                        
+
+                                    } else {
+
+
+                                        $(".alert").remove();
+                                        $(".spinbx").remove();
+
+                                        $('#sw-alerts').append(
+                                            '<div class="alert alert-danger alert-dismissible fade in" role="alert">' +
+                                            '<button type="button" class="close" data-dismiss="alert" aria-label="close"><span aria-hidden="true">×</span></button>' +
+                                            '<p class="text-center">' + obj.error + '</p>' +
+                                            '</div>'
+                                        );
+                                        $("#formLogin").submit(function (e) {
+                                            e.preventDefault();
+                                        });
+
+                                        $("#formLogin :input").attr("disabled", false); //desbloquea botones
+                                        $("#recovpasslink").attr("databs-bs-toggle", "modal"); //agrega modal
+                                        $("#linkTemUs").attr("data-toggle", "modal"); //agrega modal
+
+                                        //onClick();
+
+
+                                    }
+                                }
+
+                            } catch (e) {
+
+                                $(".alert").remove();
+                                $(".spinbx").remove();
+
+                                $("#formLogin").submit(function (e) {
+                                    e.preventDefault();
+                                });
+                                $('#sw-alerts').append(
+                                    '<div class="alert alert-danger alert-dismissible fade in" role="alert">' +
+                                    '<button type="button" class="close" data-dismiss="alert" aria-label="close"><span aria-hidden="true">×</span></button>' +
+                                    '<p class="text-center">Error Inesperado. Favor de contactar a soporte por medio de la sección “Contacto”.</p>' +
+                                    '</div>'
+                                );
+
+                                $("#formLogin :input").attr("disabled", false); //desbloquea botones
+                                $("#recovpasslink").attr("data-bs-toggle", "modal"); //agrega modal
+                                $("#linkTemUs").attr("data-toggle", "modal"); //agrega modal
+
+                            }
+
+                        },
+                        error: function (XMLHttpRequest, textStatus, errorThrown) {
+
+                            $(".alert").remove();
+                            $(".spinbx").remove();
+
+                            $("#formLogin").submit(function (e) {
+                                e.preventDefault();
+                            });
+                            $('#sw-alerts').append(
+                                '<div class="alert alert-danger alert-dismissible fade in" role="alert">' +
+                                '<button type="button" class="close" data-dismiss="alert" aria-label="close"><span aria-hidden="true">×</span></button>' +
+                                '<p class="text-center">Error Inesperado. Favor de contactar a soporte por medio de la sección “Contacto”.</p>' +
+                                '</div>'
+                            );
+
+                            $("#formLogin :input").attr("disabled", false); //desbloquea botones
+                            $("#recovpasslink").attr("data-bs-toggle", "modal"); //agrega modal
+                            $("#linkTemUs").attr("data-toggle", "modal"); //agrega modal
+
+                            return false;
+                        }
+
+                    });
+
+
+                } else {
+
+                    $(".alert").remove();
+                    $(".spinbx").remove();
+
+                    $("#formLogin").submit(function (e) {
+                        event.preventDefault();
+                    });
+                }
+
+
+            });// end login
+
+
+        });
+
+        //documen ready
+
+        function createAccount() {
+            
+            initVal.body = "";
+
+            fetch("Default.aspx/CIP_NewAccount", initVal)
+            .then(req => req.json())
+            .then(res => {
+
+                try {
+
+                    var obj = JSON.parse(res.d);
+
+                    if (obj.isOK === "True") {
+                        window.location.href = obj.error;
+                    } else {
+                        console.log(obj.error);
+                    }
+                    
+
+                } catch (e) {
+
+                   console.log(e)
+                    return;
+                }
+
+
+            }).catch(error => {
+
+                console.log(error);
+
+
+            });
+        }
+
+
+        //function usuario temporal
+        function addUserTemp() {
+
+            $('.alert').remove();
+            $("#fmUserTemp").append('<div class="spinbx"><img src="img/loader.gif" /><p>BPme</p></div>');
+            $(".btn-box button").attr("disabled", true);
+
+            $('#fmUserTemp').validate({
+                onsubmit: false,
+                onfocusin: function (element) { $(element).valid(); },
+                wrapper: 'strong',
+                rules: {
+                    sn_inv: {
+                        minlength: 2,
+                        required: true,
+                        email: true
+                    },
+                    sn_inv_conf: {
+                        required: true,
+                        equalTo: "#sn_inv",
+                        email: true
+                    },
+                },
+                messages: {
+                    //name: "Please specify your name",
+                    sn_inv: {
+                        required: "Ingresa correo electrónico",
+                        email: "Formato incorrecto usuario@domain.com"
+                    },
+                    sn_inv_conf: {
+                        required: "Confirmación requerida",
+                        equalTo: "El correo debe coincidir",
+                        email: "Formato de correo incorrecto"
+                    },
+                },
+                highlight: function (element) {
+                    $(element).closest('.control-group').removeClass('success').addClass('error');
+                },
+                success: function (element) {
+                    element.text('').addClass('valid')
+                        .closest('.control-group').removeClass('error').addClass('success');
+
+                }
+            });
+
+
+            var sec1 = $("#guestUser *input");
+
+            var allInput = [];
+
+            for (var i = 0; i < sec1.length; i++) {
+                allInput.push(sec1[i]);
+            }
+
+            for (var i = 0; i < allInput.length; i++) {
+
+                if (validate($(allInput[i]).val())) {
+
+                } else {
+                    $(".btn-box button").attr("disabled", false);
+                    $(".spinbx").remove();
+                    $('#msjUserTemp').append(
+                        '<div class="alert alert-danger alert-dismissible fade in" role="alert">' +
+                        '<button type="button" class="close" data-dismiss="alert" aria-label="close"><span aria-hidden="true">×</span></button>' +
+                        '<p class="text-center">Datos de entrada no validos: <br />' + $(allInput[i]).val() + '</p>' +
+                        '</div>'
+                    );
+
+                    return false;
+                }
+            }
+
+            if ($("#fmUserTemp").valid()) {
+
+                var userEmail = $("#sn_inv").val();
+
+                var userTempData = {
+                    "src": "",
+                    "email": $("#sn_inv").val()
+                }
+
+                $.ajax({
+                    type: "POST",
+                    url: "facturar_user_temp.aspx/addUserTemp",
+                    data: JSON.stringify(userTempData),
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json",
+                    beforeSend: function (response) {
+                    },
+                    complete: function () {
+                        $(".load_fd div.spinbx").remove();
+                    },
+                    success: function (response) {
+
+
+
+                        if (!window.sessionStorage && !window.sessionStorage.getItem('emailTemp')) {
+                            console.log("session");
+                        }
+
+                        $('.spinbx').remove();
+                        $(".alert").remove();
+
+
+                        try {
+
+                            var obj = JSON.parse(response.d);
+                            var objOk = obj.isOK.toString().toLowerCase();
+
+                            $(".btn-box button").attr("disabled", false);
+
+                            var chain = null;
+
+                            if (obj.error == null) {
+                                chain = "";
+                            } else {
+                                chain = obj.error;
+                            }
+
+                            var expresion = chain.match("Ingrese con usuario y contraseña.$");
+
+                            if (objOk == "true" || chain == "") {
+
+                                sessionStorage.setItem("emailTemp", userEmail);
+
+                                document.location.href = 'facturar_user_temp.aspx';
+
+                            } else if (objOk == "false" && expresion) {
+
+
+                                $('#msjUserTemp').append(
+                                    '<div class="alert alert-warning alert-dismissible fade in" role="alert">' +
+                                    '<button type="button" class="close" data-dismiss="alert" aria-label="close"><span aria-hidden="true">×</span></button>' +
+                                    '<p class="text-center">' + obj.error + '</p>' +
+                                    '</div>'
+                                );
+
+                            } else {
+
+                                $(".alert").remove();
+
+                                $('#msjUserTemp').append(
+                                    '<div class="alert alert-danger alert-dismissible fade in" role="alert">' +
+                                    '<button type="button" class="close" data-dismiss="alert" aria-label="close"><span aria-hidden="true">×</span></button>' +
+                                    '<p class="text-center">' + obj.error + '</p>' +
+                                    '</div>'
+                                );
+
+                            }
+
+
+                        } catch (e) {
+
+                            $(".btn-box button").attr("disabled", false);
+
+                            $('#msjUserTemp').append(
+                                '<div class="alert alert-danger alert-dismissible fade in" role="alert">' +
+                                '<button type="button" class="close" data-dismiss="alert" aria-label="close"><span aria-hidden="true">×</span></button>' +
+                                '<p class="text-center">El servicio no está disponible intente más tarde.</p>' +
+                                '</div>'
+                            );
+
+                        }
+
+
+
+                    },
+                    error: function (XMLHttpRequest, textStatus, errorThrown) {
+
+                        $('.spinbx').remove();
+                        $(".alert").remove();
+                        $(".btn-box button").attr("disabled", false);
+
+                        $('#msjUserTemp').append(
+                            '<div class="alert alert-danger alert-dismissible fade in" role="alert">' +
+                            '<button type="button" class="close" data-dismiss="alert" aria-label="close"><span aria-hidden="true">×</span></button>' +
+                            '<p class="text-center">Error Inesperado. Favor de contactar a soporte por medio de la sección “Contacto”.</p>' +
+                            '</div>'
+                        );
+                        return false;
+                    }
+
+                });
+
+            } else {
+
+                $('.spinbx').remove();
+                $(".alert").remove();
+                $(".btn-box button").attr("disabled", false);
+
+            }
+
+
+
+        }//end function usuario temporal
+
+
+
+
+        $(function () {
+
+            $("#closeIntro").on("click", function (e) {
+                e.preventDefault();
+
+                $(this).parent("#intro").fadeOut(500);
+
+            });
+        });
+
+        function onloadFn() {
+            localStorage.clear();
+            sessionStorage.clear();
+
+            var validator = $('form').validate();
+            validator.resetForm();
+            validator.destroy();
+        }
+
+
+        $(document).keypress(
+            function (event) {
+                if (event.which == '13') {
+                    event.preventDefault();
+                }
+
+                $('#sn_inv_conf').bind("cut copy paste", function (e) {
+                    e.preventDefault();
+                });
+            }
+        );
+
+
+        //detectar dispositivo movil android/ios/
+        var isMobile = {
+            Android: function () {
+                return navigator.userAgent.match(/Android/i);
+            },
+            BlackBerry: function () {
+                return navigator.userAgent.match(/BlackBerry/i);
+            },
+            iOS: function () {
+                return navigator.userAgent.match(/iPhone|iPad|iPod/i);
+            },
+            Opera: function () {
+                return navigator.userAgent.match(/Opera Mini/i);
+            },
+            Windows: function () {
+                return navigator.userAgent.match(/IEMobile/i);
+            },
+            any: function () {
+                return (isMobile.Android() || isMobile.BlackBerry() || isMobile.iOS() || isMobile.Opera() || isMobile.Windows());
+            }
+        };
+
+
+
+        jQuery(function desplazar($) {
+
+
+            if (isMobile.Android()) {
+
+                $(document).ready(function () {
+
+                    //$("input:focus").doStuff();
+
+                    $("head").append("<link href='css/mobile.css' rel='stylesheet' />");
+
+                    //if ($("input:focus")) {
+
+                    //    $('#mailUser').on('touchstart', function () {
+                    //        $(this).attr('type', 'email');
+                    //    });
+
+                    //} else {
+
+                    //    $('#mailUser').on('touchstart', function () {
+                    //        $(this).attr('type', 'text');
+                    //    });
+
+                    //}
+
+
+                    if ($("input:focus")) {
+                        //correo login
+                        $('#mailUser').on('touchstart', function () {
+                            $(this).attr('type', 'email');
+                        });
+                        //tel crear cuenta
+                        $('#a_phoneNumber').on('touchstart', function () {
+                            $(this).attr('type', 'tel');
+                        });
+                        //correo crear cuenta
+                        $('#a_email').on('touchstart', function () {
+                            $(this).attr('type', 'email');
+                        });
+                        //confirmar correo crear cuenta
+                        $('#a_confEmail').on('touchstart', function () {
+                            $(this).attr('type', 'email');
+                        });
+                        //correo recuperar contraseña
+                        $('#r_pass').on('touchstart', function () {
+                            $(this).attr('type', 'email');
+                        });
+                        //correo usuario temp
+                        $('#sn_inv').on('touchstart', function () {
+                            $(this).attr('type', 'email');
+                        });
+                        //confirmar correo usuario temp
+                        $('#sn_inv_conf').on('touchstart', function () {
+                            $(this).attr('type', 'email');
+                        });
+
+                    }
+                    //else {
+
+                    //    //tel crear cuenta
+                    //    $('#mailUser').on('touchstart', function () {
+                    //        $(this).attr('type', 'text');
+                    //    });
+                    //    //tel crear cuenta
+                    //    $('#a_phoneNumber').on('touchstart', function () {
+                    //        $(this).attr('type', 'text');
+                    //    });
+                    //    //correo crear cuenta
+                    //    $('#a_email').on('touchstart', function () {
+                    //        $(this).attr('type', 'text');
+                    //    });
+                    //    //confirmar correo crear cuenta
+                    //    $('#a_confEmail').on('touchstart', function () {
+                    //        $(this).attr('type', 'text');
+                    //    });
+                    //}
+
+                    //if ( $("input[type='text']").blur() )
+
+
+                });
+
+
+            }
+
+            if (isMobile.iOS()) {
+
+                $(document).ready(function () {
+
+                    //alert("ios");
+
+
+
+                });
+
+
+            }
+
+        });
+
+    </script>
+</body>
+</html>

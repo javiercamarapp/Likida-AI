@@ -1,7 +1,7 @@
 import { Map, Satellite, KeyRound } from 'lucide-react';
 import { exigirVerRuta } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { getEstadoRastreo, type EstadoRastreo } from '@/lib/cuadra/comercial';
+import { getEstadoRastreo, type EstadoRastreo } from '@/lib/likida/comercial';
 import { EstadoVacio, KpiTile, StatusPill } from '../../admin/ui/kit';
 import { fechaMx } from '@/lib/formato';
 

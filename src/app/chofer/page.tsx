@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { ChevronRight } from 'lucide-react';
 import { requireOperador } from '@/lib/auth/guard';
-import { viajeEnCurso, unidadDelViaje, aceptarViaje } from '@/lib/cuadra/chofer';
+import { viajeEnCurso, unidadDelViaje, aceptarViaje } from '@/lib/likida/chofer';
 import { Titulo, Pendiente, ViajeDeHoy, SinViaje, ViajeAceptado, TOQUE } from './vista';
 import BotonAceptar, { type EstadoAceptar } from './aceptar';
 

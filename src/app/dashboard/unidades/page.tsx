@@ -7,7 +7,7 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
-import { getUnidades, crearUnidad, cambiarEstadoUnidad, type UnidadRow } from '@/lib/cuadra/operacion';
+import { getUnidades, crearUnidad, cambiarEstadoUnidad, type UnidadRow } from '@/lib/likida/operacion';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
 import { sufijoTenant } from '../sufijo';
 import { CifrasUnidades, TablaUnidades, FormaUnidad } from './vista';

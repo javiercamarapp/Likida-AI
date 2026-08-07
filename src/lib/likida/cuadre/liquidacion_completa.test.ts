@@ -1,0 +1,180 @@
+import { describe, it, expect } from 'vitest';
+import { cuadrarViaje, type PoliticaGasto } from './engine';
+import { resumenCuadre } from './resumen';
+import { resumenOmitidos } from '../liquidacion/omitidos';
+import type { Gasto } from '@/types/likida';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CRITERIO DE TERMINADO DE LA FASE 0 — una liquidación REALISTA completa.
+//
+// Los tests de arriba prueban una regla a la vez. Este prueba lo que de verdad
+// llega: veinte comprobantes de un viaje real, con dos facturas de diésel
+// timbradas, una foto duplicada, casetas, comidas y un hotel.
+//
+// La pregunta que responde no es "¿funciona cada regla?" sino "¿el documento que
+// recibe el contralor cuadra consigo mismo?".
+// ═══════════════════════════════════════════════════════════════════════════
+
+const politica: PoliticaGasto[] = [
+  { concepto: 'diesel', topeMonto: 6000 },
+  { concepto: 'caseta', topeMonto: 1500 },
+  { concepto: 'alimentacion', topeMonto: 800 },
+  { concepto: 'hospedaje', topeMonto: 2500 },
+];
+const EST = { peajeFactor: 0.5, viaticosTopeFiscalDiarioMxn: 750, efectivoTopeMxn: 2000, clavesDieselIeps: ['15101505'] };
+const HC = { claves: ['15101505', '15101514', '15101515'], unidad: 'LTR', vigenteDesde: '2026-04-24' };
+
+let n = 0;
+const g = (p: Partial<Gasto>): Gasto => ({ id: `g${++n}`, concepto: 'diesel', monto: 0, ocrConfianza: 0.95, formaPago: '04', ...p });
+
+/** Un viaje Mérida→Querétaro de tres días, como llega de verdad. */
+function viajeReal(): Gasto[] {
+  n = 0;
+  const gastos: Gasto[] = [
+    // Dos cargas de diésel TIMBRADAS (el camino bueno: XML completo)
+    g({ concepto: 'diesel', monto: 5800, fecha: '2026-05-01', cfdiUuid: 'uuid-d1', xmlVerificado: true,
+        claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true,
+        rfcReceptor: 'TIN950101AB0', subTotal: 4310, ivaTraslado: 690, iepsTraslado: 800, estadoSat: 'vigente' }),
+    g({ concepto: 'diesel', monto: 5200, fecha: '2026-05-02', cfdiUuid: 'uuid-d2', xmlVerificado: true,
+        claveProdServ: '15101505', claveUnidad: 'LTR', tipoComprobante: 'I', complementoHidrocarburos: true,
+        rfcReceptor: 'TIN950101AB0', subTotal: 3862, ivaTraslado: 618, iepsTraslado: 720, estadoSat: 'vigente' }),
+    // Una caseta timbrada (para que el estímulo de peaje entre)
+    g({ concepto: 'caseta', monto: 1160, fecha: '2026-05-01', cfdiUuid: 'uuid-c1', xmlVerificado: true,
+        rfcReceptor: 'TIN950101AB0', subTotal: 1000, ivaTraslado: 160, estadoSat: 'vigente' }),
+  ];
+  // Once casetas sueltas (lo normal: tickets sin timbrar)
+  for (let i = 0; i < 11; i++) {
+    gastos.push(g({ concepto: 'caseta', monto: 180 + i * 15, fecha: '2026-05-02', folio: `CAS-${100 + i}` }));
+  }
+  // Comidas de dos días distintos, dentro del tope diario
+  gastos.push(g({ concepto: 'alimentacion', monto: 320, fecha: '2026-05-01', folio: 'AL-1' }));
+  gastos.push(g({ concepto: 'alimentacion', monto: 380, fecha: '2026-05-02', folio: 'AL-2' }));
+  // Un hotel: además de ser gasto, es el soporte que LISR 28-V le exige a la comida
+  gastos.push(g({ concepto: 'hospedaje', monto: 1450, fecha: '2026-05-01', folio: 'HOT-1' }));
+  // Transporte del operador
+  gastos.push(g({ concepto: 'transporte', monto: 260, fecha: '2026-05-02', folio: 'TR-1' }));
+  // LA FOTO DUPLICADA: mismo folio, concepto y monto que una caseta ya capturada
+  gastos.push(g({ concepto: 'caseta', monto: 180, fecha: '2026-05-02', folio: 'CAS-100' }));
+  // Un gasto más para llegar a 20
+  gastos.push(g({ concepto: 'otro', monto: 340, fecha: '2026-05-03', folio: 'OT-1' }));
+  return gastos;
+}
+
+describe('liquidación completa de 20 comprobantes', () => {
+  const gastos = viajeReal();
+  // El anticipo se calcula para que cuadre EXACTO contra lo comprobado (sin el duplicado).
+  const esperado = gastos.filter((x) => x.folio !== 'CAS-100' || x.id === 'g4').reduce((s, x) => s + x.monto, 0);
+  const r = cuadrarViaje({
+    viajeId: 'VJ-REAL', anticipo: esperado, politica, estimulos: EST, hidrocarburos: HC,
+    // RFC con DÍGITO VERIFICADOR válido a propósito: desde el 28-jul un RFC de
+    // empresa mal formado deja el receptor SIN VERIFICAR (ni deducible ni
+    // rechazado), y con el fixture inventado esta prueba medía otra cosa.
+    empresaRfc: 'TIN950101AB0', fechaMin: '2026-04-28', fechaMax: '2026-05-05',
+    gastos,
+  });
+
+  it('son 20 comprobantes', () => {
+    expect(gastos).toHaveLength(20);
+  });
+
+  it('la foto duplicada se detecta y NO infla el total', () => {
+    expect(r.diferencias.some((d) => d.tipo === 'duplicado')).toBe(true);
+    expect(r.totalComprobado).toBe(esperado); // el duplicado NO suma
+  });
+
+  it('sale sin sorpresas: ninguna regla la manda a la bandeja SIN RAZÓN', () => {
+    // Es la prueba de fuego de la Fase 0. Antes, `ieps_no_desglosado` mandaba a
+    // `revisar` TODA liquidación con diésel, y la bandeja dejaba de significar algo.
+    //
+    // AUDITORÍA 9, ALTO (frontend): `permiso_cre_no_verificable` SÍ tiene razón
+    // —el motor avisa, siempre, que no valida el permiso CRE del proveedor
+    // (LISR 27-III / RFA 2026 2.9) en NINGÚN diésel con XML verificado— pero
+    // mandarlo a REVISAR (como decidió la ronda 8) hacía que CUALQUIER
+    // liquidación con un diésel bien facturado quedara incapaz de volver a ser
+    // "Cuadrada" — incluido el viaje que `seed.sql` sembró como pieza central
+    // del demo. Corregido: ya no entra a REVISAR (mismo criterio que
+    // `diesel_desviacion` y `ieps_no_desglosado`, que tampoco entran); el
+    // aviso se imprime igual, con tono `condicionado` junto al renglón
+    // "Deducible para ISR" (ver `permiso_cre_no_verificable.test.ts`).
+    const enBandeja = r.diferencias.filter((d) =>
+      !['duplicado', 'sobre_politica', 'anticipo', 'diesel_desviacion', 'permiso_cre_no_verificable'].includes(d.tipo));
+    expect(enBandeja.map((d) => d.tipo)).toEqual([]);
+    expect(r.estatus).not.toBe('revisar'); // el permiso CRE ya no puede mandar la liquidación a la bandeja
+  });
+
+  it('las tres cubetas suman el total comprobado', () => {
+    expect(r.totalDeducible + r.totalNoDeducible + r.totalPorConfirmar).toBeCloseTo(r.totalComprobado, 2);
+  });
+
+  it('el estímulo de peaje sale de la caseta TIMBRADA, no de los tickets sueltos', () => {
+    expect(r.peajeAcreditable).toBe(500); // 1000 × 0.5, solo la que trae XML
+  });
+
+  it('el IEPS trasladado NO se presenta como estímulo acreditable', () => {
+    // Fijaba 1520 = 800 + 720, la suma de los IEPS TRASLADADOS de los CFDI.
+    // `normas/lif-2026-20-A.yaml` (verificado_fuente_primaria) dice literal:
+    // "cuota IEPS vigente al momento de la compra × LITROS. No es el IEPS
+    // trasladado en el CFDI". Y la decisión D2 del roadmap prohíbe enseñar la
+    // cifra en pesos "sin discusión": la cuota pasó de $7.3634 a $2.0925 en
+    // cinco meses y el estímulo es ingreso acumulable.
+    expect(r.iepsAcreditable).toBe(0);
+  });
+
+  it('el IVA acreditable suma los tres CFDI con XML', () => {
+    expect(r.ivaAcreditable).toBe(1468); // 690 + 618 + 160
+  });
+
+  it('la comida NO se marca sin soporte: hay hotel en el viaje', () => {
+    expect(r.diferencias.some((d) => d.tipo === 'alimentacion_sin_soporte')).toBe(false);
+  });
+
+  it('el PDF anuncia lo que no cupo, y lo omitido cuadra con el total', () => {
+    const CABEN = 17; // lo que entra en una página
+    const om = resumenOmitidos(r.gastos, CABEN)!;
+    expect(om.cuantos).toBe(3);
+    const impresos = r.gastos.slice(0, CABEN).reduce((s, x) => s + (x.monto > 0 ? x.monto : 0), 0);
+    // Impresos + omitidos = todo lo capturado (incluido el duplicado, que también
+    // aparece como renglón). Lo que el papel muestra tiene que ser coherente.
+    const todos = r.gastos.reduce((s, x) => s + (x.monto > 0 ? x.monto : 0), 0);
+    expect(impresos + om.monto).toBeCloseTo(todos, 2);
+  });
+
+  it('al operador no le llega ningún veredicto fiscal', () => {
+    const texto = resumenCuadre(r, true, 'operador');
+    expect(texto).not.toMatch(/no deducible|69-B|cancelado/i);
+  });
+
+  it('al contralor sí le llega el descargo de responsabilidad', () => {
+    expect(resumenCuadre(r, true, 'contralor')).toMatch(/no sustituye|no es un dictamen|contador/i);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PLURAL, QUE NO ES COSMÉTICO CUANDO SE PROYECTA. 1-ago-2026.
+//
+// El cuadre real cerró con «…y 12 observación(es) más en el panel». El paréntesis
+// es la marca de un texto sin terminar, y este mensaje es literalmente lo que se
+// enseña en la sala. El PDF ya lo resolvía bien.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el corte de observaciones se lee como español', () => {
+  const conObs = (n: number) => resumenCuadre({
+    totalComprobado: 100, totalAnticipo: 100, diferencia: 0, estatus: 'cuadrada',
+    diferencias: Array.from({ length: n }, (_, i) => ({
+      tipo: 'fecha_sospechosa', concepto: 'diesel', monto: 0, nota: `obs ${i}`,
+    })),
+  } as never, true, 'operador');
+
+  it('con varias, plural sin paréntesis', () => {
+    const t = conObs(18);
+    expect(t).toContain('12 observaciones más');
+    expect(t, 'el paréntesis delata un texto a medias').not.toContain('(es)');
+  });
+
+  it('con una sola, singular', () => {
+    expect(conObs(7)).toContain('1 observación más');
+  });
+
+  it('con seis o menos no corta nada', () => {
+    expect(conObs(6)).not.toMatch(/más en el panel/);
+  });
+});

@@ -2,7 +2,7 @@ import { TrendingUp, ScanText, Clock, Bot, Search, Link2, ReceiptText } from 'lu
 import {
   getValorAhorro, getKpis, detectarAnomalias, MINUTOS_CAPTURA_MANUAL,
   type ValorAhorro, type DashboardKpis, type Anomalia,
-} from '@/lib/cuadra/analytics';
+} from '@/lib/likida/analytics';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { KpiTile, EstadoVacio, ChartCard } from '../../admin/ui/kit';
 import { HBars, MultiLine } from '../../admin/ui/graficas';

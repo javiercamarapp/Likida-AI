@@ -2,9 +2,9 @@ import { Fuel, Route as RouteIcon, Receipt, CreditCard } from 'lucide-react';
 import {
   resolverPeriodo, getGastosFiscales, resumirCombustibleCasetas, resumirFiscal, tope15DeGastos,
   type GastoFiscal,
-} from '@/lib/cuadra/fiscal';
-import { TOPE_EFECTIVO, UMBRAL_ALERTA } from '@/lib/cuadra/periodo/combustible';
-import { getConfig, type CuadraConfig } from '@/lib/cuadra/config';
+} from '@/lib/likida/fiscal';
+import { TOPE_EFECTIVO, UMBRAL_ALERTA } from '@/lib/likida/periodo/combustible';
+import { getConfig, type CuadraConfig } from '@/lib/likida/config';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { KpiTile, EstadoVacio, ChartCard, StatusPill, type Estado } from '../../../admin/ui/kit';

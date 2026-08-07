@@ -1,5 +1,5 @@
 import { mxn, fechaMx } from '@/lib/utils';
-import type { LineaPorConciliar } from '@/lib/cuadra/analytics';
+import type { LineaPorConciliar } from '@/lib/likida/analytics';
 
 // La pantalla que faltaba desde la 0076 (auditoría 10, hallazgo CRÍTICO
 // fiscal): `cfdi_consolidado_linea` ya guardaba la cola de líneas que el JOIN

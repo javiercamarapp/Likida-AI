@@ -156,7 +156,7 @@ Es decir: **para que el panel enseñe litros en la sala, el operador tiene que
 mandar la foto del ticket Y el XML del CFDI.** Con la foto sola siempre es 0, y
 eso es correcto: un ticket sin timbrar no acredita nada.
 
-Queda fijado en `src/lib/cuadra/cuadre/diesel_estimulo.test.ts` (6 pruebas,
+Queda fijado en `src/lib/likida/cuadre/diesel_estimulo.test.ts` (6 pruebas,
 sin llamadas de pago), incluidos los tres casos que **no** acreditan: efectivo,
 gasolina, y foto sin litros.
 

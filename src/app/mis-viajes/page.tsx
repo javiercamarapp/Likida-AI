@@ -19,7 +19,7 @@ interface ViajeChofer { id: string; folio: string; creadoEn: string; comprobado:
  * aislamiento lo hace RLS de verdad (mig. 0045, policy `operador_ve_su_viaje`
  * / `operador_ve_sus_liquidaciones`), no un `.eq()` de cortesía.
  *
- * Y aun así los `.eq()` van explícitos, igual que en `lib/cuadra/chofer.ts`:
+ * Y aun así los `.eq()` van explícitos, igual que en `lib/likida/chofer.ts`:
  * las dos capas tienen que fallar a la vez para que un chofer vea el viaje de
  * otro. `operador_ve_su_viaje` filtra SOLO por `operador_id` —comprobado
  * contra la base el 4-ago-2026: su `qual` es `operador_id =
@@ -35,7 +35,7 @@ interface ViajeChofer { id: string; folio: string; creadoEn: string; comprobado:
  * era una lista incompleta, era el panel del chofer caído en producción.
  * Comprobado contra la base real el 4-ago-2026 (`curl` al PostgREST del
  * proyecto): sin nombrar el FK, `PGRST201 "Could not embed because more than
- * one relationship was found"`; nombrándolo, responde. `lib/cuadra/chofer.ts`
+ * one relationship was found"`; nombrándolo, responde. `lib/likida/chofer.ts`
  * ya lo nombraba — esta página se quedó atrás.
  */
 async function getMisViajes(tenantId: string, operadorId: string): Promise<ViajeChofer[]> {

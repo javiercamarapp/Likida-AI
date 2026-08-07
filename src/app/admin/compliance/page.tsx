@@ -3,11 +3,11 @@ import { EstadoVacio, KpiTile } from '../ui/kit';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { revalidatePath } from 'next/cache';
-import { listarSolicitudesArco, resolverSolicitudArco } from '@/lib/cuadra/repo';
+import { listarSolicitudesArco, resolverSolicitudArco } from '@/lib/likida/repo';
 import { fechaMx } from '@/lib/formato';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { traerTodo, conteo } from '@/lib/cuadra/pg';
-import { mensajeParaPantalla } from '@/lib/cuadra/administracion';
+import { traerTodo, conteo } from '@/lib/likida/pg';
+import { mensajeParaPantalla } from '@/lib/likida/administracion';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,4 +1,4 @@
-import { getKpis, getAcreditables, type DashboardKpis, type Acreditables } from '@/lib/cuadra/analytics';
+import { getKpis, getAcreditables, type DashboardKpis, type Acreditables } from '@/lib/likida/analytics';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { EstadoVacio } from '@/app/admin/ui/kit';

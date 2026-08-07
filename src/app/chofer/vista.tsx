@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { MapPin, Truck, Camera, FileText, CircleAlert, Check, ChevronRight } from 'lucide-react';
 import { mxn, fechaMx, fechaHoraMx } from '@/lib/formato';
-import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
+import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import {
   etiquetaEstatusViaje,
   leerDiferencia,
@@ -9,7 +9,7 @@ import {
   type ResumenLiquidacion,
   type ComprobanteChofer,
   type ViajeHistorial,
-} from '@/lib/cuadra/chofer';
+} from '@/lib/likida/chofer';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE EL CHOFER VE, SEPARADO DE CÓMO SE CONSIGUE.

@@ -23,7 +23,7 @@ export async function register() {
   const { avisarConfiguracionSilenciosa } = await import('@/lib/observability/arranque');
   avisarConfiguracionSilenciosa();
 
-  const { verificarMigracionesCriticas, verificarAvisoDePrivacidad } = await import('@/lib/cuadra/startup');
+  const { verificarMigracionesCriticas, verificarAvisoDePrivacidad } = await import('@/lib/likida/startup');
   await verificarMigracionesCriticas();
 
   // Y si la liga del aviso de privacidad EXISTE. Es lo único que distingue un

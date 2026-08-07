@@ -1,7 +1,7 @@
 import { Truck, UserCog, Wrench, TriangleAlert, PackageCheck, CircleSlash } from 'lucide-react';
 import { KpiTile, EstadoVacio, StatusPill } from '../../admin/ui/kit';
 import { fechaMx } from '../formato';
-import type { TableroOperacion, ViajeSinAsignar, CargaOperador, UnidadRow } from '@/lib/cuadra/operacion';
+import type { TableroOperacion, ViajeSinAsignar, CargaOperador, UnidadRow } from '@/lib/likida/operacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Los tres bloques visuales del despacho, separados de la página.

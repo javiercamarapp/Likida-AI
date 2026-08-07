@@ -2,8 +2,8 @@
 // npx vitest run --config pruebas-manuales/vitest.config.ts e2e-tickets-reales
 import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { extraerComprobante } from '@/lib/cuadra/intake/ocr';
-import { hashImagen } from '@/lib/cuadra/intake/hash';
+import { extraerComprobante } from '@/lib/likida/intake/ocr';
+import { hashImagen } from '@/lib/likida/intake/hash';
 
 const DIR = process.env.E2E_DIR!;
 const OUT = process.env.E2E_OUT!;

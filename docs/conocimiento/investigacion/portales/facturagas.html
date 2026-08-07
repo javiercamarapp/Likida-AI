@@ -1,0 +1,795 @@
+
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%">
+<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0" /><meta name="author" content="Atio® Group" /><title>
+	FacturaGAS® Web
+</title><link rel="preconnect" href="https://fonts.gstatic.com" /><link href="https://fonts.googleapis.com/css2?family=Roboto:wght@100;300;400&amp;display=swap" rel="stylesheet" /><link href="css/normalize.css" rel="stylesheet" /><link href="css/font-awesome.css" rel="stylesheet" /><link href="css/loginStyle.css?v=1.0.0.6" rel="stylesheet" />
+
+   <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css" rel="stylesheet" />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&amp;display=swap" rel="stylesheet" />
+    <!-- MDB -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/3.3.0/mdb.min.css" rel="stylesheet" /><link rel="shortcut icon" href="img/facturagas_pcliente.ico" type="image/x-icon" /><link rel="icon" href="img/facturagas_pcliente.ico" type="image/x-icon" /><link href="/WebResource.axd?d=EFjvvw03I-qWJ1M2kiKip86I0VJXU2xU1ElCWaGEWXvIwG4J5fO_jSm5D2jr41F08SnLy9sGxFSv0XTCdlbEeZCb_H716r1x7PUs60bCX8Avc7JUnq2CLeAfutUNJdkp0S7XiitlCYCEr-mEzosPzQ2&amp;t=636238170080000000" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /><link href="/WebResource.axd?d=iRvtG_52nRe3qtmT7s2t70AfBmkb1ssYTlNrPZhR_RkfjkhHMiLW6NlkAXkd_SusFQxPeKY_o1-pM_R1OaEhJgNleI50BTh4z7X5keTzt4pID3EZx19WPNtXlYWFl2FC5WoaTM09WYEU1yxs-x6VtkFGl-AqcfXoU9h9_PXl5QQ1&amp;t=636238170080000000" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /><link href="/WebResource.axd?d=VdPoLqp1pEU6N0-IfFplZIpUW2fG86vYSgERofuEVWoHX-QKV7Qu-pgZNajON_Og0zyjEeKrHWPECmMdrFkk6pZRpJFwy3g1Eo6lzOxmEKWEgNsiYARfxiAZstvQmCuBHLS5HBWy3GODjxxT6PRPig2&amp;t=636238170080000000" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /><link href="/WebResource.axd?d=6d0ORl_GDQ8il0vfaye5YaWy7EJkIwuu40glXnVznPWWSjYohy1uh7jvzmvWOnIzXkyph0dW8hAXkTzQ0JQ7vPGUv7rMJWy3MydfRu0-hNPbcQW9Pm2K4EkduR1rpStGEeV7pHDUosDDE5VDlwut6A2&amp;t=636238170080000000" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /><link href="/WebResource.axd?d=qpDogBCh8B2zFH7Wt5kgoD3p59BzLw759gkIaUpaiNavCkGwLCsYcruasyoWrXUxIzRK3eKAHfAv3iu9wAmDlsnXKxqrKLyyAFMR7eoOzIy9cuOl2WrzlBXbVlZxMNb2QpLySAcFUnHTD4_uGS_Z3Q2&amp;t=636238170080000000" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /><link href="/WebResource.axd?d=NZp3oGkpijSHfvYvEXDUvBwHbMsTbUhIpKry-fyftPK1ZXx0OCT3K_cPcD0ee1D9qwOAYenaocjf1XFbbFZq3-0aN9t4nJ1HGBjNL2LyZnHqGDawZcGyTylurakQs-PcjV5Tz1g4n6R8TQ2_OuG9dXLmpHnAHD3HneOctM1hhnA1&amp;t=636238170080000000" type="text/css" rel="stylesheet" class="Telerik_stylesheet" /></head>
+<body onload="onloadFn()">
+
+
+    <div class="container-fluid">
+      
+        <div class="row">
+
+                
+              <div class="col-md">
+                  <div class="d-flex p-2"><h1 class="main-title">Descubre <strong>nuestra nueva app</strong></h1></div>
+                  <div class="d-flex">
+                      <div class="p-2 flex-fill">
+                        <img id="img-mobile" class="img-fluid" src="img/smartphone.png" alt="smartphone facturagas" width="" />
+                      </div>
+
+                      <div class="p-2 flex-fill">
+                          <img src="img/FACTURAGAS-bco.png" alt="Factura Gas - Logo" width="150" style="margin-top:45px"/>
+                          <h5 class="text-fg">
+                              <a href="http://facturagas.net/" target="_blank">FacturaGAS<sup>®</sup></a>
+                               es la primera app para facturar consumos de gasolina desde tu dispositivo móvil.
+                          </h5>
+                          <hr />
+                          <p class="text-fg">
+                              Descarga FacturaGAS® totalmente gratis para cualquier sistema operativo y genera tus facturas cuando quieras y donde quieras.
+                          </p>
+                          <p class="text-fg">
+                            Descarga ya nuestra aplicación:
+                          </p>
+                          <a id="googlePlay" href="https://play.google.com/" target="_blank">
+                            <img src="img/googlePlay.png" width="150" />
+                          </a>
+                          <a id="appStore" href="https://www.apple.com/" target="_blank">
+                            <img src="img/appleStore.png" width="150" />
+                          </a>
+                      </div>
+                   </div>
+
+               
+
+                  
+
+              </div>
+
+                
+              <div class="col-md">
+                 
+
+                  
+
+                  <form method="post" action="./" onsubmit="javascript:return WebForm_OnSubmit();" id="formLogin" data-toggle="validator" role="form" style="position:relative">
+<div class="aspNetHidden">
+<input type="hidden" name="RadScriptManager1_TSM" id="RadScriptManager1_TSM" value="" />
+<input type="hidden" name="__EVENTTARGET" id="__EVENTTARGET" value="" />
+<input type="hidden" name="__EVENTARGUMENT" id="__EVENTARGUMENT" value="" />
+<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="9860+s+m1AVXJIriGGGanp0aeRBcOdUgyOOEUR+4fZSGSSJ60JeumebrzilF6y9SLZRpeBO9SSRzxUa7rAY2+/lpuK6A7V8gwfDtGeLJOc/o21ICuQtaIXlEXfOgWjx+YSzCP0rQ4/rZpNyhFW3w+mrOanJpLx+OWAWzL1St89z1X3dkhA0KVkhHSAdmLyrwmiqzUOp705gLqE6Ps8P3dKyPkwd+HDM6aq976ECMGFC0ZKqiwRevHlBkDheJN/Kh31Mc+ecdJeCfeYQnU12gaWtEm6lfE5kgKipM5a1tKhxMIIW3QotaUWeWloQRSj5J6oAJUctIItH1ittrCeN8uWqQOqC3pRm1vL3bfshjgjHVamyGnv92NGTdSryU8WQp6/b2Z4uwVBjEIPBkKz1c09RPOY93HmGeIXuzAiFxFFIw7X9o2CvPxKQ50o6SDbW2Q50Tx6h2kTa4V8XMgUMNlNrfxsUo2uk+GPhVfeCAAOauqTlIw4Oeptr2Y5zwPMffYRZezh5L+vauPnA2AAd37oQXBo1bfnh7OjzGLECKZgG81cFPROgJP7cQ91U9xu/IbYxXJ79ehvpY7rHwuNVSaY2S3sPtnbDRLQYfWRvlAco4brdyljM2susBOoTGZbZToHwcU6SbMl2a+lxfClTCqyEZX9kpX4JYGWjszCaN5af8Dvx39mdDmNsCk7wObbBTv/vunEpHdZ3eZhKDvxp1b+OTekOl3hZR2BXB79l7e04BJsqwhNmULpyVEDJ9TWoxRy+v4pzjHsVvMMEtoxiUosIuMIVsGE+0FGJc3Ofl08xUSTDjGE/DkiTcPuF+ZqFFda0N5VXGSwQivjp6Qy5Gv4QRu8x5razFvEZyj6TVVlzpOWCTItaTemS2KXdu5Ym5QUW4UBFu/fFlkzRRBmIAzEWR0Jc7MIpRc1OIY6ouYvhCynN0JcsjAreNGdX6eTJXimaADrDVjSMIsoMEVzrQBsP7y8A98SbNUhyhfHys10XkjkMClaj/Nac02Q7zhs7jCyzE6MA9H5/Le9KXjh0LPtKtYcX1qzOafo8fd6TYuIF+ri6phvkhI03rnOEns2qUoxdaC4mQ+lV+VqMH9D3xN+MLb9mwAQrFD7J9UHHNyuq2p1D/XKrGn9jFpKt3R59YAFCPJpm6+plhKj1rfT6ZnpOH3V1rclUD4xs4B9eO6B59MptGL1DfjcK2CX+4v8vKqwrsCKHND21x6Silf4cvhidHtDQoSvd6pr6QTiO3OlodLlwL06+/EwOAn6a/pTgkSPWROWYujucKOh6ZiQbUdr4x8zpY/EPZ+yumP/FtqV5AooitJgOuby1hO6GMxWlIjHybwD00BpGxUsOiaMd1dcaxnk555j1TZucwAootkCmKzV2cF408yRfLN4bcvpuZdq3zf/ZGvlGqM30AQj9NbMIlx5IMIiPSN66u3bwkV4MFBsA9jNCT2GUGeAlG8b//6ERSv9Lo8jPSv2jr69Q7DluBVQ3KVwLSpXBOLY3zs8BFteMnGC9MP+sh3t0BrLZ4vrrpmODTvd4g/EdHtjhgvhh1eIFE43AZm0GoVF1RRj4gIbpndKo53sl6OVeIThRyK92RlMedGNrrzHvv53Qh5IhKjhyIaF/0ILVBhX3HcVGnyLjjLs9YFShowFfFcUA0xBIg3Q3CWxwq/ZB+KdRq3SEKFaVkAH6h1re7TeYVQRIAEIdWm2JZPXrZz/C7OjS0GDzoV/JgLESSqidtJxTfyPTmJiEgQNS9aWgT9MwUlRvf89OK9Hw0TLbGFsJfs5U+0S8WQO3MgO4qgn3s3lzoIL2/YbP7XjkfRTJ3xqIcffsLeSB6bkFHg+LbOmyQ9jjkHHYVxaoFYyLUOGITzKuS2BiD6wCFOKF+VQWEF9Qn7/WVSeCnLQD2d08C8fmNhG7m2R/DN3EUT59ANklzF0tDgsav1Vfo66YAA0c1qK0fuUwAGJweUwgVX/LLFvPbPoEQHuYZypF2YP7Jics9MpbWgt5UKp62LgX7sGPnJXQLXy3DyvWgjnukqA25TBNshlhb+xmkmdX4t+mltz1B37Gmhs4uNqP/ByQP5wLz9fsWgkvchEqAjFDTINIhULQE+iEF/gl1Ho2t4P0d+kPmek6Otncoeqj+hhtRUjduGepQwuk=" />
+</div>
+
+<script type="text/javascript">
+//<![CDATA[
+var theForm = document.forms['formLogin'];
+if (!theForm) {
+    theForm = document.formLogin;
+}
+function __doPostBack(eventTarget, eventArgument) {
+    if (!theForm.onsubmit || (theForm.onsubmit() != false)) {
+        theForm.__EVENTTARGET.value = eventTarget;
+        theForm.__EVENTARGUMENT.value = eventArgument;
+        theForm.submit();
+    }
+}
+//]]>
+</script>
+
+
+<script src="/WebResource.axd?d=pynGkmcFUV13He1Qd6_TZOKu-A6jAAnQ526Qc-ega5vXJIsSYFeykwxwLFZEOIQIKM9bNraxSXz33WD-5BqfaA2&amp;t=638901526200000000" type="text/javascript"></script>
+
+
+<script src="/ScriptResource.axd?d=nv7asgRUU0tRmHNR2D6t1NT_i-d9WD5LIz-goK71b0eExnDHTIJyEivm1BggWzz278190cnGdYqdZ2L4rbyIYoykOnAlSBUQr6v0bUPgMa1nclEYpJgMmNjMZLr847S4XnjpXo79g4CBlem1F-ebQw2&amp;t=ffffffffdb0bd779" type="text/javascript"></script>
+<script src="/Telerik.Web.UI.WebResource.axd?_TSM_HiddenField_=RadScriptManager1_TSM&amp;compress=1&amp;_TSM_CombinedScripts_=%3b%3bSystem.Web.Extensions%2c+Version%3d4.0.0.0%2c+Culture%3dneutral%2c+PublicKeyToken%3d31bf3856ad364e35%3aen-US%3af8efdcae-fc88-4697-a128-23b7f470d078%3aea597d4b%3ab25378d2%3bTelerik.Web.UI%2c+Version%3d2017.1.228.45%2c+Culture%3dneutral%2c+PublicKeyToken%3d121fae78165ba3d4%3aen-US%3ab7c0ed1c-66b0-411f-9d0a-18294380a077%3a16e4e7cd%3a11e117d7%3af7645509%3a24ee1bba%3ac128760b%3a874f8ea2%3af46195d3%3a33715776%3a19620875%3acda80b3%3a6d43f6d9" type="text/javascript"></script>
+<script type="text/javascript">
+//<![CDATA[
+if (typeof(Sys) === 'undefined') throw new Error('ASP.NET Ajax client-side framework failed to load.');
+//]]>
+</script>
+
+<script type="text/javascript">
+//<![CDATA[
+function WebForm_OnSubmit() {
+if (typeof(ValidatorOnSubmit) == "function" && ValidatorOnSubmit() == false) return false;
+return true;
+}
+//]]>
+</script>
+
+<div class="aspNetHidden">
+
+	<input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="CA0B0334" />
+	<input type="hidden" name="__EVENTVALIDATION" id="__EVENTVALIDATION" value="a2PzWIhzbjN1jZ5gVRdjulgsmvdOgN5u81mljwvBwyqwhDY7TFBrHIUJxx0ETkelJM5yn7iqQ/0TdWeurvJ1ztbJ6O1M6gexZOB6MBAXeuoBXF7bC+o+xa+lx26PwCsvnx+Y86/IcwWUEtYD700exK9s8JQUTJM6j+rrFiiMI1hTbF2hoBE/kaWWmQNyhKdprtoQiKsi00bcVl4ltmU3gsFh52Eb9NXI4XrUuZ8Jk05lHciJp6r+asVogIRXUd9fDdD2DyvLDGmakjHl+QlYCQ==" />
+</div>
+                    <script type="text/javascript">
+//<![CDATA[
+Sys.WebForms.PageRequestManager._initialize('RadScriptManager1', 'formLogin', ['tloginCaptcha$ctl01',''], ['loginCaptcha$CaptchaLinkButton',''], [], 90, '');
+//]]>
+</script>
+
+                    <input type="hidden" name="hiFiUser" id="hiFiUser" />
+                    <input type="hidden" name="hiFiPass" id="hiFiPass" />
+                    <input type="hidden" name="hiFiDefCap" id="hiFiDefCap" value="0" />
+                    <input type="hidden" name="dfExist" id="dfExist" />
+
+                    <script type="text/javascript">
+                    
+                        //Controles telerik
+                        function fillInvisibleTextBox(sender) {
+                            var invisibleTextBox = $get("loginCaptcha_InvisibleTextBox");
+                            if (sender.checked) {
+                                invisibleTextBox.value = "Filled";
+                            }
+                            else {
+                                invisibleTextBox.value = "";
+                            }
+                        }
+
+                        //Recarga imagen Captcha
+                        function RefreshImage() {
+                            var captcha = $find("loginCaptcha");
+                            document.location = $get(captcha.get_id() + "_CaptchaLinkButton").href;
+                        }
+
+                        //Bloquea page load
+                        function pageLoad() {
+                            //Disable autoComplete
+                            var customCaptchaTextbox = $get("txtRadCaptcha");
+                            if (customCaptchaTextbox)
+                                customCaptchaTextbox.setAttribute("autoComplete", "off");
+                        }
+
+                        function reDrawLog(userVl, reDrawData) {
+
+                            if (reDrawData) {
+
+                                document.getElementById("mailUser").value = userVl;
+                                //document.getElementById("pwdUser").value = passVl;
+
+                                //$("#mailUser").val(userVl);
+                                //$("#pwdUser").val(passVl);
+
+                            }
+                        }
+
+                        function validLog(button, args) {
+
+                            try {
+
+                                $("#formLogin").validate({
+                                    onsubmit: false,
+                                    onfocusin: function (element) { $(element).valid(); },
+                                    wrapper: 'strong',
+                                    rules: {
+                                        mailUser: {
+                                            minlength: 2,
+                                            required: true,
+                                            nwemail: true
+                                        },
+                                        pwdUser: {
+                                            required: true
+                                        }
+                                    },
+                                    messages: {
+                                        mailUser: {
+                                            required: "Ingresa nombre de usuario",
+                                            nwemail: "Formato incorrecto usuario@domain.com"
+                                        },
+                                        pwdUser: {
+                                            required: "Revisa tu contraseña",
+                                        }
+                                    },
+                                    highlight: function (element) {
+                                        $(element).closest('.control-group').removeClass('success').addClass('error');
+                                    },
+                                    success: function (element) {
+                                        element.text('').addClass('valid')
+                                            .closest('.control-group').removeClass('error').addClass('success');
+
+
+                                    }
+                                });
+
+                                  
+                                //$("#pwdUser").attr('disabled', true);
+                                //$("#mailUser").attr('disabled', true);
+                                //$("#openCreate").attr('disabled', true);
+
+
+                   
+
+                                $("#hiFiUser").val($("#mailUser").val());
+                                $("#hiFiPass").val($("#pwdUser").val());
+                                $("#hiFiDefCap").val();
+                                
+                                if ($('#formLogin').valid()) {
+                                    //args.set_cancel(false);
+
+                                } else {
+
+                                    args.set_cancel(true);
+                                }
+
+                            } catch (e) {
+                                console.log(e.message);
+                            }
+                        }
+
+                        function redirect(uK, uE, df, urlFg) {
+
+                            if (uK == "" || uK == null) {
+                                return;
+                            } else {
+                                //Save array
+                                sessionStorage.setItem("uT", uK);
+                                sessionStorage.setItem("uE", uE);
+                                if (df != "") {
+                                    sessionStorage.setItem("dfExist", df);
+                                }
+
+                                window.location = urlFg;
+                            }
+                        }
+                    </script>
+
+                    <div id="inter-lg" class="d-flex p-2 mb-5"></div>
+                    <div class="login-box">
+                        <figcaption>
+                            <img class="img-fluid" src="img/fg-nw/waves.png" alt="" />
+                        </figcaption>
+
+                        <h2 class="align-self-center">Iniciar Sesión</h2>
+                        <div class="p-4 pt-0 pb-0 mt-3">
+                            <div class="form-outline mb-4">
+                                <input type="text" id="mailUser" class="form-control input-group-sm" name="mailUser" autocomplete="off" />
+                                <label class="form-label" for="mailUser">Usuario</label>
+                            </div>
+                            <div class="form-outline mt-3">
+                              <input type="password" id="pwdUser" class="form-control input-group-sm" name="pwdUser" />
+                              <label class="form-label" for="pwdUser">Contraseña</label>
+                            </div>
+
+                           
+
+                            
+
+                            <div id="captcha_box" style="display:none; overflow: hidden;" class="col-md-12">
+
+                                <div class="inner_cap_bx" style="text-align:center">
+                                    <div id="loginCaptcha" class="RadCaptcha RadCaptcha_Default">
+	<!-- 2017.1.228.45 --><span id="loginCaptcha_ctl00" style="visibility:hidden;">Código captcha incorrecto.</span><div id="loginCaptcha_SpamProtectorPanel">
+		<div id="loginCaptcha_ctl01">
+			<img id="loginCaptcha_CaptchaImageUP" class="imageClass" alt="" src="Telerik.Web.UI.WebResource.axd?type=rca&amp;isc=true&amp;guid=92c5d315-6a3c-4a9c-9a95-857a1851bd20" style="height:50px;width:180px;display:block;" /><a id="loginCaptcha_CaptchaLinkButton" class="rcRefreshImage" title="" href="javascript:__doPostBack(&#39;loginCaptcha$CaptchaLinkButton&#39;,&#39;&#39;)" style="display:block;"></a>
+		</div><p><input name="loginCaptcha$CaptchaTextBox" type="text" maxlength="5" id="loginCaptcha_CaptchaTextBox" /><label for="loginCaptcha_CaptchaTextBox" id="loginCaptcha_CaptchaTextBoxLabel"></label></p>
+	</div><input id="loginCaptcha_ClientState" name="loginCaptcha_ClientState" type="hidden" />
+</div>
+                                    <div id="Tooltip1" style="display:none;position:absolute;">
+	Recargar Captcha<input id="Tooltip1_ClientState" name="Tooltip1_ClientState" type="hidden" />
+</div>
+                                    <input type="button" id="btnRefreshImage" onclick="RefreshImage(); return false;" value="" />
+
+                                </div>
+
+                                
+                                <div class="btn_add_tk"></div>
+                            </div>
+
+                            
+                        
+
+                        <div id="lblErrorCode" style="display:none" class="alert alert-dismissible alert-warning mt-2" role="alert" data-mdb-color="warning"></div>
+
+                            <div class="col-md-12 text-center">
+
+                                <button type="button" name="loginControl" value="Ingresar" id="loginControl" class="RadButton RadButton_Default rbButton rbRounded rbIconButton btn btn-primary"><span class="rbText">Ingresar</span><input id="loginControl_ClientState" name="loginControl_ClientState" type="hidden" /></button>
+
+                                
+                                
+                                <button id="openCreate"  type="button" class="btn btn-primary" data-mdb-toggle="modal" data-mdb-target="#create-account">
+                                  Crear Cuenta
+                                </button>
+                            </div>
+                            <div style="width: 270px;margin: 8px auto;">
+                                <a id="facturaNoUser" href="generar_factura.aspx" class="btn btn-outline-primary" style="width: inherit;font-size: 11px;">
+                                    Facturación sin Usuario
+                                </a>
+                            </div>
+                        </div>
+
+                        <a id="recovpasslink" href="#" data-mdb-toggle="modal" data-mdb-target="#recover-pass">Recuperar contraseña</a>
+
+                        <p style="text-align:center;font-size:11px;">Powered by 
+                            <a href="http://www.controlgas.com.mx/#quienes_somos" target="_blank">
+                            <strong>ControlGAS<sup>®</sup></strong>
+                            </a> | Copyright &copy; 2026 |
+                            <span> Versión <em>2.0.4.5 </em></</span>
+                        </p>
+                        
+                    </div>
+
+                      <div class="text-center">
+                          <img src="img/fg-nw/logos.png" width="40%" style="margin-top:20px" />
+                      </div>
+
+                    <div id="sw-alerts" style="margin-top: 15px;" class="col-xs-12"></div>
+                    <div class="spinbx" style="display: none">
+                        <img src="img/4%20.gif" />
+                    </div>
+
+                
+<script type="text/javascript">
+//<![CDATA[
+var Page_Validators =  new Array(document.getElementById("loginCaptcha_ctl00"));
+//]]>
+</script>
+
+<script type="text/javascript">
+//<![CDATA[
+var loginCaptcha_ctl00 = document.all ? document.all["loginCaptcha_ctl00"] : document.getElementById("loginCaptcha_ctl00");
+loginCaptcha_ctl00.errormessage = "Código captcha incorrecto.";
+loginCaptcha_ctl00.validationGroup = "Group";
+loginCaptcha_ctl00.evaluationfunction = "CustomValidatorEvaluateIsValid";
+//]]>
+</script>
+
+
+<script type="text/javascript">
+//<![CDATA[
+
+var Page_ValidationActive = false;
+if (typeof(ValidatorOnLoad) == "function") {
+    ValidatorOnLoad();
+}
+
+function ValidatorOnSubmit() {
+    if (Page_ValidationActive) {
+        return ValidatorCommonOnSubmit();
+    }
+    else {
+        return true;
+    }
+}
+        
+document.getElementById('loginCaptcha_ctl00').dispose = function() {
+    Array.remove(Page_Validators, document.getElementById('loginCaptcha_ctl00'));
+}
+Sys.Application.add_init(function() {
+    $create(Telerik.Web.UI.RadCaptcha, {"_audioUrl":"/Telerik.Web.UI.WebResource.axd?type=cah\u0026isc=true\u0026guid=92c5d315-6a3c-4a9c-9a95-857a1851bd20","_enableAudio":false,"_persistCode":false,"clientStateFieldID":"loginCaptcha_ClientState"}, null, null, $get("loginCaptcha"));
+});
+Sys.Application.add_init(function() {
+    $create(Telerik.Web.UI.RadToolTip, {"_cssClass":"","_manualCloseButtonText":"Close","clientStateFieldID":"Tooltip1_ClientState","formID":"formLogin","skin":"Default","targetControlID":"btnRefreshImage"}, null, null, $get("Tooltip1"));
+});
+Sys.Application.add_init(function() {
+    $create(Telerik.Web.UI.RadButton, {"_accessKey":"","_hasIcon":false,"_hasImage":false,"_isClientSubmit":true,"_isImageButton":false,"_navigateUrl":"mainFacturaGas.aspx","_postBackReference":"WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions('loginControl', '', true, 'Group', '', false, true))","_renderMode":2,"_validationGroup":"Group","clientStateFieldID":"loginControl_ClientState","cssClass":"btn btn-primary","iconData":{},"imageData":{},"singleClick":true,"singleClickText":"Ingresando...","text":"Ingresar","toggleStatesData":[],"uniqueGroupName":"","uniqueID":"loginControl"}, {"clicking":validLog}, null, $get("loginControl"));
+});
+//]]>
+</script>
+</form>
+
+
+              </div>
+
+            
+        
+
+
+        </div> 
+
+    </div> 
+
+    <!-- Modal Create Account -->
+  
+
+    <div id="create-account" class="modal fade" tabindex="-1" aria-labelledby="exampleModalLabel" data-mdb-backdrop="static"
+  data-mdb-keyboard="false" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="exampleModalLabel">Alta de Usuario</h5>
+            
+          </div>
+          <div class="modal-body pvPol">
+              
+                <div id="showPvPol" class="col-md-12" style="display: none; background-color: white;"></div>
+
+                <form id="form_nw_account" data-toggle="validator" role="form" action="/" method="post" class="">
+
+                    <div id="inputNewUser" class="account-box">
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="form-outline">
+                                    <input id="a_name" type="text" class="form-control" name="a_name" value="" autocomplete="off" />
+                                    <label class="form-label" for="a_name">*Nombre</label>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="form-outline">
+                                    <input id="a_lastName" type="text" class="form-control" name="a_lastName" value="" autocomplete="off" />
+                                    <label class="form-label" for="a_lastName">*Apellido</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="form-outline">
+                                    <input id="a_phoneNumber" type="text" class="form-control" name="a_phoneNumber" value="" autocomplete="off" onkeypress='return event.charCode >= 47 && event.charCode <= 57' maxlength="15" />
+                                    <label class="form-label" for="a_phoneNumber">Teléfono</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row  mb-4">
+                            <div class="col-md-6">
+                                <div class="form-outline">
+                                    <input id="a_email" type="text" class="form-control" name="a_email" value="" autocomplete="off" />
+                                    <label class="form-label" for="a_email">*Correo electrónico</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-outline">
+                                    <input id="a_confEmail" type="text" class="form-control" name="a_confEmail" value="" autocomplete="off" />
+                                    <label class="form-label" for="a_confEmail">*Confirmar correo electrónico</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mb-4">
+                            <div class="col">
+                                <div class="form-outline">
+                                    <input id="a_pass" type="password" class="form-control" name="a_pass" value="" autocomplete="off" />
+                                    <label class="form-label" for="a_pass">*Contraseña</label>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="form-outline">
+                                    <input id="a_confPass" type="password" class="form-control" name="a_confPass" value="" autocomplete="off" />
+                                    <label class="form-label" for="a_confPass">Confirmar Contraseña</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-12 mt-5">
+                        <p style="color: #337ab7; font-size: 11.7px;">Los campos marcados con * son requeridos.</p>
+                    </div>
+                    <div id="sw-nwAcc" style="margin-top: 15px;" class="col-xs-12"></div>
+                    <div class="btn-box text-center">
+                        <button type="button" id="btnCreateNwAccount" class="btn-create-account btn btn-primary" onclick="addNewUser()">Crear cuenta</button>
+                        <button type="button" class="btn-cancel btn btn-outline-primary" data-mdb-dismiss="modal" onclick="resetNwUser()"
+                            data-mdb-ripple-color="dark">Cancelar</button>
+                    </div>
+                </form>
+          </div>
+          
+        </div>
+      </div>
+    </div>
+
+    
+    <!-- Modal -->
+<div class="modal fade" id="recover-pass" tabindex="-1" data-mdb-backdrop="static" data-mdb-keyboard="false" aria-labelledby="exampleModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Contraseña</h5>
+        
+      </div>
+      <div class="modal-body">
+          
+        <form id="recoverPasstLost" action="/" method="post" class="">
+            <p>Ingrese el correo para el envío de credenciales</p>
+            <div id="inpPass" class="form-group account-box">
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="form-outline">
+                            <input id="r_pass" type="text" class="form-control" required="required" name="r_pass" value="" autocomplete="off" />
+                            <label class="form-label" for="r_pass">Confirmar correo electrónico</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="serveErr" style="margin-top:15px;display:none" class="col-xs-12"></div>
+            <div id="sw-rPass" style="margin-top: 15px;" class="col-xs-12"></div>
+            <div id="rcovPass" class="btn-box text-center mt-4">
+                <button id="btnRecovPass" type="button" class="btn-create-account btn btn-primary" onclick="getPassLost();">Enviar</button>
+                <button type="button" class="btn-cancel btn btn-outline-primary" data-mdb-dismiss="modal" onclick="resetRpass();">Cancelar</button>
+            </div>
+            <div id="exitRcovPass" class="btn-box text-center">
+                <button type="button" class="btn-cancel btn btn-outline-primary" data-mdb-dismiss="modal" onclick="resetRpass();">Cerrar</button>
+            </div>
+        </form>
+
+      </div>
+      
+    </div>
+  </div>
+</div>
+
+        
+    <div id="mobileTest" class="modal fade bs-example-modal-sm" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
+        <div class="modal-dialog modal-md" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>FacturaGAS® App</h3>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size:18px;" id="textToApp"></p>
+                    <a id="linkIOS" href="#" onclick="openApp('IOS');" style="display:none">Próximamente(Ir a FacturaGAS®)</a>
+                    <a id="linkAndroid" href="#" onclick="openApp('DROID');" style="display:none">Próximamente (Ir a FacturaGAS®)</a>
+                </div>
+                <div class="modal-footer">
+                    <div id="" class="btn-box">
+                        <button type="button" class="btn-cancel" data-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+<!-- Modal -->
+<!-- The Modal element -->
+<div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+     
+      <div id="BodyModal" class="modal-body">
+        
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-mdb-dismiss="modal">Cerrar</button>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+    <!-- MDB -->
+    <script
+      type="text/javascript"
+      src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/3.3.0/mdb.min.js"></script>
+
+    <script src="scripts/jquery-3.6.1.min.js"></script>
+    <!-- MDB JS -->
+    <script src="scripts/mdb.min.js"></script>
+    
+    <script src="scripts/jquery.validate.min.js"></script>
+    <script src="scripts/additional-methods.js"></script>
+    <script src="scripts/slick.min.js"></script>
+    <script type="text/javascript" src="scripts/Purify.js"></script>
+    <script src="scripts/facturaGasScripts.js?v=2.2"></script>
+    
+    <script type="text/javascript">
+        //document.ready        
+        $(document).ready(function () {
+
+
+            popUp();
+
+            var urlHelp = 'https://facturagashelper.azurewebsites.net';
+            // Get a reference to the modal element using its ID
+            const myModalEl = document.getElementById('exampleModal');
+            // Create an MDB Modal instance
+            const modal = new mdb.Modal(myModalEl);
+  
+            function popUp() {
+
+                $.ajax({
+                    type: "POST",
+                    url: "Default.aspx/getPopUp",
+                    data: JSON.stringify({
+                        "urlWeb": "",
+                        "srcWeb": ""
+                    }),
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json",
+                    success: function (resp) {
+debugger
+                        var images = resp.d.lstOfertas;
+                        //$("#BodyModal").append("<img style='width:100%' src='" + urlHelp + "/" + images[0].img + "' />");
+                        $("#BodyModal").append("<a href='" + images[0].acc + "' target='_blank'><img style='width:100%' src='" + urlHelp + "/" + images[0].img + "' /></a>");
+
+                        setTimeout(function () {
+                            modal.show();
+                        }, 500)
+
+                },
+                    error: function (XMLHttpRequest, textStatus, errorThrown) {
+                        alert("Error!");
+                    }
+                });
+            }
+
+
+            $('.slider').slick({
+                infinite: false,
+                dots: true
+            });
+
+
+        });
+
+
+        function onloadFn() {
+            localStorage.clear();
+            sessionStorage.clear();
+
+            var validator = $('form').validate();
+            validator.resetForm();
+            validator.destroy();
+
+        }
+
+
+        function openApp(valor) {
+
+            if (valor == "IOS") {
+
+                //var urlLink1 = "";
+
+                //urlLink1 = "mobileenergychart";
+
+                //window.location = urlLink1;
+                //setTimeout(function () {
+                //    window.location = "https://itunes.apple.com/us/app/uber/id1058959277?mt=8";
+                //}, 50);
+                
+                
+            } else {
+
+                //var urlLink1 = "";
+
+                //urlLink1 = "facturagas";
+
+                //window.location = urlLink1;
+                //setTimeout(function () {
+                //    window.location = "https://play.google.com/store/apps/details?id=com.bp.mobileenergychart";
+                //}, 50);
+
+            }
+
+            //if (navigator.userAgent.match(/iPhone|iPad|iPod/i)) {
+            //window.location = "<TWITTER MOBILE DEEPLINK>";
+
+            //} else {
+            //    window.location = "<LINK TO TWITTER ONLINE>";
+            //}
+        }
+
+
+
+    $(document).keypress(
+
+        function (event) {
+            if (event.which == '13') {
+                event.preventDefault();
+            }
+
+            //$('#a_confEmail').bind("cut copy paste", function (e) {
+            //    e.preventDefault();
+            //});
+
+            $('input').bind("cut copy paste", function (e) {
+                e.preventDefault();
+            });
+
+        }
+    );
+
+
+    //detectar dispositivo movil android/ios/
+    var isMobile = {
+        Android: function () {
+            return navigator.userAgent.match(/Android/i);
+        },
+        BlackBerry: function () {
+            return navigator.userAgent.match(/BlackBerry/i);
+        },
+        iOS: function () {
+            return navigator.userAgent.match(/iPhone|iPad|iPod/i);
+        },
+        Opera: function () {
+            return navigator.userAgent.match(/Opera Mini/i);
+        },
+        Windows: function () {
+            return navigator.userAgent.match(/IEMobile/i);
+        },
+        any: function () {
+            return (isMobile.Android() || isMobile.BlackBerry() || isMobile.iOS() || isMobile.Opera() || isMobile.Windows());
+        }
+    };
+
+
+
+    jQuery(function desplazar($) {
+
+
+        if (isMobile.Android()) {
+
+            $(document).ready(function () {
+
+                if ( $("input:focus") ) {
+                    //correo login
+                    $('#mailUser').on('touchstart', function () {
+                        $(this).attr('type', 'email');
+                    });
+                    //tel crear cuenta
+                    $('#a_phoneNumber').on('touchstart', function () {
+                        $(this).attr('type', 'tel');
+                    });
+                    //correo crear cuenta
+                    $('#a_email').on('touchstart', function () {
+                        $(this).attr('type', 'email');
+                    });
+                    //confirmar correo crear cuenta
+                    $('#a_confEmail').on('touchstart', function () {
+                        $(this).attr('type', 'email');
+                    });
+                    //correo recuperar contraseña
+                    $('#r_pass').on('touchstart', function () {
+                        $(this).attr('type', 'email');
+                    });
+                }
+
+
+
+                $("#appStore").hide();
+                $("#mobileTest").modal();
+                $("#textToApp").text("Para una mejor experiencia, consulta FacturaGAS® desde la aplicación Android.");
+                $("#linkAndroid").show();
+            });
+
+
+        }
+
+        if (isMobile.iOS()) {
+
+            $(document).ready(function () {
+                if ($("input:focus")) {
+                    //correo login
+                    $('#mailUser').on('touchstart', function () {
+                        $(this).attr('type', 'email');
+                    });
+                    //tel crear cuenta
+                    $('#a_phoneNumber').on('touchstart', function () {
+                        $(this).attr('type', 'tel');
+                    });
+                    //correo crear cuenta
+                    $('#a_email').on('touchstart', function () {
+                        $(this).attr('type', 'email');
+                    });
+                    //confirmar correo crear cuenta
+                    $('#a_confEmail').on('touchstart', function () {
+                        $(this).attr('type', 'email');
+                    });
+                    //correo recuperar contraseña
+                    $('#r_pass').on('touchstart', function () {
+                        $(this).attr('type', 'email');
+                    });
+                }
+
+                $("#googlePlay").hide();
+                $("#mobileTest").modal();
+                $("#textToApp").text("Para una mejor experiencia, consulta FacturaGAS® desde la aplicación IOS.");
+                $("#linkIOS").show();
+
+            });
+
+
+
+        }
+
+    });
+
+    </script>
+</body>
+</html>

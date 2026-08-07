@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { requireOperador } from '@/lib/auth/guard';
-import { viajeEnCurso, resumenDelViaje } from '@/lib/cuadra/chofer';
+import { viajeEnCurso, resumenDelViaje } from '@/lib/likida/chofer';
 import { Titulo, Pendiente, SaldoEnVivo, SinViajeParaSaldo, TOQUE } from '../vista';
 
 export const dynamic = 'force-dynamic';

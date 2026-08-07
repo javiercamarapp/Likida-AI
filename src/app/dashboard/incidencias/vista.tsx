@@ -1,6 +1,6 @@
 import { TriangleAlert, Clock, Flame, CircleCheck } from 'lucide-react';
 import { KpiTile, EstadoVacio, StatusPill, type Estado } from '../../admin/ui/kit';
-import type { IncidenciaRow } from '@/lib/cuadra/operacion';
+import type { IncidenciaRow } from '@/lib/likida/operacion';
 
 // Bloques visuales de Incidencias, fuera de la página para poder mirar el
 // render sin sesión (mismo motivo que en Despacho y Unidades).

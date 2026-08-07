@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { desglosarPrecio, desgloseCuadra, etiquetaIva, FALTA_CRITERIO_IVA, TASA_IVA } from './iva';
-import { DatoInvalido } from '@/lib/cuadra/errores';
+import { DatoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 10, rubro pruebas — `iva.ts` es nuevo hoy (0065_iva_de_la_mensualidad,

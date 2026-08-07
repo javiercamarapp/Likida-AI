@@ -42,7 +42,7 @@ function fuentes(): string[] {
  * `liquidacion!liquidacion_viaje_id_fkey(` pasa; `liquidacion(` no. Se busca
  * en todo `src/` y no solo en esta página porque el error no es de esta
  * página: es de cualquiera que embeba esas dos tablas, y ya pasó dos veces
- * (aquí y —bien resuelto— en `lib/cuadra/chofer.ts`).
+ * (aquí y —bien resuelto— en `lib/likida/chofer.ts`).
  */
 const EMBED_SIN_FK = /\bliquidacion\s*\(/;
 
@@ -61,7 +61,7 @@ describe('el embed de liquidacion nombra su llave foránea — si no, PGRST201',
     ).toEqual([]);
   });
 
-  it('/mis-viajes nombra el FK, igual que lib/cuadra/chofer.ts', () => {
+  it('/mis-viajes nombra el FK, igual que lib/likida/chofer.ts', () => {
     const pagina = readFileSync(`${RAIZ}app/mis-viajes/page.tsx`, 'utf8');
     expect(pagina).toMatch(/liquidacion!liquidacion_viaje_id_fkey\(/);
   });

@@ -1,7 +1,7 @@
 import { LifeBuoy, AlertTriangle, Timer } from 'lucide-react';
 import { exigirVerRuta } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { getTickets, type TicketRow } from '@/lib/cuadra/comercial';
+import { getTickets, type TicketRow } from '@/lib/likida/comercial';
 import { ahoraMs } from '@/lib/saludo';
 import { EstadoVacio, KpiTile, StatusPill } from '../../admin/ui/kit';
 import { fechaMx } from '@/lib/formato';

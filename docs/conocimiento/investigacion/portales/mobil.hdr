@@ -1,0 +1,29 @@
+HTTP/2 301 
+content-type: text/html; charset=utf-8
+location: https://www.mobil.com.mx/es-mx/
+x-xss-protection: 1; mode=block
+x-content-type-options: nosniff 
+x-frame-options: SAMEORIGIN
+x-permitted-cross-domain-policies: none
+strict-transport-security: max-age=31536000; includeSubDomains;
+service-worker-allowed: /
+content-length: 148
+cache-control: public, max-age=900
+date: Wed, 05 Aug 2026 04:29:51 GMT
+set-cookie: sxa_site=Mobil_MX_Fuels_and_Lubes_PROD; path=/; secure; HttpOnly
+set-cookie: WP_CD=118769674.47873.0000; path=/; Httponly; Secure
+set-cookie: TS01aefb96=01b0394979cbb2640cc2777f5c6edf9c61bb2f0cfd9e9978d88e457ba41b0545a810c319d4ef4d901c71669cdf6922418acd387cbf; Path=/; Secure; HttpOnly
+
+HTTP/2 301 
+location: /es-mx
+content-length: 0
+date: Wed, 05 Aug 2026 04:29:51 GMT
+
+HTTP/2 403 
+mime-version: 1.0
+content-type: text/html
+content-length: 379
+x-reference-error: 18.8d62117.1785904191.39f4500
+expires: Wed, 05 Aug 2026 04:29:51 GMT
+date: Wed, 05 Aug 2026 04:29:51 GMT
+

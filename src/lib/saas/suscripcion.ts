@@ -1,8 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { exigir } from '@/lib/cuadra/pg';
+import { exigir } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { leerPrecio } from './stripe';
-import { DatoInvalido } from '@/lib/cuadra/errores';
+import { DatoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA SUSCRIPCIÓN DE UNA FLOTA A LIKIDA — lectura para el panel y escritura

@@ -16,7 +16,7 @@ export interface AgentConfig {
 export interface TenantContext {
   tenantId: string;
   nombreFlota: string;
-  /** Nombre con el que se presenta el agente por WhatsApp (ej. "Cuadra"). */
+  /** Nombre con el que se presenta el agente por WhatsApp (ej. "Likida"). */
   agentName: string;
   timezone: string;
 }

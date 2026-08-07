@@ -1,0 +1,21 @@
+HTTP/2 200 
+date: Wed, 05 Aug 2026 04:29:40 GMT
+content-type: application/xhtml+xml
+content-length: 392
+expires: Thu, 01 Jan 1970 00:00:00 GMT
+cache-control: no-cache, must-revalidate, no-store
+x-xss-protection: 1; mode=block
+pragma: no-cache
+x-frame-options: DENY
+content-security-policy: default-src 'self' 'unsafe-inline' 'unsafe-eval' https://snoxxodev.service-now.com https://snoxxoqa.service-now.com https://snoxxoprd.service-now.com; frame-ancestors 'none';
+accept-ranges: bytes
+last-modified: Wed, 15 Jul 2026 01:09:44 GMT
+x-content-type-options: nosniff
+x-envoy-upstream-service-time: 1
+set-cookie: ISTIOID="4c7ba56c93f0ec5c"; Max-Age=600; HttpOnly
+server: istio-envoy
+set-cookie: visid_incap_1358118=QZXOI0hXSw2rpMltMHtqZzO8cmoAAAAAQUIPAAAAAADZvT/LlhXz9MsEGywhfS40; expires=Wed, 04 Aug 2027 08:30:09 GMT; HttpOnly; path=/; Domain=.oxxo.com
+set-cookie: incap_ses_991_1358118=EXe2eFTs4RWqm6n+VL3ADTO8cmoAAAAAhyr2s7+kOeXp6G860xQkmg==; path=/; Domain=.oxxo.com
+x-cdn: Imperva
+x-iinfo: 47-124903467-124903478 NNNY CT(98 199 0) RT(1785904180188 54) q(0 0 0 0) r(3 3) U2
+

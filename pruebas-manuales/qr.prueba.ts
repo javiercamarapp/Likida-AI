@@ -44,7 +44,7 @@ test('¿aparece el QR en fotos reales?', async () => {
   const imagenes = listar();
   if (!imagenes.length) return console.log('\n⚠️  Sin imágenes (usa IMGS=…)\n');
 
-  const { decodeQrFromImage } = await import('@/lib/cuadra/intake/cfdi');
+  const { decodeQrFromImage } = await import('@/lib/likida/intake/cfdi');
 
   console.log(`\n${'═'.repeat(74)}\nQR sobre ${imagenes.length} foto(s)\n${'═'.repeat(74)}`);
   let hallados = 0;

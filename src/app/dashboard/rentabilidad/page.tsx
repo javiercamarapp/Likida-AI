@@ -1,7 +1,7 @@
 import { TrendingUp, ArrowDownRight, Percent, Wallet } from 'lucide-react';
 import { exigirVerRuta } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { getRentabilidad, type Rentabilidad } from '@/lib/cuadra/comercial';
+import { getRentabilidad, type Rentabilidad } from '@/lib/likida/comercial';
 import { EstadoVacio, KpiTile } from '../../admin/ui/kit';
 
 export const dynamic = 'force-dynamic';

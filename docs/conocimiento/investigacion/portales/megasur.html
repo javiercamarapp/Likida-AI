@@ -1,0 +1,241 @@
+
+
+
+
+<!DOCTYPE html>
+
+<html>
+<head>
+    <meta name="viewport" content="width=device-width" />
+    <title>Login</title>
+
+    <link href="/Content/Login/login.css" rel="stylesheet"/>
+
+
+    <link href="/Content/bootstrap3.3.5/css/bootstrap.min.css" rel="stylesheet"/>
+<link href="/Content/layout/css/sb-admin-2.css" rel="stylesheet"/>
+<link href="/Content/layout/font-awesome/css/font-awesome.css" rel="stylesheet"/>
+<link href="/Content/alertify0/css/alertify-bootstrap-3.css" rel="stylesheet"/>
+<link href="/Content/alertifyjs1.0.8/css/alertify.css" rel="stylesheet"/>
+<link href="/Content/sweetalert/sweetalert.css" rel="stylesheet"/>
+<link href="/Content/dynatable0.3.1/jquery.dynatable.css" rel="stylesheet"/>
+<link href="/Content/dynatable0.3.1/dynatableloading.css" rel="stylesheet"/>
+<link href="/Content/select1.7.4/css/bootstrap-select.min.css" rel="stylesheet"/>
+<link href="/Content/jalert3/jAlert-v3.css" rel="stylesheet"/>
+
+    <script src="/Scripts/modernizr-2.6.2.js"></script>
+
+
+    <script src="/Scripts/jquery-1.10.2.js"></script>
+
+    <script src="/Scripts/jquery.validate.min.js"></script>
+<script src="/Content/bootstrap3.3.5/js/bootstrap.min.js"></script>
+<script src="/Content/layout/metisMenu/metisMenu.min.js"></script>
+<script src="/Content/layout/js/sb-admin-2.js"></script>
+<script src="/Scripts/respond.js"></script>
+<script src="/Content/alertify0/js/alertify.js"></script>
+<script src="/Content/alertifyjs1.0.8/js/alertify.js"></script>
+<script src="/Content/spinner/spin.js"></script>
+<script src="/Content/sweetalert/sweetalert.min.js"></script>
+<script src="/Content/dynatable0.3.1/jquery.dynatable.js"></script>
+<script src="/Content/noty2.3.7/packaged/jquery.noty.packaged.min.js"></script>
+<script src="/Content/underscore/underscore-min.js"></script>
+<script src="/Content/select1.7.4/js/bootstrap-select.js"></script>
+<script src="/Content/jalert3/jAlert-v3.min.js"></script>
+<script src="/Content/jalert3/jAlert-functions.js"></script>
+
+
+    <style type="text/css">
+        /*footer {
+            width: 100px;
+            bottom: 0;
+            position: relative;
+        }*/
+
+        img {
+            width: 100%;
+            /*/ height: 100px;*/
+            max-width: 100%;
+        }
+
+        .table > thead > tr > td {
+            background: #6b6b6b !important;
+            color: #fff;
+            font-family: 'Scada' !important;
+            font-style: normal;
+            font-weight: 400;
+            font-size: 16px;
+        }
+
+        .table {
+            margin-bottom: 0px !important;
+        }
+
+        .modal-dialog {
+            overflow-y: initial !important;
+        }
+
+        .modal-body {
+            max-height: 350px !important;
+            overflow-y: auto !important;
+        }
+
+        .re-captcha-google {
+            padding-bottom: 10px;
+            padding-top: 10px;
+            padding-left: 35px;
+        }
+    </style>
+
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+</head>
+
+<script type="text/javascript">
+
+    var _tipoempresa = 1;
+</script>
+
+<body>
+
+
+    <div class="container" id="container">
+
+        <div class="row">
+
+
+            <div class="col-md-4 col-md-offset-4">
+                <div class="login">
+                    <div align="center">
+                        <h1>Facturación Electrónica Version 4.0</h1>
+                    </div>
+                    <div align="center">
+                        <img style="text-align:center;width:200px;" src="/Content/images/login.png" />
+                    </div>
+                    <div class="login-triangle"></div>
+                    <h2 class="login-header">Bienvenido</h2>
+                    <form class="login-container" role="form">
+                        <fieldset>
+                            <div class="input-group margin-bottom-sm">
+                                <span class="input-group-addon"><i class="fa fa-user fa-fw"></i></span>
+                                <input class="focus - color" id="RFC" name="RFC" placeholder="RFC" type="text" style="text-transform:uppercase" autocomplete="on" onkeypress="iniciar(event)">
+                            </div>
+
+                            <!-- Re Captcha de google -->
+                            <div class="input-group">
+                                <div class="col-lg-12 col-md-12 re-captcha-google" id="validador-captcha">
+                                </div>
+                            </div>
+
+                            <p><input type="button" value="Ingresar" id="button-login" onclick="LogIn()"></p>
+                            
+                            <p><a href="/Cliente/Register">Registrate</a></p>
+                            <h1></h1>
+                        </fieldset>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+
+        <link href='http://fonts.googleapis.com/css?family=Scada' rel='stylesheet' type='text/css'>
+<style type="text/css">
+p {
+color: #727272;
+font-size: 14px;
+text-align: left;
+font-family: 'Scada' !important;
+font-style: normal;
+font-weight: 400;
+}
+</style>
+<div style=""><font id="tdaviso"  color="#727272">
+	<h1 style="font-size: 20px; text-align: left; font-family: 'Scada' !important; font-style: normal; font-weight: 700;">AVISOS</h1>
+    <p>Este servicio permite a nuestros clientes de contado y tarjetas debito/credito facturar tickets de combustible despues de 24 hrs de emitidos</p>
+    <p>Solo podremos facturarle tickets del mes vigente</p>
+    <p>Si se desea facturar las ultimas horas del mes, le ofrecemos la facturacion en ventanilla o en la terminal punto de venta 
+    <p>SOPORTE PARA FACTURACION WEB AL NUMERO 9999429622 , WHATSAPP 9991637528 , EN HORARIO DE LUNES A VIERNES DE 09:00 AM - 05:00 PM, SABADOS DE 09:00 AM - 01:00 PM</p></font></div>
+
+        <div>
+
+            <a href="https://www.google.es/chrome/browser/desktop/index.html">
+                <img style="width:25px" src="/Content/images/googlechrome.png" />
+            </a>
+            <a href="https://www.google.es/chrome/browser/desktop/index.html">Se recomienda usar Google Chrome</a>
+
+        </div>
+        <div>
+
+            <a href="https://get.adobe.com/es/reader/">
+                <img style="width:25px" src="/Content/images/pdf.jpg" />
+            </a>
+            <a href="https://get.adobe.com/es/reader/">Se requiere Adobe PDF Reader</a>
+        </div>
+
+        <span style="color:#ca2626;font-family: 'Scada' !important;font-style: normal">Su explorador debe de ser compatible con Javascript, debe de tener habilitado cookies y ventanas emergentes.</span>
+
+
+    </div>
+
+        <div class="col-md-12" id="linefooter">
+            <hr class="topfooter" />
+        </div>
+        <footer class="col-xs-12 col-sm-12 col-lg-12 col-md-12" id="footer1"></footer>
+
+</body>
+
+<script src="/Content/wJS/login.js?v=26.3.24"></script>
+
+</html>
+
+<!-- Modal Usuarios -->
+<div id="modal_clientes" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="gridSystemModalLabel">
+    <div class="modal-dialog" style="width:1000px; overflow-y: scroll" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="gridSystemModalLabel">Usted tiene el mismo RFC con diferentes direcciones</h4>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-xs-12 col-sm-12 col-lg-12 col-md-12">
+                        <table id="tbClientes" style="font-size:10px" class="table table-bordered"></table>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /.modal-content -->
+    </div><!-- /.modal-dialog -->
+</div><!-- /.modal -->
+
+<!-- Modal Password -->
+<div id="modal_password" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="gridSystemModalLabel">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h3 class="modal-title" id="gridSystemModalLabel">Se requiere una contraseña para acceder</h3>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-lg-10 col-md-10 col-sm-10 col-lg-offset-2 col-md-offset-2 col-sm-offset-2">
+                        <div class="input-group margin-bottom-sm">
+                            <label for="login_pass" class="control-label ">Contraseña</label>
+                            <input type="password" class="form-control" id="login_pass" name="login_pass" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="LogIn()">Acceder</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const enableCaptcha = 'False';
+    const publicKey = '';
+</script>
+
+<!-- Re-Captcha -->
+<script src="https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit" async defer></script>

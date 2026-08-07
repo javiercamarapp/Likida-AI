@@ -3,7 +3,7 @@ import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd, mxn } from '@/lib/utils';
 import { DollarSign, Calculator, CreditCard, TriangleAlert, Landmark } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { mensajeParaPantalla } from '@/lib/cuadra/administracion';
+import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { getPlanes, guardarPriceDePlan, type Plan } from '@/lib/saas/suscripcion';
 import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import {

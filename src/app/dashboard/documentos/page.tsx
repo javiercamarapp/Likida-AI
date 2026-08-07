@@ -1,18 +1,18 @@
 import { ScanText, FileCheck2, ShieldAlert, Image as IconoImagen, ReceiptText } from 'lucide-react';
-import { getDocumentos, type DocumentoRow } from '@/lib/cuadra/analytics';
-import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
+import { getDocumentos, type DocumentoRow } from '@/lib/likida/analytics';
+import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { fechaMx } from '../formato';
 import { KpiTile, EstadoVacio, StatusPill, type Estado } from '../../admin/ui/kit';
-import { getPorFacturar, resumen as resumirFacturas, type TicketPorFacturar } from '@/lib/cuadra/facturacion/pendientes';
-import { avisarPorFacturar } from '@/lib/cuadra/facturacion/avisar';
+import { getPorFacturar, resumen as resumirFacturas, type TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
+import { avisarPorFacturar } from '@/lib/likida/facturacion/avisar';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
-import { mensajeParaPantalla } from '@/lib/cuadra/errores';
+import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { FormaConAviso, Campo, type ResultadoAccion } from '../../admin/ui/forma';
 import { PorFacturar } from './por-facturar';
 

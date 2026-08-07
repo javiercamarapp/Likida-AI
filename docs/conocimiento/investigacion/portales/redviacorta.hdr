@@ -1,0 +1,24 @@
+HTTP/2 302 
+date: Wed, 05 Aug 2026 04:30:26 GMT
+content-length: 0
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+set-cookie: JSESSIONID=7622F1EF9026CAED47A202D3611B3DC9; Path=/; HttpOnly
+x-request-id: 839cceb0-0b88-4e7b-fddd-f970286cb9ac
+location: https://redviacorta.mx/es/
+
+HTTP/2 200 
+date: Wed, 05 Aug 2026 04:30:26 GMT
+content-type: text/html;charset=UTF-8
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+set-cookie: JSESSIONID=8A3B8438EA94FD1336C789EEBCE349A5; Path=/; HttpOnly
+x-request-id: 483f3bf3-e601-82df-c768-8d6c74c1227d
+set-cookie: GUEST_LANGUAGE_ID=es_ES; Max-Age=31536000; Expires=Thu, 05 Aug 2027 04:30:26 GMT; Path=/; HttpOnly
+content-encoding: gzip
+expires: Thu, 01 Jan 1970 00:00:00 GMT
+cache-control: private, no-cache, no-store, must-revalidate
+pragma: no-cache
+set-cookie: COOKIE_SUPPORT=true; Max-Age=31536000; Expires=Thu, 05 Aug 2027 04:30:26 GMT; Path=/; HttpOnly
+liferay-portal: Liferay Digital Experience Platform
+

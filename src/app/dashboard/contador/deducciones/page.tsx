@@ -2,9 +2,9 @@ import { TriangleAlert, Receipt, ShieldAlert, Banknote, Info } from 'lucide-reac
 import {
   resolverPeriodo, getGastosFiscales, contarGastosDelTenant, resumirPerdidas,
   type GastoFiscal, type ResumenPerdidas, type Gravedad,
-} from '@/lib/cuadra/fiscal';
-import { getConfig, type CuadraConfig } from '@/lib/cuadra/config';
-import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
+} from '@/lib/likida/fiscal';
+import { getConfig, type CuadraConfig } from '@/lib/likida/config';
+import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { fechaMx } from '../../formato';

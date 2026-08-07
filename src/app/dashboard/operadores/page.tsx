@@ -1,8 +1,8 @@
 import { revalidatePath } from 'next/cache';
 import { UserCog, Wallet, CheckCheck, Users, UserPlus } from 'lucide-react';
-import { getOperadoresDetalle, type OperadorDetalle } from '@/lib/cuadra/analytics';
-import { crearOperador, mensajeParaPantalla } from '@/lib/cuadra/administracion';
-import { actualizarRfcOperador } from '@/lib/cuadra/repo';
+import { getOperadoresDetalle, type OperadorDetalle } from '@/lib/likida/analytics';
+import { crearOperador, mensajeParaPantalla } from '@/lib/likida/administracion';
+import { actualizarRfcOperador } from '@/lib/likida/repo';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
@@ -171,7 +171,7 @@ export default async function OperadoresPage({
     // criterio que el de la flota — un RFC mal formado apaga la validación de
     // RLISR 57 en silencio (la rama buena nunca casa).
     if (rfc) {
-      const { esRfcValido, rfcChecksumOk } = await import('@/lib/cuadra/intake/cfdi');
+      const { esRfcValido, rfcChecksumOk } = await import('@/lib/likida/intake/cfdi');
       const limpio = rfc.replace(/[^A-ZÑ&0-9]/g, '');
       if (!esRfcValido(limpio) || !rfcChecksumOk(limpio)) {
         return { error: `El RFC "${rfc}" no pasa el dígito verificador — sin él, la rama buena de RLISR 57 (viático a nombre del operador) nunca casa y todo viático suyo sale a revisar.` };

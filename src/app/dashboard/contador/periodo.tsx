@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { type ClavePeriodo, type Periodo, PERIODO_POR_DEFECTO } from '@/lib/cuadra/fiscal';
+import { type ClavePeriodo, type Periodo, PERIODO_POR_DEFECTO } from '@/lib/likida/fiscal';
 import { fechaMx } from '@/lib/formato';
 
 /**

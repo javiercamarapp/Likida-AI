@@ -5,7 +5,7 @@
 > marcado. **Pégale esto entero a tu agente nuevo antes de pedirle nada.**
 >
 > Las decisiones de arquitectura ya tomadas —y por qué— están en
-> `docs/investigacion/00-DECISIONES.md`. Léelo antes de proponer integraciones.
+> `docs/conocimiento/investigacion/00-DECISIONES.md`. Léelo antes de proponer integraciones.
 
 ---
 

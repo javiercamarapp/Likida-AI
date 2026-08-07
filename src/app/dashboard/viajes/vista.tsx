@@ -1,6 +1,6 @@
 import { Truck, BellOff, BellRing, CheckCheck, PhoneOff } from 'lucide-react';
 import { mxn } from '@/lib/utils';
-import type { ViajeRow } from '@/lib/cuadra/analytics';
+import type { ViajeRow } from '@/lib/likida/analytics';
 import { fechaMx } from '../formato';
 import { confirmacionDeViaje, resumenConfirmacion } from '../confirmacion';
 import { KpiTile, EstadoVacio, StatusPill, type Estado } from '../../admin/ui/kit';

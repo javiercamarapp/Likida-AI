@@ -7,12 +7,12 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
-import { listOperadores, reasignarOperador } from '@/lib/cuadra/repo';
+import { listOperadores, reasignarOperador } from '@/lib/likida/repo';
 import {
   getTableroOperacion, getViajesSinAsignar, getCargaOperadores, getUnidades,
   crearViaje, asignarUnidad,
   type TableroOperacion, type ViajeSinAsignar, type CargaOperador, type UnidadRow,
-} from '@/lib/cuadra/operacion';
+} from '@/lib/likida/operacion';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
 import { sufijoTenant } from '../sufijo';
 import { TableroCifras, TablaSinAsignar, TablaCarga, FormaAlta } from './vista';

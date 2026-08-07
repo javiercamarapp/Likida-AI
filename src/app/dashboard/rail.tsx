@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import ChatFlota from './chat';
-import type { DashboardKpis, Acreditables } from '@/lib/cuadra/analytics';
+import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn } from '@/lib/formato';
 
 // El ancho vive en `marco.ts`, compartido con /admin: eran 300 aquí y 276

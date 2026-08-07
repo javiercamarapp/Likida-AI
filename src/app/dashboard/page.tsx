@@ -4,9 +4,9 @@ import {
   getKpis, getAcreditables, detectarAnomalias, getLiquidacionesPorDia, getViajes,
   type ViajeRow,
   type DashboardKpis, type Acreditables, type Anomalia,
-} from '@/lib/cuadra/analytics';
+} from '@/lib/likida/analytics';
 import { saludo, fechaLarga, ahoraMs } from '@/lib/saludo';
-import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
+import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
 import { BarChartSimple } from '../admin/charts';
