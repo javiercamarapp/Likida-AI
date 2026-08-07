@@ -30,14 +30,16 @@ const { verificarMigracionesCriticas } = await import('./startup');
 // `.select().not().limit()`. Un stub que solo soporta una de las dos cadenas hace
 // que la otra lance, el `catch` general se lo trague como `migraciones_skip`, y
 // las pruebas midan cualquier cosa menos lo que dicen medir.
-const tabla = (resultado: { error: unknown } = { error: null }) => {
+const tabla = (resultado: { error: unknown; data?: unknown } = { error: null }) => {
   const enlace: Record<string, unknown> = {};
   for (const m of ['select', 'not', 'eq', 'limit']) enlace[m] = () => enlace;
   // `await` sobre el enlace resuelve al resultado (igual que el query builder real).
   enlace.then = (r: (v: unknown) => unknown) => Promise.resolve(resultado).then(r);
   return enlace;
 };
-const okTabla = tabla();
+// El probe del mutex (0005) ahora lee un viaje REAL primero: el UUID de ceros
+// choca con la FK viaje_lock→viaje (migración 0075) y daba falso positivo.
+const okTabla = tabla({ data: [{ id: 'viaje-real-1' }], error: null });
 
 beforeEach(() => {
   rpc.mockReset(); from.mockReset(); error.mockReset(); warn.mockReset(); info.mockReset();
@@ -75,6 +77,14 @@ describe('diagnóstico de migraciones', () => {
     expect(error).not.toHaveBeenCalled();
     expect(warn).not.toHaveBeenCalled();
     expect(info).toHaveBeenCalledWith('startup.migraciones', { ok: true });
+  });
+
+  it('el mutex (0005) se sondea con el viaje real, no con el UUID de ceros', async () => {
+    rpc.mockResolvedValue({ error: null });
+    await verificarMigracionesCriticas();
+    const llamadaLock = rpc.mock.calls.find((c) => c[0] === 'try_lock_viaje');
+    expect(llamadaLock).toBeDefined();
+    expect(llamadaLock![1].p_viaje).toBe('viaje-real-1');
   });
 
   // La red se puede caer en cualquiera de los cuatro probes, no solo en el primero.
