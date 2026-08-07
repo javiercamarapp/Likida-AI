@@ -551,6 +551,39 @@ export async function getGastoPorConcepto(tenantId: string): Promise<GastoPorCon
     .sort((a, b) => b.total - a.total);
 }
 
+export interface GastoPorRuta { ruta: string; total: number }
+
+/** Gasto agrupado por ruta (origen → destino) — mismo patrón de join en
+ *  memoria que `getStatsPorOperador`: `gasto` no tiene columna de ruta, así
+ *  que se cruza con `viaje` por `viaje_id`. Top 5 por gasto, no la lista
+ *  entera — es para "¿qué ruta me está costando más?", no un reporte. */
+export async function getGastoPorRuta(tenantId: string): Promise<GastoPorRuta[]> {
+  const admin = supabaseAdmin();
+  const [gastos, viajes] = await Promise.all([
+    traerTodo<{ viaje_id: unknown; monto: unknown }>(
+      (desde, hasta) => admin.from('gasto').select('viaje_id, monto').eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getGastoPorRuta.gasto',
+    ),
+    traerTodo<{ id: unknown; origen: unknown; destino: unknown }>(
+      (desde, hasta) => admin.from('viaje').select('id, origen, destino').eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getGastoPorRuta.viaje',
+    ),
+  ]);
+  const rutaPorViaje = new Map(
+    viajes.map((v) => [v.id as string, `${(v.origen as string) || '—'} → ${(v.destino as string) || '—'}`]),
+  );
+  const mapa = new Map<string, number>();
+  for (const g of gastos) {
+    const ruta = rutaPorViaje.get(g.viaje_id as string);
+    if (!ruta) continue;
+    mapa.set(ruta, (mapa.get(ruta) ?? 0) + Number(g.monto ?? 0));
+  }
+  return [...mapa.entries()]
+    .map(([ruta, total]) => ({ ruta, total: round2(total) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+}
+
 export interface OperadorDetalle {
   operadorId: string; nombre: string; telefono: string | null; numeroEmpleado: string | null;
   /** RFC del trabajador (mig. 0080) — para la rama buena de RLISR 57. */

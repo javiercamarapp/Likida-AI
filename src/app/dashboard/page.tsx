@@ -1,17 +1,22 @@
 import Link from 'next/link';
-import { Fuel, Receipt, Route as RouteIcon, Truck, Wallet, AlertTriangle, Percent } from 'lucide-react';
+import { Fuel, Receipt, Route as RouteIcon, Truck, Wallet, AlertTriangle, Percent, PiggyBank } from 'lucide-react';
 import {
   getKpis, getAcreditables, detectarAnomalias, getLiquidacionesPorDia, getViajes,
+  contarViajes, getValorAhorro, getGastoPorConcepto, getGastoPorRuta, getOperadoresDetalle,
   type ViajeRow,
-  type DashboardKpis, type Acreditables, type Anomalia,
+  type DashboardKpis, type Acreditables, type Anomalia, type ValorAhorro,
+  type GastoPorConcepto, type GastoPorRuta, type OperadorDetalle,
 } from '@/lib/likida/analytics';
+import { getPorFacturar, type TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import { saludo, fechaLarga, ahoraMs } from '@/lib/saludo';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
-import { BarChartSimple } from '../admin/charts';
+import { AreaChartSimple, Dona } from '../admin/charts';
+import { HBars } from '../admin/ui/graficas';
 import { GlobalFilter, resolverRango } from '../admin/ui/global-filter';
 import { KpiTile } from '../admin/ui/kit';
+import { KpiDegradado, ProximosVencimientos, TablaViajesRecientes } from './resumen-visual';
 import CifraGrande from './cifra-grande';
 import AvanceCierre from './avance-cierre';
 import { InicioOperacion } from './inicio-operacion';
@@ -83,15 +88,27 @@ export async function InicioContenido({
   // El filtro de arriba mueve TODO, no solo la gráfica: con 'todo' se pasa
   // `undefined` (sin corte) y con 7/30 la misma ventana a las tres consultas,
   // para que los rótulos "del periodo" digan la verdad.
-  const [acred, kpis, anomalias, porDia, viajes] = await Promise.all([
+  const [acred, kpis, anomalias, porDia, viajes, viajesActivos, totalViajes, valorAhorro, gastoConcepto, gastoRuta, operadoresDetalle, porFacturar] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId, ventana)),
     safe<DashboardKpis>(() => getKpis(tenantId, ventana)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
     safe<Array<{ dia: string; valor: number }>>(() => getLiquidacionesPorDia(tenantId, ventanaDias)),
     // Para la barra de avance de cierre: se traen los viajes con su fecha y
     // estatus y el filtro por periodo se hace en el cliente, así cambiar de
-    // semana a mes no cuesta una consulta por clic.
+    // semana a mes no cuesta una consulta por clic. La tabla "Viajes
+    // recientes" de abajo reusa este MISMO arreglo (ya viene ordenado por
+    // más reciente) en vez de pedirlo de nuevo.
     safe<ViajeRow[]>(() => getViajes(tenantId)),
+    // Piezas del Resumen visual (dirección elegida 7-ago-2026): cada una
+    // envuelta en `safe` por separado, así que si una consulta nueva falla
+    // no tumba el resto de una pantalla que ya funcionaba.
+    safe<number | null>(() => contarViajes(tenantId, ['abierto', 'en_cuadre'])),
+    safe<number | null>(() => contarViajes(tenantId)),
+    safe<ValorAhorro>(() => getValorAhorro(tenantId)),
+    safe<GastoPorConcepto[]>(() => getGastoPorConcepto(tenantId)),
+    safe<GastoPorRuta[]>(() => getGastoPorRuta(tenantId)),
+    safe<OperadorDetalle[]>(() => getOperadoresDetalle(tenantId)),
+    safe<TicketPorFacturar[]>(() => getPorFacturar(tenantId)),
   ]);
   const etiquetaVentana = rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`;
 
@@ -230,7 +247,66 @@ export async function InicioContenido({
               </div>
             )}
 
-            {/* ── ComboChart (§2 del documento: barras + línea, toggle 7d/30d/Todo) ── */}
+            {/* ── KPIs de la flota, en degradado (dirección de diseño del 7-ago-2026) ── */}
+            {kpis && (
+              <div className="px-5 pb-4 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                  <KpiDegradado icono={<Truck width={17} height={17} strokeWidth={1.75} />}
+                    etiqueta="Viajes activos" valor={viajesActivos ?? 0} formato="entero" />
+                  <KpiDegradado icono={<Wallet width={17} height={17} strokeWidth={1.75} />}
+                    etiqueta={`Liquidado — ${etiquetaVentana}`} valor={kpis.montoComprobado} formato="mxn" />
+                  <KpiDegradado icono={<Percent width={17} height={17} strokeWidth={1.75} />}
+                    etiqueta="Tasa de cuadre" valor={kpis.tasaCuadre} formato="porcentaje" />
+                  {valorAhorro && (
+                    <KpiDegradado icono={<PiggyBank width={17} height={17} strokeWidth={1.75} />}
+                      etiqueta="Horas ahorradas (estimado)" valor={valorAhorro.horasAhorradasEstimadas} formato="numero" />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Viajes / Gasto por categoría / Próximos vencimientos ── */}
+            <div className="px-5 pb-4 border-t pt-4 grid grid-cols-1 md:grid-cols-3 gap-4" style={{ borderColor: 'var(--line)' }}>
+              <div>
+                <TituloSeccion>Viajes</TituloSeccion>
+                <div className="mt-2.5">
+                  {kpis && totalViajes !== null && totalViajes !== undefined && totalViajes > 0 ? (
+                    <Dona segmentos={[
+                      { etiqueta: 'Liquidados', valor: kpis.viajesLiquidados },
+                      { etiqueta: 'Pendientes', valor: Math.max(0, totalViajes - kpis.viajesLiquidados) },
+                    ]} />
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay viajes registrados.</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <TituloSeccion>Gasto por categoría</TituloSeccion>
+                <div className="mt-2.5">
+                  {gastoConcepto && gastoConcepto.length > 0 ? (
+                    <Dona segmentos={gastoConcepto.map((g) => ({ etiqueta: g.concepto, valor: g.total }))} />
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay gastos capturados.</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <TituloSeccion>Próximos vencimientos</TituloSeccion>
+                <div className="mt-2.5">
+                  {porFacturar ? (
+                    <ProximosVencimientos items={porFacturar.map((t) => ({
+                      nombre: t.comercio?.nombre ?? t.concepto,
+                      monto: t.monto,
+                      caducidad: t.caducidad,
+                    }))} />
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Liquidaciones cerradas por día (mismo dato de siempre, toggle 7d/30d/Todo) ── */}
             <div className="px-5 pb-4 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
               <div className="flex items-center justify-between gap-4 mb-3">
                 <TituloSeccion>
@@ -248,12 +324,48 @@ export async function InicioContenido({
                   No se pudo cargar esta gráfica.
                 </div>
               ) : porDia.some((d) => d.valor > 0) ? (
-                <BarChartSimple datos={porDia} alto={160} />
+                <AreaChartSimple datos={porDia} etiquetaValor={(v) => String(v)} />
               ) : (
                 <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
                   Sin cierres en esta ventana — prueba con 30d o el histórico.
                 </div>
               )}
+            </div>
+
+            {/* ── Top operadores / Top rutas por gasto ── */}
+            <div className="px-5 pb-4 border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4" style={{ borderColor: 'var(--line)' }}>
+              <div>
+                <TituloSeccion>Top operadores por gasto</TituloSeccion>
+                <div className="mt-3">
+                  {operadoresDetalle && operadoresDetalle.filter((o) => o.comprobadoTotal > 0).length > 0 ? (
+                    <HBars formato="mxn" datos={[...operadoresDetalle]
+                      .filter((o) => o.comprobadoTotal > 0)
+                      .sort((a, b) => b.comprobadoTotal - a.comprobadoTotal)
+                      .slice(0, 5)
+                      .map((o) => ({ etiqueta: o.nombre, valor: o.comprobadoTotal }))} />
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay gasto comprobado por operador.</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <TituloSeccion>Top rutas por gasto</TituloSeccion>
+                <div className="mt-3">
+                  {gastoRuta && gastoRuta.length > 0 ? (
+                    <HBars formato="mxn" datos={gastoRuta.map((r) => ({ etiqueta: r.ruta, valor: r.total }))} />
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay gasto asociado a una ruta.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Viajes recientes ── */}
+            <div className="px-5 pb-4 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
+              <TituloSeccion>Viajes recientes</TituloSeccion>
+              <div className="mt-2.5 overflow-x-auto">
+                <TablaViajesRecientes viajes={(viajes ?? []).slice(0, 6)} />
+              </div>
             </div>
 
             {/* ── Estímulos acreditables ── */}
