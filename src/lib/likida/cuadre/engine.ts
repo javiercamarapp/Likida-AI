@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// MOTOR DE CUADRE (determinístico, sin LLM) — el diferenciador de Cuadra.
+// MOTOR DE CUADRE (determinístico, sin LLM) — el diferenciador de Likida.
 //
 // Compara los gastos comprobados contra el anticipo entregado y la política de
 // la flota, y detecta: sobre-política, faltante de CFDI, duplicados y baja

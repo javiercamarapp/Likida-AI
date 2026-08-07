@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// ANALÍTICA del dashboard — valor que Cuadra otorga con la data capturada.
+// ANALÍTICA del dashboard — valor que Likida otorga con la data capturada.
 // KPIs, rendimiento por operador/ruta, tendencia de diferencias, y DETECCIÓN
 // DE ANOMALÍAS/FRAUDE (mismo CFDI usado en dos viajes, folios duplicados).
 // ═══════════════════════════════════════════════════════════════════════════
