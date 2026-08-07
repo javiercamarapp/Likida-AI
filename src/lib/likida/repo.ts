@@ -1,4 +1,4 @@
-// Acceso a datos de Cuadra (service-role, scoping por tenant a mano).
+// Acceso a datos de Likida (service-role, scoping por tenant a mano).
 // Mapea filas de Postgres ↔ tipos del dominio.
 
 import { supabaseAdmin } from '@/lib/supabase/admin';

@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- Cuadra — migración inicial. Multi-tenant con RLS (patrón atiende endurecido).
+-- Likida — migración inicial. Multi-tenant con RLS (patrón atiende endurecido).
 -- El aislamiento vive en Postgres, no en el código.
 -- ═══════════════════════════════════════════════════════════════════════════
 

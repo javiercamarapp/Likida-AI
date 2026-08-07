@@ -1,4 +1,4 @@
-# Likida (repo `cuadra`)
+# Likida
 
 Liquidación de viajes de flotas de carga en México, por WhatsApp. El operador
 manda comprobantes, un motor los cuadra contra el anticipo y la política, y
@@ -21,7 +21,7 @@ va a cruzar lo que ve contra su PDF y su contador. Si no hay dato real:
 - se dice qué falta y por qué (`dashboard/pendiente.tsx`, `EstadoVacio`),
 - no se rellena con datos de ejemplo, ni con ceros que parezcan medición.
 Una estimación se puede mostrar, pero declarada y con su supuesto a la vista
-(ver `MINUTOS_CAPTURA_MANUAL` en `lib/cuadra/analytics.ts`).
+(ver `MINUTOS_CAPTURA_MANUAL` en `lib/likida/analytics.ts`).
 
 **Un rótulo tiene que ser verdad.** Si dice "del periodo", la consulta filtra
 por fecha. Si un filtro está en pantalla, mueve TODO lo que hay debajo.
