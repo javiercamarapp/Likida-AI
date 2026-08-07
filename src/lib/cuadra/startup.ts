@@ -53,12 +53,26 @@ export async function verificarMigracionesCriticas(): Promise<void> {
     // despliegue: se arreglaba, se volvía a desplegar, y aparecía la siguiente.
     // El arranque tiene que decir de una vez TODO lo que falta.
     let faltan = false;
-    const { error } = await admin.rpc('try_lock_viaje', { p_viaje: ZERO, p_ttl_ms: 1 });
-    if (error) {
-      reportarProbe(error, 'FALTA la migración 0005 (try_lock_viaje / unique(viaje_id)): la protección de doble liquidación NO está activa. Corre `supabase db push`.');
-      faltan = true;
+    // Migración 0005 (mutex try_lock_viaje + unique(viaje_id)). El índice
+    // `viaje_lock_pkey` se verifica en el bloque de índices de abajo; aquí se
+    // sondea la FUNCIÓN. Se usa un viaje REAL: el UUID de ceros choca con la FK
+    // `viaje_lock_viaje_id_fkey` (migración 0075) y el probe gritaba «FALTA
+    // 0005» en una base donde estaba aplicada — un falso positivo que mandaba a
+    // correr `supabase db push` contra un problema inexistente (el modo de fallo
+    // caro que este archivo existe para evitar).
+    const { data: viajeReal } = await admin.from('viaje').select('id').limit(1);
+    if (viajeReal?.[0]?.id) {
+      const { error } = await admin.rpc('try_lock_viaje', { p_viaje: viajeReal[0].id, p_ttl_ms: 1 });
+      if (error) {
+        reportarProbe(error, 'FALTA la migración 0005 (try_lock_viaje / unique(viaje_id)): la protección de doble liquidación NO está activa. Corre `supabase db push`.');
+        faltan = true;
+      }
+      await admin.rpc('unlock_viaje', { p_viaje: viajeReal[0].id }); // liberar el lock de prueba
+    } else {
+      // Base vacía: sin viajes no hay doble liquidación que proteger; el unique
+      // `viaje_lock_pkey` sí se verifica en el bloque de índices de abajo.
+      logger.info('startup.migraciones_0005_skip', { msg: 'sin viajes en la base; el probe del mutex no corre (el índice unique sí se verifica)' });
     }
-    await admin.rpc('unlock_viaje', { p_viaje: ZERO }); // liberar el lock de prueba
 
     // AUDIT_V3 orquestación CRÍTICO: migración 0011 (barrera de intake). Si falta,
     // intakeDelta devuelve 0 en silencio → esperarIntake retorna true de inmediato
@@ -124,6 +138,7 @@ export async function verificarMigracionesCriticas(): Promise<void> {
     const INDICES = {
       uq_gasto_cfdi_uuid: 'migración 0019: sin ella el mismo CFDI se liquida dos veces, con su IVA acreditado por duplicado',
       uq_operador_telefono_activo: 'migración 0024: sin ella un mismo teléfono puede resolver a dos operadores y el gasto se le carga a quien no fue',
+      viaje_lock_pkey: 'migración 0005: sin el unique sobre viaje_id dos cierres concurrentes crean dos liquidaciones para el mismo viaje',
     } as const;
     const { data: faltantes, error: eIdx } = await admin.rpc('indices_faltantes', {
       p_esperados: Object.keys(INDICES),
