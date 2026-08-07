@@ -32,7 +32,10 @@ const nextConfig: NextConfig = {
   // 66 MB en todas las demás las acercaría al límite de 250 MB sin motivo.
   outputFileTracingIncludes: {
     '/api/webhook/whatsapp': ['./node_modules/zxing-wasm/dist/reader/*.wasm'],
-    '/api/cron/facturar': ['./node_modules/@sparticuz/chromium/bin/**'],
+    '/api/cron/facturar': [
+      './node_modules/@sparticuz/chromium/bin/**',
+      './node_modules/playwright-core/browsers.json',
+    ],
     // El callback de QStash ejecuta la MISMA lógica (procesarLoteEnCola) — su
     // bundle también necesita el binario de Chromium y el browsers.json de
     // playwright-core, o revienta con "Cannot find module browsers.json".
