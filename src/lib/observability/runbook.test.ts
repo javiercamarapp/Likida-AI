@@ -97,7 +97,7 @@ describe('.env.example no se queda atrás del código', () => {
 });
 
 describe('DEPLOY.md pide lo que hace falta para que el sistema no arranque ciego', () => {
-  const deploy = () => readFileSync(join(RAIZ, 'DEPLOY.md'), 'utf8');
+  const deploy = () => readFileSync(join(RAIZ, 'docs/conocimiento/DEPLOY.md'), 'utf8');
 
   it('nombra las variables cuya ausencia es silenciosa', () => {
     const texto = deploy();

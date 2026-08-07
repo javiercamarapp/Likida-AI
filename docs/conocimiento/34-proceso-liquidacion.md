@@ -4,7 +4,7 @@
 > Este documento no vuelve a investigar el marco fiscal: lo aplica a un proceso completo,
 > agrega el marco laboral que `11-huecos.md` encontró y que el proceso operativo no puede ignorar,
 > y contrasta el diseño contra el código de Cuadra tal como existe hoy en
-> `javiercamarapp/cuadra/src/lib/cuadra/`. Cada afirmación legal remite a la ola 1; no se repiten
+> `javiercamarapp/likida/src/lib/cuadra/`. Cada afirmación legal remite a la ola 1; no se repiten
 > las citas textuales completas, solo la referencia y el número de artículo/regla.
 
 ---
@@ -373,7 +373,7 @@ Resumen operativo — el detalle completo, con las patologías de la caja chica 
 
 ## 11. Brecha entre este diseño y lo que Cuadra tiene construido hoy
 
-Revisado directamente en `javiercamarapp/cuadra/src/lib/cuadra/` el 27-jul-2026:
+Revisado directamente en `javiercamarapp/likida/src/lib/cuadra/` el 27-jul-2026:
 
 | Pieza del diseño | ¿Existe hoy? | Evidencia |
 |---|---|---|
@@ -461,13 +461,13 @@ Este documento no realizó investigación normativa nueva: aplicó y extendió e
 
 Fuentes primarias del propio repositorio de código (Cuadra), leídas directamente el 27-jul-2026 para la §11 (brecha) y el CONFLICTO 1:
 
-- `javiercamarapp/cuadra/src/lib/cuadra/cuadre/engine.ts`
-- `javiercamarapp/cuadra/src/lib/cuadra/cuadre/guardia.ts`
-- `javiercamarapp/cuadra/src/types/cuadra.ts`
-- `javiercamarapp/cuadra/src/lib/cuadra/config.ts`
-- `javiercamarapp/cuadra/src/lib/cuadra/export.ts`
-- `javiercamarapp/cuadra/src/lib/cuadra/conv.ts`
-- `javiercamarapp/cuadra/src/lib/cuadra/repo.ts`
-- `javiercamarapp/cuadra/supabase/migrations/0001_init.sql`, `0003_costos.sql`, `0004_fiscal_config.sql`, `0007_acreditamiento.sql`, `0016_codigo_pendiente.sql` (solo lectura, sin modificar ni crear migraciones)
+- `javiercamarapp/likida/src/lib/cuadra/cuadre/engine.ts`
+- `javiercamarapp/likida/src/lib/cuadra/cuadre/guardia.ts`
+- `javiercamarapp/likida/src/types/cuadra.ts`
+- `javiercamarapp/likida/src/lib/cuadra/config.ts`
+- `javiercamarapp/likida/src/lib/cuadra/export.ts`
+- `javiercamarapp/likida/src/lib/cuadra/conv.ts`
+- `javiercamarapp/likida/src/lib/cuadra/repo.ts`
+- `javiercamarapp/likida/supabase/migrations/0001_init.sql`, `0003_costos.sql`, `0004_fiscal_config.sql`, `0007_acreditamiento.sql`, `0016_codigo_pendiente.sql` (solo lectura, sin modificar ni crear migraciones)
 
 No se usó WebSearch, WebFetch ni exa en esta ola: el encargo es de diseño de proceso sobre un marco ya investigado, y las reglas duras del encargo piden construir encima de la ola 1, no repetirla.

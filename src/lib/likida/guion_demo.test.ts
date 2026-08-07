@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 // Esta prueba ata el guion a lo que el panel de verdad pinta.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const GUION = readFileSync('GUION_DEMO.md', 'utf8');
+const GUION = readFileSync('docs/conocimiento/guion-demo.md', 'utf8');
 const PANEL = readFileSync('src/app/dashboard/page.tsx', 'utf8');
 
 describe('el guion dice lo que el producto hace', () => {
