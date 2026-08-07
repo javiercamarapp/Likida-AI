@@ -29,7 +29,7 @@ const SECRETO = 'app-secret-de-prueba';
 process.env.WHATSAPP_APP_SECRET = SECRETO;
 
 const processInbound = vi.fn(async () => {});
-vi.mock('@/lib/cuadra/processor', () => ({ processInbound }));
+vi.mock('@/lib/likida/processor', () => ({ processInbound }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 // AUDITORÍA 6 · operabilidad — el flush de Sentry existía, con ocho pruebas

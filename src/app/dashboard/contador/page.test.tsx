@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { DEMO_CONFIG } from '@/lib/cuadra/config';
+import { DEMO_CONFIG } from '@/lib/likida/config';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 10, BAJO (frontend) — "Tarjetas medio vacías en el panel fiscal".
@@ -16,11 +16,11 @@ import { DEMO_CONFIG } from '@/lib/cuadra/config';
 // ═══════════════════════════════════════════════════════════════════════════
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/cuadra/config', async (original) => ({
+vi.mock('@/lib/likida/config', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   getConfig: vi.fn(async () => DEMO_CONFIG),
 }));
-vi.mock('@/lib/cuadra/fiscal', async (original) => ({
+vi.mock('@/lib/likida/fiscal', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   // Periodo SIN comprobantes: el estado que dispara el `EstadoVacio` corto
   // dentro de "El gasto del periodo, por su suerte fiscal".

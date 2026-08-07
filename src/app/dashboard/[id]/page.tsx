@@ -1,21 +1,21 @@
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerArea, inicioDe, rolEfectivo } from '@/lib/auth/visibilidad';
 import Link from 'next/link';
-import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
+import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { notFound, redirect } from 'next/navigation';
-import { getLiquidacionDetalle } from '@/lib/cuadra/analytics';
-import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
-import { filasDeducibilidad } from '@/lib/cuadra/liquidacion/deducibilidad';
+import { getLiquidacionDetalle } from '@/lib/likida/analytics';
+import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
+import { filasDeducibilidad } from '@/lib/likida/liquidacion/deducibilidad';
 import { mxn } from '@/lib/utils';
 import { litros, fechaMx } from '../formato';
 import { etiquetaEstatus } from '../estatus';
 import { puedeExportar, puedeAsignar, puedeAdministrar } from '@/lib/auth/permisos';
-import { listOperadores, reasignarOperador } from '@/lib/cuadra/repo';
+import { listOperadores, reasignarOperador } from '@/lib/likida/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { revalidatePath } from 'next/cache';
 import { RotateCcw } from 'lucide-react';
-import { reabrirViaje, mensajeParaPantalla } from '@/lib/cuadra/administracion';
+import { reabrirViaje, mensajeParaPantalla } from '@/lib/likida/administracion';
 import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 
 export const dynamic = 'force-dynamic';
@@ -146,7 +146,7 @@ export default async function Detalle({
   // ver sanitizar.ts). Enseñarla en un clic desde el panel del contralor sí es
   // "usarla": convertía la promesa en falsa. AUDITORÍA 9, CRÍTICO legal.
   const hayAcred = d.litrosDiesel > 0 || d.ieps > 0 || d.iva > 0 || d.peaje > 0;
-  // Las tres cubetas SIEMPRE suman totalComprobado (types/cuadra.ts). Se le
+  // Las tres cubetas SIEMPRE suman totalComprobado (types/likida.ts). Se le
   // pasa el total PERSISTIDO junto a las cubetas RECONSTRUIDAS a propósito: si
   // los dos no cuadran, `filasDeducibilidad` devuelve null y no se pinta nada.
   // Un desglose que contradice al total que tiene tres centímetros arriba es

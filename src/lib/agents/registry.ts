@@ -1,5 +1,5 @@
-// Fuente única de verdad de los agentes de Cuadra. A diferencia de atiende
-// (~18 agentes médicos), Cuadra es mono-propósito: un agente de liquidación.
+// Fuente única de verdad de los agentes de Likida. A diferencia de atiende
+// (~18 agentes médicos), Likida es mono-propósito: un agente de liquidación.
 
 import type { AgentConfig, AgentName } from './types';
 

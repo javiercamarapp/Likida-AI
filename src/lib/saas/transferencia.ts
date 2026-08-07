@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { DatoInvalido } from '@/lib/cuadra/errores';
+import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { facturapiConfigurado, timbrarMensualidad, enviarPorCorreo } from './facturapi';
 import { getDatosFiscales, estanCompletos } from './fiscal';

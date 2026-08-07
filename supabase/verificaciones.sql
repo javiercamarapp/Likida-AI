@@ -3146,3 +3146,23 @@ begin
   raise exception E'POD_TENANT  pod-en-su-flota=%  pod-en-flota-ajena=%   (esperado true / false — ajeno=true sería la fuga)',
     pod_propio, pod_ajeno;
 end $$;
+
+-- ── 61. config_tenant_valida NO crashea al actualizar un tenant con la ─────
+-- facilidad del 15% declarada (mig. 0085).
+-- La 0083 metió `r := o->'regimenElegible'` con `r` tipo `record`: asignar
+-- jsonb a record es "input of anonymous composite types is not implemented".
+-- Con la facilidad en config, el CHECK del tenant tronaba en CADA update
+-- (nombre, RFC, suscripción). Aquí se reproduce el escenario exacto.
+do $$
+declare v_t uuid; v_n text;
+begin
+  insert into tenant (nombre, config) values
+    ('ZZZ VERIF 0085', '{"facilidadCombustibleEfectivo":{"dedicacionExclusivaCarga":true,"regimenElegible":true}}'::jsonb)
+  returning id into v_t;
+
+  -- El CHECK valida de nuevo en el UPDATE: si la 0085 no está, esto truena.
+  update tenant set nombre = 'ZZZ VERIF 0085 UPDATED' where id = v_t;
+
+  select nombre into v_n from tenant where id = v_t;
+  raise exception E'FACILIDAD_UPDATE  actualiza-con-facilidad=%  (esperado actualiza-con-facilidad=actualiza)', v_n;
+end $$;

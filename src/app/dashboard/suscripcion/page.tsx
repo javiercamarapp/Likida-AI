@@ -6,7 +6,7 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
-import { mensajeParaPantalla } from '@/lib/cuadra/administracion';
+import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import {
   getPlanes, getSuscripcion, getFacturasSaas, getUso,
   type Plan, type Suscripcion, type FacturaSaas, type UsoDelPlan,
@@ -338,7 +338,7 @@ export default async function SuscripcionPage({
               <Campo nombre="rfc" etiqueta="RFC" requerido valorInicial={fiscales?.rfc ?? ''}
                 placeholder="TIN010101AB1" ayuda="Se valida el dígito verificador." />
               <Campo nombre="razonSocial" etiqueta="Razón social" requerido
-                valorInicial={fiscales?.razonSocial ?? ''} placeholder="TRANSPORTES INNOVATIVOS SA DE CV"
+                valorInicial={fiscales?.razonSocial ?? ''} placeholder="MI FLOTA SA DE CV"
                 ayuda="Exacta, como en tu constancia." />
               <Campo nombre="codigoPostal" etiqueta="Código postal fiscal" requerido
                 valorInicial={fiscales?.codigoPostal ?? ''} placeholder="97000" />

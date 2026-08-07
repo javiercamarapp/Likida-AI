@@ -1,0 +1,4908 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+		
+			<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<html class="ltr" dir="ltr" lang="es-ES">
+<head>
+	<title>Facturación - Red Vía Corta - RCO</title>
+
+	<meta content="initial-scale=1.0, width=device-width" name="viewport" />
+	<meta charset="UTF-8">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<meta content="text/html; charset=UTF-8" http-equiv="content-type" />
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="importmap">{"imports":{"react-dom":"/o/frontend-js-react-web/__liferay__/exports/react-dom.js","@clayui/breadcrumb":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$breadcrumb.js","@clayui/charts":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$charts.js","@clayui/empty-state":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$empty-state.js","react":"/o/frontend-js-react-web/__liferay__/exports/react.js","react-dom-16":"/o/frontend-js-react-web/__liferay__/exports/react-dom-16.js","@clayui/navigation-bar":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$navigation-bar.js","@clayui/icon":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$icon.js","@clayui/table":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$table.js","@clayui/slider":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$slider.js","@clayui/multi-select":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$multi-select.js","@clayui/nav":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$nav.js","@clayui/provider":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$provider.js","@clayui/panel":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$panel.js","@clayui/list":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$list.js","@liferay/dynamic-data-mapping-form-field-type":"/o/dynamic-data-mapping-form-field-type/__liferay__/index.js","@clayui/date-picker":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$date-picker.js","@clayui/label":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$label.js","@liferay/frontend-js-api/data-set":"/o/frontend-js-dependencies-web/__liferay__/exports/@liferay$js-api$data-set.js","@clayui/core":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$core.js","@clayui/pagination-bar":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$pagination-bar.js","@clayui/layout":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$layout.js","@clayui/multi-step-nav":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$multi-step-nav.js","@liferay/frontend-js-api":"/o/frontend-js-dependencies-web/__liferay__/exports/@liferay$js-api.js","@clayui/toolbar":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$toolbar.js","@clayui/badge":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$badge.js","react-dom-18":"/o/frontend-js-react-web/__liferay__/exports/react-dom-18.js","@clayui/link":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$link.js","@clayui/card":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$card.js","@clayui/tooltip":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$tooltip.js","@clayui/button":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$button.js","@clayui/tabs":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$tabs.js","@clayui/sticker":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$sticker.js","@clayui/form":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$form.js","@clayui/popover":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$popover.js","@clayui/shared":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$shared.js","@clayui/localized-input":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$localized-input.js","@clayui/modal":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$modal.js","@clayui/color-picker":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$color-picker.js","@clayui/pagination":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$pagination.js","@clayui/autocomplete":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$autocomplete.js","@clayui/management-toolbar":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$management-toolbar.js","@clayui/time-picker":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$time-picker.js","@clayui/upper-toolbar":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$upper-toolbar.js","@clayui/loading-indicator":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$loading-indicator.js","@clayui/drop-down":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$drop-down.js","@clayui/data-provider":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$data-provider.js","@liferay/language/":"/o/js/language/","@clayui/css":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$css.js","@clayui/alert":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$alert.js","@clayui/progress-bar":"/o/frontend-taglib-clay/__liferay__/exports/@clayui$progress-bar.js","react-16":"/o/frontend-js-react-web/__liferay__/exports/react-16.js","react-18":"/o/frontend-js-react-web/__liferay__/exports/react-18.js"},"scopes":{}}</script><script data-senna-track="temporary">var Liferay = window.Liferay || {};Liferay.Icons = Liferay.Icons || {};Liferay.Icons.controlPanelSpritemap = 'https://redviacorta.mx/o/admin-theme/images/clay/icons.svg'; Liferay.Icons.spritemap = 'https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg';</script>
+<script data-senna-track="permanent" type="text/javascript">window.Liferay = window.Liferay || {}; window.Liferay.CSP = {nonce: ''};</script>
+<link data-senna-track="temporary" href="https://redviacorta.mx/facturacion" rel="canonical" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/zh/facturacion" hreflang="zh-CN" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/es/facturacion" hreflang="es-ES" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/sv/facturacion" hreflang="sv-SE" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/ja/facturacion" hreflang="ja-JP" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/nl/facturacion" hreflang="nl-NL" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/hu/facturacion" hreflang="hu-HU" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/ar/facturacion" hreflang="ar-SA" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/pt/facturacion" hreflang="pt-BR" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/de/facturacion" hreflang="de-DE" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/ca/facturacion" hreflang="ca-ES" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/fi/facturacion" hreflang="fi-FI" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/fr/facturacion" hreflang="fr-FR" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/facturacion" hreflang="en-US" rel="alternate" />
+<link data-senna-track="temporary" href="https://redviacorta.mx/facturacion" hreflang="x-default" rel="alternate" />
+
+<meta property="og:locale" content="es_ES">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="ar_SA">
+<meta property="og:locale:alternate" content="ca_ES">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta property="og:locale:alternate" content="nl_NL">
+<meta property="og:locale:alternate" content="fi_FI">
+<meta property="og:locale:alternate" content="fr_FR">
+<meta property="og:locale:alternate" content="de_DE">
+<meta property="og:locale:alternate" content="hu_HU">
+<meta property="og:locale:alternate" content="ja_JP">
+<meta property="og:locale:alternate" content="pt_BR">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="sv_SE">
+<meta property="og:site_name" content="Red Vía Corta">
+<meta property="og:title" content="Facturación - Red Vía Corta - RCO">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://redviacorta.mx/facturacion">
+
+
+<link href="/documents/59517/0/favicon.ico/7e159044-738b-b109-0aae-1b0e9cfbf234" rel="apple-touch-icon" />
+<link href="/documents/59517/0/favicon.ico/7e159044-738b-b109-0aae-1b0e9cfbf234" rel="icon" />
+
+
+
+<link class="lfr-css-file" data-senna-track="temporary" href="https://redviacorta.mx/o/rco-simple-layout-theme/css/clay.css?browserId=chrome&amp;themeId=rcosimplelayout_WAR_rcosimplelayouttheme&amp;minifierType=css&amp;languageId=es_ES&amp;t=1785848456000" id="liferayAUICSS" rel="stylesheet" type="text/css" />
+
+
+
+
+
+
+
+
+
+	<link href="/combo?browserId=chrome&amp;minifierType=css&amp;themeId=rcosimplelayout_WAR_rcosimplelayouttheme&amp;languageId=es_ES&amp;com_liferay_portal_search_web_search_bar_portlet_SearchBarPortlet_INSTANCE_templateSearch:%2Fo%2Fportal-search-web%2Fcss%2Fmain.css&amp;com_liferay_product_navigation_product_menu_web_portlet_ProductMenuPortlet:%2Fo%2Fproduct-navigation-product-menu-web%2Fcss%2Fmain.css&amp;com_liferay_product_navigation_user_personal_bar_web_portlet_ProductNavigationUserPersonalBarPortlet:%2Fo%2Fproduct-navigation-user-personal-bar-web%2Fcss%2Fmain.css&amp;com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet:%2Fo%2Fsite-navigation-menu-web%2Fcss%2Fmain.css&amp;t=1785848456000" rel="stylesheet" type="text/css"
+ data-senna-track="temporary" id="56c78c2d" />
+
+
+
+
+
+
+
+
+<script type="text/javascript" data-senna-track="temporary">
+	// <![CDATA[
+		var Liferay = Liferay || {};
+
+		Liferay.Browser = {
+			acceptsGzip: function () {
+				return false;
+			},
+
+			
+
+			getMajorVersion: function () {
+				return 1;
+			},
+
+			getRevision: function () {
+				return '';
+			},
+			getVersion: function () {
+				return '1';
+			},
+
+			
+
+			isAir: function () {
+				return false;
+			},
+			isChrome: function () {
+				return true;
+			},
+			isEdge: function () {
+				return false;
+			},
+			isFirefox: function () {
+				return false;
+			},
+			isGecko: function () {
+				return false;
+			},
+			isIe: function () {
+				return false;
+			},
+			isIphone: function () {
+				return false;
+			},
+			isLinux: function () {
+				return false;
+			},
+			isMac: function () {
+				return false;
+			},
+			isMobile: function () {
+				return false;
+			},
+			isMozilla: function () {
+				return true;
+			},
+			isOpera: function () {
+				return false;
+			},
+			isRtf: function () {
+				return true;
+			},
+			isSafari: function () {
+				return false;
+			},
+			isSun: function () {
+				return false;
+			},
+			isWebKit: function () {
+				return false;
+			},
+			isWindows: function () {
+				return false;
+			}
+		};
+
+		Liferay.Data = Liferay.Data || {};
+
+		Liferay.Data.ICONS_INLINE_SVG = true;
+
+		Liferay.Data.NAV_SELECTOR = '#navigation';
+
+		Liferay.Data.NAV_SELECTOR_MOBILE = '#navigationCollapse';
+
+		Liferay.Data.isCustomizationView = function () {
+			return false;
+		};
+
+		Liferay.Data.notices = [
+			
+		];
+
+		(function () {
+			var available = {};
+
+			var direction = {};
+
+			
+
+				available['en_US'] = 'inglés\x20\x28Estados\x20Unidos\x29';
+				direction['en_US'] = 'ltr';
+
+			
+
+				available['ar_SA'] = 'árabe\x20\x28Arabia\x20Saudí\x29';
+				direction['ar_SA'] = 'rtl';
+
+			
+
+				available['ca_ES'] = 'catalán\x20\x28España\x29';
+				direction['ca_ES'] = 'ltr';
+
+			
+
+				available['zh_CN'] = 'chino\x20\x28China\x29';
+				direction['zh_CN'] = 'ltr';
+
+			
+
+				available['nl_NL'] = 'neerlandés\x20\x28Países\x20Bajos\x29';
+				direction['nl_NL'] = 'ltr';
+
+			
+
+				available['fi_FI'] = 'finés\x20\x28Finlandia\x29';
+				direction['fi_FI'] = 'ltr';
+
+			
+
+				available['fr_FR'] = 'francés\x20\x28Francia\x29';
+				direction['fr_FR'] = 'ltr';
+
+			
+
+				available['de_DE'] = 'alemán\x20\x28Alemania\x29';
+				direction['de_DE'] = 'ltr';
+
+			
+
+				available['hu_HU'] = 'húngaro\x20\x28Hungría\x29';
+				direction['hu_HU'] = 'ltr';
+
+			
+
+				available['ja_JP'] = 'japonés\x20\x28Japón\x29';
+				direction['ja_JP'] = 'ltr';
+
+			
+
+				available['pt_BR'] = 'portugués\x20\x28Brasil\x29';
+				direction['pt_BR'] = 'ltr';
+
+			
+
+				available['es_ES'] = 'español\x20\x28España\x29';
+				direction['es_ES'] = 'ltr';
+
+			
+
+				available['sv_SE'] = 'sueco\x20\x28Suecia\x29';
+				direction['sv_SE'] = 'ltr';
+
+			
+
+			let _cache = {};
+
+			if (Liferay && Liferay.Language && Liferay.Language._cache) {
+				_cache = Liferay.Language._cache;
+			}
+
+			Liferay.Language = {
+				_cache,
+				available,
+				direction,
+				get: function(key) {
+					let value = Liferay.Language._cache[key];
+
+					if (value === undefined) {
+						value = key;
+					}
+
+					return value;
+				}
+			};
+		})();
+
+		var featureFlags = {"LPD-10964":false,"LPD-37927":false,"LPD-10889":false,"LPS-193884":false,"LPD-30371":false,"LPD-11131":true,"LPS-178642":false,"LPS-193005":false,"LPD-31789":false,"LPD-10562":false,"LPD-11212":false,"COMMERCE-8087":false,"LPD-39304":true,"LPD-13311":true,"LRAC-10757":false,"LPD-35941":false,"LPS-180090":false,"LPS-178052":false,"LPD-21414":false,"LPS-185892":false,"LPS-186620":false,"LPD-40533":true,"LPD-40534":true,"LPS-184404":false,"LPD-40530":true,"LPD-20640":false,"LPS-198183":false,"LPD-38869":false,"LPD-35678":false,"LPD-6378":false,"LPS-153714":false,"LPD-11848":false,"LPS-170670":false,"LPD-7822":false,"LPS-169981":false,"LPD-21926":false,"LPS-177027":false,"LPD-37531":false,"LPD-11003":false,"LPD-36446":false,"LPD-39437":false,"LPS-135430":false,"LPD-20556":false,"LPD-45276":false,"LPS-134060":false,"LPS-164563":false,"LPD-32050":false,"LPS-122920":false,"LPS-199086":false,"LPD-35128":false,"LPD-10588":false,"LPD-13778":true,"LPD-11313":false,"LPD-6368":false,"LPD-34594":false,"LPS-202104":false,"LPD-19955":false,"LPD-35443":false,"LPD-39967":false,"LPD-11235":false,"LPD-11232":false,"LPS-196935":true,"LPD-43542":false,"LPS-176691":false,"LPS-197909":false,"LPD-29516":false,"COMMERCE-8949":false,"LPD-11228":false,"LPS-153813":false,"LPD-17809":false,"COMMERCE-13024":false,"LPS-165482":false,"LPS-193551":false,"LPS-197477":false,"LPS-174816":false,"LPS-186360":false,"LPD-30204":false,"LPD-32867":false,"LPS-153332":false,"LPD-35013":true,"LPS-179669":false,"LPS-174417":false,"LPD-44091":true,"LPD-31212":false,"LPD-18221":false,"LPS-155284":false,"LRAC-15017":false,"LPD-19870":false,"LPS-200108":false,"LPD-20131":false,"LPS-159643":false,"LPS-129412":false,"LPS-169837":false,"LPD-20379":false};
+
+		Liferay.FeatureFlags = Object.keys(featureFlags).reduce(
+			(acc, key) => ({
+				...acc, [key]: featureFlags[key] === 'true' || featureFlags[key] === true
+			}), {}
+		);
+
+		Liferay.PortletKeys = {
+			DOCUMENT_LIBRARY: 'com_liferay_document_library_web_portlet_DLPortlet',
+			DYNAMIC_DATA_MAPPING: 'com_liferay_dynamic_data_mapping_web_portlet_DDMPortlet',
+			ITEM_SELECTOR: 'com_liferay_item_selector_web_portlet_ItemSelectorPortlet'
+		};
+
+		Liferay.PropsValues = {
+			JAVASCRIPT_SINGLE_PAGE_APPLICATION_TIMEOUT: 0,
+			UPLOAD_SERVLET_REQUEST_IMPL_MAX_SIZE: 1857600040
+		};
+
+		Liferay.ThemeDisplay = {
+
+			
+
+			
+				getLayoutId: function () {
+					return '96';
+				},
+
+				
+
+				getLayoutRelativeControlPanelURL: function () {
+					return '/es/group/red-v%C3%ADa-corta/~/control_panel/manage';
+				},
+
+				getLayoutRelativeURL: function () {
+					return '/es/facturacion';
+				},
+				getLayoutURL: function () {
+					return 'https://redviacorta.mx/es/facturacion';
+				},
+				getParentLayoutId: function () {
+					return '22';
+				},
+				isControlPanel: function () {
+					return false;
+				},
+				isPrivateLayout: function () {
+					return 'false';
+				},
+				isVirtualLayout: function () {
+					return false;
+				},
+			
+
+			getBCP47LanguageId: function () {
+				return 'es-ES';
+			},
+			getCanonicalURL: function () {
+
+				
+
+				return 'https\x3a\x2f\x2fredviacorta\x2emx\x2ffacturacion';
+			},
+			getCDNBaseURL: function () {
+				return 'https://redviacorta.mx';
+			},
+			getCDNDynamicResourcesHost: function () {
+				return '';
+			},
+			getCDNHost: function () {
+				return '';
+			},
+			getCompanyGroupId: function () {
+				return '20121';
+			},
+			getCompanyId: function () {
+				return '20096';
+			},
+			getDefaultLanguageId: function () {
+				return 'en_US';
+			},
+			getDoAsUserIdEncoded: function () {
+				return '';
+			},
+			getLanguageId: function () {
+				return 'es_ES';
+			},
+			getParentGroupId: function () {
+				return '59517';
+			},
+			getPathContext: function () {
+				return '';
+			},
+			getPathImage: function () {
+				return '/image';
+			},
+			getPathJavaScript: function () {
+				return '/o/frontend-js-web';
+			},
+			getPathMain: function () {
+				return '/es/c';
+			},
+			getPathThemeImages: function () {
+				return 'https://redviacorta.mx/o/rco-simple-layout-theme/images';
+			},
+			getPathThemeRoot: function () {
+				return '/o/rco-simple-layout-theme';
+			},
+			getPlid: function () {
+				return '185';
+			},
+			getPortalURL: function () {
+				return 'https://redviacorta.mx';
+			},
+			getRealUserId: function () {
+				return '20099';
+			},
+			getRemoteAddr: function () {
+				return '172.30.2.104';
+			},
+			getRemoteHost: function () {
+				return '172.30.2.104';
+			},
+			getScopeGroupId: function () {
+				return '59517';
+			},
+			getScopeGroupIdOrLiveGroupId: function () {
+				return '59517';
+			},
+			getSessionId: function () {
+				return '';
+			},
+			getSiteAdminURL: function () {
+				return 'https://redviacorta.mx/group/red-v%C3%ADa-corta/~/control_panel/manage?p_p_lifecycle=0&p_p_state=maximized&p_p_mode=view';
+			},
+			getSiteGroupId: function () {
+				return '59517';
+			},
+			getTimeZone: function() {
+				return 'UTC';
+			},
+			getURLControlPanel: function() {
+				return '/es/group/control_panel?refererPlid=185';
+			},
+			getURLHome: function () {
+				return 'https\x3a\x2f\x2fredviacorta\x2emx\x2fweb\x2fred-v\x25C3\x25ADa-corta';
+			},
+			getUserEmailAddress: function () {
+				return '';
+			},
+			getUserId: function () {
+				return '20099';
+			},
+			getUserName: function () {
+				return '';
+			},
+			isAddSessionIdToURL: function () {
+				return false;
+			},
+			isImpersonated: function () {
+				return false;
+			},
+			isSignedIn: function () {
+				return false;
+			},
+
+			isStagedPortlet: function () {
+				
+					
+						return false;
+					
+				
+			},
+
+			isStateExclusive: function () {
+				return false;
+			},
+			isStateMaximized: function () {
+				return false;
+			},
+			isStatePopUp: function () {
+				return false;
+			}
+		};
+
+		var themeDisplay = Liferay.ThemeDisplay;
+
+		Liferay.AUI = {
+
+			
+
+			getCombine: function () {
+				return true;
+			},
+			getComboPath: function () {
+				return '/combo/?browserId=chrome&minifierType=&languageId=es_ES&t=1748920919848&';
+			},
+			getDateFormat: function () {
+				return '%d/%m/%Y';
+			},
+			getEditorCKEditorPath: function () {
+				return '/o/frontend-editor-ckeditor-web';
+			},
+			getFilter: function () {
+				var filter = 'raw';
+
+				
+					
+						filter = 'min';
+					
+					
+
+				return filter;
+			},
+			getFilterConfig: function () {
+				var instance = this;
+
+				var filterConfig = null;
+
+				if (!instance.getCombine()) {
+					filterConfig = {
+						replaceStr: '.js' + instance.getStaticResourceURLParams(),
+						searchExp: '\\.js$'
+					};
+				}
+
+				return filterConfig;
+			},
+			getJavaScriptRootPath: function () {
+				return '/o/frontend-js-web';
+			},
+			getPortletRootPath: function () {
+				return '/html/portlet';
+			},
+			getStaticResourceURLParams: function () {
+				return '?browserId=chrome&minifierType=&languageId=es_ES&t=1748920919848';
+			}
+		};
+
+		Liferay.authToken = 'svT4TRG7';
+
+		
+
+		Liferay.currentURL = '\x2fes\x2ffacturacion';
+		Liferay.currentURLEncoded = '\x252Fes\x252Ffacturacion';
+	// ]]>
+</script>
+
+<script data-senna-track="temporary" type="text/javascript">window.__CONFIG__= {basePath: '',combine: true, defaultURLParams: null, explainResolutions: false, exposeGlobal: false, logLevel: 'warn', moduleType: 'module', namespace:'Liferay', nonce: '', reportMismatchedAnonymousModules: 'warn', resolvePath: '/o/js_resolve_modules', url: '/combo/?browserId=chrome&minifierType=js&languageId=es_ES&t=1748920919848&', waitTimeout: 60000};</script><script data-senna-track="permanent" src="/o/frontend-js-loader-modules-extender/loader.js?&mac=9WaMmhziBCkScHZwrrVcOR7VZF4=&browserId=chrome&languageId=es_ES&minifierType=js" type="text/javascript"></script><script data-senna-track="permanent" src="/combo?browserId=chrome&minifierType=js&languageId=es_ES&t=1748920919848&/o/frontend-js-aui-web/aui/aui/aui-min.js&/o/frontend-js-aui-web/liferay/modules.js&/o/frontend-js-aui-web/liferay/aui_sandbox.js&/o/frontend-js-aui-web/aui/attribute-base/attribute-base-min.js&/o/frontend-js-aui-web/aui/attribute-complex/attribute-complex-min.js&/o/frontend-js-aui-web/aui/attribute-core/attribute-core-min.js&/o/frontend-js-aui-web/aui/attribute-observable/attribute-observable-min.js&/o/frontend-js-aui-web/aui/attribute-extras/attribute-extras-min.js&/o/frontend-js-aui-web/aui/event-custom-base/event-custom-base-min.js&/o/frontend-js-aui-web/aui/event-custom-complex/event-custom-complex-min.js&/o/frontend-js-aui-web/aui/oop/oop-min.js&/o/frontend-js-aui-web/aui/aui-base-lang/aui-base-lang-min.js&/o/frontend-js-aui-web/liferay/dependency.js&/o/frontend-js-aui-web/liferay/util.js&/o/frontend-js-web/liferay/dom_task_runner.js&/o/frontend-js-web/liferay/events.js&/o/frontend-js-web/liferay/lazy_load.js&/o/frontend-js-web/liferay/liferay.js&/o/frontend-js-web/liferay/global.bundle.js&/o/frontend-js-web/liferay/portlet.js&/o/frontend-js-web/liferay/workflow.js&/o/oauth2-provider-web/js/liferay.js" type="text/javascript"></script>
+<script data-senna-track="temporary" type="text/javascript">window.Liferay = Liferay || {}; window.Liferay.OAuth2 = {getAuthorizeURL: function() {return 'https://redviacorta.mx/o/oauth2/authorize';}, getBuiltInRedirectURL: function() {return 'https://redviacorta.mx/o/oauth2/redirect';}, getIntrospectURL: function() { return 'https://redviacorta.mx/o/oauth2/introspect';}, getTokenURL: function() {return 'https://redviacorta.mx/o/oauth2/token';}, getUserAgentApplication: function(externalReferenceCode) {return Liferay.OAuth2._userAgentApplications[externalReferenceCode];}, _userAgentApplications: {}}</script><script data-senna-track="temporary" type="text/javascript">try {var MODULE_MAIN='dynamic-data-mapping-web@5.0.115/index';var MODULE_PATH='/o/dynamic-data-mapping-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	const LiferayAUI = Liferay.AUI;
+
+	AUI().applyConfig({
+		groups: {
+			ddm: {
+				base: MODULE_PATH + '/js/legacy/',
+				combine: Liferay.AUI.getCombine(),
+				filter: LiferayAUI.getFilterConfig(),
+				modules: {
+					'liferay-ddm-form': {
+						path: 'ddm_form.js',
+						requires: [
+							'aui-base',
+							'aui-datatable',
+							'aui-datatype',
+							'aui-image-viewer',
+							'aui-parse-content',
+							'aui-set',
+							'aui-sortable-list',
+							'json',
+							'liferay-form',
+							'liferay-map-base',
+							'liferay-translation-manager',
+							'liferay-util-window',
+						],
+					},
+					'liferay-portlet-dynamic-data-mapping': {
+						condition: {
+							trigger: 'liferay-document-library',
+						},
+						path: 'main.js',
+						requires: [
+							'arraysort',
+							'aui-form-builder-deprecated',
+							'aui-form-validator',
+							'aui-map',
+							'aui-text-unicode',
+							'json',
+							'liferay-menu',
+							'liferay-translation-manager',
+							'liferay-util-window',
+							'text',
+						],
+					},
+					'liferay-portlet-dynamic-data-mapping-custom-fields': {
+						condition: {
+							trigger: 'liferay-document-library',
+						},
+						path: 'custom_fields.js',
+						requires: ['liferay-portlet-dynamic-data-mapping'],
+					},
+				},
+				root: MODULE_PATH + '/js/legacy/',
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='frontend-editor-alloyeditor-web@5.0.56/index';var MODULE_PATH='/o/frontend-editor-alloyeditor-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			alloyeditor: {
+				base: MODULE_PATH + '/js/legacy/',
+				combine: Liferay.AUI.getCombine(),
+				filter: Liferay.AUI.getFilterConfig(),
+				modules: {
+					'liferay-alloy-editor': {
+						path: 'alloyeditor.js',
+						requires: [
+							'aui-component',
+							'liferay-portlet-base',
+							'timers',
+						],
+					},
+					'liferay-alloy-editor-source': {
+						path: 'alloyeditor_source.js',
+						requires: [
+							'aui-debounce',
+							'liferay-fullscreen-source-editor',
+							'liferay-source-editor',
+							'plugin',
+						],
+					},
+				},
+				root: MODULE_PATH + '/js/legacy/',
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='exportimport-web@5.0.100/index';var MODULE_PATH='/o/exportimport-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			exportimportweb: {
+				base: MODULE_PATH + '/js/legacy/',
+				combine: Liferay.AUI.getCombine(),
+				filter: Liferay.AUI.getFilterConfig(),
+				modules: {
+					'liferay-export-import-export-import': {
+						path: 'main.js',
+						requires: [
+							'aui-datatype',
+							'aui-dialog-iframe-deprecated',
+							'aui-modal',
+							'aui-parse-content',
+							'aui-toggler',
+							'liferay-portlet-base',
+							'liferay-util-window',
+						],
+					},
+				},
+				root: MODULE_PATH + '/js/legacy/',
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='staging-processes-web@5.0.65/index';var MODULE_PATH='/o/staging-processes-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			stagingprocessesweb: {
+				base: MODULE_PATH + '/js/legacy/',
+				combine: Liferay.AUI.getCombine(),
+				filter: Liferay.AUI.getFilterConfig(),
+				modules: {
+					'liferay-staging-processes-export-import': {
+						path: 'main.js',
+						requires: [
+							'aui-datatype',
+							'aui-dialog-iframe-deprecated',
+							'aui-modal',
+							'aui-parse-content',
+							'aui-toggler',
+							'liferay-portlet-base',
+							'liferay-util-window',
+						],
+					},
+				},
+				root: MODULE_PATH + '/js/legacy/',
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='@liferay/frontend-js-react-web@5.0.54/index';var MODULE_PATH='/o/frontend-js-react-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			react: {
+
+				// eslint-disable-next-line
+				mainModule: MODULE_MAIN,
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='@liferay/document-library-web@6.0.198/index';var MODULE_PATH='/o/document-library-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			dl: {
+				base: MODULE_PATH + '/js/legacy/',
+				combine: Liferay.AUI.getCombine(),
+				filter: Liferay.AUI.getFilterConfig(),
+				modules: {
+					'document-library-upload-component': {
+						path: 'DocumentLibraryUpload.js',
+						requires: [
+							'aui-component',
+							'aui-data-set-deprecated',
+							'aui-overlay-manager-deprecated',
+							'aui-overlay-mask-deprecated',
+							'aui-parse-content',
+							'aui-progressbar',
+							'aui-template-deprecated',
+							'liferay-search-container',
+							'querystring-parse-simple',
+							'uploader',
+						],
+					},
+				},
+				root: MODULE_PATH + '/js/legacy/',
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='portal-workflow-kaleo-designer-web@5.0.146/index';var MODULE_PATH='/o/portal-workflow-kaleo-designer-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			'kaleo-designer': {
+				base: MODULE_PATH + '/designer/js/legacy/',
+				combine: Liferay.AUI.getCombine(),
+				filter: Liferay.AUI.getFilterConfig(),
+				modules: {
+					'liferay-kaleo-designer-autocomplete-util': {
+						path: 'autocomplete_util.js',
+						requires: ['autocomplete', 'autocomplete-highlighters'],
+					},
+					'liferay-kaleo-designer-definition-diagram-controller': {
+						path: 'definition_diagram_controller.js',
+						requires: [
+							'liferay-kaleo-designer-field-normalizer',
+							'liferay-kaleo-designer-utils',
+						],
+					},
+					'liferay-kaleo-designer-dialogs': {
+						path: 'dialogs.js',
+						requires: ['liferay-util-window'],
+					},
+					'liferay-kaleo-designer-editors': {
+						path: 'editors.js',
+						requires: [
+							'aui-ace-editor',
+							'aui-ace-editor-mode-xml',
+							'aui-base',
+							'aui-datatype',
+							'aui-node',
+							'liferay-kaleo-designer-autocomplete-util',
+							'liferay-kaleo-designer-utils',
+						],
+					},
+					'liferay-kaleo-designer-field-normalizer': {
+						path: 'field_normalizer.js',
+						requires: ['liferay-kaleo-designer-remote-services'],
+					},
+					'liferay-kaleo-designer-nodes': {
+						path: 'nodes.js',
+						requires: [
+							'aui-datatable',
+							'aui-datatype',
+							'aui-diagram-builder',
+							'liferay-kaleo-designer-editors',
+							'liferay-kaleo-designer-utils',
+						],
+					},
+					'liferay-kaleo-designer-remote-services': {
+						path: 'remote_services.js',
+						requires: ['aui-io'],
+					},
+					'liferay-kaleo-designer-templates': {
+						path: 'templates.js',
+						requires: ['aui-tpl-snippets-deprecated'],
+					},
+					'liferay-kaleo-designer-utils': {
+						path: 'utils.js',
+						requires: [],
+					},
+					'liferay-kaleo-designer-xml-definition': {
+						path: 'xml_definition.js',
+						requires: [
+							'aui-base',
+							'aui-component',
+							'dataschema-xml',
+							'datatype-xml',
+						],
+					},
+					'liferay-kaleo-designer-xml-definition-serializer': {
+						path: 'xml_definition_serializer.js',
+						requires: ['escape', 'liferay-kaleo-designer-xml-util'],
+					},
+					'liferay-kaleo-designer-xml-util': {
+						path: 'xml_util.js',
+						requires: ['aui-base'],
+					},
+					'liferay-portlet-kaleo-designer': {
+						path: 'main.js',
+						requires: [
+							'aui-ace-editor',
+							'aui-ace-editor-mode-xml',
+							'aui-tpl-snippets-deprecated',
+							'dataschema-xml',
+							'datasource',
+							'datatype-xml',
+							'event-valuechange',
+							'io-form',
+							'liferay-kaleo-designer-autocomplete-util',
+							'liferay-kaleo-designer-editors',
+							'liferay-kaleo-designer-nodes',
+							'liferay-kaleo-designer-remote-services',
+							'liferay-kaleo-designer-utils',
+							'liferay-kaleo-designer-xml-util',
+							'liferay-util-window',
+						],
+					},
+				},
+				root: MODULE_PATH + '/designer/js/legacy/',
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='portal-search-web@6.0.148/index';var MODULE_PATH='/o/portal-search-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			search: {
+				base: MODULE_PATH + '/js/',
+				combine: Liferay.AUI.getCombine(),
+				filter: Liferay.AUI.getFilterConfig(),
+				modules: {
+					'liferay-search-custom-range-facet': {
+						path: 'custom_range_facet.js',
+						requires: ['aui-form-validator'],
+					},
+				},
+				root: MODULE_PATH + '/js/',
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='calendar-web@5.0.105/index';var MODULE_PATH='/o/calendar-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			calendar: {
+				base: MODULE_PATH + '/js/legacy/',
+				combine: Liferay.AUI.getCombine(),
+				filter: Liferay.AUI.getFilterConfig(),
+				modules: {
+					'liferay-calendar-a11y': {
+						path: 'calendar_a11y.js',
+						requires: ['calendar'],
+					},
+					'liferay-calendar-container': {
+						path: 'calendar_container.js',
+						requires: [
+							'aui-alert',
+							'aui-base',
+							'aui-component',
+							'liferay-portlet-base',
+						],
+					},
+					'liferay-calendar-date-picker-sanitizer': {
+						path: 'date_picker_sanitizer.js',
+						requires: ['aui-base'],
+					},
+					'liferay-calendar-interval-selector': {
+						path: 'interval_selector.js',
+						requires: ['aui-base', 'liferay-portlet-base'],
+					},
+					'liferay-calendar-interval-selector-scheduler-event-link': {
+						path: 'interval_selector_scheduler_event_link.js',
+						requires: ['aui-base', 'liferay-portlet-base'],
+					},
+					'liferay-calendar-list': {
+						path: 'calendar_list.js',
+						requires: [
+							'aui-template-deprecated',
+							'liferay-scheduler',
+						],
+					},
+					'liferay-calendar-message-util': {
+						path: 'message_util.js',
+						requires: ['liferay-util-window'],
+					},
+					'liferay-calendar-recurrence-converter': {
+						path: 'recurrence_converter.js',
+						requires: [],
+					},
+					'liferay-calendar-recurrence-dialog': {
+						path: 'recurrence.js',
+						requires: [
+							'aui-base',
+							'liferay-calendar-recurrence-util',
+						],
+					},
+					'liferay-calendar-recurrence-util': {
+						path: 'recurrence_util.js',
+						requires: ['aui-base', 'liferay-util-window'],
+					},
+					'liferay-calendar-reminders': {
+						path: 'calendar_reminders.js',
+						requires: ['aui-base'],
+					},
+					'liferay-calendar-remote-services': {
+						path: 'remote_services.js',
+						requires: [
+							'aui-base',
+							'aui-component',
+							'liferay-calendar-util',
+							'liferay-portlet-base',
+						],
+					},
+					'liferay-calendar-session-listener': {
+						path: 'session_listener.js',
+						requires: ['aui-base', 'liferay-scheduler'],
+					},
+					'liferay-calendar-simple-color-picker': {
+						path: 'simple_color_picker.js',
+						requires: ['aui-base', 'aui-template-deprecated'],
+					},
+					'liferay-calendar-simple-menu': {
+						path: 'simple_menu.js',
+						requires: [
+							'aui-base',
+							'aui-template-deprecated',
+							'event-outside',
+							'event-touch',
+							'widget-modality',
+							'widget-position',
+							'widget-position-align',
+							'widget-position-constrain',
+							'widget-stack',
+							'widget-stdmod',
+						],
+					},
+					'liferay-calendar-util': {
+						path: 'calendar_util.js',
+						requires: [
+							'aui-datatype',
+							'aui-io',
+							'aui-scheduler',
+							'aui-toolbar',
+							'autocomplete',
+							'autocomplete-highlighters',
+						],
+					},
+					'liferay-scheduler': {
+						path: 'scheduler.js',
+						requires: [
+							'async-queue',
+							'aui-datatype',
+							'aui-scheduler',
+							'dd-plugin',
+							'liferay-calendar-a11y',
+							'liferay-calendar-message-util',
+							'liferay-calendar-recurrence-converter',
+							'liferay-calendar-recurrence-util',
+							'liferay-calendar-util',
+							'liferay-scheduler-event-recorder',
+							'liferay-scheduler-models',
+							'promise',
+							'resize-plugin',
+						],
+					},
+					'liferay-scheduler-event-recorder': {
+						path: 'scheduler_event_recorder.js',
+						requires: [
+							'dd-plugin',
+							'liferay-calendar-util',
+							'resize-plugin',
+						],
+					},
+					'liferay-scheduler-models': {
+						path: 'scheduler_models.js',
+						requires: [
+							'aui-datatype',
+							'dd-plugin',
+							'liferay-calendar-util',
+						],
+					},
+				},
+				root: MODULE_PATH + '/js/legacy/',
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='@liferay/frontend-js-state-web@1.0.30/index';var MODULE_PATH='/o/frontend-js-state-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			state: {
+
+				// eslint-disable-next-line
+				mainModule: MODULE_MAIN,
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='contacts-web@5.0.65/index';var MODULE_PATH='/o/contacts-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			contactscenter: {
+				base: MODULE_PATH + '/js/legacy/',
+				combine: Liferay.AUI.getCombine(),
+				filter: Liferay.AUI.getFilterConfig(),
+				modules: {
+					'liferay-contacts-center': {
+						path: 'main.js',
+						requires: [
+							'aui-io-plugin-deprecated',
+							'aui-toolbar',
+							'autocomplete-base',
+							'datasource-io',
+							'json-parse',
+							'liferay-portlet-base',
+							'liferay-util-window',
+						],
+					},
+				},
+				root: MODULE_PATH + '/js/legacy/',
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}try {var MODULE_MAIN='frontend-js-components-web@2.0.80/index';var MODULE_PATH='/o/frontend-js-components-web';/**
+ * SPDX-FileCopyrightText: (c) 2000 Liferay, Inc. https://liferay.com
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR LicenseRef-Liferay-DXP-EULA-2.0.0-2023-06
+ */
+
+(function () {
+	AUI().applyConfig({
+		groups: {
+			components: {
+
+				// eslint-disable-next-line
+				mainModule: MODULE_MAIN,
+			},
+		},
+	});
+})();
+} catch(error) {console.error(error);}</script>
+
+
+
+
+<script type="text/javascript" data-senna-track="temporary">
+	// <![CDATA[
+		
+			
+				
+		
+
+		
+	// ]]>
+</script>
+
+
+
+
+
+	
+		
+
+			
+
+			
+		
+		
+
+
+
+	
+		
+
+			
+
+			
+		
+		
+
+
+
+	
+		
+
+			
+
+			
+		
+	
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<link class="lfr-css-file" data-senna-track="temporary" href="https://redviacorta.mx/o/rco-simple-layout-theme/css/main.css?browserId=chrome&amp;themeId=rcosimplelayout_WAR_rcosimplelayouttheme&amp;minifierType=css&amp;languageId=es_ES&amp;t=1785848456000" id="liferayThemeCSS" rel="stylesheet" type="text/css" />
+
+
+
+
+	<style data-senna-track="temporary" type="text/css">
+		@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+html, body, p, .p, span,
+.c-paragraph,
+.c-text,
+.portlet, div,
+.page-editor__content, h1, h2, h3, .element-text, banner-title, SectionSubtitle, .SectionSubtitle {
+  font-family: 'Bliss', sans-serif !important;
+}
+:root {
+  --rco-primary: #114071;
+}
+
+body, #wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* El contenido principal crece para llenar el espacio */
+#content {
+  flex: 1 0 auto;
+}
+
+/* El footer no crece, se queda abajo */
+footer, .portlet-boundary_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_ {
+  flex-shrink: 0;
+}
+
+
+.btn-rco {
+  display: inline-block;
+  padding: 14px 32px;
+  border-radius: 30px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  border: 2px solid var(--rco-primary);
+}
+.btn-rco.primary {
+  background-color: var(--rco-primary);
+  color: #ffffff;
+}
+.btn-rco.primary:hover {
+  background-color: white;
+  text-decoration: none;
+  color: #114071;
+}
+
+.rco-section-title {
+  color: var(--rco-primary);
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1;
+  margin: 0 0 16px 0;
+}
+.rco-section-subtitle {
+  color: black;
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1;
+  margin: 0 0 16px 0;
+}
+.rco-section-description {
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+  margin: 0;
+}
+
+
+.btn-rco-squared {
+  display: inline-block;
+  padding: 10px 30px;
+  max-width: 450px;
+  font-size: 18;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  color: white;
+  background-color: #114071;
+  border: 2px solid var(--rco-primary);
+}
+
+.btn-rco-squared:hover {
+  background-color: white;
+  text-decoration: none;
+  color: #114071;
+}
+
+.button-semi-squared {
+  display: inline-block;
+  padding: 10px 40px;
+  max-width: 450px;
+  font-size: 18;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  color: white;
+  background-color: #1C558F;
+  border-radius: 2px;
+}
+
+.rco-parallax {
+  min-height: 600px;
+  background-attachment: fixed;
+  background-position: center;
+  background-size: cover;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.rco-parallax-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0,0,0,0.36);
+}
+.rco-parallax-content {
+  position: relative;
+  z-index: 1;
+  max-width: 600px;
+  padding: 80px 40px;
+}
+.rco-parallax-content h1 {
+  color: #fff;
+  font-size: 48px;
+  font-weight: 700;
+  margin: 0 0 24px 0;
+}
+.rco-parallax-content p {
+  color: rgba(255,255,255,0.95);
+  font-size: 18px;
+  line-height: 1.6;
+  margin: 0 0 32px 0;
+}
+
+ .portlet-content{
+       background-color: transparent;
+    }
+	</style>
+
+
+
+
+
+	<style data-senna-track="temporary" type="text/css">
+
+		
+
+			
+
+		
+
+			
+
+		
+
+			
+
+		
+
+			
+
+		
+
+			
+
+		
+
+			
+
+		
+
+			
+
+		
+
+			
+
+		
+
+	</style>
+
+
+<style data-senna-track="temporary" type="text/css">
+	:root {
+		--container-max-sm: 540px;
+		--h4-font-size: 1rem;
+		--font-weight-bold: 700;
+		--rounded-pill: 50rem;
+		--display4-weight: 300;
+		--danger: #da1414;
+		--display2-size: 5.5rem;
+		--body-bg: #fff;
+		--display2-weight: 300;
+		--display1-weight: 300;
+		--display3-weight: 300;
+		--box-shadow-sm: 0 .125rem .25rem rgba(0, 0, 0, .075);
+		--font-weight-lighter: lighter;
+		--h3-font-size: 1.1875rem;
+		--btn-outline-primary-hover-border-color: #0b5fff;
+		--transition-collapse: height .35s ease;
+		--blockquote-small-color: #6b6c7e;
+		--gray-200: #f1f2f5;
+		--btn-secondary-hover-background-color: #f7f8f9;
+		--gray-600: #6b6c7e;
+		--secondary: #6b6c7e;
+		--btn-outline-primary-color: #0b5fff;
+		--btn-link-hover-color: #004ad7;
+		--hr-border-color: rgba(0, 0, 0, .1);
+		--hr-border-margin-y: 1rem;
+		--light: #f1f2f5;
+		--btn-outline-primary-hover-color: #0b5fff;
+		--btn-secondary-background-color: #fff;
+		--btn-outline-secondary-hover-border-color: transparent;
+		--display3-size: 4.5rem;
+		--primary: #0b5fff;
+		--container-max-md: 720px;
+		--border-radius-sm: 0.1875rem;
+		--display-line-height: 1.2;
+		--h6-font-size: 0.8125rem;
+		--h2-font-size: 1.375rem;
+		--aspect-ratio-4-to-3: 75%;
+		--spacer-10: 10rem;
+		--font-weight-semi-bold: 600;
+		--font-weight-normal: 400;
+		--dark: #272833;
+		--blockquote-small-font-size: 80%;
+		--h5-font-size: 0.875rem;
+		--blockquote-font-size: 1.25rem;
+		--brand-color-3: #2e5aac;
+		--brand-color-2: #6b6c7e;
+		--brand-color-1: #0b5fff;
+		--transition-fade: opacity .15s linear;
+		--display4-size: 3.5rem;
+		--border-radius-lg: 0.375rem;
+		--btn-primary-hover-color: #fff;
+		--display1-size: 6rem;
+		--brand-color-4: #30313f;
+		--black: #000;
+		--lighter: #f7f8f9;
+		--gray-300: #e7e7ed;
+		--gray-700: #495057;
+		--btn-secondary-border-color: #cdced9;
+		--btn-outline-secondary-hover-color: #272833;
+		--body-color: #1c1c24;
+		--btn-outline-secondary-hover-background-color: rgba(39, 40, 51, 0.03);
+		--btn-primary-color: #fff;
+		--btn-secondary-color: #6b6c7e;
+		--btn-secondary-hover-border-color: #cdced9;
+		--box-shadow-lg: 0 1rem 3rem rgba(0, 0, 0, .175);
+		--container-max-lg: 960px;
+		--btn-outline-primary-border-color: #0b5fff;
+		--aspect-ratio: 100%;
+		--gray-dark: #393a4a;
+		--aspect-ratio-16-to-9: 56.25%;
+		--box-shadow: 0 .5rem 1rem rgba(0, 0, 0, .15);
+		--white: #fff;
+		--warning: #b95000;
+		--info: #2e5aac;
+		--hr-border-width: 1px;
+		--btn-link-color: #0b5fff;
+		--gray-400: #cdced9;
+		--gray-800: #393a4a;
+		--btn-outline-primary-hover-background-color: #f0f5ff;
+		--btn-primary-hover-background-color: #0053f0;
+		--btn-primary-background-color: #0b5fff;
+		--success: #287d3c;
+		--font-size-sm: 0.875rem;
+		--btn-primary-border-color: #0b5fff;
+		--font-family-base: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+		--spacer-0: 0;
+		--font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+		--lead-font-size: 1.25rem;
+		--border-radius: 0.25rem;
+		--spacer-9: 9rem;
+		--font-weight-light: 300;
+		--btn-secondary-hover-color: #272833;
+		--spacer-2: 0.5rem;
+		--spacer-1: 0.25rem;
+		--spacer-4: 1.5rem;
+		--spacer-3: 1rem;
+		--spacer-6: 4.5rem;
+		--spacer-5: 3rem;
+		--spacer-8: 7.5rem;
+		--border-radius-circle: 50%;
+		--spacer-7: 6rem;
+		--font-size-lg: 1.125rem;
+		--aspect-ratio-8-to-3: 37.5%;
+		--font-family-sans-serif: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+		--gray-100: #f7f8f9;
+		--font-weight-bolder: 900;
+		--container-max-xl: 1248px;
+		--btn-outline-secondary-color: #6b6c7e;
+		--gray-500: #a7a9bc;
+		--h1-font-size: 1.625rem;
+		--gray-900: #272833;
+		--text-muted: #a7a9bc;
+		--btn-primary-hover-border-color: transparent;
+		--btn-outline-secondary-border-color: #cdced9;
+		--lead-font-weight: 300;
+		--font-size-base: 0.875rem;
+	}
+</style>
+<link data-senna-track="permanent" href="/o/frontend-js-aui-web/alloy_ui.css?&mac=favIEq7hPo8AEd6k+N5OVADEEls=&browserId=chrome&languageId=es_ES&minifierType=css&themeId=rcosimplelayout_WAR_rcosimplelayouttheme" rel="stylesheet"></link>
+<link data-senna-track="temporary" href="/o/layout-common-styles/main.css?plid=185&segmentsExperienceId=479977&t=17809757571041785781064048" rel="stylesheet" type="text/css">
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" data-senna-track="temporary">
+	if (window.Analytics) {
+		window._com_liferay_document_library_analytics_isViewFileEntry = false;
+	}
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript">
+Liferay.on(
+	'ddmFieldBlur', function(event) {
+		if (window.Analytics) {
+			Analytics.send(
+				'fieldBlurred',
+				'Form',
+				{
+					fieldName: event.fieldName,
+					focusDuration: event.focusDuration,
+					formId: event.formId,
+					formPageTitle: event.formPageTitle,
+					page: event.page,
+					title: event.title
+				}
+			);
+		}
+	}
+);
+
+Liferay.on(
+	'ddmFieldFocus', function(event) {
+		if (window.Analytics) {
+			Analytics.send(
+				'fieldFocused',
+				'Form',
+				{
+					fieldName: event.fieldName,
+					formId: event.formId,
+					formPageTitle: event.formPageTitle,
+					page: event.page,
+					title:event.title
+				}
+			);
+		}
+	}
+);
+
+Liferay.on(
+	'ddmFormPageShow', function(event) {
+		if (window.Analytics) {
+			Analytics.send(
+				'pageViewed',
+				'Form',
+				{
+					formId: event.formId,
+					formPageTitle: event.formPageTitle,
+					page: event.page,
+					title: event.title
+				}
+			);
+		}
+	}
+);
+
+Liferay.on(
+	'ddmFormSubmit', function(event) {
+		if (window.Analytics) {
+			Analytics.send(
+				'formSubmitted',
+				'Form',
+				{
+					formId: event.formId,
+					title: event.title
+				}
+			);
+		}
+	}
+);
+
+Liferay.on(
+	'ddmFormView', function(event) {
+		if (window.Analytics) {
+			Analytics.send(
+				'formViewed',
+				'Form',
+				{
+					formId: event.formId,
+					title: event.title
+				}
+			);
+		}
+	}
+);
+
+</script><script>
+
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</head>
+
+<body class="chrome controls-visible  yui3-skin-sam signed-out public-page site">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	<nav aria-label="Enlaces rápidos" class="bg-dark cadmin quick-access-nav text-center text-white" id="excn_quickAccessNav">
+		
+			
+				<a class="d-block p-2 sr-only sr-only-focusable text-reset" href="#main-content">
+		Saltar al contenido principal
+	</a>
+			
+			
+	</nav>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="position-relative" id="wrapper">
+     <!--
+	<header id="banner" role="banner">
+		<div id="heading" style="display: none;">
+			<div aria-level="1" class="site-title" role="heading">
+				<a class="logo default-logo" href="https://redviacorta.mx/es" title="Ir a Red Vía Corta">
+					<img alt="" height="136" src="/image/layout_set_logo?img_id=477202&amp;t=1785848449852" width="340" />
+
+					<span class="site-name" title="Ir a Red Vía Corta">
+						Red Vía Corta
+					</span>
+			</div>
+		</div>
+        
+<div class="top-navigation-menu">
+    <a class="logo default-logo" href="https://redviacorta.mx/es" title="Ir a Red Vía Corta">
+       <img class="img-parent" src="https://02rcopaginaweb.s3.amazonaws.com/static/logo/logo_blanco.png" alt="Logo de RCO"/>
+    </a>
+    <nav aria-label="Páginas del sitio web" class="sort-pages modify-pages" id="navigation" role="navigation">
+        <label for="drop" class="toggle">
+<svg class="lexicon-icon lexicon-icon-bars" role="presentation" ><use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#bars" /></svg>        </label>
+        <input type="checkbox" id="drop">
+        <ul role="menubar" class="nav-list">
+            
+                <li class=" dropdown nav-item" id="layout_3" role="presentation">
+                    <a  class="dropdown-toggle" href="https://redviacorta.mx/es/empresa"  role="menuitem">
+                        <span>
+                             Nosotros
+                        </span>
+                    </a>
+                        <label for="drop-0" class="itoggle">
+                            <div>
+                                <span>
+                                    Nosotros
+                                </span>
+<svg class="lexicon-icon lexicon-icon-angle-down" role="presentation" ><use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" /></svg>                            </div>
+                        </label>
+                        <input type="checkbox" id="drop-0">
+                        
+                        <ul class="child-menu dropdown-menu" role="menu">
+                                <li class="" id="layout_6" role="presentation">
+                                    <a href="https://redviacorta.mx/es/nosotros"  role="menuitem">¿Quiénes Somos?</a>
+                                </li>
+                                <li class="" id="layout_8" role="presentation">
+                                    <a href="https://redviacorta.mx/es/historia"  role="menuitem">Historia</a>
+                                </li>
+                                <li class="" id="layout_162" role="presentation">
+                                    <a href="https://redviacorta.mx/es/cultura-somos-rco"  role="menuitem">Cultura: Somos RCO</a>
+                                </li>
+                                <li class="" id="layout_4" role="presentation">
+                                    <a href="https://redviacorta.mx/es/trabaja-con-nosotros"  role="menuitem">Trabaja con nosotros</a>
+                                </li>
+                        </ul>
+                </li>
+                <li class="selected dropdown nav-item" id="layout_22" role="presentation">
+                    <a aria-haspopup='true' class="dropdown-toggle" href="https://redviacorta.mx/es/servicios"  role="menuitem">
+                        <span>
+                             Servicios
+                        </span>
+                    </a>
+                        <label for="drop-1" class="itoggle">
+                            <div>
+                                <span>
+                                    Servicios
+                                </span>
+<svg class="lexicon-icon lexicon-icon-angle-down" role="presentation" ><use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" /></svg>                            </div>
+                        </label>
+                        <input type="checkbox" id="drop-1">
+                        
+                        <ul class="child-menu dropdown-menu" role="menu">
+                                <li class="selected" id="layout_96" role="presentation">
+                                    <a href="https://redviacorta.mx/es/facturacion"  role="menuitem">Facturación</a>
+                                </li>
+                                <li class="" id="layout_168" role="presentation">
+                                    <a href="https://redviacorta.mx/es/establecimientos1"  role="menuitem">Establecimientos</a>
+                                </li>
+                                <li class="" id="layout_170" role="presentation">
+                                    <a href="https://redviacorta.mx/es/electrolineras"  role="menuitem">Electrolineras</a>
+                                </li>
+                                <li class="" id="layout_172" role="presentation">
+                                    <a href="https://redviacorta.mx/es/programas-residentes-y-vecinos"  role="menuitem">Programas Residentes y Vecinos</a>
+                                </li>
+                        </ul>
+                </li>
+                <li class=" dropdown nav-item" id="layout_161" role="presentation">
+                    <a  class="dropdown-toggle" href="https://redviacorta.mx/es/nuestra-red"  role="menuitem">
+                        <span>
+                             Nuestra Red
+                        </span>
+                    </a>
+                        <label for="drop-2" class="itoggle">
+                            <div>
+                                <span>
+                                    Nuestra Red
+                                </span>
+<svg class="lexicon-icon lexicon-icon-angle-down" role="presentation" ><use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" /></svg>                            </div>
+                        </label>
+                        <input type="checkbox" id="drop-2">
+                        
+                        <ul class="child-menu dropdown-menu" role="menu">
+                                <li class="" id="layout_174" role="presentation">
+                                    <a href="https://redviacorta.mx/es/farac"  role="menuitem">FARAC</a>
+                                </li>
+                                <li class="" id="layout_176" role="presentation">
+                                    <a href="https://redviacorta.mx/es/autovim"  role="menuitem">AUTOVIM</a>
+                                </li>
+                                <li class="" id="layout_178" role="presentation">
+                                    <a href="https://redviacorta.mx/es/cotesa"  role="menuitem">COTESA</a>
+                                </li>
+                        </ul>
+                </li>
+                <li class=" dropdown nav-item" id="layout_138" role="presentation">
+                    <a  class="dropdown-toggle" href="https://redviacorta.mx/es/viaja-seguro"  role="menuitem">
+                        <span>
+                             Viaja Seguro
+                        </span>
+                    </a>
+                        <label for="drop-3" class="itoggle">
+                            <div>
+                                <span>
+                                    Viaja Seguro
+                                </span>
+<svg class="lexicon-icon lexicon-icon-angle-down" role="presentation" ><use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" /></svg>                            </div>
+                        </label>
+                        <input type="checkbox" id="drop-3">
+                        
+                        <ul class="child-menu dropdown-menu" role="menu">
+                                <li class="" id="layout_141" role="presentation">
+                                    <a href="https://redviacorta.mx/es/seguro-de-autopista1"  role="menuitem">Seguro de autopista</a>
+                                </li>
+                                <li class="" id="layout_143" role="presentation">
+                                    <a href="https://redviacorta.mx/es/angeles-v%C3%ADa-corta-asistencia-vial"  role="menuitem">Angeles Vía Corta: Auxilio Vial</a>
+                                </li>
+                                <li class="" id="layout_145" role="presentation">
+                                    <a href="https://redviacorta.mx/es/consejos-de-seguridad"  role="menuitem">Consejos de Seguridad</a>
+                                </li>
+                        </ul>
+                </li>
+                <li class=" dropdown nav-item" id="layout_139" role="presentation">
+                    <a  class="dropdown-toggle" href="https://redviacorta.mx/es/sostenibilidad"  role="menuitem">
+                        <span>
+                             Sostenibilidad
+                        </span>
+                    </a>
+                        <label for="drop-4" class="itoggle">
+                            <div>
+                                <span>
+                                    Sostenibilidad
+                                </span>
+<svg class="lexicon-icon lexicon-icon-angle-down" role="presentation" ><use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" /></svg>                            </div>
+                        </label>
+                        <input type="checkbox" id="drop-4">
+                        
+                        <ul class="child-menu dropdown-menu" role="menu">
+                                <li class="" id="layout_147" role="presentation">
+                                    <a href="https://redviacorta.mx/es/estrategia"  role="menuitem">Estrategia</a>
+                                </li>
+                                <li class="" id="layout_149" role="presentation">
+                                    <a href="https://redviacorta.mx/es/descarbonizacion"  role="menuitem">Ecoeficiencia-Descarbonización</a>
+                                </li>
+                                <li class="" id="layout_151" role="presentation">
+                                    <a href="https://redviacorta.mx/es/seguridad-vial"  role="menuitem">Seguridad y Calidad</a>
+                                </li>
+                                <li class="" id="layout_153" role="presentation">
+                                    <a href="https://redviacorta.mx/es/cultura-corporativa"  role="menuitem">Cultura corporativa</a>
+                                </li>
+                        </ul>
+                </li>
+                <li class=" dropdown nav-item" id="layout_140" role="presentation">
+                    <a  class="dropdown-toggle" href="https://redviacorta.mx/es/integridad-corporativa"  role="menuitem">
+                        <span>
+                             Integridad Corporativa
+                        </span>
+                    </a>
+                        <label for="drop-5" class="itoggle">
+                            <div>
+                                <span>
+                                    Integridad Corporativa
+                                </span>
+<svg class="lexicon-icon lexicon-icon-angle-down" role="presentation" ><use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" /></svg>                            </div>
+                        </label>
+                        <input type="checkbox" id="drop-5">
+                        
+                        <ul class="child-menu dropdown-menu" role="menu">
+                                <li class="" id="layout_155" role="presentation">
+                                    <a href="https://redviacorta.mx/es/buz%C3%B3n-de-%C3%A9tica"  role="menuitem">Buzón de Ética</a>
+                                </li>
+                                <li class="" id="layout_157" role="presentation">
+                                    <a href="https://redviacorta.mx/es/pol%C3%ADtica-antisoborno"  role="menuitem">Política antisoborno</a>
+                                </li>
+                                <li class="" id="layout_159" role="presentation">
+                                    <a href="https://redviacorta.mx/es/pol%C3%ADticas"  role="menuitem">Políticas</a>
+                                </li>
+                        </ul>
+                </li>
+                <li class=" dropdown nav-item" id="layout_180" role="presentation">
+                    <a  class="dropdown-toggle" href="https://redviacorta.mx/es/inversionistas1"  role="menuitem">
+                        <span>
+                             Inversionistas
+                        </span>
+                    </a>
+                        <label for="drop-6" class="itoggle">
+                            <div>
+                                <span>
+                                    Inversionistas
+                                </span>
+<svg class="lexicon-icon lexicon-icon-angle-down" role="presentation" ><use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" /></svg>                            </div>
+                        </label>
+                        <input type="checkbox" id="drop-6">
+                        
+                        <ul class="child-menu dropdown-menu" role="menu">
+                                <li class="" id="layout_73" role="presentation">
+                                    <a href="https://redviacorta.mx/es/eventos-relevantes"  role="menuitem">Eventos relevantes</a>
+                                </li>
+                                <li class="" id="layout_196" role="presentation">
+                                    <a href="https://redviacorta.mx/es/reportes"  role="menuitem">Reportes</a>
+                                </li>
+                        </ul>
+                </li>
+                <li class=" dropdown nav-item" id="layout_181" role="presentation">
+                    <a  class="dropdown-toggle" href="https://redviacorta.mx/es/servicio-al-cliente"  role="menuitem">
+                        <span>
+                             Servicio al cliente
+                        </span>
+                    </a>
+                        <label for="drop-7" class="itoggle">
+                            <div>
+                                <span>
+                                    Servicio al cliente
+                                </span>
+<svg class="lexicon-icon lexicon-icon-angle-down" role="presentation" ><use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" /></svg>                            </div>
+                        </label>
+                        <input type="checkbox" id="drop-7">
+                        
+                        <ul class="child-menu dropdown-menu" role="menu">
+                                <li class="" id="layout_45" role="presentation">
+                                    <a href="https://redviacorta.mx/es/contacto"  role="menuitem">Contacto</a>
+                                </li>
+                                <li class="" id="layout_198" role="presentation">
+                                    <a href="https://redviacorta.mx/es/centro-de-ayuda"  role="menuitem">Centro de ayuda</a>
+                                </li>
+                                <li class="" id="layout_200" role="presentation">
+                                    <a href="https://redviacorta.mx/es/servicio-al-cliente1"  role="menuitem">Servicio al cliente</a>
+                                </li>
+                        </ul>
+                </li>
+                <li class="  nav-item" id="layout_204" role="presentation">
+                    <a  class="" href="https://redviacorta.mx/es/inversionistas-page"  role="menuitem">
+                        <span>
+                             Inversionistas Page
+                        </span>
+                    </a>
+                </li>
+            <li class="nav-item" style="align-items:center;">
+
+				<div class="portlet-boundary portlet-boundary_com_liferay_product_navigation_user_personal_bar_web_portlet_ProductNavigationUserPersonalBarPortlet_  portlet-static portlet-static-end portlet-borderless portlet-user-personal-bar " id="p_p_id_com_liferay_product_navigation_user_personal_bar_web_portlet_ProductNavigationUserPersonalBarPortlet_">
+					<span id="p_com_liferay_product_navigation_user_personal_bar_web_portlet_ProductNavigationUserPersonalBarPortlet"></span>
+					<span class="sign-in text-default" role="presentation">
+						<a href="/es/web/red-vía-corta/iniciosesion" class="sign-in text-default" id="_com_liferay_product_navigation_user_personal_bar_web_portlet_ProductNavigationUserPersonalBarPortlet_qfkd____" data-redirect="false">
+						<svg class="lexicon-icon lexicon-icon-user" focusable="false" role="presentation" viewBox="0 0 512 512">
+							<circle class="lexicon-icon-outline user-head" cx="256" cy="126.1" r="96"></circle>
+							<path class="lexicon-icon-outline user-body" d="M448,398.1c0,112-384,112-384,0C64,200.1,448,202.1,448,398.1z"></path>
+						</svg>
+						<span class="taglib-icon-label">Acceder</span></a>
+					</span>
+				</div>
+			</li>
+        </ul>
+    </nav>
+</div>	</header>
+    -->
+	<section id="content">
+		<h2 class="hide-accessible sr-only" role="heading" aria-level="1">Facturación - Red Vía Corta</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+	
+	
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+	
+
+	<div class="lfr-layout-structure-item-cc8c2409-609d-5475-b70d-623a72327b14 lfr-layout-structure-item-container ">
+ <div class="lfr-layout-structure-item-navbar lfr-layout-structure-item-e5de16e2-1fb0-6a84-5f80-66345dc3f764 no_header">
+  <div id="fragment-60b8e67a-072d-0fdd-239f-7f9b30416f43">
+   <header class="rco-header text-white">
+    <div class="rco-header-logo"><a href="/">
+      <picture data-fileentryid="472265">
+       <source media="(max-width:138px)" srcset="/o/adaptive-media/image/472265/high/RcoLogo.png?t=1770355245910">
+       <source media="(max-width:138px) and (min-width:138px)" srcset="/o/adaptive-media/image/472265/Preview-1000x0/RcoLogo.png?t=1770355245910">
+       <source media="(max-width:138px) and (min-width:138px)" srcset="/o/adaptive-media/image/472265/Thumbnail-300x300/RcoLogo.png?t=1770355245910">
+       <img class="logo-light" data-lfr-editable-id="logo-light" data-lfr-editable-type="image" src="/documents/59517/472028/RcoLogo.png/a28035b3-8f7f-eccb-750f-706430713e5f?version=1.0&amp;t=1770355245910" alt="Logo" data-fileentryid="472265">
+      </picture>
+      <picture data-fileentryid="473368">
+       <source media="(max-width:142px)" srcset="/o/adaptive-media/image/473368/high/RCODark.png?t=1772487706134">
+       <source media="(max-width:142px) and (min-width:142px)" srcset="/o/adaptive-media/image/473368/Preview-1000x0/RCODark.png?t=1772487706134">
+       <source media="(max-width:142px) and (min-width:142px)" srcset="/o/adaptive-media/image/473368/Thumbnail-300x300/RCODark.png?t=1772487706134">
+       <img class="logo-dark" data-lfr-editable-id="logo-dark" data-lfr-editable-type="image" src="/documents/59517/472028/RCODark.png/d07e89b7-1bf0-b589-4055-9218a7b72ae9?version=1.0&amp;t=1772487706134" alt="Logo" data-fileentryid="473368">
+      </picture> </a>
+    </div>
+    <div class="rco-header-nav">
+     <div class="rco-header-topbar"><a href="/web/red-vía-corta/trabaja-con-nosotros" data-lfr-editable-id="toplink-1" data-lfr-editable-type="link">Talento</a> <a href="/web/red-vía-corta/noticias" data-lfr-editable-id="toplink-2" data-lfr-editable-type="link">Noticias y Medios</a> <a href="/web/red-vía-corta/proveedores1" data-lfr-editable-id="toplink-3" data-lfr-editable-type="link">Proveedores</a> <a href="/web/red-vía-corta/alianzas" data-lfr-editable-id="toplink-4" data-lfr-editable-type="link">Alianzas</a>
+     </div>
+     <hr class="rco-header-divider">
+     <div class="rco-header-desktop">
+      <div class="portlet">
+       <div class="portlet-boundary portlet-boundary_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_  portlet-static portlet-static-end portlet-decorate portlet-navigation " id="p_p_id_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_"><span id="p_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop"></span>
+        <section class="portlet" id="portlet_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop">
+         <div class="portlet-content">
+          <div class="autofit-float autofit-row portlet-header">
+           <div class="autofit-col autofit-col-expand">
+            <h2 class="portlet-title-text">Visualización del menú</h2>
+           </div>
+           <div class="autofit-col autofit-col-end">
+            <div class="autofit-section">
+            </div>
+           </div>
+          </div>
+          <div class=" portlet-content-container">
+           <div class="portlet-body">
+            <div id="navbar_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop">
+             <ul aria-label="Páginas del sitio web" class="navbar-blank navbar-nav navbar-site" role="menubar">
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_3" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" href="https://redviacorta.mx/es/empresa" role="menuitem"> <span class="text-truncate"> Nosotros <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_6" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/nosotros" role="menuitem">¿Quiénes Somos?</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_8" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/historia" role="menuitem">Historia</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_162" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/cultura-somos-rco" role="menuitem">Cultura: Somos RCO</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_4" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/trabaja-con-nosotros" role="menuitem">Trabaja con nosotros</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_22" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Servicios <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="active selected" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_96" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/facturacion" role="menuitem">Facturación</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_168" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/establecimientos1" role="menuitem">Establecimientos</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_170" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/electrolineras" role="menuitem">Electrolineras</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_172" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/programas-residentes-y-vecinos" role="menuitem">Programas Residentes y Vecinos</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_161" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Nuestra Red <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_174" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/farac" role="menuitem">FARAC</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_176" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/autovim" role="menuitem">AUTOVIM</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_178" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/cotesa" role="menuitem">COTESA</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_138" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Viaja Seguro <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_141" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/seguro-de-autopista1" role="menuitem">Seguro de autopista</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_143" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/angeles-v%C3%ADa-corta-asistencia-vial" role="menuitem">Angeles Vía Corta: Auxilio Vial</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_145" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/consejos-de-seguridad" role="menuitem">Consejos de Seguridad</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_139" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Sostenibilidad <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_147" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/estrategia" role="menuitem">Estrategia</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_149" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/descarbonizacion" role="menuitem">Ecoeficiencia-Descarbonización</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_151" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/seguridad-vial" role="menuitem">Seguridad y Calidad</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_153" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/cultura-corporativa" role="menuitem">Cultura corporativa</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_140" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Integridad Corporativa <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_155" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/buz%C3%B3n-de-%C3%A9tica" role="menuitem">Buzón de Ética</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_157" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/pol%C3%ADtica-antisoborno" role="menuitem">Política antisoborno</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_159" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/pol%C3%ADticas" role="menuitem">Políticas</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_180" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Inversionistas <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_73" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/eventos-relevantes" role="menuitem">Eventos relevantes</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_196" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/reportes" role="menuitem">Reportes</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_181" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Servicio al cliente <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_45" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/contacto" role="menuitem">Contacto</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_198" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/centro-de-ayuda" role="menuitem">Centro de ayuda</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_200" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/servicio-al-cliente1" role="menuitem">Servicio al cliente</a></li>
+               </ul></li>
+             </ul>
+            </div>
+            <script>
+AUI().use(
+  'liferay-navigation-interaction',
+function(A) {
+(function() {
+var $ = AUI.$;var _ = AUI._;		var navigation = A.one('#navbar_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop');
+
+		Liferay.Data.NAV_INTERACTION_LIST_SELECTOR = '.navbar-site';
+		Liferay.Data.NAV_LIST_SELECTOR = '.navbar-site';
+
+		if (navigation) {
+			navigation.plug(Liferay.NavigationInteraction);
+		}
+})();
+});
+
+</script>
+           </div>
+          </div>
+         </div>
+        </section>
+       </div>
+      </div>
+     </div>
+    </div> <a href="/web/red-v%C3%ADa-corta/iniciosesion" class="rco-header-cta"> Acceder </a> <button class="rco-menu-toggle" aria-label="Abrir menú"> <span></span> <span></span> <span></span> </button>
+    <div class="rco-mobile-menu">
+     <div class="rco-mobile-menu-content">
+      <div class="portlet">
+       <div class="portlet-boundary portlet-boundary_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_  portlet-static portlet-static-end portlet-decorate portlet-navigation " id="p_p_id_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_"><span id="p_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile"></span>
+        <section class="portlet" id="portlet_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile">
+         <div class="portlet-content">
+          <div class="autofit-float autofit-row portlet-header">
+           <div class="autofit-col autofit-col-expand">
+            <h2 class="portlet-title-text">Visualización del menú</h2>
+           </div>
+           <div class="autofit-col autofit-col-end">
+            <div class="autofit-section">
+            </div>
+           </div>
+          </div>
+          <div class=" portlet-content-container">
+           <div class="portlet-body">
+            <div id="navbar_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile">
+             <ul aria-label="Páginas del sitio web" class="navbar-blank navbar-nav navbar-site" role="menubar">
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_3" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" href="https://redviacorta.mx/es/empresa" role="menuitem"> <span class="text-truncate"> Nosotros <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_6" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/nosotros" role="menuitem">¿Quiénes Somos?</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_8" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/historia" role="menuitem">Historia</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_162" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/cultura-somos-rco" role="menuitem">Cultura: Somos RCO</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_4" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/trabaja-con-nosotros" role="menuitem">Trabaja con nosotros</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_22" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Servicios <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="active selected" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_96" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/facturacion" role="menuitem">Facturación</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_168" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/establecimientos1" role="menuitem">Establecimientos</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_170" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/electrolineras" role="menuitem">Electrolineras</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_172" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/programas-residentes-y-vecinos" role="menuitem">Programas Residentes y Vecinos</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_161" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Nuestra Red <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_174" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/farac" role="menuitem">FARAC</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_176" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/autovim" role="menuitem">AUTOVIM</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_178" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/cotesa" role="menuitem">COTESA</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_138" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Viaja Seguro <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_141" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/seguro-de-autopista1" role="menuitem">Seguro de autopista</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_143" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/angeles-v%C3%ADa-corta-asistencia-vial" role="menuitem">Angeles Vía Corta: Auxilio Vial</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_145" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/consejos-de-seguridad" role="menuitem">Consejos de Seguridad</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_139" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Sostenibilidad <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_147" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/estrategia" role="menuitem">Estrategia</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_149" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/descarbonizacion" role="menuitem">Ecoeficiencia-Descarbonización</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_151" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/seguridad-vial" role="menuitem">Seguridad y Calidad</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_153" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/cultura-corporativa" role="menuitem">Cultura corporativa</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_140" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Integridad Corporativa <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_155" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/buz%C3%B3n-de-%C3%A9tica" role="menuitem">Buzón de Ética</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_157" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/pol%C3%ADtica-antisoborno" role="menuitem">Política antisoborno</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_159" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/pol%C3%ADticas" role="menuitem">Políticas</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_180" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Inversionistas <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_73" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/eventos-relevantes" role="menuitem">Eventos relevantes</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_196" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/reportes" role="menuitem">Reportes</a></li>
+               </ul></li>
+              <li class="lfr-nav-item nav-item dropdown" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_181" role="presentation"><a aria-haspopup="true" class="nav-link text-truncate dropdown-toggle" role="menuitem"> <span class="text-truncate"> Servicio al cliente <span class="lfr-nav-child-toggle">
+                  <svg class="lexicon-icon lexicon-icon-angle-down" role="presentation">
+                   <use xlink:href="https://redviacorta.mx/o/rco-simple-layout-theme/images/clay/icons.svg#angle-down" />
+                  </svg> </span> </span> </a>
+               <ul aria-expanded="false" class="child-menu dropdown-menu" role="menu">
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_45" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/contacto" role="menuitem">Contacto</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_198" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/centro-de-ayuda" role="menuitem">Centro de ayuda</a></li>
+                <li class="" id="layout_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_200" role="presentation"><a class="dropdown-item" href="https://redviacorta.mx/es/servicio-al-cliente1" role="menuitem">Servicio al cliente</a></li>
+               </ul></li>
+             </ul>
+            </div>
+            <script>
+AUI().use(
+  'liferay-navigation-interaction',
+function(A) {
+(function() {
+var $ = AUI.$;var _ = AUI._;		var navigation = A.one('#navbar_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile');
+
+		Liferay.Data.NAV_INTERACTION_LIST_SELECTOR = '.navbar-site';
+		Liferay.Data.NAV_LIST_SELECTOR = '.navbar-site';
+
+		if (navigation) {
+			navigation.plug(Liferay.NavigationInteraction);
+		}
+})();
+});
+
+</script>
+           </div>
+          </div>
+         </div>
+        </section>
+       </div>
+      </div>
+      <div class="rco-header-topbar mobile"><a href="/web/red-vía-corta/trabaja-con-nosotros">Talento</a> <a href="/web/red-vía-corta/noticias">Noticias y Medios</a> <a href="/web/red-vía-corta/proveedores1">Proveedores</a> <a href="/web/red-vía-corta/alianzas">Alianzas</a> <a href="/web/red-vía-corta/iniciosesion">Acceder</a>
+      </div>
+     </div>
+    </div>
+   </header>
+  </div>
+  <style>/* ===== TOPBAR (NUEVO) ===== */
+
+
+.rco-header-topbar {
+  display: flex;
+  gap: clamp(16px, 3vw, 64px);
+  width: 95%;
+  max-width: 600px;
+  min-width: 300px;
+  align-items: center;
+  justify-content: space-between;
+  align-self: flex-end;
+  border-bottom: 1px solid white;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  padding-left: clamp(8px, 2vw, 32px);
+  padding-right: 0;
+  box-sizing: border-box;
+}
+
+.lfr-nav-child-toggle{
+  display: none;
+}
+
+.dropdown-toggle::after {
+  content: none !important;
+}
+
+.rco-header-topbar a {
+
+  color: #ffffff !important;
+
+  text-decoration: none;
+
+  font-family: 'Bliss', sans-serif;
+
+  font-weight: 400;
+
+  font-size: 1rem;
+
+  transition: opacity 0.2s, color 0.3s;
+
+  white-space: nowrap;
+
+}
+
+.rco-header-topbar a:hover {
+
+  opacity: 0.8;
+
+}
+
+.rco-header.scrolled .rco-header-topbar {
+  border-bottom: 1px solid black;
+
+}
+
+.rco-header.scrolled .rco-header-topbar a {
+  color: #1a1a1a !important;
+
+}
+
+.rco-header.scrolled .rco-header-topbar a:hover {
+
+  color: #114071 !important;
+
+}
+
+/* ===== DIVIDER (NUEVO) ===== */
+
+.rco-header-divider {
+  border: none;
+  /*border-top: 1px solid rgba(255, 255, 255, 0.3);*/
+  margin: 0;
+  width: 100%;            /* asegura que cruce todo el ancho */
+}
+
+.rco-header.scrolled .rco-header-divider {
+
+  border-top-color: rgba(0, 0, 0, 0.15);
+
+}
+
+/* ===== HEADER BASE - TRANSPARENTE ===== */
+
+.rco-header {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 48px;
+  background: transparent !important;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+  flex-wrap: nowrap;       
+  align-items: center;
+  width: 100%;
+}
+
+.rco-header .portlet {
+
+  margin: 0;
+  width: 100%;
+}
+
+.has-control-menu .rco-header {
+
+  top: 56px;
+
+  z-index: 100;
+
+}
+
+.has-edit-mode-menu .rco-header {
+  z-index: 100;
+
+}
+
+/* ===== HEADER SCROLLED - BLANCO ===== */
+
+.rco-header.scrolled {
+
+  background: #ffffff !important;
+
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+
+}
+
+.rco-header.scrolled .rco-header-nav .navbar-nav .nav-link {
+
+  color: #1a1a1a !important;
+
+}
+
+.rco-header.scrolled .rco-header-nav .navbar-nav .nav-link:hover {
+
+  color: #114071 !important;
+
+  opacity: 1;
+
+}
+
+.rco-header.scrolled .rco-menu-toggle span {
+
+  background-color: #1a1a1a;
+
+}
+
+/* ===== LOGOS ===== */
+
+.rco-header-logo img {
+
+  height: 40px;
+
+  width: auto;
+
+}
+
+.rco-header-logo .logo-dark {
+
+  display: none;
+
+}
+
+.rco-header-logo .logo-light {
+
+  display: block;
+
+}
+
+.rco-header.scrolled .rco-header-logo .logo-light {
+
+  display: none;
+
+}
+
+.rco-header.scrolled .rco-header-logo .logo-dark {
+
+  display: block;
+
+}
+
+/* ===== NAVEGACIÓN DESKTOP ===== */
+
+.rco-header-nav{ 
+
+   display: flex;
+
+	flex-direction: column;
+
+	align-items: flex-end;
+
+flex: 1;
+  min-width: 0;            /* permite que flex shrink funcione */
+  width: 100%;
+}
+
+.rco-header-desktop {
+
+  display: flex;
+
+  justify-content: center;
+
+   cursor: pointer;
+}
+
+.rco-header-nav .portlet {
+
+  margin: 0;
+
+}
+
+.rco-header-nav .navbar-nav {
+
+  display: flex;
+
+  flex-direction: row;
+
+  /*gap: 32px;*/
+
+}
+
+.rco-header-nav .navbar-nav .nav-item {
+
+  list-style: none;
+
+  position: relative;
+
+}
+
+.rco-header-nav .navbar-nav .nav-link {
+
+  color: #ffffff !important;
+
+  text-decoration: none;
+
+  font-family: 'Bliss', sans-serif;
+
+  font-weight: 500;
+
+  font-size: 1rem;
+
+  padding: 0;
+
+  transition: opacity 0.2s, color 0.3s;
+
+}
+
+.rco-header-nav .navbar-nav .nav-link:hover {
+
+  opacity: 0.8;
+
+  color: #ffffff !important;
+
+}
+
+/* Estado normal (header transparente) - underline blanco + preparación */
+.rco-header-nav .navbar-nav .nav-item.selected > .nav-link,
+.rco-header-nav .navbar-nav .nav-item.active > .nav-link {
+  position: relative;
+}
+
+.rco-header-nav .navbar-nav .nav-item.selected > .nav-link::after,
+.rco-header-nav .navbar-nav .nav-item.active > .nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: #ffffff;
+  border-radius: 2px;
+}
+
+
+
+/* Estado scrolled (header blanco) - underline y texto en #114071 */
+.rco-header.scrolled .rco-header-nav .navbar-nav .nav-item.selected > .nav-link,
+.rco-header.scrolled .rco-header-nav .navbar-nav .nav-item.active > .nav-link {
+  color: #114071 !important;
+}
+
+.rco-header.scrolled .rco-header-nav .navbar-nav .nav-item.selected > .nav-link::after,
+.rco-header.scrolled .rco-header-nav .navbar-nav .nav-item.active > .nav-link::after {
+  background: #114071;
+}
+
+/* ===== SUBMENÚS / DROPDOWNS ===== */
+
+.rco-header-nav .dropdown-menu,
+
+.rco-header-nav .child-menu,
+
+.rco-header-nav .nav-item > ul,
+
+.rco-header-nav .nav-item .dropdown {
+
+  background: #114071 !important;
+
+  border: none;
+
+  border-radius: 8px;
+
+  padding: 8px 0;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+  min-width: 180px;
+
+}
+
+.rco-header-nav .dropdown-menu .dropdown-item,
+
+.rco-header-nav .dropdown-menu .nav-link,
+
+.rco-header-nav .child-menu .nav-link,
+
+.rco-header-nav .nav-item > ul .nav-link,
+
+.rco-header-nav .nav-item > ul a {
+
+  color: #ffffff !important;
+
+  padding: 10px 20px;
+
+  font-family: 'Bliss', sans-serif;
+
+  font-weight: 500;
+
+  font-size: 14px;
+
+  transition: all 0.2s ease;
+
+  display: block;
+
+  background: transparent !important;
+
+}
+
+.rco-header-nav .dropdown-menu .dropdown-item:hover,
+
+.rco-header-nav .dropdown-menu .dropdown-item:focus,
+
+.rco-header-nav .dropdown-menu .nav-link:hover,
+
+.rco-header-nav .child-menu .nav-link:hover,
+
+.rco-header-nav .nav-item > ul .nav-link:hover,
+
+.rco-header-nav .nav-item > ul a:hover {
+
+  background: #F5F5F5 !important;
+
+  color: #114071 !important;
+
+}
+
+/* ===== CTA BUTTON ===== */
+
+.rco-header-cta {
+
+  background: #114071;
+
+  color: #ffffff !important;
+
+  padding: 12px 28px;
+
+  border-radius: 24px;
+
+  border: 2px solid #114071;
+
+  text-decoration: none;
+
+  font-family: 'Bliss', sans-serif;
+
+  font-weight: 600;
+
+  font-size: 14px;
+
+  transition: background 0.2s, border-color 0.3s;
+
+  white-space: nowrap;
+
+ flex-shrink: 0;   
+
+margin-left: 24px
+
+}
+
+
+/* Borde blanco solo cuando el fondo detrás es azul */
+.rco-header--blue-bg .rco-header-cta {
+  border-color: #ffffff;
+}
+
+.rco-header--blue-bg.scrolled .rco-header-cta {
+  border-color: #114071;
+}
+
+.rco-header-cta:hover {
+
+  background: white;
+  color: #114071 !important;
+
+  text-decoration: none;
+}
+
+/* ===== MENÚ HAMBURGUESA ===== */
+
+.rco-menu-toggle {
+
+  display: none;
+
+  flex-direction: column;
+
+  justify-content: space-between;
+
+  width: 28px;
+
+  height: 20px;
+
+  background: transparent;
+
+  border: none;
+
+  cursor: pointer !important;
+
+  padding: 0;
+
+  z-index: 1002;
+
+}
+
+.rco-menu-toggle span {
+
+  display: block;
+
+  width: 100%;
+
+  height: 3px;
+
+  background-color: #ffffff;
+
+  border-radius: 2px;
+
+  transition: all 0.3s ease;
+
+}
+
+.rco-menu-toggle.active span:nth-child(1) {
+
+  transform: rotate(45deg) translate(6px, 6px);
+
+}
+
+.rco-menu-toggle.active span:nth-child(2) {
+
+  opacity: 0;
+
+}
+
+.rco-menu-toggle.active span:nth-child(3) {
+
+  transform: rotate(-45deg) translate(6px, -6px);
+
+}
+
+.rco-header.scrolled .rco-header-topbar a {
+    color: #1a1a1a;
+}
+
+/* ===== MENÚ MÓVIL ===== */
+
+.rco-mobile-menu {
+
+  display: none;
+
+  position: fixed;
+
+  top: 0;
+
+  left: 0;
+
+  right: 0;
+
+  bottom: 0;
+
+  background: rgba(17, 64, 113, 0.98);
+
+  z-index: 1001;
+
+  opacity: 0;
+
+  visibility: hidden;
+
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  
+	cursor: pointer !important;
+
+}
+
+.rco-mobile-menu.active {
+
+  opacity: 1;
+
+  visibility: visible;
+
+}
+
+.rco-mobile-menu-content {
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: start;
+
+  justify-content: start;
+
+  height: 100%;
+
+  padding: 80px 24px 40px;
+
+}
+
+.rco-mobile-menu .navbar-nav {
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  gap: 24px;
+
+  list-style: none;
+
+  padding: 0;
+
+  margin: 0;
+
+}
+
+.rco-mobile-menu .nav-link a {
+
+  color: #ffffff !important;
+
+  text-decoration: none;
+
+  font-family: 'Bliss', sans-serif;
+
+  font-weight: 500;
+
+  font-size: 20px;
+
+  transition: opacity 0.2s;
+
+}
+
+.rco-mobile-menu .nav-link:hover {
+
+  opacity: 0.8;
+
+}
+
+.rco-header-cta.mobile {
+
+  margin-top: 32px;
+
+}
+
+/* ===== RESPONSIVE ===== */
+
+
+/* ===== PREVENIR SCROLL CUANDO MENÚ ABIERTO ===== */
+
+body.menu-open {
+
+  overflow: hidden;
+
+}
+
+/* ===== HIGHLIGHT MENÚ PRINCIPAL (categoría grande) ===== */
+
+/* ===== TOPBAR ACTIVO ===== */
+.rco-header-topbar a.topbar-active {
+  color: #114071 !important;
+  font-weight: 600;
+}
+.rco-header.scrolled .rco-header-topbar a.topbar-active {
+  color: #114071 !important;
+}
+
+/* ===== NAV PRINCIPAL - PADRE ACTIVO (texto azul) ===== */
+.rco-header-desktop .nav-item.selected > .nav-link {
+  color: #114071 !important;
+}
+.rco-header.scrolled .rco-header-desktop .nav-item.selected > .nav-link {
+  color: #114071 !important;
+}
+
+/* ===== HIJO ACTIVO DENTRO DEL DROPDOWN ===== */
+.rco-header-nav .dropdown-menu a.child-active,
+.rco-header-nav .child-menu a.child-active {
+  background: #2878C8 !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+
+
+.rco-header-nav .navbar-nav .nav-link {
+  font-size: clamp(1rem, 1.1vw, 1.2rem);
+}
+
+.rco-header-nav .navbar-nav {
+  /* gap: clamp(12px, 2vw, 32px); */
+}
+
+.rco-header-topbar {
+  gap: clamp(16px, 3vw, 64px);
+  padding-left: clamp(8px, 2vw, 32px);
+}
+
+.rco-header-topbar a {
+  font-size: clamp(1rem, 1vw, 1.2rem);
+}
+
+.rco-mobile-menu .nav-link {
+  color: #ffffff !important;
+  text-decoration: none;
+  font-family: 'Bliss', sans-serif;
+  font-weight: 500;
+  font-size: 18px;
+  position: relative;
+}
+
+.rco-mobile-menu .nav-item.selected > .nav-link::after,
+.rco-mobile-menu .nav-item.active > .nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40%;
+  height: 3px;
+  background: #ffffff;
+  border-radius: 2px;
+}
+
+.rco-mobile-menu .child-menu,
+.rco-mobile-menu .dropdown-menu {
+  display: none;
+  position: static !important;
+  background: transparent !important;
+  box-shadow: none;
+  padding: 8px 0;
+}
+
+.rco-mobile-menu .child-menu .nav-link {
+  font-size: 16px;
+  opacity: 0.8;
+}
+
+.rco-mobile-menu .navbar-nav {
+  gap: 20px;
+}
+
+.rco-header-topbar.mobile {
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  border-bottom: none;
+  margin-bottom: 24px;
+  padding-left: 0;
+}
+
+.rco-header-topbar.mobile {
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  border-bottom: none;
+  margin-bottom: 24px;
+  padding-left: 0;
+}
+
+.rco-mobile-menu .nav-item.open > .child-menu,
+.rco-mobile-menu .nav-item.open > .dropdown-menu {
+  display: block;
+}
+
+
+/* ===== NAVBAR FULL WIDTH ===== */
+
+.rco-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+/* Hace que el bloque del nav crezca y empuje todo */
+.rco-header-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Desktop nav ocupa todo el ancho */
+.rco-header-desktop {
+  width: 100%;
+}
+
+/* Forzar a Liferay nav a ocupar todo */
+.rco-header-desktop nav {
+  width: 100%;
+}
+
+.rco-header-desktop nav ul,
+.rco-header-desktop .navbar-nav {
+  display: flex;
+  width: 100%;
+  justify-content: space-between; 
+  align-items: center;
+  padding: 0;
+  margin: 0;
+}
+
+.rco-header-desktop nav ul li,
+.rco-header-desktop .navbar-nav .nav-item {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Links */
+.rco-header-desktop nav ul li a,
+.rco-header-desktop .navbar-nav .nav-link {
+  display: block;
+  /*padding: 10px 12px;*/ 
+  padding: 0;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Evita que wrappers de Liferay limiten el ancho */
+.rco-header-desktop .container,
+.rco-header-desktop .container-fluid,
+.rco-header-desktop .navbar-collapse {
+  max-width: 100% !important;
+  width: 100% !important;
+  padding: 0;
+}
+
+.rco-header-desktop { 
+  width: 95% !important;
+}
+
+.rco-header-desktop .navbar-nav {
+  padding-left: clamp(8px, 2vw, 32px); /* mismo inicio que topbar */
+  padding-right: 0;                     /* sin padding derecho = flush right */
+}
+
+/* El topbar tampoco debe tener padding-right */
+.rco-header-topbar {
+  padding-right: 0;
+}
+
+@media (max-width:1024px){
+
+/* ocultar desktop */
+.rco-header-nav, .rco-header-cta, 
+.rco-header-desktop{display:none!important}
+
+/* mostrar mobile */
+.rco-menu-toggle{display:flex}
+.rco-mobile-menu{display:block;font-size:16px;padding-top: 0px; padding-bottom: 8px; margin-top: 64px;}
+
+/* contenedor */
+.rco-mobile-menu-content{padding:0px; padding-top: 8px;}
+
+/* topbar */
+.rco-header-topbar.mobile{
+	margin-top: 16px;
+  border-top:1px solid #fff;
+	padding-top: 16px;
+  width:100%;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:flex-start;
+  text-align:left
+}
+
+/* nav vertical */
+.rco-mobile-menu .navbar-nav{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:flex-start;
+  width:100%
+}
+
+/* ¿ FIX CLAVE: padres en bloque */
+.rco-mobile-menu .nav-item,
+.rco-mobile-menu .nav-item.dropdown,
+.rco-mobile-menu .dropdown{
+  display:block!important;
+  width:100%;
+	padding-left: 24px;
+  position:relative
+}
+
+/* ¿ FIX CLAVE: dropdown hacia abajo */
+.rco-mobile-menu .dropdown-menu,
+.rco-mobile-menu .child-menu,
+.rco-mobile-menu .nav-item>ul{
+  position:static!important;
+  left:auto!important;
+  right:auto!important;
+  top:auto!important;
+  transform:none!important;
+  float:none!important;
+  width:400px!important;
+  display:none;
+  flex-direction:column!important;
+  background:transparent!important;
+	border: none;
+	border-color: transparent;
+  box-shadow:none;
+  margin:0;
+  padding:0
+}
+
+/* abrir submenu */
+.rco-mobile-menu .nav-item.open>.dropdown-menu,
+.rco-mobile-menu .nav-item.open>.child-menu,
+.rco-mobile-menu .nav-item.open>ul{
+  display:block!important
+}
+
+/* ¿ override final Liferay (.show) */
+.rco-mobile-menu .dropdown-menu.show{
+  position:static!important;
+  transform:none!important;
+}
+
+/* texto submenu blanco */
+.rco-mobile-menu .dropdown-menu a,
+.rco-mobile-menu .child-menu a{
+  color:#fff!important;
+  display:block;
+  padding:8px 16px;
+  font-size:1rem
+}
+
+
+.rco-header-topbar a,
+.rco-mobile-menu-content a{
+  color:white !important;
+  font-size:1rem!important;
+  padding:1px;
+	padding-left: 32px;
+  display:block
+}
+
+.rco-header-topbar {
+	max-width: 100%;
+	align-self: "start";
+	}
+	
+.dropdown-item:hover {
+background: rgba(17, 64, 113, 0.98) !important;
+}
+
+}
+</style>
+  <script type="module">const configuration = {}; const fragmentElement = document.querySelector('#fragment-60b8e67a-072d-0fdd-239f-7f9b30416f43'); const fragmentEntryLinkNamespace = 'hhsu'; const fragmentNamespace = 'hhsu'; const layoutMode = 'view';(function() {
+  var header = document.querySelector('.rco-header');
+  var toggle = document.querySelector('.rco-menu-toggle');
+  var menu   = document.querySelector('.rco-mobile-menu');
+
+  function getSlug(path) {
+    if (!path) return null;
+    path = path.split('?')[0];
+    var parts = path.split('/').filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : null;
+  }
+
+  function normalizePath(href) {
+    if (!href) return null;
+    try {
+      var url = new URL(href, window.location.origin);
+      return decodeURIComponent(url.pathname).replace(/\/$/, '');
+    } catch(e) {
+      try { return decodeURIComponent(href).replace(/\/$/, ''); }
+      catch(e2) { return href.replace(/\/$/, ''); }
+    }
+  }
+
+  var currentPath = normalizePath(window.location.href);
+
+  function highlightTopbar() {
+	var isMobile = window.innerWidth <= 1024;
+	if(isMobile) return;
+    var excludedTopbarPaths = [
+      'trabaja-con-nosotros'
+    ];
+
+    var isExcluded = excludedTopbarPaths.some(function(ep) {
+      return getSlug(currentPath) === ep || currentPath.startsWith(ep + '/');
+    });
+
+    if (isExcluded) return;
+
+    var topLinks = document.querySelectorAll('.rco-header-topbar a');
+    topLinks.forEach(function(link) {
+      var linkPath = normalizePath(link.getAttribute('href'));
+      if (!linkPath) return;
+      if (getSlug(currentPath) === getSlug(linkPath) || currentPath.startsWith(linkPath + '/')) {
+        link.classList.add('topbar-active');
+      }
+    });
+  }
+
+  function highlightMainNav() {
+	var isMobile = window.innerWidth <= 1024;
+	if(isMobile) return; 
+    var navItems = document.querySelectorAll('.rco-header-desktop .nav-item');
+
+    navItems.forEach(function(item) {
+      var matched = false;
+      var allLinks = item.querySelectorAll('a[href]');
+      allLinks.forEach(function(a) {
+        var linkPath = normalizePath(a.getAttribute('href'));
+        if (!linkPath) return;
+        if (getSlug(currentPath) === getSlug(linkPath) || currentPath.startsWith(linkPath + '/')) {
+          matched = true;
+          a.classList.add('child-active');
+        }
+      });
+      if (matched) item.classList.add('selected');
+    });
+  }
+
+  function handleScroll() {
+    if (!header) return;
+    if (window.scrollY > 50) header.classList.add('scrolled');
+    else header.classList.remove('scrolled');
+  }
+
+  function handleActiveStates() {
+    var isMobile = window.innerWidth <= 1024;
+    var navItems = document.querySelectorAll('.rco-header-nav .nav-item, .rco-mobile-menu .nav-item');
+
+    navItems.forEach(function(item) {
+      var link = item.querySelector('.nav-link');
+      var dropdown = item.querySelector('.dropdown-menu, .child-menu, ul');
+      if (!link || !dropdown) return;
+
+      if (isMobile) {
+        link.addEventListener('click', function(e) {
+          if (!item.classList.contains('open')) {
+            e.preventDefault();
+            e.stopPropagation();
+            navItems.forEach(function(i){ if(i !== item) i.classList.remove('open'); });
+            item.classList.add('open');
+          }
+        });
+      } else {
+        item.addEventListener('mouseenter', function() {
+          item.classList.add('show');
+          link.setAttribute('aria-expanded', 'true');
+        });
+        item.addEventListener('mouseleave', function() {
+          item.classList.remove('show');
+          link.setAttribute('aria-expanded', 'false');
+        });
+      }
+    });
+  }
+
+  function detectBlueBg() {
+    if (!header) return;
+    var rect = header.getBoundingClientRect();
+    var cx = rect.left + rect.width / 2;
+    var cy = rect.top + rect.height / 2;
+    header.style.visibility = 'hidden';
+    var el = document.elementFromPoint(cx, cy);
+    header.style.visibility = '';
+    while (el && el !== document.body) {
+      var bg = window.getComputedStyle(el).backgroundColor;
+      var match = bg.match(/rgb\((\d+),\s*(\d+),\s*(\d+)/);
+      if (match) {
+        var r = parseInt(match[1]), g = parseInt(match[2]), b = parseInt(match[3]);
+        if (r < 50 && g < 100 && b > 80) {
+          header.classList.add('rco-header--blue-bg');
+          return;
+        }
+        if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return;
+      }
+      el = el.parentElement;
+    }
+  }
+
+  if (header) {
+    header.classList.remove('scrolled');
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    detectBlueBg();
+  }
+
+  handleActiveStates();
+
+  function initHighlights() {
+    highlightTopbar();
+    highlightMainNav();
+  }
+
+  initHighlights();
+  setTimeout(initHighlights, 500);
+  setTimeout(initHighlights, 1500);
+
+  if (toggle && menu) {
+    toggle.addEventListener('click', function() {
+      toggle.classList.toggle('active');
+      menu.classList.toggle('active');
+      document.body.classList.toggle('menu-open');
+    });
+
+    menu.addEventListener('click', function(e){
+
+	var link = e.target.closest('a');
+	if(!link) return;
+
+	var item = link.closest('.nav-item');
+	var submenu = item ? item.querySelector('.dropdown-menu, .child-menu') : null;
+
+	if(submenu){
+
+		if(!item.classList.contains('open')){
+		e.preventDefault();
+
+		menu.querySelectorAll('.nav-item').forEach(function(i){
+			i.classList.remove('open');
+		});
+
+		item.classList.add('open');
+		return;
+		}
+
+	}
+
+	toggle.classList.remove('active');
+	menu.classList.remove('active');
+	document.body.classList.remove('menu-open');
+
+	});
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && menu.classList.contains('active')) {
+        toggle.classList.remove('active');
+        menu.classList.remove('active');
+        document.body.classList.remove('menu-open');
+      }
+    });
+  }
+})();;</script>
+ </div>
+</div>
+<div class="layout-content portlet-layout" id="main-content" role="main">
+ <div class="lfr-layout-structure-item-74e11a2a-d864-d772-273a-c68f92859df1 lfr-layout-structure-item-container  d-flex flex-column align-items-center justify-content-center">
+  <div class="lfr-layout-structure-item-87f1ed9d-2d29-088e-b29b-4f0047d2ae06 lfr-layout-structure-item-container ">
+   <div class="lfr-layout-structure-item-basic-component-paragraph lfr-layout-structure-item-36728bc8-2007-b6c2-ea46-ac77a1b251e9 rco-section-title">
+    <div id="fragment-4b388b63-86c7-b68b-09e4-bd25e3e9cbd7">
+     <div class="clearfix component-paragraph text-break" data-lfr-editable-id="element-text" data-lfr-editable-type="rich-text">
+      Aviso de Facturación
+     </div>
+    </div>
+    <style>.component-paragraph img {
+	max-width: 100%;
+}</style>
+   </div>
+   <div class="lfr-layout-structure-item-basic-component-paragraph lfr-layout-structure-item-501e533b-f001-7f84-8919-b97b85638d14 rco-section-description">
+    <div id="fragment-0b404e61-ddd0-dbce-51e5-fb2db3d0c59b">
+     <div class="clearfix component-paragraph text-break" data-lfr-editable-id="element-text" data-lfr-editable-type="rich-text">
+      Los tickets de peaje o consumo de Red de Carreteras de Occidente tienen vigencia dentro del año fiscal al cruce o compra.
+     </div>
+    </div>
+   </div>
+   <div class="lfr-layout-structure-item-basic-component-paragraph lfr-layout-structure-item-c3c703e5-19c4-fc47-4065-a954ddfd5a42 rco-section-description">
+    <div id="fragment-3806e291-2db5-8b30-b6fd-c30e80b60b7e">
+     <div class="clearfix component-paragraph text-break" data-lfr-editable-id="element-text" data-lfr-editable-type="rich-text">
+      Centro de Contacto&nbsp;<strong><a href="tel:3330014745">(33) 3001 4745</a></strong>&nbsp;o desde tu celular al <a href="tel: *455" rel="noopener noreferrer">*445</a>
+     </div>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class="lfr-layout-structure-item-2ab7587a-e397-1e3c-3e49-667761edd9be lfr-layout-structure-item-container ">
+  <div class="lfr-layout-structure-item-fb369e4f-bc1c-fc6c-16c1-daff9e1cf0f8 lfr-layout-structure-item-container ">
+   <div class="lfr-layout-structure-item-basic-component-paragraph lfr-layout-structure-item-bcfe3e94-4d30-8040-9cf5-9cd0307e3e7f ">
+    <div id="fragment-549da948-d3b6-eaf2-3b6b-e01437d23c97">
+     <div class="clearfix component-paragraph text-break" data-lfr-editable-id="element-text" data-lfr-editable-type="rich-text">
+      <div style="text-align:left">
+       <strong>COMUNICADO CFDI NUEVA VERSIÓN 4.0</strong>
+      </div>
+     </div>
+    </div>
+   </div>
+   <div class="lfr-layout-structure-item-43b20a3f-ee43-7b33-1ce5-26a49d4f65a9 lfr-layout-structure-item-row ">
+    <div class="row align-items-lg-start align-items-sm-start align-items-start align-items-md-start flex-lg-row flex-sm-row flex-row flex-md-row">
+     <div class="col col-lg-6 col-sm-12 col-12 col-md-6">
+      <div class="lfr-layout-structure-item-basic-component-paragraph lfr-layout-structure-item-54727130-3399-bbff-a31f-ed24aae08c24 ">
+       <div id="fragment-6c57f574-26d2-9ce3-d215-5ff7640d88b1">
+        <div class="clearfix component-paragraph text-break" data-lfr-editable-id="element-text" data-lfr-editable-type="rich-text">
+         <div style="text-align:left">
+          <span style="color: rgb(52, 64, 94); font-family: HelveticaLight; text-align: left;">Nuestro sistema de facturación se actualizó a la nueva versión 4.0 de conformidad con las nuevas disposiciones fiscales relacionadas con comprobantes fiscales publicadas por el SAT, por lo tanto, es requerido que nuestros clientes validen que sus datos fiscales que son&nbsp;</span><strong style="color: rgb(52, 64, 94); text-align: left;">obligatorios</strong><span style="color: rgb(52, 64, 94); font-family: HelveticaLight; text-align: left;">, se capturen conforme a su constancia de situación fiscal.</span>
+         </div>
+        </div>
+       </div>
+      </div>
+     </div>
+     <div class="col col-lg-6 col-sm-12 col-12 col-md-6">
+      <div class="lfr-layout-structure-item-basic-component-paragraph lfr-layout-structure-item-1d7df6c7-0c13-f7dd-63ba-3b0d3e69afbd ">
+       <div id="fragment-66db5812-cbe2-765f-cb91-056f6f3d8559">
+        <div class="clearfix component-paragraph text-break" data-lfr-editable-id="element-text" data-lfr-editable-type="rich-text">
+         <div style="text-align:left">
+          <span style="color: rgb(52, 64, 94); font-family: HelveticaLight;">Los datos fiscales obligatorios que serán validados por el SAT, además del&nbsp;</span><strong style="color: rgb(52, 64, 94);">RFC</strong><span style="color: rgb(52, 64, 94); font-family: HelveticaLight;">&nbsp;son los siguientes:</span>
+         </div>
+        </div>
+       </div>
+      </div>
+      <div class="lfr-layout-structure-item-basic-component-paragraph lfr-layout-structure-item-5541c6a4-ace3-d76c-be34-8a6d4c70610d ">
+       <div id="fragment-6e25eeaf-3eb3-9428-2826-3aa22eb9e85a">
+        <div class="clearfix component-paragraph text-break" data-lfr-editable-id="element-text" data-lfr-editable-type="rich-text">
+         <div style="text-align:left">
+          <strong style="color: rgb(52, 64, 94);">1. NOMBRE / RAZÓN SOCIAL SIN INCLUIR RÉGIMEN DE CAPITAL.</strong><span style="color: rgb(52, 64, 94); font-family: HelveticaLight;">&nbsp;En Personas Morales, la Razón Social&nbsp;</span><strong style="color: rgb(52, 64, 94);">NO</strong><span style="color: rgb(52, 64, 94); font-family: HelveticaLight;">&nbsp;debe contener el Régimen de Capital&nbsp;</span><strong style="color: rgb(52, 64, 94);">(S.A. DE C.V., S. DE R.L. DE C.V., etc.)&nbsp;</strong><span style="color: rgb(52, 64, 94); font-family: HelveticaLight;">,</span><br> <strong style="color: rgb(52, 64, 94);">2. CÓDIGO POSTAL,</strong><br> <strong style="color: rgb(52, 64, 94);">3. RÉGIMEN FISCAL y<br> <strong>4. USO DE FACTURA.</strong></strong>
+         </div>
+        </div>
+       </div>
+      </div>
+     </div>
+    </div>
+   </div>
+   <div class="lfr-layout-structure-item-92ae5bdd-9d35-8309-a6bd-455d554ea6e5 lfr-layout-structure-item-container  d-flex flex-column align-items-center justify-content-center">
+    <div class="lfr-layout-structure-item-4f93d799-3c4e-f5ee-a9c8-4b07aff7361d lfr-layout-structure-item-container ">
+     <div class="lfr-layout-structure-item-basic-component-paragraph lfr-layout-structure-item-da1588cd-e64b-0e9c-dd6f-399e077af997 ">
+      <div id="fragment-0b880bf7-4da1-f9d4-334d-569b63edeb50">
+       <div class="clearfix component-paragraph text-break" data-lfr-editable-id="element-text" data-lfr-editable-type="rich-text">
+        Factura
+       </div>
+      </div>
+     </div>
+     <div class="lfr-layout-structure-item-basic-component-paragraph lfr-layout-structure-item-3fb44765-1420-ee20-3169-810838a25f5a ">
+      <div id="fragment-a800208a-a655-bcc9-bcea-924da3ea8d22">
+       <div class="clearfix component-paragraph text-break" data-lfr-editable-id="element-text" data-lfr-editable-type="rich-text">
+        Considerar que si los datos capturados no coinciden con la información señalada en su&nbsp;constancia de situación fiscal actualizada o reciente, el SAT no permitirá emitir el CFDI. Adicionalmente, usted podrá descargar y consultar sus datos fiscales directamente de la página del SAT ingresando con su RFC y contraseña o firma electrónica, en la opción "Genera tu constancia de Situación Fiscal":<br> <a href="https://www.sat.gob.mx/aplicacion/53027/genera-tu-constancia-de-situacion-fiscal" rel="noopener noreferrer">https://www.sat.gob.mx/aplicacion/53027/genera-tu-constancia-de-situacion-fiscal.</a>
+       </div>
+      </div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="lfr-layout-structure-item-eb41d60a-e085-e46c-dfc9-93743567f8c3 lfr-layout-structure-item-container ">
+   <div class="lfr-layout-structure-item-ba642169-bab2-86b6-f898-1105bd72b18e lfr-layout-structure-item-row ">
+    <div class="row align-items-lg-start align-items-sm-start align-items-start align-items-md-start flex-lg-row flex-sm-row flex-row flex-md-row">
+     <div class="col col-lg-6 col-sm-12 col-12 col-md-12">
+      <div class="lfr-layout-structure-item-infoparallaxmini lfr-layout-structure-item-5f7443e3-176b-1738-b31b-b383c7ec2e74 " style="--background-image-file-entry-id:544134;--lfr-background-image-5f7443e3-176b-1738-b31b-b383c7ec2e74: url(/documents/d/red-v%C3%ADa-corta/vista-subway-png);" id="etwu">
+       <style>@media (max-width:300px){#etwu{background-image: url(/o/adaptive-media/image/544134/Thumbnail-300x300/vista-subway.png?t=1779413551454) !important;}}@media (max-width:1000px) and (min-width:300px){#etwu{background-image: url(/o/adaptive-media/image/544134/Preview-1000x0/vista-subway.png?t=1779413551454) !important;}}@media (max-width:1756px) and (min-width:1000px){#etwu{background-image: url(/o/adaptive-media/image/544134/high/vista-subway.png?t=1779413551454) !important;}}</style>
+       <div id="fragment-1342f138-3d82-cf5a-879e-fc191a655608">
+        <div class="rco-parallax-mini">
+         <div class="rco-parallax-overlay"></div>
+         <div class="rco-parallax-mini-content">
+          <h1 data-lfr-editable-id="title" data-lfr-editable-type="text">TICKETS DE PEAJE Y ALIMENTOS</h1>
+          <p data-lfr-editable-id="desc" data-lfr-editable-type="text"><a href="https://redviacorta.mx/es/factura">Ingresa aquí para facturar.</a></p>
+         </div>
+        </div>
+        <div style="display: none;"><a data-lfr-editable-id="link" data-lfr-editable-type="link" href="https://redviacorta.mx/es/factura">Enlace</a>
+        </div>
+       </div>
+       <style>
+.rco-parallax-mini {
+  background-attachment: fixed;
+  background-size: fit;
+	display: flex !important;
+	flex: 1;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+	width: 100% !important;
+	min-width: 100% !important;
+	border-radius: 30px !important;
+	text-align: left !important;
+	margin: 0 !important;
+	overflow: hidden;
+  transition: all 0.3s ease;
+  box-sizing: border-box !important;
+  color: white !important;
+  cursor: pointer;
+}
+
+.rco-parallax-overlay {
+  position: absolute;
+  inset: 0;
+	border-radius: 30px !important;
+	transition: all 0.3s ease;
+	max-height: 320px;
+}
+
+.rco-parallax-mini-content { 
+  position: relative;
+  z-index: 1;
+  padding: 180px 40px 80px 40px;
+  border-radius: 30px !important;
+	min-width: 640px;
+}
+
+
+.rco-parallax-mini-content h1 {
+  color: #fff;
+  font-size: 30px;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+}
+
+.rco-parallax-mini-content p {
+  color: rgba(255,255,255,0.95);
+  font-size: 20px;
+  line-height: 1.6;
+}
+
+.rco-parallax-mini a {
+  color: white !important;
+  text-decoration-color: white !important;
+}
+
+
+/* ---- RESPONSIVE ---- */
+@media (max-width: 1444px) {
+.rco-parallax-mini-content {
+	min-width: 560px !important;
+	padding: 80px 40px;
+}
+}
+@media (max-width: 1200px) {
+
+.rco-parallax-mini-content {
+  padding: 80px 40px;
+	max-width: 530px;
+	min-width: 200px !important;
+}
+	.rco-parallax-mini-content h1{
+		font-size: 18px;
+	}
+	.rco-parallax-mini-content p{
+		font-size: 14px;
+	}
+}
+
+
+@media (max-width: 568px) {
+ .rco-parallax-mini {
+	min-height: 220px;
+	justify-content: center;
+	align-items: center;
+}
+.rco-parallax-mini-content {
+  padding: 15px;
+}
+}</style>
+       <script type="module">const configuration = {}; const fragmentElement = document.querySelector('#fragment-1342f138-3d82-cf5a-879e-fc191a655608'); const fragmentEntryLinkNamespace = 'qkwp'; const fragmentNamespace = 'qkwp'; const layoutMode = 'view';const container = fragmentElement;
+const parallaxMini = container.querySelector('.rco-parallax-mini');
+const link = container.querySelector('[data-lfr-editable-id="link"]');
+
+if (parallaxMini && link) {
+  parallaxMini.addEventListener('click', function() {
+    if (link.href && link.href !== '#') {
+      window.open(link.href, '_self');
+    }
+  });
+};</script>
+      </div>
+     </div>
+     <div class="col col-lg-6 col-sm-12 col-12 col-md-12">
+      <div class="lfr-layout-structure-item-infoparallaxmini lfr-layout-structure-item-795072a7-6e14-4b5a-9f26-c6b5a8240897 " style="--background-image-file-entry-id:544161;--lfr-background-image-795072a7-6e14-4b5a-9f26-c6b5a8240897: url(/documents/d/red-v%C3%ADa-corta/vista-telepeaje-png);" id="jscn">
+       <style>@media (max-width:300px){#jscn{background-image: url(/o/adaptive-media/image/544161/Thumbnail-300x300/vista-telepeaje.png?t=1779413841823) !important;}}@media (max-width:1000px) and (min-width:300px){#jscn{background-image: url(/o/adaptive-media/image/544161/Preview-1000x0/vista-telepeaje.png?t=1779413841823) !important;}}@media (max-width:1800px) and (min-width:1000px){#jscn{background-image: url(/o/adaptive-media/image/544161/high/vista-telepeaje.png?t=1779413841823) !important;}}</style>
+       <div id="fragment-24bad9c4-b3d1-3ca0-fc24-1a7208985929">
+        <div class="rco-parallax-mini">
+         <div class="rco-parallax-overlay"></div>
+         <div class="rco-parallax-mini-content">
+          <h1 data-lfr-editable-id="title" data-lfr-editable-type="text">TELEPEAJE</h1>
+          <p data-lfr-editable-id="desc" data-lfr-editable-type="text"><a href="https://www.pase.com.mx/facturacion/facturacion-pase/">Si tu pago fue realizado con telepeaje, factura aquí.</a></p>
+         </div>
+        </div>
+        <div style="display: none;"><a data-lfr-editable-id="link" data-lfr-editable-type="link" href="https://www.pase.com.mx/facturacion/facturacion-pase/">Enlace</a>
+        </div>
+       </div>
+       <script type="module">const configuration = {}; const fragmentElement = document.querySelector('#fragment-24bad9c4-b3d1-3ca0-fc24-1a7208985929'); const fragmentEntryLinkNamespace = 'gsnv'; const fragmentNamespace = 'gsnv'; const layoutMode = 'view';const container = fragmentElement;
+const parallaxMini = container.querySelector('.rco-parallax-mini');
+const link = container.querySelector('[data-lfr-editable-id="link"]');
+
+if (parallaxMini && link) {
+  parallaxMini.addEventListener('click', function() {
+    if (link.href && link.href !== '#') {
+      window.open(link.href, '_self');
+    }
+  });
+};</script>
+      </div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="lfr-layout-structure-item-d313f6a0-ee48-f4a5-f11f-958314fad475 lfr-layout-structure-item-container  d-flex flex-column align-items-center justify-content-center">
+   <div class="lfr-layout-structure-item-aaba1e0c-6225-1fba-c44e-627f2aad9989 lfr-layout-structure-item-container  d-flex flex-column align-items-center justify-content-center">
+    <div class="lfr-layout-structure-item-basic-component-paragraph lfr-layout-structure-item-78d73f03-5fad-086e-005a-8e01a472d444 ">
+     <div id="fragment-46270206-0c72-298e-93f3-23afd67ad9d6">
+      <div class="clearfix component-paragraph text-break" data-lfr-editable-id="element-text" data-lfr-editable-type="rich-text">
+       <div style="text-align:left">
+        <h4 style="text-align:center">Cuidamos tus datos. Los utilizamos solo para fines de facturación. Consulta aquí nuestro&nbsp;&nbsp;<a href="https://redviacorta.mx/web/red-v%C3%ADa-corta/aviso-de-privacidad-de-facturaci%C3%B3n">Aviso de Privacidad de Facturación</a>.</h4>
+       </div>
+      </div>
+     </div>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<div class="lfr-layout-structure-item-feedbackbutton lfr-layout-structure-item-9f88f0f2-3404-e04b-b6d9-8690456545bf ">
+ <div id="fragment-1512fe27-4732-b01c-c05b-644345363f98"><a class="feedback-floating-btn" href="/web/red-vía-corta/contacto"> <span class="feedback-floating-btn__icon-wrap"> <img class="feedback-floating-btn__icon" src="/documents/d/red-v%C3%ADa-corta/envelope" alt="Feedback"> </span> <span class="feedback-floating-btn__text">
+    <div>
+     Contáctanos
+    </div> </span> </a>
+ </div>
+ <style>.feedback-floating-btn {
+  position: fixed;
+  right:0.5%;
+  top: 40%;
+  transform: translateY(40%) rotate(-90deg);
+  transform-origin: right center;
+  background: #000;
+	border: 2px solid #114071;
+	background-color: #114071;
+  color: #ffffff;
+  padding: 10px 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-decoration: none !important;
+  text-transform: uppercase;
+  z-index: 9999;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  white-space: nowrap;
+	max-height: 40px;
+	max-width: 250px;
+	border-radius: 10px 10px 0px 0px;
+}
+
+.feedback-floating-btn:active,
+.feedback-floating-btn:focus,
+.feedback-floating-btn:visited {
+  text-decoration: none !important;
+}
+
+.feedback-floating-btn__text {
+ margin-right: 10px;
+}
+
+.feedback-floating-btn__icon-wrap {
+  width: 25px;
+  height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+	margin: 0px 10px;
+}
+
+.feedback-floating-btn__icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+
+@media (hover: hover) {
+  .feedback-floating-btn:hover {
+    background: #fff;
+    color: #114071;
+    text-decoration: none;
+  }
+
+  .feedback-floating-btn:hover .feedback-floating-btn__icon {
+    filter: brightness(0) saturate(100%) invert(19%) sepia(63%) saturate(2053%) hue-rotate(192deg) brightness(92%) contrast(89%);
+  }
+
+  .feedback-floating-btn--inverted:hover {
+    background: #114071;
+    color: #fff;
+  }
+
+  .feedback-floating-btn--inverted:hover .feedback-floating-btn__icon {
+    filter: none;
+  }
+}
+
+/* Estado invertido cuando el botón está sobre el footer */
+.feedback-floating-btn--inverted {
+  background: #fff;
+  color: #114071 !important;
+  border-color: #114071;
+}
+
+.feedback-floating-btn--inverted .feedback-floating-btn__icon {
+  filter: brightness(0) saturate(100%) invert(19%) sepia(63%) saturate(2053%) hue-rotate(192deg) brightness(92%) contrast(89%);
+}
+
+@media (max-width: 995px) {
+  .feedback-floating-btn {
+    font-size: 1.2rem;
+		right:2%;
+  }
+.feedback-floating-btn__icon-wrap {
+  width: 20px;
+  height: 20px;
+}
+}
+
+@media (max-width: 768px) {
+  .feedback-floating-btn {
+    font-size: 1rem;
+    right:3%;
+  }
+.feedback-floating-btn__icon-wrap {
+  width: 20px;
+  height: 20px;
+	margin-right: 5px;
+}
+}
+
+@media (max-width: 480px) {
+  .feedback-floating-btn {
+    font-size: 0.8rem;
+    max-height: 25px;
+    max-width: 190px;
+    padding: 5px 5px;
+		right:3%;
+  }
+.feedback-floating-btn__icon-wrap {
+  width: 0.8rem;
+  height: 0.8rem;
+	margin-right: 5px;
+}
+}
+</style>
+ <script type="module">const configuration = {}; const fragmentElement = document.querySelector('#fragment-1512fe27-4732-b01c-c05b-644345363f98'); const fragmentEntryLinkNamespace = 'ehtd'; const fragmentNamespace = 'ehtd'; const layoutMode = 'view';(function () {
+  const btn = document.querySelector('.feedback-floating-btn');
+  const footer = document.querySelector('footer');
+
+  if (!btn || !footer) return;
+
+  function checkOverlap() {
+    const btnRect = btn.getBoundingClientRect();
+    const footerRect = footer.getBoundingClientRect();
+    btn.classList.toggle('feedback-floating-btn--inverted', btnRect.bottom >= footerRect.top);
+  }
+
+  window.addEventListener('scroll', checkOverlap);
+  window.addEventListener('resize', checkOverlap);
+  checkOverlap();
+})();
+;</script>
+</div>
+<div class="lfr-layout-structure-item-64b216e3-60fb-d36b-727b-e04f2d96c94f lfr-layout-structure-item-container ">
+ <div class="lfr-layout-structure-item-footer lfr-layout-structure-item-19bdd013-aa8a-91db-810a-fec5f724f3e1 ">
+  <div id="fragment-a0135999-c414-4f0a-e0e3-9e038a3d6582">
+   <footer class="rco-footer">
+    <div class="rco-footer-container">
+     <div class="rco-footer-brand"><picture data-fileentryid="472274">
+       <source media="(max-width:181px)" srcset="/o/adaptive-media/image/472274/high/RcoFooter.png?t=1770357063788">
+       <source media="(max-width:181px) and (min-width:181px)" srcset="/o/adaptive-media/image/472274/Preview-1000x0/RcoFooter.png?t=1770357063788">
+       <source media="(max-width:181px) and (min-width:181px)" srcset="/o/adaptive-media/image/472274/Thumbnail-300x300/RcoFooter.png?t=1770357063788">
+       <img class="rco-footer-logo" data-lfr-editable-id="logo" data-lfr-editable-type="image" src="/documents/59517/472028/RcoFooter.png/24d14f4c-5225-7c75-0339-8e03fcc77a6c?version=1.0&amp;t=1770357063788" alt="Logo" data-fileentryid="472274">
+      </picture>
+      <p class="rco-footer-desc" data-lfr-editable-id="description" data-lfr-editable-type="text">Estamos comprometidos en desempeñar nuestras funciones alineados al cumplimiento de todas las leyes, normas y reglamentos aplicables y de conformidad con los más altos estándares éticos.</p>
+      <p class="rco-footer-copy" data-lfr-editable-id="copyright" data-lfr-editable-type="text">© 2025 Red Vía Corta - Todos los derechos reservados</p>
+      <div class="rco-footer-social"><a href="https://www.facebook.com/redviacorta" data-lfr-editable-id="social-fb" data-lfr-editable-type="link" aria-label="Facebook"> <img src="/documents/59517/472028/FacebookLogo.png" alt="Facebook"> </a> <a href="https://x.com/redviacorta" data-lfr-editable-id="social-x" data-lfr-editable-type="link" aria-label="X"> <img src="/documents/59517/472028/XLogo.png" alt="X"> </a> <a href="https://www.youtube.com/channel/UCEJR0W4ZLudpHpZtevRqkkg" data-lfr-editable-id="social-yt" data-lfr-editable-type="link" aria-label="YouTube"> <img src="/documents/59517/472028/YoutubeLogo.png" alt="YouTube"> </a> <a href="https://www.instagram.com/redviacorta/" data-lfr-editable-id="social-ig" data-lfr-editable-type="link" aria-label="Instagram"> <img src="/documents/59517/472028/InstagramLogo.png" alt="Instagram"> </a> <a href="https://mx.linkedin.com/company/red-de-carreteras-de-occidente" data-lfr-editable-id="social-ln" data-lfr-editable-type="link" aria-label="Linkedin"> <img src="/documents/59517/472028/LinkedinIco.png" alt="Instagram"> </a>
+      </div>
+     </div>
+     <div class="rco-footer-sitemap">
+      <h3 class="rco-footer-title" data-lfr-editable-id="sitemap-title" data-lfr-editable-type="text">Mapa del sitio</h3>
+      <ul class="rco-footer-links">
+       <li><a href="/web/red-v%C3%ADa-corta/home" data-lfr-editable-id="link1" data-lfr-editable-type="link" target="_blank">Inicio</a></li>
+       <li><a href="/web/red-v%C3%ADa-corta/nosotros" data-lfr-editable-id="link2" data-lfr-editable-type="link" target="_blank">Nosotros</a></li>
+       <li><a href="/web/red-v%C3%ADa-corta/facturacion" data-lfr-editable-id="link4" data-lfr-editable-type="link" target="_blank">Servicios</a></li>
+       <li><a href="/web/red-v%C3%ADa-corta/farac" data-lfr-editable-id="link3" data-lfr-editable-type="link" target="_blank">Nuestra Red</a></li>
+       <li><a href="/web/red-vía-corta/seguro-de-autopista1">Viaja seguro</a></li>
+       <li><a href="/web/red-v%C3%ADa-corta/estrategia" data-lfr-editable-id="link5" data-lfr-editable-type="link" target="_blank">Sostenibilidad</a></li>
+       <li><a href="/web/red-vía-corta/buzón-de-ética">Integridad Corporativa</a></li>
+       <li><a href="/web/red-v%C3%ADa-corta/eventos-relevantes" data-lfr-editable-id="link6" data-lfr-editable-type="link" target="_blank">Inversionistas</a></li>
+       <li><a href="/web/red-v%C3%ADa-corta/contacto" data-lfr-editable-id="link7" data-lfr-editable-type="link" target="_blank">Servicio al cliente</a></li>
+      </ul>
+      <ul class="rco-footer-links rco-footer-links-secondary">
+       <li><a href="/web/red-v%C3%ADa-corta/terminos_condiciones" data-lfr-editable-id="link8" data-lfr-editable-type="link" target="_self">Términos y condiciones</a></li>
+       <li><a href="https://redviacorta.mx/es/aviso-de-privacidad" data-lfr-editable-id="link9" data-lfr-editable-type="link" target="_self">Aviso de privacidad</a></li>
+       <li><a href="/web/red-v%C3%ADa-corta/preguntas-frecuentes" data-lfr-editable-id="link10" data-lfr-editable-type="link" target="_self">Preguntas frecuentes</a></li>
+       <li><a href="/web/red-v%C3%ADa-corta/programas-residentes-y-vecinos" data-lfr-editable-id="link11" data-lfr-editable-type="link">Programa Residentes y Vecinos</a></li>
+      </ul>
+     </div>
+     <div class="rco-footer-contact">
+      <h3 class="rco-footer-title" data-lfr-editable-id="contact-title" data-lfr-editable-type="text">Contacto</h3>
+      <ul class="rco-footer-contact-list">
+       <li><a href="tel:(33)30014745" data-lfr-editable-id="phone1" data-lfr-editable-type="link">Callcenter (33) 3001 4745</a><a></a></li>
+       <li><a href="tel:*445" data-lfr-editable-id="phone2" data-lfr-editable-type="link">SOS*445</a><a></a></li>
+       <li><a href="mailto:atencion@redviacorta.mx" data-lfr-editable-id="email" data-lfr-editable-type="link">atencion@redviacorta.mx</a><a></a></li>
+      </ul>
+     </div>
+    </div>
+   </footer>
+  </div>
+  <style>.rco-footer {
+  background: #114071;
+  padding: 60px 48px;
+}
+.rco-footer-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 60px;
+}
+.rco-footer-logo {
+  height: 80px;
+  width: auto;
+  margin-bottom: 24px;
+}
+.rco-footer-desc {
+  color: rgba(255,255,255,0.85);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 0 0 20px 0;
+  max-width: 420px;
+}
+.rco-footer-copy {
+  color: rgba(255,255,255,0.7);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 13px;
+  margin: 0 0 20px 0;
+}
+.rco-footer-social {
+  display: flex;
+  gap: 12px;
+}
+.rco-footer-social a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  transition: opacity 0.2s;
+}
+.rco-footer-social a:hover {
+  opacity: 0.7;
+}
+.rco-footer-social img {
+  width: 28px;
+  height: 28px;
+}
+.rco-footer-title {
+  color: #ffffff;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 28px 0;
+}
+.rco-footer-links {
+  list-style: none;
+  margin: 0 0 28px 0;
+  padding: 0;
+}
+.rco-footer-links li {
+  margin-bottom: 6px;
+}
+.rco-footer-links a {
+  color: rgba(255,255,255,0.9);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 15px;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.rco-footer-links a:hover {
+  opacity: 0.7;
+  color: rgba(255,255,255,0.9);
+}
+.rco-footer-links-secondary {
+  margin-top: 28px;
+  padding-top: 0;
+}
+.rco-footer-contact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rco-footer-contact-list li {
+  color: rgba(255,255,255,0.9);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+.rco-footer-contact-list a {
+	color: #ffffff;
+	text-decoration: none;
+}
+
+.rco-footer-contact-list a:hover {
+	color: #ffffff;
+	text-decoration: underline;
+}
+@media (max-width: 1024px) {
+  .rco-footer-container {
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+  }
+  .rco-footer-brand {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 768px) {
+  .rco-footer {
+    padding: 40px 24px;
+  }
+  .rco-footer-container {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+  .rco-footer-brand {
+    order: 3;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .rco-footer-sitemap {
+    order: 1;
+    text-align: center;
+  }
+  .rco-footer-contact {
+    order: 2;
+    text-align: center;
+  }
+  .rco-footer-desc {
+    max-width: 100%;
+  }
+  .rco-footer-social {
+    justify-content: center;
+  }
+  .rco-footer-links {
+    margin-bottom: 20px;
+  }
+  .rco-footer-links-secondary {
+    margin-top: 20px;
+  }
+}</style>
+ </div>
+</div>
+
+
+
+
+	
+	
+
+
+<form action="#" aria-hidden="true" class="hide" id="hrefFm" method="post" name="hrefFm"><span></span><button hidden type="submit">Oculto</button></form>
+
+	
+	</section>
+    <!--
+	<footer id="footer" role="contentinfo">
+<div id="sub-footer">
+    <div class="row">
+
+        <div class="colc-xs-12 colc-lg-7">
+            <div class="row footer-container text-center">
+                <div class="colc-xs-6 colc-sm-4">
+                    <a class=" box footer-link" href="tel:(33) 3001 4745">
+                        <img src="https://02rcopaginaweb.s3.amazonaws.com/static/footer/phone.png" class="phone" alt="Callcenter"/>
+                        (33) 3001 4748
+                    </a>
+                </div>
+                <div class="colc-xs-6 colc-sm-4">
+                    <a class="footer-link" href="tel:*445">
+                        <img src="https://02rcopaginaweb.s3.amazonaws.com/static/footer/cel.png" class="cel" alt="SOS"/>
+                        *445
+                    </a> 
+                </div>
+                <div class="colc-xs-12 colc-sm-4">
+                    <a class="footer-link" href="mailto:atencion@redviacorta.mx">
+                        <img src="https://02rcopaginaweb.s3.amazonaws.com/static/footer/mail.png" class="email" alt="Email"/>
+                        atencion@redviacorta.mx
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="colc-xs-12 colc-lg-5">
+            <div class="row footer-container text-center">
+                <div class="colc-xs-2 colc-lg-1 ">
+                    <div class="icon-container">
+                        <a href=http://www.facebook.com/redviacorta target="_blank">
+                            <img src="https://02rcopaginaweb.s3.amazonaws.com/static/footer/facebook.png" src_over="https://02rcopaginaweb.s3.amazonaws.com/static/footer/facebook_white.png" src_init="https://02rcopaginaweb.s3.amazonaws.com/static/footer/facebook.png" alt="facebook"/>
+                        </a>
+                    </div>
+                </div>
+                <div class="colc-xs-2 colc-lg-1">
+                    <div class="icon-container">
+                        <a href=https://twitter.com/redviacorta target="_blank">
+                            <img src="https://02rcopaginaweb.s3.amazonaws.com/static/footer/twitter.png" src_over="https://02rcopaginaweb.s3.amazonaws.com/static/footer/twitter_white.png" src_init="https://02rcopaginaweb.s3.amazonaws.com/static/footer/twitter.png" alt="twitter"/>
+                        </a>
+                    </div>
+                </div>
+                <div class="colc-xs-2 colc-lg-1">
+                    <div class="icon-container">
+                        <a href=https://www.youtube.com/channel/UCEJR0W4ZLudpHpZtevRqkkg target="_blank">
+                            <img src="https://02rcopaginaweb.s3.amazonaws.com/static/footer/youtube.png" src_init="https://02rcopaginaweb.s3.amazonaws.com/static/footer/youtube.png" src_over="https://02rcopaginaweb.s3.amazonaws.com/static/footer/youtube_white.png" alt="youtube"/>
+                        </a>
+                    </div>
+                </div>
+                <div class="colc-xs-2 colc-lg-1">
+                    <div class="icon-container">
+                        <a href=https://www.instagram.com/redviacorta/ target="_blank">
+                            <img src="https://02rcopaginaweb.s3.amazonaws.com/static/footer/instagram.png" src_init="https://02rcopaginaweb.s3.amazonaws.com/static/footer/instagram.png" src_over="https://02rcopaginaweb.s3.amazonaws.com/static/footer/instagram_white.png" alt="instagram"/>
+                        </a>
+                    </div>
+                </div>
+                <div class="colc-xs-2 colc-lg-1">
+                    <div class="icon-container">
+                        <a href=https://twitter.com/sanblasviacorta target="_blank">
+                            <img src="https://02rcopaginaweb.s3.amazonaws.com/static/footer/twitter.png" src_init="https://02rcopaginaweb.s3.amazonaws.com/static/footer/twitter.png" src_over="https://02rcopaginaweb.s3.amazonaws.com/static/footer/twitter_white.png" alt="twitter"/>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div id="principal-footer">
+    <div class="row center">
+        <div class="colc-xs-12">
+            <p>Al acceder a este sitio usted declara encontrarse completamente de acuerdo con los <a href=/es/web/red-vía-corta/terminos_condiciones target="_blank">Términos y Condiciones</a> del <a href=/es/web/red-vía-corta/aviso-de-privacidad target="_blank">Aviso de Privacidad</a></p>            
+        </div>
+        <div class="colc-xs-12">
+            <p>© 2024 Red Vía Corta - Todos los derechos reservados</p>
+        </div>
+    </div>
+</div>	</footer>
+	-->
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+
+
+<script type="text/javascript">
+
+	
+		
+
+			
+
+			
+		
+	
+
+
+</script><script>
+
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+	
+
+	
+		
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+		
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+		
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+<script type="text/javascript">
+
+	function getValueByAttribute(node, attr) {
+		return (
+			node.dataset[attr] ||
+			(node.parentElement && node.parentElement.dataset[attr])
+		);
+	}
+
+	function sendDocumentDownloadedAnalyticsEvent(anchor) {
+		var fileEntryId = getValueByAttribute(
+			anchor,
+			'analyticsFileEntryId'
+		);
+		var title = getValueByAttribute(
+			anchor,
+			'analyticsFileEntryTitle'
+		);
+		var version = getValueByAttribute(
+			anchor,
+			'analyticsFileEntryVersion'
+		);
+
+		if (fileEntryId) {
+			Analytics.send('documentDownloaded', 'Document', {
+				groupId: themeDisplay.getScopeGroupId(),
+				fileEntryId,
+				preview:
+					!!window._com_liferay_document_library_analytics_isViewFileEntry,
+				title,
+				version,
+			});
+		}
+	}
+
+	function handleDownloadClick(event) {
+		if (window.Analytics) {
+			if (event.target.nodeName.toLowerCase() === 'a') {
+				sendDocumentDownloadedAnalyticsEvent(
+					event.target
+				);
+			}
+			else if (
+				event.target.parentNode &&
+				event.target.parentNode.nodeName.toLowerCase() === 'a'
+			) {
+				sendDocumentDownloadedAnalyticsEvent(
+					event.target.parentNode
+				);
+			}
+			else {
+				var target = event.target;
+				var matchTextContent =
+					target.textContent &&
+					target.textContent.toLowerCase() ===
+						'descargar';
+				var matchTitle =
+					target.title && target.title.toLowerCase() === 'download';
+				var matchAction = target.action === 'download';
+				var matchLexiconIcon = !!target.querySelector(
+					'.lexicon-icon-download'
+				);
+				var matchLexiconClassName = target.classList.contains(
+					'lexicon-icon-download'
+				);
+				var matchParentTitle =
+					target.parentNode &&
+					target.parentNode.title &&
+					target.parentNode.title.toLowerCase() === 'download';
+				var matchParentLexiconClassName =
+					target.parentNode &&
+					target.parentNode.classList.contains('lexicon-icon-download');
+
+				if (
+					matchTextContent ||
+					matchTitle ||
+					matchParentTitle ||
+					matchAction ||
+					matchLexiconIcon ||
+					matchLexiconClassName ||
+					matchParentLexiconClassName
+				) {
+					var selectedFiles = document.querySelectorAll(
+						'.form .custom-control-input:checked'
+					);
+
+					selectedFiles.forEach(({value}) => {
+						var selectedFile = document.querySelector(
+							'[data-analytics-file-entry-id="' + value + '"]'
+						);
+
+						sendDocumentDownloadedAnalyticsEvent(
+							selectedFile
+						);
+					});
+				}
+			}
+		}
+	}
+
+	Liferay.once('destroyPortlet', () => {
+		document.body.removeEventListener(
+			'click',
+			handleDownloadClick
+		);
+	});
+
+	Liferay.once('portletReady', () => {
+		document.body.addEventListener(
+			'click',
+			handleDownloadClick
+		);
+	});
+
+(function() {var $ = AUI.$;var _ = AUI._;
+	var onShare = function (data) {
+		if (window.Analytics) {
+			Analytics.send('shared', 'SocialBookmarks', {
+				className: data.className,
+				classPK: data.classPK,
+				type: data.type,
+				url: data.url,
+			});
+		}
+	};
+
+	var onDestroyPortlet = function () {
+		Liferay.detach('socialBookmarks:share', onShare);
+		Liferay.detach('destroyPortlet', onDestroyPortlet);
+	};
+
+	Liferay.on('socialBookmarks:share', onShare);
+	Liferay.on('destroyPortlet', onDestroyPortlet);
+})();
+(function() {var $ = AUI.$;var _ = AUI._;
+	var onVote = function (event) {
+		if (window.Analytics) {
+			let title = event.contentTitle;
+
+			if (!title) {
+				const dmNode = document.querySelector(
+					'[data-analytics-file-entry-id="' + event.classPK + '"]'
+				);
+
+				if (dmNode) {
+					title = dmNode.dataset.analyticsFileEntryTitle;
+				}
+			}
+
+			Analytics.send('VOTE', 'Ratings', {
+				className: event.className,
+				classPK: event.classPK,
+				ratingType: event.ratingType,
+				score: event.score,
+				title,
+			});
+		}
+	};
+
+	var onDestroyPortlet = function () {
+		Liferay.detach('ratings:vote', onVote);
+		Liferay.detach('destroyPortlet', onDestroyPortlet);
+	};
+
+	Liferay.on('ratings:vote', onVote);
+	Liferay.on('destroyPortlet', onDestroyPortlet);
+})();
+(function() {var $ = AUI.$;var _ = AUI._;
+	var onDestroyPortlet = function () {
+		Liferay.detach('messagePosted', onMessagePosted);
+		Liferay.detach('destroyPortlet', onDestroyPortlet);
+	};
+
+	Liferay.on('destroyPortlet', onDestroyPortlet);
+
+	var onMessagePosted = function (event) {
+		if (window.Analytics) {
+			const eventProperties = {
+				className: event.className,
+				classPK: event.classPK,
+				commentId: event.commentId,
+				text: event.text,
+			};
+
+			const blogNode = document.querySelector(
+				'[data-analytics-asset-id="' + event.classPK + '"]'
+			);
+
+			const dmNode = document.querySelector(
+				'[data-analytics-file-entry-id="' + event.classPK + '"]'
+			);
+
+			if (blogNode) {
+				eventProperties.title = blogNode.dataset.analyticsAssetTitle;
+			}
+			else if (dmNode) {
+				eventProperties.title = dmNode.dataset.analyticsFileEntryTitle;
+			}
+
+			Analytics.send('posted', 'Comment', eventProperties);
+		}
+	};
+
+	Liferay.on('messagePosted', onMessagePosted);
+})();
+
+	if (window.svg4everybody && Liferay.Data.ICONS_INLINE_SVG) {
+		svg4everybody(
+			{
+				polyfill: true,
+				validate: function (src, svg, use) {
+					return !src || !src.startsWith('#');
+				}
+			}
+		);
+	}
+
+(function() {var $ = AUI.$;var _ = AUI._;
+	Liferay.Util.delegate(
+		document,
+		'focusin',
+		'.portlet',
+		function(event) {
+			event.delegateTarget.closest('.portlet').classList.add('open');
+		}
+	);
+
+	Liferay.Util.delegate(
+		document,
+		'focusout',
+		'.portlet',
+		function(event) {
+			event.delegateTarget.closest('.portlet').classList.remove('open');
+		}
+	);
+})();
+
+	// <![CDATA[
+
+		
+
+		Liferay.currentURL = '\x2fes\x2ffacturacion';
+		Liferay.currentURLEncoded = '\x252Fes\x252Ffacturacion';
+
+	// ]]>
+
+(function() {var $ = AUI.$;var _ = AUI._;
+		import(Liferay.ThemeDisplay.getPathContext() + '/o/frontend-js-web/__liferay__/index.js').then(
+			({openToast}) => {
+				AUI().use(
+					'liferay-session',
+					function () {
+						Liferay.Session = new Liferay.SessionBase(
+							{
+								autoExtend: true,
+								redirectOnExpire: false,
+								redirectUrl: 'https\x3a\x2f\x2fredviacorta\x2emx\x2fweb\x2fred-v\x25C3\x25ADa-corta',
+								sessionLength: 900,
+								sessionTimeoutOffset: 70,
+								warningLength: 60
+							}
+						);
+
+						
+					}
+				);
+			}
+		)
+	})();
+
+	
+		Liferay.Portlet.register('com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile');
+	
+
+	Liferay.Portlet.onLoad(
+		{
+			canEditTitle: false,
+			columnPos: 0,
+			isStatic: 'end',
+			namespacedId: 'p_p_id_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile_',
+			portletId: 'com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile',
+			refreshURL: '\x2fes\x2fc\x2fportal\x2frender_portlet\x3fp_l_id\x3d185\x26p_p_id\x3dcom_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavMobile\x26p_p_lifecycle\x3d0\x26p_t_lifecycle\x3d0\x26p_p_state\x3dnormal\x26p_p_mode\x3dview\x26p_p_col_id\x3dnull\x26p_p_col_pos\x3dnull\x26p_p_col_count\x3dnull\x26p_p_static\x3d1\x26p_p_isolated\x3d1\x26currentURL\x3d\x252Fes\x252Ffacturacion',
+			refreshURLData: {}
+		}
+	);
+
+
+	
+		Liferay.Portlet.register('com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop');
+	
+
+	Liferay.Portlet.onLoad(
+		{
+			canEditTitle: false,
+			columnPos: 0,
+			isStatic: 'end',
+			namespacedId: 'p_p_id_com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop_',
+			portletId: 'com_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop',
+			refreshURL: '\x2fes\x2fc\x2fportal\x2frender_portlet\x3fp_l_id\x3d185\x26p_p_id\x3dcom_liferay_site_navigation_menu_web_portlet_SiteNavigationMenuPortlet_INSTANCE_hhsunavDesktop\x26p_p_lifecycle\x3d0\x26p_t_lifecycle\x3d0\x26p_p_state\x3dnormal\x26p_p_mode\x3dview\x26p_p_col_id\x3dnull\x26p_p_col_pos\x3dnull\x26p_p_col_count\x3dnull\x26p_p_static\x3d1\x26p_p_isolated\x3d1\x26currentURL\x3d\x252Fes\x252Ffacturacion',
+			refreshURLData: {}
+		}
+	);
+
+
+</script><script type="module">
+import {InfoItemActionHandler as ComponentModule} from '/o/layout-taglib/__liferay__/index.js';
+AUI().use(
+  'liferay-menu',
+function(A) {
+{
+Liferay.component('infoItemActionComponent', new ComponentModule({"executeInfoItemActionURL":"https:\/\/redviacorta.mx\/es\/c\/portal\/execute_info_item_action?p_l_mode=view&plid=185","namespace":"","spritemap":"https:\/\/redviacorta.mx\/o\/rco-simple-layout-theme\/images\/clay\/icons.svg"}), { destroyOnNavigate: true, portletId: ''});
+}
+(function() {
+var $ = AUI.$;var _ = AUI._;
+	new Liferay.Menu();
+
+	var liferayNotices = Liferay.Data.notices;
+
+	for (var i = 0; i < liferayNotices.length; i++) {
+		Liferay.Util.openToast(liferayNotices[i]);
+	}
+
+})();
+});
+
+</script>
+
+
+
+
+
+
+
+
+
+<script src="https://redviacorta.mx/o/rco-simple-layout-theme/js/main.js?browserId=chrome&amp;minifierType=js&amp;languageId=es_ES&amp;t=1785848456000" type="text/javascript"></script>
+
+
+
+
+<script type="module">
+import {main} from '/o/frontend-js-alert-support-web/__liferay__/index.js';
+{
+main();
+}
+
+</script><script type="module">
+import {main} from '/o/frontend-js-tabs-support-web/__liferay__/index.js';
+{
+main();
+}
+
+</script><script type="module">
+import {main} from '/o/frontend-js-dropdown-support-web/__liferay__/index.js';
+{
+main();
+}
+
+</script><script type="module">
+import {main} from '/o/frontend-js-tooltip-support-web/__liferay__/index.js';
+{
+main();
+}
+
+</script><script type="module">
+import {main} from '/o/frontend-js-collapse-support-web/__liferay__/index.js';
+{
+main();
+}
+
+</script><script type="text/javascript">
+Liferay.CustomDialogs = {enabled: false};
+
+</script><script>
+
+</script><script type="module">
+import {runThirdPartyCookiesInterval} from '/o/cookies-banner-web/__liferay__/index.js';
+{
+runThirdPartyCookiesInterval();
+}
+
+</script>
+<!-- inject:js -->
+<!-- endinject -->
+
+</body>
+
+</html>
+		
+	
+

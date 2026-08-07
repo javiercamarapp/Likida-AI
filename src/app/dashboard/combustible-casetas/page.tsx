@@ -6,9 +6,9 @@ import {
   getLineasPorConciliar,
   type GastoPorConcepto, type Acreditables, type Anomalia, type DocumentoRow, type ConciliacionConsolidado,
   type LineaPorConciliar,
-} from '@/lib/cuadra/analytics';
-import { resolverLineaAMano, type ResolucionLineaManual } from '@/lib/cuadra/intake/consolidado';
-import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
+} from '@/lib/likida/analytics';
+import { resolverLineaAMano, type ResolucionLineaManual } from '@/lib/likida/intake/consolidado';
+import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';

@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { Send, UserCog, CircleSlash } from 'lucide-react';
 import { saludo, fechaLarga, ahoraMs } from '@/lib/saludo';
-import { getViajes, type ViajeRow } from '@/lib/cuadra/analytics';
+import { getViajes, type ViajeRow } from '@/lib/likida/analytics';
 import {
   getTableroOperacion, getViajesSinAsignar, getCargaOperadores, getIncidencias,
   type TableroOperacion, type ViajeSinAsignar, type CargaOperador, type IncidenciaRow,
-} from '@/lib/cuadra/operacion';
+} from '@/lib/likida/operacion';
 import { EstadoVacio, StatusPill } from '../admin/ui/kit';
 import { TableroCifras } from './despacho/vista';
 import { TablaCarga } from './despacho/vista';

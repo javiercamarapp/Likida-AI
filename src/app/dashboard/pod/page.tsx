@@ -7,7 +7,7 @@ import { puedeAsignar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
-import { getPods, marcarPodPedido, rechazarPod, type PodRow } from '@/lib/cuadra/operacion';
+import { getPods, marcarPodPedido, rechazarPod, type PodRow } from '@/lib/likida/operacion';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
 import { sufijoTenant } from '../sufijo';
 import { CifrasPod, TablaPod } from './vista';

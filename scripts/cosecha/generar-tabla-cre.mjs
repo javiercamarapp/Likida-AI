@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 const AQUI = dirname(new URL(import.meta.url).pathname);
 const ENTRADA = join(AQUI, '../../docs/investigacion/cosecha/consolidado-estaciones.json');
-const SALIDA = join(AQUI, '../../src/lib/cuadra/facturacion/permisos_cre.json');
+const SALIDA = join(AQUI, '../../src/lib/likida/facturacion/permisos_cre.json');
 
 const { estaciones } = JSON.parse(readFileSync(ENTRADA, 'utf8'));
 

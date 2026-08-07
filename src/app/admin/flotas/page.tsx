@@ -4,8 +4,8 @@ import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
 import { Truck, ExternalLink, Plus } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { crearFlota, mensajeParaPantalla } from '@/lib/cuadra/administracion';
-import { actualizarFacilidad15 } from '@/lib/cuadra/repo';
+import { crearFlota, mensajeParaPantalla } from '@/lib/likida/administracion';
+import { actualizarFacilidad15 } from '@/lib/likida/repo';
 import ContadorRetro from '../contador-retro';
 import { HBars } from '../ui/graficas';
 import { ChartCard, EstadoVacio } from '../ui/kit';
@@ -199,7 +199,7 @@ export default async function FlotasPage() {
             </h2>
           </div>
           <FormaConAviso accion={accionCrearFlota} boton="Dar de alta">
-            <Campo nombre="nombre" etiqueta="Nombre de la flota" requerido placeholder="Transportes Innovativos" />
+            <Campo nombre="nombre" etiqueta="Nombre de la flota" requerido placeholder="Flota de ejemplo" />
             <Campo nombre="rfc" etiqueta="RFC" placeholder="Opcional"
               ayuda="Se rechaza si no pasa el dígito verificador." />
             <Campo nombre="ciudad" etiqueta="Ciudad" placeholder="Opcional" />

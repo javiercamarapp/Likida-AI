@@ -29,7 +29,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { conteo, traerTodo } from '@/lib/cuadra/pg';
+import { conteo, traerTodo } from '@/lib/likida/pg';
 import { round2 } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════

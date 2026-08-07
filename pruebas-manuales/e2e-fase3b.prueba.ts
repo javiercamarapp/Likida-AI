@@ -13,12 +13,12 @@ const OUT = process.env.E2E_OUT!;
 
 describe('fase 3b', () => {
   it('corre', async () => {
-    const { crearViaje } = await import('@/lib/cuadra/operacion');
-    const { crearOperador } = await import('@/lib/cuadra/administracion');
-    const { addGasto, saveLiquidacion } = await import('@/lib/cuadra/repo');
-    const { cuadrarDesdeDB } = await import('@/lib/cuadra/cuadre/desde_db');
-    const { resumenCuadre } = await import('@/lib/cuadra/cuadre/resumen');
-    const { estadoDelViaje, interpretarPregunta, armarRespuesta } = await import('@/lib/cuadra/consulta_chofer');
+    const { crearViaje } = await import('@/lib/likida/operacion');
+    const { crearOperador } = await import('@/lib/likida/administracion');
+    const { addGasto, saveLiquidacion } = await import('@/lib/likida/repo');
+    const { cuadrarDesdeDB } = await import('@/lib/likida/cuadre/desde_db');
+    const { resumenCuadre } = await import('@/lib/likida/cuadre/resumen');
+    const { estadoDelViaje, interpretarPregunta, armarRespuesta } = await import('@/lib/likida/consulta_chofer');
     const { supabaseAdmin } = await import('@/lib/supabase/admin');
 
     const ids = JSON.parse(readFileSync(`${OUT}/ids.json`, 'utf8'));
@@ -70,7 +70,7 @@ describe('fase 3b', () => {
     console.log('\nviaje sobregiro cerrado:', idSobre, 'diferencia', liqSobre.diferencia);
 
     // ── G. RELOJ: qué día cree el motor vs qué día imprime el PDF ─────────
-    const { ventanaDesdeDB } = await import('@/lib/cuadra/cuadre/desde_db');
+    const { ventanaDesdeDB } = await import('@/lib/likida/cuadre/desde_db');
     const { fechaMx } = await import('@/lib/formato');
     const v = await ventanaDesdeDB(tenantId, ids.viajeId as string);
     console.log('\n═══ G · RELOJ ═══');

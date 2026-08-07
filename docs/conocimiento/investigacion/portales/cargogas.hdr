@@ -1,0 +1,32 @@
+HTTP/2 301 
+server: nginx
+date: Wed, 05 Aug 2026 04:29:42 GMT
+content-type: text/html; charset=UTF-8
+content-length: 0
+location: https://cargogas.com/
+sg-f-cache: BYPASS
+x-cache-enabled: True
+x-content-type-options: nosniff
+x-xss-protection: 1; mode=block
+x-redirect-by: WordPress
+x-httpd-modphp: 1
+host-header: 6b7412fb82ca5edfd0917e3957f05d89
+x-proxy-cache: MISS
+x-proxy-cache-info: 0301 NC:000000 UP:
+
+HTTP/2 200 
+server: nginx
+date: Wed, 05 Aug 2026 04:29:42 GMT
+content-type: text/html; charset=UTF-8
+vary: Accept-Encoding
+x-cache-enabled: True
+x-content-type-options: nosniff
+x-xss-protection: 1; mode=block
+link: <https://cargogas.com/wp-json/>; rel="https://api.w.org/"
+link: <https://cargogas.com/wp-json/wp/v2/pages/943>; rel="alternate"; title="JSON"; type="application/json"
+link: <https://cargogas.com/>; rel=shortlink
+x-httpd-modphp: 1
+host-header: 8441280b0c35cbc1147f8ba998a563a7
+x-proxy-cache: HIT
+content-encoding: gzip
+

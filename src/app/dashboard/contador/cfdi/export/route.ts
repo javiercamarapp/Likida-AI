@@ -3,9 +3,9 @@ import { getSessionTenant } from '@/lib/auth/session';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
-import { toCsv } from '@/lib/cuadra/export';
-import { resolverPeriodo, getGastosFiscales, causasDe, aFilasExport, type GastoFiscal } from '@/lib/cuadra/fiscal';
-import { getConfig } from '@/lib/cuadra/config';
+import { toCsv } from '@/lib/likida/export';
+import { resolverPeriodo, getGastosFiscales, causasDe, aFilasExport, type GastoFiscal } from '@/lib/likida/fiscal';
+import { getConfig } from '@/lib/likida/config';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 

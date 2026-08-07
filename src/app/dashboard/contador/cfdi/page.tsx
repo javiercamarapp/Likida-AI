@@ -3,9 +3,9 @@ import { FileCheck2, Download, Receipt } from 'lucide-react';
 import {
   resolverPeriodo, getGastosFiscales, contarGastosDelTenant, causasDe, causaDominante,
   type GastoFiscal,
-} from '@/lib/cuadra/fiscal';
-import { getConfig, type CuadraConfig } from '@/lib/cuadra/config';
-import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
+} from '@/lib/likida/fiscal';
+import { getConfig, type CuadraConfig } from '@/lib/likida/config';
+import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeExportar } from '@/lib/auth/permisos';

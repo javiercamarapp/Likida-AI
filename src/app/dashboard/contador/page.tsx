@@ -6,8 +6,8 @@ import {
   resolverPeriodo, periodoAnterior, getGastosFiscales, contarGastosDelTenant,
   resumirFiscal, resumirPerdidas,
   type GastoFiscal, type Periodo,
-} from '@/lib/cuadra/fiscal';
-import { getConfig, type CuadraConfig } from '@/lib/cuadra/config';
+} from '@/lib/likida/fiscal';
+import { getConfig, type CuadraConfig } from '@/lib/likida/config';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { KpiTile, EstadoVacio, ChartCard } from '../../admin/ui/kit';

@@ -1,0 +1,26 @@
+HTTP/2 403 
+content-type: text/html;charset=utf-8
+x-datadome-cid: AHrlqAAAAAMAKttvq5R9xIIAu76pew==
+access-control-allow-origin: *
+pragma: no-cache
+access-control-expose-headers: x-dd-b, x-set-cookie
+cache-control: max-age=0, private, no-cache, no-store, must-revalidate
+charset: utf-8
+access-control-allow-credentials: true
+accept-ch: Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+x-dd-b: 1
+x-datadome: protected
+content-length: 853
+date: Wed, 05 Aug 2026 04:30:25 GMT
+server-timing: cdn-cache; desc=HIT
+server-timing: edge; dur=1
+akamai-grn: 0.0a72cc17.1785904225.82fbacc8
+set-cookie: akacd_default=2147483647~rv=30~id=37312a1e564ae02d626d61f7bb238ee5; path=/; Expires=Tue, 19 Jan 2038 03:14:07 GMT; Secure; SameSite=None
+strict-transport-security: max-age=31536000
+set-cookie: az_bt_al=8025a63bf32f17c2fe16af625e57a117; path=/; domain=.www.autozone.com.mx; Secure
+set-cookie: datadome=Kv5Vg9cvYInLpgxD3DdXIPbmZR_JrrxqorMfpKqZbMEUBTcaTuuNIlI4yKhTyI4D5Hfm_tLS7DoQ9xBT_bmYmQkFcTphciwPnTre4Wwk4Vj3THdqT43fXuU6Ig_uJtAU; Max-Age=31536000; Domain=.autozone.com.mx; Path=/; Secure; SameSite=Lax
+set-cookie: _pxdc=Bot; Path=/
+set-cookie: datadome_analytics_botName=Fake Browsers; Max-Age=3600; Path=/
+x-datadome-log: undefined
+server-timing: ak_p; desc="1785904225102_399274506_2197531848_17_267897_28_42_15";dur=1
+

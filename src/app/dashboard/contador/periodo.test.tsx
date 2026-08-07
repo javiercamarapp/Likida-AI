@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { EncabezadoFiscal } from './periodo';
-import type { Periodo } from '@/lib/cuadra/fiscal';
+import type { Periodo } from '@/lib/likida/fiscal';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 10, BAJO (frontend) — "Inconsistencias de identidad entre los

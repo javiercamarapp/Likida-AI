@@ -2,10 +2,10 @@ import Link from 'next/link';
 import { ReceiptText, Wallet, AlertTriangle, Copy } from 'lucide-react';
 import {
   getKpis, detectarAnomalias, type DashboardKpis, type Anomalia,
-} from '@/lib/cuadra/analytics';
+} from '@/lib/likida/analytics';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mxn } from '@/lib/utils';
-import { LEYENDA_CORTA } from '@/lib/cuadra/cuadre/leyendas';
+import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { fechaMx } from '../formato';

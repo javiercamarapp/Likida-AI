@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { toCsv, toLiquidacionRows } from '@/lib/cuadra/export';
+import { toCsv, toLiquidacionRows } from '@/lib/likida/export';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
-import { traerTodo, conteo, LecturaIncompleta } from '@/lib/cuadra/pg';
+import { traerTodo, conteo, LecturaIncompleta } from '@/lib/likida/pg';
 
 export const runtime = 'nodejs';
 

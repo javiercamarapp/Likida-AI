@@ -1,7 +1,7 @@
 import { Landmark, AlertTriangle, Clock } from 'lucide-react';
 import { exigirVerRuta } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { getCobranza, type Cobranza } from '@/lib/cuadra/comercial';
+import { getCobranza, type Cobranza } from '@/lib/likida/comercial';
 import { EstadoVacio, KpiTile } from '../../admin/ui/kit';
 import { mxn, fechaMx } from '@/lib/formato';
 

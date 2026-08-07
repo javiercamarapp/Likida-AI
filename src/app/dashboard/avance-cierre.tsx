@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { ViajeRow } from '@/lib/cuadra/analytics';
+import type { ViajeRow } from '@/lib/likida/analytics';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AVANCE DE CIERRE — cuánto de lo que se abrió ya cerró, por periodo.

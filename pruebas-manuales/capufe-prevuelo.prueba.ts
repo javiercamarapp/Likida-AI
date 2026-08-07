@@ -41,12 +41,12 @@ import { join } from 'node:path';
 import {
   conNavegador,
   type PaginaPlaywright,
-} from '@/lib/cuadra/facturacion/adaptadores/pagina_playwright';
+} from '@/lib/likida/facturacion/adaptadores/pagina_playwright';
 import {
   SELECTORES_CAPUFE,
   SELECTORES_CAPTCHA,
   URL_CAPUFE_SIN_REGISTRO,
-} from '@/lib/cuadra/facturacion/adaptadores/capufe';
+} from '@/lib/likida/facturacion/adaptadores/capufe';
 
 const PERMITIR_POST = process.env.PERMITIR_POST === '1';
 /**

@@ -1,7 +1,7 @@
 import { AlertTriangle } from 'lucide-react';
-import type { OpcionesFiscales } from '@/lib/cuadra/fiscal';
-import type { CuadraConfig } from '@/lib/cuadra/config';
-import { LecturaIncompleta } from '@/lib/cuadra/pg';
+import type { OpcionesFiscales } from '@/lib/likida/fiscal';
+import type { CuadraConfig } from '@/lib/likida/config';
+import { LecturaIncompleta } from '@/lib/likida/pg';
 
 /**
  * Piezas compartidas por las seis pantallas del panel fiscal.

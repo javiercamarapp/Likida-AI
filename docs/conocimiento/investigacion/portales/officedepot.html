@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <meta name="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta name="Pragma" content="no-cache">
+    <meta name="Expires" content="0">
+    <title>Facturaci&oacute;n</title>
+    <base href="./">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script type="text/javascript" src="/ruxitagentjs_ICANVfgqru_10341260622154106.js" data-dtconfig="rid=RID_2418|rpid=1378634480|domain=officedepot.com.mx|reportUrl=/rb_bf53432aic|app=352dfa3c055f7006|cuc=seyaukkg|owasp=1|mel=100000|featureHash=ICANVfgqru|dpvc=1|lastModification=1785807383467|tp=500,50,0|rdnt=1|uxrgce=1|srbbv=2|agentUri=/ruxitagentjs_ICANVfgqru_10341260622154106.js"></script><link rel="icon" type="image/x-icon" id="favicon" href="assets/img/favicon.ico">
+    <link rel="preconnect dns-prefetch" href="//recommender.scarabresearch.com">
+
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-5D6WWNQ');</script>
+    <!-- End Google Tag Manager -->
+
+    <script>
+
+        (function() {
+            var s = document.createElement('script');
+            var ss = document.getElementsByTagName('script')[0];
+            s.async = 1;
+            s.setAttribute("id", "flyde_script_tag");
+            s.src = "https://events.flyde.io/script/v3/fp.min.js";
+            ss.parentNode.insertBefore(s, ss);
+            window.addEventListener('load', function(event){
+                const hostname = window.location.hostname;
+                console.log('hostname',hostname);
+                let idFlyde = 'W9KF0EAoP6plk09oyUizYOZ9qB6pfkR4';
+
+                if(hostname === 'facturacion.officedepot.com.mx'){
+                    idFlyde = '33805UxZdWiQ8cmWuNdkq9Yma9fn075A';
+                }
+
+                //console.log('idFlyde',idFlyde);
+                window.flyde = new Flyde(idFlyde);
+                flyde.pageView();
+            });
+        })();
+    </script>
+<link rel="stylesheet" href="styles.5a217cb5df01789b4106.css"></head>
+<body>
+    <!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5D6WWNQ"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+    <app-root></app-root>
+        <script type="text/html" id="search-template">
+            <![CDATA[
+            <div class="card col-11 m-auto">
+            
+                {{ if (SC.page.products.length) { }}
+                
+                <h4 class="text-center mt-5">Sugerencias</h4>
+                <div class="row justify-content-center">
+                        {{ for (var i=0; i < SC.page.products.length; i++) { }}
+                        {{ var p = SC.page.products[i]; }}
+                            <div class="col-xs-12 col-md-3 text-center card mx-3">
+                            <span data-scarabitem="{{= p.id }}" class="scarab-item mb-5">
+                                <a href="{{= p.link }}" style="font-size: 14px;">
+                                    <img src="{{= p.image }}" style="width: 100%;">
+                                    {{= p.title }}
+                                </a>
+                            </span>
+                            </div>
+                        {{ } }}
+                </div>
+                {{ } }}
+            </div>    
+            ]]>
+        </script>
+        <script>
+            if(window.location.hostname == 'localhost') {
+                document.getElementById("favicon").href="assets/img/logo_radio.png";
+            } else if(window.location.hostname == 'facturacion.officedepot.com.mx') {//Comentar para dev
+                document.getElementById("favicon").href="assets/img/office_icon.ico";
+            }else if(window.location.hostname == 'facturacion.radioshack.com.mx') {
+                document.getElementById("favicon").href="assets/img/logo_radio.png";
+            }else if(window.location.hostname == 'facturacion.tiendas-hes.com.mx') {
+                document.getElementById("favicon").href="assets/img/logo_huawei_color.png";
+            }else if(window.location.hostname == 'facturacion.tiendas-mi.com.mx') {
+                document.getElementById("favicon").href="assets/img/logo_xiaomi_color.png";
+            }else if(window.location.hostname == '9.9.10.59') {
+                document.getElementById("favicon").href="assets/img/office_icon.ico";
+            } else if(window.location.href.includes("billingUatOD")) {
+                document.getElementById("favicon").href="assets/img/office_icon.ico";
+            } else if(window.location.href.includes("billingUatRS")) {
+                document.getElementById("favicon").href="assets/img/logo_radio.png";
+            } else if(window.location.href.includes("billingUatHuawei")) {
+                document.getElementById("favicon").href="assets/img/logo_huawei_color.png";
+            } else if(window.location.href.includes("billingUatMI")) {
+                document.getElementById("favicon").href="assets/img/logo_xiaomi_color.png";
+            }else if(window.location.href.includes("OD-preprod")) {
+                document.getElementById("favicon").href="assets/img/office_icon.ico";
+            }else if(window.location.href.includes("HU-preprod")) {
+                document.getElementById("favicon").href="assets/img/logo_huawei_color.png";
+            }else if(window.location.href.includes("RS-preprod")) {
+                document.getElementById("favicon").href="assets/img/logo_radio.png";
+            }else if(window.location.href.includes("MI-preprod")) {
+                document.getElementById("favicon").href="assets/img/logo_xiaomi_color.png";
+            }
+        </script>
+<script type="text/javascript" src="runtime.4920bc6eb35174f06e2c.js"></script><script type="text/javascript" src="polyfills.73a3a5a0bcaaeb35ca77.js"></script><script type="text/javascript" src="scripts.2364f1caadedbf839819.js"></script><script type="text/javascript" src="main.efe5d4a0dd6e2354a808.js"></script></body>
+
+</html>

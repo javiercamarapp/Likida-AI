@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import AvanceCierre from './avance-cierre';
-import type { ViajeRow } from '@/lib/cuadra/analytics';
+import type { ViajeRow } from '@/lib/likida/analytics';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 10 — dos hallazgos en el mismo componente.

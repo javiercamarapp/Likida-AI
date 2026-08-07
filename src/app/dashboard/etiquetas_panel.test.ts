@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
+import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PAPEL DECÍA "COMBUSTIBLE MAGNA" Y LA PANTALLA "DIÉSEL", DEL MISMO TICKET.
@@ -20,7 +20,7 @@ import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const fuentePanel = readFileSync(new URL('./[id]/page.tsx', import.meta.url), 'utf8');
-const fuentePdf = readFileSync(new URL('../../lib/cuadra/liquidacion/pdf.ts', import.meta.url), 'utf8');
+const fuentePdf = readFileSync(new URL('../../lib/likida/liquidacion/pdf.ts', import.meta.url), 'utf8');
 
 describe('el renglón del panel dice lo mismo que el renglón del PDF', () => {
   it('las dos superficies etiquetan con la función del motor, no con un mapa propio', () => {

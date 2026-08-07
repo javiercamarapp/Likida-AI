@@ -1,0 +1,2225 @@
+[
+ {
+  "comercio": "3b",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "tiendas3b.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Monto total, Fecha de compra, Datos fiscales",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto clara de tu ticket de Tiendas 3B donde se vea el folio, el total y la fecha.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema identifica automáticamente el ticket y extrae los datos necesarios.",
+   "Recibe tu factura CFDI en PDF y XML válida ante el SAT."
+  ]
+ },
+ {
+  "comercio": "50-friends",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "50friends.pv1.mx",
+  "plazo": "30 días naturales desde el consumo",
+  "datos": "Número de folio del ticket, Fecha del consumo, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días naturales",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de 50 Friends con el folio y el total visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de 50 Friends.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "7-eleven",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "7-eleven.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio fiscal del ticket, ID de la tienda, Monto total, Fecha de compra",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del plazo establecido",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Fotografía tu ticket de 7-Eleven mostrando el total, la fecha y el número de tienda.",
+   "Envía la imagen a Clara Intelligence por WhatsApp.",
+   "Nuestro sistema identifica 7-Eleven y procesa la facturación.",
+   "Descarga tu CFDI en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "ado",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "ado.com.mx",
+  "plazo": "Mismo mes calendario del viaje",
+  "datos": "Número de boleto o folio, Fecha del viaje, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se cierra",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu boleto físico o captura de pantalla del boleto electrónico ADO.",
+   "Envía la imagen por WhatsApp a Clara Intelligence con el folio del boleto visible.",
+   "Procesamos tu solicitud con el sistema de autofactura de ADO.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de traslado."
+  ]
+ },
+ {
+  "comercio": "aeromexico",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "aeromexico.com",
+  "plazo": "30 días naturales desde la emisión del boleto",
+  "datos": "Número de boleto (139-XXXXXXXXXX), Apellido del pasajero principal, Datos fiscales, Folios de extras (si aplica)",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasados 30 días el folio se cierra definitivamente",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza tu boleto electrónico de Aeroméxico (PDF o pantallazo).",
+   "Envía el comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos la facturación con los datos del boleto.",
+   "Recibe tu CFDI en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "alsea",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "alsea.interfactura.com",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Marca o cadena, Fecha del consumo, RFC del receptor",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza el folio de tu ticket de la marca ALSEA (Domino's, Italianni's, P.F. Chang's, McDonald's, etc.).",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos la marca ALSEA y seleccionamos la URL correcta en el portal de interfactura.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "amazon",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "amazon.com.mx",
+  "plazo": "Hasta 30 días (productos de terceros)",
+  "datos": "Número de pedido, Estatus 'Entregado', RFC y razón social, Código postal fiscal",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, desde Mis pedidos en cualquier momento",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza tu comprobante de compra en la app o sitio web de Amazon México.",
+   "Toma una captura de pantalla o descarga el comprobante en PDF.",
+   "Envía el comprobante por WhatsApp a Clara Intelligence.",
+   "Recibe tu factura CFDI electrónica en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "autopista-apizaco-huachinango",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista Apizaco Huachinango",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-armeria-manzanillo",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista Armeria Manzanillo",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "NO APARECE LA CASETA DE COBRO ARMERIA- MANZANILLO, ¿DONDE MAS PUEDO FACTURAR MIS TICKETS?"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-atlixco-jantetelco",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista Atlixco Jantetelco",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "EN PINFRA FACTURACION NO APARECE L AAUTOPISTA ATLIXCO JANTETELCO PARA FACTURAR MIS TIKETS DE CASETA"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-ecatepec-piramides",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista Ecatepec Piramides",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "QUIERO FACTURAR TICKET DE LA AUTOPISTA ECATEPEC PIRAMIDES PERO SUS SISTEMA NO TIENE HABILITADA LA CASETA. QUÉ DEBO HACER?"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-libramiento-aguascalientes",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista Libramiento Aguascalientes",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "Restablecer contraseña o correo para ingresar"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-marquesa-lerma-de-villada",
+  "fuentes": [
+   "fem"
+  ],
+  "requiere_cuenta": false
+ },
+ {
+  "comercio": "autopista-mexico-la-marquesa",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación México La Marquesa",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "No se puede facturar ningún ticket de la autopista México-La Marquesa. Pésimo portal de facturación"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-monterrey-nuevo-laredo",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "operadoradelasultana.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "Para realizar la facturación en línea el usuario podrá ingresar a través de la página **http://operadoradelasultana.com.mx/ en el apartado de facturación electrónica o directamente en la página www.pinfrafacturacion.com.mx**.",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "buen día.- en que página me registro para facturar tickets de autopista monterrey – nuevo laredo"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-penon-texcoco",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista Peñón Texcoco",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "buenas noches disculpa como le puedo hacer para obtener una factura de mi ticket si no se le ven claros los datos para facturar, lo único que se distingue es el consecutivo"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-san-antonio-virreyes-teziutlan",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista San Antonio Virreyes Teziutlan",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "NO ESTA HABILITADA LA CASETA DE VIRREYES-TEZIUTLAN PARA SU FACTURACION"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-san-martin-texmelucan-huejotzingo",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista San Martín Texmelucan Huejotzingo",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-san-martin-texmelucan-tlaxcala",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista San Martin Texmelucan Tlaxcala",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "QUIERO FACTURAR UN TICKET"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-santa-ana-altar",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista Santa Ana Altar",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "no me aparece la plaza de cobro Santa Ana entre las opciones, cual tengo que elegir para poder facturar??"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-tenango-ixtapan-de-la-sal",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista Tenango Ixtapan de la Sal",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "LAS CASETAS DE TENANGO IXTAPAN DE LA SAL NO SE PUEDEN FACTURAR NO APARECE LA AUTOPISTA EN EL LISTADO ."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-tlaxcala-puebla",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Caseta Autopista Tlaxcala Puebla",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.",
+   "HOLA!!! Cómo puedo facturar i el ticket no trae los ato completos como ID, consecutivo, máquina, y tampoco Efactura es de Autovias san Martín Texmelucan-Tlaxca"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autopista-zitacuaro-lengua-de-vaca",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Autopista Zitacuaro Lengua de Vaca",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "autozone",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "autozone.com.mx",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Número de folio de transacción, Fecha de compra, Monto total, RFC del receptor",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de compra de AutoZone con el número de folio visible.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación electrónica de AutoZone.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos automotrices."
+  ]
+ },
+ {
+  "comercio": "ben-and-frank",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "benandfrank.com",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Número de orden de compra, Fecha de compra, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu comprobante de compra de Ben & Frank con el número de orden visible.",
+   "Toma una foto del comprobante y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Ben & Frank.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico ante el SAT."
+  ]
+ },
+ {
+  "comercio": "benavides",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "e-facturate.com",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Número de referencia, RFC del receptor, Razón social, Código postal fiscal",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, mientras el folio siga vigente dentro del mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Farmacias Benavides con el número de referencia bajo el código de barras visible.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud en el portal oficial de facturación de Benavides.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "bodega-aurrera",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.walmartmexico.com.mx",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "TC (Terminal de Caja), TR (Transacción), TD (Terminal Dispositivo), CR (Código de Referencia)",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días desde el portal de Walmart México",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Bodega Aurrerá y toma una foto clara donde se vean el TC, TR, TD y CR en la parte inferior del comprobante.",
+   "Envía la foto de tu ticket por WhatsApp a Clara Intelligence.",
+   "Ingresamos los datos al portal de facturación de Walmart México (facturacion.walmartmexico.com.mx) seleccionando la cadena Bodega Aurrerá.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para deducir tus compras de despensa y artículos del hogar."
+  ]
+ },
+ {
+  "comercio": "bp",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "bp.com",
+  "plazo": "Varía por estación; factura el mismo día de la carga",
+  "datos": "Número de estación BP, Número de folio, Web ID, RFC del receptor",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, desde el portal mientras el folio siga vigente",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de BP con el número de estación, el folio y el Web ID visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud en el portal oficial de facturación de BP México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para deducir tu combustible."
+  ]
+ },
+ {
+  "comercio": "bp-gasolineras",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "gasolineriabp.com.mx",
+  "requiere_cuenta": false,
+  "telefono": "800 6680209",
+  "email": "contactanos@bp.com",
+  "quejas": [
+   "## Instrucciones de facturación BP Gasolineras",
+   "No se puede ingresar a su pagina para poder facturar"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Nombre",
+   "Domicilio Fiscal",
+   "Régimen Fiscal",
+   "Ticket de Compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "burger-king",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "alsea.interfactura.com",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Número de ticket, Número de tienda, Fecha de compra, Total pagado",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Burger King con el número de ticket, el número de tienda y la razón social del operador visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos si tu sucursal es de Alsea o de un franquiciatario y procesamos la solicitud en el portal correcto.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "caffenio",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturaciondrive.caffenio.com",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Folio de transacción, Código de facturación, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Caffenio donde se vean el folio y el código de facturación.",
+   "Toma una foto clara del ticket asegurándote de que ambos códigos sean legibles.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Recibe tu CFDI 4.0 en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "capufe",
+  "fuentes": [
+   "clara",
+   "fem"
+  ],
+  "portal": "facturacioncapufe.com.mx",
+  "plazo": "30 días naturales desde la fecha del cruce",
+  "datos": "Código del ticket de 18 caracteres",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, dentro del plazo establecido",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva el comprobante de pago de tu cruce de caseta CAPUFE con el folio de transacción.",
+   "Toma una foto del comprobante y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de CAPUFE.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de peaje."
+  ],
+  "telefono": "442 161 2565, 551 209 1825",
+  "email": "contacto@quadrum.com.mx",
+  "quejas": [
+   "## Instrucciones de Facturación Capufe",
+   "Haz click en validar código",
+   "Captura todos los tickets que desees.",
+   "COMO FACTURAR TICKETS DE CASETA PUENTE LA UNIDAD"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de pago de caseta",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "carls-jr",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.carlsjrmso.com",
+  "plazo": "Mismo mes calendario del pedido",
+  "datos": "Folio del ticket, Número de tienda, Fecha de compra",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Carl's Jr. con el folio, el número de tienda y el total visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos la franquicia MSO de Carl's Jr. y procesamos tu solicitud.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "casa-de-tono",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "lacasadetono.mx",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de sucursal, Fecha de consumo",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Casa de Toño con el folio, el número de sucursal y el total visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud a través del portal de facturación de Casa de Toño.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "caseta-tezoyuca",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "chedraui",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "michedraui.com.mx",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Folio del ticket, Número de tienda, Número de caja, Importe total",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto clara del ticket de Chedraui incluyendo el código de barras y el total.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema procesa el ticket y gestiona la facturación automáticamente.",
+   "Recibe tu CFDI válido en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "cinepolis",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "cinepolis.com",
+  "plazo": "Mismo mes calendario de la función",
+  "datos": "Número de folio o de orden, Fecha de la función, Complejo Cinépolis, RFC del receptor",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket o comprobante de compra de Cinépolis con el número de folio.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Cinépolis.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para tus gastos de entretenimiento."
+  ]
+ },
+ {
+  "comercio": "circle-k",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.circlekmexico.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Número de tienda, Monto total, Fecha de compra",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del plazo establecido",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto del ticket de Circle K con el folio y el monto total visibles.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud y gestionamos la factura con el portal de Circle K.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "city-market",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "citymarket.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Número de tienda, Monto total, Datos fiscales",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de City Market con el folio de transacción y el monto.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mes calendario.",
+   "Procesamos tu solicitud y gestionamos la emisión del CFDI.",
+   "Recibe tu factura en PDF y XML válida ante el SAT."
+  ]
+ },
+ {
+  "comercio": "comex",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "comex.com.mx",
+  "plazo": "30 días naturales desde la compra",
+  "datos": "Folio del ticket, Fecha de compra, Monto total, Uso del CFDI",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días del plazo",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Comex con el folio, el total y la fecha visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Comex.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "concesionaria-mexiquense",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "circuitoexterior.mx",
+  "datos": "Folio, Fecha, Horas, Minutos, Segundos, Plaza de Cobro, Carril, Categoría",
+  "requiere_cuenta": true,
+  "telefono": "13-28-12-36 (Facturación, Opción 3)",
+  "email": "tuopinion@circuitoexterior.mx",
+  "quejas": [
+   "## Instrucciones de facturación Concesionaria Mexiquense",
+   "Selecciona “Agregar tickets para facturar”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos.!"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Domicilio Fiscal",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "coppel",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturas.coppel.com",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Fecha de compra, Monto total, Datos fiscales",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto de tu ticket de Coppel con el total y la fecha visibles.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud automáticamente con el portal Coppel.",
+   "Recibe tu CFDI en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "corpogas",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "facturasgas.com",
+  "requiere_cuenta": false,
+  "telefono": "55 5511 2186",
+  "email": "Contacto@gruposynergo.com",
+  "quejas": [
+   "## Instrucciones de facturación Corpogas",
+   "Quiero facturar y me dice que no coincide mi correo",
+   "Quiero facturar y me dice que no coincide mi correo"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Nombre o razón social",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "costco",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "costco.com.mx",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Número de membresía Costco, Folio del ticket, Fecha de compra, Monto total",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto de tu ticket de Costco donde se vea claramente el número de membresía y el total.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "El sistema detecta que es un ticket de Costco y procesa tu facturación.",
+   "Descarga tu factura CFDI en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "dairy-queen-mexico",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.dequ.mx",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de tienda, Fecha de compra",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Dairy Queen con el folio, el número de tienda y el total visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos la franquicia de Dairy Queen y procesamos tu solicitud.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "dhl",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "dhl.com",
+  "plazo": "30 días naturales desde la fecha del servicio",
+  "datos": "Número de guía (waybill), Fecha del servicio, Monto total, RFC del receptor",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza tu comprobante de envío DHL con el número de guía o waybill visible.",
+   "Envía la foto del comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de DHL México.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de mensajería."
+  ]
+ },
+ {
+  "comercio": "didi",
+  "fuentes": [
+   "clara"
+  ],
+  "plazo": "7 días naturales tras el viaje o pedido",
+  "datos": "ID del viaje o pedido, Fecha y hora del servicio, Monto total, RFC del solicitante",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, en Mis recibos dentro de la app",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una captura de pantalla del recibo de tu viaje en DiDi o pedido de DiDi Food.",
+   "Envía la imagen a Clara Intelligence por WhatsApp.",
+   "El sistema procesa tu recibo y genera la solicitud de facturación.",
+   "Descarga tu factura CFDI válida en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "dominos",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "alsea.interfactura.com",
+  "plazo": "Mismo mes calendario del pedido",
+  "datos": "Folio del ticket o número de pedido, Fecha del pedido, Monto total, Forma de pago electrónica",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket o comprobante de pedido de Domino's con el folio visible.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Domino's (Alsea).",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "estafeta",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "estafeta.com",
+  "plazo": "30 días naturales desde la fecha del servicio",
+  "datos": "Número de guía, Fecha del servicio, Monto total, RFC del receptor",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza tu comprobante de envío Estafeta con el número de guía o rastreo.",
+   "Envía la foto del comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación electrónica de Estafeta.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de mensajería."
+  ]
+ },
+ {
+  "comercio": "farmacia-del-ahorro",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "fahorro.com",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio fiscal del ticket, Número de tienda, Monto total, Datos fiscales",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto de tu ticket de Farmacia del Ahorro con el total y la fecha.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de Farmacia del Ahorro.",
+   "Recibe tu CFDI en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "farmacias-guadalajara",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "farmaciasguadalajara.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Número de tienda, Monto total, Forma de pago electrónica",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Farmacias Guadalajara con el folio, número de tienda y monto.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mismo mes calendario.",
+   "Procesamos tu solicitud y emitimos el CFDI automáticamente.",
+   "Descarga tu factura en PDF y XML válida ante el SAT."
+  ]
+ },
+ {
+  "comercio": "farmacias-san-pablo",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "sanpablo.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Número de tienda, Monto total, Forma de pago electrónica",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Farmacias San Pablo con el folio y el monto total.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mismo mes.",
+   "Nuestro sistema procesa tu solicitud y emite el CFDI.",
+   "Recibe tu factura en PDF y XML válida ante el SAT para deducir."
+  ]
+ },
+ {
+  "comercio": "farmacias-similares",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.gpupm.com",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Fecha de compra, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Farmacias Similares con el monto y la fecha visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el sistema de Farmacias Similares.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "fedex",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "fedex.com",
+  "plazo": "30 días naturales desde la fecha del envío",
+  "datos": "Número de guía, Fecha del servicio, Monto exacto, RFC del receptor",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza tu comprobante de envío o guía de FedEx con el número de rastreo visible.",
+   "Envía la foto del comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de FedEx México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para deducir tus gastos de paquetería."
+  ]
+ },
+ {
+  "comercio": "g500",
+  "fuentes": [
+   "clara",
+   "nosotros"
+  ],
+  "portal": "megasur.com.mx:8029",
+  "plazo": "mes de emisión (impreso en el ticket y en el portal)",
+  "datos": "WebID (uno solo; trae estación, litros, producto, precio, importe y forma de pago)",
+  "requiere_cuenta": false,
+  "reimprimir": "Depende de la estación; conserva el PDF y XML al emitirlos",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de G500 con el nombre de la estación, el permiso CRE y el folio visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos la estación G500 correcta y procesamos tu solicitud de facturación.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para deducir tu combustible."
+  ],
+  "verificado_por_nosotros": "ticket 1000724 · $839.70 · UUID B0800A68-8565-47D9-90E0-CDA7803C50E4"
+ },
+ {
+  "comercio": "g500-network",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "servicioaclientes.g500network.com",
+  "datos": "Folio, Web Id, Llenar el captcha",
+  "requiere_cuenta": false,
+  "telefono": "55 8842 8000",
+  "quejas": [
+   "## Instrucciones de facturación G500 Network",
+   "Haz click en “Agregar” ticket."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Domicilio Fiscal",
+   "Ticket de compra",
+   "Datos de la Estación de Servicio",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "gasofac",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "gasofac.com.mx",
+  "datos": "Numero de ticket, Fecha de Ticket, Importe del Ticket",
+  "requiere_cuenta": false,
+  "telefono": "**Correo electrónico**: ventas@gasofac.com.mx",
+  "email": "ventas@gasofac.com.mx",
+  "quejas": [
+   "## Instrucciones de facturación Gasofac"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "gasolineras",
+  "fuentes": [
+   "clara"
+  ],
+  "plazo": "24 a 72 horas tras la carga",
+  "datos": "Número de permiso CRE, Folio del ticket, Número de estación, Litros y tipo de combustible",
+  "requiere_cuenta": false,
+  "reimprimir": "Generalmente no disponible pasadas 72 horas",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto del ticket de la gasolinera donde se vea el monto, litros y tipo de combustible.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema identifica la gasolinera y procesa tu facturación automáticamente.",
+   "Recibe tu factura CFDI de combustible en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "goodprice",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "goodpriceg.com",
+  "datos": "Folio, Web Id, Llenar el captcha",
+  "requiere_cuenta": false,
+  "telefono": "81 8326 4956 81 8141 0553 81 2670 7969",
+  "quejas": [
+   "## Instrucciones de facturación Goodprice",
+   "Haz click en “Agregar” ticket."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Domicilio Fiscal",
+   "Ticket de compra",
+   "Datos de la Estación de Servicio",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "heb",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "heb.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Monto total, Fecha de compra, Datos fiscales",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Fotografía tu ticket de HEB asegurándote de capturar el folio y el monto total.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema procesa la solicitud y gestiona la facturación.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "hidrosina",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "facturacionelectronica.hidrosina.com.mx",
+  "requiere_cuenta": false,
+  "telefono": "(55) 5262-3860",
+  "email": "atencionaclientes@hidrosina.com.mx",
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Nombre o razón Social",
+   "Domicilio Fiscal",
+   "Régimen Fiscal",
+   "Ticket de compra",
+   "Correo electrónico![facturacion hidrosina](https://i0.wp.com/facturaelectronicamexico.mx/wp-content/uploads/2022/05/facturacion-hidrosina-ticket-1.png?resize=435%2C444&ssl=1)"
+  ]
+ },
+ {
+  "comercio": "home-depot",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "homedepot.com.mx",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Folio fiscal, Número de tienda, Número de operación, Monto total",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Fotografía tu ticket de Home Depot asegurándote de capturar el total y el número de ticket.",
+   "Envía la foto por WhatsApp a Clara Intelligence o cárgala en nuestra plataforma.",
+   "Clara procesa el ticket automáticamente e inicia la facturación.",
+   "Recibe tu CFDI en PDF y XML listo para tus deducciones."
+  ]
+ },
+ {
+  "comercio": "iave",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "iave.capufe.gob.mx",
+  "plazo": "30 días naturales desde la fecha del cruce",
+  "datos": "Número de tag IAVE, Periodo de facturación, RFC del receptor, Razón social",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, dentro de los 30 días del cruce",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza tu estado de cuenta IAVE o los comprobantes de tus cruces de caseta.",
+   "Envía el documento o foto por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de CAPUFE.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de peaje."
+  ]
+ },
+ {
+  "comercio": "ikea",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "v2.dito.com.mx",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Número de ticket u orden, Fecha de compra, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días desde el portal Dito",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de IKEA México con el número de orden o folio visible.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud a través del portal de autofactura Dito de IKEA.",
+   "Recibe tu CFDI en PDF y XML válido para deducir muebles y artículos de oficina."
+  ]
+ },
+ {
+  "comercio": "italiannis",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "alsea.interfactura.com",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Fecha del consumo, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Italianni's con el folio y el número de sucursal visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos Italianni's como marca ALSEA y accedemos al portal correcto.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "izzi",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "izzi.mx",
+  "plazo": "Mismo ciclo de facturación mensual",
+  "datos": "Número de cuenta Izzi, Periodo de facturación, Datos fiscales, Forma de pago electrónica",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, en cualquier momento desde izzi.mx",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza tu recibo o comprobante de pago de Izzi (correo de factura mensual o ticket de pago en sucursal).",
+   "Envía el comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud y gestionamos la emisión del CFDI.",
+   "Recibe tu factura en PDF y XML válida ante el SAT para deducir."
+  ]
+ },
+ {
+  "comercio": "kfc",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "kfc.teagradece.mx",
+  "plazo": "Mismo mes calendario del pedido",
+  "datos": "Número de folio del ticket, Fecha del pedido, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de KFC donde se vea el folio, el total y el nombre de la sucursal.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos la franquicia de KFC y procesamos tu solicitud de facturación.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "krispy-kreme",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.krispykreme.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Número de folio del ticket, Fecha de compra, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Krispy Kreme con el número de folio visible.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Krispy Kreme México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "la-comer",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "lacomer.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Fecha de compra, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de La Comer con el folio de transacción y el monto visible.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de La Comer.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de despensa y operación."
+  ]
+ },
+ {
+  "comercio": "la-gas",
+  "fuentes": [
+   "nosotros"
+  ],
+  "portal": "facturacion.lagas.com.mx",
+  "plazo": "mes de consumo",
+  "datos": "folio + importe",
+  "requiere_cuenta": true,
+  "verificado_por_nosotros": "ticket 1670001331723 · $714.75 · folio BOW-2025008 · exige correo+teléfono+contraseña"
+ },
+ {
+  "comercio": "laboratorio-chopo",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "chopo.com.mx",
+  "plazo": "30 días naturales desde la fecha del servicio",
+  "datos": "Número de orden, Fecha del servicio, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu comprobante de pago de Laboratorio Chopo con el número de orden visible.",
+   "Toma una foto clara del comprobante y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Laboratorio Chopo.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico personal."
+  ]
+ },
+ {
+  "comercio": "little-caesars",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.littlecaesars.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de orden, Número de tienda, Monto total, Forma de pago electrónica",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Little Caesars con el folio y el total de la compra.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mismo mes.",
+   "Procesamos tu solicitud y gestionamos la emisión del CFDI.",
+   "Recibe tu factura en PDF y XML válida ante el SAT."
+  ]
+ },
+ {
+  "comercio": "liverpool",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacionclientes.liverpool.com.mx",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Folio fiscal, Monto total, Fecha de compra, RFC del receptor",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días desde el portal",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto de tu ticket de Liverpool donde aparezca el total y el número de transacción.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema identifica Liverpool como el comercio y procesa la facturación.",
+   "Recibe tu CFDI en PDF y XML listo para descargar."
+  ]
+ },
+ {
+  "comercio": "mcdonalds",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacionmcdonalds.com.mx",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Número de restaurante, Número de ticket, Número de caja, Fecha de compra",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes desde el portal con los datos del ticket",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de McDonald's con el número de restaurante, el número de ticket y la fecha visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud en el portal oficial de facturación de McDonald's México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "mercado-libre",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "mercadolibre.com.mx",
+  "plazo": "Primeros días del mes siguiente",
+  "datos": "RFC, razón social, régimen fiscal y código postal",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, desde Mis compras en cualquier momento",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Descarga o captura el comprobante de tu compra en Mercado Libre (confirmación de pago o número de pedido).",
+   "Envía el comprobante por WhatsApp a Clara Intelligence o súbelo desde nuestra plataforma.",
+   "Nuestro sistema extrae los datos del pedido e inicia la solicitud de facturación.",
+   "Recibe tu factura CFDI en formato PDF y XML, válida ante el SAT para tus deducciones fiscales."
+  ]
+ },
+ {
+  "comercio": "migasolina",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "migasolina.mx",
+  "datos": "Folio, Web Id, Llenar el captcha",
+  "requiere_cuenta": false,
+  "telefono": "01 800 148 55 55",
+  "email": "migasolinatrc@gmail.com",
+  "quejas": [
+   "## Instrucciones de facturación MiGasolina",
+   "Haz click en “Agregar” ticket."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Domicilio Fiscal",
+   "Ticket de compra",
+   "Datos de la Estación de Servicio",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "mobil",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "mobil.com.mx",
+  "plazo": "Varía por operador; factura el mismo día de la carga",
+  "datos": "Operador de la estación, Número de ticket o folio, Estación y hora de carga, RFC del receptor",
+  "requiere_cuenta": false,
+  "reimprimir": "Depende del operador de la estación",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Mobil con el nombre del operador, la estación, el folio y la hora de carga visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos al operador de tu estación Mobil y procesamos la solicitud en su portal de facturación.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para deducir tu combustible."
+  ]
+ },
+ {
+  "comercio": "netflix",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "netflix.com",
+  "plazo": "Mismo mes del cargo",
+  "datos": "RFC, razón social, régimen fiscal y código postal",
+  "requiere_cuenta": true,
+  "reimprimir": "Proceso no confirmado en fuente oficial",
+  "descarga": "No confirmado",
+  "pasos": [
+   "Localiza tu recibo mensual de Netflix en el correo electrónico o en la sección 'Cuenta > Ver historial de facturación' de Netflix.",
+   "Envía el comprobante por WhatsApp a Clara Intelligence o súbelo desde nuestra plataforma.",
+   "Nuestro sistema extrae los datos del cargo y gestiona la solicitud de facturación CFDI.",
+   "Recibe tu factura CFDI en PDF y XML válida ante el SAT."
+  ]
+ },
+ {
+  "comercio": "nutrisa",
+  "fuentes": [
+   "clara"
+  ],
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de sucursal, Fecha de compra",
+  "requiere_cuenta": false,
+  "reimprimir": "Consultar con sucursal",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Nutrisa con el folio, el número de sucursal y el total visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Verificamos el portal de facturación disponible para tu sucursal de Nutrisa.",
+   "Recibes tu CFDI o la orientación necesaria para obtenerlo directamente en sucursal."
+  ]
+ },
+ {
+  "comercio": "office-depot",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.officedepot.com.mx",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Folio del ticket, Número de tienda, Monto total, Datos fiscales",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto del ticket de Office Depot mostrando el total y la fecha.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Procesamos tu ticket y generamos la solicitud de facturación.",
+   "Recibe tu CFDI en PDF y XML válido para deducción."
+  ]
+ },
+ {
+  "comercio": "officemax",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.officemax.com.mx",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Número de transacción, Fecha de compra, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de compra de OfficeMax con el número de transacción visible.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación electrónica de OfficeMax.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus compras de oficina."
+  ]
+ },
+ {
+  "comercio": "opticas-devlyn",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "posap.devlyn.me",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Fecha de compra, Monto total, Prescripción del optometrista",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Ópticas Devlyn con el folio y el monto total visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Devlyn.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico ante el SAT."
+  ]
+ },
+ {
+  "comercio": "opticas-lux",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "lux.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Número de folio del comprobante, Fecha de compra, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu comprobante de compra de Ópticas Lux con el folio visible.",
+   "Toma una foto clara del comprobante y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Ópticas Lux.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico."
+  ]
+ },
+ {
+  "comercio": "orsan-en-linea",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "facturacion.orsan.com.mx",
+  "datos": "Tipo de pago, Método de pago, Uso de CFDI, Transacción, Digito Verificador",
+  "requiere_cuenta": false,
+  "telefono": "81 1878 0465",
+  "email": "sd@orsan.com.mx",
+  "quejas": [
+   "## Instrucciones de facturación Orsan",
+   "Haz click en “buscar”, para que se carguen los datos del ticket."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "oxxo",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "www4.oxxo.com:9443",
+  "plazo": "7 días naturales desde la compra",
+  "datos": "Folio web (ID Web), Monto total, Fecha de compra, RFC del receptor",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, descárgalo de nuevo desde el portal dentro del plazo de 7 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto clara de tu ticket de OXXO donde se vea el total, la fecha y el número de tienda.",
+   "Envía la foto por WhatsApp a Clara Intelligence o súbela desde nuestro sitio web.",
+   "Nuestro sistema identifica automáticamente que es un ticket de OXXO y extrae los datos necesarios.",
+   "Recibe tu factura CFDI en formato PDF y XML, válida ante el SAT para tus deducciones fiscales."
+  ]
+ },
+ {
+  "comercio": "oxxo-gas",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.oxxogas.com",
+  "plazo": "Mismo mes calendario de la carga",
+  "datos": "Folio de transacción, Fecha de carga, Monto total, Forma de pago electrónica",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de carga de gasolina de OXXO Gas con el folio visible.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de OXXO Gas.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tu gasto de combustible."
+  ]
+ },
+ {
+  "comercio": "palacio-de-hierro",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.elpalaciodehierro.com",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Número de transacción, Número de tienda, Monto total, Forma de pago",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de El Palacio de Hierro con el folio y el monto total visibles.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mes calendario.",
+   "Nuestro sistema procesa la solicitud y gestiona el CFDI.",
+   "Recibe tu factura en PDF y XML válida ante el SAT."
+  ]
+ },
+ {
+  "comercio": "panaderia-el-globo",
+  "fuentes": [
+   "clara"
+  ],
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de sucursal, Fecha de compra",
+  "requiere_cuenta": true,
+  "reimprimir": "Consultar con sucursal",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de El Globo con el folio, el número de sucursal y el total visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Verificamos el portal de facturación disponible para Panadería El Globo.",
+   "Recibes tu CFDI o la orientación para obtenerlo directamente en sucursal."
+  ]
+ },
+ {
+  "comercio": "pastelerias-esperanza",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "cfdi.esperanza.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Fecha de compra, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, descárgalo desde el portal cfdi.esperanza.mx",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Pastelerías Esperanza con el folio y el monto visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud en el portal cfdi.esperanza.mx.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "pastelerias-marisa",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.simang8.com",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Número de sucursal, Fecha de compra, Monto total",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Pastelerías Marisa con el folio y el monto visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud a través del portal de facturación de Marisa.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "pemex",
+  "fuentes": [
+   "clara"
+  ],
+  "plazo": "72 horas tras la carga (varía por estación)",
+  "datos": "Número de permiso CRE, Folio del ticket, Número de estación Pemex, Litros y tipo de combustible",
+  "requiere_cuenta": false,
+  "reimprimir": "No disponible después de 72 horas en la mayoría de franquicias",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto del ticket de la estación Pemex que muestre litros, monto y número de estación.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Identificamos la franquicia y procesamos tu facturación al instante.",
+   "Recibe tu CFDI con clave SAT de combustible en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "petro-7",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "tarjetapetro-7.com.mx",
+  "requiere_cuenta": false,
+  "telefono": "800 01 73876",
+  "email": "servicioaclientes@petro-7.com.mx",
+  "quejas": [
+   "## Instrucciones de facturación Petro 7",
+   "Haz click en “Agregar Ticket”.",
+   "Llena el Captcha y Haz click en “Facturar”"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Nombre",
+   "Domicilio Fiscal",
+   "Régimen Fiscal",
+   "Ticket de Compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "petro-seven",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "tarjetapetro-7.com.mx",
+  "requiere_cuenta": false,
+  "telefono": "800 01 73876",
+  "email": "servicioaclientes@petro-7.com.mx",
+  "quejas": [
+   "## Instrucciones de facturación Petro seven",
+   "Haz click en “Agregar Ticket”.",
+   "Llena el Captcha y Haz click en “Facturar”"
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Nombre",
+   "Domicilio Fiscal",
+   "Régimen Fiscal",
+   "Ticket de Compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "pf-changs",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "alsea.interfactura.com",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Fecha del consumo, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de P.F. Chang's con el folio y el número de sucursal visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos P.F. Chang's como marca ALSEA y accedemos a la URL correcta.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "pinfra",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Requisitos de Facturación Pinfra",
+   "## Instrucciones de facturación Pinfra",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "primera-plus",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturaelectronicagfa.mx",
+  "plazo": "Mismo mes calendario del viaje",
+  "datos": "Número de boleto o folio, Fecha del viaje, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se cierra",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu boleto físico o correo de confirmación de Primera Plus con el número de folio.",
+   "Envía la imagen del boleto por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Primera Plus.",
+   "Recibe tu CFDI en PDF y XML deducible ante el SAT."
+  ]
+ },
+ {
+  "comercio": "puente-el-prieto",
+  "fuentes": [
+   "fem"
+  ],
+  "requiere_cuenta": false
+ },
+ {
+  "comercio": "puente-jose-lopez-portillo",
+  "fuentes": [
+   "fem"
+  ],
+  "portal": "pinfrafacturacion.com.mx",
+  "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total, Hora",
+  "requiere_cuenta": true,
+  "telefono": "01800 4440173 o al (0155) 46243535",
+  "email": "facturacion@autopistasmichoacan.mx",
+  "quejas": [
+   "## Instrucciones de facturación Puente Jose Lopez Portillo",
+   "Selecciona “Facturar Ticket”",
+   "Haz click en “Agregar Ticket”. Si tiene más tickets puede agregarlos."
+  ],
+  "requisitos": [
+   "Rfc (Registro Federal de Contribuyentes)",
+   "Datos Fiscales",
+   "Ticket de compra",
+   "Correo electrónico"
+  ]
+ },
+ {
+  "comercio": "rappi",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "rappi.com.mx",
+  "plazo": "Hasta 72 horas después del pedido",
+  "datos": "RFC, razón social, régimen fiscal y código postal",
+  "requiere_cuenta": true,
+  "reimprimir": "Proceso no confirmado en fuente oficial",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Abre la app de Rappi y captura el comprobante del pedido que quieres facturar.",
+   "Envía la captura por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema procesa tu pedido y gestiona la solicitud de facturación CFDI.",
+   "Recibe tu factura CFDI en PDF y XML válida ante el SAT."
+  ]
+ },
+ {
+  "comercio": "salud-digna",
+  "fuentes": [
+   "clara"
+  ],
+  "plazo": "30 días naturales desde la fecha del servicio",
+  "datos": "Número de orden, Fecha del servicio, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu comprobante de pago de Salud Digna con el número de orden o folio.",
+   "Toma una foto clara del comprobante y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de Salud Digna.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico personal."
+  ]
+ },
+ {
+  "comercio": "sams-club",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.walmartmexico.com.mx",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Número de socio Sam's Club, Folio del ticket, Número de tienda, Monto total",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto clara de tu ticket de Sam's Club donde se vean el total, la fecha y tu número de membresía.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "El sistema detecta que es un ticket de Sam's Club y procesa la facturación.",
+   "Recibe tu CFDI en PDF y XML listo para deducir."
+  ]
+ },
+ {
+  "comercio": "sears",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturaelectronica.sears.com.mx",
+  "plazo": "Hasta el día 5 del mes siguiente",
+  "datos": "Número de tienda, Número de operación, Número de caja, Monto total",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del plazo (hasta el día 5 del mes siguiente)",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto clara de tu ticket de Sears con el total y el número de transacción.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud y emitimos la factura automáticamente.",
+   "Recibe tu CFDI en PDF y XML para deducir."
+  ]
+ },
+ {
+  "comercio": "shell",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.shell.com.mx",
+  "plazo": "72 horas tras la carga (varía por estación)",
+  "datos": "Permiso CRE de la estación, Folio del ticket, Número de estación Shell, Litros y combustible",
+  "requiere_cuenta": false,
+  "reimprimir": "No disponible después de 72 horas en la mayoría de franquicias",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Toma una foto del ticket Shell con el total, los litros y el número de estación.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Identificamos la estación Shell y generamos tu solicitud de facturación.",
+   "Recibe tu CFDI deducible en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "sodimac",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "sodimac.com.mx",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Número de transacción, Fecha de compra, RFC del receptor, Razón social",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de compra de Sodimac con el folio de transacción visible.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación electrónica de Sodimac.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "soriana",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "soriana.com",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Folio fiscal del ticket, Número de tienda, Número de caja, Monto total",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Fotografía tu ticket de Soriana asegurándote de que se vea el total y la fecha de compra.",
+   "Envía la foto a Clara Intelligence por WhatsApp o súbela a nuestra plataforma.",
+   "El sistema procesa el ticket y genera tu solicitud de facturación.",
+   "Descarga tu factura CFDI en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "spotify",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "spotify.com",
+  "plazo": "Mismo mes del cargo",
+  "datos": "RFC, razón social, régimen fiscal y código postal",
+  "requiere_cuenta": true,
+  "reimprimir": "Proceso no confirmado en fuente oficial",
+  "descarga": "No confirmado",
+  "pasos": [
+   "Localiza tu recibo mensual de Spotify en el correo electrónico o en spotify.com/account en la sección de historial de pagos.",
+   "Envía el comprobante por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema procesa el cargo y gestiona la solicitud de facturación CFDI.",
+   "Recibe tu factura CFDI en PDF y XML válida ante el SAT."
+  ]
+ },
+ {
+  "comercio": "starbucks",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.starbucks.com.mx",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Número de tienda, Monto total, Forma de pago electrónica",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Starbucks con el folio de transacción y el monto visibles.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mismo mes calendario.",
+   "Procesamos tu solicitud y gestionamos la emisión del CFDI.",
+   "Descarga tu factura en PDF y XML válida ante el SAT."
+  ]
+ },
+ {
+  "comercio": "subway",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.subway.com.mx",
+  "plazo": "Mismo mes calendario del pedido",
+  "datos": "Folio del ticket, Número de sucursal, Fecha de compra",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Subway con el folio, el número de sucursal y el total visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos el portal correcto para tu franquicia de Subway y procesamos tu solicitud.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "tag-pase",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "pase.com.mx",
+  "plazo": "30 días naturales desde la fecha del cruce",
+  "datos": "Número de tag TAG PASE, Periodo de cruces, RFC del receptor, Razón social",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, dentro de los 30 días del cruce",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza tu estado de cuenta TAG PASE o los comprobantes de tus cruces.",
+   "Envía el documento por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de TAG PASE.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus peajes."
+  ]
+ },
+ {
+  "comercio": "telcel",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "mitelcel.com",
+  "plazo": "Mismo mes calendario del pago",
+  "datos": "Número Telcel o folio del recibo, Folio del ticket de pago (si aplica), Monto total, Datos fiscales",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, disponible en cualquier momento desde mitelcel.com",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza tu recibo de Telcel (correo, app Mi Telcel o ticket de pago).",
+   "Envía la imagen o PDF por WhatsApp a Clara Intelligence.",
+   "Procesamos la facturación con los datos del recibo.",
+   "Recibe tu CFDI en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "televia",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "televia.com.mx",
+  "plazo": "30 días naturales desde la fecha del cruce",
+  "datos": "Número de tag TeleVía, Periodo de cruces, RFC del receptor, Razón social",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, dentro de los 30 días del cruce",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza tu estado de cuenta TeleVía o los comprobantes de tus cruces.",
+   "Envía el documento por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de TeleVía.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus peajes."
+  ]
+ },
+ {
+  "comercio": "tim-hortons",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "timhortonsmx.com",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de tienda, Fecha y hora del consumo, Monto total",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de Tim Hortons con el folio, el total y la fecha visible.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud en el portal de facturación de Tim Hortons México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ },
+ {
+  "comercio": "uber",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "riders.uber.com",
+  "plazo": "Hasta 72 horas tras el viaje o pedido",
+  "datos": "ID del viaje, Fecha y hora del servicio, Monto total cobrado, RFC y razón social",
+  "requiere_cuenta": true,
+  "reimprimir": "Sí, en la sección Recibos de la app o riders.uber.com",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Abre la app de Uber y toma una captura de pantalla del recibo de tu viaje o pedido de Uber Eats.",
+   "Envía la captura por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema detecta que es un recibo de Uber y procesa la facturación automáticamente.",
+   "Recibe tu CFDI en PDF y XML listo para tus deducciones fiscales."
+  ]
+ },
+ {
+  "comercio": "vips-sanborns-toks",
+  "fuentes": [
+   "clara"
+  ],
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de sucursal, Monto del consumo (sin propina), Datos fiscales",
+  "requiere_cuenta": false,
+  "reimprimir": "No, pasado el mes ya no es recuperable",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Fotografía tu ticket asegurándote de que se vea el total, la fecha y el número de sucursal.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Identificamos la cadena (Vips, Sanborns o Toks) y procesamos tu solicitud.",
+   "Recibe tu factura CFDI en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "viva-aerobus",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "vivaaerobus.com",
+  "plazo": "Mismo mes calendario de la compra del boleto",
+  "datos": "Código PNR, Apellido del pasajero, RFC del receptor, Razón social",
+  "requiere_cuenta": true,
+  "reimprimir": "No, pasado el mes de compra el folio se cierra",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Localiza el correo de confirmación de tu boleto Viva Aerobus con el código de reservación (PNR).",
+   "Envía la captura de pantalla o el PDF del boleto por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Viva Aerobus.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de viaje aéreo."
+  ]
+ },
+ {
+  "comercio": "volaris",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "factura.volaris.com",
+  "plazo": "Mismo mes calendario de la compra del boleto",
+  "datos": "Código de reserva (PNR), Apellido del pasajero principal, Datos fiscales, PNR de cargos extras",
+  "requiere_cuenta": true,
+  "reimprimir": "No, pasado el mes de compra el folio se cierra",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Descarga tu boleto Volaris o toma una captura del correo de confirmación.",
+   "Envía el comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos la facturación con los datos del boleto.",
+   "Recibe tu CFDI en PDF y XML."
+  ]
+ },
+ {
+  "comercio": "walmart",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "facturacion.walmartmexico.com.mx",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "TC – Transacción, TR – Terminal, TD – Tienda, CR – Caja",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro de los 30 días desde el portal",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Fotografía tu ticket de Walmart asegurándote de capturar el código de barras y el total de la compra.",
+   "Envía la imagen por WhatsApp a Clara Intelligence o cárgala en nuestra plataforma web.",
+   "Clara identifica el comercio y procesa tu solicitud de facturación automáticamente.",
+   "Descarga tu factura CFDI en PDF y XML directamente desde WhatsApp o tu panel de usuario."
+  ]
+ },
+ {
+  "comercio": "zara",
+  "fuentes": [
+   "clara"
+  ],
+  "portal": "zara.com",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Número de ticket o pedido, Tienda o canal de compra, Fecha de compra, RFC del receptor",
+  "requiere_cuenta": false,
+  "reimprimir": "Sí, dentro del mismo mes",
+  "descarga": "XMLPDF",
+  "pasos": [
+   "Conserva tu ticket de compra de Zara con el número de folio o ticket.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Zara México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ]
+ }
+]

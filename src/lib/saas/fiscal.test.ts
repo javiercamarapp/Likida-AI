@@ -27,7 +27,7 @@ const RFC_OK = 'GMX0902279I1';
 
 const BASE = {
   rfc: RFC_OK,
-  razonSocial: 'TRANSPORTES INNOVATIVOS SA DE CV',
+  razonSocial: 'FLOTA DEMO SA DE CV',
   regimenFiscal: '601',
   codigoPostal: '97000',
   usoCfdi: 'G03',
@@ -72,9 +72,9 @@ describe('guardarDatosFiscales', () => {
   it('NO recorta ni "arregla" la razón social más allá de espacios', async () => {
     // El SAT la compara contra lo registrado para ese RFC. Nosotros no sabemos
     // mejor que su Constancia de Situación Fiscal.
-    await guardarDatosFiscales('t-1', { ...BASE, razonSocial: '  Transportes Innovativos S.A. de C.V.  ' });
+    await guardarDatosFiscales('t-1', { ...BASE, razonSocial: '  Flota Demo S.A. de C.V.  ' });
     expect(update).toHaveBeenCalledWith(expect.objectContaining({
-      razon_social: 'Transportes Innovativos S.A. de C.V.',
+      razon_social: 'Flota Demo S.A. de C.V.',
     }));
   });
 

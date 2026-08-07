@@ -1,0 +1,18 @@
+HTTP/2 302 
+content-type: text/html; charset=UTF-8
+location: https://controlnet.mx/
+server: Microsoft-IIS/10.0
+x-powered-by: ASP.NET
+date: Wed, 05 Aug 2026 04:29:44 GMT
+content-length: 145
+
+HTTP/2 200 
+content-type: text/html; charset=UTF-8
+x-ws-origin: available
+x-ws-ratelimit-limit: 1000
+x-ws-ratelimit-remaining: 999
+date: Wed, 05 Aug 2026 04:29:46 GMT
+server: Apache
+link: <https://controlnet.mx/wp-json/>; rel="https://api.w.org/", <https://controlnet.mx/>; rel=shortlink
+content-encoding: gzip
+

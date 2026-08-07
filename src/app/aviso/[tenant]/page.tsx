@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
-import { getDatosResponsable } from '@/lib/cuadra/repo';
-import { avisoIntegral } from '@/lib/cuadra/privacidad';
+import { getDatosResponsable } from '@/lib/likida/repo';
+import { avisoIntegral } from '@/lib/likida/privacidad';
 import { fechaMx } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════

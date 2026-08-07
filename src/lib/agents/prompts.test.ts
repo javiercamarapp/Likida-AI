@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { getSystemPrompt } from './prompts';
 import type { TenantContext } from './types';
 
-const ctx: TenantContext = { tenantId: 't1', nombreFlota: 'Flota Demo', agentName: 'Cuadra', timezone: 'America/Mexico_City' };
+const ctx: TenantContext = { tenantId: 't1', nombreFlota: 'Flota Demo', agentName: 'Likida', timezone: 'America/Mexico_City' };
 
 describe('prompt de liquidación', () => {
   it('instruye CERRAR en el mismo turno con guardar_liquidacion', () => {

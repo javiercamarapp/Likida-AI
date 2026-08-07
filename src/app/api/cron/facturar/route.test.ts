@@ -71,13 +71,13 @@ const facturarLoteAlVuelo = vi.fn(async (a: { gastoIds: string[] }) => ({
   facturados: 0,
   bloqueados: [] as Array<{ gastoId: string; motivo: string }>,
 }));
-vi.mock('@/lib/cuadra/facturacion/al_vuelo', () => ({ facturarAlVuelo, facturarLoteAlVuelo }));
+vi.mock('@/lib/likida/facturacion/al_vuelo', () => ({ facturarAlVuelo, facturarLoteAlVuelo }));
 
 /** Qué datos fiscales tiene cada flota. */
 let fiscalPorFlota: Record<string, { flota: unknown; falta: string[] }>;
 const getFiscalDeFlota = vi.fn(async (t: string) =>
   fiscalPorFlota[t] ?? { flota: null, falta: ['sin ficha'] });
-vi.mock('@/lib/cuadra/facturacion/flota_fiscal', () => ({ getFiscalDeFlota }));
+vi.mock('@/lib/likida/facturacion/flota_fiscal', () => ({ getFiscalDeFlota }));
 
 /** `null` = Chromium arranca. Un string = no arranca, con ese mensaje. */
 let navegadorRoto: string | null = null;
@@ -100,11 +100,11 @@ const conNavegador = vi.fn(async (fn: (abrir: unknown) => Promise<unknown>) => {
   navegadoresAbiertos.push(Date.now());
   return fn(async () => ({}));
 });
-vi.mock('@/lib/cuadra/facturacion/adaptadores/pagina_playwright', () => ({ conNavegador }));
+vi.mock('@/lib/likida/facturacion/adaptadores/pagina_playwright', () => ({ conNavegador }));
 
 const conPortales = vi.fn(async (_op: unknown, fn: (r: unknown) => Promise<unknown>) =>
   fn({ registrados: ['capufe'], problemas: [] }));
-vi.mock('@/lib/cuadra/facturacion/adaptadores/registro', () => ({
+vi.mock('@/lib/likida/facturacion/adaptadores/registro', () => ({
   conPortales,
   PORTALES_CONOCIDOS: ['capufe'] as readonly string[],
 }));
@@ -123,7 +123,7 @@ const fila = (o: Record<string, unknown> = {}) => ({
 });
 
 const FISCAL = {
-  tenantId: 't-1', rfc: 'GMX0902279I1', nombre: 'TRANSPORTES DEL BAJIO SA DE CV',
+  tenantId: 't-1', rfc: 'XAA010101000', nombre: 'FLOTA DE PRUEBA SA DE CV',
   codigoPostal: '37000', regimenFiscal: '601', usoCfdi: 'G03', correo: 'f@x.mx',
 };
 

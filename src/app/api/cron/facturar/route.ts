@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { Client as QstashClient } from '@upstash/qstash';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { facturarAlVuelo, facturarLoteAlVuelo, type ResultadoAutofactura } from '@/lib/cuadra/facturacion/al_vuelo';
-import { armar } from '@/lib/cuadra/facturacion/pendientes';
-import { getFiscalDeFlota } from '@/lib/cuadra/facturacion/flota_fiscal';
-import { avisarPorFacturar } from '@/lib/cuadra/facturacion/avisar';
-import { telefonoJefeDe } from '@/lib/cuadra/contactos';
-import { conPortales, PORTALES_CONOCIDOS } from '@/lib/cuadra/facturacion/adaptadores/registro';
-import { conNavegador } from '@/lib/cuadra/facturacion/adaptadores/pagina_playwright';
+import { facturarAlVuelo, facturarLoteAlVuelo, type ResultadoAutofactura } from '@/lib/likida/facturacion/al_vuelo';
+import { armar } from '@/lib/likida/facturacion/pendientes';
+import { getFiscalDeFlota } from '@/lib/likida/facturacion/flota_fiscal';
+import { avisarPorFacturar } from '@/lib/likida/facturacion/avisar';
+import { telefonoJefeDe } from '@/lib/likida/contactos';
+import { conPortales, PORTALES_CONOCIDOS } from '@/lib/likida/facturacion/adaptadores/registro';
+import { conNavegador } from '@/lib/likida/facturacion/adaptadores/pagina_playwright';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';

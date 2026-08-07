@@ -1,0 +1,891 @@
+{
+ "verde": [
+  {
+   "portal": "alsea.interfactura.com",
+   "n": 5,
+   "comercios": [
+    "alsea",
+    "burger-king",
+    "dominos",
+    "italiannis",
+    "pf-changs"
+   ],
+   "plazo": "Mismo mes calendario del consumo",
+   "datos": "Folio del ticket, Marca o cadena, Fecha del consumo, RFC del receptor",
+   "txt": "No se requiere cuenta de usuario | No se requiere cuenta de usuario | No se requiere cuent"
+  },
+  {
+   "portal": "facturacion.walmartmexico.com.mx",
+   "n": 3,
+   "comercios": [
+    "bodega-aurrera",
+    "sams-club",
+    "walmart"
+   ],
+   "plazo": "30 días naturales desde la fecha de compra",
+   "datos": "TC (Terminal de Caja), TR (Transacción), TD (Terminal Dispositivo), CR (Código de Referencia)",
+   "txt": "No se requiere cuenta de usuario | Requiere membresía Sam's Club vigente | No se requiere "
+  },
+  {
+   "portal": "tarjetapetro-7.com.mx",
+   "n": 2,
+   "comercios": [
+    "petro-7",
+    "petro-seven"
+   ],
+   "plazo": null,
+   "datos": null,
+   "txt": "sin registro | sin registro"
+  },
+  {
+   "portal": "tiendas3b.com.mx",
+   "n": 1,
+   "comercios": [
+    "3b"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio de transacción, Monto total, Fecha de compra, Datos fiscales",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "50friends.pv1.mx",
+   "n": 1,
+   "comercios": [
+    "50-friends"
+   ],
+   "plazo": "30 días naturales desde el consumo",
+   "datos": "Número de folio del ticket, Fecha del consumo, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "7-eleven.com.mx",
+   "n": 1,
+   "comercios": [
+    "7-eleven"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio fiscal del ticket, ID de la tienda, Monto total, Fecha de compra",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "ado.com.mx",
+   "n": 1,
+   "comercios": [
+    "ado"
+   ],
+   "plazo": "Mismo mes calendario del viaje",
+   "datos": "Número de boleto o folio, Fecha del viaje, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "aeromexico.com",
+   "n": 1,
+   "comercios": [
+    "aeromexico"
+   ],
+   "plazo": "30 días naturales desde la emisión del boleto",
+   "datos": "Número de boleto (139-XXXXXXXXXX), Apellido del pasajero principal, Datos fiscales, Folios de extras (si aplica)",
+   "txt": "No se requiere cuenta; solo número de boleto o código de reservación"
+  },
+  {
+   "portal": "autozone.com.mx",
+   "n": 1,
+   "comercios": [
+    "autozone"
+   ],
+   "plazo": "30 días naturales desde la fecha de compra",
+   "datos": "Número de folio de transacción, Fecha de compra, Monto total, RFC del receptor",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "benandfrank.com",
+   "n": 1,
+   "comercios": [
+    "ben-and-frank"
+   ],
+   "plazo": "30 días naturales desde la fecha de compra",
+   "datos": "Número de orden de compra, Fecha de compra, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "e-facturate.com",
+   "n": 1,
+   "comercios": [
+    "benavides"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Número de referencia, RFC del receptor, Razón social, Código postal fiscal",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "bp.com",
+   "n": 1,
+   "comercios": [
+    "bp"
+   ],
+   "plazo": "Varía por estación; factura el mismo día de la carga",
+   "datos": "Número de estación BP, Número de folio, Web ID, RFC del receptor",
+   "txt": "Opcional; se puede facturar sin usuario con solo un correo"
+  },
+  {
+   "portal": "facturaciondrive.caffenio.com",
+   "n": 1,
+   "comercios": [
+    "caffenio"
+   ],
+   "plazo": "30 días naturales desde la fecha de compra",
+   "datos": "Folio de transacción, Código de facturación, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "capufe.gob.mx",
+   "n": 1,
+   "comercios": [
+    "capufe"
+   ],
+   "plazo": "30 días naturales desde la fecha del cruce",
+   "datos": "Folio de transacción, Fecha del cruce, Monto del peaje, RFC del receptor",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.carlsjrmso.com",
+   "n": 1,
+   "comercios": [
+    "carls-jr"
+   ],
+   "plazo": "Mismo mes calendario del pedido",
+   "datos": "Folio del ticket, Número de tienda, Fecha de compra",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "lacasadetono.mx",
+   "n": 1,
+   "comercios": [
+    "casa-de-tono"
+   ],
+   "plazo": "Mismo mes calendario del consumo",
+   "datos": "Folio del ticket, Número de sucursal, Fecha de consumo",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "michedraui.com.mx",
+   "n": 1,
+   "comercios": [
+    "chedraui"
+   ],
+   "plazo": "Hasta 30 días naturales desde la compra",
+   "datos": "Folio del ticket, Número de tienda, Número de caja, Importe total",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "cinepolis.com",
+   "n": 1,
+   "comercios": [
+    "cinepolis"
+   ],
+   "plazo": "Mismo mes calendario de la función",
+   "datos": "Número de folio o de orden, Fecha de la función, Complejo Cinépolis, RFC del receptor",
+   "txt": "No se requiere cuenta (recomendada para consultar historial)"
+  },
+  {
+   "portal": "facturacion.circlekmexico.com.mx",
+   "n": 1,
+   "comercios": [
+    "circle-k"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio de transacción, Número de tienda, Monto total, Fecha de compra",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "citymarket.com.mx",
+   "n": 1,
+   "comercios": [
+    "city-market"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio de transacción, Número de tienda, Monto total, Datos fiscales",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "comex.com.mx",
+   "n": 1,
+   "comercios": [
+    "comex"
+   ],
+   "plazo": "30 días naturales desde la compra",
+   "datos": "Folio del ticket, Fecha de compra, Monto total, Uso del CFDI",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturas.coppel.com",
+   "n": 1,
+   "comercios": [
+    "coppel"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio del ticket, Fecha de compra, Monto total, Datos fiscales",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "costco.com.mx",
+   "n": 1,
+   "comercios": [
+    "costco"
+   ],
+   "plazo": "Hasta 30 días naturales desde la compra",
+   "datos": "Número de membresía Costco, Folio del ticket, Fecha de compra, Monto total",
+   "txt": "Requiere membresía Costco vigente (número de socio en ticket)"
+  },
+  {
+   "portal": "facturacion.dequ.mx",
+   "n": 1,
+   "comercios": [
+    "dairy-queen-mexico"
+   ],
+   "plazo": "Mismo mes calendario del consumo",
+   "datos": "Folio del ticket, Número de tienda, Fecha de compra",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "dhl.com",
+   "n": 1,
+   "comercios": [
+    "dhl"
+   ],
+   "plazo": "30 días naturales desde la fecha del servicio",
+   "datos": "Número de guía (waybill), Fecha del servicio, Monto total, RFC del receptor",
+   "txt": "Requiere inicio de sesión en portal DHL"
+  },
+  {
+   "portal": "estafeta.com",
+   "n": 1,
+   "comercios": [
+    "estafeta"
+   ],
+   "plazo": "30 días naturales desde la fecha del servicio",
+   "datos": "Número de guía, Fecha del servicio, Monto total, RFC del receptor",
+   "txt": "Solo requiere número de guía (no cuenta)"
+  },
+  {
+   "portal": "fahorro.com",
+   "n": 1,
+   "comercios": [
+    "farmacia-del-ahorro"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio fiscal del ticket, Número de tienda, Monto total, Datos fiscales",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "farmaciasguadalajara.com.mx",
+   "n": 1,
+   "comercios": [
+    "farmacias-guadalajara"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio del ticket, Número de tienda, Monto total, Forma de pago electrónica",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "sanpablo.com.mx",
+   "n": 1,
+   "comercios": [
+    "farmacias-san-pablo"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio del ticket, Número de tienda, Monto total, Forma de pago electrónica",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.gpupm.com",
+   "n": 1,
+   "comercios": [
+    "farmacias-similares"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio del ticket, Fecha de compra, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "fedex.com",
+   "n": 1,
+   "comercios": [
+    "fedex"
+   ],
+   "plazo": "30 días naturales desde la fecha del envío",
+   "datos": "Número de guía, Fecha del servicio, Monto exacto, RFC del receptor",
+   "txt": "Solo requiere número de guía (no cuenta)"
+  },
+  {
+   "portal": "g500network.com",
+   "n": 1,
+   "comercios": [
+    "g500"
+   ],
+   "plazo": "Varía por estación; factura el mismo día de la carga",
+   "datos": "Nombre de la estación y permiso CRE, Folio del ticket, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "heb.com.mx",
+   "n": 1,
+   "comercios": [
+    "heb"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio de transacción, Monto total, Fecha de compra, Datos fiscales",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "homedepot.com.mx",
+   "n": 1,
+   "comercios": [
+    "home-depot"
+   ],
+   "plazo": "Hasta 30 días naturales desde la compra",
+   "datos": "Folio fiscal, Número de tienda, Número de operación, Monto total",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "iave.capufe.gob.mx",
+   "n": 1,
+   "comercios": [
+    "iave"
+   ],
+   "plazo": "30 días naturales desde la fecha del cruce",
+   "datos": "Número de tag IAVE, Periodo de facturación, RFC del receptor, Razón social",
+   "txt": "Requiere número de tag IAVE para factura consolidada"
+  },
+  {
+   "portal": "v2.dito.com.mx",
+   "n": 1,
+   "comercios": [
+    "ikea"
+   ],
+   "plazo": "30 días naturales desde la fecha de compra",
+   "datos": "Número de ticket u orden, Fecha de compra, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario (solo número de ticket)"
+  },
+  {
+   "portal": "izzi.mx",
+   "n": 1,
+   "comercios": [
+    "izzi"
+   ],
+   "plazo": "Mismo ciclo de facturación mensual",
+   "datos": "Número de cuenta Izzi, Periodo de facturación, Datos fiscales, Forma de pago electrónica",
+   "txt": "Requiere número de cuenta Izzi"
+  },
+  {
+   "portal": "kfc.teagradece.mx",
+   "n": 1,
+   "comercios": [
+    "kfc"
+   ],
+   "plazo": "Mismo mes calendario del pedido",
+   "datos": "Número de folio del ticket, Fecha del pedido, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.krispykreme.com.mx",
+   "n": 1,
+   "comercios": [
+    "krispy-kreme"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Número de folio del ticket, Fecha de compra, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "lacomer.com.mx",
+   "n": 1,
+   "comercios": [
+    "la-comer"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio de transacción, Fecha de compra, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "chopo.com.mx",
+   "n": 1,
+   "comercios": [
+    "laboratorio-chopo"
+   ],
+   "plazo": "30 días naturales desde la fecha del servicio",
+   "datos": "Número de orden, Fecha del servicio, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.littlecaesars.com.mx",
+   "n": 1,
+   "comercios": [
+    "little-caesars"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio de orden, Número de tienda, Monto total, Forma de pago electrónica",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacionclientes.liverpool.com.mx",
+   "n": 1,
+   "comercios": [
+    "liverpool"
+   ],
+   "plazo": "Hasta 30 días naturales desde la compra",
+   "datos": "Folio fiscal, Monto total, Fecha de compra, RFC del receptor",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacionmcdonalds.com.mx",
+   "n": 1,
+   "comercios": [
+    "mcdonalds"
+   ],
+   "plazo": "Mismo mes calendario del consumo",
+   "datos": "Número de restaurante, Número de ticket, Número de caja, Fecha de compra",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "mobil.com.mx",
+   "n": 1,
+   "comercios": [
+    "mobil"
+   ],
+   "plazo": "Varía por operador; factura el mismo día de la carga",
+   "datos": "Operador de la estación, Número de ticket o folio, Estación y hora de carga, RFC del receptor",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.officedepot.com.mx",
+   "n": 1,
+   "comercios": [
+    "office-depot"
+   ],
+   "plazo": "Hasta 30 días naturales desde la compra",
+   "datos": "Folio del ticket, Número de tienda, Monto total, Datos fiscales",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.officemax.com.mx",
+   "n": 1,
+   "comercios": [
+    "officemax"
+   ],
+   "plazo": "30 días naturales desde la fecha de compra",
+   "datos": "Número de transacción, Fecha de compra, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "posap.devlyn.me",
+   "n": 1,
+   "comercios": [
+    "opticas-devlyn"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio del ticket, Fecha de compra, Monto total, Prescripción del optometrista",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "lux.mx",
+   "n": 1,
+   "comercios": [
+    "opticas-lux"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Número de folio del comprobante, Fecha de compra, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "www4.oxxo.com:9443",
+   "n": 1,
+   "comercios": [
+    "oxxo"
+   ],
+   "plazo": "7 días naturales desde la compra",
+   "datos": "Folio web (ID Web), Monto total, Fecha de compra, RFC del receptor",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.oxxogas.com",
+   "n": 1,
+   "comercios": [
+    "oxxo-gas"
+   ],
+   "plazo": "Mismo mes calendario de la carga",
+   "datos": "Folio de transacción, Fecha de carga, Monto total, Forma de pago electrónica",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.elpalaciodehierro.com",
+   "n": 1,
+   "comercios": [
+    "palacio-de-hierro"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Número de transacción, Número de tienda, Monto total, Forma de pago",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "cfdi.esperanza.mx",
+   "n": 1,
+   "comercios": [
+    "pastelerias-esperanza"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio del ticket, Fecha de compra, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.simang8.com",
+   "n": 1,
+   "comercios": [
+    "pastelerias-marisa"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio del ticket, Número de sucursal, Fecha de compra, Monto total",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturaelectronicagfa.mx",
+   "n": 1,
+   "comercios": [
+    "primera-plus"
+   ],
+   "plazo": "Mismo mes calendario del viaje",
+   "datos": "Número de boleto o folio, Fecha del viaje, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturaelectronica.sears.com.mx",
+   "n": 1,
+   "comercios": [
+    "sears"
+   ],
+   "plazo": "Hasta el día 5 del mes siguiente",
+   "datos": "Número de tienda, Número de operación, Número de caja, Monto total",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.shell.com.mx",
+   "n": 1,
+   "comercios": [
+    "shell"
+   ],
+   "plazo": "72 horas tras la carga (varía por estación)",
+   "datos": "Permiso CRE de la estación, Folio del ticket, Número de estación Shell, Litros y combustible",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "sodimac.com.mx",
+   "n": 1,
+   "comercios": [
+    "sodimac"
+   ],
+   "plazo": "30 días naturales desde la fecha de compra",
+   "datos": "Número de transacción, Fecha de compra, RFC del receptor, Razón social",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "soriana.com",
+   "n": 1,
+   "comercios": [
+    "soriana"
+   ],
+   "plazo": "Hasta 30 días naturales desde la compra",
+   "datos": "Folio fiscal del ticket, Número de tienda, Número de caja, Monto total",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "facturacion.starbucks.com.mx",
+   "n": 1,
+   "comercios": [
+    "starbucks"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Folio de transacción, Número de tienda, Monto total, Forma de pago electrónica",
+   "txt": "No se requiere cuenta Starbucks Rewards (solo ticket)"
+  },
+  {
+   "portal": "facturacion.subway.com.mx",
+   "n": 1,
+   "comercios": [
+    "subway"
+   ],
+   "plazo": "Mismo mes calendario del pedido",
+   "datos": "Folio del ticket, Número de sucursal, Fecha de compra",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "pase.com.mx",
+   "n": 1,
+   "comercios": [
+    "tag-pase"
+   ],
+   "plazo": "30 días naturales desde la fecha del cruce",
+   "datos": "Número de tag TAG PASE, Periodo de cruces, RFC del receptor, Razón social",
+   "txt": "Requiere número de tag TAG PASE"
+  },
+  {
+   "portal": "mitelcel.com",
+   "n": 1,
+   "comercios": [
+    "telcel"
+   ],
+   "plazo": "Mismo mes calendario del pago",
+   "datos": "Número Telcel o folio del recibo, Folio del ticket de pago (si aplica), Monto total, Datos fiscales",
+   "txt": "Requiere número de línea Telcel o inicio de sesión en mitelcel.com"
+  },
+  {
+   "portal": "televia.com.mx",
+   "n": 1,
+   "comercios": [
+    "televia"
+   ],
+   "plazo": "30 días naturales desde la fecha del cruce",
+   "datos": "Número de tag TeleVía, Periodo de cruces, RFC del receptor, Razón social",
+   "txt": "Requiere número de tag TeleVía"
+  },
+  {
+   "portal": "timhortonsmx.com",
+   "n": 1,
+   "comercios": [
+    "tim-hortons"
+   ],
+   "plazo": "Mismo mes calendario del consumo",
+   "datos": "Folio del ticket, Número de tienda, Fecha y hora del consumo, Monto total",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "vivaaerobus.com",
+   "n": 1,
+   "comercios": [
+    "viva-aerobus"
+   ],
+   "plazo": "Mismo mes calendario de la compra del boleto",
+   "datos": "Código PNR, Apellido del pasajero, RFC del receptor, Razón social",
+   "txt": "Solo requiere código de reservación (PNR)"
+  },
+  {
+   "portal": "factura.volaris.com",
+   "n": 1,
+   "comercios": [
+    "volaris"
+   ],
+   "plazo": "Mismo mes calendario de la compra del boleto",
+   "datos": "Código de reserva (PNR), Apellido del pasajero principal, Datos fiscales, PNR de cargos extras",
+   "txt": "Solo requiere código de reservación (PNR); no cuenta"
+  },
+  {
+   "portal": "zara.com",
+   "n": 1,
+   "comercios": [
+    "zara"
+   ],
+   "plazo": "Mismo mes calendario de la compra",
+   "datos": "Número de ticket o pedido, Tienda o canal de compra, Fecha de compra, RFC del receptor",
+   "txt": "No se requiere cuenta de usuario"
+  },
+  {
+   "portal": "gasolineriabp.com.mx",
+   "n": 1,
+   "comercios": [
+    "bp-gasolineras"
+   ],
+   "plazo": null,
+   "datos": null,
+   "txt": "sin registro"
+  },
+  {
+   "portal": "facturasgas.com",
+   "n": 1,
+   "comercios": [
+    "corpogas"
+   ],
+   "plazo": null,
+   "datos": null,
+   "txt": "sin registro"
+  },
+  {
+   "portal": "servicioaclientes.g500network.com",
+   "n": 1,
+   "comercios": [
+    "g500-network"
+   ],
+   "plazo": null,
+   "datos": "Folio, Web Id, Llenar el captcha",
+   "txt": "sin registro"
+  },
+  {
+   "portal": "gasofac.com.mx",
+   "n": 1,
+   "comercios": [
+    "gasofac"
+   ],
+   "plazo": null,
+   "datos": "Numero de ticket, Fecha de Ticket, Importe del Ticket",
+   "txt": "sin registro"
+  },
+  {
+   "portal": "goodpriceg.com",
+   "n": 1,
+   "comercios": [
+    "goodprice"
+   ],
+   "plazo": null,
+   "datos": "Folio, Web Id, Llenar el captcha",
+   "txt": "sin registro"
+  },
+  {
+   "portal": "facturacionelectronica.hidrosina.com.mx",
+   "n": 1,
+   "comercios": [
+    "hidrosina"
+   ],
+   "plazo": null,
+   "datos": null,
+   "txt": "sin registro"
+  },
+  {
+   "portal": "migasolina.mx",
+   "n": 1,
+   "comercios": [
+    "migasolina"
+   ],
+   "plazo": null,
+   "datos": "Folio, Web Id, Llenar el captcha",
+   "txt": "sin registro"
+  },
+  {
+   "portal": "facturacion.orsan.com.mx",
+   "n": 1,
+   "comercios": [
+    "orsan-en-linea"
+   ],
+   "plazo": null,
+   "datos": "Tipo de pago, Método de pago, Uso de CFDI, Transacción, Digito Verificador",
+   "txt": "sin registro"
+  }
+ ],
+ "registro": [
+  {
+   "portal": "pinfrafacturacion.com.mx",
+   "n": 17,
+   "comercios": [
+    "autopista-apizaco-huachinango",
+    "autopista-armeria-manzanillo",
+    "autopista-atlixco-jantetelco",
+    "autopista-ecatepec-piramides",
+    "autopista-libramiento-aguascalientes",
+    "autopista-mexico-la-marquesa",
+    "autopista-penon-texcoco",
+    "autopista-san-antonio-virreyes-teziutlan",
+    "autopista-san-martin-texmelucan-huejotzingo",
+    "autopista-san-martin-texmelucan-tlaxcala",
+    "autopista-santa-ana-altar",
+    "autopista-tenango-ixtapan-de-la-sal",
+    "autopista-tlaxcala-puebla",
+    "autopista-zitacuaro-lengua-de-vaca",
+    "caseta-tezoyuca",
+    "pinfra",
+    "puente-jose-lopez-portillo"
+   ],
+   "plazo": null,
+   "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total",
+   "txt": "exige registro previo | exige registro previo | exige registro previo | exige registro pre"
+  },
+  {
+   "portal": "operadoradelasultana.com.mx",
+   "n": 1,
+   "comercios": [
+    "autopista-monterrey-nuevo-laredo"
+   ],
+   "plazo": null,
+   "datos": "Caseta, Fecha, Numero Id, Maquina, Consecutivo, Total",
+   "txt": "exige registro previo"
+  },
+  {
+   "portal": "facturacioncapufe.com.mx",
+   "n": 1,
+   "comercios": [
+    "capufe"
+   ],
+   "plazo": null,
+   "datos": "Código del ticket de 18 caracteres",
+   "txt": "exige registro previo"
+  },
+  {
+   "portal": "circuitoexterior.mx",
+   "n": 1,
+   "comercios": [
+    "concesionaria-mexiquense"
+   ],
+   "plazo": null,
+   "datos": "Folio, Fecha, Horas, Minutos, Segundos, Plaza de Cobro",
+   "txt": "exige registro previo"
+  }
+ ],
+ "rojo": [
+  {
+   "portal": "amazon.com.mx",
+   "n": 1,
+   "comercios": [
+    "amazon"
+   ],
+   "plazo": "Hasta 30 días (productos de terceros)",
+   "datos": "Número de pedido, Estatus 'Entregado', RFC y razón social, Código postal fiscal",
+   "txt": "Requiere cuenta de Amazon.com.mx"
+  },
+  {
+   "portal": "mercadolibre.com.mx",
+   "n": 1,
+   "comercios": [
+    "mercado-libre"
+   ],
+   "plazo": "Primeros días del mes siguiente",
+   "datos": "RFC, razón social, régimen fiscal y código postal",
+   "txt": "Requiere cuenta de Mercado Libre activa"
+  },
+  {
+   "portal": "netflix.com",
+   "n": 1,
+   "comercios": [
+    "netflix"
+   ],
+   "plazo": "Mismo mes del cargo",
+   "datos": "RFC, razón social, régimen fiscal y código postal",
+   "txt": "Requiere cuenta de Netflix activa"
+  },
+  {
+   "portal": "rappi.com.mx",
+   "n": 1,
+   "comercios": [
+    "rappi"
+   ],
+   "plazo": "Hasta 72 horas después del pedido",
+   "datos": "RFC, razón social, régimen fiscal y código postal",
+   "txt": "Requiere cuenta de Rappi activa"
+  },
+  {
+   "portal": "spotify.com",
+   "n": 1,
+   "comercios": [
+    "spotify"
+   ],
+   "plazo": "Mismo mes del cargo",
+   "datos": "RFC, razón social, régimen fiscal y código postal",
+   "txt": "Requiere cuenta de Spotify activa"
+  },
+  {
+   "portal": "riders.uber.com",
+   "n": 1,
+   "comercios": [
+    "uber"
+   ],
+   "plazo": "Hasta 72 horas tras el viaje o pedido",
+   "datos": "ID del viaje, Fecha y hora del servicio, Monto total cobrado, RFC y razón social",
+   "txt": "Requiere cuenta de Uber activa"
+  }
+ ]
+}

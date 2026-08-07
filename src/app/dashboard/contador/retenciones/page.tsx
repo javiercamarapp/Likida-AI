@@ -1,5 +1,5 @@
 import { Percent, FileWarning, Truck } from 'lucide-react';
-import { resolverPeriodo, getGastosFiscales, diagnosticoRetencion, type GastoFiscal } from '@/lib/cuadra/fiscal';
+import { resolverPeriodo, getGastosFiscales, diagnosticoRetencion, type GastoFiscal } from '@/lib/likida/fiscal';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { EstadoVacio } from '../../../admin/ui/kit';

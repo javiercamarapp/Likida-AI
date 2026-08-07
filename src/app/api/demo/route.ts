@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { cuadrarViaje, type PoliticaGasto } from '@/lib/cuadra/cuadre/engine';
+import { cuadrarViaje, type PoliticaGasto } from '@/lib/likida/cuadre/engine';
 import { rateLimit, bodyExcede, clientIp } from '@/lib/ratelimit';
 import { envHealth } from '@/lib/env';
-import type { Gasto } from '@/types/cuadra';
+import type { Gasto } from '@/types/likida';
 
 // Health del demo (config detectada, sin exponer valores).
 export async function GET() {
@@ -15,7 +15,7 @@ export const runtime = 'nodejs';
 // comprobantes de ejemplo. Robusto para una demo en vivo: nunca depende de red.
 
 // 🔴 INVENTADO: política de fantasía para el demo (misma que seed.sql).
-// Ajústala con la política real de Innovativos.
+// Ajústala con la política real de la flota.
 const POLITICA: PoliticaGasto[] = [
   { concepto: 'diesel', topeMonto: 4000 },
   { concepto: 'caseta', topeMonto: 1500 },

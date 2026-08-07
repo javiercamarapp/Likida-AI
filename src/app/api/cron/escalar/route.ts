@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { escalarViajesSinAceptar } from '@/lib/cuadra/escalar_viaje';
+import { escalarViajesSinAceptar } from '@/lib/likida/escalar_viaje';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { LineChart, Download, FileText, Table2 } from 'lucide-react';
-import { getKpis, getGastoPorConcepto, getLiquidacionesPorDia, type DashboardKpis, type GastoPorConcepto } from '@/lib/cuadra/analytics';
-import { etiquetaConcepto } from '@/lib/cuadra/cuadre/engine';
+import { getKpis, getGastoPorConcepto, getLiquidacionesPorDia, type DashboardKpis, type GastoPorConcepto } from '@/lib/likida/analytics';
+import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerArea } from '@/lib/auth/visibilidad';

@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// MOTOR LLM de Cuadra — gateway model-agnostic sobre OpenRouter.
+// MOTOR LLM de Likida — gateway model-agnostic sobre OpenRouter.
 //
-// Adaptado del chasis de atiende.ai, con mejoras para Cuadra:
+// Adaptado del chasis de atiende.ai, con mejoras para Likida:
 //   + Visión nativa en generateStructured (OCR de comprobantes → JSON tipado).
 //   + Ruteo por rol desde ./models (no reglas médicas hardcodeadas).
 //   + Fallback cross-provider automático en errores transient.

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Send, ArrowUp, Search } from 'lucide-react';
-import type { DashboardKpis, Acreditables } from '@/lib/cuadra/analytics';
+import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros } from '@/lib/formato';
 import { Logo } from '../logo';
 

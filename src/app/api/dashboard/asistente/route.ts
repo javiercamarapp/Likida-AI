@@ -6,7 +6,7 @@
 // si un superadmin está viendo `?tenant=<otra flota>`. Si el layout consultara
 // por su cuenta usaría siempre el tenant de la sesión, y el rail enseñaría
 // cifras del tenant demo junto a una página que muestra las de Transportes
-// Innovativos: dos verdades distintas en la misma pantalla.
+// Dos verdades distintas en la misma pantalla.
 //
 // El rail es un componente de cliente que sí ve la URL, y pregunta aquí.
 // La autorización se rehace COMPLETA en este handler —no se confía en el
@@ -18,7 +18,7 @@ import { getSessionTenant } from '@/lib/auth/session';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { getKpis, getAcreditables, detectarAnomalias } from '@/lib/cuadra/analytics';
+import { getKpis, getAcreditables, detectarAnomalias } from '@/lib/likida/analytics';
 import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';

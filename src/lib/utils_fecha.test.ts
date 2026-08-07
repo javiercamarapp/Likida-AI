@@ -49,7 +49,7 @@ describe('el PDF no puede volver a tener su propia copia', () => {
   // formateada, fue DOS implementaciones de la misma verdad separándose. Una
   // prueba sobre valores no lo habría visto —cada copia pasaba su propia
   // prueba—; hay que mirar que no haya segunda copia.
-  const PDF = readFileSync('src/lib/cuadra/liquidacion/pdf.ts', 'utf8');
+  const PDF = readFileSync('src/lib/likida/liquidacion/pdf.ts', 'utf8');
 
   it('usa la fecha compartida', () => {
     // Se comprueba la FUNCIÓN, no el módulo del que viene. La primera versión

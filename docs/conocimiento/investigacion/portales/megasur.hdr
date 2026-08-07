@@ -1,0 +1,21 @@
+HTTP/1.1 302 Found
+Cache-Control: private
+Location: http://megasur.com.mx:8029/Account/Login?ReturnUrl=%2F
+Server: Microsoft-IIS/10.0
+X-AspNetMvc-Version: 5.2
+X-AspNet-Version: 4.0.30319
+X-Powered-By: ASP.NET
+Date: Wed, 05 Aug 2026 04:29:45 GMT
+Content-Length: 0
+
+HTTP/1.1 200 OK
+Cache-Control: private
+Content-Type: text/html; charset=utf-8
+Server: Microsoft-IIS/10.0
+Set-Cookie: ASP.NET_SessionId=0ho2bysry2qv2u5xd04db11i; path=/; HttpOnly; SameSite=Lax
+X-AspNetMvc-Version: 5.2
+X-AspNet-Version: 4.0.30319
+X-Powered-By: ASP.NET
+Date: Wed, 05 Aug 2026 04:29:45 GMT
+Content-Length: 9686
+

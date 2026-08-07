@@ -2,7 +2,7 @@ import { ExternalLink, TriangleAlert, ReceiptText } from 'lucide-react';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
 import { mxn } from '@/lib/utils';
 import { fechaMx } from '../formato';
-import type { TicketPorFacturar } from '@/lib/cuadra/facturacion/pendientes';
+import type { TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS TICKETS QUE TODAVÍA NO TIENEN FACTURA — y cuánto les queda.

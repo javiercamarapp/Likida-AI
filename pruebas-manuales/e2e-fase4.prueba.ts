@@ -16,8 +16,8 @@ const V_SOBRE = 'df7c9548-f51e-4532-bbb5-59a3e4ecb166';
 
 describe('fase 4', () => {
   it('corre', async () => {
-    const { saveLiquidacion } = await import('@/lib/cuadra/repo');
-    const { cuadrarDesdeDB, ventanaDesdeDB } = await import('@/lib/cuadra/cuadre/desde_db');
+    const { saveLiquidacion } = await import('@/lib/likida/repo');
+    const { cuadrarDesdeDB, ventanaDesdeDB } = await import('@/lib/likida/cuadre/desde_db');
     const { fechaMx } = await import('@/lib/formato');
     const { supabaseAdmin } = await import('@/lib/supabase/admin');
     const extra: Record<string, unknown> = {};

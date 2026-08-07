@@ -4,9 +4,9 @@ import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { revalidatePath } from 'next/cache';
-import { listarSolicitudesArco, resolverSolicitudArco } from '@/lib/cuadra/repo';
+import { listarSolicitudesArco, resolverSolicitudArco } from '@/lib/likida/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { mensajeParaPantalla } from '@/lib/cuadra/administracion';
+import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { fechaMx } from '@/lib/formato';
 
 export const dynamic = 'force-dynamic';

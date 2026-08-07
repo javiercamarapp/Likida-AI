@@ -1,0 +1,3252 @@
+[
+ {
+  "slug": "3b",
+  "url": "https://recuperafacturas.com/factura/3b",
+  "titulo": "Factura tu ticket de Tiendas 3B en minutos",
+  "portal_nombre": "tiendas3b.com.mx/facturacion",
+  "portal_url": "https://www.tiendas3b.com.mx/facturacion",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Monto total, Fecha de compra, Datos fiscales",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto clara de tu ticket de Tiendas 3B donde se vea el folio, el total y la fecha.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema identifica automáticamente el ticket y extrae los datos necesarios.",
+   "Recibe tu factura CFDI en PDF y XML válida ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Tiendas 3B?",
+    "r": "### ¿Qué datos del ticket de 3B necesito para facturar?"
+   },
+   {
+    "p": "¿Tiendas 3B emite facturas para empresas?",
+    "r": "### ¿Puedo facturar varios tickets de 3B en una sola factura?"
+   },
+   {
+    "p": "¿Qué pasa si mi ticket de 3B está borroso o dañado?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "50-friends",
+  "url": "https://recuperafacturas.com/factura/50-friends",
+  "titulo": "Factura tus consumos en 50 Friends",
+  "portal_nombre": "50friends.pv1.mx/factura",
+  "portal_url": "https://50friends.pv1.mx/factura",
+  "plazo": "30 días naturales desde el consumo",
+  "datos": "Número de folio del ticket, Fecha del consumo, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días naturales",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de 50 Friends con el folio y el total visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de 50 Friends.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en 50 Friends?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en 50 Friends?"
+   },
+   {
+    "p": "¿Mi consumo en 50 Friends es deducible de impuestos?",
+    "r": "### ¿Puedo facturar a nombre de mi empresa en 50 Friends?"
+   },
+   {
+    "p": "¿Qué pasa si el folio de mi ticket no aparece en el portal?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Recuerda que el SAT limita la deducción de restaurantes al 8.5% del monto pagado con tarjeta.",
+   "Solo el 8.5% del monto del restaurante es deducible cuando pagas con tarjeta (art.",
+   "28 LISR).",
+   "Para la facturación fiscal, 50 Friends aplica las mismas reglas que todos los restaurantes en México: la deducción está limitada al 8.5% del monto pagado con medios electrónicos (art.",
+   "Descarga el PDF y XML del CFDI; recuerda que solo el 8.5% del monto es deducible al pagar con tarjeta.",
+   "| Pago en efectivo descalifica la deducción | El 8.5% de deducibilidad en restaurantes solo aplica cuando el pago es con tarjeta o transferencia."
+  ]
+ },
+ {
+  "slug": "7-eleven",
+  "url": "https://recuperafacturas.com/factura/7-eleven",
+  "titulo": "Recupera la factura de tu ticket de 7-Eleven",
+  "portal_nombre": "7-eleven.com.mx/facturacion-electronica",
+  "portal_url": "https://7-eleven.com.mx/facturacion-electronica",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio fiscal del ticket, ID de la tienda, Monto total, Fecha de compra",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del plazo establecido",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Fotografía tu ticket de 7-Eleven mostrando el total, la fecha y el número de tienda.",
+   "Envía la imagen a Clara Intelligence por WhatsApp.",
+   "Nuestro sistema identifica 7-Eleven y procesa la facturación.",
+   "Descarga tu CFDI en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Dónde facturo mi ticket de 7-Eleven?",
+    "r": "### ¿Hasta cuándo puedo facturar una compra de 7-Eleven?"
+   },
+   {
+    "p": "¿Qué datos fiscales necesito para facturar en 7-Eleven?",
+    "r": "### ¿Puedo facturar recargas telefónicas hechas en 7-Eleven?"
+   },
+   {
+    "p": "¿Sirve mi ticket de 7-Eleven si pagué en efectivo?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo los productos físicos vendidos directamente por 7-Eleven (snacks, bebidas, alimentos preparados, mercancía general) generan CFDI deducible para personas físicas con actividad empresarial y para personas morales registradas.",
+   "| Pago en efectivo sin deducción | Tienes el CFDI pero el SAT puede limitar la deducción si pagaste en efectivo y la operación supera $2,000 (art. 27 LISR)."
+  ]
+ },
+ {
+  "slug": "ado",
+  "url": "https://recuperafacturas.com/factura/ado",
+  "titulo": "Factura tu boleto de autobús ADO",
+  "portal_nombre": "ado.com.mx (buscar Autofactura electrónica en el menú)",
+  "portal_url": "https://www.ado.com.mx/",
+  "plazo": "Mismo mes calendario del viaje",
+  "datos": "Número de boleto o folio, Fecha del viaje, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se cierra",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu boleto físico o captura de pantalla del boleto electrónico ADO.",
+   "Envía la imagen por WhatsApp a Clara Intelligence con el folio del boleto visible.",
+   "Procesamos tu solicitud con el sistema de autofactura de ADO.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de traslado."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi boleto de ADO?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mi boleto de ADO?"
+   },
+   {
+    "p": "¿El boleto de ADO es deducible como viático?",
+    "r": "### ¿Puedo facturar boletos ADO comprados en taquilla?"
+   },
+   {
+    "p": "¿ADO tiene quioscos de autofactura en las terminales?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los boletos de autobús son deducibles como viáticos o gastos de traslado para personas con actividad empresarial.",
+   "Clara Intelligence convierte tu comprobante de viaje en un CFDI deducible sin que tengas que navegar el portal de ADO.",
+   "Para personas de negocios, consultores independientes y trabajadores que viajan regularmente entre ciudades por razones laborales, el boleto de ADO es un gasto deducible como viático de traslado que puede representar un ahorro fiscal importante al final del año."
+  ]
+ },
+ {
+  "slug": "aeromexico",
+  "url": "https://recuperafacturas.com/factura/aeromexico",
+  "titulo": "Factura tus vuelos de Aeroméxico fácilmente",
+  "portal_nombre": "aeromexico.com/es-mx/facturacion",
+  "portal_url": "https://aeromexico.com/es-mx/facturacion",
+  "plazo": "30 días naturales desde la emisión del boleto",
+  "datos": "Número de boleto (139-XXXXXXXXXX), Apellido del pasajero principal, Datos fiscales, Folios de extras (si aplica)",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta; solo número de boleto o código de reservación",
+  "reimprimir": "No, pasados 30 días el folio se cierra definitivamente",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Localiza tu boleto electrónico de Aeroméxico (PDF o pantallazo).",
+   "Envía el comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos la facturación con los datos del boleto.",
+   "Recibe tu CFDI en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Dónde facturo mi vuelo de Aeroméxico?",
+    "r": "### ¿Sirve el pase de abordar como factura?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar un vuelo de Aeroméxico?",
+    "r": "### ¿Se factura aparte el equipaje y los servicios extra?"
+   },
+   {
+    "p": "¿Puedo facturar boletos comprados con Club Premier (puntos)?",
+    "r": "### ¿Qué uso de CFDI corresponde a un vuelo deducible? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los gastos de viajes de negocios y comisiones son 100% deducibles si tienes tu CFDI.",
+   "Para gastos de viaje deducibles, recuerda que el SAT exige conservar tanto el CFDI como el pase de abordar (físico o digital) para comprobar que el viaje efectivamente se realizó.",
+   "Si fue 100% puntos, no hay CFDI."
+  ]
+ },
+ {
+  "slug": "alsea",
+  "url": "https://recuperafacturas.com/factura/alsea",
+  "titulo": "Facturar en restaurantes ALSEA: guía completa",
+  "portal_nombre": "alsea.interfactura.com",
+  "portal_url": "https://alsea.interfactura.com/",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Marca o cadena, Fecha del consumo, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Localiza el folio de tu ticket de la marca ALSEA (Domino's, Italianni's, P.F. Chang's, McDonald's, etc.).",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos la marca ALSEA y seleccionamos la URL correcta en el portal de interfactura.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Qué marcas de restaurantes facturan a través de ALSEA?",
+    "r": "### ¿Cómo sé qué URL usar para facturar mi marca ALSEA?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en restaurantes ALSEA?",
+    "r": "### ¿El consumo en McDonald's o Burger King también pasa por ALSEA?"
+   },
+   {
+    "p": "¿Cuánto puedo deducir de mis consumos en restaurantes ALSEA?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo el 8.5% del consumo en restaurante es deducible cuando pagas con tarjeta (art.",
+   "28 LISR).",
+   "El límite del 8.5% de deducibilidad aplica a todas las marcas ALSEA por igual.",
+   "Verifica que el monto del CFDI coincida con el ticket; recuerda que solo el 8.5% es deducible al pagar con tarjeta.",
+   "| Deducir el 100% del consumo | El SAT limita la deducción de restaurantes al 8.5% del monto con tarjeta (art."
+  ]
+ },
+ {
+  "slug": "amazon",
+  "url": "https://recuperafacturas.com/factura/amazon",
+  "titulo": "Obtén la factura de tus compras en Amazon",
+  "portal_nombre": "Tu cuenta → Mis pedidos",
+  "portal_url": "https://www.amazon.com.mx/",
+  "plazo": "Hasta 30 días (productos de terceros)",
+  "datos": "Número de pedido, Estatus 'Entregado', RFC y razón social, Código postal fiscal",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere cuenta de Amazon.com.mx",
+  "reimprimir": "Sí, desde Mis pedidos en cualquier momento",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Localiza tu comprobante de compra en la app o sitio web de Amazon México.",
+   "Toma una captura de pantalla o descarga el comprobante en PDF.",
+   "Envía el comprobante por WhatsApp a Clara Intelligence.",
+   "Recibe tu factura CFDI electrónica en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuál es el RFC de Amazon México?",
+    "r": "### ¿Cómo solicito factura de una compra en Amazon México?"
+   },
+   {
+    "p": "¿Puedo facturar compras antiguas en Amazon?",
+    "r": "### ¿Amazon emite facturas para empresas (personas morales)?"
+   },
+   {
+    "p": "¿Qué hago si Amazon no me deja cambiar mis datos fiscales?",
+    "r": "### ¿Puedo pedir factura por artículos vendidos por terceros en Amazon?"
+   },
+   {
+    "p": "¿En qué plazo genera Amazon mi CFDI?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "autozone",
+  "url": "https://recuperafacturas.com/factura/autozone",
+  "titulo": "Factura tus compras de AutoZone en México",
+  "portal_nombre": "autozone.com.mx/factura-electronica",
+  "portal_url": "https://www.autozone.com.mx/factura-electronica",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Número de folio de transacción, Fecha de compra, Monto total, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de compra de AutoZone con el número de folio visible.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación electrónica de AutoZone.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos automotrices."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en AutoZone México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en AutoZone?"
+   },
+   {
+    "p": "¿Las refacciones de AutoZone son deducibles de impuestos?",
+    "r": "### ¿Puedo facturar aceite y consumibles de AutoZone para mi flotilla?"
+   },
+   {
+    "p": "¿AutoZone acepta devoluciones y emite nota de crédito CFDI?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Las compras de refacciones, aceite, lubricantes y accesorios son deducibles para personas con vehículo de trabajo.",
+   "Las refacciones y lubricantes de vehículos de trabajo son deducibles con uso G03."
+  ]
+ },
+ {
+  "slug": "ben-and-frank",
+  "url": "https://recuperafacturas.com/factura/ben-and-frank",
+  "titulo": "Factura tus compras en Ben & Frank",
+  "portal_nombre": "benandfrank.com/invoice",
+  "portal_url": "https://www.benandfrank.com/invoice/c66auu90q2g1680457248474",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Número de orden de compra, Fecha de compra, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu comprobante de compra de Ben & Frank con el número de orden visible.",
+   "Toma una foto del comprobante y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Ben & Frank.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mis lentes de Ben & Frank?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Ben & Frank?"
+   },
+   {
+    "p": "¿Los lentes de Ben & Frank son deducibles como gasto médico?",
+    "r": "### ¿El examen de la vista en Ben & Frank también es facturable?"
+   },
+   {
+    "p": "¿Puedo deducir lentes de contacto de Ben & Frank?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los lentes graduados prescritos por un optometrista son deducibles como gastos médicos personales con uso de CFDI D01.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico ante el SAT.",
+   "Los lentes graduados con prescripción son deducibles con uso de CFDI D01 como gasto médico.",
+   "Los armazones sin graduación y los accesorios no califican como gasto médico deducible.",
+   "Desde la perspectiva del SAT, los lentes graduados con prescripción médica son un gasto médico personal deducible (uso CFDI D01 - Honorarios médicos, dentales y gastos hospitalarios) bajo el artículo 151 fracción I de la LISR, que incluye explícitamente los 'gastos de óptica'.",
+   "Para la declaración anual de personas físicas, el CFDI de Ben & Frank puede representar entre $2,000 y $8,000 pesos en gastos médicos deducibles, que al 30% de ISR implican un ahorro de hasta $2,400 pesos."
+  ]
+ },
+ {
+  "slug": "benavides",
+  "url": "https://recuperafacturas.com/factura/benavides",
+  "titulo": "Factura tus compras en Farmacias Benavides",
+  "portal_nombre": "e-facturate.com/benavides",
+  "portal_url": "https://e-facturate.com/benavides/",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Número de referencia, RFC del receptor, Razón social, Código postal fiscal",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, mientras el folio siga vigente dentro del mes",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Farmacias Benavides con el número de referencia bajo el código de barras visible.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud en el portal oficial de facturación de Benavides.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Farmacias Benavides?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Benavides?"
+   },
+   {
+    "p": "¿Los medicamentos de Benavides son deducibles como gasto médico?",
+    "r": "### ¿Qué dato del ticket de Benavides necesito para facturar?"
+   },
+   {
+    "p": "¿Puedo facturar la consulta médica de Benavides?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los medicamentos de farmacia solo son deducibles como gasto médico si forman parte de una factura hospitalaria; las compras de botiquín de empresa se deducen como gasto general (G03).",
+   "El tratamiento fiscal de las compras de farmacia tiene un matiz que confunde a muchos contribuyentes: los medicamentos comprados en mostrador no son deducibles como gasto médico personal, porque el artículo 151 de la LISR solo acepta medicinas cuando están incluidas en facturas de hospitales.",
+   "| Deducir medicamentos de mostrador como gasto médico | El SAT solo acepta medicamentos como deducción personal cuando forman parte de una factura hospitalaria (art. 151 LISR).",
+   "com/blog/facturacion-gastos-medicos-deducibles) [Cuanto Tiempo Facturar Ticket Mexico](https://recuperafacturas."
+  ]
+ },
+ {
+  "slug": "bodega-aurrera",
+  "url": "https://recuperafacturas.com/factura/bodega-aurrera",
+  "titulo": "Recupera la factura de tus compras en Bodega Aurrerá",
+  "portal_nombre": "facturacion.walmartmexico.com.mx",
+  "portal_url": "https://facturacion.walmartmexico.com.mx/",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "TC (Terminal de Caja), TR (Transacción), TD (Terminal Dispositivo), CR (Código de Referencia)",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días desde el portal de Walmart México",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de Bodega Aurrerá y toma una foto clara donde se vean el TC, TR, TD y CR en la parte inferior del comprobante.",
+   "Envía la foto de tu ticket por WhatsApp a Clara Intelligence.",
+   "Ingresamos los datos al portal de facturación de Walmart México (facturacion.walmartmexico.com.mx) seleccionando la cadena Bodega Aurrerá.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para deducir tus compras de despensa y artículos del hogar."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Bodega Aurrerá?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Bodega Aurrerá?"
+   },
+   {
+    "p": "¿Las compras de despensa en Bodega Aurrerá son deducibles?",
+    "r": "### ¿Es el mismo portal que Walmart para facturar?"
+   },
+   {
+    "p": "¿Qué hago si no encuentro mi ticket de Bodega Aurrerá?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "bp",
+  "url": "https://recuperafacturas.com/factura/bp",
+  "titulo": "Factura tus cargas de gasolina en BP",
+  "portal_nombre": "bp.com/es\\_mx → Facturación Electrónica",
+  "portal_url": "https://www.bp.com/es_mx/mexico/home/products-and-services/facturacion_electronica1.html",
+  "plazo": "Varía por estación; factura el mismo día de la carga",
+  "datos": "Número de estación BP, Número de folio, Web ID, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "Opcional; se puede facturar sin usuario con solo un correo",
+  "reimprimir": "Sí, desde el portal mientras el folio siga vigente",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de BP con el número de estación, el folio y el Web ID visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud en el portal oficial de facturación de BP México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para deducir tu combustible."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi gasolina de BP?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en BP?"
+   },
+   {
+    "p": "¿La gasolina de BP es deducible de impuestos?",
+    "r": "### ¿Qué es el Web ID del ticket de BP?"
+   },
+   {
+    "p": "¿Puedo facturar varias cargas de BP en una sola factura?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Para deducir el combustible ante el SAT necesitas el CFDI con el complemento correcto y haber pagado con tarjeta, transferencia o monedero electrónico de combustible: la gasolina pagada en efectivo no es deducible aunque tengas factura.",
+   "Paga siempre con tarjeta o monedero de combustible: la gasolina en efectivo no es deducible (art. 27 LISR).",
+   "La deducción de combustible tiene reglas estrictas: el artículo 27 de la LISR exige que la gasolina se pague con tarjeta de crédito o débito, transferencia, cheque nominativo o monedero electrónico de combustible autorizado por el SAT, sin importar el monto; el efectivo está excluido por completo.",
+   "| Pago en efectivo | La gasolina pagada en efectivo no es deducible aunque tengas CFDI (art. 27 LISR)."
+  ]
+ },
+ {
+  "slug": "burger-king",
+  "url": "https://recuperafacturas.com/factura/burger-king",
+  "titulo": "Factura tus pedidos de Burger King México",
+  "portal_nombre": "alsea.interfactura.com (tiendas Alsea)",
+  "portal_url": "https://alsea.interfactura.com/",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Número de ticket, Número de tienda, Fecha de compra, Total pagado",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Burger King con el número de ticket, el número de tienda y la razón social del operador visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos si tu sucursal es de Alsea o de un franquiciatario y procesamos la solicitud en el portal correcto.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Burger King México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Burger King?"
+   },
+   {
+    "p": "¿Mi consumo en Burger King es deducible de impuestos?",
+    "r": "### ¿Por qué el portal de Alsea no reconoce mi ticket de Burger King?"
+   },
+   {
+    "p": "¿Puedo facturar pedidos de Burger King por Uber Eats o Rappi?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "El SAT limita la deducción de restaurantes al 8.5% del monto pagado con medios electrónicos.",
+   "Solo el 8.5% del consumo en restaurante es deducible; paga con tarjeta para que aplique (art.",
+   "28 LISR).",
+   "Fiscalmente, los consumos en Burger King siguen la regla general de restaurantes del artículo 28 fracción XX de la LISR: solo el 8.5% del monto pagado con tarjeta, transferencia o monedero electrónico es deducible, y el consumo en efectivo no es deducible en absoluto.",
+   "Descarga el PDF y XML del CFDI; solo el 8.5% del consumo es deducible al pagar con tarjeta.",
+   "| Deducir el 100% del consumo | El SAT limita la deducción de restaurantes al 8.5% del monto pagado con tarjeta (art."
+  ]
+ },
+ {
+  "slug": "caffenio",
+  "url": "https://recuperafacturas.com/factura/caffenio",
+  "titulo": "Factura tus compras en Caffenio",
+  "portal_nombre": "facturaciondrive.caffenio.com",
+  "portal_url": "https://facturaciondrive.caffenio.com/",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Folio de transacción, Código de facturación, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Caffenio donde se vean el folio y el código de facturación.",
+   "Toma una foto clara del ticket asegurándote de que ambos códigos sean legibles.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Recibe tu CFDI 4.0 en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Caffenio?",
+    "r": "### ¿Qué es el código de facturación de Caffenio?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Caffenio?",
+    "r": "### ¿Caffenio emite CFDI 4.0?"
+   },
+   {
+    "p": "¿Mi consumo en Caffenio es deducible de impuestos?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Para consumos de trabajo o junta en Caffenio, solo el 8.5% del monto es deducible pagando con tarjeta.",
+   "Para empresas del noroeste con equipos de campo o comerciales que consumen en Caffenio diariamente, los CFDIs acumulados mensualmente pueden representar un gasto deducible relevante."
+  ]
+ },
+ {
+  "slug": "capufe",
+  "url": "https://recuperafacturas.com/factura/capufe",
+  "titulo": "Factura tus peajes de casetas CAPUFE",
+  "portal_nombre": "capufe.gob.mx (Facturación CAPUFE)",
+  "portal_url": "https://capufe.gob.mx/",
+  "plazo": "30 días naturales desde la fecha del cruce",
+  "datos": "Folio de transacción, Fecha del cruce, Monto del peaje, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del plazo establecido",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva el comprobante de pago de tu cruce de caseta CAPUFE con el folio de transacción.",
+   "Toma una foto del comprobante y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de CAPUFE.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de peaje."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi cruce de caseta CAPUFE?",
+    "r": "### ¿Los peajes de CAPUFE son deducibles de impuestos?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar un cruce de CAPUFE?",
+    "r": "### ¿Las casetas de autopistas concesionadas (PINFRA, VIADUCTO) se facturan en CAPUFE?"
+   },
+   {
+    "p": "¿Puedo facturar cruces de IAVE o TELEVIA como peaje CAPUFE?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los peajes de caseta son deducibles como gastos de traslado para personas con actividad empresarial y para flotas de vehículos.",
+   "Para personas físicas con actividad empresarial y personas morales que utilizan estas vías para transportar mercancías, visitar clientes o realizar traslados laborales, los peajes de CAPUFE son gastos deducibles ante el SAT bajo el artículo 27 de la LISR, siempre que el trayecto tenga relación comprobable con la actividad económica."
+  ]
+ },
+ {
+  "slug": "carls-jr",
+  "url": "https://recuperafacturas.com/factura/carls-jr",
+  "titulo": "Factura tus pedidos de Carl's Jr. México",
+  "portal_nombre": "facturacion.carlsjrmso.com",
+  "portal_url": "https://facturacion.carlsjrmso.com/",
+  "plazo": "Mismo mes calendario del pedido",
+  "datos": "Folio del ticket, Número de tienda, Fecha de compra",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Carl's Jr. con el folio, el número de tienda y el total visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos la franquicia MSO de Carl's Jr. y procesamos tu solicitud.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Carl's Jr. México?",
+    "r": "### ¿El portal de Carl's Jr. cubre todas las sucursales en México?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Carl's Jr.?",
+    "r": "### ¿Mi consumo en Carl's Jr. es deducible de impuestos?"
+   },
+   {
+    "p": "¿Puedo facturar pedidos de Carl's Jr. por Uber Eats?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo el 8.5% del monto de restaurante es deducible cuando pagas con tarjeta (art.",
+   "28 LISR).",
+   "para comidas rápidas de trabajo, el CFDI es el soporte del 8.5% deducible del monto pagado con tarjeta (art.",
+   "dos veces por semana a lo largo del año puede acumular entre $80,000 y $120,000 pesos en consumos, de los cuales $6,800 a $10,200 pesos son deducibles directamente."
+  ]
+ },
+ {
+  "slug": "casa-de-tono",
+  "url": "https://recuperafacturas.com/factura/casa-de-tono",
+  "titulo": "Factura tus consumos en Casa de Toño",
+  "portal_nombre": "lacasadetono.mx (sección Facturación)",
+  "portal_url": "https://lacasadetono.mx/",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de sucursal, Fecha de consumo",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Casa de Toño con el folio, el número de sucursal y el total visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud a través del portal de facturación de Casa de Toño.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Casa de Toño?",
+    "r": "### ¿Dónde encuentro la sección de facturación en el sitio de Casa de Toño?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Casa de Toño?",
+    "r": "### ¿Mi comida en Casa de Toño es deducible de impuestos?"
+   },
+   {
+    "p": "¿Puedo facturar consumos de más de una sucursal de Casa de Toño?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo el 8.5% del monto de restaurante es deducible cuando pagas con tarjeta (art.",
+   "28 LISR).",
+   "Desde el punto de vista fiscal, los consumos en Casa de Toño se tratan como gastos de restaurante bajo el artículo 28 fracción XX de la LISR, con una deducibilidad máxima del 8.5% del monto pagado con tarjeta o transferencia.",
+   "Para las personas físicas con actividad empresarial del Régimen Simplificado de Confianza (RESICO) o del régimen de actividades empresariales y profesionales, este 8.5% acumulado en un año puede representar varios cientos de pesos de ahorro fiscal en la declaración anual."
+  ]
+ },
+ {
+  "slug": "chedraui",
+  "url": "https://recuperafacturas.com/factura/chedraui",
+  "titulo": "Obtén la factura de tus compras en Chedraui",
+  "portal_nombre": "michedraui.com.mx (Facturación)",
+  "portal_url": "https://michedraui.com.mx/content/bill",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Folio del ticket, Número de tienda, Número de caja, Importe total",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto clara del ticket de Chedraui incluyendo el código de barras y el total.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema procesa el ticket y gestiona la facturación automáticamente.",
+   "Recibe tu CFDI válido en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Chedraui?",
+    "r": "### ¿Qué necesito para facturar mi ticket de Chedraui?"
+   },
+   {
+    "p": "¿Es gratis facturar con Clara Intelligence?",
+    "r": "### ¿En qué formato recibo mi factura de Chedraui? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "cinepolis",
+  "url": "https://recuperafacturas.com/factura/cinepolis",
+  "titulo": "Factura tus tickets de Cinépolis",
+  "portal_nombre": "cinepolis.com/facturacion",
+  "portal_url": "https://cinepolis.com/facturacion",
+  "plazo": "Mismo mes calendario de la función",
+  "datos": "Número de folio o de orden, Fecha de la función, Complejo Cinépolis, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta (recomendada para consultar historial)",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket o comprobante de compra de Cinépolis con el número de folio.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Cinépolis.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para tus gastos de entretenimiento."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Cinépolis?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Cinépolis?"
+   },
+   {
+    "p": "¿Las entradas de cine de Cinépolis son deducibles de impuestos?",
+    "r": "### ¿Puedo facturar el combate de palomitas y alimentos de Cinépolis?"
+   },
+   {
+    "p": "¿Las compras en Cinépolis en línea también se pueden facturar?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Las entradas de cine pueden ser deducibles como gastos de representación o entretenimiento para personas con actividad empresarial.",
+   "Los gastos de entretenimiento empresarial son deducibles hasta el límite que establece el SAT.",
+   "Desde el punto de vista fiscal, los gastos de entretenimiento empresarial (cine, teatro, eventos deportivos) son deducibles bajo el concepto de 'gastos de representación' del artículo 28 de la LISR, con los límites que establece la ley.",
+   "Para que la entrada al cine sea deducible como gasto de representación, es necesario documentar el propósito empresarial del gasto: una nota con el nombre del cliente o colaborador con quien se asistió, el motivo del evento y la relación con la actividad económica.",
+   "Las empresas que utilizan Cinépolis VIP para reuniones con clientes de alto nivel tienen una justificación más sólida para la deducibilidad que las salas estándar.",
+   "| Gasto de entretenimiento no documentado como empresarial | Para que la entrada de cine sea deducible, el SAT puede pedir que documentes el propósito empresarial (reunión con cliente, premiación, etc."
+  ]
+ },
+ {
+  "slug": "circle-k",
+  "url": "https://recuperafacturas.com/factura/circle-k",
+  "titulo": "Factura tu ticket de Circle K México",
+  "portal_nombre": "facturacion.circlekmexico.com.mx",
+  "portal_url": "https://facturacion.circlekmexico.com.mx/",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Número de tienda, Monto total, Fecha de compra",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del plazo establecido",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto del ticket de Circle K con el folio y el monto total visibles.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud y gestionamos la factura con el portal de Circle K.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Circle K México emite facturas CFDI?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Circle K?"
+   },
+   {
+    "p": "¿Puedo facturar los servicios pagados en Circle K (recargas, pagos)?",
+    "r": "### ¿Es lo mismo facturar en Circle K que en OXXO?"
+   },
+   {
+    "p": "¿Qué datos del ticket de Circle K necesito?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si compras en Circle K para gastos de oficina, viáticos o consumibles, puedes obtener tu factura CFDI deducible.",
+   "Para personas físicas con actividad empresarial y personas morales que compran en Circle K para viáticos, gastos de oficina o consumibles, el CFDI es deducible con uso G03 siempre que el ticket sea del mes en curso."
+  ]
+ },
+ {
+  "slug": "city-market",
+  "url": "https://recuperafacturas.com/factura/city-market",
+  "titulo": "Factura tus compras en City Market",
+  "portal_nombre": "citymarket.com.mx/facturacion",
+  "portal_url": "https://www.citymarket.com.mx/facturacion",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Número de tienda, Monto total, Datos fiscales",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de City Market con el folio de transacción y el monto.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mes calendario.",
+   "Procesamos tu solicitud y gestionamos la emisión del CFDI.",
+   "Recibe tu factura en PDF y XML válida ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿City Market emite facturas CFDI?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en City Market?"
+   },
+   {
+    "p": "¿City Market y Liverpool tienen el mismo portal de facturación?",
+    "r": "### ¿Puedo facturar compras de City Market en línea?"
+   },
+   {
+    "p": "¿Las compras gourmet o de importación de City Market son deducibles?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si compras productos gourmet, importados o artículos de primera calidad para tu empresa o negocio, Clara Intelligence te ayuda a obtener tu factura CFDI deducible."
+  ]
+ },
+ {
+  "slug": "comex",
+  "url": "https://recuperafacturas.com/factura/comex",
+  "titulo": "Factura tus compras en Comex México",
+  "portal_nombre": "comex.com.mx/factura",
+  "portal_url": "https://www.comex.com.mx/factura",
+  "plazo": "30 días naturales desde la compra",
+  "datos": "Folio del ticket, Fecha de compra, Monto total, Uso del CFDI",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días del plazo",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Comex con el folio, el total y la fecha visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Comex.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mis compras en Comex?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Comex?"
+   },
+   {
+    "p": "¿La pintura Comex para remodelación es deducible de impuestos?",
+    "r": "### ¿Puedo facturar materiales de pintura para una obra de construcción?"
+   },
+   {
+    "p": "¿Las compras en franquicias Comex tienen el mismo portal de facturación?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Para remodelaciones de inmuebles de negocio, la pintura y recubrimientos son deducibles como mejoras.",
+   "Las compras de pintura para venta posterior (pintores profesionales) son costo deducible.",
+   "Para pintores independientes y empresas de mantenimiento, la pintura y los materiales son costo deducible del servicio prestado, clasificado como costo de ventas en la declaración del ISR.",
+   "Para propietarios de inmuebles que usan el bien en su actividad empresarial, la pintura de remodelación puede ser gasto de mantenimiento (deducible en el ejercicio) o mejora al activo fijo (depreciable en ejercicios futuros), dependiendo de si la obra simplemente mantiene el inmueble en condiciones de uso o incrementa su valor o vida útil.",
+   "Uso del CFDIG03 para gastos generales; I04 para mejoras a instalaciones; D10 para no deducibles si aplica."
+  ]
+ },
+ {
+  "slug": "coppel",
+  "url": "https://recuperafacturas.com/factura/coppel",
+  "titulo": "Factura tu ticket de Coppel rápidamente",
+  "portal_nombre": "facturas.coppel.com",
+  "portal_url": "https://facturas.coppel.com/",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Fecha de compra, Monto total, Datos fiscales",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto de tu ticket de Coppel con el total y la fecha visibles.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud automáticamente con el portal Coppel.",
+   "Recibe tu CFDI en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuál es el portal oficial de facturación Coppel?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mi compra en Coppel?"
+   },
+   {
+    "p": "¿Las compras a crédito Coppel se pueden facturar?",
+    "r": "### ¿Cómo facturo cargos de BanCoppel o Afore Coppel?"
+   },
+   {
+    "p": "¿Puedo facturar compras en coppel.com?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si compraste a crédito o de contado en Coppel, Clara Intelligence te ayuda a recuperar tu factura CFDI deducible sin trámites complicados."
+  ]
+ },
+ {
+  "slug": "costco",
+  "url": "https://recuperafacturas.com/factura/costco",
+  "titulo": "Recupera la factura de tus compras en Costco",
+  "portal_nombre": "costco.com.mx/facturas",
+  "portal_url": "https://www.costco.com.mx/facturas",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Número de membresía Costco, Folio del ticket, Fecha de compra, Monto total",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere membresía Costco vigente (número de socio en ticket)",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto de tu ticket de Costco donde se vea claramente el número de membresía y el total.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "El sistema detecta que es un ticket de Costco y procesa tu facturación.",
+   "Descarga tu factura CFDI en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mis compras de Costco en línea?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Costco?"
+   },
+   {
+    "p": "¿Puedo facturar en Costco sin membresía?",
+    "r": "### ¿Qué RFC y datos fiscales necesito para facturar en Costco?"
+   },
+   {
+    "p": "¿Puedo facturar compras pagadas con tarjeta de crédito en Costco?",
+    "r": "### ¿Qué hago si el portal de Costco rechaza mi RFC?"
+   },
+   {
+    "p": "¿La factura de Costco es válida ante el SAT?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si eres miembro de Costco y realizas compras para tu negocio o gastos personales deducibles, Clara Intelligence te ayuda a obtener tu factura CFDI de manera automática."
+  ]
+ },
+ {
+  "slug": "dairy-queen-mexico",
+  "url": "https://recuperafacturas.com/factura/dairy-queen-mexico",
+  "titulo": "Factura tus compras en Dairy Queen México",
+  "portal_nombre": "facturacion.dequ.mx",
+  "portal_url": "https://facturacion.dequ.mx/",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de tienda, Fecha de compra",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Dairy Queen con el folio, el número de tienda y el total visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos la franquicia de Dairy Queen y procesamos tu solicitud.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Dairy Queen México?",
+    "r": "### ¿Qué hago si el portal de Dairy Queen no reconoce mi ticket?"
+   },
+   {
+    "p": "¿Dairy Queen tiene un solo portal para todas sus sucursales en México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Dairy Queen?"
+   },
+   {
+    "p": "¿Mi consumo en Dairy Queen es deducible de impuestos?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo el 8.5% del monto es deducible en establecimientos de alimentos cuando pagas con tarjeta.",
+   "Para la deducción fiscal, los consumos en Dairy Queen aplican el mismo tratamiento que cualquier establecimiento de alimentos: el artículo 28 fracción XX de la LISR limita la deducción al 8.5% del monto pagado con tarjeta o transferencia a nombre del contribuyente.",
+   "Los pagos en efectivo, aunque generen ticket, no son deducibles.",
+   "Las visitas a Dairy Queen para pausas de trabajo, celebraciones de cierre de proyecto o atención informal a clientes califican como gasto de representación parcialmente deducible."
+  ]
+ },
+ {
+  "slug": "dhl",
+  "url": "https://recuperafacturas.com/factura/dhl",
+  "titulo": "Factura tus envíos de DHL en México",
+  "portal_nombre": "dhl.com/mx-es (Inicio de sesión — Facturación)",
+  "portal_url": "https://www.dhl.com/mx-es/home/inicio-de-sesion.html",
+  "plazo": "30 días naturales desde la fecha del servicio",
+  "datos": "Número de guía (waybill), Fecha del servicio, Monto total, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere inicio de sesión en portal DHL",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Localiza tu comprobante de envío DHL con el número de guía o waybill visible.",
+   "Envía la foto del comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de DHL México.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de mensajería."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mis envíos de DHL México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar una guía DHL?"
+   },
+   {
+    "p": "¿Los envíos de DHL son deducibles de impuestos?",
+    "r": "### ¿DHL ofrece facturación consolidada para empresas?"
+   },
+   {
+    "p": "¿Puedo facturar envíos internacionales de DHL al SAT?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los gastos de envío son deducibles como gastos de operación para personas físicas con actividad empresarial y personas morales."
+  ]
+ },
+ {
+  "slug": "didi",
+  "url": "https://recuperafacturas.com/factura/didi",
+  "titulo": "Factura tus viajes de DiDi fácilmente",
+  "plazo": "7 días naturales tras el viaje o pedido",
+  "datos": "ID del viaje o pedido, Fecha y hora del servicio, Monto total, RFC del solicitante",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere cuenta de DiDi activa",
+  "reimprimir": "Sí, en Mis recibos dentro de la app",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una captura de pantalla del recibo de tu viaje en DiDi o pedido de DiDi Food.",
+   "Envía la imagen a Clara Intelligence por WhatsApp.",
+   "El sistema procesa tu recibo y genera la solicitud de facturación.",
+   "Descarga tu factura CFDI válida en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar un viaje de DiDi?",
+    "r": "### ¿Cómo facturo DiDi Food por separado de los viajes?"
+   },
+   {
+    "p": "¿Qué Uso CFDI debo elegir para facturas de DiDi?",
+    "r": "### ¿Puedo facturar viajes de meses anteriores en DiDi?"
+   },
+   {
+    "p": "¿Qué hago si la app de DiDi no me deja facturar?",
+    "r": "### ¿El RFC de DiDi México es el mismo para viajes y comida?"
+   },
+   {
+    "p": "¿Puedo facturar a nombre de mi empresa en DiDi?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Otro detalle: las propinas dejadas en la app no son facturables porque legalmente no forman parte de la contraprestación del servicio; solo el monto de la tarifa, los peajes y los recargos generan CFDI deducible."
+  ]
+ },
+ {
+  "slug": "dominos",
+  "url": "https://recuperafacturas.com/factura/dominos",
+  "titulo": "Factura tus pedidos de Domino's en México",
+  "portal_nombre": "alsea.interfactura.com (Domino's)",
+  "portal_url": "https://alsea.interfactura.com/RegistroDocumento.aspx?opc=Dominos",
+  "plazo": "Mismo mes calendario del pedido",
+  "datos": "Folio del ticket o número de pedido, Fecha del pedido, Monto total, Forma de pago electrónica",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket o comprobante de pedido de Domino's con el folio visible.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Domino's (Alsea).",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi pedido de Domino's?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Domino's?"
+   },
+   {
+    "p": "¿Mi pedido de Domino's es deducible de impuestos?",
+    "r": "### ¿Puedo facturar pedidos de Domino's por Uber Eats o Rappi?"
+   },
+   {
+    "p": "¿Domino's también factura los pedidos en línea?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Recuerda que el SAT limita la deducción de consumos en restaurante al 8.5% del monto cuando se paga con medios electrónicos.",
+   "Solo el 8.5% del consumo en restaurante es deducible (art.",
+   "28 LISR); paga con tarjeta.",
+   "Para la deducción fiscal, el consumo en restaurantes está regulado por el artículo 28 fracción XX de la LISR, que limita la deducibilidad al 8.5% del monto pagado con tarjeta o transferencia cuando el consumo sea en un restaurante.",
+   "Esto se aplica sin excepción a Domino's y todas las cadenas de comida: el CFDI es necesario pero no amplía el porcentaje deducible.",
+   "Para que el gasto sea deducible, además de tener el CFDI es indispensable que el pago sea con tarjeta de débito, crédito o transferencia electrónica a nombre del contribuyente (no en efectivo), y que la compra tenga relación con la actividad empresarial (junta de trabajo, atención a clientes, comida de equipo de ventas)."
+  ]
+ },
+ {
+  "slug": "estafeta",
+  "url": "https://recuperafacturas.com/factura/estafeta",
+  "titulo": "Factura tus envíos de Estafeta en México",
+  "portal_nombre": "estafeta.com/FACTURACION",
+  "portal_url": "https://www.estafeta.com/FACTURACION",
+  "plazo": "30 días naturales desde la fecha del servicio",
+  "datos": "Número de guía, Fecha del servicio, Monto total, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "Solo requiere número de guía (no cuenta)",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Localiza tu comprobante de envío Estafeta con el número de guía o rastreo.",
+   "Envía la foto del comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación electrónica de Estafeta.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de mensajería."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mis envíos de Estafeta?",
+    "r": "### ¿Cuánto tiempo tengo para facturar una guía de Estafeta?"
+   },
+   {
+    "p": "¿Los envíos de Estafeta son deducibles de impuestos?",
+    "r": "### ¿Estafeta ofrece facturación automática para empresas?"
+   },
+   {
+    "p": "¿Puedo facturar envíos de Estafeta realizados por mis clientes a nombre mío?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los gastos de mensajería son deducibles ante el SAT y Clara Intelligence te ayuda a obtener tu CFDI de forma automática.",
+   "es una empresa 100% mexicana fundada en 1979 y es una de las compañías de mensajería y paquetería más consolidadas del país."
+  ]
+ },
+ {
+  "slug": "farmacia-del-ahorro",
+  "url": "https://recuperafacturas.com/factura/farmacia-del-ahorro",
+  "titulo": "Factura tus compras de Farmacia del Ahorro",
+  "portal_nombre": "www.fahorro.com/facturacion",
+  "portal_url": "https://www.fahorro.com/facturacion",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio fiscal del ticket, Número de tienda, Monto total, Datos fiscales",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto de tu ticket de Farmacia del Ahorro con el total y la fecha.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de Farmacia del Ahorro.",
+   "Recibe tu CFDI en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuál es el portal oficial de facturación de Farmacias del Ahorro?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mi ticket de Farmacia del Ahorro?"
+   },
+   {
+    "p": "¿Mis medicamentos son deducibles como gasto médico?",
+    "r": "### ¿Necesito presentar receta médica al SAT?"
+   },
+   {
+    "p": "¿Las consultas en consultorios adyacentes a Farmacia del Ahorro se facturan aquí?",
+    "r": "### ¿Qué uso de CFDI elijo para medicamentos? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los medicamentos con receta son deducibles como gasto médico personal si tienes el CFDI.",
+   "Para personas físicas, las facturas de farmacia con uso de CFDI 'D01 - Honorarios médicos, dentales y gastos hospitalarios' son deducibles en la declaración anual del ISR siempre que se paguen con tarjeta de crédito, débito o transferencia electrónica.",
+   "El art. 151 de la LISR establece que las medicinas son deducibles solo si están respaldadas por receta médica de un profesional con cédula vigente y se adquieren con medio de pago electrónico nominativo.",
+   "Los productos no medicinales (cosméticos, suplementos sin receta, artículos de tocador) que vienen en el mismo CFDI no son deducibles aunque la factura los incluya; tu contador debe segregarlos al integrar la declaración anual.",
+   "Forma de pago electrónicaIndispensable para deducción como gasto médico (art. 151 LISR).",
+   "| Pago en efectivo invalida deducción médica | Por art. 151 LISR, los gastos médicos solo son deducibles si se pagan con tarjeta, transferencia o cheque nominativo."
+  ]
+ },
+ {
+  "slug": "farmacias-guadalajara",
+  "url": "https://recuperafacturas.com/factura/farmacias-guadalajara",
+  "titulo": "Factura tus compras en Farmacias Guadalajara",
+  "portal_nombre": "farmaciasguadalajara.com.mx/facturacion",
+  "portal_url": "https://www.farmaciasguadalajara.com.mx/facturacion",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Número de tienda, Monto total, Forma de pago electrónica",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de Farmacias Guadalajara con el folio, número de tienda y monto.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mismo mes calendario.",
+   "Procesamos tu solicitud y emitimos el CFDI automáticamente.",
+   "Descarga tu factura en PDF y XML válida ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Farmacias Guadalajara emite facturas CFDI?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Farmacias Guadalajara?"
+   },
+   {
+    "p": "¿Puedo deducir medicamentos de Farmacias Guadalajara?",
+    "r": "### ¿Los consultorios de Farmacias Guadalajara también facturan?"
+   },
+   {
+    "p": "¿Es igual facturar en Farmacias Guadalajara que en Farmacias del Ahorro?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si compras medicamentos, artículos de salud o visitas sus consultorios, puedes obtener tu factura CFDI deducible.",
+   "Paga con tarjeta para que el gasto médico sea deducible (art. 151 LISR).",
+   "Para los contribuyentes que compran medicamentos de manera frecuente en Farmacias Guadalajara, la planificación fiscal es importante: los gastos médicos (medicamentos con receta, honorarios médicos) tienen un límite de deducción personal en la declaración anual del 15% del ingreso total acumulable o cinco veces el salario mínimo anual del área geográfica del contribuyente, lo que resulte menor (art. 151 LISR).",
+   "Forma de pago electrónicaNecesaria para deducción como gasto médico (art. 151 LISR).",
+   "| Pago en efectivo invalida deducción médica | Por art. 151 LISR, los gastos médicos solo son deducibles si se pagan con medios electrónicos.",
+   "| Falta receta médica | Sin receta de profesional registrado, los medicamentos no califican como gasto médico deducible ante el SAT."
+  ]
+ },
+ {
+  "slug": "farmacias-san-pablo",
+  "url": "https://recuperafacturas.com/factura/farmacias-san-pablo",
+  "titulo": "Factura tus compras en Farmacias San Pablo",
+  "portal_nombre": "sanpablo.com.mx/facturacion",
+  "portal_url": "https://www.sanpablo.com.mx/facturacion",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Número de tienda, Monto total, Forma de pago electrónica",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de Farmacias San Pablo con el folio y el monto total.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mismo mes.",
+   "Nuestro sistema procesa tu solicitud y emite el CFDI.",
+   "Recibe tu factura en PDF y XML válida ante el SAT para deducir."
+  ],
+  "faq": [
+   {
+    "p": "¿Farmacias San Pablo emite facturas CFDI?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Farmacias San Pablo?"
+   },
+   {
+    "p": "¿Puedo deducir medicamentos comprados en San Pablo?",
+    "r": "### ¿Los consultorios San Pablo también facturan?"
+   },
+   {
+    "p": "¿Puedo facturar compras de cosméticos o higiene en San Pablo?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si compras medicamentos, artículos de salud o visitas sus consultorios, puedes obtener tu factura CFDI deducible.",
+   "Para gastos médicos deducibles, usa CFDI uso D01 - Honorarios médicos y gastos hospitalarios.",
+   "Paga con tarjeta para que el gasto sea deducible (art. 151 LISR para personas físicas).",
+   "Para contribuyentes que compran medicamentos de prescripción, anteojos o realizan estudios clínicos en San Pablo, la factura CFDI con uso D01 es fundamental para ejercer las deducciones personales en la declaración anual, sujetas al límite del 15% del ingreso o cinco veces el salario mínimo (art. 151 LISR).",
+   "El pago en efectivo, incluso con receta médica y CFDI, no es deducible para personas físicas en su declaración anual.",
+   "Forma de pago electrónicaPara deducción como gasto médico (art. 151 LISR)."
+  ]
+ },
+ {
+  "slug": "farmacias-similares",
+  "url": "https://recuperafacturas.com/factura/farmacias-similares",
+  "titulo": "Factura tus compras de Farmacias Similares",
+  "portal_nombre": "facturacion.gpupm.com/simifactura/portal/",
+  "portal_url": "https://facturacion.gpupm.com/simifactura/portal/",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Fecha de compra, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Farmacias Similares con el monto y la fecha visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el sistema de Farmacias Similares.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Farmacias Similares?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mi ticket de Farmacias Similares?"
+   },
+   {
+    "p": "¿Mis medicamentos de Similares son deducibles como gasto médico?",
+    "r": "### ¿La consulta del médico de Similares se factura junto con los medicamentos?"
+   },
+   {
+    "p": "¿Puedo facturar el medicamento genérico de Similares como gasto médico?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los medicamentos con receta son deducibles con uso de CFDI D01; sin receta no califican.",
+   "Clara Intelligence puede gestionar todos estos tickets si los envías por WhatsApp, consolidando el proceso para que no pierdas ni un solo CFDI deducible del año.",
+   "Receta médicaDebe conservarse 5 años; sin ella el gasto no califica como médico deducible aunque tengas el CFDI.",
+   "| Pago en efectivo descalifica la deducción | La LISR exige que los gastos médicos se paguen con medios electrónicos para ser deducibles.",
+   "| Sin receta médica, no hay deducción | El SAT exige receta de profesional con cédula registrada para aceptar medicamentos como gasto médico deducible.",
+   "com/blog/facturacion-gastos-medicos-deducibles) [Deducciones Personales Asalariados Mexico](https://recuperafacturas."
+  ]
+ },
+ {
+  "slug": "fedex",
+  "url": "https://recuperafacturas.com/factura/fedex",
+  "titulo": "Factura tus envíos de FedEx en México",
+  "portal_nombre": "fedex.com/es-mx/billing.html",
+  "portal_url": "https://www.fedex.com/es-mx/billing.html",
+  "plazo": "30 días naturales desde la fecha del envío",
+  "datos": "Número de guía, Fecha del servicio, Monto exacto, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "Solo requiere número de guía (no cuenta)",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Localiza tu comprobante de envío o guía de FedEx con el número de rastreo visible.",
+   "Envía la foto del comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de FedEx México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para deducir tus gastos de paquetería."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mis envíos de FedEx México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar una guía de FedEx?"
+   },
+   {
+    "p": "¿Los envíos de FedEx son deducibles de impuestos?",
+    "r": "### ¿Puedo facturar envíos internacionales de FedEx al SAT?"
+   },
+   {
+    "p": "¿FedEx ofrece facturación consolidada mensual para empresas?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los gastos de envío son deducibles como gasto de operación para personas físicas con actividad empresarial y para personas morales.",
+   "Para las empresas mexicanas que importan o exportan mercancías, FedEx es un socio logístico fundamental cuyo gasto de envío es completamente deducible como gasto de operación ante el SAT, incluyendo los cargos adicionales de combustible, manejo especial, seguro y área remota que pueden representar hasta el 30% del costo base del envío."
+  ]
+ },
+ {
+  "slug": "g500",
+  "url": "https://recuperafacturas.com/factura/g500",
+  "titulo": "Factura tus cargas de gasolina en G500",
+  "portal_nombre": "g500network.com/facturacion-en-linea",
+  "portal_url": "https://g500network.com/facturacion-en-linea/",
+  "plazo": "Varía por estación; factura el mismo día de la carga",
+  "datos": "Nombre de la estación y permiso CRE, Folio del ticket, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Depende de la estación; conserva el PDF y XML al emitirlos",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de G500 con el nombre de la estación, el permiso CRE y el folio visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos la estación G500 correcta y procesamos tu solicitud de facturación.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para deducir tu combustible."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi gasolina de G500?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en G500?"
+   },
+   {
+    "p": "¿La gasolina de G500 es deducible de impuestos?",
+    "r": "### ¿Qué es el permiso CRE que aparece en mi ticket de G500?"
+   },
+   {
+    "p": "¿Por qué no encuentro mi estación G500 en el portal?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Para deducir el combustible necesitas pagar con tarjeta o monedero electrónico: el efectivo no es deducible.",
+   "Paga con tarjeta o monedero de combustible: la gasolina en efectivo no es deducible (art. 27 LISR).",
+   "Como en toda gasolinera, la deducción del combustible de G500 exige pago con medios electrónicos: el artículo 27 de la LISR excluye la gasolina pagada en efectivo de cualquier deducción, sin importar el monto ni el CFDI.",
+   "| Pago en efectivo | La gasolina pagada en efectivo no es deducible aunque tengas CFDI (art. 27 LISR)."
+  ]
+ },
+ {
+  "slug": "gasolineras",
+  "url": "https://recuperafacturas.com/factura/gasolineras",
+  "titulo": "Recupera la factura de tus cargas de gasolina",
+  "plazo": "24 a 72 horas tras la carga",
+  "datos": "Número de permiso CRE, Folio del ticket, Número de estación, Litros y tipo de combustible",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta; varía por franquicia",
+  "reimprimir": "Generalmente no disponible pasadas 72 horas",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto del ticket de la gasolinera donde se vea el monto, litros y tipo de combustible.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema identifica la gasolinera y procesa tu facturación automáticamente.",
+   "Recibe tu factura CFDI de combustible en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo gasolina en una gasolinera sin portal propio?",
+    "r": "### ¿Puedo deducir gasolina como asalariado?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar gasolina en México?",
+    "r": "### ¿Qué Uso CFDI debo elegir para gasolina?"
+   },
+   {
+    "p": "¿La factura de gasolina sirve para deducir impuestos?",
+    "r": "### ¿Puedo facturar gasolina pagada con efectivo?"
+   },
+   {
+    "p": "¿Qué hago si la gasolinera se niega a darme factura?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "La gasolina es uno de los gastos más comunes y deducibles en México, tanto para personas físicas como morales.",
+   "La factura de gasolina es 100% deducible si está relacionada con tu actividad económica.",
+   "0 con el complemento 'Hidrocarburos' para combustibles, lo cual hace deducible el gasto para personas físicas con actividad empresarial y morales.",
+   "Forma de pagoTarjeta o transferencia para que sea 100% deducible.",
+   "| Pago en efectivo no deducible | Aunque tengas el CFDI, la gasolina pagada en efectivo NO es deducible (art. 27 LISR)."
+  ]
+ },
+ {
+  "slug": "heb",
+  "url": "https://recuperafacturas.com/factura/heb",
+  "titulo": "Factura tu ticket de HEB México sin complicaciones",
+  "portal_nombre": "heb.com.mx/facturacion",
+  "portal_url": "https://www.heb.com.mx/facturacion",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Monto total, Fecha de compra, Datos fiscales",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Fotografía tu ticket de HEB asegurándote de capturar el folio y el monto total.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema procesa la solicitud y gestiona la facturación.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿HEB México emite facturas CFDI?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en HEB?"
+   },
+   {
+    "p": "¿Puedo facturar compras de HEB en línea?",
+    "r": "### ¿La tarjeta de lealtad HEB afecta la facturación?"
+   },
+   {
+    "p": "¿Qué hago si el portal de HEB rechaza mi folio?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Las compras en HEB para tu empresa son deducibles con uso CFDI G03."
+  ]
+ },
+ {
+  "slug": "home-depot",
+  "url": "https://recuperafacturas.com/factura/home-depot",
+  "titulo": "Factura tus compras de Home Depot fácilmente",
+  "portal_nombre": "homedepot.com.mx/facturaweb",
+  "portal_url": "https://homedepot.com.mx/facturaweb",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Folio fiscal, Número de tienda, Número de operación, Monto total",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Fotografía tu ticket de Home Depot asegurándote de capturar el total y el número de ticket.",
+   "Envía la foto por WhatsApp a Clara Intelligence o cárgala en nuestra plataforma.",
+   "Clara procesa el ticket automáticamente e inicia la facturación.",
+   "Recibe tu CFDI en PDF y XML listo para tus deducciones."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Home Depot?",
+    "r": "### ¿Qué necesito para facturar mi ticket de Home Depot?"
+   },
+   {
+    "p": "¿Es gratis facturar con Clara Intelligence?",
+    "r": "### ¿En qué formato recibo mi factura de Home Depot? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "opera más de 130 tiendas en el país y atiende mayoritariamente compras de remodelación, construcción y herramientas, donde la deducibilidad del CFDI es crítica para constructoras, contratistas y profesionales independientes."
+  ]
+ },
+ {
+  "slug": "iave",
+  "url": "https://recuperafacturas.com/factura/iave",
+  "titulo": "Factura tus cruces de caseta IAVE",
+  "portal_nombre": "iave.capufe.gob.mx",
+  "portal_url": "https://iave.capufe.gob.mx/",
+  "plazo": "30 días naturales desde la fecha del cruce",
+  "datos": "Número de tag IAVE, Periodo de facturación, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere número de tag IAVE para factura consolidada",
+  "reimprimir": "Sí, dentro de los 30 días del cruce",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Localiza tu estado de cuenta IAVE o los comprobantes de tus cruces de caseta.",
+   "Envía el documento o foto por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de CAPUFE.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de peaje."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mis cruces de caseta con IAVE?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mis peajes IAVE?"
+   },
+   {
+    "p": "¿Los peajes de IAVE son deducibles de impuestos?",
+    "r": "### ¿Puedo facturar los peajes de IAVE para toda mi flotilla?"
+   },
+   {
+    "p": "¿IAVE cubre todas las autopistas de México?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los gastos de peaje son deducibles como viáticos de traslado o gastos de operación para personas con actividad empresarial y empresas con flotillas.",
+   "Los peajes en autopistas CAPUFE son deducibles con uso CFDI G03 para gastos de operación."
+  ]
+ },
+ {
+  "slug": "ikea",
+  "url": "https://recuperafacturas.com/factura/ikea",
+  "titulo": "Factura tus compras en IKEA México",
+  "portal_nombre": "dito.com.mx — Autofactura IKEA",
+  "portal_url": "https://v2.dito.com.mx/Dito.Web/IkeaSelfIssue/ConsultaTicket",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Número de ticket u orden, Fecha de compra, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario (solo número de ticket)",
+  "reimprimir": "Sí, dentro de los 30 días desde el portal Dito",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de IKEA México con el número de orden o folio visible.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud a través del portal de autofactura Dito de IKEA.",
+   "Recibe tu CFDI en PDF y XML válido para deducir muebles y artículos de oficina."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi compra en IKEA México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en IKEA México?"
+   },
+   {
+    "p": "¿Las compras de IKEA son deducibles para mi empresa?",
+    "r": "### ¿Qué es el portal Dito y por qué IKEA lo usa?"
+   },
+   {
+    "p": "¿Puedo facturar compras de IKEA en línea?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Muebles y sillas de oficina comprados para tu empresa son deducibles como activos fijos (uso I04 o I05).",
+   "Para home office, solo la proporción del área usada para trabajar es deducible; consulta con tu contador.",
+   "Para empresas y personas con actividad empresarial, las compras en IKEA son frecuentes fuente de activos deducibles: escritorios regulables, sillas ergonómicas MARKUS o JÄRVFJÄLLET, lámparas de escritorio, estanterías KALLAX para oficina, cajoneras de archivo y organizadores de escritorio son activos que mejoran la productividad y tienen una vida útil de varios años."
+  ]
+ },
+ {
+  "slug": "italiannis",
+  "url": "https://recuperafacturas.com/factura/italiannis",
+  "titulo": "Factura tus consumos en Italianni's México",
+  "portal_nombre": "alsea.interfactura.com — Italianni's",
+  "portal_url": "https://alsea.interfactura.com/RegistroDocumento.aspx?opc=Italiannis",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Fecha del consumo, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Italianni's con el folio y el número de sucursal visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos Italianni's como marca ALSEA y accedemos al portal correcto.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Italianni's México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Italianni's?"
+   },
+   {
+    "p": "¿Puedo facturar consumos de Italianni's en el portal genérico de ALSEA?",
+    "r": "### ¿Mi cena en Italianni's es deducible de impuestos?"
+   },
+   {
+    "p": "¿Puedo facturar si comí en Italianni's con una aplicación de delivery?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo el 8.5% del monto de restaurante es deducible cuando pagas con tarjeta (art.",
+   "28 LISR).",
+   "La deducción aplica al 8.5% del monto pagado con tarjeta o transferencia, lo que convierte a Italianni's en un establecimiento donde la disciplina de facturar el mismo día del consumo tiene un impacto directo en la contabilidad de la empresa.",
+   "Verifica el monto del CFDI y recuerda que solo el 8.5% del monto es deducible al pagar con tarjeta."
+  ]
+ },
+ {
+  "slug": "izzi",
+  "url": "https://recuperafacturas.com/factura/izzi",
+  "titulo": "Factura tu recibo de Izzi Telecom",
+  "portal_nombre": "izzi.mx/facturacion",
+  "portal_url": "https://www.izzi.mx/facturacion",
+  "plazo": "Mismo ciclo de facturación mensual",
+  "datos": "Número de cuenta Izzi, Periodo de facturación, Datos fiscales, Forma de pago electrónica",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere número de cuenta Izzi",
+  "reimprimir": "Sí, en cualquier momento desde izzi.mx",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Localiza tu recibo o comprobante de pago de Izzi (correo de factura mensual o ticket de pago en sucursal).",
+   "Envía el comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud y gestionamos la emisión del CFDI.",
+   "Recibe tu factura en PDF y XML válida ante el SAT para deducir."
+  ],
+  "faq": [
+   {
+    "p": "¿Izzi emite facturas CFDI en México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mi recibo de Izzi?"
+   },
+   {
+    "p": "¿El servicio de Izzi es deducible de impuestos?",
+    "r": "### ¿Cómo registro mi RFC en mi cuenta de Izzi para recibir facturas automáticas?"
+   },
+   {
+    "p": "¿Qué pasa si Izzi no me envió la factura de un mes anterior?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si contratas Izzi para tu empresa u oficina, el pago mensual puede ser un gasto deducible.",
+   "El servicio de internet y cable es deducible como gasto de comunicación (G03) si es para tu empresa.",
+   "Para empresas con oficinas, sucursales o puntos de venta que contratan internet Izzi, el pago mensual puede ser un gasto deducible como servicio de comunicaciones con uso CFDI G03, siempre que esté a nombre del RFC de la empresa.",
+   "Forma de pago electrónicaPara que el gasto sea deducible como servicio empresarial."
+  ]
+ },
+ {
+  "slug": "kfc",
+  "url": "https://recuperafacturas.com/factura/kfc",
+  "titulo": "Factura tus pedidos de KFC México",
+  "portal_nombre": "kfc.teagradece.mx/facturacion",
+  "portal_url": "https://kfc.teagradece.mx/facturacion",
+  "plazo": "Mismo mes calendario del pedido",
+  "datos": "Número de folio del ticket, Fecha del pedido, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de KFC donde se vea el folio, el total y el nombre de la sucursal.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos la franquicia de KFC y procesamos tu solicitud de facturación.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en KFC México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en KFC México?"
+   },
+   {
+    "p": "¿Mi consumo en KFC es deducible de impuestos?",
+    "r": "### ¿Por qué el portal de KFC no reconoce mi ticket?"
+   },
+   {
+    "p": "¿Puedo facturar pedidos de KFC a domicilio o por Uber Eats?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Recuerda que el SAT limita la deducción de restaurantes al 8.5% del monto cuando pagas con medios electrónicos.",
+   "Solo el 8.5% del consumo en restaurante es deducible; paga con tarjeta para que aplique (art.",
+   "28 LISR).",
+   "El artículo 28 fracción XX de la LISR limita la deducción de restaurantes al 8.5% del monto pagado con medios electrónicos, lo que aplica a KFC sin excepción.",
+   "Esto no significa que la factura sea inútil: el CFDI sirve como soporte documental, y el 8.5% acumulado en el año puede representar un ahorro fiscal relevante para empresas con equipos de ventas que comen frecuentemente en el campo.",
+   "El pago con tarjeta de empresa o monedero electrónico es el requisito indispensable para que el gasto sea deducible aunque sea parcialmente."
+  ]
+ },
+ {
+  "slug": "krispy-kreme",
+  "url": "https://recuperafacturas.com/factura/krispy-kreme",
+  "titulo": "Factura tus compras en Krispy Kreme México",
+  "portal_nombre": "facturacion.krispykreme.com.mx",
+  "portal_url": "https://facturacion.krispykreme.com.mx/",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Número de folio del ticket, Fecha de compra, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Krispy Kreme con el número de folio visible.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Krispy Kreme México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Krispy Kreme México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Krispy Kreme México?"
+   },
+   {
+    "p": "¿Mis compras en Krispy Kreme son deducibles de impuestos?",
+    "r": "### ¿Puedo facturar cajas de donas compradas para una junta?"
+   },
+   {
+    "p": "¿Krispy Kreme emite facturas para empresas?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo el 8.5% del monto es deducible en restaurantes y cafeterías cuando pagas con tarjeta.",
+   "Para compras corporativas como cajas de donas para eventos, la facturación como gasto de representación aplica el mismo límite del 8.5% de artículo 28 LISR para establecimientos de alimentos.",
+   "| Deducción del 100% del monto | Al igual que todos los restaurantes, el SAT limita la deducción al 8.5% cuando el pago es con tarjeta.",
+   "El CFDI es soporte documental necesario pero no cambia el porcentaje deducible."
+  ]
+ },
+ {
+  "slug": "la-comer",
+  "url": "https://recuperafacturas.com/factura/la-comer",
+  "titulo": "Factura tus compras de La Comer",
+  "portal_nombre": "lacomer.com.mx/facturacion",
+  "portal_url": "https://www.lacomer.com.mx/facturacion",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Fecha de compra, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de La Comer con el folio de transacción y el monto visible.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de La Comer.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de despensa y operación."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en La Comer?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en La Comer?"
+   },
+   {
+    "p": "¿Las compras en La Comer son deducibles para mi restaurante o negocio?",
+    "r": "### ¿Fresko y City Market tienen el mismo sistema de facturación que La Comer?"
+   },
+   {
+    "p": "¿Puedo facturar la compra de vinos y licores de La Comer para mi empresa?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Las compras de alimentos e insumos para restaurantes o eventos son deducibles con uso G03.",
+   "La Comer también emite CFDI para vinos, licores y productos gourmet importados, que pueden ser deducibles como gastos de representación corporativa (con los límites del artículo 28 de la LISR)."
+  ]
+ },
+ {
+  "slug": "laboratorio-chopo",
+  "url": "https://recuperafacturas.com/factura/laboratorio-chopo",
+  "titulo": "Factura tus estudios en Laboratorio Chopo",
+  "portal_nombre": "chopo.com.mx/factura",
+  "portal_url": "https://www.chopo.com.mx/factura",
+  "plazo": "30 días naturales desde la fecha del servicio",
+  "datos": "Número de orden, Fecha del servicio, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu comprobante de pago de Laboratorio Chopo con el número de orden visible.",
+   "Toma una foto clara del comprobante y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Laboratorio Chopo.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico personal."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Laboratorio Chopo?",
+    "r": "### ¿Mis análisis clínicos de Chopo son deducibles como gasto médico?"
+   },
+   {
+    "p": "¿Cómo facturo en Laboratorio Chopo?",
+    "r": "### ¿Puedo facturar estudios de imagen de Chopo (rayos X, ultrasonidos)?"
+   },
+   {
+    "p": "¿La factura de Laboratorio Chopo sirve para reembolso de gastos médicos mayores?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico personal.",
+   "La deducibilidad de los análisis clínicos en México es uno de los beneficios fiscales más aprovechados por personas físicas, especialmente en el régimen de sueldos y salarios (régimen 605).",
+   "El SAT permite deducir gastos de análisis clínicos, biometrías, ultrasonidos, radiografías y otros estudios diagnósticos como gastos médicos personales, hasta el límite que establece el artículo 151 de la LISR (el menor entre el 15% de los ingresos o cinco unidades de medida y actualización anuales, lo que para 2026 equivale a aproximadamente $218,000 pesos).",
+   "Uso de CFDID01 para gasto médico personal deducible en declaración anual; G03 para gastos de empresa.",
+   "| Pago en efectivo invalida deducción médica | Por el artículo 151 de la LISR, los gastos médicos solo son deducibles si se pagan con tarjeta, transferencia bancaria o cheque nominativo.",
+   "Con G03, el SAT no categoriza el gasto como médico y no aplica al límite especial de deducciones personales del artículo 151 LISR."
+  ]
+ },
+ {
+  "slug": "little-caesars",
+  "url": "https://recuperafacturas.com/factura/little-caesars",
+  "titulo": "Factura tu pedido de Little Caesars México",
+  "portal_nombre": "facturacion.littlecaesars.com.mx",
+  "portal_url": "https://facturacion.littlecaesars.com.mx/",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de orden, Número de tienda, Monto total, Forma de pago electrónica",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de Little Caesars con el folio y el total de la compra.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mismo mes.",
+   "Procesamos tu solicitud y gestionamos la emisión del CFDI.",
+   "Recibe tu factura en PDF y XML válida ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Little Caesars México emite facturas CFDI?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Little Caesars?"
+   },
+   {
+    "p": "¿El gasto en Little Caesars es deducible?",
+    "r": "### ¿Puedo facturar pedidos de Little Caesars a domicilio?"
+   },
+   {
+    "p": "¿Qué pasa si pido a través de una app de delivery como Rappi o Uber Eats?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si compras pizza para reuniones de trabajo, eventos de empresa o gastos de representación, puedes obtener tu factura CFDI deducible.",
+   "Para gastos de representación y juntas de trabajo, usa CFDI G03 (solo 8.5% deducible).",
+   "Paga con tarjeta para maximizar la deducibilidad del gasto (art. 28 LISR).",
+   "El gasto en Little Caesars es deducible como gasto de restaurante al 8.5% del monto total (art.",
+   "28 LISR), siempre que se pague con medios electrónicos y se cuente con el CFDI correspondiente.",
+   "Para obtener el CFDI deducible de Little Caesars, debes comprar directamente en sucursal o a través del sitio y app oficial de Little Caesars México."
+  ]
+ },
+ {
+  "slug": "liverpool",
+  "url": "https://recuperafacturas.com/factura/liverpool",
+  "titulo": "Recupera la factura de tus compras en Liverpool",
+  "portal_nombre": "facturacionclientes.liverpool.com.mx",
+  "portal_url": "https://facturacionclientes.liverpool.com.mx/",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Folio fiscal, Monto total, Fecha de compra, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días desde el portal",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto de tu ticket de Liverpool donde aparezca el total y el número de transacción.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema identifica Liverpool como el comercio y procesa la facturación.",
+   "Recibe tu CFDI en PDF y XML listo para descargar."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Liverpool?",
+    "r": "### ¿Qué necesito para facturar mi ticket de Liverpool?"
+   },
+   {
+    "p": "¿Es gratis facturar con Clara Intelligence?",
+    "r": "### ¿En qué formato recibo mi factura de Liverpool? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "mcdonalds",
+  "url": "https://recuperafacturas.com/factura/mcdonalds",
+  "titulo": "Factura tus pedidos de McDonald's México",
+  "portal_nombre": "facturacionmcdonalds.com.mx",
+  "portal_url": "https://www.facturacionmcdonalds.com.mx/",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Número de restaurante, Número de ticket, Número de caja, Fecha de compra",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes desde el portal con los datos del ticket",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de McDonald's con el número de restaurante, el número de ticket y la fecha visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud en el portal oficial de facturación de McDonald's México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en McDonald's México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en McDonald's?"
+   },
+   {
+    "p": "¿Mi consumo en McDonald's es deducible de impuestos?",
+    "r": "### ¿Qué datos del ticket necesito para facturar en McDonald's?"
+   },
+   {
+    "p": "¿Puedo facturar pedidos de McDonald's por Uber Eats o Rappi?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Recuerda que el SAT limita la deducción de restaurantes al 8.5% del monto cuando pagas con medios electrónicos.",
+   "Solo el 8.5% del consumo en restaurante es deducible; paga con tarjeta para que aplique (art.",
+   "28 LISR).",
+   "El artículo 28 fracción XX de la LISR limita la deducción de consumos en restaurantes al 8.5% del monto pagado con medios electrónicos, regla que aplica a McDonald's igual que a cualquier cadena.",
+   "Aun así, para equipos de ventas en campo, desayunos de trabajo y gastos de representación frecuentes, el 8.5% acumulado durante el año puede representar un ahorro fiscal relevante, siempre que cada consumo esté soportado con su CFDI y pagado con tarjeta empresarial o del contribuyente.",
+   "Descarga el PDF y XML del CFDI; recuerda que solo el 8.5% del consumo es deducible al pagar con tarjeta."
+  ]
+ },
+ {
+  "slug": "mercado-libre",
+  "url": "https://recuperafacturas.com/factura/mercado-libre",
+  "titulo": "Factura tus compras de Mercado Libre fácilmente",
+  "portal_nombre": "mercadolibre.com.mx/l/facturacion",
+  "portal_url": "https://www.mercadolibre.com.mx/l/facturacion",
+  "plazo": "Primeros días del mes siguiente",
+  "datos": "RFC, razón social, régimen fiscal y código postal",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere cuenta de Mercado Libre activa",
+  "reimprimir": "Sí, desde Mis compras en cualquier momento",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Descarga o captura el comprobante de tu compra en Mercado Libre (confirmación de pago o número de pedido).",
+   "Envía el comprobante por WhatsApp a Clara Intelligence o súbelo desde nuestra plataforma.",
+   "Nuestro sistema extrae los datos del pedido e inicia la solicitud de facturación.",
+   "Recibe tu factura CFDI en formato PDF y XML, válida ante el SAT para tus deducciones fiscales."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo solicito factura en Mercado Libre?",
+    "r": "### ¿Puedo facturar compras antiguas en Mercado Libre?"
+   },
+   {
+    "p": "¿Mercado Libre emite facturas para empresas?",
+    "r": "### ¿Cuál es el RFC de Mercado Libre México?"
+   },
+   {
+    "p": "¿Qué hago si el vendedor no quiere dar factura en Mercado Libre?",
+    "r": "### ¿Cuánto tiempo tengo para pedir factura en Mercado Libre? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Cada pedido puede convertirse en una factura CFDI deducible ante el SAT.",
+   "Para compradores, cada pedido puede generar un CFDI deducible emitido por el vendedor o por Mercado Libre según el régimen fiscal del vendedor.",
+   "El uso de CFDI más común para compras de insumos de negocio es 'G03 - Gastos en general'; para equipos de cómputo o mobiliario puede aplicar 'I04 - Equipo de computación' o 'I02 - Mobiliario y equipo de oficina por inversiones' si se trata de activos fijos deducibles a varios años según la LISR."
+  ]
+ },
+ {
+  "slug": "mobil",
+  "url": "https://recuperafacturas.com/factura/mobil",
+  "titulo": "Factura tus cargas de gasolina en Mobil",
+  "portal_nombre": "mobil.com.mx → Facturación (por operador)",
+  "portal_url": "https://www.mobil.com.mx/es-mx/gasolina/facturacion",
+  "plazo": "Varía por operador; factura el mismo día de la carga",
+  "datos": "Operador de la estación, Número de ticket o folio, Estación y hora de carga, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Depende del operador de la estación",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Mobil con el nombre del operador, la estación, el folio y la hora de carga visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos al operador de tu estación Mobil y procesamos la solicitud en su portal de facturación.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT para deducir tu combustible."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi gasolina de Mobil?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Mobil?"
+   },
+   {
+    "p": "¿La gasolina de Mobil es deducible de impuestos?",
+    "r": "### ¿Cómo sé qué operador administra mi estación Mobil?"
+   },
+   {
+    "p": "¿Por qué el portal del operador no encuentra mi ticket de Mobil?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Paga con tarjeta o monedero de combustible: la gasolina en efectivo no es deducible (art. 27 LISR).",
+   "Las reglas de deducción de combustible aplican igual que en cualquier gasolinera: el artículo 27 de la LISR exige pago con tarjeta, transferencia o monedero electrónico de combustible autorizado —el efectivo no es deducible— y el CFDI debe incluir la clave de producto y los litros correctos.",
+   "| Pago en efectivo | La gasolina pagada en efectivo no es deducible aunque tengas CFDI (art. 27 LISR)."
+  ]
+ },
+ {
+  "slug": "netflix",
+  "url": "https://recuperafacturas.com/factura/netflix",
+  "titulo": "Factura tu suscripción de Netflix en México",
+  "portal_nombre": "netflix.com/account",
+  "portal_url": "https://www.netflix.com/account",
+  "plazo": "Mismo mes del cargo",
+  "datos": "RFC, razón social, régimen fiscal y código postal",
+  "descarga": "No confirmado",
+  "cuenta": "Requiere cuenta de Netflix activa",
+  "reimprimir": "Proceso no confirmado en fuente oficial",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Localiza tu recibo mensual de Netflix en el correo electrónico o en la sección 'Cuenta > Ver historial de facturación' de Netflix.",
+   "Envía el comprobante por WhatsApp a Clara Intelligence o súbelo desde nuestra plataforma.",
+   "Nuestro sistema extrae los datos del cargo y gestiona la solicitud de facturación CFDI.",
+   "Recibe tu factura CFDI en PDF y XML válida ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Netflix emite facturas CFDI en México?",
+    "r": "### ¿Cómo obtengo mi factura mensual de Netflix?"
+   },
+   {
+    "p": "¿El gasto de Netflix es deducible de impuestos?",
+    "r": "### ¿Cuál es el RFC de Netflix México?"
+   },
+   {
+    "p": "¿Puedo facturar meses anteriores de Netflix?",
+    "r": "### ¿Qué Uso CFDI debo usar para Netflix? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Netflix es el servicio de streaming más popular de México y su suscripción mensual puede ser un gasto deducible si está relacionado con tu actividad económica.",
+   "El gasto de Netflix es deducible como 'G03 - Gastos en general' si está relacionado con tu actividad empresarial o profesional.",
+   "La deducibilidad del gasto de Netflix depende del uso que le des a la plataforma en relación con tu actividad económica.",
+   "Para productores de contenido, comunicadores digitales, agencias de publicidad o empresas de entretenimiento, el gasto puede clasificarse como 'G03 - Gastos en general' y deducirse al 100% si se puede demostrar su relación directa con el negocio.",
+   "Para personas físicas asalariadas (régimen 605) sin actividad empresarial, Netflix generalmente no es un gasto deducible en la declaración anual, ya que el SAT no lo incluye en la lista de deducciones personales del artículo 151 de la LISR."
+  ]
+ },
+ {
+  "slug": "nutrisa",
+  "url": "https://recuperafacturas.com/factura/nutrisa",
+  "titulo": "Factura tus compras en Nutrisa",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de sucursal, Fecha de compra",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Consultar con sucursal",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Nutrisa con el folio, el número de sucursal y el total visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Verificamos el portal de facturación disponible para tu sucursal de Nutrisa.",
+   "Recibes tu CFDI o la orientación necesaria para obtenerlo directamente en sucursal."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Nutrisa?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Nutrisa?"
+   },
+   {
+    "p": "¿Los suplementos y alimentos naturistas de Nutrisa son deducibles?",
+    "r": "### ¿Los helados de Nutrisa tienen el mismo proceso de facturación que los productos naturistas?"
+   },
+   {
+    "p": "¿Qué hago si no encuentro el portal de facturación de Nutrisa?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los helados y alimentos preparados aplican el tratamiento estándar de restaurantes: 8.5% deducible del monto pagado con tarjeta (art.",
+   "28 LISR)."
+  ]
+ },
+ {
+  "slug": "office-depot",
+  "url": "https://recuperafacturas.com/factura/office-depot",
+  "titulo": "Factura tus compras de Office Depot",
+  "portal_nombre": "facturacion.officedepot.com.mx",
+  "portal_url": "https://facturacion.officedepot.com.mx/",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Folio del ticket, Número de tienda, Monto total, Datos fiscales",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto del ticket de Office Depot mostrando el total y la fecha.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Procesamos tu ticket y generamos la solicitud de facturación.",
+   "Recibe tu CFDI en PDF y XML válido para deducción."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi compra en Office Depot con ticket?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Office Depot?"
+   },
+   {
+    "p": "¿Puedo facturar compras en línea de Office Depot?",
+    "r": "### ¿Qué datos fiscales necesito para facturar en Office Depot?"
+   },
+   {
+    "p": "¿Office Depot emite facturas para empresas (personas morales)?",
+    "r": "### ¿Qué hago si el portal de Office Depot da error? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Es una opción frecuente de gasto deducible para profesionistas, freelancers y empresas.",
+   "Las compras de tecnología y mobiliario son 100% deducibles si las usas para tu actividad."
+  ]
+ },
+ {
+  "slug": "officemax",
+  "url": "https://recuperafacturas.com/factura/officemax",
+  "titulo": "Factura tus compras de OfficeMax en México",
+  "portal_nombre": "facturacion.officemax.com.mx",
+  "portal_url": "https://facturacion.officemax.com.mx/",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Número de transacción, Fecha de compra, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de compra de OfficeMax con el número de transacción visible.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación electrónica de OfficeMax.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus compras de oficina."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en OfficeMax México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en OfficeMax?"
+   },
+   {
+    "p": "¿Las compras en OfficeMax son deducibles de impuestos?",
+    "r": "### ¿Puedo deducir el mobiliario de oficina comprado en OfficeMax?"
+   },
+   {
+    "p": "¿OfficeMax tiene programa de facturación para empresas?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Las compras de material de oficina son gastos deducibles.",
+   "Para las personas físicas que trabajan desde casa (home office), OfficeMax es una fuente frecuente de compras deducibles: silla ergonómica, escritorio, monitor adicional, auriculares, papel, tóner y webcam son artículos de trabajo comprados regularmente.",
+   "Para las personas morales, las compras de OfficeMax son gastos de operación deducibles en su totalidad con independencia del monto, siempre que exista el CFDI con la descripción adecuada del producto.",
+   "com/blog/gastos-deducibles-regreso-clases) [Requisitos Facturar Ticket Mexico 2025](https://recuperafacturas."
+  ]
+ },
+ {
+  "slug": "opticas-devlyn",
+  "url": "https://recuperafacturas.com/factura/opticas-devlyn",
+  "titulo": "Factura tus compras en Ópticas Devlyn",
+  "portal_nombre": "posap.devlyn.me/facturacionWeb/",
+  "portal_url": "https://posap.devlyn.me/facturacionWeb/",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Fecha de compra, Monto total, Prescripción del optometrista",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Ópticas Devlyn con el folio y el monto total visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Devlyn.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Ópticas Devlyn?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Devlyn?"
+   },
+   {
+    "p": "¿Los lentes de Devlyn son deducibles como gasto médico?",
+    "r": "### ¿El examen de la vista en Devlyn también es deducible?"
+   },
+   {
+    "p": "¿Puedo deducir lentes de contacto de Devlyn?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los lentes graduados y los exámenes visuales son gastos médicos deducibles ante el SAT cuando se pagan con tarjeta o transferencia y se cuenta con la prescripción del optometrista.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico ante el SAT.",
+   "Los lentes graduados con prescripción son deducibles con uso CFDI D01 como gasto médico personal.",
+   "Los armazones sin graduación y lentes de sol no son deducibles como gasto médico.",
+   "El artículo 151 fracción I de la LISR incluye explícitamente los 'gastos de óptica' como gastos médicos personales deducibles en la declaración anual de personas físicas, siempre que el pago sea con medios electrónicos (tarjeta, transferencia o cheque nominativo) y exista el CFDI con uso D01.",
+   "Forma de pago electrónicaTarjeta, transferencia o cheque para que el gasto califique como deducción personal (art. 151 LISR)."
+  ]
+ },
+ {
+  "slug": "opticas-lux",
+  "url": "https://recuperafacturas.com/factura/opticas-lux",
+  "titulo": "Factura tus compras en Ópticas Lux",
+  "portal_nombre": "lux.mx/pages/facturacion",
+  "portal_url": "https://lux.mx/pages/facturacion",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Número de folio del comprobante, Fecha de compra, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu comprobante de compra de Ópticas Lux con el folio visible.",
+   "Toma una foto clara del comprobante y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Ópticas Lux.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Ópticas Lux?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Ópticas Lux?"
+   },
+   {
+    "p": "¿Mis lentes de Ópticas Lux son deducibles como gasto médico?",
+    "r": "### ¿La consulta visual en Ópticas Lux también es deducible?"
+   },
+   {
+    "p": "¿Puedo deducir lentes de contacto comprados en Ópticas Lux?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los lentes graduados con prescripción son deducibles como gastos médicos personales si pagas con medios electrónicos.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico.",
+   "Armazones sin graduación y accesorios de moda no son deducibles como gasto médico.",
+   "Fiscalmente, los lentes graduados prescritos por un optometrista o médico oftalmólogo son deducibles como gastos médicos personales (uso CFDI D01) para personas físicas en su declaración anual, conforme al artículo 151 fracción I de la LISR.",
+   "| Productos sin prescripción tratados como gasto médico | Solo los lentes con prescripción médica son deducibles con uso D01.",
+   "com/blog/facturacion-gastos-medicos-deducibles) [Deducciones Personales Asalariados Mexico](https://recuperafacturas."
+  ]
+ },
+ {
+  "slug": "oxxo",
+  "url": "https://recuperafacturas.com/factura/oxxo",
+  "titulo": "Recupera la factura de tu ticket de OXXO",
+  "portal_nombre": "Facturación OXXO en línea",
+  "portal_url": "https://www4.oxxo.com:9443/facturacionElectronica-web/views/layout/inicio.do",
+  "plazo": "7 días naturales desde la compra",
+  "datos": "Folio web (ID Web), Monto total, Fecha de compra, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, descárgalo de nuevo desde el portal dentro del plazo de 7 días",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto clara de tu ticket de OXXO donde se vea el total, la fecha y el número de tienda.",
+   "Envía la foto por WhatsApp a Clara Intelligence o súbela desde nuestro sitio web.",
+   "Nuestro sistema identifica automáticamente que es un ticket de OXXO y extrae los datos necesarios.",
+   "Recibe tu factura CFDI en formato PDF y XML, válida ante el SAT para tus deducciones fiscales."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar un ticket de OXXO?",
+    "r": "### ¿Qué datos necesito del ticket de OXXO para facturar?"
+   },
+   {
+    "p": "¿Cómo facturo si perdí mi ticket de OXXO?",
+    "r": "### ¿Puedo facturar en OXXO sin internet desde la tienda?"
+   },
+   {
+    "p": "¿OXXO emite facturas globales?",
+    "r": "### ¿Qué hago si el folio de mi ticket de OXXO no es válido?"
+   },
+   {
+    "p": "¿Puedo facturar servicios pagados en OXXO (luz, agua, teléfono)?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "oxxo-gas",
+  "url": "https://recuperafacturas.com/factura/oxxo-gas",
+  "titulo": "Factura tu gasolina en OXXO Gas",
+  "portal_nombre": "facturacion.oxxogas.com",
+  "portal_url": "https://facturacion.oxxogas.com/",
+  "plazo": "Mismo mes calendario de la carga",
+  "datos": "Folio de transacción, Fecha de carga, Monto total, Forma de pago electrónica",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de carga de gasolina de OXXO Gas con el folio visible.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de OXXO Gas.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tu gasto de combustible."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi gasolina en OXXO Gas?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en OXXO Gas?"
+   },
+   {
+    "p": "¿La gasolina de OXXO Gas es deducible de impuestos?",
+    "r": "### ¿Puedo facturar gastos de gasolina de flotilla en OXXO Gas?"
+   },
+   {
+    "p": "¿OXXO Gas y OXXO (tiendas) usan el mismo portal de facturación?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Para personas con vehículos de trabajo, los gastos de gasolina son deducibles ante el SAT siempre que cuenten con su CFDI correspondiente.",
+   "El artículo 27 fracción III de la LISR establece que los pagos por gasolina deben hacerse con medios electrónicos (tarjeta o transferencia) para ser deducibles, con independencia del importe.",
+   "Forma de pago electrónicaTarjeta, SPIN u otro medio electrónico (no efectivo) para que el gasto sea deducible según art. 27 LISR.",
+   "| Pago en efectivo descalifica la deducción | Por art. 27 fracción III LISR, los pagos de gasolina deben hacerse con medios electrónicos para ser deducibles."
+  ]
+ },
+ {
+  "slug": "palacio-de-hierro",
+  "url": "https://recuperafacturas.com/factura/palacio-de-hierro",
+  "titulo": "Factura tus compras en El Palacio de Hierro",
+  "portal_nombre": "facturacion.elpalaciodehierro.com",
+  "portal_url": "https://facturacion.elpalaciodehierro.com/",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Número de transacción, Número de tienda, Monto total, Forma de pago",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de El Palacio de Hierro con el folio y el monto total visibles.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mes calendario.",
+   "Nuestro sistema procesa la solicitud y gestiona el CFDI.",
+   "Recibe tu factura en PDF y XML válida ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en El Palacio de Hierro?",
+    "r": "### ¿Qué datos del ticket de El Palacio necesito?"
+   },
+   {
+    "p": "¿Puedo facturar compras con tarjeta El Palacio de Hierro?",
+    "r": "### ¿Cómo facturo una compra en línea de elpalaciodehierro.com?"
+   },
+   {
+    "p": "¿Qué pasa si devuelvo un artículo que ya facturé en El Palacio?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si compraste ropa de diseñador, joyería, perfumería o artículos de hogar premium, puedes obtener tu factura CFDI deducible.",
+   "Para estas compras de alto valor, la factura CFDI es especialmente importante tanto para deducciones empresariales como para documentar activos de la empresa (art. 31 LISR para inversiones deducibles)."
+  ]
+ },
+ {
+  "slug": "panaderia-el-globo",
+  "url": "https://recuperafacturas.com/factura/panaderia-el-globo",
+  "titulo": "Factura tus compras en Panadería El Globo",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de sucursal, Fecha de compra",
+  "descarga": "XMLPDF",
+  "cuenta": "Depende de la sucursal",
+  "reimprimir": "Consultar con sucursal",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de El Globo con el folio, el número de sucursal y el total visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Verificamos el portal de facturación disponible para Panadería El Globo.",
+   "Recibes tu CFDI o la orientación para obtenerlo directamente en sucursal."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Panadería El Globo?",
+    "r": "### ¿Panadería El Globo tiene portal de facturación en línea?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en El Globo?",
+    "r": "### ¿Las compras para eventos corporativos en El Globo son deducibles?"
+   },
+   {
+    "p": "¿Qué hago si no puedo obtener la factura de El Globo?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo el 8.5% del monto de panadería/restaurante es deducible cuando pagas con tarjeta (art.",
+   "28 LISR)."
+  ]
+ },
+ {
+  "slug": "pastelerias-esperanza",
+  "url": "https://recuperafacturas.com/factura/pastelerias-esperanza",
+  "titulo": "Factura tus compras en Pastelerías Esperanza",
+  "portal_nombre": "cfdi.esperanza.mx",
+  "portal_url": "https://cfdi.esperanza.mx/",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Fecha de compra, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, descárgalo desde el portal cfdi.esperanza.mx",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Pastelerías Esperanza con el folio y el monto visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud en el portal cfdi.esperanza.mx.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Pastelerías Esperanza?",
+    "r": "### ¿Qué opciones ofrece el portal de facturación de Pastelerías Esperanza?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Pastelerías Esperanza?",
+    "r": "### ¿Cómo solicito una corrección en mi factura de Pastelerías Esperanza?"
+   },
+   {
+    "p": "¿Mis compras en Pastelerías Esperanza son deducibles?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "pastelerias-marisa",
+  "url": "https://recuperafacturas.com/factura/pastelerias-marisa",
+  "titulo": "Factura tus compras en Pastelerías Marisa",
+  "portal_nombre": "facturacion.simang8.com/marisa",
+  "portal_url": "https://facturacion.simang8.com/marisa",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio del ticket, Número de sucursal, Fecha de compra, Monto total",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Pastelerías Marisa con el folio y el monto visibles.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud a través del portal de facturación de Marisa.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Pastelerías Marisa?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Pastelerías Marisa?"
+   },
+   {
+    "p": "¿Mis compras en Pastelerías Marisa son deducibles de impuestos?",
+    "r": "### ¿Puedo facturar pedidos de pastel de celebración en Marisa?"
+   },
+   {
+    "p": "¿Pastelerías Marisa emite CFDI 4.0?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo el 8.5% del monto de alimentos es deducible cuando pagas con tarjeta (art.",
+   "28 LISR).",
+   "Aunque el SAT solo permite deducir el 8.5% del monto de restaurantes y pastelerías pagado con tarjeta (artículo 28 LISR), el CFDI de Marisa es un comprobante válido de gasto de representación que debe conservarse como soporte documental durante cinco años."
+  ]
+ },
+ {
+  "slug": "pemex",
+  "url": "https://recuperafacturas.com/factura/pemex",
+  "titulo": "Factura tu gasolina Pemex automáticamente",
+  "plazo": "72 horas tras la carga (varía por estación)",
+  "datos": "Número de permiso CRE, Folio del ticket, Número de estación Pemex, Litros y tipo de combustible",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta; el folio del ticket es suficiente",
+  "reimprimir": "No disponible después de 72 horas en la mayoría de franquicias",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto del ticket de la estación Pemex que muestre litros, monto y número de estación.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Identificamos la franquicia y procesamos tu facturación al instante.",
+   "Recibe tu CFDI con clave SAT de combustible en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Existe un solo portal para facturar gasolina Pemex?",
+    "r": "### ¿Cuánto tiempo tengo para facturar una carga de Pemex?"
+   },
+   {
+    "p": "¿Qué clave SAT debe llevar mi factura de gasolina Pemex?",
+    "r": "### ¿Cómo deduzco al 100% mi gasolina Pemex?"
+   },
+   {
+    "p": "¿Puedo facturar varias cargas Pemex juntas?",
+    "r": "### ¿Qué pasa si pierdo el ticket de Pemex? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si cargaste gasolina o diésel en una estación Pemex, puedes deducir 100% el gasto si lo usas para tu actividad económica.",
+   "0 con complemento de Hidrocarburos para combustibles, lo cual hace deducible el gasto para personas con actividad empresarial y para morales que justifiquen el uso del vehículo en su operación.",
+   "Forma de pagoTarjeta o transferencia para que la deducción sea 100%.",
+   "| Pago en efectivo no deducible | El art. 27 LISR exige que el combustible se pague con medios electrónicos para ser deducible, aun cuando tengas el CFDI."
+  ]
+ },
+ {
+  "slug": "pf-changs",
+  "url": "https://recuperafacturas.com/factura/pf-changs",
+  "titulo": "Factura tus consumos en P.F. Chang's México",
+  "portal_nombre": "alsea.interfactura.com — P.F. Chang's",
+  "portal_url": "https://alsea.interfactura.com/RegistroDocumento.aspx?opc=PFC",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Fecha del consumo, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de P.F. Chang's con el folio y el número de sucursal visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos P.F. Chang's como marca ALSEA y accedemos a la URL correcta.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en P.F. Chang's México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en P.F. Chang's?"
+   },
+   {
+    "p": "¿Puedo deducir una cena en P.F. Chang's?",
+    "r": "### ¿Qué pasa si el folio de P.F. Chang's no aparece en el portal ALSEA?"
+   },
+   {
+    "p": "¿P.F. Chang's también factura pedidos por Uber Eats?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo el 8.5% del monto es deducible en restaurantes cuando pagas con tarjeta (art.",
+   "28 LISR).",
+   "Chang's es considerablemente mayor — lo que hace que el 8.5% de deducibilidad represente un monto más relevante en valor absoluto.",
+   "Verifica el monto del CFDI y recuerda que solo el 8.5% del consumo es deducible al pagar con tarjeta.",
+   "Esto refuerza la deducibilidad ante una eventual revisión del SAT."
+  ]
+ },
+ {
+  "slug": "primera-plus",
+  "url": "https://recuperafacturas.com/factura/primera-plus",
+  "titulo": "Factura tu boleto de Primera Plus",
+  "portal_nombre": "facturaelectronicagfa.mx (GFA — Primera Plus)",
+  "portal_url": "https://www.facturaelectronicagfa.mx/",
+  "plazo": "Mismo mes calendario del viaje",
+  "datos": "Número de boleto o folio, Fecha del viaje, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se cierra",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu boleto físico o correo de confirmación de Primera Plus con el número de folio.",
+   "Envía la imagen del boleto por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Primera Plus.",
+   "Recibe tu CFDI en PDF y XML deducible ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi boleto de Primera Plus?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Primera Plus?"
+   },
+   {
+    "p": "¿El boleto de Primera Plus es deducible como viático?",
+    "r": "### ¿Puedo facturar boletos de autobús si soy asalariado?"
+   },
+   {
+    "p": "¿Primera Plus tiene servicio en toda la República?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Sus boletos son deducibles como viáticos de traslado.",
+   "Recibe tu CFDI en PDF y XML deducible ante el SAT.",
+   "Sus boletos tienen una alta tasa de deducibilidad para profesionales independientes, ejecutivos y empresas del sector manufacturero, industrial y agroalimentario concentrados en el Bajío mexicano.",
+   "La clave está en facturar siempre al RFC de la empresa (no del empleado) y dentro del mes del viaje, para que el gasto sea deducible en el periodo fiscal correcto."
+  ]
+ },
+ {
+  "slug": "rappi",
+  "url": "https://recuperafacturas.com/factura/rappi",
+  "titulo": "Factura tus pedidos de Rappi fácilmente",
+  "portal_nombre": "rappi.com.mx (sección Mis pedidos)",
+  "portal_url": "https://www.rappi.com.mx/",
+  "plazo": "Hasta 72 horas después del pedido",
+  "datos": "RFC, razón social, régimen fiscal y código postal",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere cuenta de Rappi activa",
+  "reimprimir": "Proceso no confirmado en fuente oficial",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Abre la app de Rappi y captura el comprobante del pedido que quieres facturar.",
+   "Envía la captura por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema procesa tu pedido y gestiona la solicitud de facturación CFDI.",
+   "Recibe tu factura CFDI en PDF y XML válida ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo solicito factura en Rappi?",
+    "r": "### ¿Cuánto tiempo tengo para facturar un pedido de Rappi?"
+   },
+   {
+    "p": "¿Qué RFC debo usar para facturar en Rappi?",
+    "r": "### ¿Puedo facturar pedidos anteriores en Rappi?"
+   },
+   {
+    "p": "¿Qué hago si el portal de Rappi no genera mi factura?",
+    "r": "### ¿El cargo de entrega de Rappi también se incluye en la factura? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si usas Rappi para gastos de negocio o trabajo, puedes obtener tu factura CFDI deducible.",
+   "La deducibilidad de los gastos de Rappi depende del tipo de pedido y el uso dado.",
+   "Los pedidos de alimentos de trabajo (para reuniones o trabajo remoto) son deducibles al 8.5% (valor referencial, art.",
+   "28 LISR) siempre que se paguen con tarjeta empresarial nominativa.",
+   "Los pedidos de supermercado con insumos de oficina (papel, artículos de limpieza, café) son deducibles como 'G03 - Gastos en general' al 100% si se relacionan con la actividad.",
+   "Clara Intelligence ayuda a los socios a recuperar todos estos CFDI de gastos deducibles enviando cada ticket por WhatsApp."
+  ]
+ },
+ {
+  "slug": "salud-digna",
+  "url": "https://recuperafacturas.com/factura/salud-digna",
+  "titulo": "Factura tus estudios en Salud Digna",
+  "plazo": "30 días naturales desde la fecha del servicio",
+  "datos": "Número de orden, Fecha del servicio, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu comprobante de pago de Salud Digna con el número de orden o folio.",
+   "Toma una foto clara del comprobante y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de Salud Digna.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico personal."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Salud Digna?",
+    "r": "### ¿Mis análisis clínicos de Salud Digna son deducibles?"
+   },
+   {
+    "p": "¿Cómo solicito mi factura de Salud Digna?",
+    "r": "### ¿La factura de Salud Digna sirve para reembolso de seguro?"
+   },
+   {
+    "p": "¿Puedo facturar estudios de Salud Digna para toda la familia en una sola factura?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Los análisis clínicos, biometrías, perfil lipídico y demás estudios son deducibles como gasto médico personal si pagas con tarjeta.",
+   "Recibe tu CFDI en PDF y XML deducible como gasto médico personal.",
+   "| Pago en efectivo descalifica deducción médica | Para deducir gastos médicos en declaración anual, la LISR exige pago con tarjeta, transferencia o cheque.",
+   "com/blog/facturacion-gastos-medicos-deducibles) [Como Facturar Farmacias Ahorro Guadalajara](https://recuperafacturas."
+  ]
+ },
+ {
+  "slug": "sams-club",
+  "url": "https://recuperafacturas.com/factura/sams-club",
+  "titulo": "Recupera la factura de tus compras en Sam's Club",
+  "portal_nombre": "Portal Walmart (incluye Sam's Club)",
+  "portal_url": "https://facturacion.walmartmexico.com.mx/",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Número de socio Sam's Club, Folio del ticket, Número de tienda, Monto total",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere membresía Sam's Club vigente",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto clara de tu ticket de Sam's Club donde se vean el total, la fecha y tu número de membresía.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "El sistema detecta que es un ticket de Sam's Club y procesa la facturación.",
+   "Recibe tu CFDI en PDF y XML listo para deducir."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuál es el portal oficial para facturar Sam's Club?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mi compra de Sam's Club?"
+   },
+   {
+    "p": "¿Necesito ser socio Sam's Club para facturar?",
+    "r": "### ¿Puedo facturar compras hechas en samsclub.com.mx?"
+   },
+   {
+    "p": "¿Las recompensas Plus de Sam's Club se pueden facturar?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si eres socio Sam's Club y compras al mayoreo para tu negocio o tu hogar, Clara Intelligence te ayuda a obtener tu factura CFDI deducible sin entrar a portales complicados."
+  ]
+ },
+ {
+  "slug": "sears",
+  "url": "https://recuperafacturas.com/factura/sears",
+  "titulo": "Recupera la factura de tus compras en Sears",
+  "portal_nombre": "facturaelectronica.sears.com.mx",
+  "portal_url": "https://facturaelectronica.sears.com.mx/",
+  "plazo": "Hasta el día 5 del mes siguiente",
+  "datos": "Número de tienda, Número de operación, Número de caja, Monto total",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del plazo (hasta el día 5 del mes siguiente)",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto clara de tu ticket de Sears con el total y el número de transacción.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud y emitimos la factura automáticamente.",
+   "Recibe tu CFDI en PDF y XML para deducir."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuál es el portal para facturar Sears México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mi ticket de Sears?"
+   },
+   {
+    "p": "¿Puedo facturar mi compra si pagué con tarjeta de crédito Sears?",
+    "r": "### ¿Cómo facturo una compra hecha en sears.com.mx?"
+   },
+   {
+    "p": "¿Qué pasa si devuelvo un producto facturado de Sears?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Esto es relevante para deducibilidad contable: el gasto se reconoce en el ejercicio fiscal de la compra, no de los pagos mensuales."
+  ]
+ },
+ {
+  "slug": "shell",
+  "url": "https://recuperafacturas.com/factura/shell",
+  "titulo": "Recupera tu factura de Shell rápidamente",
+  "portal_nombre": "facturacion.shell.com.mx",
+  "portal_url": "https://facturacion.shell.com.mx/",
+  "plazo": "72 horas tras la carga (varía por estación)",
+  "datos": "Permiso CRE de la estación, Folio del ticket, Número de estación Shell, Litros y combustible",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No disponible después de 72 horas en la mayoría de franquicias",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Toma una foto del ticket Shell con el total, los litros y el número de estación.",
+   "Envía la imagen por WhatsApp a Clara Intelligence.",
+   "Identificamos la estación Shell y generamos tu solicitud de facturación.",
+   "Recibe tu CFDI deducible en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuál es el portal para facturar gasolina Shell en México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mi carga Shell?"
+   },
+   {
+    "p": "¿Qué requisitos pide Shell para facturar combustible?",
+    "r": "### ¿Puedo facturar diésel Shell para mi flotilla?"
+   },
+   {
+    "p": "¿Las cargas pagadas con la app Shell se facturan diferente?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Recibe tu CFDI deducible en PDF y XML.",
+   "Para deducir 100%, paga con medios electrónicos a nombre del contribuyente.",
+   "Forma de pago electrónicaNecesaria para deducción 100%.",
+   "| Clave SAT genérica | El CFDI debe llevar 15101514 o 15101515 con unidad LTR para que sea deducible como combustible.",
+   "| Pago en efectivo | No es deducible para combustible por art. 27 LISR."
+  ]
+ },
+ {
+  "slug": "sodimac",
+  "url": "https://recuperafacturas.com/factura/sodimac",
+  "titulo": "Factura tus compras de Sodimac en México",
+  "portal_nombre": "sodimac.com.mx/facturacion",
+  "portal_url": "https://www.sodimac.com.mx/sodimac-mx/content/facturacion",
+  "plazo": "30 días naturales desde la fecha de compra",
+  "datos": "Número de transacción, Fecha de compra, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de compra de Sodimac con el folio de transacción visible.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación electrónica de Sodimac.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Sodimac México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Sodimac?"
+   },
+   {
+    "p": "¿Los materiales de Sodimac son deducibles de impuestos?",
+    "r": "### ¿Puedo facturar compras en Sodimac para una obra específica?"
+   },
+   {
+    "p": "¿Sodimac tiene cuenta de crédito para constructores con facturación automática?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Para constructores, remodeladores y profesionales del diseño, las compras en Sodimac son gastos deducibles.",
+   "Los materiales de construcción para obra son deducibles como costo de producción o gasto."
+  ]
+ },
+ {
+  "slug": "soriana",
+  "url": "https://recuperafacturas.com/factura/soriana",
+  "titulo": "Factura tu ticket de Soriana rápidamente",
+  "portal_nombre": "soriana.com (Facturación electrónica)",
+  "portal_url": "https://www.soriana.com/facturacionelectronica/facturacionelectronica.html",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "Folio fiscal del ticket, Número de tienda, Número de caja, Monto total",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Fotografía tu ticket de Soriana asegurándote de que se vea el total y la fecha de compra.",
+   "Envía la foto a Clara Intelligence por WhatsApp o súbela a nuestra plataforma.",
+   "El sistema procesa el ticket y genera tu solicitud de facturación.",
+   "Descarga tu factura CFDI en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Soriana?",
+    "r": "### ¿Qué necesito para facturar mi ticket de Soriana?"
+   },
+   {
+    "p": "¿Es gratis facturar con Clara Intelligence?",
+    "r": "### ¿En qué formato recibo mi factura de Soriana? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "spotify",
+  "url": "https://recuperafacturas.com/factura/spotify",
+  "titulo": "Factura tu suscripción de Spotify en México",
+  "portal_nombre": "spotify.com/mx/account",
+  "portal_url": "https://www.spotify.com/mx/account/overview/",
+  "plazo": "Mismo mes del cargo",
+  "datos": "RFC, razón social, régimen fiscal y código postal",
+  "descarga": "No confirmado",
+  "cuenta": "Requiere cuenta de Spotify activa",
+  "reimprimir": "Proceso no confirmado en fuente oficial",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Localiza tu recibo mensual de Spotify en el correo electrónico o en spotify.com/account en la sección de historial de pagos.",
+   "Envía el comprobante por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema procesa el cargo y gestiona la solicitud de facturación CFDI.",
+   "Recibe tu factura CFDI en PDF y XML válida ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Spotify emite facturas CFDI en México?",
+    "r": "### ¿Cómo descargo mi factura de Spotify?"
+   },
+   {
+    "p": "¿El gasto de Spotify es deducible?",
+    "r": "### ¿Cuál es el RFC de Spotify México?"
+   },
+   {
+    "p": "¿Puedo facturar meses anteriores de Spotify?",
+    "r": "### ¿Puedo facturar Spotify Familiar al RFC de mi empresa? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si usas Spotify para tu actividad profesional o empresarial, puedes obtener tu factura CFDI mensual deducible.",
+   "El gasto de Spotify Premium puede ser deducible con uso CFDI 'G03 - Gastos en general' si está relacionado con tu actividad.",
+   "El gasto de Spotify Premium puede ser deducible para profesionales creativos, músicos, productores de audio, podcasters, o agencias de entretenimiento que utilizan la plataforma como parte de su actividad económica documentada."
+  ]
+ },
+ {
+  "slug": "starbucks",
+  "url": "https://recuperafacturas.com/factura/starbucks",
+  "titulo": "Factura tu consumo de Starbucks México",
+  "portal_nombre": "facturacion.starbucks.com.mx",
+  "portal_url": "https://facturacion.starbucks.com.mx/",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Folio de transacción, Número de tienda, Monto total, Forma de pago electrónica",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta Starbucks Rewards (solo ticket)",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de Starbucks con el folio de transacción y el monto visibles.",
+   "Envía la foto por WhatsApp a Clara Intelligence dentro del mismo mes calendario.",
+   "Procesamos tu solicitud y gestionamos la emisión del CFDI.",
+   "Descarga tu factura en PDF y XML válida ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Puedo facturar en Starbucks México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mi ticket de Starbucks?"
+   },
+   {
+    "p": "¿El café de Starbucks es deducible de impuestos?",
+    "r": "### ¿Puedo facturar si pagué con tarjeta Starbucks Rewards?"
+   },
+   {
+    "p": "¿Cómo obtengo el folio de mi ticket de Starbucks?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Si usas Starbucks para reuniones de trabajo o gastos de representación, puedes obtener tu factura CFDI deducible.",
+   "Los consumos en Starbucks son deducibles como gasto de representación con uso CFDI G03.",
+   "Para profesionales que tienen reuniones de trabajo en Starbucks, el consumo es un gasto de representación deducible al 8.5% del monto total (art.",
+   "28 LISR) siempre que se pague con tarjeta o transferencia electrónica y se emita el CFDI correspondiente.",
+   "El pago en efectivo en restaurantes y cafeterías no es deducible para personas físicas con actividad empresarial ni para personas morales.",
+   "La tarjeta Starbucks Rewards y el pago por la app de Starbucks son medios de pago electrónicos que sí generan CFDI deducible; no equivalen a efectivo aunque sean prepagados."
+  ]
+ },
+ {
+  "slug": "subway",
+  "url": "https://recuperafacturas.com/factura/subway",
+  "titulo": "Factura tus compras en Subway México",
+  "portal_nombre": "facturacion.subway.com.mx",
+  "portal_url": "https://facturacion.subway.com.mx/",
+  "plazo": "Mismo mes calendario del pedido",
+  "datos": "Folio del ticket, Número de sucursal, Fecha de compra",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Subway con el folio, el número de sucursal y el total visibles.",
+   "Toma una foto del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Identificamos el portal correcto para tu franquicia de Subway y procesamos tu solicitud.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Subway México?",
+    "r": "### ¿El portal de facturación de Subway cubre todas las sucursales en México?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Subway México?",
+    "r": "### ¿Mi consumo en Subway es deducible de impuestos?"
+   },
+   {
+    "p": "¿Puedo facturar pedidos de Subway por Uber Eats o Rappi?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Solo el 8.5% del monto de restaurante es deducible cuando pagas con tarjeta (art.",
+   "28 LISR).",
+   "Para las empresas con equipos de campo, representantes de ventas o trabajadores remotos que consumen en Subway con frecuencia, los tickets representan gastos de restaurante deducibles al 8.5% del monto pagado con tarjeta (art."
+  ]
+ },
+ {
+  "slug": "tag-pase",
+  "url": "https://recuperafacturas.com/factura/tag-pase",
+  "titulo": "Factura tus casetas con TAG PASE",
+  "portal_nombre": "pase.com.mx/facturacion/facturacion-pase/",
+  "portal_url": "https://www.pase.com.mx/facturacion/facturacion-pase/",
+  "plazo": "30 días naturales desde la fecha del cruce",
+  "datos": "Número de tag TAG PASE, Periodo de cruces, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere número de tag TAG PASE",
+  "reimprimir": "Sí, dentro de los 30 días del cruce",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Localiza tu estado de cuenta TAG PASE o los comprobantes de tus cruces.",
+   "Envía el documento por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de TAG PASE.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus peajes."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mis cruces con TAG PASE?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mis peajes de TAG PASE?"
+   },
+   {
+    "p": "¿Los peajes de TAG PASE son deducibles?",
+    "r": "### ¿TAG PASE cubre las mismas autopistas que IAVE?"
+   },
+   {
+    "p": "¿Puedo usar TAG PASE para toda mi flotilla?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Desde el punto de vista fiscal, los peajes de TAG PASE son totalmente deducibles para personas físicas con actividad empresarial y personas morales que utilizan estos tramos para sus actividades de negocios."
+  ]
+ },
+ {
+  "slug": "telcel",
+  "url": "https://recuperafacturas.com/factura/telcel",
+  "titulo": "Factura tus pagos y recargas Telcel",
+  "portal_nombre": "mitelcel.com",
+  "portal_url": "https://mitelcel.com/",
+  "plazo": "Mismo mes calendario del pago",
+  "datos": "Número Telcel o folio del recibo, Folio del ticket de pago (si aplica), Monto total, Datos fiscales",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere número de línea Telcel o inicio de sesión en mitelcel.com",
+  "reimprimir": "Sí, disponible en cualquier momento desde mitelcel.com",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Localiza tu recibo de Telcel (correo, app Mi Telcel o ticket de pago).",
+   "Envía la imagen o PDF por WhatsApp a Clara Intelligence.",
+   "Procesamos la facturación con los datos del recibo.",
+   "Recibe tu CFDI en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Dónde solicito mi factura de Telcel?",
+    "r": "### ¿Cuánto tiempo tengo para facturar un pago Telcel?"
+   },
+   {
+    "p": "¿Puedo facturar las recargas de tiempo aire Telcel?",
+    "r": "### ¿Cómo facturo un plan corporativo o de empresa?"
+   },
+   {
+    "p": "¿Qué uso de CFDI debo elegir para mi recibo Telcel?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Forma de pago electrónicaPara que el plan sea 100% deducible (art. 27 LISR).",
+   "| Pago en efectivo limita deducción | Por art. 27 LISR, los pagos superiores a $2,000 deben hacerse con medios electrónicos para ser deducibles.",
+   "Pagos en efectivo del plan tienen tope de deducibilidad."
+  ]
+ },
+ {
+  "slug": "televia",
+  "url": "https://recuperafacturas.com/factura/televia",
+  "titulo": "Factura tus casetas con TeleVía",
+  "portal_nombre": "televia.com.mx/tag-televia/facturacion",
+  "portal_url": "https://www.televia.com.mx/tag-televia/facturacion",
+  "plazo": "30 días naturales desde la fecha del cruce",
+  "datos": "Número de tag TeleVía, Periodo de cruces, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere número de tag TeleVía",
+  "reimprimir": "Sí, dentro de los 30 días del cruce",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Localiza tu estado de cuenta TeleVía o los comprobantes de tus cruces.",
+   "Envía el documento por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de TeleVía.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus peajes."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mis cruces de TeleVía?",
+    "r": "### ¿Cuánto tiempo tengo para facturar mis peajes de TeleVía?"
+   },
+   {
+    "p": "¿Los peajes de TeleVía son deducibles de impuestos?",
+    "r": "### ¿TeleVía cubre las mismas autopistas que IAVE o TAG PASE?"
+   },
+   {
+    "p": "¿Puedo administrar múltiples tags de TeleVía para mi empresa?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "tim-hortons",
+  "url": "https://recuperafacturas.com/factura/tim-hortons",
+  "titulo": "Factura tus compras en Tim Hortons México",
+  "portal_nombre": "timhortonsmx.com/es/facturar",
+  "portal_url": "https://timhortonsmx.com/es/facturar/new.html",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de tienda, Fecha y hora del consumo, Monto total",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes el folio se consolida",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Conserva tu ticket de Tim Hortons con el folio, el total y la fecha visible.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud en el portal de facturación de Tim Hortons México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Tim Hortons México?",
+    "r": "### ¿Qué campos del ticket necesito para facturar en Tim Hortons?"
+   },
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Tim Hortons México?",
+    "r": "### ¿Mi consumo en Tim Hortons es deducible de impuestos?"
+   },
+   {
+    "p": "¿Puedo facturar los pedidos de Tim Hortons de la app o plataforma de delivery?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Para consumos de trabajo o junta, solo el 8.5% del monto es deducible pagando con tarjeta.",
+   "Para los profesionistas y equipos de trabajo que visitan Tim Hortons regularmente, cada ticket representa un pequeño gasto deducible acumulado.",
+   "Si un equipo de cinco personas toma café en Tim Hortons tres veces a la semana a lo largo del año, el gasto anual puede superar los $30,000 pesos, de los cuales el 8.5% ($2,550 pesos) son deducibles bajo el artículo 28 de la LISR."
+  ]
+ },
+ {
+  "slug": "uber",
+  "url": "https://recuperafacturas.com/factura/uber",
+  "titulo": "Recupera la factura de tus viajes en Uber",
+  "portal_nombre": "riders.uber.com (o la app Uber)",
+  "portal_url": "https://riders.uber.com/",
+  "plazo": "Hasta 72 horas tras el viaje o pedido",
+  "datos": "ID del viaje, Fecha y hora del servicio, Monto total cobrado, RFC y razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "Requiere cuenta de Uber activa",
+  "reimprimir": "Sí, en la sección Recibos de la app o riders.uber.com",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Abre la app de Uber y toma una captura de pantalla del recibo de tu viaje o pedido de Uber Eats.",
+   "Envía la captura por WhatsApp a Clara Intelligence.",
+   "Nuestro sistema detecta que es un recibo de Uber y procesa la facturación automáticamente.",
+   "Recibe tu CFDI en PDF y XML listo para tus deducciones fiscales."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Uber?",
+    "r": "### ¿Qué necesito para facturar mi ticket de Uber?"
+   },
+   {
+    "p": "¿Es gratis facturar con Clara Intelligence?",
+    "r": "### ¿En qué formato recibo mi factura de Uber? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Cada viaje y pedido de Uber Eats genera un recibo que puede convertirse en factura CFDI deducible.",
+   "Cada empleado debe generar el CFDI con el RFC de la empresa receptora antes de presentar el reembolso; de lo contrario, el ticket queda como gasto no deducible."
+  ]
+ },
+ {
+  "slug": "vips-sanborns-toks",
+  "url": "https://recuperafacturas.com/factura/vips-sanborns-toks",
+  "titulo": "Factura tus consumos en Vips, Sanborns y Toks",
+  "plazo": "Mismo mes calendario del consumo",
+  "datos": "Folio del ticket, Número de sucursal, Monto del consumo (sin propina), Datos fiscales",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "No, pasado el mes ya no es recuperable",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Fotografía tu ticket asegurándote de que se vea el total, la fecha y el número de sucursal.",
+   "Envía la foto por WhatsApp a Clara Intelligence.",
+   "Identificamos la cadena (Vips, Sanborns o Toks) y procesamos tu solicitud.",
+   "Recibe tu factura CFDI en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuál es el portal de facturación para Vips, Sanborns y Toks?",
+    "r": "### ¿Hasta cuándo puedo facturar mi consumo en restaurante?"
+   },
+   {
+    "p": "¿La propina se incluye en la factura?",
+    "r": "### ¿Qué uso de CFDI pongo en una factura de restaurante?"
+   },
+   {
+    "p": "¿Es 100% deducible un consumo en Vips, Sanborns o Toks?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "El consumo en restaurante es deducible si pagaste con tarjeta a nombre del contribuyente.",
+   "El consumo en restaurante es deducible al 8.5% (valor referencial) según el art.",
+   "28 LISR siempre que se pague con tarjeta de crédito o débito empresarial nominativa; el pago en efectivo invalida la deducción aunque tengas CFDI.",
+   "Recuerda: el consumo en restaurante es deducible solo al 8.5% del monto pagado y solo si pagaste con medios electrónicos a nombre del contribuyente.",
+   "Forma de pago electrónicaTarjeta o transferencia para que sea deducible al 8.5%.",
+   "| Pago en efectivo no deducible | Aunque tengas el CFDI, el consumo en restaurante pagado en efectivo no es deducible (art. 28 LISR)."
+  ]
+ },
+ {
+  "slug": "viva-aerobus",
+  "url": "https://recuperafacturas.com/factura/viva-aerobus",
+  "titulo": "Factura tu boleto de Viva Aerobus",
+  "portal_nombre": "vivaaerobus.com/mx/facturacion",
+  "portal_url": "https://www.vivaaerobus.com/mx/facturacion",
+  "plazo": "Mismo mes calendario de la compra del boleto",
+  "datos": "Código PNR, Apellido del pasajero, RFC del receptor, Razón social",
+  "descarga": "XMLPDF",
+  "cuenta": "Solo requiere código de reservación (PNR)",
+  "reimprimir": "No, pasado el mes de compra el folio se cierra",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Localiza el correo de confirmación de tu boleto Viva Aerobus con el código de reservación (PNR).",
+   "Envía la captura de pantalla o el PDF del boleto por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Viva Aerobus.",
+   "Recibe tu CFDI en PDF y XML válido para deducir tus gastos de viaje aéreo."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo mi boleto de Viva Aerobus?",
+    "r": "### ¿Cuánto tiempo tengo para facturar un boleto de Viva Aerobus?"
+   },
+   {
+    "p": "¿Los boletos Viva Aerobus son deducibles de impuestos?",
+    "r": "### ¿Puedo facturar los cargos de equipaje de Viva Aerobus?"
+   },
+   {
+    "p": "¿Viva Aerobus emite CFDI con complemento de viajes?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Sus boletos aéreos son deducibles como viáticos para personas con actividad empresarial."
+  ]
+ },
+ {
+  "slug": "volaris",
+  "url": "https://recuperafacturas.com/factura/volaris",
+  "titulo": "Factura tus vuelos de Volaris automáticamente",
+  "portal_nombre": "factura.volaris.com",
+  "portal_url": "https://factura.volaris.com/",
+  "plazo": "Mismo mes calendario de la compra del boleto",
+  "datos": "Código de reserva (PNR), Apellido del pasajero principal, Datos fiscales, PNR de cargos extras",
+  "descarga": "XMLPDF",
+  "cuenta": "Solo requiere código de reservación (PNR); no cuenta",
+  "reimprimir": "No, pasado el mes de compra el folio se cierra",
+  "verificado": "julio de 2026",
+  "pasos": [
+   "Descarga tu boleto Volaris o toma una captura del correo de confirmación.",
+   "Envía el comprobante por WhatsApp a Clara Intelligence.",
+   "Procesamos la facturación con los datos del boleto.",
+   "Recibe tu CFDI en PDF y XML."
+  ],
+  "faq": [
+   {
+    "p": "¿Dónde facturo mi boleto de Volaris?",
+    "r": "### ¿Hasta cuándo puedo facturar un vuelo Volaris?"
+   },
+   {
+    "p": "¿Qué datos pide Volaris para emitir mi factura?",
+    "r": "### ¿Se incluyen los extras Volaris (equipaje, asiento) en la misma factura?"
+   },
+   {
+    "p": "¿La membresía V Club Volaris se factura aparte?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "walmart",
+  "url": "https://recuperafacturas.com/factura/walmart",
+  "titulo": "Factura tu ticket de Walmart en minutos",
+  "portal_nombre": "facturacion.walmartmexico.com.mx",
+  "portal_url": "https://facturacion.walmartmexico.com.mx/",
+  "plazo": "Hasta 30 días naturales desde la compra",
+  "datos": "TC – Transacción, TR – Terminal, TD – Tienda, CR – Caja",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro de los 30 días desde el portal",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Fotografía tu ticket de Walmart asegurándote de capturar el código de barras y el total de la compra.",
+   "Envía la imagen por WhatsApp a Clara Intelligence o cárgala en nuestra plataforma web.",
+   "Clara identifica el comercio y procesa tu solicitud de facturación automáticamente.",
+   "Descarga tu factura CFDI en PDF y XML directamente desde WhatsApp o tu panel de usuario."
+  ],
+  "faq": [
+   {
+    "p": "¿Cuánto tiempo tengo para facturar en Walmart?",
+    "r": "### ¿Qué necesito para facturar mi ticket de Walmart?"
+   },
+   {
+    "p": "¿Es gratis facturar con Clara Intelligence?",
+    "r": "### ¿En qué formato recibo mi factura de Walmart? Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": []
+ },
+ {
+  "slug": "zara",
+  "url": "https://recuperafacturas.com/factura/zara",
+  "titulo": "Factura tus compras de Zara en México",
+  "portal_nombre": "zara.com/mx (Facturación cliente)",
+  "portal_url": "https://www.zara.com/mx/es/facturacion-c700094.html",
+  "plazo": "Mismo mes calendario de la compra",
+  "datos": "Número de ticket o pedido, Tienda o canal de compra, Fecha de compra, RFC del receptor",
+  "descarga": "XMLPDF",
+  "cuenta": "No se requiere cuenta de usuario",
+  "reimprimir": "Sí, dentro del mismo mes",
+  "verificado": "mayo de 2025",
+  "pasos": [
+   "Conserva tu ticket de compra de Zara con el número de folio o ticket.",
+   "Toma una foto clara del ticket y envíala por WhatsApp a Clara Intelligence.",
+   "Procesamos tu solicitud con el portal de facturación de Zara México.",
+   "Recibe tu CFDI en PDF y XML válido ante el SAT."
+  ],
+  "faq": [
+   {
+    "p": "¿Cómo facturo en Zara México?",
+    "r": "### ¿Cuánto tiempo tengo para facturar en Zara?"
+   },
+   {
+    "p": "¿La ropa de Zara es deducible de impuestos?",
+    "r": "### ¿Puedo facturar compras en línea de Zara.com?"
+   },
+   {
+    "p": "¿Zara emite facturas a nombre de empresa?",
+    "r": "Disponible vía WhatsApp·Clara Intelligence"
+   }
+  ],
+  "avisos_fiscales": [
+   "Las compras de ropa pueden ser deducibles como uniformes de trabajo o imagen corporativa para personas con actividad empresarial.",
+   "La ropa solo es deducible si es uniforme de trabajo o imagen profesional documentada.",
+   "Aunque la deducibilidad fiscal de la ropa en México es limitada (el SAT solo acepta uniformes de trabajo y prendas de imagen corporativa obligatorias), el proceso de facturación de Zara es el mismo para cualquier compra: lo relevante es que el CFDI exista y que el contador del contribuyente clasifique correctamente la deducibilidad de cada pieza.",
+   "Para los casos en que la ropa de Zara sí es deducible —uniformes para empleados, prendas de imagen para vendedores o representantes que deben vestir un estándar corporativo documentado—, el proceso es facturar al RFC de la empresa y conservar el soporte documental que acredite el uso empresarial obligatorio."
+  ]
+ }
+]

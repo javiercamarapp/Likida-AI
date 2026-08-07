@@ -1,9 +1,9 @@
-# Cuadra
+# Likida
 
 **Agente de IA por WhatsApp que automatiza el cierre diario de operaciones logísticas en México.**
 
 El operador manda por WhatsApp fotos de sus comprobantes de viaje (diésel, casetas, facturas) →
-Cuadra hace OCR → los cuadra contra el anticipo y la política de la empresa → detecta diferencias y
+Likida hace OCR → los cuadra contra el anticipo y la política de la empresa → detecta diferencias y
 faltantes **en el momento** → entrega una liquidación en PDF y un registro listo para ERP.
 
 > Validado con 2,474 vacantes reales: ~350 empresas con este dolor exacto, de transportistas
@@ -74,7 +74,7 @@ cp .env.example .env.local   # completa las llaves
 npm run dev
 ```
 El flujo del demo: manda 3–4 fotos de comprobantes al número de WhatsApp de prueba →
-Cuadra responde con la liquidación cuadrada, señala diferencias, y devuelve el PDF.
+Likida responde con la liquidación cuadrada, señala diferencias, y devuelve el PDF.
 
 ## Estado
 Sprint 0 — MVP para el demo del 6 de agosto. Ruta crítica (WhatsApp→OCR→cuadre→PDF) primero;

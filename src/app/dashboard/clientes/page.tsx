@@ -1,7 +1,7 @@
 import { Users2, TrendingUp, Layers } from 'lucide-react';
 import { exigirVerRuta } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { getCartera, type Cartera } from '@/lib/cuadra/comercial';
+import { getCartera, type Cartera } from '@/lib/likida/comercial';
 import { EstadoVacio, KpiTile } from '../../admin/ui/kit';
 import { mxn } from '@/lib/formato';
 

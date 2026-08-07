@@ -12,10 +12,10 @@ import { test, expect } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Liquidacion, Viaje, Operador, Gasto } from '@/types/cuadra';
+import type { Liquidacion, Viaje, Operador, Gasto } from '@/types/likida';
 
 test('PDF con 25 comprobantes: anuncia lo que no cupo y trae el descargo', async () => {
-  const { generarLiquidacionPDF } = await import('@/lib/cuadra/liquidacion/pdf');
+  const { generarLiquidacionPDF } = await import('@/lib/likida/liquidacion/pdf');
 
   const gastos: Gasto[] = Array.from({ length: 25 }, (_, i) => ({
     id: `g${i}`,

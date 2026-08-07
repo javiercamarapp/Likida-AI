@@ -73,7 +73,7 @@ describe('getResumenNegocio', () => {
   beforeEach(() => { respuestas.clear(); rangos.clear(); rpcs.clear(); llamadasRpc.length = 0; });
 
   it('suma costo/tokens de TODOS los tenants y agrupa por fase', async () => {
-    respuestas.set('tenant', { data: [{ id: 't1', nombre: 'Transportes Innovativos', plan: 'demo' }], error: null });
+    respuestas.set('tenant', { data: [{ id: 't1', nombre: 'Flota Demo SA de CV', plan: 'demo' }], error: null });
     respuestas.set('viaje', { data: [{ id: 'v1', tenant_id: 't1' }, { id: 'v2', tenant_id: 't1' }], error: null });
     // Lo mismo que antes eran tres filas de `llm_costo` ($1.005 + $0.5 en ocr,
     // $0.4272 en cuadre) llega ya sumado por la 0062, SIN redondear: el
@@ -110,7 +110,7 @@ describe('getResumenNegocio', () => {
     });
     const r = await getResumenNegocio('2026-08-02');
     expect(r.tenants).toBe(1);
-    expect(r.flotas).toEqual([{ id: 't1', nombre: 'Transportes Innovativos', plan: 'demo', viajes: 2, costoIaUsd: 1.93 }]);
+    expect(r.flotas).toEqual([{ id: 't1', nombre: 'Flota Demo SA de CV', plan: 'demo', viajes: 2, costoIaUsd: 1.93 }]);
     expect(r.viajesProcesados).toBe(2);
     expect(r.costoIaUsd).toBe(1.93);
     expect(r.tokensIn).toBe(1800);
@@ -297,14 +297,14 @@ describe('getConversacionesActivas', () => {
       data: [{
         telefono: '529993700779', updated_at: '2026-08-02T20:00:00Z',
         estado: { turns: [{ role: 'user', content: 'Listo' }, { role: 'assistant', content: 'Listo, cuadré tu viaje' }] },
-        tenant: { nombre: 'Transportes Innovativos' },
+        tenant: { nombre: 'Flota Demo SA de CV' },
       }],
       error: null,
     });
     const r = await getConversacionesActivas();
     expect(r).toEqual([{
       telefono: '529993700779',
-      tenantNombre: 'Transportes Innovativos',
+      tenantNombre: 'Flota Demo SA de CV',
       turns: [{ role: 'user', content: 'Listo' }, { role: 'assistant', content: 'Listo, cuadré tu viaje' }],
       actualizadaEn: '2026-08-02T20:00:00Z',
     }]);

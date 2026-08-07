@@ -97,8 +97,8 @@ test('consolidado ECC12: parsea, liga 2 de 3 contra gasto real y deja 1 en la co
   cargarEnv(resolve('.env.local'));
   expect(process.env.SUPABASE_SERVICE_ROLE_KEY, 'falta SUPABASE_SERVICE_ROLE_KEY').toBeTruthy();
 
-  const { parseCfdiXml, esConsolidado } = await import('@/lib/cuadra/intake/cfdi_xml');
-  const { guardarYConciliarConsolidado, resolverLineaAMano } = await import('@/lib/cuadra/intake/consolidado');
+  const { parseCfdiXml, esConsolidado } = await import('@/lib/likida/intake/cfdi_xml');
+  const { guardarYConciliarConsolidado, resolverLineaAMano } = await import('@/lib/likida/intake/consolidado');
   const { supabaseAdmin } = await import('@/lib/supabase/admin');
 
   const admin = supabaseAdmin();

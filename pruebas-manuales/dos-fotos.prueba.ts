@@ -52,7 +52,7 @@ test('ticket + acercamiento: el código manda sobre el OCR', async () => {
   cargarEnv(resolve('.env.local'));
   expect(process.env.OPENROUTER_API_KEY, 'falta OPENROUTER_API_KEY en .env.local').toBeTruthy();
 
-  const { extraerComprobante } = await import('@/lib/cuadra/intake/ocr');
+  const { extraerComprobante } = await import('@/lib/likida/intake/ocr');
 
   const t0 = Date.now();
   const r = await extraerComprobante([comoWhatsApp(rutaTicket), comoWhatsApp(rutaCerca)]);

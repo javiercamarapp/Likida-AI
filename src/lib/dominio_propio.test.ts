@@ -32,7 +32,7 @@ import { sinComentarios, fuentesDeProduccion } from '@/lib/pruebas/codigo';
  * Dominios que NO controlamos y que por eso no pueden viajar en nada que salga
  * de aquí. La lista crece cuando se descubra otro; no pretende ser exhaustiva.
  */
-const AJENOS = ['cuadra.mx', 'transportesinnovativos.mx'];
+const AJENOS = ['cuadra.mx', 'flotademo.mx'];
 
 const FUENTES = fuentesDeProduccion('src');
 
@@ -61,7 +61,7 @@ describe('nada nuestro nombra un dominio ajeno', () => {
 describe('el dominio propio sale de un solo sitio', () => {
   it('el pie del PDF y el referer usan `likida.ai`', () => {
     // El pie es lo único de esta lista que el CLIENTE lee en papel.
-    const pdf = readFileSync('src/lib/cuadra/liquidacion/pdf.ts', 'utf8');
+    const pdf = readFileSync('src/lib/likida/liquidacion/pdf.ts', 'utf8');
     expect(pdf).toContain("right('likida.ai'");
     const or = readFileSync('src/lib/llm/openrouter.ts', 'utf8');
     expect(or).toContain('https://likida.ai');

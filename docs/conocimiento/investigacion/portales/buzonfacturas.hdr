@@ -1,0 +1,13 @@
+HTTP/2 200 
+cache-control: private
+content-type: text/html; charset=utf-8
+content-encoding: gzip
+vary: Accept-Encoding
+server: Microsoft-IIS/10.0
+set-cookie: ASP.NET_SessionId=5e5p4omdumudp4rubf3hfvph; path=/; HttpOnly; SameSite=Lax
+x-aspnetmvc-version: 5.2
+x-aspnet-version: 4.0.30319
+x-powered-by: ASP.NET
+date: Wed, 05 Aug 2026 04:29:43 GMT
+content-length: 3748
+

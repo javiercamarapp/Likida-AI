@@ -1,0 +1,16 @@
+HTTP/1.1 200 OK
+Content-Length: 10180
+Content-Type: text/html; charset=utf-8
+Date: Wed, 05 Aug 2026 04:29:49 GMT
+Server: Microsoft-IIS/10.0
+Cache-Control: private
+Content-Encoding: gzip
+Set-Cookie: ASP.NET_SessionId=opzebu3bszcnllf4ltgbvwzc; path=/; HttpOnly; SameSite=Lax
+Set-Cookie: ARRAffinity=2e842b68f2ad1592732459aaae017cc20d1368819a81e10dae46f4cb8cef8acd;Path=/;HttpOnly;Secure;Domain=facturacion.shell.com.mx
+Set-Cookie: ARRAffinitySameSite=2e842b68f2ad1592732459aaae017cc20d1368819a81e10dae46f4cb8cef8acd;Path=/;HttpOnly;SameSite=None;Secure;Domain=facturacion.shell.com.mx
+Vary: Accept-Encoding
+Strict-Transport-Security: max-age=31536000
+X-AspNet-Version: 4.0.30319
+Content-Security-Policy: frame-ancestors
+X-XSS-Protection: 1; mode=block
+

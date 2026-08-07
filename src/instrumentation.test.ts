@@ -77,7 +77,7 @@ describe('register — el arranque llama a todo lo que dice que llama', () => {
   it('sonda el aviso de privacidad, no solo las migraciones', async () => {
     const verificarMigracionesCriticas = vi.fn(async () => {});
     const verificarAvisoDePrivacidad = vi.fn(async () => {});
-    vi.doMock('@/lib/cuadra/startup', () => ({ verificarMigracionesCriticas, verificarAvisoDePrivacidad }));
+    vi.doMock('@/lib/likida/startup', () => ({ verificarMigracionesCriticas, verificarAvisoDePrivacidad }));
     vi.doMock('@/lib/observability/sentry', () => ({
       avisarObservabilidad: vi.fn(), precargar: vi.fn(async () => {}),
     }));
@@ -94,7 +94,7 @@ describe('register — el arranque llama a todo lo que dice que llama', () => {
 
   it('fuera del runtime de Node no arranca nada', async () => {
     const verificarAvisoDePrivacidad = vi.fn(async () => {});
-    vi.doMock('@/lib/cuadra/startup', () => ({
+    vi.doMock('@/lib/likida/startup', () => ({
       verificarMigracionesCriticas: vi.fn(async () => {}), verificarAvisoDePrivacidad,
     }));
     vi.stubEnv('NEXT_RUNTIME', 'edge');

@@ -22,18 +22,18 @@ describe('provisionarUsuario', () => {
 
   it('crea el usuario de Auth y la fila de app_user con rol flota_admin por default', async () => {
     createUser.mockResolvedValue({ data: { user: { id: 'u-1' } }, error: null });
-    const r = await provisionarUsuario('t-1', 'contralor@innovativos.mx', 'Ana Ruiz');
-    expect(createUser).toHaveBeenCalledWith({ email: 'contralor@innovativos.mx', email_confirm: true });
+    const r = await provisionarUsuario('t-1', 'contralor@flotademo.mx', 'Ana Ruiz');
+    expect(createUser).toHaveBeenCalledWith({ email: 'contralor@flotademo.mx', email_confirm: true });
     expect(from).toHaveBeenCalledWith('app_user');
     expect(insert).toHaveBeenCalledWith({
-      id: 'u-1', tenant_id: 't-1', email: 'contralor@innovativos.mx', nombre: 'Ana Ruiz', rol: 'flota_admin',
+      id: 'u-1', tenant_id: 't-1', email: 'contralor@flotademo.mx', nombre: 'Ana Ruiz', rol: 'flota_admin',
     });
     expect(r).toEqual({ userId: 'u-1' });
   });
 
   it('sin nombre, nombre queda null', async () => {
     createUser.mockResolvedValue({ data: { user: { id: 'u-2' } }, error: null });
-    await provisionarUsuario('t-1', 'sin-nombre@innovativos.mx');
+    await provisionarUsuario('t-1', 'sin-nombre@flotademo.mx');
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ nombre: null }));
   });
 
@@ -57,7 +57,7 @@ describe('provisionarUsuario', () => {
   // facturación/invitar usuarios (eso sigue siendo solo de flota_admin).
   it('acepta rol encargado', async () => {
     createUser.mockResolvedValue({ data: { user: { id: 'u-4' } }, error: null });
-    await provisionarUsuario('t-1', 'encargado@innovativos.mx', 'Luis', 'encargado');
+    await provisionarUsuario('t-1', 'encargado@flotademo.mx', 'Luis', 'encargado');
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ rol: 'encargado' }));
   });
 });

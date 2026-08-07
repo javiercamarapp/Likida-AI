@@ -1,0 +1,414 @@
+<title>Por qué Likida se paga sola</title>
+<style>
+  :root{
+    --ink:#0a0a0b; --ink2:#3f3f46; --muted:#71717a; --faint:#a1a1aa;
+    --panel:#ffffff; --canvas:#f4f4f5; --canvas2:#fafafa;
+    --line:#ececee; --line2:#e4e4e7;
+    --g1:#ededed; --g2:#cfcfd2; --g3:#9a9aa0; --g4:#57575c; --g5:#0a0a0b;
+    --ok:#15803d; --okbg:#e7f5ec; --warn:#b45309; --warnbg:#fdf1e3;
+    --bad:#b91c1c; --badbg:#fbeaea;
+    --rule:#d9d9dd;
+    --serif: 'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+    --sans: -apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,'Helvetica Neue',Arial,sans-serif;
+    --mono: ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ink:#f4f4f5; --ink2:#d4d4d8; --muted:#a1a1aa; --faint:#71717a;
+      --panel:#131316; --canvas:#0a0a0b; --canvas2:#161619;
+      --line:#26262b; --line2:#2e2e34; --rule:#33333a;
+      --g1:#2a2a2f; --g2:#45454c; --g3:#6b6b73; --g4:#a8a8b0; --g5:#f4f4f5;
+      --ok:#4ade80; --okbg:#0f2417; --warn:#fbbf24; --warnbg:#2a1e08;
+      --bad:#f87171; --badbg:#2a1113;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#f4f4f5; --ink2:#d4d4d8; --muted:#a1a1aa; --faint:#71717a;
+    --panel:#131316; --canvas:#0a0a0b; --canvas2:#161619;
+    --line:#26262b; --line2:#2e2e34; --rule:#33333a;
+    --g1:#2a2a2f; --g2:#45454c; --g3:#6b6b73; --g4:#a8a8b0; --g5:#f4f4f5;
+    --ok:#4ade80; --okbg:#0f2417; --warn:#fbbf24; --warnbg:#2a1e08;
+    --bad:#f87171; --badbg:#2a1113;
+  }
+  :root[data-theme="light"]{
+    --ink:#0a0a0b; --ink2:#3f3f46; --muted:#71717a; --faint:#a1a1aa;
+    --panel:#ffffff; --canvas:#f4f4f5; --canvas2:#fafafa;
+    --line:#ececee; --line2:#e4e4e7; --rule:#d9d9dd;
+    --g1:#ededed; --g2:#cfcfd2; --g3:#9a9aa0; --g4:#57575c; --g5:#0a0a0b;
+    --ok:#15803d; --okbg:#e7f5ec; --warn:#b45309; --warnbg:#fdf1e3;
+    --bad:#b91c1c; --badbg:#fbeaea;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--canvas); color:var(--ink);
+    font-family:var(--sans); font-size:16px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .hoja{max-width:960px; margin:0 auto; padding:0 24px 96px}
+
+  /* ── Encabezado: portada de papel de trabajo ─────────────────────── */
+  header{padding:72px 0 40px; border-bottom:2px solid var(--ink)}
+  .sello{
+    font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted); margin:0 0 20px;
+  }
+  h1{
+    font-family:var(--serif); font-weight:600; font-size:clamp(34px,6vw,58px);
+    line-height:1.06; letter-spacing:-.02em; margin:0 0 18px; text-wrap:balance;
+  }
+  .bajada{
+    font-family:var(--serif); font-size:clamp(17px,2.2vw,21px); line-height:1.5;
+    color:var(--ink2); max-width:60ch; margin:0;
+  }
+
+  /* ── Procedencia: el concepto del documento ──────────────────────── */
+  .proc{
+    display:inline-flex; align-items:center; gap:5px; vertical-align:middle;
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.1em;
+    text-transform:uppercase; padding:2px 6px; border-radius:3px;
+    border:1px solid var(--line2); color:var(--muted); background:var(--canvas2);
+    white-space:nowrap;
+  }
+  .proc.med{border-color:var(--ok); color:var(--ok); background:var(--okbg)}
+  .proc.der{border-color:var(--g3); color:var(--g4)}
+  .proc.sup{border-color:var(--warn); color:var(--warn); background:var(--warnbg)}
+
+  .leyenda{
+    display:flex; flex-wrap:wrap; gap:22px; margin:32px 0 0; padding:20px 22px;
+    background:var(--panel); border:1px solid var(--line2); border-radius:10px;
+  }
+  .leyenda div{display:flex; align-items:flex-start; gap:9px; flex:1 1 240px}
+  .leyenda p{margin:0; font-size:13.5px; color:var(--ink2); line-height:1.45}
+
+  /* ── Secciones ───────────────────────────────────────────────────── */
+  section{padding:56px 0 0}
+  .eyebrow{
+    font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted); margin:0 0 10px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::after{content:""; flex:1; height:1px; background:var(--rule)}
+  h2{
+    font-family:var(--serif); font-weight:600; font-size:clamp(25px,3.6vw,34px);
+    line-height:1.14; letter-spacing:-.015em; margin:0 0 14px; text-wrap:balance;
+  }
+  h3{
+    font-family:var(--sans); font-weight:650; font-size:15px; letter-spacing:.005em;
+    margin:0 0 8px; color:var(--ink);
+  }
+  p{margin:0 0 15px; max-width:66ch; color:var(--ink2)}
+  p.ancho{max-width:none}
+  strong{color:var(--ink); font-weight:640}
+
+  /* ── Cifra grande ────────────────────────────────────────────────── */
+  .cifra{
+    display:block; font-family:var(--sans); font-variant-numeric:tabular-nums;
+    font-weight:700; letter-spacing:-.03em; line-height:1;
+    font-size:clamp(40px,7.5vw,68px); color:var(--ink); margin:0;
+  }
+  .cifra.mal{color:var(--bad)}
+  .cifra.bien{color:var(--ok)}
+  .cifra small{font-size:.42em; font-weight:600; letter-spacing:0; color:var(--muted); margin-left:6px}
+  .pie{font-size:13.5px; color:var(--muted); margin:10px 0 0; max-width:52ch; line-height:1.5}
+
+  .destacado{
+    background:var(--panel); border:1px solid var(--line2); border-radius:12px;
+    padding:30px 30px 28px; margin:26px 0;
+  }
+  .destacado.perdida{border-left:3px solid var(--bad)}
+  .destacado.gana{border-left:3px solid var(--ok)}
+
+  /* ── Rejilla de cifras ───────────────────────────────────────────── */
+  .rejilla{display:grid; grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); gap:1px; background:var(--line2); border:1px solid var(--line2); border-radius:10px; overflow:hidden; margin:24px 0}
+  .celda{background:var(--panel); padding:20px 18px}
+  .celda .n{font-variant-numeric:tabular-nums; font-weight:700; font-size:28px; letter-spacing:-.02em; line-height:1.1; display:block}
+  .celda .r{font-size:12.5px; color:var(--muted); margin:6px 0 8px; line-height:1.35}
+
+  /* ── Tabla de trabajo ────────────────────────────────────────────── */
+  .envoltura{overflow-x:auto; margin:24px 0; border:1px solid var(--line2); border-radius:10px; background:var(--panel)}
+  table{width:100%; border-collapse:collapse; font-size:14px; min-width:520px}
+  caption{
+    text-align:left; padding:16px 20px 12px; font-size:13px; color:var(--muted);
+    font-family:var(--mono); letter-spacing:.06em; text-transform:uppercase;
+    border-bottom:1px solid var(--line2);
+  }
+  th,td{padding:11px 20px; text-align:left; border-bottom:1px solid var(--line)}
+  th{font-weight:640; font-size:12px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted)}
+  td.num,th.num{text-align:right; font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:none}
+  tr.total td{font-weight:700; background:var(--canvas2); border-top:2px solid var(--ink); color:var(--ink)}
+  tr.total td.num{font-size:15.5px}
+
+  /* ── Barra comparativa ───────────────────────────────────────────── */
+  .barras{display:flex; flex-direction:column; gap:16px; margin:24px 0}
+  .barra .cab{display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:6px; font-size:14px}
+  .barra .cab b{font-variant-numeric:tabular-nums; font-weight:700}
+  .pista{height:26px; background:var(--g1); border-radius:4px; overflow:hidden}
+  .fill{height:100%; border-radius:4px}
+
+  .nota{
+    font-size:13.5px; color:var(--muted); border-left:2px solid var(--line2);
+    padding:2px 0 2px 16px; margin:20px 0; max-width:62ch; line-height:1.55;
+  }
+  .nota b{color:var(--ink2)}
+
+  ul{margin:0 0 15px; padding-left:20px; max-width:66ch; color:var(--ink2)}
+  li{margin-bottom:7px}
+  li::marker{color:var(--g3)}
+
+  footer{margin-top:64px; padding-top:24px; border-top:1px solid var(--line2); font-size:13px; color:var(--muted)}
+  footer p{max-width:70ch; color:var(--muted); font-size:13px}
+
+  @media (max-width:600px){
+    header{padding:48px 0 32px}
+    section{padding:44px 0 0}
+    .destacado{padding:24px 20px}
+    th,td{padding:10px 14px}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .fill{animation:crecer .9s cubic-bezier(.2,.7,.3,1) both}
+    @keyframes crecer{from{transform:scaleX(0); transform-origin:left}to{transform:scaleX(1)}}
+  }
+</style>
+
+<div class="hoja">
+
+<header>
+  <p class="sello">Likida · Papel de trabajo · 4 de agosto de 2026</p>
+  <h1>Por qué el software se paga solo</h1>
+  <p class="bajada">Este documento no argumenta con proyecciones. Cada cifra sale de la base de datos de producción de Likida, de una constante escrita en el código, o de aritmética sobre esas dos — y cada una dice de dónde viene.</p>
+
+  <div class="leyenda">
+    <div><span class="proc med">Medido</span><p>Consultado hoy en la base de producción. Es un hecho, no una estimación.</p></div>
+    <div><span class="proc der">Derivado</span><p>Aritmética sobre cifras medidas. La operación va escrita al lado.</p></div>
+    <div><span class="proc sup">Supuesto</span><p>No se ha medido. Se declara, con su valor a la vista, para que se pueda discutir.</p></div>
+  </div>
+</header>
+
+<section>
+  <p class="eyebrow">Antes de cualquier cifra</p>
+  <h2>De dónde salieron estos datos, y qué no prueban</h2>
+
+  <div class="destacado" style="border-left:3px solid var(--warn)">
+    <h3 style="margin-bottom:10px">Los 40 comprobantes de esta base NO son de una flota</h3>
+    <p style="margin-bottom:0">Son tickets reales de carretera, recabados a mano entre familiares para probar el sistema. Sirven para medir <strong>qué hace el software</strong> — lee, cuadra, cierra, cuesta. <strong>No sirven para medir qué porcentaje de los gastos de una flota termina sin factura</strong>, y ese sesgo probablemente va en contra nuestra: un particular casi nunca pide factura en la bomba; una flota con RFC y tarjeta de combustible la pide seguido, a veces automática.</p>
+  </div>
+
+  <p class="ancho">Por eso este documento <strong>no afirma una tasa</strong>. Afirma lo que sí se puede sostener —cuánto vale fiscalmente cada peso que se queda sin factura— y deja que la flota ponga su propio número. Es la única forma de que la cuenta aguante cuando un contralor la revise.</p>
+</section>
+
+<section>
+  <p class="eyebrow">El mecanismo</p>
+  <h2>Cada peso sin factura cuesta 40 centavos</h2>
+
+  <p class="ancho">Un gasto sin CFDI cuesta dos veces: no acredita el IVA y no deduce para ISR. Sobre cualquier importe, con las tasas de ley:</p>
+
+  <div class="envoltura">
+    <table>
+      <caption>Valor fiscal perdido por cada $100,000 de gasto de ruta sin CFDI</caption>
+      <thead><tr><th>Concepto</th><th class="num">Importe MXN</th></tr></thead>
+      <tbody>
+        <tr><td>Gasto sin comprobante fiscal</td><td class="num">100,000.00</td></tr>
+        <tr><td>Base sin IVA (÷ 1.16)</td><td class="num">86,206.90</td></tr>
+        <tr><td>IVA que no se acredita (16%)</td><td class="num">13,793.10</td></tr>
+        <tr><td>ISR que no se deduce (30% sobre la base)</td><td class="num">25,862.07</td></tr>
+        <tr class="total"><td>Valor fiscal perdido</td><td class="num">39,655.17</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="destacado perdida">
+    <p class="cifra mal">39.7<small>centavos por peso</small></p>
+    <p class="pie">Aritmética de ley, no una estimación de mercado: no depende de la flota, del giro ni del año. Es la única cifra de este documento que no admite discusión. <span class="proc der">Derivado</span></p>
+  </div>
+
+  <p class="ancho">Con eso, la conversación con la flota deja de ser «créeme este porcentaje» y pasa a ser una pregunta que ellos sí saben contestar:</p>
+
+  <div class="destacado">
+    <h3>«De lo que sus choferes gastan en ruta al mes, ¿cuánto termina con factura?»</h3>
+    <p style="margin-bottom:0">Multiplicado por 39.7% da el dinero que están perdiendo. Si dicen «casi todo se factura», no somos para ellos y es mejor saberlo en la primera junta. Si dudan —y casi siempre dudan— ahí está la venta: <strong>nadie que lo tenga resuelto duda de ese número.</strong></p>
+  </div>
+
+  <p class="ancho">El diésel, las casetas y los viáticos se pagan en carretera, con ticket de papel, y la factura hay que ir a pedirla a un portal antes de que venza. Las gasolineras dan de 7 a 15 días. Un viaje dura dos o tres. La oficina liquida por quincena. Para cuando alguien mira el fajo, una parte ya caducó — y eso pasa aunque la flota sea ordenada.</p>
+</section>
+
+<section>
+  <p class="eyebrow">Lo que está en juego</p>
+  <h2>Qué vale fiscalmente ese 91%</h2>
+
+  <p class="ancho">Un gasto sin CFDI cuesta dos veces: no acredita el IVA y no deduce para ISR. Sobre las cifras medidas arriba, con las tasas de ley:</p>
+
+  <div class="envoltura">
+    <table>
+      <caption>Valor fiscal en juego · 8 viajes medidos</caption>
+      <thead>
+        <tr><th>Concepto</th><th>Origen</th><th class="num">Importe MXN</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Gasto sin CFDI</td><td><span class="proc med">Medido</span></td><td class="num">57,897.30</td></tr>
+        <tr><td>Base sin IVA (÷ 1.16)</td><td><span class="proc der">Derivado</span></td><td class="num">49,911.47</td></tr>
+        <tr><td>IVA que no se acredita (16%)</td><td><span class="proc der">Derivado</span></td><td class="num">7,985.83</td></tr>
+        <tr><td>ISR que no se deduce (30% sobre la base)</td><td><span class="proc der">Derivado</span></td><td class="num">14,973.44</td></tr>
+        <tr class="total"><td>Valor fiscal en juego</td><td></td><td class="num">22,959.27</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="destacado perdida">
+    <p class="cifra mal">$2,869<small>por viaje</small></p>
+    <p class="pie">$22,959.27 ÷ 8 viajes. Es lo que una flota deja en la mesa por cada viaje cuyos comprobantes no se facturan. <span class="proc der">Derivado</span></p>
+  </div>
+
+  <p class="nota"><b>Lo honesto de esta cifra:</b> no todo ese dinero es recuperable. Algunos tickets ya vencieron, y algunos proveedores de carretera simplemente no facturan. Es lo que está <em>en juego</em>, no lo que se recupera. La pregunta comercial correcta no es «¿cuánto te devuelvo?» sino «¿cuánto de esto quieres dejar de perder cada mes?».</p>
+</section>
+
+<section>
+  <p class="eyebrow">El IEPS del diésel</p>
+  <h2>El dinero que ni siquiera aparece en la conversación</h2>
+
+  <p class="ancho">El IVA lo reclama todo el mundo. El <strong>IEPS del diésel</strong> no, y es el que más se pierde: el autotransporte de carga puede acreditarlo, pero solo si el CFDI viene con el impuesto desglosado y con su complemento. Sin ese papel, el impuesto se pagó y nadie lo recupera.</p>
+
+  <div class="rejilla">
+    <div class="celda"><span class="n">18</span><p class="r">cargas de diésel capturadas</p><span class="proc med">Medido</span></div>
+    <div class="celda"><span class="n" style="color:var(--bad)">17</span><p class="r">sin CFDI, o sea sin IEPS acreditable</p><span class="proc med">Medido</span></div>
+    <div class="celda"><span class="n">1</span><p class="r">con complemento de hidrocarburos</p><span class="proc med">Medido</span></div>
+    <div class="celda"><span class="n" style="color:var(--ok)">$408.62</span><p class="r">de IEPS que esa sola carga sí acredita</p><span class="proc med">Medido</span></div>
+  </div>
+
+  <p class="ancho">Esa única carga con papel completo es la prueba del concepto: $408.62 de IEPS acreditable sobre $4,200 de diésel, un <strong>9.7%</strong> del importe. Las otras diecisiete, que suman $6,700, no acreditan nada.</p>
+
+  <div class="destacado perdida">
+    <p class="cifra mal">$652<small>de IEPS no acreditado</small></p>
+    <p class="pie">$6,700 de diésel sin CFDI × 9.7%, la tasa observada en la única carga que sí trae complemento. <span class="proc der">Derivado</span> — la tasa real depende de litros y de la cuota vigente, no del importe; esta es una aproximación a partir del único caso medido.</p>
+  </div>
+
+  <p class="nota"><b>Por qué esto importa más de lo que parece:</b> el IEPS del diésel va <em>encima</em> del IVA y del ISR ya contados arriba. Y es el que un despacho contable normal no persigue, porque perseguirlo significa entrar a un portal por cada carga, con el folio del ticket, antes de que venza. Es exactamente el trabajo que nadie quiere hacer y que una máquina hace sin cansarse.</p>
+</section>
+
+<section>
+  <p class="eyebrow">Horas</p>
+  <h2>Lo que cuesta capturar a mano</h2>
+
+  <p class="ancho">El sistema lleva su propio contador de tiempo ahorrado, y la constante que usa está declarada en el código como supuesto, no como medición — a propósito, para que se pueda discutir en vez de creerse:</p>
+
+  <div class="destacado">
+    <p class="cifra">4 <small>minutos por documento</small></p>
+    <p class="pie">Leer el ticket, teclear concepto, monto, fecha y RFC, y archivarlo. <span class="proc sup">Supuesto</span> — está escrito como <code style="font-family:var(--mono);font-size:.85em">MINUTOS_CAPTURA_MANUAL = 4</code> en el código, con su nota de que es un supuesto.</p>
+  </div>
+
+  <div class="envoltura">
+    <table>
+      <caption>Carga de captura manual</caption>
+      <thead>
+        <tr><th>Escenario</th><th class="num">Documentos</th><th class="num">Horas</th><th class="num">Personas de tiempo completo</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Los 8 viajes medidos</td><td class="num">40</td><td class="num">2.7</td><td class="num">—</td></tr>
+        <tr><td>Un viaje real (22 comprobantes)</td><td class="num">22</td><td class="num">1.5</td><td class="num">—</td></tr>
+        <tr><td>Un día a 30 viajes</td><td class="num">660</td><td class="num">44</td><td class="num">5.5</td></tr>
+        <tr class="total"><td>Un mes a 30 viajes diarios</td><td class="num">14,520</td><td class="num">968</td><td class="num">5.5</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="ancho"><span class="proc med">Medido</span> los 40 documentos y los 8 viajes. <span class="proc sup">Supuesto</span> los 22 comprobantes por viaje real (viene de la conversación con la flota, no de la base: los 8 viajes de prueba promedian 5) y los 4 minutos. <span class="proc der">Derivado</span> el resto.</p>
+
+  <p class="ancho">Cinco personas y media de tiempo completo, solo tecleando tickets. Ese es el número que hay que poner enfrente de un dueño de flota — no las horas, las <strong>personas</strong>.</p>
+</section>
+
+<section>
+  <p class="eyebrow">Acciones</p>
+  <h2>Qué hace el sistema, y qué cuesta que lo haga</h2>
+
+  <div class="rejilla">
+    <div class="celda"><span class="n">131</span><p class="r">acciones de IA ejecutadas</p><span class="proc med">Medido</span></div>
+    <div class="celda"><span class="n">16.4</span><p class="r">acciones por viaje</p><span class="proc der">Derivado</span></div>
+    <div class="celda"><span class="n">7</span><p class="r">liquidaciones cerradas solas</p><span class="proc med">Medido</span></div>
+    <div class="celda"><span class="n">$1.83</span><p class="r">USD de IA, acumulado histórico</p><span class="proc med">Medido</span></div>
+  </div>
+
+  <p class="ancho">Cada acción es un paso que antes hacía una persona: leer el ticket, sacarle el monto y la fecha, reconocer el comercio, encontrar la liga de facturación, cuadrar contra el anticipo, aplicar la política de la flota, redactar la liquidación.</p>
+
+  <p class="nota"><b>Sobre el $1.83:</b> es el gasto acumulado de toda la historia del sistema, e incluye experimentos con modelos caros que ya se descartaron. La medición del costo optimizado, hecha por separado, dio <strong>alrededor de $3 MXN por viaje de 22 comprobantes</strong> — con el modelo de OCR 12 veces más barato y con caché de prompt que ahorra 92% en las llamadas repetidas. La cifra va a <em>subir</em> cuando entre la facturación automática en portales, porque abrir un navegador cuesta más que todo lo demás junto. Prefiero decirlo ahora que enseñar un número que no aguante.</p>
+</section>
+
+<section>
+  <p class="eyebrow">El cierre</p>
+  <h2>Las dos cuentas, una al lado de la otra</h2>
+
+  <p class="ancho">Por viaje, con las cifras de arriba:</p>
+
+  <div class="barras">
+    <div class="barra">
+      <div class="cab"><span>Valor fiscal en juego por viaje <span class="proc der">Derivado</span></span><b style="color:var(--bad)">$2,869</b></div>
+      <div class="pista"><div class="fill" style="width:100%;background:var(--bad)"></div></div>
+    </div>
+    <div class="barra">
+      <div class="cab"><span>Tiempo de captura evitado (1.5 h) <span class="proc sup">Supuesto</span></span><b>1.5 h</b></div>
+      <div class="pista"><div class="fill" style="width:34%;background:var(--g4)"></div></div>
+    </div>
+    <div class="barra">
+      <div class="cab"><span>Lo que le cuesta a Likida operar ese viaje <span class="proc med">Medido</span></span><b style="color:var(--ok)">≈ $3</b></div>
+      <div class="pista"><div class="fill" style="width:1.2%;background:var(--ok);min-width:3px"></div></div>
+    </div>
+  </div>
+
+  <div class="destacado gana">
+    <p class="cifra bien">956<small>× el costo de operarlo</small></p>
+    <p class="pie">$2,869 de valor fiscal en juego contra ≈$3 de costo real por viaje. Aunque solo se recupere <strong>uno de cada veinte pesos</strong> en juego, el producto sigue pagándose casi cincuenta veces. <span class="proc der">Derivado</span></p>
+  </div>
+
+  <p class="ancho">Por eso el argumento de venta no son las horas. Las horas ahorradas convencen a quien captura; el <strong>dinero deducible que se está perdiendo cada quincena</strong> convence a quien firma.</p>
+
+  <div class="envoltura">
+    <table>
+      <caption>Las tres cosas que se pagan solas, por separado</caption>
+      <thead>
+        <tr><th>Lo que hace</th><th>A quién le duele hoy</th><th class="num">Valor por viaje</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Sustituye la captura</strong><br><span style="font-size:13px;color:var(--muted)">El chofer manda la foto; nadie teclea</span></td>
+          <td>Al capturista y a quien le paga</td>
+          <td class="num">1.5 h</td>
+        </tr>
+        <tr>
+          <td><strong>Cierra el corte de ruta</strong><br><span style="font-size:13px;color:var(--muted)">Anticipo contra comprobado, con política aplicada y PDF entregado</span></td>
+          <td>Al contralor, que hoy lo arma a mano por quincena</td>
+          <td class="num">7 de 7 cerradas solas</td>
+        </tr>
+        <tr>
+          <td><strong>Recupera lo fiscal</strong><br><span style="font-size:13px;color:var(--muted)">Va por el CFDI antes de que venza: IVA, ISR y el IEPS del diésel</span></td>
+          <td>Al dueño, y no lo sabe</td>
+          <td class="num">$2,869</td>
+        </tr>
+        <tr class="total"><td colspan="2">Costo de operar ese viaje</td><td class="num">≈ $3</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="ancho">Las tres son independientes, y ahí está lo importante: <strong>con que solo una funcione, el producto ya se pagó.</strong> Si el contralor no confía en el cuadre y sigue revisándolo a mano, la captura sustituida sola lo justifica. Si además el IEPS del diésel se empieza a acreditar, el retorno deja de ser una discusión.</p>
+</section>
+
+<section>
+  <p class="eyebrow">Qué falta para sostener esto</p>
+  <h2>Lo que todavía no está probado</h2>
+
+  <p class="ancho">Para que este documento siga siendo cierto cuando la flota lo audite:</p>
+
+  <ul>
+    <li><strong>Los 22 comprobantes por viaje son un supuesto.</strong> Los 8 viajes medidos promedian 5. Se confirma con el primer mes de un cliente real.</li>
+    <li><strong>Los 4 minutos por documento nunca se han cronometrado.</strong> Vale la pena medirlos con la persona que hoy captura en la flota: si son 2, el argumento de horas se debilita; si son 7, se refuerza.</li>
+    <li><strong>La tasa de recuperación es la incógnita central.</strong> Cuántos de esos 38 comprobantes sin CFDI se logran facturar de verdad decide si el retorno es 50× o 900×. Se mide en cuanto corra la facturación automática en portales.</li>
+    <li><strong>El costo por viaje va a subir</strong> cuando entre esa facturación: un navegador por lote de tickets cuesta más que el OCR y el cuadre juntos.</li>
+  </ul>
+
+  <p class="nota">Ninguno de estos cuatro huecos cambia la conclusión, porque el margen es de tres órdenes de magnitud. Están aquí porque un documento que no dice lo que no sabe no se puede defender en una sala.</p>
+</section>
+
+<footer>
+  <p>Cifras consultadas el 4 de agosto de 2026 contra la base de producción de Likida (8 viajes, 40 comprobantes, 7 liquidaciones, 131 acciones de IA). Tasas de ley: IVA 16%, ISR 30%. Los importes capturados se asumen con IVA incluido.</p>
+</footer>
+
+</div>

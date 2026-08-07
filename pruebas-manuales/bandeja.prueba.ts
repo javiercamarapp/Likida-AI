@@ -37,8 +37,8 @@ test('bandeja: guardar → leer → emparejar → reclamar', async () => {
   expect(process.env.SUPABASE_SERVICE_ROLE_KEY, 'falta SUPABASE_SERVICE_ROLE_KEY').toBeTruthy();
 
   const { guardarCodigoPendiente, getCodigosPendientes, reclamarCodigoPendiente } =
-    await import('@/lib/cuadra/repo');
-  const { emparejarPendiente } = await import('@/lib/cuadra/intake/emparejar');
+    await import('@/lib/likida/repo');
+  const { emparejarPendiente } = await import('@/lib/likida/intake/emparejar');
   const { supabaseAdmin } = await import('@/lib/supabase/admin');
 
   const { data: viajes } = await supabaseAdmin().from('viaje').select('id, tenant_id').limit(1);

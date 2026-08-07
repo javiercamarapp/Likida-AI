@@ -20,8 +20,8 @@ import { test, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, extname, basename, resolve } from 'node:path';
 // Type-only: se borran al compilar, no rompen el orden de carga del env.
-import type { PoliticaGasto } from '@/lib/cuadra/cuadre/engine';
-import type { Gasto } from '@/types/cuadra';
+import type { PoliticaGasto } from '@/lib/likida/cuadre/engine';
+import type { Gasto } from '@/types/likida';
 
 const MIME: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -135,8 +135,8 @@ test('OCR sobre imágenes reales + cuadre del lote', async () => {
   expect(process.env.OPENROUTER_API_KEY, 'falta OPENROUTER_API_KEY en .env.local').toBeTruthy();
 
   // Import dinámico: DESPUÉS de cargar el env, por si algún módulo lo lee al importarse.
-  const { extraerComprobante } = await import('@/lib/cuadra/intake/ocr');
-  const { cuadrarViaje } = await import('@/lib/cuadra/cuadre/engine');
+  const { extraerComprobante } = await import('@/lib/likida/intake/ocr');
+  const { cuadrarViaje } = await import('@/lib/likida/cuadre/engine');
 
   // 🔴 INVENTADA: misma política de fantasía que /api/demo y seed.sql.
   // Cámbiala por la real de la flota antes de sacar conclusiones del cuadre.
@@ -161,7 +161,7 @@ test('OCR sobre imágenes reales + cuadre del lote', async () => {
     // Se decodifica aparte SOLO para el informe: es lo único que distingue "el
     // lector no vio nada" de "vio un código que no era de CFDI". Sin esto, el
     // arnés decía "sin QR" sobre tickets cuyo QR se había leído perfectamente.
-    const { decodeCodigosFromImage, bufferFromDataUrl } = await import('@/lib/cuadra/intake/cfdi');
+    const { decodeCodigosFromImage, bufferFromDataUrl } = await import('@/lib/likida/intake/cfdi');
     const codigos = await decodeCodigosFromImage(bufferFromDataUrl(url)).catch(() => []);
 
     const t0 = Date.now();
@@ -224,7 +224,7 @@ test('OCR sobre imágenes reales + cuadre del lote', async () => {
   // Con tickets reales eso engaña: un ticket de $1,050 de comida pasaba sin que
   // nadie notara que excede el tope de $750/día. Probar con fotos de verdad no
   // sirve de nada si el motor no está entero.
-  const { DEMO_CONFIG } = await import('@/lib/cuadra/config');
+  const { DEMO_CONFIG } = await import('@/lib/likida/config');
   const hoy = new Date().toISOString().slice(0, 10);
   const liq = cuadrarViaje({
     viajeId: 'prueba-manual',

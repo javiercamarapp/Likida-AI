@@ -48,7 +48,7 @@ function Seccion({ titulo, items, defaultAbierto = false, sufijo }: { titulo: st
  * `sufijo`: cuando un superadmin llega viendo una flota real (`?tenant=`) o
  * la demo (`?vista=demo`), CADA link del sidebar tiene que cargar ese mismo
  * parámetro — si no, "Viajes" te bota de vuelta al tenant demo aunque
- * estuvieras viendo Transportes Innovativos. Un flota_admin/operador/contador
+ * estuvieras viendo una flota ejemplo. Un flota_admin/operador/contador
  * real nunca trae ninguno de los dos params (entra por /login sin
  * query string), así que para ellos `sufijo` siempre es vacío y esto no
  * hace nada distinto de un link normal.

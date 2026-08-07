@@ -49,7 +49,7 @@ export default function DashboardChrome({
             <Logo alto="h-[18px]" />
             {/* La insignia usa el rol REAL de la sesión, no el previsualizado.
                 Para un superadmin eso significa que el panel que se presenta
-                como "el de Transportes Innovativos" lleva SUPERADMIN escrito
+                como "el de una flota ejemplo" lleva SUPERADMIN escrito
                 junto al logo durante todo el demo — y con `?rol=encargado` se
                 contradice con la cinta que dice "estás viendo como Jefe de
                 tráfico". Se esconde solo en ese caso: para los roles reales

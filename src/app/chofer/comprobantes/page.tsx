@@ -1,6 +1,6 @@
 import { requireOperador } from '@/lib/auth/guard';
 import { mxn } from '@/lib/formato';
-import { viajeEnCurso, resumenDelViaje, misComprobantes } from '@/lib/cuadra/chofer';
+import { viajeEnCurso, resumenDelViaje, misComprobantes } from '@/lib/likida/chofer';
 import { Titulo, Pendiente, Tarjeta, ListaComprobantes, SinViajeParaComprobantes } from '../vista';
 
 export const dynamic = 'force-dynamic';

@@ -1,0 +1,17 @@
+HTTP/1.1 200 OK
+Server: nginx
+Date: Wed, 05 Aug 2026 04:29:38 GMT
+Content-Type: text/html;charset=UTF-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+Expires: 0
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+X-Powered-By: JSP/2.3
+X-Powered-By: JSP/2.3
+Set-Cookie: JSESSIONID=25Ck9wyAk1lBIZW-mxw1d7CY18BqZwgt27-uaKhY.quadrum-appserver1; path=/valoran
+X-XSS-Protection: 1; mode=block
+Pragma: no-cache
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+

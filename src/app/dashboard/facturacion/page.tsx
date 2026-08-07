@@ -1,5 +1,5 @@
 import { FileText, ShieldCheck, ShieldAlert, Receipt } from 'lucide-react';
-import { getDocumentos, getAcreditables, type DocumentoRow, type Acreditables } from '@/lib/cuadra/analytics';
+import { getDocumentos, getAcreditables, type DocumentoRow, type Acreditables } from '@/lib/likida/analytics';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { KpiTile, EstadoVacio } from '../../admin/ui/kit';
 

@@ -1,7 +1,7 @@
 import { PackageCheck, PackageX, Clock, CircleSlash } from 'lucide-react';
 import { KpiTile, EstadoVacio, StatusPill, type Estado } from '../../admin/ui/kit';
 import { fechaMx } from '../formato';
-import type { PodRow } from '@/lib/cuadra/operacion';
+import type { PodRow } from '@/lib/likida/operacion';
 
 // Bloques visuales de POD, fuera de la página para poder mirar el render.
 

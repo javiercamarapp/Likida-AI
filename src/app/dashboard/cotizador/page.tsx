@@ -1,7 +1,7 @@
 import { Calculator, CheckCircle2, Send } from 'lucide-react';
 import { exigirVerRuta } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { getCotizaciones, type CotizacionRow } from '@/lib/cuadra/comercial';
+import { getCotizaciones, type CotizacionRow } from '@/lib/likida/comercial';
 import { EstadoVacio, KpiTile, StatusPill } from '../../admin/ui/kit';
 import { mxn } from '@/lib/formato';
 

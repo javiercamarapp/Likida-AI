@@ -1,0 +1,14 @@
+HTTP/1.1 200 OK
+Content-Length: 14201
+Content-Type: text/html; charset=utf-8
+Date: Wed, 05 Aug 2026 04:29:47 GMT
+Server: Microsoft-IIS/10.0
+Cache-Control: private
+Content-Encoding: gzip
+Set-Cookie: ARRAffinity=f402ed00886c6f0108d0d45475f30c4450fd71385d2cd70a4c2038470204e750;Path=/;HttpOnly;Secure;Domain=app.facturagas.net
+Set-Cookie: ARRAffinitySameSite=f402ed00886c6f0108d0d45475f30c4450fd71385d2cd70a4c2038470204e750;Path=/;HttpOnly;SameSite=None;Secure;Domain=app.facturagas.net
+Vary: Accept-Encoding
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+X-AspNet-Version: 4.0.30319
+X-Powered-By: ASP.NET
+

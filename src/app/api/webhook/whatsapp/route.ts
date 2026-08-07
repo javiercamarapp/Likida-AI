@@ -4,7 +4,7 @@ import { after } from 'next/server';
 // el aviso de rate limit, y ese aviso desapareció con el 429 (los mensajes
 // vuelven solos). Esta ruta solo recibe; quien contesta es el processor.
 import { verifyWebhookChallenge, verifySignature } from '@/lib/meta/client';
-import { processInbound, type InboundMessage } from '@/lib/cuadra/processor';
+import { processInbound, type InboundMessage } from '@/lib/likida/processor';
 import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { flushObservabilidad } from '@/lib/observability/sentry';

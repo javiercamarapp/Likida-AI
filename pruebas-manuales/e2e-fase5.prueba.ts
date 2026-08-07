@@ -5,10 +5,10 @@ const OUT = process.env.E2E_OUT!;
 
 describe('fase 5', () => {
   it('corre', async () => {
-    const { fechaDudosa, ventanaDelViaje } = await import('@/lib/cuadra/cuadre/fecha_dudosa');
-    const { mensajePideFechaOtraVez } = await import('@/lib/cuadra/intake/pedir_fecha');
-    const { etiquetaConcepto } = await import('@/lib/cuadra/cuadre/engine');
-    const { lineaDeSaldo } = await import('@/lib/cuadra/acuse_ticket');
+    const { fechaDudosa, ventanaDelViaje } = await import('@/lib/likida/cuadre/fecha_dudosa');
+    const { mensajePideFechaOtraVez } = await import('@/lib/likida/intake/pedir_fecha');
+    const { etiquetaConcepto } = await import('@/lib/likida/cuadre/engine');
+    const { lineaDeSaldo } = await import('@/lib/likida/acuse_ticket');
 
     const ocr = JSON.parse(readFileSync(`${OUT}/ocr.json`, 'utf8')) as Array<Record<string, unknown>>;
     const ventana = ventanaDelViaje('2026-08-02', 33, new Date('2026-08-05T04:30:00Z'));

@@ -6,11 +6,11 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
-import { getViajes, type ViajeRow } from '@/lib/cuadra/analytics';
+import { getViajes, type ViajeRow } from '@/lib/likida/analytics';
 import {
   getIncidencias, getUnidades, crearIncidencia, cambiarEstadoIncidencia,
   type IncidenciaRow, type UnidadRow,
-} from '@/lib/cuadra/operacion';
+} from '@/lib/likida/operacion';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
 import { sufijoTenant } from '../sufijo';
 import { CifrasIncidencias, TablaIncidencias, FormaIncidencia, TIPOS, PRIORIDADES, ESTADOS } from './vista';

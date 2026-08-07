@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ESTATUS, etiquetaEstatus } from './estatus';
-import type { EstatusLiquidacion } from '@/types/cuadra';
+import type { EstatusLiquidacion } from '@/types/likida';
 
 describe('estatus del panel — una sola copia que cubre el dominio', () => {
   it('cubre TODOS los valores de EstatusLiquidacion (el hueco que el test gemelo vigilaba)', () => {

@@ -1,5 +1,5 @@
 import { Truck, MapPin, Wallet, Clock } from 'lucide-react';
-import { getViajes, contarViajes, getViajesSinLiquidar, type ViajeRow } from '@/lib/cuadra/analytics';
+import { getViajes, contarViajes, getViajesSinLiquidar, type ViajeRow } from '@/lib/likida/analytics';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { KpiTile, EstadoVacio } from '../../admin/ui/kit';
