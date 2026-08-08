@@ -29,7 +29,7 @@ describe('quién ve qué área', () => {
     expect(puedeVerRuta('gerente_regional', '/dashboard/despacho')).toBe(false);
   });
 
-  it('el chofer no entra a este panel: su vista es /mis-viajes con RLS propia', () => {
+  it('el chofer no entra a este panel: ya no tiene login, solo WhatsApp', () => {
     expect(areasDe('operador')).toEqual([]);
   });
 });
@@ -141,7 +141,7 @@ describe('"Ver como" solo puede QUITAR visibilidad', () => {
 
   it('un superadmin no puede previsualizarse como superadmin ni como chofer', () => {
     // 'superadmin' no está en la lista: pedirlo no cambia nada (ya lo es).
-    // 'operador' tampoco: su panel es /mis-viajes, no éste, y fingirlo aquí
+    // 'operador' tampoco: ya no tiene panel ninguno, y fingirlo aquí
     // enseñaría una vista que no existe para ese rol.
     expect(rolEfectivo('superadmin', 'superadmin')).toBe('superadmin');
     expect(rolEfectivo('superadmin', 'operador')).toBe('superadmin');
@@ -174,22 +174,17 @@ describe('a dónde se rebota a cada quien', () => {
     expect(inicioDe('desconocido')).toBe('/sin-acceso');
   });
 
-  // ── EL CHOFER TENÍA PANEL Y SE LE DECÍA QUE NO TENÍA ACCESO ─────────────
+  // ── EL CHOFER YA NO TIENE PANEL, DE VERDAD ──────────────────────────────
   //
-  // `operador` no está en `AREAS_POR_ROL` (correcto: /dashboard no es suyo),
-  // así que `inicioDe` caía al `/sin-acceso` del final. Un chofer que tecleara
-  // /dashboard por costumbre, o que llegara por un enlace viejo, leía "no
-  // tienes acceso" teniendo /chofer — y ese texto le dice que pida su alta,
-  // que es exactamente lo que no le falta.
-  it('al chofer a /chofer, que sí es suyo — no a /sin-acceso', () => {
-    expect(inicioDe('operador')).toBe('/chofer');
-    expect(inicioDe('operador')).not.toBe('/sin-acceso');
+  // Retirado el 7-ago-2026 (/chofer, /mis-viajes y su login): `operador` no
+  // está en `AREAS_POR_ROL` NI en `PANEL_PROPIO`, así que `inicioDe` cae al
+  // `/sin-acceso` del final — y esta vez sí es la verdad, no un texto que le
+  // miente a alguien que sí tenía panel.
+  it('al chofer a /sin-acceso — ya no tiene panel del que rebotarlo', () => {
+    expect(inicioDe('operador')).toBe('/sin-acceso');
   });
 
-  it('mandarlo a /chofer NO le abrió ninguna pantalla de /dashboard', () => {
-    // Es la mitad que importa del arreglo. Darle un área para que `inicioDe`
-    // supiera a dónde mandarlo le habría abierto de paso TODAS las rutas de
-    // esa área: la salida se declara aparte (`PANEL_PROPIO`) justo por esto.
+  it('operador sin panel propio no abre ninguna pantalla de /dashboard', () => {
     expect(areasDe('operador')).toEqual([]);
     expect(puedeVerArea('operador', 'operacion')).toBe(false);
     expect(puedeVerArea('operador', 'dinero')).toBe(false);

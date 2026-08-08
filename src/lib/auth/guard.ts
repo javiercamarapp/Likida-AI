@@ -37,45 +37,6 @@ export async function requireSessionTenant(
 }
 
 /**
- * Puerta del panel del chofer (/chofer y la vieja /mis-viajes) — el reverso
- * de `requireSessionTenant`.
- *
- * Un rol≠operador no va a /sin-acceso (SÍ tiene acceso, solo que a OTRO
- * panel): va a `inicioDe(rol)`, que es el suyo. Y un operador sin
- * `operador_id` ligado (alta a medias — se creó la cuenta de Auth pero no se
- * completó la liga con `operador`) sí va a /sin-acceso: no hay panel del que
- * rebotarlo, de verdad no puede entrar a nada todavía.
- *
- * ── EL DESTINO SE RECIBE, YA NO SE ESCRIBE A MANO ────────────────────────
- *
- * Antes el rebote era `/login?next=%2Fmis-viajes` fijo. El chofer llega por un
- * enlace de WhatsApp que apunta a una pantalla CONCRETA ("mira tu saldo",
- * /chofer/liquidacion), así que con la constante escrita a mano toda liga
- * profunda aterrizaba, tras iniciar sesión, en la pantalla vieja de solo
- * lectura — la ruta de vuelta es justamente lo que no se podía perder. Cada
- * página pasa la suya, igual que `requireSessionTenant(destino)` en
- * /dashboard. El default conserva el comportamiento de /mis-viajes.
- *
- * El `next` PRECISO de una liga profunda con query string lo pone el proxy
- * (src/proxy.ts), que sí ve la URL completa y ahora también gatea /chofer.
- * Esto es la segunda capa: el destino que pasa la página basta para volver a
- * la sección correcta, y las dos tienen que fallar a la vez.
- */
-export async function requireOperador(
-  destino: string = '/mis-viajes',
-): Promise<SessionTenant & { operadorId: string }> {
-  const { inicioDe } = await import('./visibilidad');
-  const s = await getSessionTenant();
-  if (!s) redirect(`/login?next=${encodeURIComponent(destino)}`);
-  // `inicioDe` en vez de '/dashboard' fijo: al contador `/dashboard` es de
-  // operación y lo rebotaría otra vez — el mismo bucle que `exigirVerRuta`
-  // ya evitaba, que aquí estaba abierto por escribir la ruta a mano.
-  if (s.rol !== 'operador') redirect(inicioDe(s.rol));
-  if (!s.operadorId) redirect('/sin-acceso');
-  return s as SessionTenant & { operadorId: string };
-}
-
-/**
  * Puerta de /admin — la consola de negocio de Likida. Ningún otro rol la ve,
  * ni flota_admin: lo que vive aquí (cuántos tenants, cuánto gasta Likida en
  * IA) es de Javier, no de un cliente. Un rol≠superadmin va a /dashboard —

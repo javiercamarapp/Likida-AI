@@ -9,9 +9,9 @@
 // qué botón se pinta y qué endpoint acepta la petición. Un rol desconocido
 // nunca puede: fail closed, no fail open.
 //
-// El chofer (`operador`) NO pasa por aquí — su vista es /mis-viajes con RLS
-// propia (docs/superpowers/plans/2026-08-02-roles-flota.md, Task 4), no el
-// panel de flota_admin/encargado/contador.
+// El chofer (`operador`) NO pasa por aquí — ya no tiene login (retirado el
+// 7-ago-2026, solo WhatsApp), y nunca fue parte del panel de
+// flota_admin/encargado/contador.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const EXPORTA = new Set(['superadmin', 'flota_admin', 'encargado', 'contador']);
