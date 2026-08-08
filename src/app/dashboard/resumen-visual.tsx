@@ -41,29 +41,21 @@ export function TituloSeccion({ children }: { children: ReactNode }) {
  *  dos. */
 export const DEGRADADO_MARCA = 'linear-gradient(135deg, var(--g3) 0%, var(--marca) 100%)';
 
-/** Foto generada en Higgsfield (`public/hero-camion.jpg`, 6336×2688, 21:9) —
- *  UNA sola imagen panorámica, con el degradado oscuro→naranja ya horneado
- *  adentro (no un div de CSS aparte): el texto se sobrepone directo sobre la
- *  foto en cualquier punto del ancho.
+/** Foto de `public/hero-camion.jpg` (2560×551, ~4.6:1) — UNA sola imagen
+ *  panorámica, con el degradado claro→naranja ya horneado adentro (no un
+ *  div de CSS aparte): el texto se sobrepone directo sobre la foto en
+ *  cualquier punto del ancho.
  *
- *  LA ALTURA DEL BANNER NO ES COSMÉTICA — es lo que decide si el camión
- *  entra completo. Con `cover`, la franja visible de la imagen mide
- *  `alto_banner / escala`, donde la escala la fija el ANCHO (imagen mucho
- *  más ancha que alta). Lo que manda son las PROPORCIONES, no los píxeles de
- *  la fuente: el camión (techo de la cabina a las llantas) ocupa ~39% del
- *  alto de la foto, y a 120px de banner la franja visible es ~24% — SIEMPRE
- *  se recortaba, sin importar qué posición se eligiera. `py-8` sube el banner
- *  a ~200px, con franja visible ~40% — ahí sí cabe el camión entero.
- *  `center 49%` centra esa franja en el punto medio real del camión (medido a
- *  mano sobre la imagen), no en el 50% geométrico de la foto completa (el
- *  camión no está centrado en la foto: hay más cielo arriba que asfalto
- *  abajo).
- *
- *  La foto se regeneró en 4K el 8-ago-2026 (Nano Banana Pro, 21:9, `4k`,
- *  usando la anterior como referencia): misma composición y mismas
- *  proporciones, 4× de resolución. Los porcentajes de arriba siguen válidos
- *  justo por eso. Antes el archivo tenía extensión `.jpg` con bytes PNG
- *  adentro; ahora es JPEG de verdad. */
+ *  Reemplazada el 8-ago-2026 con una imagen que Javier trajo él mismo
+ *  (recortada del PNG original con `sips -c`, quitando el margen blanco del
+ *  recuadro redondeado que traía — quedarse con SOLO el contenido evita el
+ *  hairline blanco que ese margen dejaba asomar en la esquina). El banner
+ *  sigue a `py-8`/`center 49%` sin tocar: con `background-size: cover` y un
+ *  contenedor bastante más ancho que alto, el ancho SIEMPRE se llena
+ *  completo (cero franjas laterales, por definición de `cover`) — lo único
+ *  que cambia con una imagen nueva es cuánto se recorta verticalmente, y
+ *  `49%` ya centraba bien al camión en la imagen anterior; verificado
+ *  mirando el render, no solo calculado. */
 export function HeroSaludo({ saludo, nombre, tagline }: { saludo: string; nombre: string; tagline: string }) {
   return (
     <div
