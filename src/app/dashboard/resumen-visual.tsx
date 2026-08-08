@@ -41,32 +41,37 @@ export function TituloSeccion({ children }: { children: ReactNode }) {
  *  dos. */
 export const DEGRADADO_MARCA = 'linear-gradient(135deg, var(--g3) 0%, var(--marca) 100%)';
 
-/** Foto de `public/hero-camion.webp` (2626×596, ~4.4:1) — con el borde
- *  IZQUIERDO desvanecido en el propio archivo (canal alfa, 20% del ancho,
- *  negro→blanco), no una máscara CSS: una máscara puesta en el contenedor
- *  se mide contra el ANCHO DEL CONTENEDOR, que cambia con la pantalla,
- *  mientras que el borde de la foto (con `contain`) siempre cae en el mismo
- *  % de SU PROPIO ancho — desvanecerlo en el archivo es lo único que
- *  garantiza que el difuminado caiga justo donde empieza la foto en
- *  cualquier resolución.
+/** Foto de `public/hero-camion.webp` (12000×596, ~20:1) — el banner entero
+ *  DEBE ser la foto, sin ningún parche de degradado a la vista (dirección
+ *  del 8-ago-2026, tras dos intentos previos): `cover` con un contenedor
+ *  ~10:1 recortaba el camión (no cabe en la franja visible, sin importar el
+ *  recorte del archivo — es geometría, no elección de encuadre) y `contain`
+ *  dejaba un rectángulo de degradado de sobra a la izquierda, que se leía
+ *  como una caja pegada junto a la foto en vez de una sola imagen.
  *
- *  `background-size: cover` (el approach original) se descartó el 8-ago-2026:
- *  el contenedor real mide ~10:1 de ancho:alto (`getBoundingClientRect()`,
- *  1148×116) contra ~4.4:1 de la foto — `cover` solo puede mostrar una franja
- *  angosta de la imagen (la cuenta no depende de qué tan alto se recorte el
- *  archivo), y el camión completo (techo a llantas) no cabe en esa franja:
- *  SIEMPRE se le corta algo, sin importar cuánto se reencuadre. `contain` +
- *  `right center` es la única combinación que garantiza el camión ENTERO
- *  visible sin importar el ancho de pantalla: la imagen se ancla a la
- *  derecha a su tamaño real (limitado por la altura del contenedor), y el
- *  borde desvanecido se funde con el degradado de marca (la segunda capa de
- *  `background`) en vez de cortar en seco — se ve una sola imagen continua,
- *  no una foto pegada junto a un rectángulo de color. */
+ *  La solución: PROLONGAR la foto misma. El camión real (2626×596, recorte
+ *  de `sips`/`sharp` sin el margen blanco del PNG original) vive intacto en
+ *  el extremo derecho de un lienzo de 12000px; lo que lo precede es una
+ *  franja de la propia neblina/cielo del lado izquierdo de la foto,
+ *  desenfocada y estirada para extender el mismo degradado atardecer — no
+ *  un color inventado, es la imagen continuándose a sí misma. El empalme
+ *  (`hero-camion-build.md` si algún día vuelve a tocarse: `sharp`,
+ *  `.blur(60)` + `.resize({fit:'fill'})` sobre una tira de 500px, con los
+ *  últimos 320px del bloque del camión desvanecidos en alfa para fundirse
+ *  encima) queda invisible a cualquier ancho de pantalla razonable.
+ *
+ *  12000px de ancho da margen para contenedores de hasta ~20:1
+ *  (`ancho_contenedor/alto_contenedor`) sin que el recorte de `cover` llegue
+ *  a tocar el bloque del camión — el contenedor real mide ~10:1
+ *  (`getBoundingClientRect()`, 1148×116), así que hay margen de sobra
+ *  incluso en monitores anchos. `right center` ancla el camión al lado
+ *  derecho: lo que se recorta con pantallas angostas es SIEMPRE la niebla
+ *  sintética de la izquierda, nunca el camión. */
 export function HeroSaludo({ saludo, nombre, tagline }: { saludo: string; nombre: string; tagline: string }) {
   return (
     <div
       className="mx-5 mt-3 rounded-2xl px-5 py-8 flex items-center gap-4 overflow-hidden shrink-0"
-      style={{ background: `url('/hero-camion.webp') right center / contain no-repeat, ${DEGRADADO_MARCA}` }}
+      style={{ background: `url('/hero-camion.webp') right center / cover no-repeat, ${DEGRADADO_MARCA}` }}
     >
       <div className="min-w-0">
         <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600, color: '#1a1207' }}>
