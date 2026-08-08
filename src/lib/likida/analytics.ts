@@ -364,6 +364,124 @@ export async function getLiquidacionesPorDia(
   });
 }
 
+/** Lunes-a-domingo ISO de una fecha simple (columna `date`, sin hora) →
+ *  "Sem NN" para el eje X — el algoritmo estándar: el jueves de la semana
+ *  decide a qué año pertenece (evita que la semana 1 de enero se lea como
+ *  la última del año anterior en fechas de fin de diciembre). */
+function semanaIso(fechaIso: string): { anio: number; semana: number } {
+  const d = new Date(`${fechaIso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const inicioAnio = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const semana = Math.ceil(((d.getTime() - inicioAnio.getTime()) / 86_400_000 + 1) / 7);
+  return { anio: d.getUTCFullYear(), semana };
+}
+
+/** Últimas `semanas` semanas ISO completas (lunes-domingo), terminando en la
+ *  semana de `hoy` — mismas etiquetas para cualquier serie semanal de esta
+ *  página (`getGastoPorSemana`/`getLiquidadoPorSemana`), para que dos
+ *  gráficas contiguas hablen del mismo eje X. */
+function ultimasSemanas(semanas: number, hoy: string): Array<{ anio: number; semana: number; etiqueta: string }> {
+  const out: Array<{ anio: number; semana: number; etiqueta: string }> = [];
+  const cursor = new Date(`${hoy}T00:00:00Z`);
+  for (let i = semanas - 1; i >= 0; i--) {
+    const d = new Date(cursor);
+    d.setUTCDate(d.getUTCDate() - i * 7);
+    const { anio, semana } = semanaIso(d.toISOString().slice(0, 10));
+    out.push({ anio, semana, etiqueta: `${anio}-S${String(semana).padStart(2, '0')}` });
+  }
+  return out;
+}
+
+export interface GastoSemanalPorCategoria {
+  categorias: string[];
+  series: Array<{ nombre: string; valores: number[] }>;
+}
+
+/**
+ * Gasto de las últimas `semanas` semanas ISO, agrupado por concepto — hasta
+ * las 3 categorías con MÁS gasto total en la ventana, no fijas a mano: el
+ * dominio real de `gasto.concepto` incluye 'viaticos' (heredado, el OCR ya
+ * no lo emite — mig. 0025) junto a 'diesel'/'caseta'/etc., así que fijar 3
+ * categorías de antemano podría enseñar una en ceros mientras una real con
+ * gasto de verdad se queda fuera. Reusa `StackedBars` (`admin/ui/graficas`),
+ * no un componente nuevo — mismo lenguaje monocromo por opacidad del resto
+ * del producto.
+ */
+export async function getGastoPorSemana(
+  tenantId: string,
+  semanas: number = 5,
+  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+): Promise<GastoSemanalPorCategoria> {
+  const bloques = ultimasSemanas(semanas, hoy);
+  const desdeGlobal = new Date(`${hoy}T00:00:00Z`);
+  desdeGlobal.setUTCDate(desdeGlobal.getUTCDate() - (semanas * 7 - 1));
+
+  const filas = await traerTodo<{ fecha: unknown; concepto: unknown; monto: unknown }>(
+    (desde, hasta) => supabaseAdmin().from('gasto').select('fecha, concepto, monto')
+      .eq('tenant_id', tenantId).gte('fecha', desdeGlobal.toISOString().slice(0, 10)).lte('fecha', hoy)
+      .order('id').range(desde, hasta),
+    'getGastoPorSemana',
+  );
+
+  const totalPorConcepto = new Map<string, number>();
+  const porSemanaConcepto = new Map<string, number>(); // clave: `${anio}-${semana}-${concepto}`
+  for (const f of filas) {
+    const { anio, semana } = semanaIso(f.fecha as string);
+    const concepto = (f.concepto as string) ?? 'otro';
+    const monto = Number(f.monto ?? 0);
+    totalPorConcepto.set(concepto, (totalPorConcepto.get(concepto) ?? 0) + monto);
+    const k = `${anio}-${semana}-${concepto}`;
+    porSemanaConcepto.set(k, (porSemanaConcepto.get(k) ?? 0) + monto);
+  }
+
+  const top3 = [...totalPorConcepto.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
+
+  return {
+    categorias: bloques.map((b) => b.etiqueta),
+    series: top3.map((concepto) => ({
+      nombre: concepto,
+      valores: bloques.map((b) => round2(porSemanaConcepto.get(`${b.anio}-${b.semana}-${concepto}`) ?? 0)),
+    })),
+  };
+}
+
+/**
+ * Total LIQUIDADO (pesos, `total_comprobado`) de las últimas `semanas`
+ * semanas ISO — a diferencia de `getLiquidacionesPorDia` (que cuenta
+ * cierres, no pesos, para /dashboard/analitica), esto suma dinero: la
+ * gráfica "Liquidado por semana" del Resumen enseña cuánto se pagó, no
+ * cuántas liquidaciones se cerraron. `created_at` es timestamptz — bucket
+ * por DÍA LOCAL (mismo patrón que `getSerieComparativa`), no por el UTC
+ * crudo, para no repetir el bug ya pagado de cierres de tarde cayendo en el
+ * día siguiente.
+ */
+export async function getLiquidadoPorSemana(
+  tenantId: string,
+  semanas: number = 5,
+  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+): Promise<Array<{ dia: string; valor: number }>> {
+  const bloques = ultimasSemanas(semanas, hoy);
+  const desdeGlobal = new Date(`${hoy}T00:00:00Z`);
+  desdeGlobal.setUTCDate(desdeGlobal.getUTCDate() - (semanas * 7 - 1));
+
+  const filas = await traerTodo<{ created_at: unknown; total_comprobado: unknown }>(
+    (desde, hasta) => supabaseAdmin().from('liquidacion').select('created_at, total_comprobado')
+      .eq('tenant_id', tenantId).gte('created_at', `${desdeGlobal.toISOString().slice(0, 10)}T00:00:00Z`)
+      .order('id').range(desde, hasta),
+    'getLiquidadoPorSemana',
+  );
+
+  const diaLocalMx = (iso: string): string => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ_MX });
+  const porSemana = new Map<string, number>();
+  for (const f of filas) {
+    const { anio, semana } = semanaIso(diaLocalMx(f.created_at as string));
+    const k = `${anio}-${semana}`;
+    porSemana.set(k, (porSemana.get(k) ?? 0) + Number(f.total_comprobado ?? 0));
+  }
+
+  return bloques.map((b) => ({ dia: b.etiqueta, valor: round2(porSemana.get(`${b.anio}-${b.semana}`) ?? 0) }));
+}
+
 /** Viajes iniciados por MES, histórico completo — a diferencia de `viajes`
  *  (que ya carga la página para `AvanceCierre`/`ViajesAtencion`), ese
  *  arreglo viene topado a 100 filas más recientes por diseño: de sobra para
