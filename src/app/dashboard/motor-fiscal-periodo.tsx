@@ -19,7 +19,11 @@ interface ResumenSimple { montoPerdido: number; montoEnRiesgo: number; montoRecu
  * flechas ‹ › propias — dirección del 8-ago-2026: antes vivían solo dentro
  * de "Tu motor fiscal" (más abajo, fijas al ejercicio); Javier pidió
  * subirlas al mismo nivel de prominencia que Gasto total/Costo por viaje Y
- * que también ciclen semanal/mensual/histórico, igual que esas dos.
+ * que también ciclen semanal/mensual/histórico, igual que esas dos. En la
+ * MISMA línea que "Diésel elegible", ocupando todo el ancho disponible
+ * (`flex-1`, no anchos fijos) — por eso este componente NO envuelve las 2
+ * tarjetas en su propio grid: `page.tsx` las mete junto con Diésel en un
+ * solo `flex flex-wrap`, y cada una crece a lo que le toque.
  *
  * `series` ya trae los 3 `ResumenPerdidas` PRE-CALCULADOS por el servidor
  * (`page.tsx`) — este componente solo elige cuál mostrar. `resumirPerdidas`
@@ -38,32 +42,33 @@ export function MotorFiscalPeriodo({ series }: { series: Record<Modo, ResumenSim
   const r = series[modo];
 
   return (
-    <div>
-      <div className="flex items-center justify-end gap-0.5 mb-1.5">
-        <button type="button" aria-label="Periodo más corto" disabled={modoIdx <= 0}
-          onClick={() => setModoIdx((i) => Math.max(i - 1, 0))} className={BOTON} style={{ color: 'var(--muted)' }}>
-          <ChevronLeft width={14} height={14} strokeWidth={2} />
-        </button>
-        <span className="text-[11px] font-medium px-1" style={{ color: 'var(--muted)' }}>{ETIQUETA_MODO[modo]}</span>
-        <button type="button" aria-label="Periodo más largo" disabled={modoIdx >= MODOS.length - 1}
-          onClick={() => setModoIdx((i) => Math.min(i + 1, MODOS.length - 1))} className={BOTON} style={{ color: 'var(--muted)' }}>
-          <ChevronRight width={14} height={14} strokeWidth={2} />
-        </button>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        <div className="rounded-2xl p-4" style={{ background: 'color-mix(in srgb, var(--color-bad) 10%, transparent)' }}>
+    <>
+      <div className="rounded-2xl p-4 flex-1 min-w-[200px]" style={{ background: 'color-mix(in srgb, var(--color-bad) 10%, transparent)' }}>
+        <div className="flex items-center justify-between gap-2">
           <div className="text-xs font-medium" style={{ color: 'var(--muted)' }}>En riesgo / perdido</div>
-          <div className="text-xl font-semibold tracking-tight tabular mt-1" style={{ color: 'var(--color-bad)' }}>
-            {mxn(r.montoEnRiesgo + r.montoPerdido)}
+          <div className="flex items-center gap-0 shrink-0">
+            <button type="button" aria-label="Periodo más corto" disabled={modoIdx <= 0}
+              onClick={() => setModoIdx((i) => Math.max(i - 1, 0))} className={BOTON} style={{ color: 'var(--muted)' }}>
+              <ChevronLeft width={12} height={12} strokeWidth={2} />
+            </button>
+            <button type="button" aria-label="Periodo más largo" disabled={modoIdx >= MODOS.length - 1}
+              onClick={() => setModoIdx((i) => Math.min(i + 1, MODOS.length - 1))} className={BOTON} style={{ color: 'var(--muted)' }}>
+              <ChevronRight width={12} height={12} strokeWidth={2} />
+            </button>
           </div>
         </div>
-        <div className="rounded-2xl p-4" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
-          <div className="text-xs font-medium" style={{ color: 'var(--muted)' }}>Recuperable pidiendo factura</div>
-          <div className="text-xl font-semibold tracking-tight tabular mt-1" style={{ color: 'var(--color-ok)' }}>
-            {mxn(r.montoRecuperable)}
-          </div>
+        <div className="text-xl font-semibold tracking-tight tabular mt-1" style={{ color: 'var(--color-bad)' }}>
+          {mxn(r.montoEnRiesgo + r.montoPerdido)}
         </div>
+        <div className="text-[10px] mt-0.5" style={{ color: 'var(--muted)' }}>{ETIQUETA_MODO[modo]}</div>
       </div>
-    </div>
+      <div className="rounded-2xl p-4 flex-1 min-w-[200px]" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
+        <div className="text-xs font-medium" style={{ color: 'var(--muted)' }}>Recuperable pidiendo factura</div>
+        <div className="text-xl font-semibold tracking-tight tabular mt-1" style={{ color: 'var(--color-ok)' }}>
+          {mxn(r.montoRecuperable)}
+        </div>
+        <div className="text-[10px] mt-0.5" style={{ color: 'var(--muted)' }}>{ETIQUETA_MODO[modo]}</div>
+      </div>
+    </>
   );
 }

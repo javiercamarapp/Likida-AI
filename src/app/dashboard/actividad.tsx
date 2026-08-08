@@ -1,16 +1,6 @@
-'use client';
-
-import { useState } from 'react';
 import { BarChartSimple, AreaChartSimple } from '../admin/charts';
-import { TituloSeccion } from './resumen-visual';
 
-type Modo = 'semana' | 'mes' | 'historico';
-
-const OPCIONES: Array<{ id: Modo; etiqueta: string }> = [
-  { id: 'semana', etiqueta: 'Semanal' },
-  { id: 'mes', etiqueta: 'Mensual' },
-  { id: 'historico', etiqueta: 'Histórico' },
-];
+export type ModoPeriodo = 'semanal' | 'mensual' | 'historico';
 
 /**
  * Últimos `dias` días como buckets — comparación de STRINGS, no de objetos
@@ -41,47 +31,36 @@ export function bucketsPorDia(viajes: Array<{ fechaInicio: string | null }>, dia
  * Reemplaza a `ActividadSemanal` — un solo recuadro con tres vistas en vez
  * de tres widgets sueltos (el Calendario de al lado se quitó, dirección del
  * 8-ago-2026: este recuadro ocupa ese espacio). Semana/Mes leen del MISMO
- * `viajes` que ya carga `page.tsx` para `AvanceCierre` (capado a 100 filas
- * recientes — de sobra para 7/30 días). Histórico NO reusa ese arreglo: un
- * tope de 100 se leería como "todo el histórico" en una flota que ya pasó
- * esa cifra, así que viaja aparte (`porMes`, `getViajesPorMes` — agregado
- * real sin tope) y se pinta como área/línea, el lenguaje visual de una
- * serie larga (estilo gráfica de acciones) en vez de barras.
+ * `viajes` que ya carga `page.tsx` (capado a 100 filas recientes — de sobra
+ * para 7/30 días). Histórico NO reusa ese arreglo: un tope de 100 se
+ * leería como "todo el histórico" en una flota que ya pasó esa cifra, así
+ * que viaja aparte (`porMes`, `getViajesPorMes` — agregado real sin tope)
+ * y se pinta como área/línea, el lenguaje visual de una serie larga
+ * (estilo gráfica de acciones) en vez de barras.
+ *
+ * `modo` llega CONTROLADO desde `panel-periodo.tsx` (8-ago-2026, más
+ * tarde) — el selector Semanal/Mensual/Histórico se unificó para mover
+ * también Viajes/Gasto por categoría/Liquidado/Top rutas, así que este
+ * componente ya no trae su propio pill ni su propio estado.
  */
 export function Actividad({
-  viajes, porMes,
+  viajes, porMes, modo,
 }: {
   viajes: Array<{ fechaInicio: string | null }>;
   porMes: Array<{ dia: string; valor: number }>;
+  modo: ModoPeriodo;
 }) {
-  const [modo, setModo] = useState<Modo>('semana');
-
-  const datosBarras = modo === 'semana' ? bucketsPorDia(viajes, 7) : bucketsPorDia(viajes, 30);
+  const datosBarras = modo === 'semanal' ? bucketsPorDia(viajes, 7) : bucketsPorDia(viajes, 30);
   const sinDatos = modo === 'historico' ? porMes.every((d) => d.valor === 0) : datosBarras.every((d) => d.valor === 0);
 
-  return (
-    <div>
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <TituloSeccion>Actividad</TituloSeccion>
-        <div className="inline-flex items-center gap-1 p-0.5 rounded-full shrink-0" style={{ background: 'var(--canvas)' }}>
-          {OPCIONES.map((o) => (
-            <button key={o.id} type="button" onClick={() => setModo(o.id)}
-              className="text-xs font-medium px-2.5 py-1 rounded-full transition-colors"
-              style={modo === o.id ? { background: 'var(--marca)', color: 'white' } : { color: 'var(--muted)' }}>
-              {o.etiqueta}
-            </button>
-          ))}
-        </div>
-      </div>
-      {sinDatos ? (
-        <p className="text-sm" style={{ color: 'var(--muted)' }}>
-          {modo === 'historico' ? 'Aún no hay viajes registrados.' : 'Sin viajes iniciados en este periodo.'}
-        </p>
-      ) : modo === 'historico' ? (
-        <AreaChartSimple datos={porMes} etiquetaValor={(v) => `${v} viaje${v === 1 ? '' : 's'}`} />
-      ) : (
-        <BarChartSimple datos={datosBarras} etiquetaValor={(v) => `${v} viaje${v === 1 ? '' : 's'}`} alto={192} />
-      )}
-    </div>
-  );
+  if (sinDatos) {
+    return (
+      <p className="text-sm" style={{ color: 'var(--muted)' }}>
+        {modo === 'historico' ? 'Aún no hay viajes registrados.' : 'Sin viajes iniciados en este periodo.'}
+      </p>
+    );
+  }
+  return modo === 'historico'
+    ? <AreaChartSimple datos={porMes} etiquetaValor={(v) => `${v} viaje${v === 1 ? '' : 's'}`} />
+    : <BarChartSimple datos={datosBarras} etiquetaValor={(v) => `${v} viaje${v === 1 ? '' : 's'}`} alto={192} />;
 }
