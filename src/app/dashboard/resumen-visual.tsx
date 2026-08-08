@@ -41,32 +41,38 @@ export function TituloSeccion({ children }: { children: ReactNode }) {
  *  dos. */
 export const DEGRADADO_MARCA = 'linear-gradient(135deg, var(--g3) 0%, var(--marca) 100%)';
 
-/** Foto de `public/hero-camion.jpg` (2560×551, ~4.6:1) — UNA sola imagen
- *  panorámica, con el degradado claro→naranja ya horneado adentro (no un
- *  div de CSS aparte): el texto se sobrepone directo sobre la foto en
- *  cualquier punto del ancho.
+/** Foto de `public/hero-camion.webp` (2626×596, ~4.4:1) — con el borde
+ *  IZQUIERDO desvanecido en el propio archivo (canal alfa, 20% del ancho,
+ *  negro→blanco), no una máscara CSS: una máscara puesta en el contenedor
+ *  se mide contra el ANCHO DEL CONTENEDOR, que cambia con la pantalla,
+ *  mientras que el borde de la foto (con `contain`) siempre cae en el mismo
+ *  % de SU PROPIO ancho — desvanecerlo en el archivo es lo único que
+ *  garantiza que el difuminado caiga justo donde empieza la foto en
+ *  cualquier resolución.
  *
- *  Reemplazada el 8-ago-2026 con una imagen que Javier trajo él mismo
- *  (recortada del PNG original con `sips -c`, quitando el margen blanco del
- *  recuadro redondeado que traía — quedarse con SOLO el contenido evita el
- *  hairline blanco que ese margen dejaba asomar en la esquina). El banner
- *  sigue a `py-8`/`center 49%` sin tocar: con `background-size: cover` y un
- *  contenedor bastante más ancho que alto, el ancho SIEMPRE se llena
- *  completo (cero franjas laterales, por definición de `cover`) — lo único
- *  que cambia con una imagen nueva es cuánto se recorta verticalmente, y
- *  `49%` ya centraba bien al camión en la imagen anterior; verificado
- *  mirando el render, no solo calculado. */
+ *  `background-size: cover` (el approach original) se descartó el 8-ago-2026:
+ *  el contenedor real mide ~10:1 de ancho:alto (`getBoundingClientRect()`,
+ *  1148×116) contra ~4.4:1 de la foto — `cover` solo puede mostrar una franja
+ *  angosta de la imagen (la cuenta no depende de qué tan alto se recorte el
+ *  archivo), y el camión completo (techo a llantas) no cabe en esa franja:
+ *  SIEMPRE se le corta algo, sin importar cuánto se reencuadre. `contain` +
+ *  `right center` es la única combinación que garantiza el camión ENTERO
+ *  visible sin importar el ancho de pantalla: la imagen se ancla a la
+ *  derecha a su tamaño real (limitado por la altura del contenedor), y el
+ *  borde desvanecido se funde con el degradado de marca (la segunda capa de
+ *  `background`) en vez de cortar en seco — se ve una sola imagen continua,
+ *  no una foto pegada junto a un rectángulo de color. */
 export function HeroSaludo({ saludo, nombre, tagline }: { saludo: string; nombre: string; tagline: string }) {
   return (
     <div
-      className="mx-5 mt-3 rounded-2xl px-5 py-8 text-white flex items-center gap-4 overflow-hidden shrink-0"
-      style={{ background: `url('/hero-camion.jpg') center 49% / cover no-repeat, ${DEGRADADO_MARCA}` }}
+      className="mx-5 mt-3 rounded-2xl px-5 py-8 flex items-center gap-4 overflow-hidden shrink-0"
+      style={{ background: `url('/hero-camion.webp') right center / contain no-repeat, ${DEGRADADO_MARCA}` }}
     >
       <div className="min-w-0">
-        <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600 }}>
+        <h1 className="text-xl tracking-tight truncate" style={{ fontFamily: 'var(--font-display), var(--font-sans)', fontWeight: 600, color: '#1a1207' }}>
           {saludo}, {nombre} 👋
         </h1>
-        <p className="text-sm mt-1 opacity-90 truncate">{tagline}</p>
+        <p className="text-sm mt-1 truncate" style={{ color: '#1a1207', opacity: 0.85 }}>{tagline}</p>
       </div>
     </div>
   );
