@@ -124,28 +124,31 @@ describe('dashboard/page.tsx: el call site de estadoPanel', () => {
 //
 // "Estímulos acreditables" y el bloque "Liquidaciones" (KPIs) que probaban
 // esto se retiraron el 7-ago-2026 — sus números se redistribuyeron en las
-// tarjetas del degradado ("Gasto total", "Total viajes", "Liquidado"). El
-// 8-ago-2026 el Resumen del dueño perdió el ÚLTIMO consumidor del filtro
-// operativo compartido ("Liquidado por semana", nivel contador, se quitó
-// junto con "Avance de cierre", "Actividad", "Viajes" y "Top rutas" —
-// detalle operativo/contable, no la pregunta del dueño): ya no queda
-// `GlobalFilter`/`rango`/`ventanaDias` en esta página en absoluto. Las 4
-// tarjetas de KPI ciclan su PROPIA vista con flechas ‹ › (`KpiPeriodo` —
-// semanal/mensual/histórico), y la etiqueta que declara la ventana vive en
-// `kpi-periodo.tsx` (`ETIQUETA_MODO`), no en `page.tsx`. El motor fiscal
-// sigue usando SU PROPIO periodo (`periodoFiscal.etiqueta`, ejercicio
-// fiscal). La garantía que importa —que un rótulo "del periodo" no
-// mienta— sigue viva aquí, sobre el nuevo mecanismo.
+// tarjetas del degradado. El 8-ago-2026 el Resumen del dueño perdió el
+// ÚLTIMO consumidor del filtro operativo compartido: ya no queda
+// `GlobalFilter`/`rango`/`ventanaDias` en la página. Ese mismo día, más
+// tarde, "Total viajes" y "Liquidado" salieron de las tarjetas de arriba —
+// su número ya se ve como GRÁFICA más abajo (la dona "Viajes", "Liquidado
+// por semana"), y un KPI plano al lado de la misma cifra en gráfica es la
+// cifra dos veces. "Gasto total" y "Costo por viaje" siguen ciclando su
+// PROPIA vista con flechas ‹ › (`KpiPeriodo` — semanal/mensual/histórico,
+// etiqueta en `kpi-periodo.tsx`); "Ahorro generado" es nuevo, estático (el
+// ejercicio fiscal en curso, no una serie que pueda paginar). El motor
+// fiscal sigue usando SU PROPIO periodo (`periodoFiscal.etiqueta`). La
+// garantía que importa —que un rótulo "del periodo" no mienta— sigue viva
+// aquí, sobre el nuevo mecanismo.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('dashboard/page.tsx: las secciones filtradas dicen su periodo', () => {
   const PAGINA = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
   const KPI_PERIODO = readFileSync(fileURLToPath(new URL('./kpi-periodo.tsx', import.meta.url)), 'utf8');
 
-  it('las 4 tarjetas del degradado pasan por KpiPeriodo, con nombre propio', () => {
+  it('"Gasto total" y "Costo por viaje" pasan por KpiPeriodo, con nombre propio', () => {
     expect(PAGINA).toMatch(/nombre="Gasto total"/);
-    expect(PAGINA).toMatch(/nombre="Total viajes"/);
     expect(PAGINA).toMatch(/nombre="Costo por viaje"/);
-    expect(PAGINA).toMatch(/nombre="Liquidado"/);
+  });
+
+  it('"Ahorro generado" declara SU periodo (el ejercicio fiscal), no un rango mudo', () => {
+    expect(PAGINA).toMatch(/etiqueta=\{`Ahorro generado — \$\{periodoFiscal\.etiqueta\}`\}/);
   });
 
   it('KpiPeriodo declara la ventana de cada vista — nunca un número mudo', () => {
