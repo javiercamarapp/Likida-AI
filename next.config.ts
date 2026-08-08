@@ -130,6 +130,20 @@ const nextConfig: NextConfig = {
       './design-system/**', './normas/**',
     ],
   },
+  // `next dev` compila `instrumentation.ts` también para el runtime edge, aunque
+  // `register()` ya se sale con `if (process.env.NEXT_RUNTIME !== 'nodejs') return`
+  // antes de tocar nada — el análisis estático de webpack resuelve los `import()`
+  // igual, y truena en "Module not found: crypto" porque esa cadena (startup.ts →
+  // repo.ts → meta/client.ts) sí usa `crypto` de Node. Bug abierto de Next.js
+  // (vercel/next.js#86479), solo en dev, nunca en producción. `crypto` nunca se
+  // ejecuta de verdad en edge —el guard ya lo impide—, así que basta con que el
+  // bundle de edge lo trate como ausente para que compile.
+  webpack: (config, { nextRuntime }) => {
+    if (nextRuntime === 'edge') {
+      config.resolve.fallback = { ...config.resolve.fallback, crypto: false };
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

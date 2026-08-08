@@ -2,20 +2,33 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
-import { LayoutGrid, ChevronDown } from 'lucide-react';
-import { type Item, INICIO, NEGOCIO, OPERACION, FISCAL, DOCUMENTOS_DINERO, GESTION } from './rutas';
+import { LayoutGrid } from 'lucide-react';
+import { type Item, SIDEBAR_PRINCIPAL, FISCAL } from './rutas';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { DEGRADADO_MARCA } from './resumen-visual';
 
-const ITEM = 'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] transition-colors';
-const ICONO = { width: 16, height: 16, strokeWidth: 1.75, color: 'var(--muted)' } as const;
+const ITEM = 'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors';
 
-/** Mismo patrón que admin/sidebar-nav.tsx: una sección plegable, abierta
- *  de entrada si la página activa vive adentro. */
-function Seccion({ titulo, items, defaultAbierto = false, sufijo }: { titulo: string; items: Item[]; defaultAbierto?: boolean; sufijo: string }) {
-  const pathname = usePathname();
-  const [abierto, setAbierto] = useState(() => defaultAbierto || items.some((it) => it.href === pathname));
+/** Mismo degradado que los KPI de Resumen (`DEGRADADO_MARCA`, una sola
+ *  fuente) — el mockup usa ese mismo tono para el item activo del sidebar,
+ *  no el naranja plano. `hover` solo aplica al item INACTIVO: el activo no
+ *  necesita indicar que es clickeable, ya dice dónde estás. */
+function claseItem(activo: boolean): string {
+  return activo
+    ? `${ITEM} font-medium`
+    : `${ITEM} hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]`;
+}
+function estiloItem(activo: boolean) {
+  return activo ? { background: DEGRADADO_MARCA, color: 'var(--marca-fg)' } : undefined;
+}
+function estiloIcono(activo: boolean) {
+  return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--marca-fg)' : 'var(--muted)' } as const;
+}
 
+/** Mismo patrón que admin/sidebar-nav.tsx, sin el plegado: la dirección
+ *  visual del 7-ago quiere el sidebar siempre abierto, como una sola lista —
+ *  el título de sección se queda como separador de lectura, no como botón. */
+function Seccion({ titulo, items, sufijo, pathname }: { titulo: string; items: Item[]; sufijo: string; pathname: string }) {
   // Una sección que quedó sin un solo item para este rol no se pinta: un
   // encabezado "Documentos & Dinero" con nada debajo le anuncia al encargado
   // justo lo que no puede ver.
@@ -23,20 +36,17 @@ function Seccion({ titulo, items, defaultAbierto = false, sufijo }: { titulo: st
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => setAbierto((a) => !a)}
-        className="w-full flex items-center justify-between gap-2 px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide hover:opacity-70 transition-opacity"
-        style={{ color: 'var(--muted)' }}
-      >
+      <div className="px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
         {titulo}
-        <ChevronDown width={12} height={12} strokeWidth={2} className="transition-transform" style={{ transform: abierto ? 'rotate(180deg)' : 'none' }} />
-      </button>
-      {abierto && items.map(({ href, nombre, Icono }) => (
-        <Link key={href} href={`${href}${sufijo}`} className={ITEM}>
-          <Icono {...ICONO} /> {nombre}
-        </Link>
-      ))}
+      </div>
+      {items.map(({ href, nombre, Icono }) => {
+        const activo = pathname === href;
+        return (
+          <Link key={href} href={`${href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)}>
+            <Icono {...estiloIcono(activo)} /> {nombre}
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -54,6 +64,7 @@ function Seccion({ titulo, items, defaultAbierto = false, sufijo }: { titulo: st
  * hace nada distinto de un link normal.
  */
 export default function SidebarNav({ rol }: { rol: string }) {
+  const pathname = usePathname();
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
   const vista = sp.get('vista');
@@ -93,23 +104,32 @@ export default function SidebarNav({ rol }: { rol: string }) {
   // rebota, y el usuario cree que la app está rota.
   const visibles = (items: Item[]) => items.filter((it) => puedeVerRuta(rolMenu, it.href));
 
+  const resumenActivo = pathname === '/dashboard';
+
   return (
     <>
       {puedeVerRuta(rolMenu, '/dashboard') && (
         <div>
-          <Link href={`/dashboard${sufijo}`} className={`${ITEM} font-medium`}>
-            <LayoutGrid {...ICONO} /> Resumen
+          <Link href={`/dashboard${sufijo}`} className={claseItem(resumenActivo)} style={estiloItem(resumenActivo)}>
+            <LayoutGrid {...estiloIcono(resumenActivo)} /> Resumen
           </Link>
         </div>
       )}
-      <Seccion titulo="Inicio" items={visibles(INICIO)} defaultAbierto sufijo={sufijo} />
-      {/* Abierta de entrada: para el contador es TODO su panel, y una sección
-          plegada de entrada le esconde su propio trabajo detrás de un clic. */}
-      <Seccion titulo="Fiscal" items={visibles(FISCAL)} defaultAbierto sufijo={sufijo} />
-      <Seccion titulo="Negocio" items={visibles(NEGOCIO)} sufijo={sufijo} />
-      <Seccion titulo="Operación" items={visibles(OPERACION)} sufijo={sufijo} />
-      <Seccion titulo="Documentos & Dinero" items={visibles(DOCUMENTOS_DINERO)} sufijo={sufijo} />
-      <Seccion titulo="Gestión" items={visibles(GESTION)} sufijo={sufijo} />
+      {/* Plano, sin encabezado — dirección visual del 7-ago-2026, los 9 que
+          importan todos los días. */}
+      {visibles(SIDEBAR_PRINCIPAL).map(({ href, nombre, Icono }) => {
+        const activo = pathname === href;
+        return (
+          <Link key={href} href={`${href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)}>
+            <Icono {...estiloIcono(activo)} /> {nombre}
+          </Link>
+        );
+      })}
+      {/* El panel del contador SÍ necesita su sección propia: es su única
+          casa, y no aparece en SIDEBAR_PRINCIPAL (esa lista es la del
+          dueño). Para un rol sin área `dinero` esto sale vacío y no se
+          pinta (ver `Seccion`). */}
+      <Seccion titulo="Fiscal" items={visibles(FISCAL)} sufijo={sufijo} pathname={pathname} />
     </>
   );
 }

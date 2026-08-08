@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { mxn, usd, litros, fechaMx, fechaHoraMx, round2 } from './formato';
+import { mxn, usd, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -51,6 +51,38 @@ describe('el formato del dinero', () => {
     // 31-jul 19:30 en México (CST, UTC−6) = 01:30 UTC del 1-ago.
     expect(fechaMx('2026-08-01T01:30:00.000Z')).toContain('31');
     expect(fechaMx('2026-08-01T01:30:00.000Z')).toContain('jul');
+  });
+
+  it('fechaCorta: mismo día que fechaMx, sin año — para etiquetas angostas', () => {
+    expect(fechaCorta('2026-08-01T01:30:00.000Z')).toContain('31');
+    expect(fechaCorta('2026-08-01T01:30:00.000Z')).toContain('jul');
+    expect(fechaCorta('2026-08-01T01:30:00.000Z')).not.toMatch(/2026/);
+  });
+
+  it('fechaCorta: fecha simple (sin hora) no se corre un día', () => {
+    // Columna `date`, sin zona — se formatea en UTC para no moverse.
+    expect(fechaCorta('2026-08-04')).toContain('04');
+    expect(fechaCorta('2026-08-04')).toContain('ago');
+  });
+
+  it('fechaCorta: ausente o ilegible da "—", no "Invalid Date"', () => {
+    expect(fechaCorta(null)).toBe('—');
+    expect(fechaCorta('no es una fecha')).toBe('—');
+  });
+});
+
+describe('pctCambio', () => {
+  it('sube 20% cuando el actual es 120 contra una base de 100', () => {
+    expect(pctCambio(120, 100)).toBe(20);
+  });
+
+  it('baja cuando el actual es menor que la base', () => {
+    expect(pctCambio(80, 100)).toBe(-20);
+  });
+
+  it('sin base (null o cero) no hay "% de cambio" que calcular honesto', () => {
+    expect(pctCambio(500, null)).toBeNull();
+    expect(pctCambio(500, 0)).toBeNull();
   });
 });
 

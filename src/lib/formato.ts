@@ -54,6 +54,23 @@ export function round2(n: number): number {
   return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * 100) / 100;
 }
 
+/** % de cambio de `actual` contra `base`, o `null` si no se puede calcular
+ *  honesto: sin base (0 o desconocida) un "+100%" o un "$0 → $500" como
+ *  "∞%" no dicen nada real — es la MISMA regla que `costoPorViaje` (en
+ *  `analytics.ts`) aplica para no dividir entre cero.
+ *
+ *  Vive aquí, no en `analytics.ts` (de donde se movió el 8-ago-2026): es
+ *  pura, sin consulta a la base, y las tarjetas de KPI con flechas de
+ *  periodo (`kpi-periodo.tsx`) la necesitan desde un Client Component.
+ *  `analytics.ts` importa `supabaseAdmin` — "NUNCA importar en código de
+ *  cliente" es el comentario textual en ese archivo — así que cualquier
+ *  valor en tiempo de ejecución que se importe de ahí arrastra esa cadena
+ *  al bundle del navegador aunque la función en sí no la use. */
+export function pctCambio(actual: number, base: number | null): number | null {
+  if (base === null || base === 0) return null;
+  return round2(((actual - base) / base) * 100);
+}
+
 /** Pesos mexicanos como los espera un contador: `$1,234.56`. */
 export function mxn(n: number): string {
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
@@ -131,6 +148,23 @@ export function fechaMx(iso?: string | null): string {
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('es-MX', {
     day: '2-digit', month: 'short', year: 'numeric',
+    timeZone: soloFecha ? 'UTC' : TZ_MX,
+  });
+}
+
+/**
+ * Fecha corta, SIN año: `27 jul`. Misma lógica de zona que `fechaMx` (fecha
+ * simple → UTC, para que no se corra un día) — solo cambia el formato de
+ * salida, para etiquetas de espacio angosto como el rango de una tarjeta de
+ * KPI ("27 jul – 02 ago") donde el año ya es obvio por contexto.
+ */
+export function fechaCorta(iso?: string | null): string {
+  if (!iso) return '—';
+  const soloFecha = /^\d{4}-\d{2}-\d{2}$/.test(iso.trim());
+  const d = soloFecha ? new Date(`${iso.trim()}T00:00:00Z`) : new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-MX', {
+    day: '2-digit', month: 'short',
     timeZone: soloFecha ? 'UTC' : TZ_MX,
   });
 }

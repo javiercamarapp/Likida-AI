@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // REVISIÓN FINAL de la rama de auth — las cookies del refresh NO se pierden en
@@ -68,79 +68,20 @@ describe('proxy · gate de /dashboard sin sesión', () => {
     expect(res.headers.get('Cache-Control')).toContain('no-store');
   });
 
-  it('/mis-viajes (panel del chofer) pasa por el mismo gate que /dashboard', async () => {
-    const res = await pedir('/mis-viajes');
-    const destino = new URL(res.headers.get('location')!);
-    expect(destino.pathname).toBe('/login');
-    expect(destino.searchParams.get('next')).toBe('/mis-viajes');
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// /chofer NO ESTABA EN ESTE ARCHIVO.
-//
-// El panel móvil del chofer se construyó con su puerta en el layout
-// (`requireOperador`) y nada más: la promesa de este archivo —dos capas que
-// tienen que fallar a la vez— no se cumplía para toda una sección. Y es la
-// capa que ve la URL COMPLETA, así que era también la única que podía
-// devolver al chofer a la pantalla exacta del enlace de WhatsApp que abrió.
-// ═══════════════════════════════════════════════════════════════════════════
-describe('proxy · gate de /chofer sin sesión', () => {
-  beforeEach(() => { usuario = null; });
-
-  const RUTAS = [
-    '/chofer',
-    '/chofer/liquidacion',
-    '/chofer/comprobantes',
-    '/chofer/viajes',
-  ];
-
-  it.each(RUTAS)('%s sin sesión NO se sirve: rebota a /login', async (ruta) => {
-    const res = await pedir(ruta);
-    expect(res.status, `${ruta} se sirvió sin sesión`).toBe(307);
-    expect(new URL(res.headers.get('location')!).pathname).toBe('/login');
-  });
-
-  it.each(RUTAS)('%s conserva su ruta de vuelta EXACTA en el next', async (ruta) => {
-    const res = await pedir(ruta);
-    expect(new URL(res.headers.get('location')!).searchParams.get('next')).toBe(ruta);
-  });
-
-  it('una liga profunda con query string tampoco pierde el destino', async () => {
-    // Es el caso real: el enlace llega por WhatsApp y apunta a una pantalla
-    // concreta. La página solo conoce su propia ruta; esta capa ve la URL.
-    const req = new NextRequest('https://likidaai.vercel.app/chofer/viajes?ver=todos');
-    const res = await proxy(req);
-    expect(new URL(res.headers.get('location')!).searchParams.get('next')).toBe('/chofer/viajes');
-  });
-
-  it('con sesión pasa, y el panel del chofer no se cachea', async () => {
-    // Un panel con montos y nombres servido desde caché compartida sería el
-    // saldo de un chofer en la pantalla de otro.
-    usuario = { id: 'u-1' };
-    const res = await pedir('/chofer/liquidacion');
-    expect(res.headers.get('location')).toBeNull();
-    expect(res.headers.get('Cache-Control')).toContain('no-store');
-  });
-
-  it('el redirect de /chofer también lleva cabeceras de seguridad', async () => {
-    const res = await pedir('/chofer');
-    expect(res.headers.get('X-Frame-Options')).toBe('DENY');
-    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
-  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA LISTA NO SE PUEDE QUEDAR ATRÁS OTRA VEZ.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('toda sección con puerta propia está nombrada en el matcher', () => {
-  it('las cuatro secciones del producto exigen sesión en esta capa', () => {
-    // Si mañana nace /taller o /cliente con su `requireX` en el layout, esta
-    // prueba no lo va a atrapar sola — pero la lista es UN string y está a la
-    // vista, que es lo que /chofer no tuvo: su ausencia solo constaba en un
-    // comentario dentro de su propio layout.
+  it('las dos secciones del producto exigen sesión en esta capa', () => {
+    // /chofer y /mis-viajes salieron el 7-ago-2026 (el chofer ya no tiene
+    // cuenta, solo WhatsApp). Si mañana nace /taller o /cliente con su
+    // `requireX` en el layout, esta prueba no lo va a atrapar sola — pero la
+    // lista es UN string y está a la vista, que es lo que /chofer no tuvo al
+    // principio: su ausencia solo constaba en un comentario en su layout.
     expect([...RUTAS_CON_SESION].sort()).toEqual(
-      ['/admin', '/chofer', '/dashboard', '/mis-viajes'].sort(),
+      ['/admin', '/dashboard'].sort(),
     );
   });
 
@@ -167,7 +108,7 @@ describe('proxy · Content-Security-Policy', () => {
     expect(csp).toBeTruthy();
     expect(csp).toContain("default-src 'self'");
     // Las fotos de comprobante y el avatar son URLs de Storage que el
-    // navegador pide directo (chofer.ts:424, admin/mi-perfil/page.tsx:52).
+    // navegador pide directo (admin/mi-perfil/page.tsx:52).
     expect(csp).toContain('https://*.supabase.co');
     // Los dos `fetch(` de componentes cliente son a rutas propias; Sentry,
     // WhatsApp y Stripe son server-only — nada más necesita connect-src.
@@ -187,5 +128,49 @@ describe('proxy · Content-Security-Policy', () => {
     usuario = { id: 'u-1' };
     const res = await pedir('/dashboard');
     expect(res.headers.get('Content-Security-Policy')).toBeTruthy();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL 8-AGO-2026 SE PROBÓ QUE LA CSP DEJABA "AÚN CARGANDO" PARA SIEMPRE.
+//
+// `next dev` (Fast Refresh) parchea módulos con `eval()` al arrancar el
+// bundle del navegador — sin `unsafe-eval` esa corrida truena ANTES de que
+// React hidrate, y el panel se queda pegado en el loading skeleton para
+// siempre (se reprodujo igual tras reiniciar el servidor de dev entero, así
+// que no era un HMR viejo: era la CSP). El SSR seguía sirviendo el HTML real
+// —confirmado con un `fetch()` directo, 1-2s, con los datos reales adentro—
+// pero el navegador nunca lo mostraba.
+//
+// Lo que se prueba aquí: `unsafe-eval` SOLO aparece en desarrollo. Un
+// `unsafe-eval` colado en producción sería la auditoría 10 otra vez, al
+// revés.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('proxy · CSP — unsafe-eval solo en desarrollo', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('en development, script-src permite unsafe-eval (si no, Fast Refresh nunca hidrata)', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.resetModules();
+    const { proxy: proxyDev } = await import('./proxy');
+    const req = new NextRequest('https://likidaai.vercel.app/login');
+    req.cookies.set('sb-proyecto-auth-token', 'token-muerto');
+    const res = await proxyDev(req);
+    expect(res.headers.get('Content-Security-Policy')).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'");
+  });
+
+  it('en producción, unsafe-eval NUNCA aparece — relajarlo ahí sería la auditoría 10 otra vez', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.resetModules();
+    const { proxy: proxyProd } = await import('./proxy');
+    const req = new NextRequest('https://likidaai.vercel.app/login');
+    req.cookies.set('sb-proyecto-auth-token', 'token-muerto');
+    const res = await proxyProd(req);
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).toContain("script-src 'self' 'unsafe-inline'");
+    expect(csp).not.toContain('unsafe-eval');
   });
 });

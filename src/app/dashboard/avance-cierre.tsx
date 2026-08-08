@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { ViajeRow } from '@/lib/likida/analytics';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -42,8 +42,17 @@ const PERIODOS: Array<{ id: Periodo; label: string; dias: number | null }> = [
  * HTML servido y el primer render del cliente podrían meter un viaje en
  * periodos distintos y React reportaría desajuste de hidratación.
  */
-export default function AvanceCierre({ viajes, ahoraMs }: { viajes: ViajeRow[]; ahoraMs: number }) {
-  const [periodo, setPeriodo] = useState<Periodo>('mes');
+/** Ya no tiene su propio toggle — Javier pidió UN solo botón de periodo para
+ *  toda la pantalla, no tres controles que pueden mostrar estados distintos.
+ *  `rango` lo recibe como prop (el mismo `?rango=` que ya mueve KPIs,
+ *  gráfica y `GlobalFilter`) en vez de leerlo con `useSearchParams()`: así
+ *  se resuelve UNA vez en el Server Component (`page.tsx`, vía
+ *  `resolverRango`) y este componente se queda puro — se puede seguir
+ *  probando con `renderToStaticMarkup` sin envolverlo en un router de
+ *  Next, que es justo como ya estaban escritas sus pruebas. El cálculo
+ *  sigue siendo local sobre `viajes` (cero viajes de más al servidor). */
+export default function AvanceCierre({ viajes, ahoraMs, rango }: { viajes: ViajeRow[]; ahoraMs: number; rango?: string }) {
+  const periodo: Periodo = rango === '30' ? 'mes' : rango === 'todo' ? 'todo' : 'semana';
 
   const datos = useMemo(() => {
     const cfg = PERIODOS.find((p) => p.id === periodo)!;
@@ -65,35 +74,16 @@ export default function AvanceCierre({ viajes, ahoraMs }: { viajes: ViajeRow[]; 
   }, [viajes, periodo, ahoraMs]);
 
   return (
-    <div className="mt-2.5 max-w-md">
-      <div className="flex items-center justify-between gap-3 mb-2">
-        <div className="flex items-baseline gap-2 min-w-0">
-          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Avance de cierre
-          </span>
-          {/* Sin viajes en el periodo NO se pinta 0%: un 0% se lee como "no
-              has cerrado nada", que es una acusación. Se dice que no hubo. */}
-          {datos.pct !== null && (
-            <span className="text-sm font-semibold tabular">{datos.pct}%</span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1 shrink-0">
-          {PERIODOS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setPeriodo(p.id)}
-              aria-pressed={periodo === p.id}
-              className="text-[11px] font-medium px-2 py-1 rounded-full transition-colors"
-              style={periodo === p.id
-                ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
-                : { color: 'var(--muted)', border: '1px solid var(--line)' }}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+    <div>
+      <div className="flex items-baseline gap-2 min-w-0 mb-2">
+        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+          Avance de cierre
+        </span>
+        {/* Sin viajes en el periodo NO se pinta 0%: un 0% se lee como "no
+            has cerrado nada", que es una acusación. Se dice que no hubo. */}
+        {datos.pct !== null && (
+          <span className="text-sm font-semibold tabular">{datos.pct}%</span>
+        )}
       </div>
 
       {/* AUDITORÍA 10, BAJO — sin viajes en el periodo, esto dibujaba la

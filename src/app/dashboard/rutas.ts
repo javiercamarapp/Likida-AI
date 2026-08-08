@@ -79,3 +79,23 @@ export const TODAS_LAS_RUTAS: Item[] = [
   { href: '/dashboard', nombre: 'Resumen', Icono: LayoutGrid },
   ...INICIO, ...NEGOCIO, ...OPERACION, ...FISCAL, ...DOCUMENTOS_DINERO, ...GESTION,
 ];
+
+/**
+ * El sidebar que se PINTA (dirección visual del 7-ago-2026) — plano, sin
+ * secciones, los 9 que importan todos los días. Las demás páginas de arriba
+ * (INICIO/NEGOCIO/FISCAL/DOCUMENTOS_DINERO/GESTION) SIGUEN existiendo y
+ * accesibles por URL directa — esto no las borra, solo deja de listarlas
+ * aquí. `puedeVerRuta` sigue filtrando por rol igual que antes: un encargado
+ * no ve Cuadre/Facturación/Cobranza (área `dinero`) aunque estén en esta
+ * lista.
+ */
+export const SIDEBAR_PRINCIPAL: Item[] = [
+  { href: '/dashboard/despacho', nombre: 'Despacho', Icono: Send },
+  { href: '/dashboard/viajes', nombre: 'Viajes', Icono: Truck },
+  { href: '/dashboard/incidencias', nombre: 'Incidencias', Icono: TriangleAlert },
+  { href: '/dashboard/operadores', nombre: 'Operadores', Icono: UserCog },
+  { href: '/dashboard/cuadre', nombre: 'Cuadre', Icono: ReceiptText },
+  { href: '/dashboard/facturacion', nombre: 'Facturación', Icono: FileText },
+  { href: '/dashboard/cobranza', nombre: 'Cobranza', Icono: Landmark },
+  { href: '/dashboard/valor-ahorro', nombre: 'Valor y ahorro', Icono: TrendingUp },
+];
