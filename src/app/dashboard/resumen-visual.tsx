@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { Circle } from 'lucide-react';
 import { resolverFormato, type FormatoPreset } from '../admin/ui/formato-preset';
 import type { Caducidad } from '@/lib/likida/facturacion/caducidad';
 
@@ -128,32 +127,6 @@ export function KpiDegradado({
         </div>
         {flechas}
       </div>
-    </div>
-  );
-}
-
-// ── Pendientes ────────────────────────────────────────────────────────────
-
-/** Reusa las MISMAS alertas que ya calcula `page.tsx` (kpis.porRevisar,
- *  anomalías) — no una lista de tareas inventada. Sin pendientes reales,
- *  dice que no hay, en vez de pintar checkboxes vacíos que parezcan tareas
- *  de ejemplo. */
-export function Pendientes({
-  items,
-}: {
-  items: Array<{ texto: string; href: string }>;
-}) {
-  if (items.length === 0) {
-    return <p className="text-sm" style={{ color: 'var(--muted)' }}>Sin pendientes por ahora.</p>;
-  }
-  return (
-    <div className="space-y-2">
-      {items.map((it, i) => (
-        <a key={i} href={it.href} className="flex items-center gap-2 text-sm hover:opacity-70 transition-opacity">
-          <Circle width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-          <span className="truncate">{it.texto}</span>
-        </a>
-      ))}
     </div>
   );
 }
