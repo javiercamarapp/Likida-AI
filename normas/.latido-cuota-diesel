@@ -1,26 +1,32 @@
-fecha_corrida: 2026-08-01
-viernes_objetivo: 2026-07-31
+fecha_corrida: 2026-08-08
+viernes_objetivo: 2026-08-07
 estado: "INFRA egress_bloqueado"
 detalle: >
   Sin acceso a sidofqa.segob.gob.mx: 403 en el CONNECT del proxy de salida de
-  esta sesión, confirmado por dos vías independientes — `curl` directo
-  (CONNECT tunnel failed, response 403) y la herramienta WebFetch (HTTP 403
-  Forbidden), ambas contra /dof/sidof/notas/31-07-2026. `__agentproxy/status`
-  registra el rechazo en recentRelayFailures: "gateway answered 403 to CONNECT
-  (policy denial or upstream failure)" para sidofqa.segob.gob.mx:443, y la
-  allowlist de la sesión (noProxy) no incluye ese host. No se reintentó (403
-  de política no se reintenta, por instrucción del entorno). No se pudo
-  distinguir "no hubo publicación" de "la API falló" porque no se llegó a
-  golpear ni /notas ni /diarios/porFecha. Mismo bloqueo que ya reportó
-  vigilancia-normativa en sus últimas tres corridas (28-jul y antes): es la
-  política de egreso del entorno, no una caída puntual de SIDOF.
-cuota_vigente_en_repo: ninguna — normas/cuota-ieps-diesel.yaml no existe todavía.
+  esta sesión, confirmado por tres vías independientes — `curl` directo
+  contra /dof/sidof/notas/07-08-2026 (CONNECT tunnel failed, response 403),
+  la herramienta WebFetch contra la misma URL (error_type EGRESS_BLOCKED), y
+  `curl` directo contra /dof/sidof/diarios/porFecha/07-08-2026 (mismo 403).
+  `__agentproxy/status` registra el rechazo en recentRelayFailures: "gateway
+  answered 403 to CONNECT (policy denial or upstream failure)" para
+  sidofqa.segob.gob.mx:443, con timestamp 2026-08-08T02:09:54Z, y la allowlist
+  de la sesión (noProxy) no incluye ese host. No se reintentó con espera: el
+  árbitro de la sesión (/root/.ccr/README.md) indica explícitamente no
+  reintentar denegaciones de política 403/407. Al estar bloqueado también
+  /diarios/porFecha, no se pudo ni siquiera distinguir "no hubo publicación"
+  de "la API falló" — ambos endpoints responden idéntico. Mismo bloqueo,
+  mismo host, que ya reportó esta misma rutina el 2026-08-01 y que
+  vigilancia-normativa reportó en sus corridas previas (28-jul y antes): es
+  la política de egreso del entorno, no una caída puntual de SIDOF.
+cuota_vigente_en_repo: ninguna — normas/cuota-ieps-diesel.yaml sigue sin existir.
 riesgo: >
-  Sin ninguna cuota jamás registrada, el motor no tiene con qué calcular el
-  estímulo del art. 20-A para NINGUNA fecha, no solo para la semana del
-  27-jul al 31-jul. Esto no es una cuota atrasada, es la ausencia total del
-  archivo.
+  Van al menos dos corridas consecutivas (2026-08-01 y 2026-08-08) sin poder
+  llegar a SIDOF por la misma razón. El archivo de cuotas nunca se ha creado:
+  el motor no tiene con qué calcular el estímulo del art. 20-A para NINGUNA
+  fecha, no solo para la semana en curso. Esto no es una cuota atrasada, es
+  la ausencia total del archivo, y sigue sin resolverse.
 accion_requerida: >
   Habilitar en la política de egreso de esta sesión/entorno el host
   sidofqa.segob.gob.mx. Sin eso, esta rutina no puede correr en este
-  entorno bajo ninguna cadencia.
+  entorno bajo ninguna cadencia, y no hay forma de registrar la primera
+  cuota histórica.
