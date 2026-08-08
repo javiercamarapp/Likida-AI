@@ -125,15 +125,17 @@ describe('dashboard/page.tsx: el call site de estadoPanel', () => {
 // "Estímulos acreditables" y el bloque "Liquidaciones" (KPIs) que probaban
 // esto se retiraron el 7-ago-2026 — sus números se redistribuyeron en las
 // tarjetas del degradado ("Gasto total", "Total viajes", "Liquidado"). El
-// 8-ago-2026 esas tarjetas dejaron de compartir el filtro `GlobalFilter` de
-// la página (ahora solo lo usa la gráfica "Liquidado — {ventana}", más
-// abajo): cada una cicla su PROPIA vista con flechas ‹ › (`KpiPeriodo` —
-// semanal/mensual/histórico, no periodos consecutivos), y la etiqueta que
-// declara la ventana vive en `kpi-periodo.tsx` (`ETIQUETA_MODO`), no en
-// `page.tsx`. El motor fiscal sigue usando SU PROPIO periodo
-// (`periodoFiscal.etiqueta`, ejercicio fiscal — no el operativo). La
-// garantía que importa —que un rótulo "del periodo" no mienta— sigue viva
-// aquí, sobre el nuevo mecanismo.
+// 8-ago-2026 el Resumen del dueño perdió el ÚLTIMO consumidor del filtro
+// operativo compartido ("Liquidado por semana", nivel contador, se quitó
+// junto con "Avance de cierre", "Actividad", "Viajes" y "Top rutas" —
+// detalle operativo/contable, no la pregunta del dueño): ya no queda
+// `GlobalFilter`/`rango`/`ventanaDias` en esta página en absoluto. Las 4
+// tarjetas de KPI ciclan su PROPIA vista con flechas ‹ › (`KpiPeriodo` —
+// semanal/mensual/histórico), y la etiqueta que declara la ventana vive en
+// `kpi-periodo.tsx` (`ETIQUETA_MODO`), no en `page.tsx`. El motor fiscal
+// sigue usando SU PROPIO periodo (`periodoFiscal.etiqueta`, ejercicio
+// fiscal). La garantía que importa —que un rótulo "del periodo" no
+// mienta— sigue viva aquí, sobre el nuevo mecanismo.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('dashboard/page.tsx: las secciones filtradas dicen su periodo', () => {
   const PAGINA = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
@@ -155,8 +157,18 @@ describe('dashboard/page.tsx: las secciones filtradas dicen su periodo', () => {
     expect(KPI_PERIODO).toMatch(/etiqueta=\{`\$\{nombre\} — \$\{ETIQUETA_MODO\[modo\]\}`\}/);
   });
 
-  it('la gráfica "Liquidado" (la única que sigue leyendo el filtro global) también declara su ventana', () => {
-    expect(PAGINA).toMatch(/Liquidado — \{rango === 'todo' \? 'histórico' : `últimos \$\{ventanaDias\} días`\}/);
+  it('ya no queda ningún filtro operativo compartido en la página (GlobalFilter/rango)', () => {
+    // No basta con "no se importa" — un texto de comentario puede mencionar
+    // GlobalFilter sin usarlo. Lo que de verdad prueba que no queda control
+    // en pantalla es que no exista el IMPORT ni la etiqueta JSX.
+    expect(PAGINA).not.toMatch(/import\s*\{[^}]*GlobalFilter/);
+    expect(PAGINA).not.toMatch(/<GlobalFilter/);
+    expect(PAGINA).not.toMatch(/resolverRango\(/);
+  });
+
+  it('el diésel elegible del motor fiscal usa el MISMO periodo que el resto de esa sección (el ejercicio, no una ventana operativa)', () => {
+    const llamada = PAGINA.match(/getAcreditables\(tenantId,\s*\w+\)/)?.[0] ?? '';
+    expect(llamada).toMatch(/diasEjercicio/);
   });
 
   it('el motor fiscal declara SU periodo (ejercicio), no el operativo', () => {

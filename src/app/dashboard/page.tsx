@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { Truck, Wallet, Calculator, Receipt, Fuel } from 'lucide-react';
 import {
-  getKpis, getAcreditables, detectarAnomalias, getLiquidacionesPorDia, getViajes, getViajesPorMes,
-  contarViajes, getGastoPorConcepto, getGastoPorRuta,
+  getKpis, getAcreditables, detectarAnomalias, getViajes,
+  getGastoPorConcepto,
   getSeriesKpiCards, getViajesConDiferencia, getViajesConCfdiSinValidar,
   type ViajeRow,
   type DashboardKpis, type Acreditables, type Anomalia,
-  type GastoPorConcepto, type GastoPorRuta, type SeriesKpiCards,
+  type GastoPorConcepto, type SeriesKpiCards,
 } from '@/lib/likida/analytics';
 import { getPorFacturar, type TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import { getConfig, type CuadraConfig } from '@/lib/likida/config';
@@ -16,16 +16,12 @@ import { saludo, ahoraMs } from '@/lib/saludo';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
-import { AreaChartSimple, Dona } from '../admin/charts';
-import { HBars } from '../admin/ui/graficas';
-import { GlobalFilter, resolverRango } from '../admin/ui/global-filter';
+import { Dona } from '../admin/charts';
 import {
   HeroSaludo, KpiDegradado, ProximosVencimientos,
-  Pendientes, ViajesAtencion, MotorFiscal, TituloSeccion,
+  ViajesAtencion, MotorFiscal, TituloSeccion,
 } from './resumen-visual';
 import { KpiPeriodo } from './kpi-periodo';
-import { Actividad } from './actividad';
-import AvanceCierre from './avance-cierre';
 import { InicioOperacion } from './inicio-operacion';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { sufijoTenant } from './sufijo';
@@ -68,72 +64,51 @@ export async function InicioContenido({
    *  ningún cliente real, cuyo tenant existe por llave foránea. */
   tenantExiste?: boolean;
 }) {
-  // Por defecto 7 DÍAS, igual que /admin — decisión de Javier (3-ago-2026).
-  //
-  // ESTO REVIERTE UNA DECISIÓN ANTERIOR Y HAY QUE SABER QUÉ SE ACEPTA. El
-  // default era 30 porque este filtro no mueve una gráfica de actividad como
-  // en /admin: mueve los ACREDITABLES FISCALES. Con ventana de 7 días el
-  // panel puede abrir con "IVA acreditable $0.00 · Peaje $0.00" teniendo
-  // miles de pesos acumulados un poco más atrás, y un cero de encuadre se lee
-  // como un cero de la flota. El mes es además la unidad en la que un
-  // contralor piensa su corte.
-  //
-  // Si en el demo el panel abre en ceros con datos existiendo, es esto: se
-  // cambia el default de vuelta a '30' en esta línea — y el filtro se entera
-  // solo, que es justo lo que antes no pasaba (ver `resolverRango`).
-  const r = resolverRango(sp?.rango, '7');
-  const { rango, ventanaDias, ventana } = r;
   const sufijo = sufijoTenant(sp);
 
-  // El filtro de arriba mueve TODO, no solo la gráfica: con 'todo' se pasa
-  // `undefined` (sin corte) y con 7/30 la misma ventana a las tres consultas,
-  // para que los rótulos "del periodo" digan la verdad.
-  // Fiscal: mismo motor que /dashboard/contador/deducciones (getGastosFiscales
-  // + resumirPerdidas + opcionesDe), no una copia — es el diferenciador real
-  // contra un TMS genérico, y solo puede decir la verdad si usa el mismo
-  // cálculo que ya se audita ahí. `resolverPeriodo(undefined, hoy)` cae al
-  // default de esa pantalla ('ejercicio', el año fiscal en curso) — el
-  // filtro 7d/30d/Todo de arriba es OPERATIVO, no fiscal, y mezclarlos haría
-  // que "0 en 7 días" se leyera como "sin riesgo fiscal", que no es lo que
-  // mide un corte de una semana.
+  // AUDITORÍA DE DISEÑO, 8-AGO-2026 — se quitó el filtro operativo 7d/30d/
+  // Todo de esta página entera (vivía en un solo `GlobalFilter` arriba de
+  // los KPIs). Sus únicas dos consumidoras que quedaban en pie —"Liquidado
+  // por semana" y "Avance de cierre"— se retiraron del Resumen del dueño
+  // (son nivel jefe de flota/contador, no la pregunta de "¿cómo va mi
+  // dinero?"). Sin ellas no queda ninguna sección que necesite un corte
+  // operativo arbitrario, así que:
+  //   - `getKpis` ya NO recibe ventana: sin corte, para que "por revisar" y
+  //     "comprobantes duplicados" (abajo, `alertas`) nunca escondan un
+  //     pendiente real solo por ser viejo — ocultar un item accionable
+  //     detrás de una ventana que ya no tiene control en pantalla sería un
+  //     bug nuevo, no una limpieza.
+  //   - `getAcreditables` (el diésel elegible del motor fiscal) ahora usa
+  //     el MISMO periodo que el resto de "Tu motor fiscal" (`periodoFiscal`,
+  //     el ejercicio fiscal en curso) en vez de una ventana operativa
+  //     huérfana — dos cifras en la misma tarjeta con dos "cuándo" distintos
+  //     se leen como un error de captura.
   const hoy = new Date(ahoraMs()).toISOString().slice(0, 10);
   const periodoFiscal = resolverPeriodo(undefined, hoy);
+  const diasEjercicio = periodoFiscal.desde
+    ? Math.floor((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${periodoFiscal.desde}T00:00:00Z`)) / 86_400_000) + 1
+    : undefined;
 
   const [
-    acred, kpis, anomalias, porDia, viajes, totalViajes,
-    gastoConcepto, gastoRuta, porFacturar, seriesKpis, diferenciasPorViaje, cfdiSinValidar,
-    cfgFiscal, gastosFiscales, viajesPorMes,
+    acred, kpis, anomalias, viajes,
+    gastoConcepto, porFacturar, seriesKpis, diferenciasPorViaje, cfdiSinValidar,
+    cfgFiscal, gastosFiscales,
   ] = await Promise.all([
-    safe<Acreditables>(() => getAcreditables(tenantId, ventana)),
-    safe<DashboardKpis>(() => getKpis(tenantId, ventana)),
+    safe<Acreditables>(() => getAcreditables(tenantId, diasEjercicio)),
+    safe<DashboardKpis>(() => getKpis(tenantId)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
-    safe<Array<{ dia: string; valor: number }>>(() => getLiquidacionesPorDia(tenantId, ventanaDias)),
-    // Para la barra de avance de cierre: se traen los viajes con su fecha y
-    // estatus y el filtro por periodo se hace en el cliente, así cambiar de
-    // semana a mes no cuesta una consulta por clic. "Requiere tu atención"
-    // de abajo reusa este MISMO arreglo en vez de pedirlo de nuevo.
+    // "Requiere tu atención" y `estadoPanel` reusan este MISMO arreglo.
     safe<ViajeRow[]>(() => getViajes(tenantId)),
-    // Piezas del Resumen visual (dirección elegida 7-ago-2026): cada una
-    // envuelta en `safe` por separado, así que si una consulta nueva falla
-    // no tumba el resto de una pantalla que ya funcionaba.
-    safe<number | null>(() => contarViajes(tenantId)),
     safe<GastoPorConcepto[]>(() => getGastoPorConcepto(tenantId)),
-    safe<GastoPorRuta[]>(() => getGastoPorRuta(tenantId)),
     safe<TicketPorFacturar[]>(() => getPorFacturar(tenantId)),
     // Semanal/mensual/histórico para las flechas ‹ › de las 4 tarjetas de
-    // KPI (dirección del 8-ago-2026) — INDEPENDIENTE del filtro 'todo'/
-    // '7'/'30' de arriba (ese ahora solo mueve la gráfica de "Liquidado",
-    // ver `GlobalFilter` más abajo): cada tarjeta cicla su PROPIA
-    // granularidad, no un rango compartido de la página.
+    // KPI (dirección del 8-ago-2026) — cada tarjeta cicla su PROPIA
+    // granularidad, independiente de las demás.
     safe<SeriesKpiCards>(() => getSeriesKpiCards(tenantId, hoy)),
     safe<Map<string, number>>(() => getViajesConDiferencia(tenantId)),
     safe<Set<string>>(() => getViajesConCfdiSinValidar(tenantId)),
     safe<CuadraConfig>(() => getConfig(tenantId)),
     safe<GastoFiscal[]>(() => getGastosFiscales(tenantId, periodoFiscal)),
-    // `Actividad` pestaña Histórico — agregado real por mes, SIN el tope de
-    // 100 filas de `viajes` (ver nota en `getViajesPorMes`): un tope ahí se
-    // leería como "todo el histórico" en una flota que ya lo superó.
-    safe<Array<{ dia: string; valor: number }>>(() => getViajesPorMes(tenantId)),
   ]);
   const resumenPerdidas: ResumenPerdidas | null = cfgFiscal && gastosFiscales
     ? resumirPerdidas(gastosFiscales, opcionesDe(cfgFiscal))
@@ -270,14 +245,36 @@ export async function InicioContenido({
               </div>
             )}
 
-            {/* Línea de carga animada, a todo lo ancho — pedido explícito de
-                Javier tras quitar la columna angosta donde vivía antes. */}
-            <div className="px-5 pb-4">
-              <AvanceCierre viajes={viajes ?? []} ahoraMs={ahoraMs()} rango={rango} />
+            {/* ── Motor fiscal — el diferenciador real, no un TMS genérico ──
+                Subido justo debajo de los KPIs (dirección del 8-ago-2026):
+                antes vivía hasta el fondo de la página, y es lo que ningún
+                TMS genérico calcula — no debía quedar como lo último que se
+                ve. */}
+            <div className="px-5 pb-4 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
+              <TituloSeccion>Tu motor fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
+              {/* El diésel elegible va en LITROS, no en pesos — el estímulo es
+                  cuota DOF (semanal) × litros, y esa cuota no vive aquí.
+                  `docs/conocimiento/guion-demo.md` + `guion_demo.test.ts`
+                  atan el guion de venta a esto: si esto cambia, el guion
+                  tiene que cambiar con ello. */}
+              {acred && (
+                <div className="mt-3 max-w-[220px]">
+                  <KpiDegradado icono={<Fuel width={17} height={17} strokeWidth={1.75} />}
+                    etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" />
+                </div>
+              )}
+              <div className="mt-3">
+                <MotorFiscal resumen={resumenPerdidas} />
+              </div>
             </div>
 
-            {/* ── Próximos vencimientos / Viajes / Actividad ── */}
-            <div className="px-5 pb-4 border-t pt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4" style={{ borderColor: 'var(--line)' }}>
+            {/* ── Próximos vencimientos / Requieren tu atención / Gasto por
+                categoría ── "Pendientes" se quitó (dirección del 8-ago-2026):
+                mostraba la MISMA lista que ya se ve arriba en el banner de
+                alertas — dos secciones para el mismo dato. "Requieren tu
+                atención" es la única sección de "esto necesita tu acción",
+                sin duplicar. */}
+            <div className="px-5 pb-4 border-t pt-4 grid grid-cols-1 xl:grid-cols-3 gap-4" style={{ borderColor: 'var(--line)' }}>
               <div>
                 <TituloSeccion>Próximos vencimientos</TituloSeccion>
                 <div className="mt-2.5">
@@ -289,69 +286,6 @@ export async function InicioContenido({
                     }))} />
                   ) : (
                     <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</p>
-                  )}
-                </div>
-              </div>
-              <div>
-                <TituloSeccion>Viajes</TituloSeccion>
-                <div className="mt-2.5">
-                  {kpis && totalViajes !== null && totalViajes !== undefined && totalViajes > 0 ? (
-                    <Dona segmentos={[
-                      { etiqueta: 'Liquidados', valor: kpis.viajesLiquidados },
-                      { etiqueta: 'Pendientes', valor: Math.max(0, totalViajes - kpis.viajesLiquidados) },
-                    ]} />
-                  ) : (
-                    <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay viajes registrados.</p>
-                  )}
-                </div>
-              </div>
-              {/* Ocupa el doble de ancho que sus vecinas (el Calendario que
-                  vivía aquí se quitó, 8-ago-2026) — más ancho y más alto,
-                  pedido explícito para que la gráfica de Histórico (estilo
-                  bolsa, `AreaChartSimple`) tenga aire. */}
-              <div className="md:col-span-2">
-                <Actividad viajes={viajes ?? []} porMes={viajesPorMes ?? []} />
-              </div>
-            </div>
-
-            {/* ── Gasto por categoría / Liquidado por semana / Viajes recientes ── */}
-            <div className="px-5 pb-4 border-t pt-4 grid grid-cols-1 xl:grid-cols-3 gap-4" style={{ borderColor: 'var(--line)' }}>
-              <div>
-                <TituloSeccion>Gasto por categoría</TituloSeccion>
-                <div className="mt-2.5">
-                  {gastoConcepto && gastoConcepto.length > 0 ? (
-                    <Dona segmentos={gastoConcepto.map((g) => ({ etiqueta: g.concepto, valor: g.total }))} />
-                  ) : (
-                    <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay gastos capturados.</p>
-                  )}
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <TituloSeccion>Liquidado — {rango === 'todo' ? 'histórico' : `últimos ${ventanaDias} días`}</TituloSeccion>
-                  {/* Único control de rango que queda en la página — las 4
-                      tarjetas de KPI de arriba ya no lo usan (dirección del
-                      8-ago-2026, flechas ‹ › independientes por tarjeta);
-                      esta gráfica sigue siendo la única sección que
-                      necesita elegir 7d/30d/Todo. */}
-                  <GlobalFilter base="/dashboard" r={r} extra={sufijoTenantParams(sp)} />
-                </div>
-                <div className="mt-2.5">
-                  {rango === 'todo' ? (
-                    <div className="flex flex-col items-center justify-center" style={{ height: 140 }}>
-                      <div className="text-3xl font-semibold tracking-tight tabular">{kpis?.viajesLiquidados ?? 0}</div>
-                      <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>liquidaciones cerradas — total histórico</div>
-                    </div>
-                  ) : porDia === null ? (
-                    <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 140 }}>
-                      No se pudo cargar esta gráfica.
-                    </div>
-                  ) : porDia.some((d) => d.valor > 0) ? (
-                    <AreaChartSimple datos={porDia} etiquetaValor={(v) => String(v)} />
-                  ) : (
-                    <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 140 }}>
-                      Sin cierres en esta ventana — prueba con 30d o el histórico.
-                    </div>
                   )}
                 </div>
               </div>
@@ -370,44 +304,15 @@ export async function InicioContenido({
                   )}
                 </div>
               </div>
-            </div>
-
-            {/* ── Pendientes / Top rutas por gasto ── */}
-            <div className="px-5 pb-4 border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4" style={{ borderColor: 'var(--line)' }}>
               <div>
-                <TituloSeccion>Pendientes</TituloSeccion>
-                <div className="mt-3">
-                  <Pendientes items={alertas} />
-                </div>
-              </div>
-              <div>
-                <TituloSeccion>Top rutas por gasto</TituloSeccion>
-                <div className="mt-3">
-                  {gastoRuta && gastoRuta.length > 0 ? (
-                    <HBars formato="mxn" datos={gastoRuta.map((r) => ({ etiqueta: r.ruta, valor: r.total }))} />
+                <TituloSeccion>Gasto por categoría</TituloSeccion>
+                <div className="mt-2.5">
+                  {gastoConcepto && gastoConcepto.length > 0 ? (
+                    <Dona segmentos={gastoConcepto.map((g) => ({ etiqueta: g.concepto, valor: g.total }))} />
                   ) : (
-                    <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay gasto asociado a una ruta.</p>
+                    <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay gastos capturados.</p>
                   )}
                 </div>
-              </div>
-            </div>
-
-            {/* ── Motor fiscal — el diferenciador real, no un TMS genérico ── */}
-            <div className="px-5 pb-4 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
-              <TituloSeccion>Tu motor fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
-              {/* El diésel elegible va en LITROS, no en pesos — el estímulo es
-                  cuota DOF (semanal) × litros, y esa cuota no vive aquí.
-                  `docs/conocimiento/guion-demo.md` + `guion_demo.test.ts`
-                  atan el guion de venta a esto: si esto cambia, el guion
-                  tiene que cambiar con ello. */}
-              {acred && (
-                <div className="mt-3 max-w-[220px]">
-                  <KpiDegradado icono={<Fuel width={17} height={17} strokeWidth={1.75} />}
-                    etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" />
-                </div>
-              )}
-              <div className="mt-3">
-                <MotorFiscal resumen={resumenPerdidas} />
               </div>
             </div>
           </>
@@ -418,18 +323,6 @@ export async function InicioContenido({
     </main>
   );
 
-}
-
-/** AUDITORÍA 16, MEDIO: el filtro 7d/30d perdía el ?rol= de la previsualización
- *  "ver como encargado" y la volteaba al panel del dinero. Se arrastran
- *  tenant/vista/rol juntos — el mismo criterio que sufijoTenant. */
-function sufijoTenantParams(sp: { tenant?: string; vista?: string; rol?: string } | undefined): Record<string, string> | undefined {
-  if (!sp) return undefined;
-  const out: Record<string, string> = {};
-  if (sp.tenant) out.tenant = sp.tenant;
-  else if (sp.vista) out.vista = sp.vista;
-  if (sp.rol) out.rol = sp.rol;
-  return Object.keys(out).length ? out : undefined;
 }
 
 /** La página real: resuelve quién eres y a qué flota apuntas, y pinta el
