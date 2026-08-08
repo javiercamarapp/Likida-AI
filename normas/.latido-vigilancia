@@ -1,6 +1,6 @@
-fecha_corrida: 2026-08-07
+fecha_corrida: 2026-08-08
 ultimo_dia_barrido: null
-rango_intentado: 2026-07-24..2026-08-06
+rango_intentado: 2026-07-24..2026-08-07
 notas_revisadas: 0
 notas_por_edicion: {matutina: null, vespertina: null, extraordinaria: null}
 fichas_disparadas: 0
@@ -9,30 +9,33 @@ etag_sat_check: no_aplica_hoy_no_es_lunes
 deriva_ley_check: no_aplica_no_es_dia_1_trimestre
 estado: "INFRA egress_bloqueado"
 detalle: >
-  Octava corrida consecutiva (07-ago, 05-ago, 04-ago, 03-ago, 02-ago, 31-jul,
-  28-jul, y antes) bloqueada por la misma causa: el proxy de salida de esta
-  sesión rechaza todo tráfico hacia sidofqa.segob.gob.mx. Confirmado dos
-  veces en esta corrida por dos vías distintas: `curl` directo devuelve
-  "CONNECT tunnel failed, response 403"; WebFetch devuelve el error
-  explícito `{"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx",
-  "message":"Access to sidofqa.segob.gob.mx is blocked by the network
-  egress proxy."}`. Esta segunda confirmación deja claro que es una política
-  deliberada del entorno, no un fallo transitorio del proxy. `noProxy` de la
-  sesión sigue sin incluir sidofqa.segob.gob.mx, www.sat.gob.mx ni
+  Novena corrida consecutiva (08-ago, 07-ago, 05-ago, 04-ago, 03-ago, 02-ago,
+  31-jul, 28-jul, y antes) bloqueada por la misma causa: el proxy de salida
+  de esta sesión rechaza todo tráfico hacia sidofqa.segob.gob.mx. Confirmado
+  de nuevo hoy por dos vías: `curl` directo a
+  `.../dof/sidof/notas/07-08-2026` y a `.../diarios/porFecha/07-08-2026`
+  devuelve "CONNECT tunnel failed, response 403"; `$HTTPS_PROXY/__agentproxy/status`
+  reporta `recentRelayFailures` con `connect_rejected` / "gateway answered 403
+  to CONNECT" contra sidofqa.segob.gob.mx:443 (tres intentos, mismo minuto);
+  WebFetch devuelve el error explícito `{"error_type":"EGRESS_BLOCKED",
+  "domain":"sidofqa.segob.gob.mx", ...}`. El `noProxy` de la sesión (via
+  status del proxy) sigue sin incluir sidofqa.segob.gob.mx, www.sat.gob.mx ni
   diputados.gob.mx — solo paquetería (npm, pypi, jsr, crates,
-  proxy.golang.org) y dominios de anthropic.com. Por README de la proxy: un
-  403/407 de política no se reintenta ni se rodea, se reporta. Hoy es
-  viernes (no tocaba ETag del SAT ni deriva de ley), así que el único
-  chequeo que tocaba hoy — el barrido del DOF — también quedó bloqueado.
-sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible, octava vez consecutiva.
+  proxy.golang.org) y dominios de anthropic.com. Hoy es sábado: no tocaba
+  ETag del SAT (lunes) ni deriva de ley (día 1 de trimestre), así que el
+  único chequeo que tocaba hoy — el barrido del DOF — es también el único
+  bloqueado.
+sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible, novena vez consecutiva.
 accion_requerida: >
   Habilitar en la política de egreso de esta sesión/entorno los hosts:
   sidofqa.segob.gob.mx, www.sat.gob.mx, www.diputados.gob.mx (o su
   alternativa api.tlaloc.sh si se prefiere la vía comercial). Sin eso, esta
   rutina no puede correr en este entorno bajo ninguna cadencia. El rango sin
-  barrer sigue creciendo: ya cubre desde el 24-jul, ahora hasta el 06-ago —
-  ocho corridas y contando sin una sola verificación real. La ventana
+  barrer sigue creciendo: ya cubre desde el 24-jul, ahora hasta el 07-ago —
+  nueve corridas y contando sin una sola verificación real. La ventana
   anticipada del SAT (ETag del minisitio, chequeo semanal de lunes) lleva
-  bloqueada tres lunes seguidos (27-jul, 03-ago, y bloqueará el 10-ago si no
-  se corrige antes). El fix es de configuración del entorno, no de código:
-  nada que este agente pueda cambiar por su cuenta.
+  bloqueada tres lunes seguidos (27-jul, 03-ago) y bloqueará el 10-ago si no
+  se corrige antes. El fix es de configuración del entorno (agregar estos
+  hosts al noProxy/allowlist del proxy de salida), no de código: nada que
+  este agente pueda cambiar por su cuenta.
+</content>
