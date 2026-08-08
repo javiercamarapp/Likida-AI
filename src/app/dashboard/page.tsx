@@ -1,16 +1,19 @@
 import Link from 'next/link';
-import { Wallet, Calculator, PiggyBank, Fuel } from 'lucide-react';
+import { Wallet, Calculator, Fuel } from 'lucide-react';
 import {
   getKpis, getAcreditables, detectarAnomalias, getViajes, getViajesPorMes, contarViajes,
   getGastoPorSemana, getLiquidadoPorSemana,
-  getSeriesKpiCards, getViajesConDiferencia, getViajesConCfdiSinValidar,
+  getSeriesKpiCards,
   type ViajeRow,
   type DashboardKpis, type Acreditables, type Anomalia,
   type GastoSemanalPorCategoria, type SeriesKpiCards,
 } from '@/lib/likida/analytics';
 import { getPorFacturar, type TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import { getConfig, type CuadraConfig } from '@/lib/likida/config';
-import { resolverPeriodo, getGastosFiscales, resumirPerdidas, type GastoFiscal, type ResumenPerdidas } from '@/lib/likida/fiscal';
+import {
+  resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries, resumirPerdidas,
+  type GastoFiscal, type ResumenPerdidas, type GastosFiscalesSeries,
+} from '@/lib/likida/fiscal';
 import { opcionesDe } from './contador/comun';
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { mxn } from '@/lib/formato';
@@ -18,12 +21,13 @@ import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
 import { AreaChartSimple, Dona } from '../admin/charts';
-import { StackedBars } from '../admin/ui/graficas';
+import { GastoSemanalChart } from './gasto-semanal-chart';
 import {
   HeroSaludo, KpiDegradado, ProximosVencimientos,
-  ViajesAtencion, MotorFiscal, TituloSeccion,
+  MotorFiscal, TituloSeccion,
 } from './resumen-visual';
 import { KpiPeriodo } from './kpi-periodo';
+import { MotorFiscalPeriodo } from './motor-fiscal-periodo';
 import { Actividad } from './actividad';
 import { InicioOperacion } from './inicio-operacion';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
@@ -94,26 +98,29 @@ export async function InicioContenido({
 
   const [
     acred, kpis, anomalias, viajes, totalViajes,
-    gastoSemanal, liquidadoSemanal, porFacturar, seriesKpis, diferenciasPorViaje, cfdiSinValidar,
-    cfgFiscal, gastosFiscales, viajesPorMes,
+    gastoSemanal, liquidadoSemanal, porFacturar, seriesKpis,
+    cfgFiscal, gastosFiscales, gastosFiscalesSeries, viajesPorMes,
   ] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId, diasEjercicio)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
-    // "Requiere tu atención" y `estadoPanel` reusan este MISMO arreglo.
+    // `estadoPanel` y `Actividad` reusan este MISMO arreglo.
     safe<ViajeRow[]>(() => getViajes(tenantId)),
     safe<number | null>(() => contarViajes(tenantId)),
     safe<GastoSemanalPorCategoria>(() => getGastoPorSemana(tenantId, 5, hoy)),
     safe<Array<{ dia: string; valor: number }>>(() => getLiquidadoPorSemana(tenantId, 5, hoy)),
     safe<TicketPorFacturar[]>(() => getPorFacturar(tenantId)),
-    // Semanal/mensual/histórico para las flechas ‹ › de las 4 tarjetas de
-    // KPI (dirección del 8-ago-2026) — cada tarjeta cicla su PROPIA
+    // Semanal/mensual/histórico para las flechas ‹ › de las tarjetas de KPI
+    // (dirección del 8-ago-2026) — cada tarjeta cicla su PROPIA
     // granularidad, independiente de las demás.
     safe<SeriesKpiCards>(() => getSeriesKpiCards(tenantId, hoy)),
-    safe<Map<string, number>>(() => getViajesConDiferencia(tenantId)),
-    safe<Set<string>>(() => getViajesConCfdiSinValidar(tenantId)),
     safe<CuadraConfig>(() => getConfig(tenantId)),
     safe<GastoFiscal[]>(() => getGastosFiscales(tenantId, periodoFiscal)),
+    // "En riesgo/perdido" y "Recuperable pidiendo factura" también ciclan
+    // semanal/mensual/histórico ahora (`MotorFiscalPeriodo`) — serie
+    // aparte de `gastosFiscales` (que sigue fija al ejercicio, para el
+    // top-causas de "Tu motor fiscal" más abajo).
+    safe<GastosFiscalesSeries>(() => getGastosFiscalesSeries(tenantId, hoy)),
     // `Actividad` pestaña Histórico — agregado real por mes, SIN el tope de
     // 100 filas de `viajes` (ver nota en `getViajesPorMes`): un tope ahí se
     // leería como "todo el histórico" en una flota que ya lo superó.
@@ -122,6 +129,21 @@ export async function InicioContenido({
   const resumenPerdidas: ResumenPerdidas | null = cfgFiscal && gastosFiscales
     ? resumirPerdidas(gastosFiscales, opcionesDe(cfgFiscal))
     : null;
+  // Las 3 vistas de "En riesgo/Recuperable" (`MotorFiscalPeriodo`, cliente) —
+  // `resumirPerdidas` es pura, así que se calcula UNA vez por modo aquí en
+  // el servidor y se manda ya resuelta: `fiscal.ts` importa `supabaseAdmin`
+  // a nivel de módulo, así que un Client Component no puede importar esa
+  // función en tiempo de ejecución sin arrastrar el service-role al bundle
+  // del navegador (mismo caso que `pctCambio` se movió de `analytics.ts` a
+  // `formato.ts` el 8-ago).
+  const resumenPerdidasSeries: Record<'semanal' | 'mensual' | 'historico', ResumenPerdidas> | null =
+    cfgFiscal && gastosFiscalesSeries
+      ? {
+        semanal: resumirPerdidas(gastosFiscalesSeries.semanal, opcionesDe(cfgFiscal)),
+        mensual: resumirPerdidas(gastosFiscalesSeries.mensual, opcionesDe(cfgFiscal)),
+        historico: resumirPerdidas(gastosFiscalesSeries.historico, opcionesDe(cfgFiscal)),
+      }
+      : null;
 
   // `liquidaciones` ya no se carga en esta página (se fue a /dashboard/cuadre),
   // así que el estado se decide con lo que SÍ vive aquí. AUDITORÍA 10, ALTO:
@@ -129,8 +151,8 @@ export async function InicioContenido({
   // SIEMPRE tiene 7 o 30 elementos, uno por día, así que `.length` nunca daba
   // 0 y la rama 'vacio' de `estadoPanel` era inalcanzable ("0% tasa de
   // cuadre" se pintaba siempre). `liquidacionesDeViajes` filtra los VIAJES
-  // reales (ya cargados arriba para "Requieren tu atención") a los que de
-  // verdad están `liquidado` — un arreglo que sí puede quedar vacío.
+  // reales (ya cargados arriba para "Actividad") a los que de verdad están
+  // `liquidado` — un arreglo que sí puede quedar vacío.
   const estado = estadoPanel({ acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias });
 
   const alertas: Array<{ texto: string; href: string }> = [];
@@ -233,33 +255,32 @@ export async function InicioContenido({
                 aquí: sus números ya se ven como GRÁFICA más abajo (la dona
                 "Viajes" y "Liquidado por semana") — un KPI plano al lado de
                 la misma cifra en gráfica es la cifra dos veces, no
-                información nueva. En su lugar, "Ahorro generado" trae el
-                diferenciador real (motor fiscal) hasta arriba, donde se ve
-                primero. La dirección buena/mala no es la misma para las
-                tres: gastar más no es bueno aunque el número suba (al revés
-                de "más ahorro"). */}
+                información nueva. La dirección buena/mala no es la misma
+                para las dos: gastar más no es bueno aunque el número suba. */}
             {kpis && (
               <div className="px-5 pb-4 pt-2">
                 {seriesKpis ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <KpiPeriodo icono={<Wallet width={17} height={17} strokeWidth={1.75} />}
                       nombre="Gasto total" campo="gastoTotal" formato="mxn" subeEsBueno={false} series={seriesKpis} />
                     <KpiPeriodo icono={<Calculator width={17} height={17} strokeWidth={1.75} />}
                       nombre="Costo por viaje" campo="costoPorViaje" formato="mxn" subeEsBueno={false} series={seriesKpis} />
-                    {/* Sin flechas: `resumenPerdidas` es del ejercicio fiscal
-                        en curso, no una serie de periodos que pueda paginar
-                        como las otras dos — misma cifra que "Recuperable
-                        pidiendo factura" en Motor fiscal, abajo, aquí
-                        destacada como KPI. */}
-                    <KpiDegradado icono={<PiggyBank width={17} height={17} strokeWidth={1.75} />}
-                      etiqueta={`Ahorro generado — ${periodoFiscal.etiqueta}`}
-                      valor={resumenPerdidas?.montoRecuperable ?? 0} formato="mxn" />
                   </div>
                 ) : (
                   <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el comparativo de KPIs.</p>
                 )}
               </div>
             )}
+
+            {/* ── En riesgo / Recuperable, al nivel de los KPI ── Subido
+                desde dentro de "Tu motor fiscal" (dirección del 8-ago-2026):
+                mismo tamaño/prominencia que Gasto total y Costo por viaje, y
+                con sus propias flechas ‹ › semanal/mensual/histórico —
+                antes vivían fijas al ejercicio fiscal, dentro de la sección
+                de abajo. */}
+            <div className="px-5 pb-4">
+              <MotorFiscalPeriodo series={resumenPerdidasSeries} />
+            </div>
 
             {/* ── Motor fiscal — el diferenciador real, no un TMS genérico ──
                 Subido justo debajo de los KPIs (dirección del 8-ago-2026):
@@ -284,12 +305,6 @@ export async function InicioContenido({
               </div>
             </div>
 
-            {/* ── Próximos vencimientos / Requieren tu atención / Gasto por
-                categoría ── "Pendientes" se quitó (dirección del 8-ago-2026):
-                mostraba la MISMA lista que ya se ve arriba en el banner de
-                alertas — dos secciones para el mismo dato. "Requieren tu
-                atención" es la única sección de "esto necesita tu acción",
-                sin duplicar. */}
             {/* ── Próximos vencimientos / Viajes / Actividad ── */}
             <div className="px-5 pb-4 border-t pt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4" style={{ borderColor: 'var(--line)' }}>
               <div>
@@ -324,17 +339,17 @@ export async function InicioContenido({
               </div>
             </div>
 
-            {/* ── Gasto por categoría / Liquidado por semana / Requieren tu
-                atención ── Las dos gráficas usan las mismas 5 semanas ISO
+            {/* ── Gasto por categoría / Liquidado por semana ── Las dos
+                gráficas usan las mismas 5 semanas ISO
                 (`getGastoPorSemana`/`getLiquidadoPorSemana`), fijas — sin
                 selector, porque el número que antes elegía la ventana
                 (el KPI "Liquidado") ya no vive arriba. */}
-            <div className="px-5 pb-4 border-t pt-4 grid grid-cols-1 xl:grid-cols-3 gap-4" style={{ borderColor: 'var(--line)' }}>
+            <div className="px-5 pb-4 border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4" style={{ borderColor: 'var(--line)' }}>
               <div>
                 <TituloSeccion>Gasto por categoría — últimas 5 semanas</TituloSeccion>
-                <div className="mt-2.5">
+                <div className="mt-3">
                   {gastoSemanal && gastoSemanal.series.some((s) => s.valores.some((v) => v > 0)) ? (
-                    <StackedBars categorias={gastoSemanal.categorias} series={gastoSemanal.series} />
+                    <GastoSemanalChart categorias={gastoSemanal.categorias} series={gastoSemanal.series} />
                   ) : (
                     <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay gastos capturados.</p>
                   )}
@@ -342,6 +357,11 @@ export async function InicioContenido({
               </div>
               <div>
                 <TituloSeccion>Liquidado por semana</TituloSeccion>
+                {liquidadoSemanal && liquidadoSemanal.some((d) => d.valor > 0) && (
+                  <div className="text-2xl font-semibold tracking-tight tabular mt-1">
+                    {mxn(liquidadoSemanal.reduce((s, d) => s + d.valor, 0))}
+                  </div>
+                )}
                 <div className="mt-2.5">
                   {liquidadoSemanal === null ? (
                     <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 140 }}>
@@ -353,21 +373,6 @@ export async function InicioContenido({
                     <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 140 }}>
                       Sin cierres en las últimas 5 semanas.
                     </div>
-                  )}
-                </div>
-              </div>
-              <div>
-                <TituloSeccion>Requieren tu atención</TituloSeccion>
-                <div className="mt-2.5 overflow-x-auto">
-                  {viajes && diferenciasPorViaje && cfdiSinValidar ? (
-                    <ViajesAtencion
-                      viajes={viajes}
-                      diferencias={diferenciasPorViaje}
-                      cfdiSinValidar={cfdiSinValidar}
-                      hoyMs={ahoraMs()}
-                    />
-                  ) : (
-                    <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</p>
                   )}
                 </div>
               </div>

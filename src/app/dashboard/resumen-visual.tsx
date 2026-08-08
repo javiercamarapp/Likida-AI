@@ -178,91 +178,6 @@ export function ProximosVencimientos({
   );
 }
 
-// ── Requieren tu atención ────────────────────────────────────────────────
-
-/** "Viajes recientes" ordenado por fecha no le decía a nadie qué hacer hoy
- *  — el último viaje cerrado bien no necesita que lo mires. Esto es lo
- *  contrario: solo entra un viaje si hay algo roto. Tres razones reales, en
- *  orden de urgencia (una vez que un viaje entra por la primera que aplica,
- *  no se repite por las demás):
- *    1. Diferencia entre anticipo y comprobado (`getViajesConDiferencia`).
- *    2. Un CFDI del viaje sigue sin validar en el SAT
- *       (`getViajesConCfdiSinValidar` — "sin validar", no "inválido").
- *    3. Sigue abierto/en cuadre más de `diasDetenido` sin fecha de cierre —
- *       calculado en el cliente sobre `viajes`, ya cargado arriba. */
-const RAZON_COLOR: Record<'diferencia' | 'cfdi_sin_validar' | 'detenido', string> = {
-  diferencia: 'var(--color-bad)',
-  cfdi_sin_validar: 'var(--warn)',
-  detenido: 'var(--muted)',
-};
-
-export function ViajesAtencion({
-  viajes, diferencias, cfdiSinValidar, hoyMs, diasDetenido = 3,
-}: {
-  viajes: Array<{ id: string; operadorNombre: string | null; origen: string | null; destino: string | null; estatus: string; fechaInicio: string | null }>;
-  diferencias: Map<string, number>;
-  cfdiSinValidar: Set<string>;
-  hoyMs: number;
-  diasDetenido?: number;
-}) {
-  const fmt = resolverFormato('mxn');
-  const ruta = (v: { origen: string | null; destino: string | null }) => (v.origen && v.destino ? `${v.origen} → ${v.destino}` : '—');
-
-  type Fila = { id: string; operadorNombre: string | null; ruta: string; tipo: 'diferencia' | 'cfdi_sin_validar' | 'detenido'; detalle: string };
-  const filas: Fila[] = [];
-  const vistos = new Set<string>();
-
-  for (const v of viajes) {
-    const dif = diferencias.get(v.id);
-    if (dif === undefined || Math.abs(dif) === 0 || vistos.has(v.id)) continue;
-    vistos.add(v.id);
-    filas.push({ id: v.id, operadorNombre: v.operadorNombre, ruta: ruta(v), tipo: 'diferencia', detalle: `Diferencia de ${fmt(Math.abs(dif))}` });
-  }
-  for (const v of viajes) {
-    if (vistos.has(v.id) || !cfdiSinValidar.has(v.id)) continue;
-    vistos.add(v.id);
-    filas.push({ id: v.id, operadorNombre: v.operadorNombre, ruta: ruta(v), tipo: 'cfdi_sin_validar', detalle: 'CFDI sin validar en el SAT' });
-  }
-  for (const v of viajes) {
-    if (vistos.has(v.id) || (v.estatus !== 'abierto' && v.estatus !== 'en_cuadre') || !v.fechaInicio) continue;
-    const f = Date.parse(v.fechaInicio);
-    if (Number.isNaN(f)) continue;
-    const dias = Math.floor((hoyMs - f) / 86_400_000);
-    if (dias < diasDetenido) continue;
-    vistos.add(v.id);
-    filas.push({ id: v.id, operadorNombre: v.operadorNombre, ruta: ruta(v), tipo: 'detenido', detalle: `Sin cerrar hace ${dias} días` });
-  }
-
-  if (filas.length === 0) {
-    return <p className="text-sm" style={{ color: 'var(--muted)' }}>Nada requiere tu atención ahora mismo.</p>;
-  }
-
-  return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-left" style={{ color: 'var(--muted)' }}>
-          <th className="font-medium pb-2 pr-3">Operador</th>
-          <th className="font-medium pb-2 pr-3">Ruta</th>
-          <th className="font-medium pb-2">Atención</th>
-        </tr>
-      </thead>
-      <tbody>
-        {filas.slice(0, 6).map((f) => (
-          <tr key={f.id} className="border-t" style={{ borderColor: 'var(--line)' }}>
-            <td className="py-2 pr-3 truncate max-w-[160px]">{f.operadorNombre ?? '—'}</td>
-            <td className="py-2 pr-3 truncate max-w-[200px]" style={{ color: 'var(--muted)' }}>{f.ruta}</td>
-            <td className="py-2">
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" style={{ color: RAZON_COLOR[f.tipo], background: 'var(--canvas)' }}>
-                {f.detalle}
-              </span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
 // ── Motor fiscal (el moat) ───────────────────────────────────────────────
 
 /** Lo que ningún TMS genérico calcula: mismo motor que
@@ -289,32 +204,19 @@ export function MotorFiscal({
     return <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer el motor fiscal en este momento.</p>;
   }
   const top = resumen.porCausa.slice(0, 3);
+  // "En riesgo/perdido" y "Recuperable pidiendo factura" subieron al nivel
+  // de KPI el 8-ago-2026 (`MotorFiscalPeriodo`, con flechas ‹ ›
+  // semanal/mensual/histórico) — aquí solo se queda la lista de causas, que
+  // no tiene equivalente arriba.
+  if (top.length === 0) return null;
   return (
-    <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        <div className="rounded-xl p-3" style={{ background: 'color-mix(in srgb, var(--color-bad) 10%, transparent)' }}>
-          <div className="text-[11px] font-medium" style={{ color: 'var(--muted)' }}>En riesgo / perdido</div>
-          <div className="text-lg font-semibold tabular mt-0.5" style={{ color: 'var(--color-bad)' }}>
-            {fmt(resumen.montoEnRiesgo + resumen.montoPerdido)}
-          </div>
+    <div className="space-y-1.5">
+      {top.map((c, i) => (
+        <div key={i} className="flex items-center justify-between gap-3 text-sm">
+          <span className="truncate min-w-0">{c.titulo} · {c.n} comprobante{c.n === 1 ? '' : 's'}</span>
+          <span className="tabular shrink-0" style={{ color: 'var(--muted)' }}>{fmt(c.monto)}</span>
         </div>
-        <div className="rounded-xl p-3" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
-          <div className="text-[11px] font-medium" style={{ color: 'var(--muted)' }}>Recuperable pidiendo factura</div>
-          <div className="text-lg font-semibold tabular mt-0.5" style={{ color: 'var(--color-ok)' }}>
-            {fmt(resumen.montoRecuperable)}
-          </div>
-        </div>
-      </div>
-      {top.length > 0 && (
-        <div className="space-y-1.5 mt-3">
-          {top.map((c, i) => (
-            <div key={i} className="flex items-center justify-between gap-3 text-sm">
-              <span className="truncate min-w-0">{c.titulo} · {c.n} comprobante{c.n === 1 ? '' : 's'}</span>
-              <span className="tabular shrink-0" style={{ color: 'var(--muted)' }}>{fmt(c.monto)}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      ))}
     </div>
   );
 }

@@ -170,47 +170,6 @@ export async function getSeriesKpiCards(
   return { semanal, mensual, historico };
 }
 
-/**
- * `viaje_id → diferencia` de toda liquidación marcada `con_diferencias` o
- * `revisar` — la señal real de "el anticipo y lo comprobado no cuadran".
- * Se cruza en el cliente contra `getViajes` (ya cargado para la tabla de
- * abajo) en vez de repetir el join aquí: dos consultas más baratas que un
- * embed anidado (`liquidacion → viaje → operador`) cuya forma exacta hay
- * que adivinar.
- */
-export async function getViajesConDiferencia(tenantId: string): Promise<Map<string, number>> {
-  const filas = await traerTodo<{ viaje_id: unknown; diferencia: unknown }>(
-    (desde, hasta) => supabaseAdmin().from('liquidacion').select('viaje_id, diferencia')
-      .eq('tenant_id', tenantId).in('estatus', ['con_diferencias', 'revisar'])
-      .order('id').range(desde, hasta),
-    'getViajesConDiferencia',
-  );
-  const mapa = new Map<string, number>();
-  for (const f of filas) {
-    const id = f.viaje_id as string;
-    // Puede haber más de una liquidación con diferencia por viaje (recuadre);
-    // se queda la de mayor monto absoluto, que es la que de verdad alarma.
-    const actual = mapa.get(id);
-    const nueva = Number(f.diferencia ?? 0);
-    if (actual === undefined || Math.abs(nueva) > Math.abs(actual)) mapa.set(id, nueva);
-  }
-  return mapa;
-}
-
-/**
- * IDs de viaje con al menos un CFDI (`cfdi_uuid` no nulo) cuyo `estado_sat`
- * sigue sin llenarse — "sin validar", no "inválido" (ver `fiscal.ts:487`).
- */
-export async function getViajesConCfdiSinValidar(tenantId: string): Promise<Set<string>> {
-  const filas = await traerTodo<{ viaje_id: unknown }>(
-    (desde, hasta) => supabaseAdmin().from('gasto').select('viaje_id')
-      .eq('tenant_id', tenantId).not('cfdi_uuid', 'is', null).is('estado_sat', null)
-      .order('id').range(desde, hasta),
-    'getViajesConCfdiSinValidar',
-  );
-  return new Set(filas.map((f) => f.viaje_id as string));
-}
-
 export async function getKpis(tenantId: string, ventanaDias?: number): Promise<DashboardKpis> {
   const corte = corteVentana(ventanaDias);
   const rows = await traerTodo<{ total_comprobado: unknown; diferencia: unknown; estatus: unknown; diferencias: unknown }>(
