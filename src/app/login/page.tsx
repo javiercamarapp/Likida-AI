@@ -113,8 +113,11 @@ export default async function Login({
   // prensa que Likida no tiene, el selector US/MX/BR y "Contact sales"/"Try
   // Handle" (sin funnel de marketing todavía), "Sign up" (Likida no tiene
   // alta propia — decisión ya tomada y probada), y "Download desktop app"
-  // (no existe). La imagen de la derecha es propia, generada en el mismo
-  // estilo pixel-art — no la artwork de Handle.
+  // (no existe). La imagen de la derecha es propia, generada con Higgsfield
+  // (`nano_banana_2`) — fotorrealista, no la artwork de Handle ni el
+  // pixel-art que traía antes: Javier lo pidió explícito el 8-ago-2026,
+  // "camión real no pixeles", para que el login se sienta de la misma
+  // familia fotográfica que el banner de `/dashboard`.
   return (
     <main className="min-h-screen flex bg-white">
       <div className="flex w-full flex-col lg:w-1/2">
