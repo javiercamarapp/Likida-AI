@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import ChatFlota from './chat';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
@@ -32,6 +32,7 @@ interface Datos {
  * `?tenant=` que va en la petición NO se cree por sí solo.
  */
 export default function RailAsistente() {
+  const pathname = usePathname();
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
 
@@ -72,6 +73,13 @@ export default function RailAsistente() {
   // en blanco sin rastro: se dice que no se pudo leer, en vez de pintar nada.
   const errorCarga = datos?.errorCarga ?? false;
 
+  // El Resumen (`/dashboard` a secas) sigue la dirección visual elegida el
+  // 7-ago-2026: a ancho completo, sin el rail al lado. Las hooks de arriba
+  // corren igual (regla de hooks), así que la petición a `/api/dashboard/
+  // asistente` se hace una vez de más aquí — precio aceptable por no
+  // duplicar este componente. En las otras páginas el rail sigue fijo, sin
+  // cambios.
+  if (pathname === '/dashboard') return null;
 
   return (
     // EXPANDIDO SE SALE DEL FLUJO, no crece dentro de él.

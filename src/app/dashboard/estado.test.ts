@@ -118,21 +118,48 @@ describe('dashboard/page.tsx: el call site de estadoPanel', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// AUDITORÍA 10, MEDIO — "ESTÍMULOS ACREDITABLES" y "LIQUIDACIONES" están
-// ventaneadas por el `GlobalFilter` (reciben `ventana`) pero el título no lo
-// decía: con el default de 7 días, "IVA acreditable $12,480" se leía como el
-// total de la flota. La gráfica de arriba, en la misma pantalla, ya dice su
-// periodo ("Liquidaciones cerradas — últimos N días"); estas dos secciones
-// ahora hacen lo mismo, con la misma variable `etiquetaVentana`.
+// AUDITORÍA 10, MEDIO — cualquier sección ventaneada por un periodo tiene
+// que decirlo en el título: con el default de 7 días, "IVA acreditable
+// $12,480" se leía como el total de la flota.
+//
+// "Estímulos acreditables" y el bloque "Liquidaciones" (KPIs) que probaban
+// esto se retiraron el 7-ago-2026 — sus números se redistribuyeron en las
+// tarjetas del degradado ("Gasto total", "Total viajes", "Liquidado"). El
+// 8-ago-2026 esas tarjetas dejaron de compartir el filtro `GlobalFilter` de
+// la página (ahora solo lo usa la gráfica "Liquidado — {ventana}", más
+// abajo): cada una cicla su PROPIA vista con flechas ‹ › (`KpiPeriodo` —
+// semanal/mensual/histórico, no periodos consecutivos), y la etiqueta que
+// declara la ventana vive en `kpi-periodo.tsx` (`ETIQUETA_MODO`), no en
+// `page.tsx`. El motor fiscal sigue usando SU PROPIO periodo
+// (`periodoFiscal.etiqueta`, ejercicio fiscal — no el operativo). La
+// garantía que importa —que un rótulo "del periodo" no mienta— sigue viva
+// aquí, sobre el nuevo mecanismo.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('dashboard/page.tsx: las secciones filtradas dicen su periodo', () => {
   const PAGINA = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
+  const KPI_PERIODO = readFileSync(fileURLToPath(new URL('./kpi-periodo.tsx', import.meta.url)), 'utf8');
 
-  it('"Estímulos acreditables" lleva la ventana activa en el título', () => {
-    expect(PAGINA).toMatch(/Estímulos acreditables — \{etiquetaVentana\}/);
+  it('las 4 tarjetas del degradado pasan por KpiPeriodo, con nombre propio', () => {
+    expect(PAGINA).toMatch(/nombre="Gasto total"/);
+    expect(PAGINA).toMatch(/nombre="Total viajes"/);
+    expect(PAGINA).toMatch(/nombre="Costo por viaje"/);
+    expect(PAGINA).toMatch(/nombre="Liquidado"/);
   });
 
-  it('"Liquidaciones" lleva la ventana activa en el título', () => {
-    expect(PAGINA).toMatch(/Liquidaciones — \{etiquetaVentana\}/);
+  it('KpiPeriodo declara la ventana de cada vista — nunca un número mudo', () => {
+    expect(KPI_PERIODO).toMatch(/semanal:\s*'últimos 7 días'/);
+    expect(KPI_PERIODO).toMatch(/mensual:\s*'últimos 30 días'/);
+    expect(KPI_PERIODO).toMatch(/historico:\s*'histórico'/);
+    // La etiqueta real combina nombre + ventana — sin esto, ETIQUETA_MODO
+    // podría existir sin llegar nunca a la tarjeta.
+    expect(KPI_PERIODO).toMatch(/etiqueta=\{`\$\{nombre\} — \$\{ETIQUETA_MODO\[modo\]\}`\}/);
+  });
+
+  it('la gráfica "Liquidado" (la única que sigue leyendo el filtro global) también declara su ventana', () => {
+    expect(PAGINA).toMatch(/Liquidado — \{rango === 'todo' \? 'histórico' : `últimos \$\{ventanaDias\} días`\}/);
+  });
+
+  it('el motor fiscal declara SU periodo (ejercicio), no el operativo', () => {
+    expect(PAGINA).toMatch(/Tu motor fiscal — \{periodoFiscal\.etiqueta\}/);
   });
 });

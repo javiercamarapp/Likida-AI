@@ -46,6 +46,171 @@ function corteVentana(ventanaDias?: number, hoy: string = new Date().toISOString
   return d.toISOString();
 }
 
+export interface ComparativoPeriodo {
+  /** Límites del periodo, MX (`America/Mexico_City`) — AAAA-MM-DD, ambos
+   *  incluidos. Vienen en el resultado (no solo el índice de la serie) para
+   *  que la tarjeta pueda enseñar QUÉ fechas está mostrando, no solo "hace
+   *  N periodos". */
+  desde: string;
+  hasta: string;
+  gastoTotal: number;
+  totalViajes: number;
+  /** `null` sin viajes en el periodo — dividir entre cero daría Infinity, y
+   *  "$0/viaje" se leería como que salió gratis, no como que no hay con qué
+   *  medir. */
+  costoPorViaje: number | null;
+  liquidado: number;
+}
+
+/**
+ * Serie de `pasos` periodos consecutivos de `ventanaDias` días cada uno,
+ * SIN traslape, terminando en `hoy` — índice 0 es el más reciente (el que
+ * ya se enseñaba como "actual"), índice `pasos-1` el más viejo. Reemplaza a
+ * `getTendenciaKpis`/`comparativoEnRango` (un solo par actual/anterior):
+ * las flechas ‹ › de cada tarjeta de KPI (dirección del 8-ago-2026, una por
+ * tarjeta, independientes entre sí) necesitan poder seguir retrocediendo
+ * más de un periodo, no solo comparar contra el inmediato anterior.
+ *
+ * UNA SOLA CONSULTA POR TABLA, no `pasos` consultas — se trae el rango
+ * completo (`desdeGlobal` a `hoy`) una vez y se bucketea en memoria, mismo
+ * criterio que `viajes` en `page.tsx` (una carga, varias tarjetas). `gasto`
+ * y `viaje.fecha_inicio` son columnas `date` (comparación de string, sin
+ * riesgo de zona horaria). `liquidacion.created_at` SÍ es `timestamptz`,
+ * así que su bucket usa el día LOCAL (mismo patrón que
+ * `getLiquidacionesPorDia`) — un filtro en la base solo por UTC habría
+ * repetido el bug ya pagado ahí (cierres de tarde cayendo en el día
+ * siguiente).
+ */
+export async function getSerieComparativa(
+  tenantId: string,
+  ventanaDias: number,
+  pasos: number,
+  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+): Promise<ComparativoPeriodo[]> {
+  const limites = Array.from({ length: pasos }, (_, i) => {
+    const hastaD = new Date(`${hoy}T00:00:00Z`);
+    hastaD.setUTCDate(hastaD.getUTCDate() - i * ventanaDias);
+    const hasta = hastaD.toISOString().slice(0, 10);
+    const desdeD = new Date(hastaD);
+    desdeD.setUTCDate(desdeD.getUTCDate() - (ventanaDias - 1));
+    return { desde: desdeD.toISOString().slice(0, 10), hasta };
+  });
+  const desdeGlobal = limites[limites.length - 1].desde;
+
+  const admin = supabaseAdmin();
+  const [gastos, viajes, liquidaciones] = await Promise.all([
+    traerTodo<{ fecha: unknown; monto: unknown }>(
+      (desde, hasta) => admin.from('gasto').select('fecha, monto')
+        .eq('tenant_id', tenantId).gte('fecha', desdeGlobal).lte('fecha', hoy)
+        .order('id').range(desde, hasta),
+      'getSerieComparativa.gasto',
+    ),
+    traerTodo<{ fecha_inicio: unknown }>(
+      (desde, hasta) => admin.from('viaje').select('fecha_inicio')
+        .eq('tenant_id', tenantId).gte('fecha_inicio', desdeGlobal).lte('fecha_inicio', hoy)
+        .order('id').range(desde, hasta),
+      'getSerieComparativa.viaje',
+    ),
+    // Cota inferior generosa (medianoche UTC del día MX más viejo) — un
+    // poco de sobra hacia el pasado no rompe nada porque el bucket real de
+    // abajo filtra por día LOCAL; lo que sí rompería es una cota que
+    // recorte por el lado equivocado.
+    traerTodo<{ created_at: unknown; total_comprobado: unknown }>(
+      (desde, hasta) => admin.from('liquidacion').select('created_at, total_comprobado')
+        .eq('tenant_id', tenantId).gte('created_at', `${desdeGlobal}T00:00:00Z`)
+        .order('id').range(desde, hasta),
+      'getSerieComparativa.liquidacion',
+    ),
+  ]);
+
+  const diaLocalMx = (iso: string): string => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ_MX });
+  const enRango = (dia: string, desde: string, hasta: string) => dia >= desde && dia <= hasta;
+
+  return limites.map(({ desde, hasta }) => {
+    const gastoTotal = round2(
+      gastos.filter((g) => enRango(g.fecha as string, desde, hasta))
+        .reduce((s, g) => s + Number(g.monto ?? 0), 0),
+    );
+    const n = viajes.filter((v) => v.fecha_inicio && enRango(v.fecha_inicio as string, desde, hasta)).length;
+    const liquidado = round2(
+      liquidaciones.filter((l) => enRango(diaLocalMx(l.created_at as string), desde, hasta))
+        .reduce((s, l) => s + Number(l.total_comprobado ?? 0), 0),
+    );
+    return { desde, hasta, gastoTotal, totalViajes: n, costoPorViaje: n === 0 ? null : round2(gastoTotal / n), liquidado };
+  });
+}
+
+export interface SeriesKpiCards {
+  /** [actual, anterior] — 7 días vs los 7 previos. */
+  semanal: ComparativoPeriodo[];
+  /** [actual, anterior] — 30 días vs los 30 previos. */
+  mensual: ComparativoPeriodo[];
+  /** [total] — un solo bucket, TODO el histórico. Sin "anterior": no hay
+   *  tendencia que enseñar contra un periodo que no existe. */
+  historico: ComparativoPeriodo[];
+}
+
+/**
+ * Las 3 vistas que cada tarjeta de KPI cicla con sus flechas ‹ › (dirección
+ * del 8-ago-2026: reemplaza al filtro único 7d/30d/Todo que vivía arriba de
+ * las 4 tarjetas — ahora cada una cambia de granularidad por su cuenta).
+ * `histórico` reusa el mismo truco que ya usaba `getTendenciaKpis`: una
+ * ventana de ~10 años (de sobra para una flota que arrancó en 2026) hace de
+ * "todo el histórico" sin necesitar una consulta sin cota.
+ */
+export async function getSeriesKpiCards(
+  tenantId: string,
+  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+): Promise<SeriesKpiCards> {
+  const [semanal, mensual, historico] = await Promise.all([
+    getSerieComparativa(tenantId, 7, 2, hoy),
+    getSerieComparativa(tenantId, 30, 2, hoy),
+    getSerieComparativa(tenantId, 3650, 1, hoy),
+  ]);
+  return { semanal, mensual, historico };
+}
+
+/**
+ * `viaje_id → diferencia` de toda liquidación marcada `con_diferencias` o
+ * `revisar` — la señal real de "el anticipo y lo comprobado no cuadran".
+ * Se cruza en el cliente contra `getViajes` (ya cargado para la tabla de
+ * abajo) en vez de repetir el join aquí: dos consultas más baratas que un
+ * embed anidado (`liquidacion → viaje → operador`) cuya forma exacta hay
+ * que adivinar.
+ */
+export async function getViajesConDiferencia(tenantId: string): Promise<Map<string, number>> {
+  const filas = await traerTodo<{ viaje_id: unknown; diferencia: unknown }>(
+    (desde, hasta) => supabaseAdmin().from('liquidacion').select('viaje_id, diferencia')
+      .eq('tenant_id', tenantId).in('estatus', ['con_diferencias', 'revisar'])
+      .order('id').range(desde, hasta),
+    'getViajesConDiferencia',
+  );
+  const mapa = new Map<string, number>();
+  for (const f of filas) {
+    const id = f.viaje_id as string;
+    // Puede haber más de una liquidación con diferencia por viaje (recuadre);
+    // se queda la de mayor monto absoluto, que es la que de verdad alarma.
+    const actual = mapa.get(id);
+    const nueva = Number(f.diferencia ?? 0);
+    if (actual === undefined || Math.abs(nueva) > Math.abs(actual)) mapa.set(id, nueva);
+  }
+  return mapa;
+}
+
+/**
+ * IDs de viaje con al menos un CFDI (`cfdi_uuid` no nulo) cuyo `estado_sat`
+ * sigue sin llenarse — "sin validar", no "inválido" (ver `fiscal.ts:487`).
+ */
+export async function getViajesConCfdiSinValidar(tenantId: string): Promise<Set<string>> {
+  const filas = await traerTodo<{ viaje_id: unknown }>(
+    (desde, hasta) => supabaseAdmin().from('gasto').select('viaje_id')
+      .eq('tenant_id', tenantId).not('cfdi_uuid', 'is', null).is('estado_sat', null)
+      .order('id').range(desde, hasta),
+    'getViajesConCfdiSinValidar',
+  );
+  return new Set(filas.map((f) => f.viaje_id as string));
+}
+
 export async function getKpis(tenantId: string, ventanaDias?: number): Promise<DashboardKpis> {
   const corte = corteVentana(ventanaDias);
   const rows = await traerTodo<{ total_comprobado: unknown; diferencia: unknown; estatus: unknown; diferencias: unknown }>(
@@ -197,6 +362,35 @@ export async function getLiquidacionesPorDia(
     const dia = cortes(ventanaDias - 1 - i);
     return { dia, valor: porDiaMap.get(dia) ?? 0 };
   });
+}
+
+/** Viajes iniciados por MES, histórico completo — a diferencia de `viajes`
+ *  (que ya carga la página para `AvanceCierre`/`ViajesAtencion`), ese
+ *  arreglo viene topado a 100 filas más recientes por diseño: de sobra para
+ *  una ventana de 7/30 días, corto para "todo el histórico" de una flota
+ *  con más de 100 viajes en total, donde la vista histórica se leería como
+ *  un tramo reciente disfrazado de serie completa. `traerTodo` pagina sin
+ *  el tope de 1,000 filas de PostgREST; `fecha_inicio` es columna `date`
+ *  (sin hora/zona horaria que resolver, a diferencia de `created_at`). */
+export async function getViajesPorMes(tenantId: string): Promise<Array<{ dia: string; valor: number }>> {
+  const rows = await traerTodo<{ fecha_inicio: unknown }>(
+    (desde, hasta) => supabaseAdmin()
+      .from('viaje')
+      .select('fecha_inicio')
+      .eq('tenant_id', tenantId)
+      .not('fecha_inicio', 'is', null)
+      .order('id')
+      .range(desde, hasta),
+    'getViajesPorMes',
+  );
+  const porMes = new Map<string, number>();
+  for (const r of rows) {
+    const mes = (r.fecha_inicio as string).slice(0, 7); // YYYY-MM
+    porMes.set(mes, (porMes.get(mes) ?? 0) + 1);
+  }
+  return Array.from(porMes.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([dia, valor]) => ({ dia, valor }));
 }
 
 export interface Acreditables {

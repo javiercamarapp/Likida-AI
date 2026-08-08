@@ -28,13 +28,23 @@ function viaje(fechaInicio: string | null, estatus: string): ViajeRow {
   };
 }
 
-describe('AvanceCierre — mismo vocabulario que GlobalFilter', () => {
-  it('el filtro dice "7d" y "30d", no "Semana" y "Mes"', () => {
-    const html = renderToStaticMarkup(<AvanceCierre viajes={[]} ahoraMs={AHORA} />);
-    expect(html).toContain('7d');
-    expect(html).toContain('30d');
+describe('AvanceCierre — un solo filtro para toda la pantalla (7-ago-2026)', () => {
+  it('ya no dibuja su propio botón de periodo — el "7d"/"30d"/"Todo" ahora es de `GlobalFilter`, arriba', () => {
+    // Retirado el propio toggle: dos controles de periodo en la misma
+    // pantalla podían mostrar estados distintos (el hallazgo original de
+    // esta prueba). Ahora `rango` llega por prop desde `resolverRango` en
+    // `page.tsx`, y aquí no se pinta ningún botón — ni "7d"/"30d" ni
+    // "Semana"/"Mes".
+    const html = renderToStaticMarkup(<AvanceCierre viajes={[]} ahoraMs={AHORA} rango="30" />);
+    expect(html).not.toContain('<button');
     expect(html).not.toContain('Semana');
     expect(html).not.toContain('>Mes<');
+  });
+
+  it('el `rango` que recibe decide la ventana — "30" cuenta 30 días, no 7', () => {
+    const dentroDe30 = { fechaInicio: '2026-07-15', estatus: 'liquidado' } as ViajeRow;
+    const html = renderToStaticMarkup(<AvanceCierre viajes={[{ ...viaje(null, 'abierto'), ...dentroDe30 }]} ahoraMs={AHORA} rango="30" />);
+    expect(html).toContain('1 de 1 viaje');
   });
 });
 

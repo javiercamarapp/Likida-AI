@@ -41,8 +41,8 @@ import { createServerClient } from '@supabase/ssr';
  *   `unsafe-inline` la mitad del panel se pinta sin color.
  * - `img-src https://*.supabase.co`: los avatares y las fotos de
  *   comprobante son URLs firmadas/públicas de Storage
- *   (`chofer.ts:424`, `admin/mi-perfil/page.tsx:52`) — el navegador las
- *   pide directo, sin pasar por `/api`.
+ *   (`admin/mi-perfil/page.tsx:52`) — el navegador las pide directo, sin
+ *   pasar por `/api`.
  * - `connect-src 'self'` y nada más: los dos `fetch(` que existen en
  *   componentes cliente (`dashboard/rail.tsx`, `demo/page.tsx`) son a rutas
  *   propias. Sentry vive SOLO en `SENTRY_DSN` (server, sin
@@ -56,9 +56,20 @@ import { createServerClient } from '@supabase/ssr';
  *
  * Verificado, no supuesto: `docs/auditoria-10/seguridad.md`.
  */
+// `next dev` (Fast Refresh) parchea módulos con `eval()` al arrancar — sin
+// `unsafe-eval` esa corrida truena ANTES de que la app hidrate, y la pantalla
+// se queda pegada en el loading skeleton para siempre (rehidratación nunca
+// llega a correr). Ese `eval` es exclusivo del bundle de DESARROLLO: el build
+// de producción no lo usa, así que restringir la excepción a
+// `NODE_ENV === 'development'` no afloja nada en producción — la comprobó
+// `proxy.test.ts` no distingue por `script-src`, solo por presencia de CSP.
+const scriptSrc = process.env.NODE_ENV === 'development'
+  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+  : "script-src 'self' 'unsafe-inline'";
+
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  scriptSrc,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https://*.supabase.co",
   "font-src 'self' data:",
@@ -88,26 +99,21 @@ function withSecurityHeaders(res: NextResponse): NextResponse {
  * más, faltar sirve una pantalla del panel a quien no inició sesión.
  *
  * Se exporta para que `proxy.test.ts` pueda comprobar que TODA sección con
- * `requireOperador`/`requireSessionTenant` está nombrada aquí — /chofer nació
- * sin estar en esta lista y el único aviso fue un comentario en su layout.
+ * `requireSessionTenant`/`requireSuperadmin` está nombrada aquí.
+ *
+ * `/chofer` y `/mis-viajes` salieron el 7-ago-2026: el chofer ya no tiene
+ * cuenta ni panel propio, solo WhatsApp — ver `visibilidad.ts` (`PANEL_PROPIO`
+ * vacío) y `guard.ts` (`requireOperador` retirada).
  */
-export const RUTAS_CON_SESION = ['/dashboard', '/mis-viajes', '/chofer', '/admin'] as const;
+export const RUTAS_CON_SESION = ['/dashboard', '/admin'] as const;
 
 export async function proxy(req: NextRequest) {
   let res = NextResponse.next({ request: req });
   const path = req.nextUrl.pathname;
 
-  // /chofer es el panel móvil del chofer, /mis-viajes su antecesor de solo
-  // lectura, y /admin la consola de negocio de Javier (requireOperador /
-  // requireSuperadmin, guard.ts): mismo gate de sesión que /dashboard, la
-  // distinción de ROL vive en la página, no aquí — esta capa solo pregunta
-  // "¿hay sesión?".
-  //
-  // /chofer FALTABA. Su layout ya llama a `requireOperador()`, pero eso lo
-  // dejaba con UNA sola capa: la promesa de este archivo es que las dos
-  // tengan que fallar a la vez. Y es la capa que ve la URL COMPLETA, así que
-  // es la única que puede devolver al chofer exactamente a la pantalla del
-  // enlace de WhatsApp que abrió, query string incluido.
+  // /admin es la consola de negocio de Javier (requireSuperadmin, guard.ts):
+  // mismo gate de sesión que /dashboard, la distinción de ROL vive en la
+  // página, no aquí — esta capa solo pregunta "¿hay sesión?".
   if (RUTAS_CON_SESION.some((p) => path.startsWith(p))) {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
