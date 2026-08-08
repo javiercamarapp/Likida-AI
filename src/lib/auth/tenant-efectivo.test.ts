@@ -48,26 +48,25 @@ const RUTAS = [
 ];
 
 describe('un chofer no entra a NINGUNA pantalla de /dashboard, ni tecleando la URL', () => {
+  // Retirado el 7-ago-2026 (/chofer, /mis-viajes y su login): `operador` ya
+  // no tiene panel propio, así que `inicioDe('operador')` es '/sin-acceso' —
+  // y esta vez es la verdad, no un texto que le miente a alguien con panel.
   it.each(RUTAS)('%s lo rebota', async (ruta) => {
     requireSessionTenant.mockResolvedValue(CHOFER);
     await expect(resolverTenantEfectivo(ruta, undefined)).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirect, `${ruta} sirvió el panel de oficina a un chofer`).toHaveBeenCalledWith('/chofer');
+    expect(redirect, `${ruta} sirvió el panel de oficina a un chofer`).toHaveBeenCalledWith('/sin-acceso');
   });
 
-  it('el rebote lo deja EN SU PANEL, no en /sin-acceso', async () => {
-    // Antes `inicioDe('operador')` devolvía '/sin-acceso' —no tenía áreas y no
-    // había panel suyo—, así que el chofer que llegaba aquí leía "no tienes
-    // acceso" teniendo /chofer, y ese texto le dice que pida su alta.
+  it('el rebote coincide con lo que dice `inicioDe`', async () => {
     requireSessionTenant.mockResolvedValue(CHOFER);
     await expect(resolverTenantEfectivo('/dashboard', undefined)).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirect).not.toHaveBeenCalledWith('/sin-acceso');
     expect(redirect).toHaveBeenCalledWith(inicioDe('operador'));
+    expect(inicioDe('operador')).toBe('/sin-acceso');
   });
 
   it('el destino del rebote no vuelve a pasar por esta puerta — no hay bucle', () => {
-    // `/chofer` no es una ruta de /dashboard, así que no la gatea esta
-    // función: el rebote termina ahí. Es la propiedad que hizo falta cambiar
-    // el aterrizaje del contador para conseguir.
+    // `/sin-acceso` no es una ruta de /dashboard, así que no la gatea esta
+    // función: el rebote termina ahí.
     expect(RUTAS).not.toContain(inicioDe('operador'));
   });
 
@@ -78,7 +77,7 @@ describe('un chofer no entra a NINGUNA pantalla de /dashboard, ni tecleando la U
     await expect(
       resolverTenantEfectivo('/dashboard/rentabilidad', { rol: 'flota_admin' }),
     ).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirect).toHaveBeenCalledWith('/chofer');
+    expect(redirect).toHaveBeenCalledWith('/sin-acceso');
   });
 
   it('`?tenant=` tampoco: se rebota ANTES de resolver flota alguna', async () => {
@@ -86,7 +85,7 @@ describe('un chofer no entra a NINGUNA pantalla de /dashboard, ni tecleando la U
     await expect(
       resolverTenantEfectivo('/dashboard/cuadre', { tenant: 't-de-otra-flota' }),
     ).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirect).toHaveBeenCalledWith('/chofer');
+    expect(redirect).toHaveBeenCalledWith('/sin-acceso');
   });
 });
 

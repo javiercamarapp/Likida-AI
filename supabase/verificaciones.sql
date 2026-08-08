@@ -2967,186 +2967,15 @@ begin
   raise exception '53  sin_match-entra=%  basura-rebota=%  (esperado t / t)', sin_match_entra, basura_rebota;
 end $$;
 
--- ── 54. El chofer no ve ni escribe lo que no es suyo (mig. 0078) ────────────
--- La 0045 cerró viaje/gasto/liquidacion; la 0078 cierra las que quedaron:
--- operador, terminal, politica_gasto, wa_conversacion, llm_costo, cfdi_xml,
--- cfdi_consolidado_linea — y deja `tenant` en SOLO lectura por RLS (la app
--- escribe por service_role). Se siembran filas en las tablas, se impersona
--- a un chofer (mismo mecanismo del bloque 26/28) y se cuenta: esperado 0 en
--- las siete (leer lo de la flota = fuga) y 0 filas afectadas al intentar
--- editar el tenant (la regla que lo juzga). De paso se verifica que un
--- flota_admin SIGUE viendo lo suyo (no se rompió la oficina).
---
--- Corrida real esperada:
---   operador=0 terminal=0 politica=0 wa=0 llm=0 cfdi_xml=0 cola=0
---   tenant-update=0 (un UPDATE que no toca nada)  tenant-select=1
---   admin-ve-operador=2
-do $$
-declare
-  v_t uuid; v_o1 uuid; v_o2 uuid; v_v uuid; v_x uuid; v_u1 uuid := gen_random_uuid(); v_admin uuid := gen_random_uuid();
-  n_operador int; n_terminal int; n_politica int; n_wa int; n_llm int; n_xml int; n_cola int;
-  n_tenant_updated int; n_tenant_visibles int; n_admin_operador int;
-begin
-  insert into tenant (nombre) values ('ZZZ VERIF RLS 0078 '||gen_random_uuid()) returning id into v_t;
-  insert into terminal (tenant_id, nombre) values (v_t, 'Terminal ZZZ');
-  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Uno', '520000009050') returning id into v_o1;
-  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Dos', '520000009051') returning id into v_o2;
-  insert into viaje (tenant_id, operador_id) values (v_t, v_o1) returning id into v_v;
-  insert into wa_conversacion (tenant_id, operador_id, telefono) values (v_t, v_o1, '520000009050');
-  insert into llm_costo (tenant_id, viaje_id, fase, modelo, costo_usd) values (v_t, v_v, 'cuadre', 'zzz', 0.01);
-  insert into cfdi_xml (tenant_id, cfdi_uuid, xml, tiene_multiples_conceptos, total_conceptos)
-    values (v_t, 'ZZZ-0078-1', '<cfdi/>', true, 1) returning id into v_x;
-  insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, estatus)
-    values (v_t, v_x, 1, 'ecc12', 100, 'por_conciliar');
-  insert into politica_gasto (tenant_id, concepto, tope_monto) values (v_t, 'diesel', 4000);
-  insert into app_user (id, tenant_id, email, rol, operador_id)
-    values (v_u1, v_t, 'zzz-verif-chofer@likida.test', 'operador', v_o1);
-  insert into app_user (id, tenant_id, email, rol)
-    values (v_admin, v_t, 'zzz-verif-admin@likida.test', 'flota_admin');
-
-  -- ── El chofer, impersonado ─────────────────────────────────────────────
-  set local role authenticated;
-  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
-
-  select count(*) into n_operador from operador where tenant_id = v_t;
-  select count(*) into n_terminal from terminal where tenant_id = v_t;
-  select count(*) into n_politica from politica_gasto where tenant_id = v_t;
-  select count(*) into n_wa from wa_conversacion where tenant_id = v_t;
-  select count(*) into n_llm from llm_costo where tenant_id = v_t;
-  select count(*) into n_xml from cfdi_xml where tenant_id = v_t;
-  select count(*) into n_cola from cfdi_consolidado_linea where tenant_id = v_t;
-  select count(*) into n_tenant_visibles from tenant where id = v_t;
-
-  -- Editar el tenant (rfc/politica de la flota) tiene que tocar CERO filas:
-  -- `tenant_self` ahora es for select, no hay policy de escritura.
-  update tenant set rfc = 'XAXX010101000' where id = v_t;
-  GET DIAGNOSTICS n_tenant_updated = ROW_COUNT;
-
-  reset role;
-
-  -- ── Regresión: el flota_admin sigue viendo a su flota ──────────────────
-  set local role authenticated;
-  perform set_config('request.jwt.claims', json_build_object('sub', v_admin)::text, true);
-  select count(*) into n_admin_operador from operador where tenant_id = v_t;
-  reset role;
-
-  delete from tenant where id = v_t;   -- cascade limpia el resto
-  raise exception E'RLS_0078  operador=% terminal=% politica=% wa=% llm=% cfdi_xml=% cola=% tenant-update=% tenant-select=% admin-ve-operador=%   (esperado 0/0/0/0/0/0/0/0/1/2)',
-    n_operador, n_terminal, n_politica, n_wa, n_llm, n_xml, n_cola, n_tenant_updated, n_tenant_visibles, n_admin_operador;
-end $$;
-
--- ── 55. Las ESCRITURAS del chofer y la familia de la 0079 (migs. 0078+0079) ─
--- El bloque 54 probó las lecturas del chofer en cero; este prueba las
--- ESCRITURAS —el escenario titular de la 0078 (modificar teléfonos de la
--- flota) que el 54 no ejercitaba— y la 0079: el chofer ya no lee `app_user`
--- de su flota ni inserta en `bitacora_auditoria`. Un UPDATE del chofer sobre
--- `operador` de SU flota tiene que tocar CERO filas; un UPDATE de su propio
--- `app_user` (cambiarse el operador_id para robar identidad) también; un
--- INSERT en `bitacora_auditoria` tiene que rebotar; y la lectura de
--- `app_user` ajena da 0. El flota_admin sigue insertando bitácora (regresión).
---
--- Corrida real esperada:
---   update-operador=0  update-app_user=0  insert-bitacora=f
---   lee-app_user-ajeno=1 (su PROPIA fila — session.ts:70 la necesita; la del
---   admin NO la ve)  admin-inserta-bitacora=t
-do $$
-declare
-  v_t uuid; v_o1 uuid; v_o2 uuid; v_v uuid; v_u1 uuid := gen_random_uuid(); v_admin uuid := gen_random_uuid();
-  n_operador_updated int; n_self_updated int; n_appuser_visibles int;
-  bitacora_chofer_ok boolean := false; bitacora_admin_ok boolean := false;
-begin
-  insert into tenant (nombre) values ('ZZZ VERIF RLS 0079 '||gen_random_uuid()) returning id into v_t;
-  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Uno', '520000009060') returning id into v_o1;
-  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Dos', '520000009061') returning id into v_o2;
-  insert into viaje (tenant_id, operador_id) values (v_t, v_o1) returning id into v_v;
-  insert into app_user (id, tenant_id, email, rol, operador_id)
-    values (v_u1, v_t, 'zzz-verif-chofer2@likida.test', 'operador', v_o1);
-  insert into app_user (id, tenant_id, email, rol)
-    values (v_admin, v_t, 'zzz-verif-admin2@likida.test', 'flota_admin');
-
-  -- ── El chofer, impersonado ─────────────────────────────────────────────
-  set local role authenticated;
-  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
-
-  -- El escenario titular de la 0078: modificar el teléfono de un compañero.
-  update operador set telefono = '520000009099' where tenant_id = v_t;
-  GET DIAGNOSTICS n_operador_updated = ROW_COUNT;
-
-  -- Robo de identidad por la puerta de la app: ligar su cuenta a OTRO operador.
-  update app_user set operador_id = v_o2 where id = v_u1;
-  GET DIAGNOSTICS n_self_updated = ROW_COUNT;
-
-  -- Ya no lee a los usuarios de su flota (0079).
-  select count(*) into n_appuser_visibles from app_user where tenant_id = v_t;
-
-  -- Ya no siembra la bitácora (0079).
-  begin
-    insert into bitacora_auditoria (tenant_id, accion, entidad, entidad_id, detalle, actor_email)
-      values (v_t, 'flota.politica.cambiada', 'tenant', v_t, '{"tope_diesel":20000}'::jsonb, 'zzz@likida.test');
-    bitacora_chofer_ok := true;
-  exception when insufficient_privilege then bitacora_chofer_ok := false;
-  end;
-
-  reset role;
-
-  -- ── Regresión: el flota_admin sigue insertando su bitácora ─────────────
-  set local role authenticated;
-  perform set_config('request.jwt.claims', json_build_object('sub', v_admin)::text, true);
-  begin
-    insert into bitacora_auditoria (tenant_id, accion, entidad, entidad_id, detalle, actor_email)
-      values (v_t, 'flota.politica.cambiada', 'tenant', v_t, '{"tope_diesel":15000}'::jsonb, 'zzz-admin@likida.test');
-    bitacora_admin_ok := true;
-  exception when others then bitacora_admin_ok := false;
-  end;
-  reset role;
-
-  delete from tenant where id = v_t;
-  raise exception E'RLS_0079  update-operador=% update-app_user=% insert-bitacora=% lee-app_user-ajeno=% admin-inserta-bitacora=%   (esperado 0/0/f/1/t)',
-    n_operador_updated, n_self_updated, bitacora_chofer_ok, n_appuser_visibles, bitacora_admin_ok;
-end $$;
-
--- ── 56. El POD del chofer queda en SU flota (mig. 0081) ─────────────────────
--- `operador_sube_su_pod` es la única escritura RLS del chofer. Antes solo
--- verificaba que el viaje fuera suyo; un chofer podía insertar el POD con
--- tenant_id de OTRA flota y la fila quedaba cruzada. Se siembran dos tenants,
--- se impersona al chofer del A, y se intenta: POD con el tenant CORRECTO (debe
--- entrar) y POD con el tenant de B (debe rebotar).
---
--- Corrida real esperada:
---   pod-en-su-flota=t  pod-en-flota-ajena=f
-do $$
-declare
-  v_a uuid; v_b uuid; v_o uuid; v_v uuid; v_u uuid := gen_random_uuid();
-  pod_propio boolean := false; pod_ajeno boolean := false;
-begin
-  insert into tenant (nombre) values ('ZZZ VERIF POD A') returning id into v_a;
-  insert into tenant (nombre) values ('ZZZ VERIF POD B') returning id into v_b;
-  insert into operador (tenant_id, nombre, telefono) values (v_a, 'Chofer POD', '520000009070') returning id into v_o;
-  insert into viaje (tenant_id, operador_id) values (v_a, v_o) returning id into v_v;
-  insert into app_user (id, tenant_id, email, rol, operador_id)
-    values (v_u, v_a, 'zzz-verif-pod@likida.test', 'operador', v_o);
-
-  set local role authenticated;
-  perform set_config('request.jwt.claims', json_build_object('sub', v_u)::text, true);
-
-  begin
-    insert into pod (tenant_id, viaje_id, operador_id, estado) values (v_a, v_v, v_o, 'pendiente');
-    pod_propio := true;
-  exception when insufficient_privilege then pod_propio := false;
-  end;
-
-  begin
-    insert into pod (tenant_id, viaje_id, operador_id, estado) values (v_b, v_v, v_o, 'pendiente');
-    pod_ajeno := true;
-  exception when insufficient_privilege then pod_ajeno := false;
-  end;
-
-  reset role;
-  delete from tenant where id in (v_a, v_b);
-  raise exception E'POD_TENANT  pod-en-su-flota=%  pod-en-flota-ajena=%   (esperado true / false — ajeno=true sería la fuga)',
-    pod_propio, pod_ajeno;
-end $$;
-
+-- ── [RETIRADO] 54/55/56 — probaban RLS de una sesión de chofer que ya no
+-- puede existir (0086 retira `operador` del dominio de rol: /chofer y
+-- /mis-viajes salieron, el chofer solo usa WhatsApp). Los tres empezaban con
+-- `insert into app_user (..., rol, ...) values (..., 'operador', ...)`, que
+-- ahora rebota con la violación del constraint — no hay nada que impersonar.
+-- La garantía que reemplaza a las tres es más fuerte: no "no ve lo ajeno",
+-- sino "no puede tener sesión". Eso lo comprueba el bloque 62 (0086). Ver
+-- EXENTAS en migraciones_verificadas.test.ts para 0078/0079/0081.
+-- ── [antes aquí vivían los bloques 54, 55 y 56] ──────────────────────────
 -- ── 61. config_tenant_valida NO crashea al actualizar un tenant con la ─────
 -- facilidad del 15% declarada (mig. 0085).
 -- La 0083 metió `r := o->'regimenElegible'` con `r` tipo `record`: asignar
@@ -3165,4 +2994,57 @@ begin
 
   select nombre into v_n from tenant where id = v_t;
   raise exception E'FACILIDAD_UPDATE  actualiza-con-facilidad=%  (esperado actualiza-con-facilidad=actualiza)', v_n;
+end $$;
+
+-- ── 62. `operador` no puede tener sesión — reemplaza a 54/55/56 (mig. 0086) ─
+-- Retirado el rol del dominio, ya no hace falta impersonar a un chofer para
+-- probar que no ve lo ajeno: se prueba que NO PUEDE EXISTIR. Se intenta el
+-- INSERT que antes creaba la sesión de chofer (54/55/56 lo hacían tal cual)
+-- y se espera el rechazo del CHECK. De paso, regresión de que un rol real
+-- (flota_admin) sigue aislado por tenant en dos patrones de policy: el
+-- simple (`viaje`, tenant_id propio) y el de join (`ticket_mensaje`, que
+-- filtra vía `ticket_soporte` porque no tiene tenant_id propio) — para
+-- confirmar que quitar `and not is_operador()` de 20 policies no aflojó el
+-- aislamiento real que sí importa.
+--
+-- Corrida real (7-ago-2026, contra el proyecto Likida, recién aplicada 0086):
+--   operador-rebota=t  viaje-propio=1  viaje-ajeno=0  ticket-mensaje-propio=1
+--   (esperado t / 1 / 0 / 1 — los cuatro exactos)
+do $$
+declare
+  v_a uuid; v_b uuid; v_op_a uuid; v_op_b uuid; v_via_a uuid; v_via_b uuid; v_tk uuid; v_u_a uuid := gen_random_uuid();
+  operador_rebota boolean := false;
+  n_viaje_propio int; n_viaje_ajeno int; n_ticket_propio int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0086 A') returning id into v_a;
+  insert into tenant (nombre) values ('ZZZ VERIF 0086 B') returning id into v_b;
+
+  -- El INSERT que antes creaba la sesión del chofer (54/55/56) ahora rebota.
+  begin
+    insert into app_user (id, tenant_id, email, rol) values (gen_random_uuid(), v_a, 'zzz-verif-operador@likida.test', 'operador');
+  exception when check_violation then operador_rebota := true;
+  end;
+
+  insert into operador (tenant_id, nombre, telefono) values (v_a, 'Chofer ZZZ A', '520000009090') returning id into v_op_a;
+  insert into operador (tenant_id, nombre, telefono) values (v_b, 'Chofer ZZZ B', '520000009091') returning id into v_op_b;
+  insert into viaje (tenant_id, operador_id) values (v_a, v_op_a) returning id into v_via_a;
+  insert into viaje (tenant_id, operador_id) values (v_b, v_op_b) returning id into v_via_b;
+  insert into ticket_soporte (tenant_id, asunto) values (v_a, 'ZZZ ticket') returning id into v_tk;
+  insert into ticket_mensaje (ticket_id, cuerpo) values (v_tk, 'hola');
+
+  insert into app_user (id, tenant_id, email, rol) values (v_u_a, v_a, 'zzz-verif-flota-a@likida.test', 'flota_admin');
+
+  -- ── El flota_admin de la A, impersonado ─────────────────────────────────
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u_a)::text, true);
+
+  select count(*) into n_viaje_propio from viaje where tenant_id = v_a;
+  select count(*) into n_viaje_ajeno from viaje where tenant_id = v_b;
+  select count(*) into n_ticket_propio from ticket_mensaje where ticket_id = v_tk;
+
+  reset role;
+
+  delete from tenant where id in (v_a, v_b);   -- cascade limpia el resto
+  raise exception E'RLS_0086  operador-rebota=%  viaje-propio=%  viaje-ajeno=%  ticket-mensaje-propio=%   (esperado t / 1 / 0 / 1)',
+    operador_rebota, n_viaje_propio, n_viaje_ajeno, n_ticket_propio;
 end $$;

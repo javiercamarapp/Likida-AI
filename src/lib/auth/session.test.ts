@@ -21,7 +21,7 @@ const { puedeExportar, puedeAsignar, puedeAdministrar } = await import('./permis
 // Las puertas REALES contra la sesión REAL. `guard.test.ts` mockea
 // `getSessionTenant`, así que por construcción no puede ver qué rol nace de una
 // fila ausente — que es exactamente lo que falló aquí.
-const { requireSessionTenant, requireOperador, requireSuperadmin } = await import('./guard');
+const { requireSessionTenant, requireSuperadmin } = await import('./guard');
 const { resolverTenantApi } = await import('./tenant-api');
 
 describe('getSessionTenant', () => {
@@ -102,7 +102,7 @@ describe('getSessionTenant', () => {
     expect(r).toEqual({ userId: 'u-3', tenantId: null, rol: 'superadmin', nombre: 'Ana', operadorId: null, avatarUrl: null });
   });
 
-  it('chofer: trae operadorId — la vista /mis-viajes lo necesita para saber qué es "lo suyo"', async () => {
+  it('una fila con operador_id lo trae en operadorId (columna viva, aunque el login del chofer ya no exista)', async () => {
     getUser.mockResolvedValue({ data: { user: { id: 'u-4' } } });
     maybeSingle.mockResolvedValue({ data: { tenant_id: 't-1', rol: 'operador', nombre: 'Juan', operador_id: 'o-9' } });
     const r = await getSessionTenant();
@@ -152,14 +152,6 @@ describe('una cuenta de auth.users sin fila en app_user no entra por ninguna pue
   it('/admin: NO es superadmin ni por accidente', async () => {
     await expect(requireSuperadmin()).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).not.toHaveBeenCalledWith(expect.stringContaining('/admin'));
-  });
-
-  it('/chofer: rebota a /sin-acceso y ya no a /dashboard, que tampoco era suyo', async () => {
-    // Con el default viejo el rebote era `inicioDe('flota_admin')` = /dashboard,
-    // o sea que la puerta del chofer lo mandaba al panel del DUEÑO — que lo
-    // volvía a rebotar. Ahora sale al sitio correcto en un salto.
-    await expect(requireOperador('/chofer')).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirect).toHaveBeenCalledWith('/sin-acceso');
   });
 
   it('las rutas de API (export, asistente): 403, y no la flota demo', async () => {

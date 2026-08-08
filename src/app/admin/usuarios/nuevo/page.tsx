@@ -9,7 +9,6 @@ const ROLES: Array<{ valor: RolAppUser; etiqueta: string }> = [
   { valor: 'flota_admin', etiqueta: 'Dueño (flota_admin) — control total de su flota' },
   { valor: 'encargado', etiqueta: 'Encargado — asigna viajes, exporta, sin facturación' },
   { valor: 'contador', etiqueta: 'Contador — solo lectura y exportar' },
-  { valor: 'operador', etiqueta: 'Chofer (operador) — solo sus propios viajes' },
 ];
 
 /**
@@ -31,10 +30,11 @@ export default async function NuevoUsuario() {
     const nombre = String(formData.get('nombre') ?? '').trim() || undefined;
     const rol = formData.get('rol') as RolAppUser;
     if (!tenantId || !email || !rol) redirect('/admin/usuarios/nuevo?error=1');
-    // AUDITORÍA 13, MEDIO: el `<select>` solo ofrece 4 roles (sin superadmin y
-    // sin operador), pero el POST directo podía pedir cualquiera. El superadmin
-    // se crea por SQL directo y el operador con su cuenta ligada a un chofer.
-    if (rol === 'superadmin' || rol === 'operador') redirect('/admin/usuarios/nuevo?error=2');
+    // AUDITORÍA 13, MEDIO: el `<select>` solo ofrece 3 roles (sin superadmin),
+    // pero el POST directo podía pedir cualquiera. El superadmin se crea por
+    // SQL directo. El chofer (`operador`) ya ni siquiera es un rol válido del
+    // dominio (retirado el 7-ago-2026) — `rol` nunca puede llegar así aquí.
+    if (rol === 'superadmin') redirect('/admin/usuarios/nuevo?error=2');
     await provisionarUsuario(tenantId, email, nombre, rol);
     redirect('/admin?creado=1');
   }

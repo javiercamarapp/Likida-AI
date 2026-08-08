@@ -1,23 +1,23 @@
 import { getEquipo } from '@/lib/admin/negocio';
 import type { RolAppUser } from '@/lib/auth/provisionar';
-import { Users, CheckCircle2 } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
-/** Los 5 roles reales del dominio (constraint `app_user_rol_dominio`,
- *  0044_rol_encargado.sql) — etiqueta legible para cada uno. Cualquier
- *  valor que no esté en este mapa (no debería pasar, la base ya lo
- *  restringe) se enseña tal cual en vez de esconderse. */
+/** Los 4 roles reales del dominio (constraint `app_user_rol_dominio`,
+ *  0044_rol_encargado.sql, retirado `operador` el 7-ago-2026 — el chofer ya
+ *  no tiene login) — etiqueta legible para cada uno. Cualquier valor que no
+ *  esté en este mapa (no debería pasar, la base ya lo restringe) se enseña
+ *  tal cual en vez de esconderse. */
 const ROL_LABEL: Record<RolAppUser, string> = {
   superadmin: 'Superadmin',
   flota_admin: 'Dueño / Admin de flota',
   encargado: 'Encargado',
   contador: 'Contador',
-  operador: 'Operador / Chofer',
 };
 
-const ORDEN_ROL: RolAppUser[] = ['superadmin', 'flota_admin', 'encargado', 'contador', 'operador'];
+const ORDEN_ROL: RolAppUser[] = ['superadmin', 'flota_admin', 'encargado', 'contador'];
 
 function InsigniaRol({ rol }: { rol: string }) {
   const label = ROL_LABEL[rol as RolAppUser] ?? rol;
@@ -31,11 +31,10 @@ function InsigniaRol({ rol }: { rol: string }) {
 
 /**
  * Equipo / RBAC — la única de las siete con datos 100% reales: roster
- * completo de `app_user` (`getEquipo`, apéndice nuevo en negocio.ts). Los 5
+ * completo de `app_user` (`getEquipo`, apéndice nuevo en negocio.ts). Los 4
  * roles vienen del dominio real de la base (RolAppUser), no de una lista
  * inventada. Se ordena por rol siguiendo la jerarquía operativa del
- * negocio (superadmin → dueño → encargado → contador → chofer), no
- * alfabético.
+ * negocio (superadmin → dueño → encargado → contador), no alfabético.
  */
 export default async function EquipoPage() {
   const equipo = await getEquipo();
@@ -71,7 +70,6 @@ export default async function EquipoPage() {
                     <th className="px-4 py-2.5 font-medium">Nombre</th>
                     <th className="px-4 py-2.5 font-medium">Rol</th>
                     <th className="px-4 py-2.5 font-medium">Flota</th>
-                    <th className="px-4 py-2.5 font-medium">Vinculado a chofer</th>
                   </tr>
                 </thead>
                 <tbody className="card divide-y" style={{ borderColor: 'var(--line)' }}>
@@ -85,15 +83,6 @@ export default async function EquipoPage() {
                       <td className="px-4 py-3" style={{ color: 'var(--muted)' }}>
                         {u.tenantNombre ?? (u.rol === 'superadmin' ? '— (superadmin, sin flota)' : '—')}
                       </td>
-                      <td className="px-4 py-3">
-                        {u.operadorId ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-ok)' }}>
-                            <CheckCircle2 width={13} height={13} strokeWidth={1.75} /> Sí
-                          </span>
-                        ) : (
-                          <span className="text-xs" style={{ color: 'var(--muted)' }}>—</span>
-                        )}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -102,7 +91,7 @@ export default async function EquipoPage() {
           )}
 
           <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-            Los 5 roles reales del sistema: <strong>superadmin</strong> (Javier, ve todas las flotas), <strong>flota_admin</strong> (dueño/contralor de una flota), <strong>encargado</strong> (asigna viajes, no factura ni invita usuarios), <strong>contador</strong> (lectura fiscal) y <strong>operador</strong> (chofer, liga su cuenta a una fila de `operador` vía WhatsApp).
+            Los 4 roles reales del sistema: <strong>superadmin</strong> (Javier, ve todas las flotas), <strong>flota_admin</strong> (dueño/contralor de una flota), <strong>encargado</strong> (asigna viajes, no factura ni invita usuarios) y <strong>contador</strong> (lectura fiscal). El chofer ya no tiene cuenta — solo WhatsApp.
           </p>
         </section>
 

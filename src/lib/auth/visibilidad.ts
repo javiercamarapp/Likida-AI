@@ -29,8 +29,8 @@ export type Area = 'operacion' | 'dinero' | 'administracion';
 /**
  * Qué áreas ve cada rol del dominio de `app_user.rol` (0044).
  *
- * `operador` NO aparece: su vista es /chofer con RLS propia (0045), no este
- * panel. Un rol desconocido cae al `??` de `areasDe` y no ve nada: fail
+ * `operador` NO aparece: no tiene login (retirado el 7-ago-2026, solo
+ * WhatsApp). Un rol desconocido cae al `??` de `areasDe` y no ve nada: fail
  * closed, igual que `permisos.ts`.
  */
 const AREAS_POR_ROL: Record<string, readonly Area[]> = {
@@ -124,19 +124,18 @@ export function puedeVerRuta(rol: string, href: string): boolean {
  * Los roles cuyo panel NO ES ÉSTE, con la dirección del suyo.
  *
  * Está aparte de `AREAS_POR_ROL` a propósito, y la separación es la que
- * impide que arreglar el rebote se convierta en una fuga: darle un área al
- * chofer para que `inicioDe` supiera a dónde mandarlo le abriría de paso
- * TODAS las rutas de esa área en `puedeVerRuta` — que es exactamente la
- * pantalla que no puede ver. Aquí no gana visibilidad de nada: solo se
- * declara la puerta de salida.
+ * impide que arreglar el rebote se convierta en una fuga: darle un área a un
+ * rol para que `inicioDe` supiera a dónde mandarlo le abriría de paso TODAS
+ * las rutas de esa área en `puedeVerRuta`. Aquí no gana visibilidad de nada:
+ * solo se declara la puerta de salida.
+ *
+ * Vacío desde el 7-ago-2026: el chofer (`operador`) era el único caso —
+ * tenía panel propio en /chofer. Retirado su login (solo WhatsApp de aquí en
+ * adelante), no queda ningún rol con casa fuera de /dashboard. Se deja la
+ * tabla declarada, no el `Record` en línea: es el punto de extensión para el
+ * día que un rol futuro sí la necesite.
  */
-const PANEL_PROPIO: Record<string, string> = {
-  // El chofer. Antes caía al `/sin-acceso` de abajo porque no tenía áreas y
-  // no había un panel suyo al que mandarlo; desde que existe /chofer, decirle
-  // "no tienes acceso" a alguien que SÍ tiene panel es mentira, y la lee
-  // justo cuando teclea /dashboard por costumbre o llega por un enlace viejo.
-  operador: '/chofer',
-};
+const PANEL_PROPIO: Record<string, string> = {};
 
 /**
  * A dónde mandar a un rol que no puede ver donde está parado.

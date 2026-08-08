@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Building2, Landmark, Send, Smartphone, ArrowRight } from 'lucide-react';
+import { Building2, Landmark, Send, ArrowRight } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PUERTA A LOS OTROS CUATRO PANELES — desde el de Javier, sin credenciales.
@@ -21,10 +21,9 @@ import { Building2, Landmark, Send, Smartphone, ArrowRight } from 'lucide-react'
 //   ve, así que `resolverTenantEfectivo` lo rebotaría a `inicioDe('contador')`.
 //   Se le apunta directo a su casa, que es a donde ese rebote va.
 //
-// · El chofer no puede pasar por `/chofer`: lo cierra `requireOperador` y un
-//   superadmin rebota a `/dashboard` y de ahí a `/admin` — nunca ve la
-//   pantalla. Su preview vive dentro de /admin, montando los componentes
-//   REALES del panel del chofer (ver `vista-chofer/page.tsx`).
+// · El chofer ya no tiene panel propio ni cuenta — solo WhatsApp (retirado
+//   el 7-ago-2026, con /chofer, /mis-viajes y el rol `operador` de login).
+//   No hay nada que previsualizar aquí para él.
 //
 // TODOS llevan `?rol=`, incluido el dueño, que ya es lo que un superadmin ve
 // sin él: sin el parámetro no hay cinta, y una previsualización que no se
@@ -60,13 +59,6 @@ const VISTAS: Vista[] = [
     quien: 'encargado',
     que: 'Operación y nada de dinero: qué no tiene chofer, carga por operador, incidencias.',
     Icono: Send,
-  },
-  {
-    href: '/admin/vista-chofer',
-    titulo: 'Chofer',
-    quien: 'operador · /chofer',
-    que: 'El panel del teléfono: su viaje de hoy, su saldo, sus tickets.',
-    Icono: Smartphone,
   },
 ];
 
@@ -110,7 +102,7 @@ export function SelectorVista({ tenants }: { tenants: number }) {
       <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
         {tenants === 0 ? (
           <>
-            No hay ninguna flota dada de alta, así que las cuatro vistas abren VACÍAS y lo dicen en pantalla —
+            No hay ninguna flota dada de alta, así que las tres vistas abren VACÍAS y lo dicen en pantalla —
             sirven para mirar el frontend, no para leer una cifra.{' '}
             <Link href="/admin/flotas" className="underline font-medium">Dar de alta una flota</Link>.
           </>

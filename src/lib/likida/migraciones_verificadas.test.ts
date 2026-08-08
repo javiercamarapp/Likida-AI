@@ -50,6 +50,7 @@ const TITULOS = readFileSync('supabase/verificaciones.sql', 'utf8')
  * revienta ruidosamente o va lento, no se corrompe en silencio.
  */
 const EXENTAS: Record<string, string> = {
+  '0087': 'columna viaje.recordatorio_comprobacion_en + índice parcial — el mismo patrón que escalado_en (0058, sin bloque propio: su claim tampoco se verifica ahí, el bloque 37 de esa migración prueba otra cosa). La garantía real es que el UPDATE condicional (WHERE recordatorio_comprobacion_en IS NULL, la misma columna que escribe) es atómico por construcción de Postgres — no una regla de negocio que este repo agregue, sino la semántica estándar de un UPDATE con WHERE. La carrera entre corridas solapadas SÍ se prueba, exhaustivamente, en TS (recordatorio_comprobacion.test.ts: "DOS CORRIDAS SOLAPADAS", "si el claim no se pudo escribir", 15 pruebas) contra un mock que modela la fila ganada/perdida — lo único que un bloque SQL probaría de más es que Postgres cumple su propio contrato de atomicidad, no algo de este repo.',
   '0080': 'columna operador.rfc: dato opcional capturado por la flota. La rama buena de RLISR 57 se prueba en TS (engine/desde_db); si la columna falta, getOperador falla ruidoso.',
   '0082': 'redefine config_tenant_valida con la llave facilidadCombustibleEfectivo: si falta, el alta de flota que declare su régimen revienta con el error del 0026 (ruidoso, no silencioso).',
   '0083': 'redefine config_tenant_valida exigiendo la FORMA de la facilidad: si falta, una config con "sí" en la llave revienta ruidoso en el UPDATE del tenant.',
@@ -76,6 +77,9 @@ const EXENTAS: Record<string, string> = {
   '0038': 'creaba `foto_pendiente`, revertida por la 0041 (AUDITORÍA 9, CRÍTICO: fusionaba comprobantes distintos). El bloque 21 que la comprobaba se retiró junto con la tabla — no queda nada que verificar.',
   '0041': '`drop table foto_pendiente`. Reversión de la 0038; no hay garantía nueva que comprobar, la ausencia de la tabla la confirma cualquier consulta a `information_schema` y no vale la pena un bloque para eso.',
   '0044': 'extiende el dominio de app_user_rol_dominio con un valor más (encargado). La garantía de que basura sigue rechazada ya la prueba el bloque 11 (0025); que "encargado" se acepta se prueba en TS (provisionar.test.ts).',
+  '0078': 'RLS de las escrituras/lecturas del chofer sobre operador/terminal/política/wa/llm/cfdi. Retirada por la 0086 (operador ya no tiene login): su bloque (antes 54) se borró de verificaciones.sql porque probaba una sesión que ya no puede existir — el bloque 62 (0086) prueba la garantía más fuerte que la reemplaza, "no puede tener sesión".',
+  '0079': 'RLS de app_user/bitacora_auditoria para el chofer. Mismo caso que 0078: retirada por la 0086, su bloque (antes 55) se borró por la misma razón — probaba un INSERT de sesión de chofer que hoy rebota en el constraint antes de llegar a RLS.',
+  '0081': 'RLS de escritura del POD del chofer, scoped a su propio tenant. Mismo caso: retirada por la 0086, su bloque (antes 56) se borró — no hay sesión de chofer que pueda intentar el POD cruzado que probaba.',
 };
 
 const migraciones = readdirSync(DIR)
