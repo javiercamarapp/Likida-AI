@@ -60,6 +60,10 @@ export interface ComparativoPeriodo {
    *  medir. */
   costoPorViaje: number | null;
   liquidado: number;
+  /** De `totalViajes`, cuántos ya están `estatus = 'liquidado'` — para la
+   *  dona "Viajes" del Resumen (liquidados vs pendientes DEL periodo, no
+   *  del histórico completo de la flota). */
+  viajesLiquidados: number;
 }
 
 /**
@@ -105,8 +109,8 @@ export async function getSerieComparativa(
         .order('id').range(desde, hasta),
       'getSerieComparativa.gasto',
     ),
-    traerTodo<{ fecha_inicio: unknown }>(
-      (desde, hasta) => admin.from('viaje').select('fecha_inicio')
+    traerTodo<{ fecha_inicio: unknown; estatus: unknown }>(
+      (desde, hasta) => admin.from('viaje').select('fecha_inicio, estatus')
         .eq('tenant_id', tenantId).gte('fecha_inicio', desdeGlobal).lte('fecha_inicio', hoy)
         .order('id').range(desde, hasta),
       'getSerieComparativa.viaje',
@@ -131,12 +135,17 @@ export async function getSerieComparativa(
       gastos.filter((g) => enRango(g.fecha as string, desde, hasta))
         .reduce((s, g) => s + Number(g.monto ?? 0), 0),
     );
-    const n = viajes.filter((v) => v.fecha_inicio && enRango(v.fecha_inicio as string, desde, hasta)).length;
+    const viajesDelPeriodo = viajes.filter((v) => v.fecha_inicio && enRango(v.fecha_inicio as string, desde, hasta));
+    const n = viajesDelPeriodo.length;
+    const viajesLiquidados = viajesDelPeriodo.filter((v) => v.estatus === 'liquidado').length;
     const liquidado = round2(
       liquidaciones.filter((l) => enRango(diaLocalMx(l.created_at as string), desde, hasta))
         .reduce((s, l) => s + Number(l.total_comprobado ?? 0), 0),
     );
-    return { desde, hasta, gastoTotal, totalViajes: n, costoPorViaje: n === 0 ? null : round2(gastoTotal / n), liquidado };
+    return {
+      desde, hasta, gastoTotal, totalViajes: n, costoPorViaje: n === 0 ? null : round2(gastoTotal / n),
+      liquidado, viajesLiquidados,
+    };
   });
 }
 
@@ -404,6 +413,34 @@ export async function getGastoPorSemana(
   };
 }
 
+/** Cuántas semanas hacia atrás enseña cada vista — mismo mapeo en las 3
+ *  funciones `*Series` de esta página (Actividad, Gasto por categoría,
+ *  Liquidado, Top rutas): 5 semanas para "semanal" (el detalle de siempre),
+ *  ~3 meses para "mensual", ~1 año para "histórico" — más ancho de vista
+ *  según se aleja el zoom, sin ser una consulta sin cota. */
+const SEMANAS_POR_MODO = { semanal: 5, mensual: 13, historico: 52 } as const;
+export type ModoPeriodo = keyof typeof SEMANAS_POR_MODO;
+
+export interface GastoSemanalSeries {
+  semanal: GastoSemanalPorCategoria; mensual: GastoSemanalPorCategoria; historico: GastoSemanalPorCategoria;
+}
+
+/** Las 3 vistas de "Gasto por categoría" para el selector Semanal/Mensual/
+ *  Histórico compartido del Resumen (8-ago-2026) — antes esta gráfica
+ *  vivía fija a 5 semanas, con su propio rótulo ("últimas 5 semanas"); el
+ *  selector único de la página ahora la mueve igual que a Actividad. */
+export async function getGastoPorSemanaSeries(
+  tenantId: string,
+  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+): Promise<GastoSemanalSeries> {
+  const [semanal, mensual, historico] = await Promise.all([
+    getGastoPorSemana(tenantId, SEMANAS_POR_MODO.semanal, hoy),
+    getGastoPorSemana(tenantId, SEMANAS_POR_MODO.mensual, hoy),
+    getGastoPorSemana(tenantId, SEMANAS_POR_MODO.historico, hoy),
+  ]);
+  return { semanal, mensual, historico };
+}
+
 /**
  * Total LIQUIDADO (pesos, `total_comprobado`) de las últimas `semanas`
  * semanas ISO — a diferencia de `getLiquidacionesPorDia` (que cuenta
@@ -439,6 +476,26 @@ export async function getLiquidadoPorSemana(
   }
 
   return bloques.map((b) => ({ dia: b.etiqueta, valor: round2(porSemana.get(`${b.anio}-${b.semana}`) ?? 0) }));
+}
+
+export interface LiquidadoSemanalSeries {
+  semanal: Array<{ dia: string; valor: number }>;
+  mensual: Array<{ dia: string; valor: number }>;
+  historico: Array<{ dia: string; valor: number }>;
+}
+
+/** Las 3 vistas de "Liquidado por semana" — mismo criterio y mismo mapeo
+ *  de semanas que `getGastoPorSemanaSeries` (`SEMANAS_POR_MODO`). */
+export async function getLiquidadoPorSemanaSeries(
+  tenantId: string,
+  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+): Promise<LiquidadoSemanalSeries> {
+  const [semanal, mensual, historico] = await Promise.all([
+    getLiquidadoPorSemana(tenantId, SEMANAS_POR_MODO.semanal, hoy),
+    getLiquidadoPorSemana(tenantId, SEMANAS_POR_MODO.mensual, hoy),
+    getLiquidadoPorSemana(tenantId, SEMANAS_POR_MODO.historico, hoy),
+  ]);
+  return { semanal, mensual, historico };
 }
 
 /** Viajes iniciados por MES, histórico completo — a diferencia de `viajes`
@@ -853,6 +910,132 @@ export async function getGastoPorRuta(tenantId: string): Promise<GastoPorRuta[]>
     .map(([ruta, total]) => ({ ruta, total: round2(total) }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 5);
+}
+
+/**
+ * Ciudad → región de logística en México — hecho geográfico real (INEGI/
+ * gremio del autotransporte), NO una categoría de negocio inventada.
+ * Cobertura deliberadamente acotada a las plazas más comunes en carga por
+ * carretera; una ciudad que no está aquí NO se adivina — sale sin región
+ * en vez de con una región falsa (misma regla de "nunca inventar" que el
+ * resto del producto, aplicada a geografía en vez de a dinero).
+ */
+const REGION_POR_CIUDAD: Record<string, string> = {
+  'ciudad de mexico': 'Centro', 'cdmx': 'Centro', 'mexico city': 'Centro',
+  'toluca': 'Centro', 'puebla': 'Centro', 'queretaro': 'Centro', 'pachuca': 'Centro',
+  'cuernavaca': 'Centro', 'tlaxcala': 'Centro',
+  'guadalajara': 'Occidente', 'leon': 'Occidente', 'aguascalientes': 'Occidente',
+  'morelia': 'Occidente', 'colima': 'Occidente', 'zapopan': 'Occidente', 'irapuato': 'Occidente',
+  'celaya': 'Occidente', 'zamora': 'Occidente',
+  'monterrey': 'Noreste', 'saltillo': 'Noreste', 'reynosa': 'Noreste', 'nuevo laredo': 'Noreste',
+  'matamoros': 'Noreste', 'torreon': 'Noreste', 'ciudad victoria': 'Noreste',
+  'tijuana': 'Noroeste', 'mexicali': 'Noroeste', 'hermosillo': 'Noroeste',
+  'culiacan': 'Noroeste', 'ciudad juarez': 'Noroeste', 'chihuahua': 'Noroeste',
+  'la paz': 'Noroeste', 'los mochis': 'Noroeste',
+  'veracruz': 'Golfo', 'xalapa': 'Golfo', 'tampico': 'Golfo', 'coatzacoalcos': 'Golfo',
+  'villahermosa': 'Sureste', 'merida': 'Sureste', 'cancun': 'Sureste', 'campeche': 'Sureste',
+  'oaxaca': 'Sur', 'tuxtla gutierrez': 'Sur', 'acapulco': 'Sur', 'chilpancingo': 'Sur',
+};
+
+/** Sin diacríticos, minúsculas — para que "Querétaro"/"queretaro" empaten
+ *  con la misma llave del catálogo. */
+function normalizarCiudad(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+/** Busca la región de una ciudad EN LA LLAVE del catálogo (no al revés):
+ *  "Guadalajara, Jal." contiene "guadalajara" — evita exigir que el campo
+ *  libre venga exactamente igual al catálogo. */
+function regionDe(ciudad: string | null): string | null {
+  if (!ciudad) return null;
+  const norm = normalizarCiudad(ciudad);
+  for (const [clave, region] of Object.entries(REGION_POR_CIUDAD)) {
+    if (norm.includes(clave)) return region;
+  }
+  return null;
+}
+
+export interface RutaConRegion {
+  origen: string; destino: string; total: number;
+  /** % del gasto total de las rutas devueltas (no del gasto total de la
+   *  flota) — mismo criterio que un top-N: el 100% es la suma de ESTE top,
+   *  no un universo más grande que el usuario no ve. */
+  pct: number;
+  /** `null` cuando ni origen ni destino matchean el catálogo — se enseña
+   *  como "sin clasificar" en vez de adivinar. */
+  region: string | null;
+}
+
+/**
+ * Top rutas por gasto CON región — a diferencia de `getGastoPorRuta` (que
+ * regresa la ruta ya concatenada en un string), aquí se necesitan origen y
+ * destino por separado para poder buscar la región de cada uno.
+ */
+export async function getTopRutasPorGasto(
+  tenantId: string, top: number = 5, ventana?: { desde: string; hasta: string },
+): Promise<RutaConRegion[]> {
+  const admin = supabaseAdmin();
+  const [gastos, viajes] = await Promise.all([
+    traerTodo<{ viaje_id: unknown; monto: unknown }>(
+      (desde, hasta) => {
+        let q = admin.from('gasto').select('viaje_id, monto').eq('tenant_id', tenantId);
+        if (ventana) q = q.gte('fecha', ventana.desde).lte('fecha', ventana.hasta);
+        return q.order('id').range(desde, hasta);
+      },
+      'getTopRutasPorGasto.gasto',
+    ),
+    traerTodo<{ id: unknown; origen: unknown; destino: unknown }>(
+      (desde, hasta) => admin.from('viaje').select('id, origen, destino').eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getTopRutasPorGasto.viaje',
+    ),
+  ]);
+  const viajePorId = new Map(viajes.map((v) => [v.id as string, v]));
+  const mapa = new Map<string, { origen: string; destino: string; total: number }>();
+  for (const g of gastos) {
+    const v = viajePorId.get(g.viaje_id as string);
+    if (!v) continue;
+    const origen = (v.origen as string) || '—';
+    const destino = (v.destino as string) || '—';
+    const clave = `${origen}→${destino}`;
+    const prev = mapa.get(clave) ?? { origen, destino, total: 0 };
+    prev.total += Number(g.monto ?? 0);
+    mapa.set(clave, prev);
+  }
+  const ordenado = [...mapa.values()].sort((a, b) => b.total - a.total).slice(0, top);
+  const sumaTop = ordenado.reduce((s, r) => s + r.total, 0) || 1;
+  return ordenado.map((r) => ({
+    origen: r.origen, destino: r.destino, total: round2(r.total),
+    pct: round2((r.total / sumaTop) * 100),
+    // La región del DESTINO — es el mercado al que llega la carga, la
+    // pregunta operativa habitual ("¿dónde estoy vendiendo/entregando?").
+    region: regionDe(r.destino),
+  }));
+}
+
+export interface TopRutasSeries {
+  semanal: RutaConRegion[]; mensual: RutaConRegion[]; historico: RutaConRegion[];
+}
+
+/** Las 3 vistas de "Top rutas por gasto" — mismo mapeo de semanas que
+ *  `getGastoPorSemanaSeries` (`SEMANAS_POR_MODO`); "histórico" no manda
+ *  ventana en absoluto (sin cota), no una de 52 semanas disfrazada de
+ *  "todo". */
+export async function getTopRutasPorGastoSeries(
+  tenantId: string, top: number = 5,
+  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+): Promise<TopRutasSeries> {
+  const ventanaDe = (semanas: number) => {
+    const hastaD = new Date(`${hoy}T00:00:00Z`);
+    const desdeD = new Date(hastaD);
+    desdeD.setUTCDate(desdeD.getUTCDate() - (semanas * 7 - 1));
+    return { desde: desdeD.toISOString().slice(0, 10), hasta: hoy };
+  };
+  const [semanal, mensual, historico] = await Promise.all([
+    getTopRutasPorGasto(tenantId, top, ventanaDe(SEMANAS_POR_MODO.semanal)),
+    getTopRutasPorGasto(tenantId, top, ventanaDe(SEMANAS_POR_MODO.mensual)),
+    getTopRutasPorGasto(tenantId, top),
+  ]);
+  return { semanal, mensual, historico };
 }
 
 export interface OperadorDetalle {

@@ -80,6 +80,20 @@ describe('getSerieComparativa', () => {
     expect(r[0].costoPorViaje).toBeNull();
   });
 
+  it('viajesLiquidados cuenta solo los del periodo con estatus=liquidado, no el histórico completo', async () => {
+    filasPorTabla.set('gasto', []);
+    filasPorTabla.set('viaje', [
+      { fecha_inicio: '2026-08-05', estatus: 'liquidado' }, // bucket 0
+      { fecha_inicio: '2026-08-06', estatus: 'abierto' },   // bucket 0
+      { fecha_inicio: '2026-07-30', estatus: 'liquidado' }, // bucket 1
+    ]);
+    filasPorTabla.set('liquidacion', []);
+
+    const r = await getSerieComparativa('t1', 7, 2, '2026-08-08');
+    expect(r[0]).toMatchObject({ totalViajes: 2, viajesLiquidados: 1 });
+    expect(r[1]).toMatchObject({ totalViajes: 1, viajesLiquidados: 1 });
+  });
+
   it('liquidado bucketea por DÍA LOCAL MX, no por el UTC crudo del timestamptz', async () => {
     // 31-jul-2026 20:00 CDMX (UTC-6) = 2026-08-01T02:00:00Z — un slice crudo
     // lo pondría en el bucket que empieza el 1-ago; el día local es 31-jul.

@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { resolverFormato, type FormatoPreset } from '../admin/ui/formato-preset';
-import type { Caducidad } from '@/lib/likida/facturacion/caducidad';
 
 /**
  * Piezas visuales del Resumen de FLOTA — dirección elegida el 7-ago-2026
@@ -107,7 +106,7 @@ export function KpiDegradado({
   const fmt = resolverFormato(formato);
   return (
     <div
-      className="rounded-2xl p-4 text-white flex items-center justify-between gap-3 min-w-0"
+      className="rounded-2xl p-4 text-white flex items-center justify-between gap-3 min-w-0 h-full"
       style={{ background: DEGRADADO_MARCA }}
     >
       <div className="min-w-0">
@@ -127,53 +126,6 @@ export function KpiDegradado({
         </div>
         {flechas}
       </div>
-    </div>
-  );
-}
-
-// ── Próximos vencimientos (facturación) ─────────────────────────────────
-
-/** Los 3 comprobantes más urgentes por facturar, de `getPorFacturar` — NO
- *  es un calendario genérico (esa pieza del mockup original no tiene dato
- *  real detrás, y no se inventa uno): es el plazo REAL de portal que ya
- *  calcula `caducidad.ts`. Se excluyen los de plazo `desconocido` — un
- *  comercio sin identificar no tiene fecha límite que enseñar sin adivinar. */
-export function ProximosVencimientos({
-  items,
-}: {
-  items: Array<{ nombre: string; monto: number; caducidad: Caducidad }>;
-}) {
-  const fmt = resolverFormato('mxn');
-  const ordenados = items
-    .filter((i) => !i.caducidad.desconocido)
-    .sort((a, b) => a.caducidad.diasRestantes - b.caducidad.diasRestantes)
-    .slice(0, 3);
-
-  if (ordenados.length === 0) {
-    return (
-      <p className="text-sm" style={{ color: 'var(--muted)' }}>
-        Nada por facturar con plazo conocido en este momento.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {ordenados.map((it, i) => {
-        const color = it.caducidad.vencido ? 'var(--color-bad)' : it.caducidad.urgente ? 'var(--warn)' : 'var(--muted)';
-        const texto = it.caducidad.vencido
-          ? 'vencido'
-          : it.caducidad.diasRestantes === 0
-            ? 'vence hoy'
-            : `vence en ${it.caducidad.diasRestantes} día${it.caducidad.diasRestantes === 1 ? '' : 's'}`;
-        return (
-          <div key={i} className="flex items-center justify-between gap-3 text-sm">
-            <span className="truncate min-w-0">{it.nombre}</span>
-            <span className="tabular shrink-0">{fmt(it.monto)}</span>
-            <span className="text-xs font-medium shrink-0" style={{ color }}>{texto}</span>
-          </div>
-        );
-      })}
     </div>
   );
 }
