@@ -129,26 +129,32 @@ describe('dashboard/page.tsx: el call site de estadoPanel', () => {
 // `GlobalFilter`/`rango`/`ventanaDias` en la página. Ese mismo día, más
 // tarde, "Total viajes" y "Liquidado" salieron de las tarjetas de arriba —
 // su número ya se ve como GRÁFICA más abajo (la dona "Viajes", "Liquidado
-// por semana"), y un KPI plano al lado de la misma cifra en gráfica es la
-// cifra dos veces. "Gasto total" y "Costo por viaje" siguen ciclando su
-// PROPIA vista con flechas ‹ › (`KpiPeriodo` — semanal/mensual/histórico,
-// etiqueta en `kpi-periodo.tsx`); "Ahorro generado" es nuevo, estático (el
-// ejercicio fiscal en curso, no una serie que pueda paginar). El motor
-// fiscal sigue usando SU PROPIO periodo (`periodoFiscal.etiqueta`). La
-// garantía que importa —que un rótulo "del periodo" no mienta— sigue viva
-// aquí, sobre el nuevo mecanismo.
+// por semana"). "Gasto total" y "Costo por viaje" ciclan su PROPIA vista
+// con flechas ‹ › (`KpiPeriodo` — semanal/mensual/histórico, etiqueta en
+// `kpi-periodo.tsx`). "En riesgo/perdido" y "Recuperable pidiendo factura"
+// —antes fijas al ejercicio, dentro de "Tu motor fiscal"— subieron a ese
+// mismo nivel de KPI con SU PROPIO ciclo (`MotorFiscalPeriodo`, un solo
+// selector para las dos, no independientes entre sí como las otras). El
+// motor fiscal sigue declarando SU periodo (`periodoFiscal.etiqueta`) para
+// el top-causas que se queda abajo. La garantía que importa —que un
+// rótulo "del periodo" no mienta— sigue viva aquí, sobre el nuevo
+// mecanismo.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('dashboard/page.tsx: las secciones filtradas dicen su periodo', () => {
   const PAGINA = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
   const KPI_PERIODO = readFileSync(fileURLToPath(new URL('./kpi-periodo.tsx', import.meta.url)), 'utf8');
+  const MOTOR_FISCAL_PERIODO = readFileSync(fileURLToPath(new URL('./motor-fiscal-periodo.tsx', import.meta.url)), 'utf8');
 
   it('"Gasto total" y "Costo por viaje" pasan por KpiPeriodo, con nombre propio', () => {
     expect(PAGINA).toMatch(/nombre="Gasto total"/);
     expect(PAGINA).toMatch(/nombre="Costo por viaje"/);
   });
 
-  it('"Ahorro generado" declara SU periodo (el ejercicio fiscal), no un rango mudo', () => {
-    expect(PAGINA).toMatch(/etiqueta=\{`Ahorro generado — \$\{periodoFiscal\.etiqueta\}`\}/);
+  it('"En riesgo/perdido" y "Recuperable pidiendo factura" declaran su ventana también (MotorFiscalPeriodo)', () => {
+    expect(MOTOR_FISCAL_PERIODO).toMatch(/semanal:\s*'últimos 7 días'/);
+    expect(MOTOR_FISCAL_PERIODO).toMatch(/mensual:\s*'últimos 30 días'/);
+    expect(MOTOR_FISCAL_PERIODO).toMatch(/historico:\s*'histórico'/);
+    expect(PAGINA).toMatch(/<MotorFiscalPeriodo series=\{resumenPerdidasSeries\}/);
   });
 
   it('KpiPeriodo declara la ventana de cada vista — nunca un número mudo', () => {

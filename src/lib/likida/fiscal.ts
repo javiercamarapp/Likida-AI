@@ -805,6 +805,50 @@ export async function getGastosFiscales(
   });
 }
 
+export interface GastosFiscalesSeries {
+  semanal: GastoFiscal[];
+  mensual: GastoFiscal[];
+  historico: GastoFiscal[];
+}
+
+/**
+ * Las mismas 3 vistas que las flechas ‹ › de las tarjetas de KPI operativas
+ * (`getSeriesKpiCards`, `analytics.ts`) — dirección del 8-ago-2026: "En
+ * riesgo/perdido" y "Recuperable pidiendo factura" (Motor fiscal) suben al
+ * nivel de KPI y ciclan semanal/mensual/histórico igual que las demás.
+ *
+ * NO son periodos consecutivos que se restan entre sí como `Periodo`
+ * ('mes'/'mes_anterior'/'ejercicio') — son ventanas de días desde HOY,
+ * calculadas a mano con el mismo criterio que `diasEjercicio` en
+ * `dashboard/page.tsx`. `historico` reusa el `Periodo` real ('todo',
+ * `desde`/`hasta` ambos `null`) en vez de una ventana de 3650 días: esta
+ * función SÍ puede pedir sin cota (a diferencia de las operativas, que usan
+ * el truco de los ~10 años porque necesitan comparar contra un periodo
+ * "anterior" que 'todo' no tiene).
+ */
+export async function getGastosFiscalesSeries(
+  tenantId: string,
+  hoy: string = new Date().toISOString().slice(0, 10),
+): Promise<GastosFiscalesSeries> {
+  const haceNDias = (n: number): string => {
+    const d = new Date(`${hoy}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - (n - 1));
+    return d.toISOString().slice(0, 10);
+  };
+  // `clave: 'mes'` es un relleno — `getGastosFiscales` solo lee `desde`/
+  // `hasta` (ver su cuerpo), y estas ventanas no son un mes calendario. Se
+  // fija a 'mes' en vez de inventar un valor nuevo en `ClavePeriodo` porque
+  // esa unión la consume la UI del selector de /dashboard/contador
+  // (`SelectorPeriodo`, `urlDePeriodo`) — agregar 'semana' ahí solo para
+  // este uso interno habría sido el cambio más grande, no el más chico.
+  const [semanal, mensual, historico] = await Promise.all([
+    getGastosFiscales(tenantId, { clave: 'mes', desde: haceNDias(7), hasta: hoy, etiqueta: 'últimos 7 días' }, hoy),
+    getGastosFiscales(tenantId, { clave: 'mes', desde: haceNDias(30), hasta: hoy, etiqueta: 'últimos 30 días' }, hoy),
+    getGastosFiscales(tenantId, resolverPeriodo('todo', hoy), hoy),
+  ]);
+  return { semanal, mensual, historico };
+}
+
 /**
  * Cuántos comprobantes con fecha hay FUERA del periodo — la prueba de que el
  * filtro está recortando algo real.

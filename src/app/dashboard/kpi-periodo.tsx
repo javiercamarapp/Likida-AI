@@ -68,13 +68,15 @@ export function KpiPeriodo({
       formato={formato}
       tendencia={pct === null ? null : { pct, bueno: subeEsBueno ? pct >= 0 : pct <= 0 }}
       flechas={
+        // Derecha = hacia histórico, izquierda = hacia semanal (pedido
+        // explícito del 8-ago-2026 — antes estaba al revés).
         <div className="flex items-center gap-0.5 opacity-90">
-          <button type="button" aria-label="Periodo más largo" disabled={modoIdx >= MODOS.length - 1}
-            onClick={() => setModoIdx((i) => Math.min(i + 1, MODOS.length - 1))} className={BOTON}>
-            <ChevronLeft width={13} height={13} strokeWidth={2} />
-          </button>
           <button type="button" aria-label="Periodo más corto" disabled={modoIdx <= 0}
             onClick={() => setModoIdx((i) => Math.max(i - 1, 0))} className={BOTON}>
+            <ChevronLeft width={13} height={13} strokeWidth={2} />
+          </button>
+          <button type="button" aria-label="Periodo más largo" disabled={modoIdx >= MODOS.length - 1}
+            onClick={() => setModoIdx((i) => Math.min(i + 1, MODOS.length - 1))} className={BOTON}>
             <ChevronRight width={13} height={13} strokeWidth={2} />
           </button>
         </div>
