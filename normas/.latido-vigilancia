@@ -1,41 +1,39 @@
-fecha_corrida: 2026-08-09
+fecha_corrida: 2026-08-10
 ultimo_dia_barrido: null
-rango_intentado: 2026-07-24..2026-08-08
+rango_intentado: 2026-07-24..2026-08-09
 notas_revisadas: 0
 notas_por_edicion: {matutina: null, vespertina: null, extraordinaria: null}
 fichas_disparadas: 0
 etag_sat: null
-etag_sat_check: no_aplica_hoy_no_es_lunes
+etag_sat_check: bloqueado_egress_hoy_es_lunes
 deriva_ley_check: no_aplica_no_es_dia_1_trimestre
 estado: "INFRA egress_bloqueado"
 detalle: >
-  Décima corrida consecutiva (09-ago, 08-ago, 07-ago, 05-ago, 04-ago, 03-ago,
-  31-jul, 28-jul, y antes) bloqueada por la misma causa: el proxy de salida
-  de esta sesión rechaza todo tráfico hacia sidofqa.segob.gob.mx. Confirmado
-  de nuevo hoy con `curl -I` directo a
-  `.../dof/sidof/notas/08-08-2026`: "CONNECT tunnel failed, response 403";
-  `$HTTPS_PROXY/__agentproxy/status` reporta `recentRelayFailures` con
-  `connect_rejected` / "gateway answered 403 to CONNECT" contra
-  sidofqa.segob.gob.mx:443. Se probaron también hoy, aunque no tocaban en la
-  cadencia (no es lunes ni día 1 de trimestre), www.sat.gob.mx y
-  www.diputados.gob.mx: mismo bloqueo, mismo código 403 en el CONNECT. El
-  `noProxy` de la sesión sigue sin incluir ninguno de los tres hosts — solo
-  paquetería (npm, pypi, jsr, crates, proxy.golang.org) y dominios de
-  anthropic.com. Hoy es domingo: no tocaba ETag del SAT (lunes) ni deriva de
-  ley (día 1 de trimestre), así que el único chequeo que tocaba hoy — el
-  barrido del DOF — es también el único bloqueado.
-sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible, décima vez consecutiva.
+  Undécima corrida consecutiva (10-ago, 09-ago, 08-ago, 07-ago, 05-ago,
+  04-ago, 03-ago, 31-jul, 28-jul, y antes) bloqueada por la misma causa: el
+  proxy de salida de esta sesión rechaza todo tráfico hacia
+  sidofqa.segob.gob.mx, www.sat.gob.mx y www.diputados.gob.mx con 403 en el
+  CONNECT. Confirmado hoy con curl directo a los tres hosts (no solo el que
+  tocaba en la cadencia): `.../dof/sidof/notas/09-08-2026` → "CONNECT tunnel
+  failed, response 403"; SAT minisitio → HTTP 403; diputados CFF.pdf → HTTP
+  403. `$HTTPS_PROXY/__agentproxy/status` registra los tres como
+  `connect_rejected` / "gateway answered 403 to CONNECT" a las 14:21:5x UTC.
+  El `noProxy` de la sesión sigue sin incluir ninguno de los tres hosts —
+  solo paquetería (npm, pypi, jsr, crates, proxy.golang.org) y dominios de
+  anthropic.com.
+  Hoy es LUNES: tocaba también el chequeo del ETag del minisitio del SAT
+  (cadencia semanal) — es el CUARTO lunes consecutivo (27-jul, 03-ago,
+  10-ago) que ese chequeo queda bloqueado sin poder correr, ampliando la
+  ventana ciega de 4.5 meses que ese job existe para cerrar.
+sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible, undécima vez consecutiva.
 accion_requerida: >
   Habilitar en la política de egreso de esta sesión/entorno los hosts:
   sidofqa.segob.gob.mx, www.sat.gob.mx, www.diputados.gob.mx (o su
   alternativa api.tlaloc.sh si se prefiere la vía comercial). Sin eso, esta
   rutina no puede correr en este entorno bajo ninguna cadencia. El rango sin
-  barrer sigue creciendo: ya cubre desde el 24-jul, ahora hasta el 08-ago —
-  dieciséis días y diez corridas sin una sola verificación real. La ventana
-  anticipada del SAT (ETag del minisitio, chequeo semanal de lunes) lleva
-  bloqueada tres lunes seguidos (27-jul, 03-ago) y bloqueará un cuarto lunes
-  consecutivo el 10-ago (mañana) si no se corrige antes de esa corrida. El
-  fix es de configuración del entorno (agregar estos hosts al
-  noProxy/allowlist del proxy de salida), no de código: nada que este agente
-  pueda cambiar por su cuenta.
+  barrer sigue creciendo: ya cubre desde el 24-jul, ahora hasta el 09-ago —
+  diecisiete días y once corridas sin una sola verificación real. El fix es
+  de configuración del entorno (agregar estos hosts al noProxy/allowlist del
+  proxy de salida), no de código: nada que este agente pueda cambiar por su
+  cuenta.
 </content>
