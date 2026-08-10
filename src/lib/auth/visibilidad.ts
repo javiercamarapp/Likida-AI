@@ -59,20 +59,19 @@ export function puedeVerArea(rol: string, area: Area): boolean {
  * cae a `undefined`, y `puedeVerRuta` la niega. Es preferible que una pantalla
  * nueva no se vea a que se vea de más — el error caro es el segundo.
  */
+/**
+ * Las 17 páginas de "dueño de flota" (despacho, viajes, pod, incidencias,
+ * unidades, operadores, mapa, documentos, analitica, chat, valor-ahorro,
+ * rentabilidad, clientes, cotizador, cuadre, facturacion, cobranza) se
+ * borraron el 10-ago-2026 para rehacerse desde cero — sus entradas salieron
+ * de este mapa junto con la página. `puedeVerRuta` niega por default
+ * (`area !== undefined`), así que una URL vieja simplemente deja de abrir
+ * para todos, dueño incluido — el efecto correcto mientras no exista nada
+ * que gatear. `/dashboard` se queda: sigue siendo Resumen para todos los
+ * roles, incluido el jefe de tráfico (`inicio-operacion.tsx`).
+ */
 const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard': 'operacion',
-
-  // Operación
-  '/dashboard/despacho': 'operacion',
-  '/dashboard/viajes': 'operacion',
-  '/dashboard/pod': 'operacion',
-  '/dashboard/incidencias': 'operacion',
-  '/dashboard/unidades': 'operacion',
-  '/dashboard/operadores': 'operacion',
-  '/dashboard/mapa': 'operacion',
-  '/dashboard/documentos': 'operacion',
-  '/dashboard/analitica': 'operacion',
-  '/dashboard/chat': 'dinero',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
 
@@ -91,14 +90,7 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/contador/retenciones': 'dinero',
   '/dashboard/contador/liquidaciones': 'dinero',
 
-  '/dashboard/valor-ahorro': 'dinero',
-  '/dashboard/rentabilidad': 'dinero',
-  '/dashboard/clientes': 'dinero',
   '/dashboard/combustible-casetas': 'dinero',
-  '/dashboard/cotizador': 'dinero',
-  '/dashboard/cuadre': 'dinero',
-  '/dashboard/facturacion': 'dinero',
-  '/dashboard/cobranza': 'dinero',
   // Lo que Likida le cobra a la flota (0052). Es `dinero` y no
   // `administracion` porque el contador necesita las facturas de Likida para su
   // propia contabilidad — es el mismo criterio que la RLS de la 0052, que las

@@ -33,17 +33,19 @@ beforeEach(() => { redirect.mockClear(); requireSessionTenant.mockReset(); });
 
 // Toda ruta de /dashboard que hoy existe, sin depender de que alguien se
 // acuerde de añadir la nueva a una lista escrita a mano.
+//
+// Las 17 páginas de "dueño de flota" (despacho, viajes, pod, incidencias,
+// unidades, operadores, mapa, documentos, analitica, chat, valor-ahorro,
+// rentabilidad, clientes, cotizador, cuadre, facturacion, cobranza) se
+// borraron el 10-ago-2026 para rehacerse desde cero — salieron de esta
+// lista junto con la página.
 const RUTAS = [
   '/dashboard',
-  '/dashboard/despacho', '/dashboard/viajes', '/dashboard/pod', '/dashboard/incidencias',
-  '/dashboard/unidades', '/dashboard/operadores', '/dashboard/mapa', '/dashboard/documentos',
-  '/dashboard/analitica', '/dashboard/chat', '/dashboard/soporte',
+  '/dashboard/soporte',
   '/dashboard/contador', '/dashboard/contador/deducciones', '/dashboard/contador/cfdi',
   '/dashboard/contador/combustible', '/dashboard/contador/retenciones',
   '/dashboard/contador/liquidaciones',
-  '/dashboard/valor-ahorro', '/dashboard/rentabilidad', '/dashboard/clientes',
-  '/dashboard/combustible-casetas', '/dashboard/cotizador', '/dashboard/cuadre',
-  '/dashboard/facturacion', '/dashboard/cobranza', '/dashboard/suscripcion',
+  '/dashboard/combustible-casetas', '/dashboard/suscripcion',
   '/dashboard/usuarios', '/dashboard/politicas', '/dashboard/configuracion',
 ];
 
@@ -75,7 +77,7 @@ describe('un chofer no entra a NINGUNA pantalla de /dashboard, ni tecleando la U
     // Si no, `?rol=flota_admin` sería subir de privilegio con un teclazo.
     requireSessionTenant.mockResolvedValue(CHOFER);
     await expect(
-      resolverTenantEfectivo('/dashboard/rentabilidad', { rol: 'flota_admin' }),
+      resolverTenantEfectivo('/dashboard/suscripcion', { rol: 'flota_admin' }),
     ).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/sin-acceso');
   });
@@ -83,7 +85,7 @@ describe('un chofer no entra a NINGUNA pantalla de /dashboard, ni tecleando la U
   it('`?tenant=` tampoco: se rebota ANTES de resolver flota alguna', async () => {
     requireSessionTenant.mockResolvedValue(CHOFER);
     await expect(
-      resolverTenantEfectivo('/dashboard/cuadre', { tenant: 't-de-otra-flota' }),
+      resolverTenantEfectivo('/dashboard/suscripcion', { tenant: 't-de-otra-flota' }),
     ).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/sin-acceso');
   });
@@ -155,7 +157,7 @@ describe('previsualizar solo quita visibilidad, y solo a un superadmin', () => {
     // invita a leerlo como si hiciera algo.
     requireSessionTenant.mockResolvedValue(CONTADOR);
     await expect(
-      resolverTenantEfectivo('/dashboard/despacho', { rol: 'flota_admin' }),
+      resolverTenantEfectivo('/dashboard', { rol: 'flota_admin' }),
     ).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/dashboard/contador');
   });
@@ -188,7 +190,7 @@ describe('los roles de oficina siguen entrando a lo suyo', () => {
   it('el dueño pasa sin rebote', async () => {
     const duena = { userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana', operadorId: null, avatarUrl: null };
     requireSessionTenant.mockResolvedValue(duena);
-    const r = await resolverTenantEfectivo('/dashboard/rentabilidad', undefined);
+    const r = await resolverTenantEfectivo('/dashboard/suscripcion', undefined);
     expect(redirect).not.toHaveBeenCalled();
     expect(r.tenantId).toBe('t-1');
   });
@@ -196,7 +198,7 @@ describe('los roles de oficina siguen entrando a lo suyo', () => {
   it('al encargado se le sigue negando el dinero, y va a /dashboard (no a /chofer)', async () => {
     const jefe = { userId: 'u-2', tenantId: 't-1', rol: 'encargado', nombre: 'Beto', operadorId: null, avatarUrl: null };
     requireSessionTenant.mockResolvedValue(jefe);
-    await expect(resolverTenantEfectivo('/dashboard/rentabilidad', undefined)).rejects.toThrow('NEXT_REDIRECT');
+    await expect(resolverTenantEfectivo('/dashboard/suscripcion', undefined)).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/dashboard');
   });
 });

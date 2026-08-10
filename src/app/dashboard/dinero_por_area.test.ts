@@ -74,8 +74,12 @@ function rutasDeOperacion(): Array<{ ruta: string; archivos: string[] }> {
 const PAGINAS = rutasDeOperacion();
 
 describe('pantallas de operación y las cifras de dinero', () => {
+  // Bajó de >5 a >1 el 10-ago-2026: las 17 páginas de "dueño de flota" se
+  // borraron para rehacerse desde cero, y con ellas casi todo lo que era
+  // `operacion` (arco/soporte + la raíz son lo único que queda). El número
+  // vuelve a subir conforme se reconstruyan.
   it('encuentra las páginas de operación (si no, la prueba no está mirando nada)', () => {
-    expect(PAGINAS.length).toBeGreaterThan(5);
+    expect(PAGINAS.length).toBeGreaterThan(1);
   });
 
   for (const { ruta, archivos } of PAGINAS) {
