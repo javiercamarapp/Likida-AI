@@ -24,6 +24,23 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 /**
+ * A qué tenant escribe la Server Action. Vive a nivel de MÓDULO, no dentro del
+ * componente: una función anidada capturada por el closure de un `'use
+ * server'` cuenta como valor a serializar hacia el cliente, y una función
+ * plana no lo es — "Functions cannot be passed directly to Client
+ * Components". Por eso recibe `sufijo`/`tenantPedido` como parámetros en vez
+ * de cerrarlos del render.
+ */
+async function tenantDelAction(destino: string, sufijo: string, tenantPedido?: string) {
+  const s = await requireSessionTenant(destino);
+  if (!puedeAsignar(s.rol)) redirect(`${destino}${sufijo}`);
+  if (s.rol === 'superadmin' && tenantPedido) {
+    return await resolverTenantPedido(supabaseAdmin(), s.tenantId, tenantPedido);
+  }
+  return s.tenantId;
+}
+
+/**
  * DESPACHO — la pantalla del encargado (jefe de tráfico).
  *
  * Es la primera pantalla de la app donde alguien ESCRIBE en la base desde el
@@ -62,18 +79,9 @@ export default async function DespachoPage({
   // el `tenantId` que cerró el closure: un action es un endpoint con su propia
   // petición, y el valor capturado viene del render, no de quien hizo clic.
 
-  async function tenantDelAction(destino: string) {
-    const s = await requireSessionTenant(destino);
-    if (!puedeAsignar(s.rol)) redirect(`${destino}${sufijo}`);
-    if (s.rol === 'superadmin' && sp?.tenant) {
-      return await resolverTenantPedido(supabaseAdmin(), s.tenantId, sp.tenant);
-    }
-    return s.tenantId;
-  }
-
   async function accionAsignar(formData: FormData) {
     'use server';
-    const t = await tenantDelAction('/dashboard/despacho');
+    const t = await tenantDelAction('/dashboard/despacho', sufijo, sp?.tenant);
     const viajeId = String(formData.get('viajeId') ?? '');
     const operadorId = String(formData.get('operadorId') ?? '');
     const unidadId = String(formData.get('unidadId') ?? '');
@@ -91,7 +99,7 @@ export default async function DespachoPage({
 
   async function accionCrear(formData: FormData) {
     'use server';
-    const t = await tenantDelAction('/dashboard/despacho');
+    const t = await tenantDelAction('/dashboard/despacho', sufijo, sp?.tenant);
     const folio = String(formData.get('folio') ?? '').trim();
     const origen = String(formData.get('origen') ?? '').trim();
     const destino = String(formData.get('destino') ?? '').trim();

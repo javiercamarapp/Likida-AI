@@ -29,6 +29,24 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try { return await fn(); } catch { return null; }
 }
 
+/**
+ * A qué tenant escribe la Server Action. Vive a nivel de MÓDULO, no dentro del
+ * componente: una función anidada capturada por el closure de un `'use
+ * server'` cuenta como valor a serializar hacia el cliente, y una función
+ * plana no lo es — "Functions cannot be passed directly to Client
+ * Components". Por eso recibe `tenantPedido` como parámetro en vez de
+ * cerrarlo del render.
+ */
+async function tenantDelAction(tenantPedido?: string): Promise<{ t: string; email: string | null; rol: string }> {
+  const s = await requireSessionTenant('/dashboard/suscripcion');
+  let t = s.tenantId;
+  if (s.rol === 'superadmin' && tenantPedido) {
+    t = await resolverTenantPedido(supabaseAdmin(), t, tenantPedido);
+  }
+  const { data: u } = await supabaseAdmin().from('app_user').select('email').eq('id', s.userId).maybeSingle();
+  return { t, email: (u?.email as string) ?? null, rol: s.rol };
+}
+
 const ESTADO_PILL: Record<Suscripcion['estado'], { tono: 'ok' | 'warn' | 'bad' | 'neutral'; texto: string }> = {
   prueba: { tono: 'neutral', texto: 'En prueba' },
   activa: { tono: 'ok', texto: 'Activa' },
@@ -84,16 +102,6 @@ export default async function SuscripcionPage({
   const planActual = planes?.find((p) => p.clave === suscripcion?.planClave) ?? null;
   const uso = await safe<UsoDelPlan>(() => getUso(tenantId, planActual));
 
-  async function tenantDelAction(): Promise<{ t: string; email: string | null; rol: string }> {
-    const s = await requireSessionTenant('/dashboard/suscripcion');
-    let t = s.tenantId;
-    if (s.rol === 'superadmin' && sp?.tenant) {
-      t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
-    }
-    const { data: u } = await supabaseAdmin().from('app_user').select('email').eq('id', s.userId).maybeSingle();
-    return { t, email: (u?.email as string) ?? null, rol: s.rol };
-  }
-
   /**
    * Abre el pago. `requireSessionTenant` y el `redirect` final van FUERA del
    * try: los dos redirigen LANZANDO, y atraparlos convertiría el envío a Stripe
@@ -113,7 +121,7 @@ export default async function SuscripcionPage({
    */
   async function accionContratar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t, email, rol: r } = await tenantDelAction();
+    const { t, email, rol: r } = await tenantDelAction(sp?.tenant);
     if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede contratar o cambiar de plan.' };
 
     const clave = String(fd.get('plan') ?? '');
@@ -155,7 +163,7 @@ export default async function SuscripcionPage({
   /** Guarda con qué datos se le va a facturar a esta flota. */
   async function accionFiscales(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t, rol: r } = await tenantDelAction();
+    const { t, rol: r } = await tenantDelAction(sp?.tenant);
     if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede cambiar los datos fiscales.' };
     try {
       await guardarDatosFiscales(t, {
@@ -174,7 +182,7 @@ export default async function SuscripcionPage({
 
   async function accionPortal(): Promise<ResultadoAccion> {
     'use server';
-    const { t, rol: r } = await tenantDelAction();
+    const { t, rol: r } = await tenantDelAction(sp?.tenant);
     if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede administrar el cobro.' };
 
     let destino: string;
