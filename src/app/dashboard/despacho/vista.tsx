@@ -1,10 +1,11 @@
 import { Truck, UserCog, Wrench, TriangleAlert, PackageCheck, CircleSlash } from 'lucide-react';
 import { KpiTile, EstadoVacio, StatusPill } from '../../admin/ui/kit';
+import { KpiDegradado, TituloSeccion } from '../resumen-visual';
 import { fechaMx } from '../formato';
 import type { TableroOperacion, ViajeSinAsignar, CargaOperador, UnidadRow } from '@/lib/likida/operacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Los tres bloques visuales del despacho, separados de la página.
+// Los bloques visuales del despacho, separados de la página.
 //
 // No es arquitectura por gusto: la página es un Server Component que empieza
 // por `resolverTenantEfectivo`, así que NO se puede renderizar sin sesión — y
@@ -15,31 +16,42 @@ import type { TableroOperacion, ViajeSinAsignar, CargaOperador, UnidadRow } from
 
 const ICONO = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--marca)' } } as const;
 
+/**
+ * Rediseño del 10-ago-2026 — mismo lenguaje visual que `Resumen` (degradado
+ * de marca, `KpiDegradado`/`TituloSeccion` de `resumen-visual.tsx`), aplicado
+ * a Despacho por primera vez. Los 6 números del tablero se parten en dos filas
+ * en vez de una sola grilla plana: arriba, en degradado, los TRES que piden
+ * acción hoy (por asignar, incidencias abiertas, sin evidencia de entrega —
+ * los mismos que ya arma `getTableroOperacion`, ninguna cifra nueva); abajo,
+ * en plano, los tres de CONTEXTO (viajes activos, unidades disponibles, en
+ * taller) — el mismo criterio que separó el KPI de "Ahorro generado" de la
+ * lista de causas en Resumen: lo accionable arriba y destacado, lo
+ * informativo abajo y quieto.
+ */
 export function TableroCifras({ t }: { t: TableroOperacion }) {
   return (
-    <section className="glass-panel p-5">
-      <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-        Estado de la operación
-      </h2>
-      {/* AUDITORÍA 10, MEDIO — `xl:grid-cols-6` asumía que el ancho de la
-          VENTANA es el ancho disponible para la grilla. No lo es: el sidebar
-          (232 px) más el rail del asistente (276 px) más los paddings del
-          marco dejan ~1100 px de contenido real a 1440 px de ventana. Seis
-          columnas ahí dejaban ~85 px de texto por tile — menos que a
-          `md:grid-cols-3`, la variante que se supone que xl mejora. Se
-          detiene en 3: "Sin evidencia de entrega" y "Unidades disponibles"
-          entran completas en dos líneas en vez de cortarse a la mitad. */}
+    <div>
+      <TituloSeccion>Estado de la operación</TituloSeccion>
+      <div className="mt-3 flex flex-wrap gap-2.5 items-stretch">
+        <div className="flex-1 min-w-[200px]">
+          <KpiDegradado icono={<CircleSlash width={17} height={17} strokeWidth={1.75} />}
+            etiqueta="Por asignar" valor={t.porAsignar} formato="entero" />
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <KpiDegradado icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} />}
+            etiqueta="Incidencias abiertas" valor={t.incidenciasAbiertas} formato="entero" />
+        </div>
+        <div className="flex-1 min-w-[200px]">
+          <KpiDegradado icono={<PackageCheck width={17} height={17} strokeWidth={1.75} />}
+            etiqueta="Sin evidencia de entrega" valor={t.podPendientes} formato="entero" />
+        </div>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
         <KpiTile icono={<Truck {...ICONO} />} etiqueta="Viajes activos" valor={t.viajesActivos} formato="entero" />
-        <KpiTile icono={<CircleSlash {...ICONO} />} etiqueta="Por asignar" valor={t.porAsignar} formato="entero"
-          destacar={t.porAsignar > 0} nota="Sin chofer y todavía sin liquidar" />
         <KpiTile icono={<UserCog {...ICONO} />} etiqueta="Unidades disponibles" valor={t.unidadesDisponibles} formato="entero" />
         <KpiTile icono={<Wrench {...ICONO} />} etiqueta="En taller" valor={t.unidadesEnTaller} formato="entero" />
-        <KpiTile icono={<TriangleAlert {...ICONO} />} etiqueta="Incidencias abiertas" valor={t.incidenciasAbiertas} formato="entero" />
-        <KpiTile icono={<PackageCheck {...ICONO} />} etiqueta="Sin evidencia de entrega" valor={t.podPendientes}
-          formato="entero" nota="Viajes en curso sin POD subido" />
       </div>
-    </section>
+    </div>
   );
 }
 

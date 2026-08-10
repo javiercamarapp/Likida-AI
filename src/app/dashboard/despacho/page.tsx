@@ -14,6 +14,7 @@ import {
   type TableroOperacion, type ViajeSinAsignar, type CargaOperador, type UnidadRow,
 } from '@/lib/likida/operacion';
 import { EstadoVacio, StatusPill } from '../../admin/ui/kit';
+import { TituloSeccion } from '../resumen-visual';
 import { sufijoTenant } from '../sufijo';
 import { TableroCifras, TablaSinAsignar, TablaCarga, FormaAlta } from './vista';
 
@@ -131,103 +132,96 @@ export default async function DespachoPage({
   const unidadesLibres = (unidades ?? []).filter((u) => u.estado === 'disponible' && u.activo);
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <Send width={16} height={16} strokeWidth={1.75} />
-        <div className="flex-1">
-          <span className="text-sm font-medium block">Despacho</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Qué está sin repartir, quién trae cuánto, y a quién le toca
-          </span>
+    <main>
+      <div className="glass-panel overflow-hidden">
+        <div className="px-5 pt-5 pb-2 flex items-center gap-2.5">
+          <Send width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+          <div className="flex-1">
+            <span className="text-sm font-medium block">Despacho</span>
+            <span className="text-xs" style={{ color: 'var(--muted)' }}>
+              Qué está sin repartir, quién trae cuánto, y a quién le toca
+            </span>
+          </div>
+          {sp.ok === 'asignado' && <StatusPill estado="ok">Viaje asignado</StatusPill>}
+          {sp.ok === 'creado' && <StatusPill estado="ok">Viaje creado</StatusPill>}
         </div>
-        {sp.ok === 'asignado' && <StatusPill estado="ok">Viaje asignado</StatusPill>}
-        {sp.ok === 'creado' && <StatusPill estado="ok">Viaje creado</StatusPill>}
-      </header>
 
-      {tablero === null ? (
-        <div className="glass-panel p-8 text-sm" style={{ color: 'var(--muted)' }}>
-          No se pudo leer el estado de la operación.
-        </div>
-      ) : (
-        <TableroCifras t={tablero} />
-      )}
-
-      <section className="glass-panel overflow-hidden">
-        <div className="px-5 pt-5 pb-2 flex items-center gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-            Sin asignar
-          </h2>
-          {sinAsignar !== null && sinAsignar.length > 0 && (
-            <StatusPill estado="warn">{String(sinAsignar.length)}</StatusPill>
+        <div className="px-5 pb-4 pt-2">
+          {tablero === null ? (
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer el estado de la operación.</p>
+          ) : (
+            <TableroCifras t={tablero} />
           )}
         </div>
 
-        {sinAsignar === null ? (
-          <div className="px-5 pb-5 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la lista.</div>
-        ) : sinAsignar.length === 0 ? (
-          <div className="px-5 pb-5">
-            <EstadoVacio icono={<PackageCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Todo lo que está en curso ya trae chofer. Cuando entre un viaje sin asignar, aparece aquí.
-            </EstadoVacio>
+        <div className="px-5 pb-4 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex items-center gap-2">
+            <TituloSeccion>Sin asignar</TituloSeccion>
+            {sinAsignar !== null && sinAsignar.length > 0 && (
+              <StatusPill estado="warn">{String(sinAsignar.length)}</StatusPill>
+            )}
           </div>
-        ) : !puede ? (
-          <div className="px-5 pb-5">
-            <EstadoVacio>
-              Hay {sinAsignar.length} viaje(s) sin chofer, pero tu rol no puede asignar. Pídeselo al encargado o al
-              dueño de la flota.
-            </EstadoVacio>
+          <div className="mt-2.5">
+            {sinAsignar === null ? (
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la lista.</p>
+            ) : sinAsignar.length === 0 ? (
+              <EstadoVacio icono={<PackageCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                Todo lo que está en curso ya trae chofer. Cuando entre un viaje sin asignar, aparece aquí.
+              </EstadoVacio>
+            ) : !puede ? (
+              <EstadoVacio>
+                Hay {sinAsignar.length} viaje(s) sin chofer, pero tu rol no puede asignar. Pídeselo al encargado o al
+                dueño de la flota.
+              </EstadoVacio>
+            ) : ops.length === 0 ? (
+              <EstadoVacio icono={<UserCog width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                Hay {sinAsignar.length} viaje(s) sin chofer y ningún operador activo a quien asignárselos. Los
+                operadores se dan de alta cuando escriben por WhatsApp por primera vez.
+              </EstadoVacio>
+            ) : (
+              <TablaSinAsignar viajes={sinAsignar} operadores={ops} unidadesLibres={unidadesLibres} accion={accionAsignar} />
+            )}
           </div>
-        ) : ops.length === 0 ? (
-          <div className="px-5 pb-5">
-            <EstadoVacio icono={<UserCog width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Hay {sinAsignar.length} viaje(s) sin chofer y ningún operador activo a quien asignárselos. Los
-              operadores se dan de alta cuando escriben por WhatsApp por primera vez.
-            </EstadoVacio>
-          </div>
-        ) : (
-          <TablaSinAsignar viajes={sinAsignar} operadores={ops} unidadesLibres={unidadesLibres} accion={accionAsignar} />
-        )}
-      </section>
-
-      <section className="glass-panel overflow-hidden">
-        <div className="px-5 pt-5 pb-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-            Carga por operador
-          </h2>
         </div>
-        {carga === null ? (
-          <div className="px-5 pb-5 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la carga.</div>
-        ) : (
-          <TablaCarga carga={carga} />
-        )}
-      </section>
 
-      {puede && (
-        <section className="glass-panel p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Plus width={15} height={15} strokeWidth={1.75} />
-            <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
-              Dar de alta un viaje
-            </h2>
+        <div className="px-5 pb-4 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
+          <TituloSeccion>Carga por operador</TituloSeccion>
+          <div className="mt-2.5">
+            {carga === null ? (
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la carga.</p>
+            ) : (
+              <TablaCarga carga={carga} />
+            )}
           </div>
-          <FormaAlta operadores={ops} unidadesLibres={unidadesLibres} accion={accionCrear} />
-          <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-            El anticipo se guarda porque el motor de cuadre lo necesita para comparar contra lo comprobado. No se
-            lista ni se suma en esta pantalla: el dinero es de otra vista y de otro rol.
-          </p>
-        </section>
-      )}
+        </div>
 
-      <div className="px-1">
-        <EstadoVacio>
-          El mapa en vivo, las geocercas y el ETA no aparecen porque no hay proveedor de rastreo conectado — no es
-          una tabla que falte, es una integración que no existe. El margen por viaje tampoco: necesita el ingreso
-          del flete, que hoy no se registra en ningún lado. Unidades, incidencias y POD sí tienen dónde vivir desde
-          la migración 0047, y se administran en{' '}
-          <Link href={`/dashboard/unidades${sufijo}`} className="underline">Unidades</Link> y{' '}
-          <Link href={`/dashboard/viajes${sufijo}`} className="underline">Viajes</Link>.
-        </EstadoVacio>
+        {puede && (
+          <div className="px-5 pb-4 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
+            <div className="flex items-center gap-2">
+              <Plus width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+              <TituloSeccion>Dar de alta un viaje</TituloSeccion>
+            </div>
+            <div className="mt-2.5">
+              <FormaAlta operadores={ops} unidadesLibres={unidadesLibres} accion={accionCrear} />
+              <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
+                El anticipo se guarda porque el motor de cuadre lo necesita para comparar contra lo comprobado. No se
+                lista ni se suma en esta pantalla: el dinero es de otra vista y de otro rol.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="px-5 pb-5 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
+          <EstadoVacio>
+            El mapa en vivo, las geocercas y el ETA no aparecen porque no hay proveedor de rastreo conectado — no es
+            una tabla que falte, es una integración que no existe. El margen por viaje tampoco: necesita el ingreso
+            del flete, que hoy no se registra en ningún lado. Unidades, incidencias y POD sí tienen dónde vivir desde
+            la migración 0047, y se administran en{' '}
+            <Link href={`/dashboard/unidades${sufijo}`} className="underline">Unidades</Link> y{' '}
+            <Link href={`/dashboard/viajes${sufijo}`} className="underline">Viajes</Link>.
+          </EstadoVacio>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
