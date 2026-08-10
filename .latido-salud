@@ -1,0 +1,44 @@
+fecha: 2026-08-10
+
+## Bloque 1 — Tests intermitentes
+5/5 corridas verdes. 3157 passed | 1 skipped (3158 total), 252 archivos, cada corrida.
+Sin intermitencia, sin roto. Sano.
+
+## Bloque 2 — Dependencias
+- MECÁNICO (9 paquetes + 5 transitivos vía audit fix): PR #10, rama claude/salud-2026-08-10.
+  next 16.2.11→16.3.0, @sentry/nextjs 10.68.0→10.70.0, @supabase/supabase-js 2.110.8→2.112.2,
+  lucide-react 1.26.0→1.31.0, eslint-config-next 16.2.12→16.3.0, @types/react 19.2.17→19.2.18,
+  @types/react-dom 19.2.3→19.2.4, react/react-dom 19.2.4→19.2.8; + brace-expansion, fast-uri,
+  js-yaml, nanoid, postcss (transitivos, npm audit fix sin --force).
+  Verificado en la rama: tsc limpio, eslint limpio (0 errores), vitest 3157/1/3158 verde.
+- NECESITA LECTURA (1): issue #11 — sharp 0.34.5, CVE en libvips, camino real confirmado
+  (cfdi.ts:249, decodeCodigosFromImage procesa fotos de WhatsApp sin filtrar).
+- RUIDO (6, descartado con razón): vitest/vite/esbuild/@vitest-mocker/vite-node/@vitest-coverage-v8
+  — CVEs requieren servidor de UI de Vitest o dev-server de Vite, que este repo no expone
+  (se corre `vitest run`, sin --ui). Dependencia de desarrollo, ruta no ejecutada.
+
+## Bloque 3 — Deriva de documentación
+4 hallazgos verificables:
+- README.md:17 — dice "3,149 pruebas verdes"; hoy son 3,157 (3,158 con el skip). También dice
+  "build limpio", que ya no es cierto (ver bonus abajo / issue #12).
+- PROMPT-SESION-NUEVA.md:37 — dice "van 1,670 verdes"; muy atrás de las 3,158 actuales.
+- PROMPT-SESION-NUEVA.md:39-42 — describe que "cada push a master dispara un build de
+  producción en Vercel"; contradice vercel.json (ignoreCommand con bandera [deploy]) y el
+  propio CLAUDE.md, que documenta esa decisión como ya tomada el 5-ago-2026.
+- PROMPT-SESION-NUEVA.md:159 — dice "No hay forma de cobrar: sin Stripe... Sin planes ni
+  suscripción"; contradicho por src/lib/saas/stripe.ts, suscripcion.ts y
+  src/app/api/stripe/webhook/route.ts, que ya existen con código real.
+Sin issue abierto para esto (no lo pidió el super prompt para Bloque 3); reportado en el
+resumen de la sesión.
+
+## Bloque 4 — Costo por liquidación
+Saltado. Sin credenciales ni datos de producción en este entorno (.env.local no existe,
+sin variables de Supabase/OpenRouter en el ambiente). No se estimó nada.
+
+## Bonus — fuera de los cuatro bloques
+`npm run build` está roto en master (confirmado en checkout limpio, sin relación con el PR
+mecánico): 7 páginas exportan Contenido/InicioContenido y el chequeo de rutas de Next.js
+lo rechaza. Issue #12.
+
+## Estado: OK
+Los cuatro bloques corrieron. Bloque 4 se saltó por falta de datos, como indica su propia regla.
