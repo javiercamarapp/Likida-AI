@@ -1535,3 +1535,35 @@ export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorC
     })),
   }));
 }
+
+// ── Detalle de liquidaciones (tabla de Cuadre) ──────────────────────────────
+//
+// Movida aquí desde `dashboard/cuadre/page.tsx` el 10-ago-2026: vivía como
+// función local no exportada dentro de esa página, y al borrarla para el
+// rediseño de "dueño de flota" (ver inventario en
+// `docs/conocimiento/41-inventario-dueno-flota-pre-rediseno.md`) esta consulta
+// se habría perdido en silencio — es la única de las 17 páginas del
+// inventario cuya lógica no vivía ya en `lib/likida`.
+
+export interface LiqRow { id: string; folio: string; creadoEn: string; comprobado: number; diferencia: number; estatus: string }
+
+export async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
+  const { data, error } = await supabaseAdmin()
+    .from('liquidacion')
+    .select('id, estatus, total_comprobado, diferencia, created_at, viaje:viaje_id(folio)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  // supabase-js reporta el fallo POR VALOR: sin este throw, una lectura caída
+  // devolvía `[]` y la tabla salía con encabezados y cero filas bajo unos KPIs
+  // que decían "12 viajes liquidados" (auditoría 5, frontend, CRÍTICO).
+  if (error) throw new Error(`getLiquidaciones: ${error.message}`);
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    folio: ((r.viaje as { folio?: string } | null)?.folio) ?? (r.id as string).slice(0, 8),
+    creadoEn: r.created_at as string,
+    comprobado: Number(r.total_comprobado ?? 0),
+    diferencia: Number(r.diferencia ?? 0),
+    estatus: r.estatus as string,
+  }));
+}

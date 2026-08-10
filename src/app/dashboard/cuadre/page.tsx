@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { ReceiptText, Wallet, AlertTriangle, Copy } from 'lucide-react';
 import {
-  getKpis, detectarAnomalias, type DashboardKpis, type Anomalia,
+  getKpis, detectarAnomalias, getLiquidaciones, type DashboardKpis, type Anomalia, type LiqRow,
 } from '@/lib/likida/analytics';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mxn } from '@/lib/utils';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -15,29 +14,6 @@ import { KpiTile, EstadoVacio } from '../../admin/ui/kit';
 import { Gauge } from '../../admin/ui/graficas';
 
 export const dynamic = 'force-dynamic';
-
-interface LiqRow { id: string; folio: string; creadoEn: string; comprobado: number; diferencia: number; estatus: string }
-
-async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
-  const { data, error } = await supabaseAdmin()
-    .from('liquidacion')
-    .select('id, estatus, total_comprobado, diferencia, created_at, viaje:viaje_id(folio)')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false })
-    .limit(50);
-  // supabase-js reporta el fallo POR VALOR: sin este throw, una lectura caída
-  // devolvía `[]` y la tabla salía con encabezados y cero filas bajo unos KPIs
-  // que decían "12 viajes liquidados" (auditoría 5, frontend, CRÍTICO).
-  if (error) throw new Error(`getLiquidaciones: ${error.message}`);
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    folio: ((r.viaje as { folio?: string } | null)?.folio) ?? (r.id as string).slice(0, 8),
-    creadoEn: r.created_at as string,
-    comprobado: Number(r.total_comprobado ?? 0),
-    diferencia: Number(r.diferencia ?? 0),
-    estatus: r.estatus as string,
-  }));
-}
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try { return await fn(); } catch { return null; }
