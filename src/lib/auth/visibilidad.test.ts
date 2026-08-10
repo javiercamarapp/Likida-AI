@@ -35,15 +35,13 @@ describe('quién ve qué área', () => {
 });
 
 describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () => {
+  // El panel del contador (`/dashboard/contador` y sus 5 subrutas) se borró
+  // el 10-ago-2026 junto con las 17 de dueño de flota — quedan fuera de esta
+  // lista, pero `usuarios`/`configuracion`/`politicas`/`combustible-casetas`
+  // (área `dinero`/`administracion`) siguen existiendo y le siguen negadas.
   const PROHIBIDAS = [
     '/dashboard/combustible-casetas',
     '/dashboard/usuarios', '/dashboard/configuracion', '/dashboard/politicas',
-    // El panel del contador es área `dinero`: al jefe de tráfico se le niega
-    // entero. Enseñarle las deducciones perdidas de la flota es enseñarle
-    // sus finanzas por otra puerta.
-    '/dashboard/contador', '/dashboard/contador/deducciones', '/dashboard/contador/cfdi',
-    '/dashboard/contador/combustible', '/dashboard/contador/retenciones',
-    '/dashboard/contador/liquidaciones',
   ];
   it.each(PROHIBIDAS)('%s le está negada al encargado', (href) => {
     expect(puedeVerRuta('encargado', href)).toBe(false);
@@ -61,18 +59,22 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
   });
 });
 
-describe('el contador llega a su panel — y la operación le sigue cerrada', () => {
-  const SUYAS = FISCAL.map((i) => i.href);
-  it.each(SUYAS)('%s es del contador', (href) => {
-    expect(puedeVerRuta('contador', href)).toBe(true);
+describe('el contador — sin panel propio, pero la operación le sigue cerrada', () => {
+  // El panel del contador se borró el 10-ago-2026 para rehacerse desde
+  // cero — `FISCAL` (rutas.ts) está vacío mientras tanto. `inicioDe` ya no
+  // lo manda ahí: aterriza en Suscripción, la única pantalla de `dinero`
+  // que le sigue quedando de verdad (las facturas de Likida son su propia
+  // contabilidad, no un préstamo de la del dueño).
+  it('FISCAL está vacío mientras se reconstruye', () => {
+    expect(FISCAL).toEqual([]);
   });
 
-  it('su aterrizaje es una de esas seis, no el cuadre ni /dashboard', () => {
-    expect(SUYAS).toContain(inicioDe('contador'));
+  it('aterriza en Suscripción, no en un panel que ya no existe', () => {
+    expect(inicioDe('contador')).toBe('/dashboard/suscripcion');
+    expect(puedeVerRuta('contador', inicioDe('contador'))).toBe(true);
   });
 
-  // Despacho/Viajes/Mapa/POD/Operadores/Unidades se borraron el 10-ago-2026
-  // — `/dashboard` (Resumen) es la única ruta de operación que sigue
+  // `/dashboard` (Resumen) es la única ruta de operación que sigue
   // existiendo para probar que el contador no entra.
   const OPERACION_PROHIBIDA = ['/dashboard'];
   it.each(OPERACION_PROHIBIDA)('%s le sigue negada al contador aunque teclee la URL', (href) => {
@@ -161,12 +163,13 @@ describe('a dónde se rebota a cada quien', () => {
   });
 
   it('al contador NO a /dashboard — lo rebotaría otra vez y sería un bucle', () => {
-    // Cambió de `/dashboard/cuadre` a `/dashboard/contador` cuando dejó de ser
-    // "la primera página de dinero que había" y pasó a existir una hecha para
-    // él. Lo que se prueba no es CUÁL es, sino las dos propiedades que hacen
-    // que el rebote no sea un bucle: no es `/dashboard`, y su propio rol la ve.
+    // Iba a `/dashboard/contador` (su panel) hasta el 10-ago-2026, cuando ese
+    // panel se borró para rehacerse desde cero; ahora aterriza en Suscripción
+    // — mandarlo a la ruta vieja SÍ sería el bucle que esto vigila. Lo que se
+    // prueba no es CUÁL es, sino las dos propiedades que hacen que el rebote
+    // no sea un bucle: no es `/dashboard`, y su propio rol la ve.
     expect(inicioDe('contador')).not.toBe('/dashboard');
-    expect(inicioDe('contador')).toBe('/dashboard/contador');
+    expect(inicioDe('contador')).toBe('/dashboard/suscripcion');
     expect(puedeVerRuta('contador', inicioDe('contador'))).toBe(true);
   });
 

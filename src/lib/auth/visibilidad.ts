@@ -58,17 +58,19 @@ export function puedeVerArea(rol: string, area: Area): boolean {
  * Explícito y no por prefijo a propósito: una ruta nueva que nadie clasifique
  * cae a `undefined`, y `puedeVerRuta` la niega. Es preferible que una pantalla
  * nueva no se vea a que se vea de más — el error caro es el segundo.
- */
-/**
+ *
  * Las 17 páginas de "dueño de flota" (despacho, viajes, pod, incidencias,
  * unidades, operadores, mapa, documentos, analitica, chat, valor-ahorro,
  * rentabilidad, clientes, cotizador, cuadre, facturacion, cobranza) se
- * borraron el 10-ago-2026 para rehacerse desde cero — sus entradas salieron
- * de este mapa junto con la página. `puedeVerRuta` niega por default
- * (`area !== undefined`), así que una URL vieja simplemente deja de abrir
- * para todos, dueño incluido — el efecto correcto mientras no exista nada
- * que gatear. `/dashboard` se queda: sigue siendo Resumen para todos los
- * roles, incluido el jefe de tráfico (`inicio-operacion.tsx`).
+ * borraron el 10-ago-2026 para rehacerse desde cero, y las 6 del panel del
+ * CONTADOR (`/dashboard/contador` y sus 5 subrutas) las siguieron el mismo
+ * día — sus entradas salieron de este mapa junto con la página.
+ * `puedeVerRuta` niega por default (`area !== undefined`), así que una URL
+ * vieja simplemente deja de abrir para todos, dueño incluido — el efecto
+ * correcto mientras no exista nada que gatear. `/dashboard` se queda: sigue
+ * siendo Resumen para todos los roles, incluido el jefe de tráfico
+ * (`inicio-operacion.tsx`). Con el panel del contador vacío, `inicioDe`
+ * (abajo) ya no lo manda a `/dashboard/contador` — ver esa función.
  */
 const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard': 'operacion',
@@ -76,20 +78,6 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/soporte': 'operacion',
 
   // Dinero — lo que el encargado no ve
-  //
-  // El panel del CONTADOR. Es `dinero` y no un área nueva a propósito: el
-  // contador ya tiene exactamente esa área y nada más, así que un cuarto valor
-  // en el enum solo serviría para esconderle estas pantallas al dueño, que
-  // también las quiere. Lo que hace al panel del contador de SOLO LECTURA no
-  // es el área: es que ninguna de sus páginas expone una acción (ver
-  // `permisos.ts` — `puedeAsignar`/`puedeAdministrar` ya le dicen que no).
-  '/dashboard/contador': 'dinero',
-  '/dashboard/contador/deducciones': 'dinero',
-  '/dashboard/contador/cfdi': 'dinero',
-  '/dashboard/contador/combustible': 'dinero',
-  '/dashboard/contador/retenciones': 'dinero',
-  '/dashboard/contador/liquidaciones': 'dinero',
-
   '/dashboard/combustible-casetas': 'dinero',
   // Lo que Likida le cobra a la flota (0052). Es `dinero` y no
   // `administracion` porque el contador necesita las facturas de Likida para su
@@ -170,11 +158,14 @@ export function inicioDe(rol: string): string {
   if (propio) return propio;
 
   if (puedeVerArea(rol, 'operacion')) return '/dashboard';
-  // El contador aterriza en SU panel, no en el cuadre. Antes caía en
-  // `/dashboard/cuadre` porque era la primera página de `dinero` que existía;
-  // ahora existe una hecha para él, y es la que abre en la mañana. La rama
-  // sigue siendo por ÁREA y no por nombre de rol: cualquier rol futuro que
-  // solo vea dinero aterriza aquí sin que haya que acordarse de agregarlo.
-  if (puedeVerArea(rol, 'dinero')) return '/dashboard/contador';
+  // El panel del contador (`/dashboard/contador`) se borró el 10-ago-2026
+  // para rehacerse desde cero — mandarlo ahí sería un bucle (`puedeVerRuta`
+  // lo negaría otra vez, sin área declarada). Mientras no exista un panel
+  // propio, aterriza en la única pantalla de `dinero` que le sigue quedando
+  // Y que de verdad es suya: Plan & Facturación, las facturas de Likida que
+  // ya necesitaba para su propia contabilidad. La rama sigue siendo por
+  // ÁREA y no por nombre de rol: cualquier rol futuro que solo vea dinero
+  // aterriza aquí sin que haya que acordarse de agregarlo.
+  if (puedeVerArea(rol, 'dinero')) return '/dashboard/suscripcion';
   return '/sin-acceso';
 }
