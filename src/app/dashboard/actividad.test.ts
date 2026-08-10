@@ -10,9 +10,19 @@ import { bucketsPorDia } from './actividad';
 // (un timestamptz que fechaba el día siguiente).
 // ═══════════════════════════════════════════════════════════════════════════
 
-const hoyIso = () => new Date().toISOString().slice(0, 10);
+// `.toISOString()` sin fijar la hora primero convierte el MOMENTO actual a
+// UTC, no "hoy" en hora local — en México (UTC-6), desde las 18:00 eso ya es
+// mañana en UTC, y esta prueba fallaba cada noche comparando contra la fecha
+// equivocada. `setHours(0,0,0,0)` fija medianoche LOCAL antes de convertir,
+// igual que ya hace `bucketsPorDia` en el código real.
+const hoyIso = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+};
 const haceNDiasIso = (n: number) => {
   const d = new Date();
+  d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 };

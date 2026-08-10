@@ -24,6 +24,23 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 /**
+ * A qué tenant escribe la Server Action. Vive a nivel de MÓDULO, no dentro del
+ * componente: una función anidada capturada por el closure de un `'use
+ * server'` cuenta como valor a serializar hacia el cliente, y una función
+ * plana no lo es — "Functions cannot be passed directly to Client
+ * Components". Por eso recibe `sufijo`/`tenantPedido` como parámetros en vez
+ * de cerrarlos del render.
+ */
+async function tenantDelAction(sufijo: string, tenantPedido?: string) {
+  const s = await requireSessionTenant('/dashboard/unidades');
+  if (!puedeAsignar(s.rol)) redirect(`/dashboard/unidades${sufijo}`);
+  if (s.rol === 'superadmin' && tenantPedido) {
+    return await resolverTenantPedido(supabaseAdmin(), s.tenantId, tenantPedido);
+  }
+  return s.tenantId;
+}
+
+/**
  * UNIDADES — el expediente operativo del vehículo.
  *
  * Hasta la migración 0047 esta página era un `SeccionPendiente` que decía la
@@ -47,18 +64,9 @@ export default async function UnidadesPage({
 
   const unidades = await safe<UnidadRow[]>(() => getUnidades(tenantId));
 
-  async function tenantDelAction() {
-    const s = await requireSessionTenant('/dashboard/unidades');
-    if (!puedeAsignar(s.rol)) redirect(`/dashboard/unidades${sufijo}`);
-    if (s.rol === 'superadmin' && sp?.tenant) {
-      return await resolverTenantPedido(supabaseAdmin(), s.tenantId, sp.tenant);
-    }
-    return s.tenantId;
-  }
-
   async function accionEstado(formData: FormData) {
     'use server';
-    const t = await tenantDelAction();
+    const t = await tenantDelAction(sufijo, sp?.tenant);
     const unidadId = String(formData.get('unidadId') ?? '');
     const estado = String(formData.get('estado') ?? '');
     if (!unidadId || !ESTADOS.has(estado)) redirect(`/dashboard/unidades${sufijo}`);
@@ -69,7 +77,7 @@ export default async function UnidadesPage({
 
   async function accionAlta(formData: FormData) {
     'use server';
-    const t = await tenantDelAction();
+    const t = await tenantDelAction(sufijo, sp?.tenant);
     const numeroEconomico = String(formData.get('numeroEconomico') ?? '').trim();
     // Es lo ÚNICO obligatorio: es como la flota llama a la unidad en la radio
     // y en el papel, y la 0047 lo hace único por tenant. Sin él, la fila no

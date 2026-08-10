@@ -19,6 +19,23 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 /**
+ * A qué tenant escribe la Server Action. Vive a nivel de MÓDULO, no dentro del
+ * componente: una función anidada capturada por el closure de un `'use
+ * server'` cuenta como valor a serializar hacia el cliente, y una función
+ * plana no lo es — "Functions cannot be passed directly to Client
+ * Components". Por eso recibe `sufijo`/`tenantPedido` como parámetros en vez
+ * de cerrarlos del render.
+ */
+async function tenantDelAction(sufijo: string, tenantPedido?: string) {
+  const s = await requireSessionTenant('/dashboard/pod');
+  if (!puedeAsignar(s.rol)) redirect(`/dashboard/pod${sufijo}`);
+  if (s.rol === 'superadmin' && tenantPedido) {
+    return await resolverTenantPedido(supabaseAdmin(), s.tenantId, tenantPedido);
+  }
+  return s.tenantId;
+}
+
+/**
  * POD — qué entrega falta y a quién pedírsela.
  *
  * LA FOTO NO SE ENSEÑA, y es la misma decisión que ya se tomó con los
@@ -47,15 +64,6 @@ export default async function PodPage({
 
   const pods = await safe<PodRow[]>(() => getPods(tenantId));
 
-  async function tenantDelAction() {
-    const s = await requireSessionTenant('/dashboard/pod');
-    if (!puedeAsignar(s.rol)) redirect(`/dashboard/pod${sufijo}`);
-    if (s.rol === 'superadmin' && sp?.tenant) {
-      return await resolverTenantPedido(supabaseAdmin(), s.tenantId, sp.tenant);
-    }
-    return s.tenantId;
-  }
-
   /**
    * Pide el POD — y ahora SÍ le manda el mensaje al chofer.
    *
@@ -72,7 +80,7 @@ export default async function PodPage({
    */
   async function accionPedir(formData: FormData) {
     'use server';
-    const t = await tenantDelAction();
+    const t = await tenantDelAction(sufijo, sp?.tenant);
     const viajeId = String(formData.get('viajeId') ?? '');
     if (!viajeId) redirect(`/dashboard/pod${sufijo}`);
 
@@ -94,7 +102,7 @@ export default async function PodPage({
 
   async function accionRechazar(formData: FormData) {
     'use server';
-    const t = await tenantDelAction();
+    const t = await tenantDelAction(sufijo, sp?.tenant);
     const podId = String(formData.get('podId') ?? '');
     if (!podId) redirect(`/dashboard/pod${sufijo}`);
     await rechazarPod(t, podId, String(formData.get('nota') ?? '').trim() || null);

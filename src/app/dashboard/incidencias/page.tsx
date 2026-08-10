@@ -22,6 +22,23 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 /**
+ * A qué tenant escribe la Server Action. Vive a nivel de MÓDULO, no dentro del
+ * componente: una función anidada capturada por el closure de un `'use
+ * server'` cuenta como valor a serializar hacia el cliente, y una función
+ * plana no lo es — "Functions cannot be passed directly to Client
+ * Components". Por eso recibe `sufijo`/`tenantPedido` como parámetros en vez
+ * de cerrarlos del render.
+ */
+async function tenantDelAction(sufijo: string, tenantPedido?: string) {
+  const s = await requireSessionTenant('/dashboard/incidencias');
+  if (!puedeAsignar(s.rol)) redirect(`/dashboard/incidencias${sufijo}`);
+  if (s.rol === 'superadmin' && tenantPedido) {
+    return await resolverTenantPedido(supabaseAdmin(), s.tenantId, tenantPedido);
+  }
+  return s.tenantId;
+}
+
+/**
  * INCIDENCIAS — lo que se salió de lo normal, con dueño y con reloj.
  *
  * La tabla nació en la 0047 con dos constraints que esta página respeta en
@@ -47,18 +64,9 @@ export default async function IncidenciasPage({
     safe<UnidadRow[]>(() => getUnidades(tenantId)),
   ]);
 
-  async function tenantDelAction() {
-    const s = await requireSessionTenant('/dashboard/incidencias');
-    if (!puedeAsignar(s.rol)) redirect(`/dashboard/incidencias${sufijo}`);
-    if (s.rol === 'superadmin' && sp?.tenant) {
-      return await resolverTenantPedido(supabaseAdmin(), s.tenantId, sp.tenant);
-    }
-    return s.tenantId;
-  }
-
   async function accionEstado(formData: FormData) {
     'use server';
-    const t = await tenantDelAction();
+    const t = await tenantDelAction(sufijo, sp?.tenant);
     const incidenciaId = String(formData.get('incidenciaId') ?? '');
     const estado = String(formData.get('estado') ?? '');
     if (!incidenciaId || !(estado in ESTADOS)) redirect(`/dashboard/incidencias${sufijo}`);
@@ -69,7 +77,7 @@ export default async function IncidenciasPage({
 
   async function accionCrear(formData: FormData) {
     'use server';
-    const t = await tenantDelAction();
+    const t = await tenantDelAction(sufijo, sp?.tenant);
     const tipo = String(formData.get('tipo') ?? '');
     const prioridad = String(formData.get('prioridad') ?? 'media');
     if (!(tipo in TIPOS) || !(prioridad in PRIORIDADES)) redirect(`/dashboard/incidencias${sufijo}`);

@@ -39,6 +39,31 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 /**
+ * A qué tenant escribe la Server Action. Vive a nivel de MÓDULO, no dentro del
+ * componente: una función anidada capturada por el closure de un `'use
+ * server'` cuenta como valor a serializar hacia el cliente, y una función
+ * plana no lo es — "Functions cannot be passed directly to Client
+ * Components". Por eso recibe `sufijo`/`tenantPedido` como parámetros en vez
+ * de cerrarlos del render. Mismo patrón que `incidencias/page.tsx`:
+ * `requireSessionTenant` da la sesión REAL (no la previsualizada por
+ * `resolverTenantEfectivo`, que solo aplica a la LECTURA de esta página), y
+ * se revalida `puedeVerRuta` aquí porque una Server Action es un endpoint
+ * POST alcanzable por su cuenta — el gateo de la página (arriba) no la
+ * protege.
+ */
+async function tenantYUsuarioDelAction(sufijo: string, tenantPedido?: string) {
+  const s = await requireSessionTenant('/dashboard/combustible-casetas');
+  if (!puedeVerRuta(s.rol, '/dashboard/combustible-casetas')) {
+    redirect(`/dashboard/combustible-casetas${sufijo}`);
+  }
+  if (s.rol === 'superadmin' && tenantPedido) {
+    const t = await resolverTenantPedido(supabaseAdmin(), s.tenantId, tenantPedido);
+    return { tenantId: t, userId: s.userId };
+  }
+  return { tenantId: s.tenantId, userId: s.userId };
+}
+
+/**
  * `getConciliacionConsolidado` YA usa `null` con un significado real ("este
  * tenant nunca mandó un consolidado"), así que envolverlo con `safe()` a
  * secas confundiría eso con "la consulta falló" — justo la trampa que
@@ -100,29 +125,9 @@ export default async function CombustibleCasetasPage({
     safe<LineaPorConciliar[]>(() => getLineasPorConciliar(tenantId)),
   ]);
 
-  /**
-   * A qué tenant escribe la Server Action. Mismo patrón que
-   * `incidencias/page.tsx`: `requireSessionTenant` da la sesión REAL (no la
-   * previsualizada por `resolverTenantEfectivo`, que solo aplica a la
-   * LECTURA de esta página), y se revalida `puedeVerRuta` aquí porque una
-   * Server Action es un endpoint POST alcanzable por su cuenta — el gateo de
-   * la página (arriba) no la protege.
-   */
-  async function tenantYUsuarioDelAction() {
-    const s = await requireSessionTenant('/dashboard/combustible-casetas');
-    if (!puedeVerRuta(s.rol, '/dashboard/combustible-casetas')) {
-      redirect(`/dashboard/combustible-casetas${sufijo}`);
-    }
-    if (s.rol === 'superadmin' && sp?.tenant) {
-      const t = await resolverTenantPedido(supabaseAdmin(), s.tenantId, sp.tenant);
-      return { tenantId: t, userId: s.userId };
-    }
-    return { tenantId: s.tenantId, userId: s.userId };
-  }
-
   async function accionResolverLinea(formData: FormData) {
     'use server';
-    const { tenantId: t, userId } = await tenantYUsuarioDelAction();
+    const { tenantId: t, userId } = await tenantYUsuarioDelAction(sufijo, sp?.tenant);
     const lineaId = String(formData.get('lineaId') ?? '');
     const eleccion = String(formData.get('eleccion') ?? '');
     if (!lineaId || !eleccion) redirect(`/dashboard/combustible-casetas${sufijo}`);
