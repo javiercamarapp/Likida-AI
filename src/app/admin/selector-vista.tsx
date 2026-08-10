@@ -47,10 +47,14 @@ const VISTAS: Vista[] = [
     Icono: Building2,
   },
   {
-    href: '/dashboard/contador?vista=demo&rol=contador',
+    // El panel del contador (Panel fiscal, Deducciones, CFDI, etc.) se
+    // borró el 10-ago-2026 para rehacerse desde cero — mientras no exista,
+    // `inicioDe` (visibilidad.ts) lo aterriza en Suscripción, la única
+    // pantalla de `dinero` que le sigue quedando.
+    href: '/dashboard/suscripcion?vista=demo&rol=contador',
     titulo: 'Contador',
     quien: 'contador',
-    que: 'Panel fiscal, de solo lectura: IVA, IEPS de diésel y CFDI por validar.',
+    que: 'Panel fiscal en reconstrucción — hoy aterriza en Plan & Facturación.',
     Icono: Landmark,
   },
   {

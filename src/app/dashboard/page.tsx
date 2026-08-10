@@ -10,10 +10,9 @@ import {
 } from '@/lib/likida/analytics';
 import { getConfig, type CuadraConfig } from '@/lib/likida/config';
 import {
-  resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries, resumirPerdidas,
+  resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries, resumirPerdidas, opcionesDe,
   type GastoFiscal, type ResumenPerdidas, type GastosFiscalesSeries,
 } from '@/lib/likida/fiscal';
-import { opcionesDe } from './contador/comun';
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';

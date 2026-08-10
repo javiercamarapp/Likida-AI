@@ -33,6 +33,7 @@ import { exigir, traerTodo, conteo } from './pg';
 import { round2 } from '@/lib/formato';
 import { armar as armarPorFacturar } from './facturacion/pendientes';
 import { evaluarTope15, type ResultadoTope15 } from './periodo/combustible';
+import type { CuadraConfig } from './config';
 
 // ── La fila de `gasto` leída con ojos de contador ──────────────────────────
 
@@ -200,6 +201,26 @@ export interface OpcionesFiscales {
    *  undefined = sin declarar. AUDITORÍA 14, ALTO: sin esto el panel ofrecía
    *  la válvula a flotas que el motor declara no elegibles. */
   elegible15?: boolean;
+}
+
+/**
+ * Movida de `dashboard/contador/comun.tsx` el 10-ago-2026: ese panel se borró
+ * (rediseño desde cero), pero `dashboard/page.tsx` (Resumen) también la
+ * necesita para su Motor fiscal — vivía en un archivo de página en vez de en
+ * la capa de datos, así que borrar el panel se la hubiera llevado entre pies.
+ */
+export function opcionesDe(cfg: CuadraConfig): OpcionesFiscales {
+  const f15 = cfg.facilidadCombustibleEfectivo;
+  return {
+    efectivoTopeMxn: cfg.estimulos.efectivoTopeMxn,
+    clavesCombustible: cfg.hidrocarburos.claves,
+    clavesDieselIeps: cfg.estimulos.clavesDieselIeps,
+    // AUDITORÍA 14, ALTO: el panel ofrecía el 15% a flotas no elegibles. La
+    // declaración de la flota (al registrarse) llega hasta aquí.
+    elegible15: (f15 && f15.dedicacionExclusivaCarga !== undefined && f15.regimenElegible !== undefined)
+      ? (f15.dedicacionExclusivaCarga === true && f15.regimenElegible === true)
+      : undefined,
+  };
 }
 
 // ── Deducibilidad por comprobante ──────────────────────────────────────────
