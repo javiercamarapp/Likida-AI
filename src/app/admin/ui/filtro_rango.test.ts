@@ -85,7 +85,9 @@ describe('resolverRango', () => {
 // filtro recibe el objeto entero de `resolverRango`, no dos props sueltas— y
 // esta prueba vigila que nadie la desarme.
 
-const PAGINAS = ['../../dashboard/page.tsx', '../../dashboard/analitica/page.tsx', '../page.tsx'];
+// `/dashboard/analitica` se borró el 10-ago-2026 (rediseño desde cero de
+// "dueño de flota") — sale de la lista junto con la página.
+const PAGINAS = ['../../dashboard/page.tsx', '../page.tsx'];
 
 describe('ninguna página vuelve a declarar el default por su cuenta', () => {
   for (const rel of PAGINAS) {

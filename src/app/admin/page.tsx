@@ -255,7 +255,7 @@ export default async function Admin({
                               className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
                               <ExternalLink width={11} height={11} strokeWidth={1.75} /> Panel de dueño
                             </Link>
-                            <Link href={`/dashboard/despacho?tenant=${f.id}&rol=encargado`} target="_blank"
+                            <Link href={`/dashboard?tenant=${f.id}&rol=encargado`} target="_blank"
                               className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
                               <ExternalLink width={11} height={11} strokeWidth={1.75} /> Panel de jefe de flota
                             </Link>

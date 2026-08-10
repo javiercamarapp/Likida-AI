@@ -107,7 +107,9 @@ describe('etiquetas de estatus — la fuente única cubre el tipo', () => {
   it('el mapa ya no está duplicado en las páginas del panel', () => {
     // Si alguien vuelve a pegar un mapa local en vez de importar el
     // compartido, este test lo caza — igual que el del PDF, arriba.
-    for (const ruta of ['../../app/dashboard/cuadre/page.tsx', '../../app/dashboard/[id]/page.tsx']) {
+    // `/dashboard/cuadre` se borró el 10-ago-2026 (rediseño desde cero de
+    // "dueño de flota") — sale de la lista junto con la página.
+    for (const ruta of ['../../app/dashboard/[id]/page.tsx']) {
       const src = readFileSync(new URL(ruta, import.meta.url), 'utf8');
       expect(src, `volvió a aparecer un mapa de estatus propio en ${ruta}`).not.toMatch(/const ESTATUS[:\s]*[:=]/);
       expect(src, `${ruta} ya no usa la fuente única de estatus`).toMatch(/etiquetaEstatus/);

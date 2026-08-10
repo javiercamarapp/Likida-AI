@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { Send, UserCog, CircleSlash } from 'lucide-react';
 import { saludo, fechaLarga, ahoraMs } from '@/lib/saludo';
 import { getViajes, type ViajeRow } from '@/lib/likida/analytics';
@@ -7,10 +6,8 @@ import {
   type TableroOperacion, type ViajeSinAsignar, type CargaOperador, type IncidenciaRow,
 } from '@/lib/likida/operacion';
 import { EstadoVacio, StatusPill } from '../admin/ui/kit';
-import { TableroCifras } from './despacho/vista';
-import { TablaCarga } from './despacho/vista';
+import { TableroCifras, TablaCarga } from './tablero-operacion';
 import AvanceCierre from './avance-cierre';
-import { sufijoTenant } from './sufijo';
 import { AvisoSinFlota } from './sin-flota';
 import { fechaMx } from './formato';
 
@@ -33,19 +30,17 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 }
 
 export async function InicioOperacion({
-  tenantId, tenantNombre, nombre, sp, tenantExiste = true,
+  tenantId, tenantNombre, nombre, tenantExiste = true,
 }: {
   tenantId: string;
   tenantNombre: string | null;
   nombre: string | null;
-  sp: { vista?: string; tenant?: string; rol?: string } | undefined;
   /** `false` cuando el uuid al que apunta la página no tiene fila en `tenant`
    *  — ver `sin-flota.tsx`. Aquí importa más que en el Resumen del dueño: sin
    *  flota, "Todo lo que está en curso ya trae chofer" y "0 viajes activos"
    *  se leen como una mañana tranquila, no como una base vacía. */
   tenantExiste?: boolean;
 }) {
-  const sufijo = sufijoTenant(sp);
   const [tablero, sinAsignar, carga, incidencias, viajes] = await Promise.all([
     safe<TableroOperacion>(() => getTableroOperacion(tenantId)),
     safe<ViajeSinAsignar[]>(() => getViajesSinAsignar(tenantId)),
@@ -140,9 +135,6 @@ export async function InicioOperacion({
             <h2 className="text-xs font-semibold uppercase tracking-wide m-0" style={{ color: 'var(--muted)' }}>
               Sin asignar
             </h2>
-            <Link href={`/dashboard/despacho${sufijo}`} className="ml-auto text-[11px] font-medium underline">
-              Ir a despacho
-            </Link>
           </div>
           {sinAsignar === null ? (
             <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la lista.</div>

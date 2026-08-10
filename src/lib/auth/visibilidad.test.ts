@@ -36,13 +36,11 @@ describe('quién ve qué área', () => {
 
 describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () => {
   const PROHIBIDAS = [
-    '/dashboard/rentabilidad', '/dashboard/cobranza', '/dashboard/facturacion',
-    '/dashboard/clientes', '/dashboard/cotizador', '/dashboard/cuadre',
-    '/dashboard/valor-ahorro', '/dashboard/combustible-casetas',
+    '/dashboard/combustible-casetas',
     '/dashboard/usuarios', '/dashboard/configuracion', '/dashboard/politicas',
     // El panel del contador es área `dinero`: al jefe de tráfico se le niega
-    // entero, igual que rentabilidad. Enseñarle las deducciones perdidas de la
-    // flota es enseñarle sus finanzas por otra puerta.
+    // entero. Enseñarle las deducciones perdidas de la flota es enseñarle
+    // sus finanzas por otra puerta.
     '/dashboard/contador', '/dashboard/contador/deducciones', '/dashboard/contador/cfdi',
     '/dashboard/contador/combustible', '/dashboard/contador/retenciones',
     '/dashboard/contador/liquidaciones',
@@ -51,11 +49,13 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
     expect(puedeVerRuta('encargado', href)).toBe(false);
   });
 
-  const SUYAS = [
-    '/dashboard', '/dashboard/despacho', '/dashboard/viajes', '/dashboard/pod',
-    '/dashboard/incidencias', '/dashboard/unidades', '/dashboard/operadores',
-    '/dashboard/mapa', '/dashboard/documentos',
-  ];
+  // Las 17 páginas de "dueño de flota" (despacho, viajes, pod, incidencias,
+  // unidades, operadores, mapa, documentos y las demás) se borraron el
+  // 10-ago-2026 para rehacerse desde cero — mientras no exista nada que
+  // clasificar, `/dashboard` (Resumen, con su propia versión sin dinero para
+  // este rol vía `inicio-operacion.tsx`) es lo único que le sigue siendo
+  // suyo de verdad.
+  const SUYAS = ['/dashboard'];
   it.each(SUYAS)('%s sí es suya', (href) => {
     expect(puedeVerRuta('encargado', href)).toBe(true);
   });
@@ -71,10 +71,10 @@ describe('el contador llega a su panel — y la operación le sigue cerrada', ()
     expect(SUYAS).toContain(inicioDe('contador'));
   });
 
-  const OPERACION_PROHIBIDA = [
-    '/dashboard', '/dashboard/despacho', '/dashboard/viajes', '/dashboard/mapa',
-    '/dashboard/pod', '/dashboard/operadores', '/dashboard/unidades',
-  ];
+  // Despacho/Viajes/Mapa/POD/Operadores/Unidades se borraron el 10-ago-2026
+  // — `/dashboard` (Resumen) es la única ruta de operación que sigue
+  // existiendo para probar que el contador no entra.
+  const OPERACION_PROHIBIDA = ['/dashboard'];
   it.each(OPERACION_PROHIBIDA)('%s le sigue negada al contador aunque teclee la URL', (href) => {
     expect(puedeVerRuta('contador', href)).toBe(false);
   });

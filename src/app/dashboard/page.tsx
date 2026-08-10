@@ -27,7 +27,6 @@ import { MotorFiscalPeriodo } from './motor-fiscal-periodo';
 import { PanelPeriodo } from './panel-periodo';
 import { InicioOperacion } from './inicio-operacion';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
-import { sufijoTenant } from './sufijo';
 import { AvisoSinFlota } from './sin-flota';
 
 export const dynamic = 'force-dynamic';
@@ -56,19 +55,16 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * la pantalla REAL, no una copia que puede haber divergido.
  */
 export async function InicioContenido({
-  tenantId, tenantNombre, nombre, sp, tenantExiste = true,
+  tenantId, tenantNombre, nombre, tenantExiste = true,
 }: {
   tenantId: string;
   tenantNombre: string | null;
   nombre: string | null;
-  sp: { vista?: string; tenant?: string; rango?: string; rol?: string } | undefined;
   /** `false` cuando el uuid al que apunta la página no tiene fila en `tenant`
    *  — ver `sin-flota.tsx`. Default `true` para no cambiar el render de
    *  ningún cliente real, cuyo tenant existe por llave foránea. */
   tenantExiste?: boolean;
 }) {
-  const sufijo = sufijoTenant(sp);
-
   // AUDITORÍA DE DISEÑO, 8-AGO-2026 — se quitó el filtro operativo 7d/30d/
   // Todo de esta página entera (vivía en un solo `GlobalFilter` arriba de
   // los KPIs). "Gasto por categoría" y "Liquidado por semana" volvieron como
@@ -154,22 +150,13 @@ export async function InicioContenido({
   // `liquidado` — un arreglo que sí puede quedar vacío.
   const estado = estadoPanel({ acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias });
 
+  // `/dashboard/cuadre` se borró el 10-ago-2026 (rediseño desde cero de
+  // "dueño de flota") — las dos alertas de abajo vivían para mandar ahí con
+  // "Ver →". `kpis.porRevisar`/`anomalias` se SIGUEN calculando bien
+  // (analytics.ts no se tocó), pero una tarjeta que promete "Ver →" y lleva
+  // a un 404 es peor que no mostrarla. Vuelven a poblarse el día que Cuadre
+  // tenga a dónde apuntar.
   const alertas: Array<{ texto: string; href: string }> = [];
-  if (kpis && kpis.porRevisar > 0) {
-    // "liquidación" + "es" da "liquidaciónes": en español el acento SE PIERDE
-    // al pluralizar (liquidación → liquidaciones), así que el sufijo pegado
-    // no sirve para esta palabra — va la palabra completa.
-    alertas.push({
-      texto: `${kpis.porRevisar} ${kpis.porRevisar === 1 ? 'liquidación' : 'liquidaciones'} por revisar`,
-      href: `/dashboard/cuadre${sufijo}`,
-    });
-  }
-  if (anomalias && anomalias.length > 0) {
-    alertas.push({
-      texto: `${anomalias.length} comprobante${anomalias.length === 1 ? '' : 's'} aparece${anomalias.length === 1 ? '' : 'n'} en más de un viaje`,
-      href: `/dashboard/cuadre${sufijo}#anomalias`,
-    });
-  }
 
   return (
     // Mismo criterio que en `inicio-operacion.tsx`: el scroll vive DENTRO del
@@ -362,8 +349,8 @@ export default async function DashboardInicio({
   // El criterio es "¿ve dinero?" y no "¿es encargado?": un rol nuevo que
   // tampoco vea finanzas cae aquí solo, sin tocar esta línea.
   if (!puedeVerArea(rol, 'dinero')) {
-    return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} sp={sp} tenantExiste={tenantExiste} />;
+    return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} />;
   }
 
-  return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} sp={sp} tenantExiste={tenantExiste} />;
+  return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} />;
 }
