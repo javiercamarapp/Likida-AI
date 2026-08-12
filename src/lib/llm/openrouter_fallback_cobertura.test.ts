@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 // `FALLBACK`, ni es el destino de la de otro modelo (esos ya son el plan B
 // de alguien y ahí la cadena termina a propósito). Pasó el 4-ago-2026 con
 // `google/gemini-3.1-flash-lite` —el modelo que YA corre en producción vía
-// `CUADRA_MODEL_OCR`— y el mismo commit (`53492a3`) dejó otros tres modelos
+// `LIKIDA_MODEL_OCR`— y el mismo commit (`53492a3`) dejó otros tres modelos
 // igual de aislados sin que hoy sean el override activo:
 // `google/gemini-2.5-flash-lite`, `google/gemini-2.5-flash`,
 // `google/gemini-3-flash-preview`.

@@ -62,4 +62,4 @@ impacto_en_producto: >
   quiera, y ese es un hueco de producto — no de Likida ante la autoridad.
 verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito literal"
 verificado_el: 2026-07-28
-usado_en_codigo: ["src/lib/cuadra/privacidad.ts"]
+usado_en_codigo: ["src/lib/likida/privacidad.ts"]

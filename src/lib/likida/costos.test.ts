@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //      hace: supabase-js resuelve con `{ data: null, error }`. Un fallo de RLS o
 //      una columna que no existe tras una migración pasaban sin excepción y sin
 //      log — el `catch` solo cubría que reventara el `fetch`.
-//   2. `CUADRA_WHATSAPP_MSG_USD=` (puesta y vacía, que es lo que deja un copiado
+//   2. `LIKIDA_WHATSAPP_MSG_USD=` (puesta y vacía, que es lo que deja un copiado
 //      de `.env.example` a medias) → `Number('')` es 0, y `??` no cae al default
 //      porque la cadena vacía no es `undefined`. Cada mensaje saliente se
 //      registraba a $0.00.
@@ -138,13 +138,13 @@ describe('precioMensajeWhatsAppUsd — la env vacía valía $0', () => {
     // `process.env.X ?? '0.008'` no cae al default con `''` —solo con undefined—
     // y `Number('')` es 0. Resultado: todos los mensajes salientes del despliegue
     // registrados a cero, y el costo por liquidación bajando sin motivo.
-    vi.stubEnv('CUADRA_WHATSAPP_MSG_USD', '');
+    vi.stubEnv('LIKIDA_WHATSAPP_MSG_USD', '');
     expect(precioMensajeWhatsAppUsd()).toBe(0.008);
     expect(logger.error.mock.calls[0][0]).toBe('costo.precio_wa_invalido');
   });
 
   it('un valor no numérico cae al default y grita', () => {
-    vi.stubEnv('CUADRA_WHATSAPP_MSG_USD', 'gratis');
+    vi.stubEnv('LIKIDA_WHATSAPP_MSG_USD', 'gratis');
     expect(precioMensajeWhatsAppUsd()).toBe(0.008);
     expect(logger.error).toHaveBeenCalled();
   });
@@ -152,13 +152,13 @@ describe('precioMensajeWhatsAppUsd — la env vacía valía $0', () => {
   it('un 0 EXPLÍCITO se respeta: dentro de la ventana de 24h Meta no cobra', () => {
     // La regla no es "cero es sospechoso", es "cero por accidente es sospechoso".
     // `'0'` es una decisión; `''` es un descuido.
-    vi.stubEnv('CUADRA_WHATSAPP_MSG_USD', '0');
+    vi.stubEnv('LIKIDA_WHATSAPP_MSG_USD', '0');
     expect(precioMensajeWhatsAppUsd()).toBe(0);
     expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('el precio se lee en cada envío, no en el import', async () => {
-    vi.stubEnv('CUADRA_WHATSAPP_MSG_USD', '0.05');
+    vi.stubEnv('LIKIDA_WHATSAPP_MSG_USD', '0.05');
     await registrarCostoWhatsApp('t1', 'v1');
     expect(insert.mock.calls[0][0].costo_usd).toBe(0.05);
   });

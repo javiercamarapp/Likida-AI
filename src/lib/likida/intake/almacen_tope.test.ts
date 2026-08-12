@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // El tope se lee del entorno AL CARGAR el módulo. Se baja a 50 ms para que la
 // prueba mida el mecanismo y no el reloj.
-process.env.CUADRA_TOPE_CONSULTA_MS = '50';
+process.env.LIKIDA_TOPE_CONSULTA_MS = '50';
 
 const upload = vi.fn();
 vi.mock('@/lib/supabase/admin', () => ({

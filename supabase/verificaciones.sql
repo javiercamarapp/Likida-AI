@@ -183,7 +183,7 @@ begin
   select count(*) into sin_uuid from gasto where tenant_id = v_t and cfdi_uuid is null;
 
   -- El mensaje TIENE que nombrar uq_gasto_cfdi_uuid: el processor discrimina por
-  -- ese nombre para saber si el 23505 es benigno (src/lib/cuadra/pg_errores.ts).
+  -- ese nombre para saber si el 23505 es benigno (src/lib/likida/pg_errores.ts).
   raise exception E'UUID  repetido-rebotado=%  sin-uuid-que-entraron=%  msg=%   (esperado t / 3 / nombra uq_gasto_cfdi_uuid)',
     choco, sin_uuid, msg;
 end $$;
@@ -1603,7 +1603,7 @@ end $$;
 
 -- ── 40. Los índices de paginación se USAN, no solo existen (mig. 0061) ──
 --
--- `traerTodo()` (src/lib/cuadra/pg.ts) pagina SIEMPRE con `.order('id')`, en 50
+-- `traerTodo()` (src/lib/likida/pg.ts) pagina SIEMPRE con `.order('id')`, en 50
 -- llamadas del repo. No existía un solo índice `(tenant_id, id)`: los que había
 -- sirven para filtrar por tenant, no para entregar ordenado por id dentro de él
 -- (`gasto_id_tenant_key` es `(id, tenant_id)`, con las columnas al revés). El
@@ -1736,7 +1736,7 @@ end $$;
 --      atrapar un error que los DOS caminos de SQL cometieran igual.
 --
 -- Se siembran 124,000 filas A PROPÓSITO: 120,000 pasan el techo de `traerTodo`
--- (100,000 filas, `src/lib/cuadra/pg.ts`), o sea que este bloque agrega en SQL
+-- (100,000 filas, `src/lib/likida/pg.ts`), o sea que este bloque agrega en SQL
 -- justo la lectura que el camino viejo ya no puede completar. Con mil filas la
 -- verificación pasaría en verde sin tocar el motivo de la migración.
 --

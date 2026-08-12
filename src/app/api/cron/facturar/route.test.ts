@@ -279,7 +279,7 @@ describe('cuando Chromium no arranca —que es HOY, en Vercel—', () => {
     expect(res.status).toBe(503);
     expect(cuerpo.corrio).toBe(false);
     // El motivo tiene que decir QUÉ hacer, no solo que falló.
-    expect(cuerpo.motivo).toContain('CUADRA_CHROMIUM_PATH');
+    expect(cuerpo.motivo).toContain('LIKIDA_CHROMIUM_PATH');
     // Y el error del navegador tal cual: es lo que identifica el fallo.
     expect(cuerpo.error).toContain("Executable doesn't exist");
   });

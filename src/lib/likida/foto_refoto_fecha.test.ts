@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // existe porque el ENSAYO REAL de esa misma tarde falló en el cableado, no en
 // las piezas: se le pidió al operador otra foto de un ticket con la fecha mal
 // leída, reenvió EL MISMO archivo, y el dedup por contenido
-// (`CUADRA_DEDUP_FOTOS=1`) lo descartó ANTES del OCR — en silencio.
+// (`LIKIDA_DEDUP_FOTOS=1`) lo descartó ANTES del OCR — en silencio.
 //
 // Desde su lado: hizo exactamente lo que se le pidió, el sistema no contestó
 // nada, y la fecha siguió mal. Ninguna prueba de función pura podía verlo,
@@ -123,7 +123,7 @@ describe('processInbound — pedir la re-foto y saber recibirla', () => {
     fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
     process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
-    process.env.CUADRA_DEDUP_FOTOS = '1';
+    process.env.LIKIDA_DEDUP_FOTOS = '1';
     addGasto.mockResolvedValue(undefined);
     corregirFechaGasto.mockResolvedValue(undefined);
     getGastos.mockResolvedValue([]);
@@ -278,7 +278,7 @@ describe('processInbound — el comprobante se archiva', () => {
     fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
     process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
-    process.env.CUADRA_DEDUP_FOTOS = '1';
+    process.env.LIKIDA_DEDUP_FOTOS = '1';
     addGasto.mockResolvedValue(undefined);
     getGastos.mockResolvedValue([]);
     gastoExistePorHash.mockResolvedValue(false);

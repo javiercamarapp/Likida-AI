@@ -42,7 +42,7 @@ alter table public.comprobante_huerfano
 -- `cotizacion.estado`, `factura_emitida.estatus`, `llm_costo.fase`, `tarifa.modo`.
 --
 -- LOS VALORES SE TOMARON DEL CÓDIGO DE HOY, no de la 0040. La migración vieja
--- documenta solo dos motivos, pero `src/lib/cuadra/repo.ts` ya declara TRES:
+-- documenta solo dos motivos, pero `src/lib/likida/repo.ts` ya declara TRES:
 --
 --     export type MotivoHuerfano = 'sin_viaje' | 'tras_liquidar' | 'fallo_ocr';
 --                                                                  ↑ repo.ts:257

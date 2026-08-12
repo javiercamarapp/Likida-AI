@@ -1,13 +1,13 @@
 # Inventario de citas normativas
 
-Alcance recorrido: `src/lib/cuadra/` entero (`cuadre/`, `intake/`, `liquidacion/`,
+Alcance recorrido: `src/lib/likida/` entero (`cuadre/`, `intake/`, `liquidacion/`,
 `facturacion/`, raíz) contra las 17 fichas de `normas/*.yaml`. Búsquedas de
 ausencia hechas con `command grep` (no el `grep` envuelto), por la trampa del
 entorno descrita en `docs/auditoria-2/MAPA.md`.
 
 **Aviso de concurrencia.** Durante esta auditoría hubo una sesión activa en
 paralelo construyendo exactamente `guardiaFundamento()`: apareció
-`src/lib/cuadra/normas/indice.ts` (índice canónico `NORMAS`, 17 entradas 1:1
+`src/lib/likida/normas/indice.ts` (índice canónico `NORMAS`, 17 entradas 1:1
 con las fichas), `normas/normas_sincronizadas.test.ts`, `normas/fundamento.ts`
 + `fundamento.test.ts`, y `normas/por_diferencia.ts` — ninguno existía al
 empezar; todos son `??` en `git status` (sin commitear). También
@@ -19,7 +19,7 @@ producto (`engine.ts`, `config.ts`, `pdf.ts`, `leyendas.ts`, `privacidad.ts`,
 auditoría, y usa el estado de `normas/*.yaml` tal como quedó en disco al
 cerrar. Donde el índice nuevo ya resuelve algo, se anota.
 
-**Hallazgo de fondo, antes de la tabla:** `src/lib/cuadra/normas/indice.ts` ya
+**Hallazgo de fondo, antes de la tabla:** `src/lib/likida/normas/indice.ts` ya
 propone exactamente el `norma_id` canónico que este encargo pedía —17 llaves,
 una por ficha, verificadas 1:1 contra `normas/*.yaml` por
 `normas_sincronizadas.test.ts` (corrido: 8/8 tests pasan). Ver la sección
@@ -222,7 +222,7 @@ declarada no la cubre.
 | `intake/sat.ts:61` | `200/201 = emisor LIMPIO (fuera de lista 69-B).` |
 | `intake/sat.ts:68` | `presunto/definitivo 69-B (documentado)` |
 | `cuadre/guardia.ts:76` | `proveedor en lista 69-B` (comentario, ejemplo de veredicto SOLO_CONTRALOR) |
-| `src/types/cuadra.ts:35,60` | `efos?: boolean... true = emisor en lista negra 69-B (fraude)` — mismo campo, fuera de `src/lib/cuadra/` pero mismo dominio |
+| `src/types/likida.ts:35,60` | `efos?: boolean... true = emisor en lista negra 69-B (fraude)` — mismo campo, fuera de `src/lib/likida/` pero mismo dominio |
 
 Esta es la cita sin ficha con más peso en dinero: `engine.ts:206-207` declara
 `cfdi_efos` → entra directo a `NO_DEDUCIBLE_ISR` y a `SIN_ACREDITAMIENTO` (líneas
@@ -257,7 +257,7 @@ aparece en ninguna ficha.
 | Cita | Dónde | Por qué importa |
 |---|---|---|
 | CFF art. 30 | `repo.ts:11`, `processor.ts:401` | Fundamenta guardar el XML crudo. Bajo impacto (no decide dinero), pero es una afirmación legal sin respaldo documentado. |
-| **CFF art. 69-B (EFOS)** | `intake/sat.ts` (×3), `cuadre/guardia.ts:76`, `types/cuadra.ts` (×2) | **Alto impacto.** Decide `cfdi_efos` → "no deducible" duro en `engine.ts:206-207`, sin ficha que respalde el fundamento de la lista negra ni sus efectos. |
+| **CFF art. 69-B (EFOS)** | `intake/sat.ts` (×3), `cuadre/guardia.ts:76`, `types/likida.ts` (×2) | **Alto impacto.** Decide `cfdi_efos` → "no deducible" duro en `engine.ts:206-207`, sin ficha que respalde el fundamento de la lista negra ni sus efectos. |
 | RMF regla 2.7.1.8 | `config.ts:93` | Fundamenta la fecha `2026-04-24` de entrada en vigor del complemento de hidrocarburos — la MISMA fecha que `rmf-2026-2.7.1.48.yaml` ya marca como sin respaldo por otra vía. Doble hueco sobre el mismo dato. |
 | CFF art. 90 | `cuadre/leyendas.ts:11` | Citado junto al 89 (que sí tiene ficha) como "marco de responsabilidad" en el descargo legal. |
 
@@ -292,7 +292,7 @@ afirmarla como hecho. `facturacion/comercios.ts` refuerza esto con
 
 ## Fichas huérfanas
 
-Verificado con `command grep` (no el `grep` envuelto) contra `src/lib/cuadra/`
+Verificado con `command grep` (no el `grep` envuelto) contra `src/lib/likida/`
 completo — cero resultados en cada caso salvo lo anotado.
 
 | Ficha (norma_id) | `usado_en_codigo` en el YAML | Realidad verificada |
@@ -307,7 +307,7 @@ completo — cero resultados en cada caso salvo lo anotado.
 ## `norma_id` canónico propuesto
 
 **No hace falta inventar uno nuevo: ya existe y ya está probado.**
-`src/lib/cuadra/normas/indice.ts` (apareció durante esta auditoría, ver aviso
+`src/lib/likida/normas/indice.ts` (apareció durante esta auditoría, ver aviso
 de concurrencia) define `NORMAS: Record<string, Norma>` con 17 llaves, cada una
 copiada literal del campo `id:` de su ficha YAML correspondiente, y
 `normas/normas_sincronizadas.test.ts` corrió 8/8 verde al cerrar esta auditoría,

@@ -1,6 +1,6 @@
 -- 0061 — El orden que pide `traerTodo` no lo servía ningún índice.
 --
--- `traerTodo()` (src/lib/cuadra/pg.ts) es el helper que existe para que PostgREST
+-- `traerTodo()` (src/lib/likida/pg.ts) es el helper que existe para que PostgREST
 -- no recorte a 1,000 filas en silencio. Pagina así, en 50 llamadas del repo al
 -- escribir esto —y la cuenta solo sube, cada módulo nuevo trae las suyas—:
 --

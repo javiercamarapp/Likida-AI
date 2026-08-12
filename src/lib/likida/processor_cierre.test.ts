@@ -155,7 +155,7 @@ beforeEach(() => {
   fetchSpy.mockClear();
   process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
   process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
-  delete process.env.CUADRA_RECUPERAR_CIERRE_PARCIAL;
+  delete process.env.LIKIDA_RECUPERAR_CIERRE_PARCIAL;
 });
 
 describe('cierre sin PDF: ni se manda un documento que no existe, ni se calla', () => {
@@ -415,7 +415,7 @@ describe('el cierre real narrado en pretérito no se desmiente a sí mismo', () 
 // `ctxCerro` es el Único campo que el log de fallo trae para distinguir "no pasó
 // nada" de "la liquidación YA se cerró y el operador se quedó sin nada". La
 // rama de recuperación de cierre parcial (activa con
-// CUADRA_RECUPERAR_CIERRE_PARCIAL=1, que .env.example recomienda ENCENDIDA)
+// LIKIDA_RECUPERAR_CIERRE_PARCIAL=1, que .env.example recomienda ENCENDIDA)
 // ponía `closed = true` pero nunca tocaba `ctxCerro`: si algo tronaba DESPUÉS
 // de la recuperación (p. ej. `saveConversation`), el log del catch general
 // decía `cerroSinEntregar: false` sobre una liquidación que SÍ se cerró.
@@ -427,7 +427,7 @@ describe('el cierre real narrado en pretérito no se desmiente a sí mismo', () 
 // ═══════════════════════════════════════════════════════════════════════════
 describe('ctxCerro en la recuperación de cierre parcial (AUD-7 ALTO-1)', () => {
   beforeEach(() => {
-    process.env.CUADRA_RECUPERAR_CIERRE_PARCIAL = '1';
+    process.env.LIKIDA_RECUPERAR_CIERRE_PARCIAL = '1';
     createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://x/liq.pdf' }, error: null });
   });
 

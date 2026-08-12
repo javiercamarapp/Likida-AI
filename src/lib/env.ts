@@ -18,7 +18,7 @@
 //     peor que arrancar mal y decirlo.
 //   · El resto del sistema ya decidió reportar en vez de lanzar cuando la
 //     alternativa es tumbar el turno de un operador (`observability/arranque.ts`,
-//     `cuadra/startup.ts`). Dos criterios distintos para lo mismo es lo que hace
+//     `likida/startup.ts`). Dos criterios distintos para lo mismo es lo que hace
 //     que uno de los dos se ignore.
 //
 // Ahora `faltantes()` tiene un consumidor real: `avisarConfiguracionSilenciosa()`

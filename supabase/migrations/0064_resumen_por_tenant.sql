@@ -5,8 +5,8 @@
 -- la que se arregló, porque no viven en la consola de Javier sino en el panel
 -- que ve el cliente:
 --
---   · `getResumenCosto` (src/lib/cuadra/costos.ts)
---   · `getValorAhorro`  (src/lib/cuadra/analytics.ts)
+--   · `getResumenCosto` (src/lib/likida/costos.ts)
+--   · `getValorAhorro`  (src/lib/likida/analytics.ts)
 --
 -- ── 1. `getResumenCosto` YA ESTÁ MAL. NO ES UNA FECHA FUTURA. ───────────────
 --

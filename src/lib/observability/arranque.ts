@@ -10,7 +10,7 @@
 //   · `DEMO_TENANT_ID` ausente → el panel cae al tenant de `supabase/seed.sql` y
 //     pinta CERO liquidaciones, sin un solo log. En el demo del 6 de agosto eso
 //     se lee como "el producto no guardó nada". Es el caso de manual del rubro.
-//   · `CUADRA_WHATSAPP_MSG_USD` ausente → el costo por liquidación se calcula con
+//   · `LIKIDA_WHATSAPP_MSG_USD` ausente → el costo por liquidación se calcula con
 //     un default, y esa cifra es la que decide el precio del producto.
 //   · `NEXT_PUBLIC_APP_URL` ausente → `login/page.tsx` cae a `https://likida.ai`
 //     y manda los magic links y el retorno de Google a un dominio que no es el
@@ -33,7 +33,7 @@ import { faltantes } from '@/lib/env';
 
 const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   { nombre: 'DEMO_TENANT_ID', consecuencia: 'el panel consulta el tenant del seed y pinta cero liquidaciones' },
-  { nombre: 'CUADRA_WHATSAPP_MSG_USD', consecuencia: 'el costo por liquidación usa el default 0.008' },
+  { nombre: 'LIKIDA_WHATSAPP_MSG_USD', consecuencia: 'el costo por liquidación usa el default 0.008' },
   {
     nombre: 'NEXT_PUBLIC_APP_URL',
     consecuencia:

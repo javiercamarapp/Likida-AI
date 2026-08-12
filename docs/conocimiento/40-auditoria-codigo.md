@@ -2,7 +2,7 @@
 
 > Ola 2 — 27-jul-2026. Construido sobre la ola 1.
 >
-> Alcance: `javiercamarapp/likida/src/lib/cuadra/**` (3,428 líneas sin pruebas, 23 archivos de
+> Alcance: `javiercamarapp/likida/src/lib/likida/**` (3,428 líneas sin pruebas, 23 archivos de
 > prueba) leído línea por línea el 27-jul-2026, contrastado contra `00-RESUMEN-EJECUTIVO.md`,
 > `04-iva-ieps-estimulos.md`, `09-liquidacion.md`, `34-proceso-liquidacion.md` y `FISCAL_LEGAL.md`.
 > No se tocó código: esta ola es de investigación y diseño.
@@ -127,7 +127,7 @@ Un factor 0.5 sobre el SubTotal de cualquier caseta con XML. Nada más.
 | Requisito | ¿Lo verifica el código? |
 |---|---|
 | I. Aviso en **marzo** por buzón tributario con inventario vehicular | No existe |
-| II. **Bitácora de viaje** con origen, destino y ruta que **coincida con el estado de cuenta del TAG** | No existe (`grep -i "tag\|bitacora"` en `src/lib/cuadra/` → 0 resultados) |
+| II. **Bitácora de viaje** con origen, destino y ruta que **coincida con el estado de cuenta del TAG** | No existe (`grep -i "tag\|bitacora"` en `src/lib/likida/` → 0 resultados) |
 | III. Pago con **TAG o sistema electrónico** — caseta en efectivo en ventanilla no genera estímulo aunque haya CFDI | No verifica `formaPago` en absoluto |
 | IV. Factor 0.5 sobre el importe **sin IVA** | **Sí** — usa `subTotal`, correcto |
 | Tope: ingresos anuales **< 300 MDP** | No existe el dato del tenant |
@@ -199,7 +199,7 @@ transporte.
 
 **Qué hace el código.** `cuadre/engine.ts:115-118` aplica un único `viaticosTopeFiscalDiarioMxn`
 (750, `config.ts:91`) a **cada comprobante** cuyo `concepto === 'viaticos'`. El enum de conceptos
-(`types/cuadra.ts:5`) no separa alimentación de hospedaje de transporte: todo cae en `viaticos`.
+(`types/likida.ts:5`) no separa alimentación de hospedaje de transporte: todo cae en `viaticos`.
 
 Falla en las dos direcciones, y las dos cuestan:
 
@@ -243,7 +243,7 @@ operador se le dice qué falta ("mándame el XML", "verifica el folio"), no cóm
 repito. Lo que agrego desde el código son **cuatro huecos de terminación** que hacen que la
 liquidación no cierre bien aunque las reglas estuvieran correctas:
 
-1. **La liquidación se cierra sin veredicto agregado.** `Liquidacion` (`types/cuadra.ts:80-93`)
+1. **La liquidación se cierra sin veredicto agregado.** `Liquidacion` (`types/likida.ts:80-93`)
    tiene `totalComprobado`, `diferencia` y tres acreditables, pero **no** tiene "total deducible" ni
    "total no deducible". El motor sabe cuáles gastos cayeron en `NO_DEDUCIBLE` (`engine.ts:218`) y
    tira ese dato: nunca lo suma ni lo persiste. El contralor recibe un PDF donde el "no deducible"
@@ -274,7 +274,7 @@ liquidación no cierre bien aunque las reglas estuvieran correctas:
 |---|---|---|---|
 | Módulo `facturacion/` completo — `comercios.ts` (230 líneas, catálogo de 10 comercios), `caducidad.ts` (74), `identificar.ts` (51) + 3 archivos de prueba | **501 líneas** | **Cero consumidores.** `grep -rn "calcularCaducidad\|facturacion/" src --include="*.ts"` fuera del propio directorio → 0 resultados | Es trabajo bueno resolviendo un problema real (el reloj del plazo). No está conectado a nada. O se conecta al cuadre en esta semana, o sale del árbol de build hasta que se conecte. No se enseña en la demo. |
 | `config.tabulador` (rendimiento, factorCarga, precioDiesel, umbralDesviacion), `config.unidades`, `config.catalogoCuentas`, `config.salida`, `config.portales` + `portalParaTicket()` | ~45 líneas de `config.ts` | **Ninguno se lee en ningún lado** (verificado con grep sobre `src/`) | Es la configuración de reglas que no existen (desviación de diésel, salida contable, aviso de portal). Borrar o marcar `// PENDIENTE` con la regla que la va a consumir. |
-| `TipoDiferencia` `'diesel_desviacion'` | `types/cuadra.ts:64` | Se consulta en `engine.ts:246` pero **nunca se emite** | La rama del `if` es código muerto que sugiere una regla que no corre. |
+| `TipoDiferencia` `'diesel_desviacion'` | `types/likida.ts:64` | Se consulta en `engine.ts:246` pero **nunca se emite** | La rama del `if` es código muerto que sugiere una regla que no corre. |
 | `analytics.getStatsPorOperador()` | `analytics.ts:50-74` | Sin consumidores, y devuelve `diferencias: 0` **hardcodeado** (`analytics.ts:72`) | Un KPI que siempre vale cero es peor que ausente: si llega al dashboard, miente. |
 | `analytics.detectarAnomalias()` | `analytics.ts:84-107` | Sin consumidores. Declara el tipo `'folio_duplicado'` y nunca lo emite | La detección de "mismo CFDI en dos viajes" **sí vale** y es el fraude #1 de la ola 1 (`32-fraude.md`). Conectarla al dashboard cuesta una línea. |
 | `repo.getPolitica()` | `repo.ts:21-33` | Sin consumidores — la política viaja por `config.politica` | Dos fuentes de verdad para la misma política, una viva y una muerta. Borrar la muerta. |
@@ -296,7 +296,7 @@ Ordenados por lo que cuestan. Los cinco están en la ruta que corre en cada liqu
 caso corriente: la foto de un ticket de caseta cuyo folio el OCR no alcanzó a leer.
 
 El tercer candado —hash de la imagen— existe (`intake/hash.ts`, migración `0015`) pero está **detrás
-de una bandera apagada por defecto**: `processor.ts:123`, `if (process.env.CUADRA_DEDUP_FOTOS === '1')`.
+de una bandera apagada por defecto**: `processor.ts:123`, `if (process.env.LIKIDA_DEDUP_FOTOS === '1')`.
 Sin esa variable, `imgHash` nunca se calcula ni se escribe, y el índice único de la 0015 no puede
 dispararse porque la columna va en `null`.
 
@@ -305,7 +305,7 @@ dispararse porque la columna va en `null`.
 sale mal **a favor del operador**. Es la cifra que el contralor usa para decidir a quién le debe
 cuánto.
 
-**Arreglo:** encender `CUADRA_DEDUP_FOTOS=1`. Es una variable de entorno.
+**Arreglo:** encender `LIKIDA_DEDUP_FOTOS=1`. Es una variable de entorno.
 
 ### R2 — Toda factura de caseta que llega por XML deja de contar como caseta
 
@@ -400,7 +400,7 @@ observaciones que sí importan se pueden quedar afuera del corte.
 Ordenado por retorno sobre esfuerzo. Los cinco primeros caben en un día y todos son anteriores a la
 demo del 6-ago.
 
-1. **Encender `CUADRA_DEDUP_FOTOS=1`** (R1). Una variable de entorno. Cierra el doble conteo, que es
+1. **Encender `LIKIDA_DEDUP_FOTOS=1`** (R1). Una variable de entorno. Cierra el doble conteo, que es
    la única fuga que hace que la cifra final salga mal en la demo si el operador reenvía una foto.
 2. **Apagar la regla `ieps_no_desglosado`** (§2.1). Borrar el `else if` de `engine.ts:238-240`.
    Elimina una alarma falsa que hoy dispara en el 100% de las facturas de diésel y que manda toda
@@ -434,7 +434,7 @@ demo del 6-ago.
 
 | Acción | Por qué | Esfuerzo | Cuándo |
 |---|---|---|---|
-| `CUADRA_DEDUP_FOTOS=1` en el entorno del demo y de producción | Sin eso, dos fotos del mismo ticket duplican el gasto y la diferencia contra el anticipo sale mal a favor del operador | Bajo (una env var) | Hoy |
+| `LIKIDA_DEDUP_FOTOS=1` en el entorno del demo y de producción | Sin eso, dos fotos del mismo ticket duplican el gasto y la diferencia contra el anticipo sale mal a favor del operador | Bajo (una env var) | Hoy |
 | Borrar la regla `ieps_no_desglosado` (`engine.ts:238-240`) y su tipo | LIEPS 19-II prohíbe el desglose a una flota: la alarma dispara en el 100% de las facturas de diésel y manda toda liquidación a `revisar` | Bajo | Hoy |
 | Reescribir la nota de `combustible_efectivo` y sacarla de `NO_DEDUCIBLE` (`engine.ts:106-107, 218`) | Contradice la corrección C1 ya verificada por la ola 1 (RFA 2026 regla 2.9, válvula del 15%); hoy le quita al cliente una deducción real | Bajo | Antes del 6-ago |
 | Mapear `claveProdServ → concepto` al ingerir XML (`processor.ts:245`) | Toda factura de caseta que llega por XML entra como `'factura'` y pierde el estímulo del 50% | Bajo | Antes del 6-ago |
@@ -549,8 +549,8 @@ Fase 0 punto 1 del resumen ejecutivo). Verificar antes del 6-ago.
 - `34-proceso-liquidacion.md` §11 y CONFLICTO 1 — tabla de brecha del proceso (no se repite aquí).
 - `FISCAL_LEGAL.md` (en el repo) — §1.1 a §1.6, §3; ver CONFLICTOS B y C.
 
-**Código auditado:** `javiercamarapp/likida/src/lib/cuadra/{cuadre,intake,facturacion,liquidacion}/`,
-`processor.ts`, `repo.ts`, `config.ts`, `analytics.ts`, `tools.ts`, `src/types/cuadra.ts`,
+**Código auditado:** `javiercamarapp/likida/src/lib/likida/{cuadre,intake,facturacion,liquidacion}/`,
+`processor.ts`, `repo.ts`, `config.ts`, `analytics.ts`, `tools.ts`, `src/types/likida.ts`,
 `supabase/migrations/0012`, `0013`, `0015`, `0016`.
 
 ---
@@ -559,7 +559,7 @@ Fase 0 punto 1 del resumen ejecutivo). Verificar antes del 6-ago.
 
 | Mejora | Por qué | Esfuerzo | Riesgo si no se hace |
 |---|---|---|---|
-| Encender `CUADRA_DEDUP_FOTOS=1` | El candado de doble conteo existe y está apagado; sin `imgHash` el índice único de la 0015 nunca dispara | Bajo | La misma foto reenviada duplica el gasto: el total comprobado y la diferencia contra el anticipo salen mal, a favor del operador. Puede pasar **en la demo** |
+| Encender `LIKIDA_DEDUP_FOTOS=1` | El candado de doble conteo existe y está apagado; sin `imgHash` el índice único de la 0015 nunca dispara | Bajo | La misma foto reenviada duplica el gasto: el total comprobado y la diferencia contra el anticipo salen mal, a favor del operador. Puede pasar **en la demo** |
 | Borrar la regla `ieps_no_desglosado` | LIEPS 19-II prohíbe el desglose a quien no es contribuyente del IEPS por el diésel | Bajo | Toda liquidación con una factura de diésel sale en `revisar`. La pantalla de excepciones —el argumento de producto entero— no funciona |
 | Corregir la nota y el efecto de `combustible_efectivo` | Contradice C1 y la RFA 2026 regla 2.9 (válvula del 15%) | Bajo | Le decimos al contralor que perdió una deducción que sí tiene. Si lo detecta su fiscalista, se cae la credibilidad de todo el motor |
 | Mapear `claveProdServ → concepto` al ingerir XML | Hoy solo hay `diesel` o `factura`; la caseta por XML nunca es caseta | Bajo | El peaje que llega por el camino más confiable pierde el estímulo del 50%. Dinero real, invisible |

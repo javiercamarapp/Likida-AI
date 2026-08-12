@@ -19,10 +19,11 @@ import { sinComentarios, fuentesDeProduccion } from '@/lib/pruebas/codigo';
 // cada PDF de liquidación (`cuadra.mx`, que además era un dominio de un
 // tercero). Esta prueba vigila los textos que el CLIENTE lee.
 //
-// NO prohíbe la palabra en el código: los módulos viven en `lib/likida/`, los
-// tipos se llaman `CuadraConfig` y las variables `CUADRA_*`. Renombrarlos sería
-// un refactor enorme sin ningún beneficio para nadie. Lo que no puede pasar es
-// que salga hacia afuera.
+// NO prohíbe la palabra en el código: "cuadra" sigue siendo el verbo del
+// dominio, y los guardias (éste y `dominio_propio.test.ts`) la NOMBRAN para
+// vetarla. Los identificadores internos ya se renombraron el 12-ago-2026
+// (`LikidaConfig`, variables `LIKIDA_*`, `lib/likida/`). Lo que no puede
+// pasar es que salga hacia afuera como MARCA.
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('el producto se presenta con un solo nombre', () => {

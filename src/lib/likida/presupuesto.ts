@@ -94,11 +94,11 @@ export const MARGEN_CIERRE_MS = 12_000;
  * `TOPE − 0.3`s de esa holgura, y con 8s la invocación sobrevive a TRES colgadas
  * antes de tocar el límite. Con el default de undici no sobrevive a una.
  *
- * Se puede subir por entorno sin desplegar (`CUADRA_TOPE_CONSULTA_MS`): la
+ * Se puede subir por entorno sin desplegar (`LIKIDA_TOPE_CONSULTA_MS`): la
  * latencia real Vercel ↔ Supabase no está medida, y si resulta peor que la
  * documentada hay que poder aflojarlo desde el panel y no desde un commit.
  */
-export const TOPE_CONSULTA_MS = Number(process.env.CUADRA_TOPE_CONSULTA_MS) || 8_000;
+export const TOPE_CONSULTA_MS = Number(process.env.LIKIDA_TOPE_CONSULTA_MS) || 8_000;
 
 /** Margen sobre el tope antes de que dispare la red de seguridad. */
 const GRACIA_TOPE_MS = 1_500;

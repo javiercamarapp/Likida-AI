@@ -33,7 +33,7 @@ const hace = (ms: number) => new Date(Date.now() - ms).toISOString();
 
 beforeEach(() => {
   maybeSingle.mockReset(); from.mockClear(); select.mockClear(); rpc.mockReset();
-  delete process.env.CUADRA_INTAKE_GRACE_MS;
+  delete process.env.LIKIDA_INTAKE_GRACE_MS;
 });
 
 describe('intakePendientes — el sondeo es una LECTURA', () => {

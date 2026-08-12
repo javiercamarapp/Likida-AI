@@ -25,7 +25,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 
 comment on table politica_gasto is
-  'MUERTA — no la lee nadie. La política de gastos viva sale de tenant.config.politica (ver DEMO_CONFIG en src/lib/cuadra/config.ts). Cambiar un tope AQUÍ no cambia ninguna liquidación. Se conserva con su check de dominio (mig. 0025) por si la política se mueve algún día del jsonb a esta tabla.';
+  'MUERTA — no la lee nadie. La política de gastos viva sale de tenant.config.politica (ver DEMO_CONFIG en src/lib/likida/config.ts). Cambiar un tope AQUÍ no cambia ninguna liquidación. Se conserva con su check de dominio (mig. 0025) por si la política se mueve algún día del jsonb a esta tabla.';
 
 comment on column politica_gasto.tope_monto is
   'NO se aplica. El tope vivo es tenant.config.politica[].topeMonto.';

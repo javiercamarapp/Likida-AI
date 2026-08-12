@@ -105,7 +105,7 @@ redactar—. Sin `SENTRY_DSN` no se carga el paquete siquiera.
 
 ### El SAT no es subencargado
 
-`consultaqr.facturaelectronica.sat.gob.mx` (`src/lib/cuadra/intake/sat.ts:15`)
+`consultaqr.facturaelectronica.sat.gob.mx` (`src/lib/likida/intake/sat.ts:15`)
 recibe UUID, RFC emisor, RFC receptor y total para validar un CFDI. Es la
 **autoridad fiscal consultando su propio registro**, no un proveedor tratando
 datos por cuenta de nadie. Listarlo como subencargado sería un error de
@@ -145,7 +145,7 @@ un cliente:
 > ⚠️ **"Ningún dato sensible" era cierto por suerte, no por diseño — y eso ya
 > se corrigió, con la salvedad del último párrafo.**
 > Corregido el 28-jul-2026. El esquema de extracción pide `producto`
-> (`src/lib/cuadra/intake/ocr.ts:36`) y se persiste en `gasto.ocr_extra`
+> (`src/lib/likida/intake/ocr.ts:36`) y se persiste en `gasto.ocr_extra`
 > (`repo.ts:109`). Un ticket de farmacia metido a gastos escribe
 > `producto: "METFORMINA 850MG 30 TABS"` — dato de **salud** del titular
 > (art. 2 fr. VI) en una base sin justificación (art. 8, párrafo segundo), con el
@@ -192,7 +192,7 @@ un cliente:
 3. Confirmar el régimen de retención de OpenRouter para las imágenes.
 4. Aviso de privacidad **propio de Likida** para sus usuarios directos —el
    contralor, el dueño, los leads—, donde Likida es **responsable**, no
-   encargada. El mecanismo del canal (`src/lib/cuadra/privacidad.ts`) cubre el
+   encargada. El mecanismo del canal (`src/lib/likida/privacidad.ts`) cubre el
    otro sombrero: el de la flota frente a sus operadores.
 
 ### 5. Lo que tiene que dar la flota, y sin lo cual no hay aviso válido
@@ -216,7 +216,7 @@ llega el dato.
 ## Lo que ya quedó cerrado
 
 - Mecanismo del aviso simplificado en WhatsApp — art. 16 fr. II
-  (`src/lib/cuadra/privacidad.ts`, mig. 0018). El **mecanismo**: el contenido
+  (`src/lib/likida/privacidad.ts`, mig. 0018). El **mecanismo**: el contenido
   depende de datos que la flota tiene que dar (ver el bloque de abajo).
 - Reenvío automático cuando cambia el aviso — art. 15 fr. VI. Es estructural: la
   versión sale de un hash del texto, no de un contador que alguien suba.

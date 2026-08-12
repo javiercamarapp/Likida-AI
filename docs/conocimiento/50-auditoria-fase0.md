@@ -243,7 +243,7 @@ código** a partir de `politica`, igual que `resumenCuadre` hace con el cuadre.
 
 ### B12 — La barrera de intake protege 0 ms por defecto
 
-`conv.ts:171`: `const grace = Number(process.env.CUADRA_INTAKE_GRACE_MS) || 0`. Meta puede
+`conv.ts:171`: `const grace = Number(process.env.LIKIDA_INTAKE_GRACE_MS) || 0`. Meta puede
 entregar varias fotos y el "listo" en el mismo POST. Si el contador arranca en 0 porque la RPC
 `intake_delta(+1)` de la foto no ha hecho su round-trip, `esperarIntake` devuelve `true` de
 inmediato (lo prueba `barrera.test.ts:27-32`) y el "listo" cuadra sin ese comprobante.

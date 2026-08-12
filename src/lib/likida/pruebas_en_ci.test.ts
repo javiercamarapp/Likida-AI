@@ -6,7 +6,7 @@ import { readdirSync } from 'node:fs';
 // ═══════════════════════════════════════════════════════════════════════════
 // RONDA 7 · DOS PRUEBAS EXISTÍAN Y CI NO LAS CORRÍA NI UNA VEZ.
 //
-// `vitest.config.ts` exporta `CUADRA_COBERTURA=1` cuando hay `--coverage`, y dos
+// `vitest.config.ts` exporta `LIKIDA_COBERTURA=1` cuando hay `--coverage`, y dos
 // pruebas de tiempo se saltan con esa bandera. La razón es buena: la
 // instrumentación de v8 cobra por llamada, así que un umbral de milisegundos
 // mediría la instrumentación y no el algoritmo.
@@ -40,7 +40,7 @@ const saltadas = (() => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const ruta = `${dir}/${e.name}`;
       if (e.isDirectory()) recorrer(ruta);
-      else if (e.name.endsWith('.test.ts') && /skipIf\([^)]*CUADRA_COBERTURA/.test(sinComentarios(readFileSync(ruta, 'utf8')))) salida.push(ruta);
+      else if (e.name.endsWith('.test.ts') && /skipIf\([^)]*LIKIDA_COBERTURA/.test(sinComentarios(readFileSync(ruta, 'utf8')))) salida.push(ruta);
     }
   };
   recorrer('src');

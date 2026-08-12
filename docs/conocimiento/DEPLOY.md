@@ -60,13 +60,13 @@ verificar cosas (Meta, Supabase Site URL) contra el sitio que no es.
 
 Likida cobra **por liquidación**, así que un costo que se subestima en silencio
 es el que hace fijar mal el precio. Estas cuatro líneas son las que lo delatan
-(`src/lib/cuadra/costos.ts`):
+(`src/lib/likida/costos.ts`):
 
 | Línea | Qué significa |
 |---|---|
 | `costo.no_registrado` | Un insert a `llm_costo` rebotó (RLS, columna, `check`). Ese gasto **no está contado**: el costo real es más alto que el que se ve. |
 | `costo.liquidacion_sin_costo` | Una liquidación se cerró sin **una sola** fila de costo. Su costo unitario es DESCONOCIDO, no cero. |
-| `costo.precio_wa_invalido` | `CUADRA_WHATSAPP_MSG_USD` está puesta y no es un número (típicamente vacía). Se usó el default; sin este aviso cada mensaje habría contado $0. |
+| `costo.precio_wa_invalido` | `LIKIDA_WHATSAPP_MSG_USD` está puesta y no es un número (típicamente vacía). Se usó el default; sin este aviso cada mensaje habría contado $0. |
 | `costo.monto_invalido` | Llegó un costo NaN o negativo y se descartó la fila en vez de escribir un 0 que se leería como barato. |
 
 Regla de lectura: **cero solo es cero cuando alguien lo midió.** `getResumenCosto`

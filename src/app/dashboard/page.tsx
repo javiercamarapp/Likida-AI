@@ -8,7 +8,7 @@ import {
   type DashboardKpis, type Acreditables, type Anomalia,
   type GastoSemanalSeries, type LiquidadoSemanalSeries, type TopRutasSeries, type SeriesKpiCards,
 } from '@/lib/likida/analytics';
-import { getConfig, type CuadraConfig } from '@/lib/likida/config';
+import { getConfig, type LikidaConfig } from '@/lib/likida/config';
 import {
   resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries, resumirPerdidas, opcionesDe,
   type GastoFiscal, type ResumenPerdidas, type GastosFiscalesSeries,
@@ -53,7 +53,7 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * puede renderizar en una prueba visual sin sesión, y lo que se verifica es
  * la pantalla REAL, no una copia que puede haber divergido.
  */
-export async function InicioContenido({
+async function InicioContenido({
   tenantId, tenantNombre, nombre, tenantExiste = true,
 }: {
   tenantId: string;
@@ -107,7 +107,7 @@ export async function InicioContenido({
     // granularidad, independiente de las demás. `PanelPeriodo` también lo
     // reusa para la dona "Viajes" (liquidados/pendientes DEL periodo).
     safe<SeriesKpiCards>(() => getSeriesKpiCards(tenantId, hoy)),
-    safe<CuadraConfig>(() => getConfig(tenantId)),
+    safe<LikidaConfig>(() => getConfig(tenantId)),
     safe<GastoFiscal[]>(() => getGastosFiscales(tenantId, periodoFiscal)),
     // "En riesgo/perdido" y "Recuperable pidiendo factura" también ciclan
     // semanal/mensual/histórico ahora (`MotorFiscalPeriodo`) — serie

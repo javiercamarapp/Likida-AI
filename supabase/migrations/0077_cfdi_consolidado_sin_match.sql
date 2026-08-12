@@ -4,7 +4,7 @@
 --
 -- La 0076 construyó la cola (`estatus = 'por_conciliar'`) pero no la pantalla
 -- para vaciarla — ese es el hallazgo de esta ronda (ver
--- `src/lib/cuadra/intake/consolidado.ts:resolverLineaAMano` y
+-- `src/lib/likida/intake/consolidado.ts:resolverLineaAMano` y
 -- `dashboard/combustible-casetas`). Al construir la resolución a mano
 -- apareció un hueco de ESQUEMA, no solo de UI: la 0076 dejó dos estatus,
 -- 'conciliada' (gasto_id no nulo, ligada sola o a mano) y 'por_conciliar' (la

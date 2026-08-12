@@ -83,7 +83,7 @@ async function aDataUrl(ruta: string): Promise<{ url: string; bytes: number; not
     // sale "ilegible" por culpa del arnés, no del producto.
     const { execFileSync } = await import('node:child_process');
     const { tmpdir } = await import('node:os');
-    const salida = join(tmpdir(), `cuadra-heic-${basename(ruta, ext)}.jpg`);
+    const salida = join(tmpdir(), `likida-heic-${basename(ruta, ext)}.jpg`);
     try {
       // -Z remuestrea al lado mayor: imita lo que WhatsApp entrega (comprime
       // antes de mandar). Probar con el original de 12 Mpx no representa el

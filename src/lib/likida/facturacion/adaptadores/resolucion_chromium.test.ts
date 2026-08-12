@@ -72,14 +72,14 @@ function entorno(op: Partial<EntornoEjecutable> = {}): EntornoEjecutable {
 
 let guardado: string | undefined;
 beforeEach(() => {
-  guardado = process.env.CUADRA_CHROMIUM_PATH;
-  delete process.env.CUADRA_CHROMIUM_PATH;
+  guardado = process.env.LIKIDA_CHROMIUM_PATH;
+  delete process.env.LIKIDA_CHROMIUM_PATH;
   logger.warn.mockClear();
   logger.error.mockClear();
 });
 afterEach(() => {
-  if (guardado === undefined) delete process.env.CUADRA_CHROMIUM_PATH;
-  else process.env.CUADRA_CHROMIUM_PATH = guardado;
+  if (guardado === undefined) delete process.env.LIKIDA_CHROMIUM_PATH;
+  else process.env.LIKIDA_CHROMIUM_PATH = guardado;
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -92,15 +92,15 @@ describe('el orden de los tres caminos', () => {
     expect(r.banderasDelPaquete).toEqual([]);
   });
 
-  it('(a) `CUADRA_CHROMIUM_PATH` sirve igual que el parámetro', async () => {
-    process.env.CUADRA_CHROMIUM_PATH = '/usr/bin/chromium-browser';
+  it('(a) `LIKIDA_CHROMIUM_PATH` sirve igual que el parámetro', async () => {
+    process.env.LIKIDA_CHROMIUM_PATH = '/usr/bin/chromium-browser';
     const r = await resolverEjecutable(undefined, entorno());
     expect(r.via).toBe('explicito');
     expect(r.executablePath).toBe('/usr/bin/chromium-browser');
   });
 
   it('(a) el parámetro le gana a la variable de entorno', async () => {
-    process.env.CUADRA_CHROMIUM_PATH = '/de/la/variable';
+    process.env.LIKIDA_CHROMIUM_PATH = '/de/la/variable';
     const r = await resolverEjecutable('/del/parametro', entorno());
     expect(r.executablePath).toBe('/del/parametro');
   });

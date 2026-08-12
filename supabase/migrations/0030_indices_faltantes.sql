@@ -43,7 +43,7 @@ as $$
 $$;
 
 comment on function indices_faltantes(text[]) is
-  'Devuelve cuáles de los índices esperados NO existen en el esquema public. Solo lectura; la usa el chequeo de arranque para sondear migraciones que crean índices (ver src/lib/cuadra/startup.ts).';
+  'Devuelve cuáles de los índices esperados NO existen en el esquema public. Solo lectura; la usa el chequeo de arranque para sondear migraciones que crean índices (ver src/lib/likida/startup.ts).';
 
 revoke all on function indices_faltantes(text[]) from public, anon, authenticated;
 grant execute on function indices_faltantes(text[]) to service_role;

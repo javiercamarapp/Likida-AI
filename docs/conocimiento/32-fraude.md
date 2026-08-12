@@ -18,7 +18,7 @@
 
 ## 1. Qué captura Likida hoy — el inventario real, verificado en el código
 
-Antes de proponer una sola regla hay que fijar qué dato existe de verdad. Esto se verificó leyendo `src/types/cuadra.ts`, `intake/ocr.ts`, `intake/fecha.ts`, `intake/emparejar.ts`, `cuadre/engine.ts` y `repo.ts` — no se infiere de la documentación del producto.
+Antes de proponer una sola regla hay que fijar qué dato existe de verdad. Esto se verificó leyendo `src/types/likida.ts`, `intake/ocr.ts`, `intake/fecha.ts`, `intake/emparejar.ts`, `cuadre/engine.ts` y `repo.ts` — no se infiere de la documentación del producto.
 
 ### 1.1 Por comprobante (`Gasto`)
 
@@ -38,7 +38,7 @@ Antes de proponer una sola regla hay que fijar qué dato existe de verdad. Esto 
 
 ### 1.2 Por viaje (`Viaje`) y por operador (`Operador`)
 
-`Viaje` tiene `folio`, `origen`, `destino`, `anticipo`, `fechaInicio`, `fechaFin` — **no tiene ruta con plazas de cobro ni distancia**, algo que la ola 1 (`09-liquidacion.md` §6.2) ya había marcado como campo que "hay que arrancar del cliente en el onboarding aunque duela". `Operador` tiene `id`, `nombre`, `telefono`, `terminal` — **no tiene base de asignación** (necesaria para la faja de 50 km, ya cubierto en ola 1) **ni historial de rendimiento**. No existe ninguna entidad `Unidad` en `types/cuadra.ts`.
+`Viaje` tiene `folio`, `origen`, `destino`, `anticipo`, `fechaInicio`, `fechaFin` — **no tiene ruta con plazas de cobro ni distancia**, algo que la ola 1 (`09-liquidacion.md` §6.2) ya había marcado como campo que "hay que arrancar del cliente en el onboarding aunque duela". `Operador` tiene `id`, `nombre`, `telefono`, `terminal` — **no tiene base de asignación** (necesaria para la faja de 50 km, ya cubierto en ola 1) **ni historial de rendimiento**. No existe ninguna entidad `Unidad` en `types/likida.ts`.
 
 ### 1.3 Lo que el motor de reglas YA hace (no es fraude, pero es la base)
 
@@ -49,7 +49,7 @@ Antes de proponer una sola regla hay que fijar qué dato existe de verdad. Esto 
 - Viático sobre el tope fiscal diario → excedente marcado (`viatico_excede_fiscal`).
 - Fecha del comprobante fuera del rango del viaje → `fecha_sospechosa`.
 - Folio de diésel leído con baja confianza → `folio_verificar`.
-- `diesel_desviacion` **existe como tipo declarado** (`types/cuadra.ts`) y se referencia en la clasificación de estatus (`engine.ts:246`), **pero ninguna función del motor lo produce todavía** — es un enchufe reservado, no una regla implementada. Es el lugar natural donde debería vivir la detección de ordeña cuando exista el dato de rendimiento.
+- `diesel_desviacion` **existe como tipo declarado** (`types/likida.ts`) y se referencia en la clasificación de estatus (`engine.ts:246`), **pero ninguna función del motor lo produce todavía** — es un enchufe reservado, no una regla implementada. Es el lugar natural donde debería vivir la detección de ordeña cuando exista el dato de rendimiento.
 
 **El hallazgo que corrige el encargo:** de los ocho campos que el encargo asume disponibles ("monto, litros, precio por litro, rendimiento, fecha, hora, estación, secuencia de folios"), **seis existen tal cual, uno existe pero incompleto (fecha sin hora), y uno no existe (rendimiento)**. Esto no bloquea nada de lo que sigue — la mayoría de las reglas de valor alto usan justo los seis que sí están — pero cambia el orden de prioridad: las reglas que dependían de hora o de rendimiento bajan de "esta semana" a "cuando se agregue el campo".
 
@@ -227,7 +227,7 @@ Ninguna contradicción encontrada con otros archivos de la ola 1 o de esta ola. 
 
 ### Primarias (gob.mx / código propio, verificadas)
 
-- Código fuente de Cuadra, leído directamente el 27-jul-2026: `src/types/cuadra.ts`, `src/lib/cuadra/intake/ocr.ts`, `src/lib/cuadra/intake/fecha.ts`, `src/lib/cuadra/intake/emparejar.ts`, `src/lib/cuadra/intake/decidir.ts`, `src/lib/cuadra/cuadre/engine.ts`, `src/lib/cuadra/cuadre/guardia.ts`, `src/lib/cuadra/repo.ts`, `src/lib/cuadra/facturacion/comercios.ts`, `src/lib/cuadra/facturacion/identificar.ts`.
+- Código fuente de Likida, leído directamente el 27-jul-2026: `src/types/likida.ts`, `src/lib/likida/intake/ocr.ts`, `src/lib/likida/intake/fecha.ts`, `src/lib/likida/intake/emparejar.ts`, `src/lib/likida/intake/decidir.ts`, `src/lib/likida/cuadre/engine.ts`, `src/lib/likida/cuadre/guardia.ts`, `src/lib/likida/repo.ts`, `src/lib/likida/facturacion/comercios.ts`, `src/lib/likida/facturacion/identificar.ts`.
 - Comisión Nacional de Energía — Precios de expendio de gasolinas y diésel por estación de servicio (XML diario, Acuerdo A/041/2018): https://www.cne.gob.mx/ConsultaPrecios/GasolinasyDiesel/GasolinasyDiesel.html
 - Profeco — Quién es quién en el Precio de la Gasolina: https://combustibles.profeco.gob.mx/
 - LISR art. 27, fr. IV ("restadas una sola vez") — ya citado y verificado en `03-isr-facilidades.md` de la ola 1, línea 91.

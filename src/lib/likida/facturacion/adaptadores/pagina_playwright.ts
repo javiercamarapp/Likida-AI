@@ -81,7 +81,7 @@ import type { FabricaDePagina, PaginaPortal } from './playwright_base';
  * gubernamentales lentos de verdad, que es justo la clase de portal que esto
  * opera.
  */
-export const TOPE_NAVEGAR_MS = Number(process.env.CUADRA_TOPE_NAVEGAR_MS) || 20_000;
+export const TOPE_NAVEGAR_MS = Number(process.env.LIKIDA_TOPE_NAVEGAR_MS) || 20_000;
 
 /**
  * ESCRIBIR, HACER CLIC, ELEGIR EN UN DESPLEGABLE.
@@ -96,7 +96,7 @@ export const TOPE_NAVEGAR_MS = Number(process.env.CUADRA_TOPE_NAVEGAR_MS) || 20_
  * se espera a que el ELEMENTO esté accionable. Lo que pase después del clic se
  * espera leyendo, con `TOPE_LECTURA_MS`.
  */
-export const TOPE_ACCION_MS = Number(process.env.CUADRA_TOPE_ACCION_MS) || 8_000;
+export const TOPE_ACCION_MS = Number(process.env.LIKIDA_TOPE_ACCION_MS) || 8_000;
 
 /**
  * LEER TEXTO. Es el tope más delicado de los cinco y conviene entender por qué.
@@ -114,19 +114,19 @@ export const TOPE_ACCION_MS = Number(process.env.CUADRA_TOPE_ACCION_MS) || 8_000
  * 3 s: 8 × 3 s = 24 s del peor caso de una corrida de 300 s, y le da al portal
  * diez veces el tiempo que tarda un XHR sano en pintar una fila.
  */
-export const TOPE_LECTURA_MS = Number(process.env.CUADRA_TOPE_LECTURA_MS) || 3_000;
+export const TOPE_LECTURA_MS = Number(process.env.LIKIDA_TOPE_LECTURA_MS) || 3_000;
 
 /** Captura de pantalla. Una página larga con imágenes tarda ~0.5-2 s. */
-export const TOPE_CAPTURA_MS = Number(process.env.CUADRA_TOPE_CAPTURA_MS) || 10_000;
+export const TOPE_CAPTURA_MS = Number(process.env.LIKIDA_TOPE_CAPTURA_MS) || 10_000;
 
 /** Arrancar Chromium. En frío, dentro de un contenedor, ~1-3 s. */
-export const TOPE_LANZAR_MS = Number(process.env.CUADRA_TOPE_LANZAR_MS) || 30_000;
+export const TOPE_LANZAR_MS = Number(process.env.LIKIDA_TOPE_LANZAR_MS) || 30_000;
 
 /**
  * Cerrar. Corto A PROPÓSITO: para cuando esto corre, el CFDI ya se emitió o ya
  * no, así que esperar aquí no cambia ningún resultado, solo gasta invocación.
  */
-export const TOPE_CERRAR_MS = Number(process.env.CUADRA_TOPE_CERRAR_MS) || 5_000;
+export const TOPE_CERRAR_MS = Number(process.env.LIKIDA_TOPE_CERRAR_MS) || 5_000;
 
 /** Margen sobre el tope antes de que dispare la red de seguridad. Igual que en `presupuesto.ts`. */
 const GRACIA_TOPE_MS = 1_500;
@@ -194,7 +194,7 @@ export const BANDERAS_CONTENEDOR: readonly string[] = [
 // existe dentro del contenedor de una función. Por eso hay tres orígenes
 // posibles y se prueban en este orden:
 //
-//   (a) EXPLÍCITO — `OpcionesNavegador.executablePath` o `CUADRA_CHROMIUM_PATH`.
+//   (a) EXPLÍCITO — `OpcionesNavegador.executablePath` o `LIKIDA_CHROMIUM_PATH`.
 //       Va primero porque es la única puerta de escape que no depende de que
 //       adivinemos bien: el día que haya un binario en una capa, en una imagen
 //       propia o en `/opt`, se pone la ruta y nada más tiene voto. Si apunta a
@@ -438,9 +438,9 @@ export async function resolverEjecutable(
   const intentos: IntentoEjecutable[] = [];
 
   // ── (a) EXPLÍCITO ────────────────────────────────────────────────────────
-  const puesto = explicito ?? process.env.CUADRA_CHROMIUM_PATH ?? '';
+  const puesto = explicito ?? process.env.LIKIDA_CHROMIUM_PATH ?? '';
   if (!puesto.trim()) {
-    intentos.push({ via: 'explicito', ok: false, porQue: 'no hay `CUADRA_CHROMIUM_PATH` ni `executablePath`' });
+    intentos.push({ via: 'explicito', ok: false, porQue: 'no hay `LIKIDA_CHROMIUM_PATH` ni `executablePath`' });
   } else if (!entorno.existe(puesto)) {
     intentos.push({ via: 'explicito', ok: false, ruta: puesto, porQue: `se pidió esa ruta y NO existe en esta máquina` });
     logger.warn('portal.chromium_explicito_no_existe', { ruta: puesto });
@@ -885,7 +885,7 @@ export class PaginaPlaywright implements PaginaPortal {
 export interface OpcionesNavegador {
   /**
    * Ruta al binario, a mano. Es el camino (a) de `resolverEjecutable`: gana
-   * sobre `CUADRA_CHROMIUM_PATH`, sobre el paquete serverless y sobre la caché
+   * sobre `LIKIDA_CHROMIUM_PATH`, sobre el paquete serverless y sobre la caché
    * de Playwright. Si no se pasa, se resuelve solo.
    */
   executablePath?: string;

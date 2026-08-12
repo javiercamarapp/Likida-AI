@@ -59,4 +59,4 @@ impacto_en_producto: >
   repo lo resuelve, y el producto no lo va a inventar.
 verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito literal"
 verificado_el: 2026-07-28
-usado_en_codigo: ["src/lib/cuadra/laboral/pagadero.ts"]
+usado_en_codigo: ["src/lib/likida/laboral/pagadero.ts"]

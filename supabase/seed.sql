@@ -92,7 +92,7 @@ on conflict (id) do nothing;
 --
 -- La tabla politica_gasto NO LA LEE NADIE (CLAUDE.md): el motor lee
 -- `tenant.config.politica` vía getConfig(). Si config es NULL se usa
--- DEMO_CONFIG (src/lib/cuadra/config.ts) que ya trae estos topes — pero se
+-- DEMO_CONFIG (src/lib/likida/config.ts) que ya trae estos topes — pero se
 -- escriben AQUÍ explícitos para que el seed sea autosuficiente y el cambio
 -- sea visible en un solo lugar. Arrays reemplazan en la mezcla (regla de
 -- config.ts), así que esto define LA política del tenant.

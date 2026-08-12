@@ -557,7 +557,7 @@ const TTL_INTAKE_MS = 10 * 60_000;
 /**
  * Espera a que NO haya OCR de fotos en vuelo para el viaje (contador = 0). Es la
  * barrera que garantiza que el "listo" cuadre sobre TODOS los gastos, no parciales.
- * NUNCA espera indefinido: tope configurable (env CUADRA_INTAKE_ESPERA_MS, default
+ * NUNCA espera indefinido: tope configurable (env LIKIDA_INTAKE_ESPERA_MS, default
  * 20s — NO 60s: el presupuesto de la función es maxDuration=120 (webhook) y por debajo de
  * esta barrera todavía corren el lock y el agente). Devuelve true si se vació,
  * false si venció el tope (→ el caller avisa al operador y cuadra con lo que
@@ -579,16 +579,16 @@ export async function esperarIntake(
   // 60s aquí el peor caso son 112s, y cuando revienta Meta YA recibió su 200 OK
   // y el mensaje quedó marcado como procesado. Ese "listo" se pierde sin
   // reintento y sin que nadie se entere. El env puede subirlo si el plan aguanta.
-  const tope = timeoutMs ?? (Number(process.env.CUADRA_INTAKE_ESPERA_MS) || 20_000);
+  const tope = timeoutMs ?? (Number(process.env.LIKIDA_INTAKE_ESPERA_MS) || 20_000);
   // AUDIT_V3 orquestación CRÍTICO (carrera de barrera): cuando fotos y "listo"
   // llegan en el MISMO lote, corren en Promise.all; el "listo" puede leer el
   // contador ANTES de que una foto registre su +1 → ve 0 → cuadra sobre parciales.
   // GRACIA inicial: si el contador arranca en 0, se espera una ventana corta para
   // dar tiempo a que las fotos de la ráfaga incrementen antes de confiar en el 0.
-  // FLAG (HARD RULE 3): configurable por env CUADRA_INTAKE_GRACE_MS. Default 2s;
+  // FLAG (HARD RULE 3): configurable por env LIKIDA_INTAKE_GRACE_MS. Default 2s;
   // con 0 la carrera fotos+"listo" cierra sobre datos parciales, y es el ÚNICO
   // camino que no le avisa nada al operador: su liquidación sale corta.
-  const grace = Number(process.env.CUADRA_INTAKE_GRACE_MS) || 2_000;
+  const grace = Number(process.env.LIKIDA_INTAKE_GRACE_MS) || 2_000;
   const start = Date.now();
   // `null` es "no sé", y no puede abrir la barrera. Fail-CLOSED: se sigue
   // esperando hasta el tope y se devuelve `false`, que es lo que hace que el

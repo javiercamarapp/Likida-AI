@@ -3,16 +3,16 @@
 > Ola 2 — 27-jul-2026. Construido sobre la ola 1 (`00` a `11` en `likida-conocimiento/`).
 > Este documento no vuelve a investigar el marco fiscal: lo aplica a un proceso completo,
 > agrega el marco laboral que `11-huecos.md` encontró y que el proceso operativo no puede ignorar,
-> y contrasta el diseño contra el código de Cuadra tal como existe hoy en
-> `javiercamarapp/likida/src/lib/cuadra/`. Cada afirmación legal remite a la ola 1; no se repiten
+> y contrasta el diseño contra el código de Likida tal como existe hoy en
+> `javiercamarapp/likida/src/lib/likida/`. Cada afirmación legal remite a la ola 1; no se repiten
 > las citas textuales completas, solo la referencia y el número de artículo/regla.
 
 ---
 
 ## Resumen para el fundador
 
-1. **El proceso tiene tres capas, no una**: de una sola vez (alta de operador y unidad), por viaje (la máquina de estados que ya existe en germen en Cuadra) y por periodo (mes y ejercicio, que hoy no existe en ningún lado). Confundir las tres es el error de diseño más caro: los cinco contadores fiscales y los dos laborales viven en la capa de periodo, no en la de viaje, y el motor de hoy (`cuadre/engine.ts`) solo ve un viaje a la vez.
-2. **Hallazgo urgente y accionable hoy mismo**: el motor de cuadre que YA está construido marca *todo* combustible pagado en efectivo como no deducible, sin excepción. Eso contradice la corrección C1 que la propia ola 1 verificó: hasta 15% del combustible del ejercicio puede pagarse en efectivo y seguir siendo deducible (RFA 2026, regla 2.9). Hoy Cuadra le va a decir a un contralor que un gasto deducible no lo es. Ver CONFLICTOS.
+1. **El proceso tiene tres capas, no una**: de una sola vez (alta de operador y unidad), por viaje (la máquina de estados que ya existe en germen en Likida) y por periodo (mes y ejercicio, que hoy no existe en ningún lado). Confundir las tres es el error de diseño más caro: los cinco contadores fiscales y los dos laborales viven en la capa de periodo, no en la de viaje, y el motor de hoy (`cuadre/engine.ts`) solo ve un viaje a la vez.
+2. **Hallazgo urgente y accionable hoy mismo**: el motor de cuadre que YA está construido marca *todo* combustible pagado en efectivo como no deducible, sin excepción. Eso contradice la corrección C1 que la propia ola 1 verificó: hasta 15% del combustible del ejercicio puede pagarse en efectivo y seguir siendo deducible (RFA 2026, regla 2.9). Hoy Likida le va a decir a un contralor que un gasto deducible no lo es. Ver CONFLICTOS.
 3. **"Régimen del operador" no es un campo que el contralor elige**: se deriva de dos preguntas — ¿de quién es la unidad? ¿de quién es el permiso? Si el operador conduce el camión de la flota, la LFT (art. 256, capítulo propio del autotransporte) lo convierte en relación de trabajo *aunque el contrato diga lo contrario*. La ruta "tercero" (erogaciones por cuenta de terceros) solo existe cuando el operador aporta su propia unidad y su propio permiso.
 4. **Los descuentos al operador tienen dos topes legales que ninguna liquidación puede saltarse** (LFT art. 110): la deuda exigible no puede superar un mes de su salario, y el descuento por periodo no puede pasar del 30% del excedente sobre el salario mínimo. Una liquidación que imprime "a pagar: $0" porque absorbió un anticipo grande contra un sueldo chico puede estar imprimiendo un número ilegal.
 5. **Deducible y pagadero son dos veredictos distintos, no uno.** Cuando el viaje se alarga por una causa que no es culpa del operador (demora en aduana, bloqueo carretero, espera en andén), la LFT (art. 263, fr. I) obliga a pagar hospedaje y comida aunque el gasto rompa la política interna o el tope fiscal de $750/día. El motor tiene que separar "¿es deducible fiscalmente?" de "¿se le debe al operador?".
@@ -233,7 +233,7 @@ REGLA — Grupo A nunca es viático
      → jamás puede ir a Percepción 050 del CFDI de nómina, sin importar quién
        lo pida o cómo se haya capturado
   [FALTA modelar 'grupo_fiscal' como campo explícito — hoy 'concepto' es un
-   enum plano sin ese amarre estructural, types/cuadra.ts línea 5]
+   enum plano sin ese amarre estructural, types/likida.ts línea 5]
 
 REGLA — Tope de deuda laboral (LFT 110, primer párrafo)
   saldo_exigible_operador ≤ 1 × salario_mensual_operador
@@ -299,7 +299,7 @@ Tres desenlaces posibles contra el anticipo (ya identificados en `09-liquidacion
 | ¿Aplica a combustible? | No — el combustible no es viático (Grupo A) | **No, excluido desde 2024** |
 | ¿Qué pasa si se rompe? | El monto no comprobado se vuelve gravado para el operador | Todo lo deducido se vuelve no deducible retroactivo, y el 16% ya pagado **no se recupera** (es definitivo) |
 | Contador que hay que llevar | Por operador, acumulado del ejercicio | Por tenant/coordinado, acumulado del ejercicio |
-| Estado en Cuadra hoy | [FALTA] | [FALTA] |
+| Estado en Likida hoy | [FALTA] | [FALTA] |
 
 El combustible pagado sin comprobante tiene su **propia** válvula — el 15% de la RFA 2026, regla 2.9 (§7) — y nunca debe mezclarse con ninguna de las dos de arriba. Meter diésel al 8% ciego es el error más caro que puede cometer una flota (`03-isr-facilidades.md`, resumen #4, ya verificado en ola 1).
 
@@ -337,7 +337,7 @@ Dos relojes adicionales, de menor frecuencia pero con multa nombrada, que convie
 - **Relación individualizada de operadores bajo la facilidad del 7.5%**: 15-feb-2027, ficha 65/ISR (RFA 2026, regla 2.1).
 - **Renovación de la autorización del emisor del monedero**: agosto-octubre de cada año (ficha 7/ISR). No es un reloj de la flota, pero si el emisor no renueva, el cliente se queda sin comprobante deducible de combustible sin aviso — vale la pena monitorear el padrón, no solo confiar en la integración.
 
-**Ninguno de estos cuatro relojes existe hoy en el código de Cuadra.** El motor de cuadre corre por viaje, sin noción de mes ni de ejercicio fiscal (ver §11).
+**Ninguno de estos cuatro relojes existe hoy en el código de Likida.** El motor de cuadre corre por viaje, sin noción de mes ni de ejercicio fiscal (ver §11).
 
 ---
 
@@ -347,7 +347,7 @@ Lo que la etapa `CERRADA` debería producir, con su fundamento:
 
 1. **Póliza contable separada por grupo fiscal**, no por proveedor: costo de operación (Grupo A deducible), viáticos dentro de tope (Grupo B deducible), viáticos excedidos (no deducible), gasto sin comprobante bajo la facilidad del 8% (no deducible con IVA, gravado el 16%), y multas (nunca deducibles, LISR 28-VI).
 2. **Insumos para el CFDI de nómina**: los tres importes de las claves `OtrosPagos` 003 (lo entregado), `Percepciones` 050 desglosado en gravado y exento (lo comprobado, aplicando las cinco condiciones de RLISR 152 — nunca copiar la tabla de ejemplo del SAT a ciegas, ver `09-liquidacion.md` §3.3), y `Deducciones` 081 (el ajuste). Likida **calcula** estos tres números; el sistema de nómina los **timbra**.
-3. **DIOT**: proveedor, RFC, tasa, IVA trasladado, IVA retenido, forma de pago — dato que ya existe limpio en el modelo de gasto (`ivaTraslado`, `formaPago` en `types/cuadra.ts`) y que hoy no se exporta con ese propósito.
+3. **DIOT**: proveedor, RFC, tasa, IVA trasladado, IVA retenido, forma de pago — dato que ya existe limpio en el modelo de gasto (`ivaTraslado`, `formaPago` en `types/likida.ts`) y que hoy no se exporta con ese propósito.
 4. **UUID y forma de pago por renglón** en cualquier exportación contable — es el requisito literal del RCFF art. 33-B-III ("identificación de cada operación... relacionándolas con los folios... de tal forma que pueda identificarse la forma de pago"), verificado en `11-huecos.md` §1.1.
 5. **Carpeta de auditoría** (diagrama del sistema, descripción de cómo se almacenan y procesan los datos, export íntegro) — no es opcional: el RCFF art. 34 obliga al **cliente** a tenerla disponible para el SAT, y si Likida no se la entrega, el cliente incumple sin saberlo (`11-huecos.md` §1.1).
 6. **Lo que Likida NO emite**: el CFDI de flete del hombre-camión (lo timbra el tercero), el CFDI de nómina (lo timbra el sistema de nómina con los insumos de Likida), y el Complemento de Liquidación del coordinado (no existe — RFA Transitorio Segundo, ya verificado en ola 1). Likida entrega números y veredictos con fundamento citado, no documentos fiscales que no le corresponde emitir.
@@ -363,7 +363,7 @@ Resumen operativo — el detalle completo, con las patologías de la caja chica 
 | Captura de gastos | Sobre físico al regreso, capturado a mano en Excel o en el módulo del TMS, días o semanas después | Continua, por WhatsApp, con contexto (odómetro, geo) en el momento del gasto |
 | Comprobante de combustible con monedero | La gasolinera factura al operador o a la flota (**prohibido por regla**, RMF 3.3.1.7) — hallazgo de producto más importante de la ola 1 | Se ingiere el Complemento de Estado de Cuenta del emisor; la foto del ticket es solo control operativo |
 | Cruce contra el anticipo | Manual, al cierre, tres desenlaces sin lógica sistemática | Automático, con los tres desenlaces del §5 y los topes laborales aplicados |
-| Contadores fiscales (15%, 8%, 20%, faja de 50 km) | Nadie los lleva (`09-liquidacion.md` §4.6, "el hueco") | Contadores de periodo con semáforo (§4.2, §6, §7) — **hoy tampoco los lleva Cuadra**, ver §11 |
+| Contadores fiscales (15%, 8%, 20%, faja de 50 km) | Nadie los lleva (`09-liquidacion.md` §4.6, "el hueco") | Contadores de periodo con semáforo (§4.2, §6, §7) — **hoy tampoco los lleva Likida**, ver §11 |
 | Topes laborales del descuento (LFT 110) | Nadie los aplica — el hallazgo es de esta ola, no de la primera | Motor de saldos con los dos topes como candado duro |
 | Salida contable | Póliza manual, sin separación por régimen fiscal | Póliza automática separada por grupo fiscal |
 | Salida a nómina | Captura manual de las claves 003/050/081, con errores frecuentes de qué monto va en cada una | Insumos calculados automáticamente, con las cinco condiciones de exención verificadas |
@@ -371,9 +371,9 @@ Resumen operativo — el detalle completo, con las patologías de la caja chica 
 
 ---
 
-## 11. Brecha entre este diseño y lo que Cuadra tiene construido hoy
+## 11. Brecha entre este diseño y lo que Likida tiene construido hoy
 
-Revisado directamente en `javiercamarapp/likida/src/lib/cuadra/` el 27-jul-2026:
+Revisado directamente en `javiercamarapp/likida/src/lib/likida/` el 27-jul-2026:
 
 | Pieza del diseño | ¿Existe hoy? | Evidencia |
 |---|---|---|
@@ -382,7 +382,7 @@ Revisado directamente en `javiercamarapp/likida/src/lib/cuadra/` el 27-jul-2026:
 | Complemento de hidrocarburos, dos niveles | **Sí** | `engine.ts` líneas 166-189 |
 | Acreditamiento de IEPS/IVA/peaje | **Sí** | `engine.ts` líneas 216-242 |
 | Bandeja de códigos pendientes (emparejamiento de acercamientos) | **Sí** | migración `0016_codigo_pendiente.sql`, `repo.ts` |
-| Grupo fiscal A/B explícito | **No** | `concepto` es un enum plano (`diesel|caseta|factura|viaticos|otro`), `types/cuadra.ts` línea 5 — no hay un campo estructural que impida que "diésel" llegue a Percepción 050 |
+| Grupo fiscal A/B explícito | **No** | `concepto` es un enum plano (`diesel|caseta|factura|viaticos|otro`), `types/likida.ts` línea 5 — no hay un campo estructural que impida que "diésel" llegue a Percepción 050 |
 | Régimen del operador derivado (unidad + permiso) | **No** | tabla `operador` solo tiene `nombre, telefono, numero_empleado, activo` (migración `0001_init.sql`) — no hay campo de régimen ni de propiedad de unidad/permiso |
 | Base de asignación / faja de 50 km | **No** | no existe el campo, ni la regla en `engine.ts` |
 | Unidad como entidad con capacidad de tanque y rendimiento | **Parcial** | vive en `tenant.config` (jsonb) por placa (`config.ts`, `UnidadConfig`), no en una tabla propia ni ligada a propietario/permiso |
@@ -391,7 +391,7 @@ Revisado directamente en `javiercamarapp/likida/src/lib/cuadra/` el 27-jul-2026:
 | Contador 20% / $15,000 por operador (RLISR 152) | **No** | no hay acumulador por operador ni verificación del medio de pago del 80% restante |
 | Topes laborales de descuento (LFT 110) | **No** | no hay salario del operador en el modelo de datos, ni lógica de tope |
 | Deducible ≠ pagadero (LFT 263, 257) | **No** | el motor produce un solo veredicto por gasto |
-| Máquina de estados hasta "cerrada" con periodo fiscal | **Parcial** | `viaje.estatus` solo tiene `abierto` y `en_cuadre` en uso real (`conv.ts` línea 40); `liquidacion.estatus` es `cuadrada / con_diferencias / revisar` (`types/cuadra.ts` línea 77) — no existe `en_excepcion` como estado propio, ni `liquidada`, ni `cerrada`, ni ningún concepto de mes/ejercicio |
+| Máquina de estados hasta "cerrada" con periodo fiscal | **Parcial** | `viaje.estatus` solo tiene `abierto` y `en_cuadre` en uso real (`conv.ts` línea 40); `liquidacion.estatus` es `cuadrada / con_diferencias / revisar` (`types/likida.ts` línea 77) — no existe `en_excepcion` como estado propio, ni `liquidada`, ni `cerrada`, ni ningún concepto de mes/ejercicio |
 | Ingesta de estado de cuenta de monedero (ECC) | **No** | `intake/ocr.ts` procesa fotos de tickets; no hay parser del Complemento de Estado de Cuenta de Combustibles para Monederos Electrónicos |
 | Ingesta de CFDI mensual de TAG | **No** | no hay conector |
 | Salida a ERP | **Parcial** | `export.ts` genera un CSV de una fila por liquidación (folio, operador, fecha, comprobado, anticipo, diferencia, estatus, num_diferencias) — sin desglose por concepto, sin UUID/forma de pago por renglón, sin grupo fiscal |
@@ -411,7 +411,7 @@ Revisado directamente en `javiercamarapp/likida/src/lib/cuadra/` el 27-jul-2026:
 | Agregar el campo `grupo_fiscal` (A/B) explícito al modelo de gasto, derivado del `concepto`, no opcional | Es el candado estructural que impide que diésel llegue a Percepción 050 de nómina | Bajo | Fase 1 |
 | Agregar `régimen` y `base_asignación` a la tabla `operador`, derivando `régimen` de dos preguntas (propiedad de unidad, propiedad de permiso), nunca como selección libre | Sin esto no se puede correr la faja de 50 km ni decidir si el "viático" es válido o es precio de flete | Medio | Fase 1 |
 | Construir la tabla `unidad` con capacidad de tanque, rendimiento esperado por tipo de carga y propietario, sacándola de `tenant.config` jsonb | Hoy vive en config, no relacionada a la unidad como entidad ni al régimen del operador | Medio | Fase 1 |
-| Construir el contador de periodo del 15% de combustible en efectivo, por tenant y ejercicio, con semáforo a 12% | Es el contador de mayor retorno inmediato: nadie en el mercado lo lleva y hoy ni Cuadra | Medio | Fase 1 |
+| Construir el contador de periodo del 15% de combustible en efectivo, por tenant y ejercicio, con semáforo a 12% | Es el contador de mayor retorno inmediato: nadie en el mercado lo lleva y hoy ni Likida | Medio | Fase 1 |
 | Construir los contadores del 8%/$1,000,000 y del 20%/$15,000 por operador | Mismo argumento — propuesta de valor defendible que ningún competidor tiene | Medio-Alto | Fase 1-2 |
 | Meter los dos topes laborales (LFT 110) al motor de saldos del operador | Sin esto, la liquidación puede imprimir un descuento o un "a pagar $0" ilegal | Bajo | Fase 1 |
 | Separar el veredicto **deducible** del veredicto **pagadero** por gasto (LFT 263-I, 257) | Un viaje prolongado por causa ajena obliga a pagar aunque el gasto no sea deducible ni cumpla política | Medio | Fase 1 |
@@ -444,7 +444,7 @@ Revisado directamente en `javiercamarapp/likida/src/lib/cuadra/` el 27-jul-2026:
 5. **Si hay una Segunda Resolución de Modificaciones a la RMF 2026 posterior al 9-jul-2026** que haya tocado las reglas 2.2, 2.9 o 2.7.1.12 citadas en este documento. No se verificó el índice del DOF más allá del 27-jul-2026 (mismo pendiente que `11-huecos.md`, SIN VERIFICAR #1).
 6. **Las disposiciones de carácter general de la STPS sobre el registro electrónico de jornada** (LFT art. 132, fr. XXXIV): el Transitorio Quinto las exige desde el 1-ene-2027 pero no se han emitido. No se incorporó como reloj en la §8 de este documento porque su fecha de exigibilidad es posterior al horizonte de esta liquidación; queda como módulo de Fase 3 (`11-huecos.md`, acciones concretas).
 7. **Si "erogar con tarjeta del patrón" (RLISR 152) admite el monedero de combustible como equivalente cuando el gasto NO es de combustible.** No se encontró esa equivalencia resuelta en ningún archivo de la ola 1. Se asumió, para el diseño de §4.2, que la tarjeta del patrón debe ser una tarjeta de crédito, débito o servicios distinta del monedero de combustible (que por regla 3.3.1.6 solo puede usarse para comprar combustible).
-8. **El estado exacto del código de Cuadra descrito en §11** corresponde a una lectura del repositorio el 27-jul-2026. Si el código cambió después de esa fecha, la tabla de brecha puede estar desactualizada.
+8. **El estado exacto del código de Likida descrito en §11** corresponde a una lectura del repositorio el 27-jul-2026. Si el código cambió después de esa fecha, la tabla de brecha puede estar desactualizada.
 
 ---
 
@@ -459,15 +459,15 @@ Este documento no realizó investigación normativa nueva: aplicó y extendió e
 - `likida-conocimiento/10-contradicciones.md` — verificación de que la Primera Modificación a la RMF 2026 no tocó las reglas del complemento de hidrocarburos citadas aquí, y del criterio 43/ISR/PI sobre pagos a través de terceros.
 - `likida-conocimiento/00-INDICE.md` — mapa de qué archivo cubre qué.
 
-Fuentes primarias del propio repositorio de código (Cuadra), leídas directamente el 27-jul-2026 para la §11 (brecha) y el CONFLICTO 1:
+Fuentes primarias del propio repositorio de código (Likida), leídas directamente el 27-jul-2026 para la §11 (brecha) y el CONFLICTO 1:
 
-- `javiercamarapp/likida/src/lib/cuadra/cuadre/engine.ts`
-- `javiercamarapp/likida/src/lib/cuadra/cuadre/guardia.ts`
-- `javiercamarapp/likida/src/types/cuadra.ts`
-- `javiercamarapp/likida/src/lib/cuadra/config.ts`
-- `javiercamarapp/likida/src/lib/cuadra/export.ts`
-- `javiercamarapp/likida/src/lib/cuadra/conv.ts`
-- `javiercamarapp/likida/src/lib/cuadra/repo.ts`
+- `javiercamarapp/likida/src/lib/likida/cuadre/engine.ts`
+- `javiercamarapp/likida/src/lib/likida/cuadre/guardia.ts`
+- `javiercamarapp/likida/src/types/likida.ts`
+- `javiercamarapp/likida/src/lib/likida/config.ts`
+- `javiercamarapp/likida/src/lib/likida/export.ts`
+- `javiercamarapp/likida/src/lib/likida/conv.ts`
+- `javiercamarapp/likida/src/lib/likida/repo.ts`
 - `javiercamarapp/likida/supabase/migrations/0001_init.sql`, `0003_costos.sql`, `0004_fiscal_config.sql`, `0007_acreditamiento.sql`, `0016_codigo_pendiente.sql` (solo lectura, sin modificar ni crear migraciones)
 
 No se usó WebSearch, WebFetch ni exa en esta ola: el encargo es de diseño de proceso sobre un marco ya investigado, y las reglas duras del encargo piden construir encima de la ola 1, no repetirla.
