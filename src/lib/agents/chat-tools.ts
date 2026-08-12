@@ -185,6 +185,59 @@ registerTool('top_rutas', {
   },
 });
 
+/** Proyección determinística: promedio de los últimos cortes CON datos,
+ *  extendido hacia adelante. Es una estimación y lo dice — el supuesto viaja
+ *  en el resultado y el prompt obliga a narrarlo (regla del producto: una
+ *  estimación se muestra declarada, nunca disfrazada de medición). */
+export function proyectarPuntos(valores: number[]): {
+  cortesConDatos: number; promedioPorCorte: number; sumaObservada: number;
+  proyeccionSiguienteCorte: number; proyeccionSiguientes4: number; supuesto: string;
+} | { sinDatos: true } {
+  const conDatos = valores.filter((v) => v > 0);
+  if (conDatos.length === 0) return { sinDatos: true };
+  const base = conDatos.slice(-4);
+  const promedio = Math.round((base.reduce((a, b) => a + b, 0) / base.length) * 100) / 100;
+  return {
+    cortesConDatos: conDatos.length,
+    promedioPorCorte: promedio,
+    sumaObservada: Math.round(valores.reduce((a, b) => a + b, 0) * 100) / 100,
+    proyeccionSiguienteCorte: promedio,
+    proyeccionSiguientes4: Math.round(promedio * 4 * 100) / 100,
+    supuesto: `promedio simple de los últimos ${base.length} cortes con datos, extendido hacia adelante — no considera estacionalidad ni viajes ya planeados`,
+  };
+}
+
+registerTool('proyectar_serie', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'proyectar_serie',
+      description: 'PROYECCIÓN determinística (calculada por el sistema, no por ti) del gasto o del liquidado: promedio de los últimos cortes con datos extendido hacia adelante, con su supuesto declarado. Úsala para "cuánto voy a gastar/liquidar" — y SIEMPRE narra el supuesto.',
+      parameters: {
+        type: 'object',
+        properties: {
+          serie: { type: 'string', enum: ['gasto', 'liquidado'], description: 'Qué proyectar.' },
+          modo: { type: 'string', enum: ['semanal', 'mensual', 'historico'], description: 'Ventana de la serie base.' },
+        },
+        required: ['serie', 'modo'],
+        additionalProperties: false,
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const modo = modoDe(args);
+    if (args.serie === 'liquidado') {
+      const s = (await getLiquidadoPorSemanaSeries(ctx.tenantId, hoyIso()))[modo];
+      return { serie: 'liquidado', modo, moneda: 'MXN', ...proyectarPuntos(s.map((p) => p.valor)) };
+    }
+    const g = (await getGastoPorSemanaSeries(ctx.tenantId, hoyIso()))[modo];
+    // Total por corte = suma de todas las categorías en ese corte.
+    const n = Math.max(...g.series.map((x) => x.valores.length), 0);
+    const totales = Array.from({ length: n }, (_, i) => g.series.reduce((a, x) => a + (x.valores[i] ?? 0), 0));
+    return { serie: 'gasto', modo, moneda: 'MXN', ...proyectarPuntos(totales) };
+  },
+});
+
 registerTool('duplicados_detectados', {
   schema: {
     type: 'function',
