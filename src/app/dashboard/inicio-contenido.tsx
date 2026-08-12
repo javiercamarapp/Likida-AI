@@ -274,16 +274,16 @@ export async function InicioContenido({
                   dirección buena/mala no es igual para las tres: gastar
                   más no es bueno aunque el número suba. */}
               {kpis && (
-                <div className="mt-2.5">
+                <div className="mt-2">
                   {seriesKpis ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <KpiPeriodo icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
                         nombre="Gasto total" campo="gastoTotal" formato="mxn" subeEsBueno={false} series={seriesKpis} />
                       <KpiPeriodo icono={<Calculator width={15} height={15} strokeWidth={1.75} />}
                         nombre="Costo por viaje" campo="costoPorViaje" formato="mxn" subeEsBueno={false} series={seriesKpis} />
                       <StatCard icono={<PiggyBank width={15} height={15} strokeWidth={1.75} />}
                         etiqueta={`Ahorro generado — ${periodoFiscal.etiqueta}`}
-                        valor={resumenPerdidas?.montoRecuperable ?? 0} formato="mxn" />
+                        valor={resumenPerdidas?.montoRecuperable ?? 0} formato="mxn" delta={null} />
                     </div>
                   ) : (
                     <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el comparativo de KPIs.</p>
@@ -293,7 +293,7 @@ export async function InicioContenido({
 
               {/* ── Motor fiscal — el diferenciador real, no un TMS
                   genérico. Todo lo fiscal vive junto, en UNA tarjeta. */}
-              <div className="card p-3.5 mt-2.5">
+              <div className="card p-3 mt-2">
                 <TituloSeccion>Tu motor fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
                 {/* Las 3 tarjetas en la MISMA línea, todo el ancho (pedido
                     explícito, 8-ago-2026), misma altura (`h-full`). El
@@ -301,16 +301,16 @@ export async function InicioContenido({
                     es cuota DOF (semanal) × litros, y esa cuota no vive
                     aquí. `docs/conocimiento/guion-demo.md` +
                     `guion_demo.test.ts` atan el guion de venta a esto. */}
-                <div className="mt-3 flex flex-wrap gap-2.5 items-stretch">
+                <div className="mt-2 flex flex-wrap gap-2 items-stretch">
                   <MotorFiscalPeriodo series={resumenPerdidasSeries} />
                   {acred && (
                     <div className="flex-1 min-w-[200px]">
                       <StatCard icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
-                        etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" />
+                        etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" delta={null} />
                     </div>
                   )}
                 </div>
-                <div className="mt-3">
+                <div className="mt-2">
                   <MotorFiscal resumen={resumenPerdidas} />
                 </div>
               </div>
@@ -318,15 +318,15 @@ export async function InicioContenido({
               {/* ── La tabla protagonista de la referencia, con los viajes
                   REALES. Sin "Ver todo": la página de Viajes se rehará a su
                   tiempo, y un link muerto anuncia una página que no existe. */}
-              <div className="card p-3.5 mt-2.5">
-                <div className="mb-2.5"><TituloSeccion>Viajes recientes</TituloSeccion></div>
+              <div className="card p-3 mt-2">
+                <div className="mb-2"><TituloSeccion>Viajes recientes</TituloSeccion></div>
                 <TablaViajes viajes={filasViajes} sufijo={sufijo} />
               </div>
 
               {/* ── Viajes / Actividad / Gasto por categoría / Liquidado /
                   Top rutas — UN SOLO selector Semanal/Mensual/Histórico que
                   mueve las 5 juntas (pedido explícito, 8-ago-2026). */}
-              <div className="mt-4">
+              <div className="mt-2.5">
                 <PanelPeriodo
                   viajes={viajes ?? []}
                   porMes={viajesPorMes ?? []}
@@ -339,7 +339,7 @@ export async function InicioContenido({
             </>
           )}
 
-          <p className="text-xs pt-4" style={{ color: 'var(--muted)' }}>{LEYENDA_CORTA}</p>
+          <p className="text-[11px] pt-3" style={{ color: 'var(--faint)' }}>{LEYENDA_CORTA}</p>
         </div>
       </div>
     </main>

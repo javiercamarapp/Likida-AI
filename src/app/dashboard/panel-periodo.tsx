@@ -67,8 +67,8 @@ export function PanelPeriodo({
       </div>
 
       {/* ── Viajes / Actividad ── */}
-      <div className="pt-2.5 grid grid-cols-1 md:grid-cols-3 gap-2.5">
-        <div className="card p-3.5">
+      <div className="pt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+        <div className="card p-3">
           <TituloSeccion>Viajes</TituloSeccion>
           <div className="mt-2.5">
             {kpiModo && kpiModo.totalViajes > 0 ? (
@@ -81,7 +81,7 @@ export function PanelPeriodo({
             )}
           </div>
         </div>
-        <div className="card p-3.5 md:col-span-2">
+        <div className="card p-3 md:col-span-2">
           <TituloSeccion>Actividad</TituloSeccion>
           <div className="mt-3">
             <Actividad viajes={viajes} porMes={porMes} modo={modo} />
@@ -90,8 +90,8 @@ export function PanelPeriodo({
       </div>
 
       {/* ── Gasto por categoría / Liquidado por semana ── */}
-      <div className="pt-2.5 grid grid-cols-1 md:grid-cols-2 gap-2.5">
-        <div className="card p-3.5">
+      <div className="pt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+        <div className="card p-3">
           <TituloSeccion>Gasto por categoría</TituloSeccion>
           <div className="mt-3">
             {gastoModo && gastoModo.series.some((s) => s.valores.some((v) => v > 0)) ? (
@@ -101,36 +101,37 @@ export function PanelPeriodo({
             )}
           </div>
         </div>
-        <div className="card p-3.5">
+        <div className="card p-3">
           <TituloSeccion>Liquidado</TituloSeccion>
           {totalLiquidado > 0 && (
             <div className="text-2xl font-semibold tracking-tight tabular mt-1">{mxn(totalLiquidado)}</div>
           )}
           <div className="mt-2.5">
             {liquidadoModo === null ? (
-              <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 140 }}>
+              <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 90 }}>
                 No se pudo cargar esta gráfica.
               </div>
             ) : liquidadoModo.some((d) => d.valor > 0) ? (
               <AreaChartSimple datos={liquidadoModo} etiquetaValor={mxn} />
             ) : (
-              <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 140 }}>
+              <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 90 }}>
                 Sin cierres en este periodo.
               </div>
             )}
           </div>
         </div>
-      </div>
 
-      {/* ── Top rutas por gasto ── */}
-      <div className="card p-3.5 mt-2.5">
-        <TituloSeccion>Top rutas por gasto</TituloSeccion>
-        <div className="mt-2.5 overflow-x-auto">
-          {rutasModo ? (
-            <TopRutas rutas={rutasModo} />
-          ) : (
-            <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</p>
-          )}
+        {/* Top rutas en la MISMA fila (compacto del 12-ago: todo el
+            Resumen debe caber en una pantalla sin scroll). */}
+        <div className="card p-3">
+          <TituloSeccion>Top rutas por gasto</TituloSeccion>
+          <div className="mt-2 overflow-x-auto">
+            {rutasModo ? (
+              <TopRutas rutas={rutasModo} />
+            ) : (
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</p>
+            )}
+          </div>
         </div>
       </div>
     </>
