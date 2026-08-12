@@ -30,9 +30,15 @@ export default async function DashboardInicio({
   //
   // El criterio es "¿ve dinero?" y no "¿es encargado?": un rol nuevo que
   // tampoco vea finanzas cae aquí solo, sin tocar esta línea.
+  // El MISMO contrato de sufijo que el sidebar (sidebar-nav.tsx): los links
+  // que esta página emite (tabla de viajes → detalle de liquidación) cargan
+  // el ?tenant=/?vista= del superadmin; para roles reales queda vacío.
+  const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
+  const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
+
   if (!puedeVerArea(rol, 'dinero')) {
     return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} />;
   }
 
-  return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} />;
+  return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} />;
 }

@@ -41,7 +41,7 @@ export default function DashboardChrome({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-dvh" style={{ fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>
+    <div className="min-h-dvh tema-neutro" style={{ fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>
       <Fondo />
             <div className={MARCO_FILA}>
         <aside className={MARCO_SIDEBAR}>
@@ -55,37 +55,38 @@ export default function DashboardChrome({
                 tráfico". Se esconde solo en ese caso: para los roles reales
                 (flota_admin, contador, encargado) la insignia sí dice la
                 verdad y se queda, porque ahí sirve. */}
-            {rol !== 'superadmin' && (
-              <span className="hidden lg:inline text-[9px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
-                {ROL_BADGE[rol] ?? rol.toUpperCase()}
-              </span>
-            )}
+{/* El rol vive en el user card de abajo (12-ago-2026, referencia
+                FlowAI) — junto al logo no hay badge. */}
           </div>
 
           <nav className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">
             <SidebarNav rol={rol} />
           </nav>
 
+          {/* El user card de la referencia FlowAI: tarjeta con hairline,
+              avatar + nombre + rol, y salir como icono al lado — el botón
+              rojo de ancho completo gritaba más que cualquier contenido. */}
           <div className="px-2 pb-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>
-            <div className="flex items-center justify-center lg:justify-start gap-2 px-2 py-2">
-              <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-semibold" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+            <div className="hairline rounded-xl p-2 flex items-center justify-center lg:justify-start gap-2" style={{ background: 'var(--surface)' }}>
+              <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-semibold" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                 {(nombre ?? 'F')[0].toUpperCase()}
               </div>
-              <Link href="/cuenta" className="hidden lg:block text-[13px] font-medium hover:opacity-70 transition-opacity truncate">
-                {nombre ?? 'Mi cuenta'}
-              </Link>
+              <div className="hidden lg:block min-w-0 flex-1">
+                <Link href="/cuenta" className="block text-[13px] font-medium hover:opacity-70 transition-opacity truncate leading-tight">
+                  {nombre ?? 'Mi cuenta'}
+                </Link>
+                <div className="text-[10px] truncate" style={{ color: 'var(--faint)' }}>{ROL_BADGE[rol] ?? rol.toUpperCase()}</div>
+              </div>
+              {cerrarSesion && (
+                <form action={cerrarSesion} className="hidden lg:block shrink-0">
+                  <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--badbg)]"
+                    style={{ color: 'var(--bad)' }}>
+                    <LogOut width={14} height={14} strokeWidth={1.75} />
+                  </button>
+                </form>
+              )}
             </div>
-
-            {cerrarSesion && (
-              <form action={cerrarSesion} className="mt-0.5">
-                <button type="submit" title="Cerrar sesión"
-                  className="w-full flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-opacity hover:opacity-85"
-                  style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-                  <LogOut width={14} height={14} strokeWidth={1.75} />
-                  <span className="hidden lg:inline">Cerrar sesión</span>
-                </button>
-              </form>
-            )}
           </div>
         </aside>
 

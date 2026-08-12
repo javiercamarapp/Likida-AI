@@ -51,8 +51,10 @@ export function PanelPeriodo({
   const totalLiquidado = liquidadoModo?.reduce((s, d) => s + d.valor, 0) ?? 0;
 
   return (
+    // Cada bloque es una TARJETA blanca sobre el lienzo tenue (referencia
+    // FlowAI, 12-ago-2026) — el padding horizontal lo pone el padre.
     <>
-      <div className="px-5 flex items-center justify-end">
+      <div className="flex items-center justify-end">
         <div className="inline-flex items-center gap-1 p-0.5 rounded-full shrink-0" style={{ background: 'var(--canvas)' }}>
           {OPCIONES.map((o) => (
             <button key={o.id} type="button" onClick={() => setModoIdx(MODOS.indexOf(o.id))}
@@ -65,8 +67,8 @@ export function PanelPeriodo({
       </div>
 
       {/* ── Viajes / Actividad ── */}
-      <div className="px-5 pb-4 pt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
+      <div className="pt-2.5 grid grid-cols-1 md:grid-cols-3 gap-2.5">
+        <div className="card p-3.5">
           <TituloSeccion>Viajes</TituloSeccion>
           <div className="mt-2.5">
             {kpiModo && kpiModo.totalViajes > 0 ? (
@@ -79,7 +81,7 @@ export function PanelPeriodo({
             )}
           </div>
         </div>
-        <div className="md:col-span-2">
+        <div className="card p-3.5 md:col-span-2">
           <TituloSeccion>Actividad</TituloSeccion>
           <div className="mt-3">
             <Actividad viajes={viajes} porMes={porMes} modo={modo} />
@@ -88,8 +90,8 @@ export function PanelPeriodo({
       </div>
 
       {/* ── Gasto por categoría / Liquidado por semana ── */}
-      <div className="px-5 pb-4 border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4" style={{ borderColor: 'var(--line)' }}>
-        <div>
+      <div className="pt-2.5 grid grid-cols-1 md:grid-cols-2 gap-2.5">
+        <div className="card p-3.5">
           <TituloSeccion>Gasto por categoría</TituloSeccion>
           <div className="mt-3">
             {gastoModo && gastoModo.series.some((s) => s.valores.some((v) => v > 0)) ? (
@@ -99,7 +101,7 @@ export function PanelPeriodo({
             )}
           </div>
         </div>
-        <div>
+        <div className="card p-3.5">
           <TituloSeccion>Liquidado</TituloSeccion>
           {totalLiquidado > 0 && (
             <div className="text-2xl font-semibold tracking-tight tabular mt-1">{mxn(totalLiquidado)}</div>
@@ -121,7 +123,7 @@ export function PanelPeriodo({
       </div>
 
       {/* ── Top rutas por gasto ── */}
-      <div className="px-5 pb-4 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
+      <div className="card p-3.5 mt-2.5">
         <TituloSeccion>Top rutas por gasto</TituloSeccion>
         <div className="mt-2.5 overflow-x-auto">
           {rutasModo ? (

@@ -50,6 +50,16 @@ export default function RailAsistente() {
     return () => { delete raiz.dataset.asistente; };
   }, [expandido]);
 
+  // El botón "Preguntar a la IA" de la barra del Resumen (barra-acciones.tsx)
+  // abre ESTE asistente — un evento del DOM porque son hermanos lejanos en el
+  // árbol y levantar el estado hasta el layout volvería cliente todo el marco
+  // (misma razón por la que la expansión ya viaja como atributo en la raíz).
+  useEffect(() => {
+    const abrir = () => setExpandido(true);
+    window.addEventListener('likida:abrir-asistente', abrir);
+    return () => window.removeEventListener('likida:abrir-asistente', abrir);
+  }, []);
+
   // Sin `setCargando(true)` síncrono aquí: llamar setState en el cuerpo del
   // efecto encadena un render de más (regla `react-hooks/set-state-in-effect`).
   // El estado ya arranca en `true`, y al cambiar de tenant el `finally` lo

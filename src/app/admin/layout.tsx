@@ -50,7 +50,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="min-h-dvh" style={{ fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>
+    <div className="min-h-dvh tema-neutro" style={{ fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>
       <Fondo />
       {/* `dvh` en vez de `vh` a propósito: en iOS Safari, `100vh` cuenta el
           espacio DETRÁS de la barra de direcciones colapsable, así que la

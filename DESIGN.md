@@ -1,15 +1,31 @@
-# Likida — Sistema de diseño v3 ("sala de control limpia")
+# Likida — Sistema de diseño v3 (referencia: FlowAI)
 
-Dirección elegida el **12-ago-2026** a partir de 8 referencias que Javier juntó
-en `Desktop/DASHBOARD/` (Sentinel, Vocalyn, FlowAI, Steadi, Voiceon, un panel
-de inversión, un sales reporting y un panel de creators). Reemplaza la
-dirección "degradado de marca" del 7-ago-2026, que solo llegó a vivir en el
-Resumen. Una de las referencias (Steadi) es blanco + naranja: la paleta de
-Likida ya era compatible — lo que cambia es la **dosis**.
+Dirección fijada el **12-ago-2026** en dos pasos: primero 8 referencias de
+`Desktop/DASHBOARD/`, y luego Javier fijó UNA — **FlowAI** ("quiero que sea
+así") — y pidió explícito: **logo negro, ya no paleta naranja** en los
+paneles, tipografía "más corporativa, tipo usehandle.ai", y todo compacto.
+Reemplaza a la dirección "degradado de marca" del 7-ago-2026.
 
-**La frase que gobierna:** el naranja es acento, no pintura. Un contralor debe
-poder proyectar cualquier pantalla en una sala y que se lea como estado de
-cuenta, no como anuncio.
+**Las frases que gobiernan:**
+1. Los paneles son NEUTROS — tinta, gris y blanco (`.tema-neutro` en
+   globals.css pivota `--marca/--accent/--g1..--g5`); el color solo existe en
+   semáforos y estatus. El naranja QUEDA para la marca hacia afuera (login,
+   landing, PDF, ads) — no para las consolas.
+2. Un contralor debe poder proyectar cualquier pantalla y que se lea como
+   estado de cuenta, no como anuncio.
+
+**Tipografía (referencia usehandle.ai):** Inter para UI (--font-sans-handle),
+**Inter Tight** para titulares y la cifra de una stat (`.font-display`),
+**IBM Plex Mono** para micro-rótulos en mayúsculas y cifras de tabla
+(`.etiqueta-mono` / `.cifra-mono`). Las tres cargadas en `layout.tsx`.
+
+**Anatomía de página (Resumen es el patrón):** BarraPagina blanca (breadcrumb
++ búsqueda real + "Preguntar a la IA" que abre el rail + campana de
+pendientes reales) → bienvenida SIN recuadro, directo sobre el lienzo tenue
+(`--g1`), con chip de fecha y CTA `--marca` → tarjetas blancas encima:
+StatCards con caja interna y delta verde/rojo abajo, la TABLA protagonista,
+y los bloques de periodo. Compacto: paddings `p-3.5`, gaps `gap-2.5`,
+filas de tabla `py-2.5`.
 
 ---
 
@@ -44,11 +60,10 @@ tarjetas blancas `--surface` con borde `1px --line`, radio `--radius-lg`
 (1rem) y `--shadow-card`. Nada flota sin borde. Máximo dos niveles de
 superficie: lienzo → tarjeta (→ sub-bloque `--canvas` si hace falta).
 
-**Color con cuentagotas.** Por pantalla: 1 acento activo (naranja), semáforos
-solo en estatus, y TODO estado de color lleva texto (nunca color solo). El
-naranja aparece en: ítem activo del sidebar, chips de ícono, datos destacados
-de gráfica, y momentos de marca. NO aparece en: fondos de sección, KPIs
-enteros, headers.
+**Color con cuentagotas.** En los paneles el "acento" es la TINTA
+(`--marca` = #18181b vía `.tema-neutro`): chips de ícono, pill activa del
+sidebar, CTA primaria. Semáforos solo en estatus, y TODO estado de color
+lleva texto (nunca color solo). El naranja NO existe dentro de las consolas.
 
 **Botones.** Primaria = `--ink` con texto blanco (las 8 referencias usan CTA
 oscura), radio `--radius-md`, `h-9 px-4 text-sm font-medium`. Secundaria =
@@ -61,10 +76,11 @@ primaria visible por vista.
              Cifra 28-32px semibold tabular en --ink
              [DeltaChip +12.6% vs jul]   ← solo con dato real de comparación
 ```
-Icon-chip: cuadrado 32-36px, radio `--radius-md`, fondo `--g1`, ícono
-`--marca` 16px stroke 1.75. DeltaChip: pill suave `--okbg/--ok` si mejora,
-`--badbg/--bad` si empeora, `--canvas/--muted` si no hay comparable — y si el
-sentido "bueno" es ambiguo (¿gastar más es malo?), neutro con signo.
+Anatomía real (imagen #3 de la referencia): tarjeta blanca `p-2.5` → CAJA
+INTERNA `--canvas` con hairline (chip de ícono OSCURO `--marca`/`--marca-fg`
++ etiqueta + cifra `.font-display` 28px) → delta DEBAJO de la caja como
+texto `--ok`/`--bad` ("↑ 12% vs periodo anterior"). `bueno` lo decide el
+llamador; sin comparable, el delta se omite (nunca "0.0%").
 
 **Pills de estatus** (dominio Likida): `liquidado → ok`, `en_cuadre → warn`,
 `abierto → neutral`, vencido/EFOS/error → `bad`. Siempre `StatusPill`.
@@ -102,7 +118,8 @@ ante la duda, un bloque menos por fila.
 | Pieza | Archivo |
 |---|---|
 | Tokens | `src/app/globals.css` (`@theme` + `:root`) |
-| Primitivas compartidas | `src/app/admin/ui/kit.tsx` (`StatCard`, `DeltaChip`, `KpiTile`, `StatusPill`, `ChartCard`, estados) |
+| Primitivas compartidas | `src/app/admin/ui/kit.tsx` (`StatCard`, `KpiTile`, `StatusPill`, `ChartCard`, estados) |
+| Barra superior del Resumen | `dashboard/resumen-visual.tsx` (`BarraPagina`, `ChipFecha`, `TablaViajes`) + `barra-acciones.tsx` (búsqueda / IA / campana) |
 | Marco de las dos consolas | `src/app/marco.ts` (geometría) — material `.card`, ya no `.glass-panel` |
 | Sidebar de /dashboard | `src/app/dashboard/sidebar-nav.tsx` + `rutas.ts` |
 | Gráficas | `admin/charts.tsx`, `admin/ui/graficas.tsx` |

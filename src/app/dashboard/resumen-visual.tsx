@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { resolverFormato } from '../admin/ui/formato-preset';
+import { StatusPill, type Estado } from '../admin/ui/kit';
+import { mxn, fechaMx } from '@/lib/formato';
 
 /**
  * Piezas visuales del Resumen de FLOTA — dirección v3 del 12-ago-2026
@@ -22,7 +25,7 @@ import { resolverFormato } from '../admin/ui/formato-preset';
  *  importara arrastraría ese código al bundle del navegador. */
 export function TituloSeccion({ children }: { children: ReactNode }) {
   return (
-    <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+    <h2 className="etiqueta-mono text-[11px] font-medium uppercase" style={{ color: 'var(--muted)' }}>
       {children}
     </h2>
   );
@@ -30,18 +33,137 @@ export function TituloSeccion({ children }: { children: ReactNode }) {
 
 // ── Encabezado de página ─────────────────────────────────────────────────
 
-/** El saludo, limpio (patrón FlowAI/Voiceon: "Welcome back, Jane!"). Sin
- *  foto y sin degradado — el encabezado es texto sobre la lámina blanca.
- *  Se pinta en los tres estados (vacío, parcial, con datos): el tagline es
- *  una frase de bienvenida, no una cifra del negocio — no le aplica la
- *  regla de "nunca inventar". */
-export function HeroSaludo({ saludo, nombre, tagline }: { saludo: string; nombre: string; tagline: string }) {
+/** La barra superior de la referencia FlowAI: breadcrumb de página a la
+ *  izquierda, lo contextual (badge de superadmin, filtros) a la derecha,
+ *  separada del contenido por un hairline. SIN buscador ni campana: no hay
+ *  búsqueda ni notificaciones reales en /dashboard, y un control que no
+ *  hace nada es un rótulo que miente. Se agregan cuando existan. */
+export function BarraPagina({ icono, titulo, derecha }: { icono?: ReactNode; titulo: string; derecha?: ReactNode }) {
   return (
-    <div className="px-5 pt-5 pb-1 shrink-0 min-w-0">
-      <h1 className="text-xl font-semibold tracking-tight truncate">
-        {saludo}, {nombre} 👋
-      </h1>
-      <p className="text-[13px] mt-0.5 truncate" style={{ color: 'var(--muted)' }}>{tagline}</p>
+    <div className="px-5 h-11 flex items-center justify-between gap-3 border-b shrink-0" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
+      <div className="flex items-center gap-2 text-[13px] font-medium min-w-0">
+        {icono}
+        <span className="truncate">{titulo}</span>
+      </div>
+      {derecha}
+    </div>
+  );
+}
+
+/** El chip de fecha de la referencia ("27 April, 2026") — la fecha REAL del
+ *  servidor, formateada por `lib/formato` como todo lo demás. */
+export function ChipFecha({ icono, children }: { icono?: ReactNode; children: ReactNode }) {
+  return (
+    <span className="hairline inline-flex items-center gap-1.5 text-[13px] font-medium px-3 h-8 rounded-lg shrink-0 bg-white">
+      {icono}
+      {children}
+    </span>
+  );
+}
+
+/** El saludo, limpio (patrón FlowAI: "Welcome Back, Jane!" — sin emoji,
+ *  como la referencia). Se pinta en los tres estados (vacío, parcial, con
+ *  datos): el tagline es una frase de bienvenida, no una cifra del negocio
+ *  — no le aplica la regla de "nunca inventar". `derecha` es el slot del
+ *  chip de fecha / CTA cuando exista una acción real. */
+export function HeroSaludo({ saludo, nombre, tagline, derecha }: { saludo: string; nombre: string; tagline: string; derecha?: ReactNode }) {
+  return (
+    <div className="px-5 pt-5 pb-0.5 shrink-0 min-w-0 flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h1 className="font-display text-[22px] font-semibold truncate">
+          {saludo}, {nombre}
+        </h1>
+        <p className="text-[13px] mt-1 truncate" style={{ color: 'var(--muted)' }}>{tagline}</p>
+      </div>
+      {derecha}
+    </div>
+  );
+}
+
+// ── Viajes recientes (la tabla protagonista de la referencia) ────────────
+
+/** Lo que `getViajes` ya trae — copia estructural para no importar tipos de
+ *  `analytics.ts` (ese módulo carga `supabaseAdmin`; los TIPOS cruzarían
+ *  bien, pero la dependencia invita a importar funciones después). */
+export interface FilaViaje {
+  id: string; folio: string; origen: string | null; destino: string | null;
+  estatus: string; anticipo: number; operadorNombre: string | null;
+  fechaInicio: string | null;
+  /** El id de la LIQUIDACIÓN del viaje (si ya cerró) — `/dashboard/[id]` se
+   *  abre con ese id, no con el del viaje. Lo resuelve el servidor cruzando
+   *  `getLiquidaciones` por folio; sin él, la fila no linkea. */
+  liqId?: string | null;
+}
+
+/** `viaje.estatus` solo admite estos tres (constraint `viaje_estatus_dominio`).
+ *  Un valor fuera del dominio se pinta crudo en neutro — visible, no roto. */
+const PILL_ESTATUS: Record<string, { estado: Estado; etiqueta: string }> = {
+  liquidado: { estado: 'ok', etiqueta: 'Liquidado' },
+  en_cuadre: { estado: 'warn', etiqueta: 'En cuadre' },
+  abierto: { estado: 'neutral', etiqueta: 'Abierto' },
+};
+
+/**
+ * La tabla de la referencia FlowAI ("Active Workflows"), con los viajes
+ * REALES de la flota: folio + ruta, operador, anticipo, estatus como pill y
+ * fecha de inicio. "Ver" solo en los liquidados — `/dashboard/[id]` es el
+ * detalle de la LIQUIDACIÓN (pantalla de dinero), un viaje abierto no tiene
+ * a dónde llevar todavía; un link a un 404 es peor que no ponerlo. Sin
+ * "Ver todo": la página de Viajes se rehará a su tiempo, y un link muerto
+ * anuncia una página que no existe.
+ */
+export function TablaViajes({ viajes, sufijo = '' }: { viajes: FilaViaje[]; sufijo?: string }) {
+  if (viajes.length === 0) {
+    return (
+      <p className="text-sm" style={{ color: 'var(--muted)' }}>
+        Aún no hay viajes registrados. En cuanto la flota abra su primer viaje, aparece aquí.
+      </p>
+    );
+  }
+  const TH = 'etiqueta-mono text-left text-[10px] font-medium uppercase px-3 py-1.5';
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr style={{ background: 'var(--canvas)' }}>
+            <th className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Viaje</th>
+            <th className={TH} style={{ color: 'var(--muted)' }}>Operador</th>
+            <th className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Anticipo</th>
+            <th className={TH} style={{ color: 'var(--muted)' }}>Estatus</th>
+            <th className={TH} style={{ color: 'var(--muted)' }}>Inicio</th>
+            <th className={`${TH} rounded-r-lg text-right`} style={{ color: 'var(--muted)' }}>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {viajes.map((v) => {
+            const pill = PILL_ESTATUS[v.estatus] ?? { estado: 'neutral' as Estado, etiqueta: v.estatus };
+            const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino;
+            return (
+              <tr key={v.id} className="border-b transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
+                <td className="px-3 py-2.5 min-w-0">
+                  <div className="text-sm font-medium">{v.folio}</div>
+                  {/* Sin origen/destino capturados no se inventa una ruta:
+                      un guion dice "falta el dato", no "viaje sin ruta". */}
+                  <div className="text-xs mt-0.5 truncate max-w-[260px]" style={{ color: 'var(--muted)' }}>{ruta ?? '—'}</div>
+                </td>
+                <td className="px-3 py-2.5 text-sm whitespace-nowrap">{v.operadorNombre ?? <span style={{ color: 'var(--faint)' }}>Sin asignar</span>}</td>
+                <td className="cifra-mono px-3 py-2.5 text-[13px] text-right whitespace-nowrap">{mxn(v.anticipo)}</td>
+                <td className="px-3 py-2.5"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></td>
+                <td className="px-3 py-2.5 text-[13px] whitespace-nowrap" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio)}</td>
+                <td className="px-3 py-2.5 text-right">
+                  {v.liqId ? (
+                    <Link href={`/dashboard/${v.liqId}${sufijo}`} className="text-[13px] font-medium hover:opacity-70 transition-opacity">
+                      Ver
+                    </Link>
+                  ) : (
+                    <span className="text-[13px]" style={{ color: 'var(--faint)' }}>—</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
