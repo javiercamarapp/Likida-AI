@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { LayoutGrid } from 'lucide-react';
-import { type Item, SIDEBAR_PRINCIPAL, FISCAL, NEGOCIO, GESTION } from './rutas';
+import { type Item, SIDEBAR_PRINCIPAL, FISCAL } from './rutas';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors';
@@ -129,14 +129,11 @@ export default function SidebarNav({ rol }: { rol: string }) {
           dueño). Para un rol sin área `dinero` esto sale vacío y no se
           pinta (ver `Seccion`). */}
       <Seccion titulo="Fiscal" items={visibles(FISCAL)} sufijo={sufijo} pathname={pathname} />
-      {/* Las páginas que SÍ existen hoy y no estaban cableadas en ningún
-          lado tras el borrado del 10-ago (SIDEBAR_PRINCIPAL quedó vacío,
-          pero estas dos listas nunca dependieron de él): sin esto,
-          Combustible & Casetas y las 6 de cuenta/cumplimiento solo se
-          alcanzaban tecleando la URL — un link que no existe se lee como
-          "la página no existe" (12-ago-2026, rediseño v3). */}
-      <Seccion titulo="Negocio" items={visibles(NEGOCIO)} sufijo={sufijo} pathname={pathname} />
-      <Seccion titulo="Gestión" items={visibles(GESTION)} sufijo={sufijo} pathname={pathname} />
+      {/* NEGOCIO y GESTIÓN no se pintan A PROPÓSITO (12-ago-2026): esas
+          páginas existen en disco (se conservaron el 10-ago), pero Javier
+          quiere el sidebar limpio — cada link aparece cuando su página se
+          rehaga con la dirección v3, una por una. El intento de cablearlas
+          en bloque duró una captura: "esas no estaban". */}
     </>
   );
 }
