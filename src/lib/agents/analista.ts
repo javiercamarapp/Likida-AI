@@ -38,7 +38,7 @@ export type Bloque =
 const TOOLS_LECTURA = [
   'kpis_flota', 'acreditables_periodo', 'motor_fiscal', 'viajes_flota',
   'liquidaciones_flota', 'serie_gasto', 'serie_liquidado', 'top_rutas',
-  'duplicados_detectados',
+  'duplicados_detectados', 'proyectar_serie',
 ];
 
 /** Valida y recorta lo que el modelo entregó — nunca se confía en la forma. */
@@ -133,6 +133,28 @@ export function extraerNumeros(v: unknown, destino: Set<number>): void {
  *  a la vista: un monto inventado de $7.00 pasaría; uno de $7,000 no. */
 const BLANCOS = new Set<number>([...Array.from({ length: 13 }, (_, i) => i), 50, 100]);
 
+/** Una cifra también cuenta como respaldada si es DERIVADA simple de dos
+ *  respaldadas: suma, resta o porcentaje (a/b). Comparar dos números reales
+ *  ("gastaste 500 más", "eso es el 38%") es interpretar, no inventar — y la
+ *  verificación sigue siendo determinística. UN nivel de derivación, a
+ *  propósito: derivadas de derivadas ya no se distinguen de invención. */
+export function esDerivada(n: number, respaldo: Set<number>): boolean {
+  const arr = [...respaldo];
+  // Tope de trabajo: con cientos de números el n² sigue siendo barato, pero
+  // un respaldo patológicamente grande no debe colgar el turno.
+  if (arr.length > 600) return false;
+  for (let i = 0; i < arr.length; i++) {
+    for (let j = i; j < arr.length; j++) {
+      const a = arr[i], b = arr[j];
+      if (Math.abs(a + b - n) < 0.011) return true;
+      if (Math.abs(Math.abs(a - b) - n) < 0.011) return true;
+      if (b !== 0 && Math.abs((a / b) * 100 - n) < 0.6) return true;
+      if (a !== 0 && Math.abs((b / a) * 100 - n) < 0.6) return true;
+    }
+  }
+  return false;
+}
+
 /** true si toda cifra de los bloques está respaldada por las tools o por la
  *  propia pregunta del usuario. */
 export function cifrasRespaldadas(bloques: Bloque[], respaldo: Set<number>): boolean {
@@ -147,6 +169,7 @@ export function cifrasRespaldadas(bloques: Bloque[], respaldo: Set<number>): boo
   for (const n of usadas) {
     if (BLANCOS.has(n)) continue;
     if (respaldo.has(n)) continue;
+    if (esDerivada(n, respaldo)) continue;
     // Un monto "1234.5" narrado como "1,234.50" ya se normalizó al extraer;
     // si aun así no está, es una cifra que ninguna tool devolvió.
     logger.warn('chat.guardia_cifra', { cifra: n });

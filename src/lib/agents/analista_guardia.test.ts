@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { extraerNumeros, cifrasRespaldadas, validarBloques, type Bloque } from './analista';
+import { extraerNumeros, cifrasRespaldadas, esDerivada, validarBloques, type Bloque } from './analista';
+import { proyectarPuntos } from './chat-tools';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // La guardia de cifras del chat del panel — el mismo principio que
@@ -54,6 +55,31 @@ describe('cifrasRespaldadas', () => {
 
   it('conteos chicos y 50/100 no bloquean (el modelo cuenta listas él solo)', () => {
     expect(cifrasRespaldadas([{ tipo: 'texto', texto: 'Te muestro 3 rutas; el peaje acredita al 50%.' }], respaldo)).toBe(true);
+  });
+});
+
+describe('esDerivada — comparar es interpretar, no inventar', () => {
+  const respaldo = respaldoDe({ semanaActual: 8500, semanaPasada: 8000, total: 22000 });
+  it('acepta la resta de dos cifras respaldadas ("gastaste 500 más")', () => {
+    expect(cifrasRespaldadas([{ tipo: 'texto', texto: 'Gastaste 500 más que la semana pasada.' }], respaldo)).toBe(true);
+  });
+  it('acepta la suma y el porcentaje entre respaldadas', () => {
+    expect(esDerivada(16500, respaldo)).toBe(true);          // 8500 + 8000
+    expect(esDerivada(38.64, respaldo)).toBe(true);          // 8500/22000 ≈ 38.6%
+  });
+  it('sigue bloqueando lo que no es cifra ni derivada simple', () => {
+    expect(cifrasRespaldadas([{ tipo: 'texto', texto: 'Podrías ahorrar 12,345 al mes.' }], respaldo)).toBe(false);
+  });
+});
+
+describe('proyectarPuntos — la proyección la calcula código y declara su supuesto', () => {
+  it('promedia los últimos 4 cortes con datos y extiende', () => {
+    const r = proyectarPuntos([0, 1000, 2000, 3000, 4000]);
+    expect(r).toMatchObject({ promedioPorCorte: 2500, proyeccionSiguienteCorte: 2500, proyeccionSiguientes4: 10000 });
+    if (!('sinDatos' in r)) expect(r.supuesto).toMatch(/promedio simple/);
+  });
+  it('sin datos lo dice, no proyecta ceros con cara de pronóstico', () => {
+    expect(proyectarPuntos([0, 0, 0])).toEqual({ sinDatos: true });
   });
 });
 
