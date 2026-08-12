@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Send, ArrowUp, Search, Paperclip, Upload } from 'lucide-react';
+import { Send, ArrowUp, Search, Paperclip, Upload, Camera, FileImage } from 'lucide-react';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero } from '@/lib/formato';
 import { Logo } from '../logo';
@@ -93,7 +93,9 @@ function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acredita
     return {
       texto: q.includes('iva')
         ? `${mxn(acred.iva)} de IVA acreditable este periodo (LIVA, Art. 5).`
-        : `${mxn(acred.peaje)} de peaje acreditable (50%) este periodo — sujeto a elegibilidad.`,
+        : q.includes('peaje') || q.includes('caseta')
+          ? `${mxn(acred.peaje)} de peaje acreditable (50%) este periodo — sujeto a elegibilidad.`
+          : 'Esto es lo que llevas de acreditables este periodo:',
       visual: {
         tipo: 'tabla',
         filas: [
@@ -162,7 +164,9 @@ export default function ChatFlota({
   // visión trabaja.
   const [ocupado, setOcupado] = useState(false);
   const [recomendar, setRecomendar] = useState(false);
+  const [menuAdjuntar, setMenuAdjuntar] = useState(false);
   const inputArchivo = useRef<HTMLInputElement>(null);
+  const inputCamara = useRef<HTMLInputElement>(null);
 
   async function leerArchivo(archivo: File) {
     if (ocupado) return;
@@ -211,18 +215,45 @@ export default function ChatFlota({
     }
   }
 
-  /** Recomendaciones VIVAS según los datos del tenant — lo que el botón
-   *  Consulta despliega (pedido del 12-ago). Solo sugiere lo que tiene
-   *  respuesta con sustancia hoy. */
-  function recomendaciones(): string[] {
-    const r: string[] = [];
-    if (kpis && kpis.conDiferencias + kpis.porRevisar > 0) r.push('¿Cuántos viajes tengo con diferencia?');
-    if (kpis && kpis.montoComprobado > 0) r.push('¿Cuánto llevo comprobado?');
-    if (acred && acred.litrosDiesel > 0) r.push('¿Cuánto diésel es elegible para el estímulo?');
-    if (acred && (acred.iva > 0 || acred.peaje > 0)) r.push('¿Cuánto llevo de acreditables?');
-    if (kpis && kpis.viajesLiquidados > 0) r.push('¿Cuál es mi tasa de cuadre?');
-    // Flota en cero: las genéricas, para que el botón nunca abra vacío.
-    return r.length > 0 ? r : [...PREGUNTAS];
+  /** Recomendaciones por CATEGORÍA, más formales que los chips genéricos
+   *  (pedido del 12-ago: "según categoría, más formal, no lo mismo de
+   *  abajo"). El botón Consulta REEMPLAZA los chips de abajo por este
+   *  panel. Cada frase conserva la palabra clave que `responder` entiende,
+   *  y cada categoría solo aparece si sus datos existen; con la flota en
+   *  cero queda la de arranque. */
+  function categoriasConsulta(): Array<{ categoria: string; preguntas: string[] }> {
+    const cats: Array<{ categoria: string; preguntas: string[] }> = [];
+    if (kpis && kpis.viajesLiquidados > 0) {
+      cats.push({
+        categoria: 'Cuadre y liquidaciones',
+        preguntas: [
+          'Muéstrame el desglose de lo comprobado a la fecha',
+          'Estado de las liquidaciones con diferencia o por revisar',
+          'Tasa de cuadre del periodo',
+        ],
+      });
+    }
+    if (acred && (acred.iva > 0 || acred.peaje > 0 || acred.litrosDiesel > 0)) {
+      cats.push({
+        categoria: 'Fiscal y acreditables',
+        preguntas: [
+          'Desglose de acreditables del periodo',
+          'Litros de diésel elegibles para el estímulo',
+          'IVA acreditable del periodo',
+        ],
+      });
+    }
+    if (cats.length === 0) {
+      cats.push({
+        categoria: 'Para empezar',
+        preguntas: [
+          'Tasa de cuadre del periodo',
+          'Muéstrame el desglose de lo comprobado a la fecha',
+          'Desglose de acreditables del periodo',
+        ],
+      });
+    }
+    return cats;
   }
 
   function preguntar(q: string) {
@@ -329,7 +360,7 @@ export default function ChatFlota({
                   <Search width={11} height={11} strokeWidth={2.25} />
                   Consulta
                 </button>
-                <button type="button" onClick={() => inputArchivo.current?.click()} disabled={ocupado}
+                <button type="button" onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado}
                   className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
                   style={{ color: 'var(--ink2)' }}>
                   <Upload width={11} height={11} strokeWidth={2.25} />
@@ -337,25 +368,34 @@ export default function ChatFlota({
                 </button>
               </div>
 
-              {recomendar && (
-                <div className="absolute left-0 bottom-9 card p-1.5 z-30 w-72">
-                  {recomendaciones().map((rq) => (
-                    <button key={rq} type="button"
-                      onClick={() => { setRecomendar(false); preguntar(rq); }}
-                      className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)]">
-                      {rq}
-                    </button>
-                  ))}
-                </div>
-              )}
-
               <div className="flex items-center gap-1.5">
-                {/* UN solo botón de adjuntar, pegado a enviar — como la
-                    referencia. Mismo destino que Ingesta: el OCR real. */}
+                {/* UN solo clip, pegado a enviar (como la referencia). Al
+                    apretarlo pregunta: ¿tomar foto o adjuntar archivo?
+                    (pedido del 12-ago). Los dos caminos terminan en el
+                    mismo OCR real; `capture` abre la cámara en el teléfono
+                    y en desktop cae al selector normal. */}
                 <input ref={inputArchivo} type="file" accept="image/*" className="hidden"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-                <button type="button" aria-label="Adjuntar imagen del comprobante" title="Adjuntar imagen del comprobante"
-                  onClick={() => inputArchivo.current?.click()} disabled={ocupado}
+                <input ref={inputCamara} type="file" accept="image/*" capture="environment" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
+                {menuAdjuntar && (
+                  <div className="absolute right-10 bottom-9 card p-1.5 z-30 w-56">
+                    <button type="button"
+                      onClick={() => { setMenuAdjuntar(false); inputCamara.current?.click(); }}
+                      className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
+                      <Camera width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                      Tomar foto
+                    </button>
+                    <button type="button"
+                      onClick={() => { setMenuAdjuntar(false); inputArchivo.current?.click(); }}
+                      className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
+                      <FileImage width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                      Adjuntar archivo
+                    </button>
+                  </div>
+                )}
+                <button type="button" aria-label="Adjuntar comprobante" title="Adjuntar comprobante"
+                  onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado}
                   className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
                   style={{ color: 'var(--ink2)' }}>
                   <Paperclip width={14} height={14} strokeWidth={2} />
@@ -377,21 +417,42 @@ export default function ChatFlota({
             </div>
           </form>
 
-          <div className="flex flex-wrap justify-center gap-2 mt-4">
-            {PREGUNTAS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => preguntar(p)}
-                className="text-xs px-3 py-1.5 rounded-full hairline transition-opacity hover:opacity-70"
-                // BLANCO explícito (12-ago): la página hero vive sobre el
-                // lienzo tenue --g1 y un chip transparente se veía gris.
-                style={{ color: 'var(--ink2)', background: 'var(--surface)' }}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+          {recomendar ? (
+            /* El panel de Consulta: reemplaza a los chips (no un menú doble
+               encima de la caja) — categorías formales según los datos. */
+            <div className="w-full max-w-xl mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {categoriasConsulta().map((c) => (
+                <div key={c.categoria} className="card p-3">
+                  <div className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: 'var(--muted)' }}>
+                    {c.categoria}
+                  </div>
+                  {c.preguntas.map((rq) => (
+                    <button key={rq} type="button"
+                      onClick={() => { setRecomendar(false); preguntar(rq); }}
+                      className="w-full text-left text-[13px] px-2 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]">
+                      {rq}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap justify-center gap-2 mt-4">
+              {PREGUNTAS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => preguntar(p)}
+                  className="text-xs px-3 py-1.5 rounded-full hairline transition-opacity hover:opacity-70"
+                  // BLANCO explícito (12-ago): la página hero vive sobre el
+                  // lienzo tenue --g1 y un chip transparente se veía gris.
+                  style={{ color: 'var(--ink2)', background: 'var(--surface)' }}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* El límite va a la vista, pero sin otro recuadro: es una nota, no una
               tarjeta. Quitarlo dejaría creer que la caja consulta la base. */}
