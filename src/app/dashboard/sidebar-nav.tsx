@@ -3,26 +3,25 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { LayoutGrid } from 'lucide-react';
-import { type Item, SIDEBAR_PRINCIPAL, FISCAL } from './rutas';
+import { type Item, SIDEBAR_PRINCIPAL, FISCAL, NEGOCIO, GESTION } from './rutas';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { DEGRADADO_MARCA } from './resumen-visual';
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors';
 
-/** Mismo degradado que los KPI de Resumen (`DEGRADADO_MARCA`, una sola
- *  fuente) — el mockup usa ese mismo tono para el item activo del sidebar,
- *  no el naranja plano. `hover` solo aplica al item INACTIVO: el activo no
- *  necesita indicar que es clickeable, ya dice dónde estás. */
+/** Item activo = pill SUAVE (`--g1` de fondo, texto e ícono `--marca`) —
+ *  dirección v3 del 12-ago-2026 (DESIGN.md, patrón Sentinel/Vocalyn), ya no
+ *  el bloque degradado del 7-ago. `hover` solo aplica al item INACTIVO: el
+ *  activo no necesita indicar que es clickeable, ya dice dónde estás. */
 function claseItem(activo: boolean): string {
   return activo
     ? `${ITEM} font-medium`
     : `${ITEM} hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]`;
 }
 function estiloItem(activo: boolean) {
-  return activo ? { background: DEGRADADO_MARCA, color: 'var(--marca-fg)' } : undefined;
+  return activo ? { background: 'var(--g1)', color: 'var(--marca)' } : undefined;
 }
 function estiloIcono(activo: boolean) {
-  return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--marca-fg)' : 'var(--muted)' } as const;
+  return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--marca)' : 'var(--muted)' } as const;
 }
 
 /** Mismo patrón que admin/sidebar-nav.tsx, sin el plegado: la dirección
@@ -130,6 +129,14 @@ export default function SidebarNav({ rol }: { rol: string }) {
           dueño). Para un rol sin área `dinero` esto sale vacío y no se
           pinta (ver `Seccion`). */}
       <Seccion titulo="Fiscal" items={visibles(FISCAL)} sufijo={sufijo} pathname={pathname} />
+      {/* Las páginas que SÍ existen hoy y no estaban cableadas en ningún
+          lado tras el borrado del 10-ago (SIDEBAR_PRINCIPAL quedó vacío,
+          pero estas dos listas nunca dependieron de él): sin esto,
+          Combustible & Casetas y las 6 de cuenta/cumplimiento solo se
+          alcanzaban tecleando la URL — un link que no existe se lee como
+          "la página no existe" (12-ago-2026, rediseño v3). */}
+      <Seccion titulo="Negocio" items={visibles(NEGOCIO)} sufijo={sufijo} pathname={pathname} />
+      <Seccion titulo="Gestión" items={visibles(GESTION)} sufijo={sufijo} pathname={pathname} />
     </>
   );
 }

@@ -66,8 +66,15 @@ function rutasDeOperacion(): Array<{ ruta: string; archivos: string[] }> {
       salida.push({ ruta, archivos: [archivo, `${DIR}${entrada.name}/vista.tsx`] });
     }
   }
-  // La raíz también es `operacion`.
-  salida.push({ ruta: '/dashboard', archivos: [`${DIR}page.tsx`, `${DIR}inicio-operacion.tsx`] });
+  // La raíz también es `operacion`. `inicio-contenido.tsx` va en la lista
+  // desde el 12-ago-2026: el contenido con pesos se mudó ahí (page.tsx quedó
+  // como puerta) y SIN esta línea el escaneo dejó de ver dinero en /dashboard
+  // y borró su propia aserción de gateo en silencio — se notó porque el
+  // conteo de la suite bajó en 1, no porque algo fallara.
+  salida.push({
+    ruta: '/dashboard',
+    archivos: [`${DIR}page.tsx`, `${DIR}inicio-contenido.tsx`, `${DIR}inicio-operacion.tsx`],
+  });
   return salida;
 }
 

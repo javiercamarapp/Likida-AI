@@ -1,7 +1,7 @@
 import { mxn } from '@/lib/formato';
 
 /** Un color distinto por serie, mismo ramp naranja que el resto del
- *  Resumen (`DEGRADADO_MARCA`) — no un color por categoría inventado: son
+ *  Resumen (rampa --g1..--g5 de marca) — no un color por categoría inventado: son
  *  las mismas tres paradas de `--g3`/`--g4`/`--marca` que ya usa el
  *  degradado, para que esta gráfica se sienta de la misma familia visual. */
 const COLOR_SERIE = ['var(--g3)', 'var(--g4)', 'var(--marca)'];

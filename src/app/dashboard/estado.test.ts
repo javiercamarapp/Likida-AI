@@ -50,7 +50,7 @@ describe('estadoPanel', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 10, ALTO — "el estado vacío es inalcanzable". `estadoPanel` de
 // arriba siempre estuvo bien: el bug vivía en QUÉ arreglo le manda el call
-// site real (`dashboard/page.tsx:102`). Le pasaba `porDia`
+// site real (hoy `dashboard/inicio-contenido.tsx`). Le pasaba `porDia`
 // (`getLiquidacionesPorDia`), que SIEMPRE tiene 7 o 30 elementos —uno por
 // día, muchos en cero— así que `.length` nunca podía dar 0 y la rama 'vacio'
 // era código muerto: el panel pintaba "0% tasa de cuadre" siempre.
@@ -104,8 +104,8 @@ describe('liquidacionesDeViajes', () => {
 // nadie vuelva a conectar `porDia` (o cualquier arreglo de longitud fija) al
 // campo `liquidaciones` de `estadoPanel`.
 // ═══════════════════════════════════════════════════════════════════════════
-describe('dashboard/page.tsx: el call site de estadoPanel', () => {
-  const PAGINA = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
+describe('dashboard/inicio-contenido.tsx: el call site de estadoPanel', () => {
+  const PAGINA = readFileSync(fileURLToPath(new URL('./inicio-contenido.tsx', import.meta.url)), 'utf8');
 
   it('ya no conecta "porDia" (longitud fija, 7 o 30) al campo liquidaciones', () => {
     const llamada = PAGINA.match(/estadoPanel\(\{[^}]*\}\)/)?.[0] ?? '';
@@ -140,8 +140,8 @@ describe('dashboard/page.tsx: el call site de estadoPanel', () => {
 // rótulo "del periodo" no mienta— sigue viva aquí, sobre el nuevo
 // mecanismo.
 // ═══════════════════════════════════════════════════════════════════════════
-describe('dashboard/page.tsx: las secciones filtradas dicen su periodo', () => {
-  const PAGINA = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
+describe('dashboard/inicio-contenido.tsx: las secciones filtradas dicen su periodo', () => {
+  const PAGINA = readFileSync(fileURLToPath(new URL('./inicio-contenido.tsx', import.meta.url)), 'utf8');
   const KPI_PERIODO = readFileSync(fileURLToPath(new URL('./kpi-periodo.tsx', import.meta.url)), 'utf8');
   const MOTOR_FISCAL_PERIODO = readFileSync(fileURLToPath(new URL('./motor-fiscal-periodo.tsx', import.meta.url)), 'utf8');
 

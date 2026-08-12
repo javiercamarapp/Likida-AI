@@ -1,6 +1,6 @@
 import { Truck, UserCog, Wrench, TriangleAlert, PackageCheck, CircleSlash } from 'lucide-react';
-import { EstadoVacio, StatusPill, KpiTile } from '../admin/ui/kit';
-import { KpiDegradado, TituloSeccion } from './resumen-visual';
+import { EstadoVacio, StatusPill, KpiTile, StatCard } from '../admin/ui/kit';
+import { TituloSeccion } from './resumen-visual';
 import type { TableroOperacion, CargaOperador } from '@/lib/likida/operacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -18,7 +18,7 @@ import type { TableroOperacion, CargaOperador } from '@/lib/likida/operacion';
 const ICONO = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--marca)' } } as const;
 
 /**
- * Los 6 números del tablero partidos en dos filas: arriba, en degradado, los
+ * Los 6 números del tablero partidos en dos filas: arriba, como StatCard, los
  * TRES que piden acción hoy (por asignar, incidencias abiertas, sin
  * evidencia de entrega); abajo, en plano, los tres de CONTEXTO (viajes
  * activos, unidades disponibles, en taller).
@@ -29,15 +29,15 @@ export function TableroCifras({ t }: { t: TableroOperacion }) {
       <TituloSeccion>Estado de la operación</TituloSeccion>
       <div className="mt-3 flex flex-wrap gap-2.5 items-stretch">
         <div className="flex-1 min-w-[200px]">
-          <KpiDegradado icono={<CircleSlash width={17} height={17} strokeWidth={1.75} />}
+          <StatCard icono={<CircleSlash width={17} height={17} strokeWidth={1.75} />}
             etiqueta="Por asignar" valor={t.porAsignar} formato="entero" />
         </div>
         <div className="flex-1 min-w-[200px]">
-          <KpiDegradado icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} />}
+          <StatCard icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} />}
             etiqueta="Incidencias abiertas" valor={t.incidenciasAbiertas} formato="entero" />
         </div>
         <div className="flex-1 min-w-[200px]">
-          <KpiDegradado icono={<PackageCheck width={17} height={17} strokeWidth={1.75} />}
+          <StatCard icono={<PackageCheck width={17} height={17} strokeWidth={1.75} />}
             etiqueta="Sin evidencia de entrega" valor={t.podPendientes} formato="entero" />
         </div>
       </div>

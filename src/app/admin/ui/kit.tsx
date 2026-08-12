@@ -81,6 +81,73 @@ export function KpiTile({
   );
 }
 
+// ── DeltaChip / StatCard (DESIGN.md v3, 12-ago-2026) ─────────────────────
+
+/** El % contra el periodo anterior, como pill suave (patrón de las
+ *  referencias: FlowAI/Steadi). `bueno` lo decide el LLAMADOR — gastar más
+ *  no es buena noticia aunque el número suba —; `null` pinta neutro, para
+ *  métricas donde la dirección no tiene lectura moral. Sin dato comparable
+ *  el llamador OMITE el chip: un "0.0%" inventado afirmaría "sin cambio",
+ *  que no es lo mismo que "no se pudo comparar". */
+export function DeltaChip({ pct, bueno }: { pct: number; bueno: boolean | null }) {
+  const estilo = bueno === null
+    ? { background: 'var(--canvas)', color: 'var(--muted)' }
+    : bueno
+      ? { background: 'var(--okbg)', color: 'var(--ok)' }
+      : { background: 'var(--badbg)', color: 'var(--bad)' };
+  return (
+    <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full tabular inline-flex items-center gap-0.5 shrink-0" style={estilo}>
+      {pct >= 0 ? '↑' : '↓'} {Math.abs(pct)}%
+    </span>
+  );
+}
+
+/** La stat card v3: reemplaza a `KpiDegradado` (Resumen, 7-ago) en TODO el
+ *  producto — cifra en tinta sobre blanco, ícono en chip `--g1`/`--marca`,
+ *  delta como pill suave. La diferencia con `KpiTile` (que sigue viva para
+ *  /admin): jerarquía cifra-primero más grande, chip de marca en el ícono y
+ *  el slot `flechas` para los ‹ › de periodo de /dashboard. */
+export function StatCard({
+  icono, etiqueta, valor, formato = 'numero', delta, deltaNota = 'vs periodo anterior', flechas, nota,
+}: {
+  icono: React.ReactNode;
+  etiqueta: string;
+  valor: number;
+  formato?: FormatoPreset;
+  /** `{ pct, bueno }` — misma forma que tenía `KpiDegradado.tendencia`. */
+  delta?: { pct: number; bueno: boolean } | null;
+  deltaNota?: string;
+  /** Los ‹ › de `KpiPeriodo` — viven aquí para que el layout no se duplique
+   *  en cada llamador que necesite paginar el periodo. */
+  flechas?: React.ReactNode;
+  /** Nota fija de una línea (cita legal, aclaración del supuesto). */
+  nota?: string;
+}) {
+  const reducido = usePrefersReducedMotion();
+  const mostrado = useCountUp(valor, !reducido);
+  const fmt = resolverFormato(formato);
+  return (
+    <div className="card p-3.5 h-full flex flex-col min-w-0">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--g1)', color: 'var(--marca)' }}>
+          {icono}
+        </div>
+        <div className="text-xs min-w-0 flex-1 line-clamp-2" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
+        {flechas}
+      </div>
+      <div className="text-2xl font-semibold tracking-tight tabular mt-2.5">{fmt(mostrado)}</div>
+      {delta ? (
+        <div className="mt-1.5 flex items-center gap-1.5 min-w-0">
+          <DeltaChip pct={delta.pct} bueno={delta.bueno} />
+          <span className="text-[11px] truncate" style={{ color: 'var(--faint)' }}>{deltaNota}</span>
+        </div>
+      ) : nota ? (
+        <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>{nota}</p>
+      ) : null}
+    </div>
+  );
+}
+
 // ── StatusPill / Semaphore ───────────────────────────────────────────────
 
 export type Estado = 'ok' | 'warn' | 'bad' | 'neutral';

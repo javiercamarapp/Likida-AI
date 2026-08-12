@@ -20,7 +20,9 @@ import { readFileSync } from 'node:fs';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const GUION = readFileSync('docs/conocimiento/guion-demo.md', 'utf8');
-const PANEL = readFileSync('src/app/dashboard/page.tsx', 'utf8');
+// `page.tsx` se partió el 12-ago-2026: el contenido que esta prueba
+// vigila vive en `inicio-contenido.tsx` (page.tsx quedó solo como puerta).
+const PANEL = readFileSync('src/app/dashboard/inicio-contenido.tsx', 'utf8');
 
 describe('el guion dice lo que el producto hace', () => {
   it('el panel enseña el diésel en LITROS, no en pesos', () => {
