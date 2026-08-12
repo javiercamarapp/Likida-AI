@@ -35,8 +35,8 @@ export default async function PaginaChat({
 
   return (
     <main className="h-full">
-      <div className="rounded-2xl h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <div className="flex-1 min-h-0"><ChatFlota kpis={kpis} acred={acred} variante="hero" /></div>
+      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
+        <div className="flex-1 flex flex-col"><ChatFlota kpis={kpis} acred={acred} variante="hero" /></div>
       </div>
     </main>
   );

@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Send, ArrowUp, Search, Paperclip, Upload, Camera, FileImage } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Send, ArrowUp, Search, Paperclip, Camera, FileImage } from 'lucide-react';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero } from '@/lib/formato';
 import { Logo } from '../logo';
@@ -166,10 +166,23 @@ export default function ChatFlota({
   const [recomendar, setRecomendar] = useState(false);
   const [menuAdjuntar, setMenuAdjuntar] = useState(false);
   const inputArchivo = useRef<HTMLInputElement>(null);
+  const inputImagen = useRef<HTMLInputElement>(null);
   const inputCamara = useRef<HTMLInputElement>(null);
+  const finConversacion = useRef<HTMLDivElement>(null);
+
+  // Ancla la vista al último mensaje, como cualquier chat.
+  useEffect(() => {
+    finConversacion.current?.scrollIntoView({ block: 'end' });
+  }, [historial.length]);
 
   async function leerArchivo(archivo: File) {
     if (ocupado) return;
+    if (!archivo.type.startsWith('image/')) {
+      // "Adjuntar archivos" acepta más de lo que el OCR lee hoy — decirlo
+      // corto en la conversación es mejor que un error críptico del API.
+      setHistorial((h) => [...h, { q: `Leer archivo: ${archivo.name}`, r: { texto: 'Por ahora solo leo imágenes de comprobantes — el PDF y el XML del CFDI vienen después.' } }]);
+      return;
+    }
     setOcupado(true);
     const etiquetaQ = `Leer comprobante: ${archivo.name}`;
     try {
@@ -215,46 +228,40 @@ export default function ChatFlota({
     }
   }
 
-  /** Recomendaciones por CATEGORÍA, más formales que los chips genéricos
-   *  (pedido del 12-ago: "según categoría, más formal, no lo mismo de
-   *  abajo"). El botón Consulta REEMPLAZA los chips de abajo por este
-   *  panel. Cada frase conserva la palabra clave que `responder` entiende,
-   *  y cada categoría solo aparece si sus datos existen; con la flota en
-   *  cero queda la de arranque. */
-  function categoriasConsulta(): Array<{ categoria: string; preguntas: string[] }> {
-    const cats: Array<{ categoria: string; preguntas: string[] }> = [];
-    if (kpis && kpis.viajesLiquidados > 0) {
-      cats.push({
-        categoria: 'Cuadre y liquidaciones',
-        preguntas: [
-          'Muéstrame el desglose de lo comprobado a la fecha',
-          'Estado de las liquidaciones con diferencia o por revisar',
-          'Tasa de cuadre del periodo',
-        ],
-      });
-    }
-    if (acred && (acred.iva > 0 || acred.peaje > 0 || acred.litrosDiesel > 0)) {
-      cats.push({
-        categoria: 'Fiscal y acreditables',
-        preguntas: [
-          'Desglose de acreditables del periodo',
-          'Litros de diésel elegibles para el estímulo',
-          'IVA acreditable del periodo',
-        ],
-      });
-    }
-    if (cats.length === 0) {
-      cats.push({
-        categoria: 'Para empezar',
-        preguntas: [
-          'Tasa de cuadre del periodo',
-          'Muéstrame el desglose de lo comprobado a la fecha',
-          'Desglose de acreditables del periodo',
-        ],
-      });
-    }
-    return cats;
-  }
+  /** El catálogo de Consulta, por CATEGORÍA y formal (pedido del 12-ago:
+   *  al ancho de la caja y con muchas más opciones). SIEMPRE completo: las
+   *  respuestas ya degradan con honestidad cuando falta el dato ("todavía
+   *  no hay..."), así que esconder categorías solo empobrecía el menú.
+   *  Cada frase conserva una palabra clave que `responder` entiende —
+   *  verificadas contra sus ramas una por una. */
+  const CATALOGO_CONSULTA: Array<{ categoria: string; preguntas: string[] }> = [
+    {
+      categoria: 'Cuadre y liquidaciones',
+      preguntas: [
+        'Muéstrame el desglose de lo comprobado a la fecha',
+        'Estado de las liquidaciones con diferencia o por revisar',
+        '¿Cuántos viajes están por revisar?',
+        'Monto observado por el motor en las liquidaciones',
+      ],
+    },
+    {
+      categoria: 'Salud del cuadre',
+      preguntas: [
+        'Tasa de cuadre del periodo',
+        '¿Cuántas liquidaciones cerraron sin diferencias?',
+        '¿Cuánto llevo comprobado?',
+      ],
+    },
+    {
+      categoria: 'Fiscal y acreditables',
+      preguntas: [
+        'Desglose de acreditables del periodo',
+        'IVA acreditable del periodo',
+        'Peaje acreditable del periodo',
+        'Litros de diésel elegibles para el estímulo',
+      ],
+    },
+  ];
 
   function preguntar(q: string) {
     if (!q.trim()) return;
@@ -303,152 +310,173 @@ export default function ChatFlota({
 
   if (variante === 'hero') {
     const vacio = historial.length === 0;
-    return (
-      <div className="h-full w-full flex flex-col items-center justify-center px-4 py-10">
-        <div className="w-full max-w-2xl flex flex-col items-center">
-          {/* Encabezado. Se retira en cuanto hay respuestas: a partir de ahí lo
-              que importa es la conversación, no la portada. */}
-          {vacio && (
-            <>
-              <Logo alto="h-7" className="mb-6" />
-              <h1 className="text-[26px] leading-tight font-medium tracking-tight text-center">
-                Pregunta a tus datos
-              </h1>
-              <p className="mt-2 mb-8 text-sm text-center max-w-md" style={{ color: 'var(--muted)' }}>
-                Lo comprobado, las diferencias, el diésel, el IVA y el peaje — con la cifra que
-                ya calculó el motor.
-              </p>
-            </>
-          )}
 
-          {!vacio && (
-            <div className="w-full mb-6 max-h-[52vh] overflow-y-auto space-y-4 text-left">
+    /* EL recuadro — el mismo en portada y en conversación. Consulta alterna
+       el catálogo; el clip pregunta: tomar foto / subir imágenes / adjuntar
+       archivos (los tres terminan en el mismo OCR real; `capture` abre la
+       cámara del teléfono y en desktop cae al selector). */
+    const caja = (
+      <form
+        onSubmit={(e) => { e.preventDefault(); preguntar(texto); }}
+        className="w-full rounded-2xl px-4 pt-3.5 pb-3 transition-shadow focus-within:shadow-lg"
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
+          boxShadow: 'var(--shadow-card)',
+        }}
+      >
+        <input
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          placeholder="Pregunta sobre tu operación…"
+          aria-label="Pregunta sobre tu operación"
+          className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed"
+        />
+        <div className="flex items-center justify-between mt-3 relative">
+          <button type="button" onClick={() => setRecomendar((v) => !v)}
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full transition-opacity hover:opacity-85"
+            style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+            <Search width={11} height={11} strokeWidth={2.25} />
+            Consulta
+          </button>
+
+          <div className="flex items-center gap-1.5">
+            <input ref={inputCamara} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
+            <input ref={inputImagen} type="file" accept="image/*" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
+            <input ref={inputArchivo} type="file" accept="image/*,application/pdf,.xml" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
+            {menuAdjuntar && (
+              <div className="absolute right-10 bottom-9 card p-1.5 z-30 w-56">
+                <button type="button"
+                  onClick={() => { setMenuAdjuntar(false); inputCamara.current?.click(); }}
+                  className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
+                  <Camera width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                  Tomar foto
+                </button>
+                <button type="button"
+                  onClick={() => { setMenuAdjuntar(false); inputImagen.current?.click(); }}
+                  className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
+                  <FileImage width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                  Subir imágenes
+                </button>
+                <button type="button"
+                  onClick={() => { setMenuAdjuntar(false); inputArchivo.current?.click(); }}
+                  className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
+                  <Paperclip width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                  Adjuntar archivos
+                </button>
+              </div>
+            )}
+            <button type="button" aria-label="Adjuntar comprobante" title="Adjuntar comprobante"
+              onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado}
+              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
+              style={{ color: 'var(--ink2)' }}>
+              <Paperclip width={14} height={14} strokeWidth={2} />
+            </button>
+            <button
+              type="submit"
+              aria-label="Enviar"
+              disabled={!texto.trim() || ocupado}
+              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-opacity disabled:cursor-default"
+              style={{
+                background: 'var(--marca)',
+                color: 'var(--marca-fg)',
+                opacity: texto.trim() && !ocupado ? 1 : 0.35,
+              }}
+            >
+              <ArrowUp width={15} height={15} strokeWidth={2.5} />
+            </button>
+          </div>
+        </div>
+      </form>
+    );
+
+    /* El catálogo de Consulta — al ancho de la caja y SCROLLEABLE (pedido
+       del 12-ago): tres columnas de categorías con tope de alto. */
+    const panelConsulta = recomendar && (
+      <div className="w-full max-h-72 overflow-y-auto grid grid-cols-1 sm:grid-cols-3 gap-2.5 pr-0.5">
+        {CATALOGO_CONSULTA.map((c) => (
+          <div key={c.categoria} className="card p-3 self-start">
+            <div className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: 'var(--muted)' }}>
+              {c.categoria}
+            </div>
+            {c.preguntas.map((rq) => (
+              <button key={rq} type="button"
+                onClick={() => { setRecomendar(false); preguntar(rq); }}
+                className="w-full text-left text-[13px] px-2 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]">
+                {rq}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+
+    // ── CONVERSACIÓN, tipo ChatGPT/Claude (pedido del 12-ago): al primer
+    // mensaje la portada se retira, las burbujas suben y la caja se ancla
+    // abajo. Tu pregunta a la derecha; el motor a la izquierda con su
+    // tabla/gráfica cuando la trae.
+    if (!vacio) {
+      return (
+        <div className="min-h-full w-full flex-1 flex flex-col px-4 pt-4">
+          <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col">
+            <div className="flex-1 space-y-4 py-2">
               {historial.map((h, i) => (
-                <div key={i} className="text-sm">
-                  <div className="font-medium">{h.q}</div>
-                  <div className="mt-0.5" style={{ color: 'var(--muted)' }}>{h.r.texto}</div>
-                  {h.r.visual && <VisualRespuesta v={h.r.visual} />}
+                <div key={i}>
+                  <div className="flex justify-end">
+                    <div className="hairline rounded-2xl rounded-br-md px-3.5 py-2 text-sm max-w-[85%]" style={{ background: 'var(--surface)' }}>
+                      {h.q}
+                    </div>
+                  </div>
+                  <div className="mt-2.5 text-sm max-w-[85%]">
+                    <div>{h.r.texto}</div>
+                    {h.r.visual && <VisualRespuesta v={h.r.visual} />}
+                  </div>
                 </div>
               ))}
+              <div ref={finConversacion} />
             </div>
-          )}
-
-          {/* EL recuadro — el único de la página. */}
-          <form
-            onSubmit={(e) => { e.preventDefault(); preguntar(texto); }}
-            className="w-full rounded-2xl px-4 pt-3.5 pb-3 transition-shadow focus-within:shadow-lg"
-            style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--line)',
-              boxShadow: 'var(--shadow-card)',
-            }}
-          >
-            <input
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="Pregunta sobre tu operación…"
-              aria-label="Pregunta sobre tu operación"
-              className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed"
-            />
-            <div className="flex items-center justify-between mt-3 relative">
-              <div className="flex items-center gap-1.5">
-                {/* Consulta despliega recomendaciones VIVAS según los datos;
-                    Ingesta abre el selector — la imagen va al OCR real. */}
-                <button type="button" onClick={() => setRecomendar((v) => !v)}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full transition-opacity hover:opacity-85"
-                  style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                  <Search width={11} height={11} strokeWidth={2.25} />
-                  Consulta
-                </button>
-                <button type="button" onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
-                  style={{ color: 'var(--ink2)' }}>
-                  <Upload width={11} height={11} strokeWidth={2.25} />
-                  {ocupado ? 'Leyendo…' : 'Ingesta'}
-                </button>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                {/* UN solo clip, pegado a enviar (como la referencia). Al
-                    apretarlo pregunta: ¿tomar foto o adjuntar archivo?
-                    (pedido del 12-ago). Los dos caminos terminan en el
-                    mismo OCR real; `capture` abre la cámara en el teléfono
-                    y en desktop cae al selector normal. */}
-                <input ref={inputArchivo} type="file" accept="image/*" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-                <input ref={inputCamara} type="file" accept="image/*" capture="environment" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-                {menuAdjuntar && (
-                  <div className="absolute right-10 bottom-9 card p-1.5 z-30 w-56">
-                    <button type="button"
-                      onClick={() => { setMenuAdjuntar(false); inputCamara.current?.click(); }}
-                      className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
-                      <Camera width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                      Tomar foto
-                    </button>
-                    <button type="button"
-                      onClick={() => { setMenuAdjuntar(false); inputArchivo.current?.click(); }}
-                      className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
-                      <FileImage width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                      Adjuntar archivo
-                    </button>
-                  </div>
-                )}
-                <button type="button" aria-label="Adjuntar comprobante" title="Adjuntar comprobante"
-                  onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado}
-                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
-                  style={{ color: 'var(--ink2)' }}>
-                  <Paperclip width={14} height={14} strokeWidth={2} />
-                </button>
-                <button
-                  type="submit"
-                  aria-label="Enviar"
-                  disabled={!texto.trim() || ocupado}
-                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-opacity disabled:cursor-default"
-                  style={{
-                    background: 'var(--marca)',
-                    color: 'var(--marca-fg)',
-                    opacity: texto.trim() && !ocupado ? 1 : 0.35,
-                  }}
-                >
-                  <ArrowUp width={15} height={15} strokeWidth={2.5} />
-                </button>
-              </div>
+            <div className="sticky bottom-0 shrink-0 pt-3 pb-4" style={{ background: 'var(--g1)' }}>
+              {panelConsulta}
+              <div className={recomendar ? 'mt-3' : ''}>{caja}</div>
             </div>
-          </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ── PORTADA (sin mensajes todavía) ──
+    return (
+      <div className="min-h-full w-full flex-1 flex flex-col items-center justify-center px-4 py-10">
+        <div className="w-full max-w-2xl flex flex-col items-center">
+          <Logo alto="h-7" className="mb-6" />
+          <h1 className="text-[26px] leading-tight font-medium tracking-tight text-center">
+            Pregunta a tus datos
+          </h1>
+          <p className="mt-2 mb-8 text-sm text-center max-w-md" style={{ color: 'var(--muted)' }}>
+            Lo comprobado, las diferencias, el diésel, el IVA y el peaje — con la cifra que
+            ya calculó el motor.
+          </p>
+
+          {caja}
 
           {recomendar ? (
-            /* El panel de Consulta: reemplaza a los chips (no un menú doble
-               encima de la caja) — categorías formales según los datos. */
-            <div className="w-full max-w-xl mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {categoriasConsulta().map((c) => (
-                <div key={c.categoria} className="card p-3">
-                  <div className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: 'var(--muted)' }}>
-                    {c.categoria}
-                  </div>
-                  {c.preguntas.map((rq) => (
-                    <button key={rq} type="button"
-                      onClick={() => { setRecomendar(false); preguntar(rq); }}
-                      className="w-full text-left text-[13px] px-2 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]">
-                      {rq}
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
+            <div className="w-full mt-4">{panelConsulta}</div>
           ) : (
             <div className="flex flex-wrap justify-center gap-2 mt-4">
-              {PREGUNTAS.map((p) => (
+              {PREGUNTAS.map((pq) => (
                 <button
-                  key={p}
+                  key={pq}
                   type="button"
-                  onClick={() => preguntar(p)}
+                  onClick={() => preguntar(pq)}
                   className="text-xs px-3 py-1.5 rounded-full hairline transition-opacity hover:opacity-70"
                   // BLANCO explícito (12-ago): la página hero vive sobre el
                   // lienzo tenue --g1 y un chip transparente se veía gris.
                   style={{ color: 'var(--ink2)', background: 'var(--surface)' }}
                 >
-                  {p}
+                  {pq}
                 </button>
               ))}
             </div>
