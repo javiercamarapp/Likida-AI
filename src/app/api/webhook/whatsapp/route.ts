@@ -60,7 +60,7 @@ async function conPool<T>(items: T[], limite: number, fn: (item: T) => Promise<v
 
 export const runtime = 'nodejs';
 // ME-13 / AUDIT_V3 orquestación: el procesamiento corre en after() y su presupuesto
-// en el PEOR caso es acquireViajeLock(≤12s) + esperarIntake (CUADRA_INTAKE_ESPERA_MS,
+// en el PEOR caso es acquireViajeLock(≤12s) + esperarIntake (LIKIDA_INTAKE_ESPERA_MS,
 // hoy 20s) + cuadre (~40s) ≈ 72s. Eso NO cabía en los 60s que había aquí: una
 // ráfaga de fotos lenta se cortaba a media liquidación, y Meta ya tiene su 200 —
 // no reintenta. El operador se queda esperando un PDF que nadie va a mandar.

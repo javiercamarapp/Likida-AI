@@ -25,7 +25,7 @@ Tres formas del mismo disparo. Usa la corta cuando la skill ya esté instalada; 
 Pégalo tal cual. No depende de que la skill dispare, pero si está instalada la usa.
 
 ```
-Corre la auditoría diaria de ~/javiercamarapp/cuadra (Likida) en modo desatendido.
+Corre la auditoría diaria de ~/javiercamarapp/likida (Likida) en modo desatendido.
 Invoca la skill `auditoria-diaria` y sigue sus references; lo que sigue es el
 encargo de esta corrida.
 

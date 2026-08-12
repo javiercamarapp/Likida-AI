@@ -11,7 +11,7 @@ const secuencia = (vals: number[]) => {
   return async () => vals[Math.min(i++, vals.length - 1)];
 };
 
-const GRACE = 'CUADRA_INTAKE_GRACE_MS';
+const GRACE = 'LIKIDA_INTAKE_GRACE_MS';
 afterEach(() => { delete process.env[GRACE]; });
 
 describe('esperarIntake — ráfaga', () => {
@@ -25,7 +25,7 @@ describe('esperarIntake — ráfaga', () => {
   });
 
   it('SIN gracia (default): un 0 inicial cierra de inmediato (comportamiento actual)', async () => {
-    // Sin CUADRA_INTAKE_GRACE_MS, un contador 0 se toma al pie de la letra.
+    // Sin LIKIDA_INTAKE_GRACE_MS, un contador 0 se toma al pie de la letra.
     const probe = secuencia([0]);
     const ok = await esperarIntake('v', 5_000, probe);
     expect(ok).toBe(true);

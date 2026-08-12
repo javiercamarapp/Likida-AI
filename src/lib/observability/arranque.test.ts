@@ -20,7 +20,7 @@ afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 function ponerTodo() {
   vi.stubEnv('VERCEL_ENV', 'production');
   vi.stubEnv('DEMO_TENANT_ID', '11111111-1111-1111-1111-111111111111');
-  vi.stubEnv('CUADRA_WHATSAPP_MSG_USD', '0.008');
+  vi.stubEnv('LIKIDA_WHATSAPP_MSG_USD', '0.008');
   vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://likidaai.vercel.app');
 }
 

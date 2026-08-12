@@ -57,7 +57,7 @@ tope 15%)").
 
 ## Evidencia en código
 
-- `config.ts` — `facilidadCombustibleEfectivo` en CuadraConfig
+- `config.ts` — `facilidadCombustibleEfectivo` en LikidaConfig
 - `administracion.ts` / `app/admin/flotas/page.tsx` — captura al alta
 - `cuadre/engine.ts` — la matriz (ramas `facilidad15 === true/false/undefined`)
 - `cuadre/desde_db.ts` — los agregados del ejercicio

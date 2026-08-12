@@ -1,4 +1,4 @@
-# DOCUMENTO MAESTRO DE INGENIERÍA — SISTEMA "CUADRA"
+# DOCUMENTO MAESTRO DE INGENIERÍA — SISTEMA "LIKIDA"
 ### Liquidación de viajes de flota en México vía agente de IA por WhatsApp
 *Vigencia de la investigación: 24 de julio de 2026 · Redactado para Claude Code · Español mexicano*
 
@@ -9,16 +9,16 @@ Estado actual y a dónde va cada paso de la FASE 1:
 | Paso | Archivo en el repo | Estado |
 |---|---|---|
 | 2.1 Webhook + HMAC + idempotencia | `src/app/api/webhook/whatsapp/route.ts`, `src/lib/meta/client.ts`, `conv.ts:claimMessage` | ✅ |
-| 2.2 OCR visión | `src/lib/cuadra/intake/ocr.ts` | ✅ |
-| 2.3 Parser QR CFDI | `src/lib/cuadra/intake/cfdi.ts` | ✅ (solo formato) |
-| 2.4 Consulta SAT (ConsultaCFDIService) | **NUEVO `src/lib/cuadra/intake/sat.ts`** + wire en `ocr.ts` | ❌ construir |
+| 2.2 OCR visión | `src/lib/likida/intake/ocr.ts` | ✅ |
+| 2.3 Parser QR CFDI | `src/lib/likida/intake/cfdi.ts` | ✅ (solo formato) |
+| 2.4 Consulta SAT (ConsultaCFDIService) | **NUEVO `src/lib/likida/intake/sat.ts`** + wire en `ocr.ts` | ❌ construir |
 | 2.5 RFC receptor = empresa | `cfdi.ts` / motor | ❌ construir (1 día) |
-| 3.1-3.6 cuadre determinístico | `src/lib/cuadra/cuadre/engine.ts` | ✅ (ver AUDIT.md: fix duplicados) |
-| 3.5 Conciliación diésel | **NUEVO `src/lib/cuadra/cuadre/diesel.ts`** | ❌ construir |
+| 3.1-3.6 cuadre determinístico | `src/lib/likida/cuadre/engine.ts` | ✅ (ver AUDIT.md: fix duplicados) |
+| 3.5 Conciliación diésel | **NUEVO `src/lib/likida/cuadre/diesel.ts`** | ❌ construir |
 | 3.7 Anomalías (precios CRE) | `analytics.ts` + `diesel.ts` | ⚠️ parcial |
-| 3.10 PDF | `src/lib/cuadra/liquidacion/pdf.ts` | ✅ |
-| 4.x export CSV / póliza | `src/lib/cuadra/export.ts` (CSV ✅); póliza Contpaqi ❌ pend. ERP |
-| Costo | `src/lib/cuadra/costos.ts` (LLM ✅; **falta costo WhatsApp** — ver KEY FINDING 2) |
+| 3.10 PDF | `src/lib/likida/liquidacion/pdf.ts` | ✅ |
+| 4.x export CSV / póliza | `src/lib/likida/export.ts` (CSV ✅); póliza Contpaqi ❌ pend. ERP |
+| Costo | `src/lib/likida/costos.ts` (LLM ✅; **falta costo WhatsApp** — ver KEY FINDING 2) |
 
 **Regla de oro (respetar en todo lo nuevo):** el motor de cuadre es determinístico (código), el LLM solo extrae/redacta — NUNCA cuadra, decide deducibilidad ni aprueba.
 
@@ -56,7 +56,7 @@ Estado actual y a dónde va cada paso de la FASE 1:
 
 **A.4 Deducibilidad de combustible — LISR 27-III.** Combustible **debe** pagarse con transferencia/cheque nominativo/tarjeta/monedero autorizado, **aun si no excede $2,000**. Efectivo = **NO deducible en ningún monto**. Reglas RMF 3.3.1.7 y 3.3.1.10 (monederos). **→ marcar NO deducible toda carga en efectivo.**
 
-**A.5 Descuentos a nómina — LFT 110/111/517.** 110-I (lista taxativa): deudas con el patrón (anticipos, errores, pérdidas, averías) con topes **acumulativos**: ≤ un mes de salario y descuento periódico ≤ **30% del excedente del salario mínimo**, con convenio. 111 prohíbe intereses. 517: prescripción **un mes**. **→ Cuadra calcula el tope legal y exige aprobación humana + convenio; nunca automático.**
+**A.5 Descuentos a nómina — LFT 110/111/517.** 110-I (lista taxativa): deudas con el patrón (anticipos, errores, pérdidas, averías) con topes **acumulativos**: ≤ un mes de salario y descuento periódico ≤ **30% del excedente del salario mínimo**, con convenio. 111 prohíbe intereses. 517: prescripción **un mes**. **→ Likida calcula el tope legal y exige aprobación humana + convenio; nunca automático.**
 
 **A.6 LFPDPPP 2025.** DOF 20-mar-2025, vigente 21-mar-2025. Desaparece el INAI; autoridad: Secretaría Anticorrupción y Buen Gobierno. Derecho a **oponerse a tratamientos automatizados** y a **revisión humana**. **→ ranking de operadores/fraude requiere aviso de privacidad + revisión humana, no puede ser única base de una decisión que afecte al trabajador.**
 
@@ -109,7 +109,7 @@ Estado actual y a dónde va cada paso de la FASE 1:
 
 ### PARTE C — TRANSVERSALES
 - **C.1 RPA** sobre portales de terceros: alto riesgo ToS + frágil (CAPTCHA). Preferir APIs oficiales/agregadores + tarjetas de flotilla. **Sin scraping en FASE 1.**
-- **C.2 Datos:** Cuadra es **encargado del tratamiento**; aviso de privacidad, contrato de encargado, cifrado, ARCO (LFPDPPP 2025).
+- **C.2 Datos:** Likida es **encargado del tratamiento**; aviso de privacidad, contrato de encargado, cifrado, ARCO (LFPDPPP 2025).
 - **C.3 Conservación:** CFF 30.
 - **C.4 Costos LLM:** Gemini Flash + batching + prompt caching. Verificar deprecación (2.5 Flash 16-oct-2026).
 - **C.5 Panorama competitivo (jul-2026):**
@@ -117,7 +117,7 @@ Estado actual y a dónde va cada paso de la FASE 1:
   - **Mendel** — tarjeta flotilla + IA que recupera/valida CFDI ante el SAT.
   - **Clara** — Clara Fleet Card (monedero SAT, CFDI consolidado).
   - **Edenred** — Ticket Car. · **Nowports** — freight forwarding. · **Kepler/Anceti** — TMS/ERP. · Zumma, Trato.
-  - **Qué NO cubren:** nadie hace la **liquidación conversacional por WhatsApp** (foto → cuadre determinístico → PDF + póliza) reemplazando al liquidador/cajero. **Ese es el hueco de Cuadra.**
+  - **Qué NO cubren:** nadie hace la **liquidación conversacional por WhatsApp** (foto → cuadre determinístico → PDF + póliza) reemplazando al liquidador/cajero. **Ese es el hueco de Likida.**
 
 ---
 

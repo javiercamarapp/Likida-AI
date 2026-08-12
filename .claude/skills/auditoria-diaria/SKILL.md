@@ -59,6 +59,6 @@ Condición de terminación, tope de presupuesto, qué hacer si truena a media ro
 
 ## Defaults
 
-Repo: `~/javiercamarapp/cuadra` (`javiercamarapp/cuadra` en GitHub, rama `master`). Rondas en `docs/auditoria-N/`, N consecutivo. Escala 0–10 por rubro, global con un decimal. Autofix: críticos y altos. `pruebas-manuales/*.prueba.ts` hacen llamadas reales de pago — **no se corren**.
+Repo: `~/javiercamarapp/likida` (`javiercamarapp/likida.ai` en GitHub, rama `master`). Rondas en `docs/auditoria-N/`, N consecutivo. Escala 0–10 por rubro, global con un decimal. Autofix: críticos y altos. `pruebas-manuales/*.prueba.ts` hacen llamadas reales de pago — **no se corren**.
 
 Corriendo como routine en la nube cambian tres cosas —la compuerta sin `build`, los arreglos por PR y no a `master`, y que esta skill viaja en el repo—: está en `references/desatendido.md`, sección *En la nube*.

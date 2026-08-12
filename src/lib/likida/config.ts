@@ -21,7 +21,7 @@ export interface UnidadConfig {
   capacidadTanque: number;   // litros
 }
 
-export interface CuadraConfig {
+export interface LikidaConfig {
   empresa: { rfc: string; rfcsAdicionales?: string[] };
   politica: PoliticaGasto[];
   tabulador: {
@@ -67,7 +67,7 @@ export interface CuadraConfig {
 }
 
 // ── DEFAULTS DE DEMO (🔴 genéricos, NO de un cliente — reemplazables en la sala) ─
-export const DEMO_CONFIG: CuadraConfig = {
+export const DEMO_CONFIG: LikidaConfig = {
   empresa: { rfc: 'XAXX010101000' },      // 🔴 demo: RFC genérico
   politica: [
     { concepto: 'diesel', topeMonto: 4000 },
@@ -186,14 +186,14 @@ export function fusionarConfig<T>(base: T, override: unknown): T {
  * traduce `ConsultaFallida` a "no pude consultar tus datos, inténtalo en un
  * minuto" y libera el claim para que el reenvío se reprocese.
  */
-export async function getConfig(tenantId: string): Promise<CuadraConfig> {
+export async function getConfig(tenantId: string): Promise<LikidaConfig> {
   try {
     const { data, error } = await acotada(supabaseAdmin().from('tenant').select('rfc, config').eq('id', tenantId).maybeSingle(), 'getConfig');
     if (error) {
       throw new ConsultaFallida(`config del tenant: ${error.message ?? String(error)}`);
     }
-    const override = (data?.config as Partial<CuadraConfig> | null) ?? null;
-    const cfg: CuadraConfig = fusionarConfig(DEMO_CONFIG, override);
+    const override = (data?.config as Partial<LikidaConfig> | null) ?? null;
+    const cfg: LikidaConfig = fusionarConfig(DEMO_CONFIG, override);
     // El RFC de la empresa puede venir en la columna `tenant.rfc`.
     if (data?.rfc) {
       const rfc = String(data.rfc).toUpperCase().replace(/[^A-ZÑ&0-9]/g, '');

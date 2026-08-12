@@ -145,7 +145,7 @@ describe('coste y resistencia de la detección', () => {
   // SE SALTA BAJO `--coverage`: 100 llamadas instrumentadas cuestan ~107 ms
   // contra los ~7 ms reales, así que el umbral mediría la instrumentación. En
   // `npm test` corre a plena fuerza.
-  it.skipIf(process.env.CUADRA_COBERTURA === '1')('un mensaje normal cuesta una fracción de milisegundo', () => {
+  it.skipIf(process.env.LIKIDA_COBERTURA === '1')('un mensaje normal cuesta una fracción de milisegundo', () => {
     const t = 'El diésel en efectivo se limita al 15% por RFA 2026 regla 2.9, y el resto no es deducible por LISR 27-III.';
 
     // MEJOR DE NUEVE, y con un presupuesto acorde a lo que esta prueba de verdad

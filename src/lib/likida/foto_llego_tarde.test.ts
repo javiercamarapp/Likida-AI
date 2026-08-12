@@ -162,12 +162,12 @@ describe('processInbound — la foto que llega tarde avisa la verdad, no la pier
     const err = new Error('duplicate key value violates unique constraint "uq_gasto_img_hash"') as Error & { code?: string };
     err.code = '23505';
     addGasto.mockRejectedValue(err);
-    process.env.CUADRA_DEDUP_FOTOS = '1';
+    process.env.LIKIDA_DEDUP_FOTOS = '1';
 
     await processInbound(foto);
 
     expect(salientes, 'un duplicado benigno no debe generar ningún mensaje').toHaveLength(0);
-    delete process.env.CUADRA_DEDUP_FOTOS;
+    delete process.env.LIKIDA_DEDUP_FOTOS;
   });
 
   it('duplicado por CFDI (23505, mismo comprobante dos veces): se ignora en silencio', async () => {
@@ -218,7 +218,7 @@ describe('la foto que ya estaba en otro viaje', () => {
     vi.stubGlobal('fetch', fetchSpy); fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
     process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
-    process.env.CUADRA_DEDUP_FOTOS = '1';
+    process.env.LIKIDA_DEDUP_FOTOS = '1';
     extraerComprobante.mockResolvedValue({
       gasto: { concepto: 'diesel', monto: 800, fecha: '2026-08-01', ocrExtra: {} },
       costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 },
@@ -280,7 +280,7 @@ describe('la ráfaga termina diciendo qué quedó', () => {
     vi.stubGlobal('fetch', fetchSpy); fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
     process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
-    process.env.CUADRA_DEDUP_FOTOS = '1';
+    process.env.LIKIDA_DEDUP_FOTOS = '1';
     extraerComprobante.mockResolvedValue({
       gasto: { concepto: 'diesel', monto: 800, fecha: '2026-08-01', ocrExtra: {} },
       costo: { modelo: 'm', tokensIn: 1, tokensOut: 1, costoUsd: 0 }, legible: true,

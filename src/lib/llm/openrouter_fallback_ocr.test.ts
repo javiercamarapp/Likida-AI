@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // La tabla FALLBACK se indexa por SLUG. El 4-ago-2026 se cambió el OCR a
-// `google/gemini-3.1-flash-lite` por `CUADRA_MODEL_OCR` (medido 12× más
+// `google/gemini-3.1-flash-lite` por `LIKIDA_MODEL_OCR` (medido 12× más
 // barato y más certero, ver models.ts) y se agregó su precio a `PRICES` —
 // pero la entrada en `FALLBACK` se quedó fuera hasta que otra pasada la
 // completó (openrouter.ts:63). Sin ella, `FALLBACK[model] ?? null` da `null`
@@ -11,7 +11,7 @@ import { z } from 'zod';
 // deploy, solo deja de haber plan B. Un Gemini caído se leía como "tu foto
 // salió ilegible" en vez de caer a Anthropic.
 //
-// Esta prueba fija el override de producción (CUADRA_MODEL_OCR apuntando al
+// Esta prueba fija el override de producción (LIKIDA_MODEL_OCR apuntando al
 // modelo lite) y verifica que un fallo transitorio SÍ cruza de proveedor.
 // Sin la entrada en FALLBACK, este test falla con el error original del
 // primario en vez de resolver con el modelo de respaldo.
@@ -26,7 +26,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 process.env.OPENROUTER_API_KEY = 'test-key';
 // El override real que vive en Vercel — no el default de models.ts.
-process.env.CUADRA_MODEL_OCR = 'google/gemini-3.1-flash-lite';
+process.env.LIKIDA_MODEL_OCR = 'google/gemini-3.1-flash-lite';
 const { generateStructured } = await import('./openrouter');
 const { modelFor } = await import('./models');
 

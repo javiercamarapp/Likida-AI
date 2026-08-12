@@ -55,7 +55,7 @@ Un vendedor que diga "bitácora" a secas promete la que no puede entregar.
 
 ## Estado actual (con honestidad)
 
-Auditoría línea por línea del 27-jul-2026 sobre `cuadra/src/lib/cuadra/**` (3,428 líneas de dominio,
+Auditoría línea por línea del 27-jul-2026 sobre `likida/src/lib/likida/**` (3,428 líneas de dominio,
 23 archivos de prueba). Detalle en `40-auditoria-codigo.md`.
 
 ### Lo que funciona de verdad y no hay que tocar
@@ -129,7 +129,7 @@ funcione, y que el material comercial sobreviva a la primera pregunta del fiscal
 
 **Día 1 — las que se hacen hoy mismo (una tarde)**
 
-1. `CUADRA_DEDUP_FOTOS=1` en el entorno del demo y de producción (`processor.ts:123`). Sin esto, el
+1. `LIKIDA_DEDUP_FOTOS=1` en el entorno del demo y de producción (`processor.ts:123`). Sin esto, el
    operador reenvía la foto "por si no llegó" y la diferencia contra el anticipo sale mal **a favor
    del operador**. Puede pasar en la demo.
 2. Borrar la regla `ieps_no_desglosado` (`engine.ts:238-240`) y su tipo. Hoy manda **toda**
@@ -232,7 +232,7 @@ cliente.
    la ley misma (tope de $1M por integrante o por coordinado, si el 8% reduce base de PTU,
    metodología del radio de 30 km, faja de 50 km para operador de largo recorrido, periodicidad del
    15%). Esos casos van a llegar con clientes reales; no son errores.
-5. Campo `jerarquia` en `CuadraConfig`, separando `estimulos`/`hidrocarburos` (ley/RMF) de `portales`
+5. Campo `jerarquia` en `LikidaConfig`, separando `estimulos`/`hidrocarburos` (ley/RMF) de `portales`
    (política de un tercero, cero fuerza legal). Fundamento: CFF art. 33 fr. I inciso g) + tesis SCJN
    P.LV/2004 — la RMF no puede crear obligaciones más allá de la ley. La regla dura
    **LEY ≠ FACILIDAD ≠ POLÍTICA INTERNA** deja de ser estilo y se vuelve un campo obligatorio.
@@ -313,7 +313,7 @@ cliente.
 30. Gate de citas inventadas: **0% de tolerancia**, bloqueo automático de release.
 31. Jueces J2 (rúbrica) y J3 (adversarial) — J3 prompteado literalmente con las 12 contradicciones y
     las 6 correcciones C1–C6 como casos de entrenamiento; un juez adversarial genérico no sirve.
-32. Gate de regresión en CI del repo `cuadra`: las 32 preguntas + la biblioteca adversarial en cada
+32. Gate de regresión en CI del repo `likida`: las 32 preguntas + la biblioteca adversarial en cada
     cambio de prompt, modelo o corpus; caída >5 pp bloquea.
 33. Caso de prueba de **inyección de prompt vía texto oculto en la foto del ticket**, contra el
     pipeline real de `intake/`. Es un vector sobre código que ya existe, no una hipótesis.

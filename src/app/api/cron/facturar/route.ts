@@ -226,7 +226,7 @@ async function avisarALasPersonas(
  * Pero es un data-uri de ~120 KB por sesión, y ocho en un JSON de respuesta son
  * ~1 MB que además acaba en los logs de Vercel. Regla:
  *
- *   · es una RUTA en disco (`CUADRA_CAPTURAS_DIR` puesto, que es lo que uno
+ *   · es una RUTA en disco (`LIKIDA_CAPTURAS_DIR` puesto, que es lo que uno
  *     quiere en la Mac para poder mirar el .jpg) → viaja siempre, pesa nada.
  *   · es un data-uri → viaja solo con `?captura=1`, y si no, se dice su tamaño
  *     y cómo pedirla. Una evidencia que existe y no se anuncia es una evidencia
@@ -240,7 +240,7 @@ function sinCapturas(renglones: Renglon[], req: Request): unknown[] {
     return {
       ...resto,
       capturaKb: Math.round(captura.length / 1024),
-      capturaComoVerla: 'vuelve a llamar con ?captura=1 para que venga el JPEG, o pon CUADRA_CAPTURAS_DIR para que se escriba en disco',
+      capturaComoVerla: 'vuelve a llamar con ?captura=1 para que venga el JPEG, o pon LIKIDA_CAPTURAS_DIR para que se escriba en disco',
     };
   });
 }
@@ -520,8 +520,8 @@ export async function procesarLoteEnCola(
           // es lo que hace falta para MIRAR qué se habría enviado. En Vercel no
           // se pone: `/tmp` no sobrevive a la invocación, así que ahí la captura
           // vuelve a ser el data-uri y viaja con `?captura=1`.
-          pagina: process.env.CUADRA_CAPTURAS_DIR
-            ? { directorioCapturas: process.env.CUADRA_CAPTURAS_DIR }
+          pagina: process.env.LIKIDA_CAPTURAS_DIR
+            ? { directorioCapturas: process.env.LIKIDA_CAPTURAS_DIR }
             : undefined,
         });
       } catch (e) {
@@ -546,7 +546,7 @@ export async function procesarLoteEnCola(
         motivo:
           'No se pudo arrancar Chromium, así que los tickets de portal NO se intentaron y quedan sin marcar para la próxima corrida. ' +
           'El campo `error` trae los TRES caminos que se probaron para conseguir el binario, en orden: la ruta explícita ' +
-          '(`CUADRA_CHROMIUM_PATH`), el paquete serverless (`@sparticuz/chromium`, que descomprime el suyo en /tmp) y la caché ' +
+          '(`LIKIDA_CHROMIUM_PATH`), el paquete serverless (`@sparticuz/chromium`, que descomprime el suyo en /tmp) y la caché ' +
           'local de Playwright. Si el que falla es el serverless, lo primero que hay que mirar es si sus `bin/*.br` viajaron en ' +
           'el bundle de esta función (`outputFileTracingIncludes` en `next.config.ts`). La otra salida es un navegador remoto por CDP.',
         error: falloDeArranque,

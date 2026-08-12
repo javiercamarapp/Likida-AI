@@ -37,7 +37,7 @@ as $$
 $$;
 
 comment on function triggers_faltantes(text[]) is
-  'Devuelve cuáles de los triggers esperados NO existen en el esquema public. Solo lectura; la usa el chequeo de arranque para sondear migraciones que crean triggers (ver src/lib/cuadra/startup.ts).';
+  'Devuelve cuáles de los triggers esperados NO existen en el esquema public. Solo lectura; la usa el chequeo de arranque para sondear migraciones que crean triggers (ver src/lib/likida/startup.ts).';
 
 revoke all on function triggers_faltantes(text[]) from public, anon, authenticated;
 grant execute on function triggers_faltantes(text[]) to service_role;

@@ -16,7 +16,7 @@ Notas de arranque (auditoría 2, 28-jul-2026): frontend 7 · backend 6 · agént
 
 **Qué cuenta:** un mapeo de etiquetas que ya no cuadra con `src/types/`; un estado que la UI no sabe pintar y deja en blanco o crudo; un error de servidor que llega al usuario como stack; una cifra que se formatea distinto en dos pantallas; contraste o tamaño de toque que reprueba; un `key` de React inestable que reordena filas de dinero.
 
-**Lo que se le escapa a este rubro si no se le exige:** el panel no tiene lint ni prueba, así que la desincronización con los tipos es su modo de falla dominante. Comparar **cada** mapa literal del panel contra `src/types/cuadra.ts` es trabajo obligatorio, no opcional.
+**Lo que se le escapa a este rubro si no se le exige:** el panel no tiene lint ni prueba, así que la desincronización con los tipos es su modo de falla dominante. Comparar **cada** mapa literal del panel contra `src/types/likida.ts` es trabajo obligatorio, no opcional.
 
 **Anclas:** 8+ si cada estado (vacío, cargando, error, parcial) está pintado a propósito y los mapas derivan del tipo. 6 si se ve bien en el camino feliz. 4 o menos si el comprador puede ver una cifra mal formateada o una pantalla en blanco.
 
@@ -26,7 +26,7 @@ Notas de arranque (auditoría 2, 28-jul-2026): frontend 7 · backend 6 · agént
 
 **Dueño de** rutas, handlers, contratos de entrada y salida, concurrencia, idempotencia, manejo de errores del servidor, transacciones.
 
-**Dónde:** `src/app/api/`, `src/lib/cuadra/processor.ts`, `repo.ts`, `conv.ts`, `duplicados.ts`, `pg_errores.ts`, `middleware.ts`.
+**Dónde:** `src/app/api/`, `src/lib/likida/processor.ts`, `repo.ts`, `conv.ts`, `duplicados.ts`, `pg_errores.ts`, `middleware.ts`.
 
 **Qué cuenta:** un `if` que detecta la condición mala y no hace `return`; un error de la segunda escritura que se ignora; un lock que se pide y no se respeta; un upsert que no lanza y deja que dos caminos reporten éxito; un `catch` que se traga el error sin registrar cuál fila falló; un contrato que acepta lo que no debería.
 
@@ -40,7 +40,7 @@ Notas de arranque (auditoría 2, 28-jul-2026): frontend 7 · backend 6 · agént
 
 **Dueño de** el ciclo de vida de una conversación: quién habla, cuándo, con qué contexto, qué pasa si el ciclo muere a la mitad, qué texto sale hacia el humano.
 
-**Dónde:** `src/lib/agents/` (`run.ts`, `registry.ts`, `prompts.ts`), `src/lib/cuadra/processor.ts`, `conv.ts` (mutex, barrera de ráfaga), `presupuesto.ts`, `startup.ts`, `cuadre/guardia.ts`, `cuadre/resumen.ts`.
+**Dónde:** `src/lib/agents/` (`run.ts`, `registry.ts`, `prompts.ts`), `src/lib/likida/processor.ts`, `conv.ts` (mutex, barrera de ráfaga), `presupuesto.ts`, `startup.ts`, `cuadre/guardia.ts`, `cuadre/resumen.ts`.
 
 **Qué cuenta:** el destinatario equivocado (un veredicto que es del contralor y llega al chofer); una ejecución parcial que persiste y no cierra el ciclo con el humano; una carrera entre mensajes del mismo lote; un prompt que autoriza al modelo a narrar lo que debería ser determinístico; un reintento que duplica efecto; el caso "se trabó" donde el usuario nunca recibe su salida.
 
@@ -54,7 +54,7 @@ Notas de arranque (auditoría 2, 28-jul-2026): frontend 7 · backend 6 · agént
 
 **Dueño de** la frontera entre el modelo y el mundo: definición de tools, argumentos, ejecución, resultados que vuelven al modelo, loop-guard, fallback entre proveedores, contabilidad de tokens y costo.
 
-**Dónde:** `src/lib/cuadra/tools.ts`, `src/lib/llm/openrouter.ts` (`generateWithTools`, `generateStructured`), `src/lib/llm/models.ts`, `src/lib/llm/tool-executor.ts`.
+**Dónde:** `src/lib/likida/tools.ts`, `src/lib/llm/openrouter.ts` (`generateWithTools`, `generateStructured`), `src/lib/llm/models.ts`, `src/lib/llm/tool-executor.ts`.
 
 **Qué cuenta:** un parámetro que el modelo puede llenar y que decide sobre dinero o sobre a quién pertenece un dato; un resultado de tool que vuelve al modelo con más de lo que necesita; un loop-guard que cuenta mal; un fallback que cambia de modelo sin cambiar la atribución de costo; una respuesta truncada que se trata como completa; una tool que se ejecuta dos veces porque la deduplicación mira la llamada y no el efecto.
 
@@ -82,7 +82,7 @@ Notas de arranque (auditoría 2, 28-jul-2026): frontend 7 · backend 6 · agént
 
 **Dueño de** que las cifras que el producto imprime y afirma coincidan con la norma vigente: deducibilidad, IVA acreditable, IEPS, estímulos, requisitos del CFDI, plazos.
 
-**Dónde:** `normas/*.yaml` es la **fuente de verdad**; el código a auditar es `src/lib/cuadra/liquidacion/deducibilidad.ts`, `cuadre/engine.ts`, `cuadre/leyendas.ts`, `liquidacion/pdf.ts`, `intake/cfdi.ts`, `intake/sat.ts`, `facturacion/`.
+**Dónde:** `normas/*.yaml` es la **fuente de verdad**; el código a auditar es `src/lib/likida/liquidacion/deducibilidad.ts`, `cuadre/engine.ts`, `cuadre/leyendas.ts`, `liquidacion/pdf.ts`, `intake/cfdi.ts`, `intake/sat.ts`, `facturacion/`.
 
 **Cómo se audita, y es distinto a los demás rubros:** se abre la ficha YAML, se lee el texto transcrito de la norma, y se compara contra la línea de código que la implementa. Las fichas marcadas `verificado_fuente_primaria` traen el texto literal y ganan cualquier discusión. Las que no lo están se anotan como *no verificable en esta ronda* — no se asume que están bien ni que están mal.
 
@@ -98,7 +98,7 @@ Notas de arranque (auditoría 2, 28-jul-2026): frontend 7 · backend 6 · agént
 
 **Dueño de** datos personales y credenciales: consentimiento, aviso de privacidad, transferencias a terceros, retención, custodia, derechos ARCO.
 
-**Dónde:** `src/lib/cuadra/privacidad.ts`, `supabase/migrations/*aviso_privacidad*`, `src/lib/llm/` (toda salida hacia un modelo externo es una transferencia), `src/lib/cuadra/intake/sanitizar.ts`, `export/`, `docs/conocimiento/` y `FISCAL_LEGAL.md` §2.
+**Dónde:** `src/lib/likida/privacidad.ts`, `supabase/migrations/*aviso_privacidad*`, `src/lib/llm/` (toda salida hacia un modelo externo es una transferencia), `src/lib/likida/intake/sanitizar.ts`, `export/`, `docs/conocimiento/` y `FISCAL_LEGAL.md` §2.
 
 **Qué cuenta:** mandar la foto o el dato de un operador a un modelo externo sin que el aviso lo cubra; un consentimiento implícito donde la ley pide expreso; un ranking o evaluación de personas sin aviso y sin revisión humana; credenciales de portales guardadas de forma que no se puedan revocar; datos que se quedan más de lo necesario; ausencia de camino para ejercer derechos.
 
@@ -154,7 +154,7 @@ Notas de arranque (auditoría 2, 28-jul-2026): frontend 7 · backend 6 · agént
 
 **Dueño de** el peor caso, no el promedio: tiempos contra los límites reales de la plataforma, tokens por interacción, dinero por operación, consultas por request.
 
-**Dónde:** `src/lib/cuadra/presupuesto.ts`, `costos.ts`, `src/lib/llm/openrouter.ts`, `maxDuration` de las rutas, `repo.ts` (N+1), `src/lib/queue/`, `intake/ocr.ts`.
+**Dónde:** `src/lib/likida/presupuesto.ts`, `costos.ts`, `src/lib/llm/openrouter.ts`, `maxDuration` de las rutas, `repo.ts` (N+1), `src/lib/queue/`, `intake/ocr.ts`.
 
 **Qué cuenta:** un presupuesto de tiempo que no cabe en su propio límite (peor caso 112s contra `maxDuration=60` fue exactamente esto, y el mensaje se perdía en silencio sin reintento); un timeout que no considera la suma de los eslabones; una consulta dentro de un bucle; un modelo caro donde uno barato bastaba; tokens gastados en contexto que el modelo no usa; una imagen que se manda sin redimensionar.
 
@@ -168,7 +168,7 @@ Notas de arranque (auditoría 2, 28-jul-2026): frontend 7 · backend 6 · agént
 
 **Dueño de** si la base puede guardar un estado imposible: restricciones, unicidad, tipos, nulabilidad, RLS, migraciones y su reversibilidad.
 
-**Dónde:** `supabase/migrations/`, `src/types/cuadra.ts`, `src/lib/cuadra/repo.ts`, `supabase/verificaciones.sql`.
+**Dónde:** `supabase/migrations/`, `src/types/likida.ts`, `src/lib/likida/repo.ts`, `supabase/verificaciones.sql`.
 
 **Qué cuenta:** un dominio sin `CHECK` que acepta un monto negativo o un estado inventado; falta de `unique` donde la lógica asume unicidad (el mismo CFDI liquidándose dos veces es el caso de manual); un tipo de TypeScript más estricto que la columna, que es la forma más común de mentirse; una migración que no se puede revertir; RLS que se apoya en que la aplicación se porte bien.
 

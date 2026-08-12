@@ -24,7 +24,7 @@ import { avisoIntegral, avisoSimplificado, revisarAvisoIntegral, versionAviso } 
 const FLOTA = {
   razonSocial: 'FLOTA DEMO SA DE CV',
   domicilio: 'Carretera Silao-Romita Km 4.5, 36100 Silao, Guanajuato',
-  urlAvisoIntegral: 'https://cuadra.mx/aviso/11111111-1111-1111-1111-111111111111',
+  urlAvisoIntegral: 'https://likida.ai/aviso/11111111-1111-1111-1111-111111111111',
 };
 
 const todo = (r = FLOTA) => avisoIntegral(r).flatMap((s) => [s.titulo, ...s.parrafos]).join('\n');

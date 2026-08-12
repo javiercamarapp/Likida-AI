@@ -727,9 +727,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // FASE 2 (FLAG default-off): dedup por contenido. La idempotencia por
         // waMessageId cubre reintentos de Meta; esto cubre el reenvío MANUAL de la
         // misma foto (otro waMessageId). Pre-check antes del OCR → ahorra ese costo.
-        // Camino actual intacto con CUADRA_DEDUP_FOTOS sin setear (HARD RULE 3).
+        // Camino actual intacto con LIKIDA_DEDUP_FOTOS sin setear (HARD RULE 3).
         let imgHash: string | undefined;
-        if (process.env.CUADRA_DEDUP_FOTOS === '1') {
+        if (process.env.LIKIDA_DEDUP_FOTOS === '1') {
           imgHash = await hashImagen(dataUrl);
           if (await gastoExistePorHash(viajeId, imgHash, op.tenantId)) {
             logger.info('foto.dedup', { viaje: viajeId });
@@ -1896,7 +1896,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // el cierre como válido, vinculando costos y armando el resumen REAL del motor.
       // FLAG (HARD RULE 3): default off = comportamiento actual EXACTO (mensaje de
       // error, sin cierre). Se recomienda ON para el demo (ver REPORTE_NOCHE).
-      const recuperar = process.env.CUADRA_RECUPERAR_CIERRE_PARCIAL === '1';
+      const recuperar = process.env.LIKIDA_RECUPERAR_CIERRE_PARCIAL === '1';
       const parcial = e instanceof PartialExecutionError ? e.partialToolCalls : null;
 
       // LO QUE SE GASTÓ ANTES DE CAERSE TAMBIÉN SE PAGÓ. Esta rama nunca llamaba

@@ -10,7 +10,7 @@
 > que da su índice —"3 días"— no es el que imprime el ticket ("mes de emisión").
 >
 > Úsalo como PISTA DE INVESTIGACIÓN. Cada ficha que entre a
-> `src/lib/cuadra/facturacion/comercios.ts` tiene que verificarse facturando de
+> `src/lib/likida/facturacion/comercios.ts` tiene que verificarse facturando de
 > verdad, como se hizo con G500. Ver `plazoVerificado` en ese archivo.
 
 

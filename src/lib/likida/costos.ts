@@ -18,7 +18,7 @@
 //      camino del dinero que no. Un fallo de RLS, una columna que no existe tras
 //      una migración o un `check` violado pasaban sin excepción y sin log — el
 //      `catch` solo cubría que reventara el `fetch`.
-//   2. `CUADRA_WHATSAPP_MSG_USD=` (puesta y vacía, que es lo que deja un copiado
+//   2. `LIKIDA_WHATSAPP_MSG_USD=` (puesta y vacía, que es lo que deja un copiado
 //      de `.env.example` a medias en Vercel): `??` no cae al default porque `''`
 //      no es `undefined`, y `Number('')` es 0. Cada mensaje saliente entraba a
 //      $0.00 y el costo por liquidación bajaba sin que nada cambiara.
@@ -65,7 +65,7 @@ let avisadoPrecioInvalido: string | null = null;
  * accidente no.
  */
 export function precioMensajeWhatsAppUsd(): number {
-  const crudo = process.env.CUADRA_WHATSAPP_MSG_USD;
+  const crudo = process.env.LIKIDA_WHATSAPP_MSG_USD;
   if (crudo === undefined) return WHATSAPP_MSG_USD_DEFAULT;
   const n = Number(crudo);
   if (crudo.trim() === '' || !Number.isFinite(n) || n < 0) {
@@ -74,7 +74,7 @@ export function precioMensajeWhatsAppUsd(): number {
       logger.error('costo.precio_wa_invalido', {
         valor: crudo,
         usando: WHATSAPP_MSG_USD_DEFAULT,
-        err: 'CUADRA_WHATSAPP_MSG_USD no es un número válido: el costo por mensaje habría quedado en 0 y el costo por liquidación bajaría sin motivo',
+        err: 'LIKIDA_WHATSAPP_MSG_USD no es un número válido: el costo por mensaje habría quedado en 0 y el costo por liquidación bajaría sin motivo',
       });
     }
     return WHATSAPP_MSG_USD_DEFAULT;

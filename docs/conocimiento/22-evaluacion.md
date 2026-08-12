@@ -350,7 +350,7 @@ ciego después de la demo:
 | Correr las 32 preguntas + la biblioteca adversarial de §4 contra el agente actual y publicar el resultado como línea base | No hay umbral que cumplir si no hay medición de dónde se está parado hoy | Medio | Antes de la demo del 6-ago |
 | Presupuestar horas de un fiscalista con cédula para J4 (revisión semanal de muestra + examen dorado en cada release mayor) | Es el gasto que la tentación es recortar primero, y es el único juez que resuelve el desacuerdo de los otros tres | Alto (dinero recurrente) | Antes del primer cliente pagado |
 | Construir el caso de inyección de prompt vía OCR de ticket (§4.3) como prueba automatizada contra `intake/` | Es un vector de ataque real sobre código que ya existe, no hipotético | Medio | Antes de producción |
-| Fijar el gate de regresión (re-correr el examen completo en cada cambio de prompt/modelo/corpus, bloqueo si cae >5pp) en el pipeline de CI del repo `cuadra` | Sin gate automático, la disciplina se abandona en la primera fecha de entrega apretada | Medio | Fase 1 |
+| Fijar el gate de regresión (re-correr el examen completo en cada cambio de prompt/modelo/corpus, bloqueo si cae >5pp) en el pipeline de CI del repo `likida` | Sin gate automático, la disciplina se abandona en la primera fecha de entrega apretada | Medio | Fase 1 |
 | Añadir fecha de vigencia por pregunta dorada y calendario de revisión trimestral | El propio corpus documenta que ISN, multas e IEPS caducan en fechas conocidas; el examen no puede ser la única pieza sin fecha de caducidad | Bajo | Al congelar el archivo de preguntas |
 
 ---
@@ -416,7 +416,7 @@ final decide si eso se arregla en el archivo o basta con la corrección centrali
    promedio en las mismas 32 preguntas, para no exigirle al agente un estándar más alto que el
    humano que reemplaza.
 5. **Si el vector de inyección de prompt vía OCR de ticket (§4.3) ya tiene alguna mitigación en
-   el código real de `intake/`.** No se leyó el código del repo `cuadra` para este documento (la
+   el código real de `intake/`.** No se leyó el código del repo `likida` para este documento (la
    ola es de investigación y diseño, no de código); esto es una hipótesis de ataque basada en la
    arquitectura descrita en el encargo (foto por WhatsApp → OCR), no una prueba contra el
    pipeline real.

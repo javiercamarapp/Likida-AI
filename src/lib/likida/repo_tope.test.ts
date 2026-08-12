@@ -40,11 +40,11 @@ const puerto = (servidorMudo.address() as net.AddressInfo).port;
 const ENV_ORIGINAL = {
   url: process.env.NEXT_PUBLIC_SUPABASE_URL,
   key: process.env.SUPABASE_SERVICE_ROLE_KEY,
-  tope: process.env.CUADRA_TOPE_CONSULTA_MS,
+  tope: process.env.LIKIDA_TOPE_CONSULTA_MS,
 };
 process.env.NEXT_PUBLIC_SUPABASE_URL = `http://127.0.0.1:${puerto}`;
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'llave-falsa-para-la-medicion';
-process.env.CUADRA_TOPE_CONSULTA_MS = '1500';   // el de producción son 8 000
+process.env.LIKIDA_TOPE_CONSULTA_MS = '1500';   // el de producción son 8 000
 
 const { getViaje, getGastos, gastoExistePorHash, saveLiquidacion } = await import('./repo');
 const { TOPE_CONSULTA_MS } = await import('./presupuesto');
@@ -53,7 +53,7 @@ afterAll(() => {
   servidorMudo.close();
   if (ENV_ORIGINAL.url === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL; else process.env.NEXT_PUBLIC_SUPABASE_URL = ENV_ORIGINAL.url;
   if (ENV_ORIGINAL.key === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = ENV_ORIGINAL.key;
-  if (ENV_ORIGINAL.tope === undefined) delete process.env.CUADRA_TOPE_CONSULTA_MS; else process.env.CUADRA_TOPE_CONSULTA_MS = ENV_ORIGINAL.tope;
+  if (ENV_ORIGINAL.tope === undefined) delete process.env.LIKIDA_TOPE_CONSULTA_MS; else process.env.LIKIDA_TOPE_CONSULTA_MS = ENV_ORIGINAL.tope;
 });
 
 const CORTE_MS = 12_000;   // muy por encima del tope; si se llega, es que no hay tope

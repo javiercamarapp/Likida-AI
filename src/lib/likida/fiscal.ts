@@ -33,7 +33,7 @@ import { exigir, traerTodo, conteo } from './pg';
 import { round2 } from '@/lib/formato';
 import { armar as armarPorFacturar } from './facturacion/pendientes';
 import { evaluarTope15, type ResultadoTope15 } from './periodo/combustible';
-import type { CuadraConfig } from './config';
+import type { LikidaConfig } from './config';
 
 // ── La fila de `gasto` leída con ojos de contador ──────────────────────────
 
@@ -209,7 +209,7 @@ export interface OpcionesFiscales {
  * necesita para su Motor fiscal — vivía en un archivo de página en vez de en
  * la capa de datos, así que borrar el panel se la hubiera llevado entre pies.
  */
-export function opcionesDe(cfg: CuadraConfig): OpcionesFiscales {
+export function opcionesDe(cfg: LikidaConfig): OpcionesFiscales {
   const f15 = cfg.facilidadCombustibleEfectivo;
   return {
     efectivoTopeMxn: cfg.estimulos.efectivoTopeMxn,

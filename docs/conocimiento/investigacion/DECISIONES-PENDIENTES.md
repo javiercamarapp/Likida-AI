@@ -13,10 +13,10 @@ ahora corre **con los flags ON**.
 
 | Env | Valor puesto | Qué hace |
 |-----|--------------|----------|
-| `CUADRA_INTAKE_GRACE_MS` | `2000` | Gracia anti-carrera fotos+"listo" en el mismo lote. |
-| `CUADRA_RECUPERAR_CIERRE_PARCIAL` | `1` | Recupera el "huérfano de cierre" (guarda OK pero el ciclo murió). |
-| `CUADRA_DEDUP_FOTOS` | `1` | Dedup de fotos por SHA-256 (reenvíos manuales). |
-| `CUADRA_INTAKE_ESPERA_MS` | `20000` | Acota el peor caso de la barrera bajo el tope de Vercel. |
+| `LIKIDA_INTAKE_GRACE_MS` | `2000` | Gracia anti-carrera fotos+"listo" en el mismo lote. |
+| `LIKIDA_RECUPERAR_CIERRE_PARCIAL` | `1` | Recupera el "huérfano de cierre" (guarda OK pero el ciclo murió). |
+| `LIKIDA_DEDUP_FOTOS` | `1` | Dedup de fotos por SHA-256 (reenvíos manuales). |
+| `LIKIDA_INTAKE_ESPERA_MS` | `20000` | Acota el peor caso de la barrera bajo el tope de Vercel. |
 
 **Pendiente cuando despliegues:** replicar estas 4 envs en el entorno de Vercel
 (hoy no hay proyecto de este repo en Vercel; el demo corre local). Validación
@@ -38,7 +38,7 @@ pude confirmar el plan por API (la cuenta es un team personal → default Hobby)
 - **Si es Hobby:** queda en 60. El peor caso teórico (lock+barrera+cuadre >60s) NO
   cabe → el camino fiable es el común (~30s: OCR rápido + cuadre). El fix real del
   peor caso es mover el procesamiento pesado a **QStash** (ya es dependencia) en
-  FASE 3. Mientras, `CUADRA_INTAKE_ESPERA_MS=20000` acota la barrera.
+  FASE 3. Mientras, `LIKIDA_INTAKE_ESPERA_MS=20000` acota la barrera.
 
 **Acción tuya:** confirmar el plan (2 clics en Vercel) y avisarme para subir o no
 `maxDuration`, o decidir si priorizamos el offload a QStash en FASE 3.

@@ -41,7 +41,7 @@ const DEFAULTS: Record<ModelRole, string> = {
   // que se cobra) y el lite ~274. Y el sesgo del experimento FAVORECÍA al 3.6,
   // porque los valores asentados los produjo él en producción; aun así perdió.
   //
-  // El override vive en la variable `CUADRA_MODEL_OCR` de Vercel, apuntando ya
+  // El override vive en la variable `LIKIDA_MODEL_OCR` de Vercel, apuntando ya
   // a 3.1-flash-lite. El default se deja aquí a propósito: 18 comprobantes son
   // pocos para reescribir la elección de arquitectura, y revertir tiene que
   // costar una variable de entorno, no un despliegue.
@@ -59,11 +59,11 @@ const DEFAULTS: Record<ModelRole, string> = {
 };
 
 const ENV_KEY: Record<ModelRole, string> = {
-  ocr: 'CUADRA_MODEL_OCR',
-  cuadre: 'CUADRA_MODEL_CUADRE',
-  cuadre_fallback: 'CUADRA_MODEL_CUADRE_FALLBACK',
-  chat: 'CUADRA_MODEL_CHAT',
-  router: 'CUADRA_MODEL_ROUTER',
+  ocr: 'LIKIDA_MODEL_OCR',
+  cuadre: 'LIKIDA_MODEL_CUADRE',
+  cuadre_fallback: 'LIKIDA_MODEL_CUADRE_FALLBACK',
+  chat: 'LIKIDA_MODEL_CHAT',
+  router: 'LIKIDA_MODEL_ROUTER',
 };
 
 /** Devuelve el slug del modelo para un rol, respetando override por env. */

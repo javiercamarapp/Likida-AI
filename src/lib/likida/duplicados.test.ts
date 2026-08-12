@@ -148,7 +148,7 @@ describe('detectarDuplicadosEntreViajes a escala de un año de flota', () => {
   // el caso de 40 000 CFDI hace muchísimas más que el de 500: el cociente pasa
   // de ~4 a ~9 midiendo la instrumentación, no el algoritmo. En `npm test`
   // —donde el umbral sí significa algo— corre igual que siempre.
-  it.skipIf(process.env.CUADRA_COBERTURA === '1')('el tiempo no explota al crecer el número de CFDI del tenant', () => {
+  it.skipIf(process.env.LIKIDA_COBERTURA === '1')('el tiempo no explota al crecer el número de CFDI del tenant', () => {
     const GRUPOS = 2_000;
     const pocos = generar(500, GRUPOS);
     const muchos = generar(40_000, GRUPOS);

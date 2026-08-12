@@ -83,7 +83,7 @@ describe('.env.example no se queda atrás del código', () => {
     // El "Plan B demo en vivo" (ANTHROPIC_API_KEY / GOOGLE_API_KEY) no lo lee
     // nadie: `openrouter.ts` solo mira OPENROUTER_API_KEY. Descubrirlo durante
     // el demo cuesta el tiempo de ponerla y redesplegar antes de entender que no
-    // había ruta. Peligroso porque las palancas CUADRA_MODEL_* del mismo bloque
+    // había ruta. Peligroso porque las palancas LIKIDA_MODEL_* del mismo bloque
     // comentado SÍ funcionan, y desde el archivo no se distingue cuál es cuál.
     const texto = readFileSync(join(RAIZ, '.env.example'), 'utf8');
     const leidas = leidasPorElCodigo();

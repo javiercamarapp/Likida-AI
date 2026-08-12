@@ -1,7 +1,7 @@
 # Mejoras concretas sobre lo que ya está construido
 
 > Ola 2 — 27-jul-2026. Consolida `40-auditoria-codigo.md` (auditoría línea por línea de
-> `cuadra/src/lib/cuadra/**`, 3,428 líneas de dominio), `34-proceso-liquidacion.md` §11 (tabla de
+> `likida/src/lib/likida/**`, 3,428 líneas de dominio), `34-proceso-liquidacion.md` §11 (tabla de
 > brecha), `32-fraude.md` §1 (inventario real de campos) y `20-arquitectura-conocimiento.md` §1.3.
 >
 > **Las referencias `archivo:línea` corresponden a la lectura del 27-jul-2026.** Si el código cambió
@@ -21,7 +21,7 @@ crítico de cada liquidación.**
 
 | # | Cambio | Dónde | Por qué |
 |---|---|---|---|
-| **M0.1** | `CUADRA_DEDUP_FOTOS=1` en el entorno del demo **y** de producción | `processor.ts:123` | El tercer candado de deduplicación (hash de imagen, `intake/hash.ts` + migración `0015`) **existe y está apagado por bandera**. Sin la variable, `imgHash` nunca se calcula, la columna va en `null` y el índice único de la `0015` no puede dispararse |
+| **M0.1** | `LIKIDA_DEDUP_FOTOS=1` en el entorno del demo **y** de producción | `processor.ts:123` | El tercer candado de deduplicación (hash de imagen, `intake/hash.ts` + migración `0015`) **existe y está apagado por bandera**. Sin la variable, `imgHash` nunca se calcula, la columna va en `null` y el índice único de la `0015` no puede dispararse |
 | **M0.2** | Borrar el `else if` de la regla `ieps_no_desglosado` y su tipo | `engine.ts:238-240`, `engine.ts:244` | La LIEPS art. 19 fr. II **prohíbe** trasladar el IEPS en forma expresa y por separado salvo que el adquirente sea a su vez contribuyente del IEPS por esos bienes. Una flota no enajena combustible: no lo es |
 | **M0.3** | Reescribir la nota de `combustible_efectivo` a "verificar contra el 15% del ejercicio (RFA 2026 regla 2.9)" y **sacarla de `NO_DEDUCIBLE`** | `engine.ts:106-107`, `engine.ts:218` | Contradice la corrección C1 ya verificada por la propia ola 1 |
 
@@ -124,7 +124,7 @@ estímulo.
 
 ### M1.2 — Separar `viaticos` en `alimentacion` / `hospedaje` / `transporte`
 
-**Dónde:** enum `ConceptoGasto` en `types/cuadra.ts:5`; regla en `engine.ts:115-118`; tope en
+**Dónde:** enum `ConceptoGasto` en `types/likida.ts:5`; regla en `engine.ts:115-118`; tope en
 `config.ts:91`.
 
 **Fundamento verificado en fuente primaria.** LISR art. 28 fr. V, párrafos 2 a 4: alimentación hasta
@@ -150,7 +150,7 @@ beneficiario disparan el excedente de $150.
 
 ### M1.3 — Sumar y persistir `totalDeducible` / `totalNoDeducible`
 
-**Dónde:** `types/cuadra.ts:80-93` (tipo `Liquidacion`), motor en `engine.ts:218`.
+**Dónde:** `types/likida.ts:80-93` (tipo `Liquidacion`), motor en `engine.ts:218`.
 
 El motor ya sabe qué gasto cayó en `NO_DEDUCIBLE` y **tira el dato**. Falta un `reduce` y una columna.
 El contralor recibe hoy un PDF donde el "no deducible" está disperso en renglones de texto.
@@ -243,7 +243,7 @@ y ya está dictaminado, pero sigue vivo en el texto (ver `00-ROADMAP.md`, CN-8).
 |---|---|---|---|
 | Módulo `facturacion/` — `comercios.ts` (230 líneas, catálogo de 10 comercios), `caducidad.ts` (74), `identificar.ts` (51) + 3 archivos de prueba | **501 líneas** | Cero consumidores fuera del propio directorio | **Sacarlo del árbol de build** hasta que se conecte al cuadre. Es trabajo bueno sobre un problema real (el reloj del plazo), pero conectarlo bien exige la máquina de estados de la Fase 1. No se enseña en la demo |
 | `config.tabulador` (rendimiento, factorCarga, precioDiesel, umbralDesviacion), `config.unidades`, `config.catalogoCuentas`, `config.salida`, `config.portales` + `portalParaTicket()` | ~45 líneas de `config.ts` | Ninguno se lee en ningún lado | Borrar, o marcar `// PENDIENTE` con el nombre de la regla que la va a consumir. Hoy son **dos fuentes de verdad** para la política de gastos |
-| `TipoDiferencia` `'diesel_desviacion'` | `types/cuadra.ts:64` | Se consulta en `engine.ts:246`, nunca se emite | Código muerto que sugiere una regla que no corre |
+| `TipoDiferencia` `'diesel_desviacion'` | `types/likida.ts:64` | Se consulta en `engine.ts:246`, nunca se emite | Código muerto que sugiere una regla que no corre |
 | `analytics.getStatsPorOperador()` | `analytics.ts:50-74` | Sin consumidores, y devuelve `diferencias: 0` **hardcodeado** (`analytics.ts:72`) | Borrar. Un KPI que siempre vale cero es peor que ausente: si llega al dashboard, miente |
 | `repo.getPolitica()` | `repo.ts:21-33` | Sin consumidores — la política viaja por `config.politica` | Borrar la muerta |
 
@@ -394,7 +394,7 @@ descartar) cuando el monto difiera.
 
 | Campo | Dónde falta hoy | Para qué |
 |---|---|---|
-| `grupo_fiscal` A/B | `concepto` es un enum plano (`types/cuadra.ts:5`) | Candado estructural que impide que diésel llegue a Percepción 050 de nómina |
+| `grupo_fiscal` A/B | `concepto` es un enum plano (`types/likida.ts:5`) | Candado estructural que impide que diésel llegue a Percepción 050 de nómina |
 | `régimen` del operador, **derivado** | La tabla `operador` solo tiene `nombre, telefono, numero_empleado, activo` (migración `0001_init.sql`) | Se deriva de propiedad de la unidad + propiedad del permiso. **Nunca** se captura como selección: LFT art. 256 hace la relación de trabajo por ley y el pacto en contrario "no produce ningún efecto legal". Si el pacto dice "prestador de servicios" y conduce unidad de la flota, el sistema **advierte** |
 | `base_asignacion` | No existe | Faja de 50 km (LISR 28-V / RLISR 57) |
 | `salario` del operador | No existe | Los dos topes del art. 110 fr. I de la LFT |
@@ -415,7 +415,7 @@ regla 2.6.1.1 fr. II". Lo que no se sostiene es la **fecha**. Ver `00-ROADMAP.md
 relativa y el sujeto obligado se amplía a cualquiera que enajene esos combustibles. Un validador
 construido sobre el texto de diciembre deja pasar comprobantes que hoy deben traer HidroYPetro.
 
-### M3.7 — Campo `jerarquia` en `CuadraConfig`
+### M3.7 — Campo `jerarquia` en `LikidaConfig`
 
 Separar `estimulos` / `hidrocarburos` (ley y RMF) de `portales` (**política de un tercero, cero fuerza
 legal**). Hoy los tres viven en el mismo tipo sin ninguna señal de jerarquía, y esa es la causa raíz de

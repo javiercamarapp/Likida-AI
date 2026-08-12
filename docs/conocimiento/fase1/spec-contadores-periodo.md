@@ -5,7 +5,7 @@
 
 ## Por qué esto es un documento aparte de `engine.ts`
 
-`src/lib/cuadra/cuadre/engine.ts` (`cuadrarViaje`) es una función pura que recibe
+`src/lib/likida/cuadre/engine.ts` (`cuadrarViaje`) es una función pura que recibe
 **un viaje** y devuelve su liquidación. No tiene memoria entre llamadas: no sabe
 cuánto combustible en efectivo pagó el tenant en lo que va del año, no sabe
 cuánto ha ganado la empresa, no sabe cuánto le debe ya un operador. Tres topes
@@ -189,7 +189,7 @@ de producto, no una interpretación de la RFA.
 
 ### 5. Qué dato hace falta guardar
 
-Revisado en `src/types/cuadra.ts` y `supabase/migrations/*.sql` (28-jul-2026):
+Revisado en `src/types/likida.ts` y `supabase/migrations/*.sql` (28-jul-2026):
 
 | Dato | ¿Existe hoy? | Evidencia |
 |---|---|---|
@@ -320,10 +320,10 @@ Eso no depende de la contradicción de arriba.
 
 | Dato | ¿Existe hoy? | Evidencia |
 |---|---|---|
-| **Ingresos propios de la actividad, por tenant y por ejercicio** | **No — y es el hallazgo más grande de este documento** | Grep exhaustivo (`command grep -n "ingreso" src/lib/cuadra/repo.ts src/types/cuadra.ts`, y sobre todo `supabase/migrations/*.sql`) no encontró ni una columna, tabla o campo de ingresos en todo el modelo de datos. Cuadra registra **gastos** (`gasto`), **anticipos** (`viaje.anticipo`) y **liquidaciones** de costo — nunca ingresos por flete ni facturación de la flota. La base de este contador (8% de ingresos) es un dato que Likida hoy **no captura de ninguna forma**, ni siquiera como campo manual |
+| **Ingresos propios de la actividad, por tenant y por ejercicio** | **No — y es el hallazgo más grande de este documento** | Grep exhaustivo (`command grep -n "ingreso" src/lib/likida/repo.ts src/types/likida.ts`, y sobre todo `supabase/migrations/*.sql`) no encontró ni una columna, tabla o campo de ingresos en todo el modelo de datos. Likida registra **gastos** (`gasto`), **anticipos** (`viaje.anticipo`) y **liquidaciones** de costo — nunca ingresos por flete ni facturación de la flota. La base de este contador (8% de ingresos) es un dato que Likida hoy **no captura de ninguna forma**, ni siquiera como campo manual |
 | Régimen fiscal / relación coordinado-integrante | **No** | mismo hueco que el Contador 1 |
 | `concepto = combustible` como exclusión dura | **Sí, el dato existe** (`gasto.concepto`), falta la regla de filtrado en un contador que aún no existe | — |
-| Acumulador del 8%/16% por ejercicio | **No** | no existe tabla, vista ni campo en `Liquidacion` (`src/types/cuadra.ts:94-120`) que registre "monto deducido bajo la facilidad 2.2" ni "16% pagado a la fecha" |
+| Acumulador del 8%/16% por ejercicio | **No** | no existe tabla, vista ni campo en `Liquidacion` (`src/types/likida.ts:94-120`) que registre "monto deducido bajo la facilidad 2.2" ni "16% pagado a la fecha" |
 
 **Esto cambia la prioridad de implementación respecto al Contador 1.** El
 Contador 1 (15%) es computable hoy con los datos que ya existen en `gasto` —
@@ -448,11 +448,11 @@ parte SÍ es diseño de producto, lo marco así):
 
 | Dato | ¿Existe hoy? | Evidencia |
 |---|---|---|
-| `operador.salario` | **No** | `operador` (`supabase/migrations/0001_init.sql:29-36`) tiene `nombre, telefono, numero_empleado, activo` — nada de compensación. `src/types/cuadra.ts:132-137` (interfaz `Operador`) tampoco lo tiene |
+| `operador.salario` | **No** | `operador` (`supabase/migrations/0001_init.sql:29-36`) tiene `nombre, telefono, numero_empleado, activo` — nada de compensación. `src/types/likida.ts:132-137` (interfaz `Operador`) tampoco lo tiene |
 | `operador.regimen` (subordinado / tercero-permisionario) | **No** | mismo lugar — sin este campo no se puede saber si el art. 110 aplica siquiera |
 | Esquema de pago del operador (fijo / por viaje / por km) | **No** | necesario para resolver (aunque sea parcialmente) el hueco `sin_criterio` de §2 |
 | Salario mínimo vigente (general o zona libre de la frontera norte, según ubicación) | **No, y es dato externo, no del cliente** | no hay ninguna tabla de referencia de salario mínimo en el repo; lo publica CONASAMI anualmente y varía por zona. Nota: la LFT usa el salario mínimo **como salario**, no como UMA — la desindexación de 2016 sacó al salario mínimo como unidad de referencia de otras leyes, pero en materia laboral se mantiene como el salario mismo (esto lo digo por conocimiento general del dominio, **no lo verifiqué contra una fuente en este repo** — márquese igual como supuesto) |
-| Saldo/adeudo acumulado del operador, corriendo entre liquidaciones | **No** | grep sobre `repo.ts` y `types/cuadra.ts` no encontró ningún campo `saldo` ni `adeudo`. Cada `Liquidacion` (`src/types/cuadra.ts:94-120`) tiene su propia `diferencia`, pero nada las encadena en un balance corriente por operador a través del tiempo |
+| Saldo/adeudo acumulado del operador, corriendo entre liquidaciones | **No** | grep sobre `repo.ts` y `types/likida.ts` no encontró ningún campo `saldo` ni `adeudo`. Cada `Liquidacion` (`src/types/likida.ts:94-120`) tiene su propia `diferencia`, pero nada las encadena en un balance corriente por operador a través del tiempo |
 
 **Esto es el contador más lejos de ser computable de los tres**, porque
 necesita tres cosas que hoy no existen en absoluto (salario, régimen, saldo
@@ -526,7 +526,7 @@ distinga "deducible" de "pagadero", y sin ningún dato de entrada sobre causa de
 demora o si fue imputable al operador): **el motor de hoy no tiene forma de
 saber que un viaje se prolongó por causa ajena al operador**, porque no captura
 esa causa en ningún lado del modelo de `Gasto` ni de `Viaje`
-(`src/types/cuadra.ts:19-49`, `:122-130`). Sin ese dato de entrada, ni siquiera
+(`src/types/likida.ts:19-49`, `:122-130`). Sin ese dato de entrada, ni siquiera
 se puede empezar a construir esta regla — es un hueco de captura, no solo de
 cálculo.
 

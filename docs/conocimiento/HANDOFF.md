@@ -1,4 +1,4 @@
-# Handoff — Likida / cuadra
+# Handoff — Likida
 
 > Escrito el 29-jul, actualizado el **31-jul-2026** sobre `7712249`. Todo lo que
 > dice "verificado" se comprobó corriendo el comando ese día. Lo que no, va
@@ -18,7 +18,7 @@ anticipo, aplica la política de gastos y la ley fiscal mexicana, y devuelve un
 PDF de liquidación. El contralor lo ve en un panel web.
 
 - **Repo:** `~/javiercamarapp/likida` · GitHub **`javiercamarapp/likida.ai`** · rama `master`
-  (se renombró desde `cuadra`; GitHub redirige, pero el remoto ya apunta al nuevo)
+  (el nombre viejo del repo quedó retirado; GitHub redirige, y el remoto ya apunta al nuevo)
 - **Pre-revenue, cero clientes.** Las empresas del censo son prospectos, no
   clientes. **No inventes logos, testimonios ni capturas de producto.**
 - **Demo: 6-ago-2026.** El comprador es el **contralor** de la flota. Un error
@@ -203,7 +203,7 @@ volviera**. Es el patrón que más se repite en este repo.
 QR del CFDI · **pdf-lib**.
 
 ```
-src/lib/cuadra/
+src/lib/likida/
   cuadre/          EL MOTOR DEL DINERO. engine.ts es puro y sin I/O.
                    guardia.ts (cifras) · estado_afirmado.ts (afirmaciones)
                    cifras.ts · resumen.ts · leyendas.ts · desde_db.ts
@@ -353,7 +353,7 @@ migraciones se aplicaron el 31-jul y el aviso de privacidad ya tiene su liga
    (plataforma Next.js). Verificado en el log real del arranque:
    `{"msg":"startup.observabilidad","sentry":true,"entorno":"production"}` — y de
    punta a punta: capturó `startup.config_silenciosa` como issue LIKIDAAI-1, que
-   se arregló poniendo `CUADRA_WHATSAPP_MSG_USD=0.008` explícita y se marcó
+   se arregló poniendo `LIKIDA_WHATSAPP_MSG_USD=0.008` explícita y se marcó
    resuelto. El arranque siguiente reporta `ok:true, revisadas:3`.
 
    **NO se corrió el asistente de Sentry**, y no hay que correrlo: crearía

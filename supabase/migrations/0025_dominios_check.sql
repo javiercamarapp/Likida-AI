@@ -5,7 +5,7 @@
 --
 -- QUÉ ESTÁ MAL HOY. `select conname from pg_constraint where connamespace =
 -- 'public'::regnamespace and contype = 'c'` devuelve CERO filas: no hay un solo
--- CHECK en toda la base. El dominio vive en TypeScript (`types/cuadra.ts`) y en
+-- CHECK en toda la base. El dominio vive en TypeScript (`types/likida.ts`) y en
 -- un zod del intake (`intake/ocr.ts:26`), y `repo.ts` lo lee de vuelta con un
 -- cast ciego —`concepto: r.concepto as Gasto['concepto']` (repo.ts:286)—. O sea:
 -- todo lo que no entre por el intake queda sin dominio, y el motor lo trata como
@@ -79,7 +79,7 @@ begin
   for r in
     select * from (values
       -- ── gasto ────────────────────────────────────────────────────────────
-      -- Los 9 de `ConceptoGasto` (types/cuadra.ts:20-25). 'viaticos' es el
+      -- Los 9 de `ConceptoGasto` (types/likida.ts:20-25). 'viaticos' es el
       -- genérico HEREDADO: el OCR ya no lo emite (CONCEPTOS_OCR lo excluye a
       -- propósito) pero hay filas viejas con él y reclasificarlas solas sería
       -- inventar. 'flete' está separado de 'transporte' por LISR 28-V: una guía
@@ -87,7 +87,7 @@ begin
       ('gasto', 'gasto_concepto_dominio',
        $c$concepto in ('diesel','caseta','factura','alimentacion','hospedaje','transporte','flete','viaticos','otro')$c$),
 
-      -- `EstadoSat` (types/cuadra.ts:27). NULL = todavía no se preguntó al SAT,
+      -- `EstadoSat` (types/likida.ts:27). NULL = todavía no se preguntó al SAT,
       -- que es distinto de 'pendiente' (se preguntó y no contestó) y es el
       -- estado de la mayoría de los tickets de papel.
       ('gasto', 'gasto_estado_sat_dominio',
@@ -121,7 +121,7 @@ begin
        $c$intake_pendientes >= 0$c$),
 
       -- ── liquidacion ──────────────────────────────────────────────────────
-      -- `EstatusLiquidacion` (types/cuadra.ts:102). Es lo que el panel del
+      -- `EstatusLiquidacion` (types/likida.ts:102). Es lo que el panel del
       -- contralor pinta y lo que decide si el viaje va a bandeja.
       ('liquidacion', 'liquidacion_estatus_dominio',
        $c$estatus in ('cuadrada','con_diferencias','revisar')$c$),
