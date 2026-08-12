@@ -192,7 +192,7 @@ export async function InicioContenido({
                   viendo como superadmin · {tenantNombre}
                 </span>
               )}
-              <BarraAcciones items={itemsBusqueda} pendientes={pendientes} />
+              <BarraAcciones items={itemsBusqueda} pendientes={pendientes} hrefAsistente={`/dashboard/chat${sufijo}`} />
             </div>
           }
         />

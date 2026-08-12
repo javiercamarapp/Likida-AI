@@ -12,9 +12,9 @@ import { Search, Sparkles, Bell } from 'lucide-react';
  *    operador). Un resultado con liquidación navega a su detalle; uno sin
  *    liquidación se enseña igual pero dice que aún no tiene — encontrar el
  *    folio y saber su estado también es una respuesta.
- *  · "Preguntar a la IA" abre el asistente de negocio del rail (que ya
- *    existe y ya contesta) — dispara `likida:abrir-asistente`, que
- *    `rail.tsx` escucha. No es un chat nuevo: es la puerta al que hay.
+ *  · "Preguntar a la IA" navega a `/dashboard/chat` — la página hero del
+ *    asistente (estilo usehandle.ai), reconstruida el 12-ago. No es un chat
+ *    nuevo: es la casa grande del que ya contesta.
  *  · La campana enseña los PENDIENTES reales (liquidaciones por revisar,
  *    comprobantes duplicados). Sin sistema de notificaciones inventado:
  *    cuando no hay nada, dice que no hay nada.
@@ -33,7 +33,7 @@ function normalizar(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
-export function BarraAcciones({ items, pendientes }: { items: ItemBusqueda[]; pendientes: string[] }) {
+export function BarraAcciones({ items, pendientes, hrefAsistente = '/dashboard/chat' }: { items: ItemBusqueda[]; pendientes: string[]; hrefAsistente?: string }) {
   const router = useRouter();
   const [q, setQ] = useState('');
   const [abierto, setAbierto] = useState<'busqueda' | 'campana' | null>(null);
@@ -86,9 +86,10 @@ export function BarraAcciones({ items, pendientes }: { items: ItemBusqueda[]; pe
         )}
       </div>
 
-      {/* ── Preguntar a la IA (abre el asistente del rail) ── */}
+      {/* ── Preguntar a la IA — abre SU página (/dashboard/chat, estilo
+          usehandle.ai), pedido del 12-ago; antes expandía el rail. ── */}
       <button type="button" className={`${BOTON_BARRA} px-3`}
-        onClick={() => { window.dispatchEvent(new CustomEvent('likida:abrir-asistente')); setAbierto(null); }}>
+        onClick={() => { setAbierto(null); router.push(hrefAsistente); }}>
         <Sparkles width={14} height={14} strokeWidth={1.75} />
         Preguntar a la IA
       </button>

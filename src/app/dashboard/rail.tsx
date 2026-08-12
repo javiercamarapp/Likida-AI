@@ -50,16 +50,6 @@ export default function RailAsistente() {
     return () => { delete raiz.dataset.asistente; };
   }, [expandido]);
 
-  // El botón "Preguntar a la IA" de la barra del Resumen (barra-acciones.tsx)
-  // abre ESTE asistente — un evento del DOM porque son hermanos lejanos en el
-  // árbol y levantar el estado hasta el layout volvería cliente todo el marco
-  // (misma razón por la que la expansión ya viaja como atributo en la raíz).
-  useEffect(() => {
-    const abrir = () => setExpandido(true);
-    window.addEventListener('likida:abrir-asistente', abrir);
-    return () => window.removeEventListener('likida:abrir-asistente', abrir);
-  }, []);
-
   // Sin `setCargando(true)` síncrono aquí: llamar setState en el cuerpo del
   // efecto encadena un render de más (regla `react-hooks/set-state-in-effect`).
   // El estado ya arranca en `true`, y al cambiar de tenant el `finally` lo
@@ -89,7 +79,9 @@ export default function RailAsistente() {
   // asistente` se hace una vez de más aquí — precio aceptable por no
   // duplicar este componente. En las otras páginas el rail sigue fijo, sin
   // cambios.
-  if (pathname === '/dashboard') return null;
+  // Tampoco en /dashboard/chat: esa página ES el asistente en grande —
+  // mostrar el rail al lado sería el mismo chat dos veces (12-ago-2026).
+  if (pathname === '/dashboard' || pathname === '/dashboard/chat') return null;
 
   return (
     // EXPANDIDO SE SALE DEL FLUJO, no crece dentro de él.

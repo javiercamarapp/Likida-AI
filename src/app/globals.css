@@ -281,3 +281,16 @@ html, body {
   font-family: var(--font-mono), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Sidebar colapsable (botón tipo Handle, 12-ago-2026) ───────────────────
+   `boton-sidebar.tsx` marca la raíz con data-sidebar='min' (y lo recuerda en
+   localStorage). El CSS hace el resto: la lámina baja a 72px y todo lo
+   textual marcado con .sb-texto desaparece — así el colapso no depende del
+   breakpoint responsive, que sigue funcionando igual por debajo de `lg`. */
+:root[data-sidebar='min'] .sb-aside { width: 72px !important; }
+:root[data-sidebar='min'] .sb-texto { display: none !important; }
+:root[data-sidebar='min'] .sb-centrable { justify-content: center !important; }
+/* Colapsado, 72px no dan para logo + botón con aire: queda solo el botón
+   (que es el único camino de regreso). El logo vuelve al expandir. */
+:root[data-sidebar='min'] .sb-logo { display: none; }
+:root[data-sidebar='min'] .sb-aside .ml-auto { margin-left: 0; }

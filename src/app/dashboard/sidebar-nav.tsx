@@ -6,7 +6,7 @@ import { LayoutGrid } from 'lucide-react';
 import { type Item, SIDEBAR_PRINCIPAL, FISCAL } from './rutas';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 
-const ITEM = 'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors';
+const ITEM = 'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors sb-centrable';
 
 /** Item activo = pill SUAVE (`--g1` de fondo, texto e ícono `--marca`) —
  *  dirección v3 del 12-ago-2026 (DESIGN.md, patrón Sentinel/Vocalyn), ya no
@@ -35,14 +35,14 @@ function Seccion({ titulo, items, sufijo, pathname }: { titulo: string; items: I
 
   return (
     <div>
-      <div className="px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+      <div className="px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide sb-texto" style={{ color: 'var(--muted)' }}>
         {titulo}
       </div>
       {items.map(({ href, nombre, Icono }) => {
         const activo = pathname === href;
         return (
-          <Link key={href} href={`${href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)}>
-            <Icono {...estiloIcono(activo)} /> {nombre}
+          <Link key={href} href={`${href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={nombre}>
+            <Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{nombre}</span>
           </Link>
         );
       })}
@@ -109,8 +109,8 @@ export default function SidebarNav({ rol }: { rol: string }) {
     <>
       {puedeVerRuta(rolMenu, '/dashboard') && (
         <div>
-          <Link href={`/dashboard${sufijo}`} className={claseItem(resumenActivo)} style={estiloItem(resumenActivo)}>
-            <LayoutGrid {...estiloIcono(resumenActivo)} /> Resumen
+          <Link href={`/dashboard${sufijo}`} className={claseItem(resumenActivo)} style={estiloItem(resumenActivo)} title="Resumen">
+            <LayoutGrid {...estiloIcono(resumenActivo)} /> <span className="sb-texto truncate">Resumen</span>
           </Link>
         </div>
       )}
@@ -119,8 +119,8 @@ export default function SidebarNav({ rol }: { rol: string }) {
       {visibles(SIDEBAR_PRINCIPAL).map(({ href, nombre, Icono }) => {
         const activo = pathname === href;
         return (
-          <Link key={href} href={`${href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)}>
-            <Icono {...estiloIcono(activo)} /> {nombre}
+          <Link key={href} href={`${href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={nombre}>
+            <Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{nombre}</span>
           </Link>
         );
       })}
