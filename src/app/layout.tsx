@@ -1,15 +1,22 @@
 import type { Metadata } from 'next';
-import { Inter, Manrope } from 'next/font/google';
+import { Inter, Inter_Tight, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 
 // La MISMA familia que usehandle.ai, leída de su propio CSS computado
-// (capturado 2-ago-2026): Inter de default en todo el sitio, y su clase
-// `.display` usa Satoshi — una fuente de Fontshare que no está en Google
-// Fonts y no tiene un next/font/google que la sirva con licencia clara.
-// Manrope es la alternativa geométrica más cercana a Satoshi que sí se
-// puede self-hostear aquí con licencia real (Google Fonts, SIL OFL).
+// (capturado 2-ago-2026): Inter de default en todo el sitio. El 12-ago-2026
+// Javier pidió la tipografía "más corporativa, tipo usehandle.ai" para los
+// paneles, y la referencia tiene DOS voces más aparte del Inter de texto:
+//
+//  - Titulares en una grotesca APRETADA ("Payments Validation Agent") —
+//    Inter Tight es esa misma voz con licencia clara (Google Fonts, OFL);
+//    reemplaza a Manrope, que era la alternativa a Satoshi de la landing
+//    vieja y se leía redonda, no corporativa.
+//  - Micro-rótulos y cifras de tabla en MONO ("POLICIES MONITORED",
+//    "$9,242.88") — IBM Plex Mono, la voz que hace que un panel se lea
+//    como estado de cuenta. Se usa vía `.etiqueta-mono` (globals.css).
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans-handle' });
-const manrope = Manrope({ subsets: ['latin'], variable: '--font-display' });
+const interTight = Inter_Tight({ subsets: ['latin'], variable: '--font-display' });
+const plexMono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-mono' });
 
 export const metadata: Metadata = {
   title: 'Likida — Liquidación de viajes',
@@ -38,7 +45,7 @@ export const viewport = { width: 'device-width', initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${inter.variable} ${manrope.variable}`}>
+    <html lang="es" className={`${inter.variable} ${interTight.variable} ${plexMono.variable}`}>
       <body>{children}</body>
     </html>
   );

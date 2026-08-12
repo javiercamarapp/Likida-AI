@@ -6,7 +6,7 @@ import { LayoutGrid } from 'lucide-react';
 import { type Item, SIDEBAR_PRINCIPAL, FISCAL } from './rutas';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 
-const ITEM = 'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors';
+const ITEM = 'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors';
 
 /** Item activo = pill SUAVE (`--g1` de fondo, texto e ícono `--marca`) —
  *  dirección v3 del 12-ago-2026 (DESIGN.md, patrón Sentinel/Vocalyn), ya no
