@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Send, ArrowUp, Search, Paperclip, Camera, FileImage } from 'lucide-react';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero } from '@/lib/formato';
+import { useSearchParams } from 'next/navigation';
 import { Logo } from '../logo';
-import { Dona } from '../admin/charts';
+import { Dona, AreaChartSimple } from '../admin/charts';
 
 /**
  * Mismo criterio que admin/chat.tsx: coincidencia de palabras clave contra
@@ -31,9 +32,32 @@ const PREGUNTAS = [
 type Visual =
   | { tipo: 'tabla'; filas: Array<[string, string]> }
   | { tipo: 'dona'; segmentos: Array<{ etiqueta: string; valor: number }> }
-  | { tipo: 'cifra'; valor: string; nota?: string };
+  | { tipo: 'cifra'; valor: string; nota?: string }
+  | { tipo: 'serie'; puntos: Array<{ dia: string; valor: number }>; formato: 'mxn' | 'numero' };
 
-interface Respuesta { texto: string; visual?: Visual }
+interface Respuesta { texto: string; visual?: Visual; visuales?: Visual[] }
+
+/** Los bloques del agente analista (/api/dashboard/chat) → la Respuesta que
+ *  esta interfaz ya sabe pintar. El agente manda números crudos; aquí se
+ *  formatean con lib/formato — UNA sola fuente de formato, como siempre. */
+function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Respuesta {
+  const textos: string[] = [];
+  const visuales: Visual[] = [];
+  for (const b of bloques) {
+    if (b.tipo === 'texto' && typeof b.texto === 'string') textos.push(b.texto);
+    else if (b.tipo === 'cifra' && typeof b.valor === 'number') {
+      const f = b.formato === 'mxn' ? mxn : b.formato === 'litros' ? litros : numero;
+      visuales.push({ tipo: 'cifra', valor: f(b.valor), nota: typeof b.nota === 'string' ? b.nota : undefined });
+    } else if (b.tipo === 'tabla' && Array.isArray(b.filas)) {
+      visuales.push({ tipo: 'tabla', filas: (b.filas as Array<[string, string | number]>).map(([k, v]) => [k, typeof v === 'number' ? numero(v) : v]) });
+    } else if (b.tipo === 'dona' && Array.isArray(b.segmentos)) {
+      visuales.push({ tipo: 'dona', segmentos: b.segmentos as Array<{ etiqueta: string; valor: number }> });
+    } else if (b.tipo === 'serie' && Array.isArray(b.puntos)) {
+      visuales.push({ tipo: 'serie', puntos: b.puntos as Array<{ dia: string; valor: number }>, formato: b.formato === 'mxn' ? 'mxn' : 'numero' });
+    }
+  }
+  return { texto: textos.join(' ') || 'Listo.', visuales: visuales.length > 0 ? visuales : undefined };
+}
 
 function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null): Respuesta {
   const q = pregunta.toLowerCase();
@@ -123,6 +147,13 @@ function VisualRespuesta({ v }: { v: Visual }) {
   }
   if (v.tipo === 'dona') {
     return <div className="card p-3 mt-2"><Dona segmentos={v.segmentos} /></div>;
+  }
+  if (v.tipo === 'serie') {
+    return (
+      <div className="card p-3 mt-2">
+        <AreaChartSimple datos={v.puntos} etiquetaValor={v.formato === 'mxn' ? mxn : numero} />
+      </div>
+    );
   }
   return (
     <div className="card p-1.5 mt-2">
@@ -263,10 +294,46 @@ export default function ChatFlota({
     },
   ];
 
+  const spChat = useSearchParams();
+  const RESPUESTA_GENERICA = 'Todavía no sé responder eso';
+
   function preguntar(q: string) {
-    if (!q.trim()) return;
-    setHistorial((h) => [...h, { q, r: responder(q, kpis, acred) }]);
+    if (!q.trim() || ocupado) return;
     setTexto('');
+    const local = responder(q, kpis, acred);
+    // FAST-PATH GRATIS: si el respondedor de palabras clave tiene la
+    // respuesta, ni un token se gasta. Al agente solo va lo que necesita
+    // pensar — esa es la primera capa anti-quemadura.
+    if (!local.texto.startsWith(RESPUESTA_GENERICA)) {
+      setHistorial((h) => [...h, { q, r: local }]);
+      return;
+    }
+    void preguntarAnalista(q);
+  }
+
+  async function preguntarAnalista(q: string) {
+    setOcupado(true);
+    setHistorial((h) => [...h, { q, r: { texto: 'Analizando tu operación…' } }]);
+    try {
+      const previos = historial.flatMap((h) => [
+        { rol: 'usuario' as const, texto: h.q },
+        { rol: 'asistente' as const, texto: h.r.texto },
+      ]);
+      const tenant = spChat.get('tenant');
+      const resp = await fetch(`/api/dashboard/chat${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }] }),
+      });
+      const d = await resp.json().catch(() => null);
+      const r: Respuesta = resp.ok && d && Array.isArray(d.bloques)
+        ? respuestaDeBloques(d.bloques as Array<Record<string, unknown>>)
+        : { texto: d?.error ?? 'El analista no está disponible en este momento — las respuestas rápidas del catálogo siguen funcionando.' };
+      setHistorial((h) => [...h.slice(0, -1), { q, r }]);
+    } catch {
+      setHistorial((h) => [...h.slice(0, -1), { q, r: { texto: 'El analista no está disponible en este momento — las respuestas rápidas del catálogo siguen funcionando.' } }]);
+    } finally {
+      setOcupado(false);
+    }
   }
 
   const historialView = historial.length > 0 ? (
@@ -433,6 +500,7 @@ export default function ChatFlota({
                   <div className="mt-2.5 text-sm max-w-[85%]">
                     <div>{h.r.texto}</div>
                     {h.r.visual && <VisualRespuesta v={h.r.visual} />}
+                    {h.r.visuales?.map((v, j) => <VisualRespuesta key={j} v={v} />)}
                   </div>
                 </div>
               ))}
