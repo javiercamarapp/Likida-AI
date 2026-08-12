@@ -59,8 +59,15 @@ function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Respuesta 
   return { texto: textos.join(' ') || 'Listo.', visuales: visuales.length > 0 ? visuales : undefined };
 }
 
+/** Saludos y cortesías se resuelven aquí, gratis — un "hola" no debe gastar
+ *  tokens ni arriesgarse a la guardia (pasó en vivo el 12-ago). */
+const SALUDO_RE = /^\s*(hola|holi|buenas|buenos?\s*(días|dias|tardes|noches)?|hey|qué tal|que tal|saludos|gracias|ok|va|listo|perfecto)\s*[!.\u{1F44B}]*\s*$/iu;
+
 function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null): Respuesta {
   const q = pregunta.toLowerCase();
+  if (SALUDO_RE.test(pregunta)) {
+    return { texto: '¡Hola! Soy el analista de tu operación. Pregúntame por tu gasto, tu cuadre, tus rutas o tu motor fiscal — o abre el catálogo con el botón Consulta.' };
+  }
   const sinLiq = { texto: 'Todavía no hay liquidaciones para calcular esto.' };
   if (q.includes('comprobad') || q.includes('monto')) {
     if (!kpis) return sinLiq;
