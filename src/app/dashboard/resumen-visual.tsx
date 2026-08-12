@@ -68,9 +68,9 @@ export function ChipFecha({ icono, children }: { icono?: ReactNode; children: Re
  *  chip de fecha / CTA cuando exista una acción real. */
 export function HeroSaludo({ saludo, nombre, tagline, derecha }: { saludo: string; nombre: string; tagline: string; derecha?: ReactNode }) {
   return (
-    <div className="px-5 pt-5 pb-0.5 shrink-0 min-w-0 flex items-start justify-between gap-3">
+    <div className="px-5 pt-3.5 pb-0.5 shrink-0 min-w-0 flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="font-display text-[22px] font-semibold truncate">
+        <h1 className="font-display text-[20px] font-semibold truncate">
           {saludo}, {nombre}
         </h1>
         <p className="text-[13px] mt-1 truncate" style={{ color: 'var(--muted)' }}>{tagline}</p>
@@ -140,17 +140,17 @@ export function TablaViajes({ viajes, sufijo = '' }: { viajes: FilaViaje[]; sufi
             const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino;
             return (
               <tr key={v.id} className="border-b transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
-                <td className="px-3 py-2.5 min-w-0">
+                <td className="px-3 py-2 min-w-0">
                   <div className="text-sm font-medium">{v.folio}</div>
                   {/* Sin origen/destino capturados no se inventa una ruta:
                       un guion dice "falta el dato", no "viaje sin ruta". */}
                   <div className="text-xs mt-0.5 truncate max-w-[260px]" style={{ color: 'var(--muted)' }}>{ruta ?? '—'}</div>
                 </td>
-                <td className="px-3 py-2.5 text-sm whitespace-nowrap">{v.operadorNombre ?? <span style={{ color: 'var(--faint)' }}>Sin asignar</span>}</td>
-                <td className="cifra-mono px-3 py-2.5 text-[13px] text-right whitespace-nowrap">{mxn(v.anticipo)}</td>
-                <td className="px-3 py-2.5"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></td>
-                <td className="px-3 py-2.5 text-[13px] whitespace-nowrap" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio)}</td>
-                <td className="px-3 py-2.5 text-right">
+                <td className="px-3 py-2 text-sm whitespace-nowrap">{v.operadorNombre ?? <span style={{ color: 'var(--faint)' }}>Sin asignar</span>}</td>
+                <td className="cifra-mono px-3 py-2 text-[13px] text-right whitespace-nowrap">{mxn(v.anticipo)}</td>
+                <td className="px-3 py-2"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></td>
+                <td className="px-3 py-2 text-[13px] whitespace-nowrap" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio)}</td>
+                <td className="px-3 py-2 text-right">
                   {v.liqId ? (
                     <Link href={`/dashboard/${v.liqId}${sufijo}`} className="text-[13px] font-medium hover:opacity-70 transition-opacity">
                       Ver

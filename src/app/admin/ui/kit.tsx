@@ -118,8 +118,8 @@ export function StatCard({
     // INTERNA tenue (ícono + etiqueta + cifra) y el delta como línea de
     // texto DEBAJO de la caja, dentro de la tarjeta. El chip del ícono es
     // oscuro (--marca) con el glifo claro, como en la foto.
-    <div className="card p-2.5 h-full flex flex-col min-w-0">
-      <div className="rounded-xl px-3 pt-2.5 pb-3 min-w-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line2)' }}>
+    <div className="card p-2 h-full flex flex-col min-w-0">
+      <div className="rounded-xl px-3 py-2 min-w-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line2)' }}>
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
             {icono}
@@ -127,20 +127,29 @@ export function StatCard({
           <div className="text-[13px] min-w-0 flex-1 line-clamp-2" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
           {flechas}
         </div>
-        <div className="font-display text-[28px] leading-tight font-semibold tabular mt-1">{fmt(mostrado)}</div>
+        <div className="font-display text-[20px] leading-tight font-semibold tabular mt-0.5">{fmt(mostrado)}</div>
       </div>
       {/* El espaciador alinea los pies en una fila de tarjetas parejas
           (`h-full`) aunque una etiqueta envuelva a dos líneas. */}
       <div className="grow" />
       {delta ? (
-        <div className="px-1.5 pt-2 pb-0.5 text-xs flex items-baseline gap-1.5 min-w-0">
-          <span className="font-medium tabular shrink-0" style={{ color: delta.bueno ? 'var(--ok)' : 'var(--bad)' }}>
-            {delta.pct >= 0 ? '↑' : '↓'} {Math.abs(delta.pct)}%
+        <div className="px-1.5 pt-1.5 pb-0 text-xs flex items-baseline gap-1.5 min-w-0">
+          {/* Un 0% real (comparó y no cambió) va en gris neutro, no en verde
+              ni rojo: "no se movió" no es buena ni mala noticia. */}
+          <span className="font-medium tabular shrink-0"
+            style={{ color: delta.pct === 0 ? 'var(--faint)' : delta.bueno ? 'var(--ok)' : 'var(--bad)' }}>
+            {delta.pct === 0 ? '' : delta.pct > 0 ? '↑ ' : '↓ '}{Math.abs(delta.pct)}%
           </span>
-          <span className="truncate" style={{ color: 'var(--faint)' }}>{deltaNota}</span>
+          <span className="truncate" style={{ color: 'var(--faint)' }}>{delta.pct === 0 ? 'sin cambio vs periodo anterior' : deltaNota}</span>
         </div>
       ) : nota ? (
-        <p className="text-xs px-1.5 pt-2 pb-0.5" style={{ color: 'var(--faint)' }}>{nota}</p>
+        <p className="text-xs px-1.5 pt-1.5 pb-0" style={{ color: 'var(--faint)' }}>{nota}</p>
+      ) : delta === null ? (
+        // Se intentó comparar y no hay contra qué: el pie no se queda vacío
+        // (pedido del 12-ago), pero en gris y sin inventar dirección. Con
+        // `delta` OMITIDO (undefined) no se pinta nada — métricas sin
+        // concepto de comparativo (Diésel) van limpias, pedido del mismo día.
+        <p className="text-xs px-1.5 pt-1.5 pb-0 tabular" style={{ color: 'var(--faint)' }}>0% · sin movimiento</p>
       ) : null}
     </div>
   );
