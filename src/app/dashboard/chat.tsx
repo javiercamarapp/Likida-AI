@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { Send, ArrowUp, Search } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Send, ArrowUp, Search, Paperclip, Upload } from 'lucide-react';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
-import { mxn, litros } from '@/lib/formato';
+import { mxn, litros, numero } from '@/lib/formato';
 import { Logo } from '../logo';
+import { Dona } from '../admin/charts';
 
 /**
  * Mismo criterio que admin/chat.tsx: coincidencia de palabras clave contra
@@ -18,29 +19,123 @@ const PREGUNTAS = [
   '¿Cuántos viajes tengo con diferencia?',
   '¿Cuánto diésel es elegible para el estímulo?',
   '¿Cuál es mi tasa de cuadre?',
+  '¿Cuánto llevo de acreditables?',
 ];
 
-function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null): string {
+// ── Respuestas con forma (12-ago-2026: "que responda con gráficas, tablas
+// y muy visual") — cada respuesta puede traer, además del texto, una pieza
+// visual armada con los MISMOS datos ya calculados: una tabla chica, la
+// dona de `admin/charts` o una cifra grande. Nada se grafica sin dato real:
+// con la flota en cero, la respuesta es el texto honesto de siempre.
+
+type Visual =
+  | { tipo: 'tabla'; filas: Array<[string, string]> }
+  | { tipo: 'dona'; segmentos: Array<{ etiqueta: string; valor: number }> }
+  | { tipo: 'cifra'; valor: string; nota?: string };
+
+interface Respuesta { texto: string; visual?: Visual }
+
+function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null): Respuesta {
   const q = pregunta.toLowerCase();
+  const sinLiq = { texto: 'Todavía no hay liquidaciones para calcular esto.' };
   if (q.includes('comprobad') || q.includes('monto')) {
-    return kpis ? `Llevas ${mxn(kpis.montoComprobado)} comprobados en ${kpis.viajesLiquidados} viaje${kpis.viajesLiquidados === 1 ? '' : 's'}.` : 'Todavía no hay liquidaciones para calcular esto.';
+    if (!kpis) return sinLiq;
+    return {
+      texto: `Llevas ${mxn(kpis.montoComprobado)} comprobados en ${kpis.viajesLiquidados} viaje${kpis.viajesLiquidados === 1 ? '' : 's'}.`,
+      visual: {
+        tipo: 'tabla',
+        filas: [
+          ['Monto comprobado', mxn(kpis.montoComprobado)],
+          ['Viajes liquidados', numero(kpis.viajesLiquidados)],
+          ['Con diferencias', numero(kpis.conDiferencias)],
+          ['Por revisar', numero(kpis.porRevisar)],
+          ['Dinero observado', mxn(kpis.diferenciaDetectada)],
+        ],
+      },
+    };
   }
   if (q.includes('diferencia') || q.includes('revisar')) {
-    return kpis ? `${kpis.conDiferencias + kpis.porRevisar} liquidaciones tienen diferencia o están por revisar, de ${kpis.viajesLiquidados} en total.` : 'Todavía no hay liquidaciones para calcular esto.';
+    if (!kpis) return sinLiq;
+    const limpias = Math.max(0, kpis.viajesLiquidados - kpis.conDiferencias - kpis.porRevisar);
+    return {
+      texto: `${kpis.conDiferencias + kpis.porRevisar} liquidaciones tienen diferencia o están por revisar, de ${kpis.viajesLiquidados} en total.`,
+      visual: kpis.viajesLiquidados > 0
+        ? { tipo: 'dona', segmentos: [
+            { etiqueta: 'Sin diferencias', valor: limpias },
+            { etiqueta: 'Con diferencias', valor: kpis.conDiferencias },
+            { etiqueta: 'Por revisar', valor: kpis.porRevisar },
+          ] }
+        : undefined,
+    };
   }
   if (q.includes('diesel') || q.includes('diésel') || q.includes('litro')) {
-    return acred ? `${litros(acred.litrosDiesel)} elegibles para el estímulo este periodo (LIF 2026, Art. 20-A).` : 'Todavía no hay datos de diésel este periodo.';
+    if (!acred) return { texto: 'Todavía no hay datos de diésel este periodo.' };
+    return {
+      texto: `${litros(acred.litrosDiesel)} elegibles para el estímulo este periodo.`,
+      visual: { tipo: 'cifra', valor: litros(acred.litrosDiesel), nota: 'LIF 2026, Art. 20-A — el estímulo en pesos lo fija la cuota DOF de cada semana.' },
+    };
   }
   if (q.includes('tasa') || q.includes('cuadre') || q.includes('cuadra')) {
-    return kpis ? `Tu tasa de cuadre es ${kpis.tasaCuadre}% — liquidaciones sin diferencias sobre el total.` : 'Todavía no hay liquidaciones para calcular esto.';
+    if (!kpis) return sinLiq;
+    const limpias = Math.max(0, kpis.viajesLiquidados - kpis.conDiferencias - kpis.porRevisar);
+    return {
+      texto: `Tu tasa de cuadre es ${kpis.tasaCuadre}% — liquidaciones sin diferencias sobre el total.`,
+      visual: kpis.viajesLiquidados > 0
+        ? { tipo: 'dona', segmentos: [
+            { etiqueta: 'Sin diferencias', valor: limpias },
+            { etiqueta: 'Con diferencias o por revisar', valor: kpis.conDiferencias + kpis.porRevisar },
+          ] }
+        : undefined,
+    };
   }
-  if (q.includes('iva')) {
-    return acred ? `${mxn(acred.iva)} de IVA acreditable este periodo (LIVA, Art. 5).` : 'Todavía no hay datos de IVA este periodo.';
+  if (q.includes('iva') || q.includes('peaje') || q.includes('caseta') || q.includes('acreditable')) {
+    if (!acred) return { texto: 'Todavía no hay datos de acreditables este periodo.' };
+    return {
+      texto: q.includes('iva')
+        ? `${mxn(acred.iva)} de IVA acreditable este periodo (LIVA, Art. 5).`
+        : `${mxn(acred.peaje)} de peaje acreditable (50%) este periodo — sujeto a elegibilidad.`,
+      visual: {
+        tipo: 'tabla',
+        filas: [
+          ['IVA acreditable', mxn(acred.iva)],
+          ['Peaje acreditable (50%)', mxn(acred.peaje)],
+          ['Diésel elegible', litros(acred.litrosDiesel)],
+        ],
+      },
+    };
   }
-  if (q.includes('peaje') || q.includes('caseta')) {
-    return acred ? `${mxn(acred.peaje)} de peaje acreditable (50%) este periodo — sujeto a elegibilidad.` : 'Todavía no hay datos de peaje este periodo.';
+  return { texto: 'Todavía no sé responder eso — pregúntame sobre lo comprobado, diferencias, diésel, IVA, peaje o tu tasa de cuadre.' };
+}
+
+/** La pieza visual de una respuesta — tabla chica, dona o cifra grande,
+ *  con los mismos componentes del resto del panel (nunca una segunda
+ *  librería). */
+function VisualRespuesta({ v }: { v: Visual }) {
+  if (v.tipo === 'cifra') {
+    return (
+      <div className="card px-4 py-3 mt-2 inline-block">
+        <div className="font-display text-[22px] leading-tight font-semibold tabular">{v.valor}</div>
+        {v.nota && <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>{v.nota}</p>}
+      </div>
+    );
   }
-  return 'Todavía no sé responder eso — pregúntame sobre lo comprobado, diferencias, diésel, IVA, peaje o tu tasa de cuadre.';
+  if (v.tipo === 'dona') {
+    return <div className="card p-3 mt-2"><Dona segmentos={v.segmentos} /></div>;
+  }
+  return (
+    <div className="card p-1.5 mt-2">
+      <table className="w-full border-collapse text-[13px]">
+        <tbody>
+          {v.filas.map(([k, val]) => (
+            <tr key={k} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
+              <td className="px-2.5 py-1.5" style={{ color: 'var(--muted)' }}>{k}</td>
+              <td className="cifra-mono px-2.5 py-1.5 text-right">{val}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export default function ChatFlota({
@@ -59,12 +154,80 @@ export default function ChatFlota({
    */
   variante?: 'panel' | 'hero';
 }) {
-  const [historial, setHistorial] = useState<Array<{ q: string; a: string }>>([]);
+  const [historial, setHistorial] = useState<Array<{ q: string; r: Respuesta }>>([]);
   const [texto, setTexto] = useState('');
+  // Ingesta REAL de prueba (12-ago): la imagen adjunta viaja a
+  // /api/dashboard/ingesta, que corre el MISMO OCR del motor y devuelve lo
+  // leído — sin registrar nada. `ocupado` bloquea dobles envíos mientras la
+  // visión trabaja.
+  const [ocupado, setOcupado] = useState(false);
+  const [recomendar, setRecomendar] = useState(false);
+  const inputArchivo = useRef<HTMLInputElement>(null);
+
+  async function leerArchivo(archivo: File) {
+    if (ocupado) return;
+    setOcupado(true);
+    const etiquetaQ = `Leer comprobante: ${archivo.name}`;
+    try {
+      const dataUrl = await new Promise<string>((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(String(fr.result));
+        fr.onerror = () => rej(fr.error);
+        fr.readAsDataURL(archivo);
+      });
+      const resp = await fetch('/api/dashboard/ingesta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imagen: dataUrl }),
+      });
+      const d = await resp.json().catch(() => null);
+      if (!resp.ok || !d) {
+        setHistorial((h) => [...h, { q: etiquetaQ, r: { texto: d?.error ?? 'No se pudo leer la imagen en este momento.' } }]);
+        return;
+      }
+      if (!d.legible) {
+        setHistorial((h) => [...h, { q: etiquetaQ, r: { texto: `El motor no pudo leer este papel${d.motivo ? ` (${d.motivo})` : ''}. Con una foto más cercana y sin reflejos suele salir.` } }]);
+        return;
+      }
+      const filas: Array<[string, string]> = [];
+      if (d.campos.concepto) filas.push(['Concepto', String(d.campos.concepto)]);
+      if (typeof d.campos.monto === 'number') filas.push(['Monto', mxn(d.campos.monto)]);
+      if (d.campos.fecha) filas.push(['Fecha', String(d.campos.fecha)]);
+      if (d.campos.folio) filas.push(['Folio', String(d.campos.folio)]);
+      if (d.campos.rfcEmisor) filas.push(['RFC emisor', String(d.campos.rfcEmisor)]);
+      if (typeof d.campos.litros === 'number') filas.push(['Litros', litros(d.campos.litros)]);
+      if (typeof d.campos.confianza === 'number') filas.push(['Confianza del OCR', `${Math.round(d.campos.confianza * 100)}%`]);
+      setHistorial((h) => [...h, {
+        q: etiquetaQ,
+        r: {
+          texto: 'Esto fue lo que el motor leyó del papel — lectura de prueba, no se registró ningún gasto.',
+          visual: filas.length > 0 ? { tipo: 'tabla', filas } : undefined,
+        },
+      }]);
+    } catch {
+      setHistorial((h) => [...h, { q: etiquetaQ, r: { texto: 'No se pudo leer la imagen en este momento.' } }]);
+    } finally {
+      setOcupado(false);
+      if (inputArchivo.current) inputArchivo.current.value = '';
+    }
+  }
+
+  /** Recomendaciones VIVAS según los datos del tenant — lo que el botón
+   *  Consulta despliega (pedido del 12-ago). Solo sugiere lo que tiene
+   *  respuesta con sustancia hoy. */
+  function recomendaciones(): string[] {
+    const r: string[] = [];
+    if (kpis && kpis.conDiferencias + kpis.porRevisar > 0) r.push('¿Cuántos viajes tengo con diferencia?');
+    if (kpis && kpis.montoComprobado > 0) r.push('¿Cuánto llevo comprobado?');
+    if (acred && acred.litrosDiesel > 0) r.push('¿Cuánto diésel es elegible para el estímulo?');
+    if (acred && (acred.iva > 0 || acred.peaje > 0)) r.push('¿Cuánto llevo de acreditables?');
+    if (kpis && kpis.viajesLiquidados > 0) r.push('¿Cuál es mi tasa de cuadre?');
+    // Flota en cero: las genéricas, para que el botón nunca abra vacío.
+    return r.length > 0 ? r : [...PREGUNTAS];
+  }
 
   function preguntar(q: string) {
     if (!q.trim()) return;
-    setHistorial((h) => [...h, { q, a: responder(q, kpis, acred) }]);
+    setHistorial((h) => [...h, { q, r: responder(q, kpis, acred) }]);
     setTexto('');
   }
 
@@ -73,7 +236,7 @@ export default function ChatFlota({
       {historial.map((h, i) => (
         <div key={i} className="text-sm">
           <div className="font-medium">{h.q}</div>
-          <div style={{ color: 'var(--muted)' }}>{h.a}</div>
+          <div style={{ color: 'var(--muted)' }}>{h.r.texto}</div>
         </div>
       ))}
     </div>
@@ -128,11 +291,12 @@ export default function ChatFlota({
           )}
 
           {!vacio && (
-            <div className="w-full mb-6 max-h-[46vh] overflow-y-auto space-y-4 text-left">
+            <div className="w-full mb-6 max-h-[52vh] overflow-y-auto space-y-4 text-left">
               {historial.map((h, i) => (
                 <div key={i} className="text-sm">
                   <div className="font-medium">{h.q}</div>
-                  <div className="mt-0.5" style={{ color: 'var(--muted)' }}>{h.a}</div>
+                  <div className="mt-0.5" style={{ color: 'var(--muted)' }}>{h.r.texto}</div>
+                  {h.r.visual && <VisualRespuesta v={h.r.visual} />}
                 </div>
               ))}
             </div>
@@ -155,29 +319,61 @@ export default function ChatFlota({
               aria-label="Pregunta sobre tu operación"
               className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed"
             />
-            <div className="flex items-center justify-between mt-3">
-              {/* Lo que esta caja hace, dicho en la caja. No hay un segundo modo:
-                  poner uno apagado prometería algo que no existe. */}
-              <span
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full"
-                style={{ background: 'var(--canvas)', color: 'var(--ink2)' }}
-              >
-                <Search width={11} height={11} strokeWidth={2.25} />
-                Consulta
-              </span>
-              <button
-                type="submit"
-                aria-label="Enviar"
-                disabled={!texto.trim()}
-                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-opacity disabled:cursor-default"
-                style={{
-                  background: 'var(--marca)',
-                  color: 'var(--marca-fg)',
-                  opacity: texto.trim() ? 1 : 0.35,
-                }}
-              >
-                <ArrowUp width={15} height={15} strokeWidth={2.5} />
-              </button>
+            <div className="flex items-center justify-between mt-3 relative">
+              <div className="flex items-center gap-1.5">
+                {/* Consulta despliega recomendaciones VIVAS según los datos;
+                    Ingesta abre el selector — la imagen va al OCR real. */}
+                <button type="button" onClick={() => setRecomendar((v) => !v)}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full transition-opacity hover:opacity-85"
+                  style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+                  <Search width={11} height={11} strokeWidth={2.25} />
+                  Consulta
+                </button>
+                <button type="button" onClick={() => inputArchivo.current?.click()} disabled={ocupado}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
+                  style={{ color: 'var(--ink2)' }}>
+                  <Upload width={11} height={11} strokeWidth={2.25} />
+                  {ocupado ? 'Leyendo…' : 'Ingesta'}
+                </button>
+              </div>
+
+              {recomendar && (
+                <div className="absolute left-0 bottom-9 card p-1.5 z-30 w-72">
+                  {recomendaciones().map((rq) => (
+                    <button key={rq} type="button"
+                      onClick={() => { setRecomendar(false); preguntar(rq); }}
+                      className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)]">
+                      {rq}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center gap-1.5">
+                {/* UN solo botón de adjuntar, pegado a enviar — como la
+                    referencia. Mismo destino que Ingesta: el OCR real. */}
+                <input ref={inputArchivo} type="file" accept="image/*" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
+                <button type="button" aria-label="Adjuntar imagen del comprobante" title="Adjuntar imagen del comprobante"
+                  onClick={() => inputArchivo.current?.click()} disabled={ocupado}
+                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
+                  style={{ color: 'var(--ink2)' }}>
+                  <Paperclip width={14} height={14} strokeWidth={2} />
+                </button>
+                <button
+                  type="submit"
+                  aria-label="Enviar"
+                  disabled={!texto.trim() || ocupado}
+                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-opacity disabled:cursor-default"
+                  style={{
+                    background: 'var(--marca)',
+                    color: 'var(--marca-fg)',
+                    opacity: texto.trim() && !ocupado ? 1 : 0.35,
+                  }}
+                >
+                  <ArrowUp width={15} height={15} strokeWidth={2.5} />
+                </button>
+              </div>
             </div>
           </form>
 
@@ -187,8 +383,10 @@ export default function ChatFlota({
                 key={p}
                 type="button"
                 onClick={() => preguntar(p)}
-                className="text-xs px-3 py-1.5 rounded-full hairline transition-colors"
-                style={{ color: 'var(--ink2)' }}
+                className="text-xs px-3 py-1.5 rounded-full hairline transition-opacity hover:opacity-70"
+                // BLANCO explícito (12-ago): la página hero vive sobre el
+                // lienzo tenue --g1 y un chip transparente se veía gris.
+                style={{ color: 'var(--ink2)', background: 'var(--surface)' }}
               >
                 {p}
               </button>
@@ -198,8 +396,8 @@ export default function ChatFlota({
           {/* El límite va a la vista, pero sin otro recuadro: es una nota, no una
               tarjeta. Quitarlo dejaría creer que la caja consulta la base. */}
           <p className="mt-8 text-[11px] leading-relaxed text-center max-w-lg" style={{ color: 'var(--faint)' }}>
-            Responde con cifras ya calculadas en el servidor. No traduce preguntas libres a
-            consultas de base de datos, a propósito. Todavía no devuelve gráficas ni tablas.
+            Responde con cifras ya calculadas en el servidor — en texto, tabla o gráfica según
+            la pregunta. No traduce preguntas libres a consultas de base de datos, a propósito.
           </p>
         </div>
       </div>
