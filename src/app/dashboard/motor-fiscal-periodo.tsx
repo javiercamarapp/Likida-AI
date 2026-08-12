@@ -41,6 +41,19 @@ export function MotorFiscalPeriodo({ series }: { series: Record<Modo, ResumenSim
   }
   const r = series[modo];
 
+  const flechas = (
+    <div className="flex items-center gap-0 shrink-0">
+      <button type="button" aria-label="Periodo más corto" disabled={modoIdx <= 0}
+        onClick={() => setModoIdx((i) => Math.max(i - 1, 0))} className={BOTON} style={{ color: 'var(--muted)' }}>
+        <ChevronLeft width={12} height={12} strokeWidth={2} />
+      </button>
+      <button type="button" aria-label="Periodo más largo" disabled={modoIdx >= MODOS.length - 1}
+        onClick={() => setModoIdx((i) => Math.min(i + 1, MODOS.length - 1))} className={BOTON} style={{ color: 'var(--muted)' }}>
+        <ChevronRight width={12} height={12} strokeWidth={2} />
+      </button>
+    </div>
+  );
+
   return (
     <>
       {/* Misma anatomía y altura las tres (pedido del 12-ago: simetría —
@@ -48,22 +61,13 @@ export function MotorFiscalPeriodo({ series }: { series: Record<Modo, ResumenSim
           + rótulo con su ventana + cifra, todo centrado verticalmente; la
           fila las estira parejas (items-stretch del padre). */}
       <div className="rounded-xl px-3 py-2.5 flex-1 min-w-[190px] flex items-center gap-2.5" style={{ background: 'color-mix(in srgb, var(--color-bad) 10%, transparent)' }}>
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', color: 'var(--color-bad)' }}>
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           <TriangleAlert width={15} height={15} strokeWidth={1.75} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium truncate" style={{ color: 'var(--muted)' }}>En riesgo / perdido · {ETIQUETA_MODO[modo]}</div>
-            <div className="flex items-center gap-0 shrink-0">
-              <button type="button" aria-label="Periodo más corto" disabled={modoIdx <= 0}
-                onClick={() => setModoIdx((i) => Math.max(i - 1, 0))} className={BOTON} style={{ color: 'var(--muted)' }}>
-                <ChevronLeft width={12} height={12} strokeWidth={2} />
-              </button>
-              <button type="button" aria-label="Periodo más largo" disabled={modoIdx >= MODOS.length - 1}
-                onClick={() => setModoIdx((i) => Math.min(i + 1, MODOS.length - 1))} className={BOTON} style={{ color: 'var(--muted)' }}>
-                <ChevronRight width={12} height={12} strokeWidth={2} />
-              </button>
-            </div>
+{flechas}
           </div>
           <div className="font-display text-[20px] leading-tight font-semibold tabular mt-0.5" style={{ color: 'var(--color-bad)' }}>
             {mxn(r.montoEnRiesgo + r.montoPerdido)}
@@ -71,11 +75,14 @@ export function MotorFiscalPeriodo({ series }: { series: Record<Modo, ResumenSim
         </div>
       </div>
       <div className="rounded-xl px-3 py-2.5 flex-1 min-w-[190px] flex items-center gap-2.5" style={{ background: 'color-mix(in srgb, var(--color-ok) 10%, transparent)' }}>
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', color: 'var(--color-ok)' }}>
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           <ReceiptText width={15} height={15} strokeWidth={1.75} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium truncate" style={{ color: 'var(--muted)' }}>Recuperable pidiendo factura · {ETIQUETA_MODO[modo]}</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-medium truncate" style={{ color: 'var(--muted)' }}>Recuperable pidiendo factura · {ETIQUETA_MODO[modo]}</div>
+            {flechas}
+          </div>
           <div className="font-display text-[20px] leading-tight font-semibold tabular mt-0.5" style={{ color: 'var(--color-ok)' }}>
             {mxn(r.montoRecuperable)}
           </div>
