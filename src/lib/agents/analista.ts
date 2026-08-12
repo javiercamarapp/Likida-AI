@@ -23,6 +23,7 @@ import { generateWithTools } from '@/lib/llm/openrouter';
 import { toolSchemas, makeExecutor, registerTool, type ToolContext } from '@/lib/llm/tool-executor';
 import { getSystemPrompt } from './prompts';
 import { logger } from '@/lib/logger';
+import { ahoraMs } from '@/lib/saludo';
 import './chat-tools'; // registra las tools de lectura al importar
 
 // ── El contrato de bloques ──────────────────────────────────────────────────
@@ -263,6 +264,11 @@ export async function ejecutarAnalista(opts: {
     const respaldo = new Set<number>();
     for (const t of res.toolCalls) extraerNumeros(t.result, respaldo);
     extraerNumeros(opts.mensajes.map((m) => m.texto).join(' '), respaldo);
+    // La fecha de HOY también respalda: "el ejercicio 2026" en un saludo no
+    // es invención, es calendario — sin esto, la guardia tumbaba un "hola"
+    // (medido en vivo el 12-ago: el saludo mencionaba el año y no había
+    // tool que lo respaldara).
+    extraerNumeros(new Date(ahoraMs()).toISOString().slice(0, 10), respaldo);
 
     let bloques = CAPTURAS.get(runId)
       ?? (res.finalText.trim() ? [{ tipo: 'texto', texto: res.finalText.trim().slice(0, 900) } as Bloque] : null);
