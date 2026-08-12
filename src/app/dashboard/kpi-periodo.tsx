@@ -2,12 +2,12 @@
 
 import { useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { KpiDegradado } from './resumen-visual';
+import { StatCard } from '../admin/ui/kit';
 import type { ComparativoPeriodo, SeriesKpiCards } from '@/lib/likida/analytics';
 import { pctCambio } from '@/lib/formato';
 import type { FormatoPreset } from '../admin/ui/formato-preset';
 
-const BOTON = 'w-4 h-4 rounded flex items-center justify-center transition-opacity disabled:opacity-30 hover:bg-white/20 disabled:hover:bg-transparent';
+const BOTON = 'w-4 h-4 rounded flex items-center justify-center transition-colors disabled:opacity-30 hover:bg-black/5 disabled:hover:bg-transparent';
 
 type Modo = 'semanal' | 'mensual' | 'historico';
 const MODOS: Modo[] = ['semanal', 'mensual', 'historico'];
@@ -61,16 +61,16 @@ export function KpiPeriodo({
     : pctCambio(valorActual, valorAnterior);
 
   return (
-    <KpiDegradado
+    <StatCard
       icono={icono}
       etiqueta={`${nombre} — ${ETIQUETA_MODO[modo]}`}
       valor={valorActual ?? 0}
       formato={formato}
-      tendencia={pct === null ? null : { pct, bueno: subeEsBueno ? pct >= 0 : pct <= 0 }}
+      delta={pct === null ? null : { pct, bueno: subeEsBueno ? pct >= 0 : pct <= 0 }}
       flechas={
         // Derecha = hacia histórico, izquierda = hacia semanal (pedido
         // explícito del 8-ago-2026 — antes estaba al revés).
-        <div className="flex items-center gap-0.5 opacity-90">
+        <div className="flex items-center gap-0.5 shrink-0" style={{ color: 'var(--muted)' }}>
           <button type="button" aria-label="Periodo más corto" disabled={modoIdx <= 0}
             onClick={() => setModoIdx((i) => Math.max(i - 1, 0))} className={BOTON}>
             <ChevronLeft width={13} height={13} strokeWidth={2} />
