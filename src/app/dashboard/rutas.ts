@@ -21,7 +21,7 @@ export type Item = { href: string; nombre: string; Icono: typeof LayoutGrid };
 export const AGENTES: Item[] = [
   // El rótulo del sidebar es más corto que el título de la página (Agente de
   // Liquidación de Ruta) a propósito — 13-ago: "que el nombre no se corte".
-  { href: '/dashboard/agentes/liquidacion', nombre: 'Agente de liquidación', Icono: Route },
+  { href: '/dashboard/agentes/liquidacion', nombre: 'Agente de Liquidación', Icono: Route },
   { href: '/dashboard/agentes/facturas', nombre: 'Agente de Facturas', Icono: ReceiptText },
 ];
 
