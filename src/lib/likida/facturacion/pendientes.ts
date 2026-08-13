@@ -1,5 +1,6 @@
 import { traerTodo, conteo } from '../pg';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { identificarComercio } from './identificar';
 import { calcularCaducidad, type Caducidad } from './caducidad';
 import type { Comercio, ClaveCampo } from './comercios';
@@ -134,6 +135,25 @@ export async function getPorFacturar(
     'getPorFacturar',
   );
   return filas.map((g) => armar(g, hoy));
+}
+
+/**
+ * Cuántos gastos de la flota YA tienen CFDI amarrado — el acumulado del
+ * trabajo automático (emitido por el agente o pescado del XML consolidado
+ * que mandaron por WhatsApp; hoy no existe captura manual que escriba
+ * `cfdi_uuid`). `null` ≠ 0: si no se pudo contar, se dice.
+ */
+export async function contarConCfdi(tenantId: string): Promise<number | null> {
+  const { count, error } = await supabaseAdmin()
+    .from('gasto')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .not('cfdi_uuid', 'is', null);
+  if (error) {
+    logger.warn('contarConCfdi', { tenantId, err: error.message });
+    return null;
+  }
+  return count ?? null;
 }
 
 export function armar(g: FilaGasto, hoy: string): TicketPorFacturar {
