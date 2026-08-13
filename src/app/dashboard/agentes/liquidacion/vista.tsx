@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Bot, Route, ArrowRight, Inbox } from 'lucide-react';
 import type { LiqRow, DashboardKpis } from '@/lib/likida/analytics';
 import type { ResumenCostoIaTenant } from '@/lib/likida/costos';
-import { mxn, usd, numero, fechaCorta } from '@/lib/formato';
+import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../../resumen-visual';
 
@@ -20,10 +20,11 @@ export function VistaAgenteLiquidacion({
   costo: { ok: ResumenCostoIaTenant } | { err: string };
   sufijo: string;
 }) {
-  // El costo del CHAT es de la otra página ("Chatea con tus datos") — aquí
-  // se suma solo lo que gasta este agente, y se declara.
+  // SIN DÓLARES A PROPÓSITO (13-ago: "eso es para mí, ¿no?"): el costo en
+  // USD del agente es margen de Javier y vive en /admin — al cliente se le
+  // enseña la ACTIVIDAD (lecturas), que comunica trabajo sin abrir la
+  // cocina. El chat no se cuenta: ese se mide en su propia página.
   const fasesAgente = 'ok' in costo ? costo.ok.porFase.filter((f) => f.fase !== 'chat') : [];
-  const costoAgenteUsd = fasesAgente.reduce((s, f) => s + f.costoUsd, 0);
   const eventosAgente = fasesAgente.reduce((s, f) => s + f.n, 0);
 
   return (
@@ -72,19 +73,19 @@ export function VistaAgenteLiquidacion({
             </section>
 
             <section className="card p-4">
-              <h2 className="font-display text-[15px] font-semibold mb-1">Costo del agente</h2>
+              <h2 className="font-display text-[15px] font-semibold mb-1">Actividad de IA</h2>
               {'ok' in costo ? (
                 <>
-                  <div className="cifra-mono text-[22px] font-medium mt-2">{usd(costoAgenteUsd)}</div>
+                  <div className="cifra-mono text-[22px] font-medium mt-2">{numero(eventosAgente)}</div>
                   <p className="text-[12px] mt-1" style={{ color: 'var(--faint)' }}>
-                    {numero(eventosAgente)} lecturas de IA en total, histórico. No incluye el chat
-                    de datos: ese se mide en su propia página.
+                    lecturas de IA del agente en total, histórico — cada comprobante leído y
+                    cada cuadre razonado cuentan una.
                   </p>
                 </>
               ) : (
                 <p className="text-[12px] mt-2" style={{ color: 'var(--faint)' }}>
-                  El costo de IA no se pudo leer ahora mismo — antes que enseñarte un cero que
-                  nadie midió, se queda pendiente. ({costo.err})
+                  La actividad de IA no se pudo leer ahora mismo — antes que enseñarte un cero
+                  que nadie midió, se queda pendiente.
                 </p>
               )}
             </section>
