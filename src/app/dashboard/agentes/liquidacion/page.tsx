@@ -56,6 +56,7 @@ export default async function PaginaAgenteLiquidacion({
   ]);
 
   const extra: ExtraAgenteLiquidacion = {
+    puedeVerReglas: puedeVerRuta(rol, '/dashboard/configuracion'),
     actividadIa: 'ok' in costo
       ? costo.ok.porFase.filter((f) => f.fase !== 'chat').reduce((s, f) => s + f.n, 0)
       : null,
