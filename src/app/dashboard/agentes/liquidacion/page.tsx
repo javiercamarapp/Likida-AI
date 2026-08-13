@@ -77,7 +77,7 @@ export default async function PaginaAgenteLiquidacion({
     <VistaAgenteLiquidacion
       kpis={kpis}
       cola={liqs.filter((l) => l.estatus === 'revisar')}
-      cierres={liqs.filter((l) => l.estatus !== 'revisar').slice(0, 8)}
+      cierres={liqs.filter((l) => l.estatus !== 'revisar').slice(0, 5)}
       extra={extra}
       sufijo={sufijo}
     />
