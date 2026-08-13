@@ -24,6 +24,7 @@ import { toolSchemas, makeExecutor, registerTool, type ToolContext } from '@/lib
 import { getSystemPrompt } from './prompts';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
+import { TZ_MX } from '@/lib/formato';
 import './chat-tools'; // registra las tools de lectura al importar
 
 // ── El contrato de bloques ──────────────────────────────────────────────────
@@ -271,9 +272,16 @@ export async function ejecutarAnalista(opts: {
   const audiencia = opts.usuario
     ? `\n\nCON QUIÉN HABLAS: ${opts.usuario.nombre ?? 'usuario'} — ${ROL_LEGIBLE[opts.usuario.rol] ?? opts.usuario.rol}. Salúdalo por su nombre cuando salude.`
     : '';
+  // La fecha/hora REAL viaja en el prompt: "¿qué día es hoy?" se contesta
+  // al instante con dato del sistema — el agente decía "no consulto el
+  // calendario" (reporte en vivo del 12-ago) teniendo el reloj enfrente.
+  const ahora = new Date(ahoraMs());
+  const fechaLarga = new Intl.DateTimeFormat('es-MX', {
+    timeZone: TZ_MX, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  }).format(ahora);
   const system = getSystemPrompt('analista_flota', {
     tenantId: opts.tenantId, nombreFlota: opts.nombreFlota, agentName: 'Likida', timezone: 'America/Mexico_City',
-  }) + audiencia;
+  }) + audiencia + `\n\nAHORA MISMO ES: ${fechaLarga} (hora de Ciudad de México). Es dato del sistema: la fecha y la hora las respondes directo, sin tools.`;
 
   const history: OpenAI.Chat.ChatCompletionMessageParam[] = opts.mensajes.map((m) => ({
     role: m.rol === 'usuario' ? 'user' : 'assistant', content: m.texto,
@@ -307,9 +315,10 @@ export async function ejecutarAnalista(opts: {
     const respaldo = new Set<number>();
     for (const t of res.toolCalls) extraerNumeros(t.result, respaldo);
     extraerNumeros(opts.mensajes.map((m) => m.texto).join(' '), respaldo);
-    // La fecha de HOY también respalda: "el ejercicio 2026" en un saludo no
-    // es invención, es calendario.
+    // La fecha y hora de HOY también respaldan: "el ejercicio 2026" o "son
+    // las 6:15" no son invención, son calendario y reloj del sistema.
     extraerNumeros(new Date(ahoraMs()).toISOString().slice(0, 10), respaldo);
+    extraerNumeros(fechaLarga, respaldo);
 
     let bloques = CAPTURAS.get(runId)
       ?? (res.finalText.trim() ? [{ tipo: 'texto', texto: res.finalText.trim().slice(0, 900) } as Bloque] : null);

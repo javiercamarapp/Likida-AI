@@ -55,9 +55,11 @@ export function Actividad({
 
   if (sinDatos) {
     return (
-      <p className="text-sm" style={{ color: 'var(--muted)' }}>
-        {modo === 'historico' ? 'Aún no hay viajes registrados.' : 'Sin viajes iniciados en este periodo.'}
-      </p>
+      <div className="flex-1 min-h-[110px] w-full flex items-center justify-center">
+        <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
+          {modo === 'historico' ? 'Aún no hay viajes registrados.' : 'Sin viajes iniciados en este periodo.'}
+        </p>
+      </div>
     );
   }
   return modo === 'historico'

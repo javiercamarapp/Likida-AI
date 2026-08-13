@@ -24,7 +24,7 @@ function colorDe(region: string | null): string {
  */
 export function TopRutas({ rutas }: { rutas: RutaConRegion[] }) {
   if (rutas.length === 0) {
-    return <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay gasto asociado a una ruta.</p>;
+    return <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>Aún no hay gasto asociado a una ruta.</p></div>;
   }
   return (
     <table className="w-full text-sm">

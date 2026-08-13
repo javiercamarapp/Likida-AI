@@ -115,9 +115,11 @@ const PILL_ESTATUS: Record<string, { estado: Estado; etiqueta: string }> = {
 export function TablaViajes({ viajes, sufijo = '' }: { viajes: FilaViaje[]; sufijo?: string }) {
   if (viajes.length === 0) {
     return (
-      <p className="text-sm" style={{ color: 'var(--muted)' }}>
-        Aún no hay viajes registrados. En cuanto la flota abra su primer viaje, aparece aquí.
-      </p>
+      <div className="min-h-[72px] w-full flex items-center justify-center">
+        <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
+          Aún no hay viajes registrados. En cuanto la flota abra su primer viaje, aparece aquí.
+        </p>
+      </div>
     );
   }
   const TH = 'etiqueta-mono text-left text-[10px] font-medium uppercase px-3 py-1.5';

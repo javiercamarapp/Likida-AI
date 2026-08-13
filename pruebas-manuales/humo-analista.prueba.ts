@@ -2,7 +2,7 @@
 import { ejecutarAnalista } from '../src/lib/agents/analista';
 const DEMO = '11111111-1111-1111-1111-111111111111';
 async function main() {
-  for (const q of ['hola', '¿qué puede hacer Likida por mí?', '¿Cómo va mi operación en general?']) {
+  for (const q of ['¿qué fecha es hoy?', '¿me ayudas con mi tarea de historia?', '¿Cómo va mi operación en general?']) {
     console.log('\n═══', q);
     const t0 = Date.now();
     const r = await ejecutarAnalista({ tenantId: DEMO, nombreFlota: 'FLOTA DEMO SA DE CV', usuario: { nombre: 'Javier', rol: 'flota_admin' }, mensajes: [{ rol: 'usuario', texto: q }] });
