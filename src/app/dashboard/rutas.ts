@@ -1,5 +1,5 @@
 import {
-  LayoutGrid, Fuel, Sparkles,
+  LayoutGrid, Fuel, MessageCircle,
   LifeBuoy, Users, ScrollText, Settings, CreditCard, ShieldCheck,
 } from 'lucide-react';
 
@@ -67,5 +67,5 @@ export const TODAS_LAS_RUTAS: Item[] = [
 export const SIDEBAR_PRINCIPAL: Item[] = [
   // La PRIMERA página reconstruida (12-ago-2026): la regla es que cada link
   // aparece cuando su página se rehace — nunca en bloque.
-  { href: '/dashboard/chat', nombre: 'Preguntar a la IA', Icono: Sparkles },
+  { href: '/dashboard/chat', nombre: 'Chatea con tus datos', Icono: MessageCircle },
 ];

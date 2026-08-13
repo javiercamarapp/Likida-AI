@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Sparkles, Bell } from 'lucide-react';
+import { Search, MessageCircle, Bell } from 'lucide-react';
 
 /**
  * Los tres controles de la barra superior de la referencia FlowAI —
@@ -90,8 +90,8 @@ export function BarraAcciones({ items, pendientes, hrefAsistente = '/dashboard/c
           usehandle.ai), pedido del 12-ago; antes expandía el rail. ── */}
       <button type="button" className={`${BOTON_BARRA} px-3`}
         onClick={() => { setAbierto(null); router.push(hrefAsistente); }}>
-        <Sparkles width={14} height={14} strokeWidth={1.75} />
-        Preguntar a la IA
+        <MessageCircle width={14} height={14} strokeWidth={1.75} />
+        Chatea con tus datos
       </button>
 
       {/* ── Pendientes reales ── */}

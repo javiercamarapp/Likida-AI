@@ -74,6 +74,10 @@ export function puedeVerArea(rol: string, area: Area): boolean {
  */
 const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard': 'operacion',
+  // Nuevo viaje — reconstruida el 12-ago-2026 (la segunda). Es `operacion`:
+  // crear/asignar es del encargado también; el server action re-gatea con
+  // puedeAsignar adentro.
+  '/dashboard/viajes/nuevo': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
 
