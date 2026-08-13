@@ -89,8 +89,8 @@ export function PanelPeriodo({
         </div>
       </div>
 
-      {/* ── Gasto por categoría / Liquidado por semana ── */}
-      <div className="pt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+      {/* ── Gasto por categoría / Liquidado — mitad y mitad (12-ago) ── */}
+      <div className="pt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
         <div className="card p-3 h-full flex flex-col">
           <TituloSeccion>Gasto por categoría</TituloSeccion>
           <div className="mt-3 flex-1 flex flex-col">
@@ -120,10 +120,11 @@ export function PanelPeriodo({
             )}
           </div>
         </div>
+      </div>
 
-        {/* Top rutas en la MISMA fila (compacto del 12-ago: todo el
-            Resumen debe caber en una pantalla sin scroll). */}
-        <div className="card p-3 h-full flex flex-col">
+      {/* ── Top rutas por gasto — hasta abajo, a TODO lo ancho (12-ago) ── */}
+      <div className="pt-2">
+        <div className="card p-3 flex flex-col">
           <TituloSeccion>Top rutas por gasto</TituloSeccion>
           <div className="mt-2 flex-1 flex flex-col">
             {rutasModo && rutasModo.length > 0 ? (
