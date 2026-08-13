@@ -1,10 +1,11 @@
-import { ReceiptText, CheckCircle2, UserRound, Cog, CircleAlert, ShieldAlert } from 'lucide-react';
+import { ReceiptText, CheckCircle2, Cog, CircleAlert, ShieldAlert } from 'lucide-react';
 import type { TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import { enrutar, type Ruta } from '@/lib/likida/facturacion/enrutar';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { Dona } from '@/app/admin/charts';
 import { BarraPagina } from '../../resumen-visual';
+import { ColaJefe, type FilaJefe, type AccionMarcarFacturada } from './cola-jefe';
 
 /** Topes de las listas — declarados en pantalla cuando recortan, nunca en
  *  silencio (los encabezados suman la lista COMPLETA). */
@@ -30,7 +31,13 @@ export interface ExtraAgenteFacturas {
  * Nada se pinta que no salga de un ticket real; el modo de emisión se
  * declara (en ensayo no se promete emisión).
  */
-export function VistaAgenteFacturas({ tickets, extra }: { tickets: TicketPorFacturar[]; extra: ExtraAgenteFacturas }) {
+export function VistaAgenteFacturas({ tickets, extra, marcarFacturada }: {
+  tickets: TicketPorFacturar[];
+  extra: ExtraAgenteFacturas;
+  /** Server action de la puerta: escribe el CFDI capturado y re-verifica
+   *  sesión/rol/tenant ADENTRO — la vista solo la pasa a la cola. */
+  marcarFacturada: AccionMarcarFacturada;
+}) {
   // Orden por VENCIMIENTO real (no por fecha del ticket): vencidos arriba,
   // desconocidos al final. Cotas finitas — Infinity-Infinity da NaN.
   const orden = (t: TicketPorFacturar) =>
@@ -100,58 +107,27 @@ export function VistaAgenteFacturas({ tickets, extra }: { tickets: TicketPorFact
                   Hoy no te toca capturar nada — lo demás lo trae la máquina o le falta un dato.
                 </Leyenda>
               ) : (
-                <>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[13px]">
-                      <thead>
-                        <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Fecha</th>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Comercio</th>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Concepto</th>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Monto</th>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Plazo</th>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Por qué tú</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {teToca.slice(0, MAX_TE_TOCA).map(({ t, r }) => {
-                          const m = r as Extract<Ruta, { via: 'mensaje' }>;
-                          return (
-                            <tr key={t.gastoId} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                              <td className="py-2" style={{ color: 'var(--muted)' }}>{fechaCorta(t.fecha)}</td>
-                              <td className="py-2 font-medium">
-                                {t.comercio?.nombre}
-                                <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>{m.portal}</span>
-                              </td>
-                              <td className="py-2">{etiquetaConcepto(t.concepto)}</td>
-                              <td className="py-2 pr-6 text-right cifra-mono">{mxn(t.monto)}</td>
-                              <td className="py-2"><PillPlazo c={t.caducidad} /></td>
-                              <td className="py-2">
-                                {m.motivo === 'requiere_cuenta' ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
-                                    style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
-                                    <UserRound width={11} height={11} strokeWidth={2} /> Tu cuenta
-                                  </span>
-                                ) : (
-                                  <span title={m.detalle} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
-                                    style={{ color: 'var(--warn)', background: 'var(--warnbg)' }}>
-                                    <ShieldAlert width={11} height={11} strokeWidth={2} /> Bloqueado
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  {teToca.length > MAX_TE_TOCA && (
-                    <p className="text-[12px] mt-3" style={{ color: 'var(--faint)' }}>
-                      Se muestran los {MAX_TE_TOCA} que vencen primero — hay {numero(teToca.length - MAX_TE_TOCA)} más
-                      (el encabezado los suma todos).
-                    </p>
-                  )}
-                </>
+                <ColaJefe
+                  filas={teToca.slice(0, MAX_TE_TOCA).map(({ t, r }): FilaJefe => {
+                    const m = r as Extract<Ruta, { via: 'mensaje' }>;
+                    return {
+                      gastoId: t.gastoId,
+                      fecha: t.fecha,
+                      comercio: t.comercio?.nombre ?? 'Sin identificar',
+                      portal: m.portal,
+                      urlTicket: t.urlTicket,
+                      concepto: etiquetaConcepto(t.concepto),
+                      monto: t.monto,
+                      caducidad: t.caducidad,
+                      motivo: m.motivo,
+                      detalle: m.detalle ?? t.bloqueo?.motivo,
+                      campos: m.campos.map((c) => ({ etiqueta: c.etiqueta, valor: c.valor, requerido: c.requerido })),
+                    };
+                  })}
+                  marcarFacturada={marcarFacturada}
+                  maxFilas={MAX_TE_TOCA}
+                  totalFilas={teToca.length}
+                />
               )}
             </section>
 
@@ -296,19 +272,4 @@ function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; not
       {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
     </div>
   );
-}
-
-function PillPlazo({ c }: { c: TicketPorFacturar['caducidad'] }) {
-  const estilo = (fg: string, bg: string) => ({ color: fg, background: bg });
-  if (c.vencido) {
-    return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={estilo('var(--bad)', 'var(--badbg)')}>Vencido</span>;
-  }
-  if (c.desconocido) {
-    // Sin fecha de ticket confiable no se afirma un plazo — se dice.
-    return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={estilo('var(--muted)', 'var(--canvas)')}>Plazo sin verificar</span>;
-  }
-  if (c.urgente) {
-    return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={estilo('var(--warn)', 'var(--warnbg)')}>{c.diasRestantes} d</span>;
-  }
-  return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={estilo('var(--ok)', 'var(--okbg)')}>{c.diasRestantes} d</span>;
 }

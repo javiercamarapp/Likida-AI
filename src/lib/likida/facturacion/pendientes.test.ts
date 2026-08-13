@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { armar, resumen } from './pendientes';
+import { armar, resumen, validarUuidCfdi } from './pendientes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE FALTA POR FACTURAR — el puente que faltaba.
@@ -79,5 +79,18 @@ describe('resumen', () => {
     // justifica que esta pantalla exista.
     expect(r.montoVencido).toBe(100);
     expect(r.montoTotal).toBe(600);
+  });
+});
+
+describe('validarUuidCfdi', () => {
+  it('acepta el folio fiscal como lo imprime el portal y lo normaliza a mayúsculas', () => {
+    expect(validarUuidCfdi(' a3bb189e-8bf9-3888-9912-ace4e6543002 ')).toBe('A3BB189E-8BF9-3888-9912-ACE4E6543002');
+  });
+
+  it('rechaza todo lo demás — un UUID inventado sería una fila fiscal falsa', () => {
+    expect(validarUuidCfdi('')).toBeNull();
+    expect(validarUuidCfdi('no-es-un-uuid')).toBeNull();
+    expect(validarUuidCfdi('a3bb189e8bf938889912ace4e6543002')).toBeNull(); // sin guiones
+    expect(validarUuidCfdi(42)).toBeNull();
   });
 });
