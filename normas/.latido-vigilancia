@@ -1,39 +1,40 @@
-fecha_corrida: 2026-08-11
+fecha_corrida: 2026-08-13
 ultimo_dia_barrido: null
-rango_intentado: 2026-07-24..2026-08-10
+rango_intentado: 2026-07-24..2026-08-12
 notas_revisadas: 0
 notas_por_edicion: {matutina: null, vespertina: null, extraordinaria: null}
 fichas_disparadas: 0
 etag_sat: null
-etag_sat_check: no_aplica_hoy_es_martes
+etag_sat_check: no_aplica_hoy_es_jueves
 deriva_ley_check: no_aplica_no_es_dia_1_trimestre
 estado: "INFRA egress_bloqueado"
 detalle: >
-  Duodécima corrida consecutiva (11-ago, 10-ago, 09-ago, 08-ago, 07-ago,
-  05-ago, 04-ago, 03-ago, 31-jul, 28-jul, y antes) bloqueada por la misma
-  causa: el proxy de salida de esta sesión rechaza todo tráfico hacia
-  sidofqa.segob.gob.mx y www.sat.gob.mx con 403 en el CONNECT. Confirmado
-  hoy con curl directo: `.../dof/sidof/notas/10-08-2026` → "CONNECT tunnel
-  failed, response 403"; SAT minisitio (HEAD) → mismo error.
-  `$HTTPS_PROXY/__agentproxy/status` registra ambos como `connect_rejected`
-  / "gateway answered 403 to CONNECT" a las 14:19:36 UTC del 11-ago. El
-  `noProxy` de la sesión sigue sin incluir ninguno de los hosts del DOF/SAT
-  — solo paquetería (npm, pypi, jsr, crates, proxy.golang.org) y dominios de
-  anthropic.com. No se probó diputados.gob.mx hoy (no aplica: no es día 1 de
-  trimestre) pero no hay razón para esperar que responda distinto a los
-  otros dos.
-  Hoy es MARTES, no lunes: el chequeo del ETag del SAT no tocaba en esta
+  Decimotercera corrida consecutiva (13-ago, 11-ago, 10-ago, 09-ago, 08-ago,
+  07-ago, 05-ago, 04-ago, 03-ago, 31-jul, 28-jul, y antes) bloqueada por la
+  misma causa: el proxy de salida de esta sesión rechaza todo tráfico hacia
+  sidofqa.segob.gob.mx y www.sat.gob.mx. Confirmado hoy con curl directo:
+  `.../dof/sidof/notas/12-08-2026` → CONNECT tunnel failed (000, sin
+  respuesta HTTP); SAT minisitio (HEAD) → 403 Forbidden con cuerpo de 36
+  bytes (respuesta del propio gateway, no del SAT). `$HTTPS_PROXY/__agentproxy/status`
+  registra ambos como `connect_rejected` / "gateway answered 403 to CONNECT"
+  a las 14:28:53 UTC del 13-ago. El `noProxy` de la sesión sigue sin incluir
+  ninguno de los hosts del DOF/SAT — solo paquetería (npm, pypi, jsr, crates,
+  proxy.golang.org) y dominios de anthropic.com. No se probó diputados.gob.mx
+  hoy (no aplica: no es día 1 de trimestre) pero no hay razón para esperar
+  que responda distinto a los otros dos.
+  Hoy es JUEVES, no lunes: el chequeo del ETag del SAT no tocaba en esta
   corrida (va los lunes). El último lunes intentado (10-ago) también estuvo
-  bloqueado — es la cuarta semana consecutiva sin poder correr ese chequeo,
+  bloqueado — sigue sin poder correr ese chequeo semana tras semana,
   ampliando la ventana ciega de 4.5 meses que ese job existe para cerrar.
-sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible, duodécima vez consecutiva.
+sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible, decimotercera vez consecutiva.
 accion_requerida: >
-  Sin resolver desde hace 18 días y once corridas previas. Habilitar en la
-  política de egreso de esta sesión/entorno los hosts: sidofqa.segob.gob.mx,
-  www.sat.gob.mx, www.diputados.gob.mx (o su alternativa api.tlaloc.sh si se
-  prefiere la vía comercial). Sin eso, esta rutina no puede correr en este
-  entorno bajo ninguna cadencia. El rango sin barrer sigue creciendo: ya
-  cubre desde el 24-jul, ahora hasta el 10-ago — dieciocho días y doce
-  corridas sin una sola verificación real. El fix es de configuración del
-  entorno (agregar estos hosts al noProxy/allowlist del proxy de salida),
-  no de código: nada que este agente pueda cambiar por su cuenta.
+  Sin resolver desde hace 20 días y doce corridas previas (ahora trece).
+  Habilitar en la política de egreso de esta sesión/entorno los hosts:
+  sidofqa.segob.gob.mx, www.sat.gob.mx, www.diputados.gob.mx (o su
+  alternativa api.tlaloc.sh si se prefiere la vía comercial). Sin eso, esta
+  rutina no puede correr en este entorno bajo ninguna cadencia. El rango sin
+  barrer sigue creciendo: ya cubre desde el 24-jul, ahora hasta el 12-ago —
+  veinte días y trece corridas sin una sola verificación real. El fix es de
+  configuración del entorno (agregar estos hosts al noProxy/allowlist del
+  proxy de salida), no de código: nada que este agente pueda cambiar por su
+  cuenta.
