@@ -68,22 +68,22 @@ export function PanelPeriodo({
 
       {/* ── Viajes / Actividad ── */}
       <div className="pt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
-        <div className="card p-3">
+        <div className="card p-3 h-full flex flex-col">
           <TituloSeccion>Viajes</TituloSeccion>
-          <div className="mt-2.5">
+          <div className="mt-2.5 flex-1 flex flex-col">
             {kpiModo && kpiModo.totalViajes > 0 ? (
               <Dona segmentos={[
                 { etiqueta: 'Liquidados', valor: kpiModo.viajesLiquidados },
                 { etiqueta: 'Pendientes', valor: Math.max(0, kpiModo.totalViajes - kpiModo.viajesLiquidados) },
               ]} />
             ) : (
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay viajes registrados en este periodo.</p>
+              <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>Aún no hay viajes registrados en este periodo.</p></div>
             )}
           </div>
         </div>
-        <div className="card p-3 md:col-span-2">
+        <div className="card p-3 md:col-span-2 h-full flex flex-col">
           <TituloSeccion>Actividad</TituloSeccion>
-          <div className="mt-3">
+          <div className="mt-3 flex-1 flex flex-col">
             <Actividad viajes={viajes} porMes={porMes} modo={modo} />
           </div>
         </div>
@@ -91,30 +91,30 @@ export function PanelPeriodo({
 
       {/* ── Gasto por categoría / Liquidado por semana ── */}
       <div className="pt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
-        <div className="card p-3">
+        <div className="card p-3 h-full flex flex-col">
           <TituloSeccion>Gasto por categoría</TituloSeccion>
-          <div className="mt-3">
+          <div className="mt-3 flex-1 flex flex-col">
             {gastoModo && gastoModo.series.some((s) => s.valores.some((v) => v > 0)) ? (
               <GastoSemanalChart categorias={gastoModo.categorias} series={gastoModo.series} />
             ) : (
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>Aún no hay gastos capturados.</p>
+              <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>Aún no hay gastos capturados.</p></div>
             )}
           </div>
         </div>
-        <div className="card p-3">
+        <div className="card p-3 h-full flex flex-col">
           <TituloSeccion>Liquidado</TituloSeccion>
           {totalLiquidado > 0 && (
             <div className="text-2xl font-semibold tracking-tight tabular mt-1">{mxn(totalLiquidado)}</div>
           )}
-          <div className="mt-2.5">
+          <div className="mt-2.5 flex-1 flex flex-col">
             {liquidadoModo === null ? (
-              <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 90 }}>
+              <div className="flex-1 min-h-[110px] flex items-center justify-center text-sm text-center" style={{ color: 'var(--muted)' }}>
                 No se pudo cargar esta gráfica.
               </div>
             ) : liquidadoModo.some((d) => d.valor > 0) ? (
               <AreaChartSimple datos={liquidadoModo} etiquetaValor={mxn} />
             ) : (
-              <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 90 }}>
+              <div className="flex-1 min-h-[110px] flex items-center justify-center text-sm text-center" style={{ color: 'var(--muted)' }}>
                 Sin cierres en este periodo.
               </div>
             )}
@@ -123,13 +123,13 @@ export function PanelPeriodo({
 
         {/* Top rutas en la MISMA fila (compacto del 12-ago: todo el
             Resumen debe caber en una pantalla sin scroll). */}
-        <div className="card p-3">
+        <div className="card p-3 h-full flex flex-col">
           <TituloSeccion>Top rutas por gasto</TituloSeccion>
-          <div className="mt-2 overflow-x-auto">
+          <div className="mt-2 overflow-x-auto flex-1 flex flex-col">
             {rutasModo ? (
               <TopRutas rutas={rutasModo} />
             ) : (
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</p>
+              <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</p></div>
             )}
           </div>
         </div>

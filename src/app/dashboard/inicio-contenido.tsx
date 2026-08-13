@@ -14,7 +14,7 @@ import {
   type GastoFiscal, type ResumenPerdidas, type GastosFiscalesSeries,
 } from '@/lib/likida/fiscal';
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx } from '@/lib/formato';
+import { fechaMx, TZ_MX } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
 import {
@@ -204,7 +204,9 @@ export async function InicioContenido({
             tagline="Todo listo para que sigas moviendo tu flota"
             derecha={
               <div className="flex items-center gap-2.5 shrink-0 pt-1">
-                <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(hoy)}</ChipFecha>
+                {/* El DÍA DE MÉXICO, no el UTC: a las 6pm de CDMX el chip
+                    decía mañana (capturado el 12-ago). */}
+                <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahoraMs())))}</ChipFecha>
                 {/* El CTA negro de la referencia. DESHABILITADO con razón a
                     la vista: crear viaje vive en Despacho, la primera página
                     que se va a reconstruir — un botón que truena en silencio
