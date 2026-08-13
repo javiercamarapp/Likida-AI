@@ -236,30 +236,6 @@ registerTool('entregar_respuesta', {
   },
 });
 
-// ── pasar_al_analista (la palanca de escalación del conserje) ──────────────
-
-const ESCALAS = new Map<string, string>();
-
-registerTool('pasar_al_analista', {
-  schema: {
-    type: 'function',
-    function: {
-      name: 'pasar_al_analista',
-      description: 'Escala la pregunta al analista de datos (tiene las herramientas de la operación). Úsala SIEMPRE que la respuesta requiera cifras, gráficas, tablas, comparaciones o proyecciones.',
-      parameters: {
-        type: 'object',
-        properties: { razon: { type: 'string', description: 'Por qué se escala, en una frase.' } },
-        required: ['razon'],
-        additionalProperties: false,
-      },
-    },
-  },
-  handler: async (args, ctx) => {
-    if (ctx.conversationId) ESCALAS.set(ctx.conversationId, String((args as { razon?: unknown }).razon ?? ''));
-    return { ok: true, nota: 'escalado al analista' };
-  },
-});
-
 // ── El orquestador ──────────────────────────────────────────────────────────
 
 export interface RespuestaAnalista {
@@ -303,56 +279,15 @@ export async function ejecutarAnalista(opts: {
     role: m.rol === 'usuario' ? 'user' : 'assistant', content: m.texto,
   }));
 
-  // PRESUPUESTOS DE TIEMPO SEPARADOS: uno global compartido dejaba al
-  // reintento sin aire (nano razona lento + analista + reintento > 45s →
-  // aborto a medias, medido en vivo). El conserje tiene 15s; el analista
-  // (con su reintento) 40s propios — la ruta cabe en el maxDuration de 60.
-  const conserjeCtl = new AbortController();
-  const conserjeTimer = setTimeout(() => conserjeCtl.abort(), 15_000);
+  // UN SOLO SALTO (12-ago, tras medir): el nivel "conserje" en nano
+  // ahorraba $0.0004 por saludo a cambio de 3-8s de latencia en serie y
+  // tres modos de falla propios — mal negocio ("debería responder en
+  // chinga"). flash-lite conversa Y analiza; el rol chat_ligero queda como
+  // palanca reservada en models.ts por si un día vuelve a convenir.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 40_000);
   try {
-    // ── NIVEL 1: el CONSERJE (modelo barato) recibe TODO mensaje y decide —
-    // conversa él, o jala pasar_al_analista. Es el orquestador que pedía
-    // Javier ("según lo que el usuario quiere sabe qué modelo usar"), y es
-    // un MODELO decidiendo, no un regex de respuestas prehechas.
-    let conserje: Awaited<ReturnType<typeof generateWithTools>>;
-    try {
-      conserje = await generateWithTools({
-        role: 'chat_ligero',
-        system: getSystemPrompt('conserje_chat', {
-          tenantId: opts.tenantId, nombreFlota: opts.nombreFlota, agentName: 'Likida', timezone: 'America/Mexico_City',
-        }) + audiencia,
-        messages: history,
-        tools: toolSchemas(['entregar_respuesta', 'pasar_al_analista']),
-        toolExecutor: makeExecutor(ctx),
-        maxToolRounds: 3,
-        // gpt-5-nano RAZONA antes de hablar y esos tokens también cuentan:
-        // con 350 se quedaba pensando y el guardián de truncado tronaba
-        // (medido en vivo el 12-ago: 320/350 sin emitir nada). 900 de techo a
-        // precio nano son $0.00036 en el peor caso — y reasoning en 'low'
-        // porque un saludo no amerita cadena de pensamiento larga.
-        maxTokens: 900,
-        reasoning: 'low',
-        signal: conserjeCtl.signal,
-      });
-    } catch (e) {
-      // El conserje que truena o se tarda NO tumba el turno: se escala al
-      // analista, que es el que sabe. Fail-hacia-el-capaz.
-      logger.warn('chat.conserje_fallo', { err: e instanceof Error ? e.message : String(e) });
-      ESCALAS.set(runId, 'conserje falló');
-      conserje = { finalText: '', toolCalls: [], model: 'openai/gpt-5-nano', tokensIn: 0, tokensOut: 0, cost: 0, costoPorModelo: {} };
-    } finally {
-      clearTimeout(conserjeTimer);
-    }
-
-    const escalado = ESCALAS.has(runId);
-    // Si escaló, lo que el conserje haya "entregado" ("ya te paso al
-    // analista...") NO es la respuesta: se descarta para que los bloques
-    // finales sean los del analista — medido en vivo: la transición tapaba
-    // el análisis.
-    if (escalado) CAPTURAS.delete(runId);
-    const res = !escalado ? conserje : await generateWithTools({
+    const res = await generateWithTools({
       role: 'chat',
       system,
       messages: history,
@@ -373,21 +308,18 @@ export async function ejecutarAnalista(opts: {
     for (const t of res.toolCalls) extraerNumeros(t.result, respaldo);
     extraerNumeros(opts.mensajes.map((m) => m.texto).join(' '), respaldo);
     // La fecha de HOY también respalda: "el ejercicio 2026" en un saludo no
-    // es invención, es calendario — sin esto, la guardia tumbaba un "hola"
-    // (medido en vivo el 12-ago: el saludo mencionaba el año y no había
-    // tool que lo respaldara).
+    // es invención, es calendario.
     extraerNumeros(new Date(ahoraMs()).toISOString().slice(0, 10), respaldo);
 
     let bloques = CAPTURAS.get(runId)
       ?? (res.finalText.trim() ? [{ tipo: 'texto', texto: res.finalText.trim().slice(0, 900) } as Bloque] : null);
 
-    // UN reintento correctivo, solo en el camino del analista: flash-lite a
-    // veces contesta en texto plano sin la tool terminal, o con una cifra
-    // que la guardia tumba. Repreguntar con la instrucción exacta rescata
-    // el turno por centavos; a la segunda falla, honestidad y ya.
+    // UN reintento correctivo: flash-lite a veces contesta en texto plano
+    // sin la tool terminal, o con una cifra que la guardia tumba.
+    // Repreguntar con la instrucción exacta rescata el turno por centavos;
+    // a la segunda falla, la red determinística.
     let reintento = false;
-    const necesitaReintento = () => !bloques || !cifrasRespaldadas(bloques, respaldo);
-    if (escalado && necesitaReintento()) {
+    if (!bloques || !cifrasRespaldadas(bloques, respaldo)) {
       reintento = true;
       logger.warn('chat.reintento_correctivo', { tenantId: opts.tenantId });
       const res2 = await generateWithTools({
@@ -410,7 +342,6 @@ export async function ejecutarAnalista(opts: {
       res.toolCalls.push(...res2.toolCalls);
       bloques = CAPTURAS.get(runId)
         ?? (res2.finalText.trim() ? [{ tipo: 'texto', texto: res2.finalText.trim().slice(0, 900) } as Bloque] : null);
-      // El costo del reintento también se reporta.
       for (const [m, c] of Object.entries(res2.costoPorModelo)) {
         const prev = res.costoPorModelo[m] ?? { tokensIn: 0, tokensOut: 0, cost: 0 };
         res.costoPorModelo[m] = { tokensIn: prev.tokensIn + c.tokensIn, tokensOut: prev.tokensOut + c.tokensOut, cost: prev.cost + c.cost };
@@ -422,11 +353,10 @@ export async function ejecutarAnalista(opts: {
     // tumbó pero las tools SÍ leyeron datos, se arma una tabla con lo
     // leído — datos reales sin narración le sirven más al contralor que
     // una disculpa. Solo si ni eso hay, sale el aviso honesto.
-    const todasLasTools = [...res.toolCalls];
     if (!bloques || !cifrasRespaldadas(bloques, respaldo)) {
       if (bloques) logger.warn('chat.guardia_bloqueo', { tenantId: opts.tenantId, reintento });
-      const kpisCall = todasLasTools.find((t) => t.toolName === 'kpis_flota' && t.result && !t.error);
-      const primera = kpisCall ?? todasLasTools.find((t) => t.result && !t.error && t.toolName !== 'entregar_respuesta' && t.toolName !== 'pasar_al_analista');
+      const kpisCall = res.toolCalls.find((t) => t.toolName === 'kpis_flota' && t.result && !t.error);
+      const primera = kpisCall ?? res.toolCalls.find((t) => t.result && !t.error && t.toolName !== 'entregar_respuesta');
       if (primera && primera.result && typeof primera.result === 'object') {
         const filas = Object.entries(primera.result as Record<string, unknown>)
           .filter(([, v]) => typeof v === 'number' || typeof v === 'string')
@@ -443,27 +373,17 @@ export async function ejecutarAnalista(opts: {
       }
     }
 
-    // Si hubo escalación, el turno costó conserje + analista: se reporta
-    // COMPLETO (mismo criterio de costo atribuible que processor.ts).
-    const costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> = { ...conserje.costoPorModelo };
-    if (escalado) {
-      for (const [m, c] of Object.entries(res.costoPorModelo)) {
-        const prev = costoPorModelo[m] ?? { tokensIn: 0, tokensOut: 0, cost: 0 };
-        costoPorModelo[m] = { tokensIn: prev.tokensIn + c.tokensIn, tokensOut: prev.tokensOut + c.tokensOut, cost: prev.cost + c.cost };
-      }
-    }
     return {
       bloques,
-      toolsUsadas: [...conserje.toolCalls.map((t) => t.toolName), ...(escalado ? res.toolCalls.map((t) => t.toolName) : [])],
-      costoUsd: conserje.cost + (escalado ? res.cost : 0),
-      costoPorModelo,
-      tokensIn: conserje.tokensIn + (escalado ? res.tokensIn : 0),
-      tokensOut: conserje.tokensOut + (escalado ? res.tokensOut : 0),
-      modelo: escalado ? res.model : conserje.model,
+      toolsUsadas: res.toolCalls.map((t) => t.toolName),
+      costoUsd: res.cost,
+      costoPorModelo: res.costoPorModelo,
+      tokensIn: res.tokensIn,
+      tokensOut: res.tokensOut,
+      modelo: res.model,
     };
   } finally {
     clearTimeout(timer);
     CAPTURAS.delete(runId);
-    ESCALAS.delete(runId);
   }
 }
