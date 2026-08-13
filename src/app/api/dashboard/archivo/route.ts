@@ -1,0 +1,58 @@
+// Lee CUALQUIER archivo que el contralor adjunte al chat (12-ago-2026) y
+// devuelve el EXTRACTO acotado que viajará con la conversación. No escribe
+// nada: es lectura para analizar en el chat.
+//
+// Las IMÁGENES no entran aquí: van a /api/dashboard/ingesta (el OCR real de
+// comprobantes, que entiende tickets mejor que un extracto de texto).
+//
+// Autorización calcada de ingesta/chat: sesión + área dinero — el archivo
+// del contralor puede traer montos, y este endpoint es alcanzable por POST
+// directo (el proxy no cubre /api).
+import { NextResponse, type NextRequest } from 'next/server';
+import { getSessionTenant } from '@/lib/auth/session';
+import { puedeVerArea } from '@/lib/auth/visibilidad';
+import { leerArchivoUniversal, ArchivoNoSoportado } from '@/lib/likida/intake/archivo';
+import { logger } from '@/lib/logger';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
+/** ~12 MB ya en base64. Excel/PDF de oficina caben sobrados; un video no —
+ *  y un video tampoco tendría lectura honesta aquí. */
+const MAX_BASE64 = 16_000_000;
+
+export async function POST(req: NextRequest) {
+  const sesion = await getSessionTenant();
+  if (!sesion) return NextResponse.json({ error: 'sin sesion' }, { status: 401 });
+  if (!puedeVerArea(sesion.rol, 'dinero')) {
+    return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
+  }
+
+  let cuerpo: { nombre?: unknown; contenido?: unknown };
+  try { cuerpo = await req.json(); } catch { return NextResponse.json({ error: 'cuerpo inválido' }, { status: 400 }); }
+
+  const nombre = typeof cuerpo.nombre === 'string' ? cuerpo.nombre.trim().slice(0, 120) : '';
+  const contenido = typeof cuerpo.contenido === 'string' ? cuerpo.contenido : '';
+  if (!nombre || !contenido) return NextResponse.json({ error: 'faltan nombre o contenido' }, { status: 400 });
+  if (contenido.startsWith('data:image/')) {
+    return NextResponse.json({ error: 'las imágenes van al OCR de comprobantes (/api/dashboard/ingesta)' }, { status: 400 });
+  }
+  const base64 = contenido.includes('base64,') ? contenido.slice(contenido.indexOf('base64,') + 7) : contenido;
+  if (base64.length > MAX_BASE64) {
+    return NextResponse.json({ error: 'archivo demasiado grande (máx ~12 MB)' }, { status: 413 });
+  }
+
+  try {
+    const leido = await leerArchivoUniversal(nombre, Buffer.from(base64, 'base64'));
+    logger.info('archivo.leido', { tenantId: sesion.tenantId, clase: leido.clase, chars: leido.extracto.length });
+    return NextResponse.json(leido);
+  } catch (err) {
+    if (err instanceof ArchivoNoSoportado) {
+      return NextResponse.json({
+        error: `Todavía no leo archivos ${err.extension}. Sí leo: PDF, Excel (xlsx/xls), CSV, XML de CFDI, texto — y fotos de comprobantes por el clip.`,
+      }, { status: 415 });
+    }
+    logger.error('archivo.fallo', { err: err instanceof Error ? err.message : String(err) });
+    return NextResponse.json({ error: 'no se pudo leer el archivo — ¿está dañado o protegido con contraseña?' }, { status: 502 });
+  }
+}

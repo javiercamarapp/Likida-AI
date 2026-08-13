@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Send, ArrowUp, Search, Paperclip, Camera, FileImage } from 'lucide-react';
+import { Send, ArrowUp, Search, Paperclip, Camera, FileImage, X, FileText } from 'lucide-react';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero } from '@/lib/formato';
 import { useSearchParams } from 'next/navigation';
@@ -217,12 +217,48 @@ export default function ChatFlota({
     finConversacion.current?.scrollIntoView({ block: 'end' });
   }, [historial.length]);
 
+  // El documento adjunto a la conversación (extracto acotado por el
+  // servidor): viaja en cada pregunta hasta que el usuario lo quite.
+  const [documento, setDocumento] = useState<{ nombre: string; extracto: string } | null>(null);
+
   async function leerArchivo(archivo: File) {
     if (ocupado) return;
     if (!archivo.type.startsWith('image/')) {
-      // "Adjuntar archivos" acepta más de lo que el OCR lee hoy — decirlo
-      // corto en la conversación es mejor que un error críptico del API.
-      setHistorial((h) => [...h, { q: `Leer archivo: ${archivo.name}`, r: { texto: 'Por ahora solo leo imágenes de comprobantes — el PDF y el XML del CFDI vienen después.' } }]);
+      // Lector universal (12-ago): PDF, Excel, CSV, XML de CFDI, texto…
+      // El extracto regresa acotado y se ADJUNTA a la conversación.
+      setOcupado(true);
+      const etiqueta = `Adjuntar: ${archivo.name}`;
+      try {
+        const b64 = await new Promise<string>((res, rej) => {
+          const fr = new FileReader();
+          fr.onload = () => res(String(fr.result));
+          fr.onerror = () => rej(fr.error);
+          fr.readAsDataURL(archivo);
+        });
+        const resp = await fetch('/api/dashboard/archivo', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: archivo.name, contenido: b64 }),
+          signal: AbortSignal.timeout(75_000),
+        });
+        const d = await resp.json().catch(() => null);
+        if (!resp.ok || !d?.extracto) {
+          setHistorial((h) => [...h, { q: etiqueta, r: { texto: d?.error ?? 'No se pudo leer el archivo en este momento.' } }]);
+          return;
+        }
+        setDocumento({ nombre: archivo.name, extracto: d.extracto });
+        setHistorial((h) => [...h, {
+          q: etiqueta,
+          r: {
+            texto: `Listo, leí «${archivo.name}» y lo tengo a la mano en esta conversación — pregúntame lo que quieras sobre él.`,
+            visual: Array.isArray(d.meta) && d.meta.length > 0 ? { tipo: 'tabla', filas: d.meta as Array<[string, string]> } : undefined,
+          },
+        }]);
+      } catch {
+        setHistorial((h) => [...h, { q: etiqueta, r: { texto: 'No se pudo leer el archivo en este momento.' } }]);
+      } finally {
+        setOcupado(false);
+        if (inputArchivo.current) inputArchivo.current.value = '';
+      }
       return;
     }
     setOcupado(true);
@@ -337,7 +373,7 @@ export default function ChatFlota({
       const tenant = spChat.get('tenant');
       const resp = await fetch(`/api/dashboard/chat${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }] }),
+        body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }], documento }),
         // Sin esto, un servidor colgado dejaba "pensando…" para siempre
         // (reportado en vivo el 12-ago).
         signal: AbortSignal.timeout(75_000),
@@ -411,10 +447,22 @@ export default function ChatFlota({
           boxShadow: 'var(--shadow-card)',
         }}
       >
+        {documento && (
+          <div className="mb-2">
+            <span className="hairline inline-flex items-center gap-1.5 text-[12px] font-medium pl-2.5 pr-1.5 py-1 rounded-full" style={{ background: 'var(--canvas)' }}>
+              <FileText width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+              <span className="max-w-[260px] truncate">{documento.nombre}</span>
+              <button type="button" aria-label="Quitar archivo" onClick={() => setDocumento(null)}
+                className="w-5 h-5 rounded-full inline-flex items-center justify-center transition-colors hover:bg-[var(--line2)]">
+                <X width={12} height={12} strokeWidth={2} />
+              </button>
+            </span>
+          </div>
+        )}
         <input
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          placeholder="Pregunta sobre tu operación…"
+          placeholder={documento ? `Pregunta sobre «${documento.nombre}» o tu operación…` : 'Pregunta sobre tu operación…'}
           aria-label="Pregunta sobre tu operación"
           className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed"
         />
@@ -431,7 +479,7 @@ export default function ChatFlota({
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
             <input ref={inputImagen} type="file" accept="image/*" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-            <input ref={inputArchivo} type="file" accept="image/*,application/pdf,.xml" className="hidden"
+            <input ref={inputArchivo} type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.tsv,.ods,.xml,.txt,.json,.md" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
             {menuAdjuntar && (
               <div className="absolute right-10 bottom-9 card p-1.5 z-30 w-56">
@@ -451,7 +499,7 @@ export default function ChatFlota({
                   onClick={() => { setMenuAdjuntar(false); inputArchivo.current?.click(); }}
                   className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
                   <Paperclip width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                  Adjuntar archivos
+                  Adjuntar archivo (PDF, Excel, CSV…)
                 </button>
               </div>
             )}
@@ -550,8 +598,8 @@ export default function ChatFlota({
             Pregunta a tus datos
           </h1>
           <p className="mt-2 mb-8 text-sm text-center max-w-md" style={{ color: 'var(--muted)' }}>
-            Lo comprobado, las diferencias, el diésel, el IVA y el peaje — con la cifra que
-            ya calculó el motor.
+            Tu operación, con la cifra que ya calculó el motor — y adjunta un PDF, un Excel
+            o la foto de un comprobante para analizarlo aquí mismo.
           </p>
 
           {caja}

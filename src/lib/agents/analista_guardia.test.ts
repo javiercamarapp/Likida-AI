@@ -95,9 +95,19 @@ describe('validarBloques — nunca se confía en la forma que entregó el modelo
     expect(b).not.toBeNull();
     expect(b![0]).toEqual({ tipo: 'texto', texto: 'hola' });
   });
-  it('rechaza tipos desconocidos, vacío, y tablas de más de 10 filas', () => {
+  it('rechaza lo irrescatable y RESCATA lo válido junto a lo inválido', () => {
     expect(validarBloques([{ tipo: 'html', html: '<script>' }])).toBeNull();
     expect(validarBloques([])).toBeNull();
-    expect(validarBloques([{ tipo: 'tabla', filas: Array.from({ length: 11 }, (_, i) => [String(i), i]) }])).toBeNull();
+    // Tolerancia medida el 12-ago: un bloque malo NO tira la entrega entera.
+    const rescatados = validarBloques([
+      { tipo: 'html', html: '<script>' },
+      { tipo: 'texto', texto: 'esto sí vale' },
+    ]);
+    expect(rescatados).toHaveLength(1);
+    expect(rescatados![0]).toEqual({ tipo: 'texto', texto: 'esto sí vale' });
+    // Una tabla larga se recorta a 10, no se rechaza.
+    const larga = validarBloques([{ tipo: 'tabla', filas: Array.from({ length: 14 }, (_, i) => [String(i), i]) }]);
+    expect(larga![0]).toMatchObject({ tipo: 'tabla' });
+    expect((larga![0] as { filas: unknown[] }).filas).toHaveLength(10);
   });
 });

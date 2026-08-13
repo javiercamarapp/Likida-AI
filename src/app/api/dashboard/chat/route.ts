@@ -69,6 +69,13 @@ export async function POST(req: NextRequest) {
   const mensajes = validarMensajes((cuerpo as { mensajes?: unknown })?.mensajes);
   if (!mensajes) return NextResponse.json({ error: 'mensajes inválidos' }, { status: 400 });
 
+  // El documento adjunto (si hay): extracto YA acotado por /archivo, pero
+  // aquí se re-recorta — el cliente no es frontera de confianza.
+  const docCrudo = (cuerpo as { documento?: { nombre?: unknown; extracto?: unknown } | null })?.documento;
+  const documento = docCrudo && typeof docCrudo.nombre === 'string' && typeof docCrudo.extracto === 'string' && docCrudo.extracto.trim()
+    ? { nombre: docCrudo.nombre.trim().slice(0, 120), extracto: docCrudo.extracto.slice(0, 16_000) }
+    : null;
+
   // ── Tope diario ──
   const { data: filas, error: errTope } = await acotada(
     supabaseAdmin().from('llm_costo').select('costo_usd')
@@ -89,7 +96,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const r = await ejecutarAnalista({ tenantId, nombreFlota, usuario: { nombre: sesion.nombre, rol: sesion.rol }, mensajes });
+    const r = await ejecutarAnalista({ tenantId, nombreFlota, usuario: { nombre: sesion.nombre, rol: sesion.rol }, documento, mensajes });
     // El costo se registra POR MODELO real (mismo criterio que processor.ts):
     // una fila con la etiqueta del último modelo miente cuando hubo fallback.
     for (const [modelo, c] of Object.entries(r.costoPorModelo)) {
