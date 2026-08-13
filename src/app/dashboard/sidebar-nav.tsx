@@ -1,17 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { LayoutGrid } from 'lucide-react';
-import { type Item, SIDEBAR_PRINCIPAL, FISCAL } from './rutas';
+import { LayoutGrid, ChevronDown, ChevronRight } from 'lucide-react';
+import { type Item, AGENTES, OPERACION, DINERO_FISCAL, SISTEMA, ABAJO } from './rutas';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { SelectorTema } from '../selector-tema';
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors sb-centrable';
 
 /** Item activo = pill SUAVE (`--g1` de fondo, texto e ícono `--marca`) —
- *  dirección v3 del 12-ago-2026 (DESIGN.md, patrón Sentinel/Vocalyn), ya no
- *  el bloque degradado del 7-ago. `hover` solo aplica al item INACTIVO: el
- *  activo no necesita indicar que es clickeable, ya dice dónde estás. */
+ *  dirección v3 (DESIGN.md). `hover` solo aplica al item INACTIVO. */
 function claseItem(activo: boolean): string {
   return activo
     ? `${ITEM} font-medium`
@@ -24,85 +24,70 @@ function estiloIcono(activo: boolean) {
   return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--marca)' : 'var(--muted)' } as const;
 }
 
-/** Mismo patrón que admin/sidebar-nav.tsx, sin el plegado: la dirección
- *  visual del 7-ago quiere el sidebar siempre abierto, como una sola lista —
- *  el título de sección se queda como separador de lectura, no como botón. */
-function Seccion({ titulo, items, sufijo, pathname }: { titulo: string; items: Item[]; sufijo: string; pathname: string }) {
-  // Una sección que quedó sin un solo item para este rol no se pinta: un
-  // encabezado "Documentos & Dinero" con nada debajo le anuncia al encargado
-  // justo lo que no puede ver.
-  if (items.length === 0) return null;
+function Fila({ item, sufijo, pathname }: { item: Item; sufijo: string; pathname: string }) {
+  const activo = pathname === item.href;
+  return (
+    <Link href={`${item.href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={item.nombre}>
+      <item.Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{item.nombre}</span>
+    </Link>
+  );
+}
 
+function Seccion({ titulo, items, sufijo, pathname }: { titulo: string; items: Item[]; sufijo: string; pathname: string }) {
+  // PLEGABLE como la referencia Handle (13-ago-2026): el encabezado es
+  // botón con chevron. El estado es de la sesión — no persiste a propósito:
+  // un sidebar que amanece plegado esconde el producto.
+  const [plegada, setPlegada] = useState(false);
+  // Una sección sin items para este rol no se pinta: un encabezado con nada
+  // debajo le anuncia al usuario justo lo que no puede ver.
+  if (items.length === 0) return null;
   return (
     <div>
-      <div className="px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide sb-texto" style={{ color: 'var(--muted)' }}>
+      <button type="button" onClick={() => setPlegada((v) => !v)}
+        className="w-full flex items-center justify-between px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide sb-texto transition-opacity hover:opacity-70"
+        style={{ color: 'var(--muted)' }}>
         {titulo}
-      </div>
-      {items.map(({ href, nombre, Icono }) => {
-        const activo = pathname === href;
-        return (
-          <Link key={href} href={`${href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={nombre}>
-            <Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{nombre}</span>
-          </Link>
-        );
-      })}
+        {plegada
+          ? <ChevronRight width={13} height={13} strokeWidth={2} />
+          : <ChevronDown width={13} height={13} strokeWidth={2} />}
+      </button>
+      {!plegada && items.map((it) => <Fila key={it.href} item={it} sufijo={sufijo} pathname={pathname} />)}
     </div>
   );
 }
 
-/**
- * Sidebar de /dashboard — mismo patrón visual que admin/sidebar-nav.tsx,
- * navegación propia (rutas.ts).
- *
- * `sufijo`: cuando un superadmin llega viendo una flota real (`?tenant=`) o
- * la demo (`?vista=demo`), CADA link del sidebar tiene que cargar ese mismo
- * parámetro — si no, "Viajes" te bota de vuelta al tenant demo aunque
- * estuvieras viendo una flota ejemplo. Un flota_admin/operador/contador
- * real nunca trae ninguno de los dos params (entra por /login sin
- * query string), así que para ellos `sufijo` siempre es vacío y esto no
- * hace nada distinto de un link normal.
- */
-export default function SidebarNav({ rol }: { rol: string }) {
-  const pathname = usePathname();
+/** El MISMO contrato de sufijo en cada link: `?tenant=`/`?vista=`/`?rol=`
+ *  del superadmin viajan siempre — perder uno te saca del panel que ves.
+ *  (Para superadmin sin parámetro se asume `?vista=demo`: las subpáginas ya
+ *  lo mandaron ahí, y un link sin sufijo lo expulsaba del panel.) */
+function useSufijoYRol(rol: string): { sufijo: string; rolMenu: string } {
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
   const vista = sp.get('vista');
-  // EL SUPERADMIN QUE LLEGA A UNA SUBPÁGINA SIN PARÁMETRO SE EXPULSABA SOLO.
-  //
-  // `/dashboard` a secas rebota a /admin cuando el rol es superadmin y no
-  // trae `?tenant=` ni `?vista=demo` (tenant-efectivo.ts, `esRaiz`): es su
-  // consola, no la de un cliente. Pero las SUBpáginas no rebotan — caen al
-  // tenant demo sin más. Así que entrar directo a /dashboard/despacho (link
-  // pegado, bookmark) dejaba el sufijo vacío, y el link de "Resumen"
-  // apuntaba a /dashboard pelón: el propio sidebar te sacaba del panel que
-  // estabas viendo. Para superadmin sin parámetro se asume `?vista=demo`,
-  // que es el tenant al que las subpáginas ya lo mandaron.
-  //
-  // Para los otros cuatro roles esto no cambia nada: nunca traen ninguno de
-  // los dos params y su sufijo sigue siendo vacío.
   const base = tenant
     ? `?tenant=${tenant}`
     : vista ? `?vista=${vista}`
     : rol === 'superadmin' ? '?vista=demo' : '';
-
-  // "Ver como" (`?rol=`) tiene que viajar en CADA link igual que `?tenant=`:
-  // si un solo link lo pierde, el siguiente clic te devuelve a tu propia
-  // vista de superadmin y la comparación se rompe sin avisar.
   const rolVista = sp.get('rol');
   const sufijo = rolVista ? `${base}${base ? '&' : '?'}rol=${rolVista}` : base;
-
-  // El rol con el que se FILTRA el menú es el previsualizado, no el real —
-  // pero solo si el real es superadmin, misma regla que `rolEfectivo` aplica
-  // del lado del servidor. Duplicarla aquí es a propósito: este componente es
-  // cliente y no puede llamar a la del servidor, y las dos son la misma línea.
+  // El rol con el que se FILTRA el menú es el previsualizado (solo si el
+  // real es superadmin) — misma regla que `rolEfectivo` del servidor,
+  // duplicada aquí a propósito: este componente es cliente.
   const rolMenu = rol === 'superadmin' && rolVista ? rolVista : rol;
+  return { sufijo, rolMenu };
+}
 
-  // Se filtra con la MISMA función que gatea la página (`visibilidad.ts`).
-  // Dos listas separadas —una para pintar y otra para autorizar— se
-  // desincronizan, y el modo de falla es el peor: el link existe, el clic
-  // rebota, y el usuario cree que la app está rota.
+/**
+ * Navegación principal — estructura de la referencia usehandle.ai
+ * (13-ago-2026): Resumen + categorías AGENTES / OPERACIÓN / DINERO Y
+ * FISCAL / SISTEMA. Se filtra con la MISMA función que gatea la página
+ * (`visibilidad.ts`): dos listas separadas se desincronizan y el modo de
+ * falla es el peor — el link existe, el clic rebota.
+ */
+export default function SidebarNav({ rol }: { rol: string }) {
+  const pathname = usePathname();
+  const { sufijo, rolMenu } = useSufijoYRol(rol);
   const visibles = (items: Item[]) => items.filter((it) => puedeVerRuta(rolMenu, it.href));
-
   const resumenActivo = pathname === '/dashboard';
 
   return (
@@ -114,26 +99,42 @@ export default function SidebarNav({ rol }: { rol: string }) {
           </Link>
         </div>
       )}
-      {/* Plano, sin encabezado — dirección visual del 7-ago-2026, los 9 que
-          importan todos los días. */}
-      {visibles(SIDEBAR_PRINCIPAL).map(({ href, nombre, Icono }) => {
-        const activo = pathname === href;
-        return (
-          <Link key={href} href={`${href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={nombre}>
-            <Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{nombre}</span>
-          </Link>
-        );
-      })}
-      {/* El panel del contador SÍ necesita su sección propia: es su única
-          casa, y no aparece en SIDEBAR_PRINCIPAL (esa lista es la del
-          dueño). Para un rol sin área `dinero` esto sale vacío y no se
-          pinta (ver `Seccion`). */}
-      <Seccion titulo="Fiscal" items={visibles(FISCAL)} sufijo={sufijo} pathname={pathname} />
-      {/* NEGOCIO y GESTIÓN no se pintan A PROPÓSITO (12-ago-2026): esas
-          páginas existen en disco (se conservaron el 10-ago), pero Javier
-          quiere el sidebar limpio — cada link aparece cuando su página se
-          rehaga con la dirección v3, una por una. El intento de cablearlas
-          en bloque duró una captura: "esas no estaban". */}
+      <Seccion titulo="Agentes" items={visibles(AGENTES)} sufijo={sufijo} pathname={pathname} />
+      <Seccion titulo="Operación" items={visibles(OPERACION)} sufijo={sufijo} pathname={pathname} />
+      <Seccion titulo="Dinero y fiscal" items={visibles(DINERO_FISCAL)} sufijo={sufijo} pathname={pathname} />
+      <Seccion titulo="Sistema" items={visibles(SISTEMA)} sufijo={sufijo} pathname={pathname} />
+    </>
+  );
+}
+
+/** El bloque INFERIOR fijo (referencia Handle: Help Center / Settings),
+ *  montado por chrome.tsx en su zona con fondo propio — separado del nav
+ *  principal para poder anclarlo abajo. El 13-ago llegaron dos piezas más
+ *  de la referencia (con captura): "Centro de ayuda" como botón pill y el
+ *  selector de tema claro / sistema / oscuro. */
+export function SidebarAbajo({ rol }: { rol: string }) {
+  const pathname = usePathname();
+  const { sufijo, rolMenu } = useSufijoYRol(rol);
+  const items = ABAJO.filter((it) => puedeVerRuta(rolMenu, it.href));
+  if (items.length === 0) return null;
+  const ayuda = items.find((it) => it.href === '/dashboard/soporte');
+  const filas = items.filter((it) => it.href !== '/dashboard/soporte');
+  return (
+    <>
+      {ayuda && (
+        <Link href={`${ayuda.href}${sufijo}`} title={ayuda.nombre}
+          className="hairline flex items-center gap-2 px-3 py-1.5 mb-1 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
+          style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
+          <ayuda.Icono width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+          <span className="sb-texto truncate">{ayuda.nombre}</span>
+        </Link>
+      )}
+      {filas.map((it) => <Fila key={it.href} item={it} sufijo={sufijo} pathname={pathname} />)}
+      {/* El selector se esconde entero al colapsar (sb-texto): a 72px no
+          caben tres botones, y el tema no es algo que se cambie a diario. */}
+      <div className="sb-texto px-2.5 pt-1.5 flex justify-center">
+        <SelectorTema />
+      </div>
     </>
   );
 }

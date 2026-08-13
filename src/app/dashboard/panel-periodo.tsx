@@ -59,7 +59,7 @@ export function PanelPeriodo({
           {OPCIONES.map((o) => (
             <button key={o.id} type="button" onClick={() => setModoIdx(MODOS.indexOf(o.id))}
               className="text-xs font-medium px-2.5 py-1 rounded-full transition-colors"
-              style={modo === o.id ? { background: 'var(--marca)', color: 'white' } : { color: 'var(--muted)' }}>
+              style={modo === o.id ? { background: 'var(--marca)', color: 'var(--marca-fg)' } : { color: 'var(--muted)' }}>
               {o.etiqueta}
             </button>
           ))}

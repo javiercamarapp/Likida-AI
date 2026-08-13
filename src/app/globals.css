@@ -115,9 +115,43 @@
    dos reglas `[data-theme]` de abajo quedan listas para ESE switch, si algún
    día se construye, pero ya no se disparan solas. */
 :root[data-theme="dark"] {
-  --bg: #0b0b0f; --surface: #16161c; --ink: #f5ece7; --muted: #9aa0aa; --line: #242430; --accent: #fb923c; --accent-fg: #2a1206;
+  /* Oscuro PREMIUM (13-ago-2026): negro suave y grises tenues NEUTROS (zinc,
+     sin tinte azul ni cálido) — "minimalista elegante, letra que se lea".
+     Contrastes medidos con la fórmula de luminancia WCAG, no a ojo:
+     --ink 17.6:1, --ink2 12.1:1, --muted 6.6:1, --faint 5.6:1 — todos sobre
+     --surface #131316, y la jerarquía se conserva invertida:
+     ink > ink2 > muted > faint. */
+  --bg: #09090b; --surface: #131316; --ink: #f4f4f5; --muted: #a6a6ae; --line: #232328; --accent: #fb923c; --accent-fg: #2a1206;
   --color-bad: #ff453a;   /* ver la nota de contraste arriba */
-  --color-ok: #34c759;    /* 8.12:1 sobre #16161c */
+  --color-ok: #34c759;    /* 8.4:1 sobre #131316 */
+
+  /* Los tokens v2 también pivotan — sin esto el switch dejaba media consola
+     clara (láminas --g1, fondos --canvas, texto --faint) sobre fondo negro. */
+  --panel: var(--surface);
+  --canvas: #0e0e11;
+  --canvas2: #101013;
+  --ink2: #d4d4d8;
+  --faint: #98989f;
+  --line2: #29292e;
+  --g1: #2f1c0e; --g2: #573413; --g3: #b45309; --g4: #f2913f; --g5: #fb923c;
+  --marca: #fb923c;
+  --marca-fg: #2a1206;
+  --ok: #4ade80;  --okbg: #132a1d;
+  --warn: #fbbf24; --warnbg: #2b230f;
+  --bad: #f87171; --badbg: #2b1517;
+  /* La sombra difusa no existe sobre negro: el relieve lo dan las hairlines. */
+  --shadow-card: 0 0 0 1px rgba(255,255,255,0.02);
+  --shadow-pop: 0 0 0 1px rgba(255,255,255,0.03);
+}
+/* El tema neutro de las consolas, en oscuro: la "tinta" de marca se invierte
+   a casi-blanco y la rampa de grises se voltea — la pill activa del sidebar
+   y las barras de gráfica siguen siendo monocromas, ahora sobre negro. */
+:root[data-theme="dark"] .tema-neutro {
+  --marca: #f4f4f5;
+  --marca-fg: #131316;
+  --accent: #f4f4f5;
+  --accent-fg: #131316;
+  --g1: #1b1b1f; --g2: #2a2a30; --g3: #707078; --g4: #d4d4d8; --g5: #f4f4f5;
 }
 :root[data-theme="light"] {
   --bg: #fbfbfd; --surface: #ffffff; --ink: #17100d; --muted: #6b7280; --line: #ececef; --accent: #c2410c; --accent-fg: #ffffff;

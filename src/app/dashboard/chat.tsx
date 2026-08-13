@@ -359,9 +359,14 @@ export default function ChatFlota({
     setOcupado(true);
     setFasePensando('Pensando…');
     setHistorial((h) => [...h, { q, r: { texto: 'Pensando…', pendiente: true } }]);
-    const inicio = Date.now();
+    // El intervalo cuenta su propio tiempo (700ms × ticks) en vez de leer
+    // Date.now(): mismo comportamiento a la precisión que estas fases
+    // necesitan, y sin llamadas impuras que `react-hooks/purity` no puede
+    // probar seguras en una función definida durante el render.
+    let ticks = 0;
     const relojFases = setInterval(() => {
-      const t = Date.now() - inicio;
+      ticks += 1;
+      const t = ticks * 700;
       const fase = [...FASES_PENSANDO].reverse().find(([desde]) => t >= desde);
       if (fase) setFasePensando(fase[1]);
     }, 700);
@@ -423,7 +428,7 @@ export default function ChatFlota({
           className="flex-1 min-w-0 text-sm px-3 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
         <button type="submit" aria-label="Enviar"
           className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-opacity hover:opacity-85"
-          style={{ background: 'var(--marca)', color: 'white' }}>
+          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           <Send width={15} height={15} strokeWidth={2} />
         </button>
       </form>

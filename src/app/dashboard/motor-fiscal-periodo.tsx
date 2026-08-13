@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, TriangleAlert, ReceiptText } from 'lucide-react';
 import { mxn } from '@/lib/formato';
 
-const BOTON = 'w-4 h-4 rounded flex items-center justify-center transition-opacity disabled:opacity-30 hover:bg-black/5 disabled:hover:bg-transparent';
+const BOTON = 'w-4 h-4 rounded flex items-center justify-center transition-opacity disabled:opacity-30 hover:bg-[color-mix(in_srgb,var(--muted)_14%,transparent)] disabled:hover:bg-transparent';
 
 type Modo = 'semanal' | 'mensual' | 'historico';
 const MODOS: Modo[] = ['semanal', 'mensual', 'historico'];

@@ -7,7 +7,7 @@ import type { ComparativoPeriodo, SeriesKpiCards } from '@/lib/likida/analytics'
 import { pctCambio } from '@/lib/formato';
 import type { FormatoPreset } from '../admin/ui/formato-preset';
 
-const BOTON = 'w-4 h-4 rounded flex items-center justify-center transition-colors disabled:opacity-30 hover:bg-black/5 disabled:hover:bg-transparent';
+const BOTON = 'w-4 h-4 rounded flex items-center justify-center transition-colors disabled:opacity-30 hover:bg-[color-mix(in_srgb,var(--muted)_14%,transparent)] disabled:hover:bg-transparent';
 
 type Modo = 'semanal' | 'mensual' | 'historico';
 const MODOS: Modo[] = ['semanal', 'mensual', 'historico'];

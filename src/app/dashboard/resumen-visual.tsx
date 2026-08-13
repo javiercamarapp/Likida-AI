@@ -54,7 +54,7 @@ export function BarraPagina({ icono, titulo, derecha }: { icono?: ReactNode; tit
  *  servidor, formateada por `lib/formato` como todo lo demás. */
 export function ChipFecha({ icono, children }: { icono?: ReactNode; children: ReactNode }) {
   return (
-    <span className="hairline inline-flex items-center gap-1.5 text-[13px] font-medium px-3 h-8 rounded-lg shrink-0 bg-white">
+    <span className="hairline inline-flex items-center gap-1.5 text-[13px] font-medium px-3 h-8 rounded-lg shrink-0" style={{ background: 'var(--surface)' }}>
       {icono}
       {children}
     </span>

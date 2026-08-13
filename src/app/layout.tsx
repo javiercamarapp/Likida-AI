@@ -43,10 +43,21 @@ export const metadata: Metadata = {
 // ninguna renderiza.
 export const viewport = { width: 'device-width', initialScale: 1 };
 
+// Aplica el tema guardado ANTES del primer paint — sin esto, quien eligió
+// oscuro ve un flash blanco en cada navegación dura. Corre SOLO en el panel:
+// la landing, el login y el PDF se quedan claros (nunca se diseñaron en
+// oscuro y el naranja de marca vive sobre fondos claros). La misma
+// resolución de "sistema" que selector-tema.tsx, duplicada a propósito:
+// esto tiene que ser un string síncrono sin imports.
+const SCRIPT_TEMA = `(function(){try{if(location.pathname.indexOf('/dashboard')!==0)return;var t=localStorage.getItem('likida-tema');var d=t==='oscuro'||(t==='sistema'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})()`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`${inter.variable} ${interTight.variable} ${plexMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
+        {children}
+      </body>
     </html>
   );
 }
