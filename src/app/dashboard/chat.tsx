@@ -35,7 +35,18 @@ type Visual =
   | { tipo: 'cifra'; valor: string; nota?: string }
   | { tipo: 'serie'; puntos: Array<{ dia: string; valor: number }>; formato: 'mxn' | 'numero' };
 
-interface Respuesta { texto: string; visual?: Visual; visuales?: Visual[] }
+interface Respuesta { texto: string; visual?: Visual; visuales?: Visual[]; pendiente?: boolean }
+
+/** Las fases del "pensando" (pedido del 12-ago: como Claude). Son honestas
+ *  por construcción: solo se AVANZA de fase si de verdad sigue trabajando —
+ *  un saludo se resuelve en la primera y nunca dice "leyendo tu operación". */
+const FASES_PENSANDO: Array<[number, string]> = [
+  [0, 'Pensando…'],
+  [3000, 'Leyendo tu operación…'],
+  [9000, 'Cruzando cifras…'],
+  [17000, 'Armando la respuesta…'],
+  [30000, 'Esto está tardando más de lo normal…'],
+];
 
 /** Los bloques del agente analista (/api/dashboard/chat) → la Respuesta que
  *  esta interfaz ya sabe pintar. El agente manda números crudos; aquí se
@@ -306,9 +317,18 @@ export default function ChatFlota({
     void preguntarAnalista(q);
   }
 
+  const [fasePensando, setFasePensando] = useState('Pensando…');
+
   async function preguntarAnalista(q: string) {
     setOcupado(true);
-    setHistorial((h) => [...h, { q, r: { texto: 'Analizando tu operación…' } }]);
+    setFasePensando('Pensando…');
+    setHistorial((h) => [...h, { q, r: { texto: 'Pensando…', pendiente: true } }]);
+    const inicio = Date.now();
+    const relojFases = setInterval(() => {
+      const t = Date.now() - inicio;
+      const fase = [...FASES_PENSANDO].reverse().find(([desde]) => t >= desde);
+      if (fase) setFasePensando(fase[1]);
+    }, 700);
     try {
       const previos = historial.flatMap((h) => [
         { rol: 'usuario' as const, texto: h.q },
@@ -318,6 +338,9 @@ export default function ChatFlota({
       const resp = await fetch(`/api/dashboard/chat${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }] }),
+        // Sin esto, un servidor colgado dejaba "pensando…" para siempre
+        // (reportado en vivo el 12-ago).
+        signal: AbortSignal.timeout(75_000),
       });
       const d = await resp.json().catch(() => null);
       const r: Respuesta = resp.ok && d && Array.isArray(d.bloques)
@@ -327,6 +350,7 @@ export default function ChatFlota({
     } catch {
       setHistorial((h) => [...h.slice(0, -1), { q, r: responder(q, kpis, acred) }]);
     } finally {
+      clearInterval(relojFases);
       setOcupado(false);
     }
   }
@@ -493,7 +517,14 @@ export default function ChatFlota({
                     </div>
                   </div>
                   <div className="mt-2.5 text-sm max-w-[85%]">
-                    <div>{h.r.texto}</div>
+                    {h.r.pendiente ? (
+                      <div className="flex items-center gap-2" style={{ color: 'var(--muted)' }}>
+                        <span className="skeleton inline-block w-3.5 h-3.5 rounded-full shrink-0" />
+                        {fasePensando}
+                      </div>
+                    ) : (
+                      <div>{h.r.texto}</div>
+                    )}
                     {h.r.visual && <VisualRespuesta v={h.r.visual} />}
                     {h.r.visuales?.map((v, j) => <VisualRespuesta key={j} v={v} />)}
                   </div>
