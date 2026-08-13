@@ -14,15 +14,16 @@
 //     y el cliente degrada al respondedor gratis — el chat nunca queda mudo.
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSessionTenant } from '@/lib/auth/session';
-import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { registrarCosto, faseDeModelo } from '@/lib/likida/costos';
+import { guardarIntercambio } from '@/lib/likida/chat/conversaciones';
 import { ejecutarAnalista } from '@/lib/agents/analista';
 import { ahoraMs } from '@/lib/saludo';
 import { logger } from '@/lib/logger';
-import { inicioDiaMxIso, validarMensajes } from './validacion';
+import { inicioDiaMxIso, validarMensajes, validarConversacionId } from './validacion';
+import { tenantEfectivoChat } from './tenant';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -45,29 +46,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
   }
 
-  let tenantId = sesion.tenantId;
-  if (!tenantId) {
-    if (sesion.rol !== 'superadmin') return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
-    tenantId = tenantDemo();
-  }
-
-  // Un `?tenant=` solo lo honra un superadmin, y solo si existe de verdad.
-  let nombreFlota = 'tu flota';
-  const pedido = req.nextUrl.searchParams.get('tenant');
-  if (pedido && sesion.rol === 'superadmin') {
-    const { data: t } = await acotada(
-      supabaseAdmin().from('tenant').select('id, nombre').eq('id', pedido).maybeSingle(), 'chat.tenant');
-    if (t) { tenantId = t.id as string; nombreFlota = (t.nombre as string) ?? nombreFlota; }
-  } else {
-    const { data: t } = await acotada(
-      supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).maybeSingle(), 'chat.tenant');
-    if (t?.nombre) nombreFlota = t.nombre as string;
-  }
+  // Tenant efectivo + nombre de flota: regla COMPARTIDA con /conversaciones
+  // (tenant.ts) — dos copias de una regla de autorización se desincronizan.
+  const efectivo = await tenantEfectivoChat(sesion, req.nextUrl.searchParams.get('tenant'));
+  if (!efectivo) return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
+  const { tenantId, nombreFlota } = efectivo;
 
   let cuerpo: unknown;
   try { cuerpo = await req.json(); } catch { return NextResponse.json({ error: 'cuerpo inválido' }, { status: 400 }); }
   const mensajes = validarMensajes((cuerpo as { mensajes?: unknown })?.mensajes);
   if (!mensajes) return NextResponse.json({ error: 'mensajes inválidos' }, { status: 400 });
+  // El id de conversación al que anexar (historial 0088). Inválido o ajeno →
+  // conversación nueva; nunca un error que le corte la respuesta al usuario.
+  const conversacionPedida = validarConversacionId((cuerpo as { conversacionId?: unknown })?.conversacionId);
 
   // El documento adjunto (si hay): extracto YA acotado por /archivo, pero
   // aquí se re-recorta — el cliente no es frontera de confianza.
@@ -105,7 +96,24 @@ export async function POST(req: NextRequest) {
         tokensIn: c.tokensIn, tokensOut: c.tokensOut, costoUsd: c.cost,
       });
     }
-    return NextResponse.json({ bloques: r.bloques });
+    // Persistir el intercambio (0088). Si falla, la respuesta IGUAL sale:
+    // el historial es una comodidad, la respuesta ya costó dinero.
+    let conversacionId: string | null = null;
+    try {
+      conversacionId = await guardarIntercambio({
+        tenantId,
+        userId: sesion.userId,
+        conversacionId: conversacionPedida,
+        pregunta: mensajes[mensajes.length - 1].texto,
+        textoRespuesta: r.bloques
+          .filter((b): b is { tipo: 'texto'; texto: string } => b.tipo === 'texto' && typeof (b as { texto?: unknown }).texto === 'string')
+          .map((b) => b.texto).join(' ') || 'Listo.',
+        bloques: r.bloques as unknown as Array<Record<string, unknown>>,
+      });
+    } catch (err) {
+      logger.error('chat.guardar.fallo', { err: err instanceof Error ? err.message : String(err) });
+    }
+    return NextResponse.json({ bloques: r.bloques, conversacionId });
   } catch (err) {
     logger.error('chat.analista.fallo', { err: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: 'el analista no pudo responder en este momento' }, { status: 502 });
