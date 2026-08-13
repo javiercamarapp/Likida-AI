@@ -1,31 +1,70 @@
 import Link from 'next/link';
-import { Bot, Route, ArrowRight, Inbox } from 'lucide-react';
-import type { LiqRow, DashboardKpis } from '@/lib/likida/analytics';
-import type { ResumenCostoIaTenant } from '@/lib/likida/costos';
+import { Route, ArrowRight, Inbox, Bot, BellRing, Flag, Link2, Settings } from 'lucide-react';
+import type { LiqRow, DashboardKpis, HechoSolo, DineroObservadoTipo } from '@/lib/likida/analytics';
+import { etiquetaConcepto, type PoliticaGasto } from '@/lib/likida/cuadre/engine';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
+import { CalendarHeatmap, HBars } from '@/app/admin/ui/graficas';
+import { Dona } from '@/app/admin/charts';
 import { BarraPagina } from '../../resumen-visual';
 
+/** Cómo se lee cada tipo de diferencia del motor en la dona. Un tipo nuevo
+ *  cae al reemplazo genérico, nunca a texto vacío. */
+const TIPO_DIFERENCIA: Record<string, string> = {
+  sobre_politica: 'Sobre política',
+  duplicado: 'Duplicado',
+  sin_comprobar: 'Sin comprobar',
+};
+const rotuloTipo = (t: string) => TIPO_DIFERENCIA[t] ?? t.replaceAll('_', ' ');
+
+export interface ExtraAgenteLiquidacion {
+  /** Lecturas de IA del agente (sin chat). null = no se pudo leer. */
+  actividadIa: number | null;
+  /** Conteos del ciclo. null en un paso = ese conteo no se pudo leer. */
+  funnel: { abiertos: number | null; enCuadre: number | null; porRevisar: number; liquidados: number | null };
+  /** Cierres por día (últimas 12 semanas). null = no se pudo leer. */
+  cierresPorDia: Array<{ fecha: string; valor: number }> | null;
+  hechos: HechoSolo[] | null;
+  huerfanos: { resueltos: number; totales: number } | null;
+  docsProcesados: number | null;
+  porTipo: DineroObservadoTipo[] | null;
+  /** Diferencias por operador, ya en forma de barras (top, solo >0). */
+  operadores: Array<{ etiqueta: string; valor: number }> | null;
+  politica: PoliticaGasto[] | null;
+}
+
 /**
- * El render del Agente de Liquidación de Ruta, separado de su puerta (page.tsx trae
- * sesión y no se puede mirar sin ella) — el patrón page/vista del repo,
- * que existe justo para poder verificar ESTE archivo con un screenshot.
+ * El render del Agente de Liquidación de Ruta (v2, 13-ago-2026: "gráficas,
+ * algo visual… estilo minimalista elegante premium como el dashboard
+ * inicial"). Tres zonas: la firma del humano (cola), la evidencia de que el
+ * agente trabaja (ciclo, calendario, lo-que-hizo-solo), y el criterio con el
+ * que juzga (dinero observado, operadores, sus reglas).
+ *
+ * Cada sección degrada por su cuenta: un dato que no se pudo leer enseña su
+ * leyenda honesta sin tumbar la página — y un cero MEDIDO sí se grafica.
  */
 export function VistaAgenteLiquidacion({
-  kpis, cola, cierres, costo, sufijo,
+  kpis, cola, cierres, extra, sufijo,
 }: {
   kpis: DashboardKpis;
   cola: LiqRow[];
   cierres: LiqRow[];
-  costo: { ok: ResumenCostoIaTenant } | { err: string };
+  extra: ExtraAgenteLiquidacion;
   sufijo: string;
 }) {
-  // SIN DÓLARES A PROPÓSITO (13-ago: "eso es para mí, ¿no?"): el costo en
-  // USD del agente es margen de Javier y vive en /admin — al cliente se le
-  // enseña la ACTIVIDAD (lecturas), que comunica trabajo sin abrir la
-  // cocina. El chat no se cuenta: ese se mide en su propia página.
-  const fasesAgente = 'ok' in costo ? costo.ok.porFase.filter((f) => f.fase !== 'chat') : [];
-  const eventosAgente = fasesAgente.reduce((s, f) => s + f.n, 0);
+  const { funnel } = extra;
+  const funnelCompleto = funnel.abiertos !== null && funnel.enCuadre !== null && funnel.liquidados !== null;
+  const pasosFunnel = funnelCompleto
+    ? [
+        { etiqueta: 'Abiertos', valor: funnel.abiertos as number },
+        { etiqueta: 'En cuadre', valor: funnel.enCuadre as number },
+        { etiqueta: 'Por revisar', valor: funnel.porRevisar },
+        { etiqueta: 'Liquidados', valor: funnel.liquidados as number },
+      ]
+    : [];
+  const hayCiclo = funnelCompleto && pasosFunnel.some((p) => p.valor > 0);
+  const totalCierres12s = extra.cierresPorDia?.reduce((s, d) => s + d.valor, 0) ?? 0;
+  const totalObservado = extra.porTipo?.reduce((s, t) => s + t.monto, 0) ?? 0;
 
   return (
     <main className="h-full">
@@ -60,39 +99,173 @@ export function VistaAgenteLiquidacion({
             )}
           </section>
 
+          {/* ── La evidencia de que trabaja ── */}
           <div className="grid lg:grid-cols-3 gap-4">
-            <section className="card p-4 lg:col-span-2">
-              <h2 className="font-display text-[15px] font-semibold mb-3">Últimos cierres</h2>
-              {cierres.length === 0 ? (
-                <EstadoVacio icono={<Bot width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  El agente todavía no cierra ninguna liquidación en esta flota.
-                </EstadoVacio>
+            <section className="card p-4 flex flex-col">
+              <h2 className="font-display text-[15px] font-semibold mb-3">El ciclo del viaje</h2>
+              {!funnelCompleto ? (
+                <Leyenda>No se pudo contar el ciclo ahora mismo — antes que un cero sin medir, se queda pendiente.</Leyenda>
+              ) : hayCiclo ? (
+                /* HBars y no Funnel A PROPÓSITO: el Funnel imprime conversión
+                   paso-a-paso, y este ciclo no es un embudo decreciente — los
+                   liquidados son acumulado histórico y salía "24 · 1200%",
+                   un porcentaje que miente. Barras: cuántos hay en cada
+                   etapa, y ya. */
+                <HBars datos={pasosFunnel} />
               ) : (
-                <TablaLiqs filas={cierres} sufijo={sufijo} />
+                <Leyenda>Todavía no hay viajes en el ciclo. El primero que despaches aparece aquí.</Leyenda>
               )}
             </section>
 
-            <section className="card p-4">
-              <h2 className="font-display text-[15px] font-semibold mb-1">Actividad de IA</h2>
-              {'ok' in costo ? (
+            <section className="card p-4 flex flex-col">
+              <h2 className="font-display text-[15px] font-semibold mb-1">Cierres por día</h2>
+              <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Últimas 12 semanas</p>
+              {extra.cierresPorDia === null ? (
+                <Leyenda>No se pudo leer la actividad ahora mismo.</Leyenda>
+              ) : totalCierres12s > 0 ? (
                 <>
-                  <div className="cifra-mono text-[22px] font-medium mt-2">{numero(eventosAgente)}</div>
-                  <p className="text-[12px] mt-1" style={{ color: 'var(--faint)' }}>
-                    lecturas de IA del agente en total, histórico — cada comprobante leído y
-                    cada cuadre razonado cuentan una.
+                  <CalendarHeatmap dias={extra.cierresPorDia} />
+                  <p className="text-[12px] mt-3" style={{ color: 'var(--faint)' }}>
+                    {numero(totalCierres12s)} liquidaciones cerradas en la ventana.
                   </p>
                 </>
               ) : (
-                <p className="text-[12px] mt-2" style={{ color: 'var(--faint)' }}>
-                  La actividad de IA no se pudo leer ahora mismo — antes que enseñarte un cero
-                  que nadie midió, se queda pendiente.
-                </p>
+                <Leyenda>Aún sin cierres en las últimas 12 semanas — cada día con cierres pinta su cuadrito.</Leyenda>
+              )}
+            </section>
+
+            <section className="card p-4 flex flex-col">
+              <h2 className="font-display text-[15px] font-semibold mb-3">Lo que hizo solo</h2>
+              {extra.hechos === null ? (
+                <Leyenda>No se pudo leer el registro ahora mismo.</Leyenda>
+              ) : extra.hechos.length === 0 && !(extra.huerfanos && extra.huerfanos.resueltos > 0) ? (
+                <Leyenda>Aún nada que presumir: cuando el agente mande un recordatorio o escale un
+                  viaje sin que nadie se lo pida, queda escrito aquí.</Leyenda>
+              ) : (
+                <div className="space-y-2.5 text-[12.5px]">
+                  {extra.hechos.map((h, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      {h.tipo === 'recordatorio'
+                        ? <BellRing width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
+                        : <Flag width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />}
+                      <div className="min-w-0">
+                        {h.tipo === 'recordatorio'
+                          ? <span>Le recordó a <span className="font-medium">{h.operador ?? 'el operador'}</span> comprobar el viaje {h.folio}</span>
+                          : <span>Escaló el viaje <span className="font-medium">{h.folio}</span> para atención humana</span>}
+                        <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaCorta(h.cuando)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {extra.huerfanos && extra.huerfanos.resueltos > 0 && (
+                    <div className="flex items-start gap-2 pt-1.5 border-t" style={{ borderColor: 'var(--line2)' }}>
+                      <Link2 width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--ok)' }} />
+                      <span>Amarró solo <span className="font-medium">{numero(extra.huerfanos.resueltos)}</span> comprobantes
+                        que llegaron sin viaje asignado.</span>
+                    </div>
+                  )}
+                </div>
               )}
             </section>
           </div>
+
+          {/* ── El criterio con el que juzga ── */}
+          <div className="grid lg:grid-cols-3 gap-4">
+            <section className="card p-4 flex flex-col">
+              <h2 className="font-display text-[15px] font-semibold mb-1">Dinero observado</h2>
+              {extra.porTipo === null ? (
+                <Leyenda>No se pudo leer el desglose ahora mismo.</Leyenda>
+              ) : extra.porTipo.length === 0 ? (
+                <Leyenda>Sin diferencias detectadas todavía — cuando el agente atrape un gasto fuera
+                  de política o un ticket duplicado, aquí se desglosa.</Leyenda>
+              ) : (
+                <>
+                  <div className="cifra-mono text-[22px] font-medium mb-2">{mxn(totalObservado)}</div>
+                  <Dona segmentos={extra.porTipo.map((t) => ({ etiqueta: rotuloTipo(t.tipo), valor: t.monto }))} />
+                  <div className="mt-2 space-y-1">
+                    {extra.porTipo.map((t) => (
+                      <div key={t.tipo} className="flex items-center justify-between text-[12px]">
+                        <span style={{ color: 'var(--muted)' }}>{rotuloTipo(t.tipo)} · {numero(t.n)}</span>
+                        <span className="cifra-mono">{mxn(t.monto)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
+
+            <section className="card p-4 flex flex-col">
+              <h2 className="font-display text-[15px] font-semibold mb-3">Diferencias por operador</h2>
+              {extra.operadores === null ? (
+                <Leyenda>No se pudo leer el desglose ahora mismo.</Leyenda>
+              ) : extra.operadores.length === 0 ? (
+                <Leyenda>Ningún operador acumula diferencias — la señal que quieres ver.</Leyenda>
+              ) : (
+                <HBars datos={extra.operadores} />
+              )}
+            </section>
+
+            <section className="card p-4 flex flex-col gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="font-display text-[15px] font-semibold">Sus reglas</h2>
+                  <Link href={`/dashboard/configuracion${sufijo}`} title="Editar la política"
+                    className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity"
+                    style={{ color: 'var(--marca)' }}>
+                    <Settings width={12} height={12} strokeWidth={1.75} /> Editar
+                  </Link>
+                </div>
+                {extra.politica === null ? (
+                  <Leyenda>No se pudo leer la política ahora mismo.</Leyenda>
+                ) : (
+                  <div className="space-y-1">
+                    {extra.politica.map((p) => (
+                      <div key={p.concepto} className="flex items-center justify-between text-[12px]">
+                        <span style={{ color: 'var(--muted)' }}>{etiquetaConcepto(p.concepto)}</span>
+                        <span className="cifra-mono">
+                          {p.topeMonto !== undefined ? mxn(p.topeMonto) : p.requiereCfdi ? 'Requiere CFDI' : 'Sin tope'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="pt-2.5 border-t" style={{ borderColor: 'var(--line2)' }}>
+                <div className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Actividad de IA</div>
+                {extra.actividadIa === null ? (
+                  <p className="text-[12px]" style={{ color: 'var(--faint)' }}>No se pudo leer ahora mismo.</p>
+                ) : (
+                  <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
+                    <span className="cifra-mono text-[15px] font-medium" style={{ color: 'var(--ink)' }}>{numero(extra.actividadIa)}</span>{' '}
+                    lecturas en total, histórico — cada comprobante leído y cada cuadre razonado cuentan una.
+                  </p>
+                )}
+              </div>
+            </section>
+          </div>
+
+          <section className="card p-4">
+            <h2 className="font-display text-[15px] font-semibold mb-3">Últimos cierres</h2>
+            {cierres.length === 0 ? (
+              <EstadoVacio icono={<Bot width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                El agente todavía no cierra ninguna liquidación en esta flota.
+              </EstadoVacio>
+            ) : (
+              <TablaLiqs filas={cierres} sufijo={sufijo} />
+            )}
+          </section>
         </div>
       </div>
     </main>
+  );
+}
+
+/** Leyenda de vacío/pendiente — centrada por alto y ancho, como TODAS las
+ *  leyendas del panel (regla del 12-ago). */
+function Leyenda({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex-1 min-h-[110px] flex items-center justify-center">
+      <p className="text-[12.5px] text-center max-w-[30ch]" style={{ color: 'var(--muted)' }}>{children}</p>
+    </div>
   );
 }
 
