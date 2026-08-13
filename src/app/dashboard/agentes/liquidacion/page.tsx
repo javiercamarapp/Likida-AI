@@ -8,7 +8,7 @@ import { VistaAgenteLiquidacion } from './vista';
 export const dynamic = 'force-dynamic';
 
 /**
- * Agente de Liquidación — la PRIMERA página de la categoría AGENTES
+ * Agente de Liquidación de Ruta — la PRIMERA página de la categoría AGENTES
  * (13-ago-2026). Es la ventana de un agente que trabaja solo: qué ha
  * cerrado, qué trae en cola para un humano, y qué le cuesta a la flota.
  * Esta puerta trae sesión y datos; el dibujo vive en `vista.tsx` para

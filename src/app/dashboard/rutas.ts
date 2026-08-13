@@ -1,5 +1,5 @@
 import {
-  LayoutGrid, MessageCircle, Bot, ReceiptText, LifeBuoy, Settings, CreditCard,
+  LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard,
 } from 'lucide-react';
 
 /**
@@ -19,7 +19,9 @@ export type Item = { href: string; nombre: string; Icono: typeof LayoutGrid };
 /** Los agentes de Likida — cada página es la ventana de un agente que
  *  trabaja solo: qué hizo, qué trae en cola, qué necesita de un humano. */
 export const AGENTES: Item[] = [
-  { href: '/dashboard/agentes/liquidacion', nombre: 'Agente de Liquidación', Icono: Bot },
+  // El rótulo del sidebar es más corto que el título de la página (Agente de
+  // Liquidación de Ruta) a propósito — 13-ago: "que el nombre no se corte".
+  { href: '/dashboard/agentes/liquidacion', nombre: 'Agente de liquidación', Icono: Route },
   { href: '/dashboard/agentes/facturas', nombre: 'Agente de Facturas', Icono: ReceiptText },
 ];
 
