@@ -137,6 +137,17 @@ export async function getPorFacturar(
   return filas.map((g) => armar(g, hoy));
 }
 
+/** El folio fiscal (UUID) de un CFDI, como lo imprime el portal: 36
+ *  caracteres hex con guiones. Cualquier otra cosa se rechaza — un UUID
+ *  inventado aquí se vuelve una fila fiscal falsa allá. */
+const UUID_CFDI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function validarUuidCfdi(crudo: unknown): string | null {
+  if (typeof crudo !== 'string') return null;
+  const limpio = crudo.trim().toUpperCase();
+  return UUID_CFDI.test(limpio) ? limpio : null;
+}
+
 /**
  * Cuántos gastos de la flota YA tienen CFDI amarrado — el acumulado del
  * trabajo automático (emitido por el agente o pescado del XML consolidado
