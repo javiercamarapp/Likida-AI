@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Send, ArrowUp, Search, Paperclip, Camera, FileImage, X, FileText, History, PencilLine } from 'lucide-react';
+import { Send, ArrowUp, Search, Paperclip, Camera, FileImage, X, FileText, History, PencilLine, PanelRightClose } from 'lucide-react';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero, fechaCorta } from '@/lib/formato';
 import { useSearchParams } from 'next/navigation';
@@ -230,6 +230,18 @@ export default function ChatFlota({
   const [convs, setConvs] = useState<Array<{ id: string; titulo: string; actualizadoEn: string }> | 'error' | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  // El ancla sticky marca el TOPE VISIBLE del área del chat (debajo de la
+  // cinta de "ver como" cuando existe, 13-ago: "al nivel del color gris").
+  // El cajón se mide contra ella AL ABRIR — en el handler, no en un efecto.
+  const anclaChat = useRef<HTMLDivElement>(null);
+  const [topPanel, setTopPanel] = useState(16);
+
+  function abrirHistorial() {
+    const r = anclaChat.current?.getBoundingClientRect();
+    setTopPanel(Math.max(16, Math.round(r?.top ?? 16)));
+    setErrorCarga(null);
+    setHistorialAbierto(true);
+  }
 
   async function leerArchivo(archivo: File) {
     if (ocupado) return;
@@ -633,92 +645,94 @@ export default function ChatFlota({
     const listaFiltrada = Array.isArray(convs)
       ? convs.filter((c) => c.titulo.toLowerCase().includes(busqueda.trim().toLowerCase()))
       : [];
-    const historialUi = (
-      <>
-        <button type="button" onClick={() => { setHistorialAbierto(true); setErrorCarga(null); }}
-          className="fixed top-[74px] right-7 z-30 hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]"
-          style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
-          <History width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          Historial
-          {Array.isArray(convs) && (
-            <span className="cifra-mono text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
-              {numero(convs.length)}
-            </span>
-          )}
-        </button>
-
-        {historialAbierto && (
-          <>
-            {/* Clic afuera cierra. TRANSPARENTE a propósito (13-ago: "que
-                recubra la parte del chat"): oscurecer el viewport entero
-                leería como modal de toda la app, y el cajón es del chat. */}
-            <button type="button" aria-label="Cerrar historial" onClick={() => setHistorialAbierto(false)}
-              className="fixed inset-0 z-40" style={{ background: 'transparent' }} />
-            {/* top/bottom/right-4 = el MISMO p-4 del marco (marco.ts): el
-                cajón calza sobre la lámina del chat, no sobre el viewport. */}
-            <div className="fixed top-4 bottom-4 right-4 z-50 w-[320px] rounded-2xl hairline flex flex-col p-3 gap-2.5"
-              style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-pop)' }}>
-              <div className="flex items-center justify-between">
-                <button type="button" onClick={nuevoChat}
-                  className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
-                  <PencilLine width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                  Nuevo chat
-                </button>
-                <button type="button" aria-label="Cerrar" onClick={() => setHistorialAbierto(false)}
-                  className="w-8 h-8 ml-1.5 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
-                  style={{ color: 'var(--muted)' }}>
-                  <X width={14} height={14} strokeWidth={2} />
-                </button>
-              </div>
-
-              <div className="hairline flex items-center gap-2 px-3 py-2 rounded-full" style={{ background: 'var(--canvas)' }}>
-                <Search width={13} height={13} strokeWidth={2} style={{ color: 'var(--muted)' }} />
-                <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-                  placeholder="Buscar chats" aria-label="Buscar chats"
-                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px]" />
-              </div>
-
-              <div className="etiqueta-mono text-[10px] uppercase px-1 pt-1" style={{ color: 'var(--faint)' }}>
-                Recientes
-              </div>
-
-              {errorCarga && (
-                <p className="text-[12px] px-1" style={{ color: 'var(--bad)' }}>{errorCarga}</p>
-              )}
-
-              <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5">
-                {convs === null && (
-                  <div className="space-y-2 px-1 pt-1">
-                    <div className="skeleton h-4 rounded" /><div className="skeleton h-4 rounded w-4/5" /><div className="skeleton h-4 rounded w-3/5" />
-                  </div>
-                )}
-                {convs === 'error' && (
-                  <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
-                    No se pudo leer el historial ahora mismo — tus conversaciones siguen
-                    guardadas; reintenta en un momento.
-                  </p>
-                )}
-                {Array.isArray(convs) && listaFiltrada.length === 0 && (
-                  <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
-                    {convs.length === 0 ? 'Sin chats recientes.' : `Nada coincide con «${busqueda.trim()}».`}
-                  </p>
-                )}
-                {listaFiltrada.map((c) => {
-                  const activa = c.id === conversacionId;
-                  return (
-                    <button key={c.id} type="button" onClick={() => void cargarConversacion(c.id)}
-                      className={`w-full text-left px-2.5 py-2 rounded-lg text-[13px] transition-colors ${activa ? 'font-medium' : 'hover:bg-[var(--canvas)]'}`}
-                      style={activa ? { background: 'var(--g1)', color: 'var(--marca)' } : undefined}>
-                      <span className="block truncate">{c.titulo}</span>
-                      <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{fechaCorta(c.actualizadoEn)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </>
+    const pillHistorial = (
+      <div ref={anclaChat} className="sticky top-0 z-30 h-0 w-full">
+        {!historialAbierto && (
+          <button type="button" onClick={abrirHistorial}
+            className="absolute top-3 right-4 hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]"
+            style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
+            <History width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+            Historial
+            {Array.isArray(convs) && (
+              <span className="cifra-mono text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
+                {numero(convs.length)}
+              </span>
+            )}
+          </button>
         )}
-      </>
+      </div>
+    );
+
+    // EN FLUJO y no encima (13-ago: "que no choque, que se mueva como
+    // ChatGPT"): el panel es un hermano flex del contenido — al abrirse, el
+    // chat se comprime y se re-centra solo. El ancho anima con la misma
+    // curva easeOutQuint del resto del producto; sticky para quedarse
+    // pegado mientras el hilo scrollea, y la altura se midió contra el
+    // ancla al abrir (arranca al nivel del gris, cinta de rol incluida).
+    const panelHistorial = (
+      <div className="shrink-0 self-start sticky top-4 mt-4 overflow-hidden"
+        style={{ width: historialAbierto ? 352 : 0, height: `calc(100dvh - ${topPanel + 32}px)`, transition: 'width 480ms cubic-bezier(0.22, 1, 0.36, 1)' }}>
+        <div className="w-[320px] mx-4 h-full rounded-2xl hairline flex flex-col p-3 gap-2.5"
+          style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={nuevoChat}
+              className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
+              <PencilLine width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+              Nuevo chat
+            </button>
+            <button type="button" aria-label="Cerrar historial" title="Cerrar historial" onClick={() => setHistorialAbierto(false)}
+              className="w-8 h-8 ml-1.5 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
+              style={{ color: 'var(--muted)' }}>
+              <PanelRightClose width={15} height={15} strokeWidth={1.75} />
+            </button>
+          </div>
+
+          <div className="hairline flex items-center gap-2 px-3 py-2 rounded-full" style={{ background: 'var(--canvas)' }}>
+            <Search width={13} height={13} strokeWidth={2} style={{ color: 'var(--muted)' }} />
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar chats" aria-label="Buscar chats"
+              className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px]" />
+          </div>
+
+          <div className="etiqueta-mono text-[10px] uppercase px-1 pt-1" style={{ color: 'var(--faint)' }}>
+            Recientes
+          </div>
+
+          {errorCarga && (
+            <p className="text-[12px] px-1" style={{ color: 'var(--bad)' }}>{errorCarga}</p>
+          )}
+
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5">
+            {convs === null && (
+              <div className="space-y-2 px-1 pt-1">
+                <div className="skeleton h-4 rounded" /><div className="skeleton h-4 rounded w-4/5" /><div className="skeleton h-4 rounded w-3/5" />
+              </div>
+            )}
+            {convs === 'error' && (
+              <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
+                No se pudo leer el historial ahora mismo — tus conversaciones siguen
+                guardadas; reintenta en un momento.
+              </p>
+            )}
+            {Array.isArray(convs) && listaFiltrada.length === 0 && (
+              <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
+                {convs.length === 0 ? 'Sin chats recientes.' : `Nada coincide con «${busqueda.trim()}».`}
+              </p>
+            )}
+            {listaFiltrada.map((c) => {
+              const activa = c.id === conversacionId;
+              return (
+                <button key={c.id} type="button" onClick={() => void cargarConversacion(c.id)}
+                  className={`w-full text-left px-2.5 py-2 rounded-lg text-[13px] transition-colors ${activa ? 'font-medium' : 'hover:bg-[var(--canvas)]'}`}
+                  style={activa ? { background: 'var(--g1)', color: 'var(--marca)' } : undefined}>
+                  <span className="block truncate">{c.titulo}</span>
+                  <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{fechaCorta(c.actualizadoEn)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     );
 
     // ── CONVERSACIÓN, tipo ChatGPT/Claude (pedido del 12-ago): al primer
@@ -727,8 +741,10 @@ export default function ChatFlota({
     // tabla/gráfica cuando la trae.
     if (!vacio) {
       return (
-        <div className="min-h-full w-full flex-1 flex flex-col px-4 pt-4">
-          {historialUi}
+        <div className="min-h-full w-full flex-1 flex">
+          <div className="flex-1 min-w-0 flex flex-col">
+            {pillHistorial}
+            <div className="flex-1 flex flex-col px-4 pt-4">
           <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col">
             <div className="flex-1 space-y-4 py-2">
               {historial.map((h, i) => (
@@ -759,14 +775,21 @@ export default function ChatFlota({
               <div className={recomendar ? 'mt-3' : ''}>{caja}</div>
             </div>
           </div>
+            </div>
+          </div>
+          {panelHistorial}
         </div>
       );
     }
 
     // ── PORTADA (sin mensajes todavía) ──
     return (
-      <div className="min-h-full w-full flex-1 flex flex-col items-center justify-center px-4 py-10">
-        {historialUi}
+      <div className="min-h-full w-full flex-1 flex">
+        <div className="flex-1 min-w-0 flex flex-col">
+        {pillHistorial}
+        {/* El centrado vive en ESTA capa: con el ancla sticky adentro del
+            justify-center, el pill saldría a media pantalla, no arriba. */}
+        <div className="w-full flex-1 flex flex-col items-center justify-center px-4 py-10">
         <div className="w-full max-w-2xl flex flex-col items-center">
           <Logo alto="h-7" className="mb-6" />
           <h1 className="text-[26px] leading-tight font-medium tracking-tight text-center">
@@ -806,6 +829,9 @@ export default function ChatFlota({
             la pregunta. No traduce preguntas libres a consultas de base de datos, a propósito.
           </p>
         </div>
+        </div>
+        </div>
+        {panelHistorial}
       </div>
     );
   }
