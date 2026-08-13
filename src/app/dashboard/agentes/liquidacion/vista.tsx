@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Bot, ArrowRight, Inbox } from 'lucide-react';
+import { Bot, Route, ArrowRight, Inbox } from 'lucide-react';
 import type { LiqRow, DashboardKpis } from '@/lib/likida/analytics';
 import type { ResumenCostoIaTenant } from '@/lib/likida/costos';
 import { mxn, usd, numero, fechaCorta } from '@/lib/formato';
@@ -7,7 +7,7 @@ import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../../resumen-visual';
 
 /**
- * El render del Agente de Liquidación, separado de su puerta (page.tsx trae
+ * El render del Agente de Liquidación de Ruta, separado de su puerta (page.tsx trae
  * sesión y no se puede mirar sin ella) — el patrón page/vista del repo,
  * que existe justo para poder verificar ESTE archivo con un screenshot.
  */
@@ -30,8 +30,8 @@ export function VistaAgenteLiquidacion({
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
         <BarraPagina
-          icono={<Bot width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Agente de Liquidación"
+          icono={<Route width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Agente de Liquidación de Ruta"
         />
         <div className="px-5 py-5 flex-1 space-y-4">
 
