@@ -19,8 +19,9 @@ import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
 import {
   BarraPagina, ChipFecha, HeroSaludo, MotorFiscal, TituloSeccion,
-  TablaViajes, type FilaViaje,
+  type FilaViaje,
 } from './resumen-visual';
+import { ViajesRecientes } from './viajes-recientes';
 import { StatCard } from '../admin/ui/kit';
 import { BarraAcciones, type ItemBusqueda } from './barra-acciones';
 import { KpiPeriodo } from './kpi-periodo';
@@ -139,11 +140,12 @@ export async function InicioContenido({
   // es peor que no mostrarla. Vuelven a poblarse cuando Cuadre exista.
   const alertas: Array<{ texto: string; href: string }> = [];
 
-  // Las 6 filas de la tabla (la referencia enseña ~6). El link "Ver" solo
-  // cuando la liquidación existe Y se pudo cruzar — un folio sin cruce se
-  // queda sin link, nunca con un link a un 404.
+  // TODAS las filas cargadas (tope 100 de getViajes): la tarjeta enseña 6 y
+  // su botón "Ver los N" despliega el resto (pedido del 12-ago). El link
+  // "Ver" solo cuando la liquidación existe Y se pudo cruzar — un folio sin
+  // cruce se queda sin link, nunca con un link a un 404.
   const liqPorFolio = new Map((liquidaciones ?? []).map((l) => [l.folio, l.id]));
-  const filasViajes: FilaViaje[] = (viajes ?? []).slice(0, 6).map((v) => ({
+  const filasViajes: FilaViaje[] = (viajes ?? []).map((v) => ({
     id: v.id, folio: v.folio, origen: v.origen, destino: v.destino,
     estatus: v.estatus, anticipo: v.anticipo, operadorNombre: v.operadorNombre,
     fechaInicio: v.fechaInicio,
@@ -317,13 +319,9 @@ export async function InicioContenido({
                 </div>
               </div>
 
-              {/* ── La tabla protagonista de la referencia, con los viajes
-                  REALES. Sin "Ver todo": la página de Viajes se rehará a su
-                  tiempo, y un link muerto anuncia una página que no existe. */}
-              <div className="card p-3 mt-2">
-                <div className="mb-2"><TituloSeccion>Viajes recientes</TituloSeccion></div>
-                <TablaViajes viajes={filasViajes} sufijo={sufijo} />
-              </div>
+              {/* ── La tabla protagonista, con los viajes REALES y su botón
+                  de abrir (despliega los 100 cargados ahí mismo). */}
+              <ViajesRecientes filas={filasViajes} sufijo={sufijo} />
 
               {/* ── Viajes / Actividad / Gasto por categoría / Liquidado /
                   Top rutas — UN SOLO selector Semanal/Mensual/Histórico que
