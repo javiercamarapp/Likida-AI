@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const r = await ejecutarAnalista({ tenantId, nombreFlota, mensajes });
+    const r = await ejecutarAnalista({ tenantId, nombreFlota, usuario: { nombre: sesion.nombre, rol: sesion.rol }, mensajes });
     // El costo se registra POR MODELO real (mismo criterio que processor.ts):
     // una fila con la etiqueta del último modelo miente cuando hubo fallback.
     for (const [modelo, c] of Object.entries(r.costoPorModelo)) {

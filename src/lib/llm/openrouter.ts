@@ -63,6 +63,9 @@ const FALLBACK: Record<string, string> = {
   'google/gemini-3.1-flash-lite': 'anthropic/claude-haiku-4.5',
   'google/gemini-3.6-flash': 'anthropic/claude-haiku-4.5',
   'google/gemini-3.5-flash-lite': 'openai/gpt-5.6-luna',
+  // El conserje del chat del panel (chat_ligero): si OpenAI se cae, el
+  // saludo lo contesta flash-lite — cruce de proveedor, texto puro.
+  'openai/gpt-5-nano': 'google/gemini-3.5-flash-lite',
   'anthropic/claude-sonnet-5': 'openai/gpt-5.6-terra',
   'anthropic/claude-opus-5': 'anthropic/claude-sonnet-5',
   // Mismo hueco, dormido: `53492a3` (4-ago-2026) agregó estos tres a PRICES
@@ -127,6 +130,8 @@ export function isTransientError(err: unknown): boolean {
 // Precios [in, out] por 1M tokens — safety net; ver models.ts para el stack.
 const PRICES: Record<string, [number, number]> = {
   'google/gemini-3.6-flash': [1.5, 7.5],
+  // Verificado contra el catálogo público de OpenRouter el 12-ago-2026.
+  'openai/gpt-5-nano': [0.05, 0.4],
   'google/gemini-3.5-flash-lite': [0.3, 2.5],
   // Añadidos el 4-ago-2026 al medir OCR: sin ellos, `calcCost` caía a la red de
   // seguridad (tarifa más cara) y reportaba ~$0.030 por comprobante donde el

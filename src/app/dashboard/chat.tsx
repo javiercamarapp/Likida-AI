@@ -59,15 +59,8 @@ function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Respuesta 
   return { texto: textos.join(' ') || 'Listo.', visuales: visuales.length > 0 ? visuales : undefined };
 }
 
-/** Saludos y cortesías se resuelven aquí, gratis — un "hola" no debe gastar
- *  tokens ni arriesgarse a la guardia (pasó en vivo el 12-ago). */
-const SALUDO_RE = /^\s*(hola|holi|buenas|buenos?\s*(días|dias|tardes|noches)?|hey|qué tal|que tal|saludos|gracias|ok|va|listo|perfecto)\s*[!.\u{1F44B}]*\s*$/iu;
-
 function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null): Respuesta {
   const q = pregunta.toLowerCase();
-  if (SALUDO_RE.test(pregunta)) {
-    return { texto: '¡Hola! Soy el analista de tu operación. Pregúntame por tu gasto, tu cuadre, tus rutas o tu motor fiscal — o abre el catálogo con el botón Consulta.' };
-  }
   const sinLiq = { texto: 'Todavía no hay liquidaciones para calcular esto.' };
   if (q.includes('comprobad') || q.includes('monto')) {
     if (!kpis) return sinLiq;
@@ -302,19 +295,14 @@ export default function ChatFlota({
   ];
 
   const spChat = useSearchParams();
-  const RESPUESTA_GENERICA = 'Todavía no sé responder eso';
 
   function preguntar(q: string) {
     if (!q.trim() || ocupado) return;
     setTexto('');
-    const local = responder(q, kpis, acred);
-    // FAST-PATH GRATIS: si el respondedor de palabras clave tiene la
-    // respuesta, ni un token se gasta. Al agente solo va lo que necesita
-    // pensar — esa es la primera capa anti-quemadura.
-    if (!local.texto.startsWith(RESPUESTA_GENERICA)) {
-      setHistorial((h) => [...h, { q, r: local }]);
-      return;
-    }
+    // TODO mensaje va al agente (12-ago: "no quiero respuestas prehechas").
+    // El orquestador del servidor decide el modelo: conserje barato para
+    // charla/producto, analista con herramientas para datos. El respondedor
+    // local de keywords queda SOLO como paracaídas si el API falla.
     void preguntarAnalista(q);
   }
 
@@ -334,10 +322,10 @@ export default function ChatFlota({
       const d = await resp.json().catch(() => null);
       const r: Respuesta = resp.ok && d && Array.isArray(d.bloques)
         ? respuestaDeBloques(d.bloques as Array<Record<string, unknown>>)
-        : { texto: d?.error ?? 'El analista no está disponible en este momento — las respuestas rápidas del catálogo siguen funcionando.' };
+        : responder(q, kpis, acred);
       setHistorial((h) => [...h.slice(0, -1), { q, r }]);
     } catch {
-      setHistorial((h) => [...h.slice(0, -1), { q, r: { texto: 'El analista no está disponible en este momento — las respuestas rápidas del catálogo siguen funcionando.' } }]);
+      setHistorial((h) => [...h.slice(0, -1), { q, r: responder(q, kpis, acred) }]);
     } finally {
       setOcupado(false);
     }
