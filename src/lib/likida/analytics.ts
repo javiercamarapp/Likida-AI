@@ -216,6 +216,79 @@ export interface OperadorStat {
   diferencias: number;
 }
 
+// ── La página del Agente de Liquidación (v2, 13-ago-2026) ──────────────────
+
+export interface HechoSolo {
+  tipo: 'recordatorio' | 'escalado';
+  folio: string;
+  operador: string | null;
+  /** Timestamp ISO del sello (recordatorio_comprobacion_en / escalado_en). */
+  cuando: string;
+}
+
+/**
+ * Lo que el agente hizo SOLO, sin que nadie se lo pidiera: recordatorios de
+ * comprobación que mandó (0087) y viajes que escaló (0058). Es el feed que
+ * convierte "un software" en "un agente que trabaja de noche" — y cada
+ * renglón sale de un sello real en `viaje`, no de un log decorativo.
+ */
+export async function getHechosSolos(tenantId: string, limite = 8): Promise<HechoSolo[]> {
+  const { data, error } = await supabaseAdmin()
+    .from('viaje')
+    .select('folio, escalado_en, recordatorio_comprobacion_en, operador:operador_id(nombre)')
+    .eq('tenant_id', tenantId)
+    .or('escalado_en.not.is.null,recordatorio_comprobacion_en.not.is.null')
+    .order('id', { ascending: false })
+    .limit(60);
+  if (error) throw new Error(`getHechosSolos: ${error.message}`);
+  const hechos: HechoSolo[] = [];
+  for (const v of data ?? []) {
+    const operador = ((v.operador as { nombre?: string } | null)?.nombre) ?? null;
+    const folio = (v.folio as string) ?? '—';
+    if (v.recordatorio_comprobacion_en) {
+      hechos.push({ tipo: 'recordatorio', folio, operador, cuando: v.recordatorio_comprobacion_en as string });
+    }
+    if (v.escalado_en) {
+      hechos.push({ tipo: 'escalado', folio, operador, cuando: v.escalado_en as string });
+    }
+  }
+  // Los 60 viajes más recientes pueden traer hasta 120 hechos: se ordenan por
+  // fecha del sello y se recortan — el feed enseña lo último, no un archivo.
+  return hechos.sort((a, b) => b.cuando.localeCompare(a.cuando)).slice(0, limite);
+}
+
+export interface DineroObservadoTipo { tipo: string; monto: number; n: number }
+
+/**
+ * El dinero observado, DESGLOSADO por tipo de diferencia (sobre política,
+ * duplicado, …). `getKpis` suma el total; esta lo abre para la dona del
+ * agente — misma fuente (`liquidacion.diferencias`), mismo valor absoluto.
+ */
+export async function getDineroObservadoPorTipo(tenantId: string): Promise<DineroObservadoTipo[]> {
+  const rows = await traerTodo<{ diferencias: unknown }>(
+    (desde, hasta) => supabaseAdmin()
+      .from('liquidacion')
+      .select('diferencias')
+      .eq('tenant_id', tenantId)
+      .order('id')
+      .range(desde, hasta),
+    'getDineroObservadoPorTipo',
+  );
+  const acumulado = new Map<string, { monto: number; n: number }>();
+  for (const r of rows) {
+    for (const d of ((r.diferencias as Array<{ tipo?: unknown; monto?: unknown }>) ?? [])) {
+      const tipo = typeof d.tipo === 'string' ? d.tipo : 'otro';
+      const prev = acumulado.get(tipo) ?? { monto: 0, n: 0 };
+      prev.monto += Math.abs(Number(d.monto ?? 0));
+      prev.n += 1;
+      acumulado.set(tipo, prev);
+    }
+  }
+  return [...acumulado.entries()]
+    .map(([tipo, v]) => ({ tipo, monto: v.monto, n: v.n }))
+    .sort((a, b) => b.monto - a.monto);
+}
+
 /** Rendimiento por operador (diésel total, # de diferencias) — señal operativa. */
 export async function getStatsPorOperador(tenantId: string): Promise<OperadorStat[]> {
   const admin = supabaseAdmin();
