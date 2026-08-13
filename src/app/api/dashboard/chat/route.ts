@@ -27,12 +27,15 @@ import { inicioDiaMxIso, validarMensajes } from './validacion';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-/** Tope diario de gasto de chat POR TENANT, en USD. A precios de flash-lite
- *  (~$0.003/pregunta profunda) el default alcanza ~80 análisis al día —
- *  nadie legítimo lo toca; un bucle o un curioso sí. */
+/** Tope diario de gasto de chat POR TENANT, en USD. Subió de 0.25 a 1.00 el
+ *  12-ago-2026 cuando Javier confirmó su pricing ("a una flota le cobro
+ *  mucho más"): a ~$0.005 el análisis medido, $1 son ~200 análisis/día —
+ *  un contralor premium en cierre de semana no debe toparse con un muro
+ *  por centavos. El techo absoluto queda en ~$30 USD/mes por tenant, ruido
+ *  contra el ticket; el candado sigue atrapando bucles y curiosos. */
 function topeDiaUsd(): number {
   const v = Number(process.env.LIKIDA_CHAT_TOPE_DIA_USD);
-  return Number.isFinite(v) && v > 0 ? v : 0.25;
+  return Number.isFinite(v) && v > 0 ? v : 1.0;
 }
 
 export async function POST(req: NextRequest) {
