@@ -5,7 +5,6 @@ import { MARCO_FILA, MARCO_SIDEBAR, MARCO_COLUMNA, MARCO_SCROLL, CLASE_COLUMNA_C
 import SidebarNav from './sidebar-nav';
 import { BotonSidebar } from '../boton-sidebar';
 import AvisoRol from './aviso-rol';
-import RailAsistente from './rail';
 import { Logo } from '../logo';
 
 /**
@@ -99,8 +98,10 @@ export default function DashboardChrome({
           </div>
         </div>
 
-        {/* El rail, fijo a la derecha en las 20 páginas. */}
-        <RailAsistente />
+        {/* El rail del Asistente se BORRÓ el 12-ago-2026 (pedido explícito:
+            "nunca más debe aparecer en ninguna página") — su casa es
+            /dashboard/chat, "Chatea con tus datos". Con él se fue su
+            endpoint /api/dashboard/asistente. */}
       </div>
     </div>
   );
