@@ -127,7 +127,7 @@ export function TablaViajes({ viajes, sufijo = '' }: { viajes: FilaViaje[]; sufi
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
-          <tr style={{ background: 'var(--canvas)' }}>
+          <tr className="sticky top-0 z-10" style={{ background: 'var(--canvas)' }}>
             <th className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Viaje</th>
             <th className={TH} style={{ color: 'var(--muted)' }}>Operador</th>
             <th className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Anticipo</th>
