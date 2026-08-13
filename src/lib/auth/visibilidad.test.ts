@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { areasDe, puedeVerArea, puedeVerRuta, areaDeRuta, inicioDe, rolEfectivo } from './visibilidad';
-import { INICIO, NEGOCIO, OPERACION, FISCAL, DOCUMENTOS_DINERO, GESTION } from '@/app/dashboard/rutas';
+import { AGENTES, OPERACION, DINERO_FISCAL, SISTEMA, ABAJO } from '@/app/dashboard/rutas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // El encargado entraba al mismo panel que el dueño y veía TODO: rentabilidad,
@@ -65,8 +65,11 @@ describe('el contador — sin panel propio, pero la operación le sigue cerrada'
   // lo manda ahí: aterriza en Suscripción, la única pantalla de `dinero`
   // que le sigue quedando de verdad (las facturas de Likida son su propia
   // contabilidad, no un préstamo de la del dueño).
-  it('FISCAL está vacío mientras se reconstruye', () => {
-    expect(FISCAL).toEqual([]);
+  it('AGENTES nace con los dos agentes, ambos área dinero (el contador los ve)', () => {
+    expect(AGENTES.map((i) => i.href)).toEqual([
+      '/dashboard/agentes/liquidacion', '/dashboard/agentes/facturas',
+    ]);
+    for (const a of AGENTES) expect(puedeVerRuta('contador', a.href)).toBe(true);
   });
 
   it('aterriza en Suscripción, no en un panel que ya no existe', () => {
@@ -86,7 +89,7 @@ describe('el mapa de rutas no se queda atrás del sidebar', () => {
   // Es la prueba que importa a futuro: una pantalla nueva que alguien agregue
   // al sidebar y olvide clasificar quedaría SIN área, y `puedeVerRuta` la
   // negaría a todos — incluido el dueño. Falla aquí, no en producción.
-  const todas = [...INICIO, ...NEGOCIO, ...OPERACION, ...FISCAL, ...DOCUMENTOS_DINERO, ...GESTION];
+  const todas = [...AGENTES, ...OPERACION, ...DINERO_FISCAL, ...SISTEMA, ...ABAJO];
   it('toda ruta del sidebar tiene área declarada', () => {
     const huerfanas = todas.filter((i) => areaDeRuta(i.href) === undefined).map((i) => i.href);
     expect(
@@ -195,7 +198,7 @@ describe('a dónde se rebota a cada quien', () => {
   });
 
   const TODAS_LAS_RUTAS = [
-    ...INICIO, ...NEGOCIO, ...OPERACION, ...FISCAL, ...DOCUMENTOS_DINERO, ...GESTION,
+    ...AGENTES, ...OPERACION, ...DINERO_FISCAL, ...SISTEMA, ...ABAJO,
   ].map((i) => i.href);
 
   it.each(TODAS_LAS_RUTAS)('%s le sigue negada al chofer aunque teclee la URL', (href) => {

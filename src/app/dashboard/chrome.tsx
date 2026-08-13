@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import Fondo from '../fondo';
 import { MARCO_FILA, MARCO_SIDEBAR, MARCO_COLUMNA, MARCO_SCROLL, CLASE_COLUMNA_CENTRO } from '../marco';
-import SidebarNav from './sidebar-nav';
+import SidebarNav, { SidebarAbajo } from './sidebar-nav';
 import { BotonSidebar } from '../boton-sidebar';
 import AvisoRol from './aviso-rol';
 import { Logo } from '../logo';
@@ -63,6 +63,12 @@ export default function DashboardChrome({
           <nav className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">
             <SidebarNav rol={rol} />
           </nav>
+
+          {/* El bloque inferior fijo de la referencia Handle, con su propio
+              fondo (el "cambio de color de hasta abajo", 13-ago-2026). */}
+          <div className="px-2 pt-2 pb-1.5 space-y-0.5 shrink-0" style={{ background: 'var(--canvas)', borderTop: '1px solid var(--line)' }}>
+            <SidebarAbajo rol={rol} />
+          </div>
 
           {/* El user card de la referencia FlowAI: tarjeta con hairline,
               avatar + nombre + rol, y salir como icono al lado — el botón

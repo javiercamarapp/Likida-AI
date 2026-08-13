@@ -82,6 +82,10 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/soporte': 'operacion',
 
   // Dinero — lo que el encargado no ve
+  // AGENTES (13-ago-2026): las ventanas de los dos agentes enseñan montos
+  // comprobados y colas de facturación — área dinero.
+  '/dashboard/agentes/liquidacion': 'dinero',
+  '/dashboard/agentes/facturas': 'dinero',
   '/dashboard/combustible-casetas': 'dinero',
   // Preguntar a la IA — reconstruida el 12-ago-2026 (la primera de las 17).
   // Es `dinero` porque responde montos comprobados/IVA/peaje (§12: las
