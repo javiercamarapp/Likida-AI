@@ -209,17 +209,14 @@ export async function InicioContenido({
                 {/* El DÍA DE MÉXICO, no el UTC: a las 6pm de CDMX el chip
                     decía mañana (capturado el 12-ago). */}
                 <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahoraMs())))}</ChipFecha>
-                {/* El CTA negro de la referencia. DESHABILITADO con razón a
-                    la vista: crear viaje vive en Despacho, la primera página
-                    que se va a reconstruir — un botón que truena en silencio
-                    es peor que uno que dice por qué no. Al existir esa
-                    página, esto se vuelve un Link. */}
-                <button type="button" disabled
-                  title="Se habilita con la página de Despacho (la primera por reconstruir)"
-                  className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                {/* VIVO desde el 12-ago: /dashboard/viajes/nuevo existe (la
+                    segunda página reconstruida) y Despacho embeberá la misma
+                    forma. */}
+                <Link href={`/dashboard/viajes/nuevo${sufijo}`}
+                  className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85"
                   style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                   <Plus width={15} height={15} strokeWidth={2} /> Nuevo viaje
-                </button>
+                </Link>
               </div>
             }
         />
