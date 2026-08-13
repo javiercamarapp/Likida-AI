@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Send, ArrowUp, Search, Paperclip, Camera, FileImage, X, FileText } from 'lucide-react';
+import { Send, ArrowUp, Search, Paperclip, Camera, FileImage, X, FileText, History, PencilLine } from 'lucide-react';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
-import { mxn, litros, numero } from '@/lib/formato';
+import { mxn, litros, numero, fechaCorta } from '@/lib/formato';
 import { useSearchParams } from 'next/navigation';
 import { Logo } from '../logo';
 import { Dona, AreaChartSimple } from '../admin/charts';
@@ -221,6 +221,16 @@ export default function ChatFlota({
   // servidor): viaja en cada pregunta hasta que el usuario lo quite.
   const [documento, setDocumento] = useState<{ nombre: string; extracto: string } | null>(null);
 
+  // ── Historial persistente (0088, 13-ago-2026) ────────────────────────────
+  // La conversación abierta vive en la base; este id la ancla. `convs` es la
+  // lista del panel: null = cargando, 'error' = no se pudo leer (y se DICE —
+  // una lista vacía por error afirmaría "no has chateado").
+  const [conversacionId, setConversacionId] = useState<string | null>(null);
+  const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [convs, setConvs] = useState<Array<{ id: string; titulo: string; actualizadoEn: string }> | 'error' | null>(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+
   async function leerArchivo(archivo: File) {
     if (ocupado) return;
     if (!archivo.type.startsWith('image/')) {
@@ -343,6 +353,56 @@ export default function ChatFlota({
 
   const spChat = useSearchParams();
 
+  // La lista del panel Historial — se carga al montar la página hero para
+  // que el botón traiga su conteo real (como la referencia Handle).
+  useEffect(() => {
+    if (variante !== 'hero') return;
+    let vivo = true;
+    const tenant = spChat.get('tenant');
+    fetch(`/api/dashboard/conversaciones${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (vivo) setConvs(Array.isArray(d?.conversaciones) ? d.conversaciones : 'error'); })
+      .catch(() => { if (vivo) setConvs('error'); });
+    return () => { vivo = false; };
+  }, [variante, spChat]);
+
+  /** Reabre una conversación guardada: sus mensajes bajan al hilo y las
+   *  visuales se re-pintan desde los bloques crudos. */
+  async function cargarConversacion(id: string) {
+    if (ocupado) return;
+    setErrorCarga(null);
+    try {
+      const tenant = spChat.get('tenant');
+      const resp = await fetch(`/api/dashboard/conversaciones/${id}${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`);
+      const d = await resp.json().catch(() => null);
+      if (!resp.ok || !d || !Array.isArray(d.mensajes)) throw new Error('respuesta inválida');
+      const pares: Array<{ q: string; r: Respuesta }> = [];
+      for (const m of d.mensajes as Array<{ rol: string; texto: string; bloques: unknown }>) {
+        if (m.rol === 'usuario') {
+          pares.push({ q: m.texto, r: { texto: '' } });
+        } else if (pares.length > 0) {
+          pares[pares.length - 1].r = Array.isArray(m.bloques) && m.bloques.length > 0
+            ? respuestaDeBloques(m.bloques as Array<Record<string, unknown>>)
+            : { texto: m.texto };
+        }
+      }
+      setHistorial(pares);
+      setConversacionId(id);
+      setDocumento(null);
+      setHistorialAbierto(false);
+    } catch {
+      setErrorCarga('No se pudo abrir esa conversación — inténtalo de nuevo.');
+    }
+  }
+
+  function nuevoChat() {
+    setHistorial([]);
+    setConversacionId(null);
+    setDocumento(null);
+    setTexto('');
+    setHistorialAbierto(false);
+  }
+
   function preguntar(q: string) {
     if (!q.trim() || ocupado) return;
     setTexto('');
@@ -378,7 +438,7 @@ export default function ChatFlota({
       const tenant = spChat.get('tenant');
       const resp = await fetch(`/api/dashboard/chat${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }], documento }),
+        body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }], documento, conversacionId }),
         // Sin esto, un servidor colgado dejaba "pensando…" para siempre
         // (reportado en vivo el 12-ago).
         signal: AbortSignal.timeout(75_000),
@@ -387,6 +447,19 @@ export default function ChatFlota({
       const r: Respuesta = resp.ok && d && Array.isArray(d.bloques)
         ? respuestaDeBloques(d.bloques as Array<Record<string, unknown>>)
         : responder(q, kpis, acred);
+      // El servidor guardó el intercambio (0088) y dice en qué conversación:
+      // se ancla para los turnos siguientes y la lista del panel se actualiza
+      // localmente (la verdad completa se relee al reabrir la página).
+      if (resp.ok && d && typeof d.conversacionId === 'string') {
+        const idConv = d.conversacionId;
+        setConversacionId(idConv);
+        setConvs((prev) => {
+          if (!Array.isArray(prev)) return prev;
+          const ya = prev.find((c) => c.id === idConv);
+          const fila = ya ?? { id: idConv, titulo: q.replace(/\s+/g, ' ').trim().slice(0, 60), actualizadoEn: new Date().toISOString() };
+          return [{ ...fila, actualizadoEn: new Date().toISOString() }, ...prev.filter((c) => c.id !== idConv)];
+        });
+      }
       setHistorial((h) => [...h.slice(0, -1), { q, r }]);
     } catch {
       setHistorial((h) => [...h.slice(0, -1), { q, r: responder(q, kpis, acred) }]);
@@ -553,6 +626,101 @@ export default function ChatFlota({
       </div>
     );
 
+    // ── HISTORIAL (0088, pedido con capturas de Handle/ChatGPT): botón pill
+    // flotante con el conteo real, y un cajón izquierdo con Nuevo chat,
+    // búsqueda y las conversaciones guardadas. Fixed a propósito: el hilo
+    // scrollea y un absolute se iría con él.
+    const listaFiltrada = Array.isArray(convs)
+      ? convs.filter((c) => c.titulo.toLowerCase().includes(busqueda.trim().toLowerCase()))
+      : [];
+    const historialUi = (
+      <>
+        <button type="button" onClick={() => { setHistorialAbierto(true); setErrorCarga(null); }}
+          className="fixed top-[74px] right-7 z-30 hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]"
+          style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
+          <History width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+          Historial
+          {Array.isArray(convs) && (
+            <span className="cifra-mono text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
+              {numero(convs.length)}
+            </span>
+          )}
+        </button>
+
+        {historialAbierto && (
+          <>
+            {/* Clic afuera cierra. TRANSPARENTE a propósito (13-ago: "que
+                recubra la parte del chat"): oscurecer el viewport entero
+                leería como modal de toda la app, y el cajón es del chat. */}
+            <button type="button" aria-label="Cerrar historial" onClick={() => setHistorialAbierto(false)}
+              className="fixed inset-0 z-40" style={{ background: 'transparent' }} />
+            {/* top/bottom/right-4 = el MISMO p-4 del marco (marco.ts): el
+                cajón calza sobre la lámina del chat, no sobre el viewport. */}
+            <div className="fixed top-4 bottom-4 right-4 z-50 w-[320px] rounded-2xl hairline flex flex-col p-3 gap-2.5"
+              style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-pop)' }}>
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={nuevoChat}
+                  className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
+                  <PencilLine width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                  Nuevo chat
+                </button>
+                <button type="button" aria-label="Cerrar" onClick={() => setHistorialAbierto(false)}
+                  className="w-8 h-8 ml-1.5 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
+                  style={{ color: 'var(--muted)' }}>
+                  <X width={14} height={14} strokeWidth={2} />
+                </button>
+              </div>
+
+              <div className="hairline flex items-center gap-2 px-3 py-2 rounded-full" style={{ background: 'var(--canvas)' }}>
+                <Search width={13} height={13} strokeWidth={2} style={{ color: 'var(--muted)' }} />
+                <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar chats" aria-label="Buscar chats"
+                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px]" />
+              </div>
+
+              <div className="etiqueta-mono text-[10px] uppercase px-1 pt-1" style={{ color: 'var(--faint)' }}>
+                Recientes
+              </div>
+
+              {errorCarga && (
+                <p className="text-[12px] px-1" style={{ color: 'var(--bad)' }}>{errorCarga}</p>
+              )}
+
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5">
+                {convs === null && (
+                  <div className="space-y-2 px-1 pt-1">
+                    <div className="skeleton h-4 rounded" /><div className="skeleton h-4 rounded w-4/5" /><div className="skeleton h-4 rounded w-3/5" />
+                  </div>
+                )}
+                {convs === 'error' && (
+                  <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
+                    No se pudo leer el historial ahora mismo — tus conversaciones siguen
+                    guardadas; reintenta en un momento.
+                  </p>
+                )}
+                {Array.isArray(convs) && listaFiltrada.length === 0 && (
+                  <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
+                    {convs.length === 0 ? 'Sin chats recientes.' : `Nada coincide con «${busqueda.trim()}».`}
+                  </p>
+                )}
+                {listaFiltrada.map((c) => {
+                  const activa = c.id === conversacionId;
+                  return (
+                    <button key={c.id} type="button" onClick={() => void cargarConversacion(c.id)}
+                      className={`w-full text-left px-2.5 py-2 rounded-lg text-[13px] transition-colors ${activa ? 'font-medium' : 'hover:bg-[var(--canvas)]'}`}
+                      style={activa ? { background: 'var(--g1)', color: 'var(--marca)' } : undefined}>
+                      <span className="block truncate">{c.titulo}</span>
+                      <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{fechaCorta(c.actualizadoEn)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+      </>
+    );
+
     // ── CONVERSACIÓN, tipo ChatGPT/Claude (pedido del 12-ago): al primer
     // mensaje la portada se retira, las burbujas suben y la caja se ancla
     // abajo. Tu pregunta a la derecha; el motor a la izquierda con su
@@ -560,6 +728,7 @@ export default function ChatFlota({
     if (!vacio) {
       return (
         <div className="min-h-full w-full flex-1 flex flex-col px-4 pt-4">
+          {historialUi}
           <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col">
             <div className="flex-1 space-y-4 py-2">
               {historial.map((h, i) => (
@@ -597,6 +766,7 @@ export default function ChatFlota({
     // ── PORTADA (sin mensajes todavía) ──
     return (
       <div className="min-h-full w-full flex-1 flex flex-col items-center justify-center px-4 py-10">
+        {historialUi}
         <div className="w-full max-w-2xl flex flex-col items-center">
           <Logo alto="h-7" className="mb-6" />
           <h1 className="text-[26px] leading-tight font-medium tracking-tight text-center">

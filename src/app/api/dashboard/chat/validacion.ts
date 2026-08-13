@@ -28,3 +28,12 @@ export function validarMensajes(crudo: unknown): MensajeChat[] | null {
   if (limpios[limpios.length - 1].rol !== 'usuario') return null;
   return limpios;
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** El id de conversación que manda el cliente: UUID o nada. Cualquier otra
+ *  cosa se descarta a `null` (se abre conversación nueva) en vez de viajar
+ *  a la base — el cliente no es frontera de confianza. */
+export function validarConversacionId(crudo: unknown): string | null {
+  return typeof crudo === 'string' && UUID.test(crudo) ? crudo : null;
+}

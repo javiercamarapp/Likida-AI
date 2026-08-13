@@ -3048,3 +3048,49 @@ begin
   raise exception E'RLS_0086  operador-rebota=%  viaje-propio=%  viaje-ajeno=%  ticket-mensaje-propio=%   (esperado t / 1 / 0 / 1)',
     operador_rebota, n_viaje_propio, n_viaje_ajeno, n_ticket_propio;
 end $$;
+
+-- ── 63. Historial del chat: rol acotado, deny-all y cascade (mig. 0088) ─────
+-- Tres garantías que solo la base demuestra: (a) el CHECK de `rol` rebota un
+-- rol fuera del dominio usuario/asistente; (b) RLS activo SIN políticas =
+-- deny-all — hasta el DUEÑO autenticado ve cero filas, el único camino es el
+-- service role del servidor (que ancla tenant+usuario en conversaciones.ts);
+-- (c) borrar la conversación se lleva sus mensajes (cascade), no deja
+-- huérfanos ilegibles.
+--
+-- Corrida real (13-ago-2026, contra el proyecto Likida, recién aplicada 0088):
+--   rol-rebota=t  rls-conv=0  rls-msj=0  msjs-tras-borrar=0
+--   (esperado t / 0 / 0 / 0 — los cuatro exactos)
+do $$
+declare
+  v_t uuid; v_u uuid := gen_random_uuid(); v_c uuid;
+  rol_rebota boolean := false;
+  n_msjs_tras_borrar int; n_conv_rls int; n_msj_rls int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0088') returning id into v_t;
+  insert into app_user (id, tenant_id, email, rol) values (v_u, v_t, 'zzz-verif-chat@likida.test', 'flota_admin');
+
+  insert into chat_conversacion (tenant_id, user_id, titulo) values (v_t, v_u, 'ZZZ conversación') returning id into v_c;
+  insert into chat_mensaje (conversacion_id, rol, texto) values (v_c, 'usuario', 'hola'), (v_c, 'asistente', 'listo');
+
+  -- El CHECK del rol: 'sistema' no existe en el dominio.
+  begin
+    insert into chat_mensaje (conversacion_id, rol, texto) values (v_c, 'sistema', 'colado');
+  exception when check_violation then rol_rebota := true;
+  end;
+
+  -- Deny-all: hasta el DUEÑO autenticado ve cero — el único camino es el
+  -- service role del servidor, que ancla tenant+usuario en código.
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u)::text, true);
+  select count(*) into n_conv_rls from chat_conversacion where id = v_c;
+  select count(*) into n_msj_rls from chat_mensaje where conversacion_id = v_c;
+  reset role;
+
+  -- Cascade: borrar la conversación se lleva sus mensajes.
+  delete from chat_conversacion where id = v_c;
+  select count(*) into n_msjs_tras_borrar from chat_mensaje where conversacion_id = v_c;
+
+  delete from tenant where id = v_t;
+  raise exception E'CHAT_0088  rol-rebota=%  rls-conv=%  rls-msj=%  msjs-tras-borrar=%   (esperado t / 0 / 0 / 0)',
+    rol_rebota, n_conv_rls, n_msj_rls, n_msjs_tras_borrar;
+end $$;
