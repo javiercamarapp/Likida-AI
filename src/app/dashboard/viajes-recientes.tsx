@@ -28,7 +28,11 @@ export function ViajesRecientes({ filas, sufijo }: { filas: FilaViaje[]; sufijo:
           </button>
         )}
       </div>
-      <TablaViajes viajes={visibles} sufijo={sufijo} />
+      {/* Abierta, la lista NO estira la tarjeta: scrollea adentro con el
+          encabezado pegado (sticky en TablaViajes). */}
+      <div className={abierto ? 'max-h-[300px] overflow-y-auto pr-1' : ''}>
+        <TablaViajes viajes={visibles} sufijo={sufijo} />
+      </div>
     </div>
   );
 }
