@@ -18,6 +18,9 @@ const TIPO_DIFERENCIA: Record<string, string> = {
 const rotuloTipo = (t: string) => TIPO_DIFERENCIA[t] ?? t.replaceAll('_', ' ');
 
 export interface ExtraAgenteLiquidacion {
+  /** ¿El rol puede abrir /dashboard/configuracion? (El contador no —
+   *  esconder el link vale más que un clic que rebota.) */
+  puedeVerReglas: boolean;
   /** Lecturas de IA del agente (sin chat). null = no se pudo leer. */
   actividadIa: number | null;
   /** Conteos del ciclo. null en un paso = ese conteo no se pudo leer. */
@@ -223,11 +226,17 @@ export function VistaAgenteLiquidacion({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="font-display text-[15px] font-semibold">Sus reglas</h2>
-                  <Link href={`/dashboard/configuracion${sufijo}`} title="Editar la política"
-                    className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity"
-                    style={{ color: 'var(--marca)' }}>
-                    <Settings width={12} height={12} strokeWidth={1.75} /> Editar
-                  </Link>
+                  {extra.puedeVerReglas && (
+                    /* "Ver", no "Editar": Configuración hoy es solo lectura —
+                       un botón que promete editar y no edita es un botón que
+                       miente. Cuando esa página edite, esto vuelve a ser
+                       "Editar". */
+                    <Link href={`/dashboard/configuracion${sufijo}`} title="Ver la configuración completa"
+                      className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity"
+                      style={{ color: 'var(--marca)' }}>
+                      <Settings width={12} height={12} strokeWidth={1.75} /> Ver
+                    </Link>
+                  )}
                 </div>
                 {extra.politica === null ? (
                   <Leyenda>No se pudo leer la política ahora mismo.</Leyenda>
@@ -254,7 +263,7 @@ export function VistaAgenteLiquidacion({
                 El agente todavía no cierra ninguna liquidación en esta flota.
               </EstadoVacio>
             ) : (
-              <TablaLiqs filas={cierres} sufijo={sufijo} />
+              <TablaLiqs filas={cierres} sufijo={sufijo} conVer />
             )}
           </section>
         </div>
