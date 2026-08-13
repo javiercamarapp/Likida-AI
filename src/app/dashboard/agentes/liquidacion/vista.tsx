@@ -53,16 +53,18 @@ export function VistaAgenteLiquidacion({
   sufijo: string;
 }) {
   const { funnel } = extra;
-  const funnelCompleto = funnel.abiertos !== null && funnel.enCuadre !== null && funnel.liquidados !== null;
-  const pasosFunnel = funnelCompleto
+  // Barras SOLO de lo VIVO (auditoría 13-ago): "Liquidados" es acumulado
+  // histórico y en meses domina la escala — las etapas vivas se volverían
+  // astillas invisibles. Lo vivo se grafica; el histórico es una línea.
+  const cicloVivoLegible = funnel.abiertos !== null && funnel.enCuadre !== null;
+  const pasosVivos = cicloVivoLegible
     ? [
         { etiqueta: 'Abiertos', valor: funnel.abiertos as number },
         { etiqueta: 'En cuadre', valor: funnel.enCuadre as number },
         { etiqueta: 'Por revisar', valor: funnel.porRevisar },
-        { etiqueta: 'Liquidados', valor: funnel.liquidados as number },
       ]
     : [];
-  const hayCiclo = funnelCompleto && pasosFunnel.some((p) => p.valor > 0);
+  const hayCicloVivo = cicloVivoLegible && pasosVivos.some((p) => p.valor > 0);
   const totalCierres12s = extra.cierresPorDia?.reduce((s, d) => s + d.valor, 0) ?? 0;
   const totalObservado = extra.porTipo?.reduce((s, t) => s + t.monto, 0) ?? 0;
 
@@ -75,13 +77,8 @@ export function VistaAgenteLiquidacion({
         />
         <div className="px-5 py-5 flex-1 space-y-4">
 
-          <p className="text-[13px] max-w-2xl" style={{ color: 'var(--muted)' }}>
-            Recibe los comprobantes del operador por WhatsApp, los lee y los cuadra contra el
-            anticipo y la política de la flota. Lo que no cuadra solo, cae aquí abajo para tu revisión.
-          </p>
-
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi titulo="Monto comprobado" valor={mxn(kpis.montoComprobado)} />
+            <Kpi titulo="Monto comprobado" valor={mxn(kpis.montoComprobado)} nota="histórico" />
             <Kpi titulo="Tasa de cuadre" valor={`${numero(kpis.tasaCuadre)}%`} nota={`${numero(kpis.viajesLiquidados)} liquidaciones`} />
             <Kpi titulo="Por revisar" valor={numero(kpis.porRevisar)} tono={kpis.porRevisar > 0 ? 'warn' : undefined} />
             <Kpi titulo="Con diferencias" valor={numero(kpis.conDiferencias)} tono={kpis.conDiferencias > 0 ? 'bad' : undefined} />
@@ -102,18 +99,22 @@ export function VistaAgenteLiquidacion({
           {/* ── La evidencia de que trabaja ── */}
           <div className="grid lg:grid-cols-3 gap-4">
             <section className="card p-4 flex flex-col">
-              <h2 className="font-display text-[15px] font-semibold mb-3">El ciclo del viaje</h2>
-              {!funnelCompleto ? (
+              <h2 className="font-display text-[15px] font-semibold mb-1">Viajes en curso</h2>
+              <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>La foto de ahora mismo, por etapa</p>
+              {!cicloVivoLegible ? (
                 <Leyenda>No se pudo contar el ciclo ahora mismo — antes que un cero sin medir, se queda pendiente.</Leyenda>
-              ) : hayCiclo ? (
+              ) : hayCicloVivo ? (
                 /* HBars y no Funnel A PROPÓSITO: el Funnel imprime conversión
-                   paso-a-paso, y este ciclo no es un embudo decreciente — los
-                   liquidados son acumulado histórico y salía "24 · 1200%",
-                   un porcentaje que miente. Barras: cuántos hay en cada
-                   etapa, y ya. */
-                <HBars datos={pasosFunnel} />
+                   paso-a-paso y este ciclo no es un embudo decreciente. */
+                <HBars datos={pasosVivos} />
               ) : (
-                <Leyenda>Todavía no hay viajes en el ciclo. El primero que despaches aparece aquí.</Leyenda>
+                <Leyenda>Nada vivo en el ciclo ahora mismo — el próximo viaje que despaches aparece aquí.</Leyenda>
+              )}
+              {funnel.liquidados !== null && (
+                <p className="text-[12px] mt-3 pt-2.5 border-t" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
+                  <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{numero(funnel.liquidados)}</span>{' '}
+                  viajes liquidados en total, histórico.
+                </p>
               )}
             </section>
 
@@ -165,13 +166,26 @@ export function VistaAgenteLiquidacion({
                   )}
                 </div>
               )}
+              {(extra.docsProcesados !== null || extra.actividadIa !== null) && (
+                <p className="text-[12px] mt-auto pt-2.5 border-t" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
+                  {extra.docsProcesados !== null && (
+                    <><span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{numero(extra.docsProcesados)}</span> comprobantes leídos</>
+                  )}
+                  {extra.docsProcesados !== null && extra.actividadIa !== null && ' · '}
+                  {extra.actividadIa !== null && (
+                    <><span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{numero(extra.actividadIa)}</span> lecturas de IA</>
+                  )}
+                  {' '}— histórico.
+                </p>
+              )}
             </section>
           </div>
 
           {/* ── El criterio con el que juzga ── */}
           <div className="grid lg:grid-cols-3 gap-4">
             <section className="card p-4 flex flex-col">
-              <h2 className="font-display text-[15px] font-semibold mb-1">Dinero observado</h2>
+              <h2 className="font-display text-[15px] font-semibold">Dinero observado</h2>
+              <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>Lo que el agente atrapó fuera de regla o duplicado</p>
               {extra.porTipo === null ? (
                 <Leyenda>No se pudo leer el desglose ahora mismo.</Leyenda>
               ) : extra.porTipo.length === 0 ? (
@@ -194,7 +208,8 @@ export function VistaAgenteLiquidacion({
             </section>
 
             <section className="card p-4 flex flex-col">
-              <h2 className="font-display text-[15px] font-semibold mb-3">Diferencias por operador</h2>
+              <h2 className="font-display text-[15px] font-semibold">Diferencias por operador</h2>
+              <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Liquidaciones con diferencia, por operador</p>
               {extra.operadores === null ? (
                 <Leyenda>No se pudo leer el desglose ahora mismo.</Leyenda>
               ) : extra.operadores.length === 0 ? (
@@ -204,7 +219,7 @@ export function VistaAgenteLiquidacion({
               )}
             </section>
 
-            <section className="card p-4 flex flex-col gap-3">
+            <section className="card p-4 flex flex-col">
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="font-display text-[15px] font-semibold">Sus reglas</h2>
@@ -227,17 +242,6 @@ export function VistaAgenteLiquidacion({
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
-              <div className="pt-2.5 border-t" style={{ borderColor: 'var(--line2)' }}>
-                <div className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Actividad de IA</div>
-                {extra.actividadIa === null ? (
-                  <p className="text-[12px]" style={{ color: 'var(--faint)' }}>No se pudo leer ahora mismo.</p>
-                ) : (
-                  <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
-                    <span className="cifra-mono text-[15px] font-medium" style={{ color: 'var(--ink)' }}>{numero(extra.actividadIa)}</span>{' '}
-                    lecturas en total, histórico — cada comprobante leído y cada cuadre razonado cuentan una.
-                  </p>
                 )}
               </div>
             </section>
