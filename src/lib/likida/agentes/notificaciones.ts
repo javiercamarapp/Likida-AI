@@ -333,9 +333,11 @@ export function validarConfigNotificaciones(
  * Se avisa cuando la magnitud CRUZA una marca. 1 (pasó), 5 (lleva toda la
  * mañana), 20 (lleva un día y nadie lo ha tocado). Tres correos que dicen
  * tres cosas distintas; el cuarto no diría nada que el tercero no dijera, así
- * que no existe. Y la cuenta se BORRA cuando el problema se resuelve
+ * que no existe. Y la cuenta vuelve a CERO cuando el problema se resuelve
  * (`hayProblema: false`), así que el siguiente incidente vuelve a avisar
- * desde la marca 1: es un filo re-armable, no un silencio permanente.
+ * desde la marca 1: es un filo re-armable, no un silencio permanente. La
+ * huella del último correo NO se borra con la cuenta — es la memoria del
+ * piso de abajo, y el piso vale también entre dos incidentes distintos.
  */
 export const MARCAS_DE_INSISTENCIA: readonly number[] = [1, 5, 20];
 
@@ -348,6 +350,14 @@ export const MARCAS_DE_INSISTENCIA: readonly number[] = [1, 5, 20];
  * el cinturón contra la frecuencia de corrida, que es un dato del cron y no
  * una decisión de producto. No pierde información: la marca cruzada sigue
  * cruzada, así que el aviso sale en la siguiente evaluación pasada la hora.
+ *
+ * Y el piso SOBREVIVE al cierre del incidente (B7, auditoría 4): un agente
+ * que PARPADEA —falla un lote sí y uno no— cierra y reabre su incidente en
+ * cada par de corridas, y si el cierre borrara también la huella del último
+ * correo, cada reapertura sería «la primera vez» y saldría un correo POR
+ * LOTE. La pestaña afirma «entre dos avisos siempre pasan al menos 60
+ * minutos» sin excepciones, y este piso es el que lo hace verdad: vale entre
+ * dos correos cualesquiera, sean del mismo incidente o de dos distintos.
  */
 export const PISO_ENTRE_AVISOS_MS = 60 * 60 * 1000;
 
@@ -400,6 +410,15 @@ export interface EntradaDecision {
   /** Ya resuelta (racha o medida). */
   magnitud: number;
   ultimo: HuellaAviso | null;
+  /**
+   * `true` cuando `ultimo` es la huella de un incidente que YA SE CERRÓ (el
+   * cierre pone la magnitud en cero y conserva la huella — `cerrarIncidente`).
+   * Cambia la lectura entera de `ultimo`: sus MARCAS son de un problema que ya
+   * no existe y no cuentan contra el problema nuevo, pero su RELOJ sí — el
+   * piso de una hora vale entre dos correos cualesquiera. Sin esta distinción,
+   * un agente que parpadea manda un correo por lote (B7, auditoría 4).
+   */
+  ultimoDeIncidenteCerrado: boolean;
   ahora: Date;
 }
 
@@ -441,6 +460,24 @@ export function debeAvisar(e: EntradaDecision): Veredicto {
   const magnitud = Math.max(1, Math.floor(e.magnitud));
 
   if (e.ultimo === null) {
+    return { avisar: true, porque: 'es la primera vez desde la última vez que esto quedó resuelto.' };
+  }
+
+  // La huella es de un incidente que YA CERRÓ: el problema de ahora es NUEVO
+  // y no se compara contra las marcas de uno que ya no existe — el filo está
+  // re-armado. Lo ÚNICO que sobrevive al cierre es el reloj: sin este corte,
+  // un agente que parpadea (falla un lote sí y uno no) encontraría el filo
+  // re-armado en cada lote y mandaría un correo por lote, con la pestaña
+  // jurando que entre dos avisos siempre pasa una hora (B7, auditoría 4).
+  if (e.ultimoDeIncidenteCerrado) {
+    const desde = e.ahora.getTime() - e.ultimo.avisadoEn.getTime();
+    if (desde < PISO_ENTRE_AVISOS_MS) {
+      const minutos = Math.max(1, Math.ceil((PISO_ENTRE_AVISOS_MS - desde) / 60_000));
+      return {
+        avisar: false,
+        porque: `es un problema nuevo, pero el aviso anterior salió hace menos de una hora: sale en ${numero(minutos)} min.`,
+      };
+    }
     return { avisar: true, porque: 'es la primera vez desde la última vez que esto quedó resuelto.' };
   }
 
@@ -673,22 +710,34 @@ async function leerEstado(tenantId: string, agente: AgenteId, evento: EventoId):
 }
 
 /**
- * El incidente se cerró: se BORRA la fila.
+ * El incidente se cerró: la MAGNITUD vuelve a cero y la huella SE QUEDA.
  *
- * Esto es lo que re-arma el filo. Sin este borrado, un agente que se rompe,
- * se arregla y se vuelve a romper en la tarde no avisaría la segunda vez —
- * su marca seguiría "ya alcanzada" desde la mañana.
+ * Poner la cuenta en cero es lo que re-arma el filo. Sin esto, un agente que
+ * se rompe, se arregla y se vuelve a romper en la tarde no avisaría la
+ * segunda vez — su marca seguiría "ya alcanzada" desde la mañana.
+ *
+ * HASTA LA AUDITORÍA 4 (B7) ESTO ERA UN DELETE DE LA FILA ENTERA, y borraba
+ * también `avisado_en`: el siguiente incidente encontraba `ultimo === null`,
+ * `debeAvisar` lo despachaba como «primera vez» SIN consultar el piso, y un
+ * agente que parpadea (falla un lote sí y uno no) mandaba un correo POR
+ * LOTE — mientras la pestaña afirmaba «entre dos avisos siempre pasan al
+ * menos 60 minutos». La huella se conserva porque es la memoria del piso; la
+ * memoria de MARCAS del incidente muerto se degrada cuando el siguiente
+ * arranca (ver `guardarMagnitud`).
  */
-async function olvidarEstado(tenantId: string, agente: AgenteId, evento: EventoId): Promise<void> {
+async function cerrarIncidente(
+  tenantId: string, agente: AgenteId, evento: EventoId, ahora: Date,
+): Promise<void> {
   const { error } = await supabaseAdmin()
     .from('agente_notificacion_estado')
-    .delete()
+    .update({ magnitud: 0, actualizado_en: ahora.toISOString() })
     .eq('tenant_id', tenantId).eq('agente', agente).eq('evento', evento);
-  if (error) logger.warn('notificaciones.estado_no_borrado', { tenantId, agente, evento, err: error.message });
+  if (error) logger.warn('notificaciones.estado_no_cerrado', { tenantId, agente, evento, err: error.message });
 }
 
 async function guardarMagnitud(
   tenantId: string, agente: AgenteId, evento: EventoId, magnitud: number, ahora: Date,
+  degradarHuella: boolean,
 ): Promise<void> {
   // Lectura-modificación-escritura: dos corridas simultáneas pueden leer la
   // misma racha y escribir el mismo +1 (una se pierde). Se acepta a
@@ -696,12 +745,23 @@ async function guardarMagnitud(
   // iban 5 es que la marca se cruza una corrida después, y el aviso sale
   // igual. El error caro sería el contrario —contar de más y avisar de
   // nada—, y ese no puede pasar con esta forma.
+  //
+  // `degradarHuella` (B7): cuando un incidente NUEVO arranca sobre la huella
+  // de uno cerrado, `magnitud_avisada` baja a la PRIMERA marca en esta misma
+  // escritura. La razón: esa columna es la vara del anti-ruido, y dejarle las
+  // marcas del incidente muerto callaría al nuevo hasta rebasarlas — con la
+  // última (20) lo callaría PARA SIEMPRE. `avisado_en` no se toca: es la
+  // memoria del piso. El precio, y se paga a conciencia: si el último correo
+  // real salió con más de 1, el «ya se avisó con 1» de la pantalla cita la
+  // marca re-armada y no aquel correo — el correo del cliente nunca cita esta
+  // columna, así que ninguna cifra inventada le llega a él.
   const { error } = await supabaseAdmin()
     .from('agente_notificacion_estado')
     .upsert({
       tenant_id: tenantId, agente, evento,
       magnitud,
       actualizado_en: ahora.toISOString(),
+      ...(degradarHuella ? { magnitud_avisada: 1 } : {}),
     }, { onConflict: 'tenant_id,agente,evento' });
   if (error) throw new Error(`guardarMagnitud: ${error.message}`);
 }
@@ -775,9 +835,9 @@ export interface ResultadoAviso {
  * para que nadie pueda mandar saltándose el anti-ruido ni el reparto.
  *
  * SE LLAMA EN TODA CORRIDA, salga bien o mal: con `hayProblema: false` no
- * manda nada y borra el estado, que es lo que re-arma el filo para el
- * siguiente incidente. Un agente que solo llama cuando falla nunca vuelve a
- * avisar de su segundo incidente.
+ * manda nada y pone la cuenta en cero (conservando la huella del piso), que
+ * es lo que re-arma el filo para el siguiente incidente. Un agente que solo
+ * llama cuando falla nunca vuelve a avisar de su segundo incidente.
  *
  * NUNCA LANZA. Igual que `enviarCorreo`: el trabajo de fondo del agente ya se
  * hizo, y perderlo porque el aviso no se pudo evaluar sería el peor
@@ -808,15 +868,22 @@ export async function avisar(
     // apagado — si no, el filo no se re-arma cuando el cliente vuelva a
     // encender el aviso.
     if (!estado.hayProblema) {
-      await olvidarEstado(tenantId, agenteId, evento);
+      await cerrarIncidente(tenantId, agenteId, evento, ahora);
       return nada('no hay nada que avisar ahora mismo.');
     }
 
     const previo = await leerEstado(tenantId, agenteId, evento);
+    // `magnitud === 0` es la firma del cierre (`cerrarIncidente`): el problema
+    // de AHORA es un incidente nuevo, y la huella que quede en la fila es del
+    // anterior — su reloj cuenta (el piso), sus marcas no.
+    const incidenteCerrado = previo !== null && previo.magnitud === 0;
     const magnitud = estado.magnitud === null
       ? (previo?.magnitud ?? 0) + 1
       : Math.max(1, Math.floor(estado.magnitud));
-    await guardarMagnitud(tenantId, agenteId, evento, magnitud, ahora);
+    await guardarMagnitud(
+      tenantId, agenteId, evento, magnitud, ahora,
+      incidenteCerrado && previo.ultimo !== null,
+    );
 
     const conf = await leerConfigNotificaciones(tenantId, agente);
     if ('error' in conf) return nada(conf.error, magnitud);
@@ -830,6 +897,7 @@ export async function avisar(
       hayProblema: true,
       magnitud,
       ultimo: previo?.ultimo ?? null,
+      ultimoDeIncidenteCerrado: incidenteCerrado,
       ahora,
     });
     if (!veredicto.avisar) return nada(veredicto.porque, magnitud);
@@ -869,6 +937,28 @@ export async function avisar(
 }
 
 /**
+ * UN FALLO DE LA PLATAFORMA DE LIKIDA — no de los datos ni de la configuración
+ * de la flota (B8, auditoría 4).
+ *
+ * Quien detecta que la corrida murió por infraestructura NUESTRA —el caso real:
+ * Chromium no arranca en el cron de facturación, y hasta 20 flotas reciben el
+ * mismo correo a la vez— envuelve el error en esta clase antes de meterlo al
+ * mapa de corridas. `avisarCorridaFallida` la reconoce y redacta la variante
+ * que NO manda al cliente a revisar nada: decirle «tu agente no pudo trabajar»
+ * a secas, por un fallo que es de Likida, es acusarlo de un problema ajeno.
+ *
+ * Viaja EN el error y no en las firmas a propósito: el mapa de corridas es
+ * `Map<string, unknown>` y `avisarCorridasPorFlota`/`avisarCorridaFallida` ya
+ * aceptan `unknown` — marcar el origen no le cuesta un parámetro a nadie.
+ */
+export class FalloDePlataforma extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'FalloDePlataforma';
+  }
+}
+
+/**
  * El aviso que los seis agentes comparten, ya cableado a `avisoCorridaFallida`.
  *
  * `fallo` ausente (`null` o `undefined`) significa que la corrida SÍ terminó:
@@ -887,6 +977,10 @@ export async function avisarCorridaFallida(
   ahora: Date = new Date(),
 ): Promise<ResultadoAviso> {
   const fallo_ = fallo ?? null;
+  // La marca viaja en el error mismo (`FalloDePlataforma`): si el fallo fue de
+  // la plataforma de Likida, el correo lo dice y no manda al cliente a revisar
+  // una información que está bien.
+  const plataforma = fallo_ instanceof FalloDePlataforma;
   const motivo = fallo_ === null ? '' : motivoDeCorrida(fallo_);
   return avisar(
     tenantId, agenteId, 'corrida_fallida',
@@ -897,6 +991,7 @@ export async function avisarCorridaFallida(
       href: d.ruta,
       cuando: d.cuando,
       motivo,
+      plataforma,
       // La racha ES el `seguidas` del aviso: con 1 el correo dice "no pudo
       // completar su corrida"; con más, "lleva N corridas sin completarse".
       seguidas: d.magnitud,

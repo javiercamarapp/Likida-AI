@@ -12,13 +12,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Las tablas que toca el motor, con lo que cada llamada hizo. */
-const borrados: Array<Record<string, string>> = [];
+const cierres: Array<Record<string, unknown>> = [];
 const upserts: Array<Record<string, unknown>> = [];
 
 function tablaFalsa(nombre: string) {
   const filtros: Record<string, string> = {};
+  let payload: Record<string, unknown> | null = null;
   const encadenable = {
-    delete: () => encadenable,
+    // El cierre del incidente (B7) es un UPDATE que pone la magnitud en cero;
+    // la fila —y con ella la huella `avisado_en`— se queda. Se captura el
+    // payload para poder afirmar QUÉ columnas tocó y cuáles no.
+    update: (fila: Record<string, unknown>) => { payload = fila; return encadenable; },
     select: () => encadenable,
     upsert: (fila: Record<string, unknown>) => {
       upserts.push({ tabla: nombre, ...fila });
@@ -27,9 +31,11 @@ function tablaFalsa(nombre: string) {
     eq: (col: string, val: string) => { filtros[col] = val; return encadenable; },
     limit: () => Promise.resolve({ data: [], error: null }),
     maybeSingle: () => Promise.resolve({ data: null, error: null }),
-    // El `delete()...eq()...eq()` de `olvidarEstado` se resuelve al await.
+    // El `update()...eq()...eq()` de `cerrarIncidente` se resuelve al await.
     then: (res: (v: { error: null }) => unknown) => {
-      if (nombre === 'agente_notificacion_estado') borrados.push({ ...filtros });
+      if (nombre === 'agente_notificacion_estado' && payload !== null) {
+        cierres.push({ ...filtros, ...payload });
+      }
       return Promise.resolve({ error: null }).then(res);
     },
   };
@@ -49,19 +55,25 @@ vi.mock('@/lib/correo/enviar', () => ({
 const { avisarCorridasPorFlota, avisarCorridaFallida, avisar } = await import('./notificaciones');
 
 beforeEach(() => {
-  borrados.length = 0;
+  cierres.length = 0;
   upserts.length = 0;
 });
 
 describe('el éxito de una corrida REARMA el filo', () => {
-  it('una flota que corrió bien borra su racha', async () => {
-    // `olvidarEstado` es el borrado. Sin él, el contador de esa flota se queda
-    // arriba para siempre.
+  it('una flota que corrió bien pone su racha en cero — sin borrar la huella', async () => {
+    // `cerrarIncidente` es ese UPDATE. Sin él, el contador de esa flota se
+    // queda arriba para siempre. Y NO es un DELETE (B7): borrar la fila
+    // borraba también `avisado_en`, y un agente que parpadea encontraba el
+    // piso de una hora desarmado en cada lote.
     await avisarCorridasPorFlota('cobranza', new Map([['flota-a', null]]));
-    expect(borrados).toHaveLength(1);
-    expect(borrados[0]).toMatchObject({
-      tenant_id: 'flota-a', agente: 'cobranza', evento: 'corrida_fallida',
+    expect(cierres).toHaveLength(1);
+    expect(cierres[0]).toMatchObject({
+      tenant_id: 'flota-a', agente: 'cobranza', evento: 'corrida_fallida', magnitud: 0,
     });
+    // El cierre NO toca las columnas de la huella: `avisado_en` y
+    // `magnitud_avisada` se quedan como estaban — son la memoria del piso.
+    expect('avisado_en' in cierres[0]).toBe(false);
+    expect('magnitud_avisada' in cierres[0]).toBe(false);
   });
 
   it('el cierre ocurre aunque el correo esté apagado', async () => {
@@ -70,7 +82,7 @@ describe('el éxito de una corrida REARMA el filo', () => {
     // el día que alguien lo encienda.
     const r = await avisarCorridaFallida('flota-a', 'cobranza', null);
     expect(r.avisado).toBe(false);
-    expect(borrados).toHaveLength(1);
+    expect(cierres).toHaveLength(1);
   });
 
   it('`undefined` cuenta como éxito, no como fallo', async () => {
@@ -78,15 +90,15 @@ describe('el éxito de una corrida REARMA el filo', () => {
     // `undefined` como fallo mandaría el correo de "el agente no pudo
     // trabajar" cada vez que el agente trabaja.
     await avisarCorridaFallida('flota-a', 'cobranza', undefined);
-    expect(borrados).toHaveLength(1);
+    expect(cierres).toHaveLength(1);
     expect(upserts).toHaveLength(0);
   });
 });
 
 describe('el fallo SÍ sube la racha', () => {
-  it('una flota que tronó guarda magnitud, no la borra', async () => {
+  it('una flota que tronó guarda magnitud, no la cierra', async () => {
     await avisarCorridasPorFlota('cobranza', new Map([['flota-b', new Error('PostgREST 503')]]));
-    expect(borrados).toHaveLength(0);
+    expect(cierres).toHaveLength(0);
     expect(upserts.some((u) => u.tabla === 'agente_notificacion_estado' && u.tenant_id === 'flota-b')).toBe(true);
   });
 
@@ -96,7 +108,7 @@ describe('el fallo SÍ sube la racha', () => {
       ['flota-b', new Error('se cayó')],
       ['flota-c', null],
     ]));
-    expect(borrados.map((b) => b.tenant_id).sort()).toEqual(['flota-a', 'flota-c']);
+    expect(cierres.map((b) => b.tenant_id).sort()).toEqual(['flota-a', 'flota-c']);
     expect(upserts.filter((u) => u.tabla === 'agente_notificacion_estado')).toHaveLength(1);
   });
 });
@@ -104,9 +116,9 @@ describe('el fallo SÍ sube la racha', () => {
 describe('las que no corrieron no entran', () => {
   it('un mapa vacío no toca la base', async () => {
     // Es el caso del corte por reloj con cero flotas alcanzadas: ni éxito
-    // (borraría una racha real sin haber arreglado nada) ni fallo.
+    // (cerraría una racha real sin haber arreglado nada) ni fallo.
     await avisarCorridasPorFlota('cobranza', new Map());
-    expect(borrados).toHaveLength(0);
+    expect(cierres).toHaveLength(0);
     expect(upserts).toHaveLength(0);
   });
 });
@@ -132,8 +144,8 @@ describe('el aviso NUNCA tumba la corrida', () => {
     );
     expect(r.avisado).toBe(false);
     expect(r.porque).toContain('no declara ese evento');
-    // Y no dejó rastro: ni borró la racha ni la subió.
-    expect(borrados).toHaveLength(0);
+    // Y no dejó rastro: ni cerró la racha ni la subió.
+    expect(cierres).toHaveLength(0);
     expect(upserts).toHaveLength(0);
   });
 });

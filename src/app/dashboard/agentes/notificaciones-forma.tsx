@@ -302,8 +302,9 @@ export function FormaNotificaciones({ datos, guardar }: {
               Llegan <strong style={{ color: 'var(--ink)' }}>{datos.antiRuido.marcas.length} como máximo</strong>{' '}
               por incidente: el primero, y luego solo cuando la cosa empeora de verdad
               ({datos.antiRuido.marcas.join(', ')} veces). Entre dos avisos siempre
-              pasan al menos {datos.antiRuido.pisoMinutos} minutos. La cuenta se borra en cuanto
-              el problema se resuelve, así que el siguiente vuelve a avisarte desde el primero.
+              pasan al menos {datos.antiRuido.pisoMinutos} minutos — también cuando algo
+              se rompe, se arregla y se vuelve a romper. La cuenta vuelve a cero en cuanto
+              el problema se resuelve, así que el siguiente incidente te avisa desde el primero.
             </div>
           </div>
         </div>

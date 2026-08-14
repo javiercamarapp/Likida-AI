@@ -96,6 +96,15 @@ export interface DatosCorridaFallida {
   motivo: string;
   /** Cuántas veces seguidas ha fallado. 1 = la primera. */
   seguidas: number;
+  /**
+   * `true` cuando el fallo fue de la PLATAFORMA de Likida —el navegador de
+   * facturación que no arranca, infraestructura caída—, no de los datos de la
+   * flota (B8, auditoría 4). Cambia la redacción entera: el cliente no tiene
+   * nada que revisar ni corregir, el reintento es nuestro, y el `motivo` crudo
+   * NO viaja — un error de infraestructura en su bandeja no le dice qué hacer
+   * y sí le dice que el producto está roto.
+   */
+  plataforma?: boolean;
 }
 
 /**
@@ -107,6 +116,39 @@ export interface DatosCorridaFallida {
  */
 export function avisoCorridaFallida(d: DatosCorridaFallida): Correo {
   const repetido = d.seguidas > 1;
+
+  // EL FALLO ES DE LIKIDA Y EL CORREO LO DICE (B8). La variante de siempre
+  // deja entender que hay algo del lado del cliente que mirar; cuando lo que
+  // falló es la plataforma, eso manda a 20 flotas a buscar en SUS datos un
+  // problema que es nuestro. Aquí el `motivo` crudo no viaja a propósito
+  // («Executable doesn't exist…» no le dice al contralor qué hacer): queda en
+  // los logs del sistema, no en su bandeja. Y el tono no es urgente porque no
+  // hay nada que el cliente pueda hacer — la urgencia es de Likida.
+  if (d.plataforma) {
+    return {
+      asunto: repetido
+        ? `${d.agente}: ${d.seguidas} corridas detenidas por un problema de Likida`
+        : `${d.agente} no corrió por un problema de Likida`,
+      avance: 'Tu información está bien y no tienes nada que corregir.',
+      titulo: repetido
+        ? 'La plataforma de Likida sigue con un problema'
+        : 'La plataforma de Likida tuvo un problema',
+      parrafos: [
+        repetido
+          ? `Van ${d.seguidas} corridas sin poder completarse por un problema de la plataforma de Likida — no de tu información. Tus datos están bien y no tienes nada que corregir: seguimos reintentando solos, y de nuestro lado ya quedó registrado.`
+          : 'La corrida no se pudo completar por un problema de la plataforma de Likida — no de tu información. Tus datos están bien y no tienes nada que corregir: reintentamos solos en la siguiente corrida.',
+      ],
+      datos: [
+        ['Agente', d.agente],
+        ['Cuándo', d.cuando],
+        ['Qué pasó', 'Un problema interno de Likida. Tu información está bien.'],
+      ],
+      boton: { texto: `Ver ${d.agente}`, href: `${APP}${d.href}` },
+      tono: repetido ? 'atencion' : 'neutral',
+      porQueLoRecibes: porQue(d.flota, 'administras los agentes'),
+    };
+  }
+
   return {
     asunto: repetido
       ? `${d.agente} lleva ${d.seguidas} corridas sin completarse`

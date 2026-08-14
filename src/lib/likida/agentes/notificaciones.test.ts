@@ -29,6 +29,7 @@ function entrada(sobre: Partial<EntradaDecision> = {}): EntradaDecision {
     hayProblema: true,
     magnitud: 1,
     ultimo: null,
+    ultimoDeIncidenteCerrado: false,
     ahora: new Date('2026-08-14T15:00:00Z'),
     ...sobre,
   };
@@ -227,22 +228,99 @@ describe('un agente que falla 40 veces NO manda 40 correos', () => {
 
 describe('el filo se re-arma cuando el problema se resuelve', () => {
   it('resuelto y vuelto a romper, avisa otra vez desde la primera marca', () => {
-    // `hayProblema: false` no manda nada Y borra el estado (`avisar` llama a
-    // `olvidarEstado`); aquí eso se representa con `ultimo = null`.
+    // `hayProblema: false` no manda nada Y pone la cuenta en cero (`avisar`
+    // llama a `cerrarIncidente`); la huella del último correo se conserva, y
+    // el motor la entrega con `ultimoDeIncidenteCerrado: true`.
     const sano = debeAvisar(entrada({ hayProblema: false, magnitud: 0, ultimo: { avisadoEn: new Date('2026-08-14T06:00:00Z'), magnitud: 7 } }));
     expect(sano.avisar).toBe(false);
 
+    const recaida = debeAvisar(entrada({
+      magnitud: 1,
+      ultimo: { avisadoEn: new Date('2026-08-14T06:00:00Z'), magnitud: 7 },
+      ultimoDeIncidenteCerrado: true,
+      ahora: new Date('2026-08-14T15:00:00Z'),
+    }));
+    expect(recaida.avisar).toBe(true);
+    expect(recaida.porque).toMatch(/primera vez/);
+  });
+
+  it('sin huella previa (nunca se avisó), la recaída avisa sin esperar nada', () => {
+    // El caso `ultimo = null`: el incidente anterior nunca alcanzó a mandar
+    // correo, así que no hay piso que respetar.
     const recaida = debeAvisar(entrada({ magnitud: 1, ultimo: null }));
     expect(recaida.avisar).toBe(true);
     expect(recaida.porque).toMatch(/primera vez/);
   });
 
-  it('sin re-armar, la recaída se quedaría muda — por eso el borrado existe', () => {
+  it('sin re-armar, la recaída se quedaría muda — por eso el cierre existe', () => {
     const conMemoriaVieja = debeAvisar(entrada({
       magnitud: 1,
       ultimo: { avisadoEn: new Date('2026-08-14T06:00:00Z'), magnitud: 7 },
     }));
     expect(conMemoriaVieja.avisar).toBe(false);
+  });
+});
+
+describe('el parpadeo — B7: el piso de una hora sobrevive al cierre del incidente', () => {
+  // El bug exacto de la auditoría 4: el cierre BORRABA la fila entera, el
+  // siguiente incidente encontraba `ultimo === null` y `debeAvisar` lo
+  // despachaba como «primera vez» sin consultar el piso. Un agente que falla
+  // un lote sí y uno no mandaba un correo POR LOTE, con la pantalla jurando
+  // «entre dos avisos siempre pasan al menos 60 minutos».
+  const aviso = { avisadoEn: new Date('2026-08-14T06:00:00Z'), magnitud: 1 };
+
+  it('falla→aviso→resuelve→falla DENTRO de la misma hora: NO hay segundo correo', () => {
+    const v = debeAvisar(entrada({
+      magnitud: 1,
+      ultimo: aviso,
+      ultimoDeIncidenteCerrado: true,
+      ahora: new Date('2026-08-14T06:20:00Z'),
+    }));
+    expect(v.avisar).toBe(false);
+    expect(v.porque).toMatch(/problema nuevo/);
+    expect(v.porque).toMatch(/sale en \d+ min/);
+  });
+
+  it('falla→aviso→resuelve→falla PASADA la hora: SÍ, y desde la primera marca', () => {
+    const v = debeAvisar(entrada({
+      magnitud: 1,
+      ultimo: aviso,
+      ultimoDeIncidenteCerrado: true,
+      ahora: new Date('2026-08-14T07:00:01Z'),
+    }));
+    expect(v.avisar).toBe(true);
+    expect(v.porque).toMatch(/primera vez/);
+  });
+
+  it('un agente que parpadea cada 5 minutos manda un correo por hora, no uno por lote', () => {
+    // El bucle real del bug: falla un lote sí y uno no, con el cierre entre
+    // cada par. Es la simulación exacta de `avisar`: el cierre pone la cuenta
+    // en cero conservando la huella, y la reapertura entra con la marca de
+    // incidente cerrado.
+    const t0 = Date.parse('2026-08-14T06:00:00Z');
+    let ultimo: HuellaAviso | null = null;
+    let cerrado = false;
+    const salieron: number[] = [];
+
+    for (let i = 0; i < 36; i++) { // 3 horas de corridas cada 5 min
+      const ahora = new Date(t0 + i * 5 * 60 * 1000);
+      const falla = i % 2 === 0; // parpadeo: lote sí, lote no
+      if (!falla) { cerrado = true; continue; } // el cierre conserva `ultimo`
+      const v = debeAvisar(entrada({
+        magnitud: 1, ultimo, ultimoDeIncidenteCerrado: cerrado && ultimo !== null, ahora,
+      }));
+      if (v.avisar) {
+        salieron.push(ahora.getTime());
+        ultimo = { avisadoEn: ahora, magnitud: 1 };
+        cerrado = false;
+      }
+    }
+
+    // NO es silencio permanente (avisa cada hora) y NO es un correo por lote.
+    expect(salieron.length).toBe(3);
+    for (let i = 1; i < salieron.length; i++) {
+      expect(salieron[i] - salieron[i - 1]).toBeGreaterThanOrEqual(PISO_ENTRE_AVISOS_MS);
+    }
   });
 });
 
