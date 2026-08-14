@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Send, ArrowUp, Search, Paperclip, Camera, FileImage, X, FileText, History, PencilLine, PanelRightClose } from 'lucide-react';
+import { Send, ArrowUp, Search, Paperclip, Camera, FileImage, X, FileText, History, PencilLine, PanelRightClose, Check } from 'lucide-react';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero, fechaCorta } from '@/lib/formato';
 import { useSearchParams } from 'next/navigation';
-import { Logo } from '../logo';
+import { Logo, LogoIcono } from '../logo';
+import { CampoPixeles } from './pixeles';
 import { Dona, AreaChartSimple } from '../admin/charts';
 
 /**
@@ -36,6 +37,24 @@ type Visual =
   | { tipo: 'serie'; puntos: Array<{ dia: string; valor: number }>; formato: 'mxn' | 'numero' };
 
 interface Respuesta { texto: string; visual?: Visual; visuales?: Visual[]; pendiente?: boolean }
+
+/** Cómo se lee cada tool del analista en la secuencia de pensamiento
+ *  (13-ago: como Handle, que narra "Counting sor_policy…"). Pasos REALES
+ *  del ciclo — el servidor los transmite cuando de verdad ocurren. */
+const ETIQUETA_TOOL: Record<string, string> = {
+  kpis_flota: 'Leyendo los KPIs de la flota',
+  acreditables_periodo: 'Sumando IVA y peaje del periodo',
+  motor_fiscal: 'Consultando el motor fiscal',
+  viajes_flota: 'Leyendo tus viajes',
+  liquidaciones_flota: 'Leyendo tus liquidaciones',
+  serie_gasto: 'Trazando el gasto por semana',
+  serie_liquidado: 'Trazando lo liquidado por semana',
+  top_rutas: 'Rankeando tus rutas por gasto',
+  duplicados_detectados: 'Buscando tickets duplicados',
+  proyectar_serie: 'Proyectando la serie',
+  entregar_respuesta: 'Armando la respuesta',
+};
+const rotuloTool = (t: string) => ETIQUETA_TOOL[t] ?? t.replaceAll('_', ' ');
 
 /** Las fases del "pensando" (pedido del 12-ago: como Claude). Son honestas
  *  por construcción: solo se AVANZA de fase si de verdad sigue trabajando —
@@ -426,10 +445,14 @@ export default function ChatFlota({
   }
 
   const [fasePensando, setFasePensando] = useState('Pensando…');
+  // La secuencia REAL de tools del turno en curso (streaming NDJSON del
+  // servidor): 'inicio' agrega un renglón, 'fin' palomea el suyo.
+  const [pasosVivos, setPasosVivos] = useState<Array<{ tool: string; listo: boolean }>>([]);
 
   async function preguntarAnalista(q: string) {
     setOcupado(true);
     setFasePensando('Pensando…');
+    setPasosVivos([]);
     setHistorial((h) => [...h, { q, r: { texto: 'Pensando…', pendiente: true } }]);
     // El intervalo cuenta su propio tiempo (700ms × ticks) en vez de leer
     // Date.now(): mismo comportamiento a la precisión que estas fases
@@ -455,7 +478,48 @@ export default function ChatFlota({
         // (reportado en vivo el 12-ago).
         signal: AbortSignal.timeout(75_000),
       });
-      const d = await resp.json().catch(() => null);
+      // El endpoint transmite NDJSON (la secuencia de pensamiento en vivo);
+      // los caminos de tope siguen contestando JSON plano — se entienden
+      // ambos, y un evento ilegible se ignora sin tumbar el turno.
+      let d: Record<string, unknown> | null = null;
+      if (resp.ok && resp.body && (resp.headers.get('content-type') ?? '').includes('ndjson')) {
+        const lector = resp.body.getReader();
+        const dec = new TextDecoder();
+        let resto = '';
+        for (;;) {
+          const { done, value } = await lector.read();
+          if (done) break;
+          resto += dec.decode(value, { stream: true });
+          let salto;
+          while ((salto = resto.indexOf('\n')) >= 0) {
+            const linea = resto.slice(0, salto).trim();
+            resto = resto.slice(salto + 1);
+            if (!linea) continue;
+            let ev: Record<string, unknown> | null = null;
+            try { ev = JSON.parse(linea) as Record<string, unknown>; } catch { continue; }
+            if (ev.t === 'paso' && typeof ev.tool === 'string') {
+              const tool = ev.tool;
+              if (ev.fase === 'inicio') {
+                setPasosVivos((p) => [...p, { tool, listo: false }]);
+              } else {
+                setPasosVivos((p) => {
+                  // findLastIndex a mano: el target de TS de este repo no lo trae.
+                  let idx = -1;
+                  for (let i = p.length - 1; i >= 0; i--) {
+                    if (p[i].tool === tool && !p[i].listo) { idx = i; break; }
+                  }
+                  if (idx >= 0) return p.map((x, i) => (i === idx ? { ...x, listo: true } : x));
+                  return [...p, { tool, listo: true }];
+                });
+              }
+            } else if (ev.t === 'fin' || ev.t === 'error') {
+              d = ev;
+            }
+          }
+        }
+      } else {
+        d = await resp.json().catch(() => null);
+      }
       const r: Respuesta = resp.ok && d && Array.isArray(d.bloques)
         ? respuestaDeBloques(d.bloques as Array<Record<string, unknown>>)
         : responder(q, kpis, acred);
@@ -477,6 +541,7 @@ export default function ChatFlota({
       setHistorial((h) => [...h.slice(0, -1), { q, r: responder(q, kpis, acred) }]);
     } finally {
       clearInterval(relojFases);
+      setPasosVivos([]);
       setOcupado(false);
     }
   }
@@ -764,9 +829,24 @@ export default function ChatFlota({
                   </div>
                   <div className="mt-2.5 text-sm max-w-[85%]">
                     {h.r.pendiente ? (
-                      <div className="flex items-center gap-2" style={{ color: 'var(--muted)' }}>
-                        <span className="skeleton inline-block w-3.5 h-3.5 rounded-full shrink-0" />
-                        {fasePensando}
+                      <div className="flex items-start gap-2.5">
+                        <span className="likida-respira shrink-0 mt-0.5"><LogoIcono alto="h-[16px]" /></span>
+                        <div>
+                          <div style={{ color: 'var(--muted)' }}>{fasePensando}</div>
+                          {pasosVivos.length > 0 && (
+                            <div className="mt-2 space-y-1.5">
+                              {pasosVivos.map((p, j) => (
+                                <div key={j} className="flex items-center gap-2 text-[12.5px]"
+                                  style={{ color: p.listo ? 'var(--faint)' : 'var(--ink)' }}>
+                                  {p.listo
+                                    ? <Check width={12} height={12} strokeWidth={2} className="shrink-0" style={{ color: 'var(--muted)' }} />
+                                    : <span className="skeleton inline-block w-2.5 h-2.5 rounded-full shrink-0" />}
+                                  {rotuloTool(p.tool)}{p.listo ? '' : '…'}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div>{h.r.texto}</div>
@@ -793,11 +873,12 @@ export default function ChatFlota({
     // ── PORTADA (sin mensajes todavía) ──
     return (
       <div className="min-h-full w-full flex-1 flex">
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="relative flex-1 min-w-0 flex flex-col">
+        <CampoPixeles />
         {pillHistorial}
         {/* El centrado vive en ESTA capa: con el ancla sticky adentro del
             justify-center, el pill saldría a media pantalla, no arriba. */}
-        <div className="w-full flex-1 flex flex-col items-center justify-center px-4 py-10">
+        <div className="relative z-10 w-full flex-1 flex flex-col items-center justify-center px-4 py-10">
         <div className="w-full max-w-2xl flex flex-col items-center">
           <Logo alto="h-7" className="mb-6" />
           <h1 className="text-[26px] leading-tight font-medium tracking-tight text-center">

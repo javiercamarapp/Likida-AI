@@ -605,6 +605,11 @@ export async function generateWithTools(opts: {
    *  omite temperature (los modelos de razonamiento la ignoran/rechazan). */
   reasoning?: 'low' | 'medium' | 'high';
   signal?: AbortSignal;
+  /** Aviso EN VIVO de cada tool que el ciclo ejecuta (13-ago-2026: la
+   *  secuencia de pensamiento del chat). `inicio` al disparar la ejecución
+   *  real, `fin` al terminar; un acierto de caché emite solo `fin` — fue
+   *  instantáneo de verdad, no se le inventa un "pensando". */
+  onTool?: (ev: { fase: 'inicio' | 'fin'; tool: string }) => void;
 }): Promise<{
   finalText: string;
   toolCalls: ToolCallRecord[];
@@ -799,6 +804,7 @@ export async function generateWithTools(opts: {
             // llamada produjo qué resultado, no la llamada actual con el
             // resultado de otra.
             executed.push({ toolName: call.function.name, args: c.args, result: c.result, durationMs: c.durationMs, error: c.error });
+            opts.onTool?.({ fase: 'fin', tool: call.function.name });
             return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify(c.success ? c.result : { error: c.error }) };
           }
           // `inRound` dedupea llamadas de la MISMA ronda con la misma llave —el
@@ -808,8 +814,15 @@ export async function generateWithTools(opts: {
           // llamada de la ronda puede traer args distintos y de todos modos
           // reusar la ejecución de la primera.
           let entry = inRound.get(key);
-          if (!entry) { entry = { args, promise: opts.toolExecutor(call.function.name, args) }; inRound.set(key, entry); }
+          let laCreo = false;
+          if (!entry) {
+            laCreo = true;
+            opts.onTool?.({ fase: 'inicio', tool: call.function.name });
+            entry = { args, promise: opts.toolExecutor(call.function.name, args) };
+            inRound.set(key, entry);
+          }
           const exec = await entry.promise;
+          if (laCreo) opts.onTool?.({ fase: 'fin', tool: call.function.name });
           // Solo se cachea el ÉXITO, igual que la rejilla de mutaciones
           // (`tool-executor.ts`). Guardar el fracaso convierte un blip de un
           // segundo en un fallo permanente del turno: el modelo reintenta, se le
