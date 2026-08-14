@@ -1522,6 +1522,54 @@ export function derivoLaConfig(
   return false;
 }
 
+/** Un estado de cuenta (CFDI consolidado) recibido, con el saldo de su
+ *  conciliación — la bitácora del Agente de Peajes (F5). */
+export interface DesgloseRecibido {
+  cfdiXmlId: string;
+  /** Los primeros 8 del UUID — suficiente para reconocerlo, sin ocupar media tabla. */
+  uuidCorto: string;
+  recibido: string | null;
+  lineas: number;
+  conciliadas: number;
+  porConciliar: number;
+  sinMatch: number;
+  monto: number;
+}
+
+/** Los consolidados recibidos, agrupados desde sus líneas. Ventana de 2,000
+ *  líneas (≈ meses de operación); si una flota la rebasa, los más viejos
+ *  salen de esta bitácora — no de la base. */
+export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promise<DesgloseRecibido[]> {
+  const res = await supabaseAdmin()
+    .from('cfdi_consolidado_linea')
+    .select('cfdi_xml_id, estatus, monto, cfdi:cfdi_xml_id(cfdi_uuid, created_at)')
+    .eq('tenant_id', tenantId)
+    .limit(2000);
+  const filas = exigir(res, 'getDesglosesRecibidos') ?? [];
+  const porCfdi = new Map<string, DesgloseRecibido>();
+  for (const f of filas) {
+    const id = f.cfdi_xml_id as string;
+    const rel = f.cfdi as { cfdi_uuid?: string; created_at?: string } | Array<{ cfdi_uuid?: string; created_at?: string }> | null;
+    const cfdi = Array.isArray(rel) ? rel[0] : rel;
+    const d = porCfdi.get(id) ?? {
+      cfdiXmlId: id,
+      uuidCorto: (cfdi?.cfdi_uuid ?? id).slice(0, 8).toUpperCase(),
+      recibido: cfdi?.created_at ?? null,
+      lineas: 0, conciliadas: 0, porConciliar: 0, sinMatch: 0, monto: 0,
+    };
+    d.lineas += 1;
+    d.monto += Number(f.monto ?? 0);
+    if (f.estatus === 'conciliada') d.conciliadas += 1;
+    else if (f.estatus === 'sin_match') d.sinMatch += 1;
+    else d.porConciliar += 1;
+    porCfdi.set(id, d);
+  }
+  return [...porCfdi.values()]
+    .map((d) => ({ ...d, monto: round2(d.monto) }))
+    .sort((a, b) => Date.parse(b.recibido ?? '1970-01-01') - Date.parse(a.recibido ?? '1970-01-01'))
+    .slice(0, limite);
+}
+
 export interface ConciliacionConsolidado {
   conciliadas: number;
   porConciliar: number;
