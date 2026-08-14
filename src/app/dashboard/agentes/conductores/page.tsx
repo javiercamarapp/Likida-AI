@@ -8,6 +8,12 @@ import { VistaAgenteConductores, type EsperaAceptar } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
+import { puedeAdministrar } from '@/lib/auth/permisos';
+import { getConfig } from '@/lib/likida/config';
+import { validarHorasEscalacion, guardarEstrategiaAgente } from '@/lib/likida/agentes/estrategia';
+import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { revalidatePath } from 'next/cache';
+import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,13 +40,32 @@ export default async function PaginaAgenteConductores({
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/conductores')) redirect('/dashboard');
 
-  const [viajes, escalados, eventos, corridas] = await Promise.all([
+  const [viajes, escalados, eventos, corridas, config] = await Promise.all([
     getViajes(tenantId),
     contarEscalados(tenantId),
     safe(() => getEventosConductores(tenantId)),
     // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
     ultimasCorridas(tenantId, 'conductores').catch(() => null),
+    // La estrategia (B4): sin config legible no se pinta la forma — editar
+    // sobre un "valor actual" inventado guardaría a ciegas.
+    safe(() => getConfig(tenantId)),
   ]);
+
+  async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores') || !puedeAdministrar(s.rol)) {
+      return { ok: false, error: 'Solo el dueño de la flota cambia la estrategia del agente.' };
+    }
+    try {
+      const horas = validarHorasEscalacion(String(fd.get('horasEscalacion') ?? ''));
+      await guardarEstrategiaAgente(s.tenantId, { conductores: { horasEscalacion: horas } }, { id: s.userId });
+      revalidatePath('/dashboard/agentes/conductores');
+      return { ok: true, mensaje: `Listo: se escala a las ${horas} horas sin confirmación, desde la siguiente corrida.` };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar la estrategia') };
+    }
+  }
 
   const ahora = ahoraMs();
   const vivos = viajes.filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre');
@@ -73,6 +98,12 @@ export default async function PaginaAgenteConductores({
       sufijo={sufijoTenant(sp)}
       notificaciones={
         <>
+          {/* La estrategia (B4): solo el dueño la edita, y solo con la config
+              actual legible — sin ella, la forma guardaría a ciegas. */}
+          {puedeAdministrar(rol) && config !== null && (
+            <FormaEstrategiaConductores accion={guardarEstrategia}
+              horasActuales={config.agentes.conductores.horasEscalacion} />
+          )}
           <FichaCorridas corridas={corridas} />
           <SeccionNotificaciones tenantId={tenantId} agenteId="conductores" />
         </>

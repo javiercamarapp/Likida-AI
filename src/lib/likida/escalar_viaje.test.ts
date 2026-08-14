@@ -33,13 +33,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // fallo es que el código de Meta se traduzca a algo que alguien pueda accionar.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const { sendText, sendTemplate, avisarAlChofer, telefonosJefe, avisar, avisarCorridasPorFlota } = vi.hoisted(() => ({
+const { sendText, sendTemplate, avisarAlChofer, telefonosJefe, avisar, avisarCorridasPorFlota, registrarCorrida } = vi.hoisted(() => ({
   sendText: vi.fn(),
   sendTemplate: vi.fn(),
   avisarAlChofer: vi.fn(),
   telefonosJefe: vi.fn(),
   avisar: vi.fn(),
   avisarCorridasPorFlota: vi.fn(),
+  registrarCorrida: vi.fn(),
 }));
 
 vi.mock('@/lib/meta/client', async (original) => ({
@@ -54,6 +55,10 @@ vi.mock('./contactos', () => ({ telefonosJefe }));
 // a quién, con qué magnitud y con qué folios — sin arrastrar la base que el
 // motor real toca por dentro.
 vi.mock('./agentes/notificaciones', () => ({ avisar, avisarCorridasPorFlota }));
+// La bitácora (B3) se mockea para poder afirmar su cableado Y para probar que
+// un fallo suyo no tumba la corrida: el motor real ya promete no lanzar
+// (corridas.test.ts fija esa promesa), pero la corrida no cuelga de ella.
+vi.mock('./agentes/corridas', () => ({ registrarCorrida }));
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
@@ -71,6 +76,14 @@ let resultadosUpdate: Array<{ data?: unknown; error: { message: string } | null 
 const filtros: Array<[string, unknown[]]> = [];
 /** Cada update ejecutado: qué se escribió y con qué filtros. */
 const updates: Array<{ fila: Record<string, unknown>; por: Array<[string, unknown]> }> = [];
+/**
+ * La estrategia por flota (B4): lo que `getConfig` lee de `tenant.config` vía
+ * `.from('tenant').select('rfc, config').eq('id', t).maybeSingle()`. Sin
+ * entrada = flota sin fila → defaults de demo (5 h de escalación), así que
+ * ninguna prueba vieja se entera del mecanismo. Un `Error` como valor hace
+ * LANZAR la lectura de config de esa flota.
+ */
+let configPorTenant: Record<string, { data: unknown; error: { message: string } | null } | Error> = {};
 
 function cadenaLectura() {
   const nodo: Record<string, unknown> = {};
@@ -81,7 +94,21 @@ function cadenaLectura() {
   return nodo;
 }
 
-const from = vi.fn((tabla: string) => ({
+/** La cadena de `getConfig` sobre `tenant` (B4): captura el id del `.eq` y
+ *  contesta con `configPorTenant`. */
+function cadenaTenant() {
+  let id = '';
+  const nodo: Record<string, unknown> = {};
+  nodo.select = () => nodo;
+  nodo.eq = (_col: string, val: unknown) => { id = String(val); return nodo; };
+  nodo.maybeSingle = () => {
+    const r = configPorTenant[id] ?? { data: null, error: null };
+    return r instanceof Error ? Promise.reject(r) : Promise.resolve(r);
+  };
+  return nodo;
+}
+
+const from = vi.fn((tabla: string) => tabla === 'tenant' ? cadenaTenant() : ({
   select: (...a: unknown[]) => { filtros.push([`select ${tabla}`, a]); return cadenaLectura(); },
   // El update encadena `.eq()` cuantas veces haga falta y solo se resuelve al
   // esperarlo: así la prueba ve TODOS los filtros con que se acotó, no el
@@ -131,7 +158,10 @@ beforeEach(() => {
   resultadosUpdate = [{ data: [{ id: 'v-1' }], error: null }];
   filtros.length = 0;
   updates.length = 0;
+  configPorTenant = {};
   from.mockClear();
+  registrarCorrida.mockReset();
+  registrarCorrida.mockResolvedValue(undefined);
   sendText.mockReset();
   // `null` por defecto: fuera de la ventana de 24 h, que es el caso probable de
   // alguien que lleva 5 horas sin contestar. Así se ejerce la ruta real —texto
@@ -610,5 +640,110 @@ describe('el aviso de escalados por flota', () => {
     // Pero SÍ entra al cierre de corrida_fallida: la escritura del claim
     // falló, y eso es "el agente no pudo trabajar" para esa flota.
     expect(avisarCorridasPorFlota).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// B4 — el corte de horas es ESTRATEGIA de cada flota (tenant.config), no una
+// constante. La consulta global trae candidatos desde el piso (1 h) y el corte
+// fino lo pone `agentes.conductores.horasEscalacion`; sin fila de config, el
+// default de demo son las 5 h de siempre.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('B4 — las horas de escalación se leen de la estrategia de cada flota', () => {
+  /** Los dos viajes llevan 3 h avisados: dentro del corte de una flota
+   *  configurada a 2 h, fuera del default de 5. */
+  const HACE_3H = '2026-08-04T15:00:00.000Z';
+
+  it('la flota con 2 h configuradas escala a las 3 h; la del default (5 h) todavía no', async () => {
+    lectura = {
+      data: [
+        fila({ id: 'v-rapida', tenant_id: 't-rapida', folio: 'VJ-R', avisado_en: HACE_3H }),
+        fila({ id: 'v-default', tenant_id: 't-default', folio: 'VJ-D', avisado_en: HACE_3H }),
+      ],
+      error: null,
+    };
+    configPorTenant = {
+      't-rapida': { data: { rfc: null, config: { agentes: { conductores: { horasEscalacion: 2 } } } }, error: null },
+      // 't-default' sin entrada: sin fila de config → defaults de demo (5 h).
+    };
+
+    const r = await escalarViajesSinAceptar({
+      telefonoJefePorTenant: { 't-rapida': '5211111111', 't-default': '5222222222' }, ahora: AHORA,
+    });
+
+    // La consulta global pide candidatos desde el PISO (1 h), no desde 5: el
+    // corte fino es de cada flota.
+    expect(args('lte')).toContainEqual(['avisado_en', '2026-08-04T17:00:00.000Z']);
+    // Solo el viaje de la flota rápida entra a la corrida; el otro ni cuenta
+    // como revisado — su reloj de 5 h todavía no vence.
+    expect(r.revisados).toBe(1);
+    expect(r.escalados).toBe(1);
+    expect(updates.map((u) => u.por[0][1])).toEqual(['v-rapida']);
+    // Y el texto del jefe cita las horas de SU flota, no las 5 fijas.
+    expect(sendText.mock.calls[0][1]).toContain('en 2 horas');
+  });
+
+  it('si la config de una flota no se puede leer, SUS viajes se saltan la corrida y se grita', async () => {
+    // Escalar contra una estrategia que no se pudo consultar es escalar con
+    // los datos equivocados: la flota no escala, no cuenta en revisados, y NO
+    // entra al cierre de corridas (ni éxito ni fallo) — la corrida de la
+    // siguiente hora la levanta entera.
+    lectura = {
+      data: [
+        fila({ id: 'v-rota', tenant_id: 't-rota', folio: 'VJ-X' }),
+        fila({ id: 'v-sana', tenant_id: 't-sana', folio: 'VJ-S' }),
+      ],
+      error: null,
+    };
+    configPorTenant = { 't-rota': new Error('PostgREST 503') };
+
+    const r = await escalarViajesSinAceptar({
+      telefonoJefePorTenant: { 't-rota': '5211111111', 't-sana': '5222222222' }, ahora: AHORA,
+    });
+
+    expect(r.revisados).toBe(1);
+    expect(r.escalados).toBe(1);
+    expect(updates.map((u) => u.por[0][1])).toEqual(['v-sana']);
+    expect(logger.error).toHaveBeenCalledWith('escalacion.config_ilegible',
+      expect.objectContaining({ tenant: 't-rota' }));
+    // El cierre de corridas solo lleva a la flota que SÍ corrió.
+    const [, cierre] = avisarCorridasPorFlota.mock.calls[0] as [string, Map<string, unknown>];
+    expect([...cierre.keys()]).toEqual(['t-sana']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// B6 — la bitácora de corridas (B3) es observabilidad, no el trabajo: su
+// cableado queda fijado y su fallo no puede tumbar la escalación.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('la bitácora de corridas no puede tumbar la escalación', () => {
+  it('se anota una corrida por flota, con el agente y el estado correctos', async () => {
+    lectura = { data: [fila()], error: null };
+    await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+
+    expect(registrarCorrida).toHaveBeenCalledTimes(1);
+    expect(registrarCorrida).toHaveBeenCalledWith('t-1', 'conductores', expect.objectContaining({
+      estado: 'ok', disparo: 'cron', tareasHechas: 1, tareasTotal: 1,
+    }));
+  });
+
+  it('un fallo de `registrarCorrida` no tumba la corrida ni se traga los avisos', async () => {
+    // `registrarCorrida` promete no lanzar (corridas.test.ts fija esa
+    // promesa); la corrida no cuelga de ella — se prueba con la forma de
+    // fallo que la promesa NO cubre, el mismo criterio que el try del envío
+    // al jefe: una invariante que solo aguanta fallos por valor no es una
+    // invariante.
+    registrarCorrida.mockRejectedValue(new Error('bitácora caída'));
+    lectura = { data: [fila()], error: null };
+
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+
+    expect(r.escalados).toBe(1);
+    expect(r.fallos).toEqual([]);
+    // El cierre de corrida_fallida y el aviso de escalado salieron igual.
+    expect(avisarCorridasPorFlota).toHaveBeenCalledTimes(1);
+    expect(avisar).toHaveBeenCalledTimes(1);
   });
 });

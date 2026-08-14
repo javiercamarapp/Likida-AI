@@ -111,6 +111,9 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     anticipo: viaje.anticipo,
     gastos,
     politica: config.politica,
+    // B4: el umbral de confianza del OCR es estrategia del Agente de
+    // Liquidación, editable por flota (default 0.85 — el que era fijo).
+    umbralConfianza: config.agentes.liquidacion.umbralConfianza,
     ruta: viaje.destino,
     empresaRfc: config.empresa.rfc,
     rfcsAdicionales: config.empresa.rfcsAdicionales,
