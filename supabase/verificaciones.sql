@@ -3188,3 +3188,47 @@ begin
   raise exception E'PROVEEDOR_0091  doble-rebota=%  estado-rebota=%  rls=%   (esperado t / t / 0)',
     doble_rebota, estado_rebota, n_rls;
 end $$;
+
+-- ── 67. viaje_folio_unico: el dedup del import ES de la base (mig. 0092) ──
+--
+-- Corrida real (14-ago-2026): doble-rebota=t (unique tenant+folio — el
+-- segundo submit concurrente del mismo archivo choca aquí), otra-flota=t
+-- (dos flotas SÍ pueden repetir folio: el unique es por tenant), nulos=2
+-- (dos viajes de despacho WA con folio NULL conviven — NULLS DISTINCT).
+-- TODOS los viajes de prueba van 'liquidado' para quedar FUERA del índice
+-- parcial uq_viaje_abierto_por_operador (0029, abierto|en_cuadre): así el
+-- único unique que puede rebotar aquí es viaje_folio_unico, no el de 0029.
+-- El RAISE final revierte los datos de prueba.
+do $$
+declare
+  v_t1 uuid; v_t2 uuid; v_op1 uuid; v_op2 uuid;
+  doble_rebota boolean := false;
+  otra_flota boolean := false;
+  n_nulos int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0092 A') returning id into v_t1;
+  insert into tenant (nombre) values ('ZZZ VERIF 0092 B') returning id into v_t2;
+  -- Teléfonos distintos: uq_operador_telefono_activo es GLOBAL (no por tenant).
+  insert into operador (tenant_id, nombre, telefono) values (v_t1, 'Verif', '+5210000000921') returning id into v_op1;
+  insert into operador (tenant_id, nombre, telefono) values (v_t2, 'Verif', '+5210000000922') returning id into v_op2;
+
+  insert into viaje (tenant_id, operador_id, folio, estatus) values (v_t1, v_op1, 'V-VERIF-1', 'liquidado');
+  begin
+    insert into viaje (tenant_id, operador_id, folio, estatus) values (v_t1, v_op1, 'V-VERIF-1', 'liquidado');
+  exception when unique_violation then doble_rebota := true;
+  end;
+
+  begin
+    insert into viaje (tenant_id, operador_id, folio, estatus) values (v_t2, v_op2, 'V-VERIF-1', 'liquidado');
+    otra_flota := true;
+  exception when unique_violation then otra_flota := false;
+  end;
+
+  insert into viaje (tenant_id, operador_id, folio, estatus) values (v_t1, v_op1, null, 'liquidado');
+  insert into viaje (tenant_id, operador_id, folio, estatus) values (v_t1, v_op1, null, 'liquidado');
+  select count(*) into n_nulos from viaje where tenant_id = v_t1 and folio is null;
+
+  delete from tenant where id in (v_t1, v_t2);
+  raise exception E'VIAJE_FOLIO_0092  doble-rebota=%  otra-flota=%  nulos=%   (esperado t / t / 2)',
+    doble_rebota, otra_flota, n_nulos;
+end $$;
