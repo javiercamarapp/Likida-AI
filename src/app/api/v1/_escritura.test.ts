@@ -77,16 +77,43 @@ const respuestas: Record<string, Respuesta> = {
   viaje: { data: null, error: null },
   unidad: { data: null, error: null },
 };
+
+// ── La tabla `api_idempotencia` (mig. 0098), la capa durable ───────────────
+//
+// Se modela con filas de verdad y no con un `maybeSingle` fijo porque lo que
+// hay que poder representar es el caso que motivó la tabla: la llave existe
+// en la BASE aunque el Map de ESTA instancia esté vacío. Ese es literalmente
+// el escenario de dos instancias de Vercel.
+interface FilaIdem { tenant_id: string; ruta: string; llave: string; huella: string; status: number; cuerpo: unknown }
+const durables: FilaIdem[] = [];
+/** Para simular una base que no contesta. */
+const fallas = { leer: false, guardar: false };
+
 interface Consulta {
   select: (...a: unknown[]) => Consulta;
-  eq: (...a: unknown[]) => Consulta;
+  eq: (col: string, val: unknown) => Consulta;
   maybeSingle: () => Promise<Respuesta>;
+  upsert: (fila: Record<string, unknown>, o?: unknown) => Promise<{ error: { message: string } | null }>;
 }
 function consulta(tabla: string): Consulta {
+  const filtros: Record<string, unknown> = {};
   const q: Consulta = {
     select: () => q,
-    eq: () => q,
-    maybeSingle: async () => respuestas[tabla] ?? { data: null, error: null },
+    eq: (col, val) => { filtros[col] = val; return q; },
+    maybeSingle: async () => {
+      if (tabla !== 'api_idempotencia') return respuestas[tabla] ?? { data: null, error: null };
+      if (fallas.leer) return { data: null, error: { message: 'PostgREST 503' } };
+      const f = durables.find((d) => d.tenant_id === filtros.tenant_id && d.ruta === filtros.ruta && d.llave === filtros.llave);
+      return { data: f ? { huella: f.huella, status: f.status, cuerpo: f.cuerpo } as Record<string, unknown> : null, error: null };
+    },
+    upsert: async (fila) => {
+      if (fallas.guardar) return { error: { message: 'no se pudo escribir' } };
+      const f = fila as unknown as FilaIdem;
+      // `ignoreDuplicates: true`: la primera gana y la segunda no corrige.
+      const ya = durables.some((d) => d.tenant_id === f.tenant_id && d.ruta === f.ruta && d.llave === f.llave);
+      if (!ya) durables.push({ ...f });
+      return { error: null };
+    },
   };
   return q;
 }
@@ -153,6 +180,9 @@ beforeEach(() => {
   crearUnidad.mockImplementation(async () => 'u-nueva');
   respuestas.viaje = { data: null, error: null };
   respuestas.unidad = { data: null, error: null };
+  durables.length = 0;
+  fallas.leer = false;
+  fallas.guardar = false;
   sesion = { tenantId: 't-mia', rol: 'flota_admin' };
   areaDeLaLlave = 'administracion';
 });
@@ -287,21 +317,96 @@ describe('la idempotencia se exige, no se ofrece', () => {
     expect(crearViaje).toHaveBeenCalledTimes(1);
   });
 
-  it('EL CASO DEL TIMEOUT: con el recuerdo en memoria perdido, el unique de la base evita el duplicado', async () => {
-    // Primera petición: se crea.
-    await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'timeout-del-tms-1' }));
+  it('EL CASO DEL TIMEOUT: el reintento en otra instancia recibe la MISMA respuesta (capa 3)', async () => {
+    // Primera petición: se crea, y la respuesta queda anotada en la tabla.
+    const primera = await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'timeout-del-tms-1' }));
+    expect(primera.status).toBe(201);
     expect(crearViaje).toHaveBeenCalledTimes(1);
 
     // El TMS no recibió la respuesta y reintenta. Su reintento cae en OTRA
-    // instancia de Vercel: memoria vacía, misma llave, mismo cuerpo.
+    // instancia de Vercel: memoria vacía, misma llave, mismo cuerpo. La tabla
+    // sí la ven las dos.
     reiniciarIdempotencia();
     respuestas.viaje = { data: { id: 'v-nuevo', folio: 'F-001', estatus: 'abierto' }, error: null };
 
     const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'timeout-del-tms-1' }));
+    // 201 Y `idempotente: false`: la MISMA respuesta, byte por byte, que la
+    // primera vez. Antes de la mig. 0098 aquí llegaba un 200 con
+    // `idempotente: true` — no duplicaba (eso lo impide la llave natural) pero
+    // tampoco cumplía lo que `Idempotency-Key` promete, que es que reintentar
+    // sea indistinguible de haber recibido la respuesta original.
+    expect(r.status).toBe(201);
+    expect(await cuerpoDe(r)).toEqual({ dato: { id: 'v-nuevo', folio: 'F-001', estatus: 'abierto' }, idempotente: false });
+    expect(r.headers.get('Idempotent-Replayed')).toBe('true');
+    // LO QUE IMPORTA Y NO CAMBIÓ: no hubo un segundo viaje.
+    expect(crearViaje).toHaveBeenCalledTimes(1);
+  });
+
+  it('con el recuerdo durable YA PURGADO, el unique de la base sigue evitando el duplicado (capa 2)', async () => {
+    // Es el caso real de un reintento que llega días después: la fila de
+    // `api_idempotencia` ya se purgó. La capa que queda es la llave natural, y
+    // tiene que bastar ella sola — es la única de las tres de la que depende
+    // que no haya dos viajes con el mismo folio.
+    await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'reintento-tardio-1' }));
+    expect(crearViaje).toHaveBeenCalledTimes(1);
+
+    reiniciarIdempotencia();
+    durables.length = 0;
+    respuestas.viaje = { data: { id: 'v-nuevo', folio: 'F-001', estatus: 'abierto' }, error: null };
+
+    const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'reintento-tardio-1' }));
     expect(r.status).toBe(200);
     expect(await cuerpoDe(r)).toEqual({ dato: { id: 'v-nuevo', folio: 'F-001', estatus: 'abierto' }, idempotente: true });
-    // LO QUE IMPORTA: no hubo un segundo viaje.
     expect(crearViaje).toHaveBeenCalledTimes(1);
+  });
+
+  it('la misma llave con OTRO cuerpo es 400 TAMBIÉN cruzando instancias — el hueco que cerró la 0098', async () => {
+    // Éste es el caso que motivó la tabla. Antes, con la memoria perdida, la
+    // segunda petición encontraba el viaje por su folio y recibía 200 con
+    // `idempotente: true`: el integrador se iba convencido de que su
+    // corrección se había guardado, y no se había guardado nada.
+    await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'llave-cruzada-1' }));
+    reiniciarIdempotencia();
+
+    const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo({ folio: 'F-002' }), llave: 'llave-cruzada-1' }));
+    expect(r.status).toBe(400);
+    expect((await cuerpoDe(r)).error?.codigo).toBe('parametro_invalido');
+    expect(crearViaje).toHaveBeenCalledTimes(1);
+  });
+
+  it('si la tabla de idempotencia no se puede LEER, la petición no revienta: cae a la llave natural', async () => {
+    // Degradar así es deliberado y es la única vez en el repo que un error de
+    // lectura se trata como "no hay nada": esta capa es de conveniencia, y la
+    // conducta a la que cae es exactamente la que había antes de que existiera
+    // —que no puede duplicar nada—. Fallar cerrado aquí cambiaría un reintento
+    // que funciona por uno que devuelve 500.
+    await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'base-caida-11' }));
+    reiniciarIdempotencia();
+    fallas.leer = true;
+    respuestas.viaje = { data: { id: 'v-nuevo', folio: 'F-001', estatus: 'abierto' }, error: null };
+
+    const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'base-caida-11' }));
+    expect(r.status).toBe(200);
+    expect(crearViaje).toHaveBeenCalledTimes(1);
+  });
+
+  it('si el recuerdo no se puede GUARDAR, la creación que YA ocurrió se contesta igual', async () => {
+    // Cuando esto corre, el viaje ya está en la base. Dejar que un fallo al
+    // anotar el recibo tumbe la respuesta convertiría una creación exitosa en
+    // un 500 — y el TMS, obediente, reintentaría una escritura que ya ocurrió.
+    fallas.guardar = true;
+    const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'no-se-anota-1' }));
+    expect(r.status).toBe(201);
+    expect((await cuerpoDe(r)).dato).toEqual({ id: 'v-nuevo', folio: 'F-001', estatus: 'abierto' });
+    expect(durables).toHaveLength(0);
+  });
+
+  it('la respuesta se anota UNA sola vez: la segunda no reescribe la canónica', async () => {
+    await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'anota-una-vez-1' }));
+    reiniciarIdempotencia();
+    await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'anota-una-vez-1' }));
+    expect(durables).toHaveLength(1);
+    expect(durables[0].status).toBe(201);
   });
 
   it('dos llaves DISTINTAS con el mismo folio tampoco duplican — manda la llave natural', async () => {

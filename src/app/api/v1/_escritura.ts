@@ -20,36 +20,36 @@
 // un viaje que nunca existió. Es exactamente el daño que la mig. 0092 ya
 // describe para el importador de archivos, con otra puerta de entrada.
 //
-// ── LA IDEMPOTENCIA AQUÍ TIENE DOS CAPAS, Y SOLO UNA ES DURABLE ──────────
+// ── LA IDEMPOTENCIA AQUÍ TIENE TRES CAPAS, Y DOS SON DURABLES ────────────
 //
 // CAPA 1 — EL RECUERDO EN MEMORIA (`recuerdos`, abajo). Guarda la respuesta
-// exacta de cada `Idempotency-Key` y la vuelve a servir tal cual. Es la única
-// capa que puede prometer "la MISMA respuesta", y NO SOBREVIVE a un reinicio
-// ni cruza entre instancias: en Vercel cada instancia arranca con su Map
-// vacío, igual que `rateLimit`. Dicho sin adornos: la capa 1 sola NO evita el
-// duplicado del timeout, porque el reintento del TMS puede caer en otra
-// instancia. Prometer lo contrario sería la clase de afirmación no medida que
-// este repo persigue.
+// exacta de cada `Idempotency-Key` y la vuelve a servir tal cual, sin tocar la
+// base. NO SOBREVIVE a un reinicio ni cruza entre instancias: en Vercel cada
+// instancia arranca con su Map vacío, igual que `rateLimit`. Sigue siendo la
+// primera que se consulta porque es gratis, pero ya no es la que sostiene la
+// promesa — desde la mig. 0098 es solo la caché de la capa 3.
 //
-// CAPA 2 — LA LLAVE NATURAL EN LA BASE, que sí es durable y sí cruza
-// instancias: `viaje_folio_unico` (tenant_id, folio) de la mig. 0092 y
-// `unidad_economico_unico` (tenant_id, numero_economico) de la 0047. Antes de
-// insertar se BUSCA por esa llave, y si el insert choca igual (dos peticiones
-// en paralelo) se relee y se devuelve la fila que ya existe. El resultado
-// medible es el que importa: **por más veces que el TMS reintente, no puede
-// haber dos viajes con el mismo folio ni dos unidades con el mismo número
-// económico en la misma flota.**
+// CAPA 2 — LA LLAVE NATURAL EN LA BASE: `viaje_folio_unico` (tenant_id, folio)
+// de la mig. 0092 y `unidad_economico_unico` (tenant_id, numero_economico) de
+// la 0047. Antes de insertar se BUSCA por esa llave, y si el insert choca igual
+// (dos peticiones en paralelo) se relee y se devuelve la fila que ya existe.
+// Es la que sostiene lo que de verdad importa, y NO depende de las otras dos:
+// **por más veces que el TMS reintente, no puede haber dos viajes con el mismo
+// folio ni dos unidades con el mismo número económico en la misma flota.**
 //
-// EL PRECIO, dicho aquí para que nadie lo descubra en producción: sin una
-// tabla de idempotencia en la base, dos peticiones con la MISMA llave y
-// CUERPOS DISTINTOS solo se detectan si caen en la misma instancia (capa 1).
-// Cruzando instancias, la segunda encuentra la fila por su llave natural y
-// recibe un 200 con `idempotente: true` y la fila que YA existe — que es la
-// respuesta correcta para un reintento y una respuesta incompleta para un
-// cuerpo genuinamente distinto con el mismo folio. Se elige así a propósito:
-// devolver la fila existente no puede corromper nada, y crear un segundo viaje
-// sí. La tabla que cerraría ese hueco está descrita en el reporte de entrega,
-// no aquí: esta entrega no crea migraciones.
+// CAPA 3 — LA TABLA `api_idempotencia` (mig. 0098), durable y compartida entre
+// instancias. Cierra el hueco que estuvo declarado aquí desde que se escribió
+// este archivo: dos peticiones con la MISMA llave y CUERPOS DISTINTOS solo se
+// detectaban si caían en la misma instancia. Cruzando instancias, la segunda
+// encontraba la fila por su llave natural y recibía un 200 con `idempotente:
+// true` y la fila vieja — la respuesta correcta para un reintento, y una
+// respuesta que manda al integrador convencido de que su corrección se guardó
+// cuando el cuerpo era genuinamente otro. Ahora eso es un 400 que lo dice.
+//
+// LO QUE ESTA CAPA NO PROMETE: no es un candado de "en vuelo". Dos peticiones
+// simultáneas con la misma llave pueden pasar las dos por la lectura antes de
+// que ninguna escriba, y el árbitro de ese caso es —y sigue siendo— el unique
+// de la capa 2. Por eso las tres conviven en vez de sustituirse.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { createHash } from 'node:crypto';
@@ -454,6 +454,89 @@ export function reiniciarIdempotencia(): void {
   recuerdos.clear();
 }
 
+// ── CAPA 3: EL RECUERDO DURABLE (mig. 0098) ────────────────────────────────
+//
+// Lo que el Map no puede: cruzar instancias y sobrevivir a un reinicio. Las dos
+// funciones de abajo comparten una regla que es lo más importante de todo este
+// tramo — NINGUNA LANZA. Ver el porqué en cada una.
+
+/** Lo que se recordó de una llave, o `null` si no hay nada (o no se pudo leer). */
+async function leerRecuerdoDurable(
+  e: { evento: string; tenantId: string; llave: string },
+): Promise<{ huella: string; status: number; cuerpo: unknown } | null> {
+  try {
+    const { data, error } = await acotada(
+      supabaseAdmin().from('api_idempotencia')
+        .select('huella, status, cuerpo')
+        .eq('tenant_id', e.tenantId).eq('ruta', e.evento).eq('llave', e.llave)
+        .maybeSingle(),
+      'v1.leerRecuerdoDurable',
+    );
+    // UN ERROR DE LECTURA NO ES "NO HAY NADA", pero aquí se tratan igual A
+    // PROPÓSITO, y es la única vez en el repo que se hace: esta capa es de
+    // conveniencia. Si no responde, la petición sigue al paso de la llave
+    // natural —la conducta exacta que había antes de que existiera esta
+    // tabla—, y ésa no puede duplicar nada porque el unique de la base sigue
+    // en pie. Fallar cerrado aquí cambiaría un reintento que funciona por uno
+    // que devuelve 500.
+    if (error) {
+      logger.warn(`${e.evento}.idempotencia_ilegible`, { tenant: e.tenantId, err: error.message });
+      return null;
+    }
+    if (!data) return null;
+    return {
+      huella: data.huella as string,
+      status: data.status as number,
+      cuerpo: data.cuerpo as unknown,
+    };
+  } catch (err) {
+    logger.warn(`${e.evento}.idempotencia_ilegible`, {
+      tenant: e.tenantId, err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+/**
+ * Guarda la respuesta servida.
+ *
+ * `ignoreDuplicates` porque dos peticiones en paralelo con la misma llave
+ * llegan aquí las dos: la primera escribe y la segunda no tiene nada que
+ * corregir — su respuesta es equivalente y la fila que ya está es la que se va
+ * a servir de aquí en adelante. Sobrescribir sería peor: cambiaría la respuesta
+ * canónica a mitad de camino.
+ *
+ * NO LANZA, y ésta es la razón concreta: cuando esto corre, el viaje YA SE
+ * CREÓ. Dejar que un fallo al anotar el recibo tumbe la respuesta convertiría
+ * una creación exitosa en un 500 — y el TMS, obediente, reintentaría una
+ * escritura que ya ocurrió. El peor caso al callar es que el reintento no
+ * encuentre el recuerdo y caiga en la llave natural, que contesta bien.
+ */
+async function guardarRecuerdoDurable(
+  e: { evento: string; tenantId: string; llave: string; huella: string },
+  status: number,
+  cuerpo: unknown,
+): Promise<void> {
+  try {
+    const { error } = await acotada(
+      supabaseAdmin().from('api_idempotencia').upsert({
+        tenant_id: e.tenantId,
+        ruta: e.evento,
+        llave: e.llave,
+        huella: e.huella,
+        status,
+        cuerpo: cuerpo as Record<string, unknown>,
+      }, { onConflict: 'tenant_id,ruta,llave', ignoreDuplicates: true }),
+      'v1.guardarRecuerdoDurable',
+    );
+    if (error) logger.warn(`${e.evento}.idempotencia_no_guardada`, { tenant: e.tenantId, err: error.message });
+  } catch (err) {
+    logger.warn(`${e.evento}.idempotencia_no_guardada`, {
+      tenant: e.tenantId, err: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 // ── El acuse ───────────────────────────────────────────────────────────────
 
 export interface SobreEscritura<T> {
@@ -588,31 +671,53 @@ export async function escribir<T>(e: Escritura<T>): Promise<NextResponse> {
   const clave = `${e.evento}|${e.tenantId}|${e.llave}`;
   const ahora = Date.now();
 
-  const previo = recuerdos.get(clave);
-  if (previo && previo.expiraEn > ahora) {
-    if (previo.huella !== e.huella) {
-      logger.warn(`${e.evento}.llave_reusada`, { tenant: e.tenantId });
-      return errorApi(
-        'parametro_invalido',
-        `Esa \`${CABECERA_IDEMPOTENCIA}\` ya se usó para una operación con otro contenido. Usa una llave nueva por operación y repite la misma solo al reintentar la misma.`,
-      );
-    }
+  const llaveReusada = () => {
+    logger.warn(`${e.evento}.llave_reusada`, { tenant: e.tenantId });
+    return errorApi(
+      'parametro_invalido',
+      `Esa \`${CABECERA_IDEMPOTENCIA}\` ya se usó para una operación con otro contenido. Usa una llave nueva por operación y repite la misma solo al reintentar la misma.`,
+    );
+  };
+  const eco = (status: number, cuerpo: unknown) =>
     // LA MISMA RESPUESTA, literal: mismo cuerpo y mismo status que la primera
     // vez. La cabecera avisa que fue un eco para que un cliente que quiera
     // distinguirlo pueda, sin que el cuerpo cambie.
-    return NextResponse.json(previo.cuerpo, { status: previo.status, headers: { 'Idempotent-Replayed': 'true' } });
+    NextResponse.json(cuerpo, { status, headers: { 'Idempotent-Replayed': 'true' } });
+
+  const previo = recuerdos.get(clave);
+  if (previo && previo.expiraEn > ahora) {
+    if (previo.huella !== e.huella) return llaveReusada();
+    return eco(previo.status, previo.cuerpo);
   }
 
-  const recordar = (status: number, cuerpo: unknown) => {
+  // ── CAPA DURABLE (mig. 0098) ────────────────────────────────────────────
+  //
+  // Aquí es donde se atrapa lo que el Map no podía: el reintento que cayó en
+  // OTRA instancia. Va después de la memoria porque la memoria es gratis y
+  // esto es una consulta.
+  //
+  // SI ESTA LECTURA FALLA NO SE ABORTA: se sigue de largo al paso de la llave
+  // natural. Degradar así es exactamente la conducta que había antes de esta
+  // tabla, y esa conducta no puede duplicar nada —el unique de la base sigue
+  // ahí—. Devolver 500 porque la capa de conveniencia no respondió sería
+  // cambiar un reintento que funciona por uno que falla.
+  const durable = await leerRecuerdoDurable(e);
+  if (durable) {
+    if (durable.huella !== e.huella) return llaveReusada();
+    return eco(durable.status, durable.cuerpo);
+  }
+
+  const recordar = async (status: number, cuerpo: unknown) => {
     recuerdos.set(clave, { huella: e.huella, status, cuerpo, expiraEn: Date.now() + VIDA_RECUERDO_MS });
     if (recuerdos.size > MAX_RECUERDOS) podar(Date.now());
+    await guardarRecuerdoDurable(e, status, cuerpo);
   };
 
   try {
     const existente = await e.buscar();
     if (existente) {
       const cuerpo: SobreEscritura<T> = { dato: existente, idempotente: true };
-      recordar(200, cuerpo);
+      await recordar(200, cuerpo);
       logger.info(`${e.evento}.ya_existia`, { tenant: e.tenantId });
       return NextResponse.json(cuerpo, { status: 200 });
     }
@@ -626,13 +731,13 @@ export async function escribir<T>(e: Escritura<T>): Promise<NextResponse> {
       const gano = await e.buscar();
       if (!gano) throw err;   // chocó contra el unique y no está: no se inventa nada
       const cuerpo: SobreEscritura<T> = { dato: gano, idempotente: true };
-      recordar(200, cuerpo);
+      await recordar(200, cuerpo);
       logger.info(`${e.evento}.carrera_resuelta`, { tenant: e.tenantId });
       return NextResponse.json(cuerpo, { status: 200 });
     }
 
     const cuerpo: SobreEscritura<T> = { dato, idempotente: false };
-    recordar(201, cuerpo);
+    await recordar(201, cuerpo);
     return NextResponse.json(cuerpo, { status: 201 });
   } catch (err) {
     return traducirFalla(e.evento, e.tenantId, err);

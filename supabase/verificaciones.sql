@@ -3554,3 +3554,108 @@ begin
   raise exception E'AGENTE_NOTIF_0097  agente_malo=%  evento_malo=%  magnitud_neg=%  huella_coja=%  completa=%  claim_reciente_no_pasa=%  huerfanas=%   (esperado t/t/t/t/t/0/0)',
     agente_malo, evento_malo, magnitud_neg, huella_coja, huella_completa_ok, claim_gana, quedan;
 end $$;
+
+-- ── 73. Idempotencia durable de la API v1 (mig. 0098) ──────────────────────
+--
+-- Lo que se prueba NO es el duplicado: ése ya lo impide la llave natural
+-- (`viaje_folio_unico`) y no depende de esta tabla. Se prueba lo que esta
+-- tabla añade — que la MISMA llave no pueda servir dos respuestas distintas —
+-- y las tres formas en que la base se niega a guardar basura que después se
+-- serviría como si fuera buena.
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026. Salida real:
+--   politicas=0  rls=true  filas_residuales=0  → todos los guardias rechazaron
+--
+-- `politicas=0` con `rls=true` es lo esperado y no un olvido: esta tabla la
+-- toca EXCLUSIVAMENTE la capa de API con service role. Sin políticas, ningún
+-- camino con llave anónima o de usuario puede leerla ni escribirla.
+do $$
+declare
+  t uuid;
+  llave_corta boolean := false;
+  huella_mala boolean := false;
+  status_500  boolean := false;
+  dup_llave   boolean := false;
+  otra_ruta_convive boolean := false;
+  politicas int;
+  rls_on boolean;
+begin
+  select id into t from public.tenant limit 1;
+
+  -- Una llave de un carácter colisionaría entre peticiones sin relación, y
+  -- quien llegara segundo recibiría la respuesta del primero.
+  begin
+    insert into public.api_idempotencia(tenant_id,ruta,llave,huella,status,cuerpo)
+    values (t,'v1.viajes.post','corta', repeat('a',64), 201, '{}'::jsonb);
+  exception when check_violation then llave_corta := true; end;
+
+  begin
+    insert into public.api_idempotencia(tenant_id,ruta,llave,huella,status,cuerpo)
+    values (t,'v1.viajes.post','llave-valida-1234','no-es-un-hash',201,'{}'::jsonb);
+  exception when check_violation then huella_mala := true; end;
+
+  -- Un 500 NO se recuerda: un fallo sí se puede reintentar, y grabarlo dejaría
+  -- al integrador replayando su propio error para siempre.
+  begin
+    insert into public.api_idempotencia(tenant_id,ruta,llave,huella,status,cuerpo)
+    values (t,'v1.viajes.post','llave-valida-1234',repeat('b',64),500,'{}'::jsonb);
+  exception when check_violation then status_500 := true; end;
+
+  insert into public.api_idempotencia(tenant_id,ruta,llave,huella,status,cuerpo)
+  values (t,'v1.viajes.post','llave-valida-1234',repeat('c',64),201,'{"dato":{"folio":"VJ-1"}}'::jsonb);
+
+  begin
+    insert into public.api_idempotencia(tenant_id,ruta,llave,huella,status,cuerpo)
+    values (t,'v1.viajes.post','llave-valida-1234',repeat('d',64),200,'{}'::jsonb);
+  exception when unique_violation then dup_llave := true; end;
+
+  -- La misma llave en OTRA ruta SÍ convive: un cliente que reusa su llave entre
+  -- recursos no debe recibir el cuerpo del recurso equivocado, pero tampoco un
+  -- rechazo — son dos operaciones distintas.
+  insert into public.api_idempotencia(tenant_id,ruta,llave,huella,status,cuerpo)
+  values (t,'v1.unidades.post','llave-valida-1234',repeat('e',64),201,'{}'::jsonb);
+  otra_ruta_convive := true;
+
+  delete from public.api_idempotencia where tenant_id = t and llave = 'llave-valida-1234';
+
+  select count(*) into politicas from pg_policies where tablename = 'api_idempotencia';
+  select relrowsecurity into rls_on from pg_class where relname = 'api_idempotencia';
+
+  raise exception E'API_IDEMPOTENCIA_0098  llave_corta=%  huella_mala=%  status_500=%  dup_llave=%  otra_ruta=%  politicas=%  rls=%   (esperado t/t/t/t/t/0/t)',
+    llave_corta, huella_mala, status_500, dup_llave, otra_ruta_convive, politicas, rls_on;
+end $$;
+
+-- ── 74. La purga de la idempotencia respeta lo reciente (mig. 0098) ────────
+--
+-- Una purga que borra de más es peor que no purgar: se lleva el recuerdo de
+-- un reintento que todavía está en vuelo, y el TMS recibe una respuesta
+-- distinta a la que ya había recibido. Por eso lo que se prueba no es que
+-- borre, sino que DEJE la fresca.
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026. Salida real:
+--   borradas=1  quedan_frescas=1  reporta_la_llave=t
+--
+-- `reporta_la_llave` verifica que `mantenimiento_de_datos` incluya el conteo
+-- en su jsonb: el cron registra ese objeto en el log, y una purga que corre
+-- sin aparecer ahí es una purga que nadie puede auditar.
+do $$
+declare t uuid; borradas bigint; quedan int; res jsonb;
+begin
+  select id into t from public.tenant limit 1;
+
+  insert into public.api_idempotencia(tenant_id,ruta,llave,huella,status,cuerpo,created_at)
+  values (t,'v1.viajes.post','purga-vieja-0001',repeat('a',64),201,'{}'::jsonb, now() - interval '9 days'),
+         (t,'v1.viajes.post','purga-fresca-001',repeat('b',64),201,'{}'::jsonb, now() - interval '1 hour');
+
+  borradas := public.purgar_api_idempotencia();
+
+  select count(*) into quedan from public.api_idempotencia
+   where tenant_id = t and llave in ('purga-vieja-0001','purga-fresca-001');
+
+  res := public.mantenimiento_de_datos(30);
+
+  delete from public.api_idempotencia where tenant_id = t and llave like 'purga-%';
+
+  raise exception E'PURGA_0098  borradas=%  quedan_frescas=%  reporta_la_llave=%   (esperado 1/1/t)',
+    borradas, quedan, (res ? 'idempotenciaPurgada');
+end $$;
