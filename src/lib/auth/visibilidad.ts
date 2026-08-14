@@ -103,6 +103,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // AGENTES completo. Si un día el jefe de tráfico debe perseguir
   // comprobantes, ese cambio lo decide Javier, no un prefijo.
   '/dashboard/agentes/cobranza': 'dinero',
+  // El conciliador (F5): montos del estado de cuenta a la vista — dinero.
+  '/dashboard/agentes/peajes': 'dinero',
   // La bandeja de huérfanos (F2): enseña montos de comprobantes — dinero.
   '/dashboard/huerfanos': 'dinero',
   '/dashboard/combustible-casetas': 'dinero',

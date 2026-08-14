@@ -1,6 +1,6 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
-  BellRing, Truck, Users, FileQuestion, Map, MessagesSquare,
+  BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel,
 } from 'lucide-react';
 
 /**
@@ -28,6 +28,9 @@ export const AGENTES: Item[] = [
   { href: '/dashboard/agentes/cobranza', nombre: 'Agente de Cobranza', Icono: BellRing },
   // El cuarto (F4): habla con los choferes — avisos, hitos, despacho por WA.
   { href: '/dashboard/agentes/conductores', nombre: 'Agente de Conductores', Icono: MessagesSquare },
+  // El quinto (F5): el conciliador del "martirio" — estado de cuenta del
+  // TAG/monedero contra los gastos reales de los viajes.
+  { href: '/dashboard/agentes/peajes', nombre: 'Agente de Peajes', Icono: Scale },
 ];
 
 export const OPERACION: Item[] = [
@@ -45,6 +48,10 @@ export const OPERACION: Item[] = [
 export const DINERO_FISCAL: Item[] = [
   // La bandeja de la oficina (F2): montos a la vista, o sea `dinero`.
   { href: '/dashboard/huerfanos', nombre: 'Comprobantes sin viaje', Icono: FileQuestion },
+  // La MESA de conciliación línea a línea. Existía desde antes del rewrite
+  // del sidebar y quedó alcanzable solo por URL — F5 la devuelve al menú
+  // porque el Agente de Peajes manda gente a resolver aquí.
+  { href: '/dashboard/combustible-casetas', nombre: 'Combustible y casetas', Icono: Fuel },
 ];
 
 export const SISTEMA: Item[] = [
