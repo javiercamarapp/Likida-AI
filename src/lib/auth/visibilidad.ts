@@ -99,6 +99,12 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // renglón de huérfanos ni su conteo. Ponerla en `dinero` habría dejado al
   // jefe de tráfico sin enterarse de un viaje escalado, que es suyo.
   '/dashboard/notificaciones': 'operacion',
+  // Mi perfil (14-ago-2026) — la mig. 0046 dejó `avatar_url` y el bucket
+  // `avatares` desde el 12-ago diciendo que servirían "el día que su propio
+  // panel tenga edición de perfil". Es `operacion` porque TODO rol edita su
+  // nombre y su foto; las server actions escriben contra el userId de la
+  // sesión, así que el área no gatea a quién, sino a qué pantalla.
+  '/dashboard/mi-perfil': 'operacion',
 
   // Dinero — lo que el encargado no ve
   // AGENTES (13-ago-2026): las ventanas de los dos agentes enseñan montos

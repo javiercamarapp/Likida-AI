@@ -1,7 +1,7 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
   BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2, Plug,
-  ChartNoAxesCombined,
+  ChartNoAxesCombined, UserRound,
 } from 'lucide-react';
 
 /**
@@ -73,6 +73,7 @@ export const ABAJO: Item[] = [
   // abajo y no en una categoría porque no es un área del negocio: es la
   // bandeja de lo que hoy te toca, cruzada de todas las áreas que tu rol ve.
   { href: '/dashboard/notificaciones', nombre: 'Notificaciones', Icono: BellRing },
+  { href: '/dashboard/mi-perfil', nombre: 'Mi perfil', Icono: UserRound },
   { href: '/dashboard/soporte', nombre: 'Centro de ayuda', Icono: LifeBuoy },
   // Suscripción vive aquí y no en una categoría: es la casa de aterrizaje
   // del contador (inicioDe) y nada debe ser alcanzable solo tecleando URL.
