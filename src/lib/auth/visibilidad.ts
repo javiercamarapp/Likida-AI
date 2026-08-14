@@ -84,6 +84,11 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // `dinero_por_area.test.ts` los escanea).
   '/dashboard/viajes': 'operacion',
   '/dashboard/operadores': 'operacion',
+  // El Registro de Unidades (14-ago-2026): el activo que produce el dinero y
+  // sus vigencias de ley. Es `operacion` porque el jefe de tráfico es
+  // exactamente quien debe enterarse de que una unidad no puede salir, y la
+  // pantalla no enseña un peso.
+  '/dashboard/unidades': 'operacion',
   // El mapa (F3): viajes vivos sobre México, sin un peso en pantalla.
   '/dashboard/mapa': 'operacion',
   // El Agente de Conductores (F4) es el ÚNICO agente de operación: no toca
