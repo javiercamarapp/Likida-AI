@@ -145,22 +145,39 @@ export function FormaNotificaciones({ datos, guardar }: {
               De qué te avisa el {datos.agente.nombre}
             </legend>
             <div className="space-y-2.5">
-              {datos.eventos.map((e) => (
-                <label key={e.id} className="flex items-start gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox" name="eventos" value={e.id}
-                    checked={eventos.includes(e.id)}
-                    onChange={() => alternar(eventos, setEventos, e.id)}
-                    className="mt-0.5 w-3.5 h-3.5 shrink-0"
-                    style={{ accentColor: 'var(--marca)' }}
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-[13px] font-medium">{e.titulo}</span>
-                    <span className="block text-[11.5px]" style={{ color: 'var(--muted)' }}>{e.cuando}</span>
-                    <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{e.porQue}</span>
-                  </span>
-                </label>
-              ))}
+              {datos.eventos.map((e) => {
+                // `conectado === false` = este agente declara el evento pero
+                // todavía no hay código que lo emita. Se enseña APAGADO y con
+                // el porqué, en vez de ofrecer una casilla que se marca, se
+                // guarda, y no dispara nada: quien la marcara se quedaría
+                // esperando un correo que no existe, creyéndose cubierto.
+                const muerto = e.conectado === false;
+                return (
+                  <label key={e.id}
+                    className={`flex items-start gap-2.5 ${muerto ? 'cursor-default' : 'cursor-pointer'}`}>
+                    <input
+                      type="checkbox" name="eventos" value={e.id}
+                      checked={!muerto && eventos.includes(e.id)}
+                      disabled={muerto}
+                      onChange={() => alternar(eventos, setEventos, e.id)}
+                      className="mt-0.5 w-3.5 h-3.5 shrink-0"
+                      style={{ accentColor: 'var(--marca)' }}
+                    />
+                    <span className="min-w-0" style={muerto ? { opacity: 0.55 } : undefined}>
+                      <span className="block text-[13px] font-medium">{e.titulo}</span>
+                      <span className="block text-[11.5px]" style={{ color: 'var(--muted)' }}>{e.cuando}</span>
+                      {muerto ? (
+                        <span className="block text-[11px] mt-0.5" style={{ color: 'var(--warn)' }}>
+                          Todavía no está conectado: este agente aún no detecta esa situación, así que
+                          encenderlo no mandaría nada. Aparece aquí porque es lo siguiente que le toca.
+                        </span>
+                      ) : (
+                        <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{e.porQue}</span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
             <p className="text-[11px] mt-2.5" style={{ color: 'var(--faint)' }}>
               No hay casilla para «la corrida salió bien»: un aviso que llega cuando todo está

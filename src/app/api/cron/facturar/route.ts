@@ -355,6 +355,17 @@ export async function procesarLoteEnCola(
   quedaron: number,
 ): Promise<NextResponse> {
   const modo = process.env.FACTURACION_MODO === 'emitir' ? 'emitir' as const : 'ensayo' as const;
+
+  // Cómo le fue a CADA flota que alcanzó turno. El éxito SÍ se registra: es lo
+  // que rearma el filo del anti-ruido (`avisarCorridasPorFlota`). Las que se
+  // quedaron sin presupuesto de tiempo NO entran — no fallaron, no les tocó;
+  // la corrida de la siguiente hora las levanta enteras.
+  //
+  // FUERA del `try` a propósito: el cierre se manda desde el `finally`, y ahí
+  // esta variable tiene que estar viva incluso cuando el lote reventó — que es
+  // justo el caso en que el aviso importa.
+  const corridas = new Map<string, unknown>();
+
   try {
     // ── Agrupar: flota → portal → tickets. El portal sale de `armar()`, que es
     // la MISMA función con la que `al_vuelo.ts` reconoce el comercio; derivarlo
@@ -435,11 +446,6 @@ export async function procesarLoteEnCola(
     // ── 2. Una flota, un navegador, su registro de portales.
     let falloDeArranque: string | null = null;
     let sinIntentar = 0;
-    // Cómo le fue a CADA flota que alcanzó turno. El éxito SÍ se registra: es
-    // lo que rearma el filo del anti-ruido (`avisarCorridasPorFlota`). Las que
-    // se quedaron sin presupuesto de tiempo NO entran — no fallaron, no les
-    // tocó; la corrida de la siguiente hora las levanta enteras.
-    const corridas = new Map<string, unknown>();
     /** Tickets con flota y portal listos, que no se intentaron porque ya no
      *  quedaba tiempo para otra sesión de navegador completa. */
     let sinTiempo = 0;
@@ -554,11 +560,6 @@ export async function procesarLoteEnCola(
       }
     }
 
-    // FUERA del presupuesto de tiempo del lote, a propósito: los
-    // PRESUPUESTO_LOTE_MS están reservados para sesiones de portal, y una
-    // escritura de notificación no debe quitarle turno a un ticket. Nunca
-    // propaga (ver `avisarCorridasPorFlota`).
-    await avisarCorridasPorFlota('facturas', corridas);
 
     const facturados = resultados.filter((r) => r.facturado).length;
 
@@ -630,5 +631,24 @@ export async function procesarLoteEnCola(
     const error = e instanceof Error ? e.message : String(e);
     logger.error('cron.facturar.falló', { error });
     return NextResponse.json({ error }, { status: 500 });
+  } finally {
+    // ── EN `finally`, Y ÉSA ES LA CORRECCIÓN ────────────────────────────────
+    //
+    // Estaba después del bucle de flotas, que es donde parece que va y no va.
+    // El camino de fallo duro de este cron —`if (arranco) throw e`, cuando el
+    // navegador SÍ abrió y la sesión del portal revienta a media escritura—
+    // propaga fuera del bucle y salta al catch de arriba: el aviso nunca
+    // corría. O sea que el ÚNICO fallo que de verdad merecía el correo «el
+    // agente no pudo trabajar» era exactamente el que lo silenciaba.
+    //
+    // Peor que no avisar: también se perdían los cierres de las flotas que SÍ
+    // terminaron bien en ese lote, así que sus rachas quedaban sin re-armar.
+    // Y QStash reintenta 2 veces sobre 5xx, de modo que el silencio se repetía
+    // tres veces.
+    //
+    // `avisarCorridasPorFlota` nunca propaga, así que ponerlo en el `finally`
+    // no puede convertir una corrida buena en un 500 — que es la única razón
+    // por la que un `finally` daría miedo aquí.
+    await avisarCorridasPorFlota('facturas', corridas);
   }
 }
