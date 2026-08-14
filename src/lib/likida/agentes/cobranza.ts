@@ -104,10 +104,16 @@ export async function colaCobranza(tenantId: string, ahora: Date = new Date()): 
   // producción el 14-ago-2026: la página entera caía con el error boundary).
   const { data, error } = await supabaseAdmin()
     .from('viaje')
-    .select('id, folio, fecha_inicio, recordatorio_comprobacion_en, operador:operador_id(nombre, telefono)')
+    .select('id, folio, fecha_inicio, avisado_en, recordatorio_comprobacion_en, operador:operador_id(nombre, telefono)')
     .eq('tenant_id', tenantId)
     .in('estatus', ['abierto', 'en_cuadre'])
     .not('fecha_inicio', 'is', null)
+    // SOLO VIAJES QUE LIKIDA AVISÓ (auditoría 3, BE-C1): un viaje que el
+    // chofer nunca recibió por WhatsApp no se le cobra por WhatsApp — sin
+    // esto, el import del TMS (viajes históricos SIN aviso a propósito)
+    // armaba cientos de "Llevas N días..." en la primera corrida del cron.
+    // Mismo criterio que la escalación (escalar_viaje.ts).
+    .not('avisado_en', 'is', null)
     .limit(500);
   if (error) throw new Error(`colaCobranza: ${error.message}`);
 
@@ -131,6 +137,9 @@ export async function colaCobranza(tenantId: string, ahora: Date = new Date()): 
   const cola: ColaCobranza = { paraContactar: [], sinTelefono: [], vigilados: viajes.length };
   type Rel = { nombre?: string; telefono?: string };
   for (const v of viajes) {
+    // Cinturón además del filtro de la consulta (BE-C1): si esta lectura
+    // llega por otro camino, el viaje sin aviso NO entra a ninguna cubeta.
+    if (!v.avisado_en) continue;
     const dias = Math.floor((ahora.getTime() - Date.parse(`${v.fecha_inicio}T00:00:00Z`)) / 86_400_000);
     const previos = contactosPorViaje.get(v.id as string) ?? [];
     const tier = tierPendiente(dias, config.tiers, previos, v.recordatorio_comprobacion_en !== null);
