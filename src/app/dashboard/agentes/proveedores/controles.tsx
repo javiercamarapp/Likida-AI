@@ -1,0 +1,108 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
+import { useRouter } from 'next/navigation';
+import { Upload, Check, X } from 'lucide-react';
+
+export type AccionProveedores = (
+  prev: { error?: string; aviso?: string } | null,
+  fd: FormData,
+) => Promise<{ error?: string; aviso?: string } | null>;
+
+/** Subida del XML. Tras guardar, la página se refresca para que la bandeja
+ *  y los KPIs cuenten la factura nueva. */
+export function SubirFactura({ subirFactura }: { subirFactura: AccionProveedores }) {
+  const [estado, accion] = useActionState(subirFactura, null);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (estado?.aviso) router.refresh();
+  }, [estado, router]);
+
+  return (
+    <div>
+      <form action={accion} className="flex items-center gap-2 flex-wrap">
+        <input type="file" name="archivo" accept=".xml,text/xml,application/xml" required
+          aria-label="XML de la factura de proveedor"
+          className="text-[12.5px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12.5px] file:font-medium file:cursor-pointer"
+          style={{ color: 'var(--muted)' }} />
+        <BotonSubir />
+      </form>
+      {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.aviso && (
+        <p className="text-[12px] mt-2" style={{ color: estado.aviso.includes('OJO') ? 'var(--warn)' : 'var(--muted)' }}>
+          {estado.aviso}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function BotonSubir() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}
+      className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+      <Upload width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
+      {pending ? 'Leyendo…' : 'Subir a la bandeja'}
+    </button>
+  );
+}
+
+/** Aprobar / rechazar, con confirmación de dos pasos en el rechazo (aprobar
+ *  es reversible en el ERP; rechazar la saca del export sin vuelta aquí). */
+export function BotonesDecision({ facturaId, decidir }: { facturaId: string; decidir: AccionProveedores }) {
+  const [estado, accion] = useActionState(decidir, null);
+  const [confirmando, setConfirmando] = useState(false);
+
+  return (
+    <div className="min-w-[190px]">
+      {confirmando ? (
+        <form action={accion} onSubmit={() => setConfirmando(false)} className="inline-flex items-center gap-2">
+          <input type="hidden" name="facturaId" value={facturaId} />
+          <input type="hidden" name="decision" value="rechazada" />
+          <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>¿Rechazarla?</span>
+          <BotonMini texto="Sí" pendienteTexto="…" destructivo />
+          <button type="button" onClick={() => setConfirmando(false)}
+            className="hairline text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
+            No
+          </button>
+        </form>
+      ) : (
+        <div className="inline-flex items-center gap-1.5">
+          <form action={accion} className="inline">
+            <input type="hidden" name="facturaId" value={facturaId} />
+            <input type="hidden" name="decision" value="aprobada" />
+            <BotonMini texto="Aprobar" pendienteTexto="Guardando…" IconoOk />
+          </form>
+          <button type="button" onClick={() => setConfirmando(true)} title="Rechazar la factura"
+            className="hairline inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
+            <X width={11} height={11} strokeWidth={2} /> Rechazar
+          </button>
+        </div>
+      )}
+      {estado?.error && <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+    </div>
+  );
+}
+
+function BotonMini({ texto, pendienteTexto, IconoOk, destructivo }: {
+  texto: string; pendienteTexto: string; IconoOk?: boolean; destructivo?: boolean;
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}
+      className="inline-flex items-center gap-1 text-[11.5px] font-medium px-2.5 py-1 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      style={destructivo
+        ? { background: 'var(--badbg)', color: 'var(--bad)' }
+        : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+      {IconoOk && <Check width={11} height={11} strokeWidth={2} />}
+      {pending ? pendienteTexto : texto}
+    </button>
+  );
+}

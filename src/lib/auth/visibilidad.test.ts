@@ -76,8 +76,13 @@ describe('el contador — sin panel propio, pero la operación le sigue cerrada'
       '/dashboard/agentes/conductores',
       // Peajes (F5): el conciliador del estado de cuenta — dinero.
       '/dashboard/agentes/peajes',
+      // Proveedores (F6): la bandeja de facturas del taller — dinero.
+      '/dashboard/agentes/proveedores',
     ]);
-    const DINERO = ['/dashboard/agentes/liquidacion', '/dashboard/agentes/facturas', '/dashboard/agentes/cobranza', '/dashboard/agentes/peajes'];
+    const DINERO = [
+      '/dashboard/agentes/liquidacion', '/dashboard/agentes/facturas',
+      '/dashboard/agentes/cobranza', '/dashboard/agentes/peajes', '/dashboard/agentes/proveedores',
+    ];
     for (const href of DINERO) expect(puedeVerRuta('contador', href)).toBe(true);
     expect(puedeVerRuta('contador', '/dashboard/agentes/conductores')).toBe(false);
     expect(puedeVerRuta('encargado', '/dashboard/agentes/conductores')).toBe(true);

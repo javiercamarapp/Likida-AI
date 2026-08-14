@@ -105,6 +105,9 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/cobranza': 'dinero',
   // El conciliador (F5): montos del estado de cuenta a la vista — dinero.
   '/dashboard/agentes/peajes': 'dinero',
+  // Proveedores (F6): facturas y totales — dinero, y la decisión es del
+  // contador/dueño.
+  '/dashboard/agentes/proveedores': 'dinero',
   // La bandeja de huérfanos (F2): enseña montos de comprobantes — dinero.
   '/dashboard/huerfanos': 'dinero',
   '/dashboard/combustible-casetas': 'dinero',

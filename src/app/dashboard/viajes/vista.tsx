@@ -4,6 +4,7 @@ import { numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
 import { PillAviso } from '../despacho/vista';
+import { ImportarViajes, type AccionImportar } from './importar';
 
 export type FiltroViajes = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
 
@@ -35,7 +36,7 @@ const ROTULO_FILTRO: Record<FiltroViajes, string> = {
  * hacía a ciegas por cron. Sin pesos: es la pantalla que el jefe de tráfico
  * también ve.
  */
-export function VistaViajes({ filas, filtro, conteos, cargados, sufijo }: {
+export function VistaViajes({ filas, filtro, conteos, cargados, sufijo, importar }: {
   filas: FilaRegistroViaje[];
   filtro: FiltroViajes;
   conteos: {
@@ -45,6 +46,7 @@ export function VistaViajes({ filas, filtro, conteos, cargados, sufijo }: {
   /** Cuántos trajo la ventana de la tabla (tope 100) — para el rótulo honesto. */
   cargados: number;
   sufijo: string;
+  importar: AccionImportar;
 }) {
   const kpi = (n: number | null) => (n === null ? '—' : numero(n));
   const amp = sufijo ? `${sufijo}&` : '?';
@@ -65,6 +67,12 @@ export function VistaViajes({ filas, filtro, conteos, cargados, sufijo }: {
             <Kpi titulo="Escalados sin aceptar" valor={kpi(conteos.escalados)}
               tono={(conteos.escalados ?? 0) > 0 ? 'bad' : undefined} />
           </div>
+
+          {/* El kit del PoC: el export del TMS del prospecto entra aquí */}
+          <section className="card p-4">
+            <h2 className="font-display text-[15px] font-semibold mb-2">Importar desde tu TMS</h2>
+            <ImportarViajes importar={importar} />
+          </section>
 
           <section className="card p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap mb-3">

@@ -1,6 +1,6 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
-  BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel,
+  BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2,
 } from 'lucide-react';
 
 /**
@@ -31,6 +31,8 @@ export const AGENTES: Item[] = [
   // El quinto (F5): el conciliador del "martirio" — estado de cuenta del
   // TAG/monedero contra los gastos reales de los viajes.
   { href: '/dashboard/agentes/peajes', nombre: 'Agente de Peajes', Icono: Scale },
+  // El sexto (F6): la factura del taller que hoy se captura a mano en el ERP.
+  { href: '/dashboard/agentes/proveedores', nombre: 'Agente de Proveedores', Icono: Building2 },
 ];
 
 export const OPERACION: Item[] = [
