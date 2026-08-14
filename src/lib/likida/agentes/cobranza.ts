@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
-import { sendText } from '@/lib/meta/client';
+import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 import {
   CONFIG_COBRANZA_DEFAULT, validarConfigCobranza, dentroDeVentana,
   tierPendiente, armarMensajeCobranza, type ConfigCobranza,
@@ -260,7 +260,29 @@ export async function ejecutarCobranza(
       // sendText devuelve el id del mensaje de Meta, o null si rechazó.
       const idMensaje = await sendText(v.operadorTelefono as string, armarMensajeCobranza(v.folio, v.dias, config));
       enviado = idMensaje !== null;
-      if (!enviado) detalle = 'WhatsApp rechazó el envío';
+      if (!enviado) {
+        // LA PLANTILLA CUANDO EL TEXTO NO PUEDE SALIR (auditoría 3, AG-A2).
+        // La población objetivo de este agente es el chofer que lleva DÍAS
+        // sin escribir — exactamente el que trae la ventana de 24 h cerrada,
+        // donde Meta rechaza todo texto libre. Sin este fallback el agente
+        // era mudo para quien existe: el claim consumía el tier en bitácora
+        // y el chofer no recibía NI UNO de los tres contactos. Mismo patrón
+        // que la escalación (escalar_viaje.ts): el texto bueno primero, la
+        // plantilla aprobada solo cuando Meta lo rechaza. El cuerpo de
+        // `recordatorio_cierre` se escribió para el cierre de liquidación —
+        // menos preciso que el texto con los días y la firma, pero es lo
+        // ÚNICO que WhatsApp entrega con la ventana cerrada, y habla del
+        // mismo pendiente: cerrar el viaje.
+        const env = await sendTemplate(v.operadorTelefono as string, 'recordatorio_cierre', {
+          parametros: [v.operadorNombre ?? 'Operador', v.folio ?? 'sin folio'],
+        });
+        if (env.ok) {
+          enviado = true;
+          detalle = 'plantilla recordatorio_cierre (ventana de 24 h cerrada)';
+        } else {
+          detalle = `WhatsApp rechazó el texto libre y la plantilla también falló: ${motivoDeFalloWhatsApp(env.error, env.codigo)}`;
+        }
+      }
     } catch (e) {
       detalle = e instanceof Error ? e.message : 'error inesperado al enviar';
     }
