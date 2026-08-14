@@ -834,6 +834,13 @@ export default function ChatFlota({
             </div>
           )}
 
+          {/* La nota vive… salvo con el menú del clip abierto (13-ago: "solo
+              cuando aprietas adjuntar"): invisible conservando su espacio,
+              para que nada de arriba se mueva y no se asome bajo el menú. */}
+          <p className={`mt-8 text-[11px] leading-relaxed text-center max-w-lg ${menuAdjuntar ? 'invisible' : ''}`} style={{ color: 'var(--faint)' }}>
+            Responde con cifras ya calculadas en el servidor — en texto, tabla o gráfica según
+            la pregunta. No traduce preguntas libres a consultas de base de datos, a propósito.
+          </p>
         </div>
         </div>
         </div>
