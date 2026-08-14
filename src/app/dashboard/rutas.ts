@@ -1,7 +1,7 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
   BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2, Plug,
-  ChartNoAxesCombined, UserRound, BookOpen, Container, Blocks,
+  ChartNoAxesCombined, UserRound, BookOpen, Container, Blocks, Handshake, FileText,
 } from 'lucide-react';
 
 /**
@@ -60,6 +60,9 @@ export const DINERO_FISCAL: Item[] = [
   // F7: margen real y cartera de clientes. La pantalla dice qué la enciende
   // mientras `ingreso_flete` y `factura_emitida` sigan vacías.
   { href: '/dashboard/rentabilidad', nombre: 'Rentabilidad y cobranza', Icono: ChartNoAxesCombined },
+  // El lado del ingreso: quién paga el flete y cuánto debe.
+  { href: '/dashboard/clientes', nombre: 'Clientes y tarifas', Icono: Handshake },
+  { href: '/dashboard/facturacion', nombre: 'Facturación a clientes', Icono: FileText },
 ];
 
 export const SISTEMA: Item[] = [

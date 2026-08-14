@@ -33,11 +33,20 @@ describe('el producto se presenta con un solo nombre', () => {
     expect(conv, 'volvió el nombre viejo al saludo del operador').not.toMatch(/agentName: 'Cuadra'/);
   });
 
-  it('el PDF dice UN nombre, arriba y abajo', () => {
+  it('el PDF dice UN nombre de producto, arriba y abajo', () => {
     // La cabecera decía 'Cuadra' en 20pt y el pie 'Generado por Likida'. Los dos
-    // nombres en la hoja que el contralor archiva.
+    // nombres en la hoja que el contralor archiva. Eso es lo que este guardia
+    // caza, y sigue vigente.
+    //
+    // 14-ago-2026: el encabezado ya NO es siempre "Likida" — cuando la flota
+    // tiene razón social capturada, el papel lleva SU nombre y Likida baja a
+    // "Procesado por Likida". Eso no rompe la regla: el nombre del PRODUCTO
+    // sigue siendo uno solo, solo cambió de lugar. Lo que se afirma ahora es
+    // que el respaldo (sin razón social) sigue siendo 'Likida' y que la firma
+    // de abajo también.
     const pdf = readFileSync('src/lib/likida/liquidacion/pdf.ts', 'utf8');
-    expect(pdf).toMatch(/text\('Likida', M, y, 20, bold/);
+    expect(pdf).toMatch(/encabezado \?\? 'Likida'/);
+    expect(pdf).toMatch(/'Procesado por Likida'/);
     expect(pdf).toMatch(/setProducer\('Likida'\)/);
   });
 
