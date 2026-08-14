@@ -26,6 +26,13 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 // diccionario ni fuerza bruta que la alcance, y un hash lento aquí solo
 // castigaría CADA petición legítima de la API. Es el mismo criterio que usan
 // GitHub y Stripe con sus tokens.
+//
+// ── ESTE ARCHIVO ES SOLO EL CAMINO CALIENTE ───────────────────────────────
+//
+// `resolverLlave` corre en CADA petición de /v1. La emisión, la lista y la
+// revocación —el camino frío del panel (/dashboard/llaves-api)— viven en
+// `llave-api-escritura.ts`, para que un cambio en la pantalla no pueda
+// desestabilizar lo que autentica cada llamada.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** `lk_` + `live_` para que se reconozca de un vistazo en un log o un pegado
