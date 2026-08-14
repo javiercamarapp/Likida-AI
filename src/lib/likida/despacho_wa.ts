@@ -131,7 +131,7 @@ export async function atenderDespachoOficina(
         return 'Tu rol no asigna viajes — eso le toca al dueño o al jefe de tráfico.';
       }
       try {
-        await crearViaje(cuenta.tenantId, {
+        const viajeId = await crearViaje(cuenta.tenantId, {
           operadorId: pendiente.operadorId,
           origen: pendiente.origen ?? undefined,
           destino: pendiente.destino ?? undefined,
@@ -139,11 +139,36 @@ export async function atenderDespachoOficina(
           fechaInicio: hoyMx(ahora),
         });
         await guardarPendiente(cuenta.tenantId, telefono, null);
+
+        // ¿EL AVISO SALIÓ DE VERDAD? (auditoría 3, AG-A4). `crearViaje`
+        // espera a `avisarAlChofer` pero se TRAGA el resultado — "el aviso va
+        // en camino" se afirmaba también cuando el envío ya había fallado o
+        // ni se intentó (sin teléfono, plantilla pausada). Y ese viaje, con
+        // `avisado_en` NULL, es invisible para la escalación de 5 h
+        // (`viajesSinAceptar` filtra por el sello): el jefe cree que avisó,
+        // el chofer nunca se entera, y nadie vigila. Para cuando crearViaje
+        // devuelve, el sello ya está puesto o no — se LEE y se dice la
+        // verdad; si la lectura falla, se dice que no se pudo verificar.
+        // Nunca se afirma una entrega sin el dato.
+        let lineaAviso = 'No pude verificar si el aviso salió — revísalo en Despacho.';
+        const { data: sello, error: errSello } = await acotada(supabaseAdmin()
+          .from('viaje')
+          .select('avisado_en')
+          .eq('id', viajeId).eq('tenant_id', cuenta.tenantId)
+          .maybeSingle(), 'despachoWa.avisadoEn');
+        if (errSello) {
+          logger.warn('despacho_wa.aviso_ilegible', { viaje: viajeId, err: errSello.message });
+        } else if (sello) {
+          lineaAviso = (sello as { avisado_en?: string | null }).avisado_en
+            ? 'El aviso ya salió a su WhatsApp — en Despacho ves si aceptó.'
+            : '⚠️ El viaje quedó creado pero el aviso NO salió (revisa su teléfono); mándalo desde Despacho — sin aviso, la escalación de 5 h no lo vigila.';
+        }
+
         const ruta = pendiente.origen && pendiente.destino
           ? `${pendiente.origen} → ${pendiente.destino}` : (pendiente.origen ?? pendiente.destino ?? 'sin ruta');
         return [
           `Viaje creado ✅ ${pendiente.operadorNombre} · ${ruta}.`,
-          'El aviso a su WhatsApp va en camino — en Despacho ves si ya aceptó.',
+          lineaAviso,
           ...(pendiente.unidad
             ? [`(La unidad «${pendiente.unidad}» no la amarré: por aquí todavía no; se captura en el panel.)`]
             : []),
