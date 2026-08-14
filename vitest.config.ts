@@ -32,7 +32,13 @@ export default defineConfig({
       '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
       '**/.claude/**',
     ],
-    env: { CUADRA_COBERTURA: CON_COBERTURA ? '1' : '' },
+    // LIKIDA_COBERTURA es el nombre que leen los `skipIf` de las pruebas de
+    // tiempo y la red `pruebas_en_ci.test.ts`. El rename de marca del 12-ago
+    // (b79f8e5) renombró a los lectores y dejó aquí el nombre viejo: el skip
+    // murió en silencio y los umbrales de tiempo corrieron INSTRUMENTADOS en
+    // el paso de cobertura de CI. La red ahora exige que este nombre y el de
+    // los skipIf sean el mismo.
+    env: { LIKIDA_COBERTURA: CON_COBERTURA ? '1' : '' },
     // ═════════════════════════════════════════════════════════════════════════
     // MEDICIÓN DE COBERTURA — auditoría 5, MEDIO.
     //
