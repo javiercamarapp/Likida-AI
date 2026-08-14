@@ -236,6 +236,26 @@ export async function guardarYConciliarConsolidado(
     return { cfdiXmlId, totalLineas: existentes.length, conciliadas: conciliadasYa, porConciliar: existentes.length - conciliadasYa };
   }
 
+  // ── REANUDACIÓN TRAS FALLA PARCIAL (auditoría 3, BE-A4) ──────────────────
+  // Si una corrida anterior selló gastos con ESTE uuid pero murió antes de
+  // escribir sus líneas (el throw de abajo), la decisión de aquella pasada ya
+  // está grabada en el propio sello: `cfdi_orden` = índice de la línea. Esas
+  // líneas se respetan tal cual — re-correr el JOIN para ellas las reportaría
+  // como huérfanas (su gasto ya no es candidato: `cfdi_uuid` dejó de ser
+  // null) y el reenvío "desligaría" en apariencia lo que quedó bien ligado.
+  // Falla CERRADO: sin poder leer los sellos no se corre el JOIN a ciegas.
+  const { data: yaSellados, error: errSellados } = await acotada(supabaseAdmin()
+    .from('gasto')
+    .select('id, cfdi_orden')
+    .eq('tenant_id', tenantId)
+    .eq('cfdi_uuid', xml.uuid), 'consolidado.gastos_ya_sellados');
+  if (errSellados) throw new Error(`guardarYConciliarConsolidado: ${errSellados.message}`);
+  const selladoPorIndice = new Map(
+    (yaSellados ?? [])
+      .filter((g) => g.cfdi_orden !== null && g.cfdi_orden !== undefined)
+      .map((g) => [Number(g.cfdi_orden), String(g.id)]),
+  );
+
   const rango = rangoFechasLineas(xml.lineas);
   let candidatosDb: Gasto[] = [];
   if (rango) {
@@ -255,7 +275,15 @@ export async function guardarYConciliarConsolidado(
     }));
   }
 
-  const resultados = conciliarLineas(xml.lineas, candidatosDb);
+  // Las líneas cuya decisión YA quedó sellada en `gasto` no se re-adivinan;
+  // el JOIN corre solo para el resto.
+  const preClamadas: ResultadoLinea[] = xml.lineas
+    .filter((l) => selladoPorIndice.has(l.indice))
+    .map((l) => ({ linea: l, estatus: 'conciliada' as const, gastoId: selladoPorIndice.get(l.indice) as string, candidatos: [] }));
+  const resultados = [
+    ...preClamadas,
+    ...conciliarLineas(xml.lineas.filter((l) => !selladoPorIndice.has(l.indice)), candidatosDb),
+  ];
 
   // EN LOTES DE 10, NO EN SERIE (auditoría 3, REND-C1): el UPDATE por línea
   // en serie sumaba ~300s con 1,000 conciliadas contra maxDuration=120 —
@@ -264,7 +292,9 @@ export async function guardarYConciliarConsolidado(
   // que una falle no pierde el resto (`enLotes` atrapa el error en su
   // lugar); un `false` sin error (el guardia negó la fila) se registra
   // porque en el camino automático es señal de carrera real.
-  const porLigar = resultados.filter((r) => r.estatus === 'conciliada' && r.gastoId);
+  // Las pre-clamadas NO se re-ligan: su gasto ya trae el sello.
+  const porLigar = resultados.filter((r) =>
+    r.estatus === 'conciliada' && r.gastoId && !selladoPorIndice.has(r.linea.indice));
   const ligados = await enLotes(porLigar, 10, (r) =>
     ligarLineaAGasto(tenantId, xml.uuid!, r.linea.indice, r.gastoId as string));
   ligados.forEach((l, i) => {
@@ -294,7 +324,14 @@ export async function guardarYConciliarConsolidado(
     .from('cfdi_consolidado_linea')
     .upsert(filasLinea, { onConflict: 'cfdi_xml_id,indice' }), 'consolidado.guardar_lineas');
   if (errLineas) {
+    // SE PROPAGA, no se traga (auditoría 3, BE-A4): devolver el resumen
+    // normal aquí era un acuse que mentía — "están en el panel" con el panel
+    // en cero, porque la cola del contador ES esta tabla y los candidatos
+    // calculados se acaban de perder. Los gastos ya sellados arriba NO se
+    // deshacen: el reenvío los reconoce por su sello (bloque de reanudación)
+    // y reconstruye sus líneas sin re-adivinar.
     logger.error('consolidado.guardar_lineas_error', { tenant: tenantId, cfdiXmlId, err: errLineas.message });
+    throw new Error(`guardarYConciliarConsolidado: no se pudieron guardar las líneas — ${errLineas.message}`);
   }
 
   const conciliadas = resultados.filter((r) => r.estatus === 'conciliada').length;
