@@ -105,7 +105,18 @@ export interface Rentabilidad {
   ingreso: number;
   /** Lo comprobado por los operadores, de `liquidacion.total_comprobado`. */
   costoComprobado: number;
-  utilidad: number;
+  /**
+   * Ingreso menos lo COMPROBADO EN EL VIAJE. Se llamaba `utilidad` y el nombre
+   * estaba mal: un dueño de flota lee "utilidad" y entiende ganancia, y este
+   * número NO resta sueldo del operador, mantenimiento, llantas, seguro,
+   * depreciación, financiamiento ni gastos de administración. Un viaje puede
+   * salir con contribución sana y haber perdido dinero.
+   *
+   * "Contribución" es el término contable exacto —ingreso menos costos
+   * variables directos— y además avisa por sí solo que no es la utilidad. El
+   * día que exista un motor de costo completo, ESE se podrá llamar utilidad.
+   */
+  contribucion: number;
   /** `null` cuando no hay ingreso capturado: un margen sobre 0 es división por cero. */
   margenPct: number | null;
   viajesConIngreso: number;
@@ -143,7 +154,7 @@ export async function getRentabilidad(tenantId: string): Promise<Rentabilidad> {
   return {
     ingreso: round2(ingreso),
     costoComprobado: round2(costoComprobado),
-    utilidad: round2(ingreso - costoComprobado),
+    contribucion: round2(ingreso - costoComprobado),
     margenPct: ingreso > 0 ? round2(((ingreso - costoComprobado) / ingreso) * 100) : null,
     viajesConIngreso: conIngreso,
     viajesSinIngreso: sinIngreso,
