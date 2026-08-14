@@ -223,6 +223,58 @@ export function digestDe(err: unknown): string | undefined {
   return typeof d === 'string' ? d : undefined;
 }
 
+// Lo que se borra del mensaje antes de derivar el código: un UUID o una cifra
+// larga (timestamp, epoch, id numérico) haría que la MISMA causa produjera un
+// código distinto en cada corrida — y `discriminadores` convertiría cada
+// corrida en un issue nuevo, que es exactamente el ruido que OP-A1 enseñó a no
+// generar. Las cifras cortas (un HTTP 500, un código 190 de Meta) se quedan:
+// esas sí distinguen causas.
+const VARIABLE_EN_MENSAJE = new RegExp(
+  `\\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\b|\\d{4,}`,
+  'g',
+);
+
+/**
+ * Código ESTABLE de la causa de un error, para `meta.codigo` (que
+ * `discriminadores` ya lee y suma al fingerprint).
+ *
+ * Los catch de los cron emitían solo `{error}`, y el mensaje NO entra al
+ * fingerprint: dos causas distintas ("token vencido" hoy, "tabla no existe"
+ * mañana) caían en el mismo issue viejo de Sentry, que ya no notifica. Esto es
+ * el discriminador que faltaba, con dos decisiones:
+ *
+ *   · Si el error trae `code` (PostgREST '42P01', Node 'ECONNREFUSED', Meta
+ *     190), se usa tal cual: ya es el nombre de la causa y se puede buscar.
+ *   · Si no, huella FNV del `name:mensaje` NORMALIZADO — mismo algoritmo y
+ *     mismo formato que `huellaId` del logger, con prefijo `err:` propio. Dos
+ *     corridas con la misma causa dan el mismo código aunque el mensaje
+ *     traiga un UUID o un timestamp distinto.
+ *
+ * NO se usa `digestDe(err)` a propósito: el digest de Next son diez dígitos
+ * —la forma exacta de un celular— y el redactor del logger lo convierte en
+ * `[TEL]` bajo cualquier clave que no sea `digest`, colapsando todas las
+ * causas en un solo literal. El `err:` + hex de aquí no coincide con ninguna
+ * regla del redactor, verificado contra `SENSIBLE` en logger.ts.
+ */
+export function codigoDeError(err: unknown): string {
+  const objeto = err as { code?: unknown; name?: unknown; message?: unknown } | null | undefined;
+  const code = objeto?.code;
+  if ((typeof code === 'string' && code) || typeof code === 'number') return String(code);
+
+  const nombre = typeof objeto?.name === 'string' ? objeto.name : '';
+  const mensaje = typeof objeto?.message === 'string' ? objeto.message : String(err ?? '');
+  const normalizado = `${nombre}:${mensaje}`.replace(VARIABLE_EN_MENSAJE, '#');
+
+  // FNV-1a 64 bits — el mismo de `huellaId`, no compartido para no exportar
+  // del logger un primitivo que invite a huellar fuera de su pipeline.
+  let h = 0xcbf29ce484222325n;
+  for (let i = 0; i < normalizado.length; i++) {
+    h ^= BigInt(normalizado.charCodeAt(i));
+    h = (h * 0x100000001b3n) & 0xffffffffffffffffn;
+  }
+  return `err:${h.toString(16).padStart(16, '0').slice(0, 12)}`;
+}
+
 /**
  * Reporta una EXCEPCIÓN, con su stack.
  *

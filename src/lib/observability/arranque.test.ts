@@ -22,6 +22,7 @@ function ponerTodo() {
   vi.stubEnv('DEMO_TENANT_ID', '11111111-1111-1111-1111-111111111111');
   vi.stubEnv('LIKIDA_WHATSAPP_MSG_USD', '0.008');
   vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://likidaai.vercel.app');
+  vi.stubEnv('ALERTA_EMAIL', 'operador@likida.ai');
 }
 
 describe('avisarConfiguracionSilenciosa', () => {
@@ -53,6 +54,22 @@ describe('avisarConfiguracionSilenciosa', () => {
     const linea = spy.mock.calls.map((c) => String(c[0])).join('\n');
     expect(linea).toContain('startup.config_silenciosa');
     expect(linea).toContain('NEXT_PUBLIC_APP_URL');
+  });
+
+  it('grita cuando falta ALERTA_EMAIL: los fallos de cron no le llegan a nadie por correo', async () => {
+    // Auditoría 4, D1: exactamente la clase de fallo de esta lista — sin ella
+    // el sistema arranca, atiende, y un cron puede fallar nueve días sin que
+    // nadie reciba un correo.
+    ponerTodo();
+    vi.stubEnv('ALERTA_EMAIL', '');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { avisarConfiguracionSilenciosa } = await import('./arranque');
+
+    avisarConfiguracionSilenciosa();
+
+    const linea = spy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(linea).toContain('startup.config_silenciosa');
+    expect(linea).toContain('ALERTA_EMAIL');
   });
 
   it('con todo puesto deja constancia y no alarma', async () => {

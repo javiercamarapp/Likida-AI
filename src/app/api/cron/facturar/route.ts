@@ -9,7 +9,11 @@ import { telefonoJefeDe } from '@/lib/likida/contactos';
 import { conPortales, PORTALES_CONOCIDOS } from '@/lib/likida/facturacion/adaptadores/registro';
 import { conNavegador } from '@/lib/likida/facturacion/adaptadores/pagina_playwright';
 import { logger } from '@/lib/logger';
+import { codigoDeError } from '@/lib/observability/sentry';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { avisarCorridasPorFlota } from '@/lib/likida/agentes/notificaciones';
+import { registrarCorrida } from '@/lib/likida/agentes/corridas';
+import { modoEfectivo } from '@/lib/likida/facturacion/modo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -256,8 +260,6 @@ export async function GET(req: Request) {
     return new NextResponse(null, { status: 401 });
   }
 
-  const modo = process.env.FACTURACION_MODO === 'emitir' ? 'emitir' as const : 'ensayo' as const;
-
   // Sin un solo portal escrito no hay nada que este cron pueda hacer, y se dice
   // con todas sus letras. Callarlo dejaría un cron en verde dando la impresión
   // de que la facturación automática está corriendo.
@@ -339,7 +341,15 @@ export async function GET(req: Request) {
     return procesarLoteEnCola(lote, req, hoy, inicioLote, quedaron);
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    logger.error('cron.facturar.falló', { error });
+    // El `codigo` discrimina la causa en el fingerprint de Sentry ("base
+    // caída" hoy y "cola malformada" mañana son issues DISTINTOS, o sea dos
+    // notificaciones); la alerta va al operador del sistema porque los avisos
+    // por tenant no cubren un fallo del cron entero. Aquí todavía no hay
+    // flota en juego —el fallo es antes de armar el lote—, no hay tenant que
+    // emitir.
+    const codigo = codigoDeError(e);
+    logger.error('cron.facturar.falló', { error, codigo });
+    await alertarOperador('cron.facturar', { error, codigo });
     return NextResponse.json({ error }, { status: 500 });
   }
 }
@@ -354,7 +364,12 @@ export async function procesarLoteEnCola(
   inicioLote: number,
   quedaron: number,
 ): Promise<NextResponse> {
-  const modo = process.env.FACTURACION_MODO === 'emitir' ? 'emitir' as const : 'ensayo' as const;
+  // D7 (auditoría 4): el modo que se REPORTA pasa por `modoEfectivo`, no por
+  // process.env a secas. Con FACTURACION_MODO=emitir y el mandato sin aceptar,
+  // el cron corría en ensayo (bien) y su JSON y su log decían "emitir"
+  // (mintiendo sobre su propio estado). Ahora dice el modo con el que de
+  // verdad va a correr — el mismo que decide `conNavegador`.
+  const modo = modoEfectivo(process.env.FACTURACION_MODO === 'emitir' ? 'emitir' : 'ensayo');
 
   // Cómo le fue a CADA flota que alcanzó turno. El éxito SÍ se registra: es lo
   // que rearma el filo del anti-ruido (`avisarCorridasPorFlota`). Las que se
@@ -365,6 +380,7 @@ export async function procesarLoteEnCola(
   // esta variable tiene que estar viva incluso cuando el lote reventó — que es
   // justo el caso en que el aviso importa.
   const corridas = new Map<string, unknown>();
+  const inicioCorrida = new Date();
 
   try {
     // ── Agrupar: flota → portal → tickets. El portal sale de `armar()`, que es
@@ -629,7 +645,13 @@ export async function procesarLoteEnCola(
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    logger.error('cron.facturar.falló', { error });
+    // Mismo criterio que el catch del GET: código estable para el fingerprint
+    // y alerta al operador. El fallo duro típico aquí cruza flotas (`if
+    // (arranco) throw e` propaga fuera del bucle), así que tampoco hay UN
+    // tenant que emitir sin mentir sobre el alcance.
+    const codigo = codigoDeError(e);
+    logger.error('cron.facturar.falló', { error, codigo });
+    await alertarOperador('cron.facturar', { error, codigo });
     return NextResponse.json({ error }, { status: 500 });
   } finally {
     // ── EN `finally`, Y ÉSA ES LA CORRECCIÓN ────────────────────────────────
@@ -650,5 +672,17 @@ export async function procesarLoteEnCola(
     // no puede convertir una corrida buena en un 500 — que es la única razón
     // por la que un `finally` daría miedo aquí.
     await avisarCorridasPorFlota('facturas', corridas);
+    // La bitácora de corridas (B3), en el MISMO finally y por la misma razón:
+    // el fallo duro es exactamente la corrida que más merece quedar anotada.
+    // Sin conteo de tareas por flota aquí (los renglones son por portal, no
+    // por flota): tareas null, y la ficha pinta «—», no un 0/0 inventado.
+    await Promise.allSettled([...corridas.entries()].map(([tenant, err]) =>
+      registrarCorrida(tenant, 'facturas', {
+        inicio: inicioCorrida,
+        fin: new Date(),
+        estado: err ? 'fallo' : 'ok',
+        disparo: 'cron',
+        error: err ? 'La corrida de facturación de esta flota no se pudo completar. El detalle quedó en los registros del sistema.' : undefined,
+      })));
   }
 }
