@@ -188,6 +188,13 @@ const CON_EMISOR: ReadonlySet<string> = new Set([
   'cobranza:corrida_fallida',
   // íd. desde el `finally` de `procesarLoteEnCola` (api/cron/facturar).
   'facturas:corrida_fallida',
+  // `avisar(..., 'cola_atorada', ...)` desde el mismo `finally` del cron de
+  // facturación: una llamada por flota con tickets que ESA corrida bloqueó
+  // (`bloqueadosPorFlota` — requiere_cuenta, CAPTCHA), con la magnitud MEDIDA.
+  // Los otros cinco agentes siguen sin este par a propósito: sus colas solo se
+  // miden en el render, no en un cron, y listarlos sin emisor sería el bug
+  // original de la pestaña.
+  'facturas:cola_atorada',
   // íd. desde `escalarViajesSinAceptar` (escalar_viaje.ts), con el fallo real
   // por flota: la que no tiene teléfono de jefe capturado.
   'conductores:corrida_fallida',
@@ -288,11 +295,11 @@ export function validarConfigNotificaciones(
   // creería estar cubierto de algo que no existe.
   //
   // El segundo filtro (`tieneEmisor`) es el que faltaba, y es el que de verdad
-  // muerde: el catálogo declara `cola_atorada` para los seis agentes y HOY
-  // nadie lo emite (`escalado` ya dejó de estar en ese caso: lo emite
-  // `escalar_viaje.ts` y su par vive en CON_EMISOR). Sin esta línea, un
+  // muerde: el catálogo declara `cola_atorada` para los seis agentes y hoy
+  // solo Facturas lo emite (el cron de facturación; `escalado` lo emite
+  // `escalar_viaje.ts` — sus pares viven en CON_EMISOR). Sin esta línea, un
   // POST fabricado —o la propia pantalla antes de que se le pusiera el
-  // candado— guardaba encendido un aviso imposible.
+  // candado— guardaba encendido un aviso imposible en los cinco restantes.
   const eventos = [...new Set(cruda.eventos ?? [])]
     .filter((e): e is EventoId => agente.eventos.includes(e as EventoId))
     .filter((e) => tieneEmisor(agente, e));
