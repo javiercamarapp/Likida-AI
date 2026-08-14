@@ -5,6 +5,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import {
   getTableroOperacion, getViajesSinAsignar, getCargaOperadores, crearViaje, avisarAlChofer,
+  asignarUnidad,
 } from '@/lib/likida/operacion';
 import { listOperadores, reasignarOperador } from '@/lib/likida/repo';
 import { crearOperador } from '@/lib/likida/administracion';
@@ -46,7 +47,7 @@ export default async function PaginaDespacho({
 
   // Las COLAS son el corazón: sin catch — base caída = página caída, no una
   // cola vacía que afirma "nada por asignar". El tablero y la carga degradan.
-  const [tablero, sinAsignar, viajes, operadores, carga, clientes] = await Promise.all([
+  const [tablero, sinAsignar, viajes, operadores, carga, clientes, unidades] = await Promise.all([
     safe(() => getTableroOperacion(tenantId)),
     getViajesSinAsignar(tenantId),
     getViajes(tenantId, 100),
@@ -60,6 +61,12 @@ export default async function PaginaDespacho({
     supabaseAdmin().from('cliente').select('id, nombre')
       .eq('tenant_id', tenantId).eq('activo', true).order('nombre')
       .then(({ data, error }) => (error || !data ? [] : data as Array<{ id: string; nombre: string }>)),
+    // Las unidades activas, mismo trato que los clientes: catálogo degradable
+    // (`catch → []`), porque la unidad también se puede asignar después.
+    supabaseAdmin().from('unidad').select('id, numero_economico')
+      .eq('tenant_id', tenantId).eq('activo', true).order('numero_economico')
+      .then(({ data, error }) => (error || !data ? [] :
+        (data as Array<{ id: string; numero_economico: string }>).map((u) => ({ id: u.id, numeroEconomico: u.numero_economico })))),
 ]);
 
   /** El chequeo que TODA action repite: sesión viva, rol que asigna, y que
@@ -117,6 +124,10 @@ export default async function PaginaDespacho({
         fechaInicio: fecha,
         anticipo,
         operadorId: texto('operadorId', 64),
+        // '' → null (sin unidad, que la base admite). Que el id sea de ESTA
+        // flota lo re-verifica `crearViaje` (`unidadPropia`), igual que hace
+        // con el operador — el `<select>` es UI, no servidor.
+        unidadId: texto('unidadId', 64),
         clienteId: ing.clienteId,
         ingresoFlete: ing.ingresoFlete,
         kmRecorridos: ing.kmRecorridos,
@@ -151,6 +162,28 @@ export default async function PaginaDespacho({
       // Asignado SÍ quedó; el aviso no salió — se dice y "Reavisar" existe.
       logger.error('despacho.aviso.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
       return { error: 'Quedó asignado, pero el aviso de WhatsApp no salió — usa Reavisar en "En curso".' };
+    }
+    redirect(destino);
+  }
+
+  async function asignarUnidadViaje(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
+    'use server';
+    const rechazo = await guardia();
+    if (rechazo) return { error: rechazo };
+
+    const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
+    const unidadId = typeof fd.get('unidadId') === 'string' ? (fd.get('unidadId') as string).trim().slice(0, 64) : '';
+    if (!viajeId) return { error: 'Falta el viaje.' };
+
+    try {
+      // `asignarUnidad` verifica que la unidad sea de ESTA flota, ancla el
+      // update a tenant Y comprueba filas afectadas: un viaje ajeno no se
+      // reporta como "asignado". `'' → null` desasigna — opción legítima,
+      // `viaje.unidad_id` es nullable.
+      await asignarUnidad(tenantId, viajeId, unidadId || null);
+    } catch (err) {
+      logger.error('despacho.asignar_unidad.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
+      return { error: 'No se pudo asignar la unidad. Inténtalo de nuevo.' };
     }
     redirect(destino);
   }
@@ -209,9 +242,11 @@ export default async function PaginaDespacho({
       activos={viajes.filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre')}
       operadores={operadores}
       clientes={clientes}
+      unidades={unidades}
       carga={carga}
       crear={crear}
       asignarYAvisar={asignarYAvisar}
+      asignarUnidadViaje={asignarUnidadViaje}
       reenviarAviso={reenviarAviso}
       altaOperador={altaOperador}
     />

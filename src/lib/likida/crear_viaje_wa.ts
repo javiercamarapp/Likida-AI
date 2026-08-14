@@ -821,3 +821,62 @@ export async function resolverOperadorPorNombre(
   }
   return candidatos[0];
 }
+
+// ── Del número económico a la unidad ───────────────────────────────────────
+
+export interface CandidatoUnidad {
+  unidadId: string;
+  /** Como está en la base — es lo que se le enseña al jefe, no lo que tecleó. */
+  numeroEconomico: string;
+}
+
+/**
+ * ¿Qué unidad es "la 47"? `null` si no hay ninguna activa con ese número.
+ *
+ * `.ilike` SIN comodines: el parser (`RE_UNIDAD`) solo deja pasar
+ * `[a-z0-9-]`, así que no puede venir un `%` ni un `_` — el ilike es una
+ * igualdad case-insensitive ("t-102" encuentra a "T-102"), no un patrón.
+ *
+ * `unidad_economico_unico` (0047) es por texto EXACTO, así que en teoría
+ * podrían convivir "t-102" y "T-102" como filas distintas. Si el ilike trae
+ * dos, se prefiere la coincidencia exacta; sin exacta, se devuelve `null` en
+ * vez de elegir a ciegas — amarrar el viaje al camión equivocado es peor que
+ * dejarlo sin unidad.
+ *
+ * FALLA COMO `resolverOperadorPorNombre`: un error de consulta se lanza como
+ * `ConsultaFallida`, nunca se devuelve `null` — "no pude preguntar" no es
+ * "no está dada de alta".
+ */
+export async function resolverUnidadPorEconomico(
+  tenantId: string,
+  texto: string,
+): Promise<CandidatoUnidad | null> {
+  if (!tenantId) throw new Error('resolverUnidadPorEconomico: falta tenantId');
+  const buscado = (typeof texto === 'string' ? texto : '').trim();
+  if (!buscado) return null;
+
+  const { data, error } = await acotada(
+    supabaseAdmin().from('unidad').select('id, numero_economico')
+      .eq('tenant_id', tenantId).eq('activo', true)
+      .ilike('numero_economico', buscado)
+      .limit(2),
+    'resolverUnidadPorEconomico',
+  );
+  if (error) throw new ConsultaFallida(`unidades del tenant: ${error.message}`);
+
+  const filas = (data ?? []) as Array<{ id: unknown; numero_economico: unknown }>;
+  const elegir = (f: { id: unknown; numero_economico: unknown }): CandidatoUnidad | null => {
+    const id = typeof f.id === 'string' ? f.id : '';
+    const eco = typeof f.numero_economico === 'string' ? f.numero_economico : '';
+    return id && eco ? { unidadId: id, numeroEconomico: eco } : null;
+  };
+
+  if (filas.length === 0) return null;
+  if (filas.length === 1) return elegir(filas[0]);
+  const exacta = filas.find((f) => f.numero_economico === buscado);
+  if (!exacta) {
+    logger.warn('unidad.economico_ambiguo', { tenantId, buscado });
+    return null;
+  }
+  return elegir(exacta);
+}

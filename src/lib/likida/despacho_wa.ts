@@ -5,7 +5,7 @@ import { ConsultaFallida } from './conv';
 import { esAfirmacion, esNegacion } from './intake/huerfanos';
 import {
   interpretarPeticionViaje, resumenParaConfirmar, resolverOperadorPorNombre,
-  OperadorNombreAmbiguo,
+  resolverUnidadPorEconomico, OperadorNombreAmbiguo,
 } from './crear_viaje_wa';
 import { crearViaje } from './operacion';
 import { violaIndice } from './pg_errores';
@@ -45,7 +45,13 @@ interface PendienteViaje {
   origen: string | null;
   destino: string | null;
   anticipo: number | null;
+  /** El número económico como está en la BASE cuando se amarró, o como lo
+   *  tecleó el jefe cuando no. Es lo que el resumen enseña. */
   unidad: string | null;
+  /** El id resuelto contra `unidad.numero_economico` AL ARMAR el pendiente.
+   *  `null` = el jefe dictó una unidad que no está dada de alta (y el resumen
+   *  ya se lo dijo); ausente en pendientes anteriores a este campo. */
+  unidadId?: string | null;
   /** ISO de cuándo se propuso — la vigencia se mide contra esto. */
   en: string;
 }
@@ -181,6 +187,9 @@ export async function atenderDespachoOficina(
           origen: pendiente.origen ?? undefined,
           destino: pendiente.destino ?? undefined,
           anticipo: pendiente.anticipo ?? undefined,
+          // Ya resuelta AL ARMAR el pendiente (contra `numero_economico`, de
+          // esta flota) — `crearViaje` la re-verifica igual (`unidadPropia`).
+          unidadId: pendiente.unidadId ?? undefined,
           fechaInicio: hoyMx(ahora),
         });
         // El pendiente ya lo limpió el claim — aquí no queda nada que borrar.
@@ -211,11 +220,14 @@ export async function atenderDespachoOficina(
 
         const ruta = pendiente.origen && pendiente.destino
           ? `${pendiente.origen} → ${pendiente.destino}` : (pendiente.origen ?? pendiente.destino ?? 'sin ruta');
+        // La unidad SE DICE con su resultado real: amarrada con su ✓, o la
+        // verdad de que no está dada de alta — nunca un "va incluida" sin dato.
+        const conUnidad = pendiente.unidadId && pendiente.unidad ? ` · unidad ${pendiente.unidad} ✓` : '';
         return [
-          `Viaje creado ✅ ${pendiente.operadorNombre} · ${ruta}.`,
+          `Viaje creado ✅ ${pendiente.operadorNombre} · ${ruta}${conUnidad}.`,
           lineaAviso,
-          ...(pendiente.unidad
-            ? [`(La unidad «${pendiente.unidad}» no la amarré: por aquí todavía no; se captura en el panel.)`]
+          ...(pendiente.unidad && !pendiente.unidadId
+            ? [`La unidad «${pendiente.unidad}» no está dada de alta — el viaje quedó sin unidad; asígnala en Despacho.`]
             : []),
         ].join('\n');
       } catch (e) {
@@ -292,17 +304,45 @@ export async function atenderDespachoOficina(
     return `No tengo un operador activo que se llame «${intencion.operador}». Revisa el nombre, o dalo de alta en Despacho.`;
   }
 
+  // La unidad se resuelve AQUÍ, no al confirmar: así el resumen ya dice la
+  // verdad de lo que va a pasar — amarrada (con el número como está en la
+  // base) o no encontrada, ANTES de que el jefe responda SÍ. Un error de
+  // consulta corta el armado: prometer un amarre que no se pudo verificar
+  // sería afirmar sin dato.
+  let unidadId: string | null = null;
+  let unidadEnsenada = intencion.unidad;
+  let avisoUnidad = '';
+  if (intencion.unidad) {
+    let u;
+    try {
+      u = await resolverUnidadPorEconomico(cuenta.tenantId, intencion.unidad);
+    } catch (e) {
+      if (e instanceof ConsultaFallida) {
+        return 'No pude consultar las unidades ahorita — inténtalo de nuevo en un momento.';
+      }
+      throw e;
+    }
+    if (u) {
+      unidadId = u.unidadId;
+      unidadEnsenada = u.numeroEconomico;
+    } else {
+      avisoUnidad = `\n\n⚠️ La unidad «${intencion.unidad}» no está dada de alta — si confirmas, el viaje queda sin unidad.`;
+    }
+  }
+
   await guardarPendiente(cuenta.tenantId, telefono, {
     operadorId: candidato.operadorId,
     operadorNombre: candidato.nombre,
     origen: intencion.origen,
     destino: intencion.destino,
     anticipo: intencion.anticipo,
-    unidad: intencion.unidad,
+    unidad: unidadEnsenada,
+    unidadId,
     en: ahora.toISOString(),
   });
 
   // El resumen enseña el nombre RESUELTO de la base, no el texto del jefe:
-  // lo que va a confirmar es a quién le llega el aviso de verdad.
-  return resumenParaConfirmar({ ...intencion, operador: candidato.nombre });
+  // lo que va a confirmar es a quién le llega el aviso de verdad. La unidad,
+  // igual: si se amarró, sale con su número canónico.
+  return resumenParaConfirmar({ ...intencion, operador: candidato.nombre, unidad: unidadEnsenada }) + avisoUnidad;
 }

@@ -1,26 +1,38 @@
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { getUnidades } from '@/lib/likida/operacion';
+import { puedeAdministrar } from '@/lib/auth/permisos';
+import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { getUnidades, validarUnidad, crearUnidad, editarUnidad } from '@/lib/likida/operacion';
 import { VistaUnidades } from './vista';
+import type { ResultadoForma } from './forma';
 
 export const dynamic = 'force-dynamic';
 
+const RUTA = '/dashboard/unidades';
+
 /**
  * El Registro de Unidades — el activo que produce el dinero, con las vigencias
- * que la ley le exige para poder producirlo.
+ * que la ley le exige para poder producirlo. Desde el 14-ago-2026 también se
+ * CAPTURA aquí: era la única entidad del panel sin alta (solo la API la
+ * escribía), y una flota sin TMS no tenía cómo estrenar su parque.
  *
- * El motor (`getUnidades`) ya estaba terminado desde la 0047: elige el papel
- * más próximo a vencer de los tres y cuenta las órdenes de mantenimiento
- * abiertas. Lo único que faltaba era la pantalla.
+ * ── DOS PUERTAS DISTINTAS, el patrón de clientes ──────────────────────────
+ *  · VER es área `operacion` (`puedeVerRuta`): el jefe de tráfico es
+ *    exactamente quien debe enterarse de que una unidad no puede salir.
+ *  · ESCRIBIR es `puedeAdministrar` (superadmin y flota_admin): una unidad es
+ *    un activo de la empresa y su alta cambia el denominador de todo lo que
+ *    se mide por unidad — misma puerta que `POST /v1/unidades`.
  *
- * SIN CATCH: una pantalla que existe para avisar de papeles vencidos no puede
- * pintar "todo en regla" porque la consulta falló. Si no se puede leer, se cae
- * y `error.tsx` lo dice.
+ * LAS DOS SE RE-COMPRUEBAN DENTRO del server action: el `rol` del render es
+ * el del momento en que se pintó, y una server action es un endpoint
+ * alcanzable por POST directo. El `tenantId` va por sesión re-resuelta, nunca
+ * del formulario.
  *
- * Es área `operacion` y no `dinero` a propósito: el jefe de tráfico es
- * exactamente quien tiene que enterarse de que una unidad no puede salir, y la
- * pantalla no enseña un peso.
+ * SIN CATCH en la lectura: una pantalla que existe para avisar de papeles
+ * vencidos no puede pintar "todo en regla" porque la consulta falló. Si no se
+ * puede leer, se cae y `error.tsx` lo dice.
  */
 export default async function PaginaUnidades({
   searchParams,
@@ -28,10 +40,67 @@ export default async function PaginaUnidades({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/unidades', sp);
-  if (!puedeVerRuta(rol, '/dashboard/unidades')) redirect('/dashboard');
+  const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
+  if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   const unidades = await getUnidades(tenantId);
 
-  return <VistaUnidades unidades={unidades} />;
+  async function guardarUnidad(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver las unidades.' };
+    if (!puedeAdministrar(s.rol)) {
+      return { ok: false, error: 'Solo el dueño de la flota da de alta y edita unidades.' };
+    }
+
+    const id = String(fd.get('id') ?? '').trim();
+    const eco = String(fd.get('numeroEconomico') ?? '').trim();
+    try {
+      // La validación del navegador (required, max) avisa temprano; ÉSTA es
+      // la que manda, y es la misma función que prueba `operacion.test.ts`.
+      const valores = validarUnidad({
+        numeroEconomico: eco,
+        placas: String(fd.get('placas') ?? ''),
+        marca: String(fd.get('marca') ?? ''),
+        modelo: String(fd.get('modelo') ?? ''),
+        anio: String(fd.get('anio') ?? ''),
+        polizaVence: String(fd.get('polizaVence') ?? ''),
+        permisoSictVence: String(fd.get('permisoSictVence') ?? ''),
+        verificacionVence: String(fd.get('verificacionVence') ?? ''),
+      });
+
+      if (id) await editarUnidad(s.tenantId, id, valores);
+      else await crearUnidad(s.tenantId, valores);
+
+      revalidatePath(RUTA);
+      const sinPapeles = !valores.polizaVence && !valores.permisoSictVence && !valores.verificacionVence;
+      return {
+        ok: true,
+        mensaje: id
+          ? `La unidad ${valores.numeroEconomico} quedó actualizada.`
+          : `La unidad ${valores.numeroEconomico} ya está dada de alta.${sinPapeles
+            ? ' Sin fechas de papeles sale como "sin papeles" — captúralas para que Likida avise antes de que venzan.'
+            : ''}`,
+      };
+    } catch (e) {
+      // El choque contra `unidad_economico_unico` llega como Error plano
+      // (`crearUnidad` no lo traduce porque `POST /v1/unidades` reconoce el
+      // nombre del índice en el mensaje). Aquí sí se dice en palabras de
+      // quien capturó; el resto va por `mensajeParaPantalla`.
+      if (e instanceof Error && e.message.includes('unidad_economico_unico')) {
+        return { ok: false, error: `Ya tienes una unidad con el número económico "${eco}". Búscala en la lista en vez de darla de alta otra vez.` };
+      }
+      return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar la unidad' : 'dar de alta la unidad') };
+    }
+  }
+
+  return (
+    <VistaUnidades
+      unidades={unidades}
+      // El gateo de la UI solo decide si la forma SE PINTA; la puerta real se
+      // re-comprueba adentro del action (alcanzable por POST directo).
+      puedeEditar={puedeAdministrar(rol)}
+      guardar={guardarUnidad}
+    />
+  );
 }

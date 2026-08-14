@@ -11,8 +11,9 @@ import { Plus } from 'lucide-react';
  * llega como server action del host, que es quien re-verifica permisos
  * adentro (el patrón del repo: el gateo de la UI solo decide si se pinta).
  *
- * Campos = los de `NuevoViaje` (operacion.ts). La unidad llega cuando
- * Despacho exista — este formulario no promete lo que aún no ofrece.
+ * Campos = los de `NuevoViaje` (operacion.ts). La unidad ya se ofrece aquí
+ * (14-ago-2026): `viaje.unidad_id` es nullable, así que "Sin asignar todavía"
+ * es una opción que la base sí admite — a diferencia del operador.
  */
 
 export type AccionCrearViaje = (
@@ -35,13 +36,16 @@ function BotonCrear() {
   );
 }
 
-export function FormaViaje({ action, operadores, clientes }: {
+export function FormaViaje({ action, operadores, clientes, unidades }: {
   action: AccionCrearViaje;
   operadores: Array<{ id: string; nombre: string }>;
   /** Los clientes de la flota, para atar el viaje a quien paga el flete.
    *  Vacío = todavía no hay ninguno dado de alta, y el bloque del ingreso lo
    *  dice en vez de enseñar un `<select>` sin opciones. */
   clientes: Array<{ id: string; nombre: string }>;
+  /** Las unidades activas de la flota. Mismo trato que los clientes: vacío =
+   *  una frase que dice dónde se dan de alta, nunca un `<select>` hueco. */
+  unidades: Array<{ id: string; numeroEconomico: string }>;
 }) {
   const [estado, dispatch] = useActionState(action, null);
 
@@ -92,6 +96,21 @@ export function FormaViaje({ action, operadores, clientes }: {
               ? 'Necesitas al menos un operador dado de alta: un viaje no puede existir sin quién lo maneje. El alta rápida está a la derecha.'
               : 'Likida le avisa por WhatsApp en cuanto el viaje exista.'}
           </p>
+        </div>
+        <div>
+          <label htmlFor="unidadId" className={ETIQUETA}>Unidad</label>
+          {unidades.length === 0 ? (
+            <p className="text-[12px] py-2" style={{ color: 'var(--faint)' }}>
+              Todavía no hay unidades dadas de alta. Se registran en Unidades.
+            </p>
+          ) : (
+            <select id="unidadId" name="unidadId" className={CAMPO} style={{ background: 'var(--surface)' }} defaultValue="">
+              <option value="">Sin asignar todavía</option>
+              {unidades.map((u) => (
+                <option key={u.id} value={u.id}>{u.numeroEconomico}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 

@@ -105,6 +105,10 @@ export default async function PaginaViajes({
         operadoresSinAmarrar: r.operadoresSinAmarrar,
         sinOperador: r.sinOperador,
         operadorOcupado: r.operadorOcupado,
+        unidadesSinAmarrar: r.unidadesSinAmarrar,
+        sinUnidad: r.sinUnidad,
+        clientesSinAmarrar: r.clientesSinAmarrar,
+        sinCliente: r.sinCliente,
       },
     };
   }

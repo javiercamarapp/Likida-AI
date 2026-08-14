@@ -812,6 +812,11 @@ export interface ViajeRow {
   id: string; folio: string; origen: string | null; destino: string | null;
   estatus: string; anticipo: number; operadorNombre: string | null;
   fechaInicio: string | null; intakePendientes: number;
+  // La unidad amarrada (`viaje.unidad_id`, 0047). `null` = viaje sin unidad —
+  // que es un estado real y perseguible (el tablero del despacho lo cuenta),
+  // no un hueco. El eco viaja resuelto para que la pantalla no re-consulte.
+  unidadId: string | null;
+  unidadEco: string | null;
   // Las cuatro marcas de la confirmación del chofer (mig. 0058). Se leen en
   // `dashboard/confirmacion.ts`; aquí solo se traen. Un `null` en `avisadoEn`
   // NO significa lo mismo que un 0 en `avisosEnviados`: el primero es "no hay
@@ -823,10 +828,11 @@ export interface ViajeRow {
   avisosEnviados: number;
 }
 
-/** Los viajes de la flota, el más reciente primero. `viaje` NO tiene columna
- *  de unidad ni de POD (no existen en el esquema), así que la tabla enseña lo
- *  que sí hay — inventar columnas vacías haría ver el producto más completo y
- *  la pantalla más inútil. */
+/** Los viajes de la flota, el más reciente primero. `viaje.unidad_id` existe
+ *  desde la 0047 y aquí se trae con su número económico (el comentario viejo
+ *  decía que no había columna de unidad — dejó de ser verdad ese día). De POD
+ *  sigue sin haber columna en `viaje`: esa evidencia vive en su tabla y se
+ *  cruza en `getPods`. */
 /**
  * Cuántos viajes tiene la flota EN TOTAL.
  *
@@ -948,7 +954,7 @@ export async function contarEscalados(tenantId: string): Promise<number | null> 
 export async function getViajes(tenantId: string, limite = 100): Promise<ViajeRow[]> {
   const res = await supabaseAdmin()
     .from('viaje')
-    .select('id, folio, origen, destino, estatus, anticipo, fecha_inicio, intake_pendientes, avisado_en, aceptado_en, escalado_en, avisos_enviados, operador:operador_id(nombre)')
+    .select('id, folio, origen, destino, estatus, anticipo, fecha_inicio, intake_pendientes, avisado_en, aceptado_en, escalado_en, avisos_enviados, unidad_id, operador:operador_id(nombre), unidad:unidad_id(numero_economico)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(limite);
@@ -963,6 +969,8 @@ export async function getViajes(tenantId: string, limite = 100): Promise<ViajeRo
     operadorNombre: ((v.operador as { nombre?: string } | null)?.nombre) ?? null,
     fechaInicio: (v.fecha_inicio as string) || null,
     intakePendientes: Number(v.intake_pendientes ?? 0),
+    unidadId: (v.unidad_id as string) || null,
+    unidadEco: ((v.unidad as { numero_economico?: string } | null)?.numero_economico) ?? null,
     avisadoEn: (v.avisado_en as string) || null,
     aceptadoEn: (v.aceptado_en as string) || null,
     escaladoEn: (v.escalado_en as string) || null,

@@ -1,9 +1,13 @@
 import { Truck, ShieldAlert, ShieldCheck, Clock, CircleDashed, Wrench } from 'lucide-react';
-import type { UnidadRow } from '@/lib/likida/operacion';
+import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
 import { clasificarVigencia, contarVigencias, avisoVigencias, type EstadoVigencia } from '@/lib/likida/vigencias';
 import { numero } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
+// El Plegable es el mismo `<details>` de clientes — no hay una segunda
+// librería de UI, y un plegable propio sería su segunda copia.
+import { Plegable } from '../clientes/forma';
+import { FormaUnidad, type AccionForma } from './forma';
 
 const PILL: Record<EstadoVigencia, { fg: string; bg: string; Icono: typeof ShieldCheck }> = {
   vencido: { fg: 'var(--bad)', bg: 'var(--badbg)', Icono: ShieldAlert },
@@ -39,7 +43,31 @@ const ESTADO_UNIDAD: Record<string, string> = {
  * está sin verificar. Pintarla verde es la mentira que el gerente descubriría
  * cuando lo pare un inspector.
  */
-export function VistaUnidades({ unidades }: { unidades: readonly UnidadRow[] }) {
+/** Lo capturado de una unidad, en la forma cruda que la forma edita. */
+function aInicial(u: UnidadRow): UnidadCruda {
+  return {
+    numeroEconomico: u.numeroEconomico,
+    placas: u.placas ?? '',
+    marca: u.marca ?? '',
+    modelo: u.modelo ?? '',
+    anio: u.anio == null ? '' : String(u.anio),
+    polizaVence: u.polizaVence ?? '',
+    permisoSictVence: u.permisoSictVence ?? '',
+    verificacionVence: u.verificacionVence ?? '',
+  };
+}
+
+const INICIAL_VACIO: UnidadCruda = {
+  numeroEconomico: '', placas: '', marca: '', modelo: '', anio: '',
+  polizaVence: '', permisoSictVence: '', verificacionVence: '',
+};
+
+export function VistaUnidades({ unidades, puedeEditar, guardar }: {
+  unidades: readonly UnidadRow[];
+  /** Si se PINTA la captura. La puerta real vive dentro del server action. */
+  puedeEditar: boolean;
+  guardar: AccionForma;
+}) {
   const activas = unidades.filter((u) => u.activo);
   const conteo = contarVigencias(activas);
   const aviso = avisoVigencias(conteo);
@@ -74,6 +102,22 @@ export function VistaUnidades({ unidades }: { unidades: readonly UnidadRow[] }) 
                 <p className="text-[12.5px] mt-0.5">{aviso}</p>
               </div>
             </div>
+          )}
+
+          {/* El alta va ANTES del estado vacío a propósito: con cero unidades,
+              esta sección es la única forma de que deje de haber cero. Solo se
+              pinta a quien puede administrar — el encargado la lee, no la
+              escribe (misma puerta que clientes). */}
+          {puedeEditar && (
+            <section className="card p-4">
+              <h2 className="font-display text-[14px] font-semibold mb-1">Dar de alta una unidad</h2>
+              <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>
+                Con sus vigencias capturadas, Likida avisa qué papel vence primero.
+              </p>
+              <Plegable resumen="Capturar unidad">
+                <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" />
+              </Plegable>
+            </section>
           )}
 
           {activas.length === 0 ? (
@@ -142,6 +186,14 @@ export function VistaUnidades({ unidades }: { unidades: readonly UnidadRow[] }) 
                             </span>
                           )}
                         </div>
+
+                        {puedeEditar && (
+                          <div className="mt-3">
+                            <Plegable resumen="Editar unidad">
+                              <FormaUnidad accion={guardar} id={u.id} inicial={aInicial(u)} idPrefijo={`u-${u.id}`} />
+                            </Plegable>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </section>

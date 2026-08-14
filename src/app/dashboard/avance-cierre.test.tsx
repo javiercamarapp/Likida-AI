@@ -24,6 +24,7 @@ function viaje(fechaInicio: string | null, estatus: string): ViajeRow {
   return {
     id: `v${contador}`, folio: `VJ-${contador}`, origen: null, destino: null,
     estatus, anticipo: 0, operadorNombre: null, fechaInicio, intakePendientes: 0,
+    unidadId: null, unidadEco: null,
     avisadoEn: null, aceptadoEn: null, escaladoEn: null, avisosEnviados: 0,
   };
 }

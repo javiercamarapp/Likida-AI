@@ -4,6 +4,8 @@ import { acotada } from './presupuesto';
 import { traerTodo } from './pg';
 import { resolverOperadorPorNombre, OperadorNombreAmbiguo } from './crear_viaje_wa';
 import { ConsultaFallida } from './conv';
+import { validarIngreso } from './ingreso_viaje';
+import { DatoInvalido } from './errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // IMPORTADOR DE VIAJES (kit del PoC, 14-ago-2026) — el export del TMS del
@@ -35,6 +37,14 @@ export interface FilaViajeImportada {
   anticipo: number | null;
   /** El texto del TMS — se resuelve contra `operador` al importar. */
   operadorNombre: string | null;
+  /** El número económico tal cual viene — se resuelve contra `unidad`. */
+  unidadEco: string | null;
+  /** El nombre del cliente tal cual viene — se resuelve contra `cliente`. */
+  clienteNombre: string | null;
+  /** `null` = la celda venía VACÍA (no capturado); `0` = un cero tecleado.
+   *  La distinción es la que sostiene toda la medición de margen. */
+  ingresoFlete: number | null;
+  kmRecorridos: number | null;
 }
 
 export interface LecturaImportacion {
@@ -45,13 +55,21 @@ export interface LecturaImportacion {
 }
 
 /** Encabezados que el mundo real usa. Minúsculas, sin acentos. */
-const COLUMNAS: Record<keyof Omit<FilaViajeImportada, 'fechaInicio'> | 'fecha', string[]> = {
+const COLUMNAS: Record<
+  'folio' | 'origen' | 'destino' | 'fecha' | 'anticipo' | 'operadorNombre'
+  | 'unidad' | 'cliente' | 'ingreso' | 'km',
+  string[]
+> = {
   folio: ['folio', 'viaje', 'no viaje', 'no. viaje', 'numero de viaje', 'id viaje', 'referencia'],
   origen: ['origen', 'de', 'sale de', 'ciudad origen'],
   destino: ['destino', 'a', 'hasta', 'llega a', 'ciudad destino'],
   fecha: ['fecha', 'fecha inicio', 'fecha de inicio', 'salida', 'fecha salida', 'inicio'],
   anticipo: ['anticipo', 'anticipo mxn', 'monto anticipo'],
   operadorNombre: ['operador', 'chofer', 'conductor', 'nombre operador', 'nombre del operador'],
+  unidad: ['unidad', 'numero economico', 'no economico', 'no. economico', 'economico', 'camion'],
+  cliente: ['cliente', 'nombre cliente', 'razon social'],
+  ingreso: ['ingreso', 'flete', 'ingreso flete', 'precio flete', 'monto flete'],
+  km: ['km', 'kilometros', 'km recorridos', 'distancia'],
 };
 
 function normalizarEncabezado(v: unknown): string {
@@ -71,11 +89,16 @@ export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
   const limpio = String(v).replace(/[$\s]/g, '');
   if (!limpio) return null;
   // "1.234,56" europeo vs "1,234.56": si hay coma Y punto, el ÚLTIMO es el decimal.
+  // Con coma SOLA se aplica la regla de `ingreso_viaje.ts`: la coma seguida de
+  // exactamente tres dígitos es separador de MILLARES ("1,240" son mil
+  // doscientos cuarenta km, no 1.24) y cualquier otra es decimal ("8000,50").
+  // Antes una coma sola siempre era decimal, y "1,240" entraba como 1.24 — una
+  // cifra plausible que nadie cuestionaría, que es el peor tipo de error.
   const normal = limpio.includes(',') && limpio.includes('.')
     ? (limpio.lastIndexOf(',') > limpio.lastIndexOf('.')
       ? limpio.replace(/\./g, '').replace(',', '.')
       : limpio.replace(/,/g, ''))
-    : limpio.replace(',', '.');
+    : limpio.replace(/,(?=\d{3}\b)/g, '').replace(',', '.');
   const n = Number(normal);
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 'ilegible';
 }
@@ -144,6 +167,31 @@ export function interpretarFilasViajes(matriz: unknown[][]): LecturaImportacion 
     const fecha = leerFechaImportada(celda('fecha'));
     if (fecha === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `fecha ilegible (${folio})` }); continue; }
 
+    const ingreso = leerCifraImportada(celda('ingreso'));
+    if (ingreso === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `ingreso ilegible (${folio})` }); continue; }
+    const km = leerCifraImportada(celda('km'));
+    if (km === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `km ilegibles (${folio})` }); continue; }
+
+    // Los topes de cordura son los MISMOS que el formulario ($5,000,000 / 20,000
+    // km): `validarIngreso` es el dueño de la regla vacío ≠ cero y de los topes,
+    // y reimplementarlos aquí sería la segunda oportunidad de escribir
+    // `Number('')` y colar un 0 donde no hay dato. `leerCifraImportada` ya
+    // tradujo los formatos del TMS ("1.234,56"); esto solo aplica la regla.
+    let ingresoFlete: number | null;
+    let kmRecorridos: number | null;
+    try {
+      const medido = validarIngreso({
+        clienteId: '',
+        ingresoFlete: ingreso === null ? '' : String(ingreso),
+        kmRecorridos: km === null ? '' : String(km),
+      });
+      ingresoFlete = medido.ingresoFlete;
+      kmRecorridos = medido.kmRecorridos;
+    } catch (e) {
+      if (e instanceof DatoInvalido) { descartadas.push({ fila: f + 1, motivo: `${e.message} (${folio})` }); continue; }
+      throw e;
+    }
+
     viajes.push({
       folio,
       origen: String(celda('origen') ?? '').trim().slice(0, 80) || null,
@@ -151,6 +199,10 @@ export function interpretarFilasViajes(matriz: unknown[][]): LecturaImportacion 
       fechaInicio: fecha,
       anticipo,
       operadorNombre: String(celda('operadorNombre') ?? '').trim().slice(0, 120) || null,
+      unidadEco: String(celda('unidad') ?? '').trim().slice(0, 40) || null,
+      clienteNombre: String(celda('cliente') ?? '').trim().slice(0, 120) || null,
+      ingresoFlete,
+      kmRecorridos,
     });
   }
 
@@ -174,13 +226,59 @@ export interface ResultadoImportacion {
   /** Folios saltados porque su operador ya trae un viaje abierto (0029) —
    *  en la base o más arriba en el mismo archivo. */
   operadorOcupado: string[];
+  /** Números económicos del archivo que no existen en `unidad` (o que el
+   *  catálogo no distingue). Sus filas NO se crean: importar un viaje con la
+   *  unidad descartada en silencio dejaría el archivo diciendo una cosa y el
+   *  Registro otra. */
+  unidadesSinAmarrar: string[];
+  /** Folios descartados porque su unidad no se pudo amarrar. */
+  sinUnidad: string[];
+  /** Nombres de cliente del archivo que no existen en `cliente`. */
+  clientesSinAmarrar: string[];
+  /** Folios descartados porque su cliente no se pudo amarrar. */
+  sinCliente: string[];
   error?: string;
+}
+
+/** Nombre a llave de catálogo: minúsculas, sin acentos, espacios colapsados.
+ *  El mismo aplanado con el que el jefe teclea desde un teléfono. */
+function llaveCatalogo(t: string): string {
+  return t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Carga un catálogo (id por nombre) para amarrar UNA VEZ por corrida, no por
+ * fila. Dos filas del catálogo que colisionen en la misma llave (dos clientes
+ * "ACME" con acentos distintos) se marcan ambiguas — amarrar a ciegas a
+ * cualquiera de las dos es peor que descartar la fila y decirlo.
+ */
+async function cargarCatalogo(
+  tabla: 'unidad' | 'cliente', columna: 'numero_economico' | 'nombre', tenantId: string,
+): Promise<Map<string, string | null>> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from(tabla).select(`id, ${columna}`)
+      .eq('tenant_id', tenantId).eq('activo', true).order('id').range(d, h), `importarViajes.${tabla}`),
+    `importarViajes.${tabla}`,
+  );
+  const porLlave = new Map<string, string | null>();
+  for (const f of filas) {
+    const nombre = typeof f[columna] === 'string' ? (f[columna] as string) : '';
+    const id = typeof f.id === 'string' ? f.id : '';
+    if (!nombre || !id) continue;
+    const k = llaveCatalogo(nombre);
+    porLlave.set(k, porLlave.has(k) ? null : id);   // null = ambiguo
+  }
+  return porLlave;
 }
 
 /** Inserta los viajes SIN avisar a nadie (ver encabezado). Anclado al tenant. */
 export async function importarViajes(tenantId: string, filas: FilaViajeImportada[]): Promise<ResultadoImportacion> {
   if (!tenantId) throw new Error('importarViajes: falta tenantId');
-  if (!filas.length) return { creados: 0, saltados: [], operadoresSinAmarrar: [], sinOperador: [], operadorOcupado: [] };
+  const vacio = (): ResultadoImportacion => ({
+    creados: 0, saltados: [], operadoresSinAmarrar: [], sinOperador: [], operadorOcupado: [],
+    unidadesSinAmarrar: [], sinUnidad: [], clientesSinAmarrar: [], sinCliente: [],
+  });
+  if (!filas.length) return vacio();
 
   const existentes = new Set(
     (await traerTodo<{ folio: unknown }>(
@@ -229,7 +327,52 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     if (id) conOperador.push(f); else sinOperador.push(f.folio);
   }
 
-  const idsAmarrados = [...new Set(conOperador.map((f) => operadorPorNombre.get(f.operadorNombre!)!))];
+  // ── UNIDAD Y CLIENTE: UN QUERY DE CATÁLOGO POR CORRIDA, NO POR FILA ──────
+  // Amarrar por nombre exacto (aplanado); lo que no exista se DESCARTA con su
+  // folio — la fila no se importa "a medias" con la unidad o el cliente que
+  // el archivo sí decía. Vacío ≠ desconocido: una celda vacía importa normal
+  // con `null`, que es la verdad ("no viene en el archivo").
+  const necesitaUnidades = conOperador.some((f) => f.unidadEco);
+  const necesitaClientes = conOperador.some((f) => f.clienteNombre);
+  let unidadPorEco = new Map<string, string | null>();
+  let clientePorNombre = new Map<string, string | null>();
+  try {
+    [unidadPorEco, clientePorNombre] = await Promise.all([
+      necesitaUnidades ? cargarCatalogo('unidad', 'numero_economico', tenantId) : Promise.resolve(unidadPorEco),
+      necesitaClientes ? cargarCatalogo('cliente', 'nombre', tenantId) : Promise.resolve(clientePorNombre),
+    ]);
+  } catch (e) {
+    // Fallar CERRADO, como la lectura de ocupados: importar sin poder amarrar
+    // descartaría con "no existe" a unidades y clientes que sí existen.
+    logger.error('importar_viajes.catalogo_ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return {
+      ...vacio(), saltados, operadoresSinAmarrar: [...operadoresSinAmarrar], sinOperador,
+      error: 'No pude leer el catálogo de unidades o clientes — no importé nada. Vuelve a intentar.',
+    };
+  }
+
+  const unidadesSinAmarrar = new Set<string>();
+  const clientesSinAmarrar = new Set<string>();
+  const sinUnidad: string[] = [];
+  const sinCliente: string[] = [];
+  const amarradas: Array<FilaViajeImportada & { unidadId: string | null; clienteId: string | null }> = [];
+  for (const f of conOperador) {
+    const unidadId = f.unidadEco ? unidadPorEco.get(llaveCatalogo(f.unidadEco)) ?? null : null;
+    if (f.unidadEco && !unidadId) {
+      unidadesSinAmarrar.add(f.unidadEco);
+      sinUnidad.push(f.folio);
+      continue;
+    }
+    const clienteId = f.clienteNombre ? clientePorNombre.get(llaveCatalogo(f.clienteNombre)) ?? null : null;
+    if (f.clienteNombre && !clienteId) {
+      clientesSinAmarrar.add(f.clienteNombre);
+      sinCliente.push(f.folio);
+      continue;
+    }
+    amarradas.push({ ...f, unidadId, clienteId });
+  }
+
+  const idsAmarrados = [...new Set(amarradas.map((f) => operadorPorNombre.get(f.operadorNombre!)!))];
   const ocupados = new Set<string>();
   // Segmentos de 200: `.in()` con miles de ids es una URL que PostgREST corta.
   for (let i = 0; i < idsAmarrados.length; i += 200) {
@@ -243,8 +386,9 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       // lote entero al 23505 del 0029.
       logger.error('importar_viajes.ocupados_ilegible', { tenantId, err: error.message });
       return {
-        creados: 0, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar],
-        sinOperador, operadorOcupado: [],
+        ...vacio(), saltados, operadoresSinAmarrar: [...operadoresSinAmarrar], sinOperador,
+        unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
+        clientesSinAmarrar: [...clientesSinAmarrar], sinCliente,
         error: 'No pude verificar qué operadores ya traen un viaje abierto — no importé nada. Vuelve a intentar.',
       };
     }
@@ -252,8 +396,8 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
   }
 
   const operadorOcupado: string[] = [];
-  const listas: FilaViajeImportada[] = [];
-  for (const f of conOperador) {
+  const listas: Array<FilaViajeImportada & { unidadId: string | null; clienteId: string | null }> = [];
+  for (const f of amarradas) {
     const id = operadorPorNombre.get(f.operadorNombre!)!;
     if (ocupados.has(id)) { operadorOcupado.push(f.folio); continue; }
     ocupados.add(id); // la primera fila del archivo gana — como haría el 0029
@@ -272,6 +416,12 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       fecha_inicio: f.fechaInicio,
       anticipo: f.anticipo ?? 0,
       operador_id: operadorPorNombre.get(f.operadorNombre!)!,
+      unidad_id: f.unidadId,
+      cliente_id: f.clienteId,
+      // `?? null` y NO `|| null` — igual que crearViaje: un ingreso de 0 del
+      // TMS es un cero MEDIDO y tiene que entrar a la medición como tal.
+      ingreso_flete: f.ingresoFlete ?? null,
+      km_recorridos: f.kmRecorridos ?? null,
       estatus: 'abierto',
     }));
     // Upsert que IGNORA duplicados contra `viaje_folio_unico` (0092): el que
@@ -289,6 +439,8 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       return {
         creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar],
         sinOperador, operadorOcupado,
+        unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
+        clientesSinAmarrar: [...clientesSinAmarrar], sinCliente,
         error: `Se crearon ${creados} y el lote que empieza en la fila ${i + 1} falló — revisa y vuelve a subir el archivo: los ya creados se saltan solos.`,
       };
     }
@@ -302,6 +454,11 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
   logger.info('importar_viajes.ok', {
     tenantId, creados, saltados: saltados.length,
     sinOperador: sinOperador.length, operadorOcupado: operadorOcupado.length,
+    sinUnidad: sinUnidad.length, sinCliente: sinCliente.length,
   });
-  return { creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar], sinOperador, operadorOcupado };
+  return {
+    creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar], sinOperador, operadorOcupado,
+    unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
+    clientesSinAmarrar: [...clientesSinAmarrar], sinCliente,
+  };
 }

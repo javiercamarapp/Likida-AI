@@ -66,9 +66,13 @@ vi.mock('./presupuesto', async (orig) => ({
 const crearViaje = vi.fn(async (..._a: unknown[]) => 'viaje-nuevo-1');
 vi.mock('./operacion', () => ({ crearViaje: (...a: unknown[]) => crearViaje(...a) }));
 const resolver = vi.fn();
+// La unidad se resuelve AL ARMAR el pendiente. `null` = no está dada de alta;
+// el default de cada test es "no hay unidad en el mensaje", así que ni se llama.
+const resolverUnidad = vi.fn();
 vi.mock('./crear_viaje_wa', async (orig) => ({
   ...(await orig() as object),
   resolverOperadorPorNombre: (...a: unknown[]) => resolver(...a),
+  resolverUnidadPorEconomico: (...a: unknown[]) => resolverUnidad(...a),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
@@ -89,6 +93,7 @@ beforeEach(() => {
   reclamoForzado = null;
   crearViaje.mockClear();
   resolver.mockReset();
+  resolverUnidad.mockReset();
 });
 
 describe('lo que NO es despacho', () => {
@@ -199,6 +204,57 @@ describe('la confirmación', () => {
   });
 });
 
+describe('la unidad dictada por WhatsApp (auditoría 4, A7)', () => {
+  const CON_UNIDAD = 'nuevo viaje para Juan, Puebla a Monterrey, anticipo 8000, unidad 47';
+
+  it('amarrada: el resumen la enseña con el número CANÓNICO de la base y el SÍ la pasa a crearViaje', async () => {
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
+    resolverUnidad.mockResolvedValue({ unidadId: 'u-47', numeroEconomico: 'T-47' });
+    const r1 = await atenderDespachoOficina(JEFE, TEL, CON_UNIDAD, AHORA);
+    expect(resolverUnidad).toHaveBeenCalledWith('t1', '47');
+    expect(r1).toContain('Unidad: T-47');   // el resuelto, no el "47" tecleado
+    expect(r1).not.toContain('⚠️');
+
+    const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(crearViaje).toHaveBeenCalledWith('t1', expect.objectContaining({ unidadId: 'u-47' }));
+    expect(r2).toContain('unidad T-47 ✓');
+    expect(r2).not.toContain('no la amarré');
+  });
+
+  it('no dada de alta: se avisa ANTES de confirmar, el viaje se crea SIN unidad y se dice la verdad', async () => {
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
+    resolverUnidad.mockResolvedValue(null);
+    const r1 = await atenderDespachoOficina(JEFE, TEL, CON_UNIDAD, AHORA);
+    expect(r1).toContain('«47» no está dada de alta');
+
+    const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    // Nada de amarres inventados: crearViaje va sin unidadId.
+    expect((crearViaje.mock.calls[0][1] as { unidadId?: string }).unidadId).toBeUndefined();
+    expect(r2).toContain('Viaje creado');
+    expect(r2).toContain('quedó sin unidad');
+    expect(r2).not.toContain('✓');
+  });
+
+  it('consulta fallida ≠ "no existe": se corta el armado, sin pendiente y sin prometer nada', async () => {
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
+    resolverUnidad.mockRejectedValue(new ConsultaFallida('se cayó'));
+    const r = await atenderDespachoOficina(JEFE, TEL, CON_UNIDAD, AHORA);
+    expect(r).toContain('No pude consultar las unidades');
+    expect(r).not.toContain('no está dada de alta');
+    expect(estadoGuardado).toBeNull();
+    // Y el "sí" que venga no encuentra nada que confirmar.
+    const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r2).toBeNull();
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('sin unidad en el mensaje, la base de unidades NI SE CONSULTA', async () => {
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
+    await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Juan, Puebla a Monterrey, anticipo 8000', AHORA);
+    expect(resolverUnidad).not.toHaveBeenCalled();
+  });
+});
+
 describe('el choque 0029 — el operador ya trae un viaje abierto (AG-A3)', () => {
   async function proponer() {
     resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
@@ -289,6 +345,20 @@ describe('el claim del pendiente (BE-A2)', () => {
     const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
     expect(r).toContain('Díctame el viaje otra vez');
     expect(r).not.toContain('Vuelve a responder SÍ');
+  });
+
+  it('el pendiente RESTAURADO tras un error transitorio conserva la unidad amarrada', async () => {
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
+    resolverUnidad.mockResolvedValue({ unidadId: 'u-47', numeroEconomico: '47' });
+    await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Juan, Puebla a Monterrey, anticipo 8000, unidad 47', AHORA);
+    crearViaje.mockRejectedValueOnce(new Error('se cayó el insert'));
+    await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 120_000));
+    expect(r).toContain('unidad 47 ✓');
+    // Las DOS llamadas llevaron la unidad: la restauración no la perdió.
+    for (const llamada of crearViaje.mock.calls) {
+      expect((llamada[1] as { unidadId?: string }).unidadId).toBe('u-47');
+    }
   });
 
   it('el "sí" ganador crea el viaje y responde el éxito de siempre — sin un segundo write de limpieza', async () => {
