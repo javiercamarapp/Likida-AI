@@ -11,6 +11,14 @@ let estadoGuardado: Record<string, unknown> | null = null;
 // El sello del aviso (AG-A4): lo que la lectura post-crearViaje encuentra.
 let viajeLeido: { avisado_en: string | null } | null = { avisado_en: '2026-08-14T17:00:05Z' };
 let errorLecturaViaje: { message: string } | null = null;
+// El claim BE-A2: cada estado que pasa por upsert queda anotado aquí — la
+// diferencia entre "el pendiente sobrevivió porque nadie lo tocó" y "alguien
+// lo RESTAURÓ de verdad" es exactamente esta lista.
+let upserts: Record<string, unknown>[] = [];
+let errorUpsert: { message: string } | null = null;
+// Cuando no es null, el UPDATE condicional del claim devuelve esto tal cual —
+// para simular al "sí" que llegó segundo (data: []) o la base caída (error).
+let reclamoForzado: { data: { telefono: string }[] | null; error: { message: string } | null } | null = null;
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
@@ -25,10 +33,24 @@ vi.mock('@/lib/supabase/admin', () => ({
       if (tabla !== 'wa_conversacion') {
         throw new Error(`despacho_wa solo puede tocar wa_conversacion y viaje; pidió ${tabla}`);
       }
+      let actualizando: { estado: Record<string, unknown> } | null = null;
       const b = {
-        select: () => b, eq: () => b,
+        // En la lectura, `select` abre la cadena y devuelve el builder. En el
+        // claim, `select` la CIERRA (update→eq→eq→not→select) y ahí se decide
+        // atómico: si había viajePendiente, se borra y sale 1 fila; si no, 0.
+        select: () => {
+          if (!actualizando) return b;
+          if (reclamoForzado) return Promise.resolve(reclamoForzado);
+          const habia = Boolean((estadoGuardado as { viajePendiente?: unknown } | null)?.viajePendiente);
+          if (habia) estadoGuardado = actualizando.estado;
+          return Promise.resolve({ data: habia ? [{ telefono: '5215550000001' }] : [], error: null });
+        },
+        eq: () => b, not: () => b,
+        update: (fila: { estado: Record<string, unknown> }) => { actualizando = fila; return b; },
         maybeSingle: async () => ({ data: estadoGuardado ? { estado: estadoGuardado } : null, error: null }),
         upsert: (fila: { estado: Record<string, unknown> }) => {
+          if (errorUpsert) return Promise.resolve({ error: errorUpsert });
+          upserts.push(fila.estado);
           estadoGuardado = fila.estado;
           return Promise.resolve({ error: null });
         },
@@ -41,7 +63,7 @@ vi.mock('./presupuesto', async (orig) => ({
   ...(await orig() as object),
   acotada: (q: unknown) => q,
 }));
-const crearViaje = vi.fn(async (..._a: unknown[]) => 'viaje-nuevo-1');
+const crearViaje = vi.fn(async () => 'viaje-nuevo-1');
 vi.mock('./operacion', () => ({ crearViaje: (...a: unknown[]) => crearViaje(...a) }));
 const resolver = vi.fn();
 vi.mock('./crear_viaje_wa', async (orig) => ({
@@ -62,6 +84,9 @@ beforeEach(() => {
   estadoGuardado = null;
   viajeLeido = { avisado_en: '2026-08-14T17:00:05Z' };
   errorLecturaViaje = null;
+  upserts = [];
+  errorUpsert = null;
+  reclamoForzado = null;
   crearViaje.mockClear();
   resolver.mockReset();
 });
@@ -210,6 +235,74 @@ describe('el choque 0029 — el operador ya trae un viaje abierto (AG-A3)', () =
     expect(r1).toContain('No se pudo crear');
     const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 120_000));
     expect(r2).toContain('Viaje creado');
+  });
+});
+
+describe('el claim del pendiente (BE-A2)', () => {
+  async function proponer() {
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
+    await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Juan, Puebla a Monterrey, anticipo 8000', AHORA);
+    // Lo que le importa a este describe es lo que pase DESPUÉS de proponer.
+    upserts = [];
+  }
+
+  it('el "sí" perdedor (el claim salió sin filas) NO llega a crearViaje y lo dice', async () => {
+    await proponer();
+    // El otro "sí" de la misma ventana ya se llevó el pendiente entre nuestra
+    // lectura y nuestro claim — el UPDATE condicional regresa 0 filas.
+    reclamoForzado = { data: [], error: null };
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('ya la estoy procesando');
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('el claim que FALLA cierra el paso: sin crearViaje, pidiendo el SÍ de nuevo, pendiente intacto', async () => {
+    await proponer();
+    reclamoForzado = { data: null, error: { message: 'se cayó el update' } };
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('mándame el SÍ otra vez');
+    expect(crearViaje).not.toHaveBeenCalled();
+    // El update que falló no borró nada: el reintento sí encuentra el pendiente.
+    expect((estadoGuardado?.viajePendiente as { operadorId: string }).operadorId).toBe('op-9');
+  });
+
+  it('error transitorio tras GANAR el claim: el pendiente se RESTAURA con un upsert real', async () => {
+    await proponer();
+    crearViaje.mockRejectedValueOnce(new Error('se cayó el insert'));
+    const r1 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r1).toContain('No se pudo crear');
+    // La restauración es un upsert VERDADERO con el viajePendiente adentro —
+    // no un pendiente que "sobrevivió" porque nadie lo tocó: el claim ya lo
+    // había borrado.
+    expect(upserts.some((e) =>
+      (e as { viajePendiente?: { operadorId?: string } }).viajePendiente?.operadorId === 'op-9',
+    )).toBe(true);
+    // Y el reintento con otro "sí" funciona de verdad.
+    const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 120_000));
+    expect(r2).toContain('Viaje creado');
+  });
+
+  it('si la restauración TAMBIÉN falla, el mensaje pide re-dictar — "vuelve a responder SÍ" sería mentira', async () => {
+    await proponer();
+    crearViaje.mockRejectedValueOnce(new Error('se cayó el insert'));
+    errorUpsert = { message: 'tampoco se pudo guardar' };
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('Díctame el viaje otra vez');
+    expect(r).not.toContain('Vuelve a responder SÍ');
+  });
+
+  it('el "sí" ganador crea el viaje y responde el éxito de siempre — sin un segundo write de limpieza', async () => {
+    await proponer();
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('Viaje creado');
+    expect(crearViaje).toHaveBeenCalledTimes(1);
+    // El claim ES el borrado: después del éxito no queda ningún upsert de
+    // limpieza que pueda fallar y dejar un pendiente fantasma…
+    expect(upserts).toHaveLength(0);
+    // …y aun así el pendiente quedó consumido.
+    const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 120_000));
+    expect(r2).toBeNull();
+    expect(crearViaje).toHaveBeenCalledTimes(1);
   });
 });
 

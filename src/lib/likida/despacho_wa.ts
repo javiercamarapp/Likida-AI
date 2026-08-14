@@ -70,7 +70,8 @@ async function cargarPendiente(tenantId: string, telefono: string, ahora: Date):
   return p;
 }
 
-async function guardarPendiente(tenantId: string, telefono: string, p: PendienteViaje | null): Promise<void> {
+/** `true` si la escritura quedó. Quien restaura un pendiente NECESITA saberlo. */
+async function guardarPendiente(tenantId: string, telefono: string, p: PendienteViaje | null): Promise<boolean> {
   const { error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .upsert({
@@ -86,7 +87,32 @@ async function guardarPendiente(tenantId: string, telefono: string, p: Pendiente
     // encontrar nada — el flujo re-pide en vez de crear a ciegas. Se grita
     // para el diagnóstico, no se detiene la respuesta.
     logger.error('despacho_wa.pendiente_sin_guardar', { err: error.message });
+    return false;
   }
+  return true;
+}
+
+/**
+ * EL CLAIM ATÓMICO DEL PENDIENTE (auditoría 3, BE-A2).
+ *
+ * Leer el pendiente y borrarlo eran DOS viajes a la base, y entre uno y otro
+ * cabía el segundo "sí" del jefe: ambos leían el mismo pendiente y ambos
+ * llegaban a `crearViaje`. Este UPDATE condicional es leer-y-borrar en UN solo
+ * statement — la condición `estado->viajePendiente is not null` solo puede
+ * cumplirse para uno, así que gana exactamente uno y el claim ES el borrado.
+ */
+async function reclamarPendiente(tenantId: string, telefono: string): Promise<'reclamado' | 'ya_reclamado' | 'fallo'> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('wa_conversacion')
+    .update({ estado: {}, updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .not('estado->viajePendiente', 'is', null)
+    .select('telefono'), 'despachoWa.reclamarPendiente');
+  if (error) {
+    logger.error('despacho_wa.reclamo_fallo', { err: error.message });
+    return 'fallo';
+  }
+  return (data?.length ?? 0) > 0 ? 'reclamado' : 'ya_reclamado';
 }
 
 /** El día de México — `fecha_inicio` del viaje despachado por WhatsApp. */
@@ -130,6 +156,25 @@ export async function atenderDespachoOficina(
         await guardarPendiente(cuenta.tenantId, telefono, null);
         return 'Tu rol no asigna viajes — eso le toca al dueño o al jefe de tráfico.';
       }
+
+      // ── EL CLAIM VA ANTES DE crearViaje (auditoría 3, BE-A2) ─────────────
+      // Dos "sí" en la misma ventana leían el MISMO pendiente y ambos
+      // llegaban a crearViaje: el 0029 salvaba los datos rechazando al
+      // segundo, pero la conversación mentía («todavía tiene un viaje
+      // abierto» por un choque consigo mismo). Y el clear post-éxito que
+      // fallaba solo se logueaba: quedaba un pendiente fantasma que
+      // re-disparaba ese mismo choque con el siguiente "sí". Reclamando
+      // ANTES, gana exactamente un "sí" y el borrado ya ocurrió.
+      const reclamo = await reclamarPendiente(cuenta.tenantId, telefono);
+      if (reclamo === 'ya_reclamado') {
+        return 'Esa confirmación ya la estoy procesando — dame un momento.';
+      }
+      if (reclamo === 'fallo') {
+        // Fallar cerrado: sin claim no hay crearViaje. El pendiente quedó
+        // intacto, así que el reintento del jefe sí lo va a encontrar.
+        return 'No pude tomar tu confirmación — mándame el SÍ otra vez en un momento.';
+      }
+
       try {
         const viajeId = await crearViaje(cuenta.tenantId, {
           operadorId: pendiente.operadorId,
@@ -138,7 +183,7 @@ export async function atenderDespachoOficina(
           anticipo: pendiente.anticipo ?? undefined,
           fechaInicio: hoyMx(ahora),
         });
-        await guardarPendiente(cuenta.tenantId, telefono, null);
+        // El pendiente ya lo limpió el claim — aquí no queda nada que borrar.
 
         // ¿EL AVISO SALIÓ DE VERDAD? (auditoría 3, AG-A4). `crearViaje`
         // espera a `avisarAlChofer` pero se TRAGA el resultado — "el aviso va
@@ -189,14 +234,21 @@ export async function atenderDespachoOficina(
         const chocaViajeAbierto = violaIndice(e, 'uq_viaje_abierto_por_operador')
           || (e instanceof Error && e.message.includes('uq_viaje_abierto_por_operador'));
         if (chocaViajeAbierto) {
-          // El pendiente se LIMPIA: otro "sí" repetiría el mismo choque.
-          await guardarPendiente(cuenta.tenantId, telefono, null);
+          // El pendiente ya quedó limpio por el claim: otro "sí" no repite
+          // el choque. No hay nada más que borrar aquí.
           logger.info('despacho_wa.operador_con_viaje_abierto', { tenant: cuenta.tenantId, operador: pendiente.operadorId });
           return `«${pendiente.operadorNombre}» todavía tiene un viaje abierto — ciérralo o despacha a otro operador. No creé nada.`;
         }
-        // Lo transitorio de verdad: el pendiente SE CONSERVA y el jefe puede
-        // reintentar con otro "sí".
+        // Lo transitorio de verdad: el claim ya consumió el pendiente, así
+        // que para que el reintento con otro "sí" funcione hay que
+        // DEVOLVERLO a su lugar antes de prometer nada.
         logger.error('despacho_wa.crear_fallo', { tenant: cuenta.tenantId, err: e instanceof Error ? e.message : String(e) });
+        const restaurado = await guardarPendiente(cuenta.tenantId, telefono, pendiente);
+        if (!restaurado) {
+          // Sin pendiente restaurado, el "sí" de reintento no va a encontrar
+          // nada — pedirlo sería mentir. Se dice la verdad: hay que re-armar.
+          return 'No se pudo crear el viaje y tampoco pude guardar tu confirmación para reintentar. Díctame el viaje otra vez, o créalo desde Despacho.';
+        }
         return 'No se pudo crear el viaje ahorita. Vuelve a responder SÍ en un momento, o créalo desde Despacho.';
       }
     }
