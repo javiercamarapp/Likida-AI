@@ -72,17 +72,33 @@ export default defineConfig({
         '**/*.d.ts',
         // Solo tipos: no hay líneas que ejecutar.
         'src/types/**',
-        // VISTAS de React (Server Components). No hay una sola prueba de nodo
-        // sobre ellas y no la va a haber: el rubro de frontend las cubre por
-        // otro camino. Contarlas aquí ahogaría la señal de la lógica que mueve
-        // dinero, que es lo que esta puerta protege. Las RUTAS de API sí
-        // cuentan: llevan HMAC, filtro por tenant y un mapeo de dinero.
-        'src/app/**/page.tsx',
-        'src/app/**/layout.tsx',
-        'src/app/**/loading.tsx',
-        'src/app/**/error.tsx',
-        'src/app/**/global-error.tsx',
-        'src/app/**/not-found.tsx',
+        // VISTAS de React. No hay una sola prueba de nodo sobre ellas y no la
+        // va a haber: el rubro de frontend las cubre por otro camino (mirar el
+        // render). Contarlas aquí ahoga la señal de la lógica que mueve dinero,
+        // que es lo que esta puerta protege. Las RUTAS de API sí cuentan
+        // (`route.ts`, no `.tsx`): llevan HMAC, filtro por tenant y dinero.
+        //
+        // 14-ago-2026 — LA LISTA DECÍA UNA COSA Y HACÍA OTRA. Nombraba solo los
+        // archivos especiales del router (page/layout/loading/error), pero las
+        // 8 fases del plan Handle metieron el grueso de la pantalla en HERMANOS
+        // de esos archivos: `vista.tsx`, `estrategia.tsx`, `controles.tsx`,
+        // `chat.tsx`, `inicio-contenido.tsx`. Esos SÍ se contaban.
+        //
+        // Medido ese día, con la lista vieja:
+        //     70 vistas .tsx en src/app  →    225/6,269 líneas =  3.59%
+        //     todo lo demás              → 13,895/17,475       = 79.51%
+        //     mezclado (lo que veía CI)  →                       59.46%  ← rojo
+        //
+        // O sea: el número no medía protección, medía cuánta pantalla se había
+        // escrito esa semana. Escribir un `vista.tsx` bueno tiraba la puerta.
+        // Se excluye la CATEGORÍA — que es lo que el párrafo de arriba siempre
+        // dijo — y el umbral sube de 67 a 78 para que la puerta quede MÁS dura
+        // sobre lo que sí se puede probar en nodo, no más blanda.
+        //
+        // Excluir de la MEDICIÓN no apaga pruebas: `avance-cierre.test.tsx` y
+        // `tablero-operacion.test.tsx` siguen corriendo y siguen fallando si se
+        // rompen. Solo dejan de contar en el porcentaje.
+        'src/app/**/*.tsx',
       ],
       // UN TRINQUETE, NO UNA ASPIRACIÓN. Medido el 5-ago-2026 (líneas 68.07 ·
       // ramas 84.74 · funciones 79.58) tras añadir ~90 pruebas en la ronda 16
@@ -91,11 +107,17 @@ export default defineConfig({
       // bajar de aquí falla. El camino a 78 (el objetivo del trinquete) está
       // rastreado: faltan los componentes UI (necesitan jsdom + testing-library,
       // sesión dedicada post-demo) y los módulos grandes (repo.ts, consolidado).
+      // Medido el 14-ago-2026 sobre el denominador ya limpio de vistas:
+      // líneas/statements 79.51 · ramas 84.25 · funciones 85.21.
+      // Margen de ~1 punto, como el trinquete anterior. Las RAMAS se quedan en
+      // 84 —el número que ya estaba— para no aflojar un umbral al pasar; su
+      // margen queda apretado (0.25) a propósito: la siguiente rama sin cubrir
+      // debe doler.
       thresholds: {
-        lines: 67,
-        statements: 67,
+        lines: 78,
+        statements: 78,
         branches: 84,
-        functions: 79,
+        functions: 84,
       },
     },
   },
