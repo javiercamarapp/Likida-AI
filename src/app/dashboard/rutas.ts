@@ -69,6 +69,10 @@ export const SISTEMA: Item[] = [
 /** El bloque INFERIOR fijo (referencia Handle: Help Center / Settings),
  *  con fondo propio — las dos páginas existen desde antes del rediseño. */
 export const ABAJO: Item[] = [
+  // El "alertas primero" de Handle con página propia (14-ago-2026). Vive
+  // abajo y no en una categoría porque no es un área del negocio: es la
+  // bandeja de lo que hoy te toca, cruzada de todas las áreas que tu rol ve.
+  { href: '/dashboard/notificaciones', nombre: 'Notificaciones', Icono: BellRing },
   { href: '/dashboard/soporte', nombre: 'Centro de ayuda', Icono: LifeBuoy },
   // Suscripción vive aquí y no en una categoría: es la casa de aterrizaje
   // del contador (inicioDe) y nada debe ser alcanzable solo tecleando URL.
