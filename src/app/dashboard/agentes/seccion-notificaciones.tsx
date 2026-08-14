@@ -1,6 +1,8 @@
 import { Bell } from 'lucide-react';
 import { requireSessionTenant } from '@/lib/auth/guard';
-import { correoConfigurado } from '@/lib/correo/enviar';
+import { correoConfigurado, enviarCorreo } from '@/lib/correo/enviar';
+import { avisoDePrueba } from '@/lib/correo/avisos';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import {
   agentePorId, eventosDe, rolesQuePueden, repartoDe,
@@ -8,7 +10,9 @@ import {
   CONFIG_NOTIF_DEFAULT, MARCAS_DE_INSISTENCIA, PISO_ENTRE_AVISOS_MS, puedeConfigurarAvisos,
   type AgenteId, type Reparto, type UsuarioAvisable,
 } from '@/lib/likida/agentes/notificaciones';
+import { reclamarTurnoDePrueba, acuseDeEnvio } from './prueba-correo';
 import { FormaNotificaciones } from './notificaciones-forma';
+import { BotonPrueba, type EstadoPrueba } from './boton-prueba';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA SECCIÓN «NOTIFICACIONES» — una sola, montada por los seis agentes.
@@ -117,6 +121,74 @@ export async function SeccionNotificaciones({ tenantId, agenteId }: {
     return null;
   }
 
+  /**
+   * «Mándate una prueba» (auditoría 4, B5) — el correo que confirma que el
+   * canal llega ANTES de que algo se rompa de verdad. Hasta hoy la única
+   * forma de saberlo era esperar un incidente real.
+   *
+   * VA AL PROPIO USUARIO A PROPÓSITO, nunca al reparto: la pregunta que este
+   * botón contesta es «¿me llega a MÍ?», y un botón que le manda correos de
+   * mentira a todo el equipo entrena a ignorar los reales — el daño exacto
+   * que el anti-ruido del motor existe para evitar.
+   *
+   * NO pasa por `avisar()`: no hay incidente que contar ni marcas que
+   * consultar. Su freno es el turno por (usuario, agente) de
+   * `prueba-correo.ts` — en memoria y POR INSTANCIA, documentado allá.
+   */
+  async function mandarPrueba(_prev: EstadoPrueba, _fd: FormData): Promise<EstadoPrueba> {
+    'use server';
+    const objetivo = agentePorId(agenteId);
+    if (!objetivo) return { error: 'Ese agente no existe.' };
+
+    // EL MISMO GATEO QUE `guardar`, y por la misma razón: la action es
+    // alcanzable por POST directo sin pasar por el render.
+    const sesion = await requireSessionTenant(objetivo.ruta);
+    const negado = puedeConfigurarAvisos(sesion, tenantId, objetivo);
+    if (negado) {
+      logger.warn('notificaciones.prueba_negada', { tenantId, agente: objetivo.id, rol: sesion.rol });
+      return { error: negado };
+    }
+
+    // El turno se reclama ANTES de tocar la base: el freno es del botón
+    // entero, no solo del envío, y un envío que luego falle lo consume igual
+    // (mismo criterio que `reclamarAviso` en el motor).
+    const turno = reclamarTurnoDePrueba(`${sesion.userId}:${objetivo.id}`, Date.now());
+    if (!turno.ok) {
+      return { error: `Acabas de mandarte una prueba. La siguiente sale en ${turno.faltanSegundos} s.` };
+    }
+
+    // El correo del PROPIO usuario. La sesión no lo trae (`SessionTenant` no
+    // tiene email), así que se lee de `app_user` por su userId — y el error
+    // se mira POR VALOR: sin esto, una base caída se leería como «no tienes
+    // correo» y mandaría a la persona a capturar un dato que sí tiene.
+    const { data, error } = await supabaseAdmin()
+      .from('app_user').select('email').eq('id', sesion.userId).maybeSingle();
+    if (error) {
+      logger.error('notificaciones.prueba_correo_ilegible', { tenantId, agente: objetivo.id, err: error.message });
+      return { error: 'No se pudo leer el correo de tu cuenta, así que la prueba no salió. Inténtalo de nuevo.' };
+    }
+    const correo = ((data?.email as string | null) ?? '').trim();
+    if (!correo) {
+      return { error: 'Tu cuenta no tiene correo capturado, así que no hay a dónde mandarte la prueba. Captúralo en Usuarios y vuelve a intentar.' };
+    }
+
+    // El nombre de la flota es cosmético aquí: si no se puede leer, la
+    // prueba sale igual diciendo «tu flota» (mismo criterio que el despacho
+    // real, `nombreDeFlota` en el motor).
+    const flotaLeida = await supabaseAdmin()
+      .from('tenant').select('nombre').eq('id', tenantId).maybeSingle();
+    const flota = flotaLeida.error ? null : ((flotaLeida.data?.nombre as string | null) ?? null);
+
+    const envio = await enviarCorreo(correo, avisoDePrueba({ flota, agente: objetivo.nombre }));
+    if (envio.ok) {
+      logger.info('notificaciones.prueba_enviada', { tenantId, agente: objetivo.id });
+    } else {
+      logger.warn('notificaciones.prueba_no_enviada', { tenantId, agente: objetivo.id, motivo: envio.motivo });
+    }
+    const acuse = acuseDeEnvio(envio, correo);
+    return acuse.enviado ? { enviado: acuse.mensaje } : { error: acuse.mensaje };
+  }
+
   return (
     <section className="card p-4">
       <div className="flex items-center gap-2 mb-1">
@@ -144,6 +216,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId }: {
           },
         }}
       />
+      <BotonPrueba mandarPrueba={mandarPrueba} canalListo={correoConfigurado()} />
     </section>
   );
 }
