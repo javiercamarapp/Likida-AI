@@ -81,6 +81,35 @@ describe('avisoSimplificado', () => {
     // mensajes se lee a medias y la constancia queda coja.
     expect(avisoSimplificado(flota)!.length).toBeLessThan(1400);
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 3, ALTO (LEG-A1): los hitos del chofer (0090 — llegada, descarga,
+  // regreso) se sellaban con hora y se medían ("espera en patio") sin que
+  // ningún aviso lo enunciara — y el integral promete que toda finalidad no
+  // escrita exige permiso nuevo (art. 11 vigente, sin la válvula de
+  // "compatibles o análogos"). Estas pruebas fijan que el texto lo diga.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('enuncia los avisos del viaje como dato y su medición de tiempos como finalidad', () => {
+    const a = avisoSimplificado(flota)!;
+    // El dato, con las palabras que el chofer de verdad manda (hitos_viaje.ts).
+    expect(a).toMatch(/ya llegué/i);
+    expect(a).toMatch(/estoy descargando/i);
+    expect(a).toMatch(/voy de regreso/i);
+    expect(a).toMatch(/hora/i);
+    // La finalidad: medir tiempos, con el ejemplo real (la espera en descarga).
+    expect(a).toMatch(/medir sus tiempos/i);
+    expect(a).toMatch(/espera en la descarga/i);
+  });
+
+  it('no deja creer que hay GPS: la hora es la del mensaje, no telemetría', () => {
+    // hitos_viaje.ts lo estableció ("el producto nunca la presenta como
+    // telemetría"). "Avisos de posición con hora" se presta a leerse como
+    // rastreo, y un aviso que lo insinúe enuncia un tratamiento que no ocurre —
+    // el error simétrico al que esta auditoría vino a cerrar.
+    const a = avisoSimplificado(flota)!;
+    expect(a).toMatch(/no hay gps/i);
+    expect(a).toMatch(/lo que tú escribes/i);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
