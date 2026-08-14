@@ -1,6 +1,6 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
-  BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2,
+  BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2, Plug,
 } from 'lucide-react';
 
 /**
@@ -58,6 +58,8 @@ export const DINERO_FISCAL: Item[] = [
 
 export const SISTEMA: Item[] = [
   { href: '/dashboard/chat', nombre: 'Chatea con tus datos', Icono: MessageCircle },
+  // F7 (chasis Handle): la salud MEDIDA de cada conector de la flota.
+  { href: '/dashboard/conexiones', nombre: 'Conexiones', Icono: Plug },
 ];
 
 /** El bloque INFERIOR fijo (referencia Handle: Help Center / Settings),
