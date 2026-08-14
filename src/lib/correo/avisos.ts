@@ -310,3 +310,46 @@ export function avisoInvitacion(d: DatosInvitacion): Correo {
     porQueLoRecibes: `Recibes este correo porque alguien de ${flota} te dio acceso a su panel en Likida.`,
   };
 }
+
+// ── 7. La prueba de avisos — «¿me llega a MÍ?» ─────────────────────────────
+
+export interface DatosPrueba {
+  flota: string | null;
+  /** El nombre del agente cuya pestaña disparó la prueba. */
+  agente: string;
+}
+
+/**
+ * El único correo del catálogo que confirma que NO pasa nada.
+ *
+ * Existe porque hasta hoy el cliente no podía comprobar que los avisos le
+ * llegan sin esperar a que algo se rompiera de verdad (auditoría 4, B5). Lo
+ * pide él mismo con el botón «Mándate una prueba» de la pestaña
+ * Notificaciones, y le llega SOLO a él.
+ *
+ * Rompe dos reglas de la casa A PROPÓSITO, y lo declara:
+ *   · No trae botón. Quien lo lee acaba de apretar el que lo mandó, con la
+ *     pestaña abierta enfrente: una liga de vuelta a donde ya está es
+ *     decoración, no una pantalla donde algo se resuelva.
+ *   · No pide nada. Los demás avisos existen porque piden algo a una persona;
+ *     éste dice con todas sus letras que no hay ningún problema, para que
+ *     nadie salga corriendo a buscar uno.
+ *
+ * SIN cifras y sin datos de la flota más allá del nombre: puede reenviarse
+ * («mira, sí llega») y no debe cargar nada que no sea suyo.
+ */
+export function avisoDePrueba(d: DatosPrueba): Correo {
+  return {
+    asunto: `[Likida] Prueba de avisos — ${d.agente}`,
+    avance: 'Todo en orden: es la prueba que pediste, no un incidente.',
+    titulo: `Los avisos del ${d.agente} sí te llegan`,
+    parrafos: [
+      `Este correo confirma que los avisos del ${d.agente} llegan a esta dirección. No hay ningún problema real: pediste la prueba con el botón «Mándate una prueba», y comprobar la entrega es todo lo que hace.`,
+      'Cuando este agente tenga algo de verdad que avisarte, el correo va a entrar por este mismo camino.',
+    ],
+    tono: 'neutral',
+    // El pie de siempre («Recibes este… porque…»), pero sin el "puedes
+    // apagarlo" de los recurrentes: esta prueba llega solo cuando se pide.
+    porQueLoRecibes: `Recibes este correo porque pediste una prueba de los avisos del ${d.agente}${d.flota ? ` de la flota ${d.flota}` : ''} en Likida. No es recurrente: llega solo cuando tú la pides.`,
+  };
+}
