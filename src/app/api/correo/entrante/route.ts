@@ -5,6 +5,7 @@ import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
 import { tokenDeDestinatarios } from '@/lib/correo/buzon';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
 import { guardarFacturaProveedor } from '@/lib/likida/proveedores';
+import { sanitizarTexto } from '@/lib/likida/intake/sanitizar';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,14 +29,17 @@ export const dynamic = 'force-dynamic';
 //  3. IDEMPOTENCIA al final: Resend reintenta ante cualquier respuesta que no
 //     sea 2xx, y sin esto un reintento duplicaría la factura.
 //
-// ── POR QUÉ SIEMPRE SE CONTESTA 200 DESPUÉS DE LA FIRMA ──────────────────
+// ── QUÉ SE CONTESTA DESPUÉS DE LA FIRMA: 200 O 503, SEGÚN LA CLASE ───────
 //
 // Un 4xx/5xx hace que Resend reintente. Reintentar tiene sentido cuando el
-// fallo es NUESTRO y transitorio; no lo tiene cuando el correo simplemente no
-// era para nosotros (buzón desconocido, sin adjuntos, un humano respondiendo
-// "gracias"). Devolver error ahí genera una cola de reintentos que nunca va a
-// tener éxito y ensucia el log donde vive lo que sí importa. Lo que no se pudo
-// procesar se registra y se responde 200.
+// fallo es NUESTRO y transitorio (la base no contestó, la DESCARGA de un
+// adjunto se cayó): ahí va 503, porque un 200 haría que ese CFDI no volviera
+// jamás. No lo tiene cuando el correo simplemente no era para nosotros (buzón
+// desconocido, sin adjuntos, un humano respondiendo "gracias") ni cuando el
+// contenido no sirve (no es CFDI, pasa del tope de tamaño): el reintento trae
+// exactamente lo mismo, y devolver error ahí genera una cola de reintentos que
+// nunca va a tener éxito y ensucia el log donde vive lo que sí importa. Eso
+// se registra y se responde 200.
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface AdjuntoEntrante { id?: string; filename?: string; content_type?: string }
@@ -55,6 +59,13 @@ interface EventoCorreo {
  *  proveedores mandan los dos y el XML a veces viene dentro de un zip que
  *  todavía no abrimos. Cualquier otra cosa se ignora sin ruido. */
 const PROCESABLES = /\.(xml|pdf)$/i;
+
+/** El adjunto más grande que se descarga. El mismo tope que el panel le pone
+ *  al XML por pantalla (`MAX_XML_BYTES`, dashboard/agentes/peajes/page.tsx):
+ *  un CFDI pesa decenas de KB — 4 MB ya es un archivo equivocado, no una
+ *  factura grande. Sin esto, un correo hostil con un adjunto gigante se
+ *  materializaría entero en memoria. */
+const MAX_ADJUNTO_BYTES = 4 * 1024 * 1024;
 
 export async function POST(req: Request) {
   // El cuerpo CRUDO: `JSON.parse` + `stringify` reordena llaves y la firma
@@ -132,6 +143,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ignorado: 'sin_adjuntos' });
   }
 
+  // ── LA LLAVE DEL CANAL, ANTES DE CONSUMIR EL CORREO ──────────────────────
+  // Se comprueba ANTES de registrar en `correo_procesado`: registrar y luego
+  // contestar 503 dejaría el correo consumido — el reintento de Resend
+  // chocaría con la llave primaria, saldría como "ya_procesado" sin haber
+  // guardado nada, y ese CFDI no volvería jamás.
+  const llave = process.env.RESEND_API_KEY;
+  if (!llave) {
+    logger.error('correo_entrante.sin_llave', { emailId });
+    return NextResponse.json({ error: 'canal no configurado' }, { status: 503 });
+  }
+
   // ── IDEMPOTENCIA, ANTES DE PROCESAR NADA ─────────────────────────────────
   //
   // El insert ES la comprobación: si el `email_id` ya está, la llave primaria
@@ -156,16 +178,25 @@ export async function POST(req: Request) {
   }
 
   // ── LOS ADJUNTOS ─────────────────────────────────────────────────────────
-  const llave = process.env.RESEND_API_KEY;
-  if (!llave) {
-    logger.error('correo_entrante.sin_llave', { emailId });
-    return NextResponse.json({ error: 'canal no configurado' }, { status: 503 });
-  }
-
+  //
+  // Dos clases de fallo, y la línea divisoria es si llegamos a TENER el
+  // adjunto en la mano:
+  //
+  //  · TRANSITORIO (red, timeout, Resend caído, URL que no contesta): el
+  //    contenido nunca llegó. Reintentar SÍ lo arregla — el correo no debe
+  //    quedar consumido; ver el bloque del 503 abajo del loop.
+  //  · PERMANENTE (no es XML, no es CFDI, pasa del tope): el contenido llegó
+  //    y no sirve. El reintento trae el mismo archivo — se cuenta como
+  //    ignorado y el correo cierra en 200, como siempre.
   let guardadas = 0;
   let ignoradas = 0;
+  // Adjuntos cuya DESCARGA se cayó: ni guardados ni descartados. Si este
+  // correo quedara marcado como procesado, estarían perdidos para siempre.
+  let caidas = 0;
 
   for (const adj of adjuntos) {
+    // Sin id no hay qué pedirle a Resend, y el reintento trae el MISMO
+    // payload: permanente.
     if (!adj.id) { ignoradas++; continue; }
     try {
       // La `download_url` viene firmada y CADUCA, así que se pide justo antes
@@ -174,13 +205,33 @@ export async function POST(req: Request) {
         `https://api.resend.com/emails/${emailId}/attachments/${adj.id}`,
         { headers: { Authorization: `Bearer ${llave}` } },
       );
-      if (!meta.ok) { ignoradas++; continue; }
+      if (!meta.ok) { caidas++; continue; }
       const { download_url: url } = (await meta.json()) as { download_url?: string };
-      if (!url) { ignoradas++; continue; }
+      if (!url) { caidas++; continue; }
 
       const bin = await fetch(url);
-      if (!bin.ok) { ignoradas++; continue; }
+      if (!bin.ok) { caidas++; continue; }
+
+      // El TOPE, con el doble chequeo de `leerCuerpo` (api/v1/_escritura.ts):
+      // primero lo DECLARADO, para ni siquiera materializar un cuerpo gigante;
+      // después el largo REAL, porque una transferencia chunked no declara
+      // nada. Pasarse es fallo PERMANENTE — el reintento trae el mismo
+      // archivo—, se loguea con nombre (saneado: lo escribió el emisor) y
+      // tamaño para que sea visible, y los demás adjuntos siguen.
+      const declarado = Number(bin.headers.get('content-length') || 0);
+      if (declarado > MAX_ADJUNTO_BYTES) {
+        logger.warn('correo_entrante.adjunto_gigante', {
+          emailId, archivo: sanitizarTexto(adj.filename), bytes: declarado,
+        });
+        ignoradas++; continue;
+      }
       const texto = await bin.text();
+      if (texto.length > MAX_ADJUNTO_BYTES) {
+        logger.warn('correo_entrante.adjunto_gigante', {
+          emailId, archivo: sanitizarTexto(adj.filename), bytes: texto.length,
+        });
+        ignoradas++; continue;
+      }
 
       // Solo el XML se puede leer como CFDI. Un PDF llega, se cuenta y se
       // ignora: extraerle el CFDI es OCR, y eso ya tiene su propio camino.
@@ -190,11 +241,44 @@ export async function POST(req: Request) {
       const r = await guardarFacturaProveedor(flota.id as string, xml, texto, (flota.rfc as string) ?? null);
       if (r.ok) guardadas++; else ignoradas++;
     } catch (e) {
-      // Un adjunto que truena NO tumba a los demás: un correo con cinco
-      // facturas donde la tercera viene corrupta debe guardar las otras cuatro.
+      // Aquí solo pueden lanzar los fetch y sus lecturas (`parseCfdiXml`
+      // atrapa adentro y devuelve null; `guardarFacturaProveedor` reporta por
+      // valor): es la red — transitorio. Un adjunto caído NO tumba a los
+      // demás: el resto del correo se sigue intentando.
       logger.warn('correo_entrante.adjunto', { emailId, err: e instanceof Error ? e.message : String(e) });
-      ignoradas++;
+      caidas++;
     }
+  }
+
+  if (caidas > 0) {
+    // ── EL CORREO NO QUEDA CONSUMIDO ─────────────────────────────────────
+    // Registrar-antes-de-procesar sigue siendo la regla (ver arriba); pero con
+    // una descarga caída, dejar la fila perdería el CFDI PARA SIEMPRE: Resend
+    // no reintenta un 200, y el reintento de un 503 chocaría con la llave
+    // primaria y saldría "ya_procesado" sin haber guardado nada. Se libera la
+    // fila y se contesta 503 para que Resend reintente.
+    //
+    // Y si ALGUNOS adjuntos ya se guardaron, el 503 sigue siendo seguro:
+    // `factura_proveedor` tiene unique(tenant_id, cfdi_uuid) (mig. 0091) y
+    // `guardarFacturaProveedor` convierte ese choque en `duplicada` — el
+    // reintento recupera los caídos y los ya guardados rebotan sin segunda
+    // fila.
+    //
+    // CARRERA ACEPTADA: entre este DELETE y el reintento puede colarse otra
+    // entrega concurrente del mismo correo; su insert vuelve a tomar la llave
+    // primaria y la que llegue después sale por "ya_procesado". Inofensivo:
+    // alguien procesa, nadie duplica.
+    const { error: errLiberar } = await supabaseAdmin()
+      .from('correo_procesado').delete().eq('email_id', emailId);
+    if (errLiberar) {
+      // Best-effort: sin liberar, el reintento va a salir "ya_procesado" y
+      // estos adjuntos SÍ se pierden — por eso es error y no warn.
+      logger.error('correo_entrante.liberar_dedup', { emailId, err: errLiberar.message });
+    }
+    logger.warn('correo_entrante.descarga_caida', {
+      emailId, tenantId: flota.id, caidas, guardadas, ignoradas, total: adjuntos.length,
+    });
+    return NextResponse.json({ error: 'no se pudieron descargar todos los adjuntos' }, { status: 503 });
   }
 
   logger.info('correo_entrante.procesado', {
