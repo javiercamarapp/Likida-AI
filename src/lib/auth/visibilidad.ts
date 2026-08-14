@@ -130,6 +130,11 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // Es `dinero` porque responde montos comprobados/IVA/peaje (§12: las
   // cifras se piden DESPUÉS de este gateo).
   '/dashboard/chat': 'dinero',
+  // Conocimiento normativo (14-ago-2026) — de dónde sale el fundamento de cada
+  // cifra fiscal. Es `dinero` porque su lector es el contador: quien decide con
+  // esto es quien firma la declaración. La ley es la misma para todas las
+  // flotas, así que la página no recibe tenantId; aquí solo se gatea el acceso.
+  '/dashboard/conocimiento': 'dinero',
   // Lo que Likida le cobra a la flota (0052). Es `dinero` y no
   // `administracion` porque el contador necesita las facturas de Likida para su
   // propia contabilidad — es el mismo criterio que la RLS de la 0052, que las
