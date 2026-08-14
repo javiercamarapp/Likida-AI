@@ -78,6 +78,7 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // crear/asignar es del encargado también; el server action re-gatea con
   // puedeAsignar adentro.
   '/dashboard/viajes/nuevo': 'operacion',
+  '/dashboard/despacho': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
 
