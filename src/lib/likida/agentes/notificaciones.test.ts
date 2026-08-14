@@ -578,11 +578,15 @@ describe('un interruptor sin emisor no se puede encender', () => {
     }
   });
 
-  it('`cola_atorada` NO se guarda en ningún agente: hoy nadie lo emite', () => {
+  it('`cola_atorada` se guarda SOLO en facturas y sigue rebotando en los otros 5', () => {
+    // El emisor real es el cron de facturación (`procesarLoteEnCola`): avisa
+    // por cada flota con tickets bloqueados en la corrida. Las colas de los
+    // otros cinco agentes solo se miden en el render, no en un cron — su par
+    // sin emisor sería el bug original de la pestaña.
     for (const a of AGENTES_NOTIFICABLES) {
       if (!a.eventos.includes('cola_atorada')) continue;
       const v = validarConfigNotificaciones(a, { eventos: ['cola_atorada'], roles: ['flota_admin'] });
-      expect('ok' in v && v.ok.eventos, a.id).toEqual([]);
+      expect('ok' in v && v.ok.eventos, a.id).toEqual(a.id === 'facturas' ? ['cola_atorada'] : []);
     }
   });
 
@@ -623,6 +627,9 @@ describe('un interruptor sin emisor no se puede encender', () => {
     const cobranza = eventosDe(agentePorId('cobranza')!);
     expect(cobranza.find((e) => e.id === 'corrida_fallida')!.conectado).toBe(true);
     expect(cobranza.find((e) => e.id === 'cola_atorada')!.conectado).toBe(false);
+    // Y en facturas la cola atorada SÍ se pinta encendible: tiene emisor real.
+    const facturas = eventosDe(agentePorId('facturas')!);
+    expect(facturas.find((e) => e.id === 'cola_atorada')!.conectado).toBe(true);
   });
 
   it('apagar algo que estaba encendido no queda bloqueado por el filtro', () => {

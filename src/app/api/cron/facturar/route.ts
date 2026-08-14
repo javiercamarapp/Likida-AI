@@ -11,7 +11,8 @@ import { conNavegador } from '@/lib/likida/facturacion/adaptadores/pagina_playwr
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
-import { avisarCorridasPorFlota, FalloDePlataforma } from '@/lib/likida/agentes/notificaciones';
+import { avisar, avisarCorridasPorFlota, FalloDePlataforma } from '@/lib/likida/agentes/notificaciones';
+import { avisoColaAtorada } from '@/lib/correo/avisos';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { modoEfectivo } from '@/lib/likida/facturacion/modo';
 
@@ -381,6 +382,12 @@ export async function procesarLoteEnCola(
   // justo el caso en que el aviso importa.
   const corridas = new Map<string, unknown>();
   const inicioCorrida = new Date();
+  /** Flota → los gastos que ESTA corrida sacó de la cola automática. FUERA del
+   *  `try` por la misma razón que `corridas`: el aviso de cola atorada (B2) se
+   *  manda desde el `finally`, y un lote que reventó a la mitad ya pudo haber
+   *  bloqueado tickets — esos siguen esperando a una persona aunque la corrida
+   *  muera. Cada entrada nace con al menos un gasto (`anotarBloqueo`). */
+  const bloqueadosPorFlota = new Map<string, Array<{ gastoId: string; motivo: string }>>();
 
   try {
     // ── Agrupar: flota → portal → tickets. El portal sale de `armar()`, que es
@@ -413,9 +420,6 @@ export async function procesarLoteEnCola(
       /** Cuántas SESIONES de portal se abrieron, contra cuántos tickets. */
       sesiones?: number;
     }> = [];
-    /** Flota → los gastos que ESTA corrida sacó de la cola automática. */
-    const bloqueadosPorFlota = new Map<string, Array<{ gastoId: string; motivo: string }>>();
-
     const correr = async (g: FilaCola) => {
       // Se vuelve a leer el gasto dentro de `facturarAlVuelo` a propósito: es el
       // único sitio que decide si se emite y el único que escribe el UUID. Entre
@@ -695,5 +699,46 @@ export async function procesarLoteEnCola(
             : 'La corrida de facturación de esta flota no se pudo completar. El detalle quedó en los registros del sistema.')
           : undefined,
       })));
+
+    // ── LA COLA ATORADA DE FACTURAS (B2, auditoría 4) ──────────────────────
+    //
+    // `avisoColaAtorada` existía desde el 14-ago sin un solo llamador; éste es
+    // su primer emisor real, y SOLO para Facturas: los tickets que ESTA
+    // corrida bloqueó (`requiere_cuenta`, CAPTCHA, emisión sin confirmar)
+    // salieron de la cola automática y esperan a una persona — exactamente lo
+    // que el evento existe para contar. La magnitud es MEDIDA (cuántos bloqueó
+    // esta corrida) y `diasSinBajar` va en `null` porque es la verdad: no hay
+    // serie histórica de esta cola, y la plantilla lo maneja sin inventar días.
+    //
+    // SOLO cuando algo se bloqueó en esta corrida, igual que el WhatsApp de
+    // `avisarALasPersonas`: una corrida sin bloqueos nuevos no sabe si la cola
+    // vieja ya la atendió una persona, así que tampoco cierra el incidente por
+    // ella. El anti-ruido (marcas de insistencia y piso de una hora) vive en
+    // `avisar` — aquí no se duplica nada de eso.
+    //
+    // `avisar` promete no lanzar, pero la corrida no cuelga de esa promesa:
+    // una invariante que solo aguanta fallos por valor no es una invariante
+    // (el mismo criterio del emisor de `escalado` en escalar_viaje.ts).
+    for (const [tenantId, bloqueados] of bloqueadosPorFlota) {
+      try {
+        await avisar(
+          tenantId, 'facturas', 'cola_atorada',
+          { hayProblema: true, magnitud: bloqueados.length },
+          // El nombre y la ruta salen del catálogo vía `avisar` (d.agente,
+          // d.ruta) — el mismo patrón que `avisarCorridaFallida`.
+          (d) => avisoColaAtorada({
+            flota: d.flota,
+            agente: d.agente,
+            href: d.ruta,
+            cuantos: bloqueados.length,
+            diasSinBajar: null,
+          }),
+        );
+      } catch (e) {
+        logger.error('cron.facturar.aviso_cola_roto', {
+          tenant: tenantId, err: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
   }
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   avisoVigencias, avisoCorridaFallida, avisoHuerfanos, avisoEscalados, avisoInvitacion,
+  avisoDePrueba, avisoColaAtorada,
 } from './avisos';
 import { armarHtml, aTextoPlano } from './plantilla';
 
@@ -232,6 +233,105 @@ describe('el pie dice de qué flota y cómo apagarlo', () => {
     // instrucción que lleva al lugar equivocado es peor que ninguna, porque
     // quien la sigue concluye que el producto no cumple.
     expect(avisoVigencias(VIG).porQueLoRecibes).toContain('Notificaciones del agente');
+  });
+});
+
+describe('la cola atorada — el aviso que estrenó emisor con Facturas (B2)', () => {
+  const BASE = {
+    flota: 'Transportes X', agente: 'Agente de Facturas',
+    href: '/dashboard/agentes/facturas', cuantos: 3, diasSinBajar: null,
+  };
+
+  it('el asunto nombra al agente y el conteo, con el singular escrito', () => {
+    expect(avisoColaAtorada(BASE).asunto).toBe('Agente de Facturas: 3 pendientes sin avanzar');
+    expect(avisoColaAtorada({ ...BASE, cuantos: 1 }).asunto).toBe('Agente de Facturas: 1 pendiente sin avanzar');
+  });
+
+  it('sin serie histórica (`diasSinBajar: null`) no inventa días ni urgencia', () => {
+    // Es el caso con que lo emite el cron de facturación: la cola de
+    // bloqueados no tiene serie histórica, y el aviso no rellena el hueco.
+    const a = avisoColaAtorada(BASE);
+    expect(a.tono).toBe('atencion');
+    expect(a.datos).toEqual([['Agente', 'Agente de Facturas'], ['Pendientes', '3']]);
+    expect(JSON.stringify(a)).not.toContain('Sin avanzar desde hace');
+  });
+
+  it('con días medidos los enseña, y a los 3 sube a urgente', () => {
+    const viejo = avisoColaAtorada({ ...BASE, diasSinBajar: 4 });
+    expect(viejo.tono).toBe('urgente');
+    expect(viejo.datos).toContainEqual(['Sin avanzar desde hace', '4 días']);
+    expect(avisoColaAtorada({ ...BASE, diasSinBajar: 1 }).tono).toBe('atencion');
+  });
+
+  it('dice que NO es una falla del agente: corre bien y lo que queda espera a una persona', () => {
+    const todo = avisoColaAtorada(BASE).parrafos.join(' ');
+    expect(todo).toContain('sin errores');
+    expect(todo).toContain('alguien decida');
+  });
+
+  it('lleva a la página del agente y se arma en HTML y texto', () => {
+    const a = avisoColaAtorada(BASE);
+    expect(a.boton!.href).toContain('/dashboard/agentes/facturas');
+    expect(armarHtml(a)).toContain('<!doctype html>');
+    expect(aTextoPlano(a).length).toBeGreaterThan(40);
+  });
+});
+
+describe('la prueba de avisos confirma la entrega sin inventar un problema', () => {
+  const P = { flota: 'Transportes Innovativos', agente: 'Agente de Cobranza' };
+
+  it('el asunto se reconoce como prueba y nombra al agente', () => {
+    const a = avisoDePrueba(P);
+    expect(a.asunto).toContain('Prueba');
+    expect(a.asunto).toContain('Agente de Cobranza');
+  });
+
+  it('dice QUÉ confirma: que los avisos de ese agente llegan a esa dirección', () => {
+    const a = avisoDePrueba(P);
+    const todo = `${a.titulo} ${a.parrafos.join(' ')}`;
+    expect(todo).toContain('confirma');
+    expect(todo).toContain('esta dirección');
+    expect(todo).toContain('Agente de Cobranza');
+  });
+
+  it('no acusa un problema inexistente: lo niega con todas sus letras y en tono neutral', () => {
+    // Un correo de prueba que suene a alerta manda al contralor a buscar un
+    // incidente que no existe — el daño contrario al que la prueba resuelve.
+    const a = avisoDePrueba(P);
+    expect(a.tono).toBe('neutral');
+    expect(`${a.parrafos.join(' ')}`).toContain('No hay ningún problema real');
+    expect(JSON.stringify(a).toLowerCase()).not.toMatch(/urgente|falla|fall[óo]|error|se rompi|se detuv/);
+  });
+
+  it('sin cifras: pasa el barrido de $ de la casa y no trae ni un dígito', () => {
+    // El mismo barrido que huérfanos (el correo puede reenviarse), y más
+    // duro: una prueba no tiene NADA que contar, así que ningún número.
+    const todo = JSON.stringify(avisoDePrueba(P));
+    expect(todo).not.toMatch(/\$|MXN|peso/i);
+    expect(todo).not.toMatch(/\d/);
+  });
+
+  it('de la flota solo viaja el nombre, y sin nombre no queda cojo', () => {
+    expect(avisoDePrueba(P).porQueLoRecibes).toContain('Transportes Innovativos');
+    const sin = avisoDePrueba({ ...P, flota: null });
+    expect(JSON.stringify(sin)).not.toContain('null');
+    expect(sin.porQueLoRecibes).toContain('Agente de Cobranza');
+  });
+
+  it('su pie explica por qué llegó y que no es recurrente, sin ofrecer apagarlo', () => {
+    const a = avisoDePrueba(P);
+    expect(a.porQueLoRecibes).toContain('porque pediste una prueba');
+    expect(a.porQueLoRecibes).not.toContain('apagarlo');
+  });
+
+  it('no trae botón: quien lo lee ya está en la pestaña que lo mandó', () => {
+    expect(avisoDePrueba(P).boton).toBeUndefined();
+  });
+
+  it('se arma en HTML y en texto como cualquier otro', () => {
+    const a = avisoDePrueba(P);
+    expect(armarHtml(a)).toContain('<!doctype html>');
+    expect(aTextoPlano(a).length).toBeGreaterThan(40);
   });
 });
 
