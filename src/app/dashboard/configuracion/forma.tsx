@@ -132,11 +132,23 @@ export function FormaAjustes({ inicial, ejemploKm, guardar }: {
           </legend>
           <div className="space-y-1.5">
             {FORMATOS.map((f) => (
-              <label key={f.valor} className="card p-2.5 flex items-start gap-2.5 cursor-pointer">
-                <input type="radio" checked={v.salida === f.valor} onChange={() => setV((p) => ({ ...p, salida: f.valor }))}
+              <label key={f.valor}
+                className={`card p-2.5 flex items-start gap-2.5 ${f.implementado ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                style={f.implementado ? undefined : { opacity: 0.6 }}>
+                <input type="radio" disabled={!f.implementado}
+                  checked={v.salida === f.valor}
+                  onChange={() => setV((p) => ({ ...p, salida: f.valor }))}
                   className="mt-0.5" />
                 <span className="min-w-0">
-                  <span className="text-[13px] font-medium block">{f.rotulo}</span>
+                  <span className="text-[13px] font-medium block">
+                    {f.rotulo}
+                    {!f.implementado && (
+                      <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium align-middle"
+                        style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
+                        aún no
+                      </span>
+                    )}
+                  </span>
                   <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{f.detalle}</span>
                 </span>
               </label>

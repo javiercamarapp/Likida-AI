@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  validarAjustes, parsearCuentas, formatearCuentas, esFormato, type AjustesCrudos,
+  validarAjustes, parsearCuentas, formatearCuentas, esFormato, FORMATOS, type AjustesCrudos,
 } from './ajustes_operativos';
 import { DatoInvalido } from './errores';
 
@@ -68,10 +68,25 @@ describe('validarAjustes — los rangos protegen al motor, no al formulario', ()
 });
 
 describe('validarAjustes — el formato de salida', () => {
-  it('acepta los tres que el export sabe escribir', () => {
-    for (const f of ['csv', 'contpaqi_txt', 'aspel_xls']) {
-      expect(validarAjustes({ ...BUENOS, salida: f }).salida).toBe(f);
+  it('acepta el que el export SÍ sabe escribir', () => {
+    expect(validarAjustes({ ...BUENOS, salida: 'csv' }).salida).toBe('csv');
+  });
+
+  it('RECHAZA los que el tipo admite pero el export no escribe', () => {
+    // `config.salida` existe en el tipo desde hace tiempo, pero nadie la lee:
+    // `aFilasExport` produce siempre el mismo renglón. Guardar 'contpaqi_txt'
+    // dejaría la config diciendo una cosa y el archivo descargado siendo otra,
+    // y nadie se enteraría porque el CSV sale igual de bien.
+    for (const f of ['contpaqi_txt', 'aspel_xls']) {
+      expect(() => validarAjustes({ ...BUENOS, salida: f })).toThrow(/todavía no lo escribe el export/);
     }
+  });
+
+  it('cada formato declara si está implementado — la pantalla lo lee de aquí', () => {
+    // Si alguien implementa el layout de CONTPAQi y olvida marcarlo, esta
+    // prueba no truena; la de arriba sí, y es la que obliga a venir aquí.
+    expect(FORMATOS.find((f) => f.valor === 'csv')!.implementado).toBe(true);
+    expect(FORMATOS.every((f) => typeof f.implementado === 'boolean')).toBe(true);
   });
 
   it('rechaza uno inventado — el export no sabría qué escribir', () => {

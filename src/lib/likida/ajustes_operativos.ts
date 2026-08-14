@@ -35,10 +35,36 @@ import type { LikidaConfig } from './config';
 
 export type FormatoSalida = LikidaConfig['salida'];
 
-export const FORMATOS: ReadonlyArray<{ valor: FormatoSalida; rotulo: string; detalle: string }> = [
-  { valor: 'csv', rotulo: 'CSV genérico', detalle: 'Lo lee Excel y casi cualquier ERP. Es el default.' },
-  { valor: 'contpaqi_txt', rotulo: 'CONTPAQi (TXT)', detalle: 'Layout de póliza para importar en CONTPAQi.' },
-  { valor: 'aspel_xls', rotulo: 'Aspel (XLS)', detalle: 'Hoja para importar en Aspel COI.' },
+/**
+ * Los formatos que el TIPO admite, y cuáles el export SABE ESCRIBIR HOY.
+ *
+ * `implementado` no es un adorno de UI: `config.salida` existe en el tipo desde
+ * hace tiempo, pero NADIE la lee — `aFilasExport` (fiscal.ts) produce siempre
+ * el mismo renglón y la ruta de descarga no se ramifica por formato. Un
+ * selector con tres opciones era ofrecerle al contador una decisión que no
+ * cambia el archivo que baja: exactamente la promesa de UI que este producto
+ * no puede hacer.
+ *
+ * No se inventan los otros dos layouts. Un TXT de póliza de CONTPAQi mal
+ * adivinado no falla ruidosamente: importa mal y ensucia una contabilidad.
+ * Cuando haya un cliente que los pida, se escriben CONTRA SU archivo de
+ * ejemplo y se marca `implementado: true` aquí.
+ */
+export const FORMATOS: ReadonlyArray<{
+  valor: FormatoSalida; rotulo: string; detalle: string; implementado: boolean;
+}> = [
+  {
+    valor: 'csv', rotulo: 'CSV genérico', implementado: true,
+    detalle: 'Lo lee Excel y casi cualquier ERP. Es el que el export escribe hoy.',
+  },
+  {
+    valor: 'contpaqi_txt', rotulo: 'CONTPAQi (TXT)', implementado: false,
+    detalle: 'Layout de póliza para CONTPAQi. Todavía no se escribe: se hará contra el archivo de ejemplo de la primera flota que lo use, no adivinando el formato.',
+  },
+  {
+    valor: 'aspel_xls', rotulo: 'Aspel (XLS)', implementado: false,
+    detalle: 'Hoja para Aspel COI. Mismo criterio que CONTPAQi.',
+  },
 ];
 
 /** Lo que llega del formulario: strings, porque un `<input>` no da números. */
@@ -155,6 +181,12 @@ export function validarAjustes(c: AjustesCrudos): AjustesValidos {
 
   const salida = c.salida.trim();
   if (!esFormato(salida)) throw new DatoInvalido('El formato de salida no es uno de los disponibles.');
+  // Guardar un formato que el export no sabe escribir dejaría la config
+  // diciendo una cosa y el archivo descargado siendo otra — y nadie se
+  // enteraría, porque el CSV sale igual de bien.
+  if (!FORMATOS.find((f) => f.valor === salida)!.implementado) {
+    throw new DatoInvalido('Ese formato todavía no lo escribe el export. Se construye contra el archivo de ejemplo de tu ERP — pídenoslo desde el Centro de ayuda.');
+  }
 
   const catalogoCuentas = parsearCuentas(c.cuentas);
   if (Object.keys(catalogoCuentas).length === 0) {
