@@ -56,7 +56,7 @@ export async function resumenDeCierre(tenantId: string, viajeId: string): Promis
       .eq('viaje_id', viajeId).eq('tenant_id', tenantId)
       .order('created_at', { ascending: false }).limit(1).maybeSingle(),
     admin.from('viaje')
-      .select('folio, operador(nombre)')
+      .select('folio, operador:operador_id(nombre)')
       .eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(),
   ]);
 
