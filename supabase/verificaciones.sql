@@ -3232,3 +3232,80 @@ begin
   raise exception E'VIAJE_FOLIO_0092  doble-rebota=%  otra-flota=%  nulos=%   (esperado t / t / 2)',
     doble_rebota, otra_flota, n_nulos;
 end $$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── 68. Llaves de API por flota: la llave EN CLARO no cabe (mig. 0093) ──────
+--
+-- Lo que se comprueba, y por qué cada uno importa:
+--   1. Una llave EN CLARO no cabe en la columna `hash`. Es el candado que
+--      impide que un volcado de esta tabla —o un `select` de alguien con
+--      service role— sea acceso directo a la API de todas las flotas.
+--   2. Un hash de largo equivocado tampoco entra.
+--   3. El mismo hash no se puede repetir: dos flotas no comparten llave.
+--   4. Un `area` inventada rebota: fail closed, igual que un rol desconocido.
+--   5. Un nombre vacío rebota: una lista de hashes sin nombre es
+--      indistinguible y nadie se atreve a revocar ninguna.
+--   6. RLS encendida.
+--   7. Borrar la flota se lleva sus llaves: una flota dada de baja no puede
+--      dejar credenciales vivas apuntando a ella.
+--
+-- CORRIDA REAL (14-ago-2026, proyecto gngoqsvrxdguxvsizpbw):
+--   TENANT_API_KEY_0093  claro=t  corto=t  dup=t  area=t  nombre=t  rls=t
+--                        huerfanas=0   (esperado t/t/t/t/t/t/0)
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid;
+  h1 text := repeat('a', 64);
+  h2 text := repeat('b', 64);
+  claro_rebota boolean := false;
+  hash_corto_rebota boolean := false;
+  dup_rebota boolean := false;
+  area_mala_rebota boolean := false;
+  nombre_vacio_rebota boolean := false;
+  quedan int;
+  rls boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0093') returning id into t;
+
+  begin
+    insert into tenant_api_key (tenant_id, nombre, prefijo, hash)
+      values (t, 'en claro', 'lk_live_x', 'lk_live_secreto_en_claro');
+  exception when check_violation then claro_rebota := true;
+  end;
+
+  begin
+    insert into tenant_api_key (tenant_id, nombre, prefijo, hash)
+      values (t, 'corto', 'lk_live_x', 'abc123');
+  exception when check_violation then hash_corto_rebota := true;
+  end;
+
+  insert into tenant_api_key (tenant_id, nombre, prefijo, hash, area)
+    values (t, 'TMS propio', 'lk_live_abc123', h1, 'operacion');
+
+  begin
+    insert into tenant_api_key (tenant_id, nombre, prefijo, hash)
+      values (t, 'duplicada', 'lk_live_abc123', h1);
+  exception when unique_violation then dup_rebota := true;
+  end;
+
+  begin
+    insert into tenant_api_key (tenant_id, nombre, prefijo, hash, area)
+      values (t, 'area mala', 'lk_live_zzz', h2, 'todo');
+  exception when check_violation then area_mala_rebota := true;
+  end;
+
+  begin
+    insert into tenant_api_key (tenant_id, nombre, prefijo, hash)
+      values (t, '   ', 'lk_live_yyy', h2);
+  exception when check_violation then nombre_vacio_rebota := true;
+  end;
+
+  select relrowsecurity into rls from pg_class where relname = 'tenant_api_key';
+
+  delete from tenant where id = t;
+  select count(*) into quedan from tenant_api_key where tenant_id = t;
+
+  raise exception E'TENANT_API_KEY_0093  claro=%  corto=%  dup=%  area=%  nombre=%  rls=%  huerfanas=%   (esperado t/t/t/t/t/t/0)',
+    claro_rebota, hash_corto_rebota, dup_rebota, area_mala_rebota, nombre_vacio_rebota, rls, quedan;
+end $$;

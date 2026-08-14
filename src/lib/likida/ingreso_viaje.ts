@@ -1,4 +1,10 @@
 import { DatoInvalido } from './errores';
+// El formato de cifras vive SOLO en formato.ts, y hay una prueba que falla si
+// otro archivo formatea por su cuenta. Este archivo la hizo fallar en su
+// primera versión con un `toLocaleString` en el mensaje de error: el guardia
+// no distingue un mensaje de una pantalla, y hace bien — una cifra que se lee
+// distinto en dos lados se lee como dos cálculos.
+import { numero } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL INGRESO DEL VIAJE — lo que por fin cierra el ciclo del dinero.
@@ -78,7 +84,7 @@ function opcional(crudo: string, campo: string, tope: number): number | null {
   if (n < 0) throw new DatoInvalido(`${campo} no puede ser negativo.`);
   if (n > tope) {
     throw new DatoInvalido(
-      `${campo} pasa de ${tope.toLocaleString('es-MX')} y eso casi siempre es un cero de más. Si es correcto, avísanos.`,
+      `${campo} pasa de ${numero(tope)} y eso casi siempre es un cero de más. Si es correcto, avísanos.`,
     );
   }
   return n;
