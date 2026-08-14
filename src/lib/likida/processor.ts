@@ -320,9 +320,20 @@ async function recordarPeticionDeFoto(
  * una "é" NO cuenta como letra y "terminé" —la forma correcta y la más
  * escrita— nunca casaba. La lista vieja pedía además la e final, dejando fuera
  * "termino ruta", que es de las más comunes.
+ *
+ * EL "YA" PELÓN NO CUENTA (AUD3 AG-A1). "ya" solo es cierre acompañado de su
+ * forma fuerte: "ya está", "ya quedó", "ya terminé/acabé", "ya no tengo más".
+ * La lista vieja empataba `ya` seguido de CUALQUIER cosa — la frontera
+ * `(?!\p{L})` corta la palabra, no la frase—, y un chofer con 8 tickets que
+ * contestaba "ya voy" al mensaje de cobranza se leía como orden de cerrar, con
+ * cierre IRREVERSIBLE (triggers 0036/0037): tickets del regreso a huérfanos y
+ * PDF con una diferencia en contra que no es la del viaje. El `(ya\s+)?`
+ * opcional conserva "ya terminé"/"ya acabé", que antes entraban por el `ya`
+ * pelón; "ya no tengo más" se lista explícito por lo mismo — quitarle el `ya`
+ * pelón al regex no puede costarle sus formas fuertes al freno.
  */
 function pareceCierre(texto: string): boolean {
-  return /^\s*(listo|ya|ya est[aá]|termin[éeoó]|acab[éeoó]|cierra|cerrar|eso es todo|es todo|ya qued[óo])(?!\p{L})/iu.test(texto);
+  return /^\s*(listo|ya est[aá]|ya qued[óo]|ya no tengo m[áa]s|(ya\s+)?termin[éeoó]|(ya\s+)?acab[éeoó]|cierra|cerrar|eso es todo|es todo)(?!\p{L})/iu.test(texto);
 }
 
 export async function processInbound(msg: InboundMessage): Promise<void> {

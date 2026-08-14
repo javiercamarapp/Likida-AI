@@ -3,8 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 // El CABLEADO de los hitos (0090) en el dispatcher — lo que la unidad de
 // hitos_viaje.test.ts no puede probar: que "ya llegué" se atiende ANTES del
-// freno de cierre (cuyo regex ^(listo|ya|...) se lo comería) y que "listo"
-// sigue siendo del cierre, no de los hitos.
+// freno de cierre y que "listo" sigue siendo del cierre, no de los hitos.
+// (Desde AUD3 AG-A1 el regex de `pareceCierre` ya NO empata el "ya" pelón, así
+// que "ya llegué" tampoco le parece cierre — pero el orden hito-antes-de-freno
+// sigue siendo el contrato que este archivo fija.)
 // ═══════════════════════════════════════════════════════════════════════════
 
 const runAgent = vi.fn();
