@@ -1,6 +1,7 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
   BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2, Plug,
+  ChartNoAxesCombined,
 } from 'lucide-react';
 
 /**
@@ -54,6 +55,9 @@ export const DINERO_FISCAL: Item[] = [
   // del sidebar y quedó alcanzable solo por URL — F5 la devuelve al menú
   // porque el Agente de Peajes manda gente a resolver aquí.
   { href: '/dashboard/combustible-casetas', nombre: 'Combustible y casetas', Icono: Fuel },
+  // F7: margen real y cartera de clientes. La pantalla dice qué la enciende
+  // mientras `ingreso_flete` y `factura_emitida` sigan vacías.
+  { href: '/dashboard/rentabilidad', nombre: 'Rentabilidad y cobranza', Icono: ChartNoAxesCombined },
 ];
 
 export const SISTEMA: Item[] = [
