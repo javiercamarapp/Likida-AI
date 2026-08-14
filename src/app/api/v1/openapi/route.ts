@@ -36,6 +36,7 @@
 import { NextResponse } from 'next/server';
 import { clientIp, rateLimit } from '@/lib/ratelimit';
 import { DIAS_AVISO } from '@/lib/likida/vigencias';
+import { CABECERA_IDEMPOTENCIA, LARGO_MIN_LLAVE, LARGO_MAX_LLAVE, ANIO_MIN_UNIDAD } from '../_escritura';
 import {
   LIMITE_DEFECTO,
   LIMITE_MAXIMO,
@@ -190,6 +191,71 @@ const respuestasError = {
   '429': { description: `Límite de tasa: ${TASA_ANONIMA}/min por IP antes de identificar, ${TASA_POR_FLOTA}/min por flota después.`, content: { 'application/json': { schema: cuerpoError } } },
   '500': { description: 'Error interno, o `lectura_incompleta` si la flota rebasó lo que una lectura puede demostrar completo.', content: { 'application/json': { schema: cuerpoError } } },
   '503': { description: 'No se pudo verificar la credencial contra la base. Reintenta.', content: { 'application/json': { schema: cuerpoError } } },
+} as const;
+
+// ── LO QUE COMPARTEN LAS DOS ESCRITURAS ───────────────────────────────────
+//
+// `Idempotency-Key` es OBLIGATORIA, no opcional, y ésa es la decisión que esta
+// documentación tiene que dejar clarísima: sin ella, un timeout de red —el
+// caso normal, no el raro— deja al integrador sin saber si el viaje se creó, y
+// el reintento lo crea dos veces. Que sea obligatoria convierte «reintentar»
+// en la respuesta correcta a cualquier fallo, en vez de en una apuesta.
+const cabeceraIdempotencia = {
+  name: CABECERA_IDEMPOTENCIA,
+  in: 'header',
+  required: true,
+  description: `Identificador único de ESTA operación (un uuid sirve). Repítelo EXACTO al reintentar: la respuesta original se vuelve a servir tal cual, con \`Idempotent-Replayed: true\`. Entre ${LARGO_MIN_LLAVE} y ${LARGO_MAX_LLAVE} caracteres ASCII imprimibles.`,
+  schema: { type: 'string', minLength: LARGO_MIN_LLAVE, maxLength: LARGO_MAX_LLAVE },
+} as const;
+
+/** El 200 de una escritura: NO se creó nada nuevo, ya existía. */
+function yaExistia(que: string, esquema: Record<string, unknown>) {
+  return {
+    description: `${que} ya existía y se devuelve el mismo. Pasa por reintento con la misma \`Idempotency-Key\`, o porque otro camino ya lo había creado con la misma clave natural. \`idempotente: true\` lo dice en el cuerpo además del status, para que un cliente generado desde este esquema pueda distinguirlo sin leer el código HTTP.`,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: { dato: esquema, idempotente: { type: 'boolean', enum: [true] } },
+          required: ['dato', 'idempotente'],
+        },
+      },
+    },
+  };
+}
+
+function seCreo(que: string, esquema: Record<string, unknown>) {
+  return {
+    description: `${que} quedó creado en esta llamada.`,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: { dato: esquema, idempotente: { type: 'boolean', enum: [false] } },
+          required: ['dato', 'idempotente'],
+        },
+      },
+    },
+  };
+}
+
+const VIAJE_CREADO = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    folio: { type: 'string' },
+    estatus: { type: 'string', enum: ['abierto'], description: 'Todo viaje nace `abierto`. No se relee de la base: se escribe literal en el mismo insert que devolvió el id.' },
+  },
+  required: ['id', 'folio', 'estatus'],
+} as const;
+
+const UNIDAD_CREADA = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    numeroEconomico: { type: 'string' },
+  },
+  required: ['id', 'numeroEconomico'],
 } as const;
 
 const noEncontrado = {
@@ -411,6 +477,46 @@ function documento(servidor: string) {
     },
     paths: {
       '/v1/viajes': {
+        post: {
+          operationId: 'crearViaje',
+          summary: 'Da de alta un viaje.',
+          description:
+            'Requiere el área `administracion`. El viaje nace `abierto`.\n\n'
+            + 'EL TENANT NO SE MANDA. Sale de la credencial y de ningún otro lado: un `tenantId` en el cuerpo se ignora, no da error — leerlo convertiría la llave de una flota en una puerta para escribir en otra.\n\n'
+            + 'EL INGRESO DISTINGUE VACÍO DE CERO. `ingresoFlete` ausente se guarda `null` («todavía no se sabe cuánto dejó»), jamás 0 («no dejó nada»): son lecturas opuestas de la rentabilidad y el motor se niega a confundirlas. El `anticipo` es la única excepción declarada — su columna es NOT NULL, y un viaje sin anticipo es un viaje donde no se adelantó efectivo, que es lo que 0 mide de verdad.\n\n'
+            + 'El `folio` es único por flota: repetirlo devuelve 200 con el viaje que ya existía, no un segundo viaje.',
+          tags: ['viajes'],
+          parameters: [cabeceraIdempotencia],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    folio: { type: 'string', maxLength: 64, description: 'Único por flota. Es la clave natural del viaje.' },
+                    operadorId: { type: 'string', format: 'uuid', description: 'OBLIGATORIO: la columna no admite nulos. Un viaje sin chofer no se puede guardar.' },
+                    origen: { type: 'string', maxLength: 120, nullable: true },
+                    destino: { type: 'string', maxLength: 120, nullable: true },
+                    fechaInicio: { type: 'string', format: 'date', nullable: true },
+                    unidadId: { type: 'string', format: 'uuid', nullable: true },
+                    clienteId: { type: 'string', format: 'uuid', nullable: true, description: 'De quién es el flete. Sin él no hay a quién facturarle.' },
+                    ingresoFlete: { type: 'number', nullable: true, description: 'Lo que la flota COBRA por el viaje, en MXN. Ausente = `null`, nunca 0.' },
+                    kmRecorridos: { type: 'number', nullable: true },
+                    anticipo: { type: 'number', minimum: 0, default: 0, description: 'Efectivo adelantado al operador, MXN. Ausente = 0, y esto sí es una medición.' },
+                  },
+                  required: ['folio', 'operadorId'],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            '201': seCreo('El viaje', VIAJE_CREADO),
+            '200': yaExistia('Un viaje con ese folio', VIAJE_CREADO),
+            ...respuestasError,
+          },
+        },
         get: {
           operationId: 'listarViajes',
           summary: 'Los viajes de la flota, el más reciente primero.',
@@ -488,6 +594,46 @@ function documento(servidor: string) {
         },
       },
       '/v1/unidades': {
+        post: {
+          operationId: 'crearUnidad',
+          summary: 'Da de alta una unidad del parque vehicular.',
+          description:
+            'Requiere el área `administracion`. Es la ruta con la que se carga el parque desde un TMS o un CSV sin teclearlo a mano.\n\n'
+            + 'EL TENANT NO SE MANDA: sale de la credencial, igual que en `POST /v1/viajes`.\n\n'
+            + 'NO SE CAPTURAN VIGENCIAS AQUÍ. La póliza, el permiso SICT y la verificación se cargan por su propia pantalla: son fechas cuya caducidad dispara alertas, y aceptarlas en el alta masiva es la forma más rápida de llenar la flota de vencimientos inventados por un CSV mal mapeado. Una unidad recién creada aparece en el panel como `sin_dato`, que es lo que de verdad se sabe de ella.\n\n'
+            + 'El `numeroEconomico` es único por flota: repetirlo devuelve 200 con la unidad que ya existía.',
+          tags: ['unidades'],
+          parameters: [cabeceraIdempotencia],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    numeroEconomico: { type: 'string', maxLength: 40, description: 'Como le dice la flota a esa unidad (T-042). Único por flota: es su clave natural.' },
+                    placas: { type: 'string', maxLength: 20, nullable: true },
+                    marca: { type: 'string', maxLength: 60, nullable: true },
+                    modelo: { type: 'string', maxLength: 60, nullable: true },
+                    anio: {
+                      type: 'integer',
+                      minimum: ANIO_MIN_UNIDAD,
+                      nullable: true,
+                      description: `Entre ${ANIO_MIN_UNIDAD} y el año en curso + 2 (las unidades se compran con modelo adelantado). Acepta también su forma de texto ("2018"), porque un CSV exportado por un TMS manda todo como texto; "2018.5" no pasa.`,
+                    },
+                  },
+                  required: ['numeroEconomico'],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            '201': seCreo('La unidad', UNIDAD_CREADA),
+            '200': yaExistia('Una unidad con ese número económico', UNIDAD_CREADA),
+            ...respuestasError,
+          },
+        },
         get: {
           operationId: 'listarUnidades',
           summary: 'El parque vehicular con sus vigencias de ley.',
