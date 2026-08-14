@@ -1,0 +1,163 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// El flujo completo del despacho por WhatsApp: petición → resumen con el
+// nombre RESUELTO → sí/no → crearViaje. Lo que más se prueba es lo que más
+// cuesta si falla: que un "sí" viejo o un rol equivocado NO creen un viaje.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// El estado pendiente vive aquí — un jsonb de a mentiras por (tenant, tel).
+let estadoGuardado: Record<string, unknown> | null = null;
+
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({
+    from: (tabla: string) => {
+      if (tabla !== 'wa_conversacion') {
+        throw new Error(`despacho_wa solo puede tocar wa_conversacion; pidió ${tabla}`);
+      }
+      const b = {
+        select: () => b, eq: () => b,
+        maybeSingle: async () => ({ data: estadoGuardado ? { estado: estadoGuardado } : null, error: null }),
+        upsert: (fila: { estado: Record<string, unknown> }) => {
+          estadoGuardado = fila.estado;
+          return Promise.resolve({ error: null });
+        },
+      };
+      return b;
+    },
+  }),
+}));
+vi.mock('./presupuesto', async (orig) => ({
+  ...(await orig() as object),
+  acotada: (q: unknown) => q,
+}));
+const crearViaje = vi.fn(async (..._a: unknown[]) => 'viaje-nuevo-1');
+vi.mock('./operacion', () => ({ crearViaje: (...a: unknown[]) => crearViaje(...a) }));
+const resolver = vi.fn();
+vi.mock('./crear_viaje_wa', async (orig) => ({
+  ...(await orig() as object),
+  resolverOperadorPorNombre: (...a: unknown[]) => resolver(...a),
+}));
+vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+
+const { atenderDespachoOficina, VIGENCIA_PENDIENTE_MS } = await import('./despacho_wa');
+const { OperadorNombreAmbiguo } = await import('./crear_viaje_wa');
+const { ConsultaFallida } = await import('./conv');
+
+const JEFE = { tenantId: 't1', rol: 'flota_admin' as const };
+const TEL = '5215550000001';
+const AHORA = new Date('2026-08-14T17:00:00Z');
+
+beforeEach(() => {
+  estadoGuardado = null;
+  crearViaje.mockClear();
+  resolver.mockReset();
+});
+
+describe('lo que NO es despacho', () => {
+  it('un saludo devuelve null y no toca el estado', async () => {
+    const r = await atenderDespachoOficina(JEFE, TEL, 'hola, ¿cómo van mis viajes?', AHORA);
+    expect(r).toBeNull();
+    expect(estadoGuardado).toBeNull();
+  });
+});
+
+describe('la petición y su resumen', () => {
+  it('petición completa: guarda el pendiente y el resumen trae el nombre RESUELTO de la base', async () => {
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez López' });
+    const r = await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para juan perez, Puebla a Monterrey, anticipo 8000', AHORA);
+    expect(r).toContain('Juan Pérez López');
+    expect(r).toContain('Puebla → Monterrey');
+    expect(r).toContain('Responde SÍ');
+    expect((estadoGuardado?.viajePendiente as { operadorId: string }).operadorId).toBe('op-9');
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('petición incompleta: pide lo que falta, sin tocar la base de operadores', async () => {
+    const r = await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Juan Pérez', AHORA);
+    expect(r).toContain('me falta');
+    expect(resolver).not.toHaveBeenCalled();
+    expect(estadoGuardado).toBeNull();
+  });
+
+  it('el contador NO despacha, aunque escriba la petición perfecta', async () => {
+    const r = await atenderDespachoOficina({ tenantId: 't1', rol: 'contador' }, TEL, 'nuevo viaje para Juan, Puebla a Monterrey', AHORA);
+    expect(r).toContain('tu rol');
+    expect(resolver).not.toHaveBeenCalled();
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('nombre ambiguo: enseña a los candidatos, no elige por el jefe', async () => {
+    resolver.mockRejectedValue(new OperadorNombreAmbiguo('2', [
+      { operadorId: 'a', nombre: 'José Martínez Ruiz' },
+      { operadorId: 'b', nombre: 'José Martínez Cano' },
+    ]));
+    const r = await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Martínez, Puebla a Monterrey', AHORA);
+    expect(r).toContain('José Martínez Ruiz');
+    expect(r).toContain('José Martínez Cano');
+    expect(estadoGuardado).toBeNull();
+  });
+
+  it('operador desconocido y base caída se dicen distinto', async () => {
+    resolver.mockResolvedValue(null);
+    const r1 = await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Ramiro, Puebla a Monterrey', AHORA);
+    expect(r1).toContain('No tengo un operador activo');
+
+    resolver.mockRejectedValue(new ConsultaFallida('se cayó'));
+    const r2 = await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Ramiro, Puebla a Monterrey', AHORA);
+    expect(r2).toContain('inténtalo de nuevo');
+  });
+});
+
+describe('la confirmación', () => {
+  async function proponer() {
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
+    await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Juan, Puebla a Monterrey, anticipo 8000', AHORA);
+  }
+
+  it('SÍ crea el viaje con lo confirmado y con fecha_inicio del día de México', async () => {
+    await proponer();
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('Viaje creado');
+    expect(crearViaje).toHaveBeenCalledWith('t1', expect.objectContaining({
+      operadorId: 'op-9', origen: 'Puebla', destino: 'Monterrey', anticipo: 8000,
+      fechaInicio: '2026-08-14',
+    }));
+    // El pendiente se consumió: otro "sí" ya no crea nada.
+    const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 120_000));
+    expect(r2).toBeNull();
+    expect(crearViaje).toHaveBeenCalledTimes(1);
+  });
+
+  it('NO lo deja y lo dice', async () => {
+    await proponer();
+    const r = await atenderDespachoOficina(JEFE, TEL, 'no', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('no creé nada');
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('un SÍ después de la vigencia NO crea nada — el resumen ya nadie lo recuerda', async () => {
+    await proponer();
+    const tarde = new Date(AHORA.getTime() + VIGENCIA_PENDIENTE_MS + 60_000);
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', tarde);
+    expect(r).toBeNull();
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('un mensaje que no es sí/no re-enseña lo que está en juego', async () => {
+    await proponer();
+    const r = await atenderDespachoOficina(JEFE, TEL, 'oye y de paso revisa las facturas', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('esperando tu confirmación');
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('si crearViaje truena, el pendiente SE CONSERVA para reintentar', async () => {
+    await proponer();
+    crearViaje.mockRejectedValueOnce(new Error('se cayó el insert'));
+    const r1 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r1).toContain('No se pudo crear');
+    const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 120_000));
+    expect(r2).toContain('Viaje creado');
+    expect(crearViaje).toHaveBeenCalledTimes(2);
+  });
+});

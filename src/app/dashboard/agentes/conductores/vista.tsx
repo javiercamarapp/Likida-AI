@@ -1,0 +1,180 @@
+import Link from 'next/link';
+import {
+  MessagesSquare, Send, CheckCheck, Flag, MapPin, Package, Truck, Sparkles,
+} from 'lucide-react';
+import type { EventoConductor } from '@/lib/likida/analytics';
+import { HORAS_PARA_ESCALAR } from '@/lib/likida/escalar_viaje';
+import { numero, fechaCorta } from '@/lib/formato';
+import { BarraPagina } from '../../resumen-visual';
+
+export interface EsperaAceptar {
+  id: string;
+  folio: string;
+  operadorNombre: string | null;
+  /** Horas COMPLETAS desde el aviso — medidas, se rotulan así. */
+  horasDesdeAviso: number;
+  avisos: number;
+}
+
+/** Cómo se lee cada sello en la bitácora. Un tipo nuevo cae al crudo. */
+const EVENTO: Record<EventoConductor['tipo'], { Icono: typeof Send; texto: (e: EventoConductor) => string; color: string }> = {
+  avisado: { Icono: Send, color: 'var(--muted)', texto: (e) => `Le avisó a ${e.operador ?? 'el operador'} de su viaje ${e.folio}` },
+  acepto: { Icono: CheckCheck, color: 'var(--ok)', texto: (e) => `${e.operador ?? 'El operador'} aceptó el viaje ${e.folio}` },
+  escalado: { Icono: Flag, color: 'var(--bad)', texto: (e) => `Escaló el viaje ${e.folio} al jefe — nadie aceptaba` },
+  llegada: { Icono: MapPin, color: 'var(--ok)', texto: (e) => `${e.operador ?? 'El operador'} avisó que llegó (${e.folio})` },
+  descarga: { Icono: Package, color: 'var(--warn)', texto: (e) => `${e.operador ?? 'El operador'} está descargando (${e.folio})` },
+  regreso: { Icono: Truck, color: 'var(--muted)', texto: (e) => `${e.operador ?? 'El operador'} va de regreso (${e.folio})` },
+};
+
+/**
+ * La ventana del Agente de Conductores (F4): la cola honesta de aceptación,
+ * la bitácora de todo lo que selló, y la carta de lo que entiende por
+ * WhatsApp — que es la verdad del código, no marketing. Sin pesos: es la
+ * pantalla del jefe de tráfico.
+ */
+export function VistaAgenteConductores({ kpis, esperan, sinAvisar, eventos, sufijo = '' }: {
+  kpis: { vivos: number; aceptados: number; esperan: number; escalados: number | null };
+  esperan: EsperaAceptar[];
+  /** Vivos con operador y SIN aviso — el fallo silencioso que se enseña. */
+  sinAvisar: number;
+  eventos: EventoConductor[] | null;
+  sufijo?: string;
+}) {
+  return (
+    <main className="h-full">
+      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Agente de Conductores"
+        />
+        <div className="px-5 py-5 flex-1 space-y-4">
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Kpi titulo="Viajes en curso" valor={numero(kpis.vivos)} nota="abiertos o en cuadre" />
+            <Kpi titulo="Aceptados" valor={numero(kpis.aceptados)} nota="el chofer dijo que sí" />
+            <Kpi titulo="Esperan aceptar" valor={numero(kpis.esperan)}
+              tono={kpis.esperan > 0 ? 'warn' : undefined} />
+            <Kpi titulo="Escalados" valor={kpis.escalados === null ? '—' : numero(kpis.escalados)}
+              nota={kpis.escalados === null ? 'no se pudo contar' : 'esperan cambio de chofer'}
+              tono={(kpis.escalados ?? 0) > 0 ? 'bad' : undefined} />
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-4">
+            {/* La cola honesta de aceptación */}
+            <section className="card p-4 flex flex-col">
+              <h2 className="font-display text-[15px] font-semibold mb-1">Esperan aceptar</h2>
+              <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+                Avisados sin respuesta — a las {HORAS_PARA_ESCALAR} horas el agente escala al jefe solo
+              </p>
+              {esperan.length === 0 ? (
+                <Leyenda>Nadie debe respuesta ahora mismo — cada viaje avisado
+                  está aceptado o ya se escaló.</Leyenda>
+              ) : (
+                <div className="space-y-2">
+                  {esperan.map((v) => (
+                    <div key={v.id} className="flex items-center gap-2.5 text-[12.5px]">
+                      <span className="font-medium">{v.folio}</span>
+                      <span className="truncate" style={{ color: 'var(--muted)' }}>{v.operadorNombre ?? 'Sin operador'}</span>
+                      <span className="ml-auto shrink-0 cifra-mono" style={{ color: v.horasDesdeAviso >= HORAS_PARA_ESCALAR ? 'var(--warn)' : 'var(--muted)' }}>
+                        {v.horasDesdeAviso === 0 ? 'hace menos de 1 h' : `hace ${numero(v.horasDesdeAviso)} h`}
+                      </span>
+                      {v.avisos > 1 && (
+                        <span className="shrink-0 inline-flex px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+                          style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>×{v.avisos}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {sinAvisar > 0 && (
+                <p className="text-[12px] mt-3 pt-2.5 border-t" style={{ color: 'var(--warn)', borderColor: 'var(--line2)' }}>
+                  {numero(sinAvisar)} viaje{sinAvisar === 1 ? '' : 's'} con operador y SIN aviso —
+                  el botón Avisar vive en <Link href={`/dashboard/despacho${sufijo}`} className="underline">Despacho</Link>.
+                </p>
+              )}
+            </section>
+
+            {/* Bitácora */}
+            <section className="card p-4 flex flex-col">
+              <h2 className="font-display text-[15px] font-semibold mb-1">Bitácora</h2>
+              <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+                Los últimos sellos, sobre los 60 viajes más recientes
+              </p>
+              {eventos === null ? (
+                <Leyenda>No se pudo leer la bitácora ahora mismo.</Leyenda>
+              ) : eventos.length === 0 ? (
+                <Leyenda>Aún sin actividad — cada aviso, aceptación, escalación
+                  o hito del chofer queda escrito aquí.</Leyenda>
+              ) : (
+                <div className="space-y-2.5 text-[12.5px]">
+                  {eventos.map((e, i) => {
+                    const cfg = EVENTO[e.tipo];
+                    return (
+                      <div key={i} className="flex items-start gap-2">
+                        <cfg.Icono width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: cfg.color }} />
+                        <div className="min-w-0">
+                          <span>{cfg.texto(e)}</span>
+                          <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaCorta(e.cuando)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* Lo que entiende — la verdad del código, como onboarding */}
+          <section className="card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+              <h2 className="font-display text-[15px] font-semibold">Lo que entiende por WhatsApp</h2>
+            </div>
+            <div className="grid md:grid-cols-3 gap-4 text-[12.5px]">
+              <div>
+                <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>El chofer avisa</div>
+                <p style={{ color: 'var(--muted)' }}>
+                  «ya llegué» · «estoy descargando» · «voy de regreso» — cada uno queda
+                  sellado con su hora. Y cada foto de recibo se anota sola en su viaje.
+                </p>
+              </div>
+              <div>
+                <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>El jefe despacha</div>
+                <p style={{ color: 'var(--muted)' }}>
+                  «nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000» —
+                  el agente confirma antes de crear, y al confirmar el chofer recibe su aviso.
+                </p>
+              </div>
+              <div>
+                <div className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Solo, sin que nadie pida</div>
+                <p style={{ color: 'var(--muted)' }}>
+                  Persigue la aceptación del viaje y a las {HORAS_PARA_ESCALAR} horas sin respuesta
+                  escala al jefe. Corre con las reglas de fábrica — aún no tiene estrategia editable.
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Leyenda({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex-1 min-h-[110px] flex items-center justify-center">
+      <p className="text-[12.5px] text-center max-w-[34ch]" style={{ color: 'var(--muted)' }}>{children}</p>
+    </div>
+  );
+}
+
+function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; nota?: string; tono?: 'warn' | 'bad' }) {
+  return (
+    <div className="card p-3.5">
+      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
+      <div className="cifra-mono text-[20px] font-medium mt-1"
+        style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
+      {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
+    </div>
+  );
+}

@@ -872,6 +872,43 @@ export async function getViajesSinLiquidar(tenantId: string): Promise<Array<{ id
   return filas.map((v) => ({ id: v.id as string, anticipo: Number(v.anticipo ?? 0) }));
 }
 
+/** Un renglón de la bitácora del Agente de Conductores (F4): cada sello real
+ *  del ciclo de comunicación con el chofer, del más reciente al más viejo. */
+export interface EventoConductor {
+  tipo: 'avisado' | 'acepto' | 'escalado' | 'llegada' | 'descarga' | 'regreso';
+  folio: string;
+  operador: string | null;
+  cuando: string;
+}
+
+const SELLOS_CONDUCTOR: ReadonlyArray<[EventoConductor['tipo'], string]> = [
+  ['avisado', 'avisado_en'], ['acepto', 'aceptado_en'], ['escalado', 'escalado_en'],
+  ['llegada', 'llegada_en'], ['descarga', 'descarga_en'], ['regreso', 'regreso_en'],
+];
+
+/** Los sellos de los viajes recientes, aplanados a una bitácora. Ventana de
+ *  60 viajes: es la bitácora de actividad, no un histórico exhaustivo — la
+ *  vista lo rotula así. */
+export async function getEventosConductores(tenantId: string, limite = 15): Promise<EventoConductor[]> {
+  const res = await supabaseAdmin()
+    .from('viaje')
+    .select('folio, id, avisado_en, aceptado_en, escalado_en, llegada_en, descarga_en, regreso_en, operador:operador_id(nombre)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(60);
+  const filas = exigir(res, 'getEventosConductores') ?? [];
+  const eventos: EventoConductor[] = [];
+  for (const v of filas) {
+    const op = ((v.operador as { nombre?: string } | null)?.nombre) ?? null;
+    const folio = (v.folio as string) || (v.id as string).slice(0, 8);
+    for (const [tipo, col] of SELLOS_CONDUCTOR) {
+      const cuando = (v as Record<string, unknown>)[col];
+      if (typeof cuando === 'string') eventos.push({ tipo, folio, operador: op, cuando });
+    }
+  }
+  return eventos.sort((a, b) => Date.parse(b.cuando) - Date.parse(a.cuando)).slice(0, limite);
+}
+
 /** Viajes escalados que siguen sin chofer que acepte — la alerta del Inicio
  *  (F2). Conteo directo y no un filtro sobre los 100 recientes: un viaje
  *  escalado puede ser justamente el viejo que ya salió de esa ventana.

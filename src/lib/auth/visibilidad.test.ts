@@ -65,14 +65,21 @@ describe('el contador — sin panel propio, pero la operación le sigue cerrada'
   // lo manda ahí: aterriza en Suscripción, la única pantalla de `dinero`
   // que le sigue quedando de verdad (las facturas de Likida son su propia
   // contabilidad, no un préstamo de la del dueño).
-  it('AGENTES trae los tres agentes, todos área dinero (el contador los ve)', () => {
+  it('AGENTES: liquidación/facturas/cobranza son dinero (el contador los ve); Conductores es operación', () => {
     expect(AGENTES.map((i) => i.href)).toEqual([
       '/dashboard/agentes/liquidacion', '/dashboard/agentes/facturas',
       // Cobranza (0089, 14-ago-2026): sin pesos en pantalla, pero es la cola
       // del cierre contable — el dolor del contador.
       '/dashboard/agentes/cobranza',
+      // Conductores (F4): cero pesos y su usuario diario es el jefe de
+      // tráfico — el único agente de operación.
+      '/dashboard/agentes/conductores',
     ]);
-    for (const a of AGENTES) expect(puedeVerRuta('contador', a.href)).toBe(true);
+    const DINERO = ['/dashboard/agentes/liquidacion', '/dashboard/agentes/facturas', '/dashboard/agentes/cobranza'];
+    for (const href of DINERO) expect(puedeVerRuta('contador', href)).toBe(true);
+    expect(puedeVerRuta('contador', '/dashboard/agentes/conductores')).toBe(false);
+    expect(puedeVerRuta('encargado', '/dashboard/agentes/conductores')).toBe(true);
+    for (const href of DINERO) expect(puedeVerRuta('encargado', href)).toBe(false);
   });
 
   it('aterriza en Suscripción, no en un panel que ya no existe', () => {

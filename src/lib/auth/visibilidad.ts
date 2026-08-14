@@ -86,6 +86,10 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/operadores': 'operacion',
   // El mapa (F3): viajes vivos sobre México, sin un peso en pantalla.
   '/dashboard/mapa': 'operacion',
+  // El Agente de Conductores (F4) es el ÚNICO agente de operación: no toca
+  // un peso y su usuario diario es el jefe de tráfico. Sus hermanos
+  // (liquidación/facturas/cobranza) siguen en dinero.
+  '/dashboard/agentes/conductores': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
 
