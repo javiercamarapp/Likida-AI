@@ -84,6 +84,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // `dinero_por_area.test.ts` los escanea).
   '/dashboard/viajes': 'operacion',
   '/dashboard/operadores': 'operacion',
+  // El mapa (F3): viajes vivos sobre México, sin un peso en pantalla.
+  '/dashboard/mapa': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
 
