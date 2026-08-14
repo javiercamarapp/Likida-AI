@@ -8,12 +8,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // El estado pendiente vive aquí — un jsonb de a mentiras por (tenant, tel).
 let estadoGuardado: Record<string, unknown> | null = null;
+// El sello del aviso (AG-A4): lo que la lectura post-crearViaje encuentra.
+let viajeLeido: { avisado_en: string | null } | null = { avisado_en: '2026-08-14T17:00:05Z' };
+let errorLecturaViaje: { message: string } | null = null;
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => {
+      if (tabla === 'viaje') {
+        const v = {
+          select: () => v, eq: () => v,
+          maybeSingle: async () => ({ data: errorLecturaViaje ? null : viajeLeido, error: errorLecturaViaje }),
+        };
+        return v;
+      }
       if (tabla !== 'wa_conversacion') {
-        throw new Error(`despacho_wa solo puede tocar wa_conversacion; pidió ${tabla}`);
+        throw new Error(`despacho_wa solo puede tocar wa_conversacion y viaje; pidió ${tabla}`);
       }
       const b = {
         select: () => b, eq: () => b,
@@ -50,6 +60,8 @@ const AHORA = new Date('2026-08-14T17:00:00Z');
 
 beforeEach(() => {
   estadoGuardado = null;
+  viajeLeido = { avisado_en: '2026-08-14T17:00:05Z' };
+  errorLecturaViaje = null;
   crearViaje.mockClear();
   resolver.mockReset();
 });
@@ -198,5 +210,41 @@ describe('el choque 0029 — el operador ya trae un viaje abierto (AG-A3)', () =
     expect(r1).toContain('No se pudo crear');
     const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 120_000));
     expect(r2).toContain('Viaje creado');
+  });
+});
+
+describe('la verdad sobre el aviso al chofer (AG-A4)', () => {
+  async function proponer() {
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
+    await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Juan, Puebla a Monterrey, anticipo 8000', AHORA);
+  }
+
+  it('avisado_en sellado: se afirma que el aviso YA SALIÓ — nunca un "va en camino" sin el dato', async () => {
+    await proponer();
+    viajeLeido = { avisado_en: '2026-08-14T17:01:00Z' };
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('Viaje creado');
+    expect(r).toContain('El aviso ya salió a su WhatsApp');
+    expect(r).not.toContain('va en camino');
+  });
+
+  it('avisado_en NULL: el aviso NO salió y se dice — con la escalación ciega incluida', async () => {
+    await proponer();
+    viajeLeido = { avisado_en: null };
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('Viaje creado'); // el viaje SÍ existe: esa mitad es verdad
+    expect(r).toContain('el aviso NO salió');
+    expect(r).toContain('escalación');
+    expect(r).not.toContain('va en camino');
+  });
+
+  it('lectura fallida: ni "salió" ni "no salió" — se dice que no se pudo verificar', async () => {
+    await proponer();
+    errorLecturaViaje = { message: 'se cayó la lectura' };
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('Viaje creado');
+    expect(r).toContain('No pude verificar si el aviso salió');
+    expect(r).not.toContain('va en camino');
+    expect(r).not.toContain('ya salió');
   });
 });
