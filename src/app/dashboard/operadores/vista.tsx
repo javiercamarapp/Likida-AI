@@ -1,5 +1,6 @@
 import { Users, Phone, PhoneOff, IdCard } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
+import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
 
@@ -23,7 +24,12 @@ function diasParaVencer(vence: string, hoy: string): number {
   return Math.round((Date.parse(`${vence}T00:00:00Z`) - Date.parse(`${hoy}T00:00:00Z`)) / 86_400_000);
 }
 
-const VENTANA_POR_VENCER = 30;
+// El umbral y las FRONTERAS de estado son compartidos con `/dashboard/unidades`
+// (vigencias.ts): "por vencer" tiene que querer decir lo mismo en las dos
+// pantallas, o el gerente aprende dos reglas para el mismo concepto. Lo que NO
+// se comparte es el TEXTO: aquí se enseña la fecha real ("vigente hasta 12 mar
+// 2027"), que dice más que un conteo de días cuando hay una sola fecha que
+// mirar. En Unidades son tres papeles y ahí gana el conteo.
 
 /**
  * El Registro de Operadores (F2): quién maneja, cómo localizarlo y qué
@@ -37,8 +43,7 @@ export function VistaOperadores({ filas, hoy }: { filas: FilaOperador[]; hoy: st
   const conVencida = activos.filter((f) => f.licenciaVence !== null && diasParaVencer(f.licenciaVence, hoy) < 0).length;
   const porVencer = activos.filter((f) => {
     if (f.licenciaVence === null) return false;
-    const d = diasParaVencer(f.licenciaVence, hoy);
-    return d >= 0 && d <= VENTANA_POR_VENCER;
+    return clasificarVigencia(diasParaVencer(f.licenciaVence, hoy), 'Licencia').estado === 'por_vencer';
   }).length;
 
   return (
@@ -55,7 +60,7 @@ export function VistaOperadores({ filas, hoy }: { filas: FilaOperador[]; hoy: st
             <Kpi titulo="Sin teléfono" valor={numero(sinTelefono)} nota="los agentes no pueden escribirles"
               tono={sinTelefono > 0 ? 'warn' : undefined} />
             <Kpi titulo="Licencias vencidas" valor={numero(conVencida)} tono={conVencida > 0 ? 'bad' : undefined} />
-            <Kpi titulo="Vencen en 30 días" valor={numero(porVencer)} tono={porVencer > 0 ? 'warn' : undefined} />
+            <Kpi titulo={`Vencen en ${DIAS_AVISO} días`} valor={numero(porVencer)} tono={porVencer > 0 ? 'warn' : undefined} />
           </div>
 
           <section className="card p-4">
@@ -130,14 +135,15 @@ function PillLicencia({ f, hoy }: { f: FilaOperador; hoy: string }) {
     );
   }
   const dias = diasParaVencer(f.licenciaVence, hoy);
+  const estado = clasificarVigencia(dias, 'Licencia').estado;
   const tipo = f.licenciaTipo ? `${f.licenciaTipo} · ` : '';
   const pill = (texto: string, fg: string, bg: string) => (
     <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: fg, background: bg }}>
       {texto}
     </span>
   );
-  if (dias < 0) return pill(`${tipo}vencida ${fechaCorta(f.licenciaVence)}`, 'var(--bad)', 'var(--badbg)');
-  if (dias <= VENTANA_POR_VENCER) return pill(dias === 0 ? `${tipo}vence hoy` : `${tipo}vence en ${numero(dias)} días`, 'var(--warn)', 'var(--warnbg)');
+  if (estado === 'vencido') return pill(`${tipo}vencida ${fechaCorta(f.licenciaVence)}`, 'var(--bad)', 'var(--badbg)');
+  if (estado === 'por_vencer') return pill(dias === 0 ? `${tipo}vence hoy` : `${tipo}vence en ${numero(dias)} días`, 'var(--warn)', 'var(--warnbg)');
   return pill(`${tipo}vigente hasta ${fechaCorta(f.licenciaVence)}`, 'var(--ok)', 'var(--okbg)');
 }
 
