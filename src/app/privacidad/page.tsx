@@ -84,9 +84,21 @@ const SECCIONES: SeccionLegal[] = [
   {
     titulo: 'Cuánto tiempo se conservan',
     fundamento: 'CFF art. 30 · LFPDPPP art. 11',
+    // E5 (auditoría 4): esta sección prometía «un año» y «cinco años» planos y
+    // ninguna función ejecutaba ninguno de los dos. La regla es la misma que
+    // para una cifra: la página solo promete plazos que algo ejecuta.
+    //   · Los plazos operativos son los de `mantenimiento_de_datos` (migs.
+    //     0072/0098/0101/0102/0104) — si una purga cambia, esta lista cambia.
+    //   · El borrado de cuenta no tiene plazo automático: es a solicitud
+    //     (sección siguiente), y decirlo es más honesto que prometer un año
+    //     que nadie cuenta.
+    //   · Y «cinco años» a secas era justo lo que `normas/cff-30.yaml`
+    //     (limite_importante) prohíbe prometer: el propio artículo trae tres
+    //     supuestos que lo alargan.
     parrafos: [
-      `Tus datos de cuenta, mientras tengas el servicio y hasta un año después de darlo de baja.`,
-      `**Lo fiscal es distinto y no se puede borrar antes:** los comprobantes y las liquidaciones se conservan **cinco años** porque el Código Fiscal de la Federación lo obliga (art. 30). Esa obligación no la puede levantar ni tu solicitud ni nuestra voluntad, y se te dice aquí para que no te sorprenda después.`,
+      `Tus datos de cuenta, mientras tengas el servicio. Al darte de baja no corre un plazo automático: se borran cuando lo pides —la sección siguiente dice cómo— y se te confirma por escrito.`,
+      `**Los registros operativos del sistema sí tienen plazos que corren solos:** los registros técnicos de mensajes de WhatsApp ya procesados se borran a los 30 días; los de peticiones a la API, a los 7; los del intake por correo, a los 90; el historial de corridas de los agentes, el estado de conversaciones de WhatsApp sin actividad y los códigos de facturación que nunca encontraron su comprobante, a los 180.`,
+      `**Lo fiscal es distinto y no se puede borrar antes:** los comprobantes y las liquidaciones se conservan **al menos cinco años** porque el Código Fiscal de la Federación lo obliga (art. 30) — y más tiempo cuando el propio artículo lo alarga: actos cuyos efectos fiscales se prolongan en el tiempo, conceptos con un recurso o juicio pendiente, y la documentación societaria mientras la sociedad exista. Esa obligación no la puede levantar ni tu solicitud ni nuestra voluntad, y se te dice aquí para que no te sorprenda después.`,
     ],
   },
   {
@@ -104,7 +116,7 @@ const SECCIONES: SeccionLegal[] = [
     fundamento: 'Requisito de Meta para apps en producción',
     parrafos: [
       `Escribe a **${RESPONSABLE.contacto}** con el asunto **"Borrar mi cuenta"** desde el correo con el que te registraste.`,
-      `Se borran tus datos de cuenta y de acceso. **Lo que no se puede borrar** son los comprobantes fiscales y las liquidaciones ya emitidas, por la conservación de cinco años del CFF art. 30 — quedan sin vincularse a tu persona.`,
+      `Se borran tus datos de cuenta y de acceso. **Lo que no se puede borrar** son los comprobantes fiscales y las liquidaciones ya emitidas, por la conservación de al menos cinco años del CFF art. 30 — quedan sin vincularse a tu persona.`,
       `Se te confirma por escrito cuando queda hecho.`,
     ],
   },

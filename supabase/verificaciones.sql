@@ -3836,3 +3836,35 @@ select
     where table_schema='public' and table_name='viaje' and column_name='escalado_en') as col_avisos,
   (select count(*) from supabase_migrations.schema_migrations
     where name ~ '^00(6[7-9])') as ledger_0067_69;
+
+-- ── 82. La retención operativa prometida ya corre (0104) ───────────────────
+--
+-- /privacidad prometía plazos de borrado sin ejecutor (E5, auditoría 4). Las
+-- dos purgas nuevas (wa_conversacion y codigo_pendiente a 180 días) borran lo
+-- viejo, conservan lo fresco, reportan sus llaves en el jsonb del
+-- mantenimiento, y NO son ejecutables por anon. Nada fiscal se toca: el CFF
+-- 30 obliga a conservarlo (ver la cabecera de la 0104 para el porqué de cada
+-- exclusión).
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026:
+--   RETENCION_0104  conv_purgadas=1  cod_purgados=1  quedan_conv=1  quedan_cod=1  anon=f/f  (esperado >=1/>=1/1/1/f/f)
+do $$
+declare t uuid; op uuid; v uuid; res jsonb; quedan_conv bigint; quedan_cod bigint; anon_conv boolean; anon_cod boolean;
+begin
+  insert into public.tenant (nombre) values ('__verif_0104__') returning id into t;
+  insert into public.operador (tenant_id, nombre, telefono) values (t, '__V104__', '5210000000104') returning id into op;
+  insert into public.viaje (tenant_id, operador_id, folio) values (t, op, '__V104__') returning id into v;
+  insert into public.wa_conversacion (tenant_id, telefono, estado, updated_at) values
+    (t, '5210000000001', '{}', now() - interval '200 days'),
+    (t, '5210000000002', '{}', now() - interval '2 days');
+  insert into public.codigo_pendiente (tenant_id, viaje_id, monto, creado_en) values
+    (t, v, 100, now() - interval '200 days'),
+    (t, v, 200, now() - interval '2 days');
+  res := public.mantenimiento_de_datos(30);
+  select count(*) into quedan_conv from public.wa_conversacion where tenant_id = t;
+  select count(*) into quedan_cod from public.codigo_pendiente where tenant_id = t;
+  select has_function_privilege('anon', 'public.purgar_wa_conversacion(integer, timestamptz)', 'EXECUTE') into anon_conv;
+  select has_function_privilege('anon', 'public.purgar_codigo_pendiente(integer, timestamptz)', 'EXECUTE') into anon_cod;
+  raise exception E'RETENCION_0104  conv_purgadas=%  cod_purgados=%  quedan_conv=%  quedan_cod=%  anon=%/%   (esperado >=1/>=1/1/1/f/f)',
+    (res->>'conversacionesPurgadas'), (res->>'codigosPurgados'), quedan_conv, quedan_cod, anon_conv, anon_cod;
+end $$;

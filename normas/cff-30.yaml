@@ -65,3 +65,5 @@ usado_en_codigo:
   - "repo.ts — saveCfdiXmlRaw (comentario: 'Conserva el XML CRUDO del CFDI (CFF art. 30)')"
   - "processor.ts — processInbound, rama de XML sin viaje abierto: se conserva por UUID con gasto_id nulo"
   - "processor.ts — processInbound, paso 1.8: conservar el XML crudo tras aplicar el CFDI, best-effort"
+  - "src/app/privacidad/page.tsx — sección «Cuánto tiempo se conservan»: promete «al menos cinco años» y nombra los supuestos que lo alargan, en vez de cinco años planos (cierre E5, auditoría 4, 14-ago-2026)"
+  - "supabase/migrations/0104_retencion_operativa.sql — la purga operativa excluye lo fiscal a propósito: gasto, cfdi_xml y liquidacion se conservan por este artículo"
