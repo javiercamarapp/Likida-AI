@@ -154,6 +154,30 @@ describe('el mapa de rutas no se queda atrás del sidebar', () => {
       expect(todas.some((i) => i.href === '/dashboard/suscripcion')).toBe(true);
     });
   });
+
+  // ── Llaves de API (A6, 14-ago-2026) ──────────────────────────────────────
+  //
+  // Una llave es CONTROL, no dato: con ella se lee desde fuera, sin sesión,
+  // todo lo que su área permita. El área de la RUTA espeja la RLS de la 0093
+  // (`administra_flota()`), y esto fija que la pantalla nueva no quedó sin
+  // clasificar (negada a todos) ni clasificada de más (a la vista del
+  // contador).
+  describe('/dashboard/llaves-api', () => {
+    it('es administración: solo el dueño y el superadmin', () => {
+      expect(areaDeRuta('/dashboard/llaves-api')).toBe('administracion');
+      expect(puedeVerRuta('flota_admin', '/dashboard/llaves-api')).toBe(true);
+      expect(puedeVerRuta('superadmin', '/dashboard/llaves-api')).toBe(true);
+    });
+
+    it('ni el contador ni el encargado, aunque tecleen la URL', () => {
+      expect(puedeVerRuta('contador', '/dashboard/llaves-api')).toBe(false);
+      expect(puedeVerRuta('encargado', '/dashboard/llaves-api')).toBe(false);
+    });
+
+    it('está en el sidebar, no solo en el mapa de áreas', () => {
+      expect(todas.some((i) => i.href === '/dashboard/llaves-api')).toBe(true);
+    });
+  });
 });
 
 describe('"Ver como" solo puede QUITAR visibilidad', () => {

@@ -91,6 +91,10 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/unidades': 'operacion',
   // El mapa (F3): viajes vivos sobre México, sin un peso en pantalla.
   '/dashboard/mapa': 'operacion',
+  // Carta Porte (A3, 14-ago-2026): cero pesos en pantalla, y la declaración
+  // de ruta ("¿pisa federal?") es del jefe de tráfico — la regla 2.7.7.2.1
+  // exige plena certeza de quien CONOCE la ruta, no del que ve el dinero.
+  '/dashboard/carta-porte': 'operacion',
   // El Agente de Conductores (F4) es el ÚNICO agente de operación: no toca
   // un peso y su usuario diario es el jefe de tráfico. Sus hermanos
   // (liquidación/facturas/cobranza) siguen en dinero.
@@ -158,6 +162,11 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // conecta Likida y CÓMO conecta hoy con cada uno. Es `administracion` —
   // decidir conectar el ERP o el GPS es del dueño, no del jefe de tráfico.
   '/dashboard/integraciones': 'administracion',
+  // Llaves de API (A6, 14-ago-2026): una llave es CONTROL, no dato — con
+  // ella se lee desde fuera, sin sesión, todo lo que su área permita. Mismo
+  // criterio que la RLS de la 0093 (`administra_flota()`): ni el contador ni
+  // el encargado la ven, solo el dueño y el superadmin.
+  '/dashboard/llaves-api': 'administracion',
   '/dashboard/usuarios': 'administracion',
   '/dashboard/politicas': 'administracion',
   '/dashboard/configuracion': 'administracion',

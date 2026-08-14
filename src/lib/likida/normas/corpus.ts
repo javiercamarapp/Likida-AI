@@ -319,5 +319,23 @@ export const NORMAS: readonly Norma[] = [
     "citasEnCodigo": [
       "2.7.1.48"
     ]
+  },
+  {
+    "archivo": "rmf-2026-2.7.7.yaml",
+    "id": "rmf-2026-2.7.7",
+    "tipo": "regla_general",
+    "instrumento": "Resolución Miscelánea Fiscal para 2026",
+    "articulo_o_regla": "Sección 2.7.7 (2.7.7.1.1, 2.7.7.1.2, 2.7.7.2.1, 2.7.7.2.8)",
+    "titulo": "Complemento Carta Porte: obligados, traslado local y la excepción del radio de 30 km",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/rmf/RMF_2026-DOF-28122025.pdf",
+    "verificado_el": "2026-07-27",
+    "jerarquia": 3,
+    "citasEnCodigo": [
+      "2.7.7.1.1",
+      "2.7.7.2.1",
+      "2.7.7.2.8",
+      "Carta Porte"
+    ]
   }
 ] as const;

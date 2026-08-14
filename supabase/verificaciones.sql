@@ -3689,3 +3689,44 @@ begin
   raise exception E'PURGA_ACL_0098  funciones_security_definer_abiertas=[%]   (esperado vacío)',
     coalesce(abiertas, '');
 end $$;
+
+-- ── 76. Carta Porte: los datos del transportista tienen dónde vivir (0099) ─
+--
+-- Seis columnas nuevas en `unidad` (configuración vehicular, peso bruto,
+-- aseguradora y póliza RC, tipo y número de permiso SICT) y las dos
+-- DECLARACIONES por viaje (¿pisa federal?, radio del tramo federal). Todas
+-- nullables y sin defaults de catálogo: un permiso no declarado NO es TPXX00,
+-- y un NULL en ccp_pisa_federal significa "falta declarar", nunca "no pisa".
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026:
+--   parte 1: cols_unidad=6  cols_viaje=2  defaults_indebidos=0  checks=2
+--   parte 2: CCP_0099  peso_250_rebota=t  radio_negativo_rebota=t  (esperado t/t)
+select
+  (select count(*) from information_schema.columns
+    where table_schema='public' and table_name='unidad'
+      and column_name in ('config_vehicular','peso_bruto_ton','aseguradora_rc','poliza_rc_numero','permiso_sict_tipo','permiso_sict_numero')) as cols_unidad,
+  (select count(*) from information_schema.columns
+    where table_schema='public' and table_name='viaje'
+      and column_name in ('ccp_pisa_federal','ccp_radio_federal_km')) as cols_viaje,
+  (select count(*) from information_schema.columns
+    where table_schema='public' and table_name='unidad'
+      and column_name in ('config_vehicular','permiso_sict_tipo') and column_default is not null) as defaults_indebidos,
+  (select count(*) from pg_constraint where conname in ('unidad_peso_bruto_sano','viaje_ccp_radio_sano')) as checks;
+
+do $$
+declare t uuid; u uuid; peso_malo boolean := false; radio_malo boolean := false;
+begin
+  insert into public.tenant (nombre) values ('__verif_0099__') returning id into t;
+  insert into public.unidad (tenant_id, numero_economico, peso_bruto_ton, config_vehicular)
+    values (t, '__V99__', 17.5, 'T3S2') returning id into u;
+  begin
+    update public.unidad set peso_bruto_ton = 250 where id = u;
+  exception when check_violation then peso_malo := true;
+  end;
+  begin
+    insert into public.viaje (tenant_id, folio, ccp_radio_federal_km) values (t, '__V99__', -5);
+  exception when others then radio_malo := true;
+  end;
+  delete from public.tenant where id = t;  -- el raise de abajo revierte todo igual
+  raise exception E'CCP_0099  peso_250_rebota=%  radio_negativo_rebota=%   (esperado t/t)', peso_malo, radio_malo;
+end $$;
