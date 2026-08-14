@@ -83,7 +83,11 @@ export async function viajesSinAceptar(ahora: Date = new Date()): Promise<ViajeS
 
   const { data, error } = await supabaseAdmin()
     .from('viaje')
-    .select('id, tenant_id, folio, operador_id, avisado_en, avisos_enviados, operador(nombre, telefono)')
+    // `operador:operador_id` y no `operador` a secas: viaje tiene MÁS de una
+    // relación con operador y PostgREST rechaza el embed ambiguo — este cron
+    // estuvo cayéndose en silencio por esto (detectado 14-ago-2026, el mismo
+    // bug que tumbó la página de Cobranza).
+    .select('id, tenant_id, folio, operador_id, avisado_en, avisos_enviados, operador:operador_id(nombre, telefono)')
     .eq('estatus', 'abierto')
     .is('aceptado_en', null)
     .is('escalado_en', null)
