@@ -170,6 +170,9 @@ export interface ResultadoCobranza {
   /** El agente NO corrió y el porqué (pausado / fuera de ventana). */
   omitido?: string;
   fallos: string[];
+  /** Cuántos quedaron SIN intentar porque el reloj de la corrida se agotó —
+   *  se dicen, no se pierden: la siguiente corrida los levanta. */
+  cortadosPorReloj: number;
 }
 
 /**
@@ -181,15 +184,35 @@ export interface ResultadoCobranza {
 export async function ejecutarCobranza(
   tenantId: string,
   ahora: Date = new Date(),
-  opts: { ignorarVentana?: boolean } = {},
+  opts: { ignorarVentana?: boolean; venceEn?: number } = {},
 ): Promise<ResultadoCobranza> {
   const config = await leerConfigCobranza(tenantId);
   if (!config.activo) {
-    return { revisados: 0, contactados: 0, sinTelefono: 0, omitido: 'el agente está pausado', fallos: [] };
+    return { revisados: 0, contactados: 0, sinTelefono: 0, omitido: 'el agente está pausado', fallos: [], cortadosPorReloj: 0 };
   }
   if (!opts.ignorarVentana && !dentroDeVentana(config, ahora)) {
-    return { revisados: 0, contactados: 0, sinTelefono: 0, omitido: 'fuera de la ventana de contacto', fallos: [] };
+    return { revisados: 0, contactados: 0, sinTelefono: 0, omitido: 'fuera de la ventana de contacto', fallos: [], cortadosPorReloj: 0 };
   }
+
+  const admin = supabaseAdmin();
+
+  // RESCATE DE CLAIMS HUÉRFANOS (auditoría 3, REND-C2): un crash entre el
+  // claim y el envío dejaba la fila enviado=false SIN detalle para siempre —
+  // y como la cola cuenta toda fila como contacto, ese tier quedaba
+  // consumido sin que ningún chofer recibiera nada. Una fila sin resultado
+  // después de 1 hora es un crash probado (el update del resultado llega en
+  // segundos): se BORRA, el unique queda libre, y la cola de ESTA corrida lo
+  // re-reclama por el camino normal. Las filas legítimas no caen aquí: las
+  // de sin-teléfono y las de envío rechazado siempre llevan `detalle`.
+  await admin.from('cobranza_contacto')
+    .delete()
+    .eq('tenant_id', tenantId)
+    .eq('enviado', false)
+    .is('detalle', null)
+    .lt('created_at', new Date(ahora.getTime() - 3_600_000).toISOString())
+    .then(({ error }) => {
+      if (error) logger.warn('cobranza.rescate_claims_fallo', { tenantId, err: error.message });
+    });
 
   const cola = await colaCobranza(tenantId, ahora);
   const r: ResultadoCobranza = {
@@ -197,8 +220,8 @@ export async function ejecutarCobranza(
     contactados: 0,
     sinTelefono: cola.sinTelefono.length,
     fallos: [],
+    cortadosPorReloj: 0,
   };
-  const admin = supabaseAdmin();
 
   // Los sin teléfono TAMBIÉN quedan en bitácora (enviado=false, con el
   // motivo): la página los enseña y el tier no se reintenta cada corrida.
@@ -212,6 +235,16 @@ export async function ejecutarCobranza(
   }
 
   for (const v of cola.paraContactar) {
+    // EL RELOJ CORTA ANTES DEL CLAIM (auditoría 3, REND-C2): a 750 camiones
+    // los envíos seriales no caben en maxDuration — cortar DESPUÉS de
+    // reclamar consumiría tiers sin mandar nada. Lo que no alcanzó queda
+    // intacto y la corrida de la siguiente hora lo levanta (los tiers
+    // persisten en los días del viaje, no en esta pasada).
+    if (opts.venceEn !== undefined && Date.now() >= opts.venceEn) {
+      r.cortadosPorReloj = cola.paraContactar.length - (r.contactados + r.fallos.length);
+      logger.warn('cobranza.corte_por_reloj', { tenantId, pendientes: r.cortadosPorReloj });
+      break;
+    }
     // RECLAMAR ANTES DE MANDAR (patrón 0087/0058): el INSERT con
     // unique(viaje, tier) decide quién manda. El perdedor sigue de largo.
     const { error: errClaim } = await admin.from('cobranza_contacto')
@@ -261,7 +294,11 @@ export async function ejecutarCobranza(
  * config (ventana incluida). Reemplaza a `enviarRecordatoriosComprobacion`
  * (0087) — misma conducta por default, ahora configurable por flota.
  */
-export async function ejecutarCobranzaGlobal(ahora: Date = new Date()): Promise<{ tenants: number; contactados: number; fallos: string[] }> {
+/** El reloj de la corrida GLOBAL: 90s de los 120 del maxDuration del cron —
+ *  el resto es margen para la escalación que corre antes y el arranque. */
+export const PLAZO_COBRANZA_GLOBAL_MS = 90_000;
+
+export async function ejecutarCobranzaGlobal(ahora: Date = new Date()): Promise<{ tenants: number; contactados: number; cortadosPorReloj: number; fallos: string[] }> {
   const { data, error } = await supabaseAdmin()
     .from('viaje')
     .select('tenant_id')
@@ -271,11 +308,22 @@ export async function ejecutarCobranzaGlobal(ahora: Date = new Date()): Promise<
   if (error) throw new Error(`ejecutarCobranzaGlobal: ${error.message}`);
   const tenants = [...new Set((data ?? []).map((v) => v.tenant_id as string))];
 
-  const total = { tenants: tenants.length, contactados: 0, fallos: [] as string[] };
+  // Un solo vencimiento para TODA la corrida (auditoría 3, REND-C2): a 750
+  // camiones los envíos seriales nunca cabían en el maxDuration y el proceso
+  // moría a la mitad, con claims consumidos. Ahora corta limpio, dice
+  // cuántos quedaron, y la corrida de la siguiente hora los levanta.
+  const venceEn = Date.now() + PLAZO_COBRANZA_GLOBAL_MS;
+
+  const total = { tenants: tenants.length, contactados: 0, cortadosPorReloj: 0, fallos: [] as string[] };
   for (const t of tenants) {
+    if (Date.now() >= venceEn) {
+      logger.warn('cobranza.global_corte_por_reloj', { tenantsSinCorrer: tenants.length - tenants.indexOf(t) });
+      break;
+    }
     try {
-      const r = await ejecutarCobranza(t, ahora);
+      const r = await ejecutarCobranza(t, ahora, { venceEn });
       total.contactados += r.contactados;
+      total.cortadosPorReloj += r.cortadosPorReloj;
       total.fallos.push(...r.fallos);
     } catch (e) {
       total.fallos.push(`${t}: ${e instanceof Error ? e.message : 'corrida fallida'}`);
