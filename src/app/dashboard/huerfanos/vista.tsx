@@ -75,12 +75,19 @@ export function VistaHuerfanos({ pendientes, viajesVivos, acciones }: {
                             </span>
                           )}
                         </td>
-                        <td className="py-2.5 pr-6 text-right cifra-mono">{mxn(h.monto)}</td>
+                        <td className="py-2.5 pr-6 text-right">
+                          {/* Un $0.00 aquí sería una cifra que nadie midió (el
+                              OCR no pudo leerla) — se dice, no se pinta. */}
+                          {h.monto > 0
+                            ? <span className="cifra-mono">{mxn(h.monto)}</span>
+                            : <span className="text-[11px]" style={{ color: 'var(--faint)' }}>sin monto legible</span>}
+                        </td>
                         <td className="py-2.5 text-[12px]" style={{ color: 'var(--muted)' }}>
                           {MOTIVO[h.motivo] ?? h.motivo}
                         </td>
                         <td className="py-2.5 pl-4">
                           <FilaAcciones huerfanoId={h.id} viajesVivos={viajesVivos}
+                            sinMonto={h.monto <= 0}
                             adjuntar={acciones.adjuntar} descartar={acciones.descartar} />
                         </td>
                       </tr>

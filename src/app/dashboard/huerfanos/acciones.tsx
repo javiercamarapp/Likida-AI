@@ -16,10 +16,15 @@ export interface ViajeVivo { id: string; rotulo: string }
  * confirmación de dos pasos — descartar saca el comprobante de la vista de
  * todos, chofer incluido). Las acciones viven en el servidor y re-verifican
  * sesión, rol y tenant; aquí solo se pinta.
+ *
+ * `sinMonto`: un comprobante que el OCR no pudo leer (monto 0) NO ofrece
+ * adjuntar — metería una línea de $0.00 en la liquidación. El mismo guardia
+ * vive en el server action y en el flujo de WhatsApp; aquí solo se dice.
  */
-export function FilaAcciones({ huerfanoId, viajesVivos, adjuntar, descartar }: {
+export function FilaAcciones({ huerfanoId, viajesVivos, sinMonto, adjuntar, descartar }: {
   huerfanoId: string;
   viajesVivos: ViajeVivo[];
+  sinMonto: boolean;
   adjuntar: AccionHuerfano;
   descartar: AccionHuerfano;
 }) {
@@ -44,7 +49,11 @@ export function FilaAcciones({ huerfanoId, viajesVivos, adjuntar, descartar }: {
       ) : (
         <form action={accionAdj} className="flex items-center gap-2 justify-end">
           <input type="hidden" name="huerfanoId" value={huerfanoId} />
-          {viajesVivos.length > 0 ? (
+          {sinMonto ? (
+            <span className="text-[12px] text-right" style={{ color: 'var(--faint)' }}>
+              Sin monto legible no se puede adjuntar (metería $0.00) — pídele al chofer que reenvíe la foto
+            </span>
+          ) : viajesVivos.length > 0 ? (
             <>
               <select name="viajeId" required aria-label="Viaje al que va" defaultValue=""
                 className="flex-1 min-w-0 max-w-[180px] text-[12px] px-2 py-1.5 rounded-lg hairline"

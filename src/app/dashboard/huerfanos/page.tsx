@@ -74,6 +74,15 @@ export default async function PaginaHuerfanos({
     const h = await traerHuerfanoPendiente(tenantId, huerfanoId);
     if (!h) return { error: 'Ese comprobante ya no está pendiente — alguien más lo resolvió. Recarga la página.' };
 
+    // El guardia que el flujo gemelo de WhatsApp ya tiene (processor solo
+    // ofrece lo que trae monto): un fallo de OCR guarda el huérfano con
+    // monto 0, y adjuntarlo metería una línea de $0.00 —una cifra que nadie
+    // midió— en la liquidación del contralor. Number() porque `gasto` es una
+    // columna JSON: un monto ausente o raro también se rebota.
+    if (!(Number(h.gasto.monto) > 0)) {
+      return { error: 'Ese comprobante no trae monto legible — pídele al chofer que reenvíe la foto; adjuntarlo metería $0.00 a la liquidación.' };
+    }
+
     // El viaje destino se re-verifica ADENTRO (un viajeId ajeno o liquidado
     // no pasa), no se confía en que venía del <select>.
     const destinoOk = (await getViajes(tenantId)).some(
