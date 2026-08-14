@@ -3659,3 +3659,33 @@ begin
   raise exception E'PURGA_0098  borradas=%  quedan_frescas=%  reporta_la_llave=%   (esperado 1/1/t)',
     borradas, quedan, (res ? 'idempotenciaPurgada');
 end $$;
+
+-- ── 75. Ninguna función de purga es alcanzable por `anon` (mig. 0098) ──────
+--
+-- El bug que este bloque existe para que no vuelva: `purgar_api_idempotencia`
+-- se creó SECURITY DEFINER SIN `revoke`, y Postgres deja EXECUTE a PUBLIC por
+-- omisión. Supabase la publicaba en /rest/v1/rpc/, corría como `postgres`,
+-- saltaba la RLS que la propia migración encendía, y cualquiera con la anon
+-- key —pública por diseño, va en el bundle— podía vaciar la tabla desde
+-- internet llamándola con p_dias=0.
+--
+-- Se comprueba el CONJUNTO y no solo la función culpable: el modo de falla es
+-- omitir el revoke al escribir la SIGUIENTE, y una prueba que solo mira la de
+-- ayer no atrapa la de mañana.
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026, antes y después del arreglo:
+--   antes:   purgar_api_idempotencia  anon_puede=t   ← las otras 3 en f
+--   después: purgar_api_idempotencia  anon_puede=f   acl = postgres=X | service_role=X
+do $$
+declare abiertas text;
+begin
+  select string_agg(p.proname, ', ') into abiertas
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.prosecdef                       -- solo las que corren como postgres
+     and (has_function_privilege('anon', p.oid, 'EXECUTE')
+       or has_function_privilege('authenticated', p.oid, 'EXECUTE'));
+
+  raise exception E'PURGA_ACL_0098  funciones_security_definer_abiertas=[%]   (esperado vacío)',
+    coalesce(abiertas, '');
+end $$;
