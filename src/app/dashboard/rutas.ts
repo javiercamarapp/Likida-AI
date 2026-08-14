@@ -1,5 +1,5 @@
 import {
-  LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard,
+  LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
 } from 'lucide-react';
 
 /**
@@ -25,7 +25,9 @@ export const AGENTES: Item[] = [
   { href: '/dashboard/agentes/facturas', nombre: 'Agente de Facturas', Icono: ReceiptText },
 ];
 
-export const OPERACION: Item[] = [];
+export const OPERACION: Item[] = [
+  { href: '/dashboard/despacho', nombre: 'Despacho', Icono: ClipboardList },
+];
 
 export const DINERO_FISCAL: Item[] = [];
 
