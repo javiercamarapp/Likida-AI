@@ -292,7 +292,7 @@ export async function getDineroObservadoPorTipo(tenantId: string): Promise<Diner
 /** Rendimiento por operador (diésel total, # de diferencias) — señal operativa. */
 export async function getStatsPorOperador(tenantId: string): Promise<OperadorStat[]> {
   const admin = supabaseAdmin();
-  const [ops, gastos, viajes] = await Promise.all([
+  const [ops, gastos, viajes, liqs] = await Promise.all([
     traerTodo<{ id: unknown; nombre: unknown }>(
       (desde, hasta) => admin.from('operador').select('id, nombre').eq('tenant_id', tenantId).order('id').range(desde, hasta),
       'getStatsPorOperador.operador',
@@ -305,6 +305,15 @@ export async function getStatsPorOperador(tenantId: string): Promise<OperadorSta
       (desde, hasta) => admin.from('viaje').select('id, operador_id').eq('tenant_id', tenantId).order('id').range(desde, hasta),
       'getStatsPorOperador.viaje',
     ),
+    // AUDITORÍA 3, ARQ-C1 (CRÍTICO, reincidente de la ola 2): `diferencias`
+    // salía HARDCODEADA en 0 y la ventana del Agente de Liquidación pintaba
+    // "Ningún operador acumula diferencias — la señal que quieres ver" como
+    // si fuera medición. Ahora se cuenta de verdad: liquidaciones con
+    // diferencia ≠ 0, cruzadas a su operador.
+    traerTodo<{ viaje_id: unknown; diferencia: unknown }>(
+      (desde, hasta) => admin.from('liquidacion').select('viaje_id, diferencia').eq('tenant_id', tenantId).order('id').range(desde, hasta),
+      'getStatsPorOperador.liquidacion',
+    ),
   ]);
   const viajeToOp = new Map(viajes.map((v) => [v.id as string, v.operador_id as string]));
   const dieselPorOp = new Map<string, number>();
@@ -316,12 +325,20 @@ export async function getStatsPorOperador(tenantId: string): Promise<OperadorSta
     if (!viajesPorOp.has(op)) viajesPorOp.set(op, new Set());
     viajesPorOp.get(op)!.add(gr.viaje_id as string);
   }
+  const diferenciasPorOp = new Map<string, number>();
+  for (const l of liqs) {
+    const op = viajeToOp.get(l.viaje_id as string);
+    if (!op) continue;
+    // Centavos de redondeo no son una diferencia que amerite conversación.
+    if (Math.abs(Number(l.diferencia ?? 0)) < 0.01) continue;
+    diferenciasPorOp.set(op, (diferenciasPorOp.get(op) ?? 0) + 1);
+  }
   return ops.map((o) => ({
     operadorId: o.id as string,
     nombre: o.nombre as string,
     viajes: viajesPorOp.get(o.id as string)?.size ?? 0,
     dieselTotal: round2(dieselPorOp.get(o.id as string) ?? 0),
-    diferencias: 0,
+    diferencias: diferenciasPorOp.get(o.id as string) ?? 0,
   }));
 }
 
