@@ -8,6 +8,7 @@ import {
   OperadorNombreAmbiguo,
 } from './crear_viaje_wa';
 import { crearViaje } from './operacion';
+import { violaIndice } from './pg_errores';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { TZ_MX } from '@/lib/formato';
 import type { RolOficina } from './contactos';
@@ -148,7 +149,28 @@ export async function atenderDespachoOficina(
             : []),
         ].join('\n');
       } catch (e) {
-        // El pendiente SE CONSERVA: el jefe puede reintentar con otro "sí".
+        // EL CHOQUE 0029 ES PERMANENTE, NO UN TROPIEZO (auditoría 3, AG-A3).
+        // El estado NORMAL de un chofer entre liquidaciones es traer un viaje
+        // abierto (los tiers de cobranza son 3/7/14 días), y el índice
+        // `uq_viaje_abierto_por_operador` lo rechaza hoy y mañana igual —
+        // "vuelve a responder SÍ en un momento" era una instrucción falsa que
+        // armaba un bucle de reintentos durante los 30 min de vigencia.
+        //
+        // `crearViaje` (operacion.ts:570) envuelve el error de Postgres en un
+        // Error plano: el `code` 23505 no sobrevive y `violaIndice` solo no
+        // basta. Por eso además se busca el nombre del índice en el mensaje
+        // envuelto — ese nombre solo puede venir del propio Postgres, así que
+        // no reabre el falso positivo del que `violaIndice` se cuida.
+        const chocaViajeAbierto = violaIndice(e, 'uq_viaje_abierto_por_operador')
+          || (e instanceof Error && e.message.includes('uq_viaje_abierto_por_operador'));
+        if (chocaViajeAbierto) {
+          // El pendiente se LIMPIA: otro "sí" repetiría el mismo choque.
+          await guardarPendiente(cuenta.tenantId, telefono, null);
+          logger.info('despacho_wa.operador_con_viaje_abierto', { tenant: cuenta.tenantId, operador: pendiente.operadorId });
+          return `«${pendiente.operadorNombre}» todavía tiene un viaje abierto — ciérralo o despacha a otro operador. No creé nada.`;
+        }
+        // Lo transitorio de verdad: el pendiente SE CONSERVA y el jefe puede
+        // reintentar con otro "sí".
         logger.error('despacho_wa.crear_fallo', { tenant: cuenta.tenantId, err: e instanceof Error ? e.message : String(e) });
         return 'No se pudo crear el viaje ahorita. Vuelve a responder SÍ en un momento, o créalo desde Despacho.';
       }
