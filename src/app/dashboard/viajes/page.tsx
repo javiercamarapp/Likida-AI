@@ -103,6 +103,8 @@ export default async function PaginaViajes({
         saltados: r.saltados.length,
         descartadas: lectura.descartadas,
         operadoresSinAmarrar: r.operadoresSinAmarrar,
+        sinOperador: r.sinOperador,
+        operadorOcupado: r.operadorOcupado,
       },
     };
   }

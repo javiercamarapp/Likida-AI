@@ -13,6 +13,10 @@ export interface ResultadoImportarUI {
     saltados: number;
     descartadas: Array<{ fila: number; motivo: string }>;
     operadoresSinAmarrar: string[];
+    /** Folios sin operador amarrable — NO se crean (operador_id es NOT NULL). */
+    sinOperador: string[];
+    /** Folios saltados porque su operador ya trae un viaje abierto (0029). */
+    operadorOcupado: string[];
   };
 }
 
@@ -58,8 +62,19 @@ export function ImportarViajes({ importar }: { importar: AccionImportar }) {
             <p key={d.fila} style={{ color: 'var(--warn)' }}>fila {d.fila}: {d.motivo}</p>
           ))}
           {r.descartadas.length > 5 && <p style={{ color: 'var(--faint)' }}>y {r.descartadas.length - 5} más.</p>}
-          {r.operadoresSinAmarrar.length > 0 && (
-            <p>Sin amarrar a un operador (quedaron sin asignar): {r.operadoresSinAmarrar.join(', ')}.</p>
+          {r.sinOperador.length > 0 && (
+            <p style={{ color: 'var(--warn)' }}>
+              {r.sinOperador.length === 1 ? '1 viaje NO se creó' : `${r.sinOperador.length} viajes NO se crearon`} por
+              no traer operador amarrable ({r.sinOperador.join(', ')})
+              {r.operadoresSinAmarrar.length > 0 && <> — nombres sin amarrar: {r.operadoresSinAmarrar.join(', ')}</>}.
+              Da de alta o corrige el nombre en Operadores y vuelve a subir el archivo: los ya creados se saltan solos.
+            </p>
+          )}
+          {r.operadorOcupado.length > 0 && (
+            <p style={{ color: 'var(--warn)' }}>
+              {r.operadorOcupado.length === 1 ? '1 viaje saltado' : `${r.operadorOcupado.length} viajes saltados`} porque
+              su operador ya trae un viaje abierto ({r.operadorOcupado.join(', ')}) — ciérralo o liquídalo primero.
+            </p>
           )}
         </div>
       )}

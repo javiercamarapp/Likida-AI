@@ -164,16 +164,23 @@ export interface ResultadoImportacion {
   creados: number;
   /** Folios que YA existían en la flota — el mismo archivo dos veces no duplica. */
   saltados: string[];
-  /** Operadores del archivo que no se pudieron amarrar (no existe / ambiguo)
-   *  — el viaje se crea SIN asignar y esto lo dice. */
+  /** Operadores del archivo que no se pudieron amarrar (no existe / ambiguo).
+   *  Sus viajes NO se crean: `viaje.operador_id` es NOT NULL desde la 0001 —
+   *  la versión que los mandaba "sin asignar" tumbaba el lote entero con
+   *  23502 (lateral AUD3). */
   operadoresSinAmarrar: string[];
+  /** Folios cuya fila no trae operador amarrable — se saltan y se dicen. */
+  sinOperador: string[];
+  /** Folios saltados porque su operador ya trae un viaje abierto (0029) —
+   *  en la base o más arriba en el mismo archivo. */
+  operadorOcupado: string[];
   error?: string;
 }
 
 /** Inserta los viajes SIN avisar a nadie (ver encabezado). Anclado al tenant. */
 export async function importarViajes(tenantId: string, filas: FilaViajeImportada[]): Promise<ResultadoImportacion> {
   if (!tenantId) throw new Error('importarViajes: falta tenantId');
-  if (!filas.length) return { creados: 0, saltados: [], operadoresSinAmarrar: [] };
+  if (!filas.length) return { creados: 0, saltados: [], operadoresSinAmarrar: [], sinOperador: [], operadorOcupado: [] };
 
   const existentes = new Set(
     (await traerTodo<{ folio: unknown }>(
@@ -205,18 +212,66 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     }
   }
 
+  // ── LOS DOS CANDADOS DE LA BASE, RESPETADOS ANTES DEL INSERT (AUD3) ──────
+  // 1. `viaje.operador_id` es NOT NULL (0001): la fila sin operador amarrado
+  //    no puede crearse "sin asignar" — antes iba con null y el 23502 tumbaba
+  //    el LOTE ENTERO, y "vuelve a subir el archivo" repetía el mismo choque
+  //    para siempre. Se salta y se dice, con su folio.
+  // 2. `uq_viaje_abierto_por_operador` (0029): un operador, UN viaje abierto.
+  //    Se respeta antes de chocar: la primera fila del archivo gana; las
+  //    demás (y las de operadores con viaje vivo en la base) se saltan con
+  //    su folio. Si un histórico debe entrar como `liquidado` es una decisión
+  //    de producto que este módulo no adivina.
+  const sinOperador: string[] = [];
+  const conOperador: FilaViajeImportada[] = [];
+  for (const f of nuevas) {
+    const id = f.operadorNombre ? operadorPorNombre.get(f.operadorNombre) ?? null : null;
+    if (id) conOperador.push(f); else sinOperador.push(f.folio);
+  }
+
+  const idsAmarrados = [...new Set(conOperador.map((f) => operadorPorNombre.get(f.operadorNombre!)!))];
+  const ocupados = new Set<string>();
+  // Segmentos de 200: `.in()` con miles de ids es una URL que PostgREST corta.
+  for (let i = 0; i < idsAmarrados.length; i += 200) {
+    const { data, error } = await acotada(supabaseAdmin().from('viaje')
+      .select('operador_id')
+      .eq('tenant_id', tenantId)
+      .in('estatus', ['abierto', 'en_cuadre'])
+      .in('operador_id', idsAmarrados.slice(i, i + 200)), 'importarViajes.ocupados');
+    if (error) {
+      // Fallar CERRADO: insertar sin saber quién está ocupado es apostar el
+      // lote entero al 23505 del 0029.
+      logger.error('importar_viajes.ocupados_ilegible', { tenantId, err: error.message });
+      return {
+        creados: 0, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar],
+        sinOperador, operadorOcupado: [],
+        error: 'No pude verificar qué operadores ya traen un viaje abierto — no importé nada. Vuelve a intentar.',
+      };
+    }
+    for (const r of data ?? []) ocupados.add(String(r.operador_id));
+  }
+
+  const operadorOcupado: string[] = [];
+  const listas: FilaViajeImportada[] = [];
+  for (const f of conOperador) {
+    const id = operadorPorNombre.get(f.operadorNombre!)!;
+    if (ocupados.has(id)) { operadorOcupado.push(f.folio); continue; }
+    ocupados.add(id); // la primera fila del archivo gana — como haría el 0029
+    listas.push(f);
+  }
+
   let creados = 0;
   // Lotes de 100: un INSERT de 2,000 filas en una pasada es donde un timeout
   // deja mitad y mitad sin decir cuál mitad.
-  for (let i = 0; i < nuevas.length; i += 100) {
-    const lote = nuevas.slice(i, i + 100).map((f) => ({
+  for (let i = 0; i < listas.length; i += 100) {
+    const lote = listas.slice(i, i + 100).map((f) => ({
       tenant_id: tenantId,
       folio: f.folio,
       origen: f.origen,
       destino: f.destino,
       fecha_inicio: f.fechaInicio,
       anticipo: f.anticipo ?? 0,
-      operador_id: f.operadorNombre ? operadorPorNombre.get(f.operadorNombre) ?? null : null,
+      operador_id: operadorPorNombre.get(f.operadorNombre!)!,
       estatus: 'abierto',
     }));
     // Upsert que IGNORA duplicados contra `viaje_folio_unico` (0092): el que
@@ -233,6 +288,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       logger.error('importar_viajes.lote_fallo', { tenantId, desde: i, err: error.message });
       return {
         creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar],
+        sinOperador, operadorOcupado,
         error: `Se crearon ${creados} y el lote que empieza en la fila ${i + 1} falló — revisa y vuelve a subir el archivo: los ya creados se saltan solos.`,
       };
     }
@@ -243,6 +299,9 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     }
   }
 
-  logger.info('importar_viajes.ok', { tenantId, creados, saltados: saltados.length });
-  return { creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar] };
+  logger.info('importar_viajes.ok', {
+    tenantId, creados, saltados: saltados.length,
+    sinOperador: sinOperador.length, operadorOcupado: operadorOcupado.length,
+  });
+  return { creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar], sinOperador, operadorOcupado };
 }
