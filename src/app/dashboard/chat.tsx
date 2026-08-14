@@ -530,13 +530,43 @@ export default function ChatFlota({
     const caja = (
       <form
         onSubmit={(e) => { e.preventDefault(); preguntar(texto); }}
-        className="w-full rounded-2xl px-4 pt-3.5 pb-3 transition-shadow focus-within:shadow-lg"
+        className="relative w-full rounded-2xl px-4 pt-3.5 pb-3 transition-shadow focus-within:shadow-lg"
         style={{
           background: 'var(--surface)',
           border: '1px solid var(--line)',
           boxShadow: 'var(--shadow-card)',
         }}
       >
+        {menuAdjuntar && (
+          <>
+            {/* Clic afuera cierra, sin oscurecer nada. */}
+            <button type="button" aria-label="Cerrar menú" onClick={() => setMenuAdjuntar(false)}
+              className="fixed inset-0 z-20 cursor-default" style={{ background: 'transparent' }} />
+            <div className={`absolute left-0 right-0 z-30 card p-1.5 ${vacio ? 'top-[calc(100%+8px)]' : 'bottom-[calc(100%+8px)]'}`}>
+              <button type="button"
+                onClick={() => { setMenuAdjuntar(false); inputCamara.current?.click(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--canvas)] text-left">
+                <Camera width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
+                <span className="text-[13.5px] font-medium shrink-0">Tomar foto</span>
+                <span className="text-[13px] truncate" style={{ color: 'var(--muted)' }}>Con la cámara del teléfono</span>
+              </button>
+              <button type="button"
+                onClick={() => { setMenuAdjuntar(false); inputImagen.current?.click(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--canvas)] text-left">
+                <FileImage width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
+                <span className="text-[13.5px] font-medium shrink-0">Subir imágenes</span>
+                <span className="text-[13px] truncate" style={{ color: 'var(--muted)' }}>Fotos de tickets desde tu equipo</span>
+              </button>
+              <button type="button"
+                onClick={() => { setMenuAdjuntar(false); inputArchivo.current?.click(); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--canvas)] text-left">
+                <Paperclip width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
+                <span className="text-[13.5px] font-medium shrink-0">Adjuntar archivos</span>
+                <span className="text-[13px] truncate" style={{ color: 'var(--muted)' }}>PDF, Excel, CSV, XML de CFDI…</span>
+              </button>
+            </div>
+          </>
+        )}
         {documento && (
           <div className="mb-2">
             <span className="hairline inline-flex items-center gap-1.5 text-[12px] font-medium pl-2.5 pr-1.5 py-1 rounded-full" style={{ background: 'var(--canvas)' }}>
@@ -571,28 +601,6 @@ export default function ChatFlota({
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
             <input ref={inputArchivo} type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.tsv,.ods,.xml,.txt,.json,.md" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-            {menuAdjuntar && (
-              <div className="absolute right-10 bottom-9 card p-1.5 z-30 w-56">
-                <button type="button"
-                  onClick={() => { setMenuAdjuntar(false); inputCamara.current?.click(); }}
-                  className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
-                  <Camera width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                  Tomar foto
-                </button>
-                <button type="button"
-                  onClick={() => { setMenuAdjuntar(false); inputImagen.current?.click(); }}
-                  className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
-                  <FileImage width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                  Subir imágenes
-                </button>
-                <button type="button"
-                  onClick={() => { setMenuAdjuntar(false); inputArchivo.current?.click(); }}
-                  className="w-full text-left text-[13px] px-2.5 py-2 rounded-lg transition-colors hover:bg-[var(--canvas)] flex items-center gap-2">
-                  <Paperclip width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                  Adjuntar archivo (PDF, Excel, CSV…)
-                </button>
-              </div>
-            )}
             <button type="button" aria-label="Adjuntar comprobante" title="Adjuntar comprobante"
               onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado}
               className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
@@ -802,10 +810,14 @@ export default function ChatFlota({
 
           {caja}
 
+          {/* Con el menú del clip abierto, las recomendaciones se ESCONDEN
+              pero conservan su espacio (invisible, no display:none): quitarlas
+              del layout recorría el título y la caja — "lo de arriba no se
+              mueve" (13-ago). El menú cae encima de este hueco. */}
           {recomendar ? (
-            <div className="w-full mt-4">{panelConsulta}</div>
+            <div className={`w-full mt-4 ${menuAdjuntar ? 'invisible' : ''}`}>{panelConsulta}</div>
           ) : (
-            <div className="flex flex-wrap justify-center gap-2 mt-4">
+            <div className={`flex flex-wrap justify-center gap-2 mt-4 ${menuAdjuntar ? 'invisible' : ''}`}>
               {PREGUNTAS.map((pq) => (
                 <button
                   key={pq}
