@@ -33,6 +33,7 @@ import { exigir, traerTodo, conteo } from './pg';
 import { round2 } from '@/lib/formato';
 import { armar as armarPorFacturar } from './facturacion/pendientes';
 import { evaluarTope15, type ResultadoTope15 } from './periodo/combustible';
+import { proporcionAlimentacionPorGasto } from './cuadre/tope_alimentacion';
 import type { LikidaConfig } from './config';
 
 // ── La fila de `gasto` leída con ojos de contador ──────────────────────────
@@ -198,6 +199,10 @@ export interface OpcionesFiscales {
   clavesCombustible: string[];
   /** c_ClaveProdServ con estímulo de IEPS: SOLO diésel (LIF 2026 20-A-IV). */
   clavesDieselIeps: string[];
+  /** LISR 28-V: tope diario de alimentación. `null` = tenant sin tope
+   *  configurado, y entonces tampoco se prorratea — el MISMO interruptor con
+   *  el que el motor decide si aplica la regla (`topeAlimentacion != null`). */
+  viaticosTopeFiscalDiarioMxn: number | null;
   /** RFA 2026 regla 2.9: ¿la flota califica a la facilidad del 15%?
    *  true = declaró dedicación exclusiva + régimen; false = declaró que NO;
    *  undefined = sin declarar. AUDITORÍA 14, ALTO: sin esto el panel ofrecía
@@ -217,6 +222,10 @@ export function opcionesDe(cfg: LikidaConfig): OpcionesFiscales {
     efectivoTopeMxn: cfg.estimulos.efectivoTopeMxn,
     clavesCombustible: cfg.hidrocarburos.claves,
     clavesDieselIeps: cfg.estimulos.clavesDieselIeps,
+    // `?? null` y no un default: si la config del tenant perdió el tope, el
+    // motor tampoco lo aplica (lee con `!= null`) — inventar $750 aquí haría
+    // que el panel prorratee un tope que la liquidación no aplicó.
+    viaticosTopeFiscalDiarioMxn: cfg.estimulos.viaticosTopeFiscalDiarioMxn ?? null,
     // AUDITORÍA 14, ALTO: el panel ofrecía el 15% a flotas no elegibles. La
     // declaración de la flota (al registrarse) llega hasta aquí.
     elegible15: (f15 && f15.dedicacionExclusivaCarga !== undefined && f15.regimenElegible !== undefined)
@@ -503,10 +512,17 @@ export interface ResumenFiscal {
   sinCfdi: number;
   /**
    * IVA acreditable que se puede DOCUMENTAR: `iva_traslado` de comprobantes
-   * con CFDI vigente, emisor limpio y gasto deducible (LIVA 5).
+   * con CFDI vigente, emisor limpio y gasto deducible (LIVA 5). En erogaciones
+   * PARCIALMENTE deducibles (alimentación sobre el tope de LISR 28-V) entra
+   * solo la proporción deducible — LIVA 5-I, el mismo criterio del motor.
    */
   ivaAcreditable: number;
-  /** IVA desglosado que NO se acredita, con el motivo ya contado en perdidas. */
+  /**
+   * IVA desglosado que NO se acredita: el de comprobantes que no lo sostienen
+   * (motivo ya contado en perdidas) MÁS la porción no deducible del IVA de los
+   * viáticos sobre el tope. Acreditable + no acreditable siguen sumando todo
+   * el IVA desglosado — el contralor lo cruza con una calculadora.
+   */
   ivaNoAcreditable: number;
   /**
    * Comprobantes CON CFDI pero SIN desglose de IVA leído. Su IVA existe en el
@@ -559,6 +575,25 @@ export function resumirFiscal(gastos: GastoFiscal[], o: OpcionesFiscales): Resum
   let conCfdi = 0, conCfdiSinDesglose = 0, casetasSinSubTotal = 0;
   let porValidar = 0, vigentes = 0, cancelados = 0;
 
+  // AUDITORÍA 4, E4: esto sumaba el IVA COMPLETO de un viático que el motor
+  // acreditaba en proporción al tope de LISR 28-V (LIVA 5-I: "en la proporción
+  // en la que dichas erogaciones sean deducibles"). Sobre $900 con tope de
+  // $750: el panel decía 100% donde la liquidación decía 83.3%. El criterio
+  // es EL MISMO módulo que usa el motor (`cuadre/tope_alimentacion.ts`), no
+  // una réplica. El tope es por día Y POR BENEFICIARIO: este panel mira un
+  // periodo con muchos viajes, así que se parte por viaje —la liquidación es
+  // de un solo operador— antes de aplicar el criterio, igual que el motor.
+  const proporciones = new Map<string, number>();
+  if (o.viaticosTopeFiscalDiarioMxn != null) {
+    const porViaje = new Map<string, GastoFiscal[]>();
+    for (const g of gastos) porViaje.set(g.viajeId, [...(porViaje.get(g.viajeId) ?? []), g]);
+    for (const delViaje of porViaje.values()) {
+      for (const [id, p] of proporcionAlimentacionPorGasto(delViaje, o.viaticosTopeFiscalDiarioMxn)) {
+        proporciones.set(id, p);
+      }
+    }
+  }
+
   for (const g of gastos) {
     gastoTotal += g.monto;
     if (g.cfdiUuid) {
@@ -569,8 +604,15 @@ export function resumirFiscal(gastos: GastoFiscal[], o: OpcionesFiscales): Resum
       if (g.ivaTraslado === null) conCfdiSinDesglose += 1;
     }
     if (g.ivaTraslado !== null && g.ivaTraslado > 0) {
-      if (ivaSostenible(g, o)) ivaAcreditable += g.ivaTraslado;
-      else ivaNoAcreditable += g.ivaTraslado;
+      if (ivaSostenible(g, o)) {
+        const proporcion = Math.max(0, Math.min(1, proporciones.get(g.id) ?? 1));
+        ivaAcreditable += g.ivaTraslado * proporcion;
+        // El resto del traslado existe en el papel y NO se acredita: va a la
+        // otra cubeta para que las dos sigan sumando el IVA desglosado.
+        ivaNoAcreditable += g.ivaTraslado * (1 - proporcion);
+      } else {
+        ivaNoAcreditable += g.ivaTraslado;
+      }
     }
     // El IEPS del diésel exige pago electrónico y NO tiene la válvula del 15%
     // que la RFA 2.9 concede para ISR: la facilidad salva la deducción, no el

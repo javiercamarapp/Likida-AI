@@ -62,4 +62,8 @@ impacto_en_producto: >
   quiera, y ese es un hueco de producto — no de Likida ante la autoridad.
 verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito literal"
 verificado_el: 2026-07-28
-usado_en_codigo: ["src/lib/likida/privacidad.ts"]
+usado_en_codigo:
+  - "privacidad.ts — avisoSimplificado (fracciones I a IV del 15, vía 16-II), revisarAvisoIntegral, versionAviso y respuestaPrivacidad"
+  - "repo.ts — getDatosResponsable, reclamarEnvioAviso y confirmarEnvioAviso (la constancia del art. 16, migs. 0018/0033)"
+  - "processor.ts — ponerAvisoADisposicion: el aviso simplificado va ANTES de cualquier tratamiento (16-II)"
+  - "startup.ts — probes: sin la mig. 0033 no se escribe constancia, y la liga del aviso integral tiene que abrir"

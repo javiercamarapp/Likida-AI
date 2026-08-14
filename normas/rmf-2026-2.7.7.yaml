@@ -52,6 +52,6 @@ advertencia: >
 verificado_por: "investigación 02-carta-porte.md (27-jul-2026), verificada contra DOF y estándar del SAT"
 verificado_el: 2026-07-27
 usado_en_codigo:
-  - "lib/likida/carta_porte.ts — necesitaCartaPorte (árbol 2.7.7.2.1/2.7.7.2.8), CAMPOS_CCP (Apéndice 3: 19 cliente / 18 transportista), validarComplemento (Estándar 3.1 sección 8), generarIdCcp."
-  - "supabase/migrations/0099_carta_porte_transportista.sql — columnas de unidad (config vehicular, peso, póliza RC, permiso SICT) y las dos declaraciones por viaje (ccp_pisa_federal, ccp_radio_federal_km)."
-  - "app/dashboard/carta-porte — la pantalla del checklist por viaje."
+  - "carta_porte.ts — necesitaCartaPorte (árbol 2.7.7.2.1/2.7.7.2.8), CAMPOS_CCP (Apéndice 3: 19 cliente / 18 transportista), validarComplemento (Estándar 3.1 sección 8), generarIdCcp"
+  - "supabase/migrations/0099_carta_porte_transportista.sql — columnas de unidad (config vehicular, peso, póliza RC, permiso SICT) y las dos declaraciones por viaje (ccp_pisa_federal, ccp_radio_federal_km)"
+  - "src/app/dashboard/carta-porte — la pantalla del checklist por viaje"

@@ -41,5 +41,5 @@ advertencia: >
 verificado_por: "ola1 / 03-isr-facilidades.md; verificador adversarial ola1"
 verificado_el: 2026-07-27
 usado_en_codigo:
-  - "cuadre/engine.ts — regla combustible_efectivo"
-  - "cuadre/engine.ts — regla efectivo_sobre_tope"
+  - "cuadre/engine.ts — regla combustible_efectivo (con la matriz de la RFA 2.9 encima) y regla efectivo_sobre_tope"
+  - "fiscal.ts — causas efectivo_sobre_tope / combustible_efectivo / sin_cfdi del panel del contador, e ivaSostenible (el efectivo sobre tope tumba también el IVA)"

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { NORMAS, IDS_NORMA, esVinculante, type Jerarquia } from './indice';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -94,6 +94,84 @@ describe('índice de normas vs fichas', () => {
       const enIndice = NORMAS[f.id!].exigibleDesde ?? null;
       expect(enIndice, `fecha_vigencia_desde distinta en ${f.archivo}`).toBe(enFicha);
     }
+  });
+});
+
+// ── usado_en_codigo ──────────────────────────────────────────────────────────
+// AUDITORÍA 4, E3: tres fichas llevaban semanas citando código podrido —un
+// FISCAL_LEGAL.md que ya no existe, un "processor.ts:238" que hoy es otra
+// cosa, y un "no existe todavía" sobre un contador que ya vivía en repo.ts—
+// y nada fallaba, porque este archivo cotejaba todo MENOS `usado_en_codigo`.
+// Que es justo el campo que el README vende como "si cambias la norma, ese es
+// tu impacto": un impacto que apunta a un archivo inexistente manda al que
+// edita la norma a corregir un fantasma y a NO corregir el código real.
+//
+// Se coteja lo mecánicamente cotejable: que cada RUTA citada exista en el
+// repo. Los símbolos ("— tal función") NO se exigen a propósito: grepear
+// nombres desde aquí acoplaría cada rename a los YAML y el test moriría por
+// falsos positivos. Y los números de línea quedan prohibidos de facto: una
+// cita "archivo.ts:238" no existe como ruta, así que el único formato que
+// pasa es el estable — "ruta — símbolo/qué hace", sin :línea.
+
+/** Las entradas de `usado_en_codigo`: lista en línea (`[...]`) o por renglones. */
+function usadoEnCodigo(txt: string): string[] {
+  const idx = txt.search(/^usado_en_codigo:/m);
+  if (idx === -1) return [];
+  const lineas = txt.slice(idx).split('\n');
+  const resto = lineas[0].replace(/^usado_en_codigo:/, '').trim();
+  if (resto.startsWith('[')) {
+    const dentro = resto.slice(1, resto.endsWith(']') ? -1 : undefined);
+    return dentro.split(',').map((s) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+  }
+  const out: string[] = [];
+  for (const linea of lineas.slice(1)) {
+    const m = /^\s+-\s+(.*)$/.exec(linea);
+    if (m) out.push(m[1].trim().replace(/^["']|["']$/g, ''));
+    else if (linea.trim() !== '') break; // llegó otro campo: la lista terminó
+  }
+  return out;
+}
+
+/**
+ * La ruta que cita una entrada, o `null` si la entrada no cita ninguna.
+ * Es el primer token; cuenta como ruta si trae `/` o una extensión conocida.
+ * `:238` NO se recorta: una cita con línea debe fallar, no colarse.
+ */
+function rutaCitada(entrada: string): string | null {
+  const token = /^[\w@./:-]+/.exec(entrada.trim())?.[0]?.replace(/[.,;:]+$/, '') ?? '';
+  if (!token) return null;
+  return token.includes('/') || /\.(ts|tsx|mjs|sql|md|json|ya?ml)\b/.test(token) ? token : null;
+}
+
+// Las fichas citan de tres maneras (medido, no supuesto): relativo a
+// `src/lib/likida/` —el estilo dominante: "cuadre/engine.ts", "repo.ts"—,
+// desde la raíz ("supabase/migrations/...", "src/app/..."), y a veces desde
+// `src/` o `src/lib/`. Se prueba contra las cuatro bases.
+const RAIZ = new URL('../../../../', import.meta.url);
+const BASES = ['', 'src/', 'src/lib/', 'src/lib/likida/'];
+const existeEnRepo = (ruta: string) => BASES.some((b) => existsSync(new URL(b + ruta, RAIZ)));
+
+describe('usado_en_codigo apunta a código que existe', () => {
+  it('cada ruta citada existe en el repo, sin :línea', () => {
+    for (const f of fichas) {
+      for (const entrada of usadoEnCodigo(f.txt)) {
+        const ruta = rutaCitada(entrada);
+        if (!ruta) continue;
+        expect(
+          existeEnRepo(ruta),
+          `${f.archivo}: "${entrada}" cita "${ruta}" y esa ruta no existe ` +
+          `(se resolvió contra la raíz, src/, src/lib/ y src/lib/likida/). ` +
+          `El formato estable es "ruta — símbolo/qué hace", sin números de línea.`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('el coteo no está ciego: el barrido extrae rutas de verdad', () => {
+    // Un parser que devolviera [] para todo haría pasar el test de arriba en
+    // silencio — el mismo modo de falla que este archivo existe para evitar.
+    const rutas = fichas.flatMap((f) => usadoEnCodigo(f.txt)).map(rutaCitada).filter(Boolean);
+    expect(rutas.length).toBeGreaterThan(15);
   });
 });
 

@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { strip_accents } from './util';
+import { diasSobreTope } from './tope_alimentacion';
 import { fechaDudosa } from './fecha_dudosa';
 import { sanitizarFolio } from '../intake/sanitizar';
 import { esRfcValido, rfcChecksumOk } from '../intake/cfdi';
@@ -740,9 +741,10 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       //
       // AUDITORÍA 10, MEDIO REINCIDENTE (fiscal) — el matiz legal ("no es la
       // ley, puedes exigir dentro del ejercicio") solo salía en la rama
-      // VERIFICADA, y `plazoVerificado: false` es el default de 33 de 37
-      // comercios del catálogo: la rama minoritaria era la única que decía la
-      // verdad completa. El dato de que el plazo real es el ejercicio no
+      // VERIFICADA, y `plazoVerificado: false` es el default de casi todo el
+      // catálogo de comercios (el conteo exacto vive en `comercios.ts`, no
+      // aquí: citado en un comentario ya se pudrió una vez): la rama
+      // minoritaria era la única que decía la verdad completa. El dato de que el plazo real es el ejercicio no
       // depende de que YA se haya verificado el plazo de ESE comercio — es
       // información fiscal que aplica igual en los dos casos, así que ahora
       // se dice en los dos.
@@ -890,97 +892,56 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
 
   // ── Tope fiscal de ALIMENTACIÓN: $750 POR DÍA y por beneficiario (LISR 28-V) ──
   //
-  // Dos correcciones sobre cómo estaba:
-  //
-  // 1. Solo aplica a ALIMENTACIÓN. El hospedaje nacional NO tiene tope, y el
-  //    transporte del operador tampoco. Antes todo lo etiquetado "viaticos"
-  //    cargaba el tope, así que una noche de hotel de $2,000 salía con $1,250
-  //    "no deducibles" que sí lo eran.
-  //
-  // 2. Es POR DÍA, no por comprobante. Antes, tres comidas de $400 el mismo día
-  //    pasaban limpias mientras una sola de $800 se marcaba — el hueco por el que
-  //    se cuela el gasto real, y encima castigaba a quien comprobaba de una vez.
+  // EL CRITERIO NO VIVE AQUÍ. Qué concepto carga el tope, la agrupación por
+  // día (y el "sin fecha, cada quien su día"), y la proporción calculada SOLO
+  // entre los timbrados —con las auditorías 3 y 8 que lo pagaron— están en
+  // `tope_alimentacion.ts`, COMPARTIDO con `resumirFiscal` en `fiscal.ts`.
+  // AUDITORÍA 4, E4: este bloque y el panel del contador calculaban cada quien
+  // su regla y no coincidían (83.3% contra 100% del IVA sobre el mismo viático
+  // de $900 con tope de $750). No dupliques el cálculo aquí: cámbialo allá y
+  // los dos consumidores se mueven juntos.
   //
   // El beneficiario es el operador del viaje: la liquidación es de un solo
-  // operador, así que agrupar por día dentro del viaje es la unidad correcta.
+  // operador, así que pasarle los gastos del viaje ya cumple el "por
+  // beneficiario" de la ley.
   const topeAlimentacion = input.estimulos?.viaticosTopeFiscalDiarioMxn;
   if (topeAlimentacion != null) {
-    // 'viaticos' a secas entra por compatibilidad: es lo que emitía el OCR viejo
-    // y esos gastos ya guardados no se pueden reclasificar solos. Criterio
-    // conservador: se le sigue aplicando el tope.
-    const conTope = (c: string) => c === 'alimentacion' || c === 'viaticos';
-    const porDia = new Map<string, Gasto[]>();
-    for (const g of input.gastos) {
-      if (duplicados.has(g.id) || !(g.monto > 0) || !conTope(g.concepto)) continue;
-      // Sin fecha no se puede agrupar: cada comprobante cuenta como su propio día
-      // (su id como llave). No inventamos una fecha para poder sumar.
-      const dia = g.fecha ? g.fecha.slice(0, 10) : `sin-fecha:${g.id}`;
-      porDia.set(dia, [...(porDia.get(dia) ?? []), g]);
-    }
-    for (const [dia, delDia] of porDia) {
-      const total = delDia.reduce((s, x) => s + x.monto, 0);
-      if (total <= topeAlimentacion) continue;
-
-      // LA PROPORCIÓN ES DEL DÍA, NO DEL COMPROBANTE QUE LO CRUZÓ.
-      //
-      // El tope de LISR 28-V es diario, así que lo deducible del día es
-      // `tope/total` y cada comprobante hereda esa misma proporción. Antes el
-      // exceso se colgaba entero del ÚLTIMO gasto del arreglo, y eso rompía el
-      // IVA de dos maneras:
-      //
-      //  - si ese último era MÁS CHICO que el exceso, su proporción se recortaba
-      //    a 0 y lo que sobraba no se descontaba de ningún lado: se acreditaba
-      //    IVA de más ($160 en vez de $120, reproducido en la auditoría 3);
-      //  - y con tasas distintas en el mismo día, el resultado dependía del
-      //    ORDEN de los gastos en el arreglo ($92 contra $80 con los mismos
-      //    hechos).
-      //
-      // Acreditar de más es del lado caro: responde el cliente ante una revisión.
-      // AUDITORÍA 8, CRÍTICO: la proporción que de verdad se APLICA al dinero se
-      // calcula solo entre los TIMBRADOS del día, no contra `total` (que incluye
-      // tickets sin CFDI). `cubetaDe` ya manda esos tickets a por_confirmar por
-      // su cuenta y nunca lee `proporcionDeducible` — pero antes SÍ inflaban este
-      // denominador, y le recortaban la deducción a los comprobantes que sí
-      // amparan. Medido: una comida de $700 con CFDI, bajo el tope de $750,
-      // salía "$194.44 deducibles" solo porque un ticket sin timbrar del mismo
-      // día se sumó al total. La nota sigue informando del día completo
-      // (`total`, abajo) a propósito: antes de timbrarse, el contralor quiere
-      // saber que ese gasto tampoco va a deducir completo — pero el `monto`
-      // de la diferencia ya no es ese informativo (ver AUDITORÍA 9 abajo).
-      const timbrados = delDia.filter((x) => x.cfdiUuid);
-      const totalTimbrado = timbrados.reduce((s, x) => s + x.monto, 0);
-      if (totalTimbrado > 0) {
-        const proporcionTimbrado = Math.min(1, topeAlimentacion / totalTimbrado);
-        for (const x of timbrados) proporcionDeducible.set(x.id, proporcionTimbrado);
+    const vivosTope = input.gastos.filter((g) => !duplicados.has(g.id));
+    for (const d of diasSobreTope(vivosTope, topeAlimentacion)) {
+      // La proporción del día la heredan SOLO los timbrados: `cubetaDe` ya
+      // manda los tickets sin CFDI a por_confirmar por su cuenta y nunca lee
+      // `proporcionDeducible`. Acreditar de más es del lado caro: responde el
+      // cliente ante una revisión.
+      if (d.proporcionTimbrado != null) {
+        for (const x of d.delDia) if (x.cfdiUuid) proporcionDeducible.set(x.id, d.proporcionTimbrado);
       }
 
       // AUDITORÍA 9, ALTO (fiscal): el `monto` de esta diferencia CERRABA el
-      // dinero (arriba: solo entre timbrados) pero no la FRASE — seguía
+      // dinero (la proporción: solo entre timbrados) pero no la FRASE — seguía
       // colgado de `exceso`, calculado contra `total` (el día completo,
       // timbrado o no). Con dos tickets SIN CFDI de $1,200 y $800, el papel
       // imprimía "el excedente de $1,250.00 no es deducible" en la misma hoja
       // donde el desglose decía "No deducible $0.00" — ninguna cubeta
       // contenía esos $1,250, porque un comprobante sin timbrar no es
       // deducción de nadie todavía (LISR 28-V acota la DEDUCCIÓN, no el gasto
-      // crudo). `montoNoDeducible` ahora es SOLO el exceso de lo timbrado —lo
+      // crudo). `montoNoDeducible` es SOLO el exceso de lo timbrado —lo
       // mismo que de verdad resta de `totalDeducible`— y la nota distingue el
       // panorama informativo del día (`total`, que sigue avisando ANTES de
       // timbrarse, a propósito) de lo que hoy es una afirmación real.
-      const montoNoDeducible = totalTimbrado > topeAlimentacion ? round2(totalTimbrado - topeAlimentacion) : 0;
-
+      //
       // La DIFERENCIA sigue colgada de un comprobante, porque los totales de
       // deducibilidad suman por gastoId y tiene que vivir en alguno. Eso es
       // correcto para el total no deducible del día; lo que no podía ser es que
       // decidiera también el prorrateo del IVA.
-      const ancla = delDia[delDia.length - 1];
-      const cuantos = delDia.length > 1 ? ` (${delDia.length} comprobantes del día)` : '';
-      const cuando = dia.startsWith('sin-fecha') ? 'sin fecha' : dia;
-      const nota = montoNoDeducible > 0
-        ? `Alimentación del ${cuando}: ${mxn(total)}${cuantos} excede el tope fiscal de ${mxn(topeAlimentacion)} por día (LISR 28-V) — el excedente de ${mxn(montoNoDeducible)} no es deducible.`
-        : `Alimentación del ${cuando}: ${mxn(total)}${cuantos} excede el tope fiscal de ${mxn(topeAlimentacion)} por día (LISR 28-V). Hoy nada de esto es "no deducible" todavía: lo que falta por timbrar sigue por confirmar — el excedente se calcula cuando llegue la factura.`;
+      const ancla = d.delDia[d.delDia.length - 1];
+      const cuantos = d.delDia.length > 1 ? ` (${d.delDia.length} comprobantes del día)` : '';
+      const cuando = d.dia.startsWith('sin-fecha') ? 'sin fecha' : d.dia;
+      const nota = d.montoNoDeducible > 0
+        ? `Alimentación del ${cuando}: ${mxn(d.total)}${cuantos} excede el tope fiscal de ${mxn(topeAlimentacion)} por día (LISR 28-V) — el excedente de ${mxn(d.montoNoDeducible)} no es deducible.`
+        : `Alimentación del ${cuando}: ${mxn(d.total)}${cuantos} excede el tope fiscal de ${mxn(topeAlimentacion)} por día (LISR 28-V). Hoy nada de esto es "no deducible" todavía: lo que falta por timbrar sigue por confirmar — el excedente se calcula cuando llegue la factura.`;
       diferencias.push({
         tipo: 'viatico_excede_fiscal', concepto: ancla.concepto,
-        esperado: topeAlimentacion, real: round2(total), monto: montoNoDeducible,
+        esperado: topeAlimentacion, real: round2(d.total), monto: d.montoNoDeducible,
         nota,
         gastoId: ancla.id,
       });

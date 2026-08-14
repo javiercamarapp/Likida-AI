@@ -33,4 +33,4 @@ reformas_relevantes:
     verificado_por: "verificador adversarial ola1 (refutación 2)"
 verificado_el: 2026-07-27
 usado_en_codigo:
-  - "intake/cfdi.ts — validación de UUID y RFC"
+  - "intake/cfdi.ts — esUuidValido, esRfcValido y rfcChecksumOk (validación de UUID y RFC)"

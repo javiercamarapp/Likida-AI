@@ -43,4 +43,7 @@ impacto_en_producto: >
   veredicto más caro que da.
 verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito"
 verificado_el: 2026-07-28
-usado_en_codigo: ["src/lib/likida/cuadre/engine.ts"]
+usado_en_codigo:
+  - "cuadre/engine.ts — tipos cfdi_efos (no deducible duro) y cfdi_efos_indeterminado (revisión)"
+  - "intake/sat.ts — lee ValidacionEFOS de la respuesta del SAT y lo mapea a efos true/null"
+  - "fiscal.ts — causas efos / efos_indeterminado del panel del contador, e ivaSostenible (estar en el 69-B tumba también el IVA)"

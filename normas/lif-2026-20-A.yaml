@@ -90,5 +90,6 @@ hallazgos_que_el_codigo_tiene_MAL:
 verificado_el: 2026-07-27
 usado_en_codigo:
   - "config.ts — estimulos.peajeFactor (0.5), estimulos.clavesDieselIeps"
-  - "cuadre/engine.ts — iepsAcreditable, peajeAcreditable"
-  - "liquidacion/pdf.ts — sección ACREDITABLE / RECUPERABLE"
+  - "cuadre/engine.ts — peajeAcreditable (50% del SubTotal de casetas); iepsAcreditable queda en 0 a propósito y el dato duro es litrosDieselAcreditables (cuota semanal × litros, la cuota la pone el contador)"
+  - "liquidacion/acreditable.ts — arma la sección ACREDITABLE / RECUPERABLE: BASE_ESTIMULO_PEAJE (el hallazgo H4 dicho en el papel) y CONDICIONES_ESTIMULO_PEAJE (las cuatro condiciones de esta ficha)"
+  - "liquidacion/pdf.ts — dibuja esa sección (filasAcreditables)"

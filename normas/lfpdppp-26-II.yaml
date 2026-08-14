@@ -58,4 +58,7 @@ impacto_en_producto: >
   No construir cierre automático sin revisión humana sin volver aquí.
 verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito literal"
 verificado_el: 2026-07-28
-usado_en_codigo: []
+usado_en_codigo:
+  - "cuadre/engine.ts — diferencia oposicion_titular: con la oposición ejercida (mig. 0100) la liquidación exige revisión de una persona antes de cerrarse"
+  - "cierre_aviso.ts — oposicion_titular clasificada como 'decision': el cierre no puede ser automático"
+  - "normas/por_diferencia.ts — oposicion_titular cita esta ficha como su fundamento"

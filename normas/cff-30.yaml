@@ -63,5 +63,5 @@ verificado_por: "auditoría 5 / ingeniero fiscal — transcripción directa del 
 verificado_el: 2026-07-28
 usado_en_codigo:
   - "repo.ts — saveCfdiXmlRaw (comentario: 'Conserva el XML CRUDO del CFDI (CFF art. 30)')"
-  - "processor.ts:238 — conservación por UUID con gasto_id nulo"
-  - "processor.ts:494 — conservar el XML crudo, best-effort"
+  - "processor.ts — processInbound, rama de XML sin viaje abierto: se conserva por UUID con gasto_id nulo"
+  - "processor.ts — processInbound, paso 1.8: conservar el XML crudo tras aplicar el CFDI, best-effort"
