@@ -18,6 +18,7 @@ import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { registrarCosto, faseDeModelo } from '@/lib/likida/costos';
+import { PartialExecutionError } from '@/lib/llm/openrouter';
 import { guardarIntercambio } from '@/lib/likida/chat/conversaciones';
 import { ejecutarAnalista } from '@/lib/agents/analista';
 import { ahoraMs } from '@/lib/saludo';
@@ -128,7 +129,22 @@ export async function POST(req: NextRequest) {
         }
         manda({ t: 'fin', bloques: r.bloques, conversacionId });
       } catch (err) {
-        logger.error('chat.analista.fallo', { err: err instanceof Error ? err.message : String(err) });
+        // AUDITORÍA 3, TC-A1 (ALTO): el turno que truena (loop-guard, timeout
+        // de 40s, truncamiento) YA PAGÓ hasta 9 completions y su consumo
+        // viaja en PartialExecutionError — tirarlo dejaba al tope diario de
+        // $1/tenant ciego exactamente al modo de falla que más gasta. Mismo
+        // criterio que processor.ts: se registra como modelo 'parcial'.
+        if (err instanceof PartialExecutionError && (err.tokensIn > 0 || err.tokensOut > 0)) {
+          try {
+            await registrarCosto({
+              tenantId, viajeId: null, fase: 'chat', modelo: 'parcial',
+              tokensIn: err.tokensIn, tokensOut: err.tokensOut, costoUsd: err.cost,
+            });
+          } catch (e2) {
+            logger.error('chat.costo_parcial_sin_registrar', { tenantId, err: e2 instanceof Error ? e2.message : String(e2) });
+          }
+        }
+        logger.error('chat.analista.fallo', { tenantId, err: err instanceof Error ? err.message : String(err) });
         manda({ t: 'error', error: 'el analista no pudo responder en este momento' });
       } finally {
         try { controlador.close(); } catch { /* ya cerrado */ }
