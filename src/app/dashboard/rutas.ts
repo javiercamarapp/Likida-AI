@@ -1,6 +1,6 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
-  BellRing, Truck, Users, FileQuestion,
+  BellRing, Truck, Users, FileQuestion, Map,
 } from 'lucide-react';
 
 /**
@@ -34,6 +34,10 @@ export const OPERACION: Item[] = [
   // aquí se consulta y se cruza.
   { href: '/dashboard/viajes', nombre: 'Viajes', Icono: Truck },
   { href: '/dashboard/operadores', nombre: 'Operadores', Icono: Users },
+  // F3: los viajes vivos sobre México — trayecto ilustrativo, sin GPS, y la
+  // página lo declara. La /dashboard/mapa vieja (borrada el 10-ago) no
+  // dibujaba nada; esta dibuja lo que SÍ es verdad.
+  { href: '/dashboard/mapa', nombre: 'Mapa', Icono: Map },
 ];
 
 export const DINERO_FISCAL: Item[] = [

@@ -53,7 +53,7 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
   // de operación: Viajes y Operadores se reconstruyeron SIN pesos (la fuga
   // del 4-ago fue anticipos y % por chofer a su vista; `dinero_por_area`
   // escanea las dos).
-  const SUYAS = ['/dashboard', '/dashboard/despacho', '/dashboard/viajes', '/dashboard/operadores'];
+  const SUYAS = ['/dashboard', '/dashboard/despacho', '/dashboard/viajes', '/dashboard/operadores', '/dashboard/mapa'];
   it.each(SUYAS)('%s sí es suya', (href) => {
     expect(puedeVerRuta('encargado', href)).toBe(true);
   });
@@ -82,7 +82,7 @@ describe('el contador — sin panel propio, pero la operación le sigue cerrada'
 
   // El contador no despacha NI consulta el registro operativo: Viajes y
   // Operadores (F2) son de operación, igual que el Resumen.
-  const OPERACION_PROHIBIDA = ['/dashboard', '/dashboard/viajes', '/dashboard/operadores'];
+  const OPERACION_PROHIBIDA = ['/dashboard', '/dashboard/viajes', '/dashboard/operadores', '/dashboard/mapa'];
   it.each(OPERACION_PROHIBIDA)('%s le sigue negada al contador aunque teclee la URL', (href) => {
     expect(puedeVerRuta('contador', href)).toBe(false);
   });
