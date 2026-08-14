@@ -4,9 +4,13 @@ import {
   CONFIG_COBRANZA_DEFAULT,
 } from './cobranza';
 
-// Solo el motor PURO: claims, envíos y bitácora se prueban con la
-// verificación 64 de la base y el arnés manual — un mock de Supabase
-// probaría el mock.
+// Solo el motor PURO. Los caminos con DB los cubren la verificación 64 de la
+// base (claim único, ventana válida, RLS, cascade — verificaciones.sql),
+// `cobranza_cola.test.ts` (la cola y su filtro de avisados) y
+// `cobranza_reloj.test.ts` (el corte por reloj antes del claim, claim→envío,
+// plantilla y bitácora). Aquí un mock de Supabase de más probaría el mock.
+// (Hasta el 14-ago-2026 este header citaba un "arnés manual" que no existía
+// en el repo — un rótulo de prueba tiene que ser verdad.)
 
 describe('validarConfigCobranza', () => {
   it('sin nada, devuelve la conducta del 0087 (defaults)', () => {
