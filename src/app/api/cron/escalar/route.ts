@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { escalarViajesSinAceptar } from '@/lib/likida/escalar_viaje';
-import { enviarRecordatoriosComprobacion } from '@/lib/likida/recordatorio_comprobacion';
+import { ejecutarCobranzaGlobal } from '@/lib/likida/agentes/cobranza';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -73,7 +73,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const r = await enviarRecordatoriosComprobacion();
+    const r = await ejecutarCobranzaGlobal();
     logger.info('cron.recordatorio_comprobacion.ok', { ...r });
     resultado.comprobacion = r;
   } catch (e) {

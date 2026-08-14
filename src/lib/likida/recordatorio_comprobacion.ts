@@ -3,6 +3,11 @@ import { logger } from '@/lib/logger';
 import { sendText } from '@/lib/meta/client';
 
 // ═══════════════════════════════════════════════════════════════════════════
+// SUPERSEDIDO EN EL CRON por el Agente de Cobranza (0089,
+// lib/likida/agentes/cobranza.ts): mismo claim, mismo sello, ahora con
+// tiers/ventana/config POR FLOTA. Este módulo se conserva por sus puras y
+// sus pruebas; el cron ya no lo llama.
+//
 // EL OPERADOR QUE LLEVA DÍAS SIN MANDAR NADA.
 //
 // Un viaje sigue abierto/en_cuadre y su `fecha_inicio` ya pasó el plazo — el
