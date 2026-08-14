@@ -157,13 +157,34 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
       // para contestar, LFPDPPP art. 32) no tenía constancia que atender. El
       // tipo se clasifica del texto; la flota decide la calificación exacta.
       const { tipoDeSolicitudArco } = await import('@/lib/likida/privacidad');
+      const tipo = tipoDeSolicitudArco(texto);
       await registrarSolicitudArco({
         tenantId,
         operadorId,
         titularRef: telefono,
-        tipo: tipoDeSolicitudArco(texto),
+        tipo,
         canal: 'whatsapp',
       });
+      // ── E1 (auditoría 4): la oposición ENCIENDE algo, no solo se archiva ──
+      // Hasta hoy, oponerse insertaba la fila de arriba y no ocurría nada más:
+      // el aviso prometía "que la revise alguien" y el pipeline seguía
+      // decidiendo solo. La bandera (mig. 0100) es lo que el motor de cuadre
+      // lee para mandar toda liquidación suya a revisión humana. Solo se
+      // escribe si estaba en NULL: la PRIMERA fecha de ejercicio es la que
+      // demuestra desde cuándo se honra.
+      if (tipo === 'oposicion' && operadorId) {
+        const { error } = await supabaseAdmin().from('operador')
+          .update({ oposicion_automatizada: new Date().toISOString() })
+          .eq('id', operadorId).eq('tenant_id', tenantId)
+          .is('oposicion_automatizada', null);
+        if (error) {
+          // Ruidoso: la solicitud quedó registrada pero el derecho NO quedó
+          // operativo — es exactamente lo que alguien tiene que arreglar mañana.
+          logger.error('arco.oposicion_no_encendida', { tenantId, operadorId, err: error.message });
+        } else {
+          await sendText(telefono, 'Además, desde ahora tus liquidaciones las revisa una persona antes de cerrarse. Queda registrado. 👍');
+        }
+      }
       return;
     }
     // Sin datos del responsable no se puede decir a quién reclamarle. Se le dice

@@ -94,7 +94,8 @@ export type TipoDiferencia =
   // RFA 2026 regla 2.9 — la facilidad del 15% de combustible en efectivo (deber ser):
   | 'combustible_efectivo_dentro15' // efectivo DENTRO del 15% del ejercicio y flota elegible → deducible, con el contador a la vista
   | 'efectivo_sobre_15'      // efectivo que EXCEDE el 15% del ejercicio → el excedente no deducible
-  | 'efectivo_no_elegible';  // flota declaró que NO califica (dedicación o régimen) → el efectivo no se deduce (LISR 27-III)
+  | 'efectivo_no_elegible'   // flota declaró que NO califica (dedicación o régimen) → el efectivo no se deduce (LISR 27-III)
+  | 'oposicion_titular';     // el operador ejerció su oposición a la decisión automatizada (LFPDPPP 26-II) → una persona DEBE cerrar esta liquidación
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */
 export interface Diferencia {
@@ -162,4 +163,8 @@ export interface Operador {
   terminal?: string;
   /** RFC del trabajador (mig. 0080) — para la rama buena de RLISR 57. */
   rfc?: string | null;
+  /** Cuándo ejerció su oposición a la decisión automatizada (LFPDPPP 26-II,
+   *  mig. 0100). `null`/ausente = no ejercida. Con fecha, sus liquidaciones
+   *  salen a revisión humana. */
+  oposicionAutomatizada?: string | null;
 }

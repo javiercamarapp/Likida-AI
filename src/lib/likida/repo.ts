@@ -71,7 +71,7 @@ export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje
 export async function getOperador(operadorId: string, tenantId: string): Promise<Operador | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('operador')
-    .select('id, nombre, telefono, rfc, terminal:terminal_id(nombre)')
+    .select('id, nombre, telefono, rfc, oposicion_automatizada, terminal:terminal_id(nombre)')
     .eq('id', operadorId)
     .eq('tenant_id', tenantId)
     .maybeSingle(), 'getOperador');
@@ -83,6 +83,7 @@ export async function getOperador(operadorId: string, tenantId: string): Promise
     nombre: data.nombre as string,
     telefono: data.telefono as string,
     rfc: (data.rfc as string | null) ?? undefined,
+    oposicionAutomatizada: (data.oposicion_automatizada as string | null) ?? null,
     terminal: terminal?.nombre,
   };
 }

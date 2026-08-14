@@ -3730,3 +3730,70 @@ begin
   delete from public.tenant where id = t;  -- el raise de abajo revierte todo igual
   raise exception E'CCP_0099  peso_250_rebota=%  radio_negativo_rebota=%   (esperado t/t)', peso_malo, radio_malo;
 end $$;
+
+-- ── 77. La oposición del titular tiene dónde vivir (0100) ──────────────────
+--
+-- `operador.oposicion_automatizada`: timestamptz nullable sin default. NULL =
+-- derecho no ejercido (medición, no relleno); con fecha, el motor de cuadre
+-- manda toda liquidación suya a revisión humana (diferencia oposicion_titular).
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026:
+--   [{"column_name":"oposicion_automatizada","data_type":"timestamp with time zone","is_nullable":"YES","column_default":null}]
+select column_name, data_type, is_nullable, column_default
+  from information_schema.columns
+ where table_schema='public' and table_name='operador' and column_name='oposicion_automatizada';
+
+-- ── 78. La purga del intake por correo existe y no es alcanzable (0101) ────
+--
+-- `correo_procesado` crecía para siempre: la 0096 creó el índice por fecha
+-- "para poder limpiar" y `mantenimiento_de_datos` nunca la tocó (C3,
+-- auditoría 4). Ahora la purga borra lo más viejo que 90 días, conserva lo
+-- fresco, reporta su llave en el jsonb del mantenimiento, y NO es ejecutable
+-- por `anon` (la lección de la 0098, aplicada de entrada).
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026:
+--   PURGA_CORREO_0101  borradas=1  quedan_frescas=1  llave_en_jsonb=t  anon_puede=f  (esperado >=1/1/t/f)
+do $$
+declare res jsonb; quedan bigint; borro bigint; anon_puede boolean;
+begin
+  insert into public.correo_procesado (email_id, created_at) values
+    ('verif-0101-viejo', now() - interval '120 days'),
+    ('verif-0101-fresco', now() - interval '2 days');
+  res := public.mantenimiento_de_datos(30);
+  select count(*) into quedan from public.correo_procesado where email_id like 'verif-0101-%';
+  borro := (res->>'correoPurgado')::bigint;
+  select has_function_privilege('anon', 'public.purgar_correo_procesado(integer, timestamptz)', 'EXECUTE') into anon_puede;
+  raise exception E'PURGA_CORREO_0101  borradas=%  quedan_frescas=%  llave_en_jsonb=%  anon_puede=%   (esperado >=1/1/t/f)',
+    borro, quedan, (res ? 'correoPurgado'), anon_puede;
+end $$;
+
+-- ── 79. La bitácora de corridas de agentes existe y se purga (0102) ────────
+--
+-- `agente_corrida`: una fila por (corrida × flota) con Periodo · Estado ·
+-- Tareas · Duración — la ficha de Handle. Dominios vigilados por CHECK,
+-- lectura por tenant vía RLS, escritura solo service role, purga a 180 días
+-- integrada a `mantenimiento_de_datos` con su revoke desde el día uno.
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026:
+--   CORRIDA_0102  agente_malo_rebota=t  estado_malo_rebota=t  purga_reporta=t  purgo_vieja=1  anon_puede=f  (esperado t/t/t/1/f)
+do $$
+declare t uuid; rebota_agente boolean := false; rebota_estado boolean := false; res jsonb; anon_puede boolean;
+begin
+  insert into public.tenant (nombre) values ('__verif_0102__') returning id into t;
+  insert into public.agente_corrida (tenant_id, agente, inicio, fin, estado, disparo, tareas_hechas, tareas_total)
+    values (t, 'cobranza', now() - interval '5 minutes', now(), 'ok', 'cron', 3, 3);
+  begin
+    insert into public.agente_corrida (tenant_id, agente, inicio, estado) values (t, 'inventado', now(), 'ok');
+  exception when check_violation then rebota_agente := true;
+  end;
+  begin
+    insert into public.agente_corrida (tenant_id, agente, inicio, estado) values (t, 'peajes', now(), 'verde');
+  exception when check_violation then rebota_estado := true;
+  end;
+  insert into public.agente_corrida (tenant_id, agente, inicio, estado, creada_en)
+    values (t, 'peajes', now() - interval '200 days', 'ok', now() - interval '200 days');
+  res := public.mantenimiento_de_datos(30);
+  select has_function_privilege('anon', 'public.purgar_agente_corrida(integer, timestamptz)', 'EXECUTE') into anon_puede;
+  raise exception E'CORRIDA_0102  agente_malo_rebota=%  estado_malo_rebota=%  purga_reporta=%  purgo_vieja=%  anon_puede=%   (esperado t/t/t/1/f)',
+    rebota_agente, rebota_estado, (res ? 'corridasPurgadas'), (res->>'corridasPurgadas'), anon_puede;
+end $$;

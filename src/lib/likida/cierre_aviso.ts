@@ -124,6 +124,11 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   alimentacion_transporte_sin_tarjeta_credito: 'decision',
 
   // ── Señales de que algo no está bien, no de que algo falló ───────────────
+  // La oposición del titular (LFPDPPP 26-II) es 'decision' A PROPÓSITO: el
+  // punto del derecho es que una PERSONA intervenga, y la cola de decisión del
+  // jefe es exactamente esa intervención. Mandarla al panel la volvería un
+  // letrero que nadie tiene que atender.
+  oposicion_titular: 'decision',
   diesel_desviacion: 'decision',       // consumo fuera de rango: puede ser robo
   fecha_sospechosa: 'decision',        // un ticket de otro viaje cobrado aquí es dinero mal asignado
   texto_sospechoso: 'decision',        // el papel traía texto dirigido al extractor: lo ve una persona

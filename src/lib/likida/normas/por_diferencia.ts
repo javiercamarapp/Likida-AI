@@ -25,6 +25,8 @@ import { NORMAS } from './indice';
  * explicará mal el veredicto.
  */
 export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
+  // El derecho que obliga a que una persona cierre la liquidación.
+  oposicion_titular: ['lfpdppp-2025-art-26-fr-II'],
   sin_cfdi: ['lisr-27-fr-III'],
   // El papel dice "ESTE NO ES UN COMPROBANTE FISCAL". El art. 29-A lista lo que
   // un comprobante tiene que traer para amparar una deducción; una nota de

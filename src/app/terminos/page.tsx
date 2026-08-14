@@ -53,7 +53,7 @@ const SECCIONES: SeccionLegal[] = [
   {
     titulo: '2. Qué es Likida y qué no es',
     parrafos: [
-      `Likida recibe comprobantes de gasto de los operadores de una flota por WhatsApp, los lee, los **cuadra contra el anticipo entregado y contra la política de gastos de la propia empresa**, y entrega una liquidación en PDF con el fundamento fiscal de cada observación.`,
+      `Likida recibe comprobantes de gasto de los operadores de una flota por WhatsApp, los lee, los **cuadra contra el anticipo entregado y contra la política de gastos de la propia empresa**, y entrega una liquidación en PDF con el fundamento fiscal de cada observación. La empresa también puede recibir **facturas de sus proveedores por un buzón de correo dedicado** que se genera desde el panel: los CFDI adjuntos entran al mismo registro.`,
       `**Likida no es un despacho contable, ni un PAC, ni un asesor fiscal.** No timbra facturas, no presenta declaraciones, no dictamina estados financieros y no sustituye al contador de la empresa. Lo que entrega es un documento de trabajo, y así hay que tratarlo.`,
       `**Likida tampoco mueve dinero.** No dispersa anticipos, no paga a operadores y no cobra a los clientes de la flota. Los importes que calcula son informativos para quien sí hace esos pagos.`,
     ],
@@ -88,6 +88,7 @@ const SECCIONES: SeccionLegal[] = [
       `**La información es de la empresa.** Sus viajes, sus comprobantes, sus liquidaciones y sus PDF le pertenecen. Likida los trata para prestar el servicio y por instrucción suya, como **encargado del tratamiento**, no como dueño.`,
       `La empresa puede **exportar su información** en cualquier momento desde el panel. Al terminar la relación, Likida conserva lo que la ley obliga a conservar y elimina el resto; los plazos de conservación están en la política de privacidad.`,
       `**Likida no vende la información ni la comparte con terceros** para fines propios. Lo que sí hace es procesarla con los proveedores de infraestructura y modelos que la política de privacidad enumera.`,
+      `Si la empresa conecta sus propios sistemas —ERP, GPS, monederos de peaje—, las **credenciales que capture se guardan cifradas** y se usan únicamente para la conexión que la empresa instruyó. La empresa puede desactivarlas desde el panel en cualquier momento, y hacerlo corta el acceso de Likida a ese sistema. Likida nunca muestra esas credenciales de vuelta: ni en pantalla, ni en reportes, ni en soporte.`,
     ],
   },
   {
@@ -115,7 +116,7 @@ const SECCIONES: SeccionLegal[] = [
   {
     titulo: '10. Servicios de terceros de los que Likida depende',
     parrafos: [
-      `El servicio no funciona solo. Depende, al menos, de: **WhatsApp Business Platform** (Meta) como canal de mensajes, proveedores de **modelos de IA** para leer comprobantes, el **servicio de verificación de CFDI del SAT**, e infraestructura de nube para alojar y procesar.`,
+      `El servicio no funciona solo. Depende, al menos, de: **WhatsApp Business Platform** (Meta) como canal de mensajes, proveedores de **modelos de IA** para leer comprobantes, el **servicio de verificación de CFDI del SAT**, un **servicio de correo transaccional (Resend, que entrega y recibe a través de Amazon SES)** para los avisos y para el buzón de facturas de proveedores, e infraestructura de nube para alojar y procesar. El detalle de qué ve cada proveedor está en la política de privacidad y su anexo de subencargados.`,
       `Una caída, un cambio de política o una suspensión de cuenta en cualquiera de ellos **afecta a Likida y está fuera de su control**. En particular, Meta puede restringir o suspender el canal de WhatsApp conforme a sus propias políticas, y esa decisión no es de Likida.`,
       `Cuando el SAT no responde, la liquidación **no se detiene**: el comprobante queda marcado como pendiente de verificación y el proceso sigue. Es comportamiento diseñado, no una falla.`,
     ],

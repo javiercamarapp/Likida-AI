@@ -42,6 +42,13 @@ export interface CuadreInput {
    *  los comprobantes de quien presta servicios subordinados pueden expedirse a
    *  nombre de esa persona. Sin este dato no se rechaza — se manda a revisar. */
   operadorRfc?: string;
+  /** El operador ejerció su derecho de OPOSICIÓN a la decisión automatizada
+   *  (LFPDPPP art. 26-II, mig. 0100). Con `true`, la liquidación sale a
+   *  revisión humana SIEMPRE: el aviso de privacidad promete que puede pedir
+   *  "que la revise alguien", y esta bandera es lo que vuelve cierta esa
+   *  promesa. El cálculo se hace igual (números correctos que una persona
+   *  revisa), lo que cambia es que ya no se cierra sola. */
+  oposicionTitular?: boolean;
   /** Complemento de hidrocarburos (Bloque 1): claves de combustible, unidad,
    *  y desde cuándo se MIRA. Sin esto, la regla no corre.
    *
@@ -187,6 +194,18 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
 export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'creadaEn'> {
   const umbral = input.umbralConfianza ?? 0.85;
   const diferencias: Diferencia[] = [];
+
+  // ── LFPDPPP 26-II: la oposición del titular va PRIMERO ──────────────────
+  // No cambia una sola cifra: cambia quién cierra. Con la bandera, la
+  // liquidación no puede quedar `cuadrada` sola — sale a revisar y una
+  // persona la mira antes de que al operador se le afirme nada.
+  if (input.oposicionTitular === true) {
+    diferencias.push({
+      tipo: 'oposicion_titular',
+      monto: 0,
+      nota: 'El operador ejerció su derecho de oposición a la decisión automatizada (LFPDPPP art. 26, fr. II): esta liquidación requiere revisión de una persona antes de cerrarse. Los cálculos de abajo son los del motor; la decisión final es humana.',
+    });
+  }
 
   const norm = (r: string) => strip_accents(r.toUpperCase().replace(/\s/g, ''));
   // RFC genérico del SAT: si el tenant no capturó su RFC real, NO se valida el
@@ -1152,7 +1171,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // central del demo. El requisito sigue avisado —ahora con tono `condicionado`
   // en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
   // no puede bajar un estatus que nunca podría volver a subir.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'oposicion_titular'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';
