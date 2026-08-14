@@ -1,7 +1,8 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
   BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2, Plug,
-  ChartNoAxesCombined, UserRound, BookOpen, Container, Blocks, Handshake, FileText,
+  ChartNoAxesCombined, UserRound, BookOpen, Container, Blocks, Handshake, FileText, KeyRound,
+  ScrollText,
 } from 'lucide-react';
 
 /**
@@ -48,6 +49,10 @@ export const OPERACION: Item[] = [
   // página lo declara. La /dashboard/mapa vieja (borrada el 10-ago) no
   // dibujaba nada; esta dibuja lo que SÍ es verdad.
   { href: '/dashboard/mapa', nombre: 'Mapa', Icono: Map },
+  // A3 (auditoría 4, 14-ago-2026): por viaje en curso, si necesita el
+  // complemento y qué dato falta — partido 19 del cliente / 18 del
+  // transportista, que es como la ley parte la responsabilidad.
+  { href: '/dashboard/carta-porte', nombre: 'Carta Porte', Icono: ScrollText },
 ];
 
 export const DINERO_FISCAL: Item[] = [
@@ -75,6 +80,10 @@ export const SISTEMA: Item[] = [
   // La otra mitad del chasis: los SISTEMAS del cliente (ERP, GPS, TAG), contra
   // las CREDENCIALES que vive en Conexiones. Handle separa igual las dos.
   { href: '/dashboard/integraciones', nombre: 'Integraciones', Icono: Blocks },
+  // A6 (auditoría 4, 14-ago-2026): la emisión y revocación de las llaves de
+  // /v1. El openapi prometía "se emite desde el panel" sin que el panel
+  // existiera — `tenant_api_key` no tenía un solo INSERT en src/.
+  { href: '/dashboard/llaves-api', nombre: 'Llaves de API', Icono: KeyRound },
 ];
 
 /** El bloque INFERIOR fijo (referencia Handle: Help Center / Settings),

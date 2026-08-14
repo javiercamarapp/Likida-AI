@@ -1,0 +1,57 @@
+id: rmf-2026-2.7.7
+tipo: regla_general
+jerarquia: 3
+instrumento: "Resolución Miscelánea Fiscal para 2026"
+articulo_o_regla: "Sección 2.7.7 (2.7.7.1.1, 2.7.7.1.2, 2.7.7.2.1, 2.7.7.2.8)"
+titulo: "Complemento Carta Porte: obligados, traslado local y la excepción del radio de 30 km"
+citas_en_codigo: ["2.7.7.1.1", "2.7.7.2.1", "2.7.7.2.8", "Carta Porte"]
+texto_vigente: >
+  2.7.7.1.1 (primer párrafo, extracto): los contribuyentes, intermediarios o
+  agentes de transporte dedicados al servicio de transporte de carga general y
+  especializada que circulen por vía terrestre, férrea, aérea o naveguen por vía
+  marítima, "deben expedir un CFDI de tipo ingreso con los requisitos
+  establecidos en el artículo 29-A del CFF, al que deben incorporar el
+  'Complemento Carta Porte'". Último párrafo: tanto quien contrate el servicio
+  como quien lo preste serán responsables ante la autoridad cuando esta detecte
+  alguna irregularidad en los datos, y "dicha responsabilidad se limitará a los
+  datos que proporcione cada una de las partes".
+  2.7.7.2.1: el transportista que NO transite por tramos de jurisdicción federal
+  puede acreditar el transporte con el CFDI de ingreso SIN complemento; aplica
+  solo con "plena certeza" de no pisar federal, y si por cualquier causa se pisa,
+  deben emitirse los CFDI conforme a 2.7.7.1.1 y 2.7.7.1.2. Excluidos de la
+  facilidad: transportistas extranjeros, hidrocarburos/petrolíferos, despacho
+  aduanero y medicamentos.
+  2.7.7.2.8: los vehículos que no excedan los pesos y dimensiones de un camión
+  tipo C2 (NOM-012-SCT-2-2017) se entiende que NO transitan por tramos federales
+  "siempre que en su trayecto la longitud del tramo federal que se pretenda
+  utilizar no exceda de un radio de distancia de 30 kilómetros, los cuales se
+  computarán entre el origen inicial y el destino final, incluyendo los puntos
+  intermedios del traslado". Aplica también a remolques que no excedan el C2.
+fecha_publicacion: 2025-12-28
+fecha_vigencia_desde: 2024-07-17
+fuente_url: "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/rmf/RMF_2026-DOF-28122025.pdf"
+fuente_tipo: sat_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Texto extraído del PDF oficial de la RMF 2026 (DOF 28-dic-2025) el
+  27-jul-2026; investigación completa con validaciones del Estándar CCP 3.1 y
+  el Instructivo Autotransporte en docs/conocimiento/02-carta-porte.md.
+  La fecha de vigencia es la de la VERSIÓN 3.1 del complemento (obligatoria
+  desde el 17-jul-2024, página oficial del SAT); la obligación de fondo existe
+  desde 2021 y NO tiene periodo de gracia en 2026 — se leyeron los 25
+  transitorios de la RMF 2026 y la 1a Resolución de Modificaciones
+  (DOF 09-jul-2026) no tocó la Sección 2.7.7. Los catálogos
+  (catCartaPorte.xsd) cambiaron el 13-ene-2026: la validación de claves vive
+  en código, no en constraints, para poder seguirlos.
+advertencia: >
+  El incumplimiento no es solo multa (CFF 84-IV-d, $450-$670 por CFDI): el
+  traslado sin CFDI con complemento SE PRESUME CONTRABANDO (CFF 103-XXII,
+  pena de 3 a 6 años, CFF 104-IV) y el gasto pierde deducción y acreditamiento
+  (CFF 29-A). Por eso el clasificador NUNCA responde "no necesita" con datos
+  faltantes: responde "falta declarar".
+verificado_por: "investigación 02-carta-porte.md (27-jul-2026), verificada contra DOF y estándar del SAT"
+verificado_el: 2026-07-27
+usado_en_codigo:
+  - "lib/likida/carta_porte.ts — necesitaCartaPorte (árbol 2.7.7.2.1/2.7.7.2.8), CAMPOS_CCP (Apéndice 3: 19 cliente / 18 transportista), validarComplemento (Estándar 3.1 sección 8), generarIdCcp."
+  - "supabase/migrations/0099_carta_porte_transportista.sql — columnas de unidad (config vehicular, peso, póliza RC, permiso SICT) y las dos declaraciones por viaje (ccp_pisa_federal, ccp_radio_federal_km)."
+  - "app/dashboard/carta-porte — la pantalla del checklist por viaje."

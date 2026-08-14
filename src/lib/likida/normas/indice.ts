@@ -306,6 +306,20 @@ export const NORMAS: Record<string, Norma> = {
     exigibleDesde: null,
     ficha: "normas/rmf-2026-2.7.1.48.yaml",
   },
+  'rmf-2026-2.7.7': {
+    id: 'rmf-2026-2.7.7',
+    instrumento: "Resolución Miscelánea Fiscal para 2026",
+    articulo: "Sección 2.7.7 (2.7.7.1.1, 2.7.7.1.2, 2.7.7.2.1, 2.7.7.2.8)",
+    titulo: "Complemento Carta Porte: obligados, traslado local y la excepción del radio de 30 km",
+    citas: ["2.7.7.1.1", "2.7.7.2.1", "2.7.7.2.8", "Carta Porte"],
+    jerarquia: 3,
+    estado: "verificado_fuente_primaria",
+    // La fecha es la de la VERSIÓN 3.1 del complemento (obligatoria desde el
+    // 17-jul-2024). No hay periodo de gracia en 2026: se leyeron los 25
+    // transitorios de la RMF 2026 y la 1a Modificación no tocó la 2.7.7.
+    exigibleDesde: '2024-07-17',
+    ficha: "normas/rmf-2026-2.7.7.yaml",
+  },
 };
 
 /** Todas las normas conocidas. */
