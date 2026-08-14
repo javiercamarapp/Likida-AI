@@ -31,6 +31,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const runAgent = vi.fn();
 const createSignedUrl = vi.fn();
 const saveConversation = vi.fn();
+// `cierreSinComprobantes: true` simula que el freno de "cierre sin
+// comprobantes" (processor.ts) ya preguntó una vez: la mayoría de estas
+// pruebas cubren lo que pasa DESPUÉS del cierre (PDF, log, lock), no el freno
+// mismo, y con `false` el "listo" nunca llegaba al agente que dicen probar.
+// Las pruebas de AUD3 AG-A1 (abajo) lo ponen en `false` a propósito: ahí el
+// freno ES el sujeto.
+const loadConversation = vi.fn(async () => ({
+  id: 'c1',
+  turns: [] as { role: 'user' | 'assistant'; content: string }[],
+  cierreSinComprobantes: true,
+}));
 const getOpenViaje = vi.fn<(tenantId: string, operadorId: string) => Promise<string | null>>(async () => 'v1');
 const saveCfdiXmlRaw = vi.fn();
 const claimMessage = vi.fn<(id: string) => Promise<'nuevo' | 'duplicado' | 'indeterminado'>>(async () => 'nuevo');
@@ -70,11 +81,7 @@ vi.mock('@/lib/likida/conv', async (original) => ({
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
   getOpenViaje: (t: string, o: string) => getOpenViaje(t, o),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
-  // `cierreSinComprobantes: true` simula que el freno de "cierre sin
-  // comprobantes" (processor.ts) ya preguntó una vez: estas pruebas cubren lo
-  // que pasa DESPUÉS del cierre (PDF, log, lock), no el freno mismo, y con
-  // `false` el "listo" nunca llegaba al agente que dicen probar.
-  loadConversation: vi.fn(async () => ({ id: 'c1', turns: [], cierreSinComprobantes: true })),
+  loadConversation: (...a: unknown[]) => loadConversation(...(a as [])),
   saveConversation: (...a: unknown[]) => saveConversation(...a),
   claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
   acquireViajeLock: vi.fn(async () => true),
@@ -151,6 +158,8 @@ beforeEach(() => {
   claimMessage.mockReset(); claimMessage.mockResolvedValue('nuevo');
   saveCfdiXmlRaw.mockReset();
   saveConversation.mockReset(); saveConversation.mockResolvedValue(undefined);
+  loadConversation.mockReset();
+  loadConversation.mockResolvedValue({ id: 'c1', turns: [], cierreSinComprobantes: true });
   vi.stubGlobal('fetch', fetchSpy);
   fetchSpy.mockClear();
   process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
@@ -440,4 +449,56 @@ describe('ctxCerro en la recuperación de cierre parcial (AUD-7 ALTO-1)', () => 
     await processInbound(listo);
     expect(logger.error).toHaveBeenCalledWith('processInbound.fail', expect.objectContaining({ cerroSinEntregar: true }));
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 3 · ALTO AG-A1 — el "ya" pelón era orden de cierre irreversible.
+//
+// El escenario del hallazgo: chofer a mitad de ruta con 8 tickets registrados
+// recibe el mensaje de cobranza ("Si el viaje ya terminó y falta cerrarlo,
+// dime y seguimos con eso") y contesta "ya voy". `pareceCierre` empataba `ya`
+// seguido de CUALQUIER cosa, y el prompt listaba "ya" pelón como disparador de
+// cierre inmediato → `guardar_liquidacion` cerraba a mitad de viaje, los
+// triggers 0036/0037 bloqueaban todo lo posterior, los tickets del regreso
+// caían a huérfanos `tras_liquidar` y el PDF salía con una diferencia en
+// contra del operador que no es la del viaje.
+//
+// El arreglo es determinístico, no de prompt: "ya" solo cuenta acompañado de
+// su forma fuerte ("ya está", "ya quedó", "ya terminé"...). Estas pruebas van
+// por `processInbound` con el freno ACTIVO (cierreSinComprobantes: false y
+// cero gastos), donde la clasificación de `pareceCierre` es observable: si el
+// texto parece cierre, el freno contesta y el agente NO corre; si no lo
+// parece, el mensaje sigue su camino normal al agente.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('AUD3 AG-A1: "ya" pelón y "ya voy" NO son cierre; las formas fuertes sí', () => {
+  beforeEach(() => {
+    // El freno queda ACTIVO: aún no se le ha preguntado nada a este chofer.
+    loadConversation.mockResolvedValue({ id: 'c1', turns: [], cierreSinComprobantes: false });
+    // Texto neutro a propósito: no afirma un cierre, para no despertar guardias.
+    runAgent.mockResolvedValue({
+      finalText: 'Aquí sigo, mándame tus comprobantes cuando puedas.',
+      toolCalls: [], model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0,
+    });
+  });
+
+  /** El aviso del freno de cierre sin comprobantes, si salió. */
+  const avisosDelFreno = () => textos().filter((t) => /ning[úu]n comprobante/i.test(t));
+
+  it.each(['ya', 'ya voy'])(
+    '"%s" NO dispara el freno de cierre: sigue su camino al agente',
+    async (texto) => {
+      await processInbound({ from: '5219993700779', type: 'text', text: texto, waMessageId: `wa-${texto}` });
+      expect(avisosDelFreno(), `el freno trató "${texto}" como cierre`).toHaveLength(0);
+      expect(runAgent).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['ya está', 'ya quedó', 'listo', 'terminé', 'ya terminé', 'ya no tengo más'])(
+    '"%s" SÍ parece cierre: con cero comprobantes el freno pregunta antes de cerrar',
+    async (texto) => {
+      await processInbound({ from: '5219993700779', type: 'text', text: texto, waMessageId: `wa-${texto}` });
+      expect(avisosDelFreno(), `"${texto}" dejó de contar como cierre`).toHaveLength(1);
+      expect(runAgent).not.toHaveBeenCalled();
+    },
+  );
 });
