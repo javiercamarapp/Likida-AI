@@ -74,6 +74,39 @@ export function destinatarioWhatsApp(telefono: string): string {
 }
 
 /**
+ * Los últimos 4 dígitos del destinatario, para que el error de un envío diga DE
+ * QUIÉN era. AUD3 OP-A2: `wa.sendText` era el ÚNICO error-level del envío y no
+ * llevaba ningún identificador de negocio — el teléfono que viniera en el body
+ * salía redactado a `[TEL]` (correcto: dato personal), y la línea quedaba muda.
+ *
+ * El teléfono completo NO se loguea nunca: su espacio es chico (10^10) y una
+ * huella sería reversible por fuerza bruta (misma regla que en logger.ts).
+ * Cuatro dígitos dejan 10^6 candidatos —irreversible desde el log— y alcanzan
+ * para que quien SÍ tiene la base cruce contra los teléfonos de sus operadores.
+ * El prefijo `***` es a propósito: el resultado no tiene forma de teléfono, así
+ * que el redactor del logger no lo toca.
+ */
+function destinatarioEnmascarado(telefono: string): string {
+  const d = telefono.replace(/[^\d]/g, '');
+  return d.length >= 4 ? `***${d.slice(-4)}` : '***';
+}
+
+/**
+ * El código y el mensaje del error de la Graph API, si el cuerpo era su JSON.
+ * El código es lo que distingue fallos con arreglos completamente distintos
+ * (190 = token vencido, 131030 = fuera de la lista de pruebas, 132001 =
+ * plantilla no aprobada) — ver `motivoDeFalloWhatsApp`. Antes lo parseaban
+ * `sendTemplate` y `sendDocument` cada uno por su cuenta y `sendText` no lo
+ * parseaba en absoluto: su error decía `body` crudo y nada más.
+ */
+function errorDeMeta(crudo: string): { codigo?: number; mensaje?: string } {
+  try {
+    const j = JSON.parse(crudo) as { error?: { message?: string; code?: number } };
+    return { codigo: j.error?.code, mensaje: j.error?.message };
+  } catch { return {}; } // el crudo ya va (recortado) en el log
+}
+
+/**
  * Devuelve el wamid si Meta ACEPTÓ el mensaje, o `null` si lo rechazó.
  *
  * Devolvía `void`, y eso hacía imposible que un llamador supiera si su mensaje
@@ -93,7 +126,17 @@ export async function sendText(to: string, body: string): Promise<string | null>
     body: JSON.stringify({ messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } }),
     signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
   });
-  if (!res.ok) { logger.error('wa.sendText', { status: res.status, body: await res.text().catch(() => '') }); return null; }
+  if (!res.ok) {
+    // AUD3 OP-A2: esta función no recibe tenant ni viaje — y no debe: media
+    // docena de llamadores dependen de esta firma. El contexto de negocio
+    // (tenant, viaje, folio) viaja en el log del LLAMADOR; esta línea aporta lo
+    // que la función SÍ sabe: a quién iba (enmascarado) y por qué lo rechazó
+    // Meta. Con las dos líneas juntas se reconstruye el quién y el qué.
+    const crudo = await res.text().catch(() => '');
+    const { codigo } = errorDeMeta(crudo);
+    logger.error('wa.sendText', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+    return null;
+  }
   // El ÉXITO también deja rastro. Sin esta línea, "se envió" y "nunca se llamó"
   // se ven igual en los logs —los dos, en blanco— y distinguirlos costó veinte
   // minutos de la primera prueba real. El id del mensaje es lo que permite
@@ -192,7 +235,14 @@ export async function sendButtons(to: string, cuerpo: string, botones: BotonAcus
     }),
     signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
   });
-  if (!res.ok) { logger.error('wa.sendButtons', { status: res.status, body: await res.text().catch(() => '') }); return null; }
+  if (!res.ok) {
+    // Mismo trato que `sendText` (AUD3 OP-A2): destinatario enmascarado y código
+    // de Meta; el tenant/viaje va en el log del llamador.
+    const crudo = await res.text().catch(() => '');
+    const { codigo } = errorDeMeta(crudo);
+    logger.error('wa.sendButtons', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+    return null;
+  }
   // El ÉXITO también deja rastro (misma lección que `sendText`): sin esta línea,
   // "se envió" y "nunca se llamó" se ven igual en los logs.
   const id = await idDeRespuesta(res);
@@ -246,21 +296,15 @@ export async function sendTemplate(
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    logger.error('wa.sendTemplate.red', { plantilla, error });
+    logger.error('wa.sendTemplate.red', { plantilla, para: destinatarioEnmascarado(to), error });
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}` };
   }
 
   if (!res.ok) {
     const crudo = await res.text().catch(() => '');
-    let codigo: number | undefined;
-    let mensaje = `HTTP ${res.status}`;
-    try {
-      const j = JSON.parse(crudo) as { error?: { message?: string; code?: number } };
-      codigo = j.error?.code;
-      if (j.error?.message) mensaje = j.error.message;
-    } catch { /* el crudo ya va en el log */ }
-    logger.error('wa.sendTemplate', { plantilla, status: res.status, codigo, body: crudo.slice(0, 400) });
-    return { ok: false, error: mensaje, codigo };
+    const { codigo, mensaje } = errorDeMeta(crudo);
+    logger.error('wa.sendTemplate', { plantilla, para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+    return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo };
   }
 
   const id = await idDeRespuesta(res);
@@ -340,21 +384,15 @@ export async function sendDocument(
     });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    logger.error('wa.sendDocument.red', { filename, error });
+    logger.error('wa.sendDocument.red', { filename, para: destinatarioEnmascarado(to), error });
     return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}` };
   }
 
   if (!res.ok) {
     const crudo = await res.text().catch(() => '');
-    let codigo: number | undefined;
-    let mensaje = `HTTP ${res.status}`;
-    try {
-      const j = JSON.parse(crudo) as { error?: { message?: string; code?: number } };
-      codigo = j.error?.code;
-      if (j.error?.message) mensaje = j.error.message;
-    } catch { /* el crudo ya va en el log */ }
-    logger.error('wa.sendDocument', { filename, status: res.status, codigo, body: crudo.slice(0, 400) });
-    return { ok: false, error: mensaje, codigo };
+    const { codigo, mensaje } = errorDeMeta(crudo);
+    logger.error('wa.sendDocument', { filename, para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+    return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo };
   }
 
   // Igual que en `sendText`: el envío del PDF es EL entregable, y su éxito no

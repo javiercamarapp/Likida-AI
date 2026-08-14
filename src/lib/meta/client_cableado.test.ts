@@ -31,6 +31,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import crypto from 'crypto';
 import { sendText, sendDocument, verifySignature } from './client';
+import { logger } from '@/lib/logger';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
@@ -98,6 +99,71 @@ describe('el envío normaliza el destinatario mexicano (M1b: el cableado de HOY)
     const d = cuerpoEnviado(fetchSpy);
     expect(d.type).toBe('document');
     expect(d.document).toEqual({ link: 'https://x.test/l.pdf', filename: 'liquidacion.pdf', caption: 'Tu liquidación' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUD3 OP-A2 — el fallo de envío del camino del dinero se logueaba SIN
+// identificador: `wa.sendText` decía `{status, body}` y nada más. El teléfono
+// del body sale redactado a `[TEL]` (correcto), así que la línea quedaba muda:
+// con el token vencido, un issue de Sentry `{status: 401}` sin poder decir qué
+// flotas se quedaron sin cobranza. El arreglo: los últimos 4 del destinatario
+// (nunca el teléfono completo — dato personal) y el código de Meta parseado.
+// El tenant/viaje viaja en el log del LLAMADOR: la firma de sendText no cambia.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('un rechazo de Meta deja identificador en el log (AUD3 OP-A2)', () => {
+  const rechazo = (code: number, message: string, status: number) => new Response(
+    JSON.stringify({ error: { message, code } }),
+    { status, headers: { 'content-type': 'application/json' } },
+  );
+
+  beforeEach(() => { vi.mocked(logger.error).mockClear(); });
+
+  it('sendText loguea los últimos 4 del destinatario y el código de Meta', async () => {
+    fetchSpy.mockResolvedValueOnce(rechazo(190, 'Error validating access token', 401));
+    await sendText('5219993700779', 'hola');
+
+    const llamada = vi.mocked(logger.error).mock.calls.find((c) => c[0] === 'wa.sendText');
+    expect(llamada).toBeTruthy();
+    const meta = llamada![1] as Record<string, unknown>;
+    expect(meta.para).toBe('***0779');
+    expect(meta.status).toBe(401);
+    expect(meta.codigo).toBe(190);
+  });
+
+  it('el teléfono completo NO aparece en el meta fuera del body (que el logger redacta)', async () => {
+    fetchSpy.mockResolvedValueOnce(rechazo(131030, 'Recipient phone number not in allowed list', 400));
+    await sendText('5219993700779', 'hola');
+
+    const meta = vi.mocked(logger.error).mock.calls[0][1] as Record<string, unknown>;
+    const sinBody = { ...meta };
+    delete sinBody.body; // el body crudo lo redacta el logger real ([TEL]); aquí el logger es mock
+    // 10^6 candidatos desde 4 dígitos: irreversible. El número entero, jamás.
+    expect(JSON.stringify(sinBody)).not.toContain('9993700779');
+    expect(meta.para).toBe('***0779');
+  });
+
+  it('sendDocument también dice a quién iba el PDF que Meta rechazó', async () => {
+    fetchSpy.mockResolvedValueOnce(rechazo(131047, 'Re-engagement message', 400));
+    const r = await sendDocument('5219993700779', 'https://x.test/l.pdf', 'liquidacion.pdf');
+
+    expect(r.ok).toBe(false);
+    const llamada = vi.mocked(logger.error).mock.calls.find((c) => c[0] === 'wa.sendDocument');
+    const meta = llamada![1] as Record<string, unknown>;
+    expect(meta.para).toBe('***0779');
+    expect(meta.codigo).toBe(131047);
+    expect(meta.filename).toBe('liquidacion.pdf');
+  });
+
+  it('un body que no es JSON no rompe el log: status y crudo recortado siguen saliendo', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response('<html>Bad Gateway</html>', { status: 502 }));
+    await sendText('529993700779', 'hola');
+
+    const meta = vi.mocked(logger.error).mock.calls[0][1] as Record<string, unknown>;
+    expect(meta.status).toBe(502);
+    expect(meta.codigo).toBeUndefined();
+    expect(meta.body).toContain('Bad Gateway');
+    expect(meta.para).toBe('***0779');
   });
 });
 
