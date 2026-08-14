@@ -61,7 +61,7 @@ export function VistaRentabilidad({
                     />
                     <StatCard
                       icono={<TrendingUp width={14} height={14} strokeWidth={1.75} />}
-                      etiqueta="Utilidad (ingreso − comprobado)" valor={rentabilidad.utilidad} formato="mxn"
+                      etiqueta="Contribución (ingreso − comprobado)" valor={rentabilidad.contribucion} formato="mxn"
                     />
                   </div>
                   <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
@@ -70,6 +70,16 @@ export function VistaRentabilidad({
                       : 'Sin ingreso capturado, el margen no se calcula.'}
                     {rentabilidad.viajesSinIngreso > 0
                       && ` ${rentabilidad.viajesSinIngreso} viajes sin ingreso quedan fuera de esta medición.`}
+                  </p>
+                  {/* Qué NO trae esa cifra. Va aquí y no en un tooltip porque
+                      es la diferencia entre "este viaje dejó dinero" y "este
+                      viaje dejó dinero ANTES de pagar al operador y el taller",
+                      y de esa distinción dependen decisiones de tarifa. */}
+                  <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+                    Contribución NO es utilidad: es el ingreso menos lo que se comprobó en el viaje.
+                    Todavía no resta sueldo del operador, mantenimiento, llantas, seguro, depreciación
+                    ni administración. Un viaje puede salir con contribución sana y aun así haber
+                    perdido dinero — para eso hace falta tu costo por kilómetro, que Likida no conoce.
                   </p>
                 </section>
               )}
