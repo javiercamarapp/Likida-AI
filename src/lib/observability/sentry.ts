@@ -135,6 +135,40 @@ export async function flushObservabilidad(timeoutMs = 2000): Promise<void> {
 }
 
 /**
+ * Lo que separa un issue de otro ADEMÁS del mensaje y el nivel.
+ *
+ * Auditoría 3, OP-A1: con `fingerprint: [msg, nivel]` los ~216 fallos del cron
+ * (5→14 ago) fueron UN solo issue de Sentry y UNA notificación, la primera
+ * madrugada. Sentry solo vuelve a avisar cuando NACE un issue; todo lo que caiga
+ * en un issue viejo solo engorda un contador que nadie abre. Agrupar también por
+ * tenant y por causa convierte "la flota B también está fallando" y "ahora falla
+ * por token vencido, no por el embed" en issues NUEVOS — es decir, en
+ * notificaciones que sí llegan a un humano.
+ *
+ * Se leen las claves que los llamadores del camino del dinero ya emiten:
+ *   · `tenant` / `tenantId` — llega aquí ya redactado como huella FNV (`id:…`),
+ *     estable entre despliegues y máquinas (logger.ts, `huellaId`): agrupa por
+ *     flota sin exponer el UUID.
+ *   · `codigo` / `status` — el código de error de la Graph API o el HTTP status:
+ *     un 190 (token vencido) y un 131030 (fuera de la lista de pruebas) tienen
+ *     arreglos completamente distintos y merecen issues distintos.
+ *
+ * La cardinalidad queda acotada por construcción: tenants son decenas, códigos
+ * de Meta y HTTP status son un puñado. NO se mete `viaje`/`viajeId` a propósito:
+ * un issue por viaje sería un issue por fila, y el ruido mata la alarma igual
+ * que el silencio.
+ */
+function discriminadores(meta?: Record<string, unknown>): string[] {
+  if (!meta) return [];
+  const out: string[] = [];
+  const tenant = meta.tenant ?? meta.tenantId;
+  if (typeof tenant === 'string' && tenant) out.push(tenant);
+  const causa = meta.codigo ?? meta.status;
+  if (typeof causa === 'string' || typeof causa === 'number') out.push(String(causa));
+  return out;
+}
+
+/**
  * Reporta un evento ya REDACTADO por el logger.
  *
  * No se espera al envío: bloquear el turno del operador por telemetría sería
@@ -150,6 +184,10 @@ export async function flushObservabilidad(timeoutMs = 2000): Promise<void> {
  * esto, el aviso y su desmentido caen en el mismo cubo y el segundo se lee como
  * "ya lo vi". Separarlos aquí, en un solo sitio, evita tener que renombrar
  * mensajes por todo el repo cada vez que aparece una pareja así.
+ *
+ * Y lleva los `discriminadores` (tenant + causa) por la lección de OP-A1: un
+ * fallo persistente y un fallo único producían exactamente la misma molestia a
+ * un humano — una notificación, una vez.
  */
 export function reportar(nivel: 'warn' | 'error', msg: string, meta?: Record<string, unknown>): void {
   if (!sentryActivo()) return;
@@ -157,7 +195,7 @@ export function reportar(nivel: 'warn' | 'error', msg: string, meta?: Record<str
   seguir(
     intento.then(async () => {
       try {
-        sentry?.captureMessage(msg, { level: nivel === 'error' ? 'error' : 'warning', extra: meta, fingerprint: [msg, nivel] });
+        sentry?.captureMessage(msg, { level: nivel === 'error' ? 'error' : 'warning', extra: meta, fingerprint: [msg, nivel, ...discriminadores(meta)] });
         await sentry?.flush(2000);
       } catch { /* la telemetría nunca rompe el flujo */ }
     }),

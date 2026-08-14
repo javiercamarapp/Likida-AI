@@ -80,6 +80,50 @@ describe('reportar — el evento tiene que salir antes de que la invocación se 
     expect(new Set(huellas).size).toBe(2);
   });
 
+  // ── AUD3 OP-A1: 216 fallos del cron = 1 issue = 1 notificación ────────────
+  // Sentry solo notifica cuando NACE un issue. Con fingerprint [msg, nivel],
+  // el fallo de la flota B caía en el issue viejo de la flota A y nadie se
+  // enteraba. El tenant llega ya redactado como huella FNV estable (`id:…`),
+  // así que puede ir en el fingerprint sin exponer el UUID.
+  it('dos tenants fallando con el MISMO msg son DOS issues (OP-A1)', async () => {
+    vi.stubEnv('SENTRY_DSN', 'https://algo@sentry.io/1');
+    const { reportar, flushObservabilidad } = await import('./sentry');
+
+    reportar('error', 'wa.sendText', { tenant: 'id:9f2c1a4b77de', status: 401 });
+    reportar('error', 'wa.sendText', { tenant: 'id:0a1b2c3d4e5f', status: 401 });
+    await flushObservabilidad();
+
+    const huellas = sdk.captureMessage.mock.calls.map((c) => JSON.stringify((c[1] as { fingerprint?: string[] }).fingerprint));
+    expect(new Set(huellas).size).toBe(2);
+  });
+
+  it('causas distintas son issues distintos aunque la flota sea la misma (OP-A1)', async () => {
+    // Un 190 (token vencido) y un 131030 (fuera de la lista de pruebas) tienen
+    // arreglos completamente distintos: agrupados, el segundo se lee "ya lo vi".
+    vi.stubEnv('SENTRY_DSN', 'https://algo@sentry.io/1');
+    const { reportar, flushObservabilidad } = await import('./sentry');
+
+    reportar('error', 'wa.sendTemplate', { tenantId: 'id:9f2c1a4b77de', codigo: 190 });
+    reportar('error', 'wa.sendTemplate', { tenantId: 'id:9f2c1a4b77de', codigo: 131030 });
+    await flushObservabilidad();
+
+    const huellas = sdk.captureMessage.mock.calls.map((c) => JSON.stringify((c[1] as { fingerprint?: string[] }).fingerprint));
+    expect(new Set(huellas).size).toBe(2);
+  });
+
+  it('sin tenant ni causa en el meta, el fingerprint sigue siendo [msg, nivel]', async () => {
+    // Los eventos que no traen discriminadores (startup, avisos globales) no
+    // cambian de cubo con este arreglo: cero issues duplicados retroactivos.
+    vi.stubEnv('SENTRY_DSN', 'https://algo@sentry.io/1');
+    const { reportar, flushObservabilidad } = await import('./sentry');
+
+    reportar('error', 'startup.observabilidad', { err: 'SENTRY_DSN ausente' });
+    await flushObservabilidad();
+
+    const [, ctx] = sdk.captureMessage.mock.calls[0] as [string, { fingerprint?: string[] }];
+    expect(ctx.fingerprint).toEqual(['startup.observabilidad', 'error']);
+  });
+
   it('sin DSN, flushObservabilidad no lanza ni carga nada', async () => {
     vi.stubEnv('SENTRY_DSN', '');
     const { flushObservabilidad } = await import('./sentry');
