@@ -63,6 +63,12 @@ export async function GET(req: Request) {
   }
 
   const resultado: Record<string, unknown> = {};
+  // AUDITORÍA 3, OP-C1 (CRÍTICO): este cron respondía 200 con un motor
+  // entero reventado — el único con ese vicio (purgar/facturar responden
+  // 500/503) — y así fue como el embed roto de la 0075 acumuló ~216 corridas
+  // "verdes" sin que Vercel ni Sentry levantaran la mano. Un motor caído =
+  // 500, para que la plataforma cuente el cron como FALLIDO.
+  let huboFallo = false;
 
   try {
     const r = await escalarViajesSinAceptar();
@@ -72,21 +78,23 @@ export async function GET(req: Request) {
     const error = e instanceof Error ? e.message : String(e);
     logger.error('cron.escalar.falló', { error });
     resultado.aceptacion = { error };
+    huboFallo = true;
   }
 
   try {
     const r = await ejecutarCobranzaGlobal();
-    logger.info('cron.recordatorio_comprobacion.ok', { ...r });
+    logger.info('cron.cobranza.ok', { ...r });
     resultado.comprobacion = r;
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    logger.error('cron.recordatorio_comprobacion.falló', { error });
+    logger.error('cron.cobranza.falló', { error });
     resultado.comprobacion = { error };
+    huboFallo = true;
   }
 
   // Los fallos van en la RESPUESTA, no solo en el log. "Esa flota no tiene
   // teléfono de jefe registrado" es un problema de configuración que se
   // arregla en un minuto — si solo vive en el log, nadie lo ve hasta que
   // alguien pregunta por qué no le avisaron.
-  return NextResponse.json(resultado);
+  return NextResponse.json(resultado, { status: huboFallo ? 500 : 200 });
 }
