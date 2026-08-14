@@ -1,0 +1,416 @@
+import { describe, it, expect } from 'vitest';
+import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import {
+  AGENTES_NOTIFICABLES, EVENTOS, ROLES_AVISABLES, MARCAS_DE_INSISTENCIA,
+  MAX_DESTINATARIOS, PISO_ENTRE_AVISOS_MS, CONFIG_NOTIF_DEFAULT,
+  agentePorId, eventosDe, rolesQuePueden, validarConfigNotificaciones,
+  marcaAlcanzada, debeAvisar, motivoDeCorrida, repartoDe,
+  type ConfigNotificaciones, type EntradaDecision, type HuellaAviso,
+  type UsuarioAvisable,
+} from './notificaciones';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// La lógica PURA de la pestaña Notificaciones. Nada de esto toca la base:
+// son las decisiones que un correo de más arruinaría — y un correo de más
+// enseña a ignorar los que sí piden algo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const COBRANZA = agentePorId('cobranza')!;
+const CONDUCTORES = agentePorId('conductores')!;
+
+/** La entrada "todo en orden para avisar", que cada prueba tuerce en un solo
+ *  eje. Así el motivo del corte es siempre atribuible. */
+function entrada(sobre: Partial<EntradaDecision> = {}): EntradaDecision {
+  return {
+    canalListo: true,
+    eventoEncendido: true,
+    destinatarios: 2,
+    hayProblema: true,
+    magnitud: 1,
+    ultimo: null,
+    ahora: new Date('2026-08-14T15:00:00Z'),
+    ...sobre,
+  };
+}
+
+// ── EL CATÁLOGO ────────────────────────────────────────────────────────────
+
+describe('el catálogo declara agentes reales, no una lista suelta', () => {
+  it('son los seis agentes y sus llaves no se repiten', () => {
+    expect(AGENTES_NOTIFICABLES).toHaveLength(6);
+    const ids = AGENTES_NOTIFICABLES.map((a) => a.id);
+    expect(new Set(ids).size).toBe(6);
+  });
+
+  it('la ruta de cada agente es una que el panel sabe gatear', () => {
+    // Si una ruta no está en el mapa de visibilidad, `puedeVerRuta` la niega
+    // para TODOS los roles y ese agente no podría avisarle a nadie — un
+    // interruptor que nunca dispara, que es lo que esta pestaña combate.
+    for (const a of AGENTES_NOTIFICABLES) {
+      expect(rolesQuePueden(a), a.id).not.toHaveLength(0);
+    }
+  });
+
+  it('todo evento declarado tiene su texto en el catálogo', () => {
+    for (const a of AGENTES_NOTIFICABLES) {
+      for (const e of a.eventos) {
+        expect(EVENTOS[e], `${a.id}/${e}`).toBeDefined();
+        expect(EVENTOS[e].porQue.length).toBeGreaterThan(20);
+      }
+    }
+  });
+
+  it('los seis pueden fallar una corrida — es el único evento universal', () => {
+    for (const a of AGENTES_NOTIFICABLES) {
+      expect(a.eventos, a.id).toContain('corrida_fallida');
+    }
+  });
+
+  it('`escalado` solo lo declara quien de verdad escala (Conductores)', () => {
+    const conEscalado = AGENTES_NOTIFICABLES.filter((a) => a.eventos.includes('escalado'));
+    expect(conEscalado.map((a) => a.id)).toEqual(['conductores']);
+  });
+
+  it('ningún evento del catálogo es un "todo salió bien"', () => {
+    // La regla que define la pestaña: solo se avisa de lo que pide a una
+    // persona. Un aviso de éxito es el que más rápido enseña a ignorar.
+    for (const e of Object.values(EVENTOS)) {
+      expect(`${e.titulo} ${e.cuando}`.toLowerCase()).not.toMatch(/complet|correctamente|sin problemas|exitos/);
+    }
+  });
+
+  it('eventosDe devuelve los del agente, no los tres siempre', () => {
+    expect(eventosDe(COBRANZA).map((e) => e.id)).toEqual(['corrida_fallida', 'cola_atorada']);
+    expect(eventosDe(CONDUCTORES).map((e) => e.id)).toEqual(['corrida_fallida', 'cola_atorada', 'escalado']);
+  });
+});
+
+describe('a quién se le puede ofrecer cada agente', () => {
+  it('el contador no puede recibir avisos del Agente de Conductores', () => {
+    // Es de área `operacion`: su botón lo rebotaría a /dashboard.
+    expect(rolesQuePueden(CONDUCTORES)).not.toContain('contador');
+    expect(puedeVerRuta('contador', CONDUCTORES.ruta)).toBe(false);
+  });
+
+  it('el jefe de tráfico no puede recibir avisos de un agente de dinero', () => {
+    expect(rolesQuePueden(COBRANZA)).not.toContain('encargado');
+  });
+
+  it('el dueño de la flota puede recibir los de todos', () => {
+    for (const a of AGENTES_NOTIFICABLES) {
+      expect(rolesQuePueden(a), a.id).toContain('flota_admin');
+    }
+  });
+
+  it('el operador nunca aparece: no tiene login ni columna de correo', () => {
+    expect(ROLES_AVISABLES).not.toContain('operador' as never);
+  });
+});
+
+// ── LA CONFIGURACIÓN ───────────────────────────────────────────────────────
+
+describe('la configuración que se guarda no puede mentir', () => {
+  it('el default nace con un solo aviso y una sola persona', () => {
+    expect(CONFIG_NOTIF_DEFAULT.eventos).toEqual(['corrida_fallida']);
+    expect(CONFIG_NOTIF_DEFAULT.roles).toEqual(['flota_admin']);
+  });
+
+  it('descarta un evento que ese agente no emite', () => {
+    const v = validarConfigNotificaciones(COBRANZA, {
+      eventos: ['corrida_fallida', 'escalado'], roles: ['flota_admin'],
+    });
+    expect('ok' in v && v.ok.eventos).toEqual(['corrida_fallida']);
+  });
+
+  it('descarta un rol que no puede abrir la pantalla del agente', () => {
+    const v = validarConfigNotificaciones(COBRANZA, {
+      eventos: ['corrida_fallida'], roles: ['flota_admin', 'encargado'],
+    });
+    expect('ok' in v && v.ok.roles).toEqual(['flota_admin']);
+  });
+
+  it('avisos encendidos sin nadie que los reciba es ERROR, no un guardado silencioso', () => {
+    const v = validarConfigNotificaciones(COBRANZA, { eventos: ['corrida_fallida'], roles: [] });
+    expect('error' in v).toBe(true);
+  });
+
+  it('apagarlo TODO sí es una decisión válida', () => {
+    const v = validarConfigNotificaciones(COBRANZA, { eventos: [], roles: [] });
+    expect('ok' in v && v.ok).toEqual({ eventos: [], roles: [] });
+  });
+
+  it('no guarda duplicados', () => {
+    const v = validarConfigNotificaciones(COBRANZA, {
+      eventos: ['cola_atorada', 'cola_atorada'], roles: ['flota_admin', 'flota_admin'],
+    });
+    expect('ok' in v && v.ok).toEqual({ eventos: ['cola_atorada'], roles: ['flota_admin'] });
+  });
+
+  it('basura del formulario no se cuela', () => {
+    const v = validarConfigNotificaciones(COBRANZA, {
+      eventos: ['; drop table', 'corrida_fallida'], roles: ['superadmin', 'flota_admin'],
+    });
+    expect('ok' in v && v.ok).toEqual({ eventos: ['corrida_fallida'], roles: ['flota_admin'] });
+  });
+});
+
+// ── EL ANTI-RUIDO ──────────────────────────────────────────────────────────
+
+describe('las marcas de insistencia', () => {
+  it('por debajo de la primera no hay marca', () => {
+    expect(marcaAlcanzada(0)).toBe(-1);
+  });
+
+  it('cada marca sube un escalón y no más', () => {
+    expect(marcaAlcanzada(1)).toBe(0);
+    expect(marcaAlcanzada(4)).toBe(0);
+    expect(marcaAlcanzada(5)).toBe(1);
+    expect(marcaAlcanzada(19)).toBe(1);
+    expect(marcaAlcanzada(20)).toBe(2);
+    expect(marcaAlcanzada(9_999)).toBe(MARCAS_DE_INSISTENCIA.length - 1);
+  });
+});
+
+/**
+ * El bucle real: un agente que falla N corridas seguidas, con `cada` ms entre
+ * corridas. Devuelve CUÁNDO salió cada correo. Es la prueba que importa — el
+ * resto son sus piezas.
+ */
+function correosDe(corridas: number, cada: number): number[] {
+  let ultimo: HuellaAviso | null = null;
+  let magnitud = 0;
+  const salieron: number[] = [];
+  const t0 = new Date('2026-08-14T06:00:00Z').getTime();
+  for (let i = 0; i < corridas; i++) {
+    magnitud += 1;
+    const ahora = new Date(t0 + i * cada);
+    const v = debeAvisar(entrada({ magnitud, ultimo, ahora }));
+    if (v.avisar) {
+      salieron.push(ahora.getTime());
+      ultimo = { avisadoEn: ahora, magnitud };
+    }
+  }
+  return salieron;
+}
+
+describe('un agente que falla 40 veces NO manda 40 correos', () => {
+  it('manda tres: el primero, el de la mañana entera y el del día', () => {
+    expect(correosDe(40, 60 * 60 * 1000)).toHaveLength(3);
+  });
+
+  it('la cuenta no crece por seguir fallando', () => {
+    expect(correosDe(200, 60 * 60 * 1000)).toHaveLength(MARCAS_DE_INSISTENCIA.length);
+  });
+
+  it('un agente en bucle (una corrida cada 5 min) no manda dos en la misma hora', () => {
+    // Sin el piso, las tres marcas se cruzan en 100 minutos y los tres correos
+    // salen casi juntos: tres correos seguidos son un correo repetido. Con el
+    // piso siguen saliendo los tres —la marca cruzada no se pierde—, pero
+    // separados. Lo que se prueba es la SEPARACIÓN, no el conteo: el conteo lo
+    // fijan las marcas y ya está probado arriba.
+    const cuando = correosDe(40, 5 * 60 * 1000);
+    expect(cuando.length).toBeGreaterThan(0);
+    for (let i = 1; i < cuando.length; i++) {
+      expect(cuando[i] - cuando[i - 1]).toBeGreaterThanOrEqual(PISO_ENTRE_AVISOS_MS);
+    }
+  });
+
+  it('el primer fallo SIEMPRE avisa — el silencio inicial sería el peor bug', () => {
+    expect(correosDe(1, 60 * 60 * 1000)).toHaveLength(1);
+  });
+});
+
+describe('el filo se re-arma cuando el problema se resuelve', () => {
+  it('resuelto y vuelto a romper, avisa otra vez desde la primera marca', () => {
+    // `hayProblema: false` no manda nada Y borra el estado (`avisar` llama a
+    // `olvidarEstado`); aquí eso se representa con `ultimo = null`.
+    const sano = debeAvisar(entrada({ hayProblema: false, magnitud: 0, ultimo: { avisadoEn: new Date('2026-08-14T06:00:00Z'), magnitud: 7 } }));
+    expect(sano.avisar).toBe(false);
+
+    const recaida = debeAvisar(entrada({ magnitud: 1, ultimo: null }));
+    expect(recaida.avisar).toBe(true);
+    expect(recaida.porque).toMatch(/primera vez/);
+  });
+
+  it('sin re-armar, la recaída se quedaría muda — por eso el borrado existe', () => {
+    const conMemoriaVieja = debeAvisar(entrada({
+      magnitud: 1,
+      ultimo: { avisadoEn: new Date('2026-08-14T06:00:00Z'), magnitud: 7 },
+    }));
+    expect(conMemoriaVieja.avisar).toBe(false);
+  });
+});
+
+describe('nunca sale un correo de "todo salió bien"', () => {
+  it('sin problema no hay aviso, aunque todo lo demás esté encendido', () => {
+    const v = debeAvisar(entrada({ hayProblema: false }));
+    expect(v.avisar).toBe(false);
+    expect(v.porque).toBe('no hay nada que avisar ahora mismo.');
+  });
+});
+
+describe('los cortes previos, en el orden que le sirve a quien lee', () => {
+  it('sin canal configurado lo dice, aunque el evento esté encendido', () => {
+    const v = debeAvisar(entrada({ canalListo: false }));
+    expect(v.avisar).toBe(false);
+    expect(v.porque).toMatch(/no está configurado/);
+  });
+
+  it('el evento apagado se declara apagado', () => {
+    expect(debeAvisar(entrada({ eventoEncendido: false })).porque).toMatch(/apagado/);
+  });
+
+  it('sin destinatarios NO se manda y se dice por qué', () => {
+    const v = debeAvisar(entrada({ destinatarios: 0 }));
+    expect(v.avisar).toBe(false);
+    expect(v.porque).toMatch(/nadie de la flota/);
+  });
+
+  it('la falta de canal gana sobre la falta de destinatarios: es lo accionable', () => {
+    expect(debeAvisar(entrada({ canalListo: false, destinatarios: 0 })).porque).toMatch(/configurado/);
+  });
+});
+
+describe('el piso de una hora es un cinturón, no un candado', () => {
+  const base = { avisadoEn: new Date('2026-08-14T15:00:00Z'), magnitud: 1 };
+
+  it('a los 10 minutos y con marca nueva, todavía no sale', () => {
+    const v = debeAvisar(entrada({
+      magnitud: 6, ultimo: base, ahora: new Date('2026-08-14T15:10:00Z'),
+    }));
+    expect(v.avisar).toBe(false);
+    expect(v.porque).toMatch(/sale en \d+ min/);
+  });
+
+  it('pasada la hora, la marca cruzada sigue cruzada y el aviso sale', () => {
+    const v = debeAvisar(entrada({
+      magnitud: 6, ultimo: base, ahora: new Date(base.avisadoEn.getTime() + PISO_ENTRE_AVISOS_MS + 1_000),
+    }));
+    expect(v.avisar).toBe(true);
+    expect(v.porque).toMatch(/empeoró/);
+  });
+
+  it('pasada la hora SIN marca nueva no sale: el reloj no es noticia', () => {
+    const v = debeAvisar(entrada({
+      magnitud: 2, ultimo: base, ahora: new Date('2026-08-15T15:00:00Z'),
+    }));
+    expect(v.avisar).toBe(false);
+    expect(v.porque).toMatch(/el siguiente sale al llegar a 5/);
+  });
+});
+
+describe('una cola que oscila no manda un correo por oscilación', () => {
+  it('sube a 5, baja a 4, vuelve a 5: un solo correo', () => {
+    let ultimo: HuellaAviso | null = null;
+    let salieron = 0;
+    const t0 = Date.parse('2026-08-14T06:00:00Z');
+    // Magnitud MEDIDA (piezas atoradas), no racha: entra tal cual.
+    [5, 4, 5, 4, 5].forEach((piezas, i) => {
+      const ahora = new Date(t0 + i * 6 * 60 * 60 * 1000);
+      const v = debeAvisar(entrada({ magnitud: piezas, ultimo, ahora }));
+      if (v.avisar) { salieron++; ultimo = { avisadoEn: ahora, magnitud: piezas }; }
+    });
+    expect(salieron).toBe(1);
+  });
+});
+
+describe('una magnitud incoherente no calla un problema real', () => {
+  it('con problema y magnitud 0, se cuenta como 1 y avisa', () => {
+    expect(debeAvisar(entrada({ magnitud: 0 })).avisar).toBe(true);
+  });
+});
+
+// ── EL MOTIVO QUE VE UNA PERSONA ───────────────────────────────────────────
+
+describe('el motivo del correo nunca es un stack trace', () => {
+  it('de un Error se queda el mensaje, sin los marcos de pila', () => {
+    const e = new Error('No se pudo leer la cola de cobranza.');
+    e.stack = 'Error: x\n    at colaCobranza (/var/task/cobranza.js:118:11)';
+    const m = motivoDeCorrida(e);
+    expect(m).toBe('No se pudo leer la cola de cobranza.');
+    expect(m).not.toMatch(/at /);
+  });
+
+  it('un texto multilínea con pila se queda con la primera línea útil', () => {
+    expect(motivoDeCorrida('  \n    at foo (bar.js:1:1)\nSe agotó el tiempo del portal.'))
+      .toBe('Se agotó el tiempo del portal.');
+  });
+
+  it('sin motivo legible dice que no lo hay, en vez de dejar el renglón vacío', () => {
+    expect(motivoDeCorrida('')).toMatch(/sin dejar un motivo/);
+    expect(motivoDeCorrida(null)).toMatch(/sin dejar un motivo/);
+    expect(motivoDeCorrida({ raro: true })).toMatch(/sin dejar un motivo/);
+  });
+
+  it('un motivo larguísimo se recorta con puntos suspensivos', () => {
+    const m = motivoDeCorrida('x'.repeat(500));
+    expect(m.length).toBeLessThanOrEqual(160);
+    expect(m.endsWith('…')).toBe(true);
+  });
+});
+
+// ── EL REPARTO ─────────────────────────────────────────────────────────────
+
+const CONFIG_TODOS: ConfigNotificaciones = { eventos: ['corrida_fallida'], roles: ['flota_admin', 'contador'] };
+
+function usuario(sobre: Partial<UsuarioAvisable> & { id: string }): UsuarioAvisable {
+  return { nombre: null, email: `${sobre.id}@flota.mx`, rol: 'flota_admin', ...sobre };
+}
+
+describe('el reparto dice a quién le llega Y a quién no, con el porqué', () => {
+  it('quien tiene rol marcado y correo, recibe', () => {
+    const r = repartoDe([usuario({ id: 'a' })], CONFIG_TODOS, COBRANZA);
+    expect(r.reciben.map((d) => d.email)).toEqual(['a@flota.mx']);
+    expect(r.excluidos).toHaveLength(0);
+  });
+
+  it('un rol que no abre la pantalla queda fuera aunque la config lo traiga', () => {
+    // Config vieja que quedó con `encargado` en un agente de dinero.
+    const sucia = { eventos: ['corrida_fallida'], roles: ['flota_admin', 'encargado'] } as ConfigNotificaciones;
+    const r = repartoDe([usuario({ id: 'e', rol: 'encargado' })], sucia, COBRANZA);
+    expect(r.reciben).toHaveLength(0);
+    expect(r.excluidos[0].porque).toMatch(/no puede abrir la pantalla/);
+  });
+
+  it('un rol no marcado se declara no marcado, no "sin correo"', () => {
+    const solo = { eventos: ['corrida_fallida'], roles: ['flota_admin'] } as ConfigNotificaciones;
+    const r = repartoDe([usuario({ id: 'c', rol: 'contador' })], solo, COBRANZA);
+    expect(r.excluidos[0].porque).toMatch(/no está marcado/);
+  });
+
+  it('una cuenta sin correo se declara, no se rellena con nada', () => {
+    const r = repartoDe([usuario({ id: 'a', email: null }), usuario({ id: 'b', email: '   ' })], CONFIG_TODOS, COBRANZA);
+    expect(r.reciben).toHaveLength(0);
+    expect(r.excluidos.map((x) => x.porque)).toEqual(['su cuenta no tiene correo', 'su cuenta no tiene correo']);
+  });
+
+  it('dos cuentas con el mismo correo no lo reciben dos veces', () => {
+    const r = repartoDe(
+      [usuario({ id: 'a', email: 'jefe@flota.mx' }), usuario({ id: 'b', email: 'JEFE@flota.mx' })],
+      CONFIG_TODOS, COBRANZA,
+    );
+    expect(r.reciben).toHaveLength(1);
+    expect(r.excluidos[0].porque).toMatch(/mismo correo/);
+  });
+
+  it('nunca se manda a un operador: no está entre los roles que pueden', () => {
+    const r = repartoDe([usuario({ id: 'op', rol: 'operador', email: 'chofer@x.mx' })], CONFIG_TODOS, COBRANZA);
+    expect(r.reciben).toHaveLength(0);
+  });
+
+  it('el tope de destinatarios recorta y lo declara, en vez de tumbar el envío', () => {
+    const muchos = Array.from({ length: MAX_DESTINATARIOS + 3 }, (_, i) => usuario({ id: `u${i}` }));
+    const r = repartoDe(muchos, CONFIG_TODOS, COBRANZA);
+    expect(r.reciben).toHaveLength(MAX_DESTINATARIOS);
+    expect(r.excluidos).toHaveLength(3);
+    expect(r.excluidos[0].porque).toMatch(/primeras/);
+  });
+
+  it('con la config apagada nadie recibe, y nadie queda sin explicación', () => {
+    const apagada: ConfigNotificaciones = { eventos: [], roles: [] };
+    const r = repartoDe([usuario({ id: 'a' }), usuario({ id: 'b', rol: 'contador' })], apagada, COBRANZA);
+    expect(r.reciben).toHaveLength(0);
+    expect(r.excluidos).toHaveLength(2);
+    for (const x of r.excluidos) expect(x.porque.length).toBeGreaterThan(10);
+  });
+});

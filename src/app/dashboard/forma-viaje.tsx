@@ -75,14 +75,22 @@ export function FormaViaje({ action, operadores, clientes }: {
         </div>
         <div>
           <label htmlFor="operadorId" className={ETIQUETA}>Operador</label>
-          <select id="operadorId" name="operadorId" className={CAMPO} style={{ background: 'var(--surface)' }} defaultValue="">
-            <option value="">Sin asignar todavía</option>
+          {/* SIN "Sin asignar todavía". `viaje.operador_id` es NOT NULL desde la
+              0001, así que esa opción no creaba un viaje sin operador: tronaba
+              con un 23502 y el usuario veía "No se pudo crear el viaje" sin
+              saber por qué. Verificado contra producción el 14-ago-2026.
+              Ofrecer una opción que la base rechaza es peor que no ofrecerla. */}
+          <select id="operadorId" name="operadorId" required className={CAMPO}
+            style={{ background: 'var(--surface)' }} defaultValue="">
+            <option value="" disabled>Elige un operador…</option>
             {operadores.map((o) => (
               <option key={o.id} value={o.id}>{o.nombre}</option>
             ))}
           </select>
           <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-            Con operador asignado, Likida le avisa por WhatsApp en cuanto el viaje exista.
+            {operadores.length === 0
+              ? 'Necesitas al menos un operador dado de alta: un viaje no puede existir sin quién lo maneje. El alta rápida está a la derecha.'
+              : 'Likida le avisa por WhatsApp en cuanto el viaje exista.'}
           </p>
         </div>
       </div>

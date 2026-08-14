@@ -18,7 +18,7 @@ import type { TableroOperacion } from '@/lib/likida/operacion';
 
 const TABLERO: TableroOperacion = {
   viajesActivos: 4,
-  porAsignar: 1,
+  sinUnidad: 1,
   unidadesDisponibles: 3,
   unidadesEnTaller: 1,
   incidenciasAbiertas: 2,

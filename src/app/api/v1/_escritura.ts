@@ -1,0 +1,679 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// LO COMPARTIDO DE TODA ESCRITURA DE /v1 — cuerpo, idempotencia y acuse.
+//
+// `_comun.ts` es la puerta: decide DE QUÉ FLOTA habla una petición. Este
+// archivo es el segundo tramo, el que solo existe cuando la petición además
+// ESCRIBE, y responde a tres preguntas que una lectura no tiene que hacerse:
+//
+//   1. ¿el cuerpo trae lo que dice traer? (un formulario del panel garantiza
+//      la forma; un `POST` de un TMS ajeno no garantiza nada);
+//   2. ¿esta petición ya se ejecutó antes? (la idempotencia);
+//   3. ¿qué se le contesta a quien acaba de crear algo?
+//
+// ── EL MODO DE FALLA QUE ESTE ARCHIVO EXISTE PARA EVITAR ─────────────────
+//
+// Un TMS reintenta ante un timeout. Siempre. Es lo correcto de su lado: no
+// sabe si el viaje se creó o si el POST murió en el camino. Sin idempotencia,
+// UN SOLO timeout crea el viaje DOS VECES, y un viaje duplicado no es una fila
+// de más: es un anticipo contado dos veces en el Registro del contralor, una
+// población doble en la cola de cobranza y un margen de flota que se hunde con
+// un viaje que nunca existió. Es exactamente el daño que la mig. 0092 ya
+// describe para el importador de archivos, con otra puerta de entrada.
+//
+// ── LA IDEMPOTENCIA AQUÍ TIENE DOS CAPAS, Y SOLO UNA ES DURABLE ──────────
+//
+// CAPA 1 — EL RECUERDO EN MEMORIA (`recuerdos`, abajo). Guarda la respuesta
+// exacta de cada `Idempotency-Key` y la vuelve a servir tal cual. Es la única
+// capa que puede prometer "la MISMA respuesta", y NO SOBREVIVE a un reinicio
+// ni cruza entre instancias: en Vercel cada instancia arranca con su Map
+// vacío, igual que `rateLimit`. Dicho sin adornos: la capa 1 sola NO evita el
+// duplicado del timeout, porque el reintento del TMS puede caer en otra
+// instancia. Prometer lo contrario sería la clase de afirmación no medida que
+// este repo persigue.
+//
+// CAPA 2 — LA LLAVE NATURAL EN LA BASE, que sí es durable y sí cruza
+// instancias: `viaje_folio_unico` (tenant_id, folio) de la mig. 0092 y
+// `unidad_economico_unico` (tenant_id, numero_economico) de la 0047. Antes de
+// insertar se BUSCA por esa llave, y si el insert choca igual (dos peticiones
+// en paralelo) se relee y se devuelve la fila que ya existe. El resultado
+// medible es el que importa: **por más veces que el TMS reintente, no puede
+// haber dos viajes con el mismo folio ni dos unidades con el mismo número
+// económico en la misma flota.**
+//
+// EL PRECIO, dicho aquí para que nadie lo descubra en producción: sin una
+// tabla de idempotencia en la base, dos peticiones con la MISMA llave y
+// CUERPOS DISTINTOS solo se detectan si caen en la misma instancia (capa 1).
+// Cruzando instancias, la segunda encuentra la fila por su llave natural y
+// recibe un 200 con `idempotente: true` y la fila que YA existe — que es la
+// respuesta correcta para un reintento y una respuesta incompleta para un
+// cuerpo genuinamente distinto con el mismo folio. Se elige así a propósito:
+// devolver la fila existente no puede corromper nada, y crear un segundo viaje
+// sí. La tabla que cerraría ese hueco está descrita en el reporte de entrega,
+// no aquí: esta entrega no crea migraciones.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import { createHash } from 'node:crypto';
+import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '@/lib/likida/presupuesto';
+import { DatoInvalido } from '@/lib/likida/errores';
+import { errorApi, fallo, type CuerpoError } from './_comun';
+
+// ── El cuerpo ──────────────────────────────────────────────────────────────
+
+/**
+ * Tope del cuerpo de una escritura.
+ *
+ * 16 KB contra los ~500 bytes que pesa el viaje más cargado. No es un límite
+ * de negocio: es para que un cuerpo absurdo se corte ANTES de parsearlo, sin
+ * gastar CPU en el JSON.parse de un megabyte.
+ *
+ * Se contesta 400 y no 413 porque `CodigoError` (en `_comun.ts`) es un dominio
+ * CERRADO sobre el que el integrador ramifica, y agregarle un código toca un
+ * archivo que esta entrega no puede tocar. El mensaje sí dice el tope exacto.
+ */
+export const MAX_CUERPO_BYTES = 16_000;
+
+export type LecturaCuerpo =
+  | { ok: true; cuerpo: Record<string, unknown> }
+  | { ok: false; respuesta: NextResponse<CuerpoError> };
+
+/**
+ * Lee el cuerpo como objeto JSON, o explica por qué no.
+ *
+ * SE MIDE DOS VECES a propósito, igual que `bodyExcede` advierte en
+ * `ratelimit.ts`: `content-length` es lo único que hay antes de leer, y una
+ * petición `Transfer-Encoding: chunked` no la trae — ahí el tope solo lo puede
+ * imponer el largo real del texto ya leído.
+ */
+export async function leerCuerpo(req: Request): Promise<LecturaCuerpo> {
+  const declarado = Number(req.headers.get('content-length') || 0);
+  if (declarado > MAX_CUERPO_BYTES) {
+    return { ok: false, respuesta: errorApi('parametro_invalido', `El cuerpo no puede pasar de ${MAX_CUERPO_BYTES} bytes.`) };
+  }
+
+  let texto: string;
+  try {
+    texto = await req.text();
+  } catch {
+    return { ok: false, respuesta: errorApi('parametro_invalido', 'No se pudo leer el cuerpo de la petición.') };
+  }
+  if (texto.length > MAX_CUERPO_BYTES) {
+    return { ok: false, respuesta: errorApi('parametro_invalido', `El cuerpo no puede pasar de ${MAX_CUERPO_BYTES} bytes.`) };
+  }
+
+  let crudo: unknown;
+  try {
+    crudo = JSON.parse(texto);
+  } catch {
+    // El mensaje del parser NO cruza: dice offsets del texto que mandaron y no
+    // ayuda a nadie a corregir el campo. Se dice qué se esperaba.
+    return { ok: false, respuesta: errorApi('parametro_invalido', 'El cuerpo tiene que ser un objeto JSON.') };
+  }
+  if (crudo === null || typeof crudo !== 'object' || Array.isArray(crudo)) {
+    return { ok: false, respuesta: errorApi('parametro_invalido', 'El cuerpo tiene que ser un objeto JSON (no una lista ni un valor suelto).') };
+  }
+
+  return { ok: true, cuerpo: crudo as Record<string, unknown> };
+}
+
+// ── Validación en el borde ─────────────────────────────────────────────────
+//
+// `crearViaje` y `crearUnidad` esperan una forma que hoy garantiza un
+// formulario del panel: un `<select>` no manda un objeto donde va un uuid, ni
+// `true` donde va un monto. Un cuerpo de API puede traer cualquier cosa, y sin
+// esta capa esa cualquier-cosa llega hasta el INSERT — donde el que contesta
+// es Postgres, con un mensaje que ni se le puede enseñar al integrador ni le
+// dice QUÉ campo corregir.
+
+/** Un campo del cuerpo que no cumple. `campo` viaja para poder nombrarlo. */
+export class CampoInvalido extends Error {
+  constructor(readonly campo: string, mensaje: string) {
+    super(mensaje);
+    this.name = 'CampoInvalido';
+  }
+}
+
+/**
+ * ¿El campo viene o no viene?
+ *
+ * `undefined` y `null` son AUSENCIA; `''` también, porque un TMS que no tiene
+ * el dato manda la cadena vacía tan seguido como la omite. La distinción que
+ * importa —y que sostiene todo lo demás— es que ausencia NUNCA se convierte en
+ * 0 ni en cadena vacía guardada: se convierte en `null`.
+ */
+function ausente(v: unknown): boolean {
+  return v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+}
+
+/**
+ * Un texto.
+ *
+ * Acepta también un número porque un folio de TMS viaja tan seguido como
+ * `12345` que como `"12345"`, y rechazarlo obligaría al integrador a
+ * convertirlo del otro lado. Los dos se normalizan al MISMO texto, que además
+ * es lo que hace que la deduplicación por folio funcione entre las dos formas.
+ * Lo que no se acepta es un booleano, un objeto o una lista: eso no es un
+ * folio escrito de otra manera, es un error de quien armó el cuerpo.
+ */
+export function texto(
+  cuerpo: Record<string, unknown>, campo: string,
+  opciones: { obligatorio?: boolean; max: number },
+): string | null {
+  const v = cuerpo[campo];
+  if (ausente(v)) {
+    if (opciones.obligatorio) throw new CampoInvalido(campo, `\`${campo}\` es obligatorio.`);
+    return null;
+  }
+  if (typeof v !== 'string' && typeof v !== 'number') {
+    throw new CampoInvalido(campo, `\`${campo}\` tiene que ser texto.`);
+  }
+  if (typeof v === 'number' && !Number.isFinite(v)) {
+    throw new CampoInvalido(campo, `\`${campo}\` tiene que ser texto.`);
+  }
+  const t = String(v).trim();
+  if (t.length > opciones.max) {
+    // NO se recorta en silencio: un folio truncado dedupea contra el folio
+    // equivocado, que es peor que un 400. Mismo criterio que `leerPagina`.
+    throw new CampoInvalido(campo, `\`${campo}\` no puede pasar de ${opciones.max} caracteres.`);
+  }
+  return t;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Un uuid.
+ *
+ * Se valida la FORMA aquí para que un `"el-de-siempre"` no llegue a Postgres
+ * como un 22P02 que hay que traducir a ciegas. Que el id sea DE ESTA FLOTA no
+ * se comprueba aquí: eso lo hacen los candados anti-IDOR de `operacion.ts`
+ * (`operadorPropio`, `unidadPropia`, `clientePropioLocal`), que son los que
+ * tienen la base enfrente. Duplicar esa comprobación aquí sería una segunda
+ * versión de la regla de seguridad más cara del repo.
+ */
+export function uuid(
+  cuerpo: Record<string, unknown>, campo: string,
+  opciones: { obligatorio?: boolean } = {},
+): string | null {
+  const v = cuerpo[campo];
+  if (ausente(v)) {
+    if (opciones.obligatorio) throw new CampoInvalido(campo, `\`${campo}\` es obligatorio.`);
+    return null;
+  }
+  if (typeof v !== 'string' || !UUID.test(v.trim())) {
+    throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un uuid.`);
+  }
+  return v.trim();
+}
+
+/**
+ * Una fecha de calendario, `YYYY-MM-DD`.
+ *
+ * La columna es `date` (0001), no `timestamptz`. Aceptar un ISO con hora
+ * dejaría caer la hora EN SILENCIO y con ella la zona horaria: un viaje de las
+ * 23:00 en Ciudad de México mandado como `...T23:00:00Z` se guardaría en el
+ * día siguiente. Se rechaza y se dice el formato.
+ *
+ * Se comprueba además que la fecha EXISTA: `2026-02-30` cumple el regex y no
+ * es un día. Postgres lo rechazaría, pero con un mensaje suyo.
+ */
+export function fecha(cuerpo: Record<string, unknown>, campo: string): string | null {
+  const v = cuerpo[campo];
+  if (ausente(v)) return null;
+  if (typeof v !== 'string') throw new CampoInvalido(campo, `\`${campo}\` tiene que ser una fecha \`AAAA-MM-DD\`.`);
+  const t = v.trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  if (!m) throw new CampoInvalido(campo, `\`${campo}\` tiene que ser una fecha \`AAAA-MM-DD\` (sin hora).`);
+  const [a, mes, dia] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(Date.UTC(a, mes - 1, dia));
+  if (d.getUTCFullYear() !== a || d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) {
+    throw new CampoInvalido(campo, `\`${campo}\` no es una fecha que exista.`);
+  }
+  return t;
+}
+
+/**
+ * Un entero dentro de un rango.
+ *
+ * Acepta el número y también su forma de texto (`"2018"`), porque un CSV
+ * exportado por un TMS manda todo como texto. `"2018.5"` NO pasa: un año con
+ * decimales es un dato equivocado, no un entero escrito distinto.
+ */
+export function entero(
+  cuerpo: Record<string, unknown>, campo: string,
+  opciones: { min: number; max: number },
+): number | null {
+  const v = cuerpo[campo];
+  if (ausente(v)) return null;
+  let n: number;
+  if (typeof v === 'number') n = v;
+  else if (typeof v === 'string' && /^-?\d+$/.test(v.trim())) n = Number(v.trim());
+  else throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número entero.`);
+  if (!Number.isSafeInteger(n)) throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número entero.`);
+  if (n < opciones.min || n > opciones.max) {
+    throw new CampoInvalido(campo, `\`${campo}\` tiene que estar entre ${opciones.min} y ${opciones.max}.`);
+  }
+  return n;
+}
+
+/**
+ * Un monto en pesos, con hasta dos decimales.
+ *
+ * ── POR QUÉ EXISTE ESTO SI YA HAY `validarIngreso` ───────────────────────
+ *
+ * Sirve para `viaje.anticipo` y SOLO para él, que es el único monto de estas
+ * rutas cuya columna es `NOT NULL DEFAULT 0` (0001): ahí ausente y cero
+ * significan lo mismo porque la base no puede guardar otra cosa. Todo monto
+ * cuya ausencia SÍ cambia una medición —el ingreso del flete, los kilómetros—
+ * pasa por `validarIngreso`, que es donde vive la regla de VACÍO ≠ CERO. Este
+ * validador no la reimplementa: no la necesita.
+ *
+ * MÁS DE DOS DECIMALES SE RECHAZAN en vez de redondearse. `numeric(12,2)`
+ * redondearía en silencio, y un anticipo que se guarda distinto del que se
+ * mandó es exactamente el descuadre de centavos que el contralor persigue
+ * durante media tarde.
+ */
+export function monto(
+  cuerpo: Record<string, unknown>, campo: string,
+  opciones: { min: number; max: number },
+): number | null {
+  const v = cuerpo[campo];
+  if (ausente(v)) return null;
+
+  let n: number;
+  if (typeof v === 'number') {
+    n = v;
+  } else if (typeof v === 'string') {
+    // Mismo saneado que `ingreso_viaje.ts`: la coma decimal es como se teclea
+    // en México y el separador de millares se pega desde un Excel.
+    const limpio = v.trim().replace(/\s/g, '').replace(/,(?=\d{3}\b)/g, '').replace(',', '.');
+    if (!/^-?\d+(\.\d+)?$/.test(limpio)) throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número.`);
+    n = Number(limpio);
+  } else {
+    throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número.`);
+  }
+
+  if (!Number.isFinite(n)) throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número.`);
+  // Con TOLERANCIA y no con un `!==` pelado: `1234.56 * 100` es
+  // 123455.99999999999 en binario, así que la comparación exacta rechazaría un
+  // monto perfectamente válido. La tolerancia es mil veces más chica que el
+  // centavo que se está midiendo, así que 1234.567 sigue sin pasar.
+  if (Math.abs(n * 100 - Math.round(n * 100)) > 1e-6) {
+    throw new CampoInvalido(campo, `\`${campo}\` no puede traer más de dos decimales.`);
+  }
+  if (n < opciones.min || n > opciones.max) {
+    throw new CampoInvalido(campo, `\`${campo}\` tiene que estar entre ${opciones.min} y ${opciones.max}.`);
+  }
+  return n;
+}
+
+/**
+ * Lo que se le pasa a `validarIngreso` (`lib/likida/ingreso_viaje.ts`): el
+ * campo tal cual lo teclearía una persona, en TEXTO.
+ *
+ * ── POR QUÉ SE DELEGA EN VEZ DE VALIDAR AQUÍ ─────────────────────────────
+ *
+ * Porque la regla que distingue VACÍO de CERO ya está escrita, probada y es la
+ * que sostiene toda la medición de margen. Una segunda implementación en el
+ * borde de la API sería una segunda oportunidad de escribir `Number('')` y
+ * meter un 0 donde no hay dato: el viaje sin ingreso capturado se contaría como
+ * un viaje que no produjo nada, su margen saldría -100%, y las tres cifras se
+ * verían plausibles. Aquí solo se comprueba el TIPO —lo único que un formulario
+ * garantizaba y un JSON no— y el resto lo decide el motor.
+ *
+ * `null` y ausente salen como `''`, que es lo que `validarIngreso` lee como
+ * "no capturado" y convierte en `null`. Un `0` sale como `'0'`, que ese mismo
+ * motor lee como un cero MEDIDO.
+ */
+export function crudoNumerico(cuerpo: Record<string, unknown>, campo: string): string {
+  const v = cuerpo[campo];
+  if (v === undefined || v === null) return '';
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v)) throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número.`);
+    return String(v);
+  }
+  if (typeof v === 'string') return v;
+  throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número.`);
+}
+
+export type Validado<T> =
+  | { ok: true; valor: T }
+  | { ok: false; respuesta: NextResponse<CuerpoError> };
+
+/**
+ * Corre la validación de una ruta y traduce lo que lance.
+ *
+ * Los dos errores que SÍ se le enseñan al integrador son los que se
+ * escribieron para que alguien los lea: `CampoInvalido` (nombra el campo) y
+ * `DatoInvalido` (los topes de cordura de `ingreso_viaje.ts`, ya redactados
+ * para una persona). Cualquier otra excepción es una falla nuestra y se va por
+ * `fallo()`, que corta el mensaje entero.
+ */
+export function validar<T>(evento: string, f: () => T): Validado<T> {
+  try {
+    return { ok: true, valor: f() };
+  } catch (e) {
+    if (e instanceof CampoInvalido || e instanceof DatoInvalido) {
+      return { ok: false, respuesta: errorApi('parametro_invalido', e.message) };
+    }
+    return { ok: false, respuesta: fallo(evento, e) };
+  }
+}
+
+// ── La llave de idempotencia ───────────────────────────────────────────────
+
+export const CABECERA_IDEMPOTENCIA = 'Idempotency-Key';
+/** Corta lo que no es una llave: `"1"` colisiona entre peticiones distintas. */
+export const LARGO_MIN_LLAVE = 8;
+export const LARGO_MAX_LLAVE = 200;
+
+export type LecturaLlave =
+  | { ok: true; llave: string }
+  | { ok: false; respuesta: NextResponse<CuerpoError> };
+
+/**
+ * Exige `Idempotency-Key` y comprueba que tenga forma de llave.
+ *
+ * SE EXIGE, no se acepta opcionalmente. Una escritura sin llave no se puede
+ * reintentar sin riesgo, y dejarla pasar significaría que la primera
+ * integración que se escriba sin leer la documentación es también la primera
+ * que duplique viajes. Es más barato un 400 el primer día que un anticipo
+ * duplicado el día 30.
+ */
+export function leerLlaveIdempotencia(req: Request): LecturaLlave {
+  const crudo = req.headers.get(CABECERA_IDEMPOTENCIA);
+  if (!crudo || crudo.trim() === '') {
+    return {
+      ok: false,
+      respuesta: errorApi(
+        'parametro_invalido',
+        `Falta la cabecera \`${CABECERA_IDEMPOTENCIA}\`. Manda un identificador único por operación (un uuid sirve) y repítelo EXACTO si reintentas: es lo que impide que un timeout cree el registro dos veces.`,
+      ),
+    };
+  }
+  const llave = crudo.trim();
+  // ASCII imprimible: una cabecera con saltos de línea o bytes de control es la
+  // forma de un intento de inyección en cabeceras, no la de un uuid.
+  if (!/^[\x21-\x7E]+$/.test(llave)) {
+    return { ok: false, respuesta: errorApi('parametro_invalido', `\`${CABECERA_IDEMPOTENCIA}\` solo admite caracteres ASCII imprimibles.`) };
+  }
+  if (llave.length < LARGO_MIN_LLAVE || llave.length > LARGO_MAX_LLAVE) {
+    return {
+      ok: false,
+      respuesta: errorApi('parametro_invalido', `\`${CABECERA_IDEMPOTENCIA}\` tiene que medir entre ${LARGO_MIN_LLAVE} y ${LARGO_MAX_LLAVE} caracteres.`),
+    };
+  }
+  return { ok: true, llave };
+}
+
+/**
+ * La huella del cuerpo YA VALIDADO Y NORMALIZADO.
+ *
+ * Se calcula sobre lo normalizado y no sobre el texto crudo por dos razones que
+ * importan las dos: un reintento que reserialice el JSON con las llaves en otro
+ * orden o con otro espaciado sigue siendo la MISMA operación, y —esto es lo que
+ * lo vuelve una prueba— un `tenant_id` colado en el cuerpo NO cambia la huella,
+ * porque nunca entra al objeto normalizado. Un campo que no existe en la
+ * normalización no puede influir en nada de lo que pasa después.
+ */
+export function huella(payload: Record<string, string | number | boolean | null>): string {
+  const ordenado = Object.keys(payload).sort().map((k) => [k, payload[k]] as const);
+  return createHash('sha256').update(JSON.stringify(ordenado), 'utf8').digest('hex');
+}
+
+/** Lo que se recuerda de una escritura ya contestada. */
+type Recuerdo = { huella: string; status: number; cuerpo: unknown; expiraEn: number };
+
+const recuerdos = new Map<string, Recuerdo>();
+/** Backstop de memoria, igual que `ratelimit.ts`. */
+const MAX_RECUERDOS = 2_000;
+/** Cuánto vale un recuerdo. 24 h cubre de sobra el reintento de un TMS, que
+ *  ocurre en segundos; más allá de eso el que manda es el unique de la base. */
+export const VIDA_RECUERDO_MS = 86_400_000;
+
+function podar(ahora: number): void {
+  for (const [k, r] of recuerdos) if (r.expiraEn <= ahora) recuerdos.delete(k);
+  if (recuerdos.size <= MAX_RECUERDOS) return;
+  const porCaducidad = [...recuerdos.entries()].sort((a, b) => a[1].expiraEn - b[1].expiraEn);
+  const sobran = recuerdos.size - Math.floor(MAX_RECUERDOS * 0.75);
+  for (let i = 0; i < sobran; i++) recuerdos.delete(porCaducidad[i][0]);
+}
+
+/** Solo para pruebas: el Map es de módulo y se comparte entre casos. */
+export function reiniciarIdempotencia(): void {
+  recuerdos.clear();
+}
+
+// ── El acuse ───────────────────────────────────────────────────────────────
+
+export interface SobreEscritura<T> {
+  dato: T;
+  /**
+   * `true` = esto YA EXISTÍA y esta petición no creó nada. Viaja en el cuerpo
+   * además de en el status (201 vs 200) porque un cliente generado a partir del
+   * OpenAPI ramifica sobre el cuerpo mucho más seguido que sobre el status.
+   */
+  idempotente: boolean;
+}
+
+export function creado<T>(dato: T): NextResponse<SobreEscritura<T>> {
+  return NextResponse.json({ dato, idempotente: false }, { status: 201 });
+}
+
+export function yaExistia<T>(dato: T): NextResponse<SobreEscritura<T>> {
+  return NextResponse.json({ dato, idempotente: true }, { status: 200 });
+}
+
+// ── Traducir lo que truena ─────────────────────────────────────────────────
+
+/**
+ * Los mensajes de `operacion.ts` que describen un error DEL QUE LLAMA, no
+ * nuestro.
+ *
+ * Se reconocen por su texto y eso es frágil: si alguien reescribe la frase en
+ * `crearViaje`, este mapeo deja de acertar. El modo de falla de esa fragilidad
+ * es FALLAR CERRADO —cae al `fallo()` de abajo, o sea un 500 genérico sin una
+ * letra del mensaje interno—, nunca fallar abierto. Se acepta ese riesgo
+ * porque la alternativa era peor: sin esto, un TMS que manda el uuid de un
+ * operador dado de baja recibe un 500 y REINTENTA para siempre, cuando lo que
+ * necesita es que le digan cuál de sus tres referencias no existe.
+ *
+ * El mensaje que sale al integrador se ESCRIBE aquí; el interno no se copia.
+ */
+const REFERENCIAS: ReadonlyArray<{ patron: RegExp; campo: string; que: string }> = [
+  { patron: /el operador no pertenece a esta flota/i, campo: 'operadorId', que: 'operador' },
+  { patron: /la unidad no pertenece a esta flota/i, campo: 'unidadId', que: 'unidad' },
+  { patron: /el cliente no pertenece a esta flota/i, campo: 'clienteId', que: 'cliente' },
+];
+
+/** El índice parcial de la 0029: un operador, UN viaje abierto. */
+const OPERADOR_OCUPADO = 'uq_viaje_abierto_por_operador';
+
+/**
+ * Traduce una excepción de escritura a la respuesta que le sirve al integrador.
+ *
+ * Tres familias, y el default importa tanto como las tres:
+ *  · una referencia que no es de su flota → 404, diciendo QUÉ campo;
+ *  · el choque con el invariante de la 0029 → 400, explicando la regla (que es
+ *    de negocio y no un accidente: con dos viajes abiertos del mismo operador,
+ *    TODAS sus fotos se cuelgan del más nuevo y el viejo cierra con el anticipo
+ *    entero en contra de la persona — está escrito en la migración);
+ *  · TODO LO DEMÁS → `fallo()`, que corta el mensaje interno completo. Ni un
+ *    error de Postgres ni un mensaje de negocio cruzan al cuerpo: en una API se
+ *    ramifica por `codigo`, no por texto.
+ */
+export function traducirFalla(evento: string, tenantId: string, e: unknown): NextResponse<CuerpoError> {
+  const crudo = e instanceof Error ? e.message : String(e);
+
+  for (const r of REFERENCIAS) {
+    if (r.patron.test(crudo)) {
+      logger.warn(`${evento}.referencia_ajena`, { tenant: tenantId, campo: r.campo });
+      return errorApi('no_encontrado', `El \`${r.campo}\` que mandaste no existe en tu flota. Revisa que sea el id que te devolvió Likida para ese ${r.que}.`);
+    }
+  }
+
+  if (crudo.includes(OPERADOR_OCUPADO)) {
+    logger.warn(`${evento}.operador_ocupado`, { tenant: tenantId });
+    return errorApi(
+      'parametro_invalido',
+      'Ese operador ya trae un viaje abierto. En Likida un operador tiene a lo más un viaje sin liquidar a la vez: con dos, todos sus comprobantes se cuelgan del más reciente y el otro cierra con el anticipo completo en contra suya. Liquida el que trae o mándale este viaje a otro operador.',
+    );
+  }
+
+  return fallo(evento, e, { tenant: tenantId });
+}
+
+/**
+ * ¿Esta excepción es el choque contra ESTE unique de la base?
+ *
+ * Se exigen las DOS señales —el vocabulario del 23505 y el nombre exacto de la
+ * restricción— para no confundir un choque de folio con cualquier otro error
+ * que mencione la palabra. Si PostgREST cambiara el texto, esto deja de
+ * reconocerlo y la petición sale como 500: ruidoso y sin duplicar, que es el
+ * lado correcto en el que equivocarse.
+ */
+export function chocoContra(e: unknown, restriccion: string): boolean {
+  const crudo = e instanceof Error ? e.message : String(e);
+  return crudo.includes(restriccion) && /duplicate key|already exists|23505/i.test(crudo);
+}
+
+// ── El único camino de una escritura ───────────────────────────────────────
+
+export interface Escritura<T> {
+  /** Para el log y para separar recuerdos de rutas distintas. */
+  evento: string;
+  tenantId: string;
+  llave: string;
+  huella: string;
+  /** El unique de la base que dedupea esta entidad por su llave natural. */
+  restriccion: string;
+  /** Busca la fila que ya existe con esa MISMA llave natural. Lanza si no
+   *  pudo leer — un fallo de lectura no puede leerse como "no existe". */
+  buscar: () => Promise<T | null>;
+  crear: () => Promise<T>;
+}
+
+/**
+ * Ejecuta una escritura idempotente y devuelve su acuse.
+ *
+ * El orden es el que hace la promesa, y es éste:
+ *   1. RECUERDO en memoria — misma llave y mismo cuerpo: se devuelve la
+ *      respuesta EXACTA de la primera vez, sin tocar la base;
+ *   2. misma llave con OTRO cuerpo → 400. Reusar una llave con otro contenido
+ *      es un error del cliente, y contestar la respuesta vieja a un cuerpo
+ *      nuevo sería peor que rechazarlo;
+ *   3. LLAVE NATURAL en la base — la capa durable. Si ya existe, se devuelve
+ *      lo que hay con `idempotente: true`. Aquí es donde se atrapa el
+ *      reintento que cayó en otra instancia, que es EL caso del timeout;
+ *   4. se crea. Si el insert choca igual contra el unique (dos peticiones en
+ *      paralelo, la carrera que la mig. 0092 describe), se relee y se contesta
+ *      la fila que ganó. Nadie recibe un 500 por una carrera que la base ya
+ *      resolvió bien.
+ *
+ * No se marca "en vuelo" ninguna llave: sería una promesa de una sola
+ * instancia, y el único árbitro que ven todas las instancias es el unique de
+ * la base. El paso 4 ES ese árbitro.
+ */
+export async function escribir<T>(e: Escritura<T>): Promise<NextResponse> {
+  const clave = `${e.evento}|${e.tenantId}|${e.llave}`;
+  const ahora = Date.now();
+
+  const previo = recuerdos.get(clave);
+  if (previo && previo.expiraEn > ahora) {
+    if (previo.huella !== e.huella) {
+      logger.warn(`${e.evento}.llave_reusada`, { tenant: e.tenantId });
+      return errorApi(
+        'parametro_invalido',
+        `Esa \`${CABECERA_IDEMPOTENCIA}\` ya se usó para una operación con otro contenido. Usa una llave nueva por operación y repite la misma solo al reintentar la misma.`,
+      );
+    }
+    // LA MISMA RESPUESTA, literal: mismo cuerpo y mismo status que la primera
+    // vez. La cabecera avisa que fue un eco para que un cliente que quiera
+    // distinguirlo pueda, sin que el cuerpo cambie.
+    return NextResponse.json(previo.cuerpo, { status: previo.status, headers: { 'Idempotent-Replayed': 'true' } });
+  }
+
+  const recordar = (status: number, cuerpo: unknown) => {
+    recuerdos.set(clave, { huella: e.huella, status, cuerpo, expiraEn: Date.now() + VIDA_RECUERDO_MS });
+    if (recuerdos.size > MAX_RECUERDOS) podar(Date.now());
+  };
+
+  try {
+    const existente = await e.buscar();
+    if (existente) {
+      const cuerpo: SobreEscritura<T> = { dato: existente, idempotente: true };
+      recordar(200, cuerpo);
+      logger.info(`${e.evento}.ya_existia`, { tenant: e.tenantId });
+      return NextResponse.json(cuerpo, { status: 200 });
+    }
+
+    let dato: T;
+    try {
+      dato = await e.crear();
+    } catch (err) {
+      if (!chocoContra(err, e.restriccion)) throw err;
+      // La carrera: otra petición insertó entre el `buscar` y el `crear`.
+      const gano = await e.buscar();
+      if (!gano) throw err;   // chocó contra el unique y no está: no se inventa nada
+      const cuerpo: SobreEscritura<T> = { dato: gano, idempotente: true };
+      recordar(200, cuerpo);
+      logger.info(`${e.evento}.carrera_resuelta`, { tenant: e.tenantId });
+      return NextResponse.json(cuerpo, { status: 200 });
+    }
+
+    const cuerpo: SobreEscritura<T> = { dato, idempotente: false };
+    recordar(201, cuerpo);
+    return NextResponse.json(cuerpo, { status: 201 });
+  } catch (err) {
+    return traducirFalla(e.evento, e.tenantId, err);
+  }
+}
+
+// ── Las llaves naturales, que son lo que vuelve durable la idempotencia ────
+//
+// Viven aquí y no en cada ruta porque NO son una consulta cualquiera: son la
+// mitad de la mecánica de arriba. Cada una lee por el mismo par de columnas
+// que su unique, así que devuelve a lo más una fila.
+
+/** Lo que /v1 acusa de un viaje recién creado (o del que ya estaba). */
+export interface ViajeCreado {
+  id: string;
+  folio: string;
+  /** `abierto | en_cuadre | liquidado`. En un viaje que YA existía puede no ser
+   *  `abierto`: es el estado real, y es justo lo que el TMS necesita ver. */
+  estatus: string;
+}
+
+export async function buscarViajePorFolio(tenantId: string, folio: string): Promise<ViajeCreado | null> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('viaje').select('id, folio, estatus')
+      .eq('tenant_id', tenantId).eq('folio', folio).maybeSingle(),
+    'v1.buscarViajePorFolio',
+  );
+  // FALLAR CERRADO. Devolver `null` ante un error de lectura diría "no existe"
+  // y mandaría a insertar: el unique lo atraparía, pero el integrador recibiría
+  // un 500 en vez del acuse que ya le tocaba. Se lanza y `escribir` traduce.
+  if (error) throw new Error(`buscarViajePorFolio: ${error.message}`);
+  if (!data) return null;
+  const f = data as { id: unknown; folio: unknown; estatus: unknown };
+  return { id: String(f.id), folio: String(f.folio), estatus: String(f.estatus) };
+}
+
+export interface UnidadCreada {
+  id: string;
+  numeroEconomico: string;
+}
+
+export async function buscarUnidadPorEconomico(tenantId: string, numeroEconomico: string): Promise<UnidadCreada | null> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('unidad').select('id, numero_economico')
+      .eq('tenant_id', tenantId).eq('numero_economico', numeroEconomico).maybeSingle(),
+    'v1.buscarUnidadPorEconomico',
+  );
+  if (error) throw new Error(`buscarUnidadPorEconomico: ${error.message}`);
+  if (!data) return null;
+  const f = data as { id: unknown; numero_economico: unknown };
+  return { id: String(f.id), numeroEconomico: String(f.numero_economico) };
+}
