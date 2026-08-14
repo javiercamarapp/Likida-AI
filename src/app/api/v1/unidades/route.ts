@@ -33,7 +33,7 @@ import { abrir, leerPagina, rebanar, sobre, fallo } from '../_comun';
 import {
   leerCuerpo, leerLlaveIdempotencia, validar, escribir, huella,
   texto, entero, CampoInvalido,
-  buscarUnidadPorEconomico, type UnidadCreada,
+  buscarUnidadPorEconomico, unidadCoincide, type UnidadCreada, type ContenidoUnidad,
   ANIO_MIN_UNIDAD,
 } from '../_escritura';
 
@@ -202,7 +202,23 @@ export async function POST(req: Request) {
     // así que un reintento trae el mismo y choca aquí en vez de crear un
     // segundo camión que no existe.
     restriccion: 'unidad_economico_unico',
-    buscar: () => buscarUnidadPorEconomico(acceso.tenantId, nueva.numeroEconomico),
+    // Igual que en `POST /v1/viajes`: mismo contenido → 200 idempotente;
+    // mismo número económico con OTRO contenido → 409 que lo dice, en vez de
+    // descartar placas y año en silencio (hallazgo A8, auditoría 4).
+    buscar: async () => {
+      const x = await buscarUnidadPorEconomico(acceso.tenantId, nueva.numeroEconomico);
+      if (!x) return null;
+      const pedido: ContenidoUnidad = {
+        placas: nueva.placas ?? null,
+        marca: nueva.marca ?? null,
+        modelo: nueva.modelo ?? null,
+        anio: nueva.anio ?? null,
+      };
+      return { dato: x.dato, coincide: unidadCoincide(x.contenido, pedido) };
+    },
+    mensajeConflicto:
+      `Ya existe una unidad con el número económico \`${nueva.numeroEconomico}\` en tu flota, con contenido DISTINTO al que mandaste. ` +
+      'Tus datos NO se guardaron. Consulta tus unidades con `GET /v1/unidades`; las correcciones se capturan en el panel.',
     crear: async () => ({
       id: await crearUnidad(acceso.tenantId, nueva),
       numeroEconomico: nueva.numeroEconomico,

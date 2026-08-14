@@ -632,6 +632,23 @@ export function chocoContra(e: unknown, restriccion: string): boolean {
 
 // ── El único camino de una escritura ───────────────────────────────────────
 
+/** Lo que `buscar` devuelve cuando la llave natural YA tiene fila. */
+export interface Hallazgo<T> {
+  /** Lo que se le acusa al integrador si esta fila responde por él. */
+  dato: T;
+  /**
+   * ¿El CONTENIDO de esta petición coincide con la fila que ya existe?
+   *
+   * `true`  → es un reintento honesto (u otro camino creó lo mismo): 200.
+   * `false` → mismo folio, OTRO contenido: 409, porque contestar el 200
+   *           idempotente descartaría los montos del integrador EN SILENCIO
+   *           y lo mandaría convencido de que se guardaron (hallazgo A8,
+   *           auditoría 4).
+   * `null`  → la ruta no sabe comparar; se responde 200 como siempre.
+   */
+  coincide: boolean | null;
+}
+
 export interface Escritura<T> {
   /** Para el log y para separar recuerdos de rutas distintas. */
   evento: string;
@@ -640,10 +657,15 @@ export interface Escritura<T> {
   huella: string;
   /** El unique de la base que dedupea esta entidad por su llave natural. */
   restriccion: string;
-  /** Busca la fila que ya existe con esa MISMA llave natural. Lanza si no
-   *  pudo leer — un fallo de lectura no puede leerse como "no existe". */
-  buscar: () => Promise<T | null>;
+  /** Busca la fila que ya existe con esa MISMA llave natural — y en la MISMA
+   *  consulta trae lo necesario para decidir si el contenido coincide. Lanza
+   *  si no pudo leer: un fallo de lectura no puede leerse como "no existe". */
+  buscar: () => Promise<Hallazgo<T> | null>;
   crear: () => Promise<T>;
+  /** El mensaje del 409 cuando la fila existe con OTRO contenido. Lo escribe
+   *  la ruta porque es quien sabe nombrar su llave natural y decir dónde se
+   *  corrige (el panel, no esta API). */
+  mensajeConflicto: string;
 }
 
 /**
@@ -655,9 +677,11 @@ export interface Escritura<T> {
  *   2. misma llave con OTRO cuerpo → 400. Reusar una llave con otro contenido
  *      es un error del cliente, y contestar la respuesta vieja a un cuerpo
  *      nuevo sería peor que rechazarlo;
- *   3. LLAVE NATURAL en la base — la capa durable. Si ya existe, se devuelve
- *      lo que hay con `idempotente: true`. Aquí es donde se atrapa el
- *      reintento que cayó en otra instancia, que es EL caso del timeout;
+ *   3. LLAVE NATURAL en la base — la capa durable. Si ya existe CON EL MISMO
+ *      contenido, se devuelve lo que hay con `idempotente: true` (aquí se
+ *      atrapa el reintento que cayó en otra instancia, que es EL caso del
+ *      timeout). Si existe con OTRO contenido, es un 409 que lo dice: el 200
+ *      idempotente de antes descartaba los montos del integrador en silencio;
  *   4. se crea. Si el insert choca igual contra el unique (dos peticiones en
  *      paralelo, la carrera que la mig. 0092 describe), se relee y se contesta
  *      la fila que ganó. Nadie recibe un 500 por una carrera que la base ya
@@ -713,10 +737,20 @@ export async function escribir<T>(e: Escritura<T>): Promise<NextResponse> {
     await guardarRecuerdoDurable(e, status, cuerpo);
   };
 
+  // El 409 NO se recuerda: la tabla 0098 solo admite 200/201 a propósito (un
+  // error no es una respuesta canónica que replayar), y recalcularlo en cada
+  // intento es lo correcto — si alguien corrige la fila desde el panel, el
+  // siguiente POST idéntico del TMS deja de chocar.
+  const conflicto = () => {
+    logger.warn(`${e.evento}.conflicto_contenido`, { tenant: e.tenantId });
+    return errorApi('conflicto', e.mensajeConflicto);
+  };
+
   try {
     const existente = await e.buscar();
     if (existente) {
-      const cuerpo: SobreEscritura<T> = { dato: existente, idempotente: true };
+      if (existente.coincide === false) return conflicto();
+      const cuerpo: SobreEscritura<T> = { dato: existente.dato, idempotente: true };
       await recordar(200, cuerpo);
       logger.info(`${e.evento}.ya_existia`, { tenant: e.tenantId });
       return NextResponse.json(cuerpo, { status: 200 });
@@ -730,7 +764,8 @@ export async function escribir<T>(e: Escritura<T>): Promise<NextResponse> {
       // La carrera: otra petición insertó entre el `buscar` y el `crear`.
       const gano = await e.buscar();
       if (!gano) throw err;   // chocó contra el unique y no está: no se inventa nada
-      const cuerpo: SobreEscritura<T> = { dato: gano, idempotente: true };
+      if (gano.coincide === false) return conflicto();
+      const cuerpo: SobreEscritura<T> = { dato: gano.dato, idempotente: true };
       await recordar(200, cuerpo);
       logger.info(`${e.evento}.carrera_resuelta`, { tenant: e.tenantId });
       return NextResponse.json(cuerpo, { status: 200 });
@@ -759,9 +794,71 @@ export interface ViajeCreado {
   estatus: string;
 }
 
-export async function buscarViajePorFolio(tenantId: string, folio: string): Promise<ViajeCreado | null> {
+/** El CONTENIDO de un viaje que decide si dos peticiones son la misma
+ *  operación. Es la misma lista de campos que entra a la `huella` del POST,
+ *  sin el folio (por el folio se buscó). */
+export interface ContenidoViaje {
+  operadorId: string | null;
+  origen: string | null;
+  destino: string | null;
+  fechaInicio: string | null;
+  unidadId: string | null;
+  clienteId: string | null;
+  ingresoFlete: number | null;
+  kmRecorridos: number | null;
+  anticipo: number;
+}
+
+/** Texto contra texto, con AUSENTE (`null`) como valor propio: un origen que
+ *  no se mandó no es igual a un origen guardado. */
+function textoIgual(a: string | null, b: string | null): boolean {
+  return (a ?? null) === (b ?? null);
+}
+
+/** Los uuid de Postgres salen SIEMPRE en minúsculas; el del cuerpo llega como
+ *  lo escribió el TMS. Sin esto, el mismo operador en mayúsculas sería un
+ *  conflicto falso. */
+function uuidIgual(a: string | null, b: string | null): boolean {
+  return textoIgual(a === null ? null : a.toLowerCase(), b === null ? null : b.toLowerCase());
+}
+
+/** Dinero a dos decimales: la tolerancia es diez veces más chica que el
+ *  centavo, así que $500 y $500.00 coinciden y $500.01 no. */
+function montoIgual(a: number | null, b: number | null): boolean {
+  if (a === null || b === null) return a === b;
+  return Math.abs(a - b) < 0.005;
+}
+
+export function viajeCoincide(fila: ContenidoViaje, pedido: ContenidoViaje): boolean {
+  return uuidIgual(fila.operadorId, pedido.operadorId)
+    && textoIgual(fila.origen, pedido.origen)
+    && textoIgual(fila.destino, pedido.destino)
+    && textoIgual(fila.fechaInicio, pedido.fechaInicio)
+    && uuidIgual(fila.unidadId, pedido.unidadId)
+    && uuidIgual(fila.clienteId, pedido.clienteId)
+    && montoIgual(fila.ingresoFlete, pedido.ingresoFlete)
+    && montoIgual(fila.kmRecorridos, pedido.kmRecorridos)
+    && montoIgual(fila.anticipo, pedido.anticipo);
+}
+
+/** `numeric`/`int` de PostgREST llegan como número JSON; en un doble de prueba
+ *  pueden faltar. Ausente es `null` — jamás 0. */
+function numeroONull(v: unknown): number | null {
+  if (v === undefined || v === null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function textoONull(v: unknown): string | null {
+  return v === undefined || v === null ? null : String(v);
+}
+
+export async function buscarViajePorFolio(
+  tenantId: string, folio: string,
+): Promise<{ dato: ViajeCreado; contenido: ContenidoViaje } | null> {
   const { data, error } = await acotada(
-    supabaseAdmin().from('viaje').select('id, folio, estatus')
+    supabaseAdmin().from('viaje')
+      .select('id, folio, estatus, operador_id, origen, destino, fecha_inicio, unidad_id, cliente_id, ingreso_flete, km_recorridos, anticipo')
       .eq('tenant_id', tenantId).eq('folio', folio).maybeSingle(),
     'v1.buscarViajePorFolio',
   );
@@ -770,8 +867,23 @@ export async function buscarViajePorFolio(tenantId: string, folio: string): Prom
   // un 500 en vez del acuse que ya le tocaba. Se lanza y `escribir` traduce.
   if (error) throw new Error(`buscarViajePorFolio: ${error.message}`);
   if (!data) return null;
-  const f = data as { id: unknown; folio: unknown; estatus: unknown };
-  return { id: String(f.id), folio: String(f.folio), estatus: String(f.estatus) };
+  const f = data as Record<string, unknown>;
+  return {
+    dato: { id: String(f.id), folio: String(f.folio), estatus: String(f.estatus) },
+    contenido: {
+      operadorId: textoONull(f.operador_id),
+      origen: textoONull(f.origen),
+      destino: textoONull(f.destino),
+      fechaInicio: textoONull(f.fecha_inicio),
+      unidadId: textoONull(f.unidad_id),
+      clienteId: textoONull(f.cliente_id),
+      ingresoFlete: numeroONull(f.ingreso_flete),
+      kmRecorridos: numeroONull(f.km_recorridos),
+      // `viaje.anticipo` es NOT NULL DEFAULT 0 (0001): en la base siempre hay
+      // número, y 0 es la medición de "no se adelantó nada".
+      anticipo: numeroONull(f.anticipo) ?? 0,
+    },
+  };
 }
 
 export interface UnidadCreada {
@@ -779,14 +891,40 @@ export interface UnidadCreada {
   numeroEconomico: string;
 }
 
-export async function buscarUnidadPorEconomico(tenantId: string, numeroEconomico: string): Promise<UnidadCreada | null> {
+/** El contenido de una unidad, sin su número económico (por él se buscó). */
+export interface ContenidoUnidad {
+  placas: string | null;
+  marca: string | null;
+  modelo: string | null;
+  anio: number | null;
+}
+
+export function unidadCoincide(fila: ContenidoUnidad, pedido: ContenidoUnidad): boolean {
+  return textoIgual(fila.placas, pedido.placas)
+    && textoIgual(fila.marca, pedido.marca)
+    && textoIgual(fila.modelo, pedido.modelo)
+    && montoIgual(fila.anio, pedido.anio);
+}
+
+export async function buscarUnidadPorEconomico(
+  tenantId: string, numeroEconomico: string,
+): Promise<{ dato: UnidadCreada; contenido: ContenidoUnidad } | null> {
   const { data, error } = await acotada(
-    supabaseAdmin().from('unidad').select('id, numero_economico')
+    supabaseAdmin().from('unidad')
+      .select('id, numero_economico, placas, marca, modelo, anio')
       .eq('tenant_id', tenantId).eq('numero_economico', numeroEconomico).maybeSingle(),
     'v1.buscarUnidadPorEconomico',
   );
   if (error) throw new Error(`buscarUnidadPorEconomico: ${error.message}`);
   if (!data) return null;
-  const f = data as { id: unknown; numero_economico: unknown };
-  return { id: String(f.id), numeroEconomico: String(f.numero_economico) };
+  const f = data as Record<string, unknown>;
+  return {
+    dato: { id: String(f.id), numeroEconomico: String(f.numero_economico) },
+    contenido: {
+      placas: textoONull(f.placas),
+      marca: textoONull(f.marca),
+      modelo: textoONull(f.modelo),
+      anio: numeroONull(f.anio),
+    },
+  };
 }
