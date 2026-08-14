@@ -1,28 +1,41 @@
-import { Settings, Fuel, Building2, BookOpen } from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { Settings, Fuel, Building2 } from 'lucide-react';
 import { getConfig } from '@/lib/likida/config';
-import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
-import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { guardarAjustesOperativos, mensajeParaPantalla } from '@/lib/likida/administracion';
+import { validarAjustes, formatearCuentas, type AjustesCrudos } from '@/lib/likida/ajustes_operativos';
 import { EstadoVacio } from '../../admin/ui/kit';
+import { FormaAjustes, type ResultadoGuardar } from './forma';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Configuración (PASO 23) — lo que de verdad está configurado para esta
- * flota, leído con `getConfig()` (la misma función que usa el motor).
+ * Configuración — los parámetros con los que el motor cuadra los viajes de
+ * ESTA flota, y desde el 14-ago-2026 EDITABLES.
  *
- * Las "integraciones" del PASO 23 (monedero de combustible, TAG de casetas,
- * ERP) no se listan como si fueran interruptores apagados: no existe el
- * concepto de integración conectable en el esquema, así que un panel de
- * toggles apagados sería una promesa de UI, no un estado.
+ * Antes eran 168 líneas sin un solo formulario. Un contralor cuyos
+ * tractocamiones rinden 2.4 km/L y no 3.0 tenía el motor calculando mal el
+ * diésel esperado de CADA viaje, y su única salida era escribirle a Javier —
+ * o sea, Likida era el cuello de botella de su propia operación. Handle deja
+ * al cliente tunear a sus agentes sin código; esto es lo mismo para el motor.
+ *
+ * QUÉ SIGUE SIENDO DE LECTURA, Y POR QUÉ:
+ *  · El RFC — es identidad fiscal, se captura en el alta y cambiarlo apaga la
+ *    validación de receptor de TODOS los CFDI históricos.
+ *  · Las unidades calibradas — es un editor de lista (alta/baja por placa) y
+ *    merece su propia pantalla en el Registro, no un textarea aquí.
+ *  · Los topes de la LEY (estímulos, claves del SAT) — ver `ajustes_operativos.ts`.
  */
 export default async function ConfiguracionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId } = await resolverTenantEfectivo('/dashboard/configuracion', sp);
+  const { tenantId, rol, userId } = await resolverTenantEfectivo('/dashboard/configuracion', sp);
+  if (!puedeVerRuta(rol, '/dashboard/configuracion')) redirect('/dashboard');
 
   let config;
   try {
@@ -31,8 +44,58 @@ export default async function ConfiguracionPage({
     config = null;
   }
 
+  // Un viaje REAL de la flota para la vista previa. Sin viajes con km
+  // capturados NO se inventa uno: la pantalla lo dice y ya.
+  const { data: viajeEjemplo } = await supabaseAdmin()
+    .from('viaje').select('km_recorridos')
+    .eq('tenant_id', tenantId).not('km_recorridos', 'is', null)
+    .order('creado_en', { ascending: false }).limit(1).maybeSingle();
+  const ejemploKm = typeof viajeEjemplo?.km_recorridos === 'number' && viajeEjemplo.km_recorridos > 0
+    ? viajeEjemplo.km_recorridos
+    : null;
+
   const unidades = config ? Object.entries(config.unidades) : [];
-  const cuentas = config ? Object.entries(config.catalogoCuentas) : [];
+
+  async function guardar(_previo: ResultadoGuardar, fd: FormData): Promise<ResultadoGuardar> {
+    'use server';
+    // Re-gateo ADENTRO: el rol de arriba es del render, no de esta llamada, y
+    // una server action es alcanzable sin pasar por la página.
+    const s = await resolverTenantEfectivo('/dashboard/configuracion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/configuracion')) {
+      return { ok: false, error: 'Tu rol no puede cambiar la configuración de la flota.' };
+    }
+    try {
+      // La validación del cliente es para avisar; ÉSTA es la que manda.
+      const ajustes = validarAjustes({
+        rendimientoPorDefecto: String(fd.get('rendimientoPorDefecto') ?? ''),
+        factorCarga: String(fd.get('factorCarga') ?? ''),
+        precioDieselPorDefecto: String(fd.get('precioDieselPorDefecto') ?? ''),
+        umbralDesviacionPct: String(fd.get('umbralDesviacionPct') ?? ''),
+        salida: String(fd.get('salida') ?? ''),
+        cuentas: String(fd.get('cuentas') ?? ''),
+      });
+      await guardarAjustesOperativos(s.tenantId, ajustes, { id: userId });
+      return { ok: true };
+    } catch (e) {
+      // Un DatoInvalido sale con su texto tal cual (es culpa de lo capturado);
+      // cualquier otra cosa se loguea y sale como falla del sistema, para no
+      // acusar al usuario de un error de base de datos.
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar los ajustes') };
+    }
+  }
+
+  const inicial: AjustesCrudos = config ? {
+    rendimientoPorDefecto: String(config.tabulador.rendimientoPorDefecto),
+    factorCarga: String(config.tabulador.factorCarga),
+    precioDieselPorDefecto: String(config.tabulador.precioDieselPorDefecto),
+    // De fracción a porcentaje: el motor guarda 0.15, la persona lee 15.
+    umbralDesviacionPct: String(Math.round(config.tabulador.umbralDesviacion * 10000) / 100),
+    salida: config.salida,
+    cuentas: formatearCuentas(config.catalogoCuentas),
+  } : {
+    rendimientoPorDefecto: '', factorCarga: '', precioDieselPorDefecto: '',
+    umbralDesviacionPct: '', salida: 'csv', cuentas: '',
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -62,7 +125,8 @@ export default async function ConfiguracionPage({
                 <div className="text-sm font-mono">{config.empresa.rfc}</div>
                 <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
                   RFC contra el que se valida que un CFDI de gasto sea tuyo. Si no coincide con el receptor del
-                  comprobante, el motor lo marca como no verificable.
+                  comprobante, el motor lo marca como no verificable. No se edita aquí: cambiarlo apaga esa
+                  validación sobre todo tu histórico — se corrige con nosotros.
                 </div>
                 {config.empresa.rfcsAdicionales && config.empresa.rfcsAdicionales.length > 0 && (
                   <div className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
@@ -74,32 +138,24 @@ export default async function ConfiguracionPage({
           </section>
 
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Combustible
+            <h2 className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--muted)' }}>
+              Ajustes de tu operación
             </h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
-              <div className="card p-4">
-                <div className="text-lg font-semibold tabular">{config.tabulador.rendimientoPorDefecto} km/L</div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Rendimiento supuesto si la placa no está en el catálogo</div>
-              </div>
-              <div className="card p-4">
-                <div className="text-lg font-semibold tabular">{mxn(config.tabulador.precioDieselPorDefecto)}/L</div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Precio de diésel de referencia</div>
-              </div>
-              <div className="card p-4">
-                <div className="text-lg font-semibold tabular">{config.tabulador.factorCarga}</div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Factor de consumo cargado vs. vacío</div>
-              </div>
-            </div>
+            <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} guardar={guardar} />
+          </section>
 
-            <h3 className="text-xs font-semibold uppercase tracking-wide mt-5" style={{ color: 'var(--muted)' }}>
+          <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
+            <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
               Unidades calibradas
-            </h3>
+            </h2>
+            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+              Placas con consumo propio, que le ganan al rendimiento por defecto de arriba.
+            </p>
             {unidades.length === 0 ? (
               <div className="mt-3">
                 <EstadoVacio icono={<Fuel width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Ninguna placa tiene calibración propia todavía — todas usan el rendimiento por defecto de arriba.
-                  Esto NO es un registro de unidades (no existe): es solo el consumo esperado por placa.
+                  Ninguna placa tiene calibración propia todavía — todas usan el rendimiento por defecto.
+                  Darlas de alta una por una todavía se hace con nosotros.
                 </EstadoVacio>
               </div>
             ) : (
@@ -125,42 +181,6 @@ export default async function ConfiguracionPage({
               </div>
             )}
           </section>
-
-          <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-              Catálogo de cuentas
-            </h2>
-            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-              A qué cuenta contable va cada concepto en la exportación que recibe tu contador.
-            </p>
-            {cuentas.length === 0 ? (
-              <div className="mt-3">
-                <EstadoVacio icono={<BookOpen width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Sin catálogo configurado.
-                </EstadoVacio>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
-                {cuentas.map(([concepto, cuenta]) => (
-                  <div key={concepto} className="card px-3.5 py-2.5 flex items-center justify-between gap-3">
-                    <span className="text-sm truncate">{etiquetaConcepto(concepto)}</span>
-                    <span className="text-sm font-mono shrink-0" style={{ color: 'var(--muted)' }}>{cuenta}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-              Formato de exportación: <span className="font-mono">{config.salida}</span>
-            </p>
-          </section>
-
-          <div className="px-5 pt-4 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <EstadoVacio>
-              Esta pantalla es de lectura: editar la configuración desde aquí todavía no existe. Las integraciones
-              (monedero de combustible, TAG de casetas, ERP) tampoco aparecen como interruptores porque no existen
-              como tales en el sistema — enseñarlas apagadas sería prometer una conexión que no está construida.
-            </EstadoVacio>
-          </div>
         </div>
       )}
     </div>

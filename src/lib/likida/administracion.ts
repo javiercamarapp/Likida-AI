@@ -24,6 +24,7 @@ import { getConfig } from './config';
 import type { PoliticaGasto } from './cuadre/engine';
 import { logger } from '@/lib/logger';
 import { DatoInvalido } from './errores';
+import type { AjustesValidos } from './ajustes_operativos';
 
 // `DatoInvalido` y `mensajeParaPantalla` viven en `errores.ts` desde que
 // `saas/suscripcion.ts` los necesitó: importarlos de aquí metía todo este módulo
@@ -279,6 +280,56 @@ export async function guardarPolitica(
   if (error) throw new Error(`guardarPolitica: ${error.message}`);
 
   await anotar(tenantId, 'politica.editada', 'tenant', tenantId, { conceptos: politica.length }, actor);
+}
+
+/**
+ * Guarda los ajustes OPERATIVOS de la flota (tabulador, catálogo de cuentas y
+ * formato de salida) en `tenant.config`.
+ *
+ * Mismo LEE-MODIFICA-ESCRIBE que `guardarPolitica`, y por la misma razón: el
+ * `config` es un jsonb con los topes fiscales adentro (estímulos,
+ * hidrocarburos, validación). Escribirlo entero con solo estas tres llaves se
+ * los lleva por delante, y el motor los lee con `if (x != null)` — así que no
+ * truena: se SALTA el bloque, y la liquidación sale declarando todo deducible
+ * sin un solo error en el log.
+ *
+ * Lo que este módulo NO deja tocar está documentado en `ajustes_operativos.ts`:
+ * el corte entre "parámetros del negocio" y "parámetros de la ley" es legal,
+ * no de interfaz. Aquí solo se escriben las tres llaves de negocio, y eso es
+ * estructural — `validarAjustes` no puede devolver ninguna otra.
+ *
+ * VA A LA BITÁCORA porque cambia la aritmética de TODA liquidación futura: sin
+ * rastro, un rendimiento que alguien bajó de 3.0 a 2.4 se ve idéntico a un
+ * error del motor tres semanas después.
+ */
+export async function guardarAjustesOperativos(
+  tenantId: string,
+  ajustes: AjustesValidos,
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  const admin = supabaseAdmin();
+  const { data, error: errLee } = await admin.from('tenant').select('config').eq('id', tenantId).maybeSingle();
+  if (errLee) throw new Error(`guardarAjustesOperativos: no se pudo leer la config — ${errLee.message}`);
+
+  const actual = (data?.config as Record<string, unknown> | null) ?? {};
+  const nueva = {
+    ...actual,
+    tabulador: ajustes.tabulador,
+    catalogoCuentas: ajustes.catalogoCuentas,
+    salida: ajustes.salida,
+  };
+
+  const { error } = await admin.from('tenant').update({ config: nueva }).eq('id', tenantId);
+  if (error) throw new Error(`guardarAjustesOperativos: ${error.message}`);
+
+  // El detalle guarda los VALORES, no solo "se editó": el para qué de la
+  // bitácora aquí es poder contestar "¿con qué rendimiento se cuadró el viaje
+  // de marzo?" cuando el número de hoy ya es otro.
+  await anotar(tenantId, 'ajustes.editados', 'tenant', tenantId, {
+    tabulador: ajustes.tabulador,
+    salida: ajustes.salida,
+    cuentas: Object.keys(ajustes.catalogoCuentas).length,
+  }, actor);
 }
 
 /** La política vigente de la flota, ya fusionada con la base. */
