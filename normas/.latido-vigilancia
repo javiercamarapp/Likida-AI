@@ -1,40 +1,48 @@
-fecha_corrida: 2026-08-13
+fecha_corrida: 2026-08-14
 ultimo_dia_barrido: null
-rango_intentado: 2026-07-24..2026-08-12
+rango_intentado: 2026-07-24..2026-08-13
 notas_revisadas: 0
 notas_por_edicion: {matutina: null, vespertina: null, extraordinaria: null}
 fichas_disparadas: 0
 etag_sat: null
-etag_sat_check: no_aplica_hoy_es_jueves
+etag_sat_check: no_aplica_hoy_es_viernes
 deriva_ley_check: no_aplica_no_es_dia_1_trimestre
 estado: "INFRA egress_bloqueado"
 detalle: >
-  Decimotercera corrida consecutiva (13-ago, 11-ago, 10-ago, 09-ago, 08-ago,
-  07-ago, 05-ago, 04-ago, 03-ago, 31-jul, 28-jul, y antes) bloqueada por la
-  misma causa: el proxy de salida de esta sesión rechaza todo tráfico hacia
-  sidofqa.segob.gob.mx y www.sat.gob.mx. Confirmado hoy con curl directo:
-  `.../dof/sidof/notas/12-08-2026` → CONNECT tunnel failed (000, sin
-  respuesta HTTP); SAT minisitio (HEAD) → 403 Forbidden con cuerpo de 36
-  bytes (respuesta del propio gateway, no del SAT). `$HTTPS_PROXY/__agentproxy/status`
-  registra ambos como `connect_rejected` / "gateway answered 403 to CONNECT"
-  a las 14:28:53 UTC del 13-ago. El `noProxy` de la sesión sigue sin incluir
-  ninguno de los hosts del DOF/SAT — solo paquetería (npm, pypi, jsr, crates,
-  proxy.golang.org) y dominios de anthropic.com. No se probó diputados.gob.mx
-  hoy (no aplica: no es día 1 de trimestre) pero no hay razón para esperar
-  que responda distinto a los otros dos.
-  Hoy es JUEVES, no lunes: el chequeo del ETag del SAT no tocaba en esta
-  corrida (va los lunes). El último lunes intentado (10-ago) también estuvo
-  bloqueado — sigue sin poder correr ese chequeo semana tras semana,
-  ampliando la ventana ciega de 4.5 meses que ese job existe para cerrar.
-sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible, decimotercera vez consecutiva.
+  Decimocuarta corrida consecutiva (14-ago, 13-ago, 11-ago, 10-ago, 09-ago,
+  08-ago, 07-ago, 05-ago, 04-ago, 03-ago, 31-jul, 28-jul, y antes) bloqueada
+  por la misma causa: el proxy de salida de esta sesión rechaza todo tráfico
+  hacia sidofqa.segob.gob.mx y www.sat.gob.mx. Confirmado hoy por DOS vías
+  independientes: (1) curl directo con -v muestra el motivo explícito del
+  gateway — cabecera `X-Proxy-Error: request blocked: no rule allows host
+  "sidofqa.segob.gob.mx"`, HTTP 403 — sobre `.../dof/sidof/notas/13-08-2026`;
+  (2) la tool WebFetch (que no pasa por el mismo curl/proxy de shell) devolvió
+  el mismo bloqueo por un camino distinto: `EGRESS_BLOCKED` /
+  "Access to sidofqa.segob.gob.mx is blocked by the network egress proxy."
+  Esto descarta que sea un problema de la sesión de shell en particular: el
+  bloqueo es de política de red del entorno, no de una herramienta. El SAT
+  minisitio (HEAD) repite el mismo 403 con el mismo texto de gateway. El
+  `noProxy` de $HTTPS_PROXY/__agentproxy/status sigue sin ninguno de los
+  hosts del DOF/SAT — solo paquetería (npm, pypi, jsr, crates,
+  proxy.golang.org) y dominios de anthropic.com/kubernetes internos. No se
+  probó diputados.gob.mx hoy (no aplica: no es día 1 de trimestre) pero no
+  hay razón para esperar que responda distinto a los otros dos.
+  Hoy es VIERNES, no lunes: el chequeo del ETag del SAT no tocaba en esta
+  corrida (va los lunes). El lunes 10-ago también estuvo bloqueado — sigue
+  sin poder correr ese chequeo semana tras semana, ampliando la ventana
+  ciega de 4.5 meses que ese job existe para cerrar.
+sin_verificar_esta_corrida: todas las fichas de normas/ — cero verificación posible, decimocuarta vez consecutiva.
 accion_requerida: >
-  Sin resolver desde hace 20 días y doce corridas previas (ahora trece).
+  Sin resolver desde hace 21 días y trece corridas previas (ahora catorce).
   Habilitar en la política de egreso de esta sesión/entorno los hosts:
   sidofqa.segob.gob.mx, www.sat.gob.mx, www.diputados.gob.mx (o su
-  alternativa api.tlaloc.sh si se prefiere la vía comercial). Sin eso, esta
-  rutina no puede correr en este entorno bajo ninguna cadencia. El rango sin
-  barrer sigue creciendo: ya cubre desde el 24-jul, ahora hasta el 12-ago —
-  veinte días y trece corridas sin una sola verificación real. El fix es de
-  configuración del entorno (agregar estos hosts al noProxy/allowlist del
-  proxy de salida), no de código: nada que este agente pueda cambiar por su
-  cuenta.
+  alternativa api.tlaloc.sh si se prefiere la vía comercial) en el noProxy /
+  allowlist del proxy de salida ($HTTPS_PROXY). Confirmado hoy que el
+  bloqueo es de política de red — no de código ni de la herramienta usada —
+  probando con curl directo y con WebFetch por separado; ambos caminos
+  distintos dan el mismo rechazo ("no rule allows host" / EGRESS_BLOCKED).
+  Sin ese cambio de configuración, esta rutina no puede correr en este
+  entorno bajo ninguna cadencia diaria, semanal ni trimestral. El rango sin
+  barrer sigue creciendo: ya cubre desde el 24-jul, ahora hasta el 13-ago —
+  veintiún días y catorce corridas sin una sola verificación real de las 21
+  fichas de normas/.
