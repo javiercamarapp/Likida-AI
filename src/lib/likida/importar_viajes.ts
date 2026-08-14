@@ -16,10 +16,14 @@ import { ConsultaFallida } from './conv';
 // históricos de un TMS ajeno. Aquí se inserta directo, con `avisado_en`
 // nulo: la escalación (que exige aviso previo) tampoco se dispara.
 //
-// ── EL DEDUP ES POR FOLIO, Y SE DICE ───────────────────────────────────────
-// El mismo archivo subido dos veces no duplica viajes: los folios que ya
-// existen en la flota se saltan y se REPORTAN. Un folio vacío no se puede
-// dedupear — se rechaza la fila, no se adivina.
+// ── EL DEDUP ES POR FOLIO, Y VIVE EN LA BASE ───────────────────────────────
+// El candado real es `viaje_folio_unico (tenant_id, folio)` (0092): dos
+// submits CONCURRENTES del mismo archivo (doble click, dos pestañas) chocan
+// ahí — la lectura previa de folios existentes es solo para REPORTAR los
+// saltados con nombre; el insert es un upsert que ignora duplicados y cuenta
+// únicamente lo que de verdad entró, así que el perdedor de la carrera dice
+// "creados: 0", no un segundo "creados: 200" (auditoría 3, BE-A3). Un folio
+// vacío no se puede dedupear — se rechaza la fila, no se adivina.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface FilaViajeImportada {
@@ -215,8 +219,15 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       operador_id: f.operadorNombre ? operadorPorNombre.get(f.operadorNombre) ?? null : null,
       estatus: 'abierto',
     }));
+    // Upsert que IGNORA duplicados contra `viaje_folio_unico` (0092): el que
+    // pierde la carrera de dos submits concurrentes no truena ni duplica —
+    // sus folios chocan en la base, vuelven sin insertar, y se reportan como
+    // saltados. `creados` cuenta SOLO las filas que el insert devolvió: la
+    // cifra del acuse es lo que de verdad entró, nunca el tamaño del lote.
     const { data, error } = await acotada(
-      supabaseAdmin().from('viaje').insert(lote).select('id'), 'importarViajes.insert',
+      supabaseAdmin().from('viaje')
+        .upsert(lote, { onConflict: 'tenant_id,folio', ignoreDuplicates: true })
+        .select('folio'), 'importarViajes.insert',
     );
     if (error) {
       logger.error('importar_viajes.lote_fallo', { tenantId, desde: i, err: error.message });
@@ -225,7 +236,11 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
         error: `Se crearon ${creados} y el lote que empieza en la fila ${i + 1} falló — revisa y vuelve a subir el archivo: los ya creados se saltan solos.`,
       };
     }
-    creados += data?.length ?? 0;
+    const insertados = new Set((data ?? []).map((v) => String(v.folio)));
+    creados += insertados.size;
+    for (const fila of lote) {
+      if (!insertados.has(fila.folio)) saltados.push(fila.folio);
+    }
   }
 
   logger.info('importar_viajes.ok', { tenantId, creados, saltados: saltados.length });
