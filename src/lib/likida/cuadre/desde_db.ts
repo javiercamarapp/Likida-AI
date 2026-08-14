@@ -40,10 +40,18 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
   // subordinado) era inalcanzable y todo viático a su nombre caía en 'revisar'.
   // El RFC vive en operador.rfc (mig. 0080); null = no capturado, y el motor
   // ya maneja ese caso con el aviso honesto en vez de quitar la deducción.
+  //
+  // SIN `.catch(() => null)` desde el E1 (auditoría 4): la fila del operador
+  // ahora trae `oposicion_automatizada` (0100), y tragarse un fallo de lectura
+  // aquí liquidaría EN AUTOMÁTICO a un titular que ejerció su derecho a que no
+  // se decida así — el mismo criterio de `getConfig`: liquidar con los datos
+  // equivocados es peor que no liquidar. `getViaje`/`getConfig` en el
+  // Promise.all de arriba ya lanzan por esta misma razón.
   const operador = viaje.operadorId
-    ? await getOperador(viaje.operadorId, tenantId).catch(() => null)
+    ? await getOperador(viaje.operadorId, tenantId)
     : null;
   const operadorRfc = operador?.rfc ?? undefined;
+  const oposicionTitular = operador?.oposicionAutomatizada != null;
 
   // ── RFA 2026 regla 2.9 — la facilidad del 15% (deber ser completo) ────────
   // El motor necesita tres insumos del EJERCICIO, no de este viaje:
@@ -111,6 +119,7 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     fechaMin,
     fechaMax,
     operadorRfc,
+    oposicionTitular,
     facilidad15,
     totalCombustibleEjercicio,
     efectivoPrevEjercicio,

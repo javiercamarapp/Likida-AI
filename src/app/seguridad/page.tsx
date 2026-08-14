@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ShieldCheck, Lock, EyeOff, FileCheck2, Scale, FlaskConical } from 'lucide-react';
+import { ShieldCheck, Lock, EyeOff, FileCheck2, Scale, FlaskConical, KeyRound } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Seguridad — Likida',
@@ -39,6 +39,11 @@ export default function PaginaSeguridad() {
       Icono: Scale,
       titulo: 'Lo fiscal, bajo candado',
       texto: 'La emisión de comprobantes fiscales vive detrás de un candado legal: no se enciende sin el mandato del cliente aceptado. Las reglas fiscales que el producto aplica citan su norma, y lo que la norma no sostiene, la pantalla no lo afirma.',
+    },
+    {
+      Icono: KeyRound,
+      titulo: 'Tus credenciales, cifradas y de ida',
+      texto: 'Si conectas tu ERP, tu GPS o tus monederos de peaje, las credenciales se guardan cifradas (AES-256-GCM) con una llave que no vive en la base de datos. Nunca se muestran de vuelta — ni en pantalla ni en soporte: solo se enseñan pistas parciales para que sepas cuál guardaste. Desactivarlas desde el panel corta el acceso.',
     },
     {
       Icono: FlaskConical,
