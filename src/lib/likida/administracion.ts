@@ -66,6 +66,11 @@ export interface NuevaFlota {
   /** Correo del primer administrador. Sin él la flota nace sin quién entre. */
   emailAdmin?: string;
   nombreAdmin?: string;
+  /** WhatsApp del administrador (D5, auditoría 4): sin él, el dueño de una
+   *  flota nueva no puede escribirle al bot — el matcher de oficina
+   *  (`resolverCuentaOficina`) no lo reconoce. Opcional; se normaliza en
+   *  `provisionarUsuario`. */
+  telefonoAdmin?: string;
   /** RFA 2026 regla 2.9 (se piden AL REGISTRAR): ¿dedicación exclusiva al
    *  autotransporte terrestre de carga federal? Sin esta declaración el motor
    *  no puede abrir la facilidad del 15% de diésel en efectivo. */
@@ -142,7 +147,7 @@ export async function crearFlota(
   let userId: string | undefined;
   if (f.emailAdmin?.trim()) {
     const { provisionarUsuario } = await import('@/lib/auth/provisionar');
-    const r = await provisionarUsuario(tenantId, f.emailAdmin.trim().toLowerCase(), f.nombreAdmin, 'flota_admin');
+    const r = await provisionarUsuario(tenantId, f.emailAdmin.trim().toLowerCase(), f.nombreAdmin, 'flota_admin', f.telefonoAdmin);
     userId = r.userId;
     await anotar(tenantId, 'usuario.provisionado', 'app_user', userId, { rol: 'flota_admin' }, actor);
   }

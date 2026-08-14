@@ -35,6 +35,7 @@ async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): Promise
         ciudad: String(fd.get('ciudad') ?? ''),
         emailAdmin,
         nombreAdmin: String(fd.get('nombreAdmin') ?? ''),
+        telefonoAdmin: String(fd.get('telefonoAdmin') ?? '') || undefined,
         dedicacionExclusivaCarga: fd.get('dedicacionExclusivaCarga') === 'on' ? true : undefined,
         regimenFiscal: String(fd.get('regimenFiscal') ?? '') || undefined,
       },
@@ -206,6 +207,10 @@ export default async function FlotasPage() {
             <Campo nombre="emailAdmin" etiqueta="Correo del administrador" tipo="email" placeholder="dueño@flota.mx"
               ayuda="Sin él, la flota nace sin quién pueda entrar." />
             <Campo nombre="nombreAdmin" etiqueta="Nombre del administrador" placeholder="Opcional" />
+            {/* D5 (auditoría 4): sin este teléfono, el dueño no puede
+                escribirle al bot — el matcher de oficina no lo reconoce. */}
+            <Campo nombre="telefonoAdmin" etiqueta="WhatsApp del administrador" placeholder="10 dígitos — opcional, para que el bot lo reconozca"
+              ayuda="Con él, el bot reconoce al administrador cuando escribe (avisos contestables, despacho por chat). Se puede capturar después." />
             <label className="flex items-start gap-2 text-xs mt-1" style={{ color: 'var(--muted)' }}>
               <input type="checkbox" name="dedicacionExclusivaCarga" className="mt-0.5" />
               <span>
