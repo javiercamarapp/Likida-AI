@@ -496,6 +496,38 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     ctxTenant = op.tenantId;
     const viajeId = await getOpenViaje(op.tenantId, op.operadorId);
     ctxViaje = viajeId;
+
+    // ── Aviso de privacidad, ANTES de CUALQUIER tratamiento (LFPDPPP 16-II) ──
+    // AUDITORÍA 3, LEG-C1 (CRÍTICO, reincidente): el gate vivía después de la
+    // rama "sin viaje abierto", y esa rama descarga la foto y la manda al
+    // modelo de visión — el primer contacto real de un chofer nuevo suele ser
+    // once fotos sin viaje, y se trataban con aviso_privacidad_en = NULL.
+    // Izado aquí, TODO camino que trate datos (foto huérfana, XML, ticket
+    // 1:1, texto al agente) queda detrás del aviso.
+    //
+    // El obligado es el RESPONSABLE, o sea la flota. Likida solo pone el
+    // mecanismo: sin él la flota no puede cumplir aunque quiera.
+    const avisoPuesto = await ponerAvisoADisposicion(op.tenantId, op.operadorId, msg.from);
+    if (avisoPuesto !== 'puesto') {
+      // SIN AVISO NO HAY TRATAMIENTO. Lo que se le dice depende de POR QUÉ no
+      // se pudo: «tu empresa no ha configurado su aviso» solo cuando es
+      // verdad; un blip nuestro de red no se le cuelga a su patrón.
+      logger.error('privacidad.tratamiento_bloqueado', {
+        tenant: op.tenantId, operador: op.operadorId, motivo: avisoPuesto,
+      });
+      try {
+        await sendText(msg.from, avisoPuesto === 'sin_datos'
+          ? 'No puedo procesar tus comprobantes todavía: tu empresa aún no ha terminado de configurar su aviso de privacidad. Avísale a tu flota. 🙏'
+          : 'Se me trabó tantito antes de poder recibir tu comprobante 😕. No es cosa tuya ni de tu empresa. Reenvíamelo en un minuto, por favor. 🙏');
+      } catch { /* best-effort */ }
+      // Y EL CLAIM SE LIBERA cuando el fallo es nuestro y transitorio: el
+      // mensaje NO se procesó, así que no puede quedar contado como
+      // procesado. Con `sin_datos` no se libera a propósito — reintentar no
+      // da de alta a la flota, y el aviso se vuelve a intentar al siguiente.
+      if (avisoPuesto !== 'sin_datos' && msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
+      return;
+    }
+
     if (!viajeId) {
       // ── EL XML QUE PEDIMOS NO SE TIRA, aunque el viaje ya haya cerrado ──────
       // `complemento_no_verificable` NO está en SOLO_CONTRALOR a propósito: su
@@ -655,39 +687,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       return true;
     };
 
-    // ── Aviso de privacidad, una vez por operador (LFPDPPP art. 16 fr. II) ────
-    // Va aquí y no antes: es donde empieza el tratamiento que el aviso describe
-    // —fotos de comprobantes, montos, fechas—. El teléfono ya lo tenía la flota
-    // desde el alta, y ese tratamiento previo es suyo, fuera de este canal.
-    //
-    // El obligado es el RESPONSABLE, o sea la flota. Likida solo pone el
-    // mecanismo: sin él la flota no puede cumplir aunque quiera.
-    const avisoPuesto = await ponerAvisoADisposicion(op.tenantId, op.operadorId, msg.from);
-    if (avisoPuesto !== 'puesto') {
-      // SIN AVISO NO HAY TRATAMIENTO. Antes se seguía de largo: la foto se
-      // descargaba y se mandaba a un modelo externo sin el aviso que lo ampare.
-      //
-      // LO QUE SE LE DICE DEPENDE DE POR QUÉ NO SE PUDO, y ese es el arreglo.
-      // «tu empresa aún no ha terminado de configurar su aviso de privacidad»
-      // se le soltaba también cuando el que falló fue NUESTRO envío —`sendText`
-      // lanza ante red o timeout—, así que un blip de tres segundos le llegaba
-      // al chofer como un error administrativo de su patrón, con la foto
-      // descartada. Le echábamos la culpa a su jefe de un problema nuestro.
-      logger.error('privacidad.tratamiento_bloqueado', {
-        tenant: op.tenantId, operador: op.operadorId, motivo: avisoPuesto,
-      });
-      try {
-        await sendText(msg.from, avisoPuesto === 'sin_datos'
-          ? 'No puedo procesar tus comprobantes todavía: tu empresa aún no ha terminado de configurar su aviso de privacidad. Avísale a tu flota. 🙏'
-          : 'Se me trabó tantito antes de poder recibir tu comprobante 😕. No es cosa tuya ni de tu empresa. Reenvíamelo en un minuto, por favor. 🙏');
-      } catch { /* best-effort */ }
-      // Y EL CLAIM SE LIBERA cuando el fallo es nuestro y transitorio: el
-      // mensaje NO se procesó, así que no puede quedar contado como procesado.
-      // Con `sin_datos` no se libera a propósito — reintentar no va a dar de
-      // alta a la flota, y el aviso se le vuelve a dar en el siguiente mensaje.
-      if (avisoPuesto !== 'sin_datos' && msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
-      return;
-    }
+    // (El gate del aviso de privacidad vivía aquí y se IZÓ arriba, antes de
+    // la rama sin-viaje — auditoría 3, LEG-C1: esa rama trataba la foto
+    // huérfana con visión externa sin aviso puesto.)
 
 
     // ── IMAGEN: captura SILENCIOSA en PARALELO (acuse consolidado) ────────────
