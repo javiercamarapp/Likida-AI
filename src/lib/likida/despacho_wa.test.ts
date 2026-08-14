@@ -161,3 +161,42 @@ describe('la confirmación', () => {
     expect(crearViaje).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('el choque 0029 — el operador ya trae un viaje abierto (AG-A3)', () => {
+  async function proponer() {
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
+    await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Juan, Puebla a Monterrey, anticipo 8000', AHORA);
+  }
+
+  it('el Error envuelto de crearViaje se narra como PERMANENTE — nada de "vuelve a responder SÍ" — y limpia el pendiente', async () => {
+    await proponer();
+    // La forma EXACTA de producción: operacion.ts:570 envuelve el error de
+    // Postgres en un Error plano — el `code` 23505 no sobrevive, el nombre
+    // del índice sí (viene en el message de Postgres).
+    crearViaje.mockRejectedValueOnce(new Error('crearViaje: duplicate key value violates unique constraint "uq_viaje_abierto_por_operador"'));
+    const r1 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r1).toContain('«Juan Pérez» todavía tiene un viaje abierto');
+    expect(r1).toContain('No creé nada');
+    expect(r1).not.toContain('Vuelve a responder SÍ');
+    // El pendiente se limpió: otro "sí" NO repite el mismo choque.
+    const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 120_000));
+    expect(r2).toBeNull();
+    expect(crearViaje).toHaveBeenCalledTimes(1);
+  });
+
+  it('el error crudo con code 23505 (si algún día llega sin envolver) toma el mismo camino', async () => {
+    await proponer();
+    crearViaje.mockRejectedValueOnce({ code: '23505', message: 'duplicate key value violates unique constraint "uq_viaje_abierto_por_operador"' });
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('todavía tiene un viaje abierto');
+  });
+
+  it('un choque contra OTRO índice sigue siendo transitorio: conserva el pendiente', async () => {
+    await proponer();
+    crearViaje.mockRejectedValueOnce(new Error('crearViaje: duplicate key value violates unique constraint "otro_indice_cualquiera"'));
+    const r1 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r1).toContain('No se pudo crear');
+    const r2 = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 120_000));
+    expect(r2).toContain('Viaje creado');
+  });
+});
