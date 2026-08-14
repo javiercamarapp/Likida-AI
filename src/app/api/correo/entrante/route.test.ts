@@ -7,7 +7,14 @@ import { createHmac } from 'node:crypto';
 let flotaDevuelta: { id: string; rfc: string | null } | null = { id: 't-1', rfc: 'AAA010101AAA' };
 let errorFlota: { message: string } | null = null;
 let errorDedup: { code?: string; message: string } | null = null;
+let errorBorrado: { message: string } | null = null;
 const tablasTocadas: string[] = [];
+// `correo_procesado` CON ESTADO: el insert imita a la llave primaria (repetir
+// el mismo email_id es 23505) y el delete la libera. Sin esto, el test del
+// reintento tras un 503 no probaría nada — la ruta borra la fila justamente
+// para que el segundo insert sí entre.
+const correosRegistrados = new Set<string>();
+const borrados: string[] = [];
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
@@ -17,7 +24,20 @@ vi.mock('@/lib/supabase/admin', () => ({
         select: () => ({
           eq: () => ({ maybeSingle: async () => ({ data: flotaDevuelta, error: errorFlota }) }),
         }),
-        insert: async () => ({ error: errorDedup }),
+        insert: async (fila: { email_id: string }) => {
+          if (errorDedup) return { error: errorDedup };
+          if (correosRegistrados.has(fila.email_id)) return { error: { code: '23505', message: 'duplicate key' } };
+          correosRegistrados.add(fila.email_id);
+          return { error: null };
+        },
+        delete: () => ({
+          eq: async (_col: string, valor: string) => {
+            if (errorBorrado) return { error: errorBorrado };
+            correosRegistrados.delete(valor);
+            borrados.push(valor);
+            return { error: null };
+          },
+        }),
       };
     },
   }),
@@ -27,6 +47,7 @@ vi.mock('@/lib/likida/proveedores', () => ({ guardarFacturaProveedor: async () =
 vi.mock('@/lib/likida/intake/cfdi_xml', () => ({ parseCfdiXml: (t: string) => (t.includes('Comprobante') ? { uuid: 'U-1', total: 100 } : null) }));
 
 const { POST } = await import('./route');
+const { logger } = await import('@/lib/logger');
 
 const SECRETO = 'whsec_' + Buffer.from('secreto-de-webhook-para-pruebas').toString('base64');
 const TOKEN = 'abcdefghjkmnpqrstvwxyz23';
@@ -56,12 +77,15 @@ const evento = (extra: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
+  vi.clearAllMocks();
   process.env.RESEND_WEBHOOK_SECRET = SECRETO;
   process.env.RESEND_EMAIL_DOMAIN = 'mail.likida.ai';
   process.env.RESEND_API_KEY = 'llave';
   flotaDevuelta = { id: 't-1', rfc: 'AAA010101AAA' };
-  errorFlota = null; errorDedup = null;
+  errorFlota = null; errorDedup = null; errorBorrado = null;
   tablasTocadas.length = 0;
+  correosRegistrados.clear();
+  borrados.length = 0;
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (String(url).includes('/attachments/')) {
       return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
@@ -151,6 +175,16 @@ describe('idempotencia: un reintento no duplica la factura', () => {
     expect(tablasTocadas.indexOf('correo_procesado')).toBeGreaterThan(-1);
     expect(tablasTocadas.indexOf('correo_procesado')).toBeGreaterThan(tablasTocadas.indexOf('tenant'));
   });
+
+  it('sin llave del canal, 503 SIN consumir el correo', async () => {
+    // Si se registrara antes de comprobar la llave, el reintento de Resend
+    // chocaría con la llave primaria y saldría "ya_procesado" sin haber
+    // guardado nada — el CFDI se perdería para siempre.
+    delete process.env.RESEND_API_KEY;
+    const r = await POST(pedir(evento()));
+    expect(r.status).toBe(503);
+    expect(tablasTocadas).not.toContain('correo_procesado');
+  });
 });
 
 describe('los adjuntos', () => {
@@ -165,12 +199,14 @@ describe('los adjuntos', () => {
     expect(await r.json()).toMatchObject({ ignorado: 'sin_adjuntos' });
   });
 
-  it('un adjunto que truena NO tumba a los demás', async () => {
-    // Un correo con varias facturas donde una viene corrupta debe guardar el
-    // resto.
+  it('un adjunto CORRUPTO no tumba a los demás', async () => {
+    // Un correo con varias facturas donde una viene ilegible debe guardar el
+    // resto. (El caso "la descarga se cayó" ya no termina aquí: es transitorio
+    // y sale por 503 — ver el bloque de la descarga caída, abajo.)
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (String(url).includes('att_malo')) throw new Error('se cayó');
+      if (String(url).includes('att_malo')) return new Response(JSON.stringify({ download_url: 'https://x/malo' }), { status: 200 });
       if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+      if (String(url).includes('/malo')) return new Response('no soy un xml', { status: 200 });
       return new Response('<Comprobante/>', { status: 200 });
     }));
     const r = await POST(pedir(evento({
@@ -179,6 +215,7 @@ describe('los adjuntos', () => {
         { id: 'att_bueno', filename: 'b.xml' },
       ],
     })));
+    expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ guardadas: 1, ignoradas: 1 });
   });
 
@@ -189,6 +226,127 @@ describe('los adjuntos', () => {
     }));
     const r = await POST(pedir(evento()));
     expect(await r.json()).toMatchObject({ guardadas: 0, ignoradas: 1 });
+  });
+});
+
+describe('el tope de tamaño del adjunto (4 MB, el mismo del panel)', () => {
+  it('un adjunto que DECLARA más del tope se ignora por tamaño y los demás siguen', async () => {
+    // El corte por `content-length` declarado evita materializar el cuerpo.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('att_gordo')) return new Response(JSON.stringify({ download_url: 'https://x/gordo' }), { status: 200 });
+      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+      if (String(url).includes('/gordo')) {
+        return new Response('<Comprobante/>', {
+          status: 200,
+          headers: { 'content-length': String(5 * 1024 * 1024) },
+        });
+      }
+      return new Response('<Comprobante/>', { status: 200 });
+    }));
+    const r = await POST(pedir(evento({
+      attachments: [
+        { id: 'att_gordo', filename: 'estado enorme.xml' },
+        { id: 'att_bueno', filename: 'factura.xml' },
+      ],
+    })));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ guardadas: 1, ignoradas: 1 });
+    // Fallo PERMANENTE: el correo queda consumido, no se libera nada.
+    expect(borrados).toEqual([]);
+    // Y el descarte es VISIBLE en el log, con nombre saneado y tamaño.
+    expect(logger.warn).toHaveBeenCalledWith('correo_entrante.adjunto_gigante', expect.objectContaining({
+      archivo: 'estado enorme.xml',
+      bytes: 5 * 1024 * 1024,
+    }));
+  });
+
+  it('un chunked que no declara tamaño se corta por el largo real leído', async () => {
+    // Una transferencia chunked no trae content-length: el doble chequeo de
+    // `leerCuerpo` (api/v1/_escritura.ts) también mide lo que de verdad llegó.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+      return new Response('<Comprobante/>' + 'x'.repeat(4 * 1024 * 1024), { status: 200 });
+    }));
+    const r = await POST(pedir(evento()));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ guardadas: 0, ignoradas: 1 });
+    expect(logger.warn).toHaveBeenCalledWith('correo_entrante.adjunto_gigante', expect.anything());
+  });
+});
+
+describe('una descarga caída NO consume el correo (F6)', () => {
+  const fetchCaido = () => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+    return new Response('resend caído', { status: 500 });
+  }));
+
+  it('descarga caída → 503 y la fila de correo_procesado se libera', async () => {
+    // Con la fila puesta, el reintento de Resend saldría "ya_procesado" sin
+    // haber guardado nada y ese CFDI no volvería jamás.
+    fetchCaido();
+    const r = await POST(pedir(evento()));
+    expect(r.status).toBe(503);
+    expect(borrados).toEqual(['em_1']);
+  });
+
+  it('el reintento posterior procesa el correo completo', async () => {
+    fetchCaido();
+    expect((await POST(pedir(evento()))).status).toBe(503);
+    // El reintento de Resend, ya con la red viva: la fila quedó liberada, así
+    // que el insert de idempotencia entra de nuevo y el CFDI se guarda.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+      return new Response('<Comprobante/>', { status: 200 });
+    }));
+    const r = await POST(pedir(evento()));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ ok: true, guardadas: 1 });
+  });
+
+  it('contenido basura → 200 ignorado y el correo SÍ queda consumido', async () => {
+    // Reintentar un XML que no es CFDI trae el mismo XML: permanente.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+      return new Response('<otraCosa/>', { status: 200 });
+    }));
+    const r = await POST(pedir(evento()));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ guardadas: 0, ignoradas: 1 });
+    expect(borrados).toEqual([]);
+    // La prueba de que quedó consumido: el mismo correo otra vez es un repetido.
+    const r2 = await POST(pedir(evento()));
+    expect(await r2.json()).toMatchObject({ ignorado: 'ya_procesado' });
+  });
+
+  it('si unos entraron y otro se cayó, TAMBIÉN 503 — el unique por uuid vuelve inofensivo el reintento', async () => {
+    // `factura_proveedor` tiene unique(tenant_id, cfdi_uuid) (mig. 0091) y
+    // `guardarFacturaProveedor` convierte ese choque en `duplicada`: en el
+    // reintento los ya guardados rebotan sin segunda fila y los caídos entran.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('att_caido')) return new Response(JSON.stringify({ download_url: 'https://x/caido' }), { status: 200 });
+      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+      if (String(url).includes('/caido')) return new Response('resend caído', { status: 500 });
+      return new Response('<Comprobante/>', { status: 200 });
+    }));
+    const r = await POST(pedir(evento({
+      attachments: [
+        { id: 'att_bueno', filename: 'a.xml' },
+        { id: 'att_caido', filename: 'b.xml' },
+      ],
+    })));
+    expect(r.status).toBe(503);
+    expect(borrados).toEqual(['em_1']);
+  });
+
+  it('si el DELETE de liberación falla, 503 igual y log fuerte', async () => {
+    // Best-effort: sin liberar, el reintento va a salir "ya_procesado" y esos
+    // adjuntos SÍ se pierden — lo mínimo es que quede gritado en el log.
+    fetchCaido();
+    errorBorrado = { message: 'conexión perdida' };
+    const r = await POST(pedir(evento()));
+    expect(r.status).toBe(503);
+    expect(borrados).toEqual([]);
+    expect(logger.error).toHaveBeenCalledWith('correo_entrante.liberar_dedup', expect.objectContaining({ emailId: 'em_1' }));
   });
 });
 
