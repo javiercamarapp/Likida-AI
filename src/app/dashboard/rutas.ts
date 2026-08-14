@@ -1,7 +1,7 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
   BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2, Plug,
-  ChartNoAxesCombined, UserRound, BookOpen, Container,
+  ChartNoAxesCombined, UserRound, BookOpen, Container, Blocks,
 } from 'lucide-react';
 
 /**
@@ -69,6 +69,9 @@ export const SISTEMA: Item[] = [
   { href: '/dashboard/conocimiento', nombre: 'Conocimiento normativo', Icono: BookOpen },
   // F7 (chasis Handle): la salud MEDIDA de cada conector de la flota.
   { href: '/dashboard/conexiones', nombre: 'Conexiones', Icono: Plug },
+  // La otra mitad del chasis: los SISTEMAS del cliente (ERP, GPS, TAG), contra
+  // las CREDENCIALES que vive en Conexiones. Handle separa igual las dos.
+  { href: '/dashboard/integraciones', nombre: 'Integraciones', Icono: Blocks },
 ];
 
 /** El bloque INFERIOR fijo (referencia Handle: Help Center / Settings),

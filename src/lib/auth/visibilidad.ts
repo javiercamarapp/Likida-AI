@@ -149,6 +149,10 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // Administración de la cuenta — solo el dueño
   // Conexiones (F7): la configuración de conectores de la cuenta.
   '/dashboard/conexiones': 'administracion',
+  // Integraciones (chasis Handle, 14-ago-2026): con qué sistemas del cliente
+  // conecta Likida y CÓMO conecta hoy con cada uno. Es `administracion` —
+  // decidir conectar el ERP o el GPS es del dueño, no del jefe de tráfico.
+  '/dashboard/integraciones': 'administracion',
   '/dashboard/usuarios': 'administracion',
   '/dashboard/politicas': 'administracion',
   '/dashboard/configuracion': 'administracion',
