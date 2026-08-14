@@ -23,13 +23,23 @@ export interface Conector {
 }
 
 export async function getConexiones(tenantId: string): Promise<Conector[]> {
-  const [fiscal, rastreo] = await Promise.all([
+  const [fiscal, rastreo, buzon] = await Promise.all([
     getFiscalDeFlota(tenantId).catch(() => null),
     acotada(supabaseAdmin()
       .from('rastreo_credencial')
       .select('id', { count: 'exact', head: true })
       .eq('tenant_id', tenantId), 'conexiones.rastreo')
       .then(({ count, error }) => (error ? null : count ?? 0)) as Promise<number | null>,
+    // El buzón de INTAKE (0095) sí es POR FLOTA: `tenant.buzon_token` decide a
+    // qué flota entra cada factura que llega por correo. Tres estados a
+    // propósito — `null` es "no se pudo medir", que no es lo mismo que "sin
+    // buzón": afirmar lo segundo con la base caída mandaría a generar uno.
+    acotada(supabaseAdmin()
+      .from('tenant')
+      .select('buzon_token')
+      .eq('id', tenantId)
+      .maybeSingle(), 'conexiones.buzon')
+      .then(({ data, error }) => (error || !data ? null : Boolean(data.buzon_token))) as Promise<boolean | null>,
   ]);
 
   const conectores: Conector[] = [];
@@ -56,13 +66,23 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
   // pero sin dominio, `enviarCorreo` no arma el remitente y devuelve
   // `sin_configurar` — el renglón diría "listo" mientras ningún aviso sale.
   const correoListo = correoConfigurado();
+  // La OTRA mitad del canal: el intake. El renglón medía solo el SALIENTE
+  // (Resend configurado) y callaba si las facturas podían ENTRAR por correo —
+  // que es lo que decide el buzón de la 0095, por flota.
+  const intake = buzon === null
+    ? 'El estado del buzón de facturas no se pudo leer ahora mismo.'
+    : buzon
+      ? correoListo
+        ? 'Buzón de facturas activo: los XML que lleguen a la dirección de la flota entran solos al Agente de Proveedores.'
+        : 'La flota tiene buzón de facturas, pero sin el dominio de correo su dirección no existe.'
+      : 'Sin buzón de facturas — se genera en el Agente de Proveedores.';
   conectores.push({
     id: 'correo',
     nombre: 'Correo de avisos',
     estado: correoListo ? 'listo' : 'sin_configurar',
-    detalle: correoListo
+    detalle: `${correoListo
       ? `Los avisos salen de avisos@${process.env.RESEND_EMAIL_DOMAIN} — dominio verificado con SPF y DKIM.`
-      : 'Sin configurar: los avisos por correo no salen. WhatsApp sigue funcionando.',
+      : 'Sin configurar: los avisos por correo no salen. WhatsApp sigue funcionando.'} ${intake}`,
     // Lo que este renglón NO puede afirmar: que el correo LLEGUE. Un dominio
     // verificado y una llave válida solo prueban que se puede mandar; que no
     // caiga en spam depende de la reputación, y eso se mide con los eventos de

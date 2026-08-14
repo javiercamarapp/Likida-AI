@@ -15,7 +15,14 @@ const ESTADO: Record<Conector['estado'], { rotulo: string; fg: string; bg: strin
  * en palabras de persona; las decisiones de negocio (el candado del
  * timbrado) se declaran como decisiones, no como fallas.
  */
-export function VistaConexiones({ conectores }: { conectores: Conector[] }) {
+export function VistaConexiones({ conectores, credenciales }: {
+  conectores: Conector[];
+  /** La sección "Credenciales de tus sistemas", ya armada en el servidor
+   *  (`SeccionCredenciales` + acciones). Entra como ReactNode y no como
+   *  datos: esta vista no debe importar el motor, que trae `supabaseAdmin`
+   *  (mismo patrón que `notificaciones` en el Agente de Proveedores). */
+  credenciales?: React.ReactNode;
+}) {
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
@@ -57,6 +64,8 @@ export function VistaConexiones({ conectores }: { conectores: Conector[] }) {
               </section>
             );
           })}
+
+          {credenciales}
 
           <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
             ¿Falta un conector que tu operación necesita (correo de intake, tu proveedor de GPS,

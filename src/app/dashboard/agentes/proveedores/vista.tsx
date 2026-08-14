@@ -1,9 +1,13 @@
-import { Building2, Inbox, Download, TriangleAlert } from 'lucide-react';
+import { Building2, Inbox, Download, TriangleAlert, Mail } from 'lucide-react';
 import type { FacturaProveedor } from '@/lib/likida/proveedores';
+import type { BuzonDeFlota } from '@/lib/correo/buzon_escritura';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../../resumen-visual';
-import { SubirFactura, BotonesDecision, type AccionProveedores } from './controles';
+import {
+  SubirFactura, BotonesDecision, DireccionBuzon, GenerarBuzon, RotarBuzon,
+  type AccionProveedores,
+} from './controles';
 
 /**
  * La ventana del Agente de Proveedores (F6): la bandeja donde el XML del
@@ -11,11 +15,26 @@ import { SubirFactura, BotonesDecision, type AccionProveedores } from './control
  * captura manual en el ERP. El agente prepara y marca (receptor ajeno,
  * duplicados); la persona decide — nunca al revés.
  */
-export function VistaAgenteProveedores({ facturas, rfcFlota, sufijo, acciones, notificaciones }: {
+export function VistaAgenteProveedores({
+  facturas, rfcFlota, sufijo, acciones, notificaciones,
+  buzon, dominioConfigurado, puedeAdministrarBuzon,
+}: {
   facturas: FacturaProveedor[];
   rfcFlota: string | null;
   sufijo: string;
-  acciones: { subirFactura: AccionProveedores; decidir: AccionProveedores };
+  acciones: {
+    subirFactura: AccionProveedores; decidir: AccionProveedores;
+    generarBuzon: AccionProveedores; rotarBuzon: AccionProveedores;
+  };
+  /** El buzón de intake, o `null` si su lectura falló — la sección lo dice en
+   *  vez de fingir que no hay buzón. */
+  buzon: BuzonDeFlota | null;
+  /** ¿Hay `RESEND_EMAIL_DOMAIN`? Sin él no existe dirección que enseñar NI
+   *  que generar, y la sección lo dice en vez de armar una que no existe. */
+  dominioConfigurado: boolean;
+  /** Generar/rotar es CONTROL (`puedeAdministrar`), no dato: el botón solo se
+   *  pinta al dueño — y la server action lo vuelve a comprobar de todos modos. */
+  puedeAdministrarBuzon: boolean;
   /** La sección de Notificaciones, ya renderizada en el servidor
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
@@ -66,6 +85,13 @@ export function VistaAgenteProveedores({ facturas, rfcFlota, sufijo, acciones, n
               )}
             </div>
           </section>
+
+          <SeccionBuzon
+            buzon={buzon}
+            dominioConfigurado={dominioConfigurado}
+            puedeAdministrarBuzon={puedeAdministrarBuzon}
+            acciones={{ generarBuzon: acciones.generarBuzon, rotarBuzon: acciones.rotarBuzon }}
+          />
 
           <section className="card p-4">
             <h2 className="font-display text-[15px] font-semibold mb-1">La bandeja</h2>
@@ -142,6 +168,68 @@ export function VistaAgenteProveedores({ facturas, rfcFlota, sufijo, acciones, n
         </div>
       </div>
     </main>
+  );
+}
+
+/**
+ * EL BUZÓN DE INTAKE (C1, auditoría 4): la dirección de correo de la flota a
+ * la que los proveedores mandan —o el contador reenvía— sus facturas, y los
+ * XML adjuntos entran solos a esta bandeja (`api/correo/entrante`).
+ *
+ * La columna `tenant.buzon_token` existía desde la 0095 y el webhook la leía,
+ * pero NADIE la escribía: 0 flotas con buzón en producción. Esta sección es
+ * quien la llena. Exportada para poder probar su gateo por render.
+ */
+export function SeccionBuzon({ buzon, dominioConfigurado, puedeAdministrarBuzon, acciones }: {
+  buzon: BuzonDeFlota | null;
+  dominioConfigurado: boolean;
+  puedeAdministrarBuzon: boolean;
+  acciones: { generarBuzon: AccionProveedores; rotarBuzon: AccionProveedores };
+}) {
+  return (
+    <section className="card p-4">
+      <h2 className="font-display text-[15px] font-semibold mb-1">Buzón de facturas por correo</h2>
+      <p className="text-[11px] mb-3 max-w-xl" style={{ color: 'var(--faint)' }}>
+        Dale esta dirección a tus proveedores o reenvía ahí sus facturas: los XML adjuntos
+        entran solos a esta bandeja, sin subir nada a mano.
+      </p>
+
+      {buzon === null ? (
+        // La lectura falló. NO se dice "sin buzón": ese estado ofrecería
+        // generar uno encima del que quizá ya existe, y rotarlo sin querer.
+        // Un <p> y no `EstadoError`: aquel trae `useRouter` para reintentar,
+        // y esta sección se degrada dentro de una página que sí cargó.
+        <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+          No se pudo leer el buzón de la flota ahora mismo. Recarga la página; si se repite,
+          avísale a Likida.
+        </p>
+      ) : !dominioConfigurado ? (
+        // Sin RESEND_EMAIL_DOMAIN no hay dirección que enseñar ni que generar:
+        // se dice qué falta en vez de armar una dirección que no existe.
+        <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+          El dominio de correo no está configurado en este entorno
+          (falta <code className="cifra-mono">RESEND_EMAIL_DOMAIN</code>), así que el buzón por
+          correo no puede operar. Es configuración del sistema, no de tu flota.
+        </EstadoVacio>
+      ) : buzon.direccion ? (
+        <div>
+          <DireccionBuzon direccion={buzon.direccion} />
+          {puedeAdministrarBuzon && <RotarBuzon rotar={acciones.rotarBuzon} />}
+        </div>
+      ) : (
+        <div>
+          <p className="text-[12.5px] mb-2 max-w-xl" style={{ color: 'var(--muted)' }}>
+            Tu flota aún no tiene dirección. Se genera una vez y es única de tu flota — el token
+            en la dirección es lo que decide que esas facturas entren aquí y no a otra parte.
+          </p>
+          {puedeAdministrarBuzon
+            ? <GenerarBuzon generar={acciones.generarBuzon} />
+            : <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
+                Generarla es una acción del dueño de la flota — pídesela a tu administrador.
+              </p>}
+        </div>
+      )}
+    </section>
   );
 }
 

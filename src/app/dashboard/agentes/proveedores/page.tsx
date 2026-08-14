@@ -2,11 +2,17 @@ import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
+import { puedeAdministrar } from '@/lib/auth/permisos';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
 import {
   guardarFacturaProveedor, listarFacturasProveedor, decidirFacturaProveedor,
 } from '@/lib/likida/proveedores';
 import { getFiscalDeFlota } from '@/lib/likida/facturacion/flota_fiscal';
+import { mensajeParaPantalla } from '@/lib/likida/errores';
+import {
+  getBuzon, generarBuzon as generarBuzonDeFlota, rotarBuzon as rotarBuzonDeFlota,
+} from '@/lib/correo/buzon_escritura';
+import { dominioBuzon } from '@/lib/correo/buzon';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteProveedores } from './vista';
@@ -23,6 +29,23 @@ async function exigirPermiso(tenantId: string): Promise<{ error: string } | { qu
   if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar facturas de proveedor.' };
   if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Esta bandeja no es de tu flota.' };
   return { quien: sesion.nombre ?? sesion.userId };
+}
+
+/**
+ * El gateo de las actions del BUZÓN: además del área, `puedeAdministrar`.
+ *
+ * La página es área `dinero` (el contador VE la bandeja), pero generar o rotar
+ * el buzón es CONTROL: rota la credencial que decide a qué flota entra cada
+ * factura. Misma pareja de puertas que las llaves de API — y se comprueba
+ * DENTRO de la action de todos modos, porque una server action es un endpoint
+ * alcanzable por POST directo, no un botón.
+ */
+async function exigirControlBuzon(tenantId: string): Promise<{ error: string } | { userId: string }> {
+  const sesion = await requireSessionTenant('/dashboard/agentes/proveedores');
+  if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar facturas de proveedor.' };
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Esta bandeja no es de tu flota.' };
+  if (!puedeAdministrar(sesion.rol)) return { error: 'Solo el dueño de la flota genera o rota el buzón.' };
+  return { userId: sesion.userId };
 }
 
 /**
@@ -47,6 +70,13 @@ export default async function PaginaAgenteProveedores({
   const facturas = await listarFacturasProveedor(tenantId);
   const fiscal = await getFiscalDeFlota(tenantId).catch(() => null);
   const rfcFlota = fiscal?.flota?.rfc || null;
+
+  // El buzón es SECUNDARIO de esta página: si su lectura falla, la bandeja
+  // sigue sirviendo, y la sección dice "no se pudo leer" — nunca "sin buzón",
+  // que ofrecería generar (y rotar sin querer) encima del que quizá exista.
+  const buzon = await getBuzon(tenantId).catch(() => null);
+  const dominioConfigurado = dominioBuzon() !== null;
+  const puedeAdministrarBuzon = puedeAdministrar(rol);
 
   async function subirFactura(
     _prev: { error?: string; aviso?: string } | null,
@@ -96,12 +126,44 @@ export default async function PaginaAgenteProveedores({
     redirect(`/dashboard/agentes/proveedores${sufijo}`);
   }
 
+  // Sin parámetros a propósito: la action no lee nada del formulario (el
+  // tenant va por closure desde la sesión) y `useActionState` acepta una
+  // función de menor aridad.
+  async function generarBuzonAccion(): Promise<{ error?: string } | null> {
+    'use server';
+    const permiso = await exigirControlBuzon(tenantId);
+    if ('error' in permiso) return { error: permiso.error };
+    try {
+      await generarBuzonDeFlota(tenantId, { id: permiso.userId });
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'generar la dirección del buzón') };
+    }
+    // El redirect va FUERA del try: lanza NEXT_REDIRECT y un catch encima lo
+    // convertiría en "falla del sistema" sobre una operación que sí ocurrió.
+    redirect(`/dashboard/agentes/proveedores${sufijo}`);
+  }
+
+  async function rotarBuzonAccion(): Promise<{ error?: string } | null> {
+    'use server';
+    const permiso = await exigirControlBuzon(tenantId);
+    if ('error' in permiso) return { error: permiso.error };
+    try {
+      await rotarBuzonDeFlota(tenantId, { id: permiso.userId });
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'rotar la dirección del buzón') };
+    }
+    redirect(`/dashboard/agentes/proveedores${sufijo}`);
+  }
+
   return (
     <VistaAgenteProveedores
       facturas={facturas}
       rfcFlota={rfcFlota}
       sufijo={sufijo}
-      acciones={{ subirFactura, decidir }}
+      buzon={buzon}
+      dominioConfigurado={dominioConfigurado}
+      puedeAdministrarBuzon={puedeAdministrarBuzon}
+      acciones={{ subirFactura, decidir, generarBuzon: generarBuzonAccion, rotarBuzon: rotarBuzonAccion }}
       notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="proveedores" />}
     />
   );
