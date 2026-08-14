@@ -11,7 +11,7 @@ import { conNavegador } from '@/lib/likida/facturacion/adaptadores/pagina_playwr
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
-import { avisarCorridasPorFlota } from '@/lib/likida/agentes/notificaciones';
+import { avisarCorridasPorFlota, FalloDePlataforma } from '@/lib/likida/agentes/notificaciones';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { modoEfectivo } from '@/lib/likida/facturacion/modo';
 
@@ -476,7 +476,10 @@ export async function procesarLoteEnCola(
         // haya descubierto en otra: su agente no pudo trabajar, y ése es
         // exactamente el hecho que el aviso existe para contar. El anti-ruido
         // lo topa en 3 correos por incidente, no uno por flota por hora.
-        corridas.set(tenantId, new Error(falloDeArranque));
+        // Va MARCADO como fallo de plataforma (B8): Chromium es infraestructura
+        // de Likida, y el correo de la flota tiene que decir «el problema es
+        // nuestro, tu información está bien», no mandarla a revisar sus datos.
+        corridas.set(tenantId, new FalloDePlataforma(falloDeArranque));
         sinIntentar += tickets.length;
         flotas.push({ tenantId, tickets: tickets.length, falta: ['no se intentó: el navegador no arrancó'] });
         continue;
@@ -568,9 +571,11 @@ export async function procesarLoteEnCola(
         if (arranco) throw e; // el navegador sí abrió: es otro fallo, sube
 
         // `conNavegador` arranca Chromium ANTES de correr el cuerpo, así que si
-        // el cuerpo nunca se ejecutó, lo que falló fue el arranque.
+        // el cuerpo nunca se ejecutó, lo que falló fue el arranque — o sea la
+        // PLATAFORMA de Likida, no los datos de la flota. La marca (B8) es lo
+        // que hace que el correo diga la verdad sobre de quién es el problema.
         falloDeArranque = detalle;
-        corridas.set(tenantId, e);
+        corridas.set(tenantId, new FalloDePlataforma(detalle));
         sinIntentar += tickets.length;
         flotas.push({ tenantId, tickets: tickets.length, falta: ['no se intentó: el navegador no arrancó'] });
       }
@@ -682,7 +687,13 @@ export async function procesarLoteEnCola(
         fin: new Date(),
         estado: err ? 'fallo' : 'ok',
         disparo: 'cron',
-        error: err ? 'La corrida de facturación de esta flota no se pudo completar. El detalle quedó en los registros del sistema.' : undefined,
+        // La ficha también distingue el origen (B8): un fallo de plataforma no
+        // manda a nadie a revisar la información de la flota.
+        error: err
+          ? (err instanceof FalloDePlataforma
+            ? 'La plataforma de Likida tuvo un problema y esta corrida no se pudo completar. La información de la flota está bien; se reintenta solo.'
+            : 'La corrida de facturación de esta flota no se pudo completar. El detalle quedó en los registros del sistema.')
+          : undefined,
       })));
   }
 }

@@ -112,6 +112,68 @@ describe('huérfanos — el MONTO no viaja en el correo', () => {
   });
 });
 
+describe('la corrida fallida distingue un fallo de Likida de uno del cliente (B8)', () => {
+  // Antes de esta variante, un Chromium que no arrancaba en el cron de
+  // facturación mandaba a hasta 20 flotas el correo genérico de «el agente no
+  // pudo trabajar» — con el error de infraestructura en el renglón «Qué
+  // pasó»— y cada flota se ponía a buscar en SUS datos un problema de Likida.
+  const DE_PLATAFORMA = {
+    flota: 'Transportes X',
+    agente: 'Agente de Facturas',
+    href: '/dashboard/agentes/facturas',
+    cuando: 'hoy 09:00',
+    motivo: "browserType.launch: Executable doesn't exist at /ms-playwright/chromium/chrome",
+    seguidas: 1,
+    plataforma: true,
+  };
+
+  it('dice que el problema es de Likida y que no hay nada que corregir', () => {
+    const a = avisoCorridaFallida(DE_PLATAFORMA);
+    const todo = `${a.asunto} ${a.titulo} ${a.parrafos.join(' ')} ${a.avance}`;
+    expect(todo).toContain('Likida');
+    expect(todo).toContain('no tienes nada que corregir');
+    expect(todo).toContain('reintentamos solos');
+  });
+
+  it('el error crudo de infraestructura NO viaja al cliente', () => {
+    // Un «Executable doesn\'t exist» en la bandeja del contralor no le dice
+    // qué hacer y sí le dice que el producto está roto. Queda en los logs.
+    const a = avisoCorridaFallida(DE_PLATAFORMA);
+    expect(JSON.stringify(a)).not.toContain("Executable doesn't exist");
+  });
+
+  it('el texto que manda al cliente a revisar lo suyo NO aparece', () => {
+    const a = avisoCorridaFallida(DE_PLATAFORMA);
+    const todo = `${a.titulo} ${a.parrafos.join(' ')}`;
+    // Las frases de la variante de datos, que aquí serían una acusación.
+    expect(todo).not.toContain('se detuvo a medio camino');
+    expect(todo).not.toContain('Lo que alcanzó a hacer quedó guardado');
+  });
+
+  it('repetida, sigue sin acusar y trae el conteo real', () => {
+    const a = avisoCorridaFallida({ ...DE_PLATAFORMA, seguidas: 3 });
+    expect(a.asunto).toContain('3 corridas');
+    expect(a.asunto).toContain('Likida');
+    expect(a.parrafos.join(' ')).toContain('no tienes nada que corregir');
+  });
+
+  it('no llega en tono urgente: el cliente no tiene nada que hacer con la urgencia', () => {
+    expect(avisoCorridaFallida(DE_PLATAFORMA).tono).toBe('neutral');
+    expect(avisoCorridaFallida({ ...DE_PLATAFORMA, seguidas: 4 }).tono).toBe('atencion');
+  });
+
+  it('sigue llevando a la página del agente, como todo aviso', () => {
+    expect(avisoCorridaFallida(DE_PLATAFORMA).boton!.href).toContain('/dashboard/agentes/facturas');
+  });
+
+  it('SIN la marca, la variante de datos queda exactamente como era', () => {
+    const a = avisoCorridaFallida({ ...DE_PLATAFORMA, plataforma: false });
+    expect(a.titulo).toBe('Agente de Facturas se detuvo a medio camino');
+    // El motivo SÍ viaja en la de datos: ahí es lo que la persona necesita.
+    expect(a.datos!.some(([, v]) => v.includes("Executable doesn't exist"))).toBe(true);
+  });
+});
+
 describe('el correo NUNCA acusa a una persona', () => {
   it('ningún aviso usa las palabras fraude, robo o culpa', () => {
     // LFPDPPP 26-II: el agente prepara y marca, el humano decide. La misma

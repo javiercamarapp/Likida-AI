@@ -116,7 +116,20 @@ vi.mock('@/lib/likida/facturacion/adaptadores/registro', () => ({
   PORTALES_CONOCIDOS: ['capufe'] as readonly string[],
 }));
 
+/**
+ * El cierre de corridas se mockea para poder MIRAR qué mapa le llega: es donde
+ * viaja la marca de «fallo de plataforma» (B8). Todo lo demás del módulo se
+ * queda real —en particular `FalloDePlataforma`, que la ruta usa para marcar—
+ * porque mockear la clase rompería el `instanceof` que se está probando.
+ */
+const avisarCorridasPorFlota = vi.fn(async () => {});
+vi.mock('@/lib/likida/agentes/notificaciones', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/likida/agentes/notificaciones')>()),
+  avisarCorridasPorFlota: (...a: unknown[]) => avisarCorridasPorFlota(...(a as [])),
+}));
+
 const { GET } = await import('./route');
+const { FalloDePlataforma } = await import('@/lib/likida/agentes/notificaciones');
 
 /** Una fila de la cola. Por default, un ticket de CAPUFE. */
 const CAPUFE = { urlFacturacion: 'https://facturacioncapufe.com.mx/Capufe/', codigo: 'X' };
@@ -149,6 +162,7 @@ beforeEach(() => {
   getFiscalDeFlota.mockClear();
   conNavegador.mockClear();
   conPortales.mockClear();
+  avisarCorridasPorFlota.mockClear();
   for (const f of Object.values(logger)) f.mockReset();
 });
 
@@ -329,6 +343,48 @@ describe('cuando Chromium no arranca —que es HOY, en Vercel—', () => {
   it('lo grita en el log: sin esto el 503 se ve en Vercel y no dice por qué', async () => {
     await pedir();
     expect(logger.error).toHaveBeenCalledWith('cron.facturar.sin_navegador', expect.objectContaining({ sinIntentar: 1 }));
+  });
+
+  it('el fallo viaja marcado como DE PLATAFORMA para TODAS las flotas del lote (B8)', async () => {
+    // Es la marca que hace que el correo de cada flota diga «el problema es de
+    // Likida, tu información está bien» en vez del genérico que la manda a
+    // revisar sus datos — con Chromium caído lo reciben hasta 20 flotas a la
+    // vez, incluidas las que ni alcanzaron a intentar (el arranque se descubre
+    // en la primera y vale para toda la corrida).
+    cola = { data: [fila({ id: 'g-1', tenant_id: 't-1' }), fila({ id: 'g-2', tenant_id: 't-2' })], error: null };
+
+    await pedir();
+
+    expect(avisarCorridasPorFlota).toHaveBeenCalledTimes(1);
+    const [agente, corridas] = avisarCorridasPorFlota.mock.calls[0] as unknown as [string, Map<string, unknown>];
+    expect(agente).toBe('facturas');
+    expect(corridas.size).toBe(2);
+    for (const [tenant, fallo] of corridas) {
+      expect(fallo, tenant).toBeInstanceOf(FalloDePlataforma);
+    }
+  });
+});
+
+describe('el cierre de corridas distingue el origen del fallo', () => {
+  it('una corrida buena cierra con null: sin marca, sin fallo', async () => {
+    // Control de B8: el camino feliz no puede quedar marcado como fallo de
+    // plataforma — eso mandaría el correo tranquilizador a quien no espera
+    // ningún correo.
+    await pedir();
+
+    expect(avisarCorridasPorFlota).toHaveBeenCalledTimes(1);
+    const [, corridas] = avisarCorridasPorFlota.mock.calls[0] as unknown as [string, Map<string, unknown>];
+    expect(corridas.get('t-1')).toBeNull();
+  });
+
+  it('una flota sin datos fiscales NO cuenta como corrida fallida ni como fallo de plataforma', async () => {
+    // Es un hueco de captura del cliente, no un agente caído: la corrida
+    // terminó. Ya estaba decidido así; B8 no lo cambia.
+    fiscalPorFlota = { 't-1': { flota: null, falta: ['la flota no tiene RFC'] } };
+    await pedir();
+
+    const [, corridas] = avisarCorridasPorFlota.mock.calls[0] as unknown as [string, Map<string, unknown>];
+    expect(corridas.get('t-1')).toBeNull();
   });
 });
 
