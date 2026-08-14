@@ -92,6 +92,13 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/conductores': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
+  // Notificaciones (14-ago-2026) — el "alertas primero" de Handle, con página
+  // propia. Es `operacion` para que la vean TODOS los roles, y no porque sea
+  // inofensiva: cada alerta se filtra ADENTRO con este mismo `puedeVerRuta`
+  // contra la pantalla donde se resuelve, así que un encargado no recibe el
+  // renglón de huérfanos ni su conteo. Ponerla en `dinero` habría dejado al
+  // jefe de tráfico sin enterarse de un viaje escalado, que es suyo.
+  '/dashboard/notificaciones': 'operacion',
 
   // Dinero — lo que el encargado no ve
   // AGENTES (13-ago-2026): las ventanas de los dos agentes enseñan montos
