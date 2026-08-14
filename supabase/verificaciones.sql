@@ -3094,3 +3094,45 @@ begin
   raise exception E'CHAT_0088  rol-rebota=%  rls-conv=%  rls-msj=%  msjs-tras-borrar=%   (esperado t / 0 / 0 / 0)',
     rol_rebota, n_conv_rls, n_msj_rls, n_msjs_tras_borrar;
 end $$;
+
+-- ── 64. Agente de Cobranza: claim único, ventana válida, deny-all, cascade (mig. 0089) ─
+-- (a) unique(viaje, tier) rebota el doble claim — ES el candado anti-doble-
+-- envío del agente; (b) el CHECK de ventana rechaza fin<=inicio; (c) RLS sin
+-- políticas = deny-all; (d) borrar el viaje se lleva su bitácora.
+--
+-- Corrida real (13-ago-2026, contra el proyecto Likida, recién aplicada 0089):
+--   doble-rebota=t  ventana-rebota=t  rls=0  tras-borrar=0
+--   (esperado t / t / 0 / 0 — los cuatro exactos)
+do $$
+declare
+  v_t uuid; v_op uuid; v_v uuid;
+  doble_rebota boolean := false;
+  ventana_rebota boolean := false;
+  n_rls int; n_tras_borrar int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0089') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer ZZZ', '520000009092') returning id into v_op;
+  insert into viaje (tenant_id, operador_id) values (v_t, v_op) returning id into v_v;
+
+  insert into cobranza_contacto (tenant_id, viaje_id, tier) values (v_t, v_v, 3);
+  begin
+    insert into cobranza_contacto (tenant_id, viaje_id, tier) values (v_t, v_v, 3);
+  exception when unique_violation then doble_rebota := true;
+  end;
+
+  begin
+    insert into agente_cobranza_config (tenant_id, hora_inicio, hora_fin) values (v_t, 18, 9);
+  exception when check_violation then ventana_rebota := true;
+  end;
+
+  set local role authenticated;
+  select count(*) into n_rls from cobranza_contacto where tenant_id = v_t;
+  reset role;
+
+  delete from viaje where id = v_v;
+  select count(*) into n_tras_borrar from cobranza_contacto where viaje_id = v_v;
+
+  delete from tenant where id = v_t;
+  raise exception E'COBRANZA_0089  doble-rebota=%  ventana-rebota=%  rls=%  tras-borrar=%   (esperado t / t / 0 / 0)',
+    doble_rebota, ventana_rebota, n_rls, n_tras_borrar;
+end $$;
