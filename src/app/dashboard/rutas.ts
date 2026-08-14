@@ -1,5 +1,6 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
+  BellRing,
 } from 'lucide-react';
 
 /**
@@ -23,6 +24,8 @@ export const AGENTES: Item[] = [
   // Liquidación de Ruta) a propósito — 13-ago: "que el nombre no se corte".
   { href: '/dashboard/agentes/liquidacion', nombre: 'Agente de Liquidación', Icono: Route },
   { href: '/dashboard/agentes/facturas', nombre: 'Agente de Facturas', Icono: ReceiptText },
+  // El tercero (Fase 1 del plan, 14-ago-2026): cobra COMPROBANTES, no dinero.
+  { href: '/dashboard/agentes/cobranza', nombre: 'Agente de Cobranza', Icono: BellRing },
 ];
 
 export const OPERACION: Item[] = [

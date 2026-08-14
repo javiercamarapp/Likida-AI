@@ -23,8 +23,10 @@ export const maxDuration = 120;
 //      (`escalar_viaje.ts`).
 //   2. Viajes abiertos con `fecha_inicio` vieja y sin comprobantes — le
 //      insiste AL CHOFER directo, sin que nadie tenga que apretar un botón
-//      (`recordatorio_comprobacion.ts`, decisión de Javier el 8-ago-2026:
-//      automático, no dependiente del jefe de flota).
+//      (decisión de Javier el 8-ago-2026: automático, no dependiente del
+//      jefe de flota). Desde el 14-ago-2026 lo corre el Agente de Cobranza
+//      (`agentes/cobranza.ts`, 0089) con tiers/ventana POR FLOTA —
+//      `recordatorio_comprobacion.ts` se borró al quedar supersedido.
 //
 // Corren en su propio try/catch cada uno: si uno truena, el otro igual
 // intenta — dos causas de falla independientes no deberían dejar ciego al

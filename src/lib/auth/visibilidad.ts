@@ -86,6 +86,11 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // comprobados y colas de facturación — área dinero.
   '/dashboard/agentes/liquidacion': 'dinero',
   '/dashboard/agentes/facturas': 'dinero',
+  // Cobranza de COMPROBANTES (0089): la página no enseña pesos, pero es la
+  // cola del cierre contable — el dolor del contador — y opera al bloque
+  // AGENTES completo. Si un día el jefe de tráfico debe perseguir
+  // comprobantes, ese cambio lo decide Javier, no un prefijo.
+  '/dashboard/agentes/cobranza': 'dinero',
   '/dashboard/combustible-casetas': 'dinero',
   // Preguntar a la IA — reconstruida el 12-ago-2026 (la primera de las 17).
   // Es `dinero` porque responde montos comprobados/IVA/peaje (§12: las
