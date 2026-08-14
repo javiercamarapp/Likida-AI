@@ -36,9 +36,18 @@ export async function POST(req: Request) {
     monto: c.monto ?? 0,
     folio: c.folio,
     cfdiUuid: c.cfdiUuid,
+    // Sin esto (ensayo 14-ago-2026), el receptor del CFDI se TIRABA en el
+    // mapeo y el preset de factura del simulador salía «receptor no
+    // verificable» — una observación que el guion no espera y que en la sala
+    // parecería un defecto. El motor tenía razón; el cable no.
+    rfcReceptor: c.rfcReceptor,
     ocrConfianza: c.ocrConfianza ?? 0.96,
   }));
-  const liq = cuadrarViaje({ viajeId: 'demo', anticipo: body.anticipo ?? 0, gastos, politica: POLITICA, ruta: 'Silao-Laredo' });
+  // El RFC de la flota demo (el del seed): con él, la validación de receptor
+  // CORRE en el simulador — que es justo lo que el guion narra en §5. Sin
+  // empresaRfc, la comprobación entera se salta en silencio y el demo
+  // enseñaría el motor con esa defensa apagada.
+  const liq = cuadrarViaje({ viajeId: 'demo', anticipo: body.anticipo ?? 0, gastos, politica: POLITICA, ruta: 'Silao-Laredo', empresaRfc: 'GMX0902279I1' });
   return NextResponse.json({
     totalComprobado: liq.totalComprobado,
     totalAnticipo: liq.totalAnticipo,
