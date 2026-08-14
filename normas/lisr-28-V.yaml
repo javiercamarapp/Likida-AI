@@ -57,11 +57,18 @@ hallazgos_que_el_codigo_NO_implementa:
       deducible hasta $750 — y por este párrafo NO lo sería.
     severidad: alta
   - id: H2
+    estado: IMPLEMENTADO_COMO_AVISO
+    implementacion: >
+      `alimentacion_transporte_sin_tarjeta_credito` en cuadre/engine.ts: comida
+      amparada SOLO por transporte (sin hospedaje en el viaje) y pagada con algo
+      que no es tarjeta de crédito ('04' — débito NO cuenta) se manda a
+      REVISIÓN, no se declara no deducible: el hospedaje puede existir fuera de
+      esta liquidación.
     que_dice_la_ley: >
       Si lo único que acompaña es el comprobante de TRANSPORTE, la deducción "sólo
       procederá cuando el pago se efectúe mediante tarjeta de crédito de la persona
       que realiza el viaje".
-    que_hace_el_motor: "No valida el medio de pago en ese supuesto."
+    que_hacia_el_motor: "No validaba el medio de pago en ese supuesto."
     severidad: media
   - id: H3
     que_dice_la_ley: >
@@ -72,4 +79,6 @@ hallazgos_que_el_codigo_NO_implementa:
     severidad: media
 usado_en_codigo:
   - "config.ts — estimulos.viaticosTopeFiscalDiarioMxn"
-  - "cuadre/engine.ts — regla viatico_excede_fiscal (agrupada por día)"
+  - "cuadre/tope_alimentacion.ts — el criterio del tope, compartido: por día, y la proporción SOLO entre lo timbrado"
+  - "cuadre/engine.ts — regla viatico_excede_fiscal (agrupada por día) y los avisos alimentacion_sin_soporte (H1) / alimentacion_transporte_sin_tarjeta_credito (H2)"
+  - "fiscal.ts — resumirFiscal acredita el IVA de alimentación en la proporción del tope (LIVA 5-I), con el mismo criterio del motor"

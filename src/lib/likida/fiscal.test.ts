@@ -26,6 +26,7 @@ const OPTS: OpcionesFiscales = {
   efectivoTopeMxn: 2000,
   clavesCombustible: ['15101505', '15101514', '15101515'],
   clavesDieselIeps: ['15101505'],
+  viaticosTopeFiscalDiarioMxn: 750,
   // La mayoría de las pruebas ejercitan la facilidad del 15% (RFA 2.9): sin
   // esto, el efectivo en combustible cae a efectivo_no_elegible.
   elegible15: true,
@@ -316,6 +317,34 @@ describe('resumirFiscal', () => {
     ], OPTS);
     expect(r.ivaAcreditable).toBe(160);
     expect(r.ivaNoAcreditable).toBe(120);
+  });
+
+  it('un viático sobre el tope acredita su IVA EN PROPORCIÓN, no completo (LIVA 5-I)', () => {
+    // AUDITORÍA 4, E4 — el hallazgo exacto: $900 de alimentación en un día con
+    // tope de $750 es deducible al 83.33% (LISR 28-V), y el motor acreditaba
+    // esa proporción del IVA mientras este panel sumaba el 100%. Dos números
+    // distintos con la misma ley citada al lado, para el mismo comprobante.
+    const r = resumirFiscal([
+      gasto({ concepto: 'alimentacion', monto: 900, ivaTraslado: 124.14, fecha: '2026-07-15' }),
+    ], OPTS);
+    // 750/900 = 83.33%: 124.14 × 5/6 = 103.45. El resto (20.69) no desaparece:
+    // queda en no acreditable, y las dos cubetas siguen sumando el desglose.
+    expect(r.ivaAcreditable).toBe(103.45);
+    expect(r.ivaNoAcreditable).toBe(20.69);
+  });
+
+  it('la proporción del tope es POR DÍA y por viaje, con el criterio del motor', () => {
+    // Dos comidas del mismo día en el mismo viaje comparten el tope (el
+    // criterio compartido de `cuadre/tope_alimentacion.ts`); la misma comida
+    // en OTRO viaje es de otro operador y trae su propio tope intacto.
+    const r = resumirFiscal([
+      gasto({ id: 'a', viajeId: 'v1', concepto: 'alimentacion', monto: 500, ivaTraslado: 68.97, fecha: '2026-07-15' }),
+      gasto({ id: 'b', viajeId: 'v1', concepto: 'alimentacion', monto: 400, ivaTraslado: 55.17, fecha: '2026-07-15' }),
+      gasto({ id: 'c', viajeId: 'v2', concepto: 'alimentacion', monto: 700, ivaTraslado: 96.55, fecha: '2026-07-15' }),
+    ], OPTS);
+    // v1: $900 del día, proporción 750/900. v2: $700 ≤ $750, entero.
+    const esperado = (68.97 + 55.17) * (750 / 900) + 96.55;
+    expect(r.ivaAcreditable).toBeCloseTo(esperado, 2);
   });
 
   it('el efectivo sobre tope tumba el acreditamiento aunque haya CFDI vigente', () => {

@@ -40,8 +40,16 @@ limite_importante: >
 verificado_por: "ola1 / 03-isr-facilidades.md; verificador adversarial (refutó la versión absoluta de LISR 27-III)"
 verificado_el: 2026-07-27
 usado_en_codigo:
-  - "cuadre/engine.ts — nota de combustible_efectivo"
-  - "cuadre/engine.ts — SIN_ACREDITAMIENTO (sigue sin acreditar IEPS)"
+  - "cuadre/engine.ts — la matriz completa de la regla: combustible_efectivo (sin declarar, o sin base medida — fail-closed), combustible_efectivo_dentro15, efectivo_sobre_15 (la frontera del 15% se reparte POR COMPROBANTE vía proporcionDeducible) y efectivo_no_elegible"
+  - "cuadre/engine.ts — SIN_ACREDITAMIENTO: la facilidad salva la deducción de ISR, NO el IEPS ni el IVA"
+  - "repo.ts — getAcumuladoCombustible (el contador del ejercicio: efectivo y total, paginado con count exact para que PostgREST no lo recorte) y actualizarFacilidad15 (la declaración de elegibilidad de la flota)"
+  - "cuadre/desde_db.ts — le pasa al motor el acumulado del ejercicio, best-effort declarado"
+  - "periodo/combustible.ts — evaluarTope15 (TOPE_EFECTIVO 0.15, umbral de alerta al 12%)"
+  - "fiscal.ts — tope15DeGastos y las causas combustible_efectivo / efectivo_no_elegible del panel del contador"
 pendiente_en_producto: >
-  El CONTADOR del 15% por ejercicio no existe todavía. Hoy el motor avisa que hay
-  que contarlo pero no lleva la cuenta.
+  EL CONTADOR YA EXISTE (esta ficha decía "no existe todavía" semanas después de
+  que getAcumuladoCombustible en repo.ts llevara la cuenta del ejercicio y el
+  motor evaluara la matriz completa con fail-closed: sin base medida no afirma
+  nada). Lo que SIGUE pendiente es la otra condición de la regla: que el CFDI
+  consigne el permiso vigente del proveedor — el motor NO lo verifica contra el
+  padrón, solo lo avisa una vez por liquidación (permiso_cre_no_verificable).

@@ -59,4 +59,5 @@ impacto_en_producto: >
   repo lo resuelve, y el producto no lo va a inventar.
 verificado_por: "texto vigente descargado de diputados.gob.mx y transcrito literal"
 verificado_el: 2026-07-28
-usado_en_codigo: ["src/lib/likida/laboral/pagadero.ts"]
+usado_en_codigo:
+  - "laboral/pagadero.ts — veredictoLaboral (263-I: hospedaje y alimentación de la demora no imputable SE PAGAN, aun sobre política), topeDescuento (110-I) y resumenLaboral; NORMA_LABORAL apunta a esta ficha"
