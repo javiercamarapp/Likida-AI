@@ -522,7 +522,7 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
       parrafos: [
         `**Finalidades necesarias — sin ellas no puede haber liquidación:**`,
         `· Liquidar tus viajes: cuadrar lo que gastaste contra el anticipo que recibiste y emitir el documento de liquidación.`,
-        `· Comprobar los gastos ante el SAT y conservar los comprobantes fiscales el tiempo que la ley obliga (Código Fiscal de la Federación art. 30: cinco años).`,
+        `· Comprobar los gastos ante el SAT y conservar los comprobantes fiscales el tiempo que la ley obliga (Código Fiscal de la Federación art. 30: al menos cinco años).`,
         `· Responderte por WhatsApp.`,
         `**Finalidades que NO son necesarias, y a las que puedes oponerte sin que eso afecte tu liquidación:**`,
         `· Revisar si un comprobante viene repetido o alterado, comparándolo contra los de tus viajes anteriores, y entregarle ese resultado a la empresa.`,
@@ -567,7 +567,7 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
       fundamento: 'LFPDPPP art. 7 último párrafo; Reglamento art. 21',
       parrafos: [
         `Puedes retirar tu consentimiento en cualquier momento, por el mismo medio: escribe **PRIVACIDAD** por WhatsApp o preséntalo en el domicilio de la empresa.`,
-        `**Lo que la revocación no alcanza:** los comprobantes fiscales que ya se usaron para liquidar viajes pasados. La ley obliga a la empresa a conservarlos cinco años (CFF art. 30), y esa obligación no se puede revocar. Se te dice aquí para que no te sorprenda después.`,
+        `**Lo que la revocación no alcanza:** los comprobantes fiscales que ya se usaron para liquidar viajes pasados. La ley obliga a la empresa a conservarlos al menos cinco años (CFF art. 30), y esa obligación no se puede revocar. Se te dice aquí para que no te sorprenda después.`,
         `Revocar el consentimiento significa dejar de usar este canal para liquidar; la empresa te dirá por qué otro medio hacerlo.`,
       ],
     },
