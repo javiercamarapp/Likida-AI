@@ -12,6 +12,7 @@ import { cuadrarDesdeDB } from './cuadre/desde_db';
 import { getViaje, getOperador, saveLiquidacion } from './repo';
 import { getConfig } from './config';
 import { generarLiquidacionPDF } from './liquidacion/pdf';
+import { getDatosFiscales } from '@/lib/saas/fiscal';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { Liquidacion } from '@/types/likida';
@@ -185,8 +186,21 @@ registerTool('guardar_liquidacion', {
         if (up.error) { logger.warn('pdf.upload', { path, err: up.error.message }); return undefined; }
         return path;
       };
-      pdfPath = await subir(await generarLiquidacionPDF(full, v, o, undefined, 'contralor'), `${ctx.tenantId}/${ctx.viajeId}.pdf`);
-      pdfOperadorPath = await subir(await generarLiquidacionPDF(full, v, o, undefined, 'operador'), `${ctx.tenantId}/${ctx.viajeId}-operador.pdf`);
+      // La razón social de la flota: encabeza el documento (el papel es suyo,
+      // no nuestro) y nombra el descargo del pie. Se lee con catch → undefined
+      // a propósito: si la consulta falla, el PDF sale con el encabezado
+      // genérico en vez de NO SALIR. Perder la liquidación entera por no poder
+      // leer un nombre sería el peor intercambio posible — y el fallback ya
+      // está definido para no inventar ninguno.
+      let razonSocial: string | undefined;
+      try {
+        const d = await getDatosFiscales(ctx.tenantId);
+        razonSocial = d?.razonSocial ?? undefined;
+      } catch (e) {
+        logger.warn('pdf.razon_social', { err: e instanceof Error ? e.message : String(e) });
+      }
+      pdfPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'contralor'), `${ctx.tenantId}/${ctx.viajeId}.pdf`);
+      pdfOperadorPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'operador'), `${ctx.tenantId}/${ctx.viajeId}-operador.pdf`);
     } catch (e) {
       logger.error('pdf.gen', { err: e instanceof Error ? e.message : String(e) });
     }

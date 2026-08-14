@@ -58,8 +58,14 @@ export async function generarLiquidacionPDF(
   liq: Liquidacion,
   viaje: Viaje,
   operador: Operador,
-  /** Razón social del cliente, para el descargo del pie. Sin ella dice
-   *  "el contribuyente" — nunca se inventa un nombre. */
+  /**
+   * Razón social de LA FLOTA (`tenant.razon_social`).
+   *
+   * Manda en dos lugares: es el ENCABEZADO del documento —porque el papel es
+   * de la flota, no de Likida— y el nombre del descargo del pie. Sin ella el
+   * encabezado se queda en "Likida" y el descargo dice "el contribuyente":
+   * nunca se inventa un nombre en un documento que se archiva.
+   */
   razonSocial?: string,
   /**
    * A QUIÉN se le entrega ESTE ejemplar. `resumen.ts` ya filtra del mensaje al
@@ -186,7 +192,24 @@ export async function generarLiquidacionPDF(
   // más abajo, en la misma hoja— decía "Generado por Likida · likida.ai". Los
   // dos nombres del producto en el documento que el contralor archiva y que
   // puede ver un tercero.
-  text('Likida', M, y, 20, bold, INK);
+  //
+  // 14-ago-2026 — EL PAPEL ES DE LA FLOTA, NO NUESTRO. Este documento se
+  // archiva en la contabilidad del cliente, se le enseña a su contador y puede
+  // acabar frente a una autoridad. Que llevara "Likida" de 20pt como título lo
+  // hacía verse como el reporte de un proveedor de software y no como el papel
+  // de la empresa — que es lo que legalmente es. Ahora manda la razón social y
+  // Likida baja a donde le toca: quien lo procesó.
+  //
+  // Sin razón social capturada se conserva "Likida": la regla de este archivo
+  // es que un nombre NUNCA se inventa, y poner "Tu flota" o el nombre comercial
+  // adivinado en un documento archivable sería justo eso.
+  const encabezado = razonSocial?.trim() || null;
+  text(encabezado ?? 'Likida', M, y, encabezado ? 16 : 20, bold, INK);
+  if (encabezado) {
+    // Debajo y en gris: presente, verificable, y sin competirle al nombre del
+    // cliente en su propio documento.
+    text('Procesado por Likida', M, y - 12, 7.5, font, MUTED);
+  }
   right('LIQUIDACIÓN DE VIAJE', 595.28 - M, y + 3, 9, bold, MUTED);
   right(`Folio ${viaje.folio ?? liq.id.slice(0, 8).toUpperCase()}`, 595.28 - M, y - 10, 9, font, MUTED);
   y -= 28;

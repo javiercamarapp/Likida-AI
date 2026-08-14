@@ -50,6 +50,39 @@ describe('generarLiquidacionPDF — saneado de texto', () => {
     const bytes = await generarLiquidacionPDF(liq(), viaje, operador, 'TRANSPORTES DEL SURESTE SA DE CV');
     expect(bytes.byteLength).toBeGreaterThan(1000);
   });
+});
+
+describe('el encabezado: el papel es de la FLOTA, no de Likida', () => {
+  /** Saca el TEXTO del PDF de verdad. Leer los bytes crudos no sirve: pdf-lib
+   *  comprime el stream de contenido, así que la cadena impresa no aparece en
+   *  el archivo. `pdf-parse` ya es dependencia del repo (lo usa el lector
+   *  universal de archivos), así que no se agrega nada por esto. */
+  const texto = async (bytes: Uint8Array): Promise<string> => {
+    const { PDFParse } = await import('pdf-parse');
+    const r = await new PDFParse({ data: Buffer.from(bytes) }).getText();
+    return r.text;
+  };
+
+  it('con razón social, ELLA encabeza y Likida baja a "Procesado por"', async () => {
+    // Este documento se archiva en la contabilidad del cliente y puede acabar
+    // frente a una autoridad. Con "Likida" de 20pt arriba parecía el reporte de
+    // un proveedor de software, no el papel de la empresa — que es lo que es.
+    const t = await texto(await generarLiquidacionPDF(liq(), viaje, operador, 'TRANSPORTES DEL SURESTE SA DE CV'));
+    expect(t).toContain('TRANSPORTES DEL SURESTE SA DE CV');
+    expect(t).toContain('Procesado por Likida');
+  });
+
+  it('SIN razón social el encabezado se queda en Likida — no se inventa un nombre', async () => {
+    const t = await texto(await generarLiquidacionPDF(liq(), viaje, operador, undefined));
+    expect(t).not.toContain('Procesado por Likida');
+    // Y el descargo del pie sigue diciendo "el contribuyente", como ya hacía.
+    expect(t).toContain('Likida');
+  });
+
+  it('una razón social en blanco cuenta como ausente', async () => {
+    const t = await texto(await generarLiquidacionPDF(liq(), viaje, operador, '   '));
+    expect(t).not.toContain('Procesado por Likida');
+  });
 
   it('no deja bytes de control en el fuente del propio módulo', async () => {
     // El NUL de la línea 91 hacía que `file` clasificara pdf.ts como binario:
