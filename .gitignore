@@ -40,3 +40,7 @@ pruebas-manuales/imagenes/
 # `src/app/sin_previews.test.ts` los caza en la suite; esto los caza antes.
 zzz-*/
 zzz-*.mjs
+
+# Config personal de Claude Code (hooks/permisos propios de esta máquina,
+# p.ej. el guardado automático a Obsidian) — no es config de equipo.
+.claude/settings.local.json
