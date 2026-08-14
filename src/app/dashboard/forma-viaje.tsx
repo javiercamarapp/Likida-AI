@@ -6,7 +6,7 @@ import { Plus } from 'lucide-react';
 
 /**
  * El formulario de NUEVO VIAJE — pieza REUSABLE a propósito (12-ago-2026):
- * hoy la monta `/dashboard/viajes/nuevo` y mañana la embebe Despacho, que
+ * la embebe Despacho (la página suelta /viajes/nuevo se retiró el 13-ago), que
  * es la siguiente página por reconstruir. Presentación pura: la mutación
  * llega como server action del host, que es quien re-verifica permisos
  * adentro (el patrón del repo: el gateo de la UI solo decide si se pinta).
