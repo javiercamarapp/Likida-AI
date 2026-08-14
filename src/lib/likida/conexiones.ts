@@ -3,6 +3,7 @@ import { acotada } from './presupuesto';
 import { getFiscalDeFlota } from './facturacion/flota_fiscal';
 import { portalesVivos, PORTALES_CONOCIDOS } from './facturacion/adaptadores/registro';
 import { modoEfectivo, mandatoFiscalAceptado } from './facturacion/modo';
+import { correoConfigurado } from '@/lib/correo/enviar';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONEXIONES (F7 del plan — el chasis de Handle): qué tiene conectado la
@@ -12,7 +13,7 @@ import { modoEfectivo, mandatoFiscalAceptado } from './facturacion/modo';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface Conector {
-  id: 'whatsapp' | 'fiscal' | 'portales' | 'rastreo' | 'timbrado';
+  id: 'whatsapp' | 'correo' | 'fiscal' | 'portales' | 'rastreo' | 'timbrado';
   nombre: string;
   estado: 'listo' | 'incompleto' | 'sin_configurar' | 'ensayo';
   /** La verdad medida, en una línea — con su fuente. */
@@ -45,6 +46,28 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
       ? 'Canal configurado en el sistema — comprobantes, hitos y despacho entran por aquí.'
       : 'El canal de WhatsApp no está configurado en este entorno.',
     falta: [],
+  });
+
+  // Correo saliente (Resend, 14-ago-2026). Igual que WhatsApp, el canal es del
+  // SISTEMA —un dominio de Likida, `mail.likida.ai`— y por eso se mide en el
+  // servidor y no por flota.
+  //
+  // Se comprueban las DOS variables, no solo la llave: con `RESEND_API_KEY`
+  // pero sin dominio, `enviarCorreo` no arma el remitente y devuelve
+  // `sin_configurar` — el renglón diría "listo" mientras ningún aviso sale.
+  const correoListo = correoConfigurado();
+  conectores.push({
+    id: 'correo',
+    nombre: 'Correo de avisos',
+    estado: correoListo ? 'listo' : 'sin_configurar',
+    detalle: correoListo
+      ? `Los avisos salen de avisos@${process.env.RESEND_EMAIL_DOMAIN} — dominio verificado con SPF y DKIM.`
+      : 'Sin configurar: los avisos por correo no salen. WhatsApp sigue funcionando.',
+    // Lo que este renglón NO puede afirmar: que el correo LLEGUE. Un dominio
+    // verificado y una llave válida solo prueban que se puede mandar; que no
+    // caiga en spam depende de la reputación, y eso se mide con los eventos de
+    // entrega, no con dos variables de entorno.
+    falta: correoListo ? [] : ['conectar Resend desde el marketplace de Vercel'],
   });
 
   // Datos fiscales — lo que getFiscalDeFlota MIDE (es lo mismo que usa el
