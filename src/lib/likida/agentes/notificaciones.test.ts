@@ -508,10 +508,13 @@ describe('un interruptor sin emisor no se puede encender', () => {
     }
   });
 
-  it('`escalado` tampoco, aunque conductores lo declare', () => {
+  it('`escalado` SÍ se guarda en conductores: lo emite escalar_viaje', () => {
+    // El cierre de `escalarViajesSinAceptar` llama `avisar(..., 'escalado', ...)`
+    // por cada flota con viajes escalados — el par entró a CON_EMISOR en el
+    // mismo commit que su emisor, como manda el comentario de esa tabla.
     const c = agentePorId('conductores')!;
     const v = validarConfigNotificaciones(c, { eventos: ['escalado'], roles: ['encargado'] });
-    expect('ok' in v && v.ok.eventos).toEqual([]);
+    expect('ok' in v && v.ok.eventos).toEqual(['escalado']);
   });
 
   it('`corrida_fallida` SÍ se guarda donde hay emisor', () => {

@@ -1,6 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
-import { avisarCorridasPorFlota } from './agentes/notificaciones';
+import { avisar, avisarCorridasPorFlota } from './agentes/notificaciones';
+import { registrarCorrida } from './agentes/corridas';
+import { avisoEscalados } from '@/lib/correo/avisos';
 import { avisarAlChofer } from './operacion';
 import { telefonosJefe } from './contactos';
 import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
@@ -191,6 +193,8 @@ export async function escalarViajesSinAceptar(args: {
   const telefonos = args.telefonoJefePorTenant
     ?? await telefonosJefe(viajes.map((v) => v.tenantId));
   const r: ResultadoEscalacion = { revisados: viajes.length, reintentados: 0, escalados: 0, fallos: [] };
+  // Para la bitácora de corridas (B3): la hora a la que ESTA corrida arrancó.
+  const inicioCorrida = new Date();
   const admin = supabaseAdmin();
   const ahoraIso = args.ahora?.toISOString();
 
@@ -200,11 +204,16 @@ export async function escalarViajesSinAceptar(args: {
   // pudo entregar. Se cuenta por flota y no por viaje porque el aviso es por
   // flota: que un viaje de doce falle es ruido, que fallen los doce es que el
   // agente no pudo trabajar para esa empresa.
-  const porFlota = new Map<string, { intentos: number; fallidos: number; ultimo: unknown }>();
-  const anota = (tenantId: string, fallo: unknown) => {
-    const c = porFlota.get(tenantId) ?? { intentos: 0, fallidos: 0, ultimo: null };
+  // `folios` acumula los viajes que ESTA corrida escaló (los que ganaron el
+  // claim), con el folio o el id corto si no hay folio capturado — nunca un
+  // folio inventado. Es lo que el correo de `escalado` enumera; el fallo de
+  // claim (`claim.error`) NO entra: ese viaje no se escaló.
+  const porFlota = new Map<string, { intentos: number; fallidos: number; ultimo: unknown; folios: string[] }>();
+  const anota = (tenantId: string, fallo: unknown, folio?: string) => {
+    const c = porFlota.get(tenantId) ?? { intentos: 0, fallidos: 0, ultimo: null, folios: [] };
     c.intentos++;
     if (fallo !== null) { c.fallidos++; c.ultimo = fallo; }
+    if (folio) c.folios.push(folio);
     porFlota.set(tenantId, c);
   };
 
@@ -228,6 +237,10 @@ export async function escalarViajesSinAceptar(args: {
       continue;
     }
     r.escalados++;
+    // Cómo se nombra este viaje en el correo de escalados: el folio real, o el
+    // id corto (mismo recorte que usa el panel en `analytics.ts`) — nunca uno
+    // inventado.
+    const folioAviso = v.folio ?? v.id.slice(0, 8);
 
     // 1) Insistirle al chofer. Best-effort: que falle no puede impedir que el
     //    jefe se entere, que es la mitad importante.
@@ -279,24 +292,24 @@ export async function escalarViajesSinAceptar(args: {
         // sin escribirle al número.
         const enviado = await sendText(tel, armarAvisoJefe(v));
         if (enviado) {
-          anota(v.tenantId, null);
+          anota(v.tenantId, null, folioAviso);
         } else {
           const env = await sendTemplate(tel, PLANTILLA_JEFE, {
             parametros: [v.operadorNombre ?? 'Tu chofer', v.folio ?? 'sin folio'],
           });
           if (env.ok) {
-            anota(v.tenantId, null);
+            anota(v.tenantId, null, folioAviso);
           } else {
             const motivo = motivoDeFalloWhatsApp(env.error, env.codigo);
             r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivo}`);
             // Los DOS caminos fallaron: el jefe no se enteró de este viaje.
-            anota(v.tenantId, new Error(motivo));
+            anota(v.tenantId, new Error(motivo), folioAviso);
           }
         }
       } catch (e) {
         const motivo = e instanceof Error ? e.message : 'error inesperado al enviar';
         r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivo}`);
-        anota(v.tenantId, new Error(motivo));
+        anota(v.tenantId, new Error(motivo), folioAviso);
       }
     } else {
       // ERROR, no un fallo más: esta flota NUNCA va a recibir la escalación
@@ -307,7 +320,7 @@ export async function escalarViajesSinAceptar(args: {
       // la escalación hasta que alguien capture el teléfono. Es exactamente un
       // fallo por flota, accionable por el cliente, y hasta hoy solo vivía en
       // el log — donde el cliente no lo ve.
-      anota(v.tenantId, new Error('esa flota no tiene teléfono de jefe registrado'));
+      anota(v.tenantId, new Error('esa flota no tiene teléfono de jefe registrado'), folioAviso);
     }
   }
 
@@ -337,8 +350,50 @@ export async function escalarViajesSinAceptar(args: {
   const cierre = new Map<string, unknown>();
   for (const [tenantId, c] of porFlota) {
     cierre.set(tenantId, c.fallidos === c.intentos ? c.ultimo : null);
+
+    // ── EL AVISO DE `escalado` — el correo que sus plantillas esperaban ─────
+    //
+    // `avisoEscalados` existía desde el 14-ago sin un solo llamador: el dueño
+    // podía leer el interruptor en la pestaña y ningún código lo disparaba.
+    // Se emite POR FLOTA, solo para las que escalaron viajes en ESTA corrida
+    // (una flota sin escalados no tiene noticia que darle a nadie), con la
+    // magnitud MEDIDA —cuántos viajes— y sus folios. El nombre de la flota lo
+    // resuelve `avisar` (llega en `d.flota`, o `null` si no se pudo leer: el
+    // correo dice "tu flota" en vez de inventarlo). El anti-ruido, la config
+    // y el reparto viven en `avisar`; aquí solo se mide y se entrega.
+    //
+    // `avisar` promete no lanzar, pero la corrida no cuelga de esa promesa:
+    // una invariante que solo aguanta fallos por valor no es una invariante
+    // (el mismo criterio del try del envío al jefe, arriba).
+    if (c.folios.length > 0) {
+      try {
+        await avisar(
+          tenantId, 'conductores', 'escalado',
+          { hayProblema: true, magnitud: c.folios.length },
+          (d) => avisoEscalados({ flota: d.flota, cuantos: c.folios.length, folios: c.folios }),
+        );
+      } catch (e) {
+        logger.error('escalacion.aviso_escalados_roto', {
+          tenantId, err: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
   }
   await avisarCorridasPorFlota('conductores', cierre);
+  // La bitácora de corridas (B3), por flota. `registrarCorrida` nunca lanza.
+  await Promise.allSettled([...porFlota.entries()].map(([tenantId, c]) =>
+    registrarCorrida(tenantId, 'conductores', {
+      inicio: inicioCorrida,
+      fin: new Date(),
+      estado: c.fallidos === c.intentos ? 'fallo' : c.fallidos > 0 ? 'parcial' : 'ok',
+      disparo: 'cron',
+      tareasHechas: c.intentos - c.fallidos,
+      tareasTotal: c.intentos,
+      resumen: { escalados: c.folios.length, folios: c.folios.slice(0, 8) },
+      error: c.fallidos === c.intentos
+        ? 'Ninguna escalación de esta flota se pudo entregar. El detalle quedó en los registros del sistema.'
+        : undefined,
+    })));
   return r;
 }
 

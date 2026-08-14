@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { avisarCorridasPorFlota } from './notificaciones';
+import { registrarCorrida } from './corridas';
 import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 import {
   CONFIG_COBRANZA_DEFAULT, validarConfigCobranza, dentroDeVentana,
@@ -344,24 +345,45 @@ export async function ejecutarCobranzaGlobal(ahora: Date = new Date()): Promise<
   // de esa ventana le quitaría turno a choferes reales. Las que el corte dejó
   // fuera NO entran al mapa — ver `avisarCorridasPorFlota`.
   const corridas = new Map<string, unknown>();
+  // Lo que se anota en la bitácora de corridas (B3) — se escribe AL FINAL,
+  // por la misma razón del comentario de arriba: la ventana de 90s es de los
+  // envíos, no de las anotaciones.
+  const paraBitacora: Array<{ tenant: string; inicio: Date; fin: Date; contactados: number; fallos: number; error?: string }> = [];
   for (const t of tenants) {
     if (Date.now() >= venceEn) {
       logger.warn('cobranza.global_corte_por_reloj', { tenantsSinCorrer: tenants.length - tenants.indexOf(t) });
       break;
     }
+    const inicioFlota = new Date();
     try {
       const r = await ejecutarCobranza(t, ahora, { venceEn });
       total.contactados += r.contactados;
       total.cortadosPorReloj += r.cortadosPorReloj;
       total.fallos.push(...r.fallos);
       corridas.set(t, null);
+      paraBitacora.push({ tenant: t, inicio: inicioFlota, fin: new Date(), contactados: r.contactados, fallos: r.fallos.length });
     } catch (e) {
       total.fallos.push(`${t}: ${e instanceof Error ? e.message : 'corrida fallida'}`);
       corridas.set(t, e);
+      paraBitacora.push({
+        tenant: t, inicio: inicioFlota, fin: new Date(), contactados: 0, fallos: 0,
+        error: 'La corrida de cobranza de esta flota no se pudo completar. El detalle quedó en los registros del sistema.',
+      });
     }
   }
 
   await avisarCorridasPorFlota('cobranza', corridas, ahora);
+  // `registrarCorrida` nunca lanza; allSettled es cinturón sobre tirantes.
+  await Promise.allSettled(paraBitacora.map((b) => registrarCorrida(b.tenant, 'cobranza', {
+    inicio: b.inicio,
+    fin: b.fin,
+    estado: b.error ? 'fallo' : b.fallos > 0 ? 'parcial' : 'ok',
+    disparo: 'cron',
+    tareasHechas: b.contactados,
+    tareasTotal: b.contactados + b.fallos,
+    resumen: { contactados: b.contactados, fallos: b.fallos },
+    error: b.error,
+  })));
   return total;
 }
 
