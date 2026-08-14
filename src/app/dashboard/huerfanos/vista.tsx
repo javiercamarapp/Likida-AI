@@ -20,9 +20,11 @@ const MOTIVO: Record<MotivoHuerfano, string> = {
  * las dos salidas reales: adjuntar a un viaje VIVO o descartar. La foto no
  * se enseña (candado del 2-ago); el dato extraído sí.
  */
-export function VistaHuerfanos({ pendientes, viajesVivos, acciones }: {
+export function VistaHuerfanos({ pendientes, viajesVivos, cargados, acciones }: {
   pendientes: HuerfanoDeFlota[];
   viajesVivos: ViajeVivo[];
+  /** Cuántos viajes recientes cargó la page — el alcance real del selector. */
+  cargados: number;
   acciones: { adjuntar: AccionHuerfano; descartar: AccionHuerfano };
 }) {
   return (
@@ -87,7 +89,7 @@ export function VistaHuerfanos({ pendientes, viajesVivos, acciones }: {
                         </td>
                         <td className="py-2.5 pl-4">
                           <FilaAcciones huerfanoId={h.id} viajesVivos={viajesVivos}
-                            sinMonto={h.monto <= 0}
+                            sinMonto={h.monto <= 0} cargados={cargados}
                             adjuntar={acciones.adjuntar} descartar={acciones.descartar} />
                         </td>
                       </tr>

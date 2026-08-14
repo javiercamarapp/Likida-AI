@@ -3,6 +3,7 @@
 import { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Link2, Trash2 } from 'lucide-react';
+import { numero } from '@/lib/formato';
 
 export type AccionHuerfano = (
   prev: { error?: string } | null,
@@ -21,10 +22,12 @@ export interface ViajeVivo { id: string; rotulo: string }
  * adjuntar — metería una línea de $0.00 en la liquidación. El mismo guardia
  * vive en el server action y en el flujo de WhatsApp; aquí solo se dice.
  */
-export function FilaAcciones({ huerfanoId, viajesVivos, sinMonto, adjuntar, descartar }: {
+export function FilaAcciones({ huerfanoId, viajesVivos, sinMonto, cargados, adjuntar, descartar }: {
   huerfanoId: string;
   viajesVivos: ViajeVivo[];
   sinMonto: boolean;
+  /** Cuántos viajes recientes cargó la page — el alcance real del selector. */
+  cargados: number;
   adjuntar: AccionHuerfano;
   descartar: AccionHuerfano;
 }) {
@@ -72,6 +75,11 @@ export function FilaAcciones({ huerfanoId, viajesVivos, sinMonto, adjuntar, desc
             <Trash2 width={13} height={13} strokeWidth={1.75} />
           </button>
         </form>
+      )}
+      {!confirmando && !sinMonto && viajesVivos.length > 0 && (
+        <p className="text-[11px] mt-1 text-right" style={{ color: 'var(--faint)' }}>
+          El selector ofrece los viajes vivos entre los {numero(cargados)} más recientes.
+        </p>
       )}
       {estadoAdj?.error && <p className="text-[11px] mt-1 text-right" style={{ color: 'var(--bad)' }}>{estadoAdj.error}</p>}
       {estadoDesc?.error && <p className="text-[11px] mt-1 text-right" style={{ color: 'var(--bad)' }}>{estadoDesc.error}</p>}
