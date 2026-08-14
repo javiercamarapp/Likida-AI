@@ -77,7 +77,6 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // Nuevo viaje — reconstruida el 12-ago-2026 (la segunda). Es `operacion`:
   // crear/asignar es del encargado también; el server action re-gatea con
   // puedeAsignar adentro.
-  '/dashboard/viajes/nuevo': 'operacion',
   '/dashboard/despacho': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',

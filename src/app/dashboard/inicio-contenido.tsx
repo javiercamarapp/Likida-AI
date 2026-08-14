@@ -209,10 +209,11 @@ export async function InicioContenido({
                 {/* El DÍA DE MÉXICO, no el UTC: a las 6pm de CDMX el chip
                     decía mañana (capturado el 12-ago). */}
                 <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahoraMs())))}</ChipFecha>
-                {/* VIVO desde el 12-ago: /dashboard/viajes/nuevo existe (la
-                    segunda página reconstruida) y Despacho embeberá la misma
-                    forma. */}
-                <Link href={`/dashboard/viajes/nuevo${sufijo}`}
+                {/* A DESPACHO (13-ago): ahí vive la forma de crear — junto
+                    con asignar, avisar y el alta de operadores. La página
+                    suelta /viajes/nuevo se retiró: era la misma forma con
+                    menos contexto, y dos puertas se desincronizan. */}
+                <Link href={`/dashboard/despacho${sufijo}`}
                   className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85"
                   style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                   <Plus width={15} height={15} strokeWidth={2} /> Nuevo viaje
