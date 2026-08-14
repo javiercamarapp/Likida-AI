@@ -1,7 +1,7 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
   BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2, Plug,
-  ChartNoAxesCombined, UserRound,
+  ChartNoAxesCombined, UserRound, BookOpen,
 } from 'lucide-react';
 
 /**
@@ -62,6 +62,9 @@ export const DINERO_FISCAL: Item[] = [
 
 export const SISTEMA: Item[] = [
   { href: '/dashboard/chat', nombre: 'Chatea con tus datos', Icono: MessageCircle },
+  // El corpus de `normas/` consultable: de dónde sale el fundamento de cada
+  // cifra fiscal, con su estado de verificación a la vista.
+  { href: '/dashboard/conocimiento', nombre: 'Conocimiento normativo', Icono: BookOpen },
   // F7 (chasis Handle): la salud MEDIDA de cada conector de la flota.
   { href: '/dashboard/conexiones', nombre: 'Conexiones', Icono: Plug },
 ];
