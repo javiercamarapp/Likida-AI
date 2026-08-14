@@ -81,18 +81,21 @@ export function dentroDeVentana(config: ConfigCobranza, ahora: Date): boolean {
 }
 
 /** El tier que TOCA para un viaje: el mayor tier ya alcanzado por los días
- *  sin comprobar que no tenga contacto en bitácora. El sello viejo (0087)
- *  cuenta como el primer tier consumido — al estrenar tiers nadie recibe de
- *  nuevo el recordatorio que ya recibió. */
+ *  sin comprobar, SI supera al mayor tier ya contactado. Un contacto consume
+ *  también los tiers menores — insistir es escalar, nunca repetir: sin esto,
+ *  tras contactar el 14 la corrida siguiente devolvía 7 y la de después 3
+ *  (el mismo cobro tres veces en tres horas — AUD3 backend ALTO). El sello
+ *  viejo (0087) cuenta como el primer tier contactado — al estrenar tiers
+ *  nadie recibe de nuevo el recordatorio que ya recibió. */
 export function tierPendiente(
   dias: number,
   tiers: number[],
   tiersContactados: number[],
   selloViejo: boolean,
 ): number | null {
-  const consumidos = new Set(tiersContactados);
-  if (selloViejo && tiersContactados.length === 0 && tiers.length > 0) consumidos.add(tiers[0]);
-  const alcanzados = tiers.filter((t) => dias >= t && !consumidos.has(t));
+  const contactados = selloViejo && tiers.length > 0 ? [...tiersContactados, tiers[0]] : tiersContactados;
+  const techo = contactados.length > 0 ? Math.max(...contactados) : -Infinity;
+  const alcanzados = tiers.filter((t) => dias >= t && t > techo);
   return alcanzados.length > 0 ? Math.max(...alcanzados) : null;
 }
 

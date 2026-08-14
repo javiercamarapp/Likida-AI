@@ -86,6 +86,22 @@ describe('tierPendiente — a quién le toca insistir', () => {
     expect(tierPendiente(4, TIERS, [], true)).toBeNull();
     expect(tierPendiente(8, TIERS, [], true)).toBe(7);
   });
+
+  // AUD3 backend ALTO (BE-A1): la corrida SIGUIENTE. Contactado el 14, la
+  // hora siguiente devolvía 7, y la siguiente 3 — el mismo cobro tres veces
+  // en tres horas. Un contacto en un tier consume también los menores.
+  it('tras contactar un tier, los MENORES no quedan pendientes: la corrida siguiente no camina hacia abajo', () => {
+    expect(tierPendiente(20, TIERS, [14], false)).toBeNull();
+    expect(tierPendiente(20, TIERS, [7], false)).toBe(14); // hacia ARRIBA sí
+    expect(tierPendiente(20, TIERS, [7, 14], false)).toBeNull();
+  });
+
+  it('el tier consumido por el sello viejo NO reaparece después del primer contacto nuevo', () => {
+    // Antes: el sello solo contaba con bitácora vacía; tras contactar el 7,
+    // el 3 (ya cubierto por el 0087) volvía a estar "pendiente".
+    expect(tierPendiente(8, TIERS, [7], true)).toBeNull();
+    expect(tierPendiente(20, TIERS, [14], true)).toBeNull();
+  });
 });
 
 describe('armarMensajeCobranza', () => {
