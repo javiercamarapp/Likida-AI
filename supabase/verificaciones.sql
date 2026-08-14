@@ -3136,3 +3136,18 @@ begin
   raise exception E'COBRANZA_0089  doble-rebota=%  ventana-rebota=%  rls=%  tras-borrar=%   (esperado t / t / 0 / 0)',
     doble_rebota, ventana_rebota, n_rls, n_tras_borrar;
 end $$;
+
+-- ── 65. Los hitos del chofer: columnas de sello (mig. 0090) ─────────────────
+--
+-- Las tres columnas existen con el tipo correcto y nadie amaneció sellado
+-- (corrida real 14-ago-2026: columnas_creadas=3, ya_sellados=0). La
+-- atomicidad del sello es el UPDATE condicional (WHERE <col> IS NULL) de
+-- Postgres — mismo criterio que la exención del 0087; la lógica de frases y
+-- el acuse se prueban en TS (hitos_viaje.test.ts, processor_hitos.test.ts).
+select
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'viaje'
+      and column_name in ('llegada_en', 'descarga_en', 'regreso_en')
+      and data_type = 'timestamp with time zone') as columnas_creadas,
+  (select count(*) from public.viaje
+    where llegada_en is not null or descarga_en is not null or regreso_en is not null) as ya_sellados;

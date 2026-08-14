@@ -1,6 +1,6 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
-  BellRing, Truck, Users, FileQuestion, Map,
+  BellRing, Truck, Users, FileQuestion, Map, MessagesSquare,
 } from 'lucide-react';
 
 /**
@@ -26,6 +26,8 @@ export const AGENTES: Item[] = [
   { href: '/dashboard/agentes/facturas', nombre: 'Agente de Facturas', Icono: ReceiptText },
   // El tercero (Fase 1 del plan, 14-ago-2026): cobra COMPROBANTES, no dinero.
   { href: '/dashboard/agentes/cobranza', nombre: 'Agente de Cobranza', Icono: BellRing },
+  // El cuarto (F4): habla con los choferes — avisos, hitos, despacho por WA.
+  { href: '/dashboard/agentes/conductores', nombre: 'Agente de Conductores', Icono: MessagesSquare },
 ];
 
 export const OPERACION: Item[] = [

@@ -28,6 +28,9 @@ import {
   anotarFoto, anotarIncidencia, pedirTurnoDeConfirmacion, cerrarRafaga, lineaIncidencias,
 } from '@/lib/likida/intake/rafaga';
 import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
+import { interpretarHito, sellarHito, mensajeHito } from '@/lib/likida/hitos_viaje';
+import { puedeAsignar } from '@/lib/auth/permisos';
+import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { violaIndice, llegoTarde } from '@/lib/likida/pg_errores';
 import { mxn, fechaMx } from '@/lib/formato';
 import { guardiaFundamento, normasDeToolCalls } from '@/lib/likida/normas/fundamento';
@@ -432,16 +435,42 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           }
         }
 
+        // ── EL JEFE DESPACHA POR WHATSAPP (F4, despacho_wa.ts) ───────────────
+        //
+        // "nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000" →
+        // resumen → SÍ/NO → crearViaje (que ya avisa al chofer solo). El
+        // módulo devuelve null cuando el mensaje no es de despacho y este
+        // bloque cae al saludo de siempre. El rol se re-verifica ADENTRO
+        // (`puedeAsignar`); un error aquí NO deja al jefe sin respuesta.
+        if (cuenta.tenantId && msg.type === 'text' && msg.text) {
+          try {
+            const rDespacho = await atenderDespachoOficina(
+              { tenantId: cuenta.tenantId, rol: cuenta.rol }, msg.from, msg.text,
+            );
+            if (rDespacho) {
+              logger.info('oficina.despacho', { user: cuenta.userId, rol: cuenta.rol });
+              await sendText(msg.from, rDespacho);
+              return;
+            }
+          } catch (e) {
+            logger.error('oficina.despacho_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+          }
+        }
+
         const quien = cuenta.nombre ? `${cuenta.nombre}` : 'Qué tal';
         // Se le dice lo que SÍ puede hacer hoy por aquí y se le manda al panel
-        // para lo demás. Prometerle por WhatsApp algo que todavía no existe
-        // —reasignar un viaje contestando este mensaje— sería peor que no
-        // contestarle: lo haría esperar una acción que nadie va a ejecutar.
+        // para lo demás — y desde F4, despachar por aquí YA existe, así que el
+        // saludo lo enseña (solo a quien su rol se lo permite: prometérselo al
+        // contador sería prometerle una acción que `puedeAsignar` va a negar).
         logger.info('oficina.mensaje', { user: cuenta.userId, rol: cuenta.rol });
+        const puedeDespachar = cuenta.tenantId !== null && puedeAsignar(cuenta.rol);
         await sendText(msg.from,
           `${quien}, te reconozco como ${cuenta.rol === 'contador' ? 'contador' : 'parte del equipo'} de tu flota en Likida 👋\n\n` +
           `Por aquí te aviso cuando un chofer no confirma su viaje y cuando haya comprobantes por facturar. ` +
-          `Para asignar viajes, reasignar chofer o ver liquidaciones, entra a ${process.env.NEXT_PUBLIC_APP_URL ?? 'tu panel'}.`);
+          (puedeDespachar
+            ? `También puedes despacharme viajes: escribe «nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000» y te lo confirmo antes de crearlo. `
+            : '') +
+          `Para ${puedeDespachar ? 'reasignar chofer o ver liquidaciones' : 'asignar viajes, reasignar chofer o ver liquidaciones'}, entra a ${process.env.NEXT_PUBLIC_APP_URL ?? 'tu panel'}.`);
         return;
       }
 
@@ -1528,6 +1557,22 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     if (respEstado) {
       logger.info('consulta.estado', { viaje: viajeId });
       await say(respEstado);
+      return;
+    }
+
+    // ── ¿HITO DEL VIAJE? "ya llegué" / "descargando" / "de regreso" (0090) ──
+    //
+    // ANTES del freno de cierre A PROPÓSITO: `pareceCierre` arranca con
+    // ^(listo|ya|...) y se comería "ya llegué" como intento de cerrar. Y
+    // después de botones/consultas, que son respuestas a preguntas nuestras.
+    // La lista de frases es CERRADA y anclada (hitos_viaje.ts): lo que traiga
+    // más contexto sigue su camino al agente.
+    const hito = interpretarHito(msg.text);
+    if (hito) {
+      const ahoraHito = new Date();
+      const sello = await sellarHito(op.tenantId, viajeId, hito, ahoraHito);
+      logger.info('hito.viaje', { viaje: viajeId, hito, sello });
+      await say(mensajeHito(hito, sello, ahoraHito));
       return;
     }
 
