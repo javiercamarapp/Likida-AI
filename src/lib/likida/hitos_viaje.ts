@@ -15,10 +15,13 @@ import { TZ_MX } from '@/lib/formato';
 // COMPLETAS contra una lista cerrada — lo que no esté ahí sigue su camino.
 //
 // ── DÓNDE SE CABLEA Y POR QUÉ AHÍ ──────────────────────────────────────────
-// En el processor va ANTES del freno de cierre: el regex de `pareceCierre`
-// arranca con ^(listo|ya|...) y se comería "ya llegué" como intento de
-// cerrar el viaje. También va después de botones y consultas: esos son
-// respuestas a preguntas nuestras y tienen precedencia.
+// En el processor va ANTES del freno de cierre. Cuando se cableó, el regex
+// de `pareceCierre` arrancaba con ^(listo|ya|...) y se comía "ya llegué"
+// como intento de cerrar; desde AUD3 AG-A1 el "ya" pelón ya no es cierre,
+// pero el orden se queda: es el contrato que processor_hitos.test.ts fija,
+// y "ya terminé" (que SÍ es cierre) demuestra que la frontera sigue viva.
+// También va después de botones y consultas: esos son respuestas a
+// preguntas nuestras y tienen precedencia.
 //
 // ── LA HORA ES LA DEL MENSAJE, Y ESO SE DICE ───────────────────────────────
 // El sello guarda la hora en que el mensaje llegó, no la del evento físico

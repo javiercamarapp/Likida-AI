@@ -1833,8 +1833,10 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // con veintidós, y el cierre es IRREVERSIBLE: los triggers de la 0036/0037
     // bloquean después cualquier alta o corrección sobre ese viaje. Con cero
     // comprobados la liquidación sale con el anticipo ENTERO en contra del
-    // chofer, y basta un "ya voy" mal leído —`pareceCierre` empata "ya" seguido
-    // de cualquier cosa— o un turno en que el modelo se adelante a la tool.
+    // chofer, y bastaba un "ya voy" mal leído —hasta AUD3 AG-A1 `pareceCierre`
+    // empataba "ya" seguido de cualquier cosa; hoy el "ya" pelón ya no cierra,
+    // pero el freno se queda: un turno en que el modelo se adelante a la tool
+    // sigue siendo posible.
     //
     // El freno pregunta UNA sola vez por viaje. No se vuelve a preguntar aunque
     // insista, y por eso se guarda la marca: repreguntar en bucle es el otro
