@@ -104,46 +104,66 @@ export default async function Login({
     redirect(`/login?next=${encodeURIComponent(dest)}&enviado=1`);
   }
 
-  // Clon estructural de usehandle.ai/login (HTML + CSS computado, capturado
-  // 2-ago-2026 por curl — Firecrawl estaba sin créditos): mismo layout de dos
-  // columnas, mismos radios/espaciados/transiciones, colores literales de
-  // Handle (no las variables de marca de Likida, a propósito, para que quede
-  // idéntico). Lo único que cambia de contenido es lo que sería falso decir
-  // de Likida: el banner de ronda de inversión de Handle, "As seen in" con
-  // prensa que Likida no tiene, el selector US/MX/BR y "Contact sales"/"Try
-  // Handle" (sin funnel de marketing todavía), "Sign up" (Likida no tiene
-  // alta propia — decisión ya tomada y probada), y "Download desktop app"
-  // (no existe). La imagen de la derecha es propia, generada con Higgsfield
-  // (`nano_banana_2`) — fotorrealista, no la artwork de Handle ni el
-  // pixel-art que traía antes: Javier lo pidió explícito el 8-ago-2026,
-  // "camión real no pixeles", para que el login se sienta de la misma
+  // ── EL LOGIN HABLA EL IDIOMA DEL PRODUCTO ─────────────────────────────────
+  //
+  // La estructura sigue siendo la de usehandle.ai/login (dos columnas, imagen
+  // a la derecha), que es un buen layout y no hay por qué cambiarlo. Lo que se
+  // fue el 14-ago-2026 son los COLORES Y LA TIPOGRAFÍA de Handle, que estaban
+  // literales aquí (#0a0a0a, #e5e5e5, #6b6b6b) "a propósito, para que quede
+  // idéntico".
+  //
+  // El problema de esa decisión: el login es la PRIMERA pantalla del producto
+  // y era la única que no se parecía al producto. Un contralor entraba a una
+  // pantalla con botón naranja y tipografía de sistema, y caía en una consola
+  // negra con Inter Tight. La promesa visual se rompía en el primer clic.
+  //
+  // Ahora usa los tokens de la app bajo `.tema-neutro` —la misma clase que
+  // ponen `admin/layout.tsx` y `dashboard/chrome.tsx`—, así que el negro de
+  // aquí es EL MISMO negro de allá y cambia en un solo lugar. Los radios pasan
+  // de pastilla (`rounded-full`) a `rounded-lg`, que es el de los botones del
+  // panel, y los titulares a `font-display` (Inter Tight).
+  //
+  // NADA de la lógica de arriba se tocó: el límite por IP, la respuesta
+  // idéntica para un correo sin cuenta (el oráculo de enumeración) y
+  // `shouldCreateUser:false` siguen exactamente igual.
+  //
+  // La imagen de la derecha es propia, generada con Higgsfield (`nano_banana_2`)
+  // — fotorrealista, no la artwork de Handle: Javier lo pidió explícito el
+  // 8-ago-2026, "camión real no pixeles", para que se sienta de la misma
   // familia fotográfica que el banner de `/dashboard`.
   return (
-    <main className="min-h-screen flex bg-white">
+    <main className="tema-neutro min-h-screen flex" style={{ background: 'var(--surface)' }}>
       <div className="flex w-full flex-col lg:w-1/2">
         <div className="flex items-center px-6 py-6 md:px-10 lg:px-12 lg:py-12">
           <Logo alto="h-6" />
         </div>
 
         <div className="flex flex-1 items-center justify-center px-6 pb-16 md:px-10">
-          <div className="w-full max-w-[330px]">
-            <h1 className="text-center text-[32px] font-bold leading-[1.05] tracking-[-0.04em] text-[#0a0a0a]">
+          <div className="w-full max-w-[340px]">
+            <h1 className="font-display text-center text-[30px] font-semibold leading-[1.1] tracking-[-0.025em]"
+              style={{ color: 'var(--ink)' }}>
               Bienvenido a Likida
             </h1>
-            <p className="mt-3 text-center text-[14px] leading-relaxed text-[#6b6b6b]">
+            <p className="mt-3 text-center text-[14px] leading-relaxed" style={{ color: 'var(--muted)' }}>
               El panel de liquidación de tu flota.
             </p>
 
             {sp?.enviado ? (
-              <p className="mt-8 rounded-lg border border-[#e5e5e5] bg-white p-4 text-center text-[14px] text-[#0a0a0a]">
-                Te mandamos un link a tu correo. Ábrelo desde este mismo dispositivo.
-              </p>
+              <div className="mt-8 rounded-xl p-4 text-center hairline" style={{ background: 'var(--g1)' }}>
+                <p className="text-[14px] font-medium" style={{ color: 'var(--ink)' }}>
+                  Te mandamos un enlace a tu correo.
+                </p>
+                <p className="mt-1 text-[13px]" style={{ color: 'var(--muted)' }}>
+                  Ábrelo desde este mismo dispositivo.
+                </p>
+              </div>
             ) : (
               <>
                 <form action={entrarConGoogle} className="mt-8">
                   <input type="hidden" name="next" value={next} />
                   <button type="submit"
-                    className="flex w-full items-center justify-center gap-2.5 rounded-full border border-[#e5e5e5] bg-white px-5 py-3 text-[14px] font-medium text-[#0a0a0a] transition-colors hover:bg-[#fafafa]">
+                    className="hairline flex w-full items-center justify-center gap-2.5 rounded-lg px-5 py-3 text-[14px] font-medium transition-colors hover:bg-[var(--canvas)]"
+                    style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
                     <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
                       <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z" />
                       <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
@@ -155,24 +175,35 @@ export default async function Login({
                 </form>
 
                 <div className="my-6 flex items-center gap-4">
-                  <span className="h-px flex-1 bg-[#e5e5e5]" />
-                  <span className="text-[11px] font-medium tracking-[0.1em] text-[#6b6b6b]">o</span>
-                  <span className="h-px flex-1 bg-[#e5e5e5]" />
+                  <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
+                  {/* NI mono NI versalitas para esta palabra, aunque el resto
+                      de los micro-rótulos de la app sí lo sean: en IBM Plex
+                      Mono la «O» mayúscula es casi idéntica al cero, y en el
+                      primer render este separador se leía «0». Un caracter
+                      suelto no tiene contexto que lo desambigüe. */}
+                  <span className="text-[13px] lowercase" style={{ color: 'var(--faint)', fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>o</span>
+                  <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
                 </div>
 
-                <form action={entrarConEmail} className="flex flex-col gap-4">
+                <form action={entrarConEmail} className="flex flex-col gap-3.5">
                   <input type="hidden" name="next" value={next} />
-                  <input name="email" type="email" required placeholder="tu@flota.com"
-                    className="rounded-lg border border-[#e5e5e5] bg-white px-3.5 py-2.5 text-[14px] text-[#0a0a0a] outline-none transition-colors placeholder:text-[#6b6b6b99] focus:border-[var(--marca)]" />
+                  <label htmlFor="login-email" className="sr-only">Tu correo</label>
+                  <input id="login-email" name="email" type="email" required placeholder="tu@flota.com"
+                    autoComplete="email"
+                    className="hairline rounded-lg px-3.5 py-2.5 text-[14px] outline-none transition-colors focus:border-[var(--marca)]"
+                    style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
                   <button type="submit"
-                    className="mt-1 inline-flex w-full items-center justify-center rounded-full bg-[var(--marca)] px-5 py-3 text-[14px] font-medium text-white transition-colors duration-300 hover:bg-[#9a3412]">
-                    Continuar con email
+                    className="mt-1 inline-flex w-full items-center justify-center rounded-lg px-5 py-3 text-[14px] font-medium transition-opacity hover:opacity-85"
+                    style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+                    Continuar con correo
                   </button>
                 </form>
 
-                <p className="mt-6 text-center text-[13px] text-[#6b6b6b]">
+                <p className="mt-6 text-center text-[13px]" style={{ color: 'var(--muted)' }}>
                   ¿Tu correo no tiene acceso?{' '}
-                  <span className="font-medium text-[#0a0a0a]">Pídele a tu flota que te dé de alta.</span>
+                  <span className="font-medium" style={{ color: 'var(--ink)' }}>
+                    Pídele a tu flota que te dé de alta.
+                  </span>
                 </p>
               </>
             )}
@@ -186,13 +217,15 @@ export default async function Login({
             {/* Los DOS, no solo privacidad: aquí es donde se acepta el contrato,
                 y hasta hoy la única liga era la del aviso — se aceptaban unos
                 términos que no había forma de leer desde esta pantalla. */}
-            <p className="mt-8 text-center text-[11px] leading-relaxed text-[#6b6b6b]/70">
+            <p className="mt-8 text-center text-[11px] leading-relaxed" style={{ color: 'var(--faint)' }}>
               Al continuar, aceptas los{' '}
-              <a href="/terminos" className="text-[#0a0a0a] underline underline-offset-2 transition-opacity hover:opacity-70">
+              <a href="/terminos" className="underline underline-offset-2 transition-opacity hover:opacity-70"
+                style={{ color: 'var(--ink)' }}>
                 Términos de Servicio
               </a>{' '}
               y el{' '}
-              <a href="/privacidad" className="text-[#0a0a0a] underline underline-offset-2 transition-opacity hover:opacity-70">
+              <a href="/privacidad" className="underline underline-offset-2 transition-opacity hover:opacity-70"
+                style={{ color: 'var(--ink)' }}>
                 Aviso de Privacidad
               </a>{' '}
               de Likida.
@@ -203,7 +236,7 @@ export default async function Login({
 
       {/* Panel derecho — solo desktop, igual que el original (`hidden lg:flex`). */}
       <div className="hidden lg:flex lg:w-1/2 lg:flex-col lg:pb-12 lg:pl-3 lg:pr-12 lg:pt-12">
-        <div className="relative mt-8 min-h-0 flex-1 overflow-hidden rounded-[28px] bg-[#0a0a0a]">
+        <div className="relative mt-8 min-h-0 flex-1 overflow-hidden rounded-[28px]" style={{ background: 'var(--marca)' }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- imagen estática de fondo, no contenido de producto */}
           <img src="/images/login-hero.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/25" />

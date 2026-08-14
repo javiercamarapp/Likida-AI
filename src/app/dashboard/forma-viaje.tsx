@@ -35,9 +35,13 @@ function BotonCrear() {
   );
 }
 
-export function FormaViaje({ action, operadores }: {
+export function FormaViaje({ action, operadores, clientes }: {
   action: AccionCrearViaje;
   operadores: Array<{ id: string; nombre: string }>;
+  /** Los clientes de la flota, para atar el viaje a quien paga el flete.
+   *  Vacío = todavía no hay ninguno dado de alta, y el bloque del ingreso lo
+   *  dice en vez de enseñar un `<select>` sin opciones. */
+  clientes: Array<{ id: string; nombre: string }>;
 }) {
   const [estado, dispatch] = useActionState(action, null);
 
@@ -82,6 +86,58 @@ export function FormaViaje({ action, operadores }: {
           </p>
         </div>
       </div>
+
+      {/* ── EL LADO DEL INGRESO ──────────────────────────────────────────
+          Va en su propio bloque, DESPUÉS de lo operativo y visualmente
+          separado, porque son datos de otra naturaleza y de otra persona: lo
+          de arriba lo llena el jefe de tráfico al despachar, esto lo llena
+          quien conoce lo que se le cobra al cliente. Juntos en la misma
+          cuadrícula, el anticipo y el ingreso se confunden — y confundirlos
+          produce márgenes que se ven bien y están mal. */}
+      <fieldset className="pt-3.5 border-t" style={{ borderColor: 'var(--line)' }}>
+        <legend className="etiqueta-mono text-[10px] uppercase mb-2.5" style={{ color: 'var(--faint)' }}>
+          Lo que se le cobra al cliente · opcional
+        </legend>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div>
+            <label htmlFor="clienteId" className={ETIQUETA}>Cliente</label>
+            {clientes.length === 0 ? (
+              <p className="text-[12px] py-2" style={{ color: 'var(--faint)' }}>
+                Todavía no hay clientes dados de alta. Se registran en Clientes y tarifas.
+              </p>
+            ) : (
+              <select id="clienteId" name="clienteId" className={CAMPO} style={{ background: 'var(--surface)' }} defaultValue="">
+                <option value="">Sin asignar todavía</option>
+                {clientes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="ingresoFlete" className={ETIQUETA}>Ingreso del flete (MXN)</label>
+            <input id="ingresoFlete" name="ingresoFlete" type="text" inputMode="decimal" placeholder="38,500"
+              className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+              Lo que le cobras al cliente. NO es el anticipo: el anticipo es lo que le adelantas al
+              operador. Déjalo vacío si todavía no lo sabes — vacío no es cero.
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="kmRecorridos" className={ETIQUETA}>Kilómetros</label>
+            <input id="kmRecorridos" name="kmRecorridos" type="text" inputMode="numeric" placeholder="1,240"
+              className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+          </div>
+        </div>
+
+        <p className="text-[11px] mt-2.5" style={{ color: 'var(--faint)' }}>
+          Sin el ingreso capturado, este viaje no entra en la medición de margen — ni la suya ni la de
+          su ruta, su cliente o su unidad. Se puede llenar después.
+        </p>
+      </fieldset>
 
       {estado?.error && (
         <div className="rounded-lg px-3 py-2.5 text-[13px]" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
