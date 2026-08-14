@@ -35,6 +35,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { logger } from '@/lib/logger';
+import { enLotes } from '../lotes';
 import type { Gasto } from '@/types/likida';
 import type { CfdiLineaXml, CfdiXmlData } from './cfdi_xml';
 
@@ -256,18 +257,23 @@ export async function guardarYConciliarConsolidado(
 
   const resultados = conciliarLineas(xml.lineas, candidatosDb);
 
-  for (const r of resultados) {
-    if (r.estatus !== 'conciliada' || !r.gastoId) continue;
-    // Best-effort por línea: que UNA falle no debe perder el resto del
-    // consolidado ni la fila de auditoría que se escribe abajo. `ligarLineaAGasto`
-    // ya loguea su propio error; un `false` sin error (el guardia negó la fila)
-    // también se registra aquí porque ese caso, en el camino automático, no
-    // debería ocurrir nunca —el candidato salió de una lectura con
-    // `.is('cfdi_uuid', null)` milisegundos antes— y si ocurre es señal de una
-    // carrera real que vale la pena ver en el log.
-    const ligado = await ligarLineaAGasto(tenantId, xml.uuid, r.linea.indice, r.gastoId);
-    if (!ligado) logger.error('consolidado.marcar_gasto_no_disponible', { tenant: tenantId, gasto: r.gastoId });
-  }
+  // EN LOTES DE 10, NO EN SERIE (auditoría 3, REND-C1): el UPDATE por línea
+  // en serie sumaba ~300s con 1,000 conciliadas contra maxDuration=120 —
+  // morir a la mitad dejaba gastos sellados sin su fila de línea y el
+  // reenvío corrompía la conciliación. Best-effort por línea CONSERVADO:
+  // que una falle no pierde el resto (`enLotes` atrapa el error en su
+  // lugar); un `false` sin error (el guardia negó la fila) se registra
+  // porque en el camino automático es señal de carrera real.
+  const porLigar = resultados.filter((r) => r.estatus === 'conciliada' && r.gastoId);
+  const ligados = await enLotes(porLigar, 10, (r) =>
+    ligarLineaAGasto(tenantId, xml.uuid!, r.linea.indice, r.gastoId as string));
+  ligados.forEach((l, i) => {
+    if ('error' in l) {
+      logger.error('consolidado.ligar_lanzo', { tenant: tenantId, gasto: porLigar[i].gastoId, err: l.error instanceof Error ? l.error.message : String(l.error) });
+    } else if (!l.ok) {
+      logger.error('consolidado.marcar_gasto_no_disponible', { tenant: tenantId, gasto: porLigar[i].gastoId });
+    }
+  });
 
   const filasLinea = resultados.map((r) => ({
     tenant_id: tenantId,
