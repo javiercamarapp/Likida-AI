@@ -63,7 +63,7 @@ vi.mock('./presupuesto', async (orig) => ({
   ...(await orig() as object),
   acotada: (q: unknown) => q,
 }));
-const crearViaje = vi.fn(async () => 'viaje-nuevo-1');
+const crearViaje = vi.fn(async (..._a: unknown[]) => 'viaje-nuevo-1');
 vi.mock('./operacion', () => ({ crearViaje: (...a: unknown[]) => crearViaje(...a) }));
 const resolver = vi.fn();
 vi.mock('./crear_viaje_wa', async (orig) => ({
