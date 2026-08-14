@@ -33,11 +33,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // fallo es que el código de Meta se traduzca a algo que alguien pueda accionar.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const { sendText, sendTemplate, avisarAlChofer, telefonosJefe } = vi.hoisted(() => ({
+const { sendText, sendTemplate, avisarAlChofer, telefonosJefe, avisar, avisarCorridasPorFlota } = vi.hoisted(() => ({
   sendText: vi.fn(),
   sendTemplate: vi.fn(),
   avisarAlChofer: vi.fn(),
   telefonosJefe: vi.fn(),
+  avisar: vi.fn(),
+  avisarCorridasPorFlota: vi.fn(),
 }));
 
 vi.mock('@/lib/meta/client', async (original) => ({
@@ -47,6 +49,11 @@ vi.mock('@/lib/meta/client', async (original) => ({
 }));
 vi.mock('./operacion', () => ({ avisarAlChofer }));
 vi.mock('./contactos', () => ({ telefonosJefe }));
+// El motor de avisos se mockea ENTERO: desde que el escalado emite su propio
+// aviso (`conductores:escalado`), estas pruebas necesitan VER las llamadas —
+// a quién, con qué magnitud y con qué folios — sin arrastrar la base que el
+// motor real toca por dentro.
+vi.mock('./agentes/notificaciones', () => ({ avisar, avisarCorridasPorFlota }));
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
@@ -136,6 +143,10 @@ beforeEach(() => {
   avisarAlChofer.mockResolvedValue(undefined);
   telefonosJefe.mockReset();
   telefonosJefe.mockResolvedValue({});
+  avisar.mockReset();
+  avisar.mockResolvedValue({ avisado: true, porque: 'ok', destinatarios: 1, magnitud: 1 });
+  avisarCorridasPorFlota.mockReset();
+  avisarCorridasPorFlota.mockResolvedValue(undefined);
   for (const f of Object.values(logger)) f.mockReset();
 });
 
@@ -519,5 +530,85 @@ describe('escalarViajesSinAceptar', () => {
     const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
     expect(r.escalados).toBe(1);
     expect(r.fallos[0]).toMatch(/error inesperado al enviar/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// El aviso de `escalado` — el correo que sus plantillas esperaban desde el
+// 14-ago sin llamador. El par `conductores:escalado` entró a CON_EMISOR en el
+// mismo commit que este emisor; la contraprueba vive en
+// `agentes/notificaciones.test.ts` ('`escalado` SÍ se guarda en conductores').
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('el aviso de escalados por flota', () => {
+  /** Lo que `avisar` le entrega al armador; aquí se fabrica para poder abrir
+   *  el correo real que el closure produce. */
+  const datos = (magnitud: number) => ({
+    flota: null, agente: 'Agente de Conductores', ruta: '/dashboard/agentes/conductores',
+    magnitud, cuando: '14 ago 2026, 12:00',
+  });
+  type Armador = (d: ReturnType<typeof datos>) => { asunto: string; datos?: Array<[string, string]> };
+
+  it('cada flota con escalados recibe UN aviso, con la magnitud medida y sus folios', async () => {
+    lectura = {
+      data: [
+        fila({ id: 'v-1', tenant_id: 't-1', folio: 'VJ-1' }),
+        fila({ id: 'v-2', tenant_id: 't-1', folio: 'VJ-2', operador: { nombre: 'Ana Ruiz' } }),
+        // Sin folio capturado: el correo lo nombra por su id corto, nunca
+        // le inventa un folio.
+        fila({ id: 'aabbccdd-4444-4444-4444-444444444444', tenant_id: 't-2', folio: null }),
+      ],
+      error: null,
+    };
+
+    const r = await escalarViajesSinAceptar({
+      telefonoJefePorTenant: { 't-1': '5211111111', 't-2': '5222222222' }, ahora: AHORA,
+    });
+
+    expect(r.escalados).toBe(3);
+    expect(avisar).toHaveBeenCalledTimes(2);   // una por flota, no una por viaje
+
+    const deT1 = avisar.mock.calls.find((c) => c[0] === 't-1')!;
+    expect(deT1.slice(1, 4)).toEqual(['conductores', 'escalado', { hayProblema: true, magnitud: 2 }]);
+    // El armador produce el correo REAL (`avisoEscalados`) con los folios de
+    // ESA flota. El nombre de la flota se lo pasa `avisar` (d.flota) — el
+    // closure no lo inventa.
+    const correo = (deT1[4] as Armador)(datos(2));
+    expect(correo.asunto).toBe('2 viajes escalados');
+    expect(correo.datos).toEqual([['Viaje', 'VJ-1'], ['Viaje', 'VJ-2']]);
+
+    const deT2 = avisar.mock.calls.find((c) => c[0] === 't-2')!;
+    expect(deT2[3]).toEqual({ hayProblema: true, magnitud: 1 });
+    expect((deT2[4] as Armador)(datos(1)).datos).toEqual([['Viaje', 'aabbccdd']]);
+  });
+
+  it('un fallo del aviso NO tumba la corrida ni se traga el cierre de corrida_fallida', async () => {
+    // `avisar` promete no lanzar; la corrida no cuelga de esa promesa — se
+    // prueba con la forma de fallo que la promesa NO cubre (misma razón que
+    // el try del envío al jefe: una invariante que solo aguanta fallos por
+    // valor no es una invariante).
+    avisar.mockRejectedValue(new Error('canal de correo caído'));
+    lectura = { data: [fila()], error: null };
+
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+
+    expect(r.escalados).toBe(1);
+    expect(r.fallos).toEqual([]);   // el aviso es observabilidad, no el trabajo
+    expect(logger.error).toHaveBeenCalledWith('escalacion.aviso_escalados_roto',
+      expect.objectContaining({ tenantId: 't-1' }));
+    expect(avisarCorridasPorFlota).toHaveBeenCalledTimes(1);
+  });
+
+  it('una flota sin escalados no recibe el aviso: un claim que no se pudo escribir no es un viaje escalado', async () => {
+    resultadosUpdate = [{ error: { message: 'deadlock' } }];
+    lectura = { data: [fila()], error: null };
+
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+
+    expect(r.escalados).toBe(0);
+    expect(avisar).not.toHaveBeenCalled();
+    // Pero SÍ entra al cierre de corrida_fallida: la escritura del claim
+    // falló, y eso es "el agente no pudo trabajar" para esa flota.
+    expect(avisarCorridasPorFlota).toHaveBeenCalledTimes(1);
   });
 });

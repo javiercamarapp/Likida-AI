@@ -6,11 +6,13 @@ import {
   getConciliacionConsolidado, getLineasPorConciliar, getDesglosesRecibidos, getAcreditables,
 } from '@/lib/likida/analytics';
 import { parseCfdiXml, esConsolidado } from '@/lib/likida/intake/cfdi_xml';
-import { guardarYConciliarConsolidado } from '@/lib/likida/intake/consolidado';
+import { guardarYConciliarConsolidado, barrerPorConciliar, type ResumenBarrido } from '@/lib/likida/intake/consolidado';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
 import { VistaAgentePeajes } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
+import { FichaCorridas } from '../ficha-corridas';
+import { registrarCorrida, ultimasCorridas } from '@/lib/likida/agentes/corridas';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,11 +45,13 @@ export default async function PaginaAgentePeajes({
   if (!puedeVerRuta(rol, '/dashboard/agentes/peajes')) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
 
-  const [conciliacion, lineas, desgloses, acreditables] = await Promise.all([
+  const [conciliacion, lineas, desgloses, acreditables, corridas] = await Promise.all([
     getConciliacionConsolidado(tenantId),
     safe(() => getLineasPorConciliar(tenantId)),
     safe(() => getDesglosesRecibidos(tenantId)),
     safe(() => getAcreditables(tenantId)),
+    // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
+    safe(() => ultimasCorridas(tenantId, 'peajes')),
   ]);
 
   async function subirDesglose(
@@ -81,6 +85,50 @@ export default async function PaginaAgentePeajes({
     }
   }
 
+  /**
+   * El barrido a demanda (auditoría 4, B1): re-corre el cruce de las líneas
+   * `por_conciliar` contra los gastos que llegaron DESPUÉS del estado de
+   * cuenta. Es el mismo patrón que el «Ejecutar ahora» de Cobranza
+   * (`cobranza/page.tsx`): el humano que confirma es quien dispara, y el
+   * acuse dice lo que de verdad pasó.
+   */
+  async function ejecutarAhora(
+    _prev: { error?: string; resumen?: ResumenBarrido } | null,
+    _fd: FormData,
+  ): Promise<{ error?: string; resumen?: ResumenBarrido } | null> {
+    'use server';
+    // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
+    const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
+    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar este agente.' };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+
+    const inicio = new Date();
+    try {
+      const resumen = await barrerPorConciliar(tenantId);
+      // La bitácora de corridas (B3). `registrarCorrida` nunca lanza.
+      await registrarCorrida(tenantId, 'peajes', {
+        inicio,
+        fin: new Date(),
+        estado: 'ok',
+        disparo: 'manual',
+        tareasHechas: resumen.conciliadas,
+        tareasTotal: resumen.revisadas,
+        resumen: { ...resumen },
+      });
+      return { resumen };
+    } catch (e) {
+      logger.error('peajes.barrido_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+      await registrarCorrida(tenantId, 'peajes', {
+        inicio,
+        fin: new Date(),
+        estado: 'fallo',
+        disparo: 'manual',
+        error: 'El barrido no se pudo completar. El detalle quedó en los registros del sistema.',
+      });
+      return { error: 'No se pudo correr el barrido. Inténtalo de nuevo.' };
+    }
+  }
+
   return (
     <VistaAgentePeajes
       conciliacion={conciliacion}
@@ -89,7 +137,13 @@ export default async function PaginaAgentePeajes({
       peajeAcreditable={acreditables?.peaje ?? null}
       sufijo={sufijo}
       subirDesglose={subirDesglose}
-      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="peajes" />}
+      ejecutarAhora={ejecutarAhora}
+      notificaciones={
+        <>
+          <FichaCorridas corridas={corridas} />
+          <SeccionNotificaciones tenantId={tenantId} agenteId="peajes" />
+        </>
+      }
     />
   );
 }

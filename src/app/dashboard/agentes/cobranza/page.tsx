@@ -7,8 +7,10 @@ import {
   ejecutarCobranza, dentroDeVentana,
 } from '@/lib/likida/agentes/cobranza';
 import { logger } from '@/lib/logger';
+import { registrarCorrida, ultimasCorridas, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import { VistaAgenteCobranza } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
+import { FichaCorridas } from '../ficha-corridas';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,10 +52,12 @@ export default async function PaginaAgenteCobranza({
   const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
   const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
 
-  const [cola, config, bitacora] = await Promise.all([
+  const [cola, config, bitacora, corridas] = await Promise.all([
     colaCobranza(tenantId),
     leerConfigCobranza(tenantId),
     safe(() => bitacoraCobranza(tenantId)),
+    // `null` = no se pudo leer, y la ficha lo DICE (no pinta "sin corridas").
+    safe<CorridaRegistrada[]>(() => ultimasCorridas(tenantId, 'cobranza')),
   ]);
 
   async function guardarEstrategia(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
@@ -100,7 +104,18 @@ export default async function PaginaAgenteCobranza({
 
     // `ignorarVentana`: el humano que aprieta ES la autorización de contactar
     // fuera de horario. Un agente pausado no corre ni a mano (lo dice el motor).
+    const inicio = new Date();
     const resultado = await ejecutarCobranza(tenantId, new Date(), { ignorarVentana: true });
+    // La bitácora de corridas (B3). `registrarCorrida` nunca lanza.
+    await registrarCorrida(tenantId, 'cobranza', {
+      inicio,
+      fin: new Date(),
+      estado: resultado.fallos.length > 0 ? 'parcial' : 'ok',
+      disparo: 'manual',
+      tareasHechas: resultado.contactados,
+      tareasTotal: resultado.contactados + resultado.fallos.length,
+      resumen: { contactados: resultado.contactados, fallos: resultado.fallos.length },
+    });
     return { resultado };
   }
 
@@ -116,7 +131,14 @@ export default async function PaginaAgenteCobranza({
           : null,
       }}
       acciones={{ guardarEstrategia, alternarPausa, ejecutarAhora }}
-      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="cobranza" />}
+      notificaciones={
+        <>
+          {/* La ficha de corridas (B3) comparte el slot: es la otra mitad de
+              "¿mi agente trabajó?" que las notificaciones no contestan. */}
+          <FichaCorridas corridas={corridas} />
+          <SeccionNotificaciones tenantId={tenantId} agenteId="cobranza" />
+        </>
+      }
     />
   );
 }

@@ -6,6 +6,8 @@ import { ahoraMs } from '@/lib/saludo';
 import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteConductores, type EsperaAceptar } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
+import { FichaCorridas } from '../ficha-corridas';
+import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,10 +34,12 @@ export default async function PaginaAgenteConductores({
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/conductores')) redirect('/dashboard');
 
-  const [viajes, escalados, eventos] = await Promise.all([
+  const [viajes, escalados, eventos, corridas] = await Promise.all([
     getViajes(tenantId),
     contarEscalados(tenantId),
     safe(() => getEventosConductores(tenantId)),
+    // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
+    ultimasCorridas(tenantId, 'conductores').catch(() => null),
   ]);
 
   const ahora = ahoraMs();
@@ -67,7 +71,12 @@ export default async function PaginaAgenteConductores({
       sinAvisar={sinAvisar}
       eventos={eventos}
       sufijo={sufijoTenant(sp)}
-      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="conductores" />}
+      notificaciones={
+        <>
+          <FichaCorridas corridas={corridas} />
+          <SeccionNotificaciones tenantId={tenantId} agenteId="conductores" />
+        </>
+      }
     />
   );
 }

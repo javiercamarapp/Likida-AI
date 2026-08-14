@@ -6,6 +6,7 @@ import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../../resumen-visual';
 import { SubirDesglose, type AccionSubir } from './subir';
+import { BotonEjecutar, type AccionBarrer } from './controles';
 
 /**
  * La ventana del Agente de Peajes (F5): lo que el estado de cuenta del
@@ -26,7 +27,7 @@ import { SubirDesglose, type AccionSubir } from './subir';
  * que ya llevan las demás pantallas con cifra fiscal.
  */
 export function VistaAgentePeajes({
-  conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, notificaciones,
+  conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, ejecutarAhora, notificaciones,
 }: {
   conciliacion: ConciliacionConsolidado | null;
   lineas: LineaPorConciliar[] | null;
@@ -35,6 +36,8 @@ export function VistaAgentePeajes({
   peajeAcreditable: number | null;
   sufijo: string;
   subirDesglose: AccionSubir;
+  /** El barrido a demanda: re-cruza la cola contra los gastos de hoy. */
+  ejecutarAhora: AccionBarrer;
   /** La sección de Notificaciones, ya renderizada en el servidor
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
@@ -89,8 +92,12 @@ export function VistaAgentePeajes({
                 )}
               </div>
               <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-                Líneas del estado de cuenta a las que el cruce automático no les encontró gasto único
+                Líneas del estado de cuenta a las que el cruce automático no les encontró gasto único.
+                El barrido las re-cruza contra los gastos que llegaron después.
               </p>
+              <div className="mb-3">
+                <BotonEjecutar ejecutarAhora={ejecutarAhora} pendientes={lineas === null ? null : lineas.length} />
+              </div>
               {lineas === null ? (
                 <Leyenda>No se pudo leer la cola ahora mismo.</Leyenda>
               ) : lineas.length === 0 ? (

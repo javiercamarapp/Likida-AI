@@ -191,6 +191,10 @@ const CON_EMISOR: ReadonlySet<string> = new Set([
   // íd. desde `escalarViajesSinAceptar` (escalar_viaje.ts), con el fallo real
   // por flota: la que no tiene teléfono de jefe capturado.
   'conductores:corrida_fallida',
+  // `avisar(..., 'escalado', ...)` desde el cierre de `escalarViajesSinAceptar`
+  // (escalar_viaje.ts): una llamada por flota con viajes escalados en la
+  // corrida, con la magnitud medida y sus folios (`avisoEscalados`).
+  'conductores:escalado',
 ]);
 
 export function tieneEmisor(agente: AgenteNotificable, evento: EventoId): boolean {
@@ -284,8 +288,9 @@ export function validarConfigNotificaciones(
   // creería estar cubierto de algo que no existe.
   //
   // El segundo filtro (`tieneEmisor`) es el que faltaba, y es el que de verdad
-  // muerde: el catálogo declara `cola_atorada` para los seis agentes y
-  // `escalado` para conductores, pero HOY nadie los emite. Sin esta línea, un
+  // muerde: el catálogo declara `cola_atorada` para los seis agentes y HOY
+  // nadie lo emite (`escalado` ya dejó de estar en ese caso: lo emite
+  // `escalar_viaje.ts` y su par vive en CON_EMISOR). Sin esta línea, un
   // POST fabricado —o la propia pantalla antes de que se le pusiera el
   // candado— guardaba encendido un aviso imposible.
   const eventos = [...new Set(cruda.eventos ?? [])]
