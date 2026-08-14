@@ -357,6 +357,112 @@ export async function resolverHuerfanos(
   if (error) logger.error('huerfano.resolver_error', { err: error.message });
 }
 
+/** Una fila de la bandeja de la OFICINA (F2 del plan): lo que el humano
+ *  necesita para decidir a qué viaje va — sin la foto (exhibirla a un humano
+ *  tiene candado legal propio; el dato extraído no). */
+export interface HuerfanoDeFlota {
+  id: string;
+  operadorNombre: string | null;
+  concepto: string;
+  monto: number;
+  /** Fecha del comprobante (la del papel), no la de llegada. */
+  fecha: string | null;
+  motivo: MotivoHuerfano;
+  creadoEn: string;
+}
+
+/**
+ * TODOS los pendientes de la flota, para la bandeja de la oficina.
+ *
+ * Falla CERRADO (throw), al revés que `getHuerfanos`: allá, no poder leer la
+ * sala de espera no debe impedirle al chofer cerrar su viaje; acá la bandeja
+ * ES la pantalla, y un `[]` ciego afirmaría "no hay comprobantes sueltos".
+ */
+export async function getHuerfanosDeFlota(tenantId: string): Promise<HuerfanoDeFlota[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('comprobante_huerfano')
+    .select('id, gasto, motivo, creado_en, operador:operador_id(nombre)')
+    .eq('tenant_id', tenantId)
+    .is('resuelto_en', null)
+    .order('creado_en', { ascending: true })
+    .limit(200), 'getHuerfanosDeFlota');
+  if (error) throw new Error(`getHuerfanosDeFlota: ${error.message}`);
+  type RelOp = { nombre?: string };
+  return (data ?? []).map((r) => {
+    const rel = r.operador as RelOp | RelOp[] | null;
+    const op = Array.isArray(rel) ? rel[0] : rel;
+    const g = r.gasto as Gasto;
+    return {
+      id: r.id as string,
+      operadorNombre: op?.nombre ?? null,
+      concepto: g?.concepto ?? 'otros',
+      monto: Number(g?.monto ?? 0),
+      fecha: g?.fecha ?? null,
+      motivo: r.motivo as MotivoHuerfano,
+      creadoEn: r.creado_en as string,
+    };
+  });
+}
+
+/** Para la alerta del Inicio. `null` ≠ 0: un error de lectura no puede
+ *  leerse como "no hay comprobantes sueltos". */
+export async function contarHuerfanosPendientes(tenantId: string): Promise<number | null> {
+  const { count, error } = await acotada(supabaseAdmin()
+    .from('comprobante_huerfano')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .is('resuelto_en', null), 'contarHuerfanosPendientes');
+  if (error) {
+    logger.warn('contarHuerfanosPendientes', { tenantId, err: error.message });
+    return null;
+  }
+  return count ?? null;
+}
+
+/** UN huérfano pendiente, anclado al tenant — la mitad de "adjuntar desde la
+ *  oficina": el gasto completo que `addGasto` va a insertar. */
+export async function traerHuerfanoPendiente(tenantId: string, id: string): Promise<Huerfano | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('comprobante_huerfano')
+    .select('id, gasto, motivo, creado_en, ruta_imagen, ofrecido_en')
+    .eq('tenant_id', tenantId).eq('id', id)
+    .is('resuelto_en', null)
+    .maybeSingle(), 'traerHuerfanoPendiente');
+  if (error || !data) return null;
+  return {
+    id: data.id as string,
+    gasto: data.gasto as Gasto,
+    motivo: data.motivo as MotivoHuerfano,
+    creadoEn: data.creado_en as string,
+    rutaImagen: (data.ruta_imagen as string) || undefined,
+    ofrecidoEn: (data.ofrecido_en as string) || undefined,
+  };
+}
+
+/**
+ * La resolución DESDE LA OFICINA devuelve el resultado en vez de tragárselo
+ * (`resolverHuerfanos` es best-effort para el flujo de WhatsApp; un botón que
+ * dice "ya quedó" sin haber quedado es un rótulo que miente). El
+ * `.is('resuelto_en', null)` es el candado anti-carrera: si el chofer lo
+ * adjuntó por WhatsApp al mismo tiempo, el perdedor se entera aquí.
+ */
+export async function resolverHuerfanoDesdeOficina(
+  tenantId: string, id: string,
+  resolucion: 'adjuntado' | 'descartado', viajeId: string | null,
+): Promise<{ error?: string }> {
+  const { data, error } = await acotada(supabaseAdmin().from('comprobante_huerfano').update({
+    resuelto_en: new Date().toISOString(), resolucion, viaje_id: viajeId,
+  }).eq('id', id).eq('tenant_id', tenantId).is('resuelto_en', null).select('id'), 'resolverHuerfanoDesdeOficina');
+  if (error) {
+    logger.error('huerfano.oficina_resolver_error', { err: error.message });
+    return { error: 'No se pudo guardar. Inténtalo de nuevo.' };
+  }
+  if (!data || data.length === 0) {
+    return { error: 'Ese comprobante ya no está pendiente — alguien más lo resolvió. Recarga la página.' };
+  }
+  return {};
+}
+
 /**
  * Re-fecha un gasto con lo que trajo la SEGUNDA foto del mismo ticket.
  *

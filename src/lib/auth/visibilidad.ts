@@ -78,6 +78,12 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // crear/asignar es del encargado también; el server action re-gatea con
   // puedeAsignar adentro.
   '/dashboard/despacho': 'operacion',
+  // El Registro (F2, 14-ago-2026). Los DOS son `operacion` y por eso sus
+  // páginas dejan el dinero en el servidor (la fuga del 4-ago fue
+  // exactamente anticipos y % por chofer a la vista del encargado —
+  // `dinero_por_area.test.ts` los escanea).
+  '/dashboard/viajes': 'operacion',
+  '/dashboard/operadores': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
 
@@ -91,6 +97,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // AGENTES completo. Si un día el jefe de tráfico debe perseguir
   // comprobantes, ese cambio lo decide Javier, no un prefijo.
   '/dashboard/agentes/cobranza': 'dinero',
+  // La bandeja de huérfanos (F2): enseña montos de comprobantes — dinero.
+  '/dashboard/huerfanos': 'dinero',
   '/dashboard/combustible-casetas': 'dinero',
   // Preguntar a la IA — reconstruida el 12-ago-2026 (la primera de las 17).
   // Es `dinero` porque responde montos comprobados/IVA/peaje (§12: las
