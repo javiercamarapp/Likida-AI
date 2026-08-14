@@ -111,6 +111,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // La bandeja de huérfanos (F2): enseña montos de comprobantes — dinero.
   '/dashboard/huerfanos': 'dinero',
   '/dashboard/combustible-casetas': 'dinero',
+  // Rentabilidad y cobranza a clientes (F7): margen y cartera — dinero puro.
+  '/dashboard/rentabilidad': 'dinero',
   // Preguntar a la IA — reconstruida el 12-ago-2026 (la primera de las 17).
   // Es `dinero` porque responde montos comprobados/IVA/peaje (§12: las
   // cifras se piden DESPUÉS de este gateo).

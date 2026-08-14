@@ -45,6 +45,9 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
     '/dashboard/huerfanos',
     // Conexiones (F7) es administración de la cuenta — solo el dueño.
     '/dashboard/conexiones',
+    // Rentabilidad y cobranza (F7): el margen de la flota es exactamente lo
+    // que este archivo existe para no enseñarle al jefe de tráfico.
+    '/dashboard/rentabilidad',
     '/dashboard/usuarios', '/dashboard/configuracion', '/dashboard/politicas',
   ];
   it.each(PROHIBIDAS)('%s le está negada al encargado', (href) => {
