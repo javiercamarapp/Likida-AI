@@ -31,7 +31,7 @@ vi.mock('@/lib/supabase/admin', () => ({
       const b: Record<string, unknown> = {};
       const chain = () => b;
       Object.assign(b, {
-        select: chain, eq: chain, gte: chain,
+        select: chain, eq: chain, gte: chain, abortSignal: chain,
         then: (res: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(res),
       });
       return b;
@@ -46,7 +46,7 @@ const { PartialExecutionError } = await import('@/lib/llm/openrouter');
 function peticion() {
   const req = new Request('http://likida.test/api/dashboard/chat', {
     method: 'POST',
-    body: JSON.stringify({ mensajes: [{ rol: 'user', texto: '¿cuánto llevo de diésel?' }] }),
+    body: JSON.stringify({ mensajes: [{ rol: 'usuario', texto: '¿cuánto llevo de diésel?' }] }),
     headers: { 'content-type': 'application/json' },
   }) as unknown as Record<string, unknown>;
   // NextRequest.nextUrl — lo único que la ruta le pide es searchParams.
