@@ -47,13 +47,17 @@ export interface ExtraAgenteLiquidacion {
  * leyenda honesta sin tumbar la página — y un cero MEDIDO sí se grafica.
  */
 export function VistaAgenteLiquidacion({
-  kpis, cola, cierres, extra, sufijo,
+  kpis, cola, cierres, extra, sufijo, notificaciones,
 }: {
   kpis: DashboardKpis;
   cola: LiqRow[];
   cierres: LiqRow[];
   extra: ExtraAgenteLiquidacion;
   sufijo: string;
+  /** La sección de Notificaciones, ya renderizada en el servidor
+   *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
+   *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
+  notificaciones?: React.ReactNode;
 }) {
   const { funnel } = extra;
   // Barras SOLO de lo VIVO (auditoría 13-ago): "Liquidados" es acumulado
@@ -266,6 +270,8 @@ export function VistaAgenteLiquidacion({
               <TablaLiqs filas={cierres} sufijo={sufijo} conVer />
             )}
           </section>
+
+          {notificaciones}
         </div>
       </div>
     </main>

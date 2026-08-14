@@ -31,12 +31,16 @@ export interface ExtraAgenteFacturas {
  * Nada se pinta que no salga de un ticket real; el modo de emisión se
  * declara (en ensayo no se promete emisión).
  */
-export function VistaAgenteFacturas({ tickets, extra, marcarFacturada }: {
+export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones }: {
   tickets: TicketPorFacturar[];
   extra: ExtraAgenteFacturas;
   /** Server action de la puerta: escribe el CFDI capturado y re-verifica
    *  sesión/rol/tenant ADENTRO — la vista solo la pasa a la cola. */
   marcarFacturada: AccionMarcarFacturada;
+  /** La sección de Notificaciones, ya renderizada en el servidor
+   *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
+   *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
+  notificaciones?: React.ReactNode;
 }) {
   // Orden por VENCIMIENTO real (no por fecha del ticket): vencidos arriba,
   // desconocidos al final. Cotas finitas — Infinity-Infinity da NaN.
@@ -244,6 +248,8 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada }: {
               )}
             </section>
           </div>
+
+          {notificaciones}
         </div>
       </div>
     </main>

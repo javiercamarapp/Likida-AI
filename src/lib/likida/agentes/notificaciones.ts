@@ -173,6 +173,36 @@ export function rolesQuePueden(agente: AgenteNotificable): RolAvisable[] {
   return ROLES_AVISABLES.filter((rol) => puedeVerRuta(rol, agente.ruta));
 }
 
+/**
+ * LA PUERTA de la server action que reconfigura los avisos de una flota.
+ *
+ * Vive aquí, pura y probada, en vez de escrita a mano dentro de cada página de
+ * agente. La razón no es ahorrar líneas: escribir a quién le llegan los correos
+ * de una empresa es una escritura multi-tenant, y el modo de falla dominante
+ * del código escrito por agentes de IA es precisamente el de autorización —
+ * gatear el render y olvidar la action, o gatear el rol y olvidar el tenant.
+ * Seis copias son seis lugares donde falta una línea; ésta es una, y falla en
+ * prueba si alguien la afloja.
+ *
+ * Devuelve el mensaje para el cliente, o `null` si puede pasar.
+ *
+ * `superadmin` sí opera sobre otra flota A PROPÓSITO: /admin es su consola y
+ * cruza tenants por diseño (la única excepción del repo). Cualquier otro rol
+ * que traiga un tenant distinto al suyo es un POST fabricado.
+ */
+export function puedeConfigurarAvisos(
+  sesion: { rol: string; tenantId: string | null },
+  tenantIdObjetivo: string,
+  agente: AgenteNotificable,
+): string | null {
+  if (!puedeVerRuta(sesion.rol, agente.ruta)) {
+    return 'Tu rol no puede configurar los avisos de este agente.';
+  }
+  if (sesion.rol === 'superadmin') return null;
+  if (sesion.tenantId !== tenantIdObjetivo) return 'Este agente no es de tu flota.';
+  return null;
+}
+
 // ── LA CONFIGURACIÓN POR FLOTA Y POR AGENTE ────────────────────────────────
 
 export interface ConfigNotificaciones {
@@ -813,4 +843,46 @@ export async function avisarCorridaFallida(
     }),
     ahora,
   );
+}
+
+/**
+ * El cierre de una corrida GLOBAL: una flota por entrada, con su fallo o
+ * `null` si salió bien.
+ *
+ * ── POR QUÉ TAMBIÉN SE AVISA EL ÉXITO ────────────────────────────────────
+ *
+ * Ésta es la razón de que exista esta función y no un `avisarCorridaFallida`
+ * suelto dentro del `catch`. Llamarla solo cuando algo truena parece lo obvio
+ * y deja el aviso ROTO de una forma silenciosa: la racha de una flota que se
+ * rompió una vez y luego sanó nunca se limpia, así que el contador sigue
+ * arriba y el SIGUIENTE incidente —meses después, otro problema— arranca ya
+ * pasado de las marcas de insistencia y no manda el primer correo, que es
+ * justo el que importa. El éxito con `fallo = null` es lo que rearma el
+ * borde. Por eso se llama para TODAS las que corrieron, en el equivalente de
+ * un `finally`, no de un `catch`.
+ *
+ * ── LAS QUE NO CORRIERON NO ENTRAN ───────────────────────────────────────
+ *
+ * Una flota que el corte por reloj dejó fuera no va en el mapa: ni éxito (que
+ * borraría una racha real sin haber arreglado nada) ni fallo (no falló, no le
+ * tocó turno). Se calla, y la corrida de la siguiente hora decide.
+ *
+ * ── NUNCA TUMBA LA CORRIDA ───────────────────────────────────────────────
+ *
+ * `allSettled` y sin propagar: el aviso es observabilidad del trabajo, no el
+ * trabajo. Un Resend caído no puede convertir una corrida que SÍ contactó a
+ * 40 choferes en una corrida fallida — que además dispararía el aviso de que
+ * falló, cerrando el círculo del absurdo.
+ */
+export async function avisarCorridasPorFlota(
+  agenteId: AgenteId,
+  corridas: ReadonlyMap<string, unknown>,
+  ahora: Date = new Date(),
+): Promise<void> {
+  if (corridas.size === 0) return;
+  const rs = await Promise.allSettled(
+    [...corridas].map(([tenantId, fallo]) => avisarCorridaFallida(tenantId, agenteId, fallo, ahora)),
+  );
+  const rotos = rs.filter((r) => r.status === 'rejected').length;
+  if (rotos > 0) logger.error('notificaciones.cierre_de_corrida_roto', { agente: agenteId, rotos });
 }

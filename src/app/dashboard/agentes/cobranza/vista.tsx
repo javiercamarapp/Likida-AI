@@ -36,13 +36,17 @@ function rotuloDias(dias: number[]): string {
  * Sus cifras son días y contactos, todas medidas.
  */
 export function VistaAgenteCobranza({
-  cola, config, bitacora, extra, acciones,
+  cola, config, bitacora, extra, acciones, notificaciones,
 }: {
   cola: ColaCobranza;
   config: ConfigCobranza;
   bitacora: ContactoBitacora[] | null;
   extra: ExtraAgenteCobranza;
   acciones: { guardarEstrategia: AccionSimple; alternarPausa: AccionSimple; ejecutarAhora: AccionEjecutar };
+  /** La sección de Notificaciones, ya renderizada en el servidor
+   *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
+   *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
+  notificaciones?: React.ReactNode;
 }) {
   const ventana = `${rotuloDias(config.diasSemana)} · ${config.horaInicio}–${config.horaFin} h`;
 
@@ -168,6 +172,8 @@ export function VistaAgenteCobranza({
               guardar={acciones.guardarEstrategia}
             />
           </section>
+
+          {notificaciones}
         </div>
       </div>
     </main>

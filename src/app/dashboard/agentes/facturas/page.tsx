@@ -7,6 +7,7 @@ import { mandatoFiscalAceptado, modoEfectivo } from '@/lib/likida/facturacion/mo
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { VistaAgenteFacturas } from './vista';
+import { SeccionNotificaciones } from '../seccion-notificaciones';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,5 +91,12 @@ export default async function PaginaAgenteFacturas({
     redirect(`/dashboard/agentes/facturas${sufijo}`);
   }
 
-  return <VistaAgenteFacturas tickets={tickets} extra={{ conCfdi, emite }} marcarFacturada={marcarFacturada} />;
+  return (
+    <VistaAgenteFacturas
+      tickets={tickets}
+      extra={{ conCfdi, emite }}
+      marcarFacturada={marcarFacturada}
+      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="facturas" />}
+    />
+  );
 }

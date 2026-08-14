@@ -8,6 +8,7 @@ import {
 } from '@/lib/likida/agentes/cobranza';
 import { logger } from '@/lib/logger';
 import { VistaAgenteCobranza } from './vista';
+import { SeccionNotificaciones } from '../seccion-notificaciones';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +116,7 @@ export default async function PaginaAgenteCobranza({
           : null,
       }}
       acciones={{ guardarEstrategia, alternarPausa, ejecutarAhora }}
+      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="cobranza" />}
     />
   );
 }
