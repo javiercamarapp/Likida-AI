@@ -9,6 +9,11 @@ import { getConfig } from '@/lib/likida/config';
 import { traerResumenCostoIaTenant } from '@/lib/likida/costos';
 import { VistaAgenteLiquidacion, type ExtraAgenteLiquidacion } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
+import { puedeAdministrar } from '@/lib/auth/permisos';
+import { validarUmbralConfianza, guardarEstrategiaAgente } from '@/lib/likida/agentes/estrategia';
+import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { revalidatePath } from 'next/cache';
+import { FormaEstrategiaLiquidacion, type ResultadoEstrategia } from '../estrategia-forma';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +80,22 @@ export default async function PaginaAgenteLiquidacion({
     politica: config?.politica ?? null,
   };
 
+  async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion') || !puedeAdministrar(s.rol)) {
+      return { ok: false, error: 'Solo el dueño de la flota cambia la estrategia del agente.' };
+    }
+    try {
+      const umbral = validarUmbralConfianza(String(fd.get('umbralConfianza') ?? ''));
+      await guardarEstrategiaAgente(s.tenantId, { liquidacion: { umbralConfianza: umbral } }, { id: s.userId });
+      revalidatePath('/dashboard/agentes/liquidacion');
+      return { ok: true, mensaje: `Listo: las lecturas por debajo de ${umbral} salen a revisar, desde el próximo cuadre.` };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar la estrategia') };
+    }
+  }
+
   return (
     <VistaAgenteLiquidacion
       kpis={kpis}
@@ -82,7 +103,17 @@ export default async function PaginaAgenteLiquidacion({
       cierres={liqs.filter((l) => l.estatus !== 'revisar').slice(0, 5)}
       extra={extra}
       sufijo={sufijo}
-      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="liquidacion" />}
+      notificaciones={
+        <>
+          {/* La estrategia (B4): solo el dueño, y solo con la config actual
+              legible — sin ella, la forma guardaría a ciegas. */}
+          {puedeAdministrar(rol) && config !== null && (
+            <FormaEstrategiaLiquidacion accion={guardarEstrategia}
+              umbralActual={config.agentes.liquidacion.umbralConfianza} />
+          )}
+          <SeccionNotificaciones tenantId={tenantId} agenteId="liquidacion" />
+        </>
+      }
     />
   );
 }

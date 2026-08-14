@@ -52,6 +52,12 @@ import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client
 /** Cuánto se espera antes de insistir. Decisión de Javier, 4-ago-2026. */
 export const HORAS_PARA_ESCALAR = 5;
 
+/** El piso del rango configurable (B4): la consulta global trae candidatos
+ *  desde AQUÍ y el corte fino lo pone la estrategia de cada flota. Espeja el
+ *  mínimo de `validarHorasEscalacion` — si divergen, una flota configurada
+ *  por debajo del piso nunca vería escalar nada. */
+export const HORAS_MINIMAS_ESCALACION = 1;
+
 /**
  * Plantilla de Meta para avisarle al jefe. Tiene que estar aprobada.
  *
@@ -81,8 +87,8 @@ export interface ViajeSinAceptar {
  *
  * `ahora` se inyecta para que la prueba no dependa del reloj de la máquina.
  */
-export async function viajesSinAceptar(ahora: Date = new Date()): Promise<ViajeSinAceptar[]> {
-  const limite = new Date(ahora.getTime() - HORAS_PARA_ESCALAR * 3_600_000).toISOString();
+export async function viajesSinAceptar(ahora: Date = new Date(), horas: number = HORAS_PARA_ESCALAR): Promise<ViajeSinAceptar[]> {
+  const limite = new Date(ahora.getTime() - horas * 3_600_000).toISOString();
 
   const { data, error } = await supabaseAdmin()
     .from('viaje')
@@ -118,11 +124,11 @@ export async function viajesSinAceptar(ahora: Date = new Date()): Promise<ViajeS
 }
 
 /** El texto para el jefe. Corto: lo que pasó y qué puede hacer. */
-export function armarAvisoJefe(v: ViajeSinAceptar): string {
+export function armarAvisoJefe(v: ViajeSinAceptar, horas: number = HORAS_PARA_ESCALAR): string {
   const quien = v.operadorNombre ?? 'El chofer asignado';
   const viaje = v.folio ? `el viaje ${v.folio}` : 'el viaje que le asignaste';
   return [
-    `${quien} no ha confirmado ${viaje} en ${HORAS_PARA_ESCALAR} horas.`,
+    `${quien} no ha confirmado ${viaje} en ${horas} horas.`,
     'Le insistimos una vez más.',
     'Si no va a poder, conviene reasignarlo desde Despacho.',
   ].join(' ');
@@ -142,10 +148,10 @@ export function armarAvisoJefe(v: ViajeSinAceptar): string {
  * señal, o el viaje puede no ser suyo — y para eso el "no" es una respuesta
  * igual de útil que el "sí".
  */
-export function armarRecordatorioChofer(v: ViajeSinAceptar): string {
+export function armarRecordatorioChofer(v: ViajeSinAceptar, horas: number = HORAS_PARA_ESCALAR): string {
   const viaje = v.folio ? `tu viaje *${v.folio}*` : 'el viaje que te asignaron';
   return [
-    `Te recuerdo ${viaje}: lo tienes asignado desde hace ${HORAS_PARA_ESCALAR} horas y todavía no me confirmas si lo arrancas. 🚛`,
+    `Te recuerdo ${viaje}: lo tienes asignado desde hace ${horas} horas y todavía no me confirmas si lo arrancas. 🚛`,
     '',
     'Contéstame *sí* si ya vas, o *no* si no te toca — con cualquiera de las dos le aviso a tu encargado.',
     'Mientras no me confirmes no puedo anotar tus gastos: se irían al viaje equivocado.',
@@ -189,7 +195,33 @@ export async function escalarViajesSinAceptar(args: {
   telefonoJefePorTenant?: Record<string, string>;
   ahora?: Date;
 } = {}): Promise<ResultadoEscalacion> {
-  const viajes = await viajesSinAceptar(args.ahora);
+  // ── B4: el corte de horas es ESTRATEGIA de cada flota ────────────────────
+  // La consulta global trae candidatos desde el PISO configurable (1 h) y el
+  // corte fino lo pone `tenant.config.agentes.conductores.horasEscalacion`
+  // (default 5, el valor que era fijo). Si la config de una flota no se puede
+  // leer, SUS viajes se saltan esta corrida —escalar contra una estrategia que
+  // no se pudo consultar es escalar con los datos equivocados (el criterio de
+  // getConfig)— y se grita en el log; la corrida de la siguiente hora los
+  // levanta.
+  const candidatos = await viajesSinAceptar(args.ahora, HORAS_MINIMAS_ESCALACION);
+  const ahoraMs = (args.ahora ?? new Date()).getTime();
+  const horasPorTenant = new Map<string, number | null>();
+  await Promise.all([...new Set(candidatos.map((v) => v.tenantId))].map(async (t) => {
+    try {
+      const { getConfig } = await import('./config');
+      horasPorTenant.set(t, (await getConfig(t)).agentes.conductores.horasEscalacion);
+    } catch (e) {
+      horasPorTenant.set(t, null);
+      logger.error('escalacion.config_ilegible', { tenant: t, err: e instanceof Error ? e.message : String(e) });
+    }
+  }));
+  const viajes = candidatos.filter((v) => {
+    const horas = horasPorTenant.get(v.tenantId);
+    if (horas === null || horas === undefined) return false;
+    return new Date(v.avisadoEn).getTime() <= ahoraMs - horas * 3_600_000;
+  });
+  const horasDe = (tenantId: string) => horasPorTenant.get(tenantId) ?? HORAS_PARA_ESCALAR;
+
   const telefonos = args.telefonoJefePorTenant
     ?? await telefonosJefe(viajes.map((v) => v.tenantId));
   const r: ResultadoEscalacion = { revisados: viajes.length, reintentados: 0, escalados: 0, fallos: [] };
@@ -257,7 +289,7 @@ export async function escalarViajesSinAceptar(args: {
       try {
         let recordado = false;
         if (v.operadorTelefono) {
-          recordado = Boolean(await sendText(v.operadorTelefono, armarRecordatorioChofer(v)));
+          recordado = Boolean(await sendText(v.operadorTelefono, armarRecordatorioChofer(v, horasDe(v.tenantId))));
         }
         // Sin teléfono en la fila o con el texto rechazado: la plantilla. Ella
         // resuelve el teléfono por su cuenta y marca lo que tenga que marcar.
@@ -290,7 +322,7 @@ export async function escalarViajesSinAceptar(args: {
         // La plantilla se conserva como plan B porque fuera de la ventana de
         // 24 h es lo único que WhatsApp entrega — y el jefe puede llevar días
         // sin escribirle al número.
-        const enviado = await sendText(tel, armarAvisoJefe(v));
+        const enviado = await sendText(tel, armarAvisoJefe(v, horasDe(v.tenantId)));
         if (enviado) {
           anota(v.tenantId, null, folioAviso);
         } else {

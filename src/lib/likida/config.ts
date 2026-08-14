@@ -52,6 +52,27 @@ export interface LikidaConfig {
   validacion: {
     fechaToleranciaDiasAntes: number; // la fecha del gasto no puede ser anterior a (inicio del viaje − N días)
   };
+  /**
+   * Estrategia por agente (B4, auditoría 4) — SOLO las perillas que un motor
+   * de verdad lee. Handle la tiene en los ocho; aquí se expone donde hay
+   * estrategia real que editar: un knob que ningún código consume sería un
+   * rótulo que miente. Cobranza tiene la suya aparte (mig. 0089, con tiers y
+   * ventana horaria); peajes fija sus tolerancias A PROPÓSITO (el propio
+   * módulo documenta por qué ±$1 y ±1 día no son configurables); facturas se
+   * gobierna por el candado legal de env (modoEfectivo), no por flota.
+   */
+  agentes: {
+    conductores: {
+      /** Horas sin confirmación del chofer antes de insistirle y escalar al
+       *  jefe. Lo lee `escalar_viaje.ts`. */
+      horasEscalacion: number;
+    };
+    liquidacion: {
+      /** Confianza de OCR bajo la cual un comprobante sale "a revisar".
+       *  Lo lee el motor de cuadre vía `desde_db.ts`. */
+      umbralConfianza: number;
+    };
+  };
   /** RFA 2026 regla 2.9 — la facilidad del 15% de combustible en efectivo.
    *  Lo DECLARA el dueño/jefe de flota al registrar la flota (administracion.ts
    *  crearFlota). `undefined`/campos sin llenar = NO DECLARADA: el motor no
@@ -114,6 +135,13 @@ export const DEMO_CONFIG: LikidaConfig = {
     clavesPeaje: CLAVES_PEAJE,
   },
   validacion: { fechaToleranciaDiasAntes: 30 },
+  agentes: {
+    // Los defaults SON los valores que el producto usaba fijos hasta hoy:
+    // exponerlos como estrategia no cambia la conducta de nadie que no los
+    // toque.
+    conductores: { horasEscalacion: 5 },
+    liquidacion: { umbralConfianza: 0.85 },
+  },
 };
 
 /**
