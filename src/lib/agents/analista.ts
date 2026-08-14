@@ -272,6 +272,10 @@ export async function ejecutarAnalista(opts: {
   documento?: { nombre: string; extracto: string } | null;
   mensajes: Array<{ rol: 'usuario' | 'asistente'; texto: string }>;
   timeoutMs?: number;
+  /** Aviso EN VIVO de cada tool que el agente ejecuta — la secuencia de
+   *  pensamiento del chat (13-ago). Pasos REALES del ciclo, jamás una
+   *  animación inventada. */
+  onPaso?: (ev: { fase: 'inicio' | 'fin'; tool: string }) => void;
 }): Promise<RespuestaAnalista> {
   const runId = randomUUID();
   const ctx: ToolContext = { tenantId: opts.tenantId, conversationId: runId };
@@ -322,6 +326,7 @@ export async function ejecutarAnalista(opts: {
       maxTokens: 900,
       temperature: 0.2,
       signal: controller.signal,
+      onTool: opts.onPaso,
     });
 
     // El respaldo de la guardia: todo lo que las tools devolvieron en este
@@ -363,6 +368,7 @@ export async function ejecutarAnalista(opts: {
         maxTokens: 900,
         temperature: 0,
         signal: controller.signal,
+        onTool: opts.onPaso,
       });
       for (const t of res2.toolCalls) extraerNumeros(t.result, respaldo);
       res.toolCalls.push(...res2.toolCalls);

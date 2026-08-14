@@ -56,3 +56,23 @@ export function Logo({ alto, className = '' }: { alto: string; className?: strin
     </span>
   );
 }
+
+/** Solo el ÍCONO de la marca — para el indicador de "pensando" del chat
+ *  (13-ago: como Handle, que pone su logo mientras la IA lee los records).
+ *  Misma máscara y mismo token que la pieza del logo completo. */
+export function LogoIcono({ alto, className = '' }: { alto: string; className?: string }) {
+  return (
+    <span
+      role="img"
+      aria-label="Likida pensando"
+      className={`block ${alto} ${className}`}
+      style={{
+        aspectRatio: '161 / 149',
+        background: 'var(--marca)',
+        WebkitMaskImage: 'url(/images/logo-icono.png)',
+        maskImage: 'url(/images/logo-icono.png)',
+        ...MASCARA,
+      }}
+    />
+  );
+}

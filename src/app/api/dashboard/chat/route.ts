@@ -86,36 +86,56 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  try {
-    const r = await ejecutarAnalista({ tenantId, nombreFlota, usuario: { nombre: sesion.nombre, rol: sesion.rol }, documento, mensajes });
-    // El costo se registra POR MODELO real (mismo criterio que processor.ts):
-    // una fila con la etiqueta del último modelo miente cuando hubo fallback.
-    for (const [modelo, c] of Object.entries(r.costoPorModelo)) {
-      await registrarCosto({
-        tenantId, viajeId: null, fase: faseDeModelo(modelo, 'chat'), modelo,
-        tokensIn: c.tokensIn, tokensOut: c.tokensOut, costoUsd: c.cost,
-      });
-    }
-    // Persistir el intercambio (0088). Si falla, la respuesta IGUAL sale:
-    // el historial es una comodidad, la respuesta ya costó dinero.
-    let conversacionId: string | null = null;
-    try {
-      conversacionId = await guardarIntercambio({
-        tenantId,
-        userId: sesion.userId,
-        conversacionId: conversacionPedida,
-        pregunta: mensajes[mensajes.length - 1].texto,
-        textoRespuesta: r.bloques
-          .filter((b): b is { tipo: 'texto'; texto: string } => b.tipo === 'texto' && typeof (b as { texto?: unknown }).texto === 'string')
-          .map((b) => b.texto).join(' ') || 'Listo.',
-        bloques: r.bloques as unknown as Array<Record<string, unknown>>,
-      });
-    } catch (err) {
-      logger.error('chat.guardar.fallo', { err: err instanceof Error ? err.message : String(err) });
-    }
-    return NextResponse.json({ bloques: r.bloques, conversacionId });
-  } catch (err) {
-    logger.error('chat.analista.fallo', { err: err instanceof Error ? err.message : String(err) });
-    return NextResponse.json({ error: 'el analista no pudo responder en este momento' }, { status: 502 });
-  }
+  // ── STREAMING (13-ago-2026): la secuencia de pensamiento EN VIVO ─────────
+  // Cada tool que el agente ejecuta viaja como un evento NDJSON en cuanto
+  // arranca y en cuanto termina — pasos REALES del ciclo, no una animación.
+  // El último evento trae los bloques (o el error); los caminos de tope de
+  // arriba siguen contestando JSON plano y el cliente entiende ambos.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controlador) {
+      const manda = (ev: unknown) => {
+        try { controlador.enqueue(encoder.encode(`${JSON.stringify(ev)}\n`)); } catch { /* cliente cerró */ }
+      };
+      try {
+        const r = await ejecutarAnalista({
+          tenantId, nombreFlota, usuario: { nombre: sesion.nombre, rol: sesion.rol }, documento, mensajes,
+          onPaso: (p) => manda({ t: 'paso', fase: p.fase, tool: p.tool }),
+        });
+        // El costo se registra POR MODELO real (mismo criterio que
+        // processor.ts): una sola etiqueta miente cuando hubo fallback.
+        for (const [modelo, c] of Object.entries(r.costoPorModelo)) {
+          await registrarCosto({
+            tenantId, viajeId: null, fase: faseDeModelo(modelo, 'chat'), modelo,
+            tokensIn: c.tokensIn, tokensOut: c.tokensOut, costoUsd: c.cost,
+          });
+        }
+        // Persistir el intercambio (0088). Si falla, la respuesta IGUAL sale.
+        let conversacionId: string | null = null;
+        try {
+          conversacionId = await guardarIntercambio({
+            tenantId,
+            userId: sesion.userId,
+            conversacionId: conversacionPedida,
+            pregunta: mensajes[mensajes.length - 1].texto,
+            textoRespuesta: r.bloques
+              .filter((b): b is { tipo: 'texto'; texto: string } => b.tipo === 'texto' && typeof (b as { texto?: unknown }).texto === 'string')
+              .map((b) => b.texto).join(' ') || 'Listo.',
+            bloques: r.bloques as unknown as Array<Record<string, unknown>>,
+          });
+        } catch (err) {
+          logger.error('chat.guardar.fallo', { err: err instanceof Error ? err.message : String(err) });
+        }
+        manda({ t: 'fin', bloques: r.bloques, conversacionId });
+      } catch (err) {
+        logger.error('chat.analista.fallo', { err: err instanceof Error ? err.message : String(err) });
+        manda({ t: 'error', error: 'el analista no pudo responder en este momento' });
+      } finally {
+        try { controlador.close(); } catch { /* ya cerrado */ }
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
 }
