@@ -23,11 +23,21 @@ vi.mock('./crear_viaje_wa', () => ({
 }));
 vi.mock('./conv', () => ({ ConsultaFallida: class ConsultaFallida extends Error {} }));
 
-type FilaInsert = { folio: string; operador_id: string | null };
+type FilaInsert = {
+  folio: string; operador_id: string | null;
+  unidad_id?: string | null; cliente_id?: string | null;
+  ingreso_flete?: number | null; km_recorridos?: number | null;
+};
 
 /** Lo que la lectura previa de folios "ve" — cada import consume una página.
  *  Dejarla vacía simula la carrera: la lectura corre ANTES del insert ajeno. */
 let paginasLectura: Array<Array<{ folio: string }>>;
+/** Los catálogos que el amarre de unidad/cliente lee UNA vez por corrida. */
+let catalogoUnidades: Array<{ id: string; numero_economico: string }>;
+let catalogoClientes: Array<{ id: string; nombre: string }>;
+let catalogoError: { message: string } | null;
+/** Páginas ya servidas por catálogo (la 2a sale vacía: así termina traerTodo). */
+let catalogoServido: Record<string, number>;
 /** La "base": folios ya insertados, con el unique 0092 impuesto. */
 let enBase: Set<string>;
 let llamadasUpsert: number;
@@ -40,7 +50,29 @@ let ocupadosError: { message: string } | null;
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
-    from: () => ({
+    from: (tabla: string) => {
+      // Los catálogos de unidad/cliente van por SU camino: comparten cola con
+      // nada — el amarre corre en paralelo (Promise.all) y una cola única
+      // haría el orden de páginas una lotería.
+      if (tabla === 'unidad' || tabla === 'cliente') {
+        const nodo: Record<string, unknown> = {};
+        for (const m of ['eq', 'not', 'in', 'order', 'abortSignal', 'select']) nodo[m] = () => nodo;
+        nodo.range = () => {
+          if (catalogoError) return Promise.resolve({ data: null, error: catalogoError });
+          const vuelta = catalogoServido[tabla] ?? 0;
+          catalogoServido[tabla] = vuelta + 1;
+          const filas = vuelta === 0 ? (tabla === 'unidad' ? catalogoUnidades : catalogoClientes) : [];
+          return Promise.resolve({ data: filas, error: null });
+        };
+        return nodo;
+      }
+      return fromViaje();
+    },
+  }),
+}));
+
+function fromViaje() {
+  return {
       select: () => {
         const nodo: Record<string, unknown> = {};
         for (const m of ['eq', 'not', 'in', 'order', 'abortSignal']) nodo[m] = () => nodo;
@@ -88,9 +120,8 @@ vi.mock('@/lib/supabase/admin', () => ({
           return Promise.resolve({ data: lote.map((f) => ({ id: `id-${f.folio}` })), error: null });
         },
       }),
-    }),
-  }),
-}));
+  };
+}
 
 const { importarViajes } = await import('./importar_viajes');
 
@@ -100,6 +131,7 @@ const { importarViajes } = await import('./importar_viajes');
 const fila = (folio: string): FilaViajeImportada => ({
   folio, origen: null, destino: null, fechaInicio: '2026-08-01', anticipo: 8000,
   operadorNombre: `Chofer ${folio}`,
+  unidadEco: null, clienteNombre: null, ingresoFlete: null, kmRecorridos: null,
 });
 
 beforeEach(() => {
@@ -109,6 +141,10 @@ beforeEach(() => {
   lotesUpsert = [];
   ocupadosResp = [];
   ocupadosError = null;
+  catalogoUnidades = [];
+  catalogoClientes = [];
+  catalogoError = null;
+  catalogoServido = {};
   resolver.mockClear();
   logger.error.mockClear();
 });
@@ -120,7 +156,10 @@ describe('importarViajes — el dedup aguanta la carrera porque vive en la base'
     const archivo = [fila('V-100'), fila('V-101')];
 
     const a = await importarViajes('t1', archivo);
-    expect(a).toEqual({ creados: 2, saltados: [], operadoresSinAmarrar: [], sinOperador: [], operadorOcupado: [] });
+    expect(a).toEqual({
+      creados: 2, saltados: [], operadoresSinAmarrar: [], sinOperador: [], operadorOcupado: [],
+      unidadesSinAmarrar: [], sinUnidad: [], clientesSinAmarrar: [], sinCliente: [],
+    });
 
     // El segundo submit leyó ANTES del insert del primero (lectura vacía) —
     // sin el candado de la base, aquí salían 4 viajes y otro "creados: 2".
@@ -195,5 +234,70 @@ describe('los candados de la base, respetados ANTES del insert (laterales AUD3)'
     expect(r.creados).toBe(0);
     expect(r.error).toMatch(/no importé nada/i);
     expect(llamadasUpsert).toBe(0);
+  });
+});
+
+describe('unidad, cliente e ingreso del archivo (auditoría 4, A7)', () => {
+  it('amarra por catálogo (case/acentos-insensible) y el INSERT lleva las cuatro columnas nuevas', async () => {
+    catalogoUnidades = [{ id: 'u-102', numero_economico: 'T-102' }];
+    catalogoClientes = [{ id: 'c-1', nombre: 'Cementos del Bajío' }];
+    const r = await importarViajes('t1', [{
+      ...fila('V-1'),
+      unidadEco: 't-102',                      // el TMS lo exporta en minúsculas
+      clienteNombre: 'cementos del bajio',     // y sin acentos
+      ingresoFlete: 38500, kmRecorridos: 1240,
+    }]);
+    expect(r.creados).toBe(1);
+    expect(r.sinUnidad).toEqual([]);
+    expect(r.sinCliente).toEqual([]);
+    expect(lotesUpsert.flat()[0]).toMatchObject({
+      folio: 'V-1', unidad_id: 'u-102', cliente_id: 'c-1',
+      ingreso_flete: 38500, km_recorridos: 1240,
+    });
+  });
+
+  it('un ingreso de 0 llega al INSERT como 0 — un cero medido no se vuelve "sin capturar"', async () => {
+    const r = await importarViajes('t1', [{ ...fila('V-1'), ingresoFlete: 0 }]);
+    expect(r.creados).toBe(1);
+    expect(lotesUpsert.flat()[0]).toMatchObject({ ingreso_flete: 0, km_recorridos: null });
+  });
+
+  it('la unidad que NO existe descarta SU fila con folio y nombre — nada de importarla a medias', async () => {
+    catalogoUnidades = [{ id: 'u-102', numero_economico: 'T-102' }];
+    const r = await importarViajes('t1', [
+      { ...fila('V-1'), unidadEco: 'T-102' },
+      { ...fila('V-2'), unidadEco: 'T-999' },
+    ]);
+    expect(r.creados).toBe(1);
+    expect(r.sinUnidad).toEqual(['V-2']);
+    expect(r.unidadesSinAmarrar).toEqual(['T-999']);
+    expect(lotesUpsert.flat().map((f) => f.folio)).toEqual(['V-1']);
+  });
+
+  it('el cliente que NO existe descarta su fila igual', async () => {
+    catalogoClientes = [{ id: 'c-1', nombre: 'ACME' }];
+    const r = await importarViajes('t1', [
+      { ...fila('V-1'), clienteNombre: 'ACME' },
+      { ...fila('V-2'), clienteNombre: 'Fantasma SA' },
+    ]);
+    expect(r.creados).toBe(1);
+    expect(r.sinCliente).toEqual(['V-2']);
+    expect(r.clientesSinAmarrar).toEqual(['Fantasma SA']);
+  });
+
+  it('si el catálogo no se puede leer, NO se importa nada — "no pude leer" no es "no existe"', async () => {
+    catalogoError = { message: 'timeout' };
+    const r = await importarViajes('t1', [{ ...fila('V-1'), unidadEco: 'T-102' }]);
+    expect(r.creados).toBe(0);
+    expect(r.error).toMatch(/no importé nada/i);
+    expect(llamadasUpsert).toBe(0);
+  });
+
+  it('sin columnas de unidad/cliente en el archivo, el catálogo NI SE CONSULTA', async () => {
+    catalogoError = { message: 'no debería tocarse' };   // si se toca, truena
+    const r = await importarViajes('t1', [fila('V-1')]);
+    expect(r.error).toBeUndefined();
+    expect(r.creados).toBe(1);
+    expect(lotesUpsert.flat()[0]).toMatchObject({ unidad_id: null, cliente_id: null });
   });
 });

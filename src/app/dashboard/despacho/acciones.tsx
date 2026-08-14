@@ -47,6 +47,48 @@ export function AsignarFila({ viajeId, operadores, asignarYAvisar }: {
   );
 }
 
+/** El gemelo de `AsignarFila`, para la unidad, en "En curso": el viaje ya
+ *  tiene chofer y le falta (o se le cambia) el tractocamión. El select
+ *  arranca en la unidad ACTUAL — un control que siempre dijera "sin unidad"
+ *  sobre un viaje que sí la trae sería un rótulo falso. La opción vacía
+ *  desasigna: `viaje.unidad_id` es nullable y quitar una unidad mal puesta
+ *  es una corrección legítima. */
+export function AsignarUnidadFila({ viajeId, unidadId, unidades, asignarUnidadViaje }: {
+  viajeId: string;
+  /** La unidad que el viaje trae HOY, o `null`. */
+  unidadId: string | null;
+  unidades: Array<{ id: string; numeroEconomico: string }>;
+  asignarUnidadViaje: AccionDespacho;
+}) {
+  const [estado, accion] = useActionState(asignarUnidadViaje, null);
+  return (
+    <div>
+      <form action={accion} className="flex items-center gap-1.5">
+        <input type="hidden" name="viajeId" value={viajeId} />
+        <select name="unidadId" aria-label="Unidad" defaultValue={unidadId ?? ''}
+          className="min-w-0 text-[11.5px] px-2 py-1 rounded-lg hairline cifra-mono"
+          style={{ background: 'var(--surface)' }}>
+          <option value="">Sin unidad</option>
+          {unidades.map((u) => <option key={u.id} value={u.id}>{u.numeroEconomico}</option>)}
+        </select>
+        <BotonAsignarUnidad texto={unidadId ? 'Cambiar' : 'Asignar'} />
+      </form>
+      {estado?.error && <p className="text-[11px] mt-0.5" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+    </div>
+  );
+}
+
+function BotonAsignarUnidad({ texto }: { texto: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} title="Amarrar la unidad al viaje"
+      className="hairline inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 shrink-0"
+      style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
+      {pending ? 'Asignando…' : texto}
+    </button>
+  );
+}
+
 /** Mandar (o re-mandar) el aviso de WhatsApp a un chofer que no ha
  *  aceptado. El primer aviso manda el sello y un reaviso no lo reinicia —
  *  el rótulo distingue los dos casos: "Avisar" cuando nunca salió (el fallo

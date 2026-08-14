@@ -13,6 +13,13 @@ describe('leerCifraImportada — el dinero del TMS ajeno', () => {
     expect(leerCifraImportada('1,234.56')).toBe(1234.56);
   });
 
+  it('la coma sola: millares si agrupa de a tres, decimal si no — la regla de ingreso_viaje', () => {
+    // Antes "1,240" entraba como 1.24: un km/ingreso plausible y falso.
+    expect(leerCifraImportada('1,240')).toBe(1240);
+    expect(leerCifraImportada('1,240,500')).toBe(1240500);
+    expect(leerCifraImportada('8000,50')).toBe(8000.5);
+  });
+
   it('vacío es null; basura es ilegible — nunca un cero inventado', () => {
     expect(leerCifraImportada('')).toBeNull();
     expect(leerCifraImportada(null)).toBeNull();
@@ -50,8 +57,51 @@ describe('interpretarFilasViajes — el export del TMS', () => {
     expect(r.viajes[0]).toEqual({
       folio: 'V-100', origen: 'Guadalajara', destino: 'Nuevo Laredo',
       fechaInicio: '2026-08-05', anticipo: 8000, operadorNombre: 'Juan Pérez',
+      // Sin columnas de unidad/cliente/ingreso/km, TODO sale null — "el
+      // archivo no lo trae", nunca un 0 ni una cadena vacía.
+      unidadEco: null, clienteNombre: null, ingresoFlete: null, kmRecorridos: null,
     });
     expect(r.viajes[1].anticipo).toBeNull();
+  });
+
+  it('lee unidad, cliente, ingreso y km por sus alias del mundo real', () => {
+    const r = interpretarFilasViajes([
+      ['Folio', 'No. Económico', 'Razón Social', 'Precio Flete', 'Km Recorridos'],
+      ['V-1', 'T-102', 'Cementos del Bajío', '$38,500.00', '1,240'],
+      ['V-2', '', '', '', ''],
+    ]);
+    expect(r.error).toBeUndefined();
+    expect(r.viajes[0]).toMatchObject({
+      unidadEco: 'T-102', clienteNombre: 'Cementos del Bajío',
+      ingresoFlete: 38500, kmRecorridos: 1240,
+    });
+    // Celdas vacías = null. La distinción que sostiene la medición de margen:
+    // vacío no es cero, y un 0 TECLEADO sí entra como medición.
+    expect(r.viajes[1]).toMatchObject({
+      unidadEco: null, clienteNombre: null, ingresoFlete: null, kmRecorridos: null,
+    });
+  });
+
+  it('un ingreso de 0 tecleado ES un cero medido, no un "sin capturar"', () => {
+    const r = interpretarFilasViajes([
+      ['Folio', 'Ingreso'],
+      ['V-1', 0],
+    ]);
+    expect(r.viajes[0].ingresoFlete).toBe(0);
+  });
+
+  it('ingreso ilegible o fuera del tope descarta la fila CON su motivo — no se importa a medias', () => {
+    const r = interpretarFilasViajes([
+      ['Folio', 'Ingreso', 'Km'],
+      ['V-1', 'treinta mil', ''],
+      ['V-2', '', 'muchos'],
+      ['V-3', '50000000', ''],       // un cero de más — el tope de validarIngreso
+      ['V-4', '38500', '900'],
+    ]);
+    expect(r.viajes.map((v) => v.folio)).toEqual(['V-4']);
+    expect(r.descartadas[0]).toEqual({ fila: 2, motivo: 'ingreso ilegible (V-1)' });
+    expect(r.descartadas[1]).toEqual({ fila: 3, motivo: 'km ilegibles (V-2)' });
+    expect(r.descartadas[2].motivo).toMatch(/ingreso del flete pasa de .*\(V-3\)/i);
   });
 
   it('sin columna de folio no hay importación — el dedup depende de él', () => {

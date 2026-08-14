@@ -17,6 +17,14 @@ export interface ResultadoImportarUI {
     sinOperador: string[];
     /** Folios saltados porque su operador ya trae un viaje abierto (0029). */
     operadorOcupado: string[];
+    /** Números económicos del archivo que no existen en Unidades. */
+    unidadesSinAmarrar: string[];
+    /** Folios NO creados porque su unidad no se pudo amarrar. */
+    sinUnidad: string[];
+    /** Nombres de cliente del archivo que no existen en Clientes y tarifas. */
+    clientesSinAmarrar: string[];
+    /** Folios NO creados porque su cliente no se pudo amarrar. */
+    sinCliente: string[];
   };
 }
 
@@ -47,7 +55,8 @@ export function ImportarViajes({ importar }: { importar: AccionImportar }) {
         <BotonImportar />
       </form>
       <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-        Columnas: folio (obligatoria), origen, destino, fecha, anticipo, operador.
+        Columnas: folio (obligatoria), origen, destino, fecha, anticipo, operador, unidad, cliente, ingreso, km.
+        La unidad y el cliente se amarran contra el catálogo; ingreso vacío no es cero.
         Sin avisos de WhatsApp; los folios que ya existen se saltan solos.
       </p>
       {estado?.error && <p className="text-[12px] mt-1.5" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
@@ -74,6 +83,22 @@ export function ImportarViajes({ importar }: { importar: AccionImportar }) {
             <p style={{ color: 'var(--warn)' }}>
               {r.operadorOcupado.length === 1 ? '1 viaje saltado' : `${r.operadorOcupado.length} viajes saltados`} porque
               su operador ya trae un viaje abierto ({r.operadorOcupado.join(', ')}) — ciérralo o liquídalo primero.
+            </p>
+          )}
+          {r.sinUnidad.length > 0 && (
+            <p style={{ color: 'var(--warn)' }}>
+              {r.sinUnidad.length === 1 ? '1 viaje NO se creó' : `${r.sinUnidad.length} viajes NO se crearon`} porque
+              su unidad no está dada de alta ({r.sinUnidad.join(', ')})
+              {r.unidadesSinAmarrar.length > 0 && <> — números sin amarrar: {r.unidadesSinAmarrar.join(', ')}</>}.
+              Regístrala en Unidades y vuelve a subir el archivo: los ya creados se saltan solos.
+            </p>
+          )}
+          {r.sinCliente.length > 0 && (
+            <p style={{ color: 'var(--warn)' }}>
+              {r.sinCliente.length === 1 ? '1 viaje NO se creó' : `${r.sinCliente.length} viajes NO se crearon`} porque
+              su cliente no está dado de alta ({r.sinCliente.join(', ')})
+              {r.clientesSinAmarrar.length > 0 && <> — nombres sin amarrar: {r.clientesSinAmarrar.join(', ')}</>}.
+              Regístralo en Clientes y tarifas y vuelve a subir el archivo.
             </p>
           )}
         </div>
