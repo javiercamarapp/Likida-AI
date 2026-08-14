@@ -3151,3 +3151,40 @@ select
       and data_type = 'timestamp with time zone') as columnas_creadas,
   (select count(*) from public.viaje
     where llegada_en is not null or descarga_en is not null or regreso_en is not null) as ya_sellados;
+
+-- ── 66. Facturas de proveedor: dedup, dominio de estado y deny-all (mig. 0091) ──
+--
+-- Corrida real (14-ago-2026): doble-rebota=t (unique tenant+uuid), estado-
+-- rebota=t (check del dominio pendiente|aprobada|rechazada), rls=0 (deny-all
+-- para authenticated; solo el service role entra). El RAISE final revierte
+-- los datos de prueba.
+do $$
+declare
+  v_t uuid;
+  doble_rebota boolean := false;
+  estado_rebota boolean := false;
+  n_rls int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0091') returning id into v_t;
+
+  insert into factura_proveedor (tenant_id, cfdi_uuid, total, xml_crudo)
+    values (v_t, 'UUID-VERIF-1', 100, '<x/>');
+  begin
+    insert into factura_proveedor (tenant_id, cfdi_uuid, total, xml_crudo)
+      values (v_t, 'UUID-VERIF-1', 200, '<y/>');
+  exception when unique_violation then doble_rebota := true;
+  end;
+
+  begin
+    update factura_proveedor set estado = 'exportada' where tenant_id = v_t;
+  exception when check_violation then estado_rebota := true;
+  end;
+
+  set local role authenticated;
+  select count(*) into n_rls from factura_proveedor where tenant_id = v_t;
+  reset role;
+
+  delete from tenant where id = v_t;
+  raise exception E'PROVEEDOR_0091  doble-rebota=%  estado-rebota=%  rls=%   (esperado t / t / 0)',
+    doble_rebota, estado_rebota, n_rls;
+end $$;
