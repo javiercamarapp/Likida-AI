@@ -26,7 +26,7 @@ import { SubirDesglose, type AccionSubir } from './subir';
  * que ya llevan las demás pantallas con cifra fiscal.
  */
 export function VistaAgentePeajes({
-  conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose,
+  conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, notificaciones,
 }: {
   conciliacion: ConciliacionConsolidado | null;
   lineas: LineaPorConciliar[] | null;
@@ -35,6 +35,10 @@ export function VistaAgentePeajes({
   peajeAcreditable: number | null;
   sufijo: string;
   subirDesglose: AccionSubir;
+  /** La sección de Notificaciones, ya renderizada en el servidor
+   *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
+   *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
+  notificaciones?: React.ReactNode;
 }) {
   const total = conciliacion ? conciliacion.conciliadas + conciliacion.porConciliar + conciliacion.sinMatch : 0;
   const pct = conciliacion && total > 0 ? Math.round((conciliacion.conciliadas / total) * 100) : null;
@@ -179,6 +183,8 @@ export function VistaAgentePeajes({
             )}
             <p className="text-[11px] pt-3" style={{ color: 'var(--faint)' }}>{LEYENDA_CORTA}</p>
           </section>
+
+          {notificaciones}
         </div>
       </div>
     </main>

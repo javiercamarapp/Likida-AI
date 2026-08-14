@@ -10,6 +10,7 @@ import { getFiscalDeFlota } from '@/lib/likida/facturacion/flota_fiscal';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteProveedores } from './vista';
+import { SeccionNotificaciones } from '../seccion-notificaciones';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,6 +102,7 @@ export default async function PaginaAgenteProveedores({
       rfcFlota={rfcFlota}
       sufijo={sufijo}
       acciones={{ subirFactura, decidir }}
+      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="proveedores" />}
     />
   );
 }

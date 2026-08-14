@@ -8,6 +8,7 @@ import {
 import { getConfig } from '@/lib/likida/config';
 import { traerResumenCostoIaTenant } from '@/lib/likida/costos';
 import { VistaAgenteLiquidacion, type ExtraAgenteLiquidacion } from './vista';
+import { SeccionNotificaciones } from '../seccion-notificaciones';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,6 +82,7 @@ export default async function PaginaAgenteLiquidacion({
       cierres={liqs.filter((l) => l.estatus !== 'revisar').slice(0, 5)}
       extra={extra}
       sufijo={sufijo}
+      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="liquidacion" />}
     />
   );
 }

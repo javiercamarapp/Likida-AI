@@ -5,6 +5,7 @@ import { getViajes, contarEscalados, getEventosConductores } from '@/lib/likida/
 import { ahoraMs } from '@/lib/saludo';
 import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteConductores, type EsperaAceptar } from './vista';
+import { SeccionNotificaciones } from '../seccion-notificaciones';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,7 @@ export default async function PaginaAgenteConductores({
       sinAvisar={sinAvisar}
       eventos={eventos}
       sufijo={sufijoTenant(sp)}
+      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="conductores" />}
     />
   );
 }

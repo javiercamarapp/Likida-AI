@@ -32,13 +32,17 @@ const EVENTO: Record<EventoConductor['tipo'], { Icono: typeof Send; texto: (e: E
  * WhatsApp — que es la verdad del código, no marketing. Sin pesos: es la
  * pantalla del jefe de tráfico.
  */
-export function VistaAgenteConductores({ kpis, esperan, sinAvisar, eventos, sufijo = '' }: {
+export function VistaAgenteConductores({ kpis, esperan, sinAvisar, eventos, sufijo = '', notificaciones }: {
   kpis: { vivos: number; aceptados: number; esperan: number; escalados: number | null };
   esperan: EsperaAceptar[];
   /** Vivos con operador y SIN aviso — el fallo silencioso que se enseña. */
   sinAvisar: number;
   eventos: EventoConductor[] | null;
   sufijo?: string;
+  /** La sección de Notificaciones, ya renderizada en el servidor
+   *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
+   *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
+  notificaciones?: React.ReactNode;
 }) {
   return (
     <main className="h-full">
@@ -163,6 +167,8 @@ export function VistaAgenteConductores({ kpis, esperan, sinAvisar, eventos, sufi
               </div>
             </div>
           </section>
+
+          {notificaciones}
         </div>
       </div>
     </main>

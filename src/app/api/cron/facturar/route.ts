@@ -9,6 +9,7 @@ import { telefonoJefeDe } from '@/lib/likida/contactos';
 import { conPortales, PORTALES_CONOCIDOS } from '@/lib/likida/facturacion/adaptadores/registro';
 import { conNavegador } from '@/lib/likida/facturacion/adaptadores/pagina_playwright';
 import { logger } from '@/lib/logger';
+import { avisarCorridasPorFlota } from '@/lib/likida/agentes/notificaciones';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -434,6 +435,11 @@ export async function procesarLoteEnCola(
     // ── 2. Una flota, un navegador, su registro de portales.
     let falloDeArranque: string | null = null;
     let sinIntentar = 0;
+    // Cómo le fue a CADA flota que alcanzó turno. El éxito SÍ se registra: es
+    // lo que rearma el filo del anti-ruido (`avisarCorridasPorFlota`). Las que
+    // se quedaron sin presupuesto de tiempo NO entran — no fallaron, no les
+    // tocó; la corrida de la siguiente hora las levanta enteras.
+    const corridas = new Map<string, unknown>();
     /** Tickets con flota y portal listos, que no se intentaron porque ya no
      *  quedaba tiempo para otra sesión de navegador completa. */
     let sinTiempo = 0;
@@ -444,6 +450,11 @@ export async function procesarLoteEnCola(
       if (falloDeArranque) {
         // Ya se sabe que no hay navegador. No se vuelve a intentar arrancarlo ni
         // se marcan estos tickets: quedan enteros para la corrida en que se pueda.
+        // SÍ cuenta como corrida fallida para ESTA flota, aunque el error se
+        // haya descubierto en otra: su agente no pudo trabajar, y ése es
+        // exactamente el hecho que el aviso existe para contar. El anti-ruido
+        // lo topa en 3 correos por incidente, no uno por flota por hora.
+        corridas.set(tenantId, new Error(falloDeArranque));
         sinIntentar += tickets.length;
         flotas.push({ tenantId, tickets: tickets.length, falta: ['no se intentó: el navegador no arrancó'] });
         continue;
@@ -458,6 +469,11 @@ export async function procesarLoteEnCola(
         logger.warn('cron.facturar.flota_sin_datos_fiscales', { tenant: tenantId, falta: falta.join('; ') });
         flotas.push({ tenantId, tickets: tickets.length, falta });
         for (const g of tickets) await correr(g);
+        // La corrida SÍ terminó: lo que falta son los datos fiscales de la
+        // flota, que es un hueco de captura y no un agente caído. Llamarlo
+        // «corrida fallida» mandaría a alguien a revisar logs de un agente
+        // que funciona.
+        corridas.set(tenantId, null);
         continue;
       }
 
@@ -524,6 +540,7 @@ export async function procesarLoteEnCola(
             ? { directorioCapturas: process.env.LIKIDA_CAPTURAS_DIR }
             : undefined,
         });
+        corridas.set(tenantId, null);
       } catch (e) {
         const detalle = e instanceof Error ? e.message : String(e);
         if (arranco) throw e; // el navegador sí abrió: es otro fallo, sube
@@ -531,10 +548,17 @@ export async function procesarLoteEnCola(
         // `conNavegador` arranca Chromium ANTES de correr el cuerpo, así que si
         // el cuerpo nunca se ejecutó, lo que falló fue el arranque.
         falloDeArranque = detalle;
+        corridas.set(tenantId, e);
         sinIntentar += tickets.length;
         flotas.push({ tenantId, tickets: tickets.length, falta: ['no se intentó: el navegador no arrancó'] });
       }
     }
+
+    // FUERA del presupuesto de tiempo del lote, a propósito: los
+    // PRESUPUESTO_LOTE_MS están reservados para sesiones de portal, y una
+    // escritura de notificación no debe quitarle turno a un ticket. Nunca
+    // propaga (ver `avisarCorridasPorFlota`).
+    await avisarCorridasPorFlota('facturas', corridas);
 
     const facturados = resultados.filter((r) => r.facturado).length;
 

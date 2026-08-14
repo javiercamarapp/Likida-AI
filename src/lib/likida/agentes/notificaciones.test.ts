@@ -4,7 +4,7 @@ import {
   AGENTES_NOTIFICABLES, EVENTOS, ROLES_AVISABLES, MARCAS_DE_INSISTENCIA,
   MAX_DESTINATARIOS, PISO_ENTRE_AVISOS_MS, CONFIG_NOTIF_DEFAULT,
   agentePorId, eventosDe, rolesQuePueden, validarConfigNotificaciones,
-  marcaAlcanzada, debeAvisar, motivoDeCorrida, repartoDe,
+  marcaAlcanzada, debeAvisar, motivoDeCorrida, repartoDe, puedeConfigurarAvisos,
   type ConfigNotificaciones, type EntradaDecision, type HuellaAviso,
   type UsuarioAvisable,
 } from './notificaciones';
@@ -412,5 +412,65 @@ describe('el reparto dice a quién le llega Y a quién no, con el porqué', () =
     expect(r.reciben).toHaveLength(0);
     expect(r.excluidos).toHaveLength(2);
     for (const x of r.excluidos) expect(x.porque.length).toBeGreaterThan(10);
+  });
+});
+
+describe('puedeConfigurarAvisos — la puerta de la escritura multi-tenant', () => {
+  const cobranza = agentePorId('cobranza')!;      // área dinero
+  const conductores = agentePorId('conductores')!; // área operación
+
+  it('el dueño de SU flota pasa', () => {
+    expect(puedeConfigurarAvisos({ rol: 'flota_admin', tenantId: 'A' }, 'A', cobranza)).toBeNull();
+  });
+
+  it('el dueño de OTRA flota no pasa — es el IDOR que esta puerta existe para tapar', () => {
+    // El render nunca le enseña esta pantalla, pero la action es alcanzable
+    // por POST directo: sin este cruce, reconfiguraría los correos de una
+    // empresa que no es la suya.
+    expect(puedeConfigurarAvisos({ rol: 'flota_admin', tenantId: 'B' }, 'A', cobranza))
+      .toBe('Este agente no es de tu flota.');
+  });
+
+  it('el jefe de tráfico NO configura un agente de dinero', () => {
+    // No es una regla nueva: es la misma `puedeVerRuta` que decide si puede
+    // abrir la pantalla. Si pudiera configurarlo, se mandaría a sí mismo un
+    // correo cuyo botón lo rebota fuera.
+    expect(puedeConfigurarAvisos({ rol: 'encargado', tenantId: 'A' }, 'A', cobranza))
+      .toBe('Tu rol no puede configurar los avisos de este agente.');
+  });
+
+  it('el jefe de tráfico SÍ configura el de conductores, que es su área', () => {
+    expect(puedeConfigurarAvisos({ rol: 'encargado', tenantId: 'A' }, 'A', conductores)).toBeNull();
+  });
+
+  it('el contador NO configura el de conductores', () => {
+    expect(puedeConfigurarAvisos({ rol: 'contador', tenantId: 'A' }, 'A', conductores))
+      .toBe('Tu rol no puede configurar los avisos de este agente.');
+  });
+
+  it('el operador no configura nada: no tiene panel', () => {
+    for (const a of AGENTES_NOTIFICABLES) {
+      expect(puedeConfigurarAvisos({ rol: 'operador', tenantId: 'A' }, 'A', a), a.id).toBeTruthy();
+    }
+  });
+
+  it('el superadmin SÍ cruza flotas — es su consola, y es la única excepción', () => {
+    expect(puedeConfigurarAvisos({ rol: 'superadmin', tenantId: 'B' }, 'A', cobranza)).toBeNull();
+    expect(puedeConfigurarAvisos({ rol: 'superadmin', tenantId: null }, 'A', conductores)).toBeNull();
+  });
+
+  it('una sesión sin tenant que NO es superadmin no pasa', () => {
+    // `null !== 'A'`, y el orden importa: el rol se revisa antes que el tenant,
+    // pero ninguno de los dos se salta.
+    expect(puedeConfigurarAvisos({ rol: 'flota_admin', tenantId: null }, 'A', cobranza))
+      .toBe('Este agente no es de tu flota.');
+  });
+
+  it('un rol inventado no pasa por ningún agente', () => {
+    // Fallar cerrado ante un valor que no está en el dominio: si mañana alguien
+    // agrega un rol a la base y olvida `visibilidad.ts`, no hereda permisos.
+    for (const a of AGENTES_NOTIFICABLES) {
+      expect(puedeConfigurarAvisos({ rol: 'auditor_externo', tenantId: 'A' }, 'A', a), a.id).toBeTruthy();
+    }
   });
 });

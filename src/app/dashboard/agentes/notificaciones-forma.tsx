@@ -139,7 +139,10 @@ export function FormaNotificaciones({ datos, guardar }: {
           {/* ── DE QUÉ avisa ── */}
           <fieldset disabled={apagado} className="disabled:opacity-50">
             <legend className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>
-              De qué te avisa {datos.agente.nombre}
+              {/* «el» a mano: los seis se llaman "Agente de …", así que el
+                  artículo siempre cuadra. Sin él se lee "De qué te avisa
+                  Agente de Cobranza", que suena a traducción automática. */}
+              De qué te avisa el {datos.agente.nombre}
             </legend>
             <div className="space-y-2.5">
               {datos.eventos.map((e) => (

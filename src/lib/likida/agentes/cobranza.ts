@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { avisarCorridasPorFlota } from './notificaciones';
 import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 import {
   CONFIG_COBRANZA_DEFAULT, validarConfigCobranza, dentroDeVentana,
@@ -337,6 +338,12 @@ export async function ejecutarCobranzaGlobal(ahora: Date = new Date()): Promise<
   const venceEn = Date.now() + PLAZO_COBRANZA_GLOBAL_MS;
 
   const total = { tenants: tenants.length, contactados: 0, cortadosPorReloj: 0, fallos: [] as string[] };
+  // Cómo le fue a CADA flota que sí alcanzó turno. El aviso se manda al final
+  // y no aquí adentro por el reloj: los 90s están presupuestados para los
+  // envíos de WhatsApp, y meter una escritura de notificación por flota dentro
+  // de esa ventana le quitaría turno a choferes reales. Las que el corte dejó
+  // fuera NO entran al mapa — ver `avisarCorridasPorFlota`.
+  const corridas = new Map<string, unknown>();
   for (const t of tenants) {
     if (Date.now() >= venceEn) {
       logger.warn('cobranza.global_corte_por_reloj', { tenantsSinCorrer: tenants.length - tenants.indexOf(t) });
@@ -347,10 +354,14 @@ export async function ejecutarCobranzaGlobal(ahora: Date = new Date()): Promise<
       total.contactados += r.contactados;
       total.cortadosPorReloj += r.cortadosPorReloj;
       total.fallos.push(...r.fallos);
+      corridas.set(t, null);
     } catch (e) {
       total.fallos.push(`${t}: ${e instanceof Error ? e.message : 'corrida fallida'}`);
+      corridas.set(t, e);
     }
   }
+
+  await avisarCorridasPorFlota('cobranza', corridas, ahora);
   return total;
 }
 

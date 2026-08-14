@@ -10,6 +10,7 @@ import { guardarYConciliarConsolidado } from '@/lib/likida/intake/consolidado';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
 import { VistaAgentePeajes } from './vista';
+import { SeccionNotificaciones } from '../seccion-notificaciones';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,6 +89,7 @@ export default async function PaginaAgentePeajes({
       peajeAcreditable={acreditables?.peaje ?? null}
       sufijo={sufijo}
       subirDesglose={subirDesglose}
+      notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="peajes" />}
     />
   );
 }

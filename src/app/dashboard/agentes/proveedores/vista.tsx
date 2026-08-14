@@ -11,11 +11,15 @@ import { SubirFactura, BotonesDecision, type AccionProveedores } from './control
  * captura manual en el ERP. El agente prepara y marca (receptor ajeno,
  * duplicados); la persona decide — nunca al revés.
  */
-export function VistaAgenteProveedores({ facturas, rfcFlota, sufijo, acciones }: {
+export function VistaAgenteProveedores({ facturas, rfcFlota, sufijo, acciones, notificaciones }: {
   facturas: FacturaProveedor[];
   rfcFlota: string | null;
   sufijo: string;
   acciones: { subirFactura: AccionProveedores; decidir: AccionProveedores };
+  /** La sección de Notificaciones, ya renderizada en el servidor
+   *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
+   *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
+  notificaciones?: React.ReactNode;
 }) {
   const pendientes = facturas.filter((f) => f.estado === 'pendiente');
   const aprobadas = facturas.filter((f) => f.estado === 'aprobada');
@@ -133,6 +137,8 @@ export function VistaAgenteProveedores({ facturas, rfcFlota, sufijo, acciones }:
             escritura directa a SAP B1 se diseña con las credenciales del cliente — este agente
             no la promete antes de tenerlas.
           </p>
+
+          {notificaciones}
         </div>
       </div>
     </main>

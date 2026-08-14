@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { avisarCorridasPorFlota } from './agentes/notificaciones';
 import { avisarAlChofer } from './operacion';
 import { telefonosJefe } from './contactos';
 import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
@@ -277,6 +278,22 @@ export async function escalarViajesSinAceptar(args: {
   }
 
   logger.info('viaje.escalacion', { revisados: r.revisados, escalados: r.escalados, fallos: r.fallos.length });
+
+  // ── EL CIERRE DE LA CORRIDA, PARA EL ANTI-RUIDO ──────────────────────────
+  //
+  // SOLO ÉXITOS, y no es un cableado a medias: este runner NO TIENE un fallo
+  // por flota que reportar. Cada envío de arriba va en su propio try/catch y
+  // termina en `r.fallos` —un WhatsApp que no salió no es «el agente no pudo
+  // trabajar»—, y lo único que sí tumba la corrida entera (la lectura de
+  // viajes, la de teléfonos) revienta ANTES de este punto, cuando todavía no
+  // se sabe qué flotas había: sin lista de tenants no hay a quién avisarle, y
+  // el 500 del cron es ahí la señal, no un correo inventado.
+  //
+  // Registrar el éxito igual sí sirve, y es la mitad que se olvida: es lo que
+  // rearma el filo. Sin esto, la racha de una flota que se rompió una vez no
+  // se limpia nunca y su siguiente incidente arranca pasado de las marcas, sin
+  // mandar el primer correo — que es el que importa.
+  await avisarCorridasPorFlota('conductores', new Map(viajes.map((v) => [v.tenantId, null])));
   return r;
 }
 
