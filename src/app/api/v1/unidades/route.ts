@@ -34,6 +34,7 @@ import {
   leerCuerpo, leerLlaveIdempotencia, validar, escribir, huella,
   texto, entero, CampoInvalido,
   buscarUnidadPorEconomico, type UnidadCreada,
+  ANIO_MIN_UNIDAD,
 } from '../_escritura';
 
 export const runtime = 'nodejs';
@@ -155,7 +156,6 @@ export async function GET(req: Request) {
 /** El primer año de una unidad de carga que siga rodando. Un `1900` es un
  *  dedazo; un año en el futuro lejano también. `+2` porque los modelos se
  *  venden adelantados. */
-const ANIO_MIN = 1950;
 
 function normalizarUnidad(cuerpo: Record<string, unknown>, hoy = new Date()): NuevaUnidad {
   // Igual que en `POST /v1/viajes`: un `tenant_id` en el cuerpo no se lee aquí
@@ -168,7 +168,7 @@ function normalizarUnidad(cuerpo: Record<string, unknown>, hoy = new Date()): Nu
     placas: texto(cuerpo, 'placas', { max: 20 }),
     marca: texto(cuerpo, 'marca', { max: 60 }),
     modelo: texto(cuerpo, 'modelo', { max: 60 }),
-    anio: entero(cuerpo, 'anio', { min: ANIO_MIN, max: hoy.getUTCFullYear() + 2 }),
+    anio: entero(cuerpo, 'anio', { min: ANIO_MIN_UNIDAD, max: hoy.getUTCFullYear() + 2 }),
   };
 }
 

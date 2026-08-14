@@ -369,6 +369,14 @@ export const CABECERA_IDEMPOTENCIA = 'Idempotency-Key';
 export const LARGO_MIN_LLAVE = 8;
 export const LARGO_MAX_LLAVE = 200;
 
+/** El año más viejo que admite una unidad.
+ *
+ *  Vive aquí y no en la ruta porque el OpenAPI lo cita, y un `route.ts` de
+ *  Next.js no puede exportar nada que no sea un handler. Que el spec lea ESTA
+ *  constante y no una copia suya es el punto: un límite documentado que no es
+ *  el que valida enseña a mandar peticiones que rebotan. */
+export const ANIO_MIN_UNIDAD = 1950;
+
 export type LecturaLlave =
   | { ok: true; llave: string }
   | { ok: false; respuesta: NextResponse<CuerpoError> };
