@@ -75,8 +75,10 @@ export interface GastoFiscal {
   viajeFolio: string | null;
   operadorNombre: string | null;
   /**
-   * ¿Ya no se puede pedir la factura? Lo calcula `getGastosFiscales` con el
-   * plazo real del comercio (`facturacion/caducidad.ts`).
+   * ¿El PORTAL del comercio ya cerró su plazo? Lo calcula `getGastosFiscales`
+   * con el plazo del comercio (`facturacion/caducidad.ts`). Es política de un
+   * tercero (nivel 6), no un plazo legal: el derecho de exigir la factura
+   * vive todo el ejercicio (`normas/politica-portales-plazos.yaml`).
    *
    * `null` = no se sabe (sin fecha de ticket confiable, o comercio no
    * reconocido). NO es `false`: decirle "todavía te da tiempo" a alguien
@@ -226,7 +228,8 @@ export function opcionesDe(cfg: LikidaConfig): OpcionesFiscales {
 // ── Deducibilidad por comprobante ──────────────────────────────────────────
 
 export type CausaPerdida =
-  /** El comercio ya no acepta facturar: la deducción ya no se recupera. */
+  /** El PORTAL del comercio cerró su plazo (política de nivel 6, no la ley):
+   *  el derecho legal de exigir la factura vive todo el ejercicio. */
   | 'plazo_vencido'
   /** El emisor canceló el CFDI. */
   | 'cfdi_cancelado'
@@ -246,7 +249,8 @@ export type CausaPerdida =
 export type Gravedad =
   /** El dinero ya no se recupera. */
   | 'perdida'
-  /** Depende de algo que todavía puede moverse (el 15%, una aclaración). */
+  /** Depende de algo que todavía puede moverse (el 15%, una aclaración, la
+   *  Conciliación de Factura del SAT). */
   | 'en_riesgo'
   /** Con una gestión se recupera: pedir la factura antes de que venza. */
   | 'recuperable';
@@ -261,11 +265,19 @@ export interface Causa {
 }
 
 const TITULOS: Record<CausaPerdida, Omit<Causa, 'causa'>> = {
+  // AUD3 FI-A2, ALTO: esto era `gravedad: 'perdida'` y el KPI lo sumaba a
+  // "monto perdido". La ficha `normas/politica-portales-plazos.yaml`
+  // (jerarquía 6) dice lo contrario: el plazo del portal "tiene CERO fuerza
+  // legal" y "el plazo LEGAL para pedir factura es todo el ejercicio" — y el
+  // motor, sobre el mismo ticket, imprime "legalmente puedes exigirlo dentro
+  // del ejercicio" (engine.ts, rama vencida). Dar por perdida una deducción
+  // que la Conciliación de Factura recupera es confundir nivel 6 con
+  // obligación fiscal: el error más caro del dominio (normas/README.md).
   plazo_vencido: {
-    gravedad: 'perdida',
-    titulo: 'Plazo de facturación vencido',
+    gravedad: 'en_riesgo',
+    titulo: 'Plazo del comercio vencido',
     norma: 'LISR 27-III',
-    detalle: 'El comercio ya no acepta timbrarlo. Sin CFDI no ampara deducción y el IVA no se acredita.',
+    detalle: 'El portal del comercio cerró su plazo — política del comercio, no la ley. El derecho legal vive todo el ejercicio: recuperarlo exige pedir la factura directo al emisor (Conciliación de Factura del SAT). Sin CFDI al cierre, no ampara deducción ni acredita IVA.',
   },
   cfdi_cancelado: {
     gravedad: 'perdida',
@@ -343,7 +355,7 @@ export function causasDe(g: GastoFiscal, o: OpcionesFiscales): Causa[] {
 
   if (!g.cfdiUuid) {
     // `plazoVencido === null` es "no se sabe": se trata como recuperable —el
-    // camino que le pide a alguien que lo revise— en vez de darlo por perdido.
+    // camino que le pide a alguien que lo revise— en vez de darlo por vencido.
     if (g.plazoVencido === true) push('plazo_vencido');
     else push('sin_cfdi');
   }
@@ -372,9 +384,13 @@ export function causasDe(g: GastoFiscal, o: OpcionesFiscales): Causa[] {
  * primero lo que ya no se recupera, luego lo que está en riesgo, al final lo
  * que basta con gestionar.
  */
+// `plazo_vencido` bajó del grupo de pérdidas al de riesgo (AUD3 FI-A2): un
+// ticket sin CFDI con el portal cerrado cuesta una gestión ante el emisor,
+// no el dinero — así que una pérdida dura (efectivo sobre el tope) le gana
+// la dominancia.
 const ORDEN: CausaPerdida[] = [
-  'efos', 'cfdi_cancelado', 'plazo_vencido', 'efectivo_sobre_tope',
-  'efos_indeterminado', 'combustible_efectivo', 'sin_cfdi',
+  'efos', 'cfdi_cancelado', 'efectivo_sobre_tope',
+  'efos_indeterminado', 'plazo_vencido', 'combustible_efectivo', 'sin_cfdi',
 ];
 
 export function causaDominante(g: GastoFiscal, o: OpcionesFiscales): Causa | null {

@@ -138,11 +138,29 @@ describe('causasDe', () => {
     expect(c.gravedad).toBe('recuperable');
   });
 
-  it('sin CFDI y con plazo vencido es PÉRDIDA, y ya no dice "sin_cfdi"', () => {
+  it('sin CFDI y con plazo del comercio vencido emite plazo_vencido, y ya no dice "sin_cfdi"', () => {
     // Son el mismo hecho en dos momentos: emitir las dos duplicaría el dinero.
     const cs = causasDe(gasto({ cfdiUuid: null, plazoVencido: true }), OPTS).map((c) => c.causa);
     expect(cs).toContain('plazo_vencido');
     expect(cs).not.toContain('sin_cfdi');
+  });
+
+  it('plazo del comercio vencido queda EN RIESGO, no perdido: el derecho legal vive todo el ejercicio', () => {
+    // AUD3 FI-A2, ALTO. `normas/politica-portales-plazos.yaml` (jerarquía 6):
+    // "ESTO NO ES UNA NORMA FISCAL… El plazo LEGAL para pedir factura es todo
+    // el ejercicio", con remedio en la Conciliación de Factura del SAT. El
+    // motor ya lo decía sobre el mismo ticket (engine.ts, rama vencida:
+    // "legalmente puedes exigirlo dentro del ejercicio") mientras este panel
+    // lo sumaba a "monto perdido" — dos veredictos opuestos sobre el mismo
+    // papel, y el del panel era el error que normas/README.md llama el más
+    // caro del dominio: confundir la política de un comercio (nivel 6) con
+    // una obligación fiscal.
+    const c = causasDe(gasto({ cfdiUuid: null, plazoVencido: true }), OPTS)
+      .find((x) => x.causa === 'plazo_vencido')!;
+    expect(c.gravedad).toBe('en_riesgo');
+    // La nota tiene que llevar el matiz en la misma frase: el derecho vive
+    // todo el ejercicio y recuperarlo es una gestión, no un milagro.
+    expect(c.detalle).toMatch(/ejercicio/);
   });
 
   it('plazo DESCONOCIDO no se da por vencido', () => {
@@ -246,7 +264,12 @@ describe('resumirPerdidas', () => {
     expect(r.ivaPerdidoDocumentado).toBe(160);
     expect(r.sinDesgloseDeIva).toBe(1);
     // El monto sí se reporta entero: lo que no se afirma es su IVA.
-    expect(r.montoPerdido).toBe(6160);
+    // Antes esto esperaba montoPerdido 6160 (cancelado + plazo vencido
+    // juntos): el plazo del comercio vencido ya no es pérdida sino riesgo
+    // (AUD3 FI-A2 — el plazo legal es todo el ejercicio, ficha
+    // politica-portales-plazos), así que los $5,000 viven en montoEnRiesgo.
+    expect(r.montoPerdido).toBe(1160);
+    expect(r.montoEnRiesgo).toBe(5000);
   });
 
   it('ordena las filas por monto: lo que más pesa, arriba', () => {
