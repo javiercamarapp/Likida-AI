@@ -39,8 +39,14 @@ se llena el portal y NO se aprieta emitir.
 
 ## El día uno, en orden
 
+> **DECISIÓN TOMADA (13-ago-2026):** Javier eligió encender **bajo su propio
+> riesgo, sin revisión de abogado**, PERO hasta cerrar el primer cliente:
+> "cuando ya cierre el primer cliente, recuérdame hacer eso". El disparador
+> es ese — al primer cliente cerrado, ejecutar esta lista desde el paso 2.
+
 1. **Visto bueno del abogado** al borrador (o decisión expresa de Javier de
-   publicarlo bajo su propio riesgo — es su producto; que quede por escrito).
+   publicarlo bajo su propio riesgo — es su producto; que quede por escrito.
+   ← Ya quedó por escrito: ver el recuadro de arriba).
 2. **Publicar `/terminos`** con el texto corregido y la cláusula de mandato
    (secciones 1 y 2 del borrador). Sin este paso, el candado NO se toca.
 3. **Variables en Vercel** (las pone Javier — el CLI, no el panel):
