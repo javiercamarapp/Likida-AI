@@ -63,7 +63,18 @@ function rutasDeOperacion(): Array<{ ruta: string; archivos: string[] }> {
     if (!existsSync(archivo)) continue;
     const ruta = `/dashboard/${entrada.name}`;
     if (areaDeRuta(ruta) === 'operacion') {
-      salida.push({ ruta, archivos: [archivo, `${DIR}${entrada.name}/vista.tsx`] });
+      // TODOS los .tsx del directorio, no una lista de nombres a mano.
+      //
+      // Esta lista ya se quedó corta DOS veces: el 4-ago con `vista.tsx` y el
+      // 12-ago con `inicio-contenido.tsx`, y las dos se descubrieron por
+      // casualidad (la segunda porque bajó el conteo de la suite, no porque
+      // algo fallara). Un tercer nombre a mano solo espera al cuarto archivo:
+      // el 14-ago apareció `viajes/libro.tsx`, con `mxn(` adentro y fuera del
+      // escaneo. Escanear el directorio cierra la clase entera de agujero.
+      const tsx = readdirSync(`${DIR}${entrada.name}`, { withFileTypes: true })
+        .filter((f) => f.isFile() && f.name.endsWith('.tsx') && !f.name.includes('.test.'))
+        .map((f) => `${DIR}${entrada.name}/${f.name}`);
+      salida.push({ ruta, archivos: tsx });
     }
   }
   // La raíz también es `operacion`. `inicio-contenido.tsx` va en la lista

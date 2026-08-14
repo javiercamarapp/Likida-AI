@@ -131,6 +131,11 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/combustible-casetas': 'dinero',
   // Rentabilidad y cobranza a clientes (F7): margen y cartera — dinero puro.
   '/dashboard/rentabilidad': 'dinero',
+  // El lado del INGRESO (0048/0049), que existía en la base y estaba dormido.
+  // Los dos son `dinero`: quién te paga, cuánto y cuánto debe es exactamente lo
+  // que el jefe de tráfico no ve.
+  '/dashboard/clientes': 'dinero',
+  '/dashboard/facturacion': 'dinero',
   // Preguntar a la IA — reconstruida el 12-ago-2026 (la primera de las 17).
   // Es `dinero` porque responde montos comprobados/IVA/peaje (§12: las
   // cifras se piden DESPUÉS de este gateo).
