@@ -13,6 +13,22 @@ import { StatCard, EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 // enero cruza el año, que es justo cuando el corte importa.
 import { mxn, numero, fechaMx } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
+import {
+  FormaFactura, FormaPago, FormaEmitir, FormaCancelar, Plegable, type AccionForma,
+} from './forma';
+
+/** Lo que la página inyecta para que la pantalla además CAPTURE. Opcional a
+ *  propósito: sin esto la vista sigue siendo pura-props y se puede mirar con
+ *  fixtures sin sesión, igual que siempre. */
+export interface CapturaFacturacion {
+  clientes: ReadonlyArray<{ id: string; nombre: string; diasCredito: number | null }>;
+  /** `YYYY-MM-DD` en hora de México, para los defaults de fecha. */
+  hoy: string;
+  factura: AccionForma;
+  pago: AccionForma;
+  emitir: AccionForma;
+  cancelar: AccionForma;
+}
 
 /**
  * FACTURACIÓN A CLIENTES — el link que el sidebar pintaba y daba 404.
@@ -34,7 +50,10 @@ import { BarraPagina } from '../resumen-visual';
  *
  * Pura props a propósito, para poder mirarla con fixtures sin sesión.
  */
-export function VistaFacturacion({ datos }: { datos: FacturacionClientes | null }) {
+export function VistaFacturacion({ datos, captura = null }: {
+  datos: FacturacionClientes | null;
+  captura?: CapturaFacturacion | null;
+}) {
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
@@ -47,20 +66,32 @@ export function VistaFacturacion({ datos }: { datos: FacturacionClientes | null 
           {datos === null ? (
             <EstadoError mensaje="No pude leer tus facturas emitidas, sus pagos ni tus viajes liquidados. No se enseña una cartera a medias: media tabla sumada se ve igual que la tabla entera, solo que más barata." />
           ) : datos.cartera.facturas.length === 0 && datos.viajesLiquidados === 0 ? (
-            // El estado en el que abre HOY toda flota: las tablas de la 0049
-            // existen y están vacías. Se dice qué las llena, no se pintan ceros.
-            <EstadoVacio icono={<FileText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Esta pantalla trabaja con dos cosas que tu cuenta todavía no tiene: las{' '}
-              <strong>facturas que le emites a tus clientes</strong> (con sus pagos) y{' '}
-              <strong>viajes ya liquidados</strong>. En cuanto exista lo primero, aquí sale cuánto te
-              deben y desde hace cuánto — corriente, 1 a 30, 31 a 60 y más de 60 días — y qué está
-              vencido de verdad. En cuanto exista lo segundo, sale la lista de viajes cerrados que
-              nadie facturó, que es el dinero que se queda en la mesa. Nada de esto se estima: si el
-              dato no está, se dice.
-            </EstadoVacio>
+            // El estado en el que abre una flota nueva: las tablas de la 0049
+            // existen y están vacías. Se dice qué las llena, no se pintan
+            // ceros — y desde el hallazgo A1 (auditoría 4), la captura que las
+            // llena vive AQUÍ MISMO, no en una promesa.
+            <>
+              <EstadoVacio icono={<FileText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                Esta pantalla trabaja con dos cosas que tu cuenta todavía no tiene: las{' '}
+                <strong>facturas que le emites a tus clientes</strong> (con sus pagos) y{' '}
+                <strong>viajes ya liquidados</strong>. En cuanto exista lo primero, aquí sale cuánto te
+                deben y desde hace cuánto — corriente, 1 a 30, 31 a 60 y más de 60 días — y qué está
+                vencido de verdad. En cuanto exista lo segundo, sale la lista de viajes cerrados que
+                nadie facturó, que es el dinero que se queda en la mesa. Nada de esto se estima: si el
+                dato no está, se dice. La primera factura se registra aquí abajo.
+              </EstadoVacio>
+              {captura && (
+                <div className="card p-4">
+                  <Plegable resumen="＋ Registrar una factura emitida">
+                    <FormaFactura accion={captura.factura} clientes={captura.clientes}
+                      viajesSinFacturar={[]} hoy={captura.hoy} />
+                  </Plegable>
+                </div>
+              )}
+            </>
           ) : (
             <>
-              <BloqueCartera datos={datos} />
+              <BloqueCartera datos={datos} captura={captura} />
               <BloqueEnLaMesa datos={datos} />
               <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
                 Todo lo de esta pantalla se fechó contra un solo día: <strong>{fechaMx(datos.hoy)}</strong>,
@@ -83,7 +114,7 @@ function plural(n: number, uno: string, varios: string): string {
 
 // ── La cartera ─────────────────────────────────────────────────────────────
 
-function BloqueCartera({ datos }: { datos: FacturacionClientes }) {
+function BloqueCartera({ datos, captura }: { datos: FacturacionClientes; captura: CapturaFacturacion | null }) {
   const c = datos.cartera;
 
   return (
@@ -91,6 +122,15 @@ function BloqueCartera({ datos }: { datos: FacturacionClientes }) {
       <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
         Lo que facturaste y lo que te deben
       </h2>
+
+      {captura && (
+        <div className="card p-4">
+          <Plegable resumen="＋ Registrar una factura emitida">
+            <FormaFactura accion={captura.factura} clientes={captura.clientes}
+              viajesSinFacturar={datos.enLaMesa.viajes} hoy={captura.hoy} />
+          </Plegable>
+        </div>
+      )}
 
       {c.facturas.length === 0 ? (
         <EstadoVacio icono={<Banknote width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
@@ -139,7 +179,7 @@ function BloqueCartera({ datos }: { datos: FacturacionClientes }) {
           )}
 
           <TablaClientes clientes={c.clientes} />
-          <TablaFacturas facturas={c.facturas} />
+          <TablaFacturas facturas={c.facturas} captura={captura} />
 
           {(c.borradores > 0 || c.canceladas > 0) && (
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
@@ -265,7 +305,7 @@ const PILL_ESTATUS: Record<string, { rotulo: string; fg: string; bg: string }> =
   cancelada: { rotulo: 'cancelada', fg: 'var(--muted)', bg: 'var(--canvas)' },
 };
 
-function TablaFacturas({ facturas }: { facturas: RenglonCartera[] }) {
+function TablaFacturas({ facturas, captura }: { facturas: RenglonCartera[]; captura: CapturaFacturacion | null }) {
   return (
     <div className="card overflow-x-auto">
       <table className="w-full text-[12.5px]">
@@ -282,17 +322,52 @@ function TablaFacturas({ facturas }: { facturas: RenglonCartera[] }) {
             <th className="px-3 py-2 font-medium text-right">Saldo</th>
             <th className="px-3 py-2 font-medium">Vence</th>
             <th className="px-3 py-2 font-medium">Antigüedad</th>
+            {captura && <th className="px-3 py-2 font-medium">Acciones</th>}
           </tr>
         </thead>
         <tbody>
-          {facturas.map((f) => <RenglonFactura key={f.id} f={f} />)}
+          {facturas.map((f) => <RenglonFactura key={f.id} f={f} captura={captura} />)}
         </tbody>
       </table>
     </div>
   );
 }
 
-function RenglonFactura({ f }: { f: RenglonCartera }) {
+/** Qué se le puede hacer a cada factura, según su estado REAL:
+ *  borrador → sellarla con su UUID, o cancelarla;
+ *  emitida con saldo → abonarle pagos; sin pagos aún → también cancelarla;
+ *  pagada o cancelada → nada, y la celda lo dice con un guion. */
+function CeldaAcciones({ f, captura }: { f: RenglonCartera; captura: CapturaFacturacion }) {
+  const esBorrador = f.estatus === 'borrador';
+  const puedeAbonar = f.viva && f.estatus === 'emitida' && f.conSaldo;
+  // El borrador NO es "viva" (no entra a la cartera) y aun así se puede
+  // cancelar: un borrador capturado por error no tiene otra salida.
+  const puedeCancelar = (f.viva || esBorrador) && f.pagado === 0;
+  if (!esBorrador && !puedeAbonar && !puedeCancelar) {
+    return <td className="px-3 py-2" style={{ color: 'var(--faint)' }}>—</td>;
+  }
+  return (
+    <td className="px-3 py-2 space-y-1.5 min-w-[220px]">
+      {esBorrador && (
+        <Plegable resumen="Marcar emitida">
+          <FormaEmitir accion={captura.emitir} facturaId={f.id} folioActual={f.folio} />
+        </Plegable>
+      )}
+      {puedeAbonar && (
+        <Plegable resumen="Registrar pago">
+          <FormaPago accion={captura.pago} facturaId={f.id} hoy={captura.hoy} />
+        </Plegable>
+      )}
+      {puedeCancelar && (
+        <Plegable resumen="Cancelar">
+          <FormaCancelar accion={captura.cancelar} facturaId={f.id} />
+        </Plegable>
+      )}
+    </td>
+  );
+}
+
+function RenglonFactura({ f, captura }: { f: RenglonCartera; captura: CapturaFacturacion | null }) {
   const pill = PILL_ESTATUS[f.estatus];
   // El color sale del MISMO criterio que el rótulo de la derecha, y por eso
   // exige las tres condiciones: viva, con saldo y vencida. Se vio mirando el
@@ -334,6 +409,7 @@ function RenglonFactura({ f }: { f: RenglonCartera }) {
           </span>
         )}
       </td>
+      {captura && <CeldaAcciones f={f} captura={captura} />}
     </tr>
   );
 }
