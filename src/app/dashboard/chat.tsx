@@ -834,12 +834,6 @@ export default function ChatFlota({
             </div>
           )}
 
-          {/* El límite va a la vista, pero sin otro recuadro: es una nota, no una
-              tarjeta. Quitarlo dejaría creer que la caja consulta la base. */}
-          <p className="mt-8 text-[11px] leading-relaxed text-center max-w-lg" style={{ color: 'var(--faint)' }}>
-            Responde con cifras ya calculadas en el servidor — en texto, tabla o gráfica según
-            la pregunta. No traduce preguntas libres a consultas de base de datos, a propósito.
-          </p>
         </div>
         </div>
         </div>
