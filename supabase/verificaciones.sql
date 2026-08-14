@@ -3797,3 +3797,42 @@ begin
   raise exception E'CORRIDA_0102  agente_malo_rebota=%  estado_malo_rebota=%  purga_reporta=%  purgo_vieja=%  anon_puede=%   (esperado t/t/t/1/f)',
     rebota_agente, rebota_estado, (res ? 'corridasPurgadas'), (res->>'corridasPurgadas'), anon_puede;
 end $$;
+
+-- ── 80. El índice muerto de conector_credencial se tiró (0103) ─────────────
+--
+-- El parcial `conector_credencial_por_flota` estaba totalmente cubierto por
+-- el UNIQUE `conector_credencial_unica` (mismas columnas, sin filtro).
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026:
+--   [{"indice_muerto":0,"unique_vivo":1}]
+select
+  (select count(*) from pg_indexes where schemaname='public' and indexname='conector_credencial_por_flota') as indice_muerto,
+  (select count(*) from pg_indexes where schemaname='public' and indexname='conector_credencial_unica') as unique_vivo;
+
+-- ── 81. F1 resuelto por evidencia: 0067-0069 NUNCA EXISTIERON ──────────────
+--
+-- La auditoría 4 reportó "migraciones 0067, 0068 y 0069 sin archivo" como el
+-- modo de falla de apply_migration por MCP. Se verificó contra el registro
+-- de producción (supabase_migrations.schema_migrations) y contra el repo:
+--   · el registro NO tiene ninguna migración con esos números ni ninguna
+--     entrada sin archivo correspondiente en esa ventana (05-ago-2026);
+--   · cero referencias a 0067/0068/0069 en supabase/, src/ y docs/;
+--   · el hueco es de NUMERACIÓN (la secuencia saltó de 0066 a 0070), no de
+--     archivos perdidos: una base reconstruida desde el repo NO diverge por
+--     esta causa.
+-- Lo que el registro SÍ mostró es lo inverso: los archivos 0078-0085 no
+-- aparecen en el ledger (se aplicaron fuera de él); sus objetos SÍ están en
+-- producción — verificado abajo por muestreo (función de la 0084, columna de
+-- la 0080). El repo sigue siendo la fuente de verdad reconstruible.
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026:
+--   [{"f_0084":1,"col_0080":1,"col_avisos":1,"ledger_0067_69":0}]
+select
+  (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname='sumar_combustible_ejercicio') as f_0084,
+  (select count(*) from information_schema.columns
+    where table_schema='public' and table_name='operador' and column_name='rfc') as col_0080,
+  (select count(*) from information_schema.columns
+    where table_schema='public' and table_name='viaje' and column_name='escalado_en') as col_avisos,
+  (select count(*) from supabase_migrations.schema_migrations
+    where name ~ '^00(6[7-9])') as ledger_0067_69;

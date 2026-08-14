@@ -35,7 +35,8 @@ export default async function NuevoUsuario() {
     // SQL directo. El chofer (`operador`) ya ni siquiera es un rol válido del
     // dominio (retirado el 7-ago-2026) — `rol` nunca puede llegar así aquí.
     if (rol === 'superadmin') redirect('/admin/usuarios/nuevo?error=2');
-    await provisionarUsuario(tenantId, email, nombre, rol);
+    const telefono = String(formData.get('telefono') ?? '').trim() || undefined;
+    await provisionarUsuario(tenantId, email, nombre, rol, telefono);
     redirect('/admin?creado=1');
   }
 
@@ -60,6 +61,17 @@ export default async function NuevoUsuario() {
           <div>
             <label className="text-sm font-medium block mb-1.5">Nombre (opcional)</label>
             <input name="nombre" type="text" className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
+          </div>
+          <div>
+            {/* D5 (auditoría 4): la columna existía (0059), el matcher de
+                oficina la leía, y ningún alta la llenaba — la persona no
+                podía escribirle al bot sin un UPDATE a mano. */}
+            <label className="text-sm font-medium block mb-1.5">WhatsApp (opcional)</label>
+            <input name="telefono" type="text" placeholder="10 dígitos"
+              className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
+            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+              Con él, el bot reconoce a esta persona cuando escribe (avisos contestables, despacho por chat).
+            </p>
           </div>
           <div>
             <label className="text-sm font-medium block mb-1.5">Rol</label>
