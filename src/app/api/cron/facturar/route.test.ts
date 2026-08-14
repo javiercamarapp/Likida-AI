@@ -37,6 +37,13 @@ delete process.env.FACTURACION_MODO;
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
+// El canal de alerta al operador (auditoría 4, D1) se mockea: aquí se prueba
+// que el cron LO DISPARA al fallar, no el canal (observability/alerta.test.ts).
+const alertarOperador = vi.fn(async () => {});
+vi.mock('@/lib/observability/alerta', () => ({
+  alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])),
+}));
+
 /** Lo que devuelve la consulta de la cola. */
 let cola: { data: Array<Record<string, unknown>> | null; error: { message: string } | null };
 const consulta: Array<[string, unknown[]]> = [];
@@ -400,13 +407,28 @@ describe('el modo', () => {
     expect((facturarLoteAlVuelo.mock.calls[0][0] as unknown as { modo: string }).modo).toBe('ensayo');
   });
 
-  it('solo emite con FACTURACION_MODO=emitir puesto a mano en el ambiente', async () => {
+  it('solo emite con las DOS llaves: FACTURACION_MODO=emitir Y el mandato aceptado', async () => {
+    // D7 (auditoría 4): el modo del cron pasa por `modoEfectivo`, así que el
+    // candado legal del runbook (docs/encender-emision.md) aplica también
+    // aquí — una sola llave no basta, y el JSON reporta el modo REAL.
+    process.env.FACTURACION_MODO = 'emitir';
+    process.env.FACTURACION_MANDATO_ACEPTADO = 'si';
+    const cuerpo = await (await pedir()).json();
+    delete process.env.FACTURACION_MODO;
+    delete process.env.FACTURACION_MANDATO_ACEPTADO;
+
+    expect(cuerpo.modo).toBe('emitir');
+    expect((facturarLoteAlVuelo.mock.calls[0][0] as unknown as { modo: string }).modo).toBe('emitir');
+  });
+
+  it('FACTURACION_MODO=emitir SIN el mandato corre en ensayo Y LO DICE (antes mentía "emitir")', async () => {
     process.env.FACTURACION_MODO = 'emitir';
     const cuerpo = await (await pedir()).json();
     delete process.env.FACTURACION_MODO;
 
-    expect(cuerpo.modo).toBe('emitir');
-    expect((facturarLoteAlVuelo.mock.calls[0][0] as unknown as { modo: string }).modo).toBe('emitir');
+    // El hallazgo D7 exacto: corría en ensayo (bien) y reportaba "emitir".
+    expect(cuerpo.modo).toBe('ensayo');
+    expect((facturarLoteAlVuelo.mock.calls[0][0] as unknown as { modo: string }).modo).toBe('ensayo');
   });
 
   it('cualquier otro valor es ensayo', async () => {
@@ -425,5 +447,15 @@ describe('cuando la base no contesta', () => {
     expect(res.status).toBe(500);
     expect((await res.json()).error).toBe('timeout');
     expect(facturarAlVuelo).not.toHaveBeenCalled();
+  });
+
+  it('el fallo lleva código estable y dispara la alerta al operador (auditoría 4, D1/D2)', async () => {
+    alertarOperador.mockClear();
+    logger.error.mockClear();
+    cola = { data: null, error: { message: 'timeout' } };
+    await pedir();
+
+    expect(logger.error).toHaveBeenCalledWith('cron.facturar.falló', expect.objectContaining({ codigo: expect.any(String) }));
+    expect(alertarOperador).toHaveBeenCalledWith('cron.facturar', expect.objectContaining({ codigo: expect.any(String) }));
   });
 });

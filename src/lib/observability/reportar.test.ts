@@ -228,3 +228,49 @@ describe('avisarObservabilidad — arrancar sin observabilidad tiene que DECIRSE
     expect(todo).not.toContain('startup.observabilidad');
   });
 });
+
+describe('codigoDeError — el discriminador estable de causa (auditoría 4, D2)', () => {
+  // Pura y sin SDK: se prueba directo. Lo que fija es el contrato del
+  // fingerprint: misma causa = mismo código (una corrida no abre un issue
+  // nuevo), causa distinta = código distinto (la causa nueva SÍ notifica).
+
+  it('la misma causa da el mismo código, corrida tras corrida', async () => {
+    const { codigoDeError } = await import('./sentry');
+    const a = codigoDeError(new Error('fetch failed'));
+    const b = codigoDeError(new Error('fetch failed'));
+    expect(a).toBe(b);
+    expect(a).toMatch(/^err:[0-9a-f]{12}$/);
+  });
+
+  it('un UUID o un timestamp en el mensaje NO cambian el código', async () => {
+    const { codigoDeError } = await import('./sentry');
+    const a = codigoDeError(new Error('viaje 3f9c2a1b-77de-4e10-9a2b-0c1d2e3f4a5b sin cerrar tras 1723612345000 ms'));
+    const b = codigoDeError(new Error('viaje 9e8d7c6b-5a49-4382-b1c0-d9e8f7a6b5c4 sin cerrar tras 1723698745000 ms'));
+    expect(a).toBe(b);
+  });
+
+  it('causas distintas dan códigos distintos — incluidos dos HTTP status', async () => {
+    const { codigoDeError } = await import('./sentry');
+    expect(codigoDeError(new Error('HTTP 500'))).not.toBe(codigoDeError(new Error('HTTP 503')));
+    expect(codigoDeError(new Error('token vencido'))).not.toBe(codigoDeError(new Error('tabla no existe')));
+  });
+
+  it('si el error trae `code` (PostgREST, Node, Meta), ese manda', async () => {
+    const { codigoDeError } = await import('./sentry');
+    // La forma del error POR VALOR de supabase-js: no es un Error, es un objeto.
+    expect(codigoDeError({ message: 'relation "x" does not exist', code: '42P01' })).toBe('42P01');
+    expect(codigoDeError({ message: 'token vencido', code: 190 })).toBe('190');
+  });
+
+  it('entra al fingerprint por la puerta que discriminadores ya lee', async () => {
+    vi.stubEnv('SENTRY_DSN', 'https://algo@sentry.io/1');
+    const { reportar, codigoDeError, flushObservabilidad } = await import('./sentry');
+
+    reportar('error', 'cron.purgar.falló', { error: 'a', codigo: codigoDeError(new Error('causa A')) });
+    reportar('error', 'cron.purgar.falló', { error: 'b', codigo: codigoDeError(new Error('causa B')) });
+    await flushObservabilidad();
+
+    const huellas = sdk.captureMessage.mock.calls.map((c) => JSON.stringify((c[1] as { fingerprint?: string[] }).fingerprint));
+    expect(new Set(huellas).size).toBe(2);
+  });
+});

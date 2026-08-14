@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { escalarViajesSinAceptar } from '@/lib/likida/escalar_viaje';
 import { ejecutarCobranzaGlobal } from '@/lib/likida/agentes/cobranza';
 import { logger } from '@/lib/logger';
+import { codigoDeError } from '@/lib/observability/sentry';
+import { alertarOperador } from '@/lib/observability/alerta';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -76,7 +78,14 @@ export async function GET(req: Request) {
     resultado.aceptacion = r;
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    logger.error('cron.escalar.falló', { error });
+    // El `codigo` es lo que separa "token vencido" de "tabla no existe" en el
+    // fingerprint de Sentry (`discriminadores`): sin él, la causa nueva caía en
+    // el issue viejo y no notificaba (reincidencia de OP-A1). Estable por
+    // construcción — misma causa, mismo código, mismo issue. No hay tenant que
+    // emitir: el motor corre global, sobre todas las flotas a la vez.
+    const codigo = codigoDeError(e);
+    logger.error('cron.escalar.falló', { error, codigo });
+    await alertarOperador('cron.escalar', { error, codigo });
     resultado.aceptacion = { error };
     huboFallo = true;
   }
@@ -87,7 +96,11 @@ export async function GET(req: Request) {
     resultado.comprobacion = r;
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    logger.error('cron.cobranza.falló', { error });
+    // Mismo criterio que el catch de arriba: código estable para el
+    // fingerprint, alerta directa al operador del sistema.
+    const codigo = codigoDeError(e);
+    logger.error('cron.cobranza.falló', { error, codigo });
+    await alertarOperador('cron.cobranza', { error, codigo });
     resultado.comprobacion = { error };
     huboFallo = true;
   }

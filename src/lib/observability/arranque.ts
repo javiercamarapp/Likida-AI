@@ -39,6 +39,11 @@ const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
     consecuencia:
       'login arma sus redirects contra https://likida.ai (el fallback del código) en vez del dominio desplegado: el magic link y el retorno de Google apuntan a otro sitio y nadie entra, sin un solo error',
   },
+  // El canal de alerta del operador (observability/alerta.ts). Sin ella el
+  // sistema arranca y atiende igual — que es exactamente lo que califica para
+  // esta lista: un cron puede fallar nueve días y el único rastro es un issue
+  // viejo de Sentry que ya no notifica.
+  { nombre: 'ALERTA_EMAIL', consecuencia: 'los fallos de cron no le llegan a nadie por correo' },
 ];
 
 /**

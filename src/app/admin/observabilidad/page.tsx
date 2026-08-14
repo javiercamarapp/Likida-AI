@@ -1,4 +1,5 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
+import { sentryActivo } from '@/lib/observability/sentry';
 import { usd } from '@/lib/utils';
 import { Activity } from 'lucide-react';
 import { AreaChartSimple } from '../charts';
@@ -49,17 +50,24 @@ export default async function ObservabilidadPage() {
         <section className="p-5">
           <TituloSeccion>Salud del sistema</TituloSeccion>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            {/* MEDIDO, no fijo (auditoría 4, D3): el pill decía "Conectado"
+                por decreto. Lo único que se puede afirmar desde aquí es si hay
+                DSN — "configurado", nunca "conectado". */}
             <a href="https://sentry.io" target="_blank" rel="noopener noreferrer" className="card p-4 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium">Errores — Sentry</div>
-                <StatusPill estado="ok">Conectado</StatusPill>
+                {sentryActivo()
+                  ? <StatusPill estado="ok">DSN configurado</StatusPill>
+                  : <StatusPill estado="bad">Sin DSN — ciego</StatusPill>}
               </div>
               <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Se enlaza en vez de reconstruirse.</div>
             </a>
             <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="card p-4 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium">Uptime, deploys y latencia de edge — Vercel</div>
-                <StatusPill estado="ok">Conectado</StatusPill>
+                {/* No hay medición de Vercel desde adentro (si esto renderiza,
+                    Vercel contestó): neutral honesto, no verde de adorno. */}
+                <StatusPill estado="neutral">No medido</StatusPill>
               </div>
               <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Vercel ya lo mide. Se enlaza en vez de reconstruirse.</div>
             </a>
