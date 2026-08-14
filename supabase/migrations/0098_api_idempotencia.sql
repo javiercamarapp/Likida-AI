@@ -156,6 +156,22 @@ begin
   return n;
 end $$;
 
+-- EL `revoke` NO ES CEREMONIA: sin él, Postgres deja EXECUTE a PUBLIC y
+-- Supabase publica la función en PostgREST como /rest/v1/rpc/. Al ser
+-- SECURITY DEFINER corre como `postgres` y SALTA la RLS que esta misma
+-- migración acaba de encender — o sea que cualquiera con la anon key (que va
+-- en el bundle del navegador, es pública por diseño) podría llamarla con
+-- `p_dias = 0` y vaciar la tabla desde internet, en bucle y sin autenticarse.
+--
+-- Se escribió sin esto el 14-ago-2026 y se detectó en la auditoría del mismo
+-- día: era la ÚNICA función del repo alcanzable por `anon`. Sus tres gemelas
+-- (`purgar_wa_mensaje_procesado` en la 0072, `consolidar_llm_costo_mensual`,
+-- `mantenimiento_de_datos`) sí lo traían; el patrón existía y se omitió.
+revoke all on function public.purgar_api_idempotencia(integer, timestamptz) from public;
+revoke all on function public.purgar_api_idempotencia(integer, timestamptz) from anon;
+revoke all on function public.purgar_api_idempotencia(integer, timestamptz) from authenticated;
+grant execute on function public.purgar_api_idempotencia(integer, timestamptz) to service_role;
+
 create or replace function public.mantenimiento_de_datos(
   p_dias_wa integer     default 30,
   p_ahora   timestamptz default now()
