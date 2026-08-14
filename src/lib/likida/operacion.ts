@@ -482,6 +482,27 @@ export interface NuevoViaje {
   anticipo?: number;
   operadorId?: string | null;
   unidadId?: string | null;
+
+  // ── EL LADO DEL INGRESO (14-ago-2026) ────────────────────────────────────
+  //
+  // La migración 0048 se llama literalmente "EL LADO DEL INGRESO" y creó estas
+  // tres columnas hace semanas. Nadie las escribía: no había formulario, así
+  // que `getRentabilidad` sumaba sobre `ingreso_flete` nulos, el libro del
+  // viaje no podía calcular contribución, y la pregunta que de verdad le
+  // importa a un dueño de flota —"¿este viaje ganó dinero?"— no tenía
+  // respuesta posible. El esqueleto estaba; faltaba quien lo alimentara.
+  //
+  // Los tres son OPCIONALES y su ausencia es `null`, NUNCA 0. Un viaje sin
+  // ingreso capturado no es un viaje que ingresó cero: es uno del que no se
+  // sabe, y el motor entero depende de esa distinción (ver `aNumero` en
+  // `libro_viaje.ts` y `getRentabilidad` en `comercial.ts`, que cuentan
+  // aparte los viajes sin ingreso en vez de promediarlos con ceros).
+  clienteId?: string | null;
+  /** Lo que se le cobra al cliente por el flete. NO es el anticipo: el
+   *  anticipo es lo que la empresa le ADELANTA al operador. Confundirlos
+   *  produce márgenes que se ven bien y están mal. */
+  ingresoFlete?: number | null;
+  kmRecorridos?: number | null;
 }
 
 /**
@@ -503,6 +524,24 @@ async function unidadPropia(tenantId: string, unidadId: string): Promise<boolean
     (d, h) => supabaseAdmin().from('unidad').select('id', conteo(d))
       .eq('tenant_id', tenantId).eq('id', unidadId).order('id').range(d, h),
     'unidadPropia',
+  );
+  return filas.length > 0;
+}
+
+/**
+ * Comprueba que un cliente sea del tenant, ANTES de escribirlo en `viaje`.
+ *
+ * Mismo candado que `operadorId` y `unidadId`, por la misma razón exacta: el
+ * `<select>` del formulario solo ofrece los clientes de la flota, pero eso es
+ * la UI, no el servidor. Un POST directo al server action con el `clienteId`
+ * de OTRA flota crearía un viaje con `tenant_id = A` apuntando al cliente de
+ * B — y con él, el ingreso de A se contaría en la cartera de B.
+ */
+async function clientePropioLocal(tenantId: string, clienteId: string): Promise<boolean> {
+  const filas = await traerTodo<{ id: unknown }>(
+    (d, h) => supabaseAdmin().from('cliente').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', clienteId).order('id').range(d, h),
+    'clientePropioLocal',
   );
   return filas.length > 0;
 }
@@ -556,6 +595,11 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
     throw new Error('crearViaje: la unidad no pertenece a esta flota');
   }
 
+  // Y el tercero, para el cliente que paga el flete (14-ago-2026).
+  if (v.clienteId && !(await clientePropioLocal(tenantId, v.clienteId))) {
+    throw new Error('crearViaje: el cliente no pertenece a esta flota');
+  }
+
   const { data, error } = await acotada(supabaseAdmin().from('viaje').insert({
     tenant_id: tenantId,
     folio: v.folio || null,
@@ -565,6 +609,13 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
     anticipo: v.anticipo ?? 0,
     operador_id: v.operadorId || null,
     unidad_id: v.unidadId || null,
+    // `?? null` y NO `|| null`: con `||` un ingreso de 0 —un viaje de
+    // cortesía, o el tramo de regreso vacío que se factura aparte— se
+    // convertiría en "sin capturar", y el viaje se saldría de la medición de
+    // rentabilidad en vez de entrar con su cero real.
+    cliente_id: v.clienteId ?? null,
+    ingreso_flete: v.ingresoFlete ?? null,
+    km_recorridos: v.kmRecorridos ?? null,
     estatus: 'abierto',
   }).select('id').single(), 'crearViaje');
   if (error) throw new Error(`crearViaje: ${error.message}`);

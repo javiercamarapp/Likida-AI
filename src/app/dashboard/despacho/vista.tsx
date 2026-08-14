@@ -21,12 +21,14 @@ const MAX_FILAS = 12;
  * columna — el estándar de siempre del despacho.
  */
 export function VistaDespacho({
-  tablero, sinAsignar, activos, operadores, carga, crear, asignarYAvisar, reenviarAviso, altaOperador,
+  tablero, sinAsignar, activos, operadores, clientes, carga, crear, asignarYAvisar, reenviarAviso, altaOperador,
 }: {
   tablero: TableroOperacion | null;
   sinAsignar: ViajeSinAsignar[];
   activos: ViajeRow[];
   operadores: Array<{ id: string; nombre: string }>;
+  /** Los clientes de la flota, para atar el viaje a quien paga el flete. */
+  clientes: Array<{ id: string; nombre: string }>;
   carga: CargaOperador[] | null;
   crear: AccionCrearViaje;
   asignarYAvisar: AccionDespacho;
@@ -105,7 +107,7 @@ export function VistaDespacho({
               <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
                 Nace abierto: desde ese momento el operador puede mandar comprobantes por WhatsApp
               </p>
-              <FormaViaje action={crear} operadores={operadores} />
+              <FormaViaje action={crear} operadores={operadores} clientes={clientes} />
             </section>
           </div>
 

@@ -13,6 +13,7 @@ import { getViajes } from '@/lib/likida/analytics';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { VistaDespacho } from './vista';
+import { validarIngreso } from '@/lib/likida/ingreso_viaje';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,13 +46,21 @@ export default async function PaginaDespacho({
 
   // Las COLAS son el corazón: sin catch — base caída = página caída, no una
   // cola vacía que afirma "nada por asignar". El tablero y la carga degradan.
-  const [tablero, sinAsignar, viajes, operadores, carga] = await Promise.all([
+  const [tablero, sinAsignar, viajes, operadores, carga, clientes] = await Promise.all([
     safe(() => getTableroOperacion(tenantId)),
     getViajesSinAsignar(tenantId),
     getViajes(tenantId, 100),
     listOperadores(tenantId),
     safe(() => getCargaOperadores(tenantId)),
-  ]);
+      // Los clientes, para atar el viaje a quien paga el flete (14-ago-2026).
+    // `catch → []` a propósito: si esta lectura falla, el `<select>` sale
+    // vacío y el viaje se crea igual SIN cliente. Tirar el despacho entero
+    // porque no se pudo leer un catálogo cambiaría un problema de captura por
+    // uno de operación — y el cliente se puede asignar después.
+    supabaseAdmin().from('cliente').select('id, nombre')
+      .eq('tenant_id', tenantId).eq('activo', true).order('nombre')
+      .then(({ data, error }) => (error || !data ? [] : data as Array<{ id: string; nombre: string }>)),
+]);
 
   /** El chequeo que TODA action repite: sesión viva, rol que asigna, y que
    *  la flota de la sesión sea la del render (superadmin exento: su tenant
@@ -85,6 +94,16 @@ export default async function PaginaDespacho({
       // `crearViaje` re-valida que el operador sea de ESTA flota y manda el
       // aviso de WhatsApp él mismo (y se traga el fallo del aviso a
       // propósito: el viaje ya existe y "Reavisar" vive aquí abajo).
+      // El lado del ingreso. `validarIngreso` distingue VACÍO de CERO, que es
+      // la distinción de la que depende toda la medición de margen: con
+      // `Number('')` un viaje sin capturar se contaría como uno que no produjo
+      // nada, y su -100% se vería perfectamente plausible.
+      const ing = validarIngreso({
+        clienteId: String(fd.get('clienteId') ?? ''),
+        ingresoFlete: String(fd.get('ingresoFlete') ?? ''),
+        kmRecorridos: String(fd.get('kmRecorridos') ?? ''),
+      });
+
       await crearViaje(tenantId, {
         folio: texto('folio', 40),
         origen: texto('origen', 120),
@@ -92,6 +111,9 @@ export default async function PaginaDespacho({
         fechaInicio: fecha,
         anticipo,
         operadorId: texto('operadorId', 64),
+        clienteId: ing.clienteId,
+        ingresoFlete: ing.ingresoFlete,
+        kmRecorridos: ing.kmRecorridos,
       });
     } catch (err) {
       logger.error('despacho.crear.fallo', { err: err instanceof Error ? err.message : String(err) });
@@ -180,6 +202,7 @@ export default async function PaginaDespacho({
       sinAsignar={sinAsignar}
       activos={viajes.filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre')}
       operadores={operadores}
+      clientes={clientes}
       carga={carga}
       crear={crear}
       asignarYAvisar={asignarYAvisar}
