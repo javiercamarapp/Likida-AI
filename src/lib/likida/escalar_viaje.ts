@@ -194,6 +194,20 @@ export async function escalarViajesSinAceptar(args: {
   const admin = supabaseAdmin();
   const ahoraIso = args.ahora?.toISOString();
 
+  // ── CÓMO LE FUE A CADA FLOTA, PARA EL CIERRE DE CORRIDA ─────────────────
+  //
+  // Una flota entra como éxito y se degrada a fallo si su escalación NO se
+  // pudo entregar. Se cuenta por flota y no por viaje porque el aviso es por
+  // flota: que un viaje de doce falle es ruido, que fallen los doce es que el
+  // agente no pudo trabajar para esa empresa.
+  const porFlota = new Map<string, { intentos: number; fallidos: number; ultimo: unknown }>();
+  const anota = (tenantId: string, fallo: unknown) => {
+    const c = porFlota.get(tenantId) ?? { intentos: 0, fallidos: 0, ultimo: null };
+    c.intentos++;
+    if (fallo !== null) { c.fallidos++; c.ultimo = fallo; }
+    porFlota.set(tenantId, c);
+  };
+
   for (const v of viajes) {
     // 0) RECLAMAR, ANTES DE MANDAR CUALQUIER MENSAJE. Si el UPDATE condicional
     //    no devuelve esta fila, otra corrida la ganó entre la lectura de arriba
@@ -203,6 +217,10 @@ export async function escalarViajesSinAceptar(args: {
     const claim = await reclamarEscalacion(admin, v, ahoraIso);
     if (claim.error) {
       r.fallos.push(`marcar ${v.id}: ${claim.error}`);
+      // La ESCRITURA a la base falló, no un envío. Eso sí es «el agente no
+      // pudo trabajar»: sin el sello, este viaje se va a reintentar en cada
+      // corrida y nadie se entera.
+      anota(v.tenantId, new Error(claim.error));
       continue;
     }
     if (!claim.ganado) {
@@ -260,20 +278,36 @@ export async function escalarViajesSinAceptar(args: {
         // 24 h es lo único que WhatsApp entrega — y el jefe puede llevar días
         // sin escribirle al número.
         const enviado = await sendText(tel, armarAvisoJefe(v));
-        if (!enviado) {
+        if (enviado) {
+          anota(v.tenantId, null);
+        } else {
           const env = await sendTemplate(tel, PLANTILLA_JEFE, {
             parametros: [v.operadorNombre ?? 'Tu chofer', v.folio ?? 'sin folio'],
           });
-          if (!env.ok) r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivoDeFalloWhatsApp(env.error, env.codigo)}`);
+          if (env.ok) {
+            anota(v.tenantId, null);
+          } else {
+            const motivo = motivoDeFalloWhatsApp(env.error, env.codigo);
+            r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivo}`);
+            // Los DOS caminos fallaron: el jefe no se enteró de este viaje.
+            anota(v.tenantId, new Error(motivo));
+          }
         }
       } catch (e) {
-        r.fallos.push(`jefe ${v.folio ?? v.id}: ${e instanceof Error ? e.message : 'error inesperado al enviar'}`);
+        const motivo = e instanceof Error ? e.message : 'error inesperado al enviar';
+        r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivo}`);
+        anota(v.tenantId, new Error(motivo));
       }
     } else {
       // ERROR, no un fallo más: esta flota NUNCA va a recibir la escalación
       // hasta que alguien capture el teléfono, y el viaje se marca igual.
       logger.error('escalacion.sin_telefono_de_jefe', { tenantId: v.tenantId, viaje: v.id });
       r.fallos.push(`${v.folio ?? v.id}: esa flota no tiene teléfono de jefe registrado`);
+      // El propio comentario de arriba lo dice: esta flota NUNCA va a recibir
+      // la escalación hasta que alguien capture el teléfono. Es exactamente un
+      // fallo por flota, accionable por el cliente, y hasta hoy solo vivía en
+      // el log — donde el cliente no lo ve.
+      anota(v.tenantId, new Error('esa flota no tiene teléfono de jefe registrado'));
     }
   }
 
@@ -281,19 +315,30 @@ export async function escalarViajesSinAceptar(args: {
 
   // ── EL CIERRE DE LA CORRIDA, PARA EL ANTI-RUIDO ──────────────────────────
   //
-  // SOLO ÉXITOS, y no es un cableado a medias: este runner NO TIENE un fallo
-  // por flota que reportar. Cada envío de arriba va en su propio try/catch y
-  // termina en `r.fallos` —un WhatsApp que no salió no es «el agente no pudo
-  // trabajar»—, y lo único que sí tumba la corrida entera (la lectura de
-  // viajes, la de teléfonos) revienta ANTES de este punto, cuando todavía no
-  // se sabe qué flotas había: sin lista de tenants no hay a quién avisarle, y
-  // el 500 del cron es ahí la señal, no un correo inventado.
+  // UNA FLOTA FALLA CUANDO NINGUNA DE SUS ESCALACIONES SE PUDO ENTREGAR.
   //
-  // Registrar el éxito igual sí sirve, y es la mitad que se olvida: es lo que
-  // rearma el filo. Sin esto, la racha de una flota que se rompió una vez no
-  // se limpia nunca y su siguiente incidente arranca pasado de las marcas, sin
-  // mandar el primer correo — que es el que importa.
-  await avisarCorridasPorFlota('conductores', new Map(viajes.map((v) => [v.tenantId, null])));
+  // Este cierre nació mal el 14-ago-2026 y la auditoría del mismo día lo
+  // atrapó: mandaba `null` —éxito— para TODAS las flotas de la corrida,
+  // incluidas aquellas donde falló el 100% de las escalaciones. Un éxito
+  // falso es peor que no avisar: borra la racha de la flota justo cuando su
+  // problema sigue vivo, así que el aviso nunca llega a salir.
+  //
+  // El comentario que lo justificaba decía que este runner «no tiene un fallo
+  // por flota que reportar», y veinte líneas más arriba estaba
+  // `escalacion.sin_telefono_de_jefe` — un fallo por flota, accionable por el
+  // cliente (capturar el teléfono), que hasta hoy solo vivía en el log.
+  //
+  // POR FLOTA Y NO POR VIAJE: que un viaje de doce no se entregue es ruido —
+  // un teléfono mal capturado, una ventana de 24 h cerrada. Que fallen los
+  // doce es que el agente no pudo trabajar para esa empresa, y eso sí es lo
+  // que el correo existe para contar. El parcial cuenta como éxito: la flota
+  // SÍ está recibiendo escalaciones, y sus casos sueltos ya salen en
+  // `r.fallos`, que va en la respuesta del cron.
+  const cierre = new Map<string, unknown>();
+  for (const [tenantId, c] of porFlota) {
+    cierre.set(tenantId, c.fallidos === c.intentos ? c.ultimo : null);
+  }
+  await avisarCorridasPorFlota('conductores', cierre);
   return r;
 }
 

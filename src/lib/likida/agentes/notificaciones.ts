@@ -125,6 +125,9 @@ export interface EventoDeclarado {
   /** Por qué ESTE sí merece un correo. La pestaña lo enseña porque es la
    *  respuesta a "¿y si lo apago?". */
   porQue: string;
+  /** ¿Hay hoy código que lo emita? Lo llena `eventosDe`; `EVENTOS` no lo trae
+   *  porque depende del AGENTE, no del evento. */
+  conectado?: boolean;
 }
 
 export const EVENTOS: Readonly<Record<EventoId, EventoDeclarado>> = {
@@ -154,9 +157,54 @@ export const EVENTOS: Readonly<Record<EventoId, EventoDeclarado>> = {
   },
 };
 
-/** Los eventos que ESTE agente puede emitir, ya redactados para la pestaña. */
+/**
+ * QUÉ PARES (agente, evento) TIENEN UN EMISOR DE VERDAD HOY.
+ *
+ * Esta tabla existe porque el 14-ago-2026 se construyó la pestaña con 18
+ * interruptores de los que **16 no podían dispararse nunca**: `cola_atorada`
+ * estaba declarado para los seis y `escalado` para conductores, y ninguno de
+ * los dos tenía una sola línea que los emitiera. Sus plantillas de correo
+ * (`avisoColaAtorada`, `avisoEscalados`) se escribieron el mismo día y
+ * quedaron sin llamador.
+ *
+ * El daño no es un correo de menos: el dueño marca la casilla, la pantalla le
+ * responde «Hoy le llega a: Juan Pérez», y se queda esperando un aviso que no
+ * existe. Es exactamente lo que el catálogo de arriba prohíbe con todas sus
+ * letras —«ofrecer un interruptor para un evento que el agente nunca emite es
+ * la misma mentira que un semáforo decorativo»— y se incumplió en el mismo
+ * archivo que lo escribió.
+ *
+ * Se declara aparte y no se borran los eventos del catálogo porque el destino
+ * es cablearlos: `eventos` dice a qué ASPIRA el agente, esto dice qué CUMPLE.
+ * Es el mismo patrón que `FORMATOS.implementado` en `ajustes_operativos.ts`,
+ * que nació del mismo error.
+ *
+ * PARA QUIEN CABLEE UNO NUEVO: agrega aquí el par el mismo commit en que
+ * escribas el `avisar(...)`, ni antes ni después. `notificaciones.test.ts`
+ * verifica que todo par listado aquí exista en el catálogo.
+ */
+const CON_EMISOR: ReadonlySet<string> = new Set([
+  // `avisarCorridasPorFlota` desde `ejecutarCobranzaGlobal` (cobranza.ts).
+  'cobranza:corrida_fallida',
+  // íd. desde el `finally` de `procesarLoteEnCola` (api/cron/facturar).
+  'facturas:corrida_fallida',
+  // íd. desde `escalarViajesSinAceptar` (escalar_viaje.ts), con el fallo real
+  // por flota: la que no tiene teléfono de jefe capturado.
+  'conductores:corrida_fallida',
+]);
+
+export function tieneEmisor(agente: AgenteNotificable, evento: EventoId): boolean {
+  return CON_EMISOR.has(`${agente.id}:${evento}`);
+}
+
+/** Solo para la prueba que vigila que esta tabla no cite pares inventados. */
+export const PARES_CON_EMISOR: readonly string[] = [...CON_EMISOR];
+
+/** Los eventos que ESTE agente declara, cada uno diciendo si YA está
+ *  conectado. La pestaña pinta los que no lo están apagados y lo explica, en
+ *  vez de ofrecer un interruptor que no hace nada. */
 export function eventosDe(agente: AgenteNotificable): EventoDeclarado[] {
-  return agente.eventos.map((e) => EVENTOS[e]);
+  return agente.eventos.map((e) => ({ ...EVENTOS[e], conectado: tieneEmisor(agente, e) }));
 }
 
 /**
@@ -234,8 +282,15 @@ export function validarConfigNotificaciones(
   // Un evento que este agente no emite se DESCARTA, no se guarda: guardarlo
   // dejaría un interruptor encendido que nunca dispara nada, y el cliente
   // creería estar cubierto de algo que no existe.
+  //
+  // El segundo filtro (`tieneEmisor`) es el que faltaba, y es el que de verdad
+  // muerde: el catálogo declara `cola_atorada` para los seis agentes y
+  // `escalado` para conductores, pero HOY nadie los emite. Sin esta línea, un
+  // POST fabricado —o la propia pantalla antes de que se le pusiera el
+  // candado— guardaba encendido un aviso imposible.
   const eventos = [...new Set(cruda.eventos ?? [])]
-    .filter((e): e is EventoId => agente.eventos.includes(e as EventoId));
+    .filter((e): e is EventoId => agente.eventos.includes(e as EventoId))
+    .filter((e) => tieneEmisor(agente, e));
 
   const permitidos = rolesQuePueden(agente);
   const roles = [...new Set(cruda.roles ?? [])]

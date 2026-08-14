@@ -5,6 +5,7 @@ import {
   MAX_DESTINATARIOS, PISO_ENTRE_AVISOS_MS, CONFIG_NOTIF_DEFAULT,
   agentePorId, eventosDe, rolesQuePueden, validarConfigNotificaciones,
   marcaAlcanzada, debeAvisar, motivoDeCorrida, repartoDe, puedeConfigurarAvisos,
+  PARES_CON_EMISOR, tieneEmisor,
   type ConfigNotificaciones, type EntradaDecision, type HuellaAviso,
   type UsuarioAvisable,
 } from './notificaciones';
@@ -140,10 +141,14 @@ describe('la configuración que se guarda no puede mentir', () => {
   });
 
   it('no guarda duplicados', () => {
+    // Con `corrida_fallida` y no `cola_atorada`: desde que existe el filtro
+    // por emisor, un evento sin quien lo dispare se descarta, y esta prueba
+    // caza el DEDUP, no el filtro. Usar uno muerto la volvía verde por la
+    // razón equivocada.
     const v = validarConfigNotificaciones(COBRANZA, {
-      eventos: ['cola_atorada', 'cola_atorada'], roles: ['flota_admin', 'flota_admin'],
+      eventos: ['corrida_fallida', 'corrida_fallida'], roles: ['flota_admin', 'flota_admin'],
     });
-    expect('ok' in v && v.ok).toEqual({ eventos: ['cola_atorada'], roles: ['flota_admin'] });
+    expect('ok' in v && v.ok).toEqual({ eventos: ['corrida_fallida'], roles: ['flota_admin'] });
   });
 
   it('basura del formulario no se cuela', () => {
@@ -472,5 +477,77 @@ describe('puedeConfigurarAvisos — la puerta de la escritura multi-tenant', () 
     for (const a of AGENTES_NOTIFICABLES) {
       expect(puedeConfigurarAvisos({ rol: 'auditor_externo', tenantId: 'A' }, 'A', a), a.id).toBeTruthy();
     }
+  });
+});
+
+
+describe('un interruptor sin emisor no se puede encender', () => {
+  // EL BUG QUE ESTO EXISTE PARA QUE NO VUELVA: el 14-ago-2026 la pestaña salió
+  // con 18 interruptores de los que 16 no podían dispararse nunca. El catálogo
+  // declaraba `cola_atorada` para los seis agentes y `escalado` para
+  // conductores, y ninguno tenía una sola línea que lo emitiera — con sus
+  // plantillas de correo ya escritas y sin llamador. El dueño marcaba la
+  // casilla, la pantalla le contestaba "Hoy le llega a: Juan Pérez", y se
+  // quedaba esperando un correo que no existía.
+  it('los pares declarados con emisor existen de verdad en el catálogo', () => {
+    // Si alguien borra un agente o le quita un evento, esta tabla queda
+    // citando un par fantasma y el filtro dejaría de morder sin avisar.
+    for (const par of PARES_CON_EMISOR) {
+      const [id, evento] = par.split(':');
+      const agente = agentePorId(id);
+      expect(agente, `${par}: ese agente no existe`).not.toBeNull();
+      expect(agente!.eventos, `${par}: ese agente no declara ese evento`).toContain(evento);
+    }
+  });
+
+  it('`cola_atorada` NO se guarda en ningún agente: hoy nadie lo emite', () => {
+    for (const a of AGENTES_NOTIFICABLES) {
+      if (!a.eventos.includes('cola_atorada')) continue;
+      const v = validarConfigNotificaciones(a, { eventos: ['cola_atorada'], roles: ['flota_admin'] });
+      expect('ok' in v && v.ok.eventos, a.id).toEqual([]);
+    }
+  });
+
+  it('`escalado` tampoco, aunque conductores lo declare', () => {
+    const c = agentePorId('conductores')!;
+    const v = validarConfigNotificaciones(c, { eventos: ['escalado'], roles: ['encargado'] });
+    expect('ok' in v && v.ok.eventos).toEqual([]);
+  });
+
+  it('`corrida_fallida` SÍ se guarda donde hay emisor', () => {
+    for (const id of ['cobranza', 'facturas', 'conductores']) {
+      const a = agentePorId(id)!;
+      const v = validarConfigNotificaciones(a, {
+        eventos: ['corrida_fallida'], roles: [rolesQuePueden(a)[0]],
+      });
+      expect('ok' in v && v.ok.eventos, id).toEqual(['corrida_fallida']);
+    }
+  });
+
+  it('`corrida_fallida` NO se guarda donde todavía no hay emisor', () => {
+    // liquidación, peajes y proveedores declaran el evento y ninguno llama a
+    // `avisar()`. Ofrecerlo sería la misma mentira.
+    for (const id of ['liquidacion', 'peajes', 'proveedores']) {
+      const a = agentePorId(id)!;
+      const v = validarConfigNotificaciones(a, {
+        eventos: ['corrida_fallida'], roles: [rolesQuePueden(a)[0]],
+      });
+      expect('ok' in v && v.ok.eventos, id).toEqual([]);
+    }
+  });
+
+  it('la pestaña recibe cada evento diciendo si está conectado', () => {
+    // Es lo que le permite pintarlo apagado con su explicación en vez de
+    // esconderlo: el evento sigue siendo el roadmap del agente.
+    const cobranza = eventosDe(agentePorId('cobranza')!);
+    expect(cobranza.find((e) => e.id === 'corrida_fallida')!.conectado).toBe(true);
+    expect(cobranza.find((e) => e.id === 'cola_atorada')!.conectado).toBe(false);
+  });
+
+  it('apagar algo que estaba encendido no queda bloqueado por el filtro', () => {
+    // Si una flota alcanzó a guardar `cola_atorada` antes del candado, tiene
+    // que poder quedar en cero sin toparse con el error de "marca un rol".
+    const v = validarConfigNotificaciones(COBRANZA, { eventos: ['cola_atorada'], roles: [] });
+    expect('ok' in v && v.ok).toEqual({ eventos: [], roles: [] });
   });
 });
