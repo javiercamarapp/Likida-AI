@@ -99,9 +99,12 @@ export interface ColaCobranza {
  *  que `ejecutarCobranza` va a intentar. */
 export async function colaCobranza(tenantId: string, ahora: Date = new Date()): Promise<ColaCobranza> {
   const config = await leerConfigCobranza(tenantId);
+  // `operador:operador_id` y no `operador` a secas: viaje tiene MÁS de una
+  // relación con operador y PostgREST rechaza el embed ambiguo (se pagó en
+  // producción el 14-ago-2026: la página entera caía con el error boundary).
   const { data, error } = await supabaseAdmin()
     .from('viaje')
-    .select('id, folio, fecha_inicio, recordatorio_comprobacion_en, operador(nombre, telefono)')
+    .select('id, folio, fecha_inicio, recordatorio_comprobacion_en, operador:operador_id(nombre, telefono)')
     .eq('tenant_id', tenantId)
     .in('estatus', ['abierto', 'en_cuadre'])
     .not('fecha_inicio', 'is', null)
@@ -285,7 +288,7 @@ export interface ContactoBitacora {
 export async function bitacoraCobranza(tenantId: string, limite = 12): Promise<ContactoBitacora[]> {
   const { data, error } = await supabaseAdmin()
     .from('cobranza_contacto')
-    .select('tier, enviado, detalle, created_at, viaje:viaje_id(folio, operador(nombre))')
+    .select('tier, enviado, detalle, created_at, viaje:viaje_id(folio, operador:operador_id(nombre))')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(limite);
