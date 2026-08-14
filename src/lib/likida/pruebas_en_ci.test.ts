@@ -71,6 +71,25 @@ describe('lo que se salta bajo cobertura sí corre en CI', () => {
     ).toEqual([]);
   });
 
+  it('vitest.config.ts exporta LA MISMA bandera que los skipIf leen', () => {
+    // El modo de falla que esta red no veía (auditoría 3, PR-A2): el rename de
+    // marca del 12-ago (b79f8e5) renombró los skipIf a LIKIDA_COBERTURA y dejó
+    // el config exportando el nombre viejo. Nadie seteaba lo que los tests
+    // leían: el skip murió en silencio y los umbrales de tiempo corrieron
+    // INSTRUMENTADOS en el paso de cobertura — la medición que sus propios
+    // comentarios declaran inválida. El detector de arriba y los skipIf
+    // compartían el nombre nuevo, así que la red era internamente consistente
+    // y externamente ciega. Config y lectores tienen que nombrar la misma
+    // bandera, y ese nombre se verifica aquí, sobre el archivo real.
+    //
+    // Crudo y NO con sinComentarios: los globs del config ('**/dist/**')
+    // abren un falso `/*` y el limpiador se come media configuración — la
+    // misma trampa que descartó el primer grep de la auditoría 3. El ancla
+    // `^\s*env:` ya deja fuera a cualquier cita dentro de un comentario.
+    const config = readFileSync('vitest.config.ts', 'utf8');
+    expect(config).toMatch(/^\s*env:\s*\{\s*LIKIDA_COBERTURA:/m);
+  });
+
   it('y CI sigue corriendo la suite con umbral', () => {
     // El paso nuevo NO sustituye al de cobertura: si alguien lo cambiara por un
     // `npm test` a secas, el umbral —que es la puerta— dejaría de evaluarse.
