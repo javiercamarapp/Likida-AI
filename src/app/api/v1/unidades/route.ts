@@ -27,9 +27,14 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { getUnidades, type UnidadRow } from '@/lib/likida/operacion';
+import { getUnidades, crearUnidad, type UnidadRow, type NuevaUnidad } from '@/lib/likida/operacion';
 import { clasificarVigencia, contarVigencias, DIAS_AVISO, type EstadoVigencia } from '@/lib/likida/vigencias';
 import { abrir, leerPagina, rebanar, sobre, fallo } from '../_comun';
+import {
+  leerCuerpo, leerLlaveIdempotencia, validar, escribir, huella,
+  texto, entero, CampoInvalido,
+  buscarUnidadPorEconomico, type UnidadCreada,
+} from '../_escritura';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -117,4 +122,90 @@ export async function GET(req: Request) {
   } catch (e) {
     return fallo('v1.unidades', e, { tenant: acceso.tenantId });
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// POST /v1/unidades — dar de alta el parque desde el TMS de la flota.
+//
+// Una flota que estrena Likida tiene entre 20 y 300 unidades ya capturadas en
+// su sistema. Teclearlas otra vez a mano no es solo trabajo: es la primera
+// oportunidad de que el número económico no coincida entre los dos sistemas, y
+// a partir de ahí ninguna unidad se puede cruzar.
+//
+// ── ÁREA `administracion`, aunque el GET sea `operacion` ─────────────────
+//
+// LEER el parque es del jefe de tráfico —es exactamente quien debe enterarse
+// de que una unidad no puede salir— y por eso el `GET` de arriba es
+// `operacion`. DARLA DE ALTA es del dueño: una unidad nueva es un activo de la
+// empresa y su alta cambia el denominador de todo lo que se mide por unidad.
+// Son dos permisos distintos y aquí se piden distintos.
+//
+// ── LO QUE ESTA RUTA NO CAPTURA, Y POR QUÉ ───────────────────────────────
+//
+// Ni `estado`, ni `kmActual`, ni las TRES FECHAS DE VIGENCIA (póliza, permiso
+// SICT, verificación), que son lo más valioso que devuelve el `GET`. No es un
+// olvido: `crearUnidad` (`NuevaUnidad`, en `lib/likida/operacion.ts`) no las
+// acepta, y ampliarla toca un archivo que esta entrega no puede tocar. Una
+// unidad creada por aquí nace con `vigencia.estado = 'sin_dato'`, que es la
+// verdad —nadie le capturó papeles— y no `vigente`, que sería la mentira que
+// la cabecera de este archivo existe para prohibir. Queda anotado en el
+// reporte de entrega, no fingido en el código.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** El primer año de una unidad de carga que siga rodando. Un `1900` es un
+ *  dedazo; un año en el futuro lejano también. `+2` porque los modelos se
+ *  venden adelantados. */
+const ANIO_MIN = 1950;
+
+function normalizarUnidad(cuerpo: Record<string, unknown>, hoy = new Date()): NuevaUnidad {
+  // Igual que en `POST /v1/viajes`: un `tenant_id` en el cuerpo no se lee aquí
+  // ni en ningún otro sitio de la ruta. El tenant sale de `abrir()`.
+  const numeroEconomico = texto(cuerpo, 'numeroEconomico', { obligatorio: true, max: 40 });
+  if (!numeroEconomico) throw new CampoInvalido('numeroEconomico', '`numeroEconomico` es obligatorio.');
+
+  return {
+    numeroEconomico,
+    placas: texto(cuerpo, 'placas', { max: 20 }),
+    marca: texto(cuerpo, 'marca', { max: 60 }),
+    modelo: texto(cuerpo, 'modelo', { max: 60 }),
+    anio: entero(cuerpo, 'anio', { min: ANIO_MIN, max: hoy.getUTCFullYear() + 2 }),
+  };
+}
+
+export async function POST(req: Request) {
+  const acceso = await abrir(req, 'administracion');
+  if (!acceso.ok) return acceso.respuesta;
+
+  const llave = leerLlaveIdempotencia(req);
+  if (!llave.ok) return llave.respuesta;
+
+  const cuerpo = await leerCuerpo(req);
+  if (!cuerpo.ok) return cuerpo.respuesta;
+
+  const v = validar('v1.unidades.post', () => normalizarUnidad(cuerpo.cuerpo));
+  if (!v.ok) return v.respuesta;
+  const nueva = v.valor;
+
+  return escribir<UnidadCreada>({
+    evento: 'v1.unidades.post',
+    tenantId: acceso.tenantId,
+    llave: llave.llave,
+    huella: huella({
+      numeroEconomico: nueva.numeroEconomico,
+      placas: nueva.placas ?? null,
+      marca: nueva.marca ?? null,
+      modelo: nueva.modelo ?? null,
+      anio: nueva.anio ?? null,
+    }),
+    // (tenant_id, numero_economico), mig. 0047. Es la red durable: el número
+    // económico es como la flota llama a la unidad en la radio y en el papel,
+    // así que un reintento trae el mismo y choca aquí en vez de crear un
+    // segundo camión que no existe.
+    restriccion: 'unidad_economico_unico',
+    buscar: () => buscarUnidadPorEconomico(acceso.tenantId, nueva.numeroEconomico),
+    crear: async () => ({
+      id: await crearUnidad(acceso.tenantId, nueva),
+      numeroEconomico: nueva.numeroEconomico,
+    }),
+  });
 }

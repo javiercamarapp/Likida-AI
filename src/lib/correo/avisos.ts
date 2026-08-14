@@ -30,7 +30,7 @@ const APP = process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
 /** El pie de "por qué te llegó", parametrizado por flota. Todos lo usan. */
 function porQue(flota: string | null, que: string): string {
   const donde = flota ? `la flota ${flota}` : 'tu flota';
-  return `Recibes este aviso porque ${que} de ${donde} en Likida. Puedes apagarlo en Configuración.`;
+  return `Recibes este aviso porque ${que} de ${donde} en Likida. Puedes apagarlo en la pestaña Notificaciones del agente.`;
 }
 
 const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios);
@@ -188,7 +188,52 @@ export function avisoEscalados(d: DatosEscalados): Correo {
   };
 }
 
-// ── 5. Bienvenida al invitar a alguien ─────────────────────────────────────
+// ── 5. La cola de un agente que dejó de bajar ──────────────────────────────
+
+export interface DatosColaAtorada {
+  flota: string | null;
+  agente: string;
+  href: string;
+  /** Cuántos elementos lleva parados. */
+  cuantos: number;
+  /** Desde cuándo no baja, en días. `null` = no se pudo medir. */
+  diasSinBajar: number | null;
+}
+
+/**
+ * El agente SÍ está corriendo, pero su cola no baja.
+ *
+ * Es distinto de una corrida fallida y más difícil de notar: no hay error en
+ * ningún log, las corridas salen "bien", y el trabajo simplemente se acumula.
+ * El síntoma típico es que el agente hace todo lo que puede solo y lo que
+ * queda necesita a una persona — que no sabe que la necesitan.
+ */
+export function avisoColaAtorada(d: DatosColaAtorada): Correo {
+  const viejo = d.diasSinBajar !== null && d.diasSinBajar >= 3;
+  return {
+    asunto: `${d.agente}: ${d.cuantos} ${plural(d.cuantos, 'pendiente sin avanzar', 'pendientes sin avanzar')}`,
+    avance: 'El agente corre bien, pero su cola no baja.',
+    titulo: `La cola de ${d.agente} no está bajando`,
+    parrafos: [
+      'El agente está corriendo sin errores — por eso esto no aparece como una falla. Lo que pasa es que hizo todo lo que podía solo, y lo que queda necesita que alguien decida.',
+      ...(viejo
+        ? [`Llevan ${d.diasSinBajar} días sin moverse. Entre más esperan, más difícil es reconstruir el contexto de cada uno.`]
+        : []),
+    ],
+    datos: [
+      ['Agente', d.agente],
+      ['Pendientes', String(d.cuantos)],
+      ...(d.diasSinBajar !== null
+        ? ([['Sin avanzar desde hace', `${d.diasSinBajar} ${plural(d.diasSinBajar, 'día', 'días')}`]] as Array<[string, string]>)
+        : []),
+    ],
+    boton: { texto: `Ver ${d.agente}`, href: `${APP}${d.href}` },
+    tono: viejo ? 'urgente' : 'atencion',
+    porQueLoRecibes: porQue(d.flota, 'administras los agentes'),
+  };
+}
+
+// ── 6. Bienvenida al invitar a alguien ─────────────────────────────────────
 
 export interface DatosInvitacion {
   flota: string | null;

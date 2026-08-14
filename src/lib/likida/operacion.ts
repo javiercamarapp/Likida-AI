@@ -416,7 +416,20 @@ export async function rechazarPod(tenantId: string, podId: string, nota: string 
 
 export interface TableroOperacion {
   viajesActivos: number;
-  porAsignar: number;
+  /**
+   * Viajes en curso SIN unidad asignada.
+   *
+   * Antes esto era `porAsignar` y contaba viajes sin OPERADOR — un número que
+   * no podía ser distinto de 0 nunca: `viaje.operador_id` es NOT NULL desde la
+   * 0001 (verificado contra producción el 14-ago-2026). El tablero enseñaba un
+   * cero que se leía como medición ("no hay pendientes") cuando en realidad era
+   * imposible que hubiera, que es exactamente el cero que este producto
+   * prohíbe.
+   *
+   * `unidad_id` SÍ es nullable, así que este conteo mide algo real: un viaje
+   * despachado al que todavía no se le asignó tractocamión.
+   */
+  sinUnidad: number;
   unidadesDisponibles: number;
   unidadesEnTaller: number;
   incidenciasAbiertas: number;
@@ -434,8 +447,8 @@ export interface TableroOperacion {
 export async function getTableroOperacion(tenantId: string): Promise<TableroOperacion> {
   const admin = supabaseAdmin();
   const [viajes, unidades, incidencias, pods] = await Promise.all([
-    traerTodo<{ id: unknown; operador_id: unknown; estatus: unknown }>(
-      (d, h) => admin.from('viaje').select('id, operador_id, estatus', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h),
+    traerTodo<{ id: unknown; unidad_id: unknown; estatus: unknown }>(
+      (d, h) => admin.from('viaje').select('id, unidad_id, estatus', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h),
       'getTableroOperacion.viaje',
     ),
     traerTodo<{ estado: unknown }>(
@@ -457,7 +470,7 @@ export async function getTableroOperacion(tenantId: string): Promise<TableroOper
 
   return {
     viajesActivos: enCurso.length,
-    porAsignar: enCurso.filter((v) => !v.operador_id).length,
+    sinUnidad: enCurso.filter((v) => !v.unidad_id).length,
     unidadesDisponibles: unidades.filter((u) => u.estado === 'disponible').length,
     unidadesEnTaller: unidades.filter((u) => u.estado === 'taller').length,
     incidenciasAbiertas: incidencias.length,

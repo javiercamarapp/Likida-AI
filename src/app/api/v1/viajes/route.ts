@@ -22,7 +22,14 @@
 
 import { NextResponse } from 'next/server';
 import { getViajes, contarViajes, type ViajeRow } from '@/lib/likida/analytics';
+import { crearViaje, type NuevoViaje } from '@/lib/likida/operacion';
+import { validarIngreso } from '@/lib/likida/ingreso_viaje';
 import { abrir, leerPagina, rebanar, sobre, fallo, errorApi } from '../_comun';
+import {
+  leerCuerpo, leerLlaveIdempotencia, validar, escribir, huella,
+  texto, uuid, fecha, monto, crudoNumerico, CampoInvalido,
+  buscarViajePorFolio, type ViajeCreado,
+} from '../_escritura';
 
 export const runtime = 'nodejs';
 // Sin esto Next puede cachear la respuesta de una ruta GET, y una API
@@ -111,6 +118,155 @@ export async function GET(req: Request) {
   } catch (e) {
     return fallo('v1.viajes', e, { tenant: acceso.tenantId });
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// POST /v1/viajes — el TMS de la flota despacha DESDE SU PROPIO CÓDIGO.
+//
+// Es la otra mitad del argumento de venta: hasta aquí Likida podía LEERSE
+// desde un sistema ajeno, pero los viajes seguían capturándose a mano en el
+// panel. Transportes Innovativos está reescribiendo su TMS y quiere que sus
+// viajes entren aquí sin que nadie los vuelva a teclear.
+//
+// ── ÁREA `administracion`, NO `operacion` ────────────────────────────────
+//
+// El `GET` de arriba es `operacion` a propósito: un tablero de tráfico tiene
+// que poder leer los viajes. CREARLOS no es el mismo permiso. Una llave de
+// tablero —la que se pega en un Grafana o en el Looker de la flota, la que
+// más manos toca y la que más fácil se filtra— no debe poder meter viajes al
+// Registro del contralor. `administracion` la tienen el dueño y el superadmin
+// (`lib/auth/visibilidad.ts`), y en una llave hay que pedirla explícitamente.
+//
+// ── LOS TRES CANDADOS DE LA BASE, DICHOS AQUÍ PARA QUE NADIE LOS DESCUBRA
+//    EN PRODUCCIÓN ───────────────────────────────────────────────────────
+//
+// 1. `viaje.operador_id` es NOT NULL desde la 0001. Por eso `operadorId` es
+//    OBLIGATORIO en esta ruta y no opcional como en `NuevoViaje`: mandarlo
+//    vacío no crearía un viaje "sin asignar", tronaría con un 23502 que el
+//    integrador no puede interpretar. Es el mismo lateral que el importador de
+//    archivos ya documenta (`importar_viajes.ts`).
+// 2. `uq_viaje_abierto_por_operador` (0029): un operador tiene A LO MÁS un
+//    viaje sin liquidar. El choque sale como 400 explicando la regla, no como
+//    500 — ver `traducirFalla`.
+// 3. `viaje_folio_unico` (0092): (tenant_id, folio). Es la red DURABLE de la
+//    idempotencia, y por eso `folio` es obligatorio aquí. Con folio NULL el
+//    unique no participa (NULLS DISTINCT) y dos reintentos crearían dos
+//    viajes: un viaje despachado por WhatsApp puede nacer sin folio porque
+//    nadie lo va a reintentar, uno que entra por API no.
+//
+// ── ESTA RUTA LE ESCRIBE AL CHOFER ───────────────────────────────────────
+//
+// `crearViaje` avisa por WhatsApp al operador en cuanto el viaje existe
+// (best-effort: si el aviso no sale, el viaje ya está creado y el panel lo
+// sigue enseñando como no avisado). O sea que un POST aquí manda un mensaje a
+// una persona. No es un efecto colateral que se pueda quitar por ser una API:
+// es la operación que el jefe de tráfico pidió, y un viaje que el chofer no
+// conoce es un viaje que no arranca.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Tope de cordura del anticipo, con el mismo criterio que los de
+ * `ingreso_viaje.ts`: no es un límite de negocio, es el dedazo que se atrapa al
+ * capturar en vez de tres semanas después. El anticipo es el efectivo que la
+ * empresa le adelanta al operador para diesel, casetas y comidas de UN viaje;
+ * un millón de pesos es un cero de más, y si alguna vez fuera real se captura
+ * hablando con nosotros.
+ */
+const TOPE_ANTICIPO = 1_000_000;
+
+/**
+ * El cuerpo de `POST /v1/viajes`, ya normalizado.
+ *
+ * ── EL `tenant_id` DEL CUERPO NO EXISTE EN ESTA FUNCIÓN ───────────────────
+ *
+ * No se lee, no se compara, no se rechaza: no se menciona. El tenant sale de
+ * `abrir()` —o sea de la llave o de la cookie— y entra a `crearViaje` desde
+ * ahí. Un campo que ninguna línea lee no puede cambiar de flota un viaje ni
+ * por descuido; rechazarlo con un 400, en cambio, le tiraría la sincronización
+ * a un TMS que reenvía su payload completo por costumbre. Es la misma decisión
+ * que `urlSinTenant` toma con el `?tenant=` en `_comun.ts`, y está fijada por
+ * prueba en `_escritura.test.ts`.
+ */
+function normalizarViaje(cuerpo: Record<string, unknown>): NuevoViaje & { folio: string } {
+  const folio = texto(cuerpo, 'folio', { obligatorio: true, max: 64 });
+  const operadorId = uuid(cuerpo, 'operadorId', { obligatorio: true });
+  // `texto()` con `obligatorio` ya lanza si falta; el `if` es para TypeScript,
+  // que no puede saberlo, y no una segunda validación.
+  if (!folio || !operadorId) throw new CampoInvalido('folio', '`folio` y `operadorId` son obligatorios.');
+
+  // El ingreso NO se valida aquí: se delega en el motor que ya distingue VACÍO
+  // de CERO (`validarIngreso`). Un `ingresoFlete` ausente sale `null`, jamás 0.
+  const ingreso = validarIngreso({
+    clienteId: uuid(cuerpo, 'clienteId') ?? '',
+    ingresoFlete: crudoNumerico(cuerpo, 'ingresoFlete'),
+    kmRecorridos: crudoNumerico(cuerpo, 'kmRecorridos'),
+  });
+
+  return {
+    folio,
+    operadorId,
+    origen: texto(cuerpo, 'origen', { max: 120 }),
+    destino: texto(cuerpo, 'destino', { max: 120 }),
+    fechaInicio: fecha(cuerpo, 'fechaInicio'),
+    unidadId: uuid(cuerpo, 'unidadId'),
+    clienteId: ingreso.clienteId,
+    ingresoFlete: ingreso.ingresoFlete,
+    kmRecorridos: ingreso.kmRecorridos,
+    // ── EL ÚNICO CAMPO DONDE AUSENTE SE VUELVE UN NÚMERO, Y SE DICE ────────
+    // `viaje.anticipo` es `numeric(12,2) NOT NULL DEFAULT 0` (0001): la columna
+    // no puede guardar "no sé". Un viaje sin anticipo declarado es un viaje
+    // donde la empresa no adelantó efectivo, y 0 es la medición correcta de
+    // eso — no un relleno. La distinción vacío/cero que sí cambia una medición
+    // (el INGRESO) vive donde puede: en `ingreso_flete`, que sí es nullable.
+    anticipo: monto(cuerpo, 'anticipo', { min: 0, max: TOPE_ANTICIPO }) ?? 0,
+  };
+}
+
+export async function POST(req: Request) {
+  const acceso = await abrir(req, 'administracion');
+  if (!acceso.ok) return acceso.respuesta;
+
+  // La llave ANTES del cuerpo: es una cabecera y no cuesta leerla, así que una
+  // integración a la que se le olvidó se entera sin que nadie parsee su JSON.
+  const llave = leerLlaveIdempotencia(req);
+  if (!llave.ok) return llave.respuesta;
+
+  const cuerpo = await leerCuerpo(req);
+  if (!cuerpo.ok) return cuerpo.respuesta;
+
+  const v = validar('v1.viajes.post', () => normalizarViaje(cuerpo.cuerpo));
+  if (!v.ok) return v.respuesta;
+  const nuevo = v.valor;
+
+  return escribir<ViajeCreado>({
+    evento: 'v1.viajes.post',
+    tenantId: acceso.tenantId,
+    llave: llave.llave,
+    huella: huella({
+      folio: nuevo.folio,
+      operadorId: nuevo.operadorId ?? null,
+      origen: nuevo.origen ?? null,
+      destino: nuevo.destino ?? null,
+      fechaInicio: nuevo.fechaInicio ?? null,
+      unidadId: nuevo.unidadId ?? null,
+      clienteId: nuevo.clienteId ?? null,
+      ingresoFlete: nuevo.ingresoFlete ?? null,
+      kmRecorridos: nuevo.kmRecorridos ?? null,
+      anticipo: nuevo.anticipo ?? 0,
+    }),
+    restriccion: 'viaje_folio_unico',
+    buscar: () => buscarViajePorFolio(acceso.tenantId, nuevo.folio),
+    // EL TENANT SALE DE `acceso`, que salió de la credencial. Es el único
+    // lugar de esta ruta donde se decide de qué flota es el viaje.
+    crear: async () => ({
+      id: await crearViaje(acceso.tenantId, nuevo),
+      folio: nuevo.folio,
+      // `crearViaje` escribe `estatus: 'abierto'` literal en el MISMO insert
+      // que devolvió el id. No se relee: releer no lo haría más cierto, solo
+      // más tarde.
+      estatus: 'abierto',
+    }),
+  });
 }
 
 // ── POR QUÉ LAS LLAVES VAN EN ESPAÑOL ──────────────────────────────────────

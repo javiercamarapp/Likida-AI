@@ -86,6 +86,12 @@ export default async function PaginaDespacho({
     if (!Number.isFinite(anticipo) || anticipo < 0) {
       return { error: 'El anticipo tiene que ser un monto válido (o dejarse vacío).' };
     }
+    // `viaje.operador_id` es NOT NULL (0001). Sin este guard, elegir "sin
+    // operador" llegaba a la base y volvía como un 23502 traducido a "No se
+    // pudo crear el viaje": un mensaje que no dice qué arreglar.
+    if (!texto('operadorId', 64)) {
+      return { error: 'Elige un operador: un viaje no puede existir sin quién lo maneje.' };
+    }
     const fecha = texto('fechaInicio', 10);
     if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
       return { error: 'La fecha de inicio no tiene un formato válido.' };

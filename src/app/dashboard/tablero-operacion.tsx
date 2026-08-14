@@ -30,7 +30,7 @@ export function TableroCifras({ t }: { t: TableroOperacion }) {
       <div className="mt-3 flex flex-wrap gap-2.5 items-stretch">
         <div className="flex-1 min-w-[200px]">
           <StatCard icono={<CircleSlash width={17} height={17} strokeWidth={1.75} />}
-            etiqueta="Por asignar" valor={t.porAsignar} formato="entero" />
+            etiqueta="Sin unidad" valor={t.sinUnidad} formato="entero" />
         </div>
         <div className="flex-1 min-w-[200px]">
           <StatCard icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} />}

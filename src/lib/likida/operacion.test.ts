@@ -256,7 +256,7 @@ describe('getTableroOperacion', () => {
     expect(t.incidenciasAbiertas).toBe(1);
   });
 
-  it('porAsignar solo cuenta viajes EN CURSO sin dueño', async () => {
+  it('sinUnidad solo cuenta viajes EN CURSO sin dueño', async () => {
     TABLAS = {
       viaje: [
         { id: 'v-1', operador_id: null, estatus: 'abierto' },
@@ -264,7 +264,7 @@ describe('getTableroOperacion', () => {
       ],
       unidad: [], incidencia: [], pod: [],
     };
-    expect((await getTableroOperacion('t-1')).porAsignar).toBe(1);
+    expect((await getTableroOperacion('t-1')).sinUnidad).toBe(1);
   });
 });
 

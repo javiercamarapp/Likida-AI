@@ -3309,3 +3309,248 @@ begin
   raise exception E'TENANT_API_KEY_0093  claro=%  corto=%  dup=%  area=%  nombre=%  rls=%  huerfanas=%   (esperado t/t/t/t/t/t/0)',
     claro_rebota, hash_corto_rebota, dup_rebota, area_mala_rebota, nombre_vacio_rebota, rls, quedan;
 end $$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── 69. Credenciales de conector: un JSON en claro NO cabe (mig. 0094) ──────
+--
+-- La tabla existe porque `rastreo_credencial` (0050) solo acepta proveedores de
+-- GPS, así que 14 de los 19 conectores no tenían dónde guardar sus accesos.
+--
+-- Lo que se comprueba:
+--   1. Un JSON EN CLARO rebota. Es el candado que impide que la contraseña de
+--      un SAP se guarde sin cifrar por un descuido del llamador: un objeto
+--      serializado empieza con `{` y un cifrado nunca.
+--   2. Un `conector_id` vacío rebota.
+--   3. DOS juegos de accesos al mismo conector en la misma flota rebotan: es
+--      una ambigüedad que nadie sabría resolver al conectar.
+--   4. Pero OTRA flota SÍ puede tener su propio SAP — el unique es por
+--      (tenant, conector), no global.
+--   5. RLS encendida con su política.
+--   6. Borrar la flota se lleva sus credenciales: una flota dada de baja no
+--      puede dejar accesos vivos a los sistemas de su cliente.
+--
+-- CORRIDA REAL (14-ago-2026, proyecto gngoqsvrxdguxvsizpbw):
+--   CONECTOR_CREDENCIAL_0094  en_claro=t  id_vacio=t  dup=t  otra_flota=t
+--                             rls=t  politicas=1  huerfanas=0
+--                             (esperado t/t/t/t/t/1/0)
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid; t2 uuid;
+  en_claro_rebota boolean := false;
+  id_vacio_rebota boolean := false;
+  dup_rebota boolean := false;
+  otra_flota_ok boolean := false;
+  quedan int;
+  rls boolean;
+  pol int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0094 A') returning id into t;
+  insert into tenant (nombre) values ('ZZZ VERIF 0094 B') returning id into t2;
+
+  begin
+    insert into conector_credencial (tenant_id, conector_id, valores_cifrados)
+      values (t, 'sap_b1', '{"password":"secreto"}');
+  exception when check_violation then en_claro_rebota := true;
+  end;
+
+  begin
+    insert into conector_credencial (tenant_id, conector_id, valores_cifrados)
+      values (t, '   ', 'AAAAcifradoAAAA');
+  exception when check_violation then id_vacio_rebota := true;
+  end;
+
+  insert into conector_credencial (tenant_id, conector_id, valores_cifrados, pistas)
+    values (t, 'sap_b1', 'AAAAcifradoAAAA', '{"host":"sap.cliente.mx","usuario":"likida","password":"…4f2a"}');
+
+  begin
+    insert into conector_credencial (tenant_id, conector_id, valores_cifrados)
+      values (t, 'sap_b1', 'BBBBotroBBBB');
+  exception when unique_violation then dup_rebota := true;
+  end;
+
+  begin
+    insert into conector_credencial (tenant_id, conector_id, valores_cifrados)
+      values (t2, 'sap_b1', 'CCCCterceroCCCC');
+    otra_flota_ok := true;
+  exception when unique_violation then otra_flota_ok := false;
+  end;
+
+  select relrowsecurity into rls from pg_class where relname='conector_credencial';
+  select count(*) into pol from pg_policies where tablename='conector_credencial';
+
+  delete from tenant where id in (t, t2);
+  select count(*) into quedan from conector_credencial where tenant_id in (t, t2);
+
+  raise exception E'CONECTOR_CREDENCIAL_0094  en_claro=%  id_vacio=%  dup=%  otra_flota=%  rls=%  politicas=%  huerfanas=%   (esperado t/t/t/t/t/1/0)',
+    en_claro_rebota, id_vacio_rebota, dup_rebota, otra_flota_ok, rls, pol, quedan;
+end $$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── 70. Buzón de intake: el token NO se deriva del tenant (mig. 0095) ───────
+--
+-- La dirección `f-<token>@mail.likida.ai` es por donde entran las facturas de
+-- talleres y diésel. El token es ALEATORIO y no el `tenant_id`, porque un id
+-- aparece en URLs, logs y exports: quien lo tuviera podría inyectar facturas
+-- falsas en la contabilidad de esa flota. Un id identifica, no autoriza.
+--
+-- Lo que se comprueba:
+--   1. Un token CORTO rebota — sería adivinable.
+--   2. Caracteres AMBIGUOS (0/O, 1/l) rebotan: la dirección se dicta por
+--      teléfono y se transcribe mal.
+--   3. El bueno entra.
+--   4. DOS flotas no pueden compartir buzón: la una recibiría las facturas de
+--      la otra.
+--   5. Pero muchas flotas SÍ pueden tener NULL a la vez — el índice único es
+--      parcial, porque una flota sin buzón simplemente no lo tiene encendido.
+--
+-- CORRIDA REAL (14-ago-2026, proyecto gngoqsvrxdguxvsizpbw):
+--   BUZON_INTAKE_0095  corto=t  ambiguo=t  bueno=t  dup=t  nulos_conviven=t
+--                      (esperado t/t/t/t/t)
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid; t2 uuid;
+  corto_rebota boolean := false;
+  ambiguo_rebota boolean := false;
+  dup_rebota boolean := false;
+  nulos_conviven boolean := false;
+  bueno_entra boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0095 A') returning id into t;
+  insert into tenant (nombre) values ('ZZZ VERIF 0095 B') returning id into t2;
+
+  begin
+    update tenant set buzon_token = 'abc' where id = t;
+  exception when check_violation then corto_rebota := true;
+  end;
+
+  begin
+    update tenant set buzon_token = 'abcdefgh0ijklmnop1qrstuv' where id = t;
+  exception when check_violation then ambiguo_rebota := true;
+  end;
+
+  update tenant set buzon_token = 'abcdefghjkmnpqrstvwxyz23' where id = t;
+  select true into bueno_entra;
+
+  begin
+    update tenant set buzon_token = 'abcdefghjkmnpqrstvwxyz23' where id = t2;
+  exception when unique_violation then dup_rebota := true;
+  end;
+
+  select count(*) = 0 into nulos_conviven
+    from tenant where buzon_token is null and id = t2;
+  nulos_conviven := not nulos_conviven;
+
+  delete from tenant where id in (t, t2);
+
+  raise exception E'BUZON_INTAKE_0095  corto=%  ambiguo=%  bueno=%  dup=%  nulos_conviven=%   (esperado t/t/t/t/t)',
+    corto_rebota, ambiguo_rebota, bueno_entra, dup_rebota, nulos_conviven;
+end $$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── 71. Idempotencia del correo entrante (mig. 0096) ───────────────────────
+--
+-- Resend REINTENTA cualquier webhook que no conteste 2xx. Sin esta tabla, un
+-- timeout nuestro a mitad de proceso produce una segunda entrega del MISMO
+-- correo y una segunda factura en la contabilidad del cliente.
+--
+-- El dedup de `factura_proveedor` (unique tenant+uuid) NO alcanza: atrapa el
+-- mismo CFDI, pero no el correo con varios adjuntos donde el segundo falló —
+-- al reintentar, el primero se re-procesa. Por eso la llave es el CORREO.
+--
+-- El insert ES la comprobación (llave primaria). Preguntar-y-después-escribir
+-- dejaría una ventana por la que se cuelan dos entregas simultáneas.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  repite_rebota boolean := false;
+  primero_entra boolean := false;
+begin
+  insert into correo_procesado (email_id) values ('ZZZ-VERIF-0096');
+  primero_entra := true;
+
+  begin
+    insert into correo_procesado (email_id) values ('ZZZ-VERIF-0096');
+  exception when unique_violation then repite_rebota := true;
+  end;
+
+  delete from correo_procesado where email_id = 'ZZZ-VERIF-0096';
+
+  raise exception E'CORREO_PROCESADO_0096  primero=%  repite_rebota=%   (esperado t/t)',
+    primero_entra, repite_rebota;
+end $$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── 72. Notificaciones por agente: la huella va completa (mig. 0097) ───────
+--
+-- Lo que se comprueba:
+--   1. Un `agente` con typo NO crea una fila de config inalcanzable en
+--      silencio — el dominio duplica el catálogo de TypeScript a propósito.
+--   2. Un `evento` inventado tampoco.
+--   3. Magnitud negativa rebota.
+--   4. LA HUELLA VA COMPLETA O NO VA: una con `avisado_en` pero sin
+--      `magnitud_avisada` se leería como magnitud 0 —"cualquier cosa es
+--      noticia"— y el anti-ruido dejaría de existir sin que nada fallara.
+--   5. Completa sí entra.
+--   6. EL CLAIM: un UPDATE condicional dentro del piso de 60 min afecta CERO
+--      filas. Es lo que impide que dos corridas solapadas de Vercel Cron
+--      manden dos copias del mismo aviso.
+--   7. Borrar la flota se lleva su configuración.
+--
+-- CORRIDA REAL (14-ago-2026, proyecto gngoqsvrxdguxvsizpbw):
+--   AGENTE_NOTIF_0097  agente_malo=t  evento_malo=t  magnitud_neg=t
+--                      huella_coja=t  completa=t  claim_reciente_no_pasa=0
+--                      huerfanas=0   (esperado t/t/t/t/t/0/0)
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare
+  t uuid;
+  agente_malo boolean := false;
+  evento_malo boolean := false;
+  huella_coja boolean := false;
+  magnitud_neg boolean := false;
+  huella_completa_ok boolean := false;
+  claim_gana int;
+  quedan int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0097') returning id into t;
+
+  begin
+    insert into agente_notificacion_config (tenant_id, agente) values (t, 'liquidacionn');
+  exception when check_violation then agente_malo := true;
+  end;
+
+  begin
+    insert into agente_notificacion_estado (tenant_id, agente, evento) values (t, 'cobranza', 'lo_que_sea');
+  exception when check_violation then evento_malo := true;
+  end;
+
+  begin
+    insert into agente_notificacion_estado (tenant_id, agente, evento, magnitud)
+      values (t, 'cobranza', 'corrida_fallida', -1);
+  exception when check_violation then magnitud_neg := true;
+  end;
+
+  begin
+    insert into agente_notificacion_estado (tenant_id, agente, evento, avisado_en)
+      values (t, 'cobranza', 'corrida_fallida', now());
+  exception when check_violation then huella_coja := true;
+  end;
+
+  insert into agente_notificacion_estado (tenant_id, agente, evento, magnitud, avisado_en, magnitud_avisada)
+    values (t, 'cobranza', 'corrida_fallida', 5, now(), 5);
+  huella_completa_ok := true;
+
+  update agente_notificacion_estado
+     set avisado_en = now(), magnitud_avisada = 20
+   where tenant_id = t and agente = 'cobranza' and evento = 'corrida_fallida'
+     and (avisado_en is null or avisado_en < now() - interval '60 minutes');
+  get diagnostics claim_gana = row_count;
+
+  delete from tenant where id = t;
+  select count(*) into quedan from agente_notificacion_config where tenant_id = t;
+
+  raise exception E'AGENTE_NOTIF_0097  agente_malo=%  evento_malo=%  magnitud_neg=%  huella_coja=%  completa=%  claim_reciente_no_pasa=%  huerfanas=%   (esperado t/t/t/t/t/0/0)',
+    agente_malo, evento_malo, magnitud_neg, huella_coja, huella_completa_ok, claim_gana, quedan;
+end $$;

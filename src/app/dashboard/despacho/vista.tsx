@@ -53,7 +53,7 @@ export function VistaDespacho({
           ) : (
             <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
               <Kpi titulo="Viajes activos" valor={numero(tablero.viajesActivos)} />
-              <Kpi titulo="Por asignar" valor={numero(tablero.porAsignar)} tono={tablero.porAsignar > 0 ? 'warn' : undefined} />
+              <Kpi titulo="Sin unidad" valor={numero(tablero.sinUnidad)} tono={tablero.sinUnidad > 0 ? 'warn' : undefined} />
               <Kpi titulo="Unidades libres" valor={numero(tablero.unidadesDisponibles)} />
               <Kpi titulo="En taller" valor={numero(tablero.unidadesEnTaller)} />
               <Kpi titulo="Incidencias" valor={numero(tablero.incidenciasAbiertas)} tono={tablero.incidenciasAbiertas > 0 ? 'warn' : undefined} />

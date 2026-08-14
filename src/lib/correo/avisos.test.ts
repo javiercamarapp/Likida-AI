@@ -164,8 +164,12 @@ describe('el pie dice de qué flota y cómo apagarlo', () => {
     expect(a.porQueLoRecibes).not.toContain('null');
   });
 
-  it('los recurrentes ofrecen apagarse', () => {
-    expect(avisoVigencias(VIG).porQueLoRecibes).toContain('Configuración');
+  it('los recurrentes ofrecen apagarse, y dicen DÓNDE', () => {
+    // Decía "en Configuración" cuando no había dónde apagarlos. Ahora sí lo
+    // hay —la pestaña Notificaciones de cada agente— y el pie manda ahí: una
+    // instrucción que lleva al lugar equivocado es peor que ninguna, porque
+    // quien la sigue concluye que el producto no cumple.
+    expect(avisoVigencias(VIG).porQueLoRecibes).toContain('Notificaciones del agente');
   });
 });
 
