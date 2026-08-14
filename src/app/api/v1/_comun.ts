@@ -58,6 +58,11 @@ export type CodigoError =
   | 'sin_permiso'
   | 'no_encontrado'
   | 'parametro_invalido'
+  // El registro YA EXISTE con esa llave natural pero con OTRO contenido. No es
+  // `parametro_invalido` (el cuerpo está bien formado) ni un 200 idempotente
+  // (eso diría "tu escritura ya estaba hecha", y no lo está): el integrador
+  // tiene que enterarse de que SUS DATOS NO SE GUARDARON.
+  | 'conflicto'
   | 'demasiadas_peticiones'
   | 'lectura_incompleta'
   | 'error_interno'
@@ -76,6 +81,7 @@ const STATUS: Record<CodigoError, number> = {
   sin_permiso: 403,
   no_encontrado: 404,
   parametro_invalido: 400,
+  conflicto: 409,
   demasiadas_peticiones: 429,
   // Los dos son 500 y aun así son códigos distintos: `lectura_incompleta` le
   // dice al integrador que reintentar NO lo va a arreglar (la flota rebasó lo

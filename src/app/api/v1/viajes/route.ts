@@ -28,7 +28,7 @@ import { abrir, leerPagina, rebanar, sobre, fallo, errorApi } from '../_comun';
 import {
   leerCuerpo, leerLlaveIdempotencia, validar, escribir, huella,
   texto, uuid, fecha, monto, crudoNumerico, CampoInvalido,
-  buscarViajePorFolio, type ViajeCreado,
+  buscarViajePorFolio, viajeCoincide, type ViajeCreado, type ContenidoViaje,
 } from '../_escritura';
 
 export const runtime = 'nodejs';
@@ -255,7 +255,30 @@ export async function POST(req: Request) {
       anticipo: nuevo.anticipo ?? 0,
     }),
     restriccion: 'viaje_folio_unico',
-    buscar: () => buscarViajePorFolio(acceso.tenantId, nuevo.folio),
+    // La MISMA consulta que encuentra la fila trae su contenido, y aquí se
+    // decide si esta petición es un reintento (mismo contenido → 200) o un
+    // cuerpo genuinamente distinto contra un folio ocupado (→ 409). Antes esa
+    // segunda mitad no existía: los montos nuevos se descartaban en silencio
+    // bajo un `200 {idempotente:true}` (hallazgo A8, auditoría 4).
+    buscar: async () => {
+      const x = await buscarViajePorFolio(acceso.tenantId, nuevo.folio);
+      if (!x) return null;
+      const pedido: ContenidoViaje = {
+        operadorId: nuevo.operadorId ?? null,
+        origen: nuevo.origen ?? null,
+        destino: nuevo.destino ?? null,
+        fechaInicio: nuevo.fechaInicio ?? null,
+        unidadId: nuevo.unidadId ?? null,
+        clienteId: nuevo.clienteId ?? null,
+        ingresoFlete: nuevo.ingresoFlete ?? null,
+        kmRecorridos: nuevo.kmRecorridos ?? null,
+        anticipo: nuevo.anticipo ?? 0,
+      };
+      return { dato: x.dato, coincide: viajeCoincide(x.contenido, pedido) };
+    },
+    mensajeConflicto:
+      `Ya existe un viaje con el folio \`${nuevo.folio}\` en tu flota, con contenido DISTINTO al que mandaste. ` +
+      'Tus datos NO se guardaron. Consulta el viaje con `GET /v1/viajes/{id}`; esta API no actualiza viajes — las correcciones se capturan en el panel.',
     // EL TENANT SALE DE `acceso`, que salió de la credencial. Es el único
     // lugar de esta ruta donde se decide de qué flota es el viaje.
     crear: async () => ({

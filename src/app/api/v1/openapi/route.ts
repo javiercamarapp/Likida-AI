@@ -151,10 +151,10 @@ const cuerpoError = {
         codigo: {
           type: 'string',
           enum: [
-            'no_autenticado', 'sin_permiso', 'no_encontrado', 'parametro_invalido',
+            'no_autenticado', 'sin_permiso', 'no_encontrado', 'parametro_invalido', 'conflicto',
             'demasiadas_peticiones', 'lectura_incompleta', 'error_interno', 'dependencia_no_disponible',
           ],
-          description: 'Ramifica sobre esto, no sobre `mensaje` (que se puede reescribir sin previo aviso). `lectura_incompleta` y `error_interno` son ambos 500 y significan cosas distintas: el primero NO se arregla reintentando.',
+          description: 'Ramifica sobre esto, no sobre `mensaje` (que se puede reescribir sin previo aviso). `lectura_incompleta` y `error_interno` son ambos 500 y significan cosas distintas: el primero NO se arregla reintentando. `conflicto` (409) significa que la llave natural ya existe con OTRO contenido y TUS DATOS NO SE GUARDARON.',
         },
         mensaje: {
           type: 'string',
@@ -211,7 +211,7 @@ const cabeceraIdempotencia = {
 /** El 200 de una escritura: NO se creó nada nuevo, ya existía. */
 function yaExistia(que: string, esquema: Record<string, unknown>) {
   return {
-    description: `${que} ya existía y se devuelve el mismo. Pasa por reintento con la misma \`Idempotency-Key\`, o porque otro camino ya lo había creado con la misma clave natural. \`idempotente: true\` lo dice en el cuerpo además del status, para que un cliente generado desde este esquema pueda distinguirlo sin leer el código HTTP.`,
+    description: `${que} ya existía CON EL MISMO CONTENIDO y se devuelve el mismo. Pasa por reintento con la misma \`Idempotency-Key\`, o porque otro camino ya lo había creado con la misma clave natural. Si la clave natural existe con contenido DISTINTO, la respuesta es 409 \`conflicto\` — nunca este 200. \`idempotente: true\` lo dice en el cuerpo además del status, para que un cliente generado desde este esquema pueda distinguirlo sin leer el código HTTP.`,
     content: {
       'application/json': {
         schema: {
@@ -221,6 +221,14 @@ function yaExistia(que: string, esquema: Record<string, unknown>) {
         },
       },
     },
+  };
+}
+
+/** El 409 de una escritura: la llave natural existe con OTRO contenido. */
+function conflictoNatural(que: string, llave: string) {
+  return {
+    description: `Ya existe ${que} con ese ${llave} en tu flota, con contenido DISTINTO al del cuerpo. TUS DATOS NO SE GUARDARON — esta API no actualiza registros; las correcciones se capturan en el panel. Un reintento con el MISMO contenido no cae aquí: recibe el 200 idempotente.`,
+    content: { 'application/json': { schema: cuerpoError } },
   };
 }
 
@@ -514,6 +522,7 @@ function documento(servidor: string) {
           responses: {
             '201': seCreo('El viaje', VIAJE_CREADO),
             '200': yaExistia('Un viaje con ese folio', VIAJE_CREADO),
+            '409': conflictoNatural('un viaje', 'folio'),
             ...respuestasError,
           },
         },
@@ -631,6 +640,7 @@ function documento(servidor: string) {
           responses: {
             '201': seCreo('La unidad', UNIDAD_CREADA),
             '200': yaExistia('Una unidad con ese número económico', UNIDAD_CREADA),
+            '409': conflictoNatural('una unidad', 'número económico'),
             ...respuestasError,
           },
         },

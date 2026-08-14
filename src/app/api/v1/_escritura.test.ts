@@ -155,6 +155,18 @@ function viajeMinimo(extra: Record<string, unknown> = {}) {
   return { folio: 'F-001', operadorId: OPERADOR, ...extra };
 }
 
+/** La fila que `buscar` encuentra en la base para `viajeMinimo()`: el acuse
+ *  MÁS el contenido que ahora viaja en la misma consulta para decidir si la
+ *  petición coincide (uuid en minúsculas, como los guarda Postgres). */
+function filaViajeMinimo(extra: Record<string, unknown> = {}) {
+  return {
+    id: 'v-nuevo', folio: 'F-001', estatus: 'abierto',
+    operador_id: OPERADOR.toLowerCase(), origen: null, destino: null, fecha_inicio: null,
+    unidad_id: null, cliente_id: null, ingreso_flete: null, km_recorridos: null, anticipo: 0,
+    ...extra,
+  };
+}
+
 interface CuerpoLeido {
   error?: { codigo: string; mensaje: string };
   dato?: Record<string, unknown>;
@@ -223,7 +235,7 @@ describe('el tenant sale de la credencial, JAMÁS del cuerpo', () => {
     // consulta lleva `.eq('tenant_id', …)` con el tenant de `abrir()`. Se fija
     // por el lado observable: el doble devuelve fila y el acuse la devuelve
     // como propia sólo porque la consulta ya venía acotada.
-    respuestas.viaje = { data: { id: 'v-ya', folio: 'F-001', estatus: 'liquidado' }, error: null };
+    respuestas.viaje = { data: filaViajeMinimo({ id: 'v-ya', estatus: 'liquidado' }), error: null };
     const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo() }));
     expect(r.status).toBe(200);
     expect(await cuerpoDe(r)).toEqual({
@@ -327,7 +339,7 @@ describe('la idempotencia se exige, no se ofrece', () => {
     // instancia de Vercel: memoria vacía, misma llave, mismo cuerpo. La tabla
     // sí la ven las dos.
     reiniciarIdempotencia();
-    respuestas.viaje = { data: { id: 'v-nuevo', folio: 'F-001', estatus: 'abierto' }, error: null };
+    respuestas.viaje = { data: filaViajeMinimo(), error: null };
 
     const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'timeout-del-tms-1' }));
     // 201 Y `idempotente: false`: la MISMA respuesta, byte por byte, que la
@@ -352,7 +364,7 @@ describe('la idempotencia se exige, no se ofrece', () => {
 
     reiniciarIdempotencia();
     durables.length = 0;
-    respuestas.viaje = { data: { id: 'v-nuevo', folio: 'F-001', estatus: 'abierto' }, error: null };
+    respuestas.viaje = { data: filaViajeMinimo(), error: null };
 
     const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'reintento-tardio-1' }));
     expect(r.status).toBe(200);
@@ -383,7 +395,7 @@ describe('la idempotencia se exige, no se ofrece', () => {
     await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'base-caida-11' }));
     reiniciarIdempotencia();
     fallas.leer = true;
-    respuestas.viaje = { data: { id: 'v-nuevo', folio: 'F-001', estatus: 'abierto' }, error: null };
+    respuestas.viaje = { data: filaViajeMinimo(), error: null };
 
     const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'base-caida-11' }));
     expect(r.status).toBe(200);
@@ -409,12 +421,85 @@ describe('la idempotencia se exige, no se ofrece', () => {
     expect(durables[0].status).toBe(201);
   });
 
-  it('dos llaves DISTINTAS con el mismo folio tampoco duplican — manda la llave natural', async () => {
+  it('dos llaves DISTINTAS con el mismo folio y el MISMO contenido tampoco duplican — manda la llave natural', async () => {
     await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'llave-una-aaaa' }));
-    respuestas.viaje = { data: { id: 'v-nuevo', folio: 'F-001', estatus: 'abierto' }, error: null };
+    respuestas.viaje = { data: filaViajeMinimo(), error: null };
     const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'llave-dos-bbbb' }));
     expect(r.status).toBe(200);
     expect(crearViaje).toHaveBeenCalledTimes(1);
+  });
+
+  it('EL HALLAZGO A8: mismo folio, OTRO contenido, llave NUEVA → 409 que dice que NO se guardó', async () => {
+    // Antes: el TMS mandaba el folio existente con montos corregidos y una
+    // llave nueva, recibía `200 {idempotente:true}` con la fila VIEJA, y sus
+    // montos se descartaban sin log. Se iba convencido de que se guardaron.
+    await postViaje(peticion('viajes', { cuerpo: viajeMinimo(), llave: 'primer-alta-aa' }));
+    respuestas.viaje = { data: filaViajeMinimo(), error: null };
+
+    const r = await postViaje(peticion('viajes', {
+      cuerpo: viajeMinimo({ ingresoFlete: 18500, anticipo: 2500 }),
+      llave: 'correccion-bb',
+    }));
+    expect(r.status).toBe(409);
+    const c = await cuerpoDe(r);
+    expect(c.error?.codigo).toBe('conflicto');
+    expect(c.error?.mensaje).toContain('F-001');
+    expect(c.error?.mensaje).toContain('NO se guardaron');
+    // No se creó un segundo viaje NI se fingió que se guardó nada.
+    expect(crearViaje).toHaveBeenCalledTimes(1);
+    // El 409 NO se recuerda: si alguien corrige la fila en el panel, el
+    // siguiente POST idéntico del TMS tiene que poder recibir su 200.
+    expect(durables.some((d) => d.llave === 'correccion-bb')).toBe(false);
+  });
+
+  it('el contenido igual escrito distinto NO es conflicto: uuid en mayúsculas y $500 contra $500.00', async () => {
+    respuestas.viaje = {
+      data: filaViajeMinimo({ origen: 'CDMX', anticipo: 500 }),
+      error: null,
+    };
+    const r = await postViaje(peticion('viajes', {
+      cuerpo: viajeMinimo({ operadorId: OPERADOR.toUpperCase(), origen: 'CDMX', anticipo: 500.0 }),
+      llave: 'reintento-formato-cc',
+    }));
+    expect(r.status).toBe(200);
+    expect((await cuerpoDe(r)).idempotente).toBe(true);
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('la CARRERA con contenido distinto también es 409, no la fila ajena disfrazada de acuse', async () => {
+    crearViaje.mockImplementationOnce(async () => {
+      throw new Error('crearViaje: duplicate key value violates unique constraint "viaje_folio_unico"');
+    });
+    let vuelta = 0;
+    Object.defineProperty(respuestas, 'viaje', {
+      configurable: true,
+      get: () => (vuelta++ === 0
+        ? { data: null, error: null }
+        : { data: filaViajeMinimo({ id: 'v-gano', origen: 'Monterrey' }), error: null }),
+      set: () => {},
+    });
+
+    const r = await postViaje(peticion('viajes', { cuerpo: viajeMinimo({ origen: 'Saltillo' }) }));
+    expect(r.status).toBe(409);
+    expect((await cuerpoDe(r)).error?.codigo).toBe('conflicto');
+
+    Object.defineProperty(respuestas, 'viaje', { configurable: true, writable: true, value: { data: null, error: null } });
+  });
+
+  it('una unidad con el mismo número económico y OTRO contenido también es 409', async () => {
+    respuestas.unidad = {
+      data: { id: 'u-vieja', numero_economico: 'C2-08', placas: 'ABC1234', marca: null, modelo: null, anio: 2019 },
+      error: null,
+    };
+    const r = await postUnidad(peticion('unidades', {
+      cuerpo: { numeroEconomico: 'C2-08', placas: 'XYZ9876', anio: 2022 },
+      llave: 'unidad-conflicto-dd',
+    }));
+    expect(r.status).toBe(409);
+    const c = await cuerpoDe(r);
+    expect(c.error?.codigo).toBe('conflicto');
+    expect(c.error?.mensaje).toContain('C2-08');
+    expect(crearUnidad).not.toHaveBeenCalled();
   });
 
   it('la CARRERA: dos peticiones a la vez, la que pierde recibe la fila que ganó, no un 500', async () => {
@@ -428,7 +513,7 @@ describe('la idempotencia se exige, no se ofrece', () => {
       configurable: true,
       get: () => (vuelta++ === 0
         ? { data: null, error: null }
-        : { data: { id: 'v-gano', folio: 'F-001', estatus: 'abierto' }, error: null }),
+        : { data: filaViajeMinimo({ id: 'v-gano' }), error: null }),
       set: () => {},
     });
 
