@@ -135,6 +135,46 @@ describe('lo que este producto sí hace, dicho sin adornos', () => {
     expect(s.parrafos.join(' ')).toMatch(/persona encargada/i);
     expect(s.parrafos.join(' ')).toMatch(/eso no cambia quién responde/i);
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA 3, ALTO (LEG-A1): los hitos del chofer (0090) — "ya llegué",
+  // "estoy descargando", "voy de regreso" — se sellan con hora y se miden
+  // (espera en descarga, bitácora por chofer con nombre) y ningún aviso los
+  // enunciaba, cuando la fr. III de este mismo texto promete que toda
+  // finalidad no escrita exige permiso nuevo (art. 11 vigente).
+  // ═════════════════════════════════════════════════════════════════════════
+  it('enuncia los avisos del viaje como categoría de dato (fr. II)', () => {
+    const s = avisoIntegral(FLOTA).find((x) => x.fundamento === 'LFPDPPP art. 15 fr. II')!;
+    const t = s.parrafos.join(' ');
+    expect(t).toMatch(/avisos del viaje/i);
+    expect(t).toMatch(/ya llegué/);
+    expect(t).toMatch(/estoy descargando/);
+    expect(t).toMatch(/voy de regreso/);
+    expect(t).toMatch(/hora/i);
+  });
+
+  it('enuncia la medición de tiempos como finalidad, y ENTRE las no necesarias', () => {
+    // La liquidación cierra igual sin hitos: es seguimiento pedido por la
+    // empresa, no requisito. Por eso tiene que vivir DESPUÉS del rótulo de
+    // "NO son necesarias" — donde el titular conserva la oposición sin que
+    // eso afecte su liquidación. Antes del rótulo sería declararla forzosa.
+    const s = avisoIntegral(FLOTA).find((x) => x.fundamento === 'LFPDPPP art. 15 fr. III')!;
+    const t = s.parrafos.join('\n');
+    const rotulo = t.indexOf('NO son necesarias');
+    const hitos = t.indexOf('avisos del viaje');
+    expect(rotulo).toBeGreaterThan(-1);
+    expect(hitos).toBeGreaterThan(rotulo);
+    expect(t).toMatch(/espera en la descarga/i);
+  });
+
+  it('dice que no hay GPS: la hora es la del mensaje del chofer, no telemetría', () => {
+    // hitos_viaje.ts: "el sello guarda la hora en que el mensaje llegó, no la
+    // del evento físico... el producto nunca la presenta como telemetría". El
+    // aviso tampoco puede: insinuar rastreo enunciaría un tratamiento que no
+    // ocurre.
+    expect(todo()).toMatch(/No hay GPS ni rastreo/i);
+    expect(todo()).toMatch(/lo que tú escribes/i);
+  });
 });
 
 describe('la liga que se le manda al operador ya resuelve', () => {

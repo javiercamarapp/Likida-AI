@@ -201,7 +201,13 @@ export function avisoSimplificado(r: DatosResponsable): string | null {
     ``,
     // Fr. II — qué datos. En cristiano, no en abstracto: el operador tiene que
     // reconocer lo que va a mandar.
-    `Qué se trata: tu nombre y teléfono, y las fotos de comprobantes de gasto que envíes por aquí (diésel, casetas, alimentación, hospedaje) con sus montos y fechas.`,
+    //
+    // AUDITORÍA 3, ALTO (LEG-A1): los avisos del viaje (hitos 0090 — "ya
+    // llegué", "estoy descargando", "voy de regreso") se sellan con hora en
+    // `viaje.llegada_en/descarga_en/regreso_en` y ningún aviso los enunciaba.
+    // Se nombran con las palabras que el chofer de verdad manda, porque eso es
+    // lo que tiene que reconocer.
+    `Qué se trata: tu nombre y teléfono, las fotos de comprobantes de gasto que envíes por aquí (diésel, casetas, alimentación, hospedaje) con sus montos y fechas, y los avisos del viaje que tú mandes ("ya llegué", "estoy descargando", "voy de regreso") con la hora de tu mensaje.`,
     ``,
     // Fr. III — finalidades, DISTINGUIENDO. La fracción vigente no se conforma
     // con enumerarlas: pide separar las que requieren consentimiento. Y el
@@ -213,6 +219,15 @@ export function avisoSimplificado(r: DatosResponsable): string | null {
     `Para qué, y sin esto no hay liquidación: liquidar tus viajes y comprobar los gastos ante el SAT.`,
     ``,
     `Para qué más: revisar si un comprobante viene repetido o alterado —incluyendo la comparación contra los de tus viajes anteriores— y entregarle ese resultado a la empresa.`,
+    ``,
+    // AUDITORÍA 3, ALTO (LEG-A1) — la finalidad de los hitos, enunciada. La
+    // liquidación cierra igual sin ellos (es seguimiento, no requisito), así
+    // que va como finalidad ADICIONAL, no escondida en "liquidar". Y se dice
+    // la verdad sobre el alcance: la hora es la del mensaje, no telemetría —
+    // hitos_viaje.ts ya lo estableció ("el producto nunca la presenta como
+    // telemetría"), y un aviso que insinúe rastreo enunciaría un tratamiento
+    // que no ocurre.
+    `También: anotar la hora de tus avisos del viaje para medir sus tiempos —como la espera en la descarga— y enseñárselos a la empresa. No hay GPS: solo se anota lo que tú escribes y a qué hora lo mandaste.`,
     ``,
     // Art. 26 fr. II — el derecho de oposición al tratamiento automatizado. Es
     // el elemento 11 del checklist de docs/conocimiento/11-datos-personales.md
@@ -495,6 +510,9 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         `Tu **nombre** y tu **número de teléfono**.`,
         `Las **fotos de comprobantes** que envías por WhatsApp —diésel, casetas, alimentación, hospedaje, refacciones— y lo que viene escrito en ellas: montos, fechas, folios, RFC del establecimiento y datos fiscales del comprobante.`,
         `El **contenido de tus mensajes** en esa conversación, y los **viajes y liquidaciones** en los que participas.`,
+        // AUDITORÍA 3, ALTO (LEG-A1): los hitos 0090 como categoría de dato,
+        // con su límite dicho — la hora es la del mensaje, no telemetría.
+        `Los **avisos del viaje** que decides mandar por el mismo chat —"ya llegué", "estoy descargando", "voy de regreso"— con la hora en que llega tu mensaje. **No hay GPS ni rastreo del teléfono:** se anota únicamente lo que tú escribes y cuándo lo mandaste.`,
         `**No se tratan datos sensibles.** Ni salud, ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Si en una foto aparece algo así por accidente, no se usa para nada y puedes pedir que se borre.`,
       ],
     },
@@ -508,6 +526,11 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         `· Responderte por WhatsApp.`,
         `**Finalidades que NO son necesarias, y a las que puedes oponerte sin que eso afecte tu liquidación:**`,
         `· Revisar si un comprobante viene repetido o alterado, comparándolo contra los de tus viajes anteriores, y entregarle ese resultado a la empresa.`,
+        // AUDITORÍA 3, ALTO (LEG-A1): la finalidad de los hitos 0090. Va aquí
+        // —entre las NO necesarias— porque la liquidación cierra igual sin
+        // ellos: es seguimiento pedido por la empresa, y el titular conserva
+        // la oposición sin que eso afecte su liquidación.
+        `· Anotar la hora de tus avisos del viaje ("ya llegué", "estoy descargando", "voy de regreso") para medir los tiempos de la operación —por ejemplo, cuánto dura la espera en la descarga— y mostrárselos a la empresa.`,
         `· Medir cómo funciona el servicio para mejorarlo (estadísticas de uso, sin identificarte en los reportes).`,
         `Cualquier finalidad que no esté escrita aquí requiere que te vuelvan a pedir permiso. La ley vigente ya no permite ampararse en usos "compatibles o análogos".`,
       ],
