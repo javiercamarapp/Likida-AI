@@ -43,6 +43,8 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
     '/dashboard/combustible-casetas',
     // La bandeja de huérfanos (F2) enseña montos — dinero, no operación.
     '/dashboard/huerfanos',
+    // Conexiones (F7) es administración de la cuenta — solo el dueño.
+    '/dashboard/conexiones',
     '/dashboard/usuarios', '/dashboard/configuracion', '/dashboard/politicas',
   ];
   it.each(PROHIBIDAS)('%s le está negada al encargado', (href) => {

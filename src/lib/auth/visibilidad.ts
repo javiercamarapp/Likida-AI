@@ -122,6 +122,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/suscripcion': 'dinero',
 
   // Administración de la cuenta — solo el dueño
+  // Conexiones (F7): la configuración de conectores de la cuenta.
+  '/dashboard/conexiones': 'administracion',
   '/dashboard/usuarios': 'administracion',
   '/dashboard/politicas': 'administracion',
   '/dashboard/configuracion': 'administracion',
