@@ -9,33 +9,47 @@ const BASE: Correo = {
   porQueLoRecibes: 'Recibes este aviso porque administras la flota en Likida.',
 };
 
-describe('el logo va arriba a la IZQUIERDA y sobrevive a los clientes de correo', () => {
+describe('el wordmark va arriba a la IZQUIERDA y NO puede romperse', () => {
   const html = armarHtml(BASE);
 
-  it('la banda del logo está alineada a la izquierda', () => {
-    expect(html).toMatch(/<td align="left"[^>]*>\s*<img[^>]*logo\.png/);
+  it('es el logo REAL, incrustado (cid:), no enlazado a un dominio', () => {
+    // Un <img src="https://…"> depende de que el cliente autorice imágenes
+    // externas. El archivo respondía HTTP 200 y aun así llegó roto, porque
+    // Gmail las bloquea por defecto para un remitente nuevo.
+    expect(html).toMatch(/<img src="cid:likida-logo"/);
+    expect(html).not.toContain('https://app.likida.ai/images/');
   });
 
-  it('el logo lleva alt="Likida": con las imágenes bloqueadas se lee la marca', () => {
-    // Outlook corporativo bloquea imágenes por defecto. Sin alt, el encabezado
-    // del correo queda vacío.
-    expect(html).toMatch(/<img[^>]+alt="Likida"/);
+  it('el texto alterno LLEVA ESTILO: el peor caso es el wordmark, no un ícono roto', () => {
+    // Cuando un cliente no pinta la imagen, la mayoría aplica los estilos del
+    // <img> a su alt. Así no queda un estado feo posible.
+    expect(html).toMatch(/<img[^>]+alt="LIKIDA"/);
+    expect(html).toMatch(/<img[^>]+letter-spacing:0\.34em/);
+    expect(html).toMatch(/<img[^>]+font-family:'Inter Tight'/);
   });
 
-  it('lleva ancho y alto en ATRIBUTOS, no solo en el estilo', () => {
-    // Con la imagen bloqueada, los atributos son lo único que conserva el
-    // espacio; sin ellos el encabezado colapsa y el correo se ve roto.
-    expect(html).toMatch(/<img[^>]+width="104"[^>]+height="21"/);
+  it('va alineado a la IZQUIERDA y antes que la tarjeta', () => {
+    const posLogo = html.indexOf('cid:likida-logo');
+    const posTarjeta = html.indexOf('border-radius:14px');
+    expect(posLogo).toBeGreaterThan(-1);
+    expect(posLogo).toBeLessThan(posTarjeta);
+    expect(html).toMatch(/<td align="left"[^>]*>\s*<img src="cid:/);
   });
 
-  it('la banda tiene fondo claro EXPLÍCITO', () => {
-    // El PNG de marca es negro sobre transparente: en un cliente con tema
-    // oscuro, sin fondo propio, el logo desaparece.
-    expect(html).toMatch(/bgcolor="#ffffff"[^>]*>\s*<img/);
+  it('lleva ancho y alto en ATRIBUTOS, para que el hueco no colapse', () => {
+    expect(html).toMatch(/<img[^>]+width="112"[^>]+height="23"/);
   });
 
-  it('la URL del logo es absoluta — un correo no resuelve rutas relativas', () => {
-    expect(html).toMatch(/src="https?:\/\/[^"]+\/images\/logo\.png"/);
+  it('usa el NEGRO de las consolas, no el naranja de los tokens', () => {
+    // Las dos consolas corren bajo `.tema-neutro`, que pivota --marca a
+    // #18181b. El naranja #c2410c vive en globals.css pero no es lo que el
+    // usuario ve, así que un correo naranja no se parecía al producto.
+    expect(html).toContain('#18181b');
+    expect(html).not.toContain('#c2410c');
+  });
+
+  it('la tipografía de titulares es la de la app (Inter Tight primero)', () => {
+    expect(html).toMatch(/<h1[^>]+font-family:'Inter Tight',Inter/);
   });
 });
 
@@ -144,13 +158,26 @@ describe('el pie dice por qué llegó', () => {
   });
 });
 
-describe('el tono cambia el acento, no la estructura', () => {
-  it('urgente pinta rojo y neutral pinta la marca', () => {
-    expect(armarHtml({ ...BASE, tono: 'urgente' })).toContain('#b91c1c');
-    expect(armarHtml({ ...BASE, tono: 'neutral' })).toContain('#c2410c');
+describe('el tono es un micro-rótulo, no una banda de color', () => {
+  it('urgente pone la palabra, y el correo NO se llena de rojo', () => {
+    // La versión anterior ponía un filo rojo de 3px y un botón rojo: el correo
+    // gritaba, y tres avisos seguidos parecían tres alarmas.
+    const html = armarHtml({ ...BASE, tono: 'urgente' });
+    expect(html).toContain('Urgente');
+    expect(html).toContain('#b91c1c');
+    // El botón sigue siendo negro, no rojo.
+    expect(armarHtml({ ...BASE, tono: 'urgente', boton: { texto: 'Ver', href: 'https://app.likida.ai' } }))
+      .toMatch(/bgcolor="#18181b"/);
   });
 
-  it('sin tono declarado, el default es la marca', () => {
-    expect(armarHtml(BASE)).toContain('#c2410c');
+  it('neutral no pone rótulo ninguno', () => {
+    expect(armarHtml({ ...BASE, tono: 'neutral' })).not.toContain('Requiere atención');
+    expect(armarHtml({ ...BASE, tono: 'neutral' })).not.toContain('Urgente');
+  });
+
+  it('atención pinta ámbar y nombra su estado', () => {
+    const html = armarHtml({ ...BASE, tono: 'atencion' });
+    expect(html).toContain('Requiere atención');
+    expect(html).toContain('#b45309');
   });
 });

@@ -1,5 +1,6 @@
 import { logger } from '@/lib/logger';
 import { armarHtml, aTextoPlano, type Correo } from './plantilla';
+import { LOGO_PNG_BASE64, LOGO_CID, LOGO_NOMBRE } from './logo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ENVÍO DE CORREO — Resend, por HTTP directo.
@@ -94,6 +95,16 @@ export async function enviarCorreo(
         // La parte de texto no es opcional: un correo sin ella puntúa peor en
         // los filtros de spam y hay clientes que solo leen esa.
         text: aTextoPlano(correo),
+        // EL LOGO VIAJA CON EL CORREO. `content_disposition: 'inline'` + el
+        // `content_id` que el HTML referencia como `cid:` — así el logo no
+        // depende de que el cliente autorice imágenes externas, que es lo que
+        // lo rompió la primera vez. No aparece como adjunto descargable.
+        attachments: [{
+          filename: LOGO_NOMBRE,
+          content: LOGO_PNG_BASE64,
+          content_id: LOGO_CID,
+          content_disposition: 'inline',
+        }],
       }),
     });
 
