@@ -79,5 +79,5 @@ export default async function PaginaMapa({
   // Lo más atorado primero — mismo criterio que la cola de cobranza.
   ubicados.sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
 
-  return <VistaMapa ubicados={ubicados} sinUbicar={sinUbicar} />;
+  return <VistaMapa ubicados={ubicados} sinUbicar={sinUbicar} cargados={viajes.length} />;
 }

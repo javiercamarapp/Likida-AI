@@ -49,14 +49,23 @@ export function VistaAgenteConductores({ kpis, esperan, sinAvisar, eventos, sufi
         />
         <div className="px-5 py-5 flex-1 space-y-4">
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi titulo="Viajes en curso" valor={numero(kpis.vivos)} nota="abiertos o en cuadre" />
-            <Kpi titulo="Aceptados" valor={numero(kpis.aceptados)} nota="el chofer dijo que sí" />
-            <Kpi titulo="Esperan aceptar" valor={numero(kpis.esperan)}
-              tono={kpis.esperan > 0 ? 'warn' : undefined} />
-            <Kpi titulo="Escalados" valor={kpis.escalados === null ? '—' : numero(kpis.escalados)}
-              nota={kpis.escalados === null ? 'no se pudo contar' : 'esperan cambio de chofer'}
-              tono={(kpis.escalados ?? 0) > 0 ? 'bad' : undefined} />
+          <div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <Kpi titulo="Viajes en curso" valor={numero(kpis.vivos)} nota="abiertos o en cuadre" />
+              <Kpi titulo="Aceptados" valor={numero(kpis.aceptados)} nota="el chofer dijo que sí" />
+              <Kpi titulo="Esperan aceptar" valor={numero(kpis.esperan)}
+                tono={kpis.esperan > 0 ? 'warn' : undefined} />
+              <Kpi titulo="Escalados" valor={kpis.escalados === null ? '—' : numero(kpis.escalados)}
+                nota={kpis.escalados === null ? 'no se pudo contar' : 'esperan cambio de chofer'}
+                tono={(kpis.escalados ?? 0) > 0 ? 'bad' : undefined} />
+            </div>
+            {/* La ventana se declara, como en Viajes: estos conteos NO son el
+                histórico. El 100 es el default de getViajes que usa esta page
+                (mismo estilo que el "60" declarado en la bitácora). */}
+            <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
+              Viajes en curso, aceptados y la cola se calculan sobre los 100 viajes más
+              recientes; Escalados sí cuenta todo el histórico.
+            </p>
           </div>
 
           <div className="grid lg:grid-cols-2 gap-4">

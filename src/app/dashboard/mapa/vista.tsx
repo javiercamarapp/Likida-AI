@@ -16,9 +16,11 @@ export interface SinUbicar {
  * lista honesta de lo que NO se pudo ubicar abajo. La leyenda del trayecto
  * ilustrativo vive junto al mapa, no en un tooltip escondido.
  */
-export function VistaMapa({ ubicados, sinUbicar }: {
+export function VistaMapa({ ubicados, sinUbicar, cargados }: {
   ubicados: ViajeEnMapa[];
   sinUbicar: SinUbicar[];
+  /** Cuántos viajes recientes cargó la page — el alcance real de TODO aquí. */
+  cargados: number;
 }) {
   const escalados = ubicados.filter((v) => v.escalado).length;
 
@@ -31,13 +33,20 @@ export function VistaMapa({ ubicados, sinUbicar }: {
         />
         <div className="px-5 py-5 flex-1 space-y-4">
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi titulo="Viajes en curso" valor={numero(ubicados.length + sinUbicar.length)} nota="abiertos o en cuadre" />
-            <Kpi titulo="En el mapa" valor={numero(ubicados.length)} />
-            <Kpi titulo="Sin ubicar" valor={numero(sinUbicar.length)}
-              nota={sinUbicar.length > 0 ? 'listados abajo, no omitidos' : undefined}
-              tono={sinUbicar.length > 0 ? 'warn' : undefined} />
-            <Kpi titulo="Escalados" valor={numero(escalados)} tono={escalados > 0 ? 'bad' : undefined} />
+          <div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <Kpi titulo="Viajes en curso" valor={numero(ubicados.length + sinUbicar.length)} nota="abiertos o en cuadre" />
+              <Kpi titulo="En el mapa" valor={numero(ubicados.length)} />
+              <Kpi titulo="Sin ubicar" valor={numero(sinUbicar.length)}
+                nota={sinUbicar.length > 0 ? 'listados abajo, no omitidos' : undefined}
+                tono={sinUbicar.length > 0 ? 'warn' : undefined} />
+              <Kpi titulo="Escalados" valor={numero(escalados)} tono={escalados > 0 ? 'bad' : undefined} />
+            </div>
+            {/* La ventana se declara, como en Viajes: el mapa NO es el histórico. */}
+            <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
+              El mapa y los conteos se construyen sobre los {numero(cargados)} viajes más
+              recientes; un viaje vivo más viejo que esa ventana no aparece aquí.
+            </p>
           </div>
 
           <MapaVivo viajes={ubicados} />

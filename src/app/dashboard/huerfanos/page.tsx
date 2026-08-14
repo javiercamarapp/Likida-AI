@@ -127,6 +127,7 @@ export default async function PaginaHuerfanos({
     <VistaHuerfanos
       pendientes={pendientes}
       viajesVivos={viajesVivos}
+      cargados={viajes.length}
       acciones={{ adjuntar, descartar }}
     />
   );
