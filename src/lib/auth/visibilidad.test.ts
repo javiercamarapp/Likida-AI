@@ -41,19 +41,19 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
   // (área `dinero`/`administracion`) siguen existiendo y le siguen negadas.
   const PROHIBIDAS = [
     '/dashboard/combustible-casetas',
+    // La bandeja de huérfanos (F2) enseña montos — dinero, no operación.
+    '/dashboard/huerfanos',
     '/dashboard/usuarios', '/dashboard/configuracion', '/dashboard/politicas',
   ];
   it.each(PROHIBIDAS)('%s le está negada al encargado', (href) => {
     expect(puedeVerRuta('encargado', href)).toBe(false);
   });
 
-  // Las 17 páginas de "dueño de flota" (despacho, viajes, pod, incidencias,
-  // unidades, operadores, mapa, documentos y las demás) se borraron el
-  // 10-ago-2026 para rehacerse desde cero — mientras no exista nada que
-  // clasificar, `/dashboard` (Resumen, con su propia versión sin dinero para
-  // este rol vía `inicio-operacion.tsx`) es lo único que le sigue siendo
-  // suyo de verdad.
-  const SUYAS = ['/dashboard'];
+  // El Registro de F2 (14-ago-2026) le devolvió al encargado sus pantallas
+  // de operación: Viajes y Operadores se reconstruyeron SIN pesos (la fuga
+  // del 4-ago fue anticipos y % por chofer a su vista; `dinero_por_area`
+  // escanea las dos).
+  const SUYAS = ['/dashboard', '/dashboard/despacho', '/dashboard/viajes', '/dashboard/operadores'];
   it.each(SUYAS)('%s sí es suya', (href) => {
     expect(puedeVerRuta('encargado', href)).toBe(true);
   });
@@ -80,11 +80,15 @@ describe('el contador — sin panel propio, pero la operación le sigue cerrada'
     expect(puedeVerRuta('contador', inicioDe('contador'))).toBe(true);
   });
 
-  // `/dashboard` (Resumen) es la única ruta de operación que sigue
-  // existiendo para probar que el contador no entra.
-  const OPERACION_PROHIBIDA = ['/dashboard'];
+  // El contador no despacha NI consulta el registro operativo: Viajes y
+  // Operadores (F2) son de operación, igual que el Resumen.
+  const OPERACION_PROHIBIDA = ['/dashboard', '/dashboard/viajes', '/dashboard/operadores'];
   it.each(OPERACION_PROHIBIDA)('%s le sigue negada al contador aunque teclee la URL', (href) => {
     expect(puedeVerRuta('contador', href)).toBe(false);
+  });
+
+  it('la bandeja de huérfanos (dinero) SÍ es suya — es la antesala de su cierre', () => {
+    expect(puedeVerRuta('contador', '/dashboard/huerfanos')).toBe(true);
   });
 });
 

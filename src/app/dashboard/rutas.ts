@@ -1,6 +1,6 @@
 import {
   LayoutGrid, MessageCircle, Route, ReceiptText, LifeBuoy, Settings, CreditCard, ClipboardList,
-  BellRing,
+  BellRing, Truck, Users, FileQuestion,
 } from 'lucide-react';
 
 /**
@@ -30,9 +30,16 @@ export const AGENTES: Item[] = [
 
 export const OPERACION: Item[] = [
   { href: '/dashboard/despacho', nombre: 'Despacho', Icono: ClipboardList },
+  // El Registro (F2): la fuente de verdad navegable. Acción en Despacho;
+  // aquí se consulta y se cruza.
+  { href: '/dashboard/viajes', nombre: 'Viajes', Icono: Truck },
+  { href: '/dashboard/operadores', nombre: 'Operadores', Icono: Users },
 ];
 
-export const DINERO_FISCAL: Item[] = [];
+export const DINERO_FISCAL: Item[] = [
+  // La bandeja de la oficina (F2): montos a la vista, o sea `dinero`.
+  { href: '/dashboard/huerfanos', nombre: 'Comprobantes sin viaje', Icono: FileQuestion },
+];
 
 export const SISTEMA: Item[] = [
   { href: '/dashboard/chat', nombre: 'Chatea con tus datos', Icono: MessageCircle },

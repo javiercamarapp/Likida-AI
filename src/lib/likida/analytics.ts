@@ -872,6 +872,25 @@ export async function getViajesSinLiquidar(tenantId: string): Promise<Array<{ id
   return filas.map((v) => ({ id: v.id as string, anticipo: Number(v.anticipo ?? 0) }));
 }
 
+/** Viajes escalados que siguen sin chofer que acepte — la alerta del Inicio
+ *  (F2). Conteo directo y no un filtro sobre los 100 recientes: un viaje
+ *  escalado puede ser justamente el viejo que ya salió de esa ventana.
+ *  `null` ≠ 0, como en `contarViajes`. */
+export async function contarEscalados(tenantId: string): Promise<number | null> {
+  const { count, error } = await supabaseAdmin()
+    .from('viaje')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .in('estatus', ['abierto', 'en_cuadre'])
+    .not('escalado_en', 'is', null)
+    .is('aceptado_en', null);
+  if (error) {
+    logger.warn('contarEscalados', { tenantId, err: error.message });
+    return null;
+  }
+  return count ?? null;
+}
+
 export async function getViajes(tenantId: string, limite = 100): Promise<ViajeRow[]> {
   const res = await supabaseAdmin()
     .from('viaje')

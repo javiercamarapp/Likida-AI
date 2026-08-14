@@ -212,8 +212,10 @@ export function VistaDespacho({
 }
 
 /** El estado del aviso, con las cuatro marcas reales de la confirmación
- *  (0058): sin avisar → avisado (con el conteo) → aceptó / escalado. */
-function PillAviso({ v }: { v: ViajeRow }) {
+ *  (0058): sin avisar → avisado (con el conteo) → aceptó / escalado.
+ *  Exportada desde F2: el registro de Viajes pinta el MISMO estado — dos
+ *  copias de este mapa se separan en el primer estatus nuevo. */
+export function PillAviso({ v }: { v: Pick<ViajeRow, 'aceptadoEn' | 'escaladoEn' | 'avisadoEn' | 'avisosEnviados'> }) {
   const pill = (texto: string, fg: string, bg: string) => (
     <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: fg, background: bg }}>{texto}</span>
   );

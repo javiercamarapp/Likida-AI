@@ -8,6 +8,8 @@ import {
   type DashboardKpis, type Acreditables, type Anomalia,
   type GastoSemanalSeries, type LiquidadoSemanalSeries, type TopRutasSeries, type SeriesKpiCards,
 } from '@/lib/likida/analytics';
+import { contarEscalados } from '@/lib/likida/analytics';
+import { contarHuerfanosPendientes } from '@/lib/likida/repo';
 import { getConfig, type LikidaConfig } from '@/lib/likida/config';
 import {
   resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries, resumirPerdidas, opcionesDe,
@@ -82,7 +84,7 @@ export async function InicioContenido({
     acred, kpis, anomalias, viajes,
     gastoSemanalSeries, liquidadoSemanalSeries, seriesKpis,
     cfgFiscal, gastosFiscales, gastosFiscalesSeries, viajesPorMes, topRutasSeries,
-    liquidaciones,
+    liquidaciones, escalados, huerfanosPendientes,
   ] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId, diasEjercicio)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
@@ -111,6 +113,10 @@ export async function InicioContenido({
     // Para el "Ver" de la tabla: `/dashboard/[id]` abre por id de
     // LIQUIDACIÓN, no de viaje — se cruza por folio.
     safe<LiqRow[]>(() => getLiquidaciones(tenantId)),
+    // Las alertas de F2. Devuelven `null` ante error (≠ 0) y la alerta
+    // simplemente no se pinta — una alerta no puede afirmar en falso.
+    safe<number | null>(() => contarEscalados(tenantId)),
+    safe<number | null>(() => contarHuerfanosPendientes(tenantId)),
   ]);
   const resumenPerdidas: ResumenPerdidas | null = cfgFiscal && gastosFiscales
     ? resumirPerdidas(gastosFiscales, opcionesDe(cfgFiscal))
@@ -134,11 +140,35 @@ export async function InicioContenido({
   // (siempre traía 7/30 elementos y la rama 'vacio' era inalcanzable).
   const estado = estadoPanel({ acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias });
 
-  // `/dashboard/cuadre` se borró el 10-ago-2026 (rediseño desde cero) — las
-  // alertas vivían para mandar ahí con "Ver →". `kpis.porRevisar`/`anomalias`
-  // se SIGUEN calculando bien; una tarjeta que promete "Ver →" hacia un 404
-  // es peor que no mostrarla. Vuelven a poblarse cuando Cuadre exista.
+  // Las alertas accionables (F2): cada una lleva a LA pantalla donde se
+  // resuelve, con el sufijo del superadmin a cuestas. Se apagaron cuando
+  // Cuadre se borró el 10-ago (un "Ver →" a un 404 es peor que nada);
+  // regresan ahora que sus destinos existen.
   const alertas: Array<{ texto: string; href: string }> = [];
+  if (kpis && kpis.porRevisar > 0) {
+    alertas.push({
+      texto: `${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? '' : 'es'} esperan tu revisión`,
+      href: `/dashboard/agentes/liquidacion${sufijo}`,
+    });
+  }
+  if (escalados !== null && escalados !== undefined && escalados > 0) {
+    alertas.push({
+      texto: `${escalados} viaje${escalados === 1 ? '' : 's'} escalado${escalados === 1 ? '' : 's'} sin chofer que acepte — se resuelve en Despacho`,
+      href: `/dashboard/despacho${sufijo}`,
+    });
+  }
+  if (huerfanosPendientes !== null && huerfanosPendientes !== undefined && huerfanosPendientes > 0) {
+    alertas.push({
+      texto: `${huerfanosPendientes} comprobante${huerfanosPendientes === 1 ? '' : 's'} sin viaje esperan que alguien los acomode`,
+      href: `/dashboard/huerfanos${sufijo}`,
+    });
+  }
+  if (anomalias && anomalias.length > 0) {
+    alertas.push({
+      texto: `${anomalias.length} comprobante${anomalias.length === 1 ? '' : 's'} repetido${anomalias.length === 1 ? '' : 's'} entre viajes distintos`,
+      href: `/dashboard/agentes/liquidacion${sufijo}`,
+    });
+  }
 
   // TODAS las filas cargadas (tope 100 de getViajes): la tarjeta enseña 6 y
   // su botón "Ver los N" despliega el resto (pedido del 12-ago). El link
@@ -232,7 +262,7 @@ export async function InicioContenido({
           {alertas.length > 0 && (
             <div className="mt-3 space-y-1.5">
               {alertas.map((a) => (
-                <Link key={a.href} href={a.href}
+                <Link key={a.texto} href={a.href}
                   className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
                   style={{ borderColor: 'var(--warn)' }}>
                   <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />

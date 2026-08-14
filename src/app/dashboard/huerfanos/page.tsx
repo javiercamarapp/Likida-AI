@@ -1,0 +1,124 @@
+import { redirect } from 'next/navigation';
+import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { requireSessionTenant } from '@/lib/auth/guard';
+import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
+import {
+  getHuerfanosDeFlota, traerHuerfanoPendiente, resolverHuerfanoDesdeOficina, addGasto,
+} from '@/lib/likida/repo';
+import { getViajes } from '@/lib/likida/analytics';
+import { logger } from '@/lib/logger';
+import { sufijoTenant } from '../sufijo';
+import { VistaHuerfanos } from './vista';
+
+export const dynamic = 'force-dynamic';
+
+/** El gateo que ambas actions repiten adentro. Helper de módulo y no
+ *  closure: una action solo captura VALORES serializables (tenantId). */
+async function exigirPermiso(tenantId: string): Promise<string | null> {
+  const sesion = await requireSessionTenant('/dashboard/huerfanos');
+  if (!puedeVerArea(sesion.rol, 'dinero')) return 'Tu rol no puede resolver comprobantes.';
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta bandeja no es de tu flota.';
+  return null;
+}
+
+/**
+ * Comprobantes sin viaje (F2 del plan) — la bandeja de la OFICINA para lo
+ * que "una foto NUNCA se rechaza" dejó en el limbo: el chofer mandó un
+ * comprobante sin viaje abierto (o después de liquidar, o el OCR se cayó) y
+ * alguien tiene que acomodarlo o descartarlo.
+ *
+ * El adjuntar sigue EL MISMO ORDEN que el flujo de WhatsApp (processor):
+ * primero `addGasto` al viaje, DESPUÉS se resuelve la fila. Si el insert
+ * falla a medias, queda una fila todavía pendiente — nunca un comprobante
+ * marcado como puesto que no está en ningún lado.
+ *
+ * SIN FOTOS a propósito: exhibir el comprobante a un humano tiene candado
+ * legal propio (LFPDPPP art. 8, decisión del 2-ago); aquí viaja el dato
+ * extraído, no la imagen.
+ */
+export default async function PaginaHuerfanos({
+  searchParams,
+}: {
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+}) {
+  const sp = await searchParams;
+  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/huerfanos', sp);
+  if (!puedeVerRuta(rol, '/dashboard/huerfanos')) redirect('/dashboard');
+  const sufijo = sufijoTenant(sp);
+
+  // Primarios sin catch: bandeja ciega = página caída, no "no hay sueltos".
+  const [pendientes, viajes] = await Promise.all([
+    getHuerfanosDeFlota(tenantId),
+    getViajes(tenantId),
+  ]);
+
+  // A dónde se puede adjuntar: solo viajes VIVOS. Un gasto a un viaje
+  // liquidado lo rebota el trigger de la 0037 — mejor no ofrecerlo.
+  const viajesVivos = viajes
+    .filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre')
+    .map((v) => ({
+      id: v.id,
+      rotulo: `${v.folio}${v.operadorNombre ? ` · ${v.operadorNombre}` : ''}`,
+    }));
+
+  async function adjuntar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
+    'use server';
+    const negado = await exigirPermiso(tenantId);
+    if (negado) return { error: negado };
+
+    const huerfanoId = typeof fd.get('huerfanoId') === 'string' ? (fd.get('huerfanoId') as string).trim().slice(0, 64) : '';
+    const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
+    if (!huerfanoId) return { error: 'Falta el comprobante.' };
+    if (!viajeId) return { error: 'Elige el viaje al que va.' };
+
+    const h = await traerHuerfanoPendiente(tenantId, huerfanoId);
+    if (!h) return { error: 'Ese comprobante ya no está pendiente — alguien más lo resolvió. Recarga la página.' };
+
+    // El viaje destino se re-verifica ADENTRO (un viajeId ajeno o liquidado
+    // no pasa), no se confía en que venía del <select>.
+    const destinoOk = (await getViajes(tenantId)).some(
+      (v) => v.id === viajeId && (v.estatus === 'abierto' || v.estatus === 'en_cuadre'),
+    );
+    if (!destinoOk) return { error: 'Ese viaje ya no está abierto. Recarga la página.' };
+
+    try {
+      await addGasto(tenantId, viajeId, h.gasto);
+    } catch (e) {
+      const code = (e as Error & { code?: string }).code;
+      if (code === '23505') {
+        // El gasto YA vive en algún viaje (misma foto, mismo id). No se
+        // resuelve como adjuntado a ESTE viaje: sería un rótulo falso.
+        return { error: 'Ese comprobante ya vive en un viaje — si aquí sobra, descártalo.' };
+      }
+      logger.error('huerfano.oficina_adjuntar_fallo', { huerfanoId, err: e instanceof Error ? e.message : String(e) });
+      return { error: 'No se pudo adjuntar. Inténtalo de nuevo.' };
+    }
+
+    const r = await resolverHuerfanoDesdeOficina(tenantId, huerfanoId, 'adjuntado', viajeId);
+    if (r.error) return { error: r.error };
+    logger.info('huerfano.oficina_adjuntado', { tenantId, huerfanoId, viajeId });
+    redirect(`/dashboard/huerfanos${sufijo}`);
+  }
+
+  async function descartar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
+    'use server';
+    const negado = await exigirPermiso(tenantId);
+    if (negado) return { error: negado };
+
+    const huerfanoId = typeof fd.get('huerfanoId') === 'string' ? (fd.get('huerfanoId') as string).trim().slice(0, 64) : '';
+    if (!huerfanoId) return { error: 'Falta el comprobante.' };
+
+    const r = await resolverHuerfanoDesdeOficina(tenantId, huerfanoId, 'descartado', null);
+    if (r.error) return { error: r.error };
+    logger.info('huerfano.oficina_descartado', { tenantId, huerfanoId });
+    redirect(`/dashboard/huerfanos${sufijo}`);
+  }
+
+  return (
+    <VistaHuerfanos
+      pendientes={pendientes}
+      viajesVivos={viajesVivos}
+      acciones={{ adjuntar, descartar }}
+    />
+  );
+}
