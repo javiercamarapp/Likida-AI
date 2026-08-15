@@ -30,7 +30,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, traerTodo } from '@/lib/likida/pg';
-import { round2 } from '@/lib/formato';
+import { round2, TZ_MX } from '@/lib/formato';
 // Solo TIPOS: `import type` se borra al compilar, así que esto no arrastra el
 // módulo de corridas (que carga supabaseAdmin/logger al importarse) — aquí
 // nada más se quiere el dominio del CHECK de la 0102 escrito una vez.
@@ -101,7 +101,17 @@ async function traerResumenCostoIa(
 
 export interface ResumenNegocio {
   tenants: number;
-  flotas: Array<{ id: string; nombre: string; plan: string; viajes: number; costoIaUsd: number; facilidad15?: { dedicacionExclusivaCarga?: boolean; regimenElegible?: boolean } }>;
+  flotas: Array<{
+    id: string; nombre: string; plan: string; viajes: number; costoIaUsd: number;
+    facilidad15?: { dedicacionExclusivaCarga?: boolean; regimenElegible?: boolean };
+    /** ¿La flota guardó SU política de gastos? Se mide sobre el OVERRIDE crudo
+     *  (`tenant.config.politica`) y no sobre `getConfig()` a propósito:
+     *  `getConfig` fusiona con `DEMO_CONFIG` y su resultado no distingue "la
+     *  flota decidió estos topes" de "corren los defaults de demo". Un array
+     *  vacío cuenta como configurada — `fusionarConfig` lo documenta como una
+     *  decisión, no un hueco. */
+    politicaPropia: boolean;
+  }>;
   viajesProcesados: number;
   costoIaUsd: number;
   tokensIn: number;
@@ -113,7 +123,9 @@ export interface ResumenNegocio {
    *  OCR/CFDI) procesadas por día, ventana de `ventanaDias` (default 7) —
    *  siempre TODAS las fechas de la ventana, con `n: 0` en las que no hubo
    *  actividad, para que la gráfica de barras no comprima el periodo a un
-   *  solo día real. */
+   *  solo día real. El día es el DE MÉXICO, no el UTC (14-ago-2026): con el
+   *  corte UTC, a las 6pm de CDMX la última barra ya rotulaba mañana y un
+   *  comprobante de la tarde caía en la barra del día siguiente. */
   facturasPorDia: Array<{ dia: string; n: number }>;
   /** Total histórico de facturas (todas las filas de `gasto`, sin filtro
    *  de fecha) — para el contador retro junto al saludo. */
@@ -140,8 +152,16 @@ export interface ResumenNegocio {
  * cambiaría la cifra con la que se pone el precio del producto, y eso es un
  * cambio de producto, no de rendimiento. El día que se decida, es un argumento.
  */
+/** El DÍA DE MÉXICO de un timestamptz — el mismo patrón que `getSeriesKpiCards`
+ *  (analytics.ts) y el chip de fecha de consola.tsx. `en-CA` da `YYYY-MM-DD`. */
+const diaMx = (iso: string): string =>
+  new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ_MX });
+
 export async function getResumenNegocio(
-  hoy: string = new Date().toISOString().slice(0, 10),
+  // El día de MÉXICO, no `toISOString().slice(0, 10)` (que es el día UTC): a
+  // las 6pm de CDMX ya es mañana en UTC, y la ventana de `facturasPorDia`
+  // terminaba en una fecha que el usuario todavía no vive (hallazgo 13-ago).
+  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
   ventanaDias: number = 7,
 ): Promise<ResumenNegocio> {
   const admin = supabaseAdmin();
@@ -214,9 +234,14 @@ export async function getResumenNegocio(
   // Últimos 7 días, siempre las 7 fechas (0 donde no hubo facturas) — el
   // mismo criterio de `cortes()` de arriba, para que "hoy" sea inyectable
   // en las pruebas en vez de depender del reloj real.
+  //
+  // El bucket es el DÍA DE MÉXICO. `slice(0, 10)` sobre el timestamptz era el
+  // día UTC: una factura procesada a las 7pm de CDMX contaba en la barra de
+  // MAÑANA. (`porDia` del costo de IA sí se queda en UTC a propósito — su
+  // comentario de arriba explica por qué no se mueve la serie histórica.)
   const facturasPorDiaMap = new Map<string, number>();
   for (const g of gastosData) {
-    const dia = g.created_at.slice(0, 10);
+    const dia = diaMx(g.created_at);
     facturasPorDiaMap.set(dia, (facturasPorDiaMap.get(dia) ?? 0) + 1);
   }
   const facturasPorDia = Array.from({ length: ventanaDias }, (_, i) => {
@@ -225,13 +250,15 @@ export async function getResumenNegocio(
   });
 
   const flotas = tenantsData.map((t) => {
-    const cfg = (t.config as { facilidadCombustibleEfectivo?: { dedicacionExclusivaCarga?: boolean; regimenElegible?: boolean } } | null) ?? null;
+    const cfg = (t.config as { facilidadCombustibleEfectivo?: { dedicacionExclusivaCarga?: boolean; regimenElegible?: boolean }; politica?: unknown } | null) ?? null;
     return {
       ...t,
       viajes: viajesPorTenant.get(t.id) ?? 0,
       costoIaUsd: round2(costoPorTenant.get(t.id) ?? 0),
       // La declaración del 15% (RFA 2.9) viaja al panel para verse y corregirse.
       facilidad15: cfg?.facilidadCombustibleEfectivo,
+      // Sobre el override CRUDO, no sobre getConfig() — ver el comentario del tipo.
+      politicaPropia: Array.isArray(cfg?.politica),
     };
   });
   return {
@@ -531,5 +558,73 @@ export async function getUltimaCorridaPorAgente(): Promise<UltimaCorridaAgente[]
     if (error) throw new Error(`getUltimaCorridaPorAgente/${agente}: ${error.message}`);
     const fila = (data ?? [])[0] as Record<string, unknown> | undefined;
     return { agente, ultima: fila ? mapearCorrida(fila) : null };
+  }));
+}
+
+/**
+ * Las corridas en `fallo` — la vista para la bandeja de escalaciones: cada
+ * una es un agente que NO terminó su trabajo y nadie más se va a enterar si
+ * esta lectura no lo dice. Mismo mapeo y mismas columnas que
+ * `getCorridasRecientes` (una corrida no puede contarse distinto en dos
+ * pantallas); solo cambia el filtro. LANZA ante error de lectura — "0
+ * fallos" sobre una base caída afirmaría que todo corrió bien.
+ */
+export async function getCorridasFallidas(limite = 20): Promise<CorridaReciente[]> {
+  const { data, error } = await supabaseAdmin()
+    .from('agente_corrida')
+    .select(COLUMNAS_CORRIDA)
+    .eq('estado', 'fallo')
+    .order('inicio', { ascending: false })
+    .limit(limite);
+  if (error) throw new Error(`getCorridasFallidas: ${error.message}`);
+  return (data ?? []).map((f) => {
+    const r = f as Record<string, unknown>;
+    return { agente: String(r.agente), ...mapearCorrida(r) };
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LIQUIDACIONES EN `revisar`, CRUZADAS — la versión cross-tenant de lo que
+// `getKpis` (analytics.ts) cuenta por-tenant con `estatus === 'revisar'`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface LiquidacionEnRevision {
+  id: string;
+  creadaEn: string;
+  /** Folio del viaje (join a `viaje.folio`) — NULL para viajes despachados
+   *  por WhatsApp, que nacen sin folio (0092). */
+  folio: string | null;
+  tenantId: string;
+  tenantNombre: string;
+}
+
+/**
+ * Las liquidaciones que AHORA están en `revisar`, de todas las flotas.
+ *
+ * HONESTIDAD DEL DATO: `liquidacion.estatus` (dominio de la 0025: cuadrada |
+ * con_diferencias | revisar) es el estado ACTUAL, no una historia.
+ * `guardar_liquidacion_tx` hace UPSERT: un re-cuadre REESCRIBE el estatus sin
+ * dejar rastro de que la liquidación pasó por la bandeja. Por eso ninguna
+ * pantalla puede afirmar "cerrada sin haber pasado nunca por un humano" —
+ * solo "hoy no está en la bandeja". El rótulo de la consola lo dice así.
+ */
+export async function getLiquidacionesEnRevisar(): Promise<LiquidacionEnRevision[]> {
+  const admin = supabaseAdmin();
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => admin
+      .from('liquidacion')
+      .select('id, created_at, tenant_id, tenant:tenant_id(nombre), viaje:viaje_id(folio)', conteo(d))
+      .eq('estatus', 'revisar')
+      .order('id').range(d, h),
+    'getLiquidacionesEnRevisar',
+  );
+  return filas.map((f) => ({
+    id: f.id as string,
+    creadaEn: f.created_at as string,
+    folio: ((f.viaje as { folio?: string | null } | null)?.folio) ?? null,
+    tenantId: f.tenant_id as string,
+    // Join sin nombre → '—', visible, no inventado (mismo criterio que
+    // `mapearCorrida`).
+    tenantNombre: ((f.tenant as { nombre?: string } | null)?.nombre) ?? '—',
   }));
 }

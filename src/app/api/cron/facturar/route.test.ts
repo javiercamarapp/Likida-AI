@@ -44,6 +44,13 @@ vi.mock('@/lib/observability/alerta', () => ({
   alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])),
 }));
 
+// El kill switch (0110). Default: sin fila = encendido (false) — así TODAS
+// las pruebas existentes prueban de paso que sin interruptor el cron corre.
+const estaApagado = vi.fn(async (nombre: string) => nombre === '__ninguno_apagado__');
+vi.mock('@/lib/likida/interruptores', () => ({
+  estaApagado: (...a: unknown[]) => estaApagado(...(a as [string])),
+}));
+
 /** Lo que devuelve la consulta de la cola. */
 let cola: { data: Array<Record<string, unknown>> | null; error: { message: string } | null };
 const consulta: Array<[string, unknown[]]> = [];
@@ -180,6 +187,7 @@ beforeEach(() => {
   telefonoJefeDe.mockClear();
   avisar.mockReset();
   avisar.mockResolvedValue({ avisado: true, porque: 'ok', destinatarios: 1, magnitud: 1 });
+  estaApagado.mockReset().mockResolvedValue(false);
   for (const f of Object.values(logger)) f.mockReset();
 });
 
@@ -197,6 +205,45 @@ describe('la puerta', () => {
   it('con el bearer equivocado, 401', async () => {
     expect((await pedir('Bearer otro')).status).toBe(401);
     expect(facturarAlVuelo).not.toHaveBeenCalled();
+  });
+});
+
+describe('el kill switch (0110)', () => {
+  it("con 'global' apagado: 200 con {saltado}, sin tocar la cola ni abrir navegador", async () => {
+    estaApagado.mockImplementation(async (n: string) => n === 'global');
+    const res = await pedir();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ corrio: false, saltado: 'interruptor global' });
+    // Ni la consulta de la cola (los tickets no se marcan), ni navegador, ni
+    // el camino de "sin adaptadores": la ruta se detiene ANTES de todo eso.
+    expect(consulta).toHaveLength(0);
+    expect(conNavegador).not.toHaveBeenCalled();
+    expect(facturarAlVuelo).not.toHaveBeenCalled();
+    expect(facturarLoteAlVuelo).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('cron.facturar.saltado', { interruptor: 'global' });
+  });
+
+  it("con 'agente:facturas' apagado (y global encendido): salta igual, y dice CUÁL palanca fue", async () => {
+    estaApagado.mockImplementation(async (n: string) => n === 'agente:facturas');
+    const res = await pedir();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ corrio: false, saltado: 'interruptor agente:facturas' });
+    expect(facturarLoteAlVuelo).not.toHaveBeenCalled();
+  });
+
+  it('sin fila (el default) el cron corre — las palancas se consultaron y estaban en encendido', async () => {
+    const cuerpo = await (await pedir()).json();
+
+    expect(cuerpo.corrio).toBe(true);
+    const consultados = estaApagado.mock.calls.map((c) => c[0]);
+    expect(consultados).toEqual(['global', 'agente:facturas']);
+  });
+
+  it('con el bearer equivocado el interruptor NI SE LEE: la puerta va primero', async () => {
+    await pedir('Bearer otro');
+    expect(estaApagado).not.toHaveBeenCalled();
   });
 });
 

@@ -19,7 +19,7 @@ import { logger } from '@/lib/logger';
 // Los dos bordes de PostgREST (error por valor, y el recorte silencioso a
 // 1,000 filas) viven en `pg.ts` desde que `operacion.ts` los necesitó también.
 // La explicación larga de POR QUÉ existen está allá, junto al código.
-import { exigir, traerTodo, conteo } from './pg';
+import { exigir, traerTodo, traerPorIds, conteo } from './pg';
 
 export interface DashboardKpis {
   viajesLiquidados: number;
@@ -388,11 +388,22 @@ export async function getLiquidacionesPorDia(
   ventanaDias: number = 7,
   hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
 ): Promise<Array<{ dia: string; valor: number }>> {
+  // Cota inferior GENEROSA (auditoría de escala 15k): esto traía TODO el
+  // histórico de `liquidacion` para bucketear una ventana de 7/30 días — con
+  // ~12,000 cierres/mes, la gráfica del día pagaba leer años enteros. La cota
+  // es la medianoche UTC del día MX más viejo de la ventana: MX va DETRÁS de
+  // UTC, así que el día local empieza DESPUÉS de esa medianoche y la cota solo
+  // puede sobrar hacia el pasado — mismo criterio que la de
+  // `getSerieComparativa.liquidacion` de arriba. El bucket de abajo sigue
+  // filtrando por día LOCAL: filas de sobra se descartan, nunca faltan.
+  const corteViejo = new Date(`${hoy}T00:00:00Z`);
+  corteViejo.setUTCDate(corteViejo.getUTCDate() - (ventanaDias - 1));
   const rows = await traerTodo<{ created_at: unknown }>(
     (desde, hasta) => supabaseAdmin()
       .from('liquidacion')
       .select('created_at')
       .eq('tenant_id', tenantId)
+      .gte('created_at', `${corteViejo.toISOString().slice(0, 10)}T00:00:00Z`)
       .order('id')
       .range(desde, hasta),
     'getLiquidacionesPorDia',
@@ -1561,15 +1572,24 @@ export interface DesgloseRecibido {
   monto: number;
 }
 
-/** Los consolidados recibidos, agrupados desde sus líneas. Ventana de 2,000
- *  líneas (≈ meses de operación); si una flota la rebasa, los más viejos
- *  salen de esta bitácora — no de la base. */
+/** Los consolidados recibidos, agrupados desde sus líneas. Ventana de las
+ *  1,000 líneas MÁS RECIENTES; si una flota la rebasa, los más viejos salen
+ *  de esta bitácora — no de la base.
+ *
+ *  AUDITORÍA DE ESCALA 15k: aquí decía "ventana de 2,000 líneas" sobre un
+ *  `.limit(2000)` — y PostgREST aplica min(limit, max_rows), así que la
+ *  ventana real siempre fue de 1,000. Peor: SIN `.order()`, esas 1,000 eran
+ *  las que Postgres quisiera — la bitácora podía enseñar consolidados viejos
+ *  y callarse los recién recibidos. El límite se declara como lo que es y el
+ *  orden garantiza que lo que entra a la ventana es lo último. */
 export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promise<DesgloseRecibido[]> {
   const res = await supabaseAdmin()
     .from('cfdi_consolidado_linea')
     .select('cfdi_xml_id, estatus, monto, cfdi:cfdi_xml_id(cfdi_uuid, created_at)')
     .eq('tenant_id', tenantId)
-    .limit(2000);
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(1000);
   const filas = exigir(res, 'getDesglosesRecibidos') ?? [];
   const porCfdi = new Map<string, DesgloseRecibido>();
   for (const f of filas) {
@@ -1689,9 +1709,15 @@ export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorC
   const cfdiXmlIds = [...new Set(filas.map((f) => f.cfdi_xml_id as string))];
   const gastoIds = [...new Set(candidatosPorFila.flat().map((c) => c.gastoId))];
 
-  const resXml = await supabaseAdmin().from('cfdi_xml').select('id, cfdi_uuid')
-    .eq('tenant_id', tenantId).in('id', cfdiXmlIds);
-  const filasXml = exigir(resXml, 'getLineasPorConciliar.cfdi_xml') ?? [];
+  // `traerPorIds` y no un `.in()` directo (auditoría de escala 15k): con miles
+  // de líneas pendientes, el `.in()` se recorta a 1,000 en silencio y el
+  // humano decide sin saber de qué CFDI o viaje viene cada candidato.
+  const filasXml = await traerPorIds(
+    cfdiXmlIds,
+    (tanda) => supabaseAdmin().from('cfdi_xml').select('id, cfdi_uuid')
+      .eq('tenant_id', tenantId).in('id', tanda),
+    'getLineasPorConciliar.cfdi_xml',
+  );
   const uuidPorXmlId = new Map(filasXml.map((r) => [r.id as string, (r.cfdi_uuid as string) || null]));
 
   // Los candidatos ya no existen como filas "disponibles" — pueden estar
@@ -1700,17 +1726,23 @@ export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorC
   // (lo que el JOIN vio en su momento, no lo que el gasto diga hoy).
   let folioPorGastoId = new Map<string, string | null>();
   if (gastoIds.length > 0) {
-    const resGasto = await supabaseAdmin().from('gasto').select('id, viaje_id')
-      .eq('tenant_id', tenantId).in('id', gastoIds);
-    const filasGasto = exigir(resGasto, 'getLineasPorConciliar.gasto') ?? [];
+    const filasGasto = await traerPorIds(
+      gastoIds,
+      (tanda) => supabaseAdmin().from('gasto').select('id, viaje_id')
+        .eq('tenant_id', tenantId).in('id', tanda),
+      'getLineasPorConciliar.gasto',
+    );
     const viajeIdPorGasto = new Map(filasGasto.map((g) => [g.id as string, (g.viaje_id as string) || null]));
 
     const viajeIds = [...new Set(filasGasto.map((g) => g.viaje_id as string).filter((v): v is string => !!v))];
     let folioPorViajeId = new Map<string, string | null>();
     if (viajeIds.length > 0) {
-      const resViaje = await supabaseAdmin().from('viaje').select('id, folio')
-        .eq('tenant_id', tenantId).in('id', viajeIds);
-      const filasViaje = exigir(resViaje, 'getLineasPorConciliar.viaje') ?? [];
+      const filasViaje = await traerPorIds(
+        viajeIds,
+        (tanda) => supabaseAdmin().from('viaje').select('id, folio')
+          .eq('tenant_id', tenantId).in('id', tanda),
+        'getLineasPorConciliar.viaje',
+      );
       folioPorViajeId = new Map(filasViaje.map((v) => [v.id as string, (v.folio as string) || null]));
     }
     folioPorGastoId = new Map(gastoIds.map((gid) => {

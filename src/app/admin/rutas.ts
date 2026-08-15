@@ -2,7 +2,7 @@ import {
   LayoutGrid, ScanText, Calculator, MessagesSquare, MessageCircle, UserPlus,
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
-  Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake,
+  Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake, Inbox,
 } from 'lucide-react';
 
 /**
@@ -25,6 +25,10 @@ export const AGENTES: Item[] = [
 ];
 
 export const NEGOCIO: Item[] = [
+  // La bandeja va PRIMERA en Negocio: es la cola de trabajo del superadmin
+  // (todo lo que espera a un humano, de todas las fuentes) — el resto de la
+  // sección son vistas; esta es donde se destraba.
+  { href: '/admin/escalaciones', nombre: 'Escalaciones', Icono: Inbox },
   { href: '/admin/flotas', nombre: 'Flotas / Clientes', Icono: Truck },
   // El equipo de ventas (prospectos y comisiones) — la página vive en
   // /admin/vendedores. `Handshake` y no `Users`: Users ya es Equipo (RBAC) y

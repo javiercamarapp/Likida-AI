@@ -34,6 +34,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
+import { traerTodo, conteo } from '../pg';
 import { logger } from '@/lib/logger';
 import { enLotes } from '../lotes';
 import type { Gasto } from '@/types/likida';
@@ -230,11 +231,32 @@ export async function guardarYConciliarConsolidado(
   // `cfdi_uuid` deja de ser null), así que una segunda pasada lo vería como
   // "no disponible" y reportaría esa línea como huérfana — un reenvío
   // legítimo desligaría en apariencia lo que ya estaba bien ligado.
-  const { data: existentes, error: errExistentes } = await acotada(supabaseAdmin()
-    .from('cfdi_consolidado_linea')
-    .select('estatus')
-    .eq('cfdi_xml_id', cfdiXmlId), 'consolidado.lineas_existentes');
-  if (!errExistentes && existentes && existentes.length > 0) {
+  // Paginado con `traerTodo` (auditoría de escala 15k): un consolidado mensual
+  // de una flota de 500 viajes/día trae MILES de líneas, y el `.select()` sin
+  // rango se recortaba a 1,000 en silencio — el acuse del reenvío reportaba
+  // 1,000 líneas donde había más, con toda la pinta de un total. El error de
+  // lectura conserva su camino de siempre (seguir al JOIN, que la reanudación
+  // de abajo protege), pero ahora con su línea de log.
+  let existentes: Array<{ estatus: unknown }> | null = null;
+  try {
+    existentes = await traerTodo<{ estatus: unknown }>(
+      (d, h) => acotada(supabaseAdmin()
+        .from('cfdi_consolidado_linea')
+        .select('estatus', conteo(d))
+        // `tenant_id` además del id del XML: todas sus vecinas del archivo lo
+        // filtran y esta era la única que no (misma auditoría).
+        .eq('tenant_id', tenantId)
+        .eq('cfdi_xml_id', cfdiXmlId)
+        .order('id').range(d, h), 'consolidado.lineas_existentes'),
+      'consolidado.lineas_existentes',
+    );
+  } catch (e) {
+    logger.warn('consolidado.lineas_existentes_ilegibles', {
+      tenant: tenantId, cfdiXmlId, err: e instanceof Error ? e.message : String(e),
+    });
+    existentes = null;
+  }
+  if (existentes && existentes.length > 0) {
     const conciliadasYa = existentes.filter((f) => f.estatus === 'conciliada').length;
     return { cfdiXmlId, totalLineas: existentes.length, conciliadas: conciliadasYa, porConciliar: existentes.length - conciliadasYa };
   }
@@ -247,14 +269,21 @@ export async function guardarYConciliarConsolidado(
   // como huérfanas (su gasto ya no es candidato: `cfdi_uuid` dejó de ser
   // null) y el reenvío "desligaría" en apariencia lo que quedó bien ligado.
   // Falla CERRADO: sin poder leer los sellos no se corre el JOIN a ciegas.
-  const { data: yaSellados, error: errSellados } = await acotada(supabaseAdmin()
-    .from('gasto')
-    .select('id, cfdi_orden')
-    .eq('tenant_id', tenantId)
-    .eq('cfdi_uuid', xml.uuid), 'consolidado.gastos_ya_sellados');
-  if (errSellados) throw new Error(`guardarYConciliarConsolidado: ${errSellados.message}`);
+  // `traerTodo` (escala 15k): un consolidado sella un gasto POR LÍNEA. Con más
+  // de 1,000 sellados, el mapa salía incompleto y el reenvío re-corría el JOIN
+  // sobre líneas ya resueltas — reportando como huérfano lo que estaba bien
+  // ligado, que es EXACTAMENTE el fallo que este bloque dice venir a evitar.
+  const yaSellados = await traerTodo<{ id: unknown; cfdi_orden: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('gasto')
+      .select('id, cfdi_orden', conteo(d))
+      .eq('tenant_id', tenantId)
+      .eq('cfdi_uuid', xml.uuid)
+      .order('id').range(d, h), 'consolidado.gastos_ya_sellados'),
+    'consolidado.gastos_ya_sellados',
+  );
   const selladoPorIndice = new Map(
-    (yaSellados ?? [])
+    yaSellados
       .filter((g) => g.cfdi_orden !== null && g.cfdi_orden !== undefined)
       .map((g) => [Number(g.cfdi_orden), String(g.id)]),
   );
@@ -262,15 +291,22 @@ export async function guardarYConciliarConsolidado(
   const rango = rangoFechasLineas(xml.lineas);
   let candidatosDb: Gasto[] = [];
   if (rango) {
-    const { data, error } = await acotada(supabaseAdmin()
-      .from('gasto')
-      .select('id, concepto, monto, fecha')
-      .eq('tenant_id', tenantId)
-      .is('cfdi_uuid', null)
-      .gte('fecha', rango.desde)
-      .lte('fecha', rango.hasta), 'consolidado.candidatos_gasto');
-    if (error) throw new Error(`guardarYConciliarConsolidado: ${error.message}`);
-    candidatosDb = (data ?? []).map((g) => ({
+    // `traerTodo` (escala 15k): el rango es el del estado de cuenta —un mes—
+    // y con ~45,000 gastos/mes los candidatos sin CFDI pasan de 1,000 con
+    // holgura. El recorte silencioso marcaba `por_conciliar`/`sin_match`
+    // líneas perfectamente conciliables: fraude aparente por truncamiento.
+    const data = await traerTodo<{ id: unknown; concepto: unknown; monto: unknown; fecha: unknown }>(
+      (d, h) => acotada(supabaseAdmin()
+        .from('gasto')
+        .select('id, concepto, monto, fecha', conteo(d))
+        .eq('tenant_id', tenantId)
+        .is('cfdi_uuid', null)
+        .gte('fecha', rango.desde)
+        .lte('fecha', rango.hasta)
+        .order('id').range(d, h), 'consolidado.candidatos_gasto'),
+      'consolidado.candidatos_gasto',
+    );
+    candidatosDb = data.map((g) => ({
       id: g.id as string,
       concepto: g.concepto as Gasto['concepto'],
       monto: Number(g.monto),
@@ -577,15 +613,21 @@ export async function barrerPorConciliar(tenantId: string): Promise<ResumenBarri
   const rango = rangoFechasLineas(pendientes.map(lineaDesdeFila));
   let disponibles: Gasto[] = [];
   if (rango) {
-    const { data, error } = await acotada(supabaseAdmin()
-      .from('gasto')
-      .select('id, concepto, monto, fecha')
-      .eq('tenant_id', tenantId)
-      .is('cfdi_uuid', null)
-      .gte('fecha', rango.desde)
-      .lte('fecha', rango.hasta), 'barrido.candidatos_gasto');
-    if (error) throw new Error(`barrerPorConciliar: ${error.message}`);
-    disponibles = (data ?? []).map((g) => ({
+    // `traerTodo` por la misma razón que `consolidado.candidatos_gasto`: el
+    // recorte a 1,000 dejaba al barrido cruzando contra una fracción del
+    // universo y las líneas cuyo gasto quedó fuera nunca se conciliaban.
+    const data = await traerTodo<{ id: unknown; concepto: unknown; monto: unknown; fecha: unknown }>(
+      (d, h) => acotada(supabaseAdmin()
+        .from('gasto')
+        .select('id, concepto, monto, fecha', conteo(d))
+        .eq('tenant_id', tenantId)
+        .is('cfdi_uuid', null)
+        .gte('fecha', rango.desde)
+        .lte('fecha', rango.hasta)
+        .order('id').range(d, h), 'barrido.candidatos_gasto'),
+      'barrido.candidatos_gasto',
+    );
+    disponibles = data.map((g) => ({
       id: g.id as string,
       concepto: g.concepto as Gasto['concepto'],
       monto: Number(g.monto),

@@ -8,12 +8,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let filas: Array<{ created_at: string }> = [];
+/** La cota inferior que la consulta mandó a la base (auditoría de escala 15k:
+ *  sin ella, la gráfica de 7 días leía TODO el histórico de `liquidacion`). */
+let corteVisto: string | null = null;
 
 function mockPaginado() {
-  const pideConteo = false;
   const b = {
     select: () => b,
     eq: () => b,
+    gte: (_col: string, val: string) => { corteVisto = val; return b; },
     order: () => b,
     range: (desde: number, hasta: number) => Promise.resolve({
       data: filas.slice(desde, hasta + 1), error: null, count: undefined,
@@ -29,7 +32,15 @@ vi.mock('./cuadre/desde_db', () => ({ cuadrarDesdeDB: vi.fn(), ventanaDesdeDB: v
 const { getLiquidacionesPorDia } = await import('./analytics');
 
 describe('getLiquidacionesPorDia — el bucket por día respeta la hora local', () => {
-  beforeEach(() => { filas = []; });
+  beforeEach(() => { filas = []; corteVisto = null; });
+
+  it('acota la lectura a la ventana: la cota es la medianoche UTC del día MX más viejo', async () => {
+    // Ventana de 3 días terminando el 2026-08-01 → día más viejo 2026-07-30.
+    // MX (UTC-6) empieza ese día a las 06:00Z, así que la cota de 00:00Z solo
+    // puede sobrar hacia el pasado — nunca recortar un cierre de la ventana.
+    await getLiquidacionesPorDia('t1', 3, '2026-08-01');
+    expect(corteVisto).toBe('2026-07-30T00:00:00Z');
+  });
 
   it('un cierre de las 20:00 CDMX cae en SU día local, no en el UTC siguiente', async () => {
     // 31-jul-2026 20:00 CDMX (UTC-6) = 2026-08-01T02:00:00Z. El slice crudo

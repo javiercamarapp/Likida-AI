@@ -55,6 +55,13 @@ vi.mock('@/lib/supabase/admin', () => ({
             // La consulta global de tenants con viajes vivos.
             ? { data: [{ tenant_id: 't-buena' }, { tenant_id: 't-rota' }], error: null }
             : { data: [], error: null }).then(res),
+        // `traerTodo` pagina con `.range(d, h)`: el mock rebana como lo haría
+        // el servidor — la página más allá del final llega vacía y cierra.
+        range: (d: number, h: number) =>
+          Promise.resolve({
+            data: (tabla === 'viaje' ? [{ tenant_id: 't-buena' }, { tenant_id: 't-rota' }] : []).slice(d, h + 1),
+            error: null,
+          }),
       });
       return b;
     },

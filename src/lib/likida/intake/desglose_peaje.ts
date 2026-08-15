@@ -35,6 +35,7 @@
 import * as XLSX from 'xlsx';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
+import { traerTodo, traerPorIds, conteo } from '../pg';
 import { logger } from '@/lib/logger';
 import { enLotes } from '../lotes';
 import { round2 } from '@/lib/formato';
@@ -645,15 +646,22 @@ export async function conciliarDesglose(
 async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): Promise<ResumenCruceDesglose> {
   // 1) Las líneas del desglose, en el orden del archivo. Error de lectura
   //    LANZA: "no hay líneas" y "no pude leer" llevan a acuses opuestos.
-  const { data: filas, error: errLineas } = await acotada(supabaseAdmin()
-    .from('desglose_peaje_linea')
-    .select('id, indice, fecha, monto')
-    .eq('tenant_id', tenantId)
-    .eq('desglose_id', desgloseId)
-    .order('indice')
-    .limit(MAX_LINEAS_DESGLOSE), 'desglose_peaje.leer_lineas');
-  if (errLineas) throw new Error(`conciliarDesglose: ${errLineas.message}`);
-  const lineas = (filas ?? []).map((f) => ({
+  // `traerTodo` y no `.limit(MAX_LINEAS_DESGLOSE)` (auditoría de escala 15k):
+  // PostgREST aplica min(limit, max_rows), así que un `.limit(5000)` entrega
+  // 1,000 filas y NADA avisa — el cruce corría sobre la quinta parte del
+  // archivo. El tope de importación sigue viviendo en la ingesta; aquí se
+  // pagina lo que haya.
+  const filas = await traerTodo<{ id: unknown; indice: unknown; fecha: unknown; monto: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('desglose_peaje_linea')
+      .select('id, indice, fecha, monto', conteo(d))
+      .eq('tenant_id', tenantId)
+      .eq('desglose_id', desgloseId)
+      .order('indice').order('id')
+      .range(d, h), 'desglose_peaje.leer_lineas'),
+    'desglose_peaje.leer_lineas',
+  );
+  const lineas = filas.map((f) => ({
     id: String(f.id),
     fecha: (f.fecha as string | null) ?? null,
     monto: Number(f.monto),
@@ -671,16 +679,21 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
   if (fechas.length > 0) {
     const desde = sumarDias(fechas[0], -VENTANA_DIAS_FECHA);
     const hasta = sumarDias(fechas[fechas.length - 1], VENTANA_DIAS_FECHA);
-    const { data, error } = await acotada(supabaseAdmin()
-      .from('gasto')
-      .select('id, viaje_id, monto, fecha')
-      .eq('tenant_id', tenantId)
-      .eq('concepto', 'caseta')
-      .gte('fecha', desde)
-      .lte('fecha', hasta)
-      .limit(MAX_LINEAS_DESGLOSE), 'desglose_peaje.gastos_caseta');
-    if (error) throw new Error(`conciliarDesglose: ${error.message}`);
-    gastos = (data ?? [])
+    // Misma razón que arriba: con ~45,000 gastos/mes, las casetas del rango
+    // pasan de 1,000 y el `.limit(5000)` recortado marcaba `sin_contraparte`
+    // líneas que SÍ tenían contraparte.
+    const data = await traerTodo<{ id: unknown; viaje_id: unknown; monto: unknown; fecha: unknown }>(
+      (d, h) => acotada(supabaseAdmin()
+        .from('gasto')
+        .select('id, viaje_id, monto, fecha', conteo(d))
+        .eq('tenant_id', tenantId)
+        .eq('concepto', 'caseta')
+        .gte('fecha', desde)
+        .lte('fecha', hasta)
+        .order('id').range(d, h), 'desglose_peaje.gastos_caseta'),
+      'desglose_peaje.gastos_caseta',
+    );
+    gastos = data
       .filter((g) => g.fecha !== null && g.viaje_id !== null)
       .map((g) => ({
         id: String(g.id),
@@ -756,16 +769,21 @@ export interface ResumenDesglose {
 }
 
 async function agregarEstatus(tenantId: string, desgloseId: string): Promise<Pick<ResumenDesglose, 'total' | 'cuadra' | 'noCuadra' | 'sinContraparte' | 'pctCuadra'>> {
-  // El límite es explícito porque PostgREST recorta a 1,000 en silencio
-  // (CLAUDE.md); el tope de importación garantiza que cabe completo.
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('desglose_peaje_linea')
-    .select('estatus')
-    .eq('tenant_id', tenantId)
-    .eq('desglose_id', desgloseId)
-    .limit(MAX_LINEAS_DESGLOSE), 'desglose_peaje.agregar_estatus');
-  if (error) throw new Error(`agregarEstatus: ${error.message}`);
-  const filas = data ?? [];
+  // AUDITORÍA DE ESCALA 15k: aquí decía «el tope de importación garantiza que
+  // cabe completo» sobre un `.limit(MAX_LINEAS_DESGLOSE)` — y la premisa era
+  // FALSA: PostgREST aplica min(limit, max_rows), así que un `.limit(5000)`
+  // entrega 1,000 filas sin error. `total` y `pctCuadra` se congelaban en
+  // 1,000 — en el detalle Y EN EL ACUSE que se le manda al cliente. Se pagina
+  // con `traerTodo`, que además exige demostrar que la lectura quedó completa.
+  const filas = await traerTodo<{ estatus: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('desglose_peaje_linea')
+      .select('estatus', conteo(d))
+      .eq('tenant_id', tenantId)
+      .eq('desglose_id', desgloseId)
+      .order('id').range(d, h), 'desglose_peaje.agregar_estatus'),
+    'desglose_peaje.agregar_estatus',
+  );
   const cuenta = (e: EstatusLineaDesglose) => filas.filter((f) => f.estatus === e).length;
   const total = filas.length;
   const cuadra = cuenta('cuadra');
@@ -963,16 +981,21 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
   if (errDesglose) throw new Error(`bitacoraRmf918: ${errDesglose.message}`);
   if (!desglose) return null;
 
-  const { data: filas, error: errLineas } = await acotada(supabaseAdmin()
-    .from('desglose_peaje_linea')
-    .select('fecha, caseta, monto, tag, viaje_id')
-    .eq('tenant_id', tenantId)
-    .eq('desglose_id', desgloseId)
-    .eq('estatus', 'cuadra')
-    .order('indice')
-    .limit(MAX_LINEAS_DESGLOSE), 'bitacora.lineas');
-  if (errLineas) throw new Error(`bitacoraRmf918: ${errLineas.message}`);
-  const lineas = (filas ?? []).map((f) => ({
+  // `traerTodo` por lo mismo que `agregarEstatus`: la bitácora RMF 9.18 con
+  // el `.limit(5000)` recortado a 1,000 salía INCOMPLETA — y es un documento
+  // fiscal descargable, no una vista.
+  const filas = await traerTodo<{ fecha: unknown; caseta: unknown; monto: unknown; tag: unknown; viaje_id: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('desglose_peaje_linea')
+      .select('fecha, caseta, monto, tag, viaje_id', conteo(d))
+      .eq('tenant_id', tenantId)
+      .eq('desglose_id', desgloseId)
+      .eq('estatus', 'cuadra')
+      .order('indice').order('id')
+      .range(d, h), 'bitacora.lineas'),
+    'bitacora.lineas',
+  );
+  const lineas = filas.map((f) => ({
     fecha: (f.fecha as string | null) ?? null,
     caseta: (f.caseta as string | null) ?? null,
     monto: Number(f.monto),
@@ -983,10 +1006,15 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
   const viajeIds = [...new Set(lineas.map((l) => l.viajeId).filter((v): v is string => !!v))];
   const viajePorId = new Map<string, { folio: string | null; origen: string | null; destino: string | null }>();
   if (viajeIds.length > 0) {
-    const { data, error } = await acotada(supabaseAdmin()
-      .from('viaje').select('id, folio, origen, destino').eq('tenant_id', tenantId).in('id', viajeIds), 'bitacora.viajes');
-    if (error) throw new Error(`bitacoraRmf918: ${error.message}`);
-    for (const v of data ?? []) {
+    // `traerPorIds`: un `.in()` con miles de viajes se recorta a 1,000 en
+    // silencio y además viaja en la URL (ver pg.ts).
+    const data = await traerPorIds<{ id: unknown; folio: unknown; origen: unknown; destino: unknown }>(
+      viajeIds,
+      (tanda) => acotada(supabaseAdmin()
+        .from('viaje').select('id, folio, origen, destino').eq('tenant_id', tenantId).in('id', tanda), 'bitacora.viajes'),
+      'bitacora.viajes',
+    );
+    for (const v of data) {
       viajePorId.set(String(v.id), {
         folio: (v.folio as string | null) ?? null,
         origen: (v.origen as string | null) ?? null,

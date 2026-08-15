@@ -97,6 +97,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 const {
   getResumenNegocio, getCostoPorFaseModelo, getConversacionesActivas,
   getConteosPlataforma, getCorridasRecientes, getUltimaCorridaPorAgente, AGENTES_BITACORA,
+  getCorridasFallidas, getLiquidacionesEnRevisar,
 } = await import('./negocio');
 
 describe('getResumenNegocio', () => {
@@ -140,7 +141,9 @@ describe('getResumenNegocio', () => {
     });
     const r = await getResumenNegocio('2026-08-02');
     expect(r.tenants).toBe(1);
-    expect(r.flotas).toEqual([{ id: 't1', nombre: 'Flota Demo SA de CV', plan: 'demo', viajes: 2, costoIaUsd: 1.93 }]);
+    // `politicaPropia` sale del override CRUDO de tenant.config — sin
+    // config, false: la flota corre con la política de demo.
+    expect(r.flotas).toEqual([{ id: 't1', nombre: 'Flota Demo SA de CV', plan: 'demo', viajes: 2, costoIaUsd: 1.93, politicaPropia: false }]);
     expect(r.viajesProcesados).toBe(2);
     expect(r.costoIaUsd).toBe(1.93);
     expect(r.tokensIn).toBe(1800);
@@ -277,6 +280,40 @@ describe('getResumenNegocio', () => {
     respuestas.set('gasto', { data: [{ created_at: '2026-08-01T08:00:00Z' }], error: null });
     await getResumenNegocio('2026-08-02');
     expect(rangos.get('gasto')).toEqual([[0, 999]]);
+  });
+
+  // ── El bug UTC de facturasPorDia (hallazgo 13-ago-2026) ──────────────────
+  //
+  // `slice(0, 10)` sobre el timestamptz era el día UTC: una factura de las
+  // 7pm de CDMX (01:00Z del día siguiente) contaba en la barra de MAÑANA, y
+  // el default de `hoy` (`toISOString().slice(0,10)`) rotulaba la última
+  // barra con una fecha que el usuario todavía no vivía.
+  it('facturasPorDia agrupa por el DÍA DE MÉXICO, no el UTC', async () => {
+    respuestas.set('gasto', {
+      data: [
+        // 2-ago 19:00 en CDMX (UTC−6) — en UTC ya es 3-ago.
+        { created_at: '2026-08-03T01:00:00Z' },
+        // 2-ago 06:00 en CDMX — mismo día en ambas zonas.
+        { created_at: '2026-08-02T12:00:00Z' },
+      ],
+      error: null,
+    });
+    const r = await getResumenNegocio('2026-08-02');
+    // Las DOS caen en la barra del 2-ago; ninguna se fuga al 3.
+    expect(r.facturasPorDia.at(-1)).toEqual({ dia: '2026-08-02', n: 2 });
+    expect(r.facturasPorDia.every((d) => d.dia <= '2026-08-02')).toBe(true);
+  });
+
+  it('a las 6pm de CDMX el default de `hoy` sigue siendo HOY (día MX), no mañana (UTC)', async () => {
+    vi.useFakeTimers();
+    // 00:30Z del 3-ago = 2-ago 18:30 en CDMX — la hora exacta del reporte.
+    vi.setSystemTime(new Date('2026-08-03T00:30:00Z'));
+    try {
+      const r = await getResumenNegocio(); // sin `hoy`: se ejercita el default
+      expect(r.facturasPorDia.at(-1)?.dia).toBe('2026-08-02');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -519,5 +556,69 @@ describe('getUltimaCorridaPorAgente', () => {
   it('un fallo LANZA en vez de responder a medias', async () => {
     respuestas.set('agente_corrida', { data: null, error: { message: 'fetch failed' } });
     await expect(getUltimaCorridaPorAgente()).rejects.toThrow(/getUltimaCorridaPorAgente\/\w+: fetch failed/);
+  });
+});
+
+// La vista de la bandeja de escalaciones: SOLO las corridas en `fallo`,
+// mapeadas con el MISMO `mapearCorrida` que el resto (una corrida no puede
+// contarse distinto en dos pantallas).
+describe('getCorridasFallidas', () => {
+  beforeEach(() => { respuestas.clear(); rangos.clear(); });
+
+  it('filtra por estado=fallo de verdad y conserva el NULL honesto', async () => {
+    respuestas.set('agente_corrida', { data: CORRIDAS, error: null });
+    const r = await getCorridasFallidas();
+    // El fixture trae 4 corridas y solo UNA en fallo (cobranza) — si el
+    // `.eq` no filtrara, vendrían las 4.
+    expect(r).toEqual([{
+      agente: 'cobranza', estado: 'fallo', disparo: 'manual',
+      inicio: '2026-08-13T09:00:00Z', fin: null,
+      tareasHechas: null, tareasTotal: null,
+      tenantId: 't2', tenantNombre: '—',
+    }]);
+  });
+
+  it('un fallo de lectura LANZA — "0 fallos" sobre una base caída afirmaría que todo corrió bien', async () => {
+    respuestas.set('agente_corrida', { data: null, error: { message: 'fetch failed' } });
+    await expect(getCorridasFallidas()).rejects.toThrow('getCorridasFallidas: fetch failed');
+  });
+});
+
+// Las liquidaciones en `revisar` cruzadas — la versión cross-tenant de lo
+// que `getKpis` cuenta por-tenant. El dato es el estatus ACTUAL (el upsert
+// de guardar_liquidacion_tx lo reescribe sin rastro), y el tipo lo dice.
+describe('getLiquidacionesEnRevisar', () => {
+  beforeEach(() => { respuestas.clear(); rangos.clear(); });
+
+  const LIQUIDACIONES = [
+    {
+      id: 'l1', estatus: 'revisar', created_at: '2026-08-10T15:00:00Z',
+      tenant_id: 't1', tenant: { nombre: 'Flota Demo SA de CV' }, viaje: { folio: 'V-001' },
+    },
+    { id: 'l2', estatus: 'cuadrada', created_at: '2026-08-11T15:00:00Z', tenant_id: 't1', tenant: { nombre: 'Flota Demo SA de CV' }, viaje: null },
+    {
+      // Viaje despachado por WhatsApp: nace sin folio (0092) — null, no ''.
+      id: 'l3', estatus: 'revisar', created_at: '2026-08-12T15:00:00Z',
+      tenant_id: 't2', tenant: null, viaje: { folio: null },
+    },
+  ];
+
+  it('trae SOLO las que están en revisar, con folio y flota aplanados', async () => {
+    respuestas.set('liquidacion', { data: LIQUIDACIONES, error: null });
+    const r = await getLiquidacionesEnRevisar();
+    expect(r).toEqual([
+      { id: 'l1', creadaEn: '2026-08-10T15:00:00Z', folio: 'V-001', tenantId: 't1', tenantNombre: 'Flota Demo SA de CV' },
+      { id: 'l3', creadaEn: '2026-08-12T15:00:00Z', folio: null, tenantId: 't2', tenantNombre: '—' },
+    ]);
+  });
+
+  it('con la tabla vacía, lista vacía CONTADA — cero de verdad, no inventado', async () => {
+    const r = await getLiquidacionesEnRevisar();
+    expect(r).toEqual([]);
+  });
+
+  it('un fallo de lectura LANZA — una bandeja vacía sobre una base caída diría "nadie espera revisión"', async () => {
+    respuestas.set('liquidacion', { data: null, error: { message: 'fetch failed' } });
+    await expect(getLiquidacionesEnRevisar()).rejects.toThrow('fetch failed');
   });
 });

@@ -28,6 +28,13 @@ vi.mock('@/lib/observability/alerta', () => ({
   alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])),
 }));
 
+// El kill switch (0110). Default: sin fila = encendido (false) — así TODAS
+// las pruebas existentes prueban de paso que sin interruptor el cron corre.
+const estaApagado = vi.fn(async (nombre: string) => nombre === '__ninguno_apagado__');
+vi.mock('@/lib/likida/interruptores', () => ({
+  estaApagado: (...a: unknown[]) => estaApagado(...(a as [string])),
+}));
+
 process.env.CRON_SECRET = 'secreto-de-prueba';
 const { GET } = await import('./route');
 
@@ -41,6 +48,8 @@ describe('GET /api/cron/escalar — el cron ya no miente en verde', () => {
     ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });
     alertarOperador.mockClear();
     logger.error.mockClear();
+    logger.warn.mockClear();
+    estaApagado.mockReset().mockResolvedValue(false);
   });
 
   it('con los dos motores sanos responde 200 y no molesta al operador', async () => {
@@ -74,5 +83,59 @@ describe('GET /api/cron/escalar — el cron ya no miente en verde', () => {
     const res = await GET(peticion('Bearer equivocado'));
     expect(res.status).toBe(401);
     expect(escalarViajesSinAceptar).not.toHaveBeenCalled();
+  });
+});
+
+describe('el kill switch (0110)', () => {
+  beforeEach(() => {
+    // El beforeEach del describe de arriba no alcanza a éste: se re-arman los
+    // motores aquí o los conteos arrastran las llamadas de las pruebas previas.
+    escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0 });
+    ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });
+    logger.warn.mockClear();
+    estaApagado.mockReset().mockResolvedValue(false);
+  });
+
+  it("con 'global' apagado: 200 con {saltado}, y NINGÚN motor corre", async () => {
+    // 200 y no 500: apagado a propósito no es fallo — un 500 mandaría a
+    // alguien a investigar la decisión de Javier como si fuera incidente.
+    estaApagado.mockImplementation(async (n: string) => n === 'global');
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ corrio: false, saltado: 'interruptor global' });
+    expect(escalarViajesSinAceptar).not.toHaveBeenCalled();
+    expect(ejecutarCobranzaGlobal).not.toHaveBeenCalled();
+    // Y lo dice en el log: el salto no puede pasar desapercibido.
+    expect(logger.warn).toHaveBeenCalledWith('cron.escalar.saltado', { interruptor: 'global' });
+  });
+
+  it("con 'agente:cobranza' apagado: la aceptación CORRE, la cobranza salta Y LO DICE", async () => {
+    estaApagado.mockImplementation(async (n: string) => n === 'agente:cobranza');
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    const cuerpo = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(escalarViajesSinAceptar).toHaveBeenCalledTimes(1);
+    expect(ejecutarCobranzaGlobal).not.toHaveBeenCalled();
+    expect(cuerpo.comprobacion).toEqual({ saltado: 'interruptor agente:cobranza' });
+    // La aceptación reporta normal: la palanca de cobranza no la toca.
+    expect(cuerpo.aceptacion).toEqual({ escalados: 0 });
+  });
+
+  it('sin fila (el default del catálogo) el cron corre entero', async () => {
+    // `estaApagado` en false ES "sin fila = encendido" — el contrato del
+    // default seguro, probado desde el cable.
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(escalarViajesSinAceptar).toHaveBeenCalledTimes(1);
+    expect(ejecutarCobranzaGlobal).toHaveBeenCalledTimes(1);
+  });
+
+  it('el interruptor se consulta DESPUÉS de la puerta: sin bearer válido ni se lee', async () => {
+    // Si se consultara antes, cualquiera sin secreto podría sondear con el
+    // reloj si el sistema está apagado.
+    await GET(peticion('Bearer equivocado'));
+    expect(estaApagado).not.toHaveBeenCalled();
   });
 });

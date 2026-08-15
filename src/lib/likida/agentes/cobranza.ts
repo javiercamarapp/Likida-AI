@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { traerTodo, traerPorIds, conteo } from '../pg';
 import { avisarCorridasPorFlota } from './notificaciones';
 import { registrarCorrida } from './corridas';
 import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
@@ -104,32 +105,47 @@ export async function colaCobranza(tenantId: string, ahora: Date = new Date()): 
   // `operador:operador_id` y no `operador` a secas: viaje tiene MÁS de una
   // relación con operador y PostgREST rechaza el embed ambiguo (se pagó en
   // producción el 14-ago-2026: la página entera caía con el error boundary).
-  const { data, error } = await supabaseAdmin()
-    .from('viaje')
-    .select('id, folio, fecha_inicio, avisado_en, recordatorio_comprobacion_en, operador:operador_id(nombre, telefono)')
-    .eq('tenant_id', tenantId)
-    .in('estatus', ['abierto', 'en_cuadre'])
-    .not('fecha_inicio', 'is', null)
-    // SOLO VIAJES QUE LIKIDA AVISÓ (auditoría 3, BE-C1): un viaje que el
-    // chofer nunca recibió por WhatsApp no se le cobra por WhatsApp — sin
-    // esto, el import del TMS (viajes históricos SIN aviso a propósito)
-    // armaba cientos de "Llevas N días..." en la primera corrida del cron.
-    // Mismo criterio que la escalación (escalar_viaje.ts).
-    .not('avisado_en', 'is', null)
-    .limit(500);
-  if (error) throw new Error(`colaCobranza: ${error.message}`);
+  // `traerTodo` y no el `.limit(500)` que vivía aquí (auditoría de escala
+  // 15k): `cola.vigilados` — el KPI "Viajes vigilados" de la página — era
+  // `viajes.length` topado a 500, y un cliente de 500 viajes/día lo llenaba
+  // solo. Lo abierto está acotado por la OPERACIÓN (un abierto por operador,
+  // mig. 0029), no por el tiempo: paginar aquí es barato y el conteo vuelve a
+  // ser verdad.
+  const viajes = await traerTodo<{
+    id: unknown; folio: unknown; fecha_inicio: unknown; avisado_en: unknown;
+    recordatorio_comprobacion_en: unknown; operador: unknown;
+  }>(
+    (d, h) => supabaseAdmin()
+      .from('viaje')
+      .select('id, folio, fecha_inicio, avisado_en, recordatorio_comprobacion_en, operador:operador_id(nombre, telefono)', conteo(d))
+      .eq('tenant_id', tenantId)
+      .in('estatus', ['abierto', 'en_cuadre'])
+      .not('fecha_inicio', 'is', null)
+      // SOLO VIAJES QUE LIKIDA AVISÓ (auditoría 3, BE-C1): un viaje que el
+      // chofer nunca recibió por WhatsApp no se le cobra por WhatsApp — sin
+      // esto, el import del TMS (viajes históricos SIN aviso a propósito)
+      // armaba cientos de "Llevas N días..." en la primera corrida del cron.
+      // Mismo criterio que la escalación (escalar_viaje.ts).
+      .not('avisado_en', 'is', null)
+      .order('id').range(d, h),
+    'colaCobranza',
+  );
 
-  const viajes = data ?? [];
   const ids = viajes.map((v) => v.id as string);
   const contactosPorViaje = new Map<string, number[]>();
   if (ids.length > 0) {
-    const { data: contactos, error: errC } = await supabaseAdmin()
-      .from('cobranza_contacto')
-      .select('viaje_id, tier')
-      .eq('tenant_id', tenantId)
-      .in('viaje_id', ids);
-    if (errC) throw new Error(`colaCobranza.contactos: ${errC.message}`);
-    for (const c of contactos ?? []) {
+    // `traerPorIds`: un `.in()` con más de mil viajes vivos se recorta a
+    // 1,000 en silencio y el tier de contacto se perdería (ver pg.ts).
+    const contactos = await traerPorIds<{ viaje_id: unknown; tier: unknown }>(
+      ids,
+      (tanda) => supabaseAdmin()
+        .from('cobranza_contacto')
+        .select('viaje_id, tier')
+        .eq('tenant_id', tenantId)
+        .in('viaje_id', tanda),
+      'colaCobranza.contactos',
+    );
+    for (const c of contactos) {
       const lista = contactosPorViaje.get(c.viaje_id as string) ?? [];
       lista.push(c.tier as number);
       contactosPorViaje.set(c.viaje_id as string, lista);
@@ -323,14 +339,22 @@ export async function ejecutarCobranza(
 export const PLAZO_COBRANZA_GLOBAL_MS = 90_000;
 
 export async function ejecutarCobranzaGlobal(ahora: Date = new Date()): Promise<{ tenants: number; contactados: number; cortadosPorReloj: number; fallos: string[] }> {
-  const { data, error } = await supabaseAdmin()
-    .from('viaje')
-    .select('tenant_id')
-    .in('estatus', ['abierto', 'en_cuadre'])
-    .not('fecha_inicio', 'is', null)
-    .limit(1000);
-  if (error) throw new Error(`ejecutarCobranzaGlobal: ${error.message}`);
-  const tenants = [...new Set((data ?? []).map((v) => v.tenant_id as string))];
+  // `traerTodo` y no el `.limit(1000)` que vivía aquí — que estaba EXACTAMENTE
+  // en el tope de PostgREST, donde "hay 1,000" y "hay 90,000" son
+  // indistinguibles (auditoría de escala 15k). Un solo cliente de 500
+  // viajes/día llenaba las 1,000 filas con sus propios abiertos y NINGUNA
+  // otra flota volvía a ser cobrada, sin error y sin log. Lo abierto está
+  // acotado por la operación (mig. 0029), así que paginarlo es barato.
+  const data = await traerTodo<{ tenant_id: unknown }>(
+    (d, h) => supabaseAdmin()
+      .from('viaje')
+      .select('tenant_id', conteo(d))
+      .in('estatus', ['abierto', 'en_cuadre'])
+      .not('fecha_inicio', 'is', null)
+      .order('id').range(d, h),
+    'ejecutarCobranzaGlobal',
+  );
+  const tenants = [...new Set(data.map((v) => v.tenant_id as string))];
 
   // Un solo vencimiento para TODA la corrida (auditoría 3, REND-C2): a 750
   // camiones los envíos seriales nunca cabían en el maxDuration y el proceso

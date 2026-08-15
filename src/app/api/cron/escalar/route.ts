@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { escalarViajesSinAceptar } from '@/lib/likida/escalar_viaje';
 import { ejecutarCobranzaGlobal } from '@/lib/likida/agentes/cobranza';
+import { estaApagado } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -64,6 +65,22 @@ export async function GET(req: Request) {
     return new NextResponse(null, { status: 401 });
   }
 
+  // ── EL KILL SWITCH (0110), DESPUÉS de la puerta y ANTES de trabajar ──────
+  //
+  // 'global' apaga los dos motores. Responde 200, no 500: apagado A PROPÓSITO
+  // no es un fallo — un 500 aquí pintaría el cron rojo en Vercel y dispararía
+  // a alguien a investigar exactamente lo que Javier acaba de decidir. El
+  // `saltado` en el cuerpo es lo que distingue esta corrida de una sana.
+  // El interruptor es GLOBAL por agente (v1), no por tenant: este cron barre
+  // todas las flotas en una corrida y la palanca corta el barrido entero.
+  // Fail-closed: si el interruptor no se puede LEER, `estaApagado` devuelve
+  // apagado con grito en el log (ver interruptores.ts) — este cron manda
+  // WhatsApp a personas reales, y "no sé si está apagado" no es permiso.
+  if (await estaApagado('global')) {
+    logger.warn('cron.escalar.saltado', { interruptor: 'global' });
+    return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
+  }
+
   const resultado: Record<string, unknown> = {};
   // AUDITORÍA 3, OP-C1 (CRÍTICO): este cron respondía 200 con un motor
   // entero reventado — el único con ese vicio (purgar/facturar responden
@@ -90,19 +107,29 @@ export async function GET(req: Request) {
     huboFallo = true;
   }
 
-  try {
-    const r = await ejecutarCobranzaGlobal();
-    logger.info('cron.cobranza.ok', { ...r });
-    resultado.comprobacion = r;
-  } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
-    // Mismo criterio que el catch de arriba: código estable para el
-    // fingerprint, alerta directa al operador del sistema.
-    const codigo = codigoDeError(e);
-    logger.error('cron.cobranza.falló', { error, codigo });
-    await alertarOperador('cron.cobranza', { error, codigo });
-    resultado.comprobacion = { error };
-    huboFallo = true;
+  // El segundo motor ES el Agente de Cobranza, así que tiene su propia
+  // palanca además de la global. El primero (aceptación) no la tiene: la
+  // escalación de aceptación no es un agente del catálogo (0102) y no hay
+  // nombre honesto que darle — se apaga con 'global', y se dice aquí para
+  // que nadie busque un interruptor que no existe.
+  if (await estaApagado('agente:cobranza')) {
+    logger.warn('cron.cobranza.saltado', { interruptor: 'agente:cobranza' });
+    resultado.comprobacion = { saltado: 'interruptor agente:cobranza' };
+  } else {
+    try {
+      const r = await ejecutarCobranzaGlobal();
+      logger.info('cron.cobranza.ok', { ...r });
+      resultado.comprobacion = r;
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      // Mismo criterio que el catch de arriba: código estable para el
+      // fingerprint, alerta directa al operador del sistema.
+      const codigo = codigoDeError(e);
+      logger.error('cron.cobranza.falló', { error, codigo });
+      await alertarOperador('cron.cobranza', { error, codigo });
+      resultado.comprobacion = { error };
+      huboFallo = true;
+    }
   }
 
   // Los fallos van en la RESPUESTA, no solo en el log. "Esa flota no tiene

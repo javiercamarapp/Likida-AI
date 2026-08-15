@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
+import { traerTodo, conteo } from './pg';
 import { strip_accents } from './cuadre/util';
 import { getTableroOperacion } from './operacion';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
@@ -67,27 +68,25 @@ export function interpretarInforme(texto: string): boolean {
  * eso se pagina igual que `analytics.ts`).
  */
 async function anticiposVivos(tenantId: string): Promise<{ suma: number; viajes: number }> {
-  const PAGINA = 1000;
-  let desde = 0;
-  let suma = 0;
-  let viajes = 0;
-  for (;;) {
-    const { data, error } = await acotada(supabaseAdmin()
+  // `traerTodo` y no el bucle a mano que vivía aquí (auditoría de escala 15k):
+  // aquel cortaba con `filas.length < PAGINA`, el criterio que pg.ts documenta
+  // como defectuoso — da por hecho que el servidor entrega la página completa,
+  // y `max_rows` es un ajuste del proyecto: bajarlo a 500 habría convertido
+  // este informe en una suma parcial mandada al dueño como total, sin aviso.
+  const filas = await traerTodo<{ anticipo: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
       .from('viaje')
-      .select('anticipo')
+      .select('anticipo', conteo(d))
       .eq('tenant_id', tenantId)
       .in('estatus', ['abierto', 'en_cuadre'])
       .order('id')
-      .range(desde, desde + PAGINA - 1), 'informes.anticiposVivos');
-    if (error) throw new Error(`anticiposVivos: ${error.message}`);
-    const filas = data ?? [];
-    for (const f of filas) {
-      suma += Number(f.anticipo ?? 0);
-      viajes += 1;
-    }
-    if (filas.length < PAGINA) return { suma, viajes };
-    desde += PAGINA;
-  }
+      .range(d, h), 'informes.anticiposVivos'),
+    'informes.anticiposVivos',
+  );
+  return {
+    suma: filas.reduce((s, f) => s + Number(f.anticipo ?? 0), 0),
+    viajes: filas.length,
+  };
 }
 
 /**

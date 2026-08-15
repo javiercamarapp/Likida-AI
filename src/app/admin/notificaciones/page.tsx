@@ -1,4 +1,6 @@
 import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio';
+import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
+import { ahoraMs } from '@/lib/saludo';
 import { calcularAlertas } from '../calcular-alertas';
 import { Bell } from 'lucide-react';
 import NotificacionesLista from './lista';
@@ -15,8 +17,13 @@ export const dynamic = 'force-dynamic';
  * leído/marcar todas, swipe en móvil) vive en `lista.tsx` (client).
  */
 export default async function NotificacionesPage() {
-  const [r, conversaciones] = await Promise.all([getResumenNegocio(), getConversacionesActivas()]);
-  const alertas = calcularAlertas(r, conversaciones);
+  // La bandeja de escalaciones alimenta la campana con los MISMOS conteos
+  // que pinta /admin/escalaciones (nunca lanza: una fuente ilegible llega
+  // como null y calcularAlertas la reporta como fuente ciega).
+  const [r, conversaciones, bandeja] = await Promise.all([
+    getResumenNegocio(), getConversacionesActivas(), getBandejaEscalaciones(ahoraMs()),
+  ]);
+  const alertas = calcularAlertas(r, conversaciones, bandeja.conteos);
 
   return (
     <div className="flex flex-col gap-4">
