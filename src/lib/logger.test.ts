@@ -128,6 +128,24 @@ describe('logger — lo que sí es dato personal se borra entero', () => {
     expect(salida).not.toContain('9993700779');
   });
 
+  it('una CLABE de 18 dígitos se redacta como [CLABE]', () => {
+    // Auditoría 11 · ALTO (legal): antes de este test, un log de pago que
+    // trajera la CLABE la emitía en claro.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logger.error('pago.devolucion', { clabe: '012345678901234567' });
+    const salida = ultimaLinea(spy);
+    expect(salida).toContain('[CLABE]');
+    expect(salida).not.toContain('012345678901234567');
+  });
+
+  it('un PAN de tarjeta de 16 dígitos se redacta como [TARJETA]', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logger.error('pago.tarjeta', { pan: '4111111111111111' });
+    const salida = ultimaLinea(spy);
+    expect(salida).toContain('[TARJETA]');
+    expect(salida).not.toContain('4111111111111111');
+  });
+
   it('un epoch en milisegundos NO se confunde con un teléfono', () => {
     // Falso positivo caro: si `Date.now()` sale como [TEL] se pierde la hora,
     // que es justo lo único con lo que hoy se cruzan las líneas (t va vacío).
