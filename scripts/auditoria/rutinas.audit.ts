@@ -170,7 +170,7 @@ ${checklist}
   }
   const estado = cambiosPropuestos.length === 0 ? 'REVISADO (sin cambios aplicables)' : `${aplicados}/${cambiosPropuestos.length} cambios aplicados`;
   const detalle = [aplicados ? estado : estado, ...detalles, hayCambios ? '' : `Conclusión: ${texto.slice(0, 600)}`].join('\n');
-  return { id: rt.id, nombre: rt.name, estado, cambios: cambiosPropuestos.length, detalle };
+  return { id: rt.id, nombre: rt.nombre, estado, cambios: cambiosPropuestos.length, detalle };
 }
 
 export async function correrRutinas(n: number): Promise<ResultadoRutina[]> {
