@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirRonda } from './config.audit';
 import { verificarRonda } from './verificar.audit';
-import { fixerPorSeveridad } from './modelos.audit';
+import { fixerPorSeveridad, severidadDeTexto } from './modelos.audit';
 import { llamada } from './llamada.audit';
 import type { HallazgoVerificado } from './verificar.audit';
 
@@ -69,7 +69,7 @@ function testArchivo(ruta: string): string | null {
 }
 
 async function sugerirReemplazo(h: HallazgoVerificado): Promise<Reemplazo | null> {
-  const f = fixerPorSeveridad(h.rubro, h.severidad);
+  const f = fixerPorSeveridad(h.rubro, severidadDeTexto(h.severidad));
   const modelo = f.modelo(h.rubro);
   const lineas = leerArchivo(h.archivo);
   if (!lineas) return null;
