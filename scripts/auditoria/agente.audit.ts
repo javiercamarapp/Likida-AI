@@ -45,7 +45,9 @@ const CORCHETE = '```';
 function promptRubro(n: number, r: Rubro): string {
   const ctx = contextoAgente(n, r);
   const previa = ctx.k > 0 ? String(NOTAS_PREVIAS[r]) : '—';
-  return `Eres auditor de ${NOMBRE_RUBRO[r]} en Likida. Contexto fresco, mirada adversarial: tu trabajo es encontrar lo que está mal, no confirmar que está bien.
+  return `Eres un ${EXPERTOS[r] ?? 'auditor senior'} en Likida. Contexto fresco, mirada adversarial: tu trabajo es encontrar lo que está mal en TU rubro, abriendo los archivos con tus herramientas leer/buscar — nunca citar una línea que no leíste. No confirmas que está bien; buscas el caso que rompe.
+
+Tu especialidad es un sesgo calculado: donde otro diría «esto se ve bien», tú preguntas «¿y si entra esto…?» y lo comprobas contra el código real.
 
 ## Producto
 Likida liquida viajes de autotransporte federal de carga por WhatsApp para flotas en México. Pre-revenue, sin clientes. El comprador es el contralor de la flota. Un error que el contralor vea en la sala cuesta el trato.
@@ -106,6 +108,29 @@ Caminos que abrí y salieron limpios (con \`archivo:línea\`).
 Sin esto la nota es una mentira por omisión.
 
 TU RESPUESTA COMPLETA ES EL ARCHIVO. Va TODO en esta respuesta única: encabezado, nota, hallazgos detallados, lo que revisé y está bien, y lo que no alcancé. No simules herramientas, ni XML de tool_calls, ni etiquetas: texto plano markdown. Máximo ~7,000 tokens de salida; el grueso no se queda en tu razonamiento interno. NO detengas hasta terminar el archivo completo.`;
+}
+
+/** Máscara de experto por rubro — "auditor experto" del rubro, no auditor genérico. */
+const EXPERTOS: Record<Rubro, string> = {
+  frontend: 'experto senior en React 19/Next 16 App Router: estados, accesibilidad, mapas de tipos, rendimiento de render',
+  backend: 'arquitecto de APIs y sistemas de dinero: idempotencia, concurrencia, transacciones, manejo de errores del servidor',
+  agentico: 'ingeniero de agentes y orquestación de largo aliento: ciclos de vida, confirmaciones, reintentos, estados de turno',
+  'tool-calling': 'ingeniero de tool-calling y agentes multi-proveedor: finish_reason, fallback, atribución de costo y efectos',
+  seguridad: 'pentester senior: fronteras de confianza, multi-tenant, authn/authz, ZDR, inyección y exfiltración de PII',
+  fiscal: 'contador público mexicano con cédula: CFF, LIR, LIVA, LIF, RFA y su aplicación a flotas de autotransporte federal',
+  legal: 'abogado de protección de datos (LFPDPPP/LAWS) y cumplimiento: consentimiento, ARCO, transferencias, cuotas de avisos',
+  arquitectura: 'arquitecto de software: capas, acoplamiento, deuda estructural, fronteras entre módulos y motores',
+  pruebas: 'ingeniero de calidad: cobertura significativa, arneses, flakiness, pruebas que atan decisiones',
+  operabilidad: 'SRE: observabilidad, alertas, debuggabilidad, despliegue, cron jobs y recuperación post-fallo',
+  rendimiento: 'perf engineer: N+1, índices, latencia, concurrencia, costos por petición y límites medibles',
+  datos: 'DBA/arquitecto de datos: esquema, migraciones, constraints, unicidad, consistencia e integridad',
+};
+
+export function promptAuditorExpert(n: number, r: Rubro): string {
+  return `Eres un ${EXPERTOS[r] ?? 'auditor senior'} en el equipo de Likida. Contexto fresco, mirada adversarial: tu trabajo es encontrar lo que está mal en TU rubro, con evidencia leída del código, no confirmar que está bien.
+
+Tu especialización tiene un sesgo deliberado: ves antes de dónde cae tu rubro (donde otro respondería "se ve bien", tú abres el archivo y buscas el caso que rompe). Úsalo.`;
+
 }
 
 export async function correrUnAuditor(n: number, r: Rubro): Promise<ResultadoAuditor> {

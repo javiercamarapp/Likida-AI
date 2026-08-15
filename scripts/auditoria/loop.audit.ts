@@ -17,6 +17,7 @@ import { correrTablero } from './tablero.audit';
 import { correrSintesis } from './sintesis.audit';
 import { despacharFixers } from './fijar.audit';
 import { aplicarFixesRonda } from './aplicar.audit';
+import { correrRutinas } from './rutinas.audit';
 import { resumenLedger } from './ledger.audit';
 
 cargaEnvLocal();
@@ -63,6 +64,14 @@ export async function correrRonda(n: number): Promise<string[]> {
     log.push(`  ${fixes.length} planes de fixer → docs/auditoria-${n}/fixes-plan.md`);
   } else {
     log.push('FASE 4 (fixers/fixes) saltada — AUDIT_AUTOFIX=1 aplica con repro, AUDIT_FIX=1 planea');
+  }
+
+  if (quiere('rutinas')) {
+    log.push('RUTINAS EXPERTAS (11 agentes de la imagen — errores por clase)…');
+    const ruts = await correrRutinas(n);
+    log.push(`  ${ruts.length} rutinas: ${ruts.filter((r) => r.estado.includes('aplicados')).length} con cambios aplicados → docs/auditoria-${n}/rutinas.md`);
+  } else {
+    log.push('RUTINAS EXPERTAS: saltadas (AUDIT_SOLO=rutinas)');
   }
 
   if (quiere('tablero')) {
