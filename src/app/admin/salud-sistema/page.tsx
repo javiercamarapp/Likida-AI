@@ -1,8 +1,11 @@
-import { Activity, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
+import { HeartPulse, ExternalLink, ArrowRight } from 'lucide-react';
 import { Semaphore, EstadoVacio, type Estado } from '../ui/kit';
+import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { sentryActivo } from '@/lib/observability/sentry';
 import { alertaConfigurada } from '@/lib/observability/alerta';
 import { correoConfigurado } from '@/lib/correo/enviar';
+import { cofreConfigurado } from '@/lib/likida/conectores/cofre';
 import { envHealth, faltantes, type EnvGroup } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
@@ -29,6 +32,22 @@ export const dynamic = 'force-dynamic';
 //   · Vercel: NO hay medición disponible desde adentro (medirse a sí mismo
 //     respondiendo no dice nada: si esta página renderiza, Vercel contestó).
 //     Neutral honesto con el link al panel, que es donde sí se mide.
+//
+// AUDITORÍA DEL 14-AGO — cuatro dependencias que sí tienen medición y estaban
+// fuera del radar de esta pantalla entraron como renglones:
+//   · `LIKIDA_COFRE_LLAVE` (`cofreConfigurado()`): sin ella el cofre no puede
+//     cifrar y guardar credenciales de conectores — `cifrar()` LANZA a
+//     propósito, porque guardarlas en claro no es una opción.
+//   · `CRON_SECRET`: los tres crons (escalar, facturar, purgar) devuelven 500
+//     SIN él, a propósito — un 200 dejaría el cron verde en Vercel sin haber
+//     hecho nada.
+//   · QStash (`UPSTASH_QSTASH_TOKEN` + las dos signing keys): la cola que
+//     rompe el techo de 300 s del cron de facturación. El caso peligroso es el
+//     PARCIAL: con token pero sin llaves, el cron encola y el callback rechaza
+//     con 503 — el lote se queda encolado sin procesarse.
+//   · Stripe / Facturapi / CLABE ya se miden en Costos & Facturación — se
+//     enlaza, no se duplica la medición (dos copias del mismo semáforo se
+//     desincronizan al primer cambio).
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface Renglon {
@@ -36,6 +55,7 @@ interface Renglon {
   estado: Estado;
   etiqueta: string;
   detalle: string;
+  /** `/ruta` interna se pinta con <Link>; una URL externa abre en otra pestaña. */
   link?: { href: string; texto: string };
 }
 
@@ -96,6 +116,61 @@ function renglonAlerta(): Renglon {
   };
 }
 
+/** El cofre de credenciales de conectores (`LIKIDA_COFRE_LLAVE`). La medición
+ *  es la misma que usa la pantalla de conectores: `cofreConfigurado()` —
+ *  presente Y de al menos 32 caracteres, no solo presente. */
+function renglonCofre(): Renglon {
+  const titulo = 'Cofre de credenciales — LIKIDA_COFRE_LLAVE';
+  return cofreConfigurado()
+    ? {
+      titulo, estado: 'ok', etiqueta: 'Llave puesta (≥ 32 caracteres)',
+      detalle: 'Las credenciales de conectores (rastreo GPS) se pueden cifrar y guardar.',
+    }
+    : {
+      titulo, estado: 'warn', etiqueta: 'Ausente o demasiado corta',
+      detalle: 'El cofre no puede guardar credenciales de conectores: cifrar() lanza a propósito — el modo de falla aceptable es "no se guardó", no "se guardó en claro".',
+    };
+}
+
+/** Sin `CRON_SECRET`, los tres crons (escalar, facturar, purgar) devuelven 500
+ *  A PROPÓSITO — un 200 dejaría el cron verde en Vercel sin haber hecho nada. */
+function renglonCronSecret(): Renglon {
+  const titulo = 'Crons — CRON_SECRET';
+  return process.env.CRON_SECRET
+    ? {
+      titulo, estado: 'ok', etiqueta: 'Configurado',
+      detalle: 'Escalar, facturar y purgar lo exigen como Bearer; Vercel Cron lo manda en cada disparo.',
+    }
+    : {
+      titulo, estado: 'bad', etiqueta: 'Sin CRON_SECRET — los crons no corren',
+      detalle: 'Los tres crons devuelven 500 sin él (a propósito: un 200 dejaría el cron verde sin hacer nada). Escalación, facturación y purga están paradas.',
+    };
+}
+
+/** QStash: presencia de las TRES variables. El estado parcial (token sin
+ *  llaves) es el peligroso: el cron encola y el callback rechaza con 503. */
+function renglonQstash(): Renglon {
+  const titulo = 'Cola de facturación — QStash';
+  const token = !!process.env.UPSTASH_QSTASH_TOKEN;
+  const llaves = !!process.env.QSTASH_CURRENT_SIGNING_KEY && !!process.env.QSTASH_NEXT_SIGNING_KEY;
+  if (token && llaves) {
+    return {
+      titulo, estado: 'ok', etiqueta: 'Token y llaves de firma presentes',
+      detalle: 'El cron de facturación puede encolar lotes grandes con hasta 10 min por lote; el callback verifica la firma.',
+    };
+  }
+  if (token && !llaves) {
+    return {
+      titulo, estado: 'bad', etiqueta: 'Token SIN llaves de firma',
+      detalle: 'El cron encola el lote pero el callback lo rechaza con 503 (no puede verificar la firma): los tickets encolados no se procesan. Faltan QSTASH_CURRENT_SIGNING_KEY / QSTASH_NEXT_SIGNING_KEY.',
+    };
+  }
+  return {
+    titulo, estado: 'warn', etiqueta: 'Sin configurar',
+    detalle: 'Sin UPSTASH_QSTASH_TOKEN el cron de facturación procesa el lote inline (falla-cerrado), bajo el techo de 300 s por invocación — funciona, pero un lote grande se corta. La cola existe para romper ese techo.',
+  };
+}
+
 const NOMBRE_GRUPO: Record<EnvGroup, string> = {
   llm: 'IA (OpenRouter)',
   whatsapp: 'WhatsApp Cloud API',
@@ -130,12 +205,24 @@ export default async function SaludSistemaPage() {
         detalle: 'Falta RESEND_API_KEY o RESEND_EMAIL_DOMAIN: ningún aviso por correo sale (esperado en local).',
       },
     renglonAlerta(),
+    renglonCronSecret(),
+    renglonCofre(),
+    renglonQstash(),
     {
       titulo: 'Uptime y deploys — Vercel', estado: 'neutral', etiqueta: 'No medido',
       // Un verde fijo aquí es mentira; un neutral honesto no. Desde adentro no
       // hay nada que medir: si esta página renderiza, Vercel ya contestó.
       detalle: 'No medido desde aquí — abre el panel: historial de deploys, logs de build y runtime.',
       link: { href: 'https://vercel.com/dashboard', texto: 'Abrir el panel de Vercel' },
+    },
+    {
+      titulo: 'Stripe · Facturapi · CLABE', estado: 'neutral', etiqueta: 'Medidos en Costos & Facturación',
+      // Se ENLAZA, no se duplica: esos tres ya tienen semáforo medido allá
+      // (stripeConfigurado, facturapiConfigurado, la CLABE con su dígito
+      // verificador), y dos copias del mismo semáforo se desincronizan al
+      // primer cambio.
+      detalle: 'El cobro (Stripe), el timbrado CFDI (Facturapi) y la cuenta de transferencias ya tienen su semáforo medido en su propia página.',
+      link: { href: '/admin/costos-facturacion', texto: 'Ir a Costos & Facturación' },
     },
     ...(Object.keys(NOMBRE_GRUPO) as EnvGroup[]).map((g): Renglon => (
       salud[g]
@@ -151,42 +238,48 @@ export default async function SaludSistemaPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <Activity width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Salud del sistema</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>SRE — cada renglón está medido o dice que no lo está</span>
-        </div>
-      </header>
+    <main className="h-full">
+      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<HeartPulse width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Salud del sistema"
+        />
 
-      <div className="glass-panel overflow-hidden">
-        <section className="p-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {renglones.map((r) => (
-              <div key={r.titulo} className="card p-4 flex flex-col gap-1.5">
-                <span className="text-sm font-medium">{r.titulo}</span>
-                <Semaphore estado={r.estado} etiqueta={r.etiqueta} />
-                <span className="text-xs" style={{ color: 'var(--muted)' }}>{r.detalle}</span>
-                {r.link && (
-                  <a href={r.link.href} target="_blank" rel="noopener noreferrer"
-                    className="text-xs inline-flex items-center gap-1 hover:underline" style={{ color: 'var(--muted)' }}>
-                    {r.link.texto}
-                    <ExternalLink width={12} height={12} strokeWidth={1.75} className="shrink-0" />
-                  </a>
-                )}
-              </div>
-            ))}
+        <div className="px-5 py-5 flex-1 space-y-2.5">
+          <div className="card p-3">
+            <TituloSeccion>SRE — cada renglón está medido o dice que no lo está</TituloSeccion>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 mt-2">
+              {renglones.map((r) => (
+                <div key={r.titulo} className="hairline rounded-lg px-3 py-2.5 flex flex-col gap-1" style={{ background: 'var(--surface)' }}>
+                  <span className="text-[13px] font-medium">{r.titulo}</span>
+                  <Semaphore estado={r.estado} etiqueta={r.etiqueta} />
+                  <span className="text-xs" style={{ color: 'var(--muted)' }}>{r.detalle}</span>
+                  {r.link && (
+                    r.link.href.startsWith('/') ? (
+                      <Link href={r.link.href}
+                        className="text-xs inline-flex items-center gap-1 hover:underline" style={{ color: 'var(--muted)' }}>
+                        {r.link.texto}
+                        <ArrowRight width={12} height={12} strokeWidth={1.75} className="shrink-0" />
+                      </Link>
+                    ) : (
+                      <a href={r.link.href} target="_blank" rel="noopener noreferrer"
+                        className="text-xs inline-flex items-center gap-1 hover:underline" style={{ color: 'var(--muted)' }}>
+                        {r.link.texto}
+                        <ExternalLink width={12} height={12} strokeWidth={1.75} className="shrink-0" />
+                      </a>
+                    )
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </section>
 
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <EstadoVacio>
             Timeline de incidentes, on-call y consumo vs. rate limits agregado — no está instrumentado aquí hoy;
             Sentry y Vercel ya miden lo suyo en sus propios dashboards, enlazados arriba.
           </EstadoVacio>
-        </section>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

@@ -2,6 +2,7 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { UserRound, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { BarraPagina } from '../../dashboard/resumen-visual';
 import AvatarUploader from './avatar-uploader';
 
 export const dynamic = 'force-dynamic';
@@ -58,54 +59,58 @@ export default async function MiPerfilPage({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel h-14 flex items-center gap-2.5 px-5">
-        <UserRound width={16} height={16} strokeWidth={1.75} />
-        <span className="text-sm font-medium">Mi perfil</span>
-      </header>
+    <main className="h-full">
+      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<UserRound width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Mi perfil"
+        />
 
-      <div className="glass-panel p-6" style={{ maxWidth: 480 }}>
-        {sp.ok && (
-          <div className="flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg mb-5" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-            <CheckCircle2 width={15} height={15} strokeWidth={1.75} />
-            {sp.ok === 'avatar' ? 'Foto de perfil actualizada.' : 'Nombre guardado.'}
-          </div>
-        )}
-        {sp.error && (
-          <div className="flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg mb-5" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-            <AlertTriangle width={15} height={15} strokeWidth={1.75} />
-            {sp.error === 'avatar' ? 'No se pudo subir la foto — intenta con otra imagen.' : 'El nombre no puede quedar vacío.'}
-          </div>
-        )}
+        <div className="px-5 py-5 flex-1">
+          <div className="card p-5" style={{ maxWidth: 480 }}>
+            {sp.ok && (
+              <div className="flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg mb-5" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
+                <CheckCircle2 width={15} height={15} strokeWidth={1.75} />
+                {sp.ok === 'avatar' ? 'Foto de perfil actualizada.' : 'Nombre guardado.'}
+              </div>
+            )}
+            {sp.error && (
+              <div className="flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg mb-5" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+                <AlertTriangle width={15} height={15} strokeWidth={1.75} />
+                {sp.error === 'avatar' ? 'No se pudo subir la foto — intenta con otra imagen.' : 'El nombre no puede quedar vacío.'}
+              </div>
+            )}
 
-        <AvatarUploader nombre={s.nombre ?? 'Javier'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
+            <AvatarUploader nombre={s.nombre ?? 'Javier'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
 
-        <form action={actualizarNombre} className="space-y-4 mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
-          <div>
-            <label className="text-sm font-medium block mb-1.5">Nombre</label>
-            <input name="nombre" type="text" defaultValue={s.nombre ?? ''} required
-              className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
-          </div>
-          <button type="submit" className="text-sm px-4 py-2.5 rounded-lg font-medium transition-opacity hover:opacity-85"
-            style={{ background: 'var(--marca)', color: 'white' }}>
-            Guardar nombre
-          </button>
-        </form>
+            <form action={actualizarNombre} className="space-y-4 mt-6 pt-6 border-t" style={{ borderColor: 'var(--line2)' }}>
+              <div>
+                <label className="text-sm font-medium block mb-1.5">Nombre</label>
+                <input name="nombre" type="text" defaultValue={s.nombre ?? ''} required
+                  className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
+              </div>
+              <button type="submit" className="text-sm px-4 py-2.5 rounded-lg font-medium transition-opacity hover:opacity-85"
+                style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+                Guardar nombre
+              </button>
+            </form>
 
-        <dl className="mt-6 pt-6 border-t space-y-3 text-sm" style={{ borderColor: 'var(--line)' }}>
-          <div className="flex justify-between gap-4">
-            <dt style={{ color: 'var(--muted)' }}>Correo</dt>
-            <dd className="text-right">{(fila?.email as string) ?? '—'}</dd>
+            <dl className="mt-6 pt-6 border-t space-y-3 text-sm" style={{ borderColor: 'var(--line2)' }}>
+              <div className="flex justify-between gap-4">
+                <dt style={{ color: 'var(--muted)' }}>Correo</dt>
+                <dd className="text-right">{(fila?.email as string) ?? '—'}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt style={{ color: 'var(--muted)' }}>Rol</dt>
+                <dd className="text-right">{ROL_LABEL[s.rol] ?? s.rol}</dd>
+              </div>
+            </dl>
+            <p className="text-xs mt-4" style={{ color: 'var(--muted)' }}>
+              Correo y rol no son editables aquí — el correo está ligado a tu cuenta de acceso y el rol lo asigna otro superadmin.
+            </p>
           </div>
-          <div className="flex justify-between gap-4">
-            <dt style={{ color: 'var(--muted)' }}>Rol</dt>
-            <dd className="text-right">{ROL_LABEL[s.rol] ?? s.rol}</dd>
-          </div>
-        </dl>
-        <p className="text-xs mt-4" style={{ color: 'var(--muted)' }}>
-          Correo y rol no son editables aquí — el correo está ligado a tu cuenta de acceso y el rol lo asigna otro superadmin.
-        </p>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

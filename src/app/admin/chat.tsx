@@ -112,8 +112,10 @@ export default function ChatNegocio({ resumen, compacto = false }: { resumen: Re
   }
 
   return (
-    <div className="glass-panel p-6 h-full flex flex-col overflow-hidden">
-      <h2 className="text-sm font-semibold uppercase tracking-wide mb-4 shrink-0" style={{ color: 'var(--muted)' }}>
+    // `card` (FlowAI, 14-ago) y ya no `glass-panel`: la página que lo monta
+    // vive sobre el lienzo --g1 y las piezas son tarjetas blancas encima.
+    <div className="card p-5 h-full flex flex-col overflow-hidden">
+      <h2 className="etiqueta-mono text-[11px] font-medium uppercase mb-4 shrink-0" style={{ color: 'var(--muted)' }}>
         Pregunta a tus datos
       </h2>
       <div className="flex-1 min-h-0 overflow-y-auto">{historialView}</div>

@@ -21,6 +21,8 @@ import { IconoProveedor } from './proveedor-icono';
 import { GlobalFilter, resolverRango } from './ui/global-filter';
 import { StatCard, StatusPill, EstadoVacio, type Estado } from './ui/kit';
 import { SelectorVista } from './selector-vista';
+import Notificaciones from './notificaciones';
+import { calcularAlertas } from './calcular-alertas';
 import { AGENTES, SECCIONES } from './rutas';
 
 /** `llm_costo.fase` → cómo se llama el agente en pantalla (para la dona). */
@@ -145,9 +147,16 @@ export async function ConsolaAdmin({
           icono={<LayoutGrid {...ICONO_BARRA} />}
           titulo="Consola de Likida"
           derecha={
-            // El DÍA DE MÉXICO, no el UTC — mismo arreglo que los otros
-            // inicios (a las 6pm de CDMX el chip decía mañana, 12-ago).
-            <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaHoyMx}</ChipFecha>
+            <div className="flex items-center gap-2">
+              {/* La campana vivía en el sidebar; al volverlo gemelo del de
+                  /dashboard (14-ago) se mudó aquí, junto al resto de las
+                  señales del Resumen — mismo tradeoff que el cliente: las
+                  alertas se miran donde se miran las cifras. */}
+              <Notificaciones alertas={calcularAlertas(r, conversaciones)} />
+              {/* El DÍA DE MÉXICO, no el UTC — mismo arreglo que los otros
+                  inicios (a las 6pm de CDMX el chip decía mañana, 12-ago). */}
+              <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaHoyMx}</ChipFecha>
+            </div>
           }
         />
         <HeroSaludo

@@ -1,5 +1,6 @@
 import { ShieldAlert } from 'lucide-react';
 import { EstadoVacio } from '../ui/kit';
+import { BarraPagina } from '../../dashboard/resumen-visual';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,28 +18,28 @@ export const dynamic = 'force-dynamic';
  */
 export default function TrustSafetyPage() {
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <ShieldAlert width={16} height={16} strokeWidth={1.75} />
-        <span className="text-sm font-medium">Trust & Safety</span>
-      </header>
+    <main className="h-full">
+      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<ShieldAlert width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Trust & Safety"
+        />
 
-      <div className="glass-panel overflow-hidden">
-        <section className="p-5">
+        <div className="px-5 py-5 flex-1 space-y-2.5">
           <EstadoVacio icono={<ShieldAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             Intentos de jailbreak bloqueados, fugas de PII detectadas, cuentas bloqueadas por abuso/spam, rate
             limiting por cuenta — Likida no tiene un pipeline de detección de esto hoy.
           </EstadoVacio>
-        </section>
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            El prompt del Agente de Cuadre ya incluye instrucciones anti-inyección explícitas — trata folios,
-            tickets y mensajes del operador como datos, nunca como instrucciones
-            (<code className="font-mono">src/lib/agents/prompts.ts</code>) — pero eso es mitigación en el prompt,
-            no detección ni alertas: no hay panel de eso hoy.
-          </p>
-        </section>
+          <div className="card p-4">
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              El prompt del Agente de Cuadre ya incluye instrucciones anti-inyección explícitas — trata folios,
+              tickets y mensajes del operador como datos, nunca como instrucciones
+              (<code className="font-mono">src/lib/agents/prompts.ts</code>) — pero eso es mitigación en el prompt,
+              no detección ni alertas: no hay panel de eso hoy.
+            </p>
+          </div>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

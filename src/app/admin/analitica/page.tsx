@@ -1,6 +1,7 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
 import { LineChart } from 'lucide-react';
+import { BarraPagina } from '../../dashboard/resumen-visual';
 import { AreaChartSimple, Dona, BarChartSimple } from '../charts';
 import ContadorRetro from '../contador-retro';
 import { IconoProveedor } from '../proveedor-icono';
@@ -29,30 +30,39 @@ const FASE_LABEL: Record<string, string> = {
  * unidades de escala muy distintas (dólares vs. miles de tokens) — en un
  * solo eje compartido la serie más chica se aplastaría casi a cero, el
  * mismo motivo por el que `AreaChartSimple` ya las pide por separado (ver
- * comentario en `admin/page.tsx`). Tampoco se usa `CalendarHeatmap`/
+ * comentario en `admin/consola.tsx`). Tampoco se usa `CalendarHeatmap`/
  * `Heatmap`: la sección de abajo documenta que no hay suficiente historia
  * día a día todavía para que un mapa de calor diga algo real.
+ *
+ * Anatomía FlowAI (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
+ * (--g1). El contador Solari (45px de alto) no cabe en la barra de 44px:
+ * vive en la primera tarjeta, con la explicación de qué cifra es.
  */
 export default async function AnaliticaPage() {
   const r = await getResumenNegocio();
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel px-5 py-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2.5">
-          <LineChart width={16} height={16} strokeWidth={1.75} />
-          <span className="text-sm font-medium">Analítica & Stats</span>
-        </div>
-        {/* Total histórico de facturas (filas de `gasto`, sin filtro de
-            fecha) — no se muestra en ningún otro lado de /admin, es el
-            número que de verdad resume "cuánto ha procesado Likida" y le
-            queda natural a una página de analítica. Real, de
-            `getResumenNegocio()`. */}
-        <ContadorRetro valor={r.facturasTotal} etiqueta="Facturas procesadas — total histórico" tamaño="md" />
-      </header>
+    <main className="h-full">
+      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<LineChart width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Analítica & Stats"
+        />
 
-      <div className="glass-panel overflow-hidden">
-        <section className="p-5">
+        <div className="px-5 py-5 flex-1 space-y-2.5">
+          <div className="card p-4 flex items-center justify-between gap-4">
+            {/* Total histórico de facturas (filas de `gasto`, sin filtro de
+                fecha) — no se muestra en ningún otro lado de /admin, es el
+                número que de verdad resume "cuánto ha procesado Likida" y le
+                queda natural a una página de analítica. Real, de
+                `getResumenNegocio()`. */}
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>
+              Cada factura contada aquí es una fila real de <code className="text-xs">gasto</code> que pasó
+              por el pipeline — sin filtro de fecha, todo el histórico.
+            </p>
+            <ContadorRetro valor={r.facturasTotal} etiqueta="Facturas procesadas — total histórico" tamaño="md" />
+          </div>
+
           {r.porDia.length > 1 ? (
             <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
               <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} />
@@ -64,10 +74,8 @@ export default async function AnaliticaPage() {
               </EstadoVacio>
             </ChartCard>
           )}
-        </section>
 
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
             {r.porFase.length > 0 ? (
               <ChartCard titulo="Costo por fase" tamano="S">
                 <Dona segmentos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))} />
@@ -84,7 +92,7 @@ export default async function AnaliticaPage() {
               </ChartCard>
             ) : (
               <ChartCard titulo="Costo por modelo" tamano="M">
-                <div className="divide-y" style={{ borderColor: 'var(--line)' }}>
+                <div className="divide-y" style={{ borderColor: 'var(--line2)' }}>
                   {r.porModelo.map((m) => (
                     <div key={m.modelo} className="py-2.5 flex items-center gap-3">
                       <IconoProveedor modelo={m.modelo} />
@@ -99,9 +107,7 @@ export default async function AnaliticaPage() {
               </ChartCard>
             )}
           </div>
-        </section>
 
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           {r.facturasPorDia.some((d) => d.n > 0) ? (
             <ChartCard titulo="Facturas procesadas por día" tamano="M">
               <BarChartSimple datos={r.facturasPorDia.map((d) => ({ dia: d.dia, valor: d.n }))} alto={160} />
@@ -111,9 +117,7 @@ export default async function AnaliticaPage() {
               <EstadoVacio>Aún sin datos suficientes.</EstadoVacio>
             </ChartCard>
           )}
-        </section>
 
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <ChartCard titulo="Distribuciones y comparativas" tamano="S">
             <EstadoVacio>
               Histogramas de mensajes por conversación, mapa de calor hora×día y comparativas por cliente
@@ -122,12 +126,10 @@ export default async function AnaliticaPage() {
               en cuanto haya suficiente para que no sean solo ruido.
             </EstadoVacio>
           </ChartCard>
-        </section>
 
-        <section className="px-5 py-4 border-t" style={{ borderColor: 'var(--line)' }}>
           <EstadoVacio>Exportar CSV y reportes programados — Fase 2 del roadmap.</EstadoVacio>
-        </section>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

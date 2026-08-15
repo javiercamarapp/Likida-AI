@@ -1,5 +1,6 @@
-import { Code2 } from 'lucide-react';
+import { Code2, ExternalLink } from 'lucide-react';
 import { EstadoVacio } from '../ui/kit';
+import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,39 +17,42 @@ const REPO_URL = 'https://github.com/javiercamarapp/likida.ai';
  */
 export default function DevPage() {
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <Code2 width={16} height={16} strokeWidth={1.75} />
-        <span className="text-sm font-medium">Dev</span>
-      </header>
+    <main className="h-full">
+      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<Code2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Dev"
+        />
 
-      <div className="glass-panel overflow-hidden">
-        <section className="p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Repositorio
-          </h2>
-          <div className="mt-3">
-            <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="card p-4 block hover:shadow-md transition-shadow">
-              <div className="text-sm font-medium">Código — GitHub</div>
-              <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>javiercamarapp/likida.ai. Se enlaza en vez de reconstruirse.</div>
-            </a>
+        <div className="px-5 py-5 flex-1 space-y-2.5">
+          <div className="card p-3">
+            <TituloSeccion>Repositorio</TituloSeccion>
+            <div className="mt-2">
+              <a href={REPO_URL} target="_blank" rel="noopener noreferrer"
+                className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                style={{ background: 'var(--surface)' }}>
+                <ExternalLink width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
+                <div className="min-w-0">
+                  <div className="text-[13px] font-medium">Código — GitHub</div>
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>javiercamarapp/likida.ai. Se enlaza en vez de reconstruirse.</div>
+                </div>
+              </a>
+            </div>
           </div>
-        </section>
 
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Lo que falta
-          </h2>
-          <div className="mt-3">
-            <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Calendario de contribuciones, deploys recientes con estado de build, feature flags & kill switches,
-              PRs abiertos/tiempo de merge/cobertura/error budget, changelog — este panel no tiene integración con la
-              API de GitHub ni con la de Vercel para traer esto en vivo hoy. Vercel y Sentry ya están enlazados desde
-              Inicio/Observabilidad.
-            </EstadoVacio>
+          <div className="card p-3">
+            <TituloSeccion>Lo que falta</TituloSeccion>
+            <div className="mt-2">
+              <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                Calendario de contribuciones, deploys recientes con estado de build, feature flags & kill switches,
+                PRs abiertos/tiempo de merge/cobertura/error budget, changelog — este panel no tiene integración con la
+                API de GitHub ni con la de Vercel para traer esto en vivo hoy. Vercel y Sentry ya están enlazados desde
+                Inicio/Observabilidad.
+              </EstadoVacio>
+            </div>
           </div>
-        </section>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

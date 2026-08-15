@@ -1,4 +1,5 @@
 import { BookOpen } from 'lucide-react';
+import { BarraPagina } from '../../dashboard/resumen-visual';
 import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -13,27 +14,27 @@ export const dynamic = 'force-dynamic';
  * calidad de retrieval ni un "probador" de RAG: construir cualquiera de
  * esos widgets sería aparentar una feature que conceptualmente no existe
  * en el producto, justo lo que la regla del proyecto prohíbe.
+ *
+ * Re-envuelta en la anatomía FlowAI (14-ago): lienzo `--g1` + `BarraPagina`
+ * con el ícono de `rutas.ts`. El mensaje honesto es el mismo de antes.
  */
 export default function ConocimientoRagPage() {
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <BookOpen width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Conocimiento / RAG</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>Esta feature no existe en Likida hoy</span>
-        </div>
-      </header>
-
-      <div className="glass-panel overflow-hidden">
-        <section className="p-5">
-          {/* EstadoVacio (design system v2, ui/kit.tsx) — mismo mensaje
-              honesto de antes, ni una palabra cambiada; las dos oraciones
-              que antes eran `<p>` separados van como `<span className="block">`
-              porque EstadoVacio ya envuelve `children` en un `<p>` propio, y
-              anidar `<p>` dentro de `<p>` es HTML inválido (el navegador
-              cierra el `<p>` externo antes de tiempo y React lo marca como
-              mismatch de hidratación). Icono por defecto (Info). */}
+    <main className="h-full">
+      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<BookOpen width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Conocimiento / RAG"
+        />
+        <div className="px-5 py-5 flex-1 space-y-2.5">
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>Esta feature no existe en Likida hoy</p>
+          {/* EstadoVacio (kit compartido) — mismo mensaje honesto de antes,
+              ni una palabra cambiada; las dos oraciones que antes eran `<p>`
+              separados van como `<span className="block">` porque EstadoVacio
+              ya envuelve `children` en un `<p>` propio, y anidar `<p>` dentro
+              de `<p>` es HTML inválido (el navegador cierra el `<p>` externo
+              antes de tiempo y React lo marca como mismatch de hidratación).
+              Icono por defecto (Info). */}
           <EstadoVacio>
             <span className="block">
               Likida no usa RAG (retrieval-augmented generation) hoy — sus agentes trabajan directo sobre la
@@ -48,8 +49,8 @@ export default function ConocimientoRagPage() {
               que no existe.
             </span>
           </EstadoVacio>
-        </section>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
