@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {
   LayoutGrid, CalendarDays, Truck, DollarSign, Cpu, CheckCircle2, ReceiptText,
   UserRound, Users, MessageCircle, ChevronDown, ExternalLink, ArrowRight,
-  LifeBuoy, Sparkles, UserPlus, Handshake, HeartPulse, Bot,
+  LifeBuoy, UserPlus, Handshake, HeartPulse, Bot,
 } from 'lucide-react';
 import {
   getResumenNegocio, getConversacionesActivas, getConteosPlataforma,
@@ -354,16 +354,9 @@ export async function ConsolaAdmin({
                   </div>
                   <ArrowRight width={13} height={13} strokeWidth={1.75} className="ml-auto shrink-0" style={{ color: 'var(--muted)' }} />
                 </Link>
-                <Link href="/admin/chat"
-                  className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
-                  style={{ background: 'var(--surface)' }}>
-                  <Sparkles width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-medium">Chatea con tus datos</div>
-                    <div className="text-xs" style={{ color: 'var(--muted)' }}>Preguntas sobre el negocio</div>
-                  </div>
-                  <ArrowRight width={13} height={13} strokeWidth={1.75} className="ml-auto shrink-0" style={{ color: 'var(--muted)' }} />
-                </Link>
+                {/* El chat de IA se quitó de la consola entera (14-ago,
+                    segunda pasada del pedido "sin asistente de AI"): ni
+                    tarjeta aquí, ni item en el sidebar. */}
               </div>
             </div>
           </div>

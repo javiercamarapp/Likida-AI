@@ -16,7 +16,9 @@ import { Logo } from '../logo';
  * puerta vive en `layout.tsx`.
  *
  * EL ASISTENTE EXPANDIBLE SE FUE (14-ago-2026) — la misma decisión que el
- * rail del dashboard el 12-ago: su casa es /admin/chat. La campana de
+ * rail del dashboard el 12-ago — y en la segunda pasada (mismo día) se
+ * quitó también la página /admin/chat y sus entradas: /admin queda SIN
+ * asistente de IA en ninguna forma. La campana de
  * alertas se mudó al Resumen (`consola.tsx`), donde se miran las señales.
  */
 export default function AdminChrome({
