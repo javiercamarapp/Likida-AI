@@ -1,5 +1,6 @@
-import { FlaskConical } from 'lucide-react';
+import { ClipboardCheck } from 'lucide-react';
 import { EstadoVacio } from '../ui/kit';
+import { BarraPagina } from '../../dashboard/resumen-visual';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,23 +15,23 @@ export const dynamic = 'force-dynamic';
  */
 export default function CalidadEvalsPage() {
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <FlaskConical width={16} height={16} strokeWidth={1.75} />
-        <span className="text-sm font-medium">Calidad & Evals</span>
-      </header>
+    <main className="h-full">
+      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<ClipboardCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Calidad & Evals"
+        />
 
-      <div className="glass-panel overflow-hidden">
-        <section className="p-5">
-          <EstadoVacio icono={<FlaskConical width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+        <div className="px-5 py-5 flex-1 space-y-2.5">
+          <EstadoVacio icono={<ClipboardCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             Score de calidad, % de baja confianza, alucinaciones detectadas, CSAT, feedback 👍/👎, drift de calidad,
             evals automáticos por criterio, cola de revisión priorizada — Likida no tiene un pipeline de evaluación
             ni una tabla de feedback hoy.
             <br /><br />
             Esto es AgentOps de nivel Langfuse/Braintrust — semanas de trabajo real, Fase 4 del roadmap.
           </EstadoVacio>
-        </section>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

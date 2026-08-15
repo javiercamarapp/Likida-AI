@@ -1,67 +1,61 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { Calculator, DollarSign, CheckCircle2 } from 'lucide-react';
-import { KpiTile, EstadoVacio } from '../ui/kit';
+import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
+import { StatCard, EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
-function TituloSeccion({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-      {children}
-    </h2>
-  );
-}
+const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
 /**
  * Agente de Cuadre — la fase que compara los gastos ya capturados contra el
  * anticipo y la política de la flota. Real: `llm_costo` filtrado por
  * `fase === 'cuadre'` (`getResumenNegocio`) y `viaje` para el total de
  * viajes procesados.
+ *
+ * Re-envuelta en la anatomía FlowAI (14-ago): lienzo `--g1` + `BarraPagina`
+ * con el ícono de `rutas.ts` + `StatCard` del kit. Las cifras y su fuente
+ * no cambian. Un cero aquí es MEDIDO: cero filas en `llm_costo` para la
+ * fase es cero gasto real, no un relleno.
  */
 export default async function AgenteCuadrePage() {
   const r = await getResumenNegocio();
   const cuadre = r.porFase.find((f) => f.fase === 'cuadre');
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <Calculator width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Agente de Cuadre</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>Concilia gastos comprobados contra anticipo y política</span>
-        </div>
-      </header>
+    <main className="h-full">
+      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<Calculator width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Agente de Cuadre"
+        />
+        <div className="px-5 py-5 flex-1 space-y-2.5">
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>Concilia gastos comprobados contra anticipo y política — costo real, histórico</p>
 
-      <div className="glass-panel overflow-hidden">
-        <section className="p-5">
-          <TituloSeccion>Costo real</TituloSeccion>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-            <KpiTile
-              icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <StatCard icono={<DollarSign {...ICONO_KPI} />}
               etiqueta="Gastado en Cuadre" valor={cuadre ? cuadre.costoUsd : 0} formato="usd"
             />
-            <KpiTile
-              icono={<Calculator width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+            <StatCard icono={<Calculator {...ICONO_KPI} />}
               etiqueta="Llamadas de Cuadre" valor={cuadre ? cuadre.n : 0} formato="entero"
             />
-            <KpiTile
-              icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+            <StatCard icono={<CheckCircle2 {...ICONO_KPI} />}
               etiqueta="Viajes procesados" valor={r.viajesProcesados} formato="entero"
             />
           </div>
-        </section>
 
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <TituloSeccion>Conciliación automática vs. manual</TituloSeccion>
-          <div className="mt-2">
-            <EstadoVacio>
-              % de conciliación automática vs. manual — necesita instrumentar qué viajes requirieron intervención
-              humana, no existe hoy. Likida sabe cuántos viajes se procesaron ({r.viajesProcesados}) y cuánto costó el
-              Agente de Cuadre, pero no guarda todavía si un viaje se cerró solo o si alguien tuvo que intervenir.
-            </EstadoVacio>
+          <div className="card p-3">
+            <TituloSeccion>Conciliación automática vs. manual</TituloSeccion>
+            <div className="mt-2">
+              <EstadoVacio>
+                % de conciliación automática vs. manual — necesita instrumentar qué viajes requirieron intervención
+                humana, no existe hoy. Likida sabe cuántos viajes se procesaron ({r.viajesProcesados}) y cuánto costó el
+                Agente de Cuadre, pero no guarda todavía si un viaje se cerró solo o si alguien tuvo que intervenir.
+              </EstadoVacio>
+            </div>
           </div>
-        </section>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

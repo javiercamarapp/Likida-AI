@@ -1,4 +1,6 @@
-import { FlaskConical, ScanText, Calculator, Smartphone, Gauge, Info } from 'lucide-react';
+import Link from 'next/link';
+import { FlaskConical, ScanText, Calculator, MessagesSquare, Gauge, Info, ArrowRight } from 'lucide-react';
+import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -11,22 +13,23 @@ export const dynamic = 'force-dynamic';
  * aislado, instrumentación de latencia (que hoy no existe — ver Model Ops)
  * y una forma segura de no escribir en las tablas reales. Por eso esta
  * página NO simula un chat ni una caja de prueba: eso sería funcionalidad
- * decorativa que aparenta hacer algo y no hace nada, la regla más estricta
- * de esta noche. Es honesta sobre lo que falta y por qué.
+ * decorativa que aparenta hacer algo y no hace nada. Es honesta sobre lo
+ * que falta y por qué.
+ *
+ * Re-envuelta en la anatomía FlowAI (14-ago): lienzo `--g1` + `BarraPagina`
+ * con el ícono de `rutas.ts`. El mensaje honesto es el mismo de antes.
  */
 export default function PlaygroundPage() {
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <FlaskConical width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Playground</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>Sandbox de prueba en vivo — todavía no existe</span>
-        </div>
-      </header>
+    <main className="h-full">
+      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<FlaskConical width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Playground"
+        />
+        <div className="px-5 py-5 flex-1 space-y-2.5">
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>Sandbox de prueba en vivo — todavía no existe</p>
 
-      <div className="glass-panel overflow-hidden">
-        <section className="p-6">
           <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             <span className="block text-sm font-semibold">Esta función no existe en Likida hoy.</span>
             <span className="block text-sm mt-2" style={{ color: 'var(--muted)' }}>
@@ -44,34 +47,35 @@ export default function PlaygroundPage() {
               Referencia: <span className="font-mono">docs/superpowers/plans/2026-08-02-roadmap-admin-negocio.md</span>
             </span>
           </EstadoVacio>
-        </section>
 
-        <section className="p-6 border-t" style={{ borderColor: 'var(--line)' }}>
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Qué SÍ existe hoy</h2>
-          <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
-            Las 3 fases reales del pipeline (OCR → Cuadre → WhatsApp) corren en producción sobre datos reales de
-            viajes — su costo y volumen de llamadas ya se ven en <span className="font-medium" style={{ color: 'var(--ink)' }}>Model Ops</span> y
-            en cada página de agente. Lo que falta no es esa visibilidad; es un entorno de prueba separado de eso.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-            {[
-              { Icono: ScanText, nombre: 'Agente OCR', href: '/admin/agente-ocr' },
-              { Icono: Calculator, nombre: 'Agente de Cuadre', href: '/admin/agente-cuadre' },
-              { Icono: Smartphone, nombre: 'Agente de WhatsApp', href: '/admin/agente-whatsapp' },
-            ].map(({ Icono, nombre, href }) => (
-              <a key={nombre} href={href} className="card p-3.5 flex items-center gap-3 hover:shadow-md transition-shadow">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-                  <Icono width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-                </div>
-                <span className="text-sm font-medium">{nombre}</span>
-              </a>
-            ))}
+          <div className="card p-3">
+            <TituloSeccion>Qué SÍ existe hoy</TituloSeccion>
+            <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
+              Las 3 fases reales del pipeline (OCR → Cuadre → WhatsApp) corren en producción sobre datos reales de
+              viajes — su costo y volumen de llamadas ya se ven en <span className="font-medium" style={{ color: 'var(--ink)' }}>Model Ops</span> y
+              en cada página de agente. Lo que falta no es esa visibilidad; es un entorno de prueba separado de eso.
+            </p>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-1.5">
+              {[
+                { Icono: ScanText, nombre: 'Agente OCR', href: '/admin/agente-ocr' },
+                { Icono: Calculator, nombre: 'Agente de Cuadre', href: '/admin/agente-cuadre' },
+                { Icono: MessagesSquare, nombre: 'Agente de WhatsApp', href: '/admin/agente-whatsapp' },
+              ].map(({ Icono, nombre, href }) => (
+                <Link key={nombre} href={href}
+                  className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                  style={{ background: 'var(--surface)' }}>
+                  <Icono width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
+                  <span className="text-[13px] font-medium truncate">{nombre}</span>
+                  <ArrowRight width={13} height={13} strokeWidth={1.75} className="ml-auto shrink-0" style={{ color: 'var(--muted)' }} />
+                </Link>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-3 text-xs" style={{ color: 'var(--muted)' }}>
+              <Gauge width={13} height={13} strokeWidth={1.75} /> Latencia por llamada: sin instrumentar todavía (Model Ops → Roadmap).
+            </div>
           </div>
-          <div className="flex items-center gap-2 mt-4 text-xs" style={{ color: 'var(--muted)' }}>
-            <Gauge width={13} height={13} strokeWidth={1.75} /> Latencia por llamada: sin instrumentar todavía (Model Ops → Roadmap).
-          </div>
-        </section>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

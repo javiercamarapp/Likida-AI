@@ -1,8 +1,9 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
-import { TrendingUp, DollarSign } from 'lucide-react';
+import { Gauge, TrendingUp, DollarSign } from 'lucide-react';
 import { AreaChartSimple } from '../charts';
-import { ChartCard, KpiTile, EstadoVacio } from '../ui/kit';
+import { StatCard, EstadoVacio } from '../ui/kit';
+import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,69 +34,60 @@ export default async function CapacidadForecastPage() {
   const r = await getResumenNegocio();
   const proyeccion = proyectar(r.porDia);
 
+  const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
+
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel flex items-center gap-2.5 px-5 py-4">
-        <TrendingUp width={16} height={16} strokeWidth={1.75} />
-        <div>
-          <span className="text-sm font-medium block">Capacidad & Forecast</span>
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>Proyección de gasto de IA y capacidad de WhatsApp</span>
-        </div>
-      </header>
+    <main className="h-full">
+      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<Gauge {...ICONO} style={{ color: 'var(--muted)' }} />}
+          titulo="Capacidad & Forecast"
+        />
 
-      <div className="glass-panel overflow-hidden">
-        <section className="p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-            Proyección de costo de IA
-          </h2>
-
+        <div className="px-5 py-5 flex-1 space-y-2.5">
           {proyeccion === null ? (
-            <div className="mt-3">
-              <EstadoVacio>
-                Sin datos de costo de IA registrados todavía — no hay base para proyectar nada.
-              </EstadoVacio>
-            </div>
+            <EstadoVacio>
+              Sin datos de costo de IA registrados todavía — no hay base para proyectar nada.
+            </EstadoVacio>
           ) : (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                {r.porDia.length > 1 ? (
-                  <ChartCard titulo="Costo de IA por día" tamano="L">
-                    <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={(v) => usd(v)} />
-                  </ChartCard>
-                ) : (
-                  <EstadoVacio>
-                    Sin historial suficiente todavía para una serie — solo hay un día con datos.
-                  </EstadoVacio>
-                )}
-                <div className="flex flex-col gap-3 justify-center">
-                  <KpiTile
-                    icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                    etiqueta={`Costo diario promedio, últimos ${proyeccion.diasVentana} día${proyeccion.diasVentana === 1 ? '' : 's'}`}
-                    valor={proyeccion.promedioDiario} formato="usd"
-                  />
-                  <KpiTile
-                    icono={<TrendingUp width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                    etiqueta="Proyección a 30 días"
-                    valor={proyeccion.proyeccionMensual} formato="usd"
-                  />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <StatCard icono={<DollarSign {...ICONO} />}
+                  etiqueta={`Costo diario promedio, últimos ${proyeccion.diasVentana} día${proyeccion.diasVentana === 1 ? '' : 's'}`}
+                  valor={proyeccion.promedioDiario} formato="usd"
+                />
+                <StatCard icono={<TrendingUp {...ICONO} />}
+                  etiqueta="Proyección a 30 días"
+                  valor={proyeccion.proyeccionMensual} formato="usd"
+                />
               </div>
-              <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-                Proyección simple: costo diario promedio × 30 — no es un modelo real de forecasting, solo una
-                extrapolación honesta de la tendencia actual.
-                {proyeccion.diasVentana < 7 && ' Con tan poca historia, esta cifra es apenas indicativa.'}
-              </p>
+
+              <div className="card p-4">
+                <TituloSeccion>Costo de IA por día</TituloSeccion>
+                <div className="mt-3">
+                  {r.porDia.length > 1 ? (
+                    <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={(v) => usd(v)} />
+                  ) : (
+                    <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
+                      Sin historial suficiente todavía para una serie — solo hay un día con datos.
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
+                  Proyección simple: costo diario promedio × 30 — no es un modelo real de forecasting, solo una
+                  extrapolación honesta de la tendencia actual.
+                  {proyeccion.diasVentana < 7 && ' Con tan poca historia, esta cifra es apenas indicativa.'}
+                </p>
+              </div>
             </>
           )}
-        </section>
 
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
           <EstadoVacio>
             Números de WhatsApp libres, días para tope de cuota, onboarding self-service — no aplica hoy con 1
             número y sin sistema de aprovisionamiento.
           </EstadoVacio>
-        </section>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

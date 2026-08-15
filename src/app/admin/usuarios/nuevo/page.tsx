@@ -2,6 +2,8 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { provisionarUsuario, type RolAppUser } from '@/lib/auth/provisionar';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { redirect } from 'next/navigation';
+import { UserPlus } from 'lucide-react';
+import { BarraPagina } from '../../../dashboard/resumen-visual';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +19,9 @@ const ROLES: Array<{ valor: RolAppUser; etiqueta: string }> = [
  * ya está probada (provisionar.test.ts). El botón "+ Nuevo Agente" de la
  * referencia no tenía equivalente real en Likida (no hay agentes que un
  * superadmin cree); esto sí es una tarea real y recurrente.
+ *
+ * Anatomía FlowAI (14-ago): BarraPagina + la forma en una tarjeta blanca
+ * sobre el lienzo tenue (--g1).
  */
 export default async function NuevoUsuario() {
   await requireSuperadmin();
@@ -41,53 +46,57 @@ export default async function NuevoUsuario() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel h-14 flex items-center px-5">
-        <span className="text-sm font-medium">Nuevo usuario</span>
-      </header>
-      <main className="max-w-md">
-        <form action={crear} className="glass-panel p-6 space-y-4">
-          <div>
-            <label className="text-sm font-medium block mb-1.5">Flota</label>
-            <select name="tenantId" required className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }}>
-              {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-sm font-medium block mb-1.5">Correo</label>
-            <input name="email" type="email" required placeholder="persona@flota.com"
-              className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
-          </div>
-          <div>
-            <label className="text-sm font-medium block mb-1.5">Nombre (opcional)</label>
-            <input name="nombre" type="text" className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
-          </div>
-          <div>
-            {/* D5 (auditoría 4): la columna existía (0059), el matcher de
-                oficina la leía, y ningún alta la llenaba — la persona no
-                podía escribirle al bot sin un UPDATE a mano. */}
-            <label className="text-sm font-medium block mb-1.5">WhatsApp (opcional)</label>
-            <input name="telefono" type="text" placeholder="10 dígitos"
-              className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
-            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-              Con él, el bot reconoce a esta persona cuando escribe (avisos contestables, despacho por chat).
+    <main className="h-full">
+      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<UserPlus width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
+          titulo="Nuevo usuario"
+        />
+
+        <div className="px-5 py-5 flex-1">
+          <form action={crear} className="card p-5 space-y-4 max-w-md">
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Flota</label>
+              <select name="tenantId" required className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }}>
+                {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Correo</label>
+              <input name="email" type="email" required placeholder="persona@flota.com"
+                className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Nombre (opcional)</label>
+              <input name="nombre" type="text" className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
+            </div>
+            <div>
+              {/* D5 (auditoría 4): la columna existía (0059), el matcher de
+                  oficina la leía, y ningún alta la llenaba — la persona no
+                  podía escribirle al bot sin un UPDATE a mano. */}
+              <label className="text-sm font-medium block mb-1.5">WhatsApp (opcional)</label>
+              <input name="telefono" type="text" placeholder="10 dígitos"
+                className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
+              <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                Con él, el bot reconoce a esta persona cuando escribe (avisos contestables, despacho por chat).
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Rol</label>
+              <select name="rol" required defaultValue="flota_admin" className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }}>
+                {ROLES.map((r) => <option key={r.valor} value={r.valor}>{r.etiqueta}</option>)}
+              </select>
+            </div>
+            <button type="submit" className="w-full text-sm px-4 py-2.5 rounded-lg font-medium transition-opacity hover:opacity-85"
+              style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+              Crear usuario
+            </button>
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              Crea la cuenta de Auth y la fila en app_user (mismo camino que el script manual). El primer login (magic link) confirma la cuenta.
             </p>
-          </div>
-          <div>
-            <label className="text-sm font-medium block mb-1.5">Rol</label>
-            <select name="rol" required defaultValue="flota_admin" className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--surface)' }}>
-              {ROLES.map((r) => <option key={r.valor} value={r.valor}>{r.etiqueta}</option>)}
-            </select>
-          </div>
-          <button type="submit" className="w-full text-sm px-4 py-2.5 rounded-lg font-medium transition-opacity hover:opacity-85"
-            style={{ background: 'var(--marca)', color: 'white' }}>
-            Crear usuario
-          </button>
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            Crea la cuenta de Auth y la fila en app_user (mismo camino que el script manual). El primer login (magic link) confirma la cuenta.
-          </p>
-        </form>
-      </main>
-    </div>
+          </form>
+        </div>
+      </div>
+    </main>
   );
 }
