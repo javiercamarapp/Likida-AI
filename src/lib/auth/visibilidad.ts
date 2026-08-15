@@ -69,8 +69,9 @@ export function puedeVerArea(rol: string, area: Area): boolean {
  * vieja simplemente deja de abrir para todos, dueño incluido — el efecto
  * correcto mientras no exista nada que gatear. `/dashboard` se queda: sigue
  * siendo Resumen para todos los roles, incluido el jefe de tráfico
- * (`inicio-operacion.tsx`). Con el panel del contador vacío, `inicioDe`
- * (abajo) ya no lo manda a `/dashboard/contador` — ver esa función.
+ * (`inicio-operacion.tsx`). La RAÍZ del panel del contador volvió el
+ * 14-ago-2026 (`/dashboard/contador`, sin las 5 subrutas viejas) y con ella
+ * `inicioDe` (abajo) vuelve a mandarlo ahí — ver esa función.
  */
 const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard': 'operacion',
@@ -116,6 +117,12 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/mi-perfil': 'operacion',
 
   // Dinero — lo que el encargado no ve
+  // La casa del contador, reconstruida el 14-ago-2026 (la raíz sola; sus 5
+  // subrutas viejas no volvieron). Es `dinero` y no un área nueva: es el
+  // Resumen de quien vive del dinero y del papel, y el dueño también puede
+  // abrirla. Además es el aterrizaje de `inicioDe` para el rol que solo ve
+  // dinero — sin esta línea, ese rebote sería el bucle que esa función evita.
+  '/dashboard/contador': 'dinero',
   // AGENTES (13-ago-2026): las ventanas de los dos agentes enseñan montos
   // comprobados y colas de facturación — área dinero.
   '/dashboard/agentes/liquidacion': 'dinero',
@@ -239,14 +246,16 @@ export function inicioDe(rol: string): string {
   if (propio) return propio;
 
   if (puedeVerArea(rol, 'operacion')) return '/dashboard';
-  // El panel del contador (`/dashboard/contador`) se borró el 10-ago-2026
-  // para rehacerse desde cero — mandarlo ahí sería un bucle (`puedeVerRuta`
-  // lo negaría otra vez, sin área declarada). Mientras no exista un panel
-  // propio, aterriza en la única pantalla de `dinero` que le sigue quedando
-  // Y que de verdad es suya: Plan & Facturación, las facturas de Likida que
-  // ya necesitaba para su propia contabilidad. La rama sigue siendo por
-  // ÁREA y no por nombre de rol: cualquier rol futuro que solo vea dinero
-  // aterriza aquí sin que haya que acordarse de agregarlo.
-  if (puedeVerArea(rol, 'dinero')) return '/dashboard/suscripcion';
+  // El rol que solo ve dinero aterriza en el panel del contador. La raíz se
+  // reconstruyó el 14-ago-2026: mientras estuvo borrada (10→14-ago) esta
+  // rama mandaba a `/dashboard/suscripcion` — la única pantalla de `dinero`
+  // que era suya de verdad — porque rebotar a una ruta sin área declarada
+  // habría sido un bucle (`puedeVerRuta` niega lo no clasificado). Hoy
+  // `/dashboard/contador` está declarada como `dinero` en AREA_POR_RUTA, así
+  // que por construcción el destino sí se puede ver y el bucle no existe.
+  // La rama sigue siendo por ÁREA y no por nombre de rol: cualquier rol
+  // futuro que solo vea dinero aterriza aquí sin que haya que acordarse de
+  // agregarlo.
+  if (puedeVerArea(rol, 'dinero')) return '/dashboard/contador';
   return '/sin-acceso';
 }

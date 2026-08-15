@@ -95,8 +95,11 @@ export const ABAJO: Item[] = [
   { href: '/dashboard/notificaciones', nombre: 'Notificaciones', Icono: BellRing },
   { href: '/dashboard/mi-perfil', nombre: 'Mi perfil', Icono: UserRound },
   { href: '/dashboard/soporte', nombre: 'Centro de ayuda', Icono: LifeBuoy },
-  // Suscripción vive aquí y no en una categoría: es la casa de aterrizaje
-  // del contador (inicioDe) y nada debe ser alcanzable solo tecleando URL.
+  // Suscripción vive aquí y no en una categoría: es el plan de la cuenta, no
+  // un área del negocio, y nada debe ser alcanzable solo tecleando URL. Fue
+  // el aterrizaje del contador mientras su panel estuvo borrado (10→14-ago-
+  // 2026); hoy `inicioDe` lo manda a /dashboard/contador, cuyo link de
+  // Resumen lo pinta el sidebar directamente (sidebar-nav.tsx).
   { href: '/dashboard/suscripcion', nombre: 'Plan y facturación', Icono: CreditCard },
   { href: '/dashboard/configuracion', nombre: 'Configuración', Icono: Settings },
 ];

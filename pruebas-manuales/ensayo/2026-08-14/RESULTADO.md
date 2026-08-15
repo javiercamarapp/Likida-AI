@@ -36,7 +36,7 @@ agente. Se recorrió el camino de respaldo que el propio guion designa para
 `operador`, `viaje`, `gasto`, `liquidacion`: 0 filas. El guion asume viaje
 abierto Silao→Nuevo Laredo con anticipo $10,600 y 2 gastos. **Arreglado**:
 re-sembrado con `supabase/seed.sql` vía MCP y verificado contra la base
-(5 operadores, `VJ-2026-0847` abierto con anticipo $10,600, 2 gastos, 3
+(5 operadores, `VJ-2026-0001` abierto con anticipo $10,600, 2 gastos, 3
 liquidaciones de historial). Por qué estaba en cero no quedó determinado — la
 ronda 3 la dejó sembrada; nada en el repo la borra.
 
