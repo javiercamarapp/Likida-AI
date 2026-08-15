@@ -41,10 +41,13 @@ function Fila({ item, pathname }: { item: Item; pathname: string }) {
 }
 
 function Seccion({ titulo, items, pathname }: { titulo: string; items: Item[]; pathname: string }) {
-  // Plegable como su gemelo del dashboard; arranca abierta si la página
-  // activa vive adentro (no perder de dónde vienes al cargar). El estado es
+  // ARRANCA ABIERTA, exactamente como su gemelo del dashboard: "un sidebar
+  // que amanece plegado esconde el producto" (dashboard/sidebar-nav.tsx). La
+  // primera versión de este archivo arrancaba plegada salvo la sección
+  // activa, y en producción /admin se veía como cinco encabezados pelones —
+  // justo el "no sigue el estilo" que Javier reportó (14-ago). El estado es
   // de la sesión — no persiste a propósito.
-  const [plegada, setPlegada] = useState(() => !items.some((it) => it.href === pathname));
+  const [plegada, setPlegada] = useState(false);
   if (items.length === 0) return null;
   return (
     <div>

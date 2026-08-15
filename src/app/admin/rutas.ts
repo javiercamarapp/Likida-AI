@@ -1,5 +1,5 @@
 import {
-  LayoutGrid, ScanText, Calculator, MessagesSquare, MessageCircle, Sparkles, UserPlus,
+  LayoutGrid, ScanText, Calculator, MessagesSquare, MessageCircle, UserPlus,
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
   Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake,
@@ -36,7 +36,6 @@ export const NEGOCIO: Item[] = [
   { href: '/admin/cobranza', nombre: 'Cobranza', Icono: Receipt },
   { href: '/admin/crecimiento', nombre: 'Crecimiento', Icono: TrendingUp },
   { href: '/admin/ejecutivo', nombre: 'Ejecutivo / Board', Icono: Presentation },
-  { href: '/admin/chat', nombre: 'Chatea con tus Datos', Icono: Sparkles },
   { href: '/admin/usuarios/nuevo', nombre: 'Nuevo usuario', Icono: UserPlus },
 ];
 
