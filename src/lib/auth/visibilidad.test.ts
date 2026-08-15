@@ -35,11 +35,12 @@ describe('quién ve qué área', () => {
 });
 
 describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () => {
-  // El panel del contador (`/dashboard/contador` y sus 5 subrutas) se borró
-  // el 10-ago-2026 junto con las 17 de dueño de flota — quedan fuera de esta
-  // lista, pero `usuarios`/`configuracion`/`politicas`/`combustible-casetas`
-  // (área `dinero`/`administracion`) siguen existiendo y le siguen negadas.
+  // El panel del contador se borró el 10-ago-2026 junto con las 17 de dueño
+  // de flota; su RAÍZ volvió el 14-ago (`/dashboard/contador`, área `dinero`)
+  // y por eso entra a esta lista — el margen y los acreditables de la flota
+  // son exactamente lo que el jefe de tráfico no ve.
   const PROHIBIDAS = [
+    '/dashboard/contador',
     '/dashboard/combustible-casetas',
     // La bandeja de huérfanos (F2) enseña montos — dinero, no operación.
     '/dashboard/huerfanos',
@@ -64,12 +65,11 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
   });
 });
 
-describe('el contador — sin panel propio, pero la operación le sigue cerrada', () => {
-  // El panel del contador se borró el 10-ago-2026 para rehacerse desde
-  // cero — `FISCAL` (rutas.ts) está vacío mientras tanto. `inicioDe` ya no
-  // lo manda ahí: aterriza en Suscripción, la única pantalla de `dinero`
-  // que le sigue quedando de verdad (las facturas de Likida son su propia
-  // contabilidad, no un préstamo de la del dueño).
+describe('el contador — su panel volvió, y la operación le sigue cerrada', () => {
+  // El panel del contador se borró el 10-ago-2026 y su raíz se reconstruyó
+  // el 14-ago (`/dashboard/contador`, área `dinero`). Mientras estuvo
+  // borrado, `inicioDe` lo mandaba a Suscripción; hoy vuelve a mandarlo a
+  // su casa — ver el describe de rebotes, abajo.
   it('AGENTES: liquidación/facturas/cobranza son dinero (el contador los ve); Conductores es operación', () => {
     expect(AGENTES.map((i) => i.href)).toEqual([
       '/dashboard/agentes/liquidacion', '/dashboard/agentes/facturas',
@@ -94,9 +94,25 @@ describe('el contador — sin panel propio, pero la operación le sigue cerrada'
     for (const href of DINERO) expect(puedeVerRuta('encargado', href)).toBe(false);
   });
 
-  it('aterriza en Suscripción, no en un panel que ya no existe', () => {
-    expect(inicioDe('contador')).toBe('/dashboard/suscripcion');
+  it('aterriza en su panel reconstruido, y su propio rol lo ve — sin bucle', () => {
+    expect(inicioDe('contador')).toBe('/dashboard/contador');
     expect(puedeVerRuta('contador', inicioDe('contador'))).toBe(true);
+  });
+
+  // ── /dashboard/contador (raíz reconstruida el 14-ago-2026) ──────────────
+  //
+  // SE PRUEBA EL CAMINO, NO EL RENDER — mismo criterio que Suscripción: una
+  // ruta sin área declarada cae a `undefined` y `puedeVerRuta` la niega a
+  // TODOS, dueño incluido, sin un solo error. Ya pasó una vez.
+  it('/dashboard/contador es dinero: contador, dueño y superadmin SÍ llegan', () => {
+    expect(areaDeRuta('/dashboard/contador')).toBe('dinero');
+    expect(puedeVerRuta('contador', '/dashboard/contador')).toBe(true);
+    expect(puedeVerRuta('flota_admin', '/dashboard/contador')).toBe(true);
+    expect(puedeVerRuta('superadmin', '/dashboard/contador')).toBe(true);
+  });
+
+  it('/dashboard/contador le está negada al encargado aunque teclee la URL', () => {
+    expect(puedeVerRuta('encargado', '/dashboard/contador')).toBe(false);
   });
 
   // El contador no despacha NI consulta el registro operativo: Viajes y
@@ -216,13 +232,13 @@ describe('a dónde se rebota a cada quien', () => {
   });
 
   it('al contador NO a /dashboard — lo rebotaría otra vez y sería un bucle', () => {
-    // Iba a `/dashboard/contador` (su panel) hasta el 10-ago-2026, cuando ese
-    // panel se borró para rehacerse desde cero; ahora aterriza en Suscripción
-    // — mandarlo a la ruta vieja SÍ sería el bucle que esto vigila. Lo que se
-    // prueba no es CUÁL es, sino las dos propiedades que hacen que el rebote
-    // no sea un bucle: no es `/dashboard`, y su propio rol la ve.
+    // Iba a `/dashboard/contador` hasta el 10-ago-2026 (panel borrado), a
+    // Suscripción del 10 al 14, y de vuelta a su panel reconstruido desde el
+    // 14-ago. Lo que se prueba no es solo CUÁL es, sino las dos propiedades
+    // que hacen que el rebote no sea un bucle: no es `/dashboard`, y su
+    // propio rol la ve (o sea: la ruta está declarada en AREA_POR_RUTA).
     expect(inicioDe('contador')).not.toBe('/dashboard');
-    expect(inicioDe('contador')).toBe('/dashboard/suscripcion');
+    expect(inicioDe('contador')).toBe('/dashboard/contador');
     expect(puedeVerRuta('contador', inicioDe('contador'))).toBe(true);
   });
 

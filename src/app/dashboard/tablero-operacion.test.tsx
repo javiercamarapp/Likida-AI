@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { TableroCifras } from './tablero-operacion';
+import { TableroCifras, TablaViajesOperacion, type FilaViajeOperacion } from './tablero-operacion';
 import type { TableroOperacion } from '@/lib/likida/operacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -40,5 +40,55 @@ describe('TableroCifras — la grilla ya no aprieta a 6 columnas', () => {
     const html = renderToStaticMarkup(<TableroCifras t={TABLERO} />);
     expect(html).toContain('Sin evidencia de entrega');
     expect(html).toContain('Unidades disponibles');
+  });
+});
+
+// ── La tabla de viajes del ENCARGADO (14-ago-2026) ─────────────────────────
+//
+// NO es `TablaViajes` (resumen-visual.tsx): aquella imprime el anticipo y el
+// "Ver" al detalle de la liquidación — pantallas de dinero. Esta prueba
+// vigila que la versión del encargado no las herede por accidente: el tipo
+// `FilaViajeOperacion` ya no tiene campo de anticipo, pero el tipo no impide
+// que alguien agregue una columna nueva con un `mxn()` adentro.
+
+function fila(extra: Partial<FilaViajeOperacion>): FilaViajeOperacion {
+  return {
+    id: 'v1', folio: 'VJ-001', origen: 'CDMX', destino: 'Monterrey',
+    estatus: 'abierto', operadorNombre: 'Juan Pérez', fechaInicio: '2026-08-10',
+    ...extra,
+  };
+}
+
+describe('TablaViajesOperacion — folio/ruta/chofer/estatus/fecha, CERO pesos', () => {
+  it('pinta las columnas del encargado y ningún signo de pesos', () => {
+    const html = renderToStaticMarkup(<TablaViajesOperacion viajes={[fila({})]} />);
+    expect(html).toContain('VJ-001');
+    expect(html).toContain('CDMX → Monterrey');
+    expect(html).toContain('Juan Pérez');
+    expect(html).toContain('Abierto');
+    // La garantía del rol: ni la columna ni el símbolo del dueño.
+    expect(html).not.toContain('Anticipo');
+    expect(html).not.toContain('$');
+  });
+
+  it('sin chofer asignado lo dice, y un estatus fuera del dominio se pinta crudo', () => {
+    const html = renderToStaticMarkup(
+      <TablaViajesOperacion viajes={[fila({ id: 'v2', operadorNombre: null, estatus: 'raro' })]} />,
+    );
+    expect(html).toContain('Sin asignar');
+    expect(html).toContain('raro');
+  });
+
+  it('vacía no inventa filas: dice que aún no hay viajes', () => {
+    const html = renderToStaticMarkup(<TablaViajesOperacion viajes={[]} />);
+    expect(html).toContain('Aún no hay viajes registrados');
+    expect(html).not.toContain('<table');
+  });
+
+  it('con más de 8 enseña los 8 más recientes y LO DICE — el tope no es silencioso', () => {
+    const muchas = Array.from({ length: 12 }, (_, i) => fila({ id: `v${i}`, folio: `VJ-${i}` }));
+    const html = renderToStaticMarkup(<TablaViajesOperacion viajes={muchas} />);
+    expect(html).toContain('Los 8 más recientes de 12 cargados');
+    expect(html).not.toContain('VJ-11');
   });
 });

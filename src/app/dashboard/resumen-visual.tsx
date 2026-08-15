@@ -96,8 +96,11 @@ export interface FilaViaje {
 }
 
 /** `viaje.estatus` solo admite estos tres (constraint `viaje_estatus_dominio`).
- *  Un valor fuera del dominio se pinta crudo en neutro — visible, no roto. */
-const PILL_ESTATUS: Record<string, { estado: Estado; etiqueta: string }> = {
+ *  Un valor fuera del dominio se pinta crudo en neutro — visible, no roto.
+ *  Exportado porque `tablero-operacion.tsx` (la tabla de viajes SIN pesos del
+ *  encargado) pinta el mismo estatus: dos mapas se separan al primer estatus
+ *  nuevo, que es exactamente como se rompió `CONCEPTO` dos veces. */
+export const PILL_ESTATUS: Record<string, { estado: Estado; etiqueta: string }> = {
   liquidado: { estado: 'ok', etiqueta: 'Liquidado' },
   en_cuadre: { estado: 'warn', etiqueta: 'En cuadre' },
   abierto: { estado: 'neutral', etiqueta: 'Abierto' },

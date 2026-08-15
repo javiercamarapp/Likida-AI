@@ -40,9 +40,10 @@ beforeEach(() => { redirect.mockClear(); requireSessionTenant.mockReset(); });
 // del panel del contador (contador, contador/deducciones, contador/cfdi,
 // contador/combustible, contador/retenciones, contador/liquidaciones) se
 // borraron el 10-ago-2026 para rehacerse desde cero — salieron de esta
-// lista junto con la página.
+// lista junto con la página. La RAÍZ del panel del contador volvió el
+// 14-ago-2026 y con ella su renglón aquí.
 const RUTAS = [
-  '/dashboard',
+  '/dashboard', '/dashboard/contador',
   '/dashboard/soporte',
   '/dashboard/combustible-casetas', '/dashboard/suscripcion',
   '/dashboard/usuarios', '/dashboard/politicas', '/dashboard/configuracion',
@@ -133,15 +134,15 @@ describe('previsualizar solo quita visibilidad, y solo a un superadmin', () => {
 
   it('el rebote CONSERVA la previsualización — no se apaga sola a media navegación', async () => {
     // /dashboard es de `operacion`: el contador no la ve y se le rebota a su
-    // aterrizaje (Suscripción — su panel propio se borró el 10-ago-2026).
-    // Sin el sufijo, ese salto lo dejaba ahí con sus propios ojos de
-    // superadmin: menú completo, sin cinta, y creyendo que eso era lo que
-    // ve un contador.
+    // aterrizaje (su panel, reconstruido el 14-ago-2026 — mientras estuvo
+    // borrado, del 10 al 14, el aterrizaje fue Suscripción). Sin el sufijo,
+    // ese salto lo dejaba ahí con sus propios ojos de superadmin: menú
+    // completo, sin cinta, y creyendo que eso era lo que ve un contador.
     requireSessionTenant.mockResolvedValue(SUPER);
     await expect(
       resolverTenantEfectivo('/dashboard', { vista: 'demo', rol: 'contador' }),
     ).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirect).toHaveBeenCalledWith('/dashboard/suscripcion?vista=demo&rol=contador');
+    expect(redirect).toHaveBeenCalledWith('/dashboard/contador?vista=demo&rol=contador');
   });
 
   it('`?tenant=` gana a `?vista=` en el sufijo del rebote, igual que en sufijoTenant', async () => {
@@ -149,7 +150,7 @@ describe('previsualizar solo quita visibilidad, y solo a un superadmin', () => {
     await expect(
       resolverTenantEfectivo('/dashboard', { tenant: 't-7', vista: 'demo', rol: 'contador' }),
     ).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirect).toHaveBeenCalledWith('/dashboard/suscripcion?tenant=t-7&rol=contador');
+    expect(redirect).toHaveBeenCalledWith('/dashboard/contador?tenant=t-7&rol=contador');
   });
 
   it('a un rol real NO se le arrastra `?rol=` en el rebote', async () => {
@@ -159,7 +160,7 @@ describe('previsualizar solo quita visibilidad, y solo a un superadmin', () => {
     await expect(
       resolverTenantEfectivo('/dashboard', { rol: 'flota_admin' }),
     ).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirect).toHaveBeenCalledWith('/dashboard/suscripcion');
+    expect(redirect).toHaveBeenCalledWith('/dashboard/contador');
   });
 
   it('el destino del rebote sí lo puede ver el rol previsualizado — no hay bucle', async () => {

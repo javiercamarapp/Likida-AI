@@ -88,13 +88,22 @@ export default function SidebarNav({ rol }: { rol: string }) {
   const pathname = usePathname();
   const { sufijo, rolMenu } = useSufijoYRol(rol);
   const visibles = (items: Item[]) => items.filter((it) => puedeVerRuta(rolMenu, it.href));
-  const resumenActivo = pathname === '/dashboard';
+  // El Resumen de CADA QUIEN, un solo link. `/dashboard` es de `operacion`,
+  // así que el contador no lo ve — su casa es `/dashboard/contador` (dinero,
+  // reconstruida el 14-ago-2026) y sin esta rama se quedaba sin link de
+  // Resumen, con su panel alcanzable solo tecleando la URL. El orden importa:
+  // el dueño y el superadmin ven las dos rutas, y su Resumen sigue siendo
+  // `/dashboard` — nunca se pintan los dos links.
+  const hrefResumen = puedeVerRuta(rolMenu, '/dashboard')
+    ? '/dashboard'
+    : puedeVerRuta(rolMenu, '/dashboard/contador') ? '/dashboard/contador' : null;
+  const resumenActivo = pathname === hrefResumen;
 
   return (
     <>
-      {puedeVerRuta(rolMenu, '/dashboard') && (
+      {hrefResumen && (
         <div>
-          <Link href={`/dashboard${sufijo}`} className={claseItem(resumenActivo)} style={estiloItem(resumenActivo)} title="Resumen">
+          <Link href={`${hrefResumen}${sufijo}`} className={claseItem(resumenActivo)} style={estiloItem(resumenActivo)} title="Resumen">
             <LayoutGrid {...estiloIcono(resumenActivo)} /> <span className="sb-texto truncate">Resumen</span>
           </Link>
         </div>

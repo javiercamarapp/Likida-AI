@@ -147,7 +147,7 @@ export async function InicioContenido({
   const alertas: Array<{ texto: string; href: string }> = [];
   if (kpis && kpis.porRevisar > 0) {
     alertas.push({
-      texto: `${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? '' : 'es'} esperan tu revisión`,
+      texto: `${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? ' espera' : 'es esperan'} tu revisión`,
       href: `/dashboard/agentes/liquidacion${sufijo}`,
     });
   }
@@ -159,7 +159,7 @@ export async function InicioContenido({
   }
   if (huerfanosPendientes !== null && huerfanosPendientes !== undefined && huerfanosPendientes > 0) {
     alertas.push({
-      texto: `${huerfanosPendientes} comprobante${huerfanosPendientes === 1 ? '' : 's'} sin viaje esperan que alguien los acomode`,
+      texto: `${huerfanosPendientes} comprobante${huerfanosPendientes === 1 ? ' sin viaje espera que alguien lo acomode' : 's sin viaje esperan que alguien los acomode'}`,
       href: `/dashboard/huerfanos${sufijo}`,
     });
   }
