@@ -54,7 +54,7 @@ export async function correrRonda(n: number): Promise<string[]> {
   }
 
   if (quiere('aplicar') && process.env.AUDIT_AUTOFIX === '1') {
-    log.push(`FASE 4* (fixes APLICADOS; ${hallazgos.length} verificados)…`);
+    log.push('FASE 4* (fixes APLICADOS)…');
     const aplicados = await aplicarFixesRonda(n);
     log.push(`  ${aplicados.filter((r) => r.estado === 'APLICADO').length} aplicados · ${aplicados.filter((r) => r.estado === 'FALSO_POSITIVO').length} falsos · ${aplicados.filter((r) => r.estado === 'ERROR').length} rechazados → docs/auditoria-${n}/fixes-aplicadas.md`);
   } else if (quiere('fixers') && process.env.AUDIT_FIX === '1') {
