@@ -38,8 +38,15 @@ export interface ResultadoFixAplicado {
 const repo = process.cwd();
 
 function arbolLimpio(): boolean {
+  // Nuestros propios artefactos (docs/auditoria-N, scripts/auditoria,
+  // vitest.audit.config) no cuentan como "árbol sucio": son productos del
+  // pipeline. El gate protege el CÓDIGO y el trabajo humano, no nuestros logs.
   const r = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8', cwd: repo });
-  return (r.stdout ?? '').trim().length === 0;
+  const lineas = (r.stdout ?? '').split('\n').filter((l) => l.trim().length > 0).map((l) => l.slice(3));
+  const ajenos = lineas.filter(
+    (l) => !l.startsWith('docs/auditoria-') && !l.startsWith('scripts/auditoria') && l !== 'vitest.audit.config.ts',
+  );
+  return ajenos.length === 0;
 }
 
 function leerArchivo(ruta: string): string[] | null {
