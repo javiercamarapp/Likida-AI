@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit",
     "seed": "bash scripts/seed.sh",
     "setup": "npm install && npm run seed",
-    "ticket": "vitest run arnes_ticket_real"
+    "ticket": "vitest run arnes_ticket_real",
+    "auditoria": "vitest run --config vitest.audit.config.ts scripts/auditoria/loop.audit.ts",
+    "auditoria:baselina": "vitest run --config vitest.audit.config.ts scripts/auditoria/loop.audit.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.0.0",
