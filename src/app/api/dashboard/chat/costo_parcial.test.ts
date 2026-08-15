@@ -31,7 +31,10 @@ vi.mock('@/lib/supabase/admin', () => ({
       const b: Record<string, unknown> = {};
       const chain = () => b;
       Object.assign(b, {
-        select: chain, eq: chain, gte: chain, abortSignal: chain,
+        select: chain, eq: chain, gte: chain, order: chain, abortSignal: chain,
+        // `traerTodo` pagina con `.range()`: una página vacía es su prueba de
+        // término, así que este mock ("no hay gasto hoy") lo satisface igual.
+        range: () => Promise.resolve({ data: [], error: null }),
         then: (res: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(res),
       });
       return b;

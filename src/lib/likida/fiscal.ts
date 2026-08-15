@@ -29,7 +29,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { exigir, traerTodo, conteo } from './pg';
+import { traerTodo, traerPorIds, conteo } from './pg';
 import { round2 } from '@/lib/formato';
 import { armar as armarPorFacturar } from './facturacion/pendientes';
 import { evaluarTope15, type ResultadoTope15 } from './periodo/combustible';
@@ -819,19 +819,27 @@ export async function getGastosFiscales(
   // El contexto del viaje va en una segunda consulta y no en un join anidado:
   // el `select` con relación de PostgREST no pagina el lado embebido, así que
   // en una flota grande el join silenciosamente devuelve menos de lo que hay.
+  //
+  // Y el reemplazo tenía EL MISMO techo por el otro lado (auditoría de escala
+  // 15k): un `.in('id', viajeIds)` con miles de ids también se recorta a 1,000
+  // en silencio — con 15,000 viajes/mes, todo gasto cuyo viaje pasara del
+  // corte salía SIN folio y SIN operador en la pantalla del contador, sin
+  // marca alguna. `traerPorIds` parte en tandas que no pueden tocar el techo.
   const viajeIds = Array.from(new Set(filas.map((f) => f.viaje_id as string).filter(Boolean)));
   const contexto = new Map<string, { folio: string | null; operador: string | null }>();
-  if (viajeIds.length) {
-    const res = await supabaseAdmin()
+  const viajes = await traerPorIds(
+    viajeIds,
+    (tanda) => supabaseAdmin()
       .from('viaje')
       .select('id, folio, operador:operador_id(nombre)')
       .eq('tenant_id', tenantId)
-      .in('id', viajeIds);
-    for (const v of exigir(res, 'getGastosFiscales.viaje') ?? []) {
-      const op = v.operador as { nombre?: string } | Array<{ nombre?: string }> | null;
-      const nombre = Array.isArray(op) ? (op[0]?.nombre ?? null) : (op?.nombre ?? null);
-      contexto.set(v.id as string, { folio: (v.folio as string) || null, operador: nombre });
-    }
+      .in('id', tanda),
+    'getGastosFiscales.viaje',
+  );
+  for (const v of viajes) {
+    const op = v.operador as { nombre?: string } | Array<{ nombre?: string }> | null;
+    const nombre = Array.isArray(op) ? (op[0]?.nombre ?? null) : (op?.nombre ?? null);
+    contexto.set(v.id as string, { folio: (v.folio as string) || null, operador: nombre });
   }
 
   return filas.map((f) => {

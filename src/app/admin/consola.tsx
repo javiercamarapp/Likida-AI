@@ -8,6 +8,7 @@ import {
   getResumenNegocio, getConversacionesActivas, getConteosPlataforma,
   getUltimaCorridaPorAgente, getCorridasRecientes,
 } from '@/lib/admin/negocio';
+import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { usd, numero } from '@/lib/utils';
 import { saludo, ahoraMs } from '@/lib/saludo';
@@ -100,12 +101,16 @@ export async function ConsolaAdmin({
   const filtro = resolverRango(sp?.rango, '7');
   const { rango, ventanaDias } = filtro;
 
-  const [r, conversaciones, conteos, porAgente, corridasRecientes] = await Promise.all([
+  const [r, conversaciones, conteos, porAgente, corridasRecientes, bandeja] = await Promise.all([
     getResumenNegocio(undefined, ventanaDias),
     getConversacionesActivas(),
     getConteosPlataforma(),
     getUltimaCorridaPorAgente(),
     getCorridasRecientes(8),
+    // La bandeja NUNCA lanza: cada fuente cae por su lado y los conteos de
+    // esa fuente llegan en null ("no se pudo leer" ≠ 0). Por eso puede vivir
+    // en una consola que, en sus lecturas core, prefiere caerse entera.
+    getBandejaEscalaciones(ahoraMs()),
   ]);
 
   // AUDITORÍA 10, ALTO — "Flota (solo el demo)" era texto fijo: con la base
@@ -137,6 +142,18 @@ export async function ConsolaAdmin({
   };
   const bitacoraVacia = porAgente.every((a) => a.ultima === null);
 
+  // ── LA MÉTRICA NORTE: % de liquidaciones sin humano — ESTADO ACTUAL ──────
+  // Numerador y denominador de lecturas que ya se pagaron: el total es el
+  // head-count de `getConteosPlataforma` y las en `revisar` son la MISMA
+  // lectura que pinta /admin/escalaciones (bandeja.conteos). Lo que el dato
+  // NO puede afirmar: "nunca la tocó un humano" — `guardar_liquidacion_tx`
+  // hace upsert y un re-cuadre reescribe el estatus sin dejar rastro de que
+  // pasó por la bandeja (ver getLiquidacionesEnRevisar). Por eso el rótulo
+  // dice "hoy", y el pie dice de dónde sale el número.
+  const liqTotal = conteos.liquidaciones;
+  const liqEnRevision = bandeja.conteos.liquidacionesRevisar;
+  const liqSinHumano = liqEnRevision === null ? null : liqTotal - liqEnRevision;
+
   return (
     // El scroll vive en el marco del layout; el lienzo del contenido es
     // TENUE (`--g1`) y las piezas son tarjetas blancas encima — la anatomía
@@ -152,7 +169,7 @@ export async function ConsolaAdmin({
                   /dashboard (14-ago) se mudó aquí, junto al resto de las
                   señales del Resumen — mismo tradeoff que el cliente: las
                   alertas se miran donde se miran las cifras. */}
-              <Notificaciones alertas={calcularAlertas(r, conversaciones)} />
+              <Notificaciones alertas={calcularAlertas(r, conversaciones, bandeja.conteos)} />
               {/* El DÍA DE MÉXICO, no el UTC — mismo arreglo que los otros
                   inicios (a las 6pm de CDMX el chip decía mañana, 12-ago). */}
               <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaHoyMx}</ChipFecha>
@@ -214,6 +231,26 @@ export async function ConsolaAdmin({
             <StatCard icono={<MessageCircle {...ICONO_KPI} />}
               etiqueta="Conversaciones de WhatsApp" valor={conteos.conversacionesWa} formato="entero"
             />
+            {/* La métrica norte. SIEMPRE con el absoluto al lado ("X de N") —
+                un porcentaje suelto sobre 2 liquidaciones se leería como una
+                estadística que no es. Tres ramas honestas: no se pudo leer,
+                no hay liquidaciones (no hay % que afirmar), y el % real. */}
+            {liqSinHumano === null ? (
+              <StatCard icono={<Bot {...ICONO_KPI} />}
+                etiqueta="Liquidaciones (total) — el % sin humano no se pudo medir" valor={liqTotal} formato="entero"
+                nota="La lectura de la bandeja «revisar» falló: hay total contado, pero no cuántas esperan humano."
+              />
+            ) : liqTotal === 0 ? (
+              <StatCard icono={<Bot {...ICONO_KPI} />}
+                etiqueta="Liquidaciones sin humano — aún no hay liquidaciones" valor={0} formato="entero"
+                nota="Sin liquidaciones generadas no hay porcentaje que afirmar."
+              />
+            ) : (
+              <StatCard icono={<Bot {...ICONO_KPI} />}
+                etiqueta="Liquidaciones sin humano — hoy" valor={(liqSinHumano / liqTotal) * 100} formato="porcentaje"
+                nota={`${numero(liqSinHumano)} de ${numero(liqTotal)} fuera de la bandeja «revisar» AHORA — es el estatus actual, no historial (un re-cuadre lo reescribe).`}
+              />
+            )}
           </div>
           {r.tenants <= 1 && (
             <p className="text-xs" style={{ color: 'var(--muted)' }}>

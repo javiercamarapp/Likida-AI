@@ -19,7 +19,13 @@ vi.mock('@/lib/supabase/admin', () => ({
       if (tabla !== 'viaje') throw new Error(`informes_wa solo consulta viaje; pidió ${tabla}`);
       const b = {
         select: () => b, eq: () => b, in: () => b, order: () => b,
-        range: async () => ({ data: filasAnticipo, error: errorAnticipo }),
+        // `traerTodo` pagina con `.range(d, h)`: el mock rebana como lo haría
+        // el servidor — la página que empieza más allá del final llega vacía
+        // y con eso el bucle sabe que terminó.
+        range: async (d: number, h: number) => ({
+          data: filasAnticipo === null ? null : filasAnticipo.slice(d, h + 1),
+          error: errorAnticipo,
+        }),
       };
       return b;
     },

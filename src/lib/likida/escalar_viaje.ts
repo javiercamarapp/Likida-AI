@@ -102,6 +102,14 @@ export async function viajesSinAceptar(ahora: Date = new Date(), horas: number =
     .is('escalado_en', null)
     .not('avisado_en', 'is', null)
     .lte('avisado_en', limite)
+    // MÁS VIEJO PRIMERO (auditoría de escala 15k): sin `.order()`, Postgres
+    // devuelve los 100 en el orden que quiera — con más de 100 vencidos entre
+    // corridas, un viaje concreto podía quedarse fuera del lote PARA SIEMPRE
+    // sin rastro de que existía. Ordenado por antigüedad, el lote es una cola
+    // que drena: lo que no cupo hoy encabeza la corrida siguiente (escalar
+    // sella `escalado_en` y lo saca del filtro). El techo de 100 por corrida
+    // se queda: es el presupuesto de envíos del cron, no una ventana de vista.
+    .order('avisado_en', { ascending: true })
     .limit(100);
 
   if (error) throw new Error(`viajesSinAceptar: ${error.message}`);

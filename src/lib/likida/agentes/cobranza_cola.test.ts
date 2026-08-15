@@ -26,6 +26,10 @@ vi.mock('@/lib/supabase/admin', () => ({
       Object.assign(b, {
         select: chain, eq: chain, in: chain, not: chain, limit: chain, order: chain,
         maybeSingle: async () => ({ data: null, error: null }), // config → defaults
+        // `traerTodo` pagina con `.range(d, h)`: el mock rebana como lo haría
+        // el servidor — la página más allá del final llega vacía y cierra.
+        range: (d: number, h: number) =>
+          Promise.resolve({ data: (tabla === 'viaje' ? VIAJES : []).slice(d, h + 1), error: null }),
         then: (res: (v: unknown) => unknown) => {
           if (tabla === 'viaje') return Promise.resolve({ data: VIAJES, error: null }).then(res);
           if (tabla === 'cobranza_contacto') return Promise.resolve({ data: [], error: null }).then(res);

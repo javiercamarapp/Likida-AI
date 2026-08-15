@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useState, useSyncExternalStore } from 'react';
-import { TriangleAlert, CircleCheck, CheckCheck } from 'lucide-react';
+import Link from 'next/link';
+import { TriangleAlert, CircleCheck, CheckCheck, ArrowRight } from 'lucide-react';
 import type { Alerta } from '../calcular-alertas';
 import { claveAlerta, leerLeidas, marcarLeida, marcarTodasLeidas, suscribirCambiosLeidas, SIN_LEIDAS } from '../notificaciones-leidas';
 
@@ -59,7 +60,18 @@ function FilaAlerta({ alerta, onLeida }: { alerta: Alerta; onLeida: () => void }
           ? <TriangleAlert width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--color-bad)' }} />
           : <CircleCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--color-ok)' }} />}
       </div>
-      <p className="text-sm pt-1 flex-1">{alerta.texto}</p>
+      <div className="flex-1 pt-1 min-w-0">
+        <p className="text-sm">{alerta.texto}</p>
+        {/* La alerta lleva a DONDE SE RESUELVE (las de escalación, todas a
+            /admin/escalaciones). Sin href no se pinta nada — un "Ver" sin
+            destino sería un botón que miente. */}
+        {alerta.href && (
+          <Link href={alerta.href}
+            className="mt-1 inline-flex items-center gap-1 text-xs font-medium underline hover:opacity-70 transition-opacity">
+            Ver <ArrowRight width={11} height={11} strokeWidth={1.75} />
+          </Link>
+        )}
+      </div>
       <button type="button" onClick={() => { setSaliendo('der'); setTimeout(onLeida, 260); }}
         className="shrink-0 text-xs px-2.5 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
         Marcar leído

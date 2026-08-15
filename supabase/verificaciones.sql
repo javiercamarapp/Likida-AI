@@ -4211,3 +4211,109 @@ begin
   raise exception E'PROVEEDOR_FLUJO_0108  dedup=%  foto_sin_xml=%  sin_respaldo_rebota=%  origen_malo=%  sat_malo=%  export_pendiente_rebota=%  exportadas=%  disparo_correo_malo_rebota=%  rls=%   (esperado t/1/t/t/t/t/1/t/0)',
     dedup_vivo, n_foto, sin_respaldo_rebota, origen_malo, sat_malo, export_pendiente_rebota, n_export, disparo_malo, n_rls;
 end $$;
+
+-- ── 87. El kill switch y el dedup de impersonación (0110) ──────────────────
+--
+-- Lo que solo la base puede demostrar de la 0110: (a) `interruptor` vigila su
+-- dominio — un nombre inventado rebota, 'global' y 'agente:cobranza' caben;
+-- (b) apagar exige motivo NO VACÍO — sin motivo rebota, con espacios rebota,
+-- con motivo cabe, y encendido sin motivo cabe (encender es el default);
+-- (c) las dos tablas tienen RLS activa SIN políticas (deny-all: cero policies
+-- en pg_policies) y `authenticated` no lee ni una fila; (d) el PK de
+-- `impersonacion_dia` deduplica de verdad — el segundo insert del mismo
+-- (actor, flota, día) rebota con unique_violation, que es el mecanismo por el
+-- que la bitácora se firma UNA vez por día. Todo dentro de un DO que revierte
+-- con su excepción final — no queda ni una fila.
+--
+-- SALIDA REAL (15-ago-2026, corrida vía MCP tras aplicar la 0110):
+--   ERROR: P0001: INTERRUPTORES_0110  dominio_malo_rebota=t
+--   apagado_sin_motivo_rebota=t  motivo_blanco_rebota=t  apagados=1
+--   encendidos=1  dedup_impersonacion=t  rls_int=t  rls_imp=t
+--   policies_int=0  policies_imp=0  lee_auth_int=0  lee_auth_imp=0
+--   (esperado t/t/t/1/1/t/t/t/0/0/0/0) — coincide; el RAISE revirtió todo.
+do $$
+declare
+  v_t uuid; v_u uuid := gen_random_uuid();
+  dominio_malo boolean := false;
+  apagado_sin_motivo boolean := false;
+  apagado_motivo_blanco boolean := false;
+  dedup_impersonacion boolean := false;
+  n_apagados int; n_encendidos int;
+  rls_int boolean; rls_imp boolean;
+  pol_int int; pol_imp int;
+  n_lee_int int; n_lee_imp int;
+begin
+  -- (a) el dominio del nombre
+  insert into public.interruptor (id, apagado, motivo, cambiado_por)
+    values ('agente:cobranza', true, 'verificación 0110: incidente de prueba', null);
+  insert into public.interruptor (id) values ('global');  -- encendido, sin motivo: cabe
+  begin
+    insert into public.interruptor (id) values ('agente:marketing');
+  exception when check_violation then dominio_malo := true;
+  end;
+
+  -- (b) apagar exige motivo no vacío
+  begin
+    insert into public.interruptor (id, apagado) values ('agente:peajes', true);
+  exception when check_violation then apagado_sin_motivo := true;
+  end;
+  begin
+    insert into public.interruptor (id, apagado, motivo) values ('agente:peajes', true, '   ');
+  exception when check_violation then apagado_motivo_blanco := true;
+  end;
+  select count(*) into n_apagados from public.interruptor where apagado;
+  select count(*) into n_encendidos from public.interruptor where not apagado;
+
+  -- (d) el dedup de impersonacion_dia — necesita actor y flota reales (FKs)
+  insert into public.tenant (nombre) values ('__verif_0110__') returning id into v_t;
+  insert into public.app_user (id, email, rol, tenant_id)
+    values (v_u, '__verif_0110__@likida.ai', 'superadmin', null);
+  insert into public.impersonacion_dia (actor_id, tenant_id, dia) values (v_u, v_t, current_date);
+  begin
+    insert into public.impersonacion_dia (actor_id, tenant_id, dia) values (v_u, v_t, current_date);
+  exception when unique_violation then dedup_impersonacion := true;
+  end;
+
+  -- (c) deny-all en las dos: RLS activa, cero policies, authenticated ciego
+  select relrowsecurity into rls_int from pg_class where oid = 'public.interruptor'::regclass;
+  select relrowsecurity into rls_imp from pg_class where oid = 'public.impersonacion_dia'::regclass;
+  select count(*) into pol_int from pg_policies where schemaname = 'public' and tablename = 'interruptor';
+  select count(*) into pol_imp from pg_policies where schemaname = 'public' and tablename = 'impersonacion_dia';
+  set local role authenticated;
+  select count(*) into n_lee_int from public.interruptor;
+  select count(*) into n_lee_imp from public.impersonacion_dia;
+  reset role;
+
+  raise exception E'INTERRUPTORES_0110  dominio_malo_rebota=%  apagado_sin_motivo_rebota=%  motivo_blanco_rebota=%  apagados=%  encendidos=%  dedup_impersonacion=%  rls_int=%  rls_imp=%  policies_int=%  policies_imp=%  lee_auth_int=%  lee_auth_imp=%   (esperado t/t/t/1/1/t/t/t/0/0/0/0)',
+    dominio_malo, apagado_sin_motivo, apagado_motivo_blanco, n_apagados, n_encendidos,
+    dedup_impersonacion, rls_int, rls_imp, pol_int, pol_imp, n_lee_int, n_lee_imp;
+end $$;
+
+-- ── 88. Los dos índices de rango-de-fecha de la 0111 existen ────────────────
+--
+-- No hay concurrencia que probar: la garantía es que `gasto_tenant_fecha_idx`
+-- y `viaje_tenant_fecha_inicio_idx` EXISTEN en el esquema público con la
+-- definición exacta de la 0111 — un `create index if not exists` que alguien
+-- renombró o aplicó a medias se ve idéntico desde el código, y el planeador
+-- simplemente no lo usa. Se leen de pg_indexes y se cuentan.
+--
+-- Esperado: ambos=2  gasto_def=t  viaje_def=t
+-- SALIDA REAL (15-ago-2026, corrida vía MCP tras aplicar la 0111):
+--   ERROR: P0001: INDICES_0111  ambos=2  gasto_def=t  viaje_def=t
+--   (esperado 2/t/t) — coincide.
+do $$
+declare
+  n int;
+  gasto_def boolean;
+  viaje_def boolean;
+begin
+  select count(*) into n from pg_indexes
+    where schemaname = 'public'
+      and indexname in ('gasto_tenant_fecha_idx', 'viaje_tenant_fecha_inicio_idx');
+  select indexdef ilike '%(tenant_id, fecha)%' into gasto_def from pg_indexes
+    where schemaname = 'public' and indexname = 'gasto_tenant_fecha_idx';
+  select indexdef ilike '%(tenant_id, fecha_inicio)%' into viaje_def from pg_indexes
+    where schemaname = 'public' and indexname = 'viaje_tenant_fecha_inicio_idx';
+  raise exception E'INDICES_0111  ambos=%  gasto_def=%  viaje_def=%   (esperado 2/t/t)',
+    n, coalesce(gasto_def, false), coalesce(viaje_def, false);
+end $$;

@@ -21,6 +21,8 @@ import { redirect } from 'next/navigation';
 import { requireSessionTenant } from './guard';
 import { puedeVerRuta, inicioDe, rolEfectivo } from './visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
+import { TZ_MX } from '@/lib/formato';
 import type { SessionTenant } from './session';
 
 export interface TenantEfectivo extends SessionTenant {
@@ -74,6 +76,73 @@ function sufijoPrevisualizacion(
   return s ? `?${s}` : '';
 }
 
+/** Hoy en día MX (`AAAA-MM-DD`), que es el "día" del dedup de impersonación:
+ *  el reloj de quien opera el sistema, no el de UTC — a las 7pm de CDMX ya es
+ *  mañana en UTC y el dedup partiría una sesión de revisión en dos firmas. */
+function diaMx(): string {
+  // `en-CA` porque su formato de fecha ES `AAAA-MM-DD` — no hay que rearmar.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ_MX, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
+/**
+ * LA IMPERSONACIÓN SE FIRMA (0110, pieza 3 del informe): cuando un superadmin
+ * abre el panel de una flota REAL con `?tenant=` — no la demo, no `?vista=demo`
+ * —, queda una entrada en `bitacora_auditoria`. La auditoría encontró que el
+ * "ver como" no dejaba rastro: el acceso más privilegiado del sistema era el
+ * único invisible.
+ *
+ * UNA VEZ POR (actor, flota, día MX), no por carga de página: una sesión de
+ * revisión son decenas de páginas y firmar cada una enterraría la bitácora en
+ * su propio ruido. El dedup es el PK de `impersonacion_dia` (0110): el upsert
+ * con `ignoreDuplicates` devuelve fila SOLO cuando ganó el insert, y solo ese
+ * camino escribe la bitácora — dos pestañas simultáneas no duplican la firma
+ * porque la base decide quién ganó, no un `select` previo con carrera.
+ *
+ * JAMÁS ROMPE LA RESOLUCIÓN: todo fallo se traga con logger. Dejar a un
+ * superadmin fuera del panel de un cliente porque la firma no se pudo
+ * escribir sería bloquear la operación por su propia auditoría. Se AWAITEA a
+ * propósito (no fire-and-forget puro): una promesa suelta en una función
+ * serverless puede morir con la invocación y la firma se perdería en
+ * silencio; el costo es un upsert indexado en la carga de página que ya hizo
+ * la consulta del tenant.
+ */
+async function firmarImpersonacion(actorId: string, tenantId: string): Promise<void> {
+  try {
+    const dia = diaMx();
+    const { data, error } = await supabaseAdmin()
+      .from('impersonacion_dia')
+      .upsert(
+        { actor_id: actorId, tenant_id: tenantId, dia },
+        { onConflict: 'actor_id,tenant_id,dia', ignoreDuplicates: true },
+      )
+      .select('dia');
+    if (error) {
+      logger.warn('impersonacion.no_firmada', { tenant: tenantId, err: error.message });
+      return;
+    }
+    // Sin fila devuelta = ya estaba firmado hoy. No se re-escribe la bitácora.
+    if (!data || data.length === 0) return;
+
+    const { error: errBitacora } = await supabaseAdmin().from('bitacora_auditoria').insert({
+      tenant_id: tenantId,
+      actor_id: actorId,
+      accion: 'impersonacion.dashboard',
+      entidad: 'tenant',
+      entidad_id: tenantId,
+      detalle: { dia },
+    });
+    if (errBitacora) {
+      logger.warn('impersonacion.bitacora_no_escribio', { tenant: tenantId, err: errBitacora.message });
+    }
+  } catch (e) {
+    logger.warn('impersonacion.no_firmada', {
+      tenant: tenantId, err: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
 export async function resolverTenantEfectivo(
   destino: string,
   sp: { vista?: string; tenant?: string; rol?: string } | undefined,
@@ -122,6 +191,11 @@ export async function resolverTenantEfectivo(
     if (t) {
       tenantId = t.id as string;
       tenantNombre = t.nombre as string;
+      // Solo aquí: `?tenant=` que RESOLVIÓ a una flota real. `?vista=demo` no
+      // pasa por este if y no se firma — mirar la demo no es mirar a un
+      // cliente. Ver `firmarImpersonacion` para el dedup y el porqué de que
+      // un fallo del registro nunca tumbe esta página.
+      await firmarImpersonacion(sesionReal.userId, t.id as string);
     }
   }
 

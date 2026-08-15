@@ -1,5 +1,5 @@
 import { LifeBuoy, AlertTriangle, Timer, CheckCircle2 } from 'lucide-react';
-import { getTicketsCruzados, type TicketCruzado } from '@/lib/admin/soporte';
+import { getTicketsCruzados, ESTADOS_TICKET_CERRADO, type TicketCruzado } from '@/lib/admin/soporte';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, numero } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -18,7 +18,9 @@ const PILL_TICKET: Record<string, { estado: Estado; etiqueta: string }> = {
   cerrado: { estado: 'ok', etiqueta: 'Cerrado' },
 };
 
-const CERRADOS = new Set(['resuelto', 'cerrado']);
+// Los estados terminales viven junto a la lectura (lib/admin/soporte.ts):
+// la bandeja de escalaciones usa el MISMO conjunto, no una copia.
+const CERRADOS = ESTADOS_TICKET_CERRADO;
 
 /** "hace 3 h" / "hace 2 d" — la edad del ticket contra el reloj del SERVIDOR
  *  (`ahoraMs()`), el mismo contra el que se resta el SLA: dos relojes en la

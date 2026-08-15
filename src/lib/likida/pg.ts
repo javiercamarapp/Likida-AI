@@ -134,6 +134,52 @@ export class LecturaIncompleta extends Error {
  * pueden repetir una fila y saltarse otra. Todos los llamadores desempatan con
  * `id`.
  */
+/** Cuántos ids viajan por tanda en `traerPorIds`. 200 UUIDs son ~7.5 KB de
+ *  URL — debajo del techo típico de un proxy (8 KB) — y devuelven a lo más
+ *  200 filas en un lookup por PK: nunca tocan el recorte de 1,000. */
+export const IDS_POR_TANDA = 200;
+/** Tandas en vuelo a la vez. El mismo criterio que el pool del webhook
+ *  (route.ts:40): acotado para no abrir cientos de conexiones, >1 para que
+ *  un periodo grande no pague las tandas en serie. */
+const TANDAS_EN_PARALELO = 5;
+
+/**
+ * Trae las filas de un `.in('id', ids)` SIN el techo silencioso.
+ *
+ * Un `.in()` con miles de ids tiene DOS modos de falla, y los dos son mudos:
+ * PostgREST recorta el resultado a `max_rows` (1,000) igual que en cualquier
+ * select — con 15,000 viajes/mes, el contexto de folio/operador de
+ * `getGastosFiscales` (fiscal.ts) dejaba sin folio a todo lo que pasara de
+ * mil — y la lista entera viaja EN LA URL, así que además puede rebotar en el
+ * proxy antes de llegar. Se parte en tandas de `IDS_POR_TANDA`: cada tanda es
+ * un lookup por PK que devuelve a lo más su propio tamaño, y ninguna puede
+ * tocar ninguno de los dos techos.
+ *
+ * El resultado conserva el orden de las tandas (no el de llegada de la red):
+ * los llamadores construyen Maps y no les importa, pero un orden que cambia
+ * entre corridas es la clase de sorpresa que este archivo existe para no dar.
+ */
+export async function traerPorIds<T>(
+  ids: string[],
+  construir: (tanda: string[]) => PromiseLike<RespuestaPg<T[]>>,
+  consulta: string,
+): Promise<T[]> {
+  const tandas: string[][] = [];
+  for (let i = 0; i < ids.length; i += IDS_POR_TANDA) tandas.push(ids.slice(i, i + IDS_POR_TANDA));
+  const porTanda: T[][] = new Array(tandas.length);
+
+  let siguiente = 0;
+  const obrero = async () => {
+    for (;;) {
+      const i = siguiente++;
+      if (i >= tandas.length) return;
+      porTanda[i] = exigir(await construir(tandas[i]), consulta) ?? [];
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(TANDAS_EN_PARALELO, tandas.length) }, obrero));
+  return porTanda.flat();
+}
+
 export async function traerTodo<T>(
   construir: (desde: number, hasta: number) => PromiseLike<RespuestaPg<T[]>>,
   consulta: string,

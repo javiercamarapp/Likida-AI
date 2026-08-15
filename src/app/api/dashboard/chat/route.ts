@@ -17,6 +17,7 @@ import { getSessionTenant } from '@/lib/auth/session';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
+import { traerTodo, conteo } from '@/lib/likida/pg';
 import { registrarCosto, faseDeModelo } from '@/lib/likida/costos';
 import { PartialExecutionError } from '@/lib/llm/openrouter';
 import { guardarIntercambio } from '@/lib/likida/chat/conversaciones';
@@ -69,17 +70,30 @@ export async function POST(req: NextRequest) {
     : null;
 
   // ── Tope diario ──
-  const { data: filas, error: errTope } = await acotada(
-    supabaseAdmin().from('llm_costo').select('costo_usd')
-      .eq('tenant_id', tenantId).eq('fase', 'chat')
-      .gte('created_at', inicioDiaMxIso(ahoraMs())),
-    'chat.tope_dia');
-  // Fallar CERRADO: si no se pudo leer el gasto del día, no se gasta más.
-  if (errTope) {
-    logger.error('chat.tope_dia.error', { err: errTope.message });
+  //
+  // Paginado con `traerTodo` (auditoría de escala 15k): sin él, PostgREST
+  // recortaba la lectura a 1,000 filas EN SILENCIO — no como error, como
+  // éxito — y a partir de la fila 1,001 del día `gastadoHoy` se congelaba
+  // por debajo del tope real: EL FRENO DE PRESUPUESTO dejaba de dispararse
+  // justo el día de más uso. El "fallar cerrado" de abajo solo cubría el
+  // error por valor; el recorte lo burlaba por el lado del éxito.
+  let filas: Array<{ costo_usd: unknown }>;
+  try {
+    filas = await traerTodo<{ costo_usd: unknown }>(
+      (d, h) => acotada(
+        supabaseAdmin().from('llm_costo').select('costo_usd', conteo(d))
+          .eq('tenant_id', tenantId).eq('fase', 'chat')
+          .gte('created_at', inicioDiaMxIso(ahoraMs()))
+          .order('id').range(d, h),
+        'chat.tope_dia'),
+      'chat.tope_dia',
+    );
+  } catch (e) {
+    // Fallar CERRADO: si no se pudo leer el gasto del día, no se gasta más.
+    logger.error('chat.tope_dia.error', { err: e instanceof Error ? e.message : String(e) });
     return NextResponse.json({ agotado: true, bloques: [{ tipo: 'texto', texto: 'No pude verificar el presupuesto del día — el análisis con IA descansa un momento. Las respuestas rápidas siguen funcionando.' }] });
   }
-  const gastadoHoy = (filas ?? []).reduce((s, f) => s + Number((f as { costo_usd: unknown }).costo_usd ?? 0), 0);
+  const gastadoHoy = filas.reduce((s, f) => s + Number(f.costo_usd ?? 0), 0);
   if (gastadoHoy >= topeDiaUsd()) {
     return NextResponse.json({
       agotado: true,

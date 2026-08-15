@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { estaApagado } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -64,6 +65,18 @@ export async function GET(req: Request) {
   if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
     // Sin cuerpo: a quien no está autorizado no se le dice qué hay detrás.
     return new NextResponse(null, { status: 401 });
+  }
+
+  // ── EL KILL SWITCH (0110): solo 'global' — la purga no es un agente ──────
+  //
+  // Esta ruta BORRA FILAS: en un incidente donde Javier apaga todo, lo último
+  // que quiere es un cron borrando datos mientras investiga. 200 y no error:
+  // apagado a propósito no es fallo, y el `saltado` del cuerpo distingue esta
+  // corrida de una sana. Fail-closed: interruptor ilegible = apagado con
+  // grito en el log (interruptores.ts) — no se borra sin permiso legible.
+  if (await estaApagado('global')) {
+    logger.warn('cron.purgar.saltado', { interruptor: 'global' });
+    return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 
   try {

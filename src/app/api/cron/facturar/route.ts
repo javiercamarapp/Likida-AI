@@ -15,6 +15,7 @@ import { avisar, avisarCorridasPorFlota, FalloDePlataforma } from '@/lib/likida/
 import { avisoColaAtorada } from '@/lib/correo/avisos';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { modoEfectivo } from '@/lib/likida/facturacion/modo';
+import { estaApagado } from '@/lib/likida/interruptores';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -259,6 +260,26 @@ export async function GET(req: Request) {
   }
   if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
     return new NextResponse(null, { status: 401 });
+  }
+
+  // ── EL KILL SWITCH (0110), DESPUÉS de la puerta y ANTES de tocar la cola ─
+  //
+  // Este cron entero ES el Agente de Facturas, así que dos palancas lo
+  // apagan: 'global' (todo el trabajo programado) y 'agente:facturas' (solo
+  // él). Responde 200, no error: apagado A PROPÓSITO no es un fallo, y un
+  // 500 mandaría a alguien a investigar la decisión de Javier como si fuera
+  // un incidente. El interruptor es GLOBAL por agente (v1), no por tenant:
+  // el barrido por flota de `procesarLoteEnCola` se corta ENTERO — apagar
+  // facturas para una sola flota sería config de esa flota, no esta palanca.
+  // Fail-closed: si el interruptor no se puede LEER se lee como apagado, con
+  // grito en el log (interruptores.ts) — emitir CFDIs con la palanca ilegible
+  // es el error caro; saltar una corrida que reintenta en una hora, el barato.
+  const apagadoPor = (await estaApagado('global'))
+    ? 'global'
+    : (await estaApagado('agente:facturas')) ? 'agente:facturas' : null;
+  if (apagadoPor) {
+    logger.warn('cron.facturar.saltado', { interruptor: apagadoPor });
+    return NextResponse.json({ corrio: false, saltado: `interruptor ${apagadoPor}` });
   }
 
   // Sin un solo portal escrito no hay nada que este cron pueda hacer, y se dice

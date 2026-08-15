@@ -29,8 +29,16 @@ let lineasUpsertPayload: Array<Record<string, unknown>> | null;
 
 function thenable(resp: () => Resp) {
   const nodo: Record<string, unknown> = {};
-  for (const m of ['eq', 'is', 'gte', 'lte', 'select']) nodo[m] = () => nodo;
+  for (const m of ['eq', 'is', 'gte', 'lte', 'select', 'order']) nodo[m] = () => nodo;
   nodo.single = () => Promise.resolve(resp());
+  // `traerTodo` pagina con `.range(d, h)`: el mock rebana como lo haría el
+  // servidor — la página que empieza más allá del final llega vacía y con eso
+  // el bucle de `traerTodo` sabe que terminó.
+  nodo.range = (d: number, h: number) =>
+    Promise.resolve(resp()).then((r) => ({
+      ...r,
+      data: Array.isArray(r.data) ? (r.data as unknown[]).slice(d, h + 1) : r.data,
+    }));
   nodo.then = (onOk: (v: unknown) => unknown, onErr?: (e: unknown) => unknown) =>
     Promise.resolve(resp()).then(onOk, onErr);
   return nodo;

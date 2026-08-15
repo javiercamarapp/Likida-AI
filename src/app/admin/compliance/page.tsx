@@ -8,6 +8,7 @@ import { resolverSolicitudArco } from '@/lib/likida/repo';
 import { fechaMx } from '@/lib/formato';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { traerTodo, conteo } from '@/lib/likida/pg';
+import { getSolicitudesArcoPendientes } from '@/lib/admin/escalaciones';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 
 export const dynamic = 'force-dynamic';
@@ -167,11 +168,10 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
       ).order('recibida_en', { ascending: false }).order('id', { ascending: false }).range(d, h),
       'compliance.todas',
     ),
-    traerTodo<{ vence_en: unknown }>(
-      (d, h) => supabaseAdmin().from('solicitud_arco').select('vence_en', conteo(d))
-        .in('estado', ['recibida', 'en_proceso']).order('id').range(d, h),
-      'compliance.pendientes',
-    ),
+    // La MISMA lectura de pendientes que la bandeja de escalaciones —
+    // extraída a lib/admin/escalaciones.ts para no contarlas dos veces con
+    // dos consultas que puedan divergir.
+    getSolicitudesArcoPendientes(),
   ]);
   const mapeadas = solicitudes.map((f) => ({
     id: f.id as string,
@@ -186,6 +186,6 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
     operadorNombre: ((f.operador as { nombre?: string } | null)?.nombre) ?? null,
     flotaNombre: ((f.flota as { nombre?: string } | null)?.nombre) ?? '—',
   }));
-  const vence = pendientes.filter((f) => (f.vence_en as string) <= new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10)).length;
+  const vence = pendientes.filter((p) => p.venceEn <= new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10)).length;
   return { solicitudes: mapeadas as SolicitudArcoPanel[], pendientesVencen: vence };
 }

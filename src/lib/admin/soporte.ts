@@ -19,6 +19,11 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, traerTodo } from '@/lib/likida/pg';
 import { round2 } from '@/lib/formato';
 
+/** Los dos estados TERMINALES del dominio de `ticket_soporte.estado` (0051).
+ *  Vive aquí —junto a la lectura— y no en cada pantalla, para que "abierto"
+ *  no se calcule distinto en /admin/soporte y en la bandeja de escalaciones. */
+export const ESTADOS_TICKET_CERRADO: ReadonlySet<string> = new Set(['resuelto', 'cerrado']);
+
 export interface TicketCruzado {
   id: string;
   asunto: string;

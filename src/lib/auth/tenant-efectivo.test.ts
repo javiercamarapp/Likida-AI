@@ -18,18 +18,54 @@ vi.mock('next/navigation', () => ({ redirect: (...a: unknown[]) => redirect(...(
 const requireSessionTenant = vi.fn();
 vi.mock('./guard', () => ({ requireSessionTenant: (...a: unknown[]) => requireSessionTenant(...a) }));
 
+// El builder por tabla (mismo patrón que buzon_escritura.test.ts): las
+// pruebas viejas no ponen nada en `colas` y reciben `{ data: null }` — el
+// comportamiento exacto del mock anterior. Las de impersonación sí sirven
+// respuestas por tabla para poder MIRAR qué se escribió.
+type Registro = { tabla: string; op: string | null; payload: unknown; eq: Array<[string, unknown]> };
+type Respuesta = { data: unknown; error: { message: string } | null };
+const llamadas: Registro[] = [];
+const colas = new Map<string, Respuesta[]>();
+
+function contestar(tabla: string): Respuesta {
+  const cola = colas.get(tabla) ?? [];
+  const r = cola.length > 1 ? cola.shift() : cola[0];
+  return r ?? { data: null, error: null };
+}
+
+function builder(tabla: string) {
+  const r: Registro = { tabla, op: null, payload: null, eq: [] };
+  llamadas.push(r);
+  const b: Record<string, unknown> = {};
+  b.insert = (p: unknown) => { r.op = 'insert'; r.payload = p; return b; };
+  b.upsert = (p: unknown) => { r.op = 'upsert'; r.payload = p; return b; };
+  b.select = () => { if (!r.op) r.op = 'select'; return b; };
+  b.eq = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
+  b.maybeSingle = async () => contestar(tabla);
+  b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+    Promise.resolve(contestar(tabla)).then(res, rej);
+  return b;
+}
+
 vi.mock('@/lib/supabase/admin', () => ({
-  supabaseAdmin: () => ({
-    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null }) }) }) }),
-  }),
+  supabaseAdmin: () => ({ from: (t: string) => builder(t) }),
 }));
+
+const logs = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+vi.mock('@/lib/logger', () => ({ logger: logs }));
 
 const { resolverTenantEfectivo } = await import('./tenant-efectivo');
 const { inicioDe } = await import('./visibilidad');
 
 const CHOFER = { userId: 'u-9', tenantId: 't-1', rol: 'operador', nombre: 'Juan', operadorId: 'o-9', avatarUrl: null };
 
-beforeEach(() => { redirect.mockClear(); requireSessionTenant.mockReset(); });
+beforeEach(() => {
+  redirect.mockClear();
+  requireSessionTenant.mockReset();
+  llamadas.length = 0;
+  colas.clear();
+  logs.warn.mockClear();
+});
 
 // Toda ruta de /dashboard que hoy existe, sin depender de que alguien se
 // acuerde de añadir la nueva a una lista escrita a mano.
@@ -201,5 +237,105 @@ describe('los roles de oficina siguen entrando a lo suyo', () => {
     requireSessionTenant.mockResolvedValue(jefe);
     await expect(resolverTenantEfectivo('/dashboard/suscripcion', undefined)).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/dashboard');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA IMPERSONACIÓN SE FIRMA (0110, pieza 3): el "ver como" de una flota REAL
+// era el acceso más privilegiado del sistema y el único sin rastro. Lo que se
+// fija aquí: se firma UNA vez por (actor, flota, día MX) vía el PK de
+// `impersonacion_dia`; la demo no cuenta; y NINGÚN fallo del registro puede
+// dejar al superadmin fuera del panel — la firma es auditoría, no candado.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la impersonación con ?tenant= real queda firmada', () => {
+  const SUPER = { userId: 'u-0', tenantId: 'demo', rol: 'superadmin', nombre: 'Javier', operadorId: null, avatarUrl: null };
+  const FLOTA = { id: 't-7', nombre: 'Transportes del Norte' };
+
+  const de = (tabla: string) => llamadas.filter((l) => l.tabla === tabla);
+
+  it('la primera vez del día: dedup ganado → bitácora escrita, con actor, flota y día MX', async () => {
+    colas.set('tenant', [{ data: FLOTA, error: null }]);
+    colas.set('impersonacion_dia', [{ data: [{ dia: '2026-08-15' }], error: null }]);
+
+    requireSessionTenant.mockResolvedValue(SUPER);
+    const r = await resolverTenantEfectivo('/dashboard', { tenant: 't-7' });
+
+    // La resolución salió normal: la firma no cambia lo que la página ve.
+    expect(r.tenantId).toBe('t-7');
+    expect(r.tenantNombre).toBe('Transportes del Norte');
+
+    const [dedup] = de('impersonacion_dia');
+    expect(dedup.op).toBe('upsert');
+    expect(dedup.payload).toMatchObject({ actor_id: 'u-0', tenant_id: 't-7' });
+    expect(String((dedup.payload as Record<string, unknown>).dia)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    const [firma] = de('bitacora_auditoria');
+    expect(firma.op).toBe('insert');
+    expect(firma.payload).toMatchObject({
+      tenant_id: 't-7',
+      actor_id: 'u-0',
+      accion: 'impersonacion.dashboard',
+      entidad: 'tenant',
+      entidad_id: 't-7',
+    });
+  });
+
+  it('la segunda vez del mismo día NO re-firma: el upsert no devolvió fila y la bitácora ni se toca', async () => {
+    colas.set('tenant', [{ data: FLOTA, error: null }]);
+    // `ignoreDuplicates` con el PK ya ocupado devuelve lista vacía.
+    colas.set('impersonacion_dia', [{ data: [], error: null }]);
+
+    requireSessionTenant.mockResolvedValue(SUPER);
+    await resolverTenantEfectivo('/dashboard', { tenant: 't-7' });
+
+    expect(de('impersonacion_dia')).toHaveLength(1);
+    expect(de('bitacora_auditoria')).toHaveLength(0);
+  });
+
+  it('un fallo del registro JAMÁS rompe la resolución — se loguea y la página sigue', async () => {
+    colas.set('tenant', [{ data: FLOTA, error: null }]);
+    colas.set('impersonacion_dia', [{ data: null, error: { message: 'fetch failed' } }]);
+
+    requireSessionTenant.mockResolvedValue(SUPER);
+    const r = await resolverTenantEfectivo('/dashboard', { tenant: 't-7' });
+
+    expect(r.tenantId).toBe('t-7');
+    expect(logs.warn).toHaveBeenCalledWith('impersonacion.no_firmada',
+      expect.objectContaining({ tenant: 't-7', err: 'fetch failed' }));
+    expect(de('bitacora_auditoria')).toHaveLength(0);
+  });
+
+  it('una bitácora caída tampoco la rompe: el dedup quedó, el fallo quedó en el log', async () => {
+    colas.set('tenant', [{ data: FLOTA, error: null }]);
+    colas.set('impersonacion_dia', [{ data: [{ dia: '2026-08-15' }], error: null }]);
+    colas.set('bitacora_auditoria', [{ data: null, error: { message: 'timeout' } }]);
+
+    requireSessionTenant.mockResolvedValue(SUPER);
+    const r = await resolverTenantEfectivo('/dashboard', { tenant: 't-7' });
+
+    expect(r.tenantNombre).toBe('Transportes del Norte');
+    expect(logs.warn).toHaveBeenCalledWith('impersonacion.bitacora_no_escribio', expect.anything());
+  });
+
+  it('`?vista=demo` NO se firma: mirar la demo no es mirar a un cliente', async () => {
+    requireSessionTenant.mockResolvedValue(SUPER);
+    await resolverTenantEfectivo('/dashboard', { vista: 'demo' });
+    expect(de('impersonacion_dia')).toHaveLength(0);
+    expect(de('bitacora_auditoria')).toHaveLength(0);
+  });
+
+  it('un `?tenant=` que NO resuelve (flota inexistente) no firma nada', async () => {
+    // El mock default contesta `{ data: null }`: la flota no existe.
+    requireSessionTenant.mockResolvedValue(SUPER);
+    await resolverTenantEfectivo('/dashboard', { tenant: 't-fantasma' });
+    expect(de('impersonacion_dia')).toHaveLength(0);
+  });
+
+  it('un rol real con `?tenant=` no firma: el parámetro se ignora entero para él', async () => {
+    requireSessionTenant.mockResolvedValue({ userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana', operadorId: null, avatarUrl: null });
+    const r = await resolverTenantEfectivo('/dashboard', { tenant: 't-7' });
+    expect(r.tenantId).toBe('t-1');
+    expect(de('impersonacion_dia')).toHaveLength(0);
+    expect(de('bitacora_auditoria')).toHaveLength(0);
   });
 });

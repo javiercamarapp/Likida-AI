@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { Receiver } from '@upstash/qstash';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { estaApagado } from '@/lib/likida/interruptores';
 import { procesarLoteEnCola, type FilaCola } from '../route';
 
 export const runtime = 'nodejs';
@@ -55,6 +56,20 @@ export async function POST(req: NextRequest) {
 
   const lote = body.lote ?? [];
   if (lote.length === 0) return NextResponse.json({ corrio: true, vacio: true });
+
+  // EL KILL SWITCH TAMBIÉN AQUÍ (0110): un lote encolado segundos antes del
+  // apagón llegaría por esta puerta con hasta 10 minutos de presupuesto — el
+  // camino perfecto para que "apagué facturas" siga emitiendo. 200 y no 5xx:
+  // un 5xx haría que QStash REINTENTARA el lote (retries: 2), o sea insistir
+  // en correr lo apagado. Los tickets no se marcan: el cron los recoge
+  // enteros cuando la palanca vuelva.
+  const apagadoPor = (await estaApagado('global'))
+    ? 'global'
+    : (await estaApagado('agente:facturas')) ? 'agente:facturas' : null;
+  if (apagadoPor) {
+    logger.warn('qstash.cola.saltado', { interruptor: apagadoPor, tickets: lote.length });
+    return NextResponse.json({ corrio: false, saltado: `interruptor ${apagadoPor}` });
+  }
 
   // Re-validar que los gastos siguen en la cola (un intento previo pudo
   // facturarlos): no se procesa un ticket que ya tiene CFDI.

@@ -38,7 +38,15 @@ let escriturasLinea: Array<{ fila: Record<string, unknown>; por: Array<[string, 
 
 function lecturable(resp: () => Resp) {
   const nodo: Record<string, unknown> = {};
-  for (const m of ['eq', 'is', 'in', 'gte', 'lte', 'limit']) nodo[m] = () => nodo;
+  for (const m of ['eq', 'is', 'in', 'gte', 'lte', 'limit', 'order']) nodo[m] = () => nodo;
+  // `traerTodo` pagina con `.range(d, h)`: el mock rebana como lo haría el
+  // servidor, y la página que empieza más allá del final llega vacía — que es
+  // la prueba de término que `traerTodo` acepta cuando no hay `count`.
+  nodo.range = (d: number, h: number) =>
+    Promise.resolve(resp()).then((r) => ({
+      ...r,
+      data: Array.isArray(r.data) ? (r.data as unknown[]).slice(d, h + 1) : r.data,
+    }));
   nodo.then = (ok: (v: unknown) => unknown, err?: (e: unknown) => unknown) =>
     Promise.resolve(resp()).then(ok, err);
   return nodo;
