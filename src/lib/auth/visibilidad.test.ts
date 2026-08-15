@@ -279,3 +279,43 @@ describe('a dónde se rebota a cada quien', () => {
     expect(areaDeRuta(inicioDe('operador'))).toBeUndefined();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL VENDEDOR (0105): rol de LIKIDA con panel propio. Su trabajo son los
+// prospectos del censo, no los datos de ninguna flota — la garantía de que
+// no abre NADA de /dashboard es su AUSENCIA de AREAS_POR_ROL (fail closed
+// por el `?? []`), y su casa se declara solo en PANEL_PROPIO.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el vendedor: panel propio, cero flota', () => {
+  it('no tiene ninguna área del panel de flota — fail closed por ausencia', () => {
+    expect(areasDe('vendedor')).toEqual([]);
+    expect(puedeVerArea('vendedor', 'operacion')).toBe(false);
+    expect(puedeVerArea('vendedor', 'dinero')).toBe(false);
+    expect(puedeVerArea('vendedor', 'administracion')).toBe(false);
+  });
+
+  it('su casa es /vendedor — primero el panel propio, sin bucle posible', () => {
+    // Es el primer rol que estrena el orden de `inicioDe` (panel ajeno ANTES
+    // que las áreas): si alguien un día le diera un área sin quitarle el
+    // panel, seguiría aterrizando en /vendedor y no en /dashboard.
+    expect(inicioDe('vendedor')).toBe('/vendedor');
+    expect(inicioDe('vendedor').startsWith('/dashboard')).toBe(false);
+    // Fuera del mapa de áreas: el gate de /dashboard no lo puede rebotar en
+    // círculo porque su destino no está gateado por ese mapa.
+    expect(areaDeRuta(inicioDe('vendedor'))).toBeUndefined();
+  });
+
+  const TODAS_LAS_RUTAS = [
+    ...AGENTES, ...OPERACION, ...DINERO_FISCAL, ...SISTEMA, ...ABAJO,
+  ].map((i) => i.href);
+
+  it.each(TODAS_LAS_RUTAS)('%s le está negada al vendedor aunque teclee la URL', (href) => {
+    expect(puedeVerRuta('vendedor', href)).toBe(false);
+  });
+
+  it('"Ver como" NO lo incluye: previsualizar vendedor no enseña /dashboard', () => {
+    // Su panel vive fuera de /dashboard; fingirlo con `?rol=` enseñaría una
+    // vista que ese rol no tiene — el mismo criterio que con el chofer.
+    expect(rolEfectivo('superadmin', 'vendedor')).toBe('superadmin');
+  });
+});

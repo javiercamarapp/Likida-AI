@@ -40,15 +40,49 @@ export function SubirFactura({ subirFactura }: { subirFactura: AccionProveedores
   );
 }
 
-function BotonSubir() {
+function BotonSubir({ rotulo = 'Subir a la bandeja', pendienteRotulo = 'Leyendo…' }: {
+  rotulo?: string; pendienteRotulo?: string;
+}) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
       className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Upload width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
-      {pending ? 'Leyendo…' : 'Subir a la bandeja'}
+      {pending ? pendienteRotulo : rotulo}
     </button>
+  );
+}
+
+/**
+ * La vía de FOTO (F6): cuando solo hay papel. El botón dice "leer con IA" a
+ * propósito — las cifras van a salir de visión, no del XML, y el aviso de la
+ * action manda a revisarlas contra el papel antes de aprobar.
+ */
+export function SubirFotoFactura({ subirFoto }: { subirFoto: AccionProveedores }) {
+  const [estado, accion] = useActionState(subirFoto, null);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (estado?.aviso) router.refresh();
+  }, [estado, router]);
+
+  return (
+    <div>
+      <form action={accion} className="flex items-center gap-2 flex-wrap">
+        <input type="file" name="archivo" accept="image/jpeg,image/png,image/webp" required
+          aria-label="Foto de la factura de proveedor"
+          className="text-[12.5px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12.5px] file:font-medium file:cursor-pointer"
+          style={{ color: 'var(--muted)' }} />
+        <BotonSubir rotulo="Leer foto con IA" pendienteRotulo="Leyendo la foto…" />
+      </form>
+      {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.aviso && (
+        <p className="text-[12px] mt-2" style={{ color: estado.aviso.includes('OJO') ? 'var(--warn)' : 'var(--muted)' }}>
+          {estado.aviso}
+        </p>
+      )}
+    </div>
   );
 }
 

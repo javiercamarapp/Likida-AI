@@ -57,7 +57,10 @@ export const TOLERANCIA_MONTO_MXN = 1;
  */
 export const VENTANA_DIAS_FECHA = 1;
 
-function diasDeDiferencia(a: string, b: string): number {
+// Exportada porque `desglose_peaje.ts` cruza con la MISMA regla de ventana:
+// dos copias de este cálculo serían dos oportunidades de que una redondee
+// distinto y los dos cruces dejen de significar lo mismo.
+export function diasDeDiferencia(a: string, b: string): number {
   const ta = Date.parse(`${a}T00:00:00Z`);
   const tb = Date.parse(`${b}T00:00:00Z`);
   if (Number.isNaN(ta) || Number.isNaN(tb)) return Infinity;

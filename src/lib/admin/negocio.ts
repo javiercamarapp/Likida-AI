@@ -31,6 +31,10 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, traerTodo } from '@/lib/likida/pg';
 import { round2 } from '@/lib/formato';
+// Solo TIPOS: `import type` se borra al compilar, así que esto no arrastra el
+// módulo de corridas (que carga supabaseAdmin/logger al importarse) — aquí
+// nada más se quiere el dominio del CHECK de la 0102 escrito una vez.
+import type { AgenteConCorridas, EstadoCorrida } from '@/lib/likida/agentes/corridas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA AGREGACIÓN DE `llm_costo`, EN SQL
@@ -344,5 +348,188 @@ export async function getEquipo(): Promise<MiembroEquipo[]> {
     tenantId: (u.tenant_id as string | null) ?? null,
     tenantNombre: ((u.tenant as { nombre?: string } | null)?.nombre) ?? null,
     operadorId: (u.operador_id as string | null) ?? null,
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTEOS DE PLATAFORMA — los números chicos del Inicio de /admin que no
+// salen de `llm_costo`: cuánta gente y cuánto papel hay en TODA la base.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ConteosPlataforma {
+  /** Filas de `operador` — choferes dados de alta, de todas las flotas. */
+  operadores: number;
+  /** Filas de `liquidacion` — liquidaciones generadas por el motor, histórico. */
+  liquidaciones: number;
+  /** Filas de `wa_conversacion` — una por teléfono con conversación viva
+   *  (ventana rodante de turnos, ver `getConversacionesActivas`). */
+  conversacionesWa: number;
+  /** Filas de `app_user` — cuentas que pueden entrar a algún panel. */
+  usuarios: number;
+  /** El mismo total, desglosado por rol (dominio de `app_user.rol`:
+   *  superadmin, flota_admin, contador, operador, encargado). Orden
+   *  alfabético por rol — el orden estable de la consulta, no uno inventado. */
+  usuariosPorRol: Array<{ rol: string; n: number }>;
+}
+
+/**
+ * `head: true` + `count: 'exact'`: PostgREST cuenta en la base y no manda NI
+ * UNA fila — el conteo de una tabla que va a crecer (operador, liquidacion)
+ * no puede pagarse arrastrando las filas como hace `traerTodo`.
+ *
+ * Y se exige que `count` venga como número: un `head` sin conteo devolvería
+ * `data: null, count: null` sin error, y leerle `?? 0` pintaría un cero que
+ * nadie midió — NULL no es 0, es "no se pudo contar".
+ */
+async function contarFilas(tabla: 'operador' | 'liquidacion' | 'wa_conversacion'): Promise<number> {
+  const { count, error } = await supabaseAdmin()
+    .from(tabla)
+    .select('id', { count: 'exact', head: true });
+  if (error) throw new Error(`getConteosPlataforma/${tabla}: ${error.message}`);
+  if (typeof count !== 'number') {
+    throw new Error(`getConteosPlataforma/${tabla}: PostgREST no devolvió el conteo — no se afirma un 0 que nadie midió.`);
+  }
+  return count;
+}
+
+export async function getConteosPlataforma(): Promise<ConteosPlataforma> {
+  const admin = supabaseAdmin();
+  const [operadores, liquidaciones, conversacionesWa, usuariosData] = await Promise.all([
+    contarFilas('operador'),
+    contarFilas('liquidacion'),
+    contarFilas('wa_conversacion'),
+    // `app_user` sí se trae (solo la columna `rol`) porque además del total se
+    // quiere el desglose por rol, y son pocas filas — el día que deje de
+    // serlo, esto se vuelve un `group by` en SQL como la 0062. `rol` empata
+    // muchísimo, así que `id` desempata la paginación (mismo porqué que
+    // `getEquipo`).
+    traerTodo<{ rol: string }>(
+      (d, h) => admin.from('app_user').select('rol', conteo(d)).order('rol', { ascending: true }).order('id').range(d, h),
+      'getConteosPlataforma/app_user',
+    ),
+  ]);
+  const porRol = new Map<string, number>();
+  for (const u of usuariosData) porRol.set(u.rol, (porRol.get(u.rol) ?? 0) + 1);
+  return {
+    operadores,
+    liquidaciones,
+    conversacionesWa,
+    usuarios: usuariosData.length,
+    usuariosPorRol: Array.from(porRol, ([rol, n]) => ({ rol, n })),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA BITÁCORA DE CORRIDAS, VISTA DESDE ARRIBA — `agente_corrida` (0102)
+// cruzada por TODOS los tenants, para la sección de orquestación del Inicio.
+// La lectura tenant-scoped de la misma tabla es `ultimasCorridas`
+// (lib/likida/agentes/corridas.ts); esta vive aquí porque cruzar tenants es
+// el permiso exclusivo de este archivo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * El dominio del CHECK `agente_corrida_agente_dominio` (0102, ampliado por la
+ * 0105 con `ventas`), escrito una vez y atado por `satisfies` al tipo de
+ * corridas.ts: si el CHECK crece, el tipo crece y esta lista se revisa a mano
+ * — el CHECK vive en SQL y ningún tipo lo puede leer solo. Los agentes de
+ * PLATAFORMA del sidebar de /admin (OCR, Cuadre, WhatsApp) NO están aquí a
+ * propósito: corren por webhook dentro del pipeline y su rastro es
+ * `llm_costo.fase`, no esta bitácora.
+ */
+export const AGENTES_BITACORA = [
+  'liquidacion', 'facturas', 'cobranza', 'conductores', 'peajes', 'proveedores', 'ventas',
+] as const satisfies readonly AgenteConCorridas[];
+
+export interface CorridaCruzada {
+  estado: EstadoCorrida;
+  disparo: 'cron' | 'manual';
+  inicio: string;
+  fin: string | null;
+  /** Ambos o ninguno — un numerador sin denominador no dice nada (0102). */
+  tareasHechas: number | null;
+  tareasTotal: number | null;
+  /** De QUÉ flota fue la corrida — la fila es (corrida × flota), y una vista
+   *  cross-tenant que no diga la flota mezclaría historias de clientes
+   *  distintos como si fueran una. NULL desde la 0105: la corrida fue para
+   *  LIKIDA misma (negocio, no flota — hoy solo el agente `ventas`). */
+  tenantId: string | null;
+  tenantNombre: string;
+}
+
+export interface CorridaReciente extends CorridaCruzada {
+  agente: string;
+}
+
+export interface UltimaCorridaAgente {
+  agente: AgenteConCorridas;
+  /** `null` = la bitácora no tiene NI UNA corrida de este agente — que con
+   *  la base en cero es lo esperado, y la UI lo dice en vez de esconderlo. */
+  ultima: CorridaCruzada | null;
+}
+
+/** La forma cruda de PostgREST → `CorridaCruzada`, con el join de tenant
+ *  aplanado. Compartido por las dos lecturas para que el "cuándo/tareas" no
+ *  se mapee distinto en dos pantallas. */
+function mapearCorrida(f: Record<string, unknown>): CorridaCruzada {
+  const tenantId = (f.tenant_id as string | null) ?? null;
+  return {
+    estado: f.estado as EstadoCorrida,
+    disparo: f.disparo as 'cron' | 'manual',
+    inicio: f.inicio as string,
+    fin: (f.fin as string | null) ?? null,
+    tareasHechas: (f.tareas_hechas as number | null) ?? null,
+    tareasTotal: (f.tareas_total as number | null) ?? null,
+    tenantId,
+    // Sin tenant NO es un hueco: la 0105 lo define como "corrió para Likida
+    // misma". Un tenant que SÍ existe pero cuyo join no trajo nombre se
+    // pinta '—' — visible, no inventado.
+    tenantNombre: tenantId === null
+      ? 'Likida (negocio)'
+      : ((f.tenant as { nombre?: string } | null)?.nombre) ?? '—',
+  };
+}
+
+const COLUMNAS_CORRIDA = 'agente, estado, disparo, inicio, fin, tareas_hechas, tareas_total, tenant_id, tenant:tenant_id(nombre)';
+
+/**
+ * Las últimas N corridas de CUALQUIER agente en CUALQUIER flota — el feed de
+ * "qué acaban de hacer los agentes" del Inicio. LANZA ante error de lectura:
+ * un feed vacío sobre una base caída afirmaría "nadie ha corrido", que es
+ * exactamente lo que esta bitácora existe para desmentir (misma regla que
+ * `ultimasCorridas`).
+ */
+export async function getCorridasRecientes(limite = 8): Promise<CorridaReciente[]> {
+  const { data, error } = await supabaseAdmin()
+    .from('agente_corrida')
+    .select(COLUMNAS_CORRIDA)
+    .order('inicio', { ascending: false })
+    .limit(limite);
+  if (error) throw new Error(`getCorridasRecientes: ${error.message}`);
+  return (data ?? []).map((f) => {
+    const r = f as Record<string, unknown>;
+    return { agente: String(r.agente), ...mapearCorrida(r) };
+  });
+}
+
+/**
+ * La ÚLTIMA corrida de cada agente del dominio — el estado de la sección de
+ * orquestación. Seis consultas `limit 1` en paralelo y no una sola con
+ * dedupe en JS a propósito: deduplicar sobre "las últimas N" mentiría con un
+ * agente que no corre desde hace semanas ("sin corridas" cuando SÍ tiene,
+ * solo que fuera de la ventana), y traer la tabla entera para seis filas es
+ * el patrón que la 0062 vino a matar.
+ */
+export async function getUltimaCorridaPorAgente(): Promise<UltimaCorridaAgente[]> {
+  const admin = supabaseAdmin();
+  return Promise.all(AGENTES_BITACORA.map(async (agente) => {
+    const { data, error } = await admin
+      .from('agente_corrida')
+      .select(COLUMNAS_CORRIDA)
+      .eq('agente', agente)
+      .order('inicio', { ascending: false })
+      .limit(1);
+    if (error) throw new Error(`getUltimaCorridaPorAgente/${agente}: ${error.message}`);
+    const fila = (data ?? [])[0] as Record<string, unknown> | undefined;
+    return { agente, ultima: fila ? mapearCorrida(fila) : null };
   }));
 }

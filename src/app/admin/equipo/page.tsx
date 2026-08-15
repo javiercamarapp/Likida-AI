@@ -5,19 +5,20 @@ import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
 
-/** Los 4 roles reales del dominio (constraint `app_user_rol_dominio`,
- *  0044_rol_encargado.sql, retirado `operador` el 7-ago-2026 — el chofer ya
- *  no tiene login) — etiqueta legible para cada uno. Cualquier valor que no
- *  esté en este mapa (no debería pasar, la base ya lo restringe) se enseña
- *  tal cual en vez de esconderse. */
+/** Los 5 roles reales del dominio (constraint `app_user_rol_dominio`:
+ *  0044 metió `encargado`, 0086 retiró `operador` — el chofer ya no tiene
+ *  login —, 0105 metió `vendedor`) — etiqueta legible para cada uno.
+ *  Cualquier valor que no esté en este mapa (no debería pasar, la base ya lo
+ *  restringe) se enseña tal cual en vez de esconderse. */
 const ROL_LABEL: Record<RolAppUser, string> = {
   superadmin: 'Superadmin',
   flota_admin: 'Dueño / Admin de flota',
   encargado: 'Encargado',
   contador: 'Contador',
+  vendedor: 'Vendedor (Likida)',
 };
 
-const ORDEN_ROL: RolAppUser[] = ['superadmin', 'flota_admin', 'encargado', 'contador'];
+const ORDEN_ROL: RolAppUser[] = ['superadmin', 'vendedor', 'flota_admin', 'encargado', 'contador'];
 
 function InsigniaRol({ rol }: { rol: string }) {
   const label = ROL_LABEL[rol as RolAppUser] ?? rol;
@@ -31,10 +32,11 @@ function InsigniaRol({ rol }: { rol: string }) {
 
 /**
  * Equipo / RBAC — la única de las siete con datos 100% reales: roster
- * completo de `app_user` (`getEquipo`, apéndice nuevo en negocio.ts). Los 4
+ * completo de `app_user` (`getEquipo`, apéndice nuevo en negocio.ts). Los 5
  * roles vienen del dominio real de la base (RolAppUser), no de una lista
- * inventada. Se ordena por rol siguiendo la jerarquía operativa del
- * negocio (superadmin → dueño → encargado → contador), no alfabético.
+ * inventada. Se ordena por rol siguiendo la jerarquía operativa del negocio
+ * (los de Likida primero: superadmin → vendedor; luego la flota: dueño →
+ * encargado → contador), no alfabético.
  */
 export default async function EquipoPage() {
   const equipo = await getEquipo();

@@ -3868,3 +3868,346 @@ begin
   raise exception E'RETENCION_0104  conv_purgadas=%  cod_purgados=%  quedan_conv=%  quedan_cod=%  anon=%/%   (esperado >=1/>=1/1/1/f/f)',
     (res->>'conversacionesPurgadas'), (res->>'codigosPurgados'), quedan_conv, quedan_cod, anon_conv, anon_cod;
 end $$;
+
+-- ── 83. La zona de vendedores (0105) ───────────────────────────────────────
+--
+-- Tres cosas que solo la base puede demostrar: (a) el rol `vendedor` entró
+-- al dominio y un rol inventado sigue rebotando; (b) `prospecto` vigila su
+-- embudo — estado fuera del dominio rebota, cerrado exige `cerrado_en` (y
+-- viceversa), `tenant_id` solo se acepta en cerrado, empresa en blanco
+-- rebota, y la tabla tiene RLS SIN políticas (deny-all: cero policies en
+-- pg_policies); (c) `agente_corrida` acepta al agente `ventas` con
+-- `tenant_id` NULL y sigue rebotando un agente inventado. Todo dentro de un
+-- DO que revierte con su excepción final — no queda ni una fila.
+--
+-- SALIDA REAL (14-ago-2026, corrida vía MCP tras aplicar la 0105):
+--   ERROR: P0001: VENDEDORES_0105  rol_malo_rebota=t  estado_malo=t
+--   cerrado_sin_fecha=t  fecha_sin_cerrado=t  tenant_sin_cerrar=t
+--   empresa_vacia=t  rls=t  policies=0  indice=1  agente_malo=t
+--   (esperado t/t/t/t/t/t/t/0/1/t) — coincide; el RAISE final revirtió
+--   todas las filas de prueba.
+do $$
+declare
+  u uuid := gen_random_uuid(); p uuid; t uuid;
+  rol_malo boolean := false; estado_malo boolean := false;
+  cerrado_sin_fecha boolean := false; fecha_sin_cerrado boolean := false;
+  tenant_sin_cerrar boolean := false; empresa_vacia boolean := false;
+  agente_malo boolean := false; rls_activa boolean; policies int; idx int;
+begin
+  -- (a) el dominio de rol
+  insert into public.app_user (id, email, rol, tenant_id) values (u, '__verif_0105__@likida.ai', 'vendedor', null);
+  begin
+    insert into public.app_user (id, email, rol) values (gen_random_uuid(), '__verif_0105b__@likida.ai', 'gerente');
+  exception when check_violation then rol_malo := true;
+  end;
+
+  -- (b) el embudo de prospecto
+  insert into public.prospecto (empresa, vacante, vendedor_id)
+    values ('__VERIF_0105__', 'Analista de liquidaciones', u) returning id into p;
+  begin
+    insert into public.prospecto (empresa, estado) values ('__V105__', 'tibio');
+  exception when check_violation then estado_malo := true;
+  end;
+  begin
+    insert into public.prospecto (empresa, estado) values ('__V105__', 'cerrado');  -- sin cerrado_en
+  exception when check_violation then cerrado_sin_fecha := true;
+  end;
+  begin
+    insert into public.prospecto (empresa, estado, cerrado_en) values ('__V105__', 'nuevo', now());
+  exception when check_violation then fecha_sin_cerrado := true;
+  end;
+  insert into public.tenant (nombre) values ('__verif_0105__') returning id into t;
+  begin
+    insert into public.prospecto (empresa, estado, tenant_id) values ('__V105__', 'nuevo', t);
+  exception when check_violation then tenant_sin_cerrar := true;
+  end;
+  begin
+    insert into public.prospecto (empresa) values ('   ');
+  exception when check_violation then empresa_vacia := true;
+  end;
+  select relrowsecurity into rls_activa from pg_class where oid = 'public.prospecto'::regclass;
+  select count(*) into policies from pg_policies where schemaname = 'public' and tablename = 'prospecto';
+  select count(*) into idx from pg_indexes where schemaname = 'public' and indexname = 'prospecto_por_vendedor';
+
+  -- (c) la bitácora del agente de ventas, sin flota
+  insert into public.agente_corrida (tenant_id, agente, inicio, fin, estado, disparo, tareas_hechas, tareas_total)
+    values (null, 'ventas', now() - interval '3 seconds', now(), 'ok', 'manual', 2, 2);
+  begin
+    insert into public.agente_corrida (tenant_id, agente, inicio, estado) values (null, 'marketing', now(), 'ok');
+  exception when check_violation then agente_malo := true;
+  end;
+
+  raise exception E'VENDEDORES_0105  rol_malo_rebota=%  estado_malo=%  cerrado_sin_fecha=%  fecha_sin_cerrado=%  tenant_sin_cerrar=%  empresa_vacia=%  rls=%  policies=%  indice=%  agente_malo=%   (esperado t/t/t/t/t/t/t/0/1/t)',
+    rol_malo, estado_malo, cerrado_sin_fecha, fecha_sin_cerrado, tenant_sin_cerrar, empresa_vacia, rls_activa, policies, idx, agente_malo;
+end $$;
+
+-- ── 84. El desglose del proveedor de peaje (0106) ──────────────────────────
+--
+-- Lo que solo la base puede demostrar de la 0106: (a) el dominio de estatus
+-- rebota un valor inventado y el default es `sin_contraparte` (toda línea
+-- nace sin conciliar — sin cruce no se afirma nada); (b) `diferencia` y
+-- `viaje_id` aceptan NULL (NULL ≠ 0: sin contraparte no hay diferencia que
+-- medir); (c) el UNIQUE (desglose_id, indice) rebota el renglón repetido;
+-- (d) el periodo incoherente (hasta < desde) rebota; (e) ambas tablas tienen
+-- RLS activa con CERO políticas (deny-all — todo acceso por service_role);
+-- (f) los tres índices existen; (g) borrar el desglose arrastra sus líneas
+-- (cascade). Todo dentro de un DO que revierte con su excepción final.
+--
+-- SALIDA REAL (14-ago-2026, corrida vía MCP tras aplicar la 0106 — con el
+--   arreglo de operador_id anotado arriba):
+--   ERROR: P0001: DESGLOSE_0106  default_sin_contraparte=t  diferencia_nula=t
+--   estatus_malo_rebota=t  indice_repetido_rebota=t  periodo_malo_rebota=t
+--   rls=t/t  policies=0  indices=3  lineas_tras_borrar=0
+--   (esperado t/t/t/t/t/t/t/0/3/0) — coincide; el RAISE revirtió todo.
+do $$
+declare
+  t uuid; o uuid; d uuid; v uuid; lin uuid;
+  estatus_malo boolean := false; indice_repetido boolean := false;
+  periodo_malo boolean := false;
+  default_ok boolean; dif_nula boolean;
+  rls_desglose boolean; rls_linea boolean; policies int; indices int;
+  lineas_tras_borrar int;
+begin
+  insert into public.tenant (nombre) values ('__verif_0106__') returning id into t;
+  -- viaje.operador_id es NOT NULL (0001): sin un operador de utilería el
+  -- INSERT de abajo rebota — atrapado en la primera corrida real del bloque.
+  insert into public.operador (tenant_id, nombre, telefono)
+    values (t, '__verif_0106__', '5210000000106') returning id into o;
+  insert into public.viaje (tenant_id, operador_id, folio) values (t, o, '__V106__') returning id into v;
+
+  -- (a) default sin_contraparte + dominio vigilado
+  insert into public.desglose_peaje (tenant_id, proveedor, archivo_nombre)
+    values (t, 'IAVE', 'verif_0106.xlsx') returning id into d;
+  insert into public.desglose_peaje_linea (tenant_id, desglose_id, indice, fecha, caseta, monto, tag)
+    values (t, d, 0, current_date, 'Tepotzotlán', 189.00, 'IMDM00106') returning id into lin;
+  select (estatus = 'sin_contraparte'), (diferencia is null)
+    into default_ok, dif_nula
+    from public.desglose_peaje_linea where id = lin;
+  begin
+    insert into public.desglose_peaje_linea (tenant_id, desglose_id, indice, monto, estatus)
+      values (t, d, 1, 100.00, 'conciliada');  -- estatus de OTRA tabla: aquí no existe
+  exception when check_violation then estatus_malo := true;
+  end;
+
+  -- (b) una línea que cuadra puede señalar su viaje y su diferencia medida
+  update public.desglose_peaje_linea
+     set estatus = 'cuadra', viaje_id = v, diferencia = 0.00 where id = lin;
+
+  -- (c) el renglón repetido rebota
+  begin
+    insert into public.desglose_peaje_linea (tenant_id, desglose_id, indice, monto)
+      values (t, d, 0, 55.00);
+  exception when unique_violation then indice_repetido := true;
+  end;
+
+  -- (d) el periodo incoherente rebota
+  begin
+    insert into public.desglose_peaje (tenant_id, periodo_desde, periodo_hasta)
+      values (t, '2026-08-10', '2026-08-01');
+  exception when check_violation then periodo_malo := true;
+  end;
+
+  -- (e) RLS activa, cero policies en las dos
+  select relrowsecurity into rls_desglose from pg_class where oid = 'public.desglose_peaje'::regclass;
+  select relrowsecurity into rls_linea from pg_class where oid = 'public.desglose_peaje_linea'::regclass;
+  select count(*) into policies from pg_policies
+    where schemaname = 'public' and tablename in ('desglose_peaje', 'desglose_peaje_linea');
+
+  -- (f) los tres índices
+  select count(*) into indices from pg_indexes
+    where schemaname = 'public' and indexname in
+      ('desglose_peaje_linea_por_desglose', 'desglose_peaje_linea_por_estatus', 'desglose_peaje_por_flota');
+
+  -- (g) borrar el desglose arrastra sus líneas
+  delete from public.desglose_peaje where id = d;
+  select count(*) into lineas_tras_borrar from public.desglose_peaje_linea where desglose_id = d;
+
+  raise exception E'DESGLOSE_0106  default_sin_contraparte=%  diferencia_nula=%  estatus_malo_rebota=%  indice_repetido_rebota=%  periodo_malo_rebota=%  rls=%/%  policies=%  indices=%  lineas_tras_borrar=%   (esperado t/t/t/t/t/t/t/0/3/0)',
+    default_ok, dif_nula, estatus_malo, indice_repetido, periodo_malo,
+    rls_desglose, rls_linea, policies, indices, lineas_tras_borrar;
+end $$;
+
+-- ── 85. La decisión de la talacha se firma o no existe (0107 + 0109) ───────
+--
+-- Lo que solo la base puede demostrar de la 0107: (a) el dominio de
+-- `autorizacion` rebota un valor inventado; (b) una decisión SIN firma
+-- (autorizada sin quién/cuándo) rebota — una "autorizada" anónima se leería
+-- igual que una firmada, y la firma es todo el punto del circuito §4.6;
+-- (c) una firma SIN decisión (pendiente con autorizada_en) también rebota —
+-- la coherencia es bicondicional, como incidencia_cierre_coherente; (d) el
+-- claim anti-doble-decisión: dos UPDATE condicionales `WHERE autorizacion =
+-- 'pendiente'` — el primero toca 1 fila, el segundo 0, así el segundo botón
+-- del jefe no re-firma ni pisa la primera decisión; (e) las incidencias de
+-- siempre (autorizacion NULL) siguen entrando sin firma — la 0107 no les
+-- exige nada nuevo; (f) el índice parcial de pendientes existe. Todo dentro
+-- de un DO que revierte con su excepción final.
+--
+-- SALIDA REAL (14-ago-2026, DOS corridas vía MCP — y la primera ATRAPÓ un
+--   hueco real):
+--   1ª corrida (0107 recién aplicada, con el arreglo de operador_id anotado
+--   arriba): firma_suelta_rebota=f — el check de la 0107 dejaba estampar
+--   `autorizada_en` sola sobre una PENDIENTE (false=false pasa el ⇔). Todo
+--   lo demás en verde: t/t/f/1/0/t/t contra esperado t/t/t/1/0/t/t.
+--   2ª corrida (tras la 0109, que ata cada campo de la firma a la decisión):
+--   ERROR: P0001: TALACHA_0107  dominio_rebota=t  sin_firma_rebota=t
+--   firma_suelta_rebota=t  primer_claim=1  segundo_claim=0  vieja_entra=t
+--   indice=t   (esperado t/t/t/1/0/t/t) — coincide; el RAISE revirtió todo.
+do $$
+declare
+  t uuid; o uuid; v uuid; jefe uuid; inc uuid;
+  dominio_rebota boolean := false; sin_firma_rebota boolean := false;
+  firma_suelta_rebota boolean := false;
+  primer_claim int; segundo_claim int;
+  vieja_entra boolean := false; indice_existe boolean;
+begin
+  insert into public.tenant (nombre) values ('__verif_0107__') returning id into t;
+  -- viaje.operador_id es NOT NULL (0001) — mismo arreglo que el bloque 84.
+  insert into public.operador (tenant_id, nombre, telefono)
+    values (t, '__verif_0107__', '5210000000107') returning id into o;
+  insert into public.viaje (tenant_id, operador_id, folio) values (t, o, '__V107__') returning id into v;
+  insert into public.app_user (id, tenant_id, email, rol)
+    values (gen_random_uuid(), t, 'verif0107@likida.test', 'flota_admin') returning id into jefe;
+
+  -- (e) la incidencia informativa de siempre: sin autorizacion, sin firma.
+  begin
+    insert into public.incidencia (tenant_id, viaje_id, tipo, descripcion)
+      values (t, v, 'retraso', 'verif 0107: informativa');
+    vieja_entra := true;
+  exception when others then vieja_entra := false;
+  end;
+
+  -- La talacha pendiente del circuito.
+  insert into public.incidencia (tenant_id, viaje_id, tipo, prioridad, descripcion, monto_estimado, autorizacion)
+    values (t, v, 'averia', 'alta', 'verif 0107: talacha', 800, 'pendiente') returning id into inc;
+
+  -- (a) dominio vigilado.
+  begin
+    update public.incidencia set autorizacion = 'verde' where id = inc;
+  exception when check_violation then dominio_rebota := true;
+  end;
+
+  -- (b) decisión sin firma.
+  begin
+    update public.incidencia set autorizacion = 'autorizada' where id = inc;
+  exception when check_violation then sin_firma_rebota := true;
+  end;
+
+  -- (c) firma sin decisión.
+  begin
+    update public.incidencia set autorizada_en = now() where id = inc;
+  exception when check_violation then firma_suelta_rebota := true;
+  end;
+
+  -- (d) el claim: gana exactamente un botón.
+  update public.incidencia
+     set autorizacion = 'autorizada', autorizada_por = jefe, autorizada_en = now()
+   where id = inc and autorizacion = 'pendiente';
+  get diagnostics primer_claim = row_count;
+  update public.incidencia
+     set autorizacion = 'rechazada', autorizada_por = jefe, autorizada_en = now()
+   where id = inc and autorizacion = 'pendiente';
+  get diagnostics segundo_claim = row_count;
+
+  -- (f) el índice parcial de pendientes.
+  select count(*) = 1 into indice_existe
+    from pg_indexes
+   where schemaname = 'public' and indexname = 'incidencia_autorizacion_pendiente_idx';
+
+  raise exception E'TALACHA_0107  dominio_rebota=%  sin_firma_rebota=%  firma_suelta_rebota=%  primer_claim=%  segundo_claim=%  vieja_entra=%  indice=%   (esperado t/t/t/1/0/t/t)',
+    dominio_rebota, sin_firma_rebota, firma_suelta_rebota, primer_claim, segundo_claim, vieja_entra, indice_existe;
+end $$;
+
+-- ── 86. El flujo de proveedores: foto, SAT, export y disparo correo (0108) ──
+--
+-- Lo que solo la base puede demostrar de la 0108: (a) el dedup por
+-- (tenant, cfdi_uuid) sigue vivo con las columnas nuevas puestas; (b) una
+-- factura de FOTO cabe sin xml_crudo PORQUE trae ocr_confianza, y una fila
+-- sin respaldo (ni XML ni OCR) rebota; (c) los dominios de origen y
+-- estado_sat rebotan valores inventados; (d) exportada_en solo cabe sobre
+-- una aprobada; (e) `agente_corrida` acepta el disparo 'correo' y sigue
+-- rebotando uno inventado; (f) la tabla sigue deny-all para authenticated.
+-- Todo dentro de un DO que revierte con su excepción final.
+--
+-- SALIDA REAL (14-ago-2026, corrida vía MCP tras aplicar la 0108):
+--   ERROR: P0001: PROVEEDOR_FLUJO_0108  dedup=t  foto_sin_xml=1
+--   sin_respaldo_rebota=t  origen_malo=t  sat_malo=t
+--   export_pendiente_rebota=t  exportadas=1  disparo_correo_malo_rebota=t
+--   rls=0   (esperado t/1/t/t/t/t/1/t/0) — coincide; el RAISE revirtió todo.
+do $$
+declare
+  v_t uuid;
+  dedup_vivo boolean := false;
+  sin_respaldo_rebota boolean := false;
+  origen_malo boolean := false;
+  sat_malo boolean := false;
+  export_pendiente_rebota boolean := false;
+  disparo_malo boolean := false;
+  n_foto int;
+  n_export int;
+  n_rls int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0108') returning id into v_t;
+
+  -- (a) XML con las columnas nuevas, y el dedup contra una FOTO del mismo UUID
+  insert into factura_proveedor (tenant_id, cfdi_uuid, total, xml_crudo, origen, estado_sat)
+    values (v_t, 'UUID-VERIF-0108', 100, '<x/>', 'correo', 'vigente');
+  begin
+    insert into factura_proveedor (tenant_id, cfdi_uuid, total, ocr_confianza, origen)
+      values (v_t, 'UUID-VERIF-0108', 100, 0.62, 'subida');
+  exception when unique_violation then dedup_vivo := true;
+  end;
+
+  -- (b) la foto cabe sin XML porque declara su OCR; sin ninguno de los dos, no
+  insert into factura_proveedor (tenant_id, cfdi_uuid, total, ocr_confianza, origen, estado_sat)
+    values (v_t, 'UUID-VERIF-0108-F', 250, 0.62, 'subida', 'pendiente');
+  select count(*) into n_foto from factura_proveedor
+    where tenant_id = v_t and xml_crudo is null and ocr_confianza = 0.62;
+  begin
+    insert into factura_proveedor (tenant_id, cfdi_uuid, total)
+      values (v_t, 'UUID-VERIF-0108-N', 300);
+  exception when check_violation then sin_respaldo_rebota := true;
+  end;
+
+  -- (c) los dominios nuevos
+  begin
+    insert into factura_proveedor (tenant_id, cfdi_uuid, total, xml_crudo, origen)
+      values (v_t, 'UUID-VERIF-0108-O', 10, '<x/>', 'fax');
+  exception when check_violation then origen_malo := true;
+  end;
+  begin
+    insert into factura_proveedor (tenant_id, cfdi_uuid, total, xml_crudo, estado_sat)
+      values (v_t, 'UUID-VERIF-0108-S', 10, '<x/>', 'valido');
+  exception when check_violation then sat_malo := true;
+  end;
+
+  -- (d) exportada_en: rebota sobre pendiente, cabe sobre aprobada
+  begin
+    update factura_proveedor set exportada_en = now()
+      where tenant_id = v_t and cfdi_uuid = 'UUID-VERIF-0108';
+  exception when check_violation then export_pendiente_rebota := true;
+  end;
+  update factura_proveedor set estado = 'aprobada', decidido_por = 'verif', decidido_en = now()
+    where tenant_id = v_t and cfdi_uuid = 'UUID-VERIF-0108';
+  update factura_proveedor set exportada_en = now()
+    where tenant_id = v_t and cfdi_uuid = 'UUID-VERIF-0108';
+  select count(*) into n_export from factura_proveedor
+    where tenant_id = v_t and exportada_en is not null;
+
+  -- (e) el disparo 'correo' de la bitácora
+  insert into agente_corrida (tenant_id, agente, inicio, fin, estado, disparo, tareas_hechas, tareas_total)
+    values (v_t, 'proveedores', now() - interval '2 seconds', now(), 'ok', 'correo', 1, 2);
+  begin
+    insert into agente_corrida (tenant_id, agente, inicio, estado, disparo)
+      values (v_t, 'proveedores', now(), 'ok', 'webhook');
+  exception when check_violation then disparo_malo := true;
+  end;
+
+  -- (f) deny-all intacto
+  set local role authenticated;
+  select count(*) into n_rls from factura_proveedor where tenant_id = v_t;
+  reset role;
+
+  delete from tenant where id = v_t;
+  raise exception E'PROVEEDOR_FLUJO_0108  dedup=%  foto_sin_xml=%  sin_respaldo_rebota=%  origen_malo=%  sat_malo=%  export_pendiente_rebota=%  exportadas=%  disparo_correo_malo_rebota=%  rls=%   (esperado t/1/t/t/t/t/1/t/0)',
+    dedup_vivo, n_foto, sin_respaldo_rebota, origen_malo, sat_malo, export_pendiente_rebota, n_export, disparo_malo, n_rls;
+end $$;

@@ -102,10 +102,11 @@ function withSecurityHeaders(res: NextResponse): NextResponse {
  * `requireSessionTenant`/`requireSuperadmin` está nombrada aquí.
  *
  * `/chofer` y `/mis-viajes` salieron el 7-ago-2026: el chofer ya no tiene
- * cuenta ni panel propio, solo WhatsApp — ver `visibilidad.ts` (`PANEL_PROPIO`
- * vacío) y `guard.ts` (`requireOperador` retirada).
+ * cuenta ni panel propio, solo WhatsApp — ver `visibilidad.ts` y `guard.ts`
+ * (`requireOperador` retirada). `/vendedor` entró el 14-ago-2026 (0105): el
+ * panel del rol `vendedor`, gateado en su layout por `requireVendedor`.
  */
-export const RUTAS_CON_SESION = ['/dashboard', '/admin'] as const;
+export const RUTAS_CON_SESION = ['/dashboard', '/admin', '/vendedor'] as const;
 
 export async function proxy(req: NextRequest) {
   let res = NextResponse.next({ request: req });

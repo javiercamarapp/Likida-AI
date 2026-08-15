@@ -86,10 +86,24 @@ describe('resolverRango', () => {
 // esta prueba vigila que nadie la desarme.
 
 // `/dashboard/analitica` se borró el 10-ago-2026 (rediseño desde cero de
-// "dueño de flota") — sale de la lista junto con la página.
-const PAGINAS = ['../../dashboard/page.tsx', '../page.tsx'];
+// "dueño de flota") — sale de la lista junto con la página. `admin/page.tsx`
+// quedó en puro gateo el 14-ago (extracción para preview headless): el
+// GlobalFilter vive ahora en `admin/consola.tsx`, y ESE es el archivo que
+// hay que vigilar — la lista apuntando al cascarón dejó la suite VACÍA y
+// vitest la marcó como fallo ("No test found in suite"), que es exactamente
+// el aviso correcto: una vigilancia sin vigilado no es verde, es un hueco.
+const PAGINAS = ['../../dashboard/page.tsx', '../page.tsx', '../consola.tsx'];
 
 describe('ninguna página vuelve a declarar el default por su cuenta', () => {
+  // Si NINGUNA página de la lista usa el filtro, la vigilancia entera quedó
+  // apuntando a la nada — eso tiene que fallar solo, no quedarse en silencio.
+  it('la lista vigila al menos un archivo que SÍ usa <GlobalFilter', () => {
+    const conFiltro = PAGINAS.filter((rel) =>
+      readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8').includes('<GlobalFilter'),
+    );
+    expect(conFiltro.length).toBeGreaterThan(0);
+  });
+
   for (const rel of PAGINAS) {
     const fuente = readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
     if (!fuente.includes('<GlobalFilter')) continue;

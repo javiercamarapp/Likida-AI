@@ -65,7 +65,12 @@ hallazgos_que_el_codigo_tiene_MAL:
       total podría duplicar el beneficio del IVA, que ya se acredita por separado
       (LIVA art. 5). Esta es una pregunta para un contador, NO para resolverse sola.
     severidad: alta
-    estado: SIN RESOLVER
+    estado: >
+      RESUELTO (14-ago-2026): la RMF 2026 regla 9.1.8, fr. IV (ficha
+      rmf-2026-9.1.8, verificada en fuente primaria) fija la base: "se aplicará
+      al importe pagado por concepto del uso de la infraestructura carretera de
+      cuota, sin incluir el IVA, el factor de 0.5". La lectura conservadora del
+      motor es la que la regla ordena — no hay que cambiar el código.
   - id: H5
     que_dice_la_ley: "que utilizan la Red Nacional de Autopistas de Cuota"
     que_hace_el_motor: "Aplica el 50% a TODO gasto con concepto 'caseta'."

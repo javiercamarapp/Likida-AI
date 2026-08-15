@@ -337,5 +337,21 @@ export const NORMAS: readonly Norma[] = [
       "2.7.7.2.8",
       "Carta Porte"
     ]
+  },
+  {
+    "archivo": "rmf-2026-9.1.8.yaml",
+    "id": "rmf-2026-9.1.8",
+    "tipo": "regla_general",
+    "instrumento": "Resolución Miscelánea Fiscal para 2026",
+    "articulo_o_regla": "9.1.8 (Título 9, Capítulo 9.1)",
+    "titulo": "Requisitos operativos del estímulo del 50% de peaje: aviso de marzo, bitácora de viaje conciliada, pago electrónico y factor 0.5 sin IVA",
+    "estado_verificacion": "verificado_fuente_primaria",
+    "fuente_url": "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/rmf/RMF_2026-DOF-28122025.pdf",
+    "verificado_el": "2026-07-27",
+    "jerarquia": 3,
+    "citasEnCodigo": [
+      "RMF 9.1.8",
+      "regla 9.1.8"
+    ]
   }
 ] as const;

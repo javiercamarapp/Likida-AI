@@ -31,6 +31,11 @@ export async function requireSessionTenant(
   if (!s) redirect(`/login?next=${encodeURIComponent(destino)}`);
   if (!s.tenantId) {
     if (s.rol === 'superadmin') return { ...s, tenantId: tenantDemo() };
+    // El vendedor (0105) no tiene tenant NI pantalla en /dashboard: su casa
+    // es /vendedor. Sin esta rama, el aterrizaje post-login (que por default
+    // apunta a /dashboard) lo mandaba a /sin-acceso TENIENDO acceso — la
+    // pantalla le decía "pide tu alta" a una cuenta ya dada de alta.
+    if (s.rol === 'vendedor') redirect('/vendedor');
     redirect('/sin-acceso');
   }
   return s as SessionTenant & { tenantId: string };
@@ -46,6 +51,27 @@ export async function requireSuperadmin(): Promise<SessionTenant> {
   const s = await getSessionTenant();
   if (!s) redirect(`/login?next=${encodeURIComponent('/admin')}`);
   if (s.rol !== 'superadmin') redirect('/dashboard');
+  return s;
+}
+
+/**
+ * Puerta de /vendedor — la zona de vendedores de Likida (0105). Entra el
+ * rol `vendedor` y el superadmin (soporte: es la consola de SU equipo de
+ * ventas, no la de un cliente). Cualquier otro rol se va a SU casa vía
+ * `inicioDe` — que también resuelve al rol sin fila (`SIN_ROL` →
+ * /sin-acceso): fail closed, no un rebote a un panel que no le toca.
+ *
+ * QUIÉN VE QUÉ ADENTRO lo decide la página con la sesión devuelta: el
+ * vendedor consulta con SU userId (solo sus prospectos); el superadmin ve
+ * todos. Esta puerta solo decide si la pantalla existe para ese rol.
+ */
+export async function requireVendedor(): Promise<SessionTenant> {
+  const s = await getSessionTenant();
+  if (!s) redirect(`/login?next=${encodeURIComponent('/vendedor')}`);
+  if (s.rol !== 'vendedor' && s.rol !== 'superadmin') {
+    const { inicioDe } = await import('./visibilidad');
+    redirect(inicioDe(s.rol));
+  }
   return s;
 }
 

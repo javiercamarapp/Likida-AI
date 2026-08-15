@@ -6,7 +6,10 @@ import { puedeAdministrar } from '@/lib/auth/permisos';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
 import {
   guardarFacturaProveedor, listarFacturasProveedor, decidirFacturaProveedor,
+  ingresarFacturaDesdeFoto, estadoSatDeCfdi,
 } from '@/lib/likida/proveedores';
+import { ultimasCorridas, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
+import { FichaCorridas } from '../ficha-corridas';
 import { getFiscalDeFlota } from '@/lib/likida/facturacion/flota_fiscal';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import {
@@ -21,6 +24,9 @@ import { SeccionNotificaciones } from '../seccion-notificaciones';
 export const dynamic = 'force-dynamic';
 
 const MAX_XML_BYTES = 2 * 1024 * 1024;
+/** Una foto de celular pesa unidades de MB; 8 ya es un archivo equivocado. */
+const MAX_FOTO_BYTES = 8 * 1024 * 1024;
+const TIPOS_FOTO = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 /** El gateo de las actions — helper de módulo (una action solo captura
  *  valores serializables). */
@@ -71,6 +77,11 @@ export default async function PaginaAgenteProveedores({
   const fiscal = await getFiscalDeFlota(tenantId).catch(() => null);
   const rfcFlota = fiscal?.flota?.rfc || null;
 
+  // La ficha de corridas es SECUNDARIA: si su lectura falla, la bandeja sigue
+  // y la ficha dice que no pudo leer — nunca "sin corridas" sobre una caída.
+  const corridas: CorridaRegistrada[] | null =
+    await ultimasCorridas(tenantId, 'proveedores').catch(() => null);
+
   // El buzón es SECUNDARIO de esta página: si su lectura falla, la bandeja
   // sigue sirviendo, y la sección dice "no se pudo leer" — nunca "sin buzón",
   // que ofrecería generar (y rotar sin querer) encima del que quizá exista.
@@ -97,7 +108,9 @@ export default async function PaginaAgenteProveedores({
     }
 
     const rfc = (await getFiscalDeFlota(tenantId).catch(() => null))?.flota?.rfc || null;
-    const r = await guardarFacturaProveedor(tenantId, xml, texto, rfc);
+    // El estatus SAT se consulta al ingerir (jamás lanza; SAT caído → 'pendiente').
+    const estadoSat = await estadoSatDeCfdi(xml);
+    const r = await guardarFacturaProveedor(tenantId, xml, texto, rfc, 'subida', estadoSat);
     if (!r.ok) {
       return r.motivo === 'duplicada'
         ? { error: 'Esa factura ya está en la bandeja (mismo folio fiscal).' }
@@ -107,7 +120,49 @@ export default async function PaginaAgenteProveedores({
     return {
       aviso: r.receptorEsFlota === false
         ? 'Guardada — OJO: el receptor del CFDI NO es el RFC de tu flota; revísala antes de aprobar.'
-        : 'Guardada. Está en la bandeja esperando tu decisión.',
+        : estadoSat === 'cancelado'
+          ? 'Guardada — OJO: el SAT reporta este CFDI como CANCELADO; revísalo antes de aprobar.'
+          : 'Guardada. Está en la bandeja esperando tu decisión.',
+    };
+  }
+
+  /**
+   * La vía de FOTO (F6): la factura en papel de la que solo hay imagen. Las
+   * cifras salen de VISIÓN, no del XML — por eso la fila queda marcada con
+   * `ocr_confianza` y el aviso manda a revisar contra el papel, no afirma
+   * que quedó lista.
+   */
+  async function subirFoto(
+    _prev: { error?: string; aviso?: string } | null,
+    fd: FormData,
+  ): Promise<{ error?: string; aviso?: string } | null> {
+    'use server';
+    const permiso = await exigirPermiso(tenantId);
+    if ('error' in permiso) return { error: permiso.error };
+
+    const archivo = fd.get('archivo');
+    if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige la foto de la factura.' };
+    if (!TIPOS_FOTO.has(archivo.type)) return { error: 'Eso no es una foto (JPG, PNG o WebP). Si tienes el XML, súbelo por el otro botón — es el dato duro.' };
+    if (archivo.size > MAX_FOTO_BYTES) return { error: 'Esa foto pesa demasiado. Una foto de celular normal entra sin problema.' };
+
+    const dataUrl = `data:${archivo.type};base64,${Buffer.from(await archivo.arrayBuffer()).toString('base64')}`;
+    const rfc = (await getFiscalDeFlota(tenantId).catch(() => null))?.flota?.rfc || null;
+    const r = await ingresarFacturaDesdeFoto(tenantId, dataUrl, rfc);
+    if (!r.ok) {
+      const mensajes: Record<typeof r.motivo, string> = {
+        ilegible: 'No pude leer la foto como factura. Intenta con más luz y el papel plano — o sube el XML, que es el dato duro.',
+        sin_uuid: 'No se alcanzó a leer el folio fiscal (el QR del CFDI). Toma un acercamiento del QR o sube el XML: sin esa llave no puedo evitar duplicados.',
+        sin_total: 'No pude leer el total de la factura. Con el XML no pasa — súbelo si lo tienes.',
+        duplicada: 'Esa factura ya está en la bandeja (mismo folio fiscal).',
+        error: 'No se pudo guardar la factura. Inténtalo de nuevo.',
+      };
+      return { error: mensajes[r.motivo] };
+    }
+    logger.info('proveedores.subida_foto', { tenantId, factura: r.facturaId, confianza: r.ocrConfianza });
+    return {
+      aviso: r.receptorEsFlota === false
+        ? 'Guardada desde la foto — OJO: el receptor del CFDI NO es el RFC de tu flota; revísala antes de aprobar.'
+        : 'Guardada desde la foto. Las cifras las leyó la IA del papel, no del XML: revísalas contra la factura antes de aprobar.',
     };
   }
 
@@ -163,7 +218,10 @@ export default async function PaginaAgenteProveedores({
       buzon={buzon}
       dominioConfigurado={dominioConfigurado}
       puedeAdministrarBuzon={puedeAdministrarBuzon}
-      acciones={{ subirFactura, decidir, generarBuzon: generarBuzonAccion, rotarBuzon: rotarBuzonAccion }}
+      acciones={{ subirFactura, subirFoto, decidir, generarBuzon: generarBuzonAccion, rotarBuzon: rotarBuzonAccion }}
+      // ReactNode y no datos, como las notificaciones: la vista no debe
+      // importar el módulo de corridas, que trae supabaseAdmin.
+      ficha={<FichaCorridas corridas={corridas} />}
       notificaciones={<SeccionNotificaciones tenantId={tenantId} agenteId="proveedores" />}
     />
   );

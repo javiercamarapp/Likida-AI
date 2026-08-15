@@ -78,7 +78,9 @@ export function FichaCorridas({ corridas }: { corridas: CorridaRegistrada[] | nu
                       {dur === null ? <span style={{ color: 'var(--faint)' }}>—</span> : dur}
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
-                      {c.disparo === 'manual' ? 'Ejecutar ahora' : 'Programado'}
+                      {/* Cada disparo con su verdad: 'correo' (0108) NO es programado —
+                          lo disparó un correo que llegó al buzón. */}
+                      {c.disparo === 'manual' ? 'Ejecutar ahora' : c.disparo === 'correo' ? 'Llegó un correo' : 'Programado'}
                     </td>
                   </tr>
                 );

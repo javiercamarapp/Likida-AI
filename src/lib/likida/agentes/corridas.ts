@@ -16,15 +16,22 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 
-/** El dominio del CHECK de la 0102 — el mismo catálogo de notificaciones. */
-export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'conductores' | 'peajes' | 'proveedores';
+/** El dominio del CHECK de la 0102 (los seis del catálogo de notificaciones)
+ *  más `ventas` (0105): el asignador de prospectos, que corre para LIKIDA y
+ *  no para una flota — sus corridas van con `tenant_id` null y solo las ve
+ *  el superadmin (la policy `tenant_lee` no alcanza filas sin tenant). */
+export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'conductores' | 'peajes' | 'proveedores' | 'ventas';
 export type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
+/** `correo` (0108): el agente de Proveedores no corre por reloj — corre
+ *  cuando llega un correo al buzón. Registrarlo como 'cron' pintaría
+ *  «Programado» en la ficha sobre algo que disparó un correo. */
+export type DisparoCorrida = 'cron' | 'manual' | 'correo';
 
 export interface CorridaNueva {
   inicio: Date;
   fin: Date;
   estado: EstadoCorrida;
-  disparo: 'cron' | 'manual';
+  disparo: DisparoCorrida;
   /** El «2/2» de la ficha. Ambos o ninguno: un numerador sin denominador no
    *  dice nada, y la ficha pinta «—» cuando la corrida no se mide en tareas. */
   tareasHechas?: number;
@@ -36,7 +43,10 @@ export interface CorridaNueva {
 }
 
 export async function registrarCorrida(
-  tenantId: string,
+  /** `null` SOLO para agentes de negocio (hoy `ventas`): la corrida no es de
+   *  ninguna flota. Para los seis agentes de flota sigue siendo obligatorio —
+   *  el tipo lo permite, el llamador responde. */
+  tenantId: string | null,
   agente: AgenteConCorridas,
   c: CorridaNueva,
 ): Promise<void> {
@@ -64,7 +74,7 @@ export interface CorridaRegistrada {
   inicio: string;
   fin: string | null;
   estado: EstadoCorrida;
-  disparo: 'cron' | 'manual';
+  disparo: DisparoCorrida;
   tareasHechas: number | null;
   tareasTotal: number | null;
   resumen: Record<string, unknown> | null;
@@ -91,24 +101,49 @@ export async function ultimasCorridas(
     .order('inicio', { ascending: false })
     .limit(limite), 'ultimasCorridas');
   if (error) throw new Error(`ultimasCorridas: ${error.message}`);
-  return (data ?? []).map((f) => {
-    const r = f as Record<string, unknown>;
-    const inicio = String(r.inicio);
-    const fin = r.fin === null || r.fin === undefined ? null : String(r.fin);
-    const ms = fin === null ? null : new Date(fin).getTime() - new Date(inicio).getTime();
-    return {
-      id: String(r.id),
-      inicio,
-      fin,
-      estado: String(r.estado) as EstadoCorrida,
-      disparo: String(r.disparo) as 'cron' | 'manual',
-      tareasHechas: r.tareas_hechas === null || r.tareas_hechas === undefined ? null : Number(r.tareas_hechas),
-      tareasTotal: r.tareas_total === null || r.tareas_total === undefined ? null : Number(r.tareas_total),
-      resumen: (r.resumen as Record<string, unknown> | null) ?? null,
-      error: r.error === null || r.error === undefined ? null : String(r.error),
-      duracionMs: ms !== null && Number.isFinite(ms) && ms >= 0 ? ms : null,
-    };
-  });
+  return (data ?? []).map(desdeFilaCorrida);
+}
+
+function desdeFilaCorrida(f: unknown): CorridaRegistrada {
+  const r = f as Record<string, unknown>;
+  const inicio = String(r.inicio);
+  const fin = r.fin === null || r.fin === undefined ? null : String(r.fin);
+  const ms = fin === null ? null : new Date(fin).getTime() - new Date(inicio).getTime();
+  return {
+    id: String(r.id),
+    inicio,
+    fin,
+    estado: String(r.estado) as EstadoCorrida,
+    disparo: String(r.disparo) as DisparoCorrida,
+    tareasHechas: r.tareas_hechas === null || r.tareas_hechas === undefined ? null : Number(r.tareas_hechas),
+    tareasTotal: r.tareas_total === null || r.tareas_total === undefined ? null : Number(r.tareas_total),
+    resumen: (r.resumen as Record<string, unknown> | null) ?? null,
+    error: r.error === null || r.error === undefined ? null : String(r.error),
+    duracionMs: ms !== null && Number.isFinite(ms) && ms >= 0 ? ms : null,
+  };
+}
+
+/**
+ * Las últimas corridas de un agente de NEGOCIO (tenant null — hoy `ventas`,
+ * 0105). Función aparte y no un `tenantId: null` en `ultimasCorridas` porque
+ * el filtro cambia de operador (`.is` en vez de `.eq`) y un `.eq('tenant_id',
+ * null)` NO matchea filas NULL en Postgres: compilaría y devolvería siempre
+ * vacío — el fallo silencioso exacto que este historial existe para evitar.
+ * Misma regla que su hermana: un error de lectura LANZA.
+ */
+export async function ultimasCorridasNegocio(
+  agente: AgenteConCorridas,
+  limite = 5,
+): Promise<CorridaRegistrada[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('agente_corrida')
+    .select('id, inicio, fin, estado, disparo, tareas_hechas, tareas_total, resumen, error')
+    .is('tenant_id', null)
+    .eq('agente', agente)
+    .order('inicio', { ascending: false })
+    .limit(limite), 'ultimasCorridasNegocio');
+  if (error) throw new Error(`ultimasCorridasNegocio: ${error.message}`);
+  return (data ?? []).map(desdeFilaCorrida);
 }
 
 /** «3 s», «2 min 05 s» — la duración como la lee una persona. */
