@@ -62,14 +62,33 @@ Una línea con la lectura de la ronda.
 
 ## Presupuesto de la ronda (gasto vs tope)
 
-Responde SOLO con el contenido del archivo 00-SINTESIS.md.`;
-  const out = await llamada({
+IMPORTANTE — RESPONDES COMO DOCUMENTO, NO COMO ASISTENTE:
+- NO uses herramientas ni tool_calls ni Glob ni tags XML ni <tool_call> ni <bash>.
+- NO redactes ni anuncies lo que vas a hacer ("voy a escribir", "primero confirmo").
+- EMPIEZA DIRECTAMENTE con el encabezado: # Auditoria ${n} - Sintesis y recalificacion (asi, sin comillas) y escribe el documento completo en markdown plano. Fin de la respuesta.`;
+  let out = await llamada({
     modelo: MODELO_SINTESIS,
     quien: 'sintesis',
     mensajes: [{ role: 'user', content: prompt }],
     maxTokens: 8000,
     temperatura: 0.2,
   });
+  // Guardia anti-tool-call: si el modelo emite glitches (tool_call, <bash>,
+  // 'voy a…'), se le insiste UNA vez para que entregue el documento plano.
+  if (out.text.includes('<tool_call') || out.text.includes('<bash') || out.text.includes('Voy a ')) {
+    process.stderr.write('[audit] síntesis: salida con glitches — insistiendo documento plano\n');
+    out = await llamada({
+      modelo: MODELO_SINTESIS,
+      quien: 'sintesis',
+      mensajes: [
+        { role: 'user', content: prompt },
+        { role: 'assistant', content: out.text.slice(0, 1500) },
+        { role: 'user', content: 'Descartá lo anterior: no uses herramientas ni anuncios. Escribí AHORA el documento completo iniciando con: `# Auditoría ' + n + ' — Síntesis y recalificación`.' },
+      ],
+      maxTokens: 8000,
+      temperatura: 0.2,
+    });
+  }
   mkdirSync(dirRonda(n), { recursive: true });
   writeFileSync(`${dirRonda(n)}/00-SINTESIS.md`, out.text, 'utf8');
   return out.text;
