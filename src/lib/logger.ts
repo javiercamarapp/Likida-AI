@@ -55,14 +55,21 @@ const RFC = /\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/;
 // milisegundos tiene 13 dígitos y se convertiría en `[TEL]`, que es cómo se
 // pierde la hora de un evento.
 const PHONE = /\b\+?521?\d{10}\b|\b\d{10}\b/;
+// Datos patrimoniales. Auditoría 11 · ALTO (legal): la CLABE (18 dígitos) y el
+// PAN de tarjeta (16) vivían fuera del redactor, y un log de pago/devolución
+// que los trajera los emitía en claro. Se fijan en 18 y 16 EXACTOS y no en un
+// rango abierto (13-19): un rango volvería `[TARJETA]` un epoch de 13 dígitos o
+// un folio largo — el mismo error que ya se documentó con `PHONE`.
+const CLABE = /\b\d{18}\b/;
+const TARJETA = /\b\d{16}\b/;
 
-// UNA sola pasada con las tres reglas alternadas, no tres `replace` encadenados.
+// UNA sola pasada con las reglas alternadas, no tres `replace` encadenados.
 // Encadenar significa que la salida de una regla vuelve a ser entrada de la
 // siguiente: una huella que por azar saliera toda en dígitos podía acabar
 // redactada como teléfono, y un UUID cuyo último segmento fuera numérico se
 // perdía antes de llegar a la regla de UUID. Con una pasada, lo ya sustituido no
 // se vuelve a mirar.
-const SENSIBLE = new RegExp([UUID.source, RFC.source, PHONE.source].join('|'), 'g');
+const SENSIBLE = new RegExp([UUID.source, RFC.source, PHONE.source, CLABE.source, TARJETA.source].join('|'), 'g');
 
 const FNV_OFFSET = 0xcbf29ce484222325n;
 const FNV_PRIME = 0x100000001b3n;
@@ -93,6 +100,8 @@ export function huellaId(uuid: string): string {
 export function redactarTexto(s: string): string {
   return s.replace(SENSIBLE, (m) => {
     if (m.includes('-')) return huellaId(m); // UUID: se conserva la traza
+    if (/^\d{18}$/.test(m)) return '[CLABE]'; // dato patrimonial: se borra
+    if (/^\d{16}$/.test(m)) return '[TARJETA]'; // dato patrimonial: se borra
     if (/^[A-ZÑ&]/.test(m)) return '[RFC]'; // dato fiscal: se borra
     return '[TEL]'; // dato personal: se borra
   });
