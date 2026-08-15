@@ -1,0 +1,161 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// AGENTE AUDITOR — un rubro, un archivo, su modelo.
+//
+// Construye el prompt EXACTO del skill (references/auditor-prompt.md) con el
+// contexto del rubro (MAPA + sección + nota previa + abiertos + síntesis) y
+// llama al modelo que le toca por rubro (modelos.audit.ts). Escribe UN solo
+// archivo: docs/auditoria-N/<rubro>.md. Nunca toca código.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { dirRonda, rondaActual, NOTAS_PREVIAS } from './config.audit';
+import { contextoAgente, evidenciaBaseline } from './contexto.audit';
+import { modeloRubro } from './modelos.audit';
+import { llamada, llamadaConTools } from './llamada.audit';
+import type { Rubro } from './config.audit';
+
+const NOMBRE_RUBRO: Record<Rubro, string> = {
+  frontend: 'Frontend',
+  backend: 'Backend y API',
+  agentico: 'Sistema agéntico y orquestación',
+  'tool-calling': 'Tool calling',
+  seguridad: 'Seguridad',
+  fiscal: 'Cumplimiento fiscal',
+  legal: 'Cumplimiento legal',
+  arquitectura: 'Arquitectura y mantenibilidad',
+  pruebas: 'Pruebas',
+  operabilidad: 'Operabilidad y DX',
+  rendimiento: 'Rendimiento y costo',
+  datos: 'Modelo de datos y esquema',
+};
+
+export interface ResultadoAuditor {
+  rubro: Rubro;
+  texto: string;
+  modelo: string;
+  tokIn: number;
+  tokOut: number;
+  cost: number;
+  nota?: number;
+}
+
+const SALTO = `\n\n`;
+const CORCHETE = '```';
+
+function promptRubro(n: number, r: Rubro): string {
+  const ctx = contextoAgente(n, r);
+  const previa = ctx.k > 0 ? String(NOTAS_PREVIAS[r]) : '—';
+  return `Eres auditor de ${NOMBRE_RUBRO[r]} en Likida. Contexto fresco, mirada adversarial: tu trabajo es encontrar lo que está mal, no confirmar que está bien.
+
+## Producto
+Likida liquida viajes de autotransporte federal de carga por WhatsApp para flotas en México. Pre-revenue, sin clientes. El comprador es el contralor de la flota. Un error que el contralor vea en la sala cuesta el trato.
+
+## Línea base REAL de esta ronda (evidencia, no suposición)
+${evidenciaBaseline(n) || '(baseline sin correr: las notas no miden suite nueva)'}
+
+## Dónde está todo / qué no tocar
+${ctx.mapa || '(sin MAPA previo)'}
+
+TIENES HERRAMIENTAS REALES para leer el repositorio: leer (abre un archivo real con líneas), buscar (regex sobre el código) y listar (explora directorios). ÚSALAS SIEMPRE: cada hallazgo cita el «archivo:línea» que abriste tú; el orquestador lo re-verifica físicamente y uno inválido se descarta. No edites código ni corras npm test: tu trabajo es encontrar y calificar.
+
+## Tu rubro
+${ctx.seccion || '(sección del rubro no disponible)'}
+
+## De dónde vienes
+Nota previa: ${previa}/10.
+${ctx.sintesisPrev ? `Síntesis previa (para el delta):\n${ctx.sintesisPrev.slice(0, 4000)}` : ''}
+
+Hallazgos abiertos que te tocan: ${ctx.abiertos.length > 400 ? ctx.abiertos.slice(0, 400) + '…' : ctx.abiertos}.
+
+Los abiertos se verifican primero: si siguen ahí, se reportan como REINCIDENTE. Si ya se arreglaron, se dice, porque eso justifica subir la nota.
+
+## Qué es un hallazgo
+Un hallazgo tiene las cuatro cosas, o no existe:
+1. \`archivo:línea\` exacto — abierto y leído por ti, no inferido de un nombre.
+2. Escenario de falla concreto: entra X → sale Y mal, con valores. No «podría fallar»; sí «entra este mensaje → sale esta cifra mal».
+3. Consecuencia para alguien real: el contralor, el chofer, el SAT, la flota o el equipo que mantiene esto.
+4. Severidad: CRÍTICO (dinero mal, dato personal expuesto, o el demo se cae) · ALTO (falla silenciosa o efecto duplicado) · MEDIO (se degrada y se nota) · BAJO (deuda que va a cobrar factura).
+
+Si no puedes escribir el escenario con valores, no lo reportes. Antes de escribir cada hallazgo, intenta refutarlo tú mismo: busca el guardarraíl que ya lo cubre.
+
+## Qué NO hacer
+- No propongas el arreglo. Ni el diff, ni el plan. Encuentras y calificas (una línea de causa raíz probable sí está permitida al final de cada hallazgo).
+- No reportes estilo, nombres ni formato salvo que cambien el significado.
+- No repitas lo que ya está resuelto en la ronda anterior.
+
+## Entregable
+Escribe UN archivo, y solo ese: docs/auditoria-${n}/${r}.md. Forma:
+
+# ${NOMBRE_RUBRO[r]} — auditoría ${n}
+
+**Nota: X/10** (antes Y). Razón del movimiento: se atacó y subió · deuda que cobró factura · mirada más profunda (la nota previa estaba inflada).
+
+Una línea con el riesgo mayor del rubro, hoy.
+
+## Hallazgos
+### [SEVERIDAD] Título en una línea
+\`archivo:línea\`
+Escenario: entra X → sale Y mal (con valores).
+Consecuencia: quién se afecta y cómo.
+Causa probable: una línea. (REINCIDENTE si venía de la ronda anterior.)
+
+## Lo que revisé y está bien
+Caminos que abrí y salieron limpios (con \`archivo:línea\`).
+
+## Lo que NO alcancé a revisar
+Sin esto la nota es una mentira por omisión.
+
+TU RESPUESTA COMPLETA ES EL ARCHIVO. Va TODO en esta respuesta única: encabezado, nota, hallazgos detallados, lo que revisé y está bien, y lo que no alcancé. No simules herramientas, ni XML de tool_calls, ni etiquetas: texto plano markdown. Máximo ~7,000 tokens de salida; el grueso no se queda en tu razonamiento interno. NO detengas hasta terminar el archivo completo.`;
+}
+
+export async function correrUnAuditor(n: number, r: Rubro): Promise<ResultadoAuditor> {
+  const modelo = modeloRubro(r);
+  const prompt = promptRubro(n, r);
+  const conTools = (process.env.AUDIT_TOOLS ?? '1') !== '0';
+  const llamar = (o: Parameters<typeof llamada>[0]) => (conTools ? llamadaConTools(o) : llamada(o));
+  let out = await llamar({
+    modelo,
+    quien: `auditor-${r}`,
+    mensajes: [{ role: 'user', content: prompt }],
+    maxTokens: 24000,
+    temperatura: 0.2,
+    ...(conTools ? { pasosMax: 10 } : {}),
+  });
+  // Los modelos chinos de razonamiento a veces devuelven contenido corto o
+  // simulan tool-calls. Un reporte vacío NO es un rubro limpio: se reintenta
+  // una vez con la advertencia explícita, y se anota en el archivo si falló.
+  let intentos = 0;
+  while (out.text.trim().length < 300 && intentos < 1) {
+    intentos++;
+    process.stderr.write(`[audit] auditor-${r}: respuesta corta (${out.text.trim().length} chars) — reintento\n`);
+    out = await llamada({
+      modelo,
+      quien: `auditor-${r}`,
+      mensajes: [
+        { role: 'user', content: prompt },
+        { role: 'assistant', content: out.text },
+        { role: 'user', content: 'Tu respuesta anterior quedó vacía o incompleta. Escribe AHORA el reporte COMPLETO en markdown, sin etiquetas ni tool calls.' },
+      ],
+      maxTokens: 24000,
+      temperatura: 0.2,
+      ...(conTools ? { pasosMax: 10 } : {}),
+    });
+  }
+  if (out.text.trim().length < 200) {
+    out = { ...out, text: out.text + `\n\n**ADVERTENCIA**: respuesta insuficiente tras reintento (${out.text.trim().length} chars). Rubro sin cobertura real.` };
+  }
+  const texto = out.text;
+  mkdirSync(dirRonda(n), { recursive: true });
+  writeFileSync(`${dirRonda(n)}/${r}.md`, texto, 'utf8');
+  return { rubro: r, texto, modelo: out.modelo, tokIn: out.tokIn, tokOut: out.tokOut, cost: out.cost, nota: extraerNota(texto) };
+}
+
+function extraerNota(texto: string): number | undefined {
+  const m = texto.match(/Nota[:：]?\s*\*{0,2}\s*(\d+(?:\.\d+)?)\s*\/\s*10/i);
+  return m ? Number(m[1]) : undefined;
+}
+
+export function leerReporte(n: number, r: Rubro): string {
+  const p = `${dirRonda(n)}/${r}.md`;
+  return existsSync(p) ? readFileSync(p, 'utf8') : '';
+}
