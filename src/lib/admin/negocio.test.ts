@@ -17,29 +17,56 @@ const rangos = new Map<string, Array<[number, number]>>();
 // devolviera la tabla entera en cada `range` describiría una base que no
 // existe —`range(1000, 1999)` sobre tres filas devuelve `[]`, no las tres— y
 // es justo esa ficción la que dejaba pasar el recorte silencioso.
+//
+// También como PostgREST: `.eq` FILTRA de verdad y `.limit` recorta (los usan
+// las lecturas de `agente_corrida`), y `head: true` cuenta sin mandar NI UNA
+// fila (`data: null`) — un mock donde eq/limit fueran no-ops "pasaría" una
+// consulta que trae la tabla entera, que es justo lo que esas lecturas
+// prometen no hacer. Un fixture puede forzar `count` explícito (incluso
+// `null`) para probar el head al que PostgREST no le devolvió conteo.
 function crearBuilder(tabla: string) {
-  const resp = (): Resp => respuestas.get(tabla) ?? { data: [], error: null };
+  const raw = (): Resp => respuestas.get(tabla) ?? { data: [], error: null };
   let pidioConteo = false;
+  let esHead = false;
+  let tope: number | null = null;
+  const filtros: Array<[string, unknown]> = [];
+  const filtradas = (): Array<Record<string, unknown>> => {
+    let todas = (raw().data ?? []) as Array<Record<string, unknown>>;
+    for (const [col, val] of filtros) todas = todas.filter((f) => f[col] === val);
+    return todas;
+  };
   const b: Record<string, unknown> = {};
-  const self = () => b;
-  for (const m of ['eq', 'order', 'limit']) b[m] = self;
-  b.select = (_cols?: unknown, opts?: { count?: string }) => {
+  b.order = () => b; // el orden lo simula el fixture: se declara ya ordenado
+  b.eq = (col: string, val: unknown) => { filtros.push([col, val]); return b; };
+  b.limit = (n: number) => { tope = n; return b; };
+  b.select = (_cols?: unknown, opts?: { count?: string; head?: boolean }) => {
     if (opts?.count === 'exact') pidioConteo = true;
+    if (opts?.head) esHead = true;
     return b;
   };
   b.range = (desde: number, hasta: number) => {
-    const r = resp();
+    const r = raw();
     if (!rangos.has(tabla)) rangos.set(tabla, []);
     rangos.get(tabla)!.push([desde, hasta]);
     if (r.error) return Promise.resolve(r);
-    const todas = (r.data ?? []) as unknown[];
+    const todas = filtradas();
     return Promise.resolve({
       data: todas.slice(desde, hasta + 1),
       error: null,
       count: pidioConteo ? todas.length : null,
     });
   };
-  b.then = (ok: (v: Resp) => unknown, fail?: (e: unknown) => unknown) => Promise.resolve(resp()).then(ok, fail);
+  b.then = (ok: (v: Resp) => unknown, fail?: (e: unknown) => unknown) => {
+    const r = raw();
+    if (r.error) return Promise.resolve(r).then(ok, fail);
+    const todas = filtradas();
+    const count = 'count' in r ? (r.count ?? null) : pidioConteo ? todas.length : null;
+    return Promise.resolve({
+      data: esHead ? null : tope !== null ? todas.slice(0, tope) : todas,
+      error: null,
+      count,
+    }).then(ok, fail);
+  };
   return b;
 }
 
@@ -67,7 +94,10 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-const { getResumenNegocio, getCostoPorFaseModelo, getConversacionesActivas } = await import('./negocio');
+const {
+  getResumenNegocio, getCostoPorFaseModelo, getConversacionesActivas,
+  getConteosPlataforma, getCorridasRecientes, getUltimaCorridaPorAgente, AGENTES_BITACORA,
+} = await import('./negocio');
 
 describe('getResumenNegocio', () => {
   beforeEach(() => { respuestas.clear(); rangos.clear(); rpcs.clear(); llamadasRpc.length = 0; });
@@ -323,5 +353,171 @@ describe('getConversacionesActivas', () => {
   it('un fallo de Supabase lanza', async () => {
     respuestas.set('wa_conversacion', { data: null, error: { message: 'fetch failed' } });
     await expect(getConversacionesActivas()).rejects.toThrow('fetch failed');
+  });
+});
+
+// Los conteos de plataforma del Inicio: operadores, liquidaciones y
+// conversaciones se cuentan con `head: true` (la base cuenta, no viajan
+// filas); `app_user` sí se trae —solo `rol`— porque además del total se
+// quiere el desglose.
+describe('getConteosPlataforma', () => {
+  beforeEach(() => { respuestas.clear(); rangos.clear(); rpcs.clear(); llamadasRpc.length = 0; });
+
+  it('cuenta las tres tablas sin traer filas y agrupa app_user por rol', async () => {
+    respuestas.set('operador', { data: [{ id: 'o1' }, { id: 'o2' }], error: null });
+    respuestas.set('liquidacion', { data: [{ id: 'l1' }], error: null });
+    respuestas.set('wa_conversacion', { data: [{ id: 'w1' }, { id: 'w2' }, { id: 'w3' }], error: null });
+    // Ya ordenadas por rol, como las devuelve la consulta real.
+    respuestas.set('app_user', {
+      data: [{ rol: 'contador' }, { rol: 'flota_admin' }, { rol: 'superadmin' }, { rol: 'superadmin' }],
+      error: null,
+    });
+    const r = await getConteosPlataforma();
+    expect(r).toEqual({
+      operadores: 2,
+      liquidaciones: 1,
+      conversacionesWa: 3,
+      usuarios: 4,
+      usuariosPorRol: [
+        { rol: 'contador', n: 1 }, { rol: 'flota_admin', n: 1 }, { rol: 'superadmin', n: 2 },
+      ],
+    });
+    // Los head-counts no paginan: ni un `range` sobre esas tablas.
+    expect(rangos.get('operador')).toBeUndefined();
+    expect(rangos.get('liquidacion')).toBeUndefined();
+    expect(rangos.get('wa_conversacion')).toBeUndefined();
+    // `app_user` sí, y pide el total en la primera página.
+    expect(rangos.get('app_user')).toEqual([[0, 999]]);
+  });
+
+  it('base vacía: ceros CONTADOS (0 filas de verdad), no inventados', async () => {
+    const r = await getConteosPlataforma();
+    expect(r).toEqual({ operadores: 0, liquidaciones: 0, conversacionesWa: 0, usuarios: 0, usuariosPorRol: [] });
+  });
+
+  it('un fallo de Supabase LANZA, no se lee como "no hay nadie"', async () => {
+    respuestas.set('liquidacion', { data: null, error: { message: 'fetch failed' } });
+    await expect(getConteosPlataforma()).rejects.toThrow('fetch failed');
+  });
+
+  it('un head SIN conteo LANZA — NULL no es 0', async () => {
+    // PostgREST puede responder sin `count` (p. ej. sin `Prefer: count=exact`
+    // honrado); leerle `?? 0` afirmaría "cero operadores" sin haber contado.
+    respuestas.set('operador', { data: [], error: null, count: null });
+    await expect(getConteosPlataforma()).rejects.toThrow(/no devolvió el conteo/);
+  });
+});
+
+// La bitácora de `agente_corrida` (0102) vista cross-tenant. El fixture se
+// declara YA ordenado por `inicio` desc — el orden real lo pone la base
+// (`order('inicio', { ascending: false })`), el mock no reordena.
+const CORRIDAS = [
+  {
+    agente: 'liquidacion', estado: 'ok', disparo: 'cron',
+    inicio: '2026-08-14T09:00:00Z', fin: '2026-08-14T09:00:03Z',
+    tareas_hechas: 2, tareas_total: 2,
+    tenant_id: 't1', tenant: { nombre: 'Flota Demo SA de CV' },
+  },
+  {
+    // Una corrida SIN cerrar y sin tareas: `fin`/`tareas_*` en NULL no se
+    // convierten en 0 ni en '' — la ficha pinta «—», no una medición.
+    agente: 'cobranza', estado: 'fallo', disparo: 'manual',
+    inicio: '2026-08-13T09:00:00Z', fin: null,
+    tareas_hechas: null, tareas_total: null,
+    tenant_id: 't2', tenant: null,
+  },
+  {
+    agente: 'liquidacion', estado: 'parcial', disparo: 'cron',
+    inicio: '2026-08-12T09:00:00Z', fin: '2026-08-12T09:00:09Z',
+    tareas_hechas: 1, tareas_total: 3,
+    tenant_id: 't1', tenant: { nombre: 'Flota Demo SA de CV' },
+  },
+  {
+    // `ventas` (0105) corre para LIKIDA misma: `tenant_id` NULL no es un
+    // hueco de datos, es "negocio, no flota" — y el mapeo lo dice.
+    agente: 'ventas', estado: 'ok', disparo: 'manual',
+    inicio: '2026-08-11T09:00:00Z', fin: '2026-08-11T09:00:12Z',
+    tareas_hechas: 5, tareas_total: 5,
+    tenant_id: null, tenant: null,
+  },
+];
+
+describe('getCorridasRecientes', () => {
+  beforeEach(() => { respuestas.clear(); rangos.clear(); });
+
+  it('trae las últimas cross-tenant con la flota aplanada y NULL como null', async () => {
+    respuestas.set('agente_corrida', { data: CORRIDAS, error: null });
+    const r = await getCorridasRecientes();
+    expect(r).toEqual([
+      {
+        agente: 'liquidacion', estado: 'ok', disparo: 'cron',
+        inicio: '2026-08-14T09:00:00Z', fin: '2026-08-14T09:00:03Z',
+        tareasHechas: 2, tareasTotal: 2,
+        tenantId: 't1', tenantNombre: 'Flota Demo SA de CV',
+      },
+      {
+        agente: 'cobranza', estado: 'fallo', disparo: 'manual',
+        inicio: '2026-08-13T09:00:00Z', fin: null,
+        tareasHechas: null, tareasTotal: null,
+        tenantId: 't2', tenantNombre: '—',
+      },
+      {
+        agente: 'liquidacion', estado: 'parcial', disparo: 'cron',
+        inicio: '2026-08-12T09:00:00Z', fin: '2026-08-12T09:00:09Z',
+        tareasHechas: 1, tareasTotal: 3,
+        tenantId: 't1', tenantNombre: 'Flota Demo SA de CV',
+      },
+      {
+        agente: 'ventas', estado: 'ok', disparo: 'manual',
+        inicio: '2026-08-11T09:00:00Z', fin: '2026-08-11T09:00:12Z',
+        tareasHechas: 5, tareasTotal: 5,
+        tenantId: null, tenantNombre: 'Likida (negocio)',
+      },
+    ]);
+  });
+
+  it('respeta el límite pedido', async () => {
+    respuestas.set('agente_corrida', { data: CORRIDAS, error: null });
+    const r = await getCorridasRecientes(1);
+    expect(r).toHaveLength(1);
+    expect(r[0].inicio).toBe('2026-08-14T09:00:00Z');
+  });
+
+  it('un fallo LANZA, no se lee como "ningún agente ha corrido"', async () => {
+    respuestas.set('agente_corrida', { data: null, error: { message: 'fetch failed' } });
+    await expect(getCorridasRecientes()).rejects.toThrow('getCorridasRecientes: fetch failed');
+  });
+});
+
+describe('getUltimaCorridaPorAgente', () => {
+  beforeEach(() => { respuestas.clear(); rangos.clear(); });
+
+  it('una entrada POR agente del dominio: la última de los que corrieron, null honesto en el resto', async () => {
+    respuestas.set('agente_corrida', { data: CORRIDAS, error: null });
+    const r = await getUltimaCorridaPorAgente();
+    expect(r).toHaveLength(AGENTES_BITACORA.length);
+    const porId = new Map(r.map((a) => [a.agente, a.ultima]));
+    // El `.eq('agente')` + `limit(1)` de verdad filtran: liquidacion toma SU
+    // fila más reciente (la 'ok' del 14-ago, no la 'parcial' del 12).
+    expect(porId.get('liquidacion')).toMatchObject({ estado: 'ok', inicio: '2026-08-14T09:00:00Z', tareasHechas: 2 });
+    expect(porId.get('cobranza')).toMatchObject({ estado: 'fallo', tenantNombre: '—' });
+    // `ventas` sin tenant (0105): el NULL se traduce a "negocio", no a hueco.
+    expect(porId.get('ventas')).toMatchObject({ estado: 'ok', tenantId: null, tenantNombre: 'Likida (negocio)' });
+    // Los que no tienen ni una fila: null, no un objeto con ceros.
+    expect(porId.get('facturas')).toBeNull();
+    expect(porId.get('conductores')).toBeNull();
+    expect(porId.get('peajes')).toBeNull();
+    expect(porId.get('proveedores')).toBeNull();
+  });
+
+  it('con la bitácora vacía, los seis en null — "sin corridas" lo dice la UI, no un cero', async () => {
+    const r = await getUltimaCorridaPorAgente();
+    expect(r).toHaveLength(AGENTES_BITACORA.length);
+    expect(r.every((a) => a.ultima === null)).toBe(true);
+  });
+
+  it('un fallo LANZA en vez de responder a medias', async () => {
+    respuestas.set('agente_corrida', { data: null, error: { message: 'fetch failed' } });
+    await expect(getUltimaCorridaPorAgente()).rejects.toThrow(/getUltimaCorridaPorAgente\/\w+: fetch failed/);
   });
 });

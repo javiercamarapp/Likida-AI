@@ -1,0 +1,60 @@
+id: rmf-2026-9.1.8
+tipo: regla_general
+jerarquia: 3
+instrumento: "Resolución Miscelánea Fiscal para 2026"
+articulo_o_regla: "9.1.8 (Título 9, Capítulo 9.1)"
+titulo: "Requisitos operativos del estímulo del 50% de peaje: aviso de marzo, bitácora de viaje conciliada, pago electrónico y factor 0.5 sin IVA"
+citas_en_codigo: ["RMF 9.1.8", "regla 9.1.8"]
+texto_vigente: >
+  Fracción I: "Presentar durante el mes de marzo del siguiente año, mediante
+  buzón tributario, aviso en el que se señale que es sujeto del estímulo
+  [...] En el aviso [...] se deberá incluir el inventario de los vehículos que
+  se hayan utilizado durante el año inmediato anterior, en la Red Nacional de
+  Autopistas de Cuota, desglosado de la siguiente manera: a) Denominación del
+  equipo, incluyendo el nombre técnico y comercial, así como la capacidad de
+  carga o de pasajeros [...] b) Modelo de la unidad. c) Número de control de
+  inventario o, en su defecto, el número de serie y los datos de la placa
+  vehicular. d) Fecha de incorporación o de baja del inventario [...]"
+  ---
+  Fracción II: "Llevar una bitácora de viaje de origen y destino, así como la
+  ruta de que se trate, que coincida con el estado de cuenta de la tarjeta de
+  identificación automática vehicular o de un sistema electrónico de pago.
+  Caminos y Puentes Federales de Ingresos y Servicios Conexos podrá
+  proporcionar el servicio de expedición de reportes que contenga la
+  información requerida."
+  ---
+  Fracción III: "Efectuar los pagos de autopistas mediante la tarjeta de
+  identificación automática vehicular o de cualquier otro sistema electrónico
+  de pago con que cuente la autopista y conservar los estados de cuenta" de
+  dicha tarjeta o sistema.
+  ---
+  Fracción IV: "Para la determinación del monto del acreditamiento, se
+  aplicará al importe pagado por concepto del uso de la infraestructura
+  carretera de cuota, sin incluir el IVA, el factor de 0.5 para toda la Red
+  Nacional de Autopistas de Cuota."
+consecuencias_operativas:
+  - "La fr. III mata el efectivo: una caseta pagada en ventanilla con billetes NO genera estímulo aunque después se facture."
+  - "La fr. II es una conciliación viaje por viaje contra el estado de cuenta del TAG, no un total mensual."
+  - "La fr. IV resuelve la base: importe SIN IVA × 0.5 — la lectura conservadora que el motor ya aplicaba (ver H4 de la ficha lif-2026-20-A, RESUELTO)."
+  - "La regla instrumenta el estímulo de la LIF 2026 art. 20, apartado A, fr. V; las condiciones de fondo (exclusividad, Red Nacional, <300 MDP, no parte relacionada) viven en la ley, no aquí."
+fecha_publicacion: 2025-12-28
+fecha_vigencia_desde: 2026-01-01
+fuente_url: "https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/rmf/RMF_2026-DOF-28122025.pdf"
+fuente_tipo: sat_oficial
+estado_verificacion: verificado_fuente_primaria
+nota_verificacion: >
+  Texto tomado de la investigación del 27-jul-2026
+  (docs/conocimiento/03-isr-facilidades.md §6.2 y
+  docs/conocimiento/04-iva-ieps-estimulos.md §4.2-4.3), que leyó el índice y
+  el cuerpo del PDF oficial de la RMF 2026 (DOF 28-dic-2025): las reglas del
+  transportista viven en el Título 9, Capítulo 9.1 (9.1.6 a 9.1.8) — NO en la
+  11.7.3 que citan varios blogs (esa es el estímulo a quien ENAJENA
+  combustible). La fr. IV es literal; las fracciones I a III son literales con
+  elisiones marcadas [...]. La fecha de vigencia es la entrada en vigor de la
+  RMF 2026 (01-ene-2026).
+verificado_el: 2026-07-27
+usado_en_codigo:
+  - "intake/desglose_peaje.ts — bitacoraRmf918 y LEYENDAS_BITACORA_RMF_918 (la bitácora de la fr. II: viaje, origen, destino, caseta y monto conciliados contra el desglose del proveedor) y cruzarLineasDesglose (el cruce que la sostiene)"
+  - "src/app/api/export/bitacora-peaje/route.ts — el CSV descargable de la bitácora, con la leyenda de qué fracciones cumple y cuáles corren por cuenta del contribuyente"
+  - "src/app/dashboard/agentes/peajes/vista.tsx — la card del estímulo: cada renglón dice qué fracción produce esta pantalla y cuáles van por cuenta de la flota"
+  - "cuadre/engine.ts — peajeAcreditable: factor 0.5 sobre el SubTotal sin IVA, la base que la fr. IV fija"

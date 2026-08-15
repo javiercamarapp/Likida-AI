@@ -2,7 +2,7 @@ import {
   LayoutGrid, ScanText, Calculator, MessagesSquare, MessageCircle, Sparkles, UserPlus,
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
-  Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge,
+  Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake,
 } from 'lucide-react';
 
 /**
@@ -26,6 +26,10 @@ export const AGENTES: Item[] = [
 
 export const NEGOCIO: Item[] = [
   { href: '/admin/flotas', nombre: 'Flotas / Clientes', Icono: Truck },
+  // El equipo de ventas (prospectos y comisiones) — la página vive en
+  // /admin/vendedores. `Handshake` y no `Users`: Users ya es Equipo (RBAC) y
+  // dos íconos iguales en el mismo sidebar se leen como la misma pantalla.
+  { href: '/admin/vendedores', nombre: 'Vendedores', Icono: Handshake },
   { href: '/admin/conversaciones', nombre: 'Conversaciones', Icono: MessageCircle },
   { href: '/admin/analitica', nombre: 'Analítica & Stats', Icono: LineChart },
   { href: '/admin/costos-facturacion', nombre: 'Costos & Facturación', Icono: DollarSign },
@@ -59,9 +63,22 @@ export const SISTEMA: Item[] = [
   { href: '/admin/capacidad-forecast', nombre: 'Capacidad & Forecast', Icono: Gauge },
 ];
 
-/** Lista plana de las 26+1 rutas — la usan `command-palette.tsx` (⌘K) y
- *  `sidebar-nav-iconos.tsx` (rail colapsado). Inicio se agrega aparte
- *  porque no vive en ninguna de las 5 secciones. */
+/** Las cinco secciones CON su rótulo — el MISMO agrupamiento y los MISMOS
+ *  títulos que pinta el sidebar (`sidebar-nav.tsx`), exportados para que el
+ *  grid de accesos del Inicio se genere DESDE este mapa: una página nueva
+ *  aparece ahí sola, y una lista escrita a mano en la página es la que se
+ *  desincroniza al primer alta. */
+export const SECCIONES: Array<{ titulo: string; items: Item[] }> = [
+  { titulo: 'Agentes', items: AGENTES },
+  { titulo: 'Negocio', items: NEGOCIO },
+  { titulo: 'Plataforma', items: PLATAFORMA },
+  { titulo: 'Control', items: CONTROL },
+  { titulo: 'Sistema', items: SISTEMA },
+];
+
+/** Lista plana de todas las rutas (no cites el conteo: crece) — la usan
+ *  `command-palette.tsx` (⌘K) y `sidebar-nav-iconos.tsx` (rail colapsado).
+ *  Inicio se agrega aparte porque no vive en ninguna de las 5 secciones. */
 export const TODAS_LAS_RUTAS: Item[] = [
   { href: '/admin', nombre: 'Inicio', Icono: LayoutGrid },
   ...AGENTES, ...NEGOCIO, ...PLATAFORMA, ...CONTROL, ...SISTEMA,

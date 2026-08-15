@@ -24,7 +24,11 @@ function leer(ruta: string): string {
 
 const CRECIMIENTO = leer('./crecimiento/page.tsx');
 const ANALITICA = leer('./analitica/page.tsx');
-const ADMIN = leer('./page.tsx');
+// El Inicio de /admin vive en `consola.tsx` desde el 14-ago-2026 (page.tsx
+// quedó como puro gateo, convención de inicio-contenido.tsx para que el
+// preview headless monte el componente REAL) — se vigila el archivo donde la
+// etiqueta REALMENTE vive, no el cascarón.
+const ADMIN = leer('./consola.tsx');
 const EJECUTIVO = leer('./ejecutivo/page.tsx');
 
 describe('admin/crecimiento: el conteo de flotas ya no es texto fijo', () => {
@@ -56,8 +60,8 @@ describe('admin/analitica: "hoy Likida tiene 1 flota" ya lee el conteo real', ()
   });
 });
 
-describe('admin/page.tsx y admin/ejecutivo: "Flota (solo el demo)" ya no es incondicional', () => {
-  for (const [nombre, src] of [['admin/page.tsx', ADMIN], ['admin/ejecutivo/page.tsx', EJECUTIVO]] as const) {
+describe('admin/consola.tsx y admin/ejecutivo: "Flota (solo el demo)" ya no es incondicional', () => {
+  for (const [nombre, src] of [['admin/consola.tsx', ADMIN], ['admin/ejecutivo/page.tsx', EJECUTIVO]] as const) {
     it(`${nombre}: la etiqueta ya no es "r.tenants <= 1 ? 'Flota (solo el demo)'"`, () => {
       // Esa era la forma exacta del bug: con 0 tenants, `r.tenants <= 1` es
       // verdadero y el tile decía "0 — Flota (solo el demo)".

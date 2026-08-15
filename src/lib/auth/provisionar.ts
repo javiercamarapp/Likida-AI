@@ -14,7 +14,10 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 
-export type RolAppUser = 'superadmin' | 'flota_admin' | 'contador' | 'encargado';
+/** El dominio de `app_user_rol_dominio` menos `operador` (sin login desde el
+ *  7-ago-2026). `vendedor` (0105) es rol de LIKIDA: siempre con tenantId
+ *  null, como superadmin — su panel es /vendedor, no /dashboard. */
+export type RolAppUser = 'superadmin' | 'flota_admin' | 'contador' | 'encargado' | 'vendedor';
 
 /**
  * Normaliza el teléfono de oficina EXACTAMENTE como el del operador

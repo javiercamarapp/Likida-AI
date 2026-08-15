@@ -43,7 +43,14 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/likida/proveedores', () => ({ guardarFacturaProveedor: async () => ({ ok: true }) }));
+// `estadoSatDeCfdi` devuelve null en el doble: aquí se prueba el ORDEN del
+// webhook, no la consulta al SAT (esa vive en intake/sat y jamás lanza).
+vi.mock('@/lib/likida/proveedores', () => ({
+  guardarFacturaProveedor: async () => ({ ok: true }),
+  estadoSatDeCfdi: async () => null,
+}));
+// La bitácora se anota best-effort al final; el doble solo registra que se llamó.
+vi.mock('@/lib/likida/agentes/corridas', () => ({ registrarCorrida: vi.fn(async () => {}) }));
 vi.mock('@/lib/likida/intake/cfdi_xml', () => ({ parseCfdiXml: (t: string) => (t.includes('Comprobante') ? { uuid: 'U-1', total: 100 } : null) }));
 
 const { POST } = await import('./route');

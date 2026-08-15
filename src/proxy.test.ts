@@ -74,14 +74,15 @@ describe('proxy · gate de /dashboard sin sesión', () => {
 // LA LISTA NO SE PUEDE QUEDAR ATRÁS OTRA VEZ.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('toda sección con puerta propia está nombrada en el matcher', () => {
-  it('las dos secciones del producto exigen sesión en esta capa', () => {
+  it('las tres secciones del producto exigen sesión en esta capa', () => {
     // /chofer y /mis-viajes salieron el 7-ago-2026 (el chofer ya no tiene
-    // cuenta, solo WhatsApp). Si mañana nace /taller o /cliente con su
-    // `requireX` en el layout, esta prueba no lo va a atrapar sola — pero la
-    // lista es UN string y está a la vista, que es lo que /chofer no tuvo al
-    // principio: su ausencia solo constaba en un comentario en su layout.
+    // cuenta, solo WhatsApp); /vendedor entró el 14-ago-2026 (0105, con
+    // `requireVendedor` en su layout). Si mañana nace /taller o /cliente con
+    // su `requireX` en el layout, esta prueba no lo va a atrapar sola — pero
+    // la lista es UN string y está a la vista, que es lo que /chofer no tuvo
+    // al principio: su ausencia solo constaba en un comentario en su layout.
     expect([...RUTAS_CON_SESION].sort()).toEqual(
-      ['/admin', '/dashboard'].sort(),
+      ['/admin', '/dashboard', '/vendedor'].sort(),
     );
   });
 

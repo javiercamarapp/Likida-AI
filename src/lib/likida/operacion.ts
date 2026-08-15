@@ -970,6 +970,36 @@ export interface NuevaIncidencia {
   prioridad?: string;
   descripcion?: string | null;
   slaHoras?: number | null;
+
+  // ── El circuito de la talacha por WhatsApp (0107, F4) ──────────────────────
+  //
+  // Los cuatro son opcionales para que las incidencias de siempre (las del
+  // panel) sigan naciendo informativas sin tocar a sus llamadores. `null` y
+  // ausente significan lo mismo: no aplica.
+  /** Lo que el chofer dijo o la nota trae. `null` = sin monto reportado —
+   *  NUNCA se rellena con 0: un cero aquí sería una cifra que nadie midió. */
+  montoEstimado?: number | null;
+  /** La foto de la nota en Storage (mismo bucket que los comprobantes). */
+  evidenciaPath?: string | null;
+  /** El gasto que esa nota generó en la liquidación — el enlace por el que un
+   *  gasto de camino se lee como pre-autorizado, sin tocar el motor de cuadre. */
+  gastoId?: string | null;
+  /** `'pendiente'` arranca el circuito de autorización del jefe. La decisión
+   *  ('autorizada'/'rechazada') NUNCA se escribe al crear: la firma un humano
+   *  después, con quién y cuándo (constraint `incidencia_decision_firmada`). */
+  autorizacion?: 'pendiente' | null;
+}
+
+/** Comprueba que un gasto sea del tenant, ANTES de enlazarlo a una incidencia.
+ *  Mismo candado que viajePropio/unidadPropia (auditoría 12): la UI y el
+ *  processor solo mandan ids propios, pero eso es el llamador, no el motor. */
+async function gastoPropio(tenantId: string, gastoId: string): Promise<boolean> {
+  const filas = await traerTodo<{ id: unknown }>(
+    (d, h) => supabaseAdmin().from('gasto').select('id', conteo(d))
+      .eq('tenant_id', tenantId).eq('id', gastoId).order('id').range(d, h),
+    'gastoPropio',
+  );
+  return filas.length > 0;
 }
 
 export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Promise<string> {
@@ -983,6 +1013,11 @@ export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Pro
   if (i.unidadId && !(await unidadPropia(tenantId, i.unidadId))) {
     throw new Error('crearIncidencia: la unidad no pertenece a esta flota');
   }
+  // Y el tercero, para el gasto enlazado (0107): un gasto de OTRA flota
+  // enlazado aquí haría que el panel de A pintara el dinero de B.
+  if (i.gastoId && !(await gastoPropio(tenantId, i.gastoId))) {
+    throw new Error('crearIncidencia: el gasto no pertenece a esta flota');
+  }
   const { data, error } = await acotada(supabaseAdmin().from('incidencia').insert({
     tenant_id: tenantId,
     viaje_id: i.viajeId || null,
@@ -991,6 +1026,13 @@ export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Pro
     prioridad: i.prioridad || 'media',
     descripcion: i.descripcion || null,
     sla_horas: i.slaHoras ?? null,
+    // `?? null` y NO `|| null` en el monto: un estimado de 0 no existe en este
+    // dominio (nadie reporta una talacha de $0), pero el patrón se mantiene
+    // igual que en crearViaje para no reabrir esa trampa por copia.
+    monto_estimado: i.montoEstimado ?? null,
+    evidencia_path: i.evidenciaPath ?? null,
+    gasto_id: i.gastoId ?? null,
+    autorizacion: i.autorizacion ?? null,
   }).select('id').single(), 'crearIncidencia');
   if (error) throw new Error(`crearIncidencia: ${error.message}`);
   const id = (data as { id?: unknown } | null)?.id;

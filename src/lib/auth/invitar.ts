@@ -42,7 +42,9 @@ import { DatoInvalido } from '@/lib/likida/errores';
  * cae al fail-closed del catálogo): el select no lo ofrece, pero una server
  * action es un endpoint POST alcanzable sin pasar por el select — el mismo
  * agujero que la auditoría 13 cerró en /admin/usuarios/nuevo. `operador`
- * tampoco: ya no tiene login (7-ago-2026, solo WhatsApp).
+ * tampoco: ya no tiene login (7-ago-2026, solo WhatsApp). Y `vendedor`
+ * (0105) tampoco: es un rol de LIKIDA (tenant null, panel /vendedor) y su
+ * única puerta es /admin/vendedores — ver `validarInvitacionVendedor`.
  */
 export const ROLES_INVITABLES = [
   {
@@ -77,24 +79,35 @@ export interface InvitacionValida {
  *  existencia — comprobar que existe requeriría mandarle algo. */
 const CORREO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Minúsculas a propósito: Supabase Auth guarda el correo en minúsculas, y
+ *  si `app_user.email` quedara como se tecleó ("Ana@Flota.mx"), las dos
+ *  tablas dirían correos distintos de la misma cuenta. Compartido entre las
+ *  DOS puertas de invitación (flota y vendedor) para que las reglas del
+ *  correo no puedan divergir. */
+function correoDeInvitacion(crudo: string): string {
+  const email = crudo.trim().toLowerCase();
+  if (email === '') throw new DatoInvalido('Falta el correo: es con lo que esta persona va a entrar al panel.');
+  if (email.length > 160) throw new DatoInvalido('El correo no puede pasar de 160 caracteres.');
+  if (!CORREO_RE.test(email)) {
+    throw new DatoInvalido(`"${email}" no se ve como un correo. Escríbelo completo (nombre@empresa.com).`);
+  }
+  return email;
+}
+
+function nombreDeInvitacion(crudo: string): string | undefined {
+  const nombre = crudo.trim();
+  if (nombre.length > 120) throw new DatoInvalido('El nombre no puede pasar de 120 caracteres.');
+  return nombre || undefined;
+}
+
 export function validarInvitacion(c: {
   email: string;
   nombre: string;
   rol: string;
   telefono: string;
 }): InvitacionValida {
-  // Minúsculas a propósito: Supabase Auth guarda el correo en minúsculas, y
-  // si `app_user.email` quedara como se tecleó ("Ana@Flota.mx"), las dos
-  // tablas dirían correos distintos de la misma cuenta.
-  const email = c.email.trim().toLowerCase();
-  if (email === '') throw new DatoInvalido('Falta el correo: es con lo que esta persona va a entrar al panel.');
-  if (email.length > 160) throw new DatoInvalido('El correo no puede pasar de 160 caracteres.');
-  if (!CORREO_RE.test(email)) {
-    throw new DatoInvalido(`"${email}" no se ve como un correo. Escríbelo completo (nombre@empresa.com).`);
-  }
-
-  const nombre = c.nombre.trim();
-  if (nombre.length > 120) throw new DatoInvalido('El nombre no puede pasar de 120 caracteres.');
+  const email = correoDeInvitacion(c.email);
+  const nombre = nombreDeInvitacion(c.nombre);
 
   // Fail closed contra el catálogo: cualquier valor que no esté en la lista
   // rebota — `superadmin` incluido, aunque el select nunca lo ofrezca.
@@ -156,4 +169,22 @@ export function descifrarErrorProvision(e: unknown): DatoInvalido | null {
   if (/necesita 10 más la lada 52/.test(m)) return new DatoInvalido(m);
 
   return null;
+}
+
+export interface InvitacionVendedorValida {
+  email: string;
+  nombre?: string;
+}
+
+/**
+ * La validación del alta de un VENDEDOR (0105) — la puerta de
+ * /admin/vendedores, solo superadmin. El rol NO se pregunta: esta puerta
+ * produce únicamente `vendedor` (rol de LIKIDA, tenant null), así que no hay
+ * catálogo que ofrecer ni forma de pedir otro por POST. Correo y nombre
+ * pasan por LOS MISMOS helpers que `validarInvitacion`: si la regla del
+ * correo cambia, cambia para las dos puertas a la vez. Sin teléfono a
+ * propósito: el vendedor no habla con el bot de WhatsApp de ninguna flota.
+ */
+export function validarInvitacionVendedor(c: { email: string; nombre: string }): InvitacionVendedorValida {
+  return { email: correoDeInvitacion(c.email), nombre: nombreDeInvitacion(c.nombre) };
 }

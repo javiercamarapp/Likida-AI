@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { toCsv } from '@/lib/likida/export';
-import { listarFacturasProveedor, aFilaExportProveedor } from '@/lib/likida/proveedores';
+import { exportarAprobadas, marcarExportadas, type FormatoExport } from '@/lib/likida/proveedores';
+import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { puedeExportar } from '@/lib/auth/permisos';
@@ -9,11 +10,26 @@ import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 
+/** `?formato=` → layout. Sin parámetro sigue saliendo el genérico de la 0091
+ *  (hay quien ya lo descarga); un valor inventado es 400, no un default
+ *  silencioso — mandar el layout equivocado al ERP es peor que un error. */
+const FORMATOS: Record<string, FormatoExport> = {
+  '': 'generico',
+  generico: 'generico',
+  sap_b1: 'sap_b1',
+  contpaqi: 'contpaqi',
+};
+
 /**
- * Export de facturas de proveedor APROBADAS (F6) — el layout importable a
- * SAP B1 / CONTPAQi. Mismo patrón de puertas que /api/export/liquidaciones:
- * la del DATO (área dinero) Y la del verbo (puedeExportar) — la lección
- * documentada del IDOR: se acota el tenant y se olvida el rol.
+ * Export de facturas de proveedor APROBADAS (F6, escalón 2) — el archivo
+ * importable: genérico, layout SAP B1 (Excel/DTW) o variante CONTPAQi.
+ * Mismo patrón de puertas que /api/export/liquidaciones: la del DATO (área
+ * dinero) Y la del verbo (puedeExportar) — la lección documentada del IDOR:
+ * se acota el tenant y se olvida el rol.
+ *
+ * Después de generar el CSV se marca `exportada_en` (anti-doble-import) y se
+ * anota la corrida del agente. Los dos son POSTERIORES al archivo y jamás lo
+ * tumban: si el marcado falla, el archivo sale y la corrida lo dice.
  */
 export async function GET(req: Request) {
   if (!rateLimit(`export-prov:${clientIp(req)}`, 10, 60_000)) {
@@ -32,21 +48,44 @@ export async function GET(req: Request) {
     return new NextResponse('Tu rol no puede descargar este documento.', { status: 403 });
   }
 
+  const crudo = new URL(req.url).searchParams.get('formato') ?? '';
+  const formato = FORMATOS[crudo];
+  if (!formato) {
+    return new NextResponse('Formato desconocido. Los que existen: generico, sap_b1, contpaqi.', { status: 400 });
+  }
+
+  const inicio = new Date();
   try {
-    // El tope de listar (100) es el de la bandeja; para el export se sube —
-    // y si algún día una flota lo rebasa, el CSV corto se DICE, no se manda
-    // callado (misma doctrina que el export de liquidaciones).
-    const todas = await listarFacturasProveedor(t.tenantId, 5000);
-    if (todas.length === 5000) {
+    // El tope de la bandeja (100) aquí se sube — y si algún día una flota lo
+    // rebasa, el CSV corto se DICE, no se manda callado (misma doctrina que
+    // el export de liquidaciones).
+    const { filas, ids, recortado } = await exportarAprobadas(t.tenantId, formato);
+    if (recortado) {
       logger.error('export.proveedor_tope', { tenant: t.tenantId });
       return new NextResponse('La flota tiene más facturas de las que el export puede traer en una pasada. Avísanos: necesitamos paginar el archivo.', { status: 500 });
     }
-    const filas = todas.filter((f) => f.estado === 'aprobada').map(aFilaExportProveedor);
     const csv = toCsv(filas);
+
+    // El archivo ya existe: lo que sigue anota, no decide.
+    const marca = await marcarExportadas(t.tenantId, ids);
+    await registrarCorrida(t.tenantId, 'proveedores', {
+      inicio,
+      fin: new Date(),
+      estado: marca.error ? 'parcial' : 'ok',
+      disparo: 'manual',
+      tareasHechas: ids.length,
+      tareasTotal: ids.length,
+      resumen: { accion: 'export', formato, facturas: ids.length },
+      error: marca.error
+        ? 'El archivo salió, pero no se pudo marcar qué facturas quedaron exportadas — pueden reaparecer como «sin exportar».'
+        : undefined,
+    });
+
     return new NextResponse(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="facturas_proveedor_likida.csv"',
+        // El genérico conserva su nombre de siempre: hay quien ya lo descarga.
+        'Content-Disposition': `attachment; filename="${formato === 'generico' ? 'facturas_proveedor_likida.csv' : `facturas_proveedor_${formato}_likida.csv`}"`,
       },
     });
   } catch (e) {

@@ -197,13 +197,16 @@ export function puedeVerRuta(rol: string, href: string): boolean {
  * las rutas de esa área en `puedeVerRuta`. Aquí no gana visibilidad de nada:
  * solo se declara la puerta de salida.
  *
- * Vacío desde el 7-ago-2026: el chofer (`operador`) era el único caso —
- * tenía panel propio en /chofer. Retirado su login (solo WhatsApp de aquí en
- * adelante), no queda ningún rol con casa fuera de /dashboard. Se deja la
- * tabla declarada, no el `Record` en línea: es el punto de extensión para el
- * día que un rol futuro sí la necesite.
+ * Estuvo vacío del 7-ago-2026 (salió el chofer con /chofer) al 14-ago-2026,
+ * cuando entró `vendedor` (0105): rol de LIKIDA con tenant null cuya casa es
+ * /vendedor. NO aparece en `AREAS_POR_ROL` a propósito — esa ausencia es la
+ * garantía (vía el `?? []` de `areasDe`) de que un vendedor no abre NINGUNA
+ * pantalla de /dashboard: su trabajo son prospectos, no los datos de una
+ * flota. Aquí solo se declara su puerta de salida.
  */
-const PANEL_PROPIO: Record<string, string> = {};
+const PANEL_PROPIO: Record<string, string> = {
+  vendedor: '/vendedor',
+};
 
 /**
  * A dónde mandar a un rol que no puede ver donde está parado.
@@ -239,9 +242,9 @@ export function rolEfectivo(rolReal: string, rolPedido?: string | null): string 
 
 export function inicioDe(rol: string): string {
   // PRIMERO el panel ajeno: un rol que vive fuera de /dashboard no se rebota
-  // adentro ni por accidente. Hoy solo aplica al chofer, que no tiene áreas,
-  // así que el orden no cambia nada — lo cambiaría el día que alguien le dé
-  // un área a un rol de esta tabla, y ese es justo el día en que importa.
+  // adentro ni por accidente. Desde el 14-ago-2026 aplica al `vendedor`
+  // (0105): sin áreas, su destino es /vendedor. El orden importaría el día
+  // que alguien le dé un área a un rol de esta tabla — por eso va primero.
   const propio = PANEL_PROPIO[rol];
   if (propio) return propio;
 

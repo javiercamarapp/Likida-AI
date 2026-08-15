@@ -31,6 +31,10 @@ import { avisoSimplificado, versionAviso, pideAtencionPrivacidad, respuestaPriva
 import { interpretarHito, sellarHito, mensajeHito } from '@/lib/likida/hitos_viaje';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
+import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
+import { esCaptionPod, guardarPodDelChofer, mensajePod } from '@/lib/likida/pod_wa';
+import { atenderInformeOficina } from '@/lib/likida/informes_wa';
+import { atenderAsignacionOficina } from '@/lib/likida/asignar_wa';
 import { violaIndice, llegoTarde } from '@/lib/likida/pg_errores';
 import { mxn, fechaMx } from '@/lib/formato';
 import { guardiaFundamento, normasDeToolCalls } from '@/lib/likida/normas/fundamento';
@@ -72,6 +76,9 @@ import { logger } from '@/lib/logger';
 export interface InboundMessage {
   from: string;               // teléfono E.164
   type: 'text' | 'image' | 'document' | 'other';
+  /** El cuerpo del texto — o, en una imagen, su CAPTION (el rótulo que el
+   *  chofer escribe al pie de la foto; F4: así se distingue la carta porte
+   *  y la nota de talacha de un comprobante cualquiera). */
   text?: string;
   mediaId?: string;           // para image/document
   waMessageId?: string;       // id de Meta, para idempotencia
@@ -467,6 +474,29 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           }
         }
 
+        // ── ¿ES LA DECISIÓN DE UNA TALACHA? (F4, talacha_wa.ts) ──────────────
+        //
+        // Va ANTES del despacho a propósito: el botón `tal_si:<uuid>` es la
+        // respuesta a una pregunta CONCRETA que le mandamos, y con un viaje
+        // pendiente de despacho ese módulo se queda con todo lo que no sea
+        // sí/no — un id crudo de botón terminaría en el resumen del viaje. El
+        // tenant va del LOOKUP (cuenta), jamás del texto: un id de otra flota
+        // toca cero filas y recibe "no encontré esa solicitud".
+        if (msg.type === 'text' && msg.text) {
+          try {
+            const rTalacha = await atenderAutorizacionTalacha(
+              { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, msg.text,
+            );
+            if (rTalacha) {
+              logger.info('oficina.talacha_decision', { user: cuenta.userId, rol: cuenta.rol });
+              await sendText(msg.from, rTalacha);
+              return;
+            }
+          } catch (e) {
+            logger.error('oficina.talacha_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+          }
+        }
+
         // ── EL JEFE DESPACHA POR WHATSAPP (F4, despacho_wa.ts) ───────────────
         //
         // "nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000" →
@@ -487,6 +517,44 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           } catch (e) {
             logger.error('oficina.despacho_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
           }
+
+          // ── ASIGNAR UNIDAD / REASIGNAR CHOFER (F4, asignar_wa.ts) ──────────
+          //
+          // "asígnale la unidad 12 al viaje de Juan" → resumen → SÍ/NO →
+          // asignarUnidad/reasignarOperador. Va DESPUÉS de despacho: si hay un
+          // viaje esperando confirmación, ese "sí" es del viaje (ver el
+          // encabezado de asignar_wa.ts sobre el pendiente único).
+          try {
+            const rAsignacion = await atenderAsignacionOficina(
+              { tenantId: cuenta.tenantId, rol: cuenta.rol }, msg.from, msg.text,
+            );
+            if (rAsignacion) {
+              logger.info('oficina.asignacion', { user: cuenta.userId, rol: cuenta.rol });
+              await sendText(msg.from, rAsignacion);
+              return;
+            }
+          } catch (e) {
+            logger.error('oficina.asignacion_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+          }
+
+          // ── "¿CÓMO VAN?" — EL INFORME CON CIFRAS REALES (F4, informes_wa) ──
+          //
+          // Consulta estructurada y plantilla, SIN modelo — el molde de
+          // consulta_chofer. El dinero solo sale para el rol que lo ve en el
+          // panel (visibilidad.ts); si una consulta falla, el informe DICE que
+          // no pudo leer, nunca un cero que parezca medición.
+          try {
+            const rInforme = await atenderInformeOficina(
+              { tenantId: cuenta.tenantId, rol: cuenta.rol }, msg.text,
+            );
+            if (rInforme) {
+              logger.info('oficina.informe', { user: cuenta.userId, rol: cuenta.rol });
+              await sendText(msg.from, rInforme);
+              return;
+            }
+          } catch (e) {
+            logger.error('oficina.informe_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+          }
         }
 
         const quien = cuenta.nombre ? `${cuenta.nombre}` : 'Qué tal';
@@ -496,13 +564,20 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // contador sería prometerle una acción que `puedeAsignar` va a negar).
         logger.info('oficina.mensaje', { user: cuenta.userId, rol: cuenta.rol });
         const puedeDespachar = cuenta.tenantId !== null && puedeAsignar(cuenta.rol);
+        const puedeInforme = cuenta.tenantId !== null;
         await sendText(msg.from,
           `${quien}, te reconozco como ${cuenta.rol === 'contador' ? 'contador' : 'parte del equipo'} de tu flota en Likida 👋\n\n` +
           `Por aquí te aviso cuando un chofer no confirma su viaje y cuando haya comprobantes por facturar. ` +
+          // Solo se le ofrece lo que su rol de verdad puede hacer: prometerle
+          // el despacho al contador sería prometerle una acción que
+          // `puedeAsignar` va a negar dos mensajes después.
           (puedeDespachar
-            ? `También puedes despacharme viajes: escribe «nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000» y te lo confirmo antes de crearlo. `
+            ? `También puedes despacharme viajes («nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000»), asignar unidad o reasignar chofer («asígnale la unidad 12 al viaje de Juan») — todo te lo confirmo antes de aplicarlo. `
             : '') +
-          `Para ${puedeDespachar ? 'reasignar chofer o ver liquidaciones' : 'asignar viajes, reasignar chofer o ver liquidaciones'}, entra a ${process.env.NEXT_PUBLIC_APP_URL ?? 'tu panel'}.`);
+          (puedeInforme
+            ? `Pregúntame «¿cómo van?» y te doy el resumen de la operación. `
+            : '') +
+          `Para el detalle completo, entra a ${process.env.NEXT_PUBLIC_APP_URL ?? 'tu panel'}.`);
         return;
       }
 
@@ -729,6 +804,35 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     // al contador de intake al entrar y -1 al salir; el "listo" espera a que ese
     // contador llegue a 0 antes de cuadrar → nunca cierra sobre datos parciales.
     if (msg.type === 'image' && msg.mediaId) {
+      // ── ¿ES LA CARTA PORTE SELLADA? (POD por foto, F4) ────────────────────
+      //
+      // El CAPTION es la única señal determinística de qué papel es la foto;
+      // sin él, la foto sigue el camino de comprobante como siempre. Este
+      // branch va ANTES de la barrera de intake a propósito: la carta porte
+      // no es un gasto —no paga visión, no entra a la liquidación— y el
+      // "listo" no debe esperarla. Aterriza en `pod`, que el tablero del
+      // encargado ya cuenta (`podPendientes`).
+      if (esCaptionPod(msg.text)) {
+        try {
+          const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
+          if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
+          // El constraint pod_subido_tiene_archivo manda: sin archivo guardado
+          // no hay "subido" que registrar. Fallar cerrado y decirlo.
+          const ruta = await subirComprobante(op.tenantId, viajeId, await hashImagen(dataUrl), dataUrl);
+          if (!ruta) {
+            logger.error('pod.foto_sin_guardar', { viaje: viajeId, tenant: op.tenantId });
+            await say(mensajePod('fallo'));
+            return;
+          }
+          const resultado = await guardarPodDelChofer(op.tenantId, viajeId, op.operadorId, ruta);
+          await say(mensajePod(resultado));
+        } catch (e) {
+          logger.error('pod.error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+          await say(mensajePod('fallo'));
+        }
+        return;
+      }
+
       // El +1 de esta foto. El valor devuelto ya NO decide el acuse (ver abajo):
       // decidirlo con "el contador pasó de 0 a 1" mandaba el mensaje una vez por
       // foto. Se conserva la llamada porque su EFECTO —el incremento— es lo que
@@ -1207,6 +1311,34 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // llamador nuevo de marcar como aceptado el viaje de un compañero.
         await aceptarPorActividad(op.tenantId, viajeId, op.operadorId);
 
+        // ── ¿LA FOTO VENÍA ROTULADA COMO TALACHA? (F4, 0107) ─────────────────
+        //
+        // "se me ponchó una llanta, son 800" como caption de la foto de la
+        // nota. El gasto YA entró arriba (addGasto) y entra a la liquidación
+        // como cualquier comprobante; aquí se abre —o se completa— la
+        // incidencia con la foto de evidencia y el enlace al gasto, y se le
+        // manda al jefe la solicitud de autorización. La respuesta de talacha
+        // SUSTITUYE al acuse genérico: es la contestación específica a lo que
+        // el chofer preguntó, con el monto que se leyó a la vista (y el jefe
+        // como control humano de esa cifra).
+        const talachaFoto = interpretarTalacha(msg.text);
+        if (talachaFoto) {
+          const rutaEvidencia = await subida;   // ya corrió en paralelo con la visión
+          const respuestaTalacha = await atenderTalachaChofer({
+            tenantId: op.tenantId,
+            viajeId,
+            operadorId: op.operadorId,
+            texto: msg.text!,
+            // El monto del CAPTION manda (lo dijo el chofer); el de la nota
+            // solo entra si el caption no trajo cifra y el OCR sí leyó una.
+            monto: talachaFoto.monto ?? (gasto.monto > 0 ? gasto.monto : null),
+            evidenciaPath: rutaEvidencia ?? null,
+            gastoId: gasto.id,
+          });
+          await say(respuestaTalacha);
+          return;   // el finally de abajo libera la barrera igual
+        }
+
         // ── ¿SE LE CONTESTA POR ESTA FOTO? ───────────────────────────────────
         //
         // Tres peldaños, en `acuse_ticket.ts`. Aquí solo llegan comprobantes que
@@ -1607,6 +1739,28 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       const sello = await sellarHito(op.tenantId, viajeId, hito, ahoraHito);
       logger.info('hito.viaje', { viaje: viajeId, hito, sello });
       await say(mensajeHito(hito, sello, ahoraHito));
+      return;
+    }
+
+    // ── ¿REPORTE DE TALACHA / AVERÍA? (F4, 0107) ─────────────────────────────
+    //
+    // "se me ponchó una llanta, la talacha son 800" → incidencia pendiente de
+    // autorización + solicitud al JEFE por WhatsApp con botones. Va después de
+    // hitos (frases exactas primero) y ANTES de la confirmación de viaje: un
+    // reporte de avería nunca es una afirmación de arranque. El módulo
+    // atiende solo palabras del oficio (lista cerrada); todo lo demás sigue
+    // al agente, que sí lee contexto.
+    const talacha = interpretarTalacha(msg.text);
+    if (talacha) {
+      const respuestaTalacha = await atenderTalachaChofer({
+        tenantId: op.tenantId,
+        viajeId,
+        operadorId: op.operadorId,
+        texto: msg.text,
+        monto: talacha.monto,
+      });
+      logger.info('talacha.reporte_texto', { viaje: viajeId, conMonto: talacha.monto !== null });
+      await say(respuestaTalacha);
       return;
     }
 

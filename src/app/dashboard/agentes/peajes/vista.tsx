@@ -1,12 +1,16 @@
 import Link from 'next/link';
-import { Scale, ArrowRight, Inbox, CircleCheck, CircleAlert, CircleSlash } from 'lucide-react';
+import { Scale, ArrowRight, Inbox, CircleCheck, CircleAlert, CircleSlash, FileDown, FileSpreadsheet } from 'lucide-react';
 import type { ConciliacionConsolidado, LineaPorConciliar, DesgloseRecibido } from '@/lib/likida/analytics';
+// SOLO tipos: el módulo importa supabaseAdmin y no debe entrar al bundle de la vista.
+import type { ResumenDesglose, DetalleDesglose, LineaDesgloseVista } from '@/lib/likida/intake/desglose_peaje';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../../resumen-visual';
 import { SubirDesglose, type AccionSubir } from './subir';
 import { BotonEjecutar, type AccionBarrer } from './controles';
+import { SubirDesgloseProveedor, type AccionImportar } from './subir-desglose';
+import { BotonConciliar, type AccionConciliar } from './conciliar-desglose';
 
 /**
  * La ventana del Agente de Peajes (F5): lo que el estado de cuenta del
@@ -25,9 +29,18 @@ import { BotonEjecutar, type AccionBarrer } from './controles';
  * condiciones de elegibilidad de la ley se listan completas (antes solo una),
  * y la cifra lleva la leyenda de descargo de CFF 89 (`cuadre/leyendas.ts`)
  * que ya llevan las demás pantallas con cifra fiscal.
+ *
+ * 14-AGO-2026 (F5): la RMF 9.1.8 YA tiene ficha verificada en fuente primaria
+ * (`normas/rmf-2026-9.1.8.yaml`), así que la card volvió a citarla — ahora
+ * con sustento: la fr. IV RESUELVE H4 (la base es el importe sin IVA, lo que
+ * el motor ya hacía) y la fr. II es exactamente la bitácora que la sección
+ * del desglose del proveedor produce. H5 (Red Nacional) sigue abierto y así
+ * se dice. Esta pantalla sigue sin afirmar que el estímulo proceda.
  */
 export function VistaAgentePeajes({
-  conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, ejecutarAhora, notificaciones,
+  conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, ejecutarAhora,
+  desglosesProveedor, desgloseSeleccionado, detalleSeleccionado, importarDesglose, conciliarDesglose,
+  notificaciones,
 }: {
   conciliacion: ConciliacionConsolidado | null;
   lineas: LineaPorConciliar[] | null;
@@ -38,6 +51,12 @@ export function VistaAgentePeajes({
   subirDesglose: AccionSubir;
   /** El barrido a demanda: re-cruza la cola contra los gastos de hoy. */
   ejecutarAhora: AccionBarrer;
+  /** Los desgloses del PROVEEDOR (F5), con su % conciliado medido. null = no se pudo leer. */
+  desglosesProveedor: ResumenDesglose[] | null;
+  desgloseSeleccionado: ResumenDesglose | null;
+  detalleSeleccionado: DetalleDesglose | null;
+  importarDesglose: AccionImportar;
+  conciliarDesglose: AccionConciliar;
   /** La sección de Notificaciones, ya renderizada en el servidor
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
@@ -162,21 +181,130 @@ export function VistaAgentePeajes({
             </section>
           </div>
 
+          {/* ── El desglose del PROVEEDOR (F5, PoC): tres cubetas y bitácora ── */}
+          <section className="card p-4">
+            <h2 className="font-display text-[15px] font-semibold mb-1">Desglose del proveedor de peaje</h2>
+            <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+              El Excel/CSV (o PDF con texto) que IAVE, PASE, TeleVía o el convenio directo mandan
+              cada corte. El agente lo cruza contra los gastos de caseta de los viajes — por fecha
+              (±1 día) y monto — y separa tres cubetas: cuadra, con discrepancia, sin contraparte.
+              De lo que cuadra sale la bitácora de la RMF 9.1.8. (El cruce contra el GPS del TMS es
+              v2: requiere acceso al TMS del cliente; hoy se cruza contra lo que Likida ya registró.)
+            </p>
+            <SubirDesgloseProveedor importar={importarDesglose} />
+
+            {desglosesProveedor === null ? (
+              <p className="text-[12.5px] mt-4" style={{ color: 'var(--muted)' }}>
+                No se pudo leer la lista de desgloses ahora mismo.
+              </p>
+            ) : desglosesProveedor.length === 0 ? (
+              <div className="mt-4">
+                <EstadoVacio icono={<FileSpreadsheet width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                  Aún no se importa ningún desglose del proveedor — súbelo arriba y el cruce corre al
+                  instante, con su % conciliado medido.
+                </EstadoVacio>
+              </div>
+            ) : (
+              <div className="grid lg:grid-cols-[minmax(240px,1fr)_2fr] gap-4 mt-4">
+                {/* La lista, cada uno con su % MEDIDO */}
+                <div>
+                  <h3 className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Desgloses importados</h3>
+                  <div className="space-y-1.5">
+                    {desglosesProveedor.map((d) => {
+                      const activo = d.desgloseId === desgloseSeleccionado?.desgloseId;
+                      return (
+                        <Link key={d.desgloseId}
+                          href={`/dashboard/agentes/peajes${sufijo}${sufijo ? '&' : '?'}desglose=${d.desgloseId}`}
+                          className="block rounded-lg px-2.5 py-2 hairline transition-colors hover:bg-[var(--canvas)]"
+                          style={activo ? { background: 'var(--canvas)' } : undefined}>
+                          <div className="flex items-center gap-2 text-[12.5px]">
+                            <span className="truncate" title={d.archivoNombre ?? undefined}>
+                              {d.proveedor ?? d.archivoNombre ?? 'desglose'}
+                            </span>
+                            <span className="ml-auto shrink-0 cifra-mono text-[12px]"
+                              style={{ color: d.pctCuadra !== null && d.pctCuadra >= 100 ? 'var(--ok)' : undefined }}>
+                              {d.pctCuadra === null ? '—' : `${numero(d.pctCuadra)}%`}
+                            </span>
+                          </div>
+                          <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
+                            {d.periodoDesde && d.periodoHasta
+                              ? `${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`
+                              : 'periodo sin medir (líneas sin fecha)'}
+                            {' · '}{numero(d.total)} líneas
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* El detalle del seleccionado: las tres cubetas */}
+                {desgloseSeleccionado && (
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap mb-3">
+                      <BotonConciliar conciliar={conciliarDesglose} desgloseId={desgloseSeleccionado.desgloseId} />
+                      {desgloseSeleccionado.cuadra > 0 ? (
+                        <a href={`/api/export/bitacora-peaje?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
+                          className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
+                          style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                          <FileDown width={13} height={13} strokeWidth={2} /> Bitácora RMF 9.1.8 (CSV)
+                        </a>
+                      ) : (
+                        <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
+                          La bitácora RMF 9.1.8 se habilita cuando al menos una línea cuadre.
+                        </span>
+                      )}
+                    </div>
+                    {detalleSeleccionado === null ? (
+                      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+                        No se pudo leer el detalle de este desglose ahora mismo.
+                      </p>
+                    ) : (
+                      <div className="grid md:grid-cols-3 gap-3">
+                        <CubetaDesglose
+                          titulo="Cuadran"
+                          total={desgloseSeleccionado.cuadra}
+                          nota="ligadas a su gasto de viaje"
+                          tono="ok"
+                          lineas={detalleSeleccionado.cuadra}
+                        />
+                        <CubetaDesglose
+                          titulo="No cuadran"
+                          total={desgloseSeleccionado.noCuadra}
+                          nota="discrepancia o ambigüedad — el porqué, línea a línea"
+                          tono="warn"
+                          lineas={detalleSeleccionado.noCuadra}
+                        />
+                        <CubetaDesglose
+                          titulo="Sin contraparte"
+                          total={desgloseSeleccionado.sinContraparte}
+                          nota="cruces que ningún gasto de caseta respalda"
+                          lineas={detalleSeleccionado.sinContraparte}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
           {/* ── El estímulo de peaje: cada renglón dice lo que su ficha sostiene ── */}
           <section className="card p-4">
-            <h2 className="font-display text-[15px] font-semibold mb-1">El estímulo de peaje — hasta 50% (LIF 2026 art. 20, ap. A)</h2>
+            <h2 className="font-display text-[15px] font-semibold mb-1">El estímulo de peaje — hasta 50% (LIF 2026 art. 20, ap. A · RMF 2026 regla 9.1.8)</h2>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-              La ley otorga un acreditamiento de hasta el 50% del gasto en autopistas de cuota,
-              aplicable únicamente cumpliendo los requisitos que el SAT fija en reglas de carácter
-              general. Ese texto del SAT Likida aún no lo tiene verificado, así que esta pantalla
-              no afirma qué pide. Lo que sí produce: cada línea del TAG ligada a su gasto de viaje.
+              La ley otorga un acreditamiento de hasta el 50% del gasto en autopistas de cuota; los
+              requisitos operativos los fija la regla 9.1.8 de la RMF 2026 (texto verificado en
+              fuente primaria — ficha rmf-2026-9.1.8). Cada renglón dice qué produce esta pantalla
+              y qué corre por cuenta de la flota. Esta pantalla no afirma que el estímulo proceda.
             </p>
             <div className="grid md:grid-cols-2 gap-x-6 gap-y-1.5 text-[12.5px]">
-              <Requisito tono="ok" texto="Cruce del estado de cuenta del TAG contra los gastos de los viajes, por monto y fecha — es lo que esta pantalla produce" />
-              <Requisito tono="abierto" texto="Factor 0.5 por viaje sobre el subtotal SIN IVA — la base exacta está sin resolver: la ley dice «gasto total erogado» y el motor usa la lectura conservadora sin IVA (~13.8% menos que sobre el total); pregunta para tu contador" />
-              <Requisito tono="abierto" texto="Requisitos operativos de las reglas del SAT — sin texto verificado: Likida no afirma cuáles son ni que este cruce los cumpla; confírmalos con tu contador" />
+              <Requisito tono="ok" texto="Fr. II — bitácora de viaje que coincida con el estado de cuenta del sistema electrónico de pago: es lo que esta pantalla produce con los cruces conciliados (botón «Bitácora RMF 9.1.8»); origen/destino salen del viaje y quedan vacíos si no se capturaron" />
+              <Requisito tono="ok" texto="Fr. IV — factor 0.5 sobre el importe SIN IVA: la base que la regla fija y la que el motor ya aplica (la duda de «gasto total erogado» de la LIF quedó resuelta por esta fracción)" />
+              <Requisito tono="flota" texto="Fr. I — aviso en MARZO del año siguiente por buzón tributario, con inventario vehicular desglosado — trámite de la flota, Likida no lo presenta" />
+              <Requisito tono="flota" texto="Fr. III — pagar las autopistas con TAG o sistema electrónico y CONSERVAR los estados de cuenta — Likida no verifica la forma de pago de cada caseta; el efectivo en ventanilla mata el estímulo" />
               <Requisito tono="flota" texto="Dedicación EXCLUSIVA al transporte terrestre de carga, pasaje o turismo — lo declara la flota, Likida no lo verifica" />
-              <Requisito tono="flota" texto="Casetas de la Red Nacional de Autopistas de Cuota — el motor no distingue la red: aplica el factor a toda caseta" />
+              <Requisito tono="abierto" texto="Casetas de la Red Nacional de Autopistas de Cuota — el motor no distingue la red: aplica el factor a toda caseta (hallazgo H5 de la ficha LIF, abierto)" />
               <Requisito tono="flota" texto="Ingresos anuales menores a $300 millones — dato de la flota, Likida no lo conoce" />
               <Requisito tono="flota" texto="No ser parte relacionada (LISR art. 179) — dato de la flota, Likida no lo conoce" />
             </div>
@@ -195,6 +323,80 @@ export function VistaAgentePeajes({
         </div>
       </div>
     </main>
+  );
+}
+
+/** El motivo de `detalle` dicho para una persona — nada de claves crudas. */
+const MOTIVO_LEGIBLE: Record<string, string> = {
+  sin_fecha: 'sin fecha legible en el archivo',
+  sin_gastos_en_ventana: 'ningún gasto de caseta a ±1 día',
+  contraparte_ya_reclamada: 'su contraparte ya la reclamó otra línea igual',
+  ambigua_monto_exacto: 'dos gastos igual de buenos — decide un humano',
+  ambigua_en_tolerancia: 'dos gastos igual de buenos — decide un humano',
+  monto_distinto: 'el monto no coincide',
+};
+
+/** El renglón chico bajo cada línea: viaje, diferencia medida y porqué —
+ *  separados por «·» SOLO entre partes presentes (sin separadores colgantes). */
+function MetaLinea({ linea }: { linea: LineaDesgloseVista }) {
+  const partes: React.ReactNode[] = [];
+  if (linea.viajeFolio) partes.push(<span key="v">viaje {linea.viajeFolio}</span>);
+  if (linea.diferencia !== null && linea.diferencia !== 0) {
+    partes.push(<span key="d" style={{ color: 'var(--warn)' }}>dif. {mxn(linea.diferencia)}</span>);
+  }
+  if (linea.motivo) partes.push(<span key="m">{MOTIVO_LEGIBLE[linea.motivo] ?? linea.motivo}</span>);
+  if (partes.length === 0) return null;
+  return (
+    <div className="text-[10.5px]" style={{ color: 'var(--faint)' }}>
+      {partes.map((p, i) => (
+        <span key={i}>{i > 0 && ' · '}{p}</span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Una cubeta del desglose del proveedor: el conteo COMPLETO (viene del
+ * agregado, no de las filas enseñadas) y hasta 12 líneas de muestra con su
+ * porqué. Si hay más de las que caben, se dice cuántas.
+ */
+function CubetaDesglose({ titulo, total, nota, tono, lineas }: {
+  titulo: string;
+  total: number;
+  nota: string;
+  tono?: 'ok' | 'warn';
+  lineas: LineaDesgloseVista[];
+}) {
+  return (
+    <div className="rounded-xl hairline p-3" style={{ background: 'var(--surface)' }}>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[12.5px] font-semibold">{titulo}</span>
+        <span className="cifra-mono text-[15px] font-medium ml-auto"
+          style={tono ? { color: `var(--${tono})` } : undefined}>{numero(total)}</span>
+      </div>
+      <p className="text-[10.5px] mb-2" style={{ color: 'var(--faint)' }}>{nota}</p>
+      {lineas.length === 0 ? (
+        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Ninguna línea en esta cubeta.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {lineas.map((l) => (
+            <div key={l.id} className="text-[11.5px] leading-snug">
+              <div className="flex items-center gap-1.5">
+                <span style={{ color: 'var(--muted)' }}>{l.fecha ? fechaCorta(l.fecha) : 'sin fecha'}</span>
+                <span className="truncate" title={l.caseta ?? undefined}>{l.caseta ?? 'sin caseta'}</span>
+                <span className="ml-auto shrink-0 cifra-mono">{mxn(l.monto)}</span>
+              </div>
+              <MetaLinea linea={l} />
+            </div>
+          ))}
+          {total > lineas.length && (
+            <p className="text-[10.5px] pt-0.5" style={{ color: 'var(--faint)' }}>
+              y {numero(total - lineas.length)} más en esta cubeta.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

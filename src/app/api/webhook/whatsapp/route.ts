@@ -271,7 +271,11 @@ interface WaWebhook {
           from: string;
           type: string;
           text?: { body: string };
-          image?: { id: string };
+          // `caption` es el rótulo que el chofer escribe AL PIE de la foto —
+          // la única señal determinística de qué papel es ("carta porte",
+          // "se me ponchó una llanta, son 800"). Meta lo manda dentro del
+          // objeto image y hasta el 14-ago-2026 se tiraba aquí.
+          image?: { id: string; caption?: string };
           document?: { id: string };
           // El chofer apretó un botón. Meta manda `type: 'interactive'` y dentro
           // un `interactive.type` que dice CUÁL de los interactivos fue:
@@ -308,7 +312,10 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
       for (const m of change.value?.messages ?? []) {
         const base = { from: m.from, waMessageId: m.id };
         if (m.type === 'text' && m.text) out.push({ ...base, type: 'text', text: m.text.body });
-        else if (m.type === 'image' && m.image) out.push({ ...base, type: 'image', mediaId: m.image.id });
+        // El caption viaja como `text` del mensaje de imagen: `InboundMessage`
+        // ya tiene el campo y el processor decide con él (POD/talacha, F4).
+        // `|| undefined` para que un caption vacío no se distinga de ninguno.
+        else if (m.type === 'image' && m.image) out.push({ ...base, type: 'image', mediaId: m.image.id, text: m.image.caption || undefined });
         else if (m.type === 'document' && m.document) out.push({ ...base, type: 'document', mediaId: m.document.id });
         // BOTÓN APRETADO → entra como TEXTO con el id del botón por cuerpo.
         //

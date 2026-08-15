@@ -306,6 +306,20 @@ export const NORMAS: Record<string, Norma> = {
     exigibleDesde: null,
     ficha: "normas/rmf-2026-2.7.1.48.yaml",
   },
+  'rmf-2026-9.1.8': {
+    id: 'rmf-2026-9.1.8',
+    instrumento: "Resolución Miscelánea Fiscal para 2026",
+    articulo: "9.1.8 (Título 9, Capítulo 9.1)",
+    titulo: "Requisitos operativos del estímulo del 50% de peaje: aviso de marzo, bitácora de viaje conciliada, pago electrónico y factor 0.5 sin IVA",
+    citas: ["RMF 9.1.8", "regla 9.1.8"],
+    jerarquia: 3,
+    estado: "verificado_fuente_primaria",
+    // La entrada en vigor de la RMF 2026 (DOF 28-dic-2025, vigor 01-ene-2026).
+    // La fr. IV RESUELVE el hallazgo H4 de la ficha LIF: la base del
+    // acreditamiento es el importe SIN IVA — lo que el motor ya aplicaba.
+    exigibleDesde: '2026-01-01',
+    ficha: "normas/rmf-2026-9.1.8.yaml",
+  },
   'rmf-2026-2.7.7': {
     id: 'rmf-2026-2.7.7',
     instrumento: "Resolución Miscelánea Fiscal para 2026",

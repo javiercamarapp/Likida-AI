@@ -4,7 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
 import { tokenDeDestinatarios } from '@/lib/correo/buzon';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
-import { guardarFacturaProveedor } from '@/lib/likida/proveedores';
+import { guardarFacturaProveedor, estadoSatDeCfdi } from '@/lib/likida/proveedores';
+import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { sanitizarTexto } from '@/lib/likida/intake/sanitizar';
 
 export const runtime = 'nodejs';
@@ -193,6 +194,9 @@ export async function POST(req: Request) {
   // Adjuntos cuya DESCARGA se cayó: ni guardados ni descartados. Si este
   // correo quedara marcado como procesado, estarían perdidos para siempre.
   let caidas = 0;
+  // Para la bitácora de corridas (0108): el agente de Proveedores "corrió"
+  // desde que empezó a procesar adjuntos.
+  const inicioCorrida = new Date();
 
   for (const adj of adjuntos) {
     // Sin id no hay qué pedirle a Resend, y el reintento trae el MISMO
@@ -238,7 +242,11 @@ export async function POST(req: Request) {
       const xml = parseCfdiXml(texto);
       if (!xml) { ignoradas++; continue; }
 
-      const r = await guardarFacturaProveedor(flota.id as string, xml, texto, (flota.rfc as string) ?? null);
+      // El estatus SAT se consulta AQUÍ, con el adjunto ya en la mano:
+      // `consultarCFDI` jamás lanza (timeout 4s → 'pendiente'), así que un
+      // SAT caído no convierte este adjunto en `caida` ni frena el correo.
+      const estadoSat = await estadoSatDeCfdi(xml);
+      const r = await guardarFacturaProveedor(flota.id as string, xml, texto, (flota.rfc as string) ?? null, 'correo', estadoSat);
       if (r.ok) guardadas++; else ignoradas++;
     } catch (e) {
       // Aquí solo pueden lanzar los fetch y sus lecturas (`parseCfdiXml`
@@ -280,6 +288,22 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ error: 'no se pudieron descargar todos los adjuntos' }, { status: 503 });
   }
+
+  // ── LA CORRIDA SE ANOTA (0108) ───────────────────────────────────────────
+  // Solo la corrida que TERMINÓ: el camino de descargas caídas salió arriba
+  // con 503 y Resend lo va a reintentar — anotar cada intento fallido llenaría
+  // la ficha con el mismo correo N veces. `registrarCorrida` jamás lanza.
+  // tareas = adjuntos procesables; hechas = los que quedaron en la bandeja
+  // (un PDF ignorado no es un fallo del agente, y el resumen lo desglosa).
+  await registrarCorrida(flota.id as string, 'proveedores', {
+    inicio: inicioCorrida,
+    fin: new Date(),
+    estado: 'ok',
+    disparo: 'correo',
+    tareasHechas: guardadas,
+    tareasTotal: adjuntos.length,
+    resumen: { accion: 'correo_entrante', guardadas, ignoradas },
+  });
 
   logger.info('correo_entrante.procesado', {
     emailId, tenantId: flota.id, guardadas, ignoradas, total: adjuntos.length,
