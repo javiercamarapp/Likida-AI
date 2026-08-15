@@ -1,14 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// APLICADOR DE FIXES — fase 4 de verdad: corrige el repo, no solo planea.
+// APLICADOR — fase 4: corrige el repo con compuerta real.
 //
-// Para cada hallazgo verificado se llama al fixer de su clase (con el
-// contenido REAL del archivo alrededor de la línea) pidiéndole un reemplazo
-// JSON: { "archivo", "desde", "hasta", "reemplazo" } — o falso_positivo.
-// Reglas duras (del skill):
-//   1. Reemplaza LÍNEAS del mismo archivo, siempre dentro de rango.
-//   2. Compuerta: `tsc --noEmit` limpio + (si existe) test del archivo verde.
-//   3. Compuerta roja → `git checkout` (rollback) y PENDIENTE. Nada a medias.
-//   4. Commit atómico citando el ID. Árbol sucio → no arregla.
+// Compuertas duras (del skill): reemplazo por LÍNEAS dentro de rango, `tsc
+// --noEmit` limpio, tests del archivo (si existen) verdes, commit atómico
+// citando el ID. Compuerta roja → `git checkout` (rollback) y PENDIENTE.
+// Árbol sucio (código ajeno) → no arregla.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -31,22 +27,34 @@ interface Reemplazo {
 export interface ResultadoFixAplicado {
   id: string;
   archivo: string;
-  estado: 'APLICADO' | 'FALSO_POSITIVO' | 'ERROR';
+  estado: 'APLICADO' | 'FALSO_POSITIVO' | 'ERROR' | 'NADA';
   detalle: string;
+}
+
+export interface Cambio {
+  archivo: string;
+  desde: number;
+  hasta: number;
+  reemplazo: string;
+  id: string;
+  descripcion: string;
+  /** Modelo que propuso el cambio (opcional: default por severidad/fixer). */
+  modelo?: string;
 }
 
 const repo = process.cwd();
 
 function arbolLimpio(): boolean {
-  // Nuestros propios artefactos (docs/auditoria-N, scripts/auditoria,
-  // vitest.audit.config) no cuentan como "árbol sucio": son productos del
-  // pipeline. El gate protege el CÓDIGO y el trabajo humano, no nuestros logs.
+  // Los propios artefactos del pipeline no ensucian el árbol de los fixes.
   const r = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8', cwd: repo });
   const lineas = (r.stdout ?? '').split('\n').filter((l) => l.trim().length > 0).map((l) => l.slice(3));
-  const ajenos = lineas.filter(
-    (l) => !l.startsWith('docs/auditoria-') && !l.startsWith('scripts/auditoria') && l !== 'vitest.audit.config.ts',
-  );
+  const ajenos = lineas.filter((l) => !l.startsWith('docs/auditoria-') && !l.startsWith('scripts/auditoria') && l !== 'vitest.audit.config.ts');
   return ajenos.length === 0;
+}
+
+export function estadoGit(): string {
+  const r = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8', cwd: repo });
+  return (r.stdout ?? '').trim().slice(0, 500);
 }
 
 function leerArchivo(ruta: string): string[] | null {
@@ -75,18 +83,31 @@ function testArchivo(ruta: string): string | null {
   return null;
 }
 
-async function sugerirReemplazo(h: HallazgoVerificado): Promise<Reemplazo | null> {
+function extractJson(texto: string): Reemplazo | null {
+  try {
+    const ini = texto.indexOf('{');
+    const fin = texto.lastIndexOf('}');
+    if (ini < 0 || fin <= ini) return null;
+    return JSON.parse(texto.slice(ini, fin + 1)) as Reemplazo;
+  } catch {
+    return null;
+  }
+}
+
+/** Pide a un fixer un JSON de reemplazo; `modelo` dado o el de la clase del hallazgo. */
+async function sugerirReemplazo(h: HallazgoVerificado, modelo?: string): Promise<Reemplazo | null> {
   const f = fixerPorSeveridad(h.rubro, severidadDeTexto(h.severidad));
-  const modelo = f.modelo(h.rubro);
-  const lineas = leerArchivo(h.archivo);
+  const linea = h.linea;
+  const archivo = h.archivo;
+  const lineas = leerArchivo(archivo);
   if (!lineas) return null;
-  const desdeCtx = Math.max(1, h.linea - 12);
-  const hastaCtx = Math.min(lineas.length, h.linea + 12);
+  const desdeCtx = Math.max(1, linea - 12);
+  const hastaCtx = Math.min(lineas.length, linea + 12);
   const contexto = lineas.slice(desdeCtx - 1, hastaCtx).map((l, i) => `${desdeCtx + i}: ${l}`).join('\n');
   const total = lineas.length <= 3500 ? lineas.join('\n') : '';
 
   const out = await llamada({
-    modelo,
+    modelo: modelo ?? f.modelo(h.rubro),
     quien: `fixer-${f.nombre}-${h.rubro}`,
     mensajes: [
       {
@@ -94,7 +115,7 @@ async function sugerirReemplazo(h: HallazgoVerificado): Promise<Reemplazo | null
         content: `Eres "${f.nombre}" en Likida. ${f.queHace}. Reglas estrictas:
 1) Un solo reemplazo de LÍNEAS dentro de UN archivo.
 2) Responde SOLO JSON: {"archivo":"<ruta>","desde":N,"hasta":M,"reemplazo":"<texto>"} — o {"falso_positivo":true,"motivo":"..."} si el hallazgo no aplica.
-3) Reemplazo mínimo: no cambies semántica ajena, no imports nuevos, no toques code de pagos salvo que sea trivial y obvio.`,
+3) Reemplazo mínimo: sin imports nuevos, sin semántica ajena, sin tocar pagos salvo trivial y obvio.`,
       },
       {
         role: 'user',
@@ -104,59 +125,62 @@ Contexto (líneas ${desdeCtx}-${hastaCtx}):
 ${contexto}
 ${total ? `\n=== ARCHIVO COMPLETO (${lineas.length} líneas) ===\n${total.slice(0, 15000)}` : ''}
 
-Devuelve SOLO el JSON del reemplazo (o falso:true). El "reemplazo" reemplaza las líneas desde..hasta INCLUSIVE.`,
+Devuelve SOLO el JSON del reemplazo (o falso:true). "reemplazo" sustituye desde..hasta INCLUSIVE.`,
       },
     ],
     maxTokens: 2500,
     temperatura: 0.1,
   });
-  try {
-    const ini = out.text.indexOf('{');
-    const fin = out.text.lastIndexOf('}');
-    if (ini < 0 || fin <= ini) return null;
-    return JSON.parse(out.text.slice(ini, fin + 1)) as Reemplazo;
-  } catch {
-    return null;
-  }
+  return extractJson(out.text);
 }
 
-export async function aplicarFix(n: number, h: HallazgoVerificado): Promise<ResultadoFixAplicado> {
-  const id = `${h.rubro}-${h.severidad.slice(0, 1)}`;
+/** Gate + commit de un cambio concreto (usado por auditores Y por rutinas). */
+export async function aplicarCambio(n: number, c: Cambio): Promise<ResultadoFixAplicado> {
   if (!arbolLimpio()) {
-    return { id, archivo: h.archivo, estado: 'ERROR', detalle: 'árbol de git sucio — no commit atómico' };
+    return { id: c.id, archivo: c.archivo, estado: 'ERROR', detalle: `árbol sucio — no commit atómico (${estadoGit().slice(0, 120)})` };
   }
-  const sug = await sugerirReemplazo(h);
-  if (!sug) return { id, archivo: h.archivo, estado: 'ERROR', detalle: 'fixer sin JSON válido' };
-  if (sug.falso_positivo) return { id, archivo: h.archivo, estado: 'FALSO_POSITIVO', detalle: sug.motivo ?? 'no aplica' };
-  const archivo = (sug.archivo ?? h.archivo).replace(/^\/+/, '');
-  const desde = sug.desde ?? 1;
-  const hasta = sug.hasta ?? desde;
-  const reemplazo = sug.reemplazo ?? '';
+  const archivo = c.archivo.replace(/^\/+/, '');
   const lineas = leerArchivo(archivo);
-  if (!lineas || desde < 1 || hasta < desde || hasta > lineas.length) {
-    return { id, archivo, estado: 'ERROR', detalle: `rango ${desde}-${hasta} inválido (${lineas?.length ?? 0} líneas)` };
+  if (!lineas || c.desde < 1 || c.hasta < c.desde || c.hasta > lineas.length) {
+    return { id: c.id, archivo, estado: 'ERROR', detalle: `rango ${c.desde}-${c.hasta} inválido (${lineas?.length ?? 0} líneas)` };
   }
-
-  const nuevas = [...lineas.slice(0, desde - 1), ...reemplazo.split('\n'), ...lineas.slice(hasta)];
+  const nuevas = [...lineas.slice(0, c.desde - 1), ...c.reemplazo.split('\n'), ...lineas.slice(c.hasta)];
   writeFileSync(`${repo}/${archivo}`, nuevas.join('\n') + '\n', 'utf8');
 
   const tsc = ejecutar('npx', ['tsc', '--noEmit']);
   if (!tsc.ok) {
     spawnSync('git', ['checkout', '--', archivo], { encoding: 'utf8', cwd: repo });
-    return { id, archivo, estado: 'ERROR', detalle: `tsc roto: ${tsc.salida.slice(0, 200)}` };
+    return { id: c.id, archivo, estado: 'ERROR', detalle: `tsc roto: ${tsc.salida.slice(0, 190)}` };
   }
   const t = testArchivo(archivo);
   if (t) {
     const vt = ejecutar('npx', ['vitest', 'run', t, '--reporter=dot']);
     if (!vt.ok) {
       spawnSync('git', ['checkout', '--', archivo], { encoding: 'utf8', cwd: repo });
-      return { id, archivo, estado: 'ERROR', detalle: `test roto (${t}): ${vt.salida.slice(0, 200)}` };
+      return { id: c.id, archivo, estado: 'ERROR', detalle: `test roto (${t}): ${vt.salida.slice(0, 190)}` };
     }
   }
-  const msg = `[audit${n}] ${id} ${h.titulo.slice(0, 70)}`;
+  const msg = `[audit${n}] ${c.id} ${c.descripcion.slice(0, 70)}`;
   spawnSync('git', ['add', archivo], { encoding: 'utf8', cwd: repo });
   spawnSync('git', ['commit', '-m', msg], { encoding: 'utf8', cwd: repo });
-  return { id, archivo, estado: 'APLICADO', detalle: `tsc+tests verdes; commit ${msg}` };
+  return { id: c.id, archivo, estado: 'APLICADO', detalle: `tsc+tests verdes → ${msg}` };
+}
+
+export async function aplicarFix(n: number, h: HallazgoVerificado, modelo?: string): Promise<ResultadoFixAplicado> {
+  const id = `${h.rubro}-${h.severidad.slice(0, 1)}`;
+  if (!arbolLimpio()) return { id, archivo: h.archivo, estado: 'ERROR', detalle: 'árbol de git sucio — no commit atómico' };
+  const sug = await sugerirReemplazo(h, modelo);
+  if (!sug) return { id, archivo: h.archivo, estado: 'ERROR', detalle: 'fixer sin JSON válido' };
+  if (sug.falso_positivo) return { id, archivo: h.archivo, estado: 'FALSO_POSITIVO', detalle: sug.motivo ?? 'no aplica' };
+  return aplicarCambio(n, {
+    id,
+    descripcion: h.titulo,
+    archivo: (sug.archivo ?? h.archivo).replace(/^\/+/, ''),
+    desde: sug.desde ?? 1,
+    hasta: sug.hasta ?? (sug.desde ?? 1),
+    reemplazo: sug.reemplazo ?? '',
+    modelo,
+  });
 }
 
 export async function aplicarFixesRonda(n: number): Promise<ResultadoFixAplicado[]> {
@@ -174,8 +198,6 @@ export async function aplicarFixesRonda(n: number): Promise<ResultadoFixAplicado
     `# Fixes aplicados — auditoría ${n}`,
     '',
     ...resultados.map((r) => `- [${r.estado}] ${r.id} ${r.archivo}: ${r.detalle}`),
-    '',
-    `Commit: git log -1 --format='%h %s'`,
   ].join('\n');
   const dir = dirRonda(n);
   writeFileSync(`${dir}/fixes-aplicadas.md`, md, 'utf8');
