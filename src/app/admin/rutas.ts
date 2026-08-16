@@ -4,7 +4,7 @@ import {
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
   Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake, Inbox,
-  Bot, ListChecks, Sparkles,
+  Bot, Bug, ListChecks, Sparkles,
 } from 'lucide-react';
 
 /**
@@ -28,6 +28,9 @@ export const AGENTES: Item[] = [
   { href: '/admin/agente-whatsapp', nombre: 'Agente de WhatsApp', Icono: MessagesSquare },
   { href: '/admin/model-ops', nombre: 'Model Ops', Icono: Settings2 },
   { href: '/admin/playground', nombre: 'Playground', Icono: FlaskConical },
+  // El panel de QA (Fase A): fotos reales contra el pipeline real, veredicto
+  // por oráculos del ejército (scripts/qa-agentes/). Diseño: 00-PANEL-DE-QA.md.
+  { href: '/admin/qa', nombre: 'QA autónomo', Icono: Bug },
 ];
 
 export const NEGOCIO: Item[] = [
