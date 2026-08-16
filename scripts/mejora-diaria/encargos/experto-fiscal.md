@@ -25,6 +25,14 @@ verificación, jerarquía (ley > reglamento > RMF), version_anterior.
    drift es HALLAZGO con archivo:línea. Backlog semilla (16-ago, nadie los ha
    verificado POR NOMBRE): los tres bugs fiscales pendientes — IEPS diésel,
    casetas 1/5, diésel en efectivo. Si tu área los toca, verifícalos y dilo.
+   YA CERRADO el 16-ago con fuente primaria (no re-investigar): la 1ª RM RMF
+   2026 se leyó íntegra (codNota 5793101) — la 11.7.3 ya viene incorporada
+   en las cuotas del viernes (jamás recalcular desde la metodología); los
+   Anexos 21/22 son controles volumétricos y NO tocan a Likida; NO existe 2ª
+   RM al 16-ago; la cita correcta de la retroactividad es el transitorio
+   VIGÉSIMO SEXTO. Lo que SIGUE abierto: la tensión A/B del estímulo
+   (fiscalista) y si las determinaciones posteriores al 02-jul conservan el
+   ajuste del precio base (vigilarlo en los acuerdos de cada viernes).
 3. ENRIQUECE: si al área le falta una ficha que el producto necesita para
    opinar, créala — SOLO con fuente primaria leída; sin fuente, se crea con
    `sin_verificar` y el producto NO la afirma (así funciona el candado).
