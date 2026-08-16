@@ -3764,7 +3764,7 @@ end $$;
 -- ── 79. La bitácora de corridas de agentes existe y se purga (0102) ────────
 --
 -- `agente_corrida`: una fila por (corrida × flota) con Periodo · Estado ·
--- Tareas · Duración — la ficha de Handle. Dominios vigilados por CHECK,
+-- Tareas · Duración — la ficha de referencia. Dominios vigilados por CHECK,
 -- lectura por tenant vía RLS, escritura solo service role, purga a 180 días
 -- integrada a `mantenimiento_de_datos` con su revoke desde el día uno.
 --
@@ -4842,4 +4842,54 @@ begin
 
   raise exception E'COLA_ACTOR_0120  aprobada_sin_actor_rebota=%  pendiente_con_actor_rebota=%  con_actor_cabe=%   (esperado t/t/t)',
     sin_actor, pendiente_con_actor, con_actor_cabe;
+end $$;
+
+-- ── 95. Historial del copiloto: rol acotado, deny-all y cascade (mig. 0121) ─
+-- El ESPEJO del bloque 63 (0088), porque la migración es el espejo de
+-- aquella menos el tenant: el copiloto es de Likida, no de una flota, y su
+-- ancla es SOLO el usuario (superadmin). Las mismas tres garantías que solo
+-- la base demuestra: (a) el CHECK de `rol` rebota un rol fuera del dominio
+-- usuario/asistente; (b) RLS activo SIN políticas = deny-all — hasta el
+-- DUEÑO autenticado ve cero filas, el único camino es el service role del
+-- servidor (que ancla user_id en copiloto-historial.ts); (c) borrar la
+-- conversación se lleva sus mensajes (cascade), no deja huérfanos.
+--
+-- Escrito el 16-ago-2026 con la 0121 recién creada: primera corrida en el
+-- Postgres de CI (que aplica todas las migraciones); la corrida contra el
+-- proyecto real va después de aplicarla, como el resto.
+--   (esperado t / 0 / 0 / 0 — los cuatro exactos)
+do $$
+declare
+  v_t uuid; v_u uuid := gen_random_uuid(); v_c uuid;
+  rol_rebota boolean := false;
+  n_msjs_tras_borrar int; n_conv_rls int; n_msj_rls int;
+begin
+  -- El usuario exige tenant (app_user.tenant_id NOT NULL); la conversación, NO.
+  insert into tenant (nombre) values ('ZZZ VERIF 0121') returning id into v_t;
+  insert into app_user (id, tenant_id, email, rol) values (v_u, v_t, 'zzz-verif-copiloto@likida.test', 'superadmin');
+
+  insert into copiloto_conversacion (user_id, titulo) values (v_u, 'ZZZ copiloto') returning id into v_c;
+  insert into copiloto_mensaje (conversacion_id, rol, texto) values (v_c, 'usuario', 'hola'), (v_c, 'asistente', 'listo');
+
+  -- El CHECK del rol: 'sistema' no existe en el dominio.
+  begin
+    insert into copiloto_mensaje (conversacion_id, rol, texto) values (v_c, 'sistema', 'colado');
+  exception when check_violation then rol_rebota := true;
+  end;
+
+  -- Deny-all: hasta el DUEÑO autenticado ve cero — el único camino es el
+  -- service role del servidor, que ancla user_id en código.
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_u)::text, true);
+  select count(*) into n_conv_rls from copiloto_conversacion where id = v_c;
+  select count(*) into n_msj_rls from copiloto_mensaje where conversacion_id = v_c;
+  reset role;
+
+  -- Cascade: borrar la conversación se lleva sus mensajes.
+  delete from copiloto_conversacion where id = v_c;
+  select count(*) into n_msjs_tras_borrar from copiloto_mensaje where conversacion_id = v_c;
+
+  delete from tenant where id = v_t;
+  raise exception E'COPILOTO_0121  rol-rebota=%  rls-conv=%  rls-msj=%  msjs-tras-borrar=%   (esperado t / 0 / 0 / 0)',
+    rol_rebota, n_conv_rls, n_msj_rls, n_msjs_tras_borrar;
 end $$;

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Power, Eye, Siren, AlertTriangle, Check } from 'lucide-react';
+import { Search, Power, Eye, Siren, AlertTriangle, Check, Sparkles } from 'lucide-react';
 import { TODAS_LAS_RUTAS } from './rutas';
 import { etiquetaInterruptor } from './observabilidad/etiquetas';
 
@@ -225,6 +225,12 @@ export default function CommandPalette() {
         correr: () => { setModo('flotas'); setConsulta(''); setActivo(0); },
       },
       { key: 'acc-escalaciones', etiqueta: 'Ir a escalaciones', detalle: '⌃⇧E', Icono: Siren, correr: () => ir('/admin/escalaciones') },
+      {
+        // El panel lateral del copiloto (diseño §6). Mismo puente de evento
+        // que el botón "Buscar" del sidebar: el estado vive en su componente.
+        key: 'acc-copiloto', etiqueta: 'Abrir el copiloto (panel lateral)', detalle: '⌘J', Icono: Sparkles,
+        correr: () => { setAbierto(false); window.dispatchEvent(new CustomEvent('likida:abrir-copiloto')); },
+      },
     ];
     const rutas = TODAS_LAS_RUTAS.map((r): Item => ({
       key: r.href, etiqueta: r.nombre, Icono: r.Icono, correr: () => ir(r.href),
