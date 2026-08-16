@@ -13,6 +13,81 @@ nota_verificacion: >
   Texto obtenido de dos reproducciones del articulado (leyes-mx.com y mley.mx) y
   corroborado con el documento de Reducciones y Estímulos Fiscales 2026 de PRODECON.
 
+# ── LA DEFINICIÓN QUE FALTABA EN ESTA FICHA (agregada 15-ago-2026) ───────────
+# El párrafo que precede a la fracción V define "transporte privado" PARA AMBAS
+# fracciones (IV y V). No estaba transcrito aquí, y es la pieza que decide si
+# una flota que NO es transportista entra o no al estímulo. Extraído del PDF
+# oficial de la Cámara de Diputados (LIF_2026.pdf, art. 20 en la línea 1143 del
+# texto plano; la definición en la 1326).
+definicion_transporte_privado:
+  texto_vigente: >
+    Para los efectos de la presente fracción y la fracción V de este apartado, se
+    entiende por transporte privado de personas o de carga, aquel que realizan las
+    personas contribuyentes con vehículos de su propiedad o con vehículos que tengan
+    en arrendamiento, incluido el arrendamiento financiero, para transportar bienes
+    propios o su personal, o bienes o personal, relacionados con sus actividades
+    económicas, sin que por ello se genere un cobro.
+  por_que_importa: >
+    La ley DEFINE transporte privado como mover BIENES PROPIOS O PERSONAL PROPIO,
+    con vehículos propios o arrendados, sin cobrar por ello. Eso es exactamente una
+    embotelladora repartiendo su refresco, un mayorista de abarrotes surtiendo
+    tiendas, una farmacéutica distribuyendo medicamento, y una maquiladora moviendo
+    a sus trabajadores. **Ninguna de esas empresas está en SCIAN 484**, así que el
+    mercado de Likida es mucho más grande que el padrón de autotransportistas.
+    Incluye también el arrendamiento financiero, que es como muchas flotas grandes
+    tienen sus unidades.
+  verificado_el: 2026-08-15
+  fuente: "PDF oficial diputados.gob.mx/LeyesBiblio/pdf/LIF_2026.pdf, art. 20 apartado A, párrafo previo a la fracción V"
+
+# ── DÓNDE SÍ Y DÓNDE NO APLICA CADA ESTÍMULO (el matiz que cambia el pitch) ──
+# Los dos estímulos usan la palabra "exclusivamente", pero la cuelgan de cosas
+# DISTINTAS, y ahí está toda la diferencia comercial:
+#
+#   IEPS (fr. IV): "...en VEHÍCULOS QUE SE DESTINEN exclusivamente al transporte
+#   público y privado, de personas o de carga, así como el turístico".
+#   El "exclusivamente" califica al VEHÍCULO. Un camión de reparto de una
+#   embotelladora es un vehículo destinado exclusivamente a transportar carga.
+#   ⇒ SÍ APLICA a flota privada, a transporte de personal, y a pasajeros.
+#
+#   PEAJE (fr. V): "...personas contribuyentes QUE SE DEDIQUEN exclusivamente al
+#   transporte terrestre público y privado, de carga o pasaje...".
+#   El "exclusivamente" califica al CONTRIBUYENTE. Una embotelladora se dedica a
+#   hacer bebidas, no exclusivamente a transportar.
+#   ⇒ NO APLICA a la flota privada de una empresa que vive de otra cosa.
+#
+# Y la trampa que cierra la puerta por el otro lado: un grupo que separe su flota
+# en una filial ("Transportes XYZ") para cumplir el "exclusivamente" queda fuera
+# por la exclusión de PARTES RELACIONADAS (LISR 179) que la misma fracción V
+# impone. Sumado al tope de ingresos < $300M, el estímulo de peaje está
+# prácticamente vedado para el segmento corporativo grande.
+aplicabilidad_por_segmento:
+  ieps_diesel_fr_IV:
+    aplica_a: >
+      Autotransporte de carga federal; transporte de pasajeros (público y privado);
+      transporte turístico; FLOTA PRIVADA de cualquier industria que mueva bienes
+      propios o personal propio (embotelladoras, abarrotes, farmacéuticas, gas y
+      combustibles, construcción, agroindustria, paquetería, residuos, personal).
+    no_aplica_a: >
+      Quien use el diésel en maquinaria fija o en actividades agropecuarias — ésos
+      van por las fracciones I y II, que EXCLUYEN expresamente el autotransporte por
+      carretera (ver hallazgo H7 abajo). No confundir las dos vías.
+  peaje_50_fr_V:
+    aplica_a: >
+      Solo quien SE DEDIQUE EXCLUSIVAMENTE al transporte terrestre (público, privado
+      o turístico), con ingresos anuales < $300M y sin ser parte relacionada.
+      En la práctica: transportistas puros, chicos y medianos.
+    no_aplica_a: >
+      La flota privada de una empresa cuyo giro es otro; los grandes por el tope de
+      $300M; y las filiales de transporte de un grupo, por partes relacionadas.
+  consecuencia_comercial: >
+    El pitch NO es el mismo para los dos mercados y no debe presentarse igual. Al
+    transportista puro chico/mediano se le venden LOS DOS estímulos. A la flota
+    privada grande se le vende el de IEPS de diésel (que sobre volúmenes de miles
+    de litros al mes es el grande de los dos), más deducibilidad, IVA acreditable,
+    69-B y control de viáticos — pero NO se le promete el 50% de peaje. Prometerlo
+    sería exactamente el tipo de cifra inventada que la regla del producto prohíbe,
+    y con un contribuyente auditado se paga caro.
+
 estimulo_diesel_transporte:
   texto_vigente: >
     Se otorga un estímulo fiscal a las personas contribuyentes que importen o
