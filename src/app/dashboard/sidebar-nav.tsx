@@ -7,6 +7,7 @@ import { LayoutGrid, ChevronDown, ChevronRight } from 'lucide-react';
 import { type Item, AGENTES, OPERACION, DINERO_FISCAL, SISTEMA, ABAJO } from './rutas';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { SelectorTema } from '../selector-tema';
+import { WidgetUso } from '../admin/ui/kit';
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors sb-centrable';
 
@@ -123,7 +124,14 @@ export default function SidebarNav({ rol }: { rol: string }) {
  *  principal para poder anclarlo abajo. El 13-ago llegaron dos piezas más:
  *  "Centro de ayuda" como botón pill y el
  *  selector de tema claro / sistema / oscuro. */
-export function SidebarAbajo({ rol }: { rol: string }) {
+export function SidebarAbajo({ rol, usoIa }: {
+  rol: string;
+  /** El % usado del presupuesto diario de análisis con IA (16-ago-2026, ref.
+   *  shadcn-dashboard "plan usage") — % real gastado/tope, sin dólares: el
+   *  costo interno va en USD y esa unidad no es del cliente. `undefined` no
+   *  se pinta; `null` = no se pudo leer, y se dice. */
+  usoIa?: { pct: number } | null;
+}) {
   const pathname = usePathname();
   const { sufijo, rolMenu } = useSufijoYRol(rol);
   const items = ABAJO.filter((it) => puedeVerRuta(rolMenu, it.href));
@@ -132,6 +140,15 @@ export function SidebarAbajo({ rol }: { rol: string }) {
   const filas = items.filter((it) => it.href !== '/dashboard/soporte');
   return (
     <>
+      {usoIa !== undefined && (
+        <WidgetUso
+          etiqueta="Análisis con IA · hoy"
+          valor={usoIa ? `${usoIa.pct}%` : null}
+          detalle={usoIa ? 'del análisis incluido hoy — se renueva a medianoche' : undefined}
+          tope={usoIa ? { usado: usoIa.pct, limite: 100 } : null}
+          href={`/dashboard/chat${sufijo}`} hrefTexto="Preguntar a tus datos"
+        />
+      )}
       {ayuda && (
         <Link href={`${ayuda.href}${sufijo}`} title={ayuda.nombre}
           className="hairline flex items-center gap-2 px-3 py-1.5 mb-1 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"

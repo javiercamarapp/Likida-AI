@@ -29,12 +29,15 @@ import { Logo } from '../logo';
  * puro dibujo — la puerta real es /api/admin/copiloto en cada llamada.
  */
 export default function AdminChrome({
-  nombre, avatarUrl, cerrarSesion, children,
+  nombre, avatarUrl, cerrarSesion, usoIa, children,
 }: {
   nombre: string | null;
   avatarUrl: string | null;
   /** Server action. Opcional: el render de prueba no cierra sesión de nadie. */
   cerrarSesion?: () => Promise<void>;
+  /** El costo de IA del mes para el widget de uso del sidebar (16-ago-2026).
+   *  Lo trae layout.tsx; omitido (render de prueba) no se pinta. */
+  usoIa?: { mesUsd: number; llamadas: number; etiquetaMes: string } | null;
   children: React.ReactNode;
 }) {
   return (
@@ -55,10 +58,10 @@ export default function AdminChrome({
           {/* El bloque inferior fijo con su propio fondo — gemelo del de
               chrome.tsx (la referencia del 13-ago). */}
           <div className="px-2 pt-2 pb-1.5 space-y-0.5 shrink-0" style={{ background: 'var(--canvas)', borderTop: '1px solid var(--line)' }}>
-            <SidebarAbajoAdmin />
+            <SidebarAbajoAdmin usoIa={usoIa} />
           </div>
 
-          {/* El user card de la referencia FlowAI, idéntico al del cliente:
+          {/* El user card, idéntico al del cliente:
               avatar + nombre + rol, salir como ícono. El avatar real si hay. */}
           <div className="px-2 pb-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>
             <div className="hairline rounded-xl p-2 flex items-center justify-center lg:justify-start gap-2 sb-centrable" style={{ background: 'var(--surface)' }}>

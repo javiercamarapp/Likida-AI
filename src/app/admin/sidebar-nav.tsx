@@ -6,6 +6,9 @@ import { usePathname } from 'next/navigation';
 import { LayoutGrid, ChevronDown, ChevronRight, ArrowLeftRight } from 'lucide-react';
 import { type Item, AGENTES, NEGOCIO, PLATAFORMA, CONTROL, SISTEMA } from './rutas';
 import { SelectorTema } from '../selector-tema';
+import { WidgetUso } from './ui/kit';
+import { usd } from '@/lib/utils';
+import { numero } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL MISMO LENGUAJE QUE EL SIDEBAR DE /dashboard, A PROPÓSITO (14-ago-2026,
@@ -19,16 +22,18 @@ import { SelectorTema } from '../selector-tema';
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors sb-centrable';
 
+/** Activo = pill SÓLIDA en tinta (16-ago-2026, ref. shadcn-dashboard) —
+ *  el MISMO cambio que su gemelo dashboard/sidebar-nav.tsx, a la vez. */
 function claseItem(activo: boolean): string {
   return activo
     ? `${ITEM} font-medium`
     : `${ITEM} hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]`;
 }
 function estiloItem(activo: boolean) {
-  return activo ? { background: 'var(--g1)', color: 'var(--marca)' } : undefined;
+  return activo ? { background: 'var(--marca)', color: 'var(--marca-fg)' } : undefined;
 }
 function estiloIcono(activo: boolean) {
-  return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--marca)' : 'var(--muted)' } as const;
+  return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--marca-fg)' : 'var(--muted)' } as const;
 }
 
 function Fila({ item, pathname }: { item: Item; pathname: string }) {
@@ -85,10 +90,25 @@ export default function SidebarNav() {
 
 /** El bloque inferior fijo — gemelo de `SidebarAbajo` del dashboard (pill de
  *  ayuda + selector de tema). Aquí la pill es la puerta a los paneles de los
- *  otros roles: la acción que el superadmin hace todo el día. */
-export function SidebarAbajoAdmin() {
+ *  otros roles: la acción que el superadmin hace todo el día.
+ *
+ *  `usoIa` (16-ago-2026, ref. shadcn-dashboard): el costo de IA del mes,
+ *  medido — lo trae layout.tsx. `undefined` = no se pidió (render de
+ *  prueba): el widget no se pinta; `null` = se pidió y no se pudo leer: el
+ *  widget lo DICE. */
+export function SidebarAbajoAdmin({ usoIa }: {
+  usoIa?: { mesUsd: number; llamadas: number; etiquetaMes: string } | null;
+}) {
   return (
     <>
+      {usoIa !== undefined && (
+        <WidgetUso
+          etiqueta={usoIa ? `Costo de IA · ${usoIa.etiquetaMes}` : 'Costo de IA · este mes'}
+          valor={usoIa ? usd(usoIa.mesUsd) : null}
+          detalle={usoIa ? `${numero(usoIa.llamadas)} ${usoIa.llamadas === 1 ? 'llamada' : 'llamadas'} al modelo` : undefined}
+          href="/admin/costos-facturacion" hrefTexto="Ver costos"
+        />
+      )}
       <Link href="/admin#vistas" title="Entrar a los paneles de los otros roles"
         className="hairline flex items-center gap-2 px-3 py-1.5 mb-1 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
         style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>

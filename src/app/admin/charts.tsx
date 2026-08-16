@@ -42,29 +42,53 @@ export function Tendencia({ valor }: { valor: number | null }) {
 }
 
 /** Área + línea de una sola métrica en el tiempo. Un solo eje, a propósito
- *  (dataviz skill: nunca doble eje) — costo y tokens se piden por separado. */
+ *  (dataviz skill: nunca doble eje) — costo y tokens se piden por separado.
+ *
+ *  `comparativa` (16-ago-2026, ref. shadcn-dashboard): el periodo ANTERIOR
+ *  como línea PUNTEADA en gris — actual sólida, anterior punteada, la
+ *  convención que ya fijaba DESIGN.md §3 ("comparativos en gris"). Se escala
+ *  al MISMO max que `datos` (dos escalas mentirían la comparación) y solo se
+ *  pinta cuando el llamador tiene la serie real — jamás se sintetiza. */
 export function AreaChartSimple({
-  datos, etiquetaValor,
+  datos, etiquetaValor, comparativa, etiquetaComparativa = 'periodo anterior',
 }: {
   datos: Array<{ dia: string; valor: number }>;
   etiquetaValor: (v: number) => string;
+  comparativa?: Array<{ dia: string; valor: number }>;
+  etiquetaComparativa?: string;
 }) {
   const ANCHO = 640, ALTO = 240, PAD_IZQ = 8, PAD_DER = 8, PAD_SUP = 16, PAD_INF = 28;
   const w = ANCHO - PAD_IZQ - PAD_DER, h = ALTO - PAD_SUP - PAD_INF;
-  const max = Math.max(...datos.map((d) => d.valor), 1);
+  const comp = comparativa && comparativa.length > 1 ? comparativa : null;
+  const max = Math.max(...datos.map((d) => d.valor), ...(comp ?? []).map((d) => d.valor), 1);
   const paso = datos.length > 1 ? w / (datos.length - 1) : 0;
   const xy = datos.map((d, i) => [PAD_IZQ + i * paso, PAD_SUP + h - (d.valor / max) * h] as const);
   const linea = xy.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   const area = `${linea} L${xy[xy.length - 1][0].toFixed(1)},${PAD_SUP + h} L${xy[0][0].toFixed(1)},${PAD_SUP + h} Z`;
+  const pasoComp = comp ? w / (comp.length - 1) : 0;
+  const lineaComp = comp
+    ? comp.map((d, i) => `${i === 0 ? 'M' : 'L'}${(PAD_IZQ + i * pasoComp).toFixed(1)},${(PAD_SUP + h - (d.valor / max) * h).toFixed(1)}`).join(' ')
+    : null;
   // Cada 1/4 y última — evita amontonar etiquetas en series largas.
   const mostrarEtiqueta = (i: number) => i === 0 || i === datos.length - 1 || i % Math.max(1, Math.ceil(datos.length / 5)) === 0;
 
   return (
+    <>
+    {comp && (
+      <div className="flex items-center gap-3 mb-1 text-[11px]" style={{ color: 'var(--muted)' }}>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 rounded" style={{ borderColor: 'var(--marca)' }} /> actual</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 rounded" style={{ borderColor: 'var(--muted)', borderTopStyle: 'dashed' }} /> {etiquetaComparativa}</span>
+      </div>
+    )}
     <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} className="w-full h-auto">
       {[0, 0.5, 1].map((t) => (
         <line key={t} x1={PAD_IZQ} x2={ANCHO - PAD_DER} y1={PAD_SUP + h * t} y2={PAD_SUP + h * t}
           stroke="var(--line)" strokeWidth={1} />
       ))}
+      {lineaComp && (
+        <path d={lineaComp} fill="none" stroke="var(--muted)" strokeWidth={1.5} strokeDasharray="5 5"
+          opacity={0.6} strokeLinecap="round" strokeLinejoin="round" />
+      )}
       <path d={area} fill="var(--marca)" opacity={0.08} />
       <path d={linea} fill="none" stroke="var(--marca)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       {xy.map(([x, y], i) => (
@@ -86,6 +110,7 @@ export function AreaChartSimple({
         </g>
       ))}
     </svg>
+    </>
   );
 }
 

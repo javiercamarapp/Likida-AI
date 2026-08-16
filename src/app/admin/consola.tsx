@@ -20,7 +20,7 @@ import GraficaCostoConRango from './rango-costo';
 import ContadorRetro from './contador-retro';
 import { IconoProveedor } from './proveedor-icono';
 import { GlobalFilter, resolverRango } from './ui/global-filter';
-import { StatCard, StatusPill, EstadoVacio, type Estado } from './ui/kit';
+import { StatCard, StatusPill, EstadoVacio, VerMas, type Estado } from './ui/kit';
 import { SelectorVista } from './selector-vista';
 import Notificaciones from './notificaciones';
 import { calcularAlertas } from './calcular-alertas';
@@ -257,6 +257,12 @@ export async function ConsolaAdmin({
               Cifras reales, no de ejemplo — Likida todavía no tiene clientes, así que son bajas a propósito.
             </p>
           )}
+          {/* Los fantasma "Ver →" (ref. shadcn): cada grupo de métricas
+              declara a dónde se profundiza. */}
+          <div className="flex justify-end gap-2">
+            <VerMas href="/admin/analitica">Ver analítica</VerMas>
+            <VerMas href="/admin/costos-facturacion">Ver costos de IA</VerMas>
+          </div>
 
           {/* ── Orquestación de agentes ───────────────────────────────────── */}
           <div className="card p-3">
