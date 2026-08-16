@@ -28,6 +28,12 @@ vi.mock('@/lib/agents/copiloto-historial', () => ({
   guardarIntercambioCopiloto: (...a: unknown[]) => guardarIntercambioCopiloto(...a),
 }));
 
+// El freno de turnos (16-ago): mockeado con permiso por default para que la
+// puerta y las acciones se prueben sin tropezarse con el limiter local; los
+// casos del tope lo ponen en false a propósito.
+const rateLimit = vi.fn(async (_k: string, _l: number, _w: number) => true);
+vi.mock('@/lib/ratelimit', () => ({ rateLimit: (...a: [string, number, number]) => rateLimit(...a) }));
+
 const { POST } = await import('./route');
 
 const pedir = (cuerpo: unknown) => new Request('https://app.likida.ai/api/admin/copiloto', {
@@ -130,5 +136,35 @@ describe('el historial (0121)', () => {
     expect(fin.t).toBe('fin');
     expect(fin.bloques).toEqual([{ tipo: 'texto', texto: 'hola' }]);
     expect(fin.conversacionId).toBeNull();
+  });
+});
+
+describe('el freno de gasto (16-ago) — el único camino LLM que no tenía techo', () => {
+  it('tope por minuto: 429 y se DICE cuál tope pegó, sin ejecutar el modelo', async () => {
+    rateLimit.mockImplementationOnce(async () => false); // el de :min es la primera llamada
+    const res = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
+    expect(res.status).toBe(429);
+    const cuerpo = await res.json() as { error: string };
+    expect(cuerpo.error).toContain('minuto');
+    expect(ejecutarCopiloto).not.toHaveBeenCalled();
+  });
+
+  it('tope diario de turnos: 429 nombrando el override, sin gastar', async () => {
+    rateLimit
+      .mockImplementationOnce(async () => true)   // :min pasa
+      .mockImplementationOnce(async () => false); // :dia frena
+    const res = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
+    expect(res.status).toBe(429);
+    const cuerpo = await res.json() as { error: string };
+    expect(cuerpo.error).toContain('LIKIDA_COPILOTO_TOPE_TURNOS_DIA');
+    expect(ejecutarCopiloto).not.toHaveBeenCalled();
+  });
+
+  it('el freno cuenta por userId de SESIÓN — la llave no sale del cuerpo', async () => {
+    rateLimit.mockClear();
+    await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
+    const llaves = rateLimit.mock.calls.map((c) => c[0]);
+    expect(llaves).toContain('copiloto:min:u-javier');
+    expect(llaves).toContain('copiloto:dia:u-javier');
   });
 });
