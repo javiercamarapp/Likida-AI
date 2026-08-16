@@ -153,4 +153,8 @@ done
 
 rm -f "$CARPETA/tmp-encargo.txt"
 log "Fin: $ABIERTOS PRs abiertos hoy."
+RESUMEN_WA="🤖 mejora-diaria — $ABIERTOS PRs abiertos de $INTENTOS corridas"
+[ "$ABIERTOS" -gt 0 ] && RESUMEN_WA="$RESUMEN_WA
+Apruébalos en: https://github.com/javiercamarapp/likida.ai/pulls"
+bash "$REPO/scripts/mejora-diaria/wa-notificar.sh" "$RESUMEN_WA" || true
 osascript -e "display notification \"$ABIERTOS PRs de mejora abiertos — revísalos en GitHub\" with title \"Likida · mejora diaria\"" 2>/dev/null || true
