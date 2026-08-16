@@ -83,6 +83,7 @@ const ETIQUETA_TOOL: Record<string, string> = {
   cobranza_saas: 'Revisando la cobranza SaaS',
   costo_por_fase_modelo: 'Desglosando el costo de IA',
   bitacora: 'Leyendo la bitácora de auditoría',
+  ficha_cliente: 'Armando la ficha 360 del cliente',
   proponer_accion: 'Armando la previsualización',
   entregar_respuesta_admin: 'Armando la respuesta',
 };
@@ -103,6 +104,7 @@ const PANTALLA_UI: Record<string, { ruta: string; etiqueta: string }> = {
   cobranza_saas: { ruta: '/admin/cobranza', etiqueta: 'Cobranza' },
   costo_por_fase_modelo: { ruta: '/admin/costos-facturacion', etiqueta: 'Costos' },
   bitacora: { ruta: '/admin/compliance', etiqueta: 'Compliance' },
+  ficha_cliente: { ruta: '/admin/flotas', etiqueta: 'Flotas / Clientes' },
 };
 
 const FASES_PENSANDO: Array<[number, string]> = [

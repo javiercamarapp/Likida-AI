@@ -226,6 +226,12 @@ export default async function FlotasPage() {
                               los dos. `?rol=` solo QUITA visibilidad y solo se
                               honra si la sesión real es superadmin. */}
                           <div className="inline-flex items-center gap-1.5">
+                            {/* La ficha 360 (16-ago-2026): TODO el cliente en
+                                una pantalla — el hueco que el plan nombró. */}
+                            <Link href={`/admin/flotas/${f.id}`}
+                              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
+                              Ficha 360
+                            </Link>
                             <Link href={`/dashboard?tenant=${f.id}`} target="_blank"
                               className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
                               <ExternalLink width={11} height={11} strokeWidth={1.75} /> Panel de dueño
