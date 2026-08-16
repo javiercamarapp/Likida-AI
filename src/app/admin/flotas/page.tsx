@@ -118,7 +118,7 @@ function Casilla({ estado, texto, href, accion }: {
  * MRR, mostrando aquí `resumen.tenants` — el único número de cabecera de
  * esta página con un dato real y singular detrás.
  *
- * Anatomía FlowAI (14-ago): BarraPagina + tarjetas blancas sobre el lienzo
+ * Anatomía de página (14-ago): BarraPagina + tarjetas blancas sobre el lienzo
  * tenue (--g1), como consola.tsx. El contador (45px de alto) no cabe en la
  * barra de 44px, así que encabeza la tarjeta de la tabla.
  */

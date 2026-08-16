@@ -34,7 +34,7 @@ const FASE_LABEL: Record<string, string> = {
  * `Heatmap`: la sección de abajo documenta que no hay suficiente historia
  * día a día todavía para que un mapa de calor diga algo real.
  *
- * Anatomía FlowAI (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
+ * Anatomía de página (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
  * (--g1). El contador Solari (45px de alto) no cabe en la barra de 44px:
  * vive en la primera tarjeta, con la explicación de qué cifra es.
  */

@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
  * decorativa que aparenta hacer algo y no hace nada. Es honesta sobre lo
  * que falta y por qué.
  *
- * Re-envuelta en la anatomía FlowAI (14-ago): lienzo `--g1` + `BarraPagina`
+ * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
  * con el ícono de `rutas.ts`. El mensaje honesto es el mismo de antes.
  */
 export default function PlaygroundPage() {

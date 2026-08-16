@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
  * los últimos 6 por espacio) y hay dos cifras de cabecera — ambas sumas
  * reales sobre esos mismos datos, no una fuente nueva.
  *
- * Anatomía FlowAI (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
+ * Anatomía de página (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
  * (--g1); cada conversación es una lámina --surface con hairline dentro de
  * la tarjeta, el mismo material que usa la sección gemela de consola.tsx.
  */

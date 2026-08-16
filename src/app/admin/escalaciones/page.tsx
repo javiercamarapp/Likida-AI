@@ -52,7 +52,7 @@ const FUENTES: FuenteEscalacion[] = [
  * (0051) y liquidaciones en `revisar` — aplanadas por
  * `lib/admin/escalaciones.ts`, que es también quien alimenta la campana.
  *
- * Anatomía FlowAI (misma que /admin/soporte): BarraPagina + tarjetas
+ * Anatomía de página (misma que /admin/soporte): BarraPagina + tarjetas
  * blancas sobre el lienzo tenue. Los errores van POR FUENTE: si una tabla
  * no se pudo leer, SU tarjeta lo dice ("no se pudo leer" ≠ 0) y la cola
  * sigue enseñando lo que sí se leyó.

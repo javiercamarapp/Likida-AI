@@ -2,10 +2,9 @@ import type { Metadata } from 'next';
 import { Inter, Inter_Tight, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 
-// La MISMA familia que usehandle.ai, leída de su propio CSS computado
-// (capturado 2-ago-2026): Inter de default en todo el sitio. El 12-ago-2026
-// Javier pidió la tipografía "más corporativa, tipo usehandle.ai" para los
-// paneles, y la referencia tiene DOS voces más aparte del Inter de texto:
+// Inter de default en todo el sitio. El 12-ago-2026
+// Javier pidió una tipografía más corporativa para los
+// paneles, con DOS voces más aparte del Inter de texto:
 //
 //  - Titulares en una grotesca APRETADA ("Payments Validation Agent") —
 //    Inter Tight es esa misma voz con licencia clara (Google Fonts, OFL);
@@ -14,7 +13,7 @@ import './globals.css';
 //  - Micro-rótulos y cifras de tabla en MONO ("POLICIES MONITORED",
 //    "$9,242.88") — IBM Plex Mono, la voz que hace que un panel se lea
 //    como estado de cuenta. Se usa vía `.etiqueta-mono` (globals.css).
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans-handle' });
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans-ui' });
 const interTight = Inter_Tight({ subsets: ['latin'], variable: '--font-display' });
 const plexMono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-mono' });
 

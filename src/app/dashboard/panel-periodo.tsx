@@ -51,8 +51,8 @@ export function PanelPeriodo({
   const totalLiquidado = liquidadoModo?.reduce((s, d) => s + d.valor, 0) ?? 0;
 
   return (
-    // Cada bloque es una TARJETA blanca sobre el lienzo tenue (referencia
-    // FlowAI, 12-ago-2026) — el padding horizontal lo pone el padre.
+    // Cada bloque es una TARJETA blanca sobre el lienzo tenue
+    // (12-ago-2026) — el padding horizontal lo pone el padre.
     <>
       <div className="flex items-center justify-end">
         <div className="inline-flex items-center gap-1 p-0.5 rounded-full shrink-0" style={{ background: 'var(--canvas)' }}>

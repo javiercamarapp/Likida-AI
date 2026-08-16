@@ -1,5 +1,5 @@
 // Lectura de PRUEBA de un comprobante desde el panel — la pata "Ingest" de
-// la página Preguntar a la IA (12-ago-2026, referencia usehandle.ai).
+// la página Preguntar a la IA (12-ago-2026).
 //
 // Corre el MISMO OCR del motor (`extraerComprobante`, el de WhatsApp) sobre
 // la imagen que el usuario adjunta y devuelve lo leído. NO ESCRIBE NADA:

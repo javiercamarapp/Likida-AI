@@ -131,7 +131,7 @@ describe('modo oscuro: el mismo token, el otro color', () => {
   // dark)` mismo (docs/superpowers/plans/2026-08-02-roles-flota.md): el panel
   // cambiaba a oscuro solo por el sistema operativo del contralor, sin que
   // nadie en Likida lo hubiera pedido, y así se veía "todo negro" sin
-  // decisión. El estilo de referencia (usehandle.ai) no tiene modo oscuro. El
+  // decisión. El producto no ofrece modo oscuro hoy. El
   // bloque `[data-theme="dark"]` se conserva por si algún día hay un switch
   // manual — eso sí seguiría midiéndose arriba.
 });

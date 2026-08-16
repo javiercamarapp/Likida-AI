@@ -13,7 +13,7 @@ const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
  * (`getResumenNegocio`) y `wa_conversacion.estado` para las conversaciones
  * activas (mismo render que Inicio, con más espacio para leerlas).
  *
- * Re-envuelta en la anatomía FlowAI (14-ago): lienzo `--g1` + `BarraPagina`
+ * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
  * con el ícono de `rutas.ts` (MessagesSquare, el mismo del sidebar) +
  * `StatCard` del kit. Cifras y fuente no cambian. Un cero aquí es MEDIDO:
  * cero filas en `llm_costo` para la fase es cero gasto real, no un relleno.

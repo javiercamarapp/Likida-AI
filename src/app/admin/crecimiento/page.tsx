@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
  * etiquetado así a propósito, nunca como "crecimiento de usuarios", porque
  * no hay una sola métrica de usuario real detrás.
  *
- * Anatomía FlowAI (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
+ * Anatomía de página (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
  * (--g1), como consola.tsx. El H1 honesto y su párrafo se quedan — son la
  * tesis de la página — solo cambian de glass-panel a tarjeta.
  */

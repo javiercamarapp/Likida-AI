@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Search, MessageCircle, Bell } from 'lucide-react';
 
 /**
- * Los tres controles de la barra superior de la referencia FlowAI —
+ * Los tres controles de la barra superior —
  * búsqueda, "Ask AI" y campana — construidos sobre lo que SÍ existe:
  *
  *  · La búsqueda busca entre los VIAJES reales de la flota (folio, ruta,
@@ -13,7 +13,7 @@ import { Search, MessageCircle, Bell } from 'lucide-react';
  *    liquidación se enseña igual pero dice que aún no tiene — encontrar el
  *    folio y saber su estado también es una respuesta.
  *  · "Preguntar a la IA" navega a `/dashboard/chat` — la página hero del
- *    asistente (estilo usehandle.ai), reconstruida el 12-ago. No es un chat
+ *    asistente, reconstruida el 12-ago. No es un chat
  *    nuevo: es la casa grande del que ya contesta.
  *  · La campana enseña los PENDIENTES reales (liquidaciones por revisar,
  *    comprobantes duplicados). Sin sistema de notificaciones inventado:
@@ -86,8 +86,8 @@ export function BarraAcciones({ items, pendientes, hrefAsistente = '/dashboard/c
         )}
       </div>
 
-      {/* ── Preguntar a la IA — abre SU página (/dashboard/chat, estilo
-          usehandle.ai), pedido del 12-ago; antes expandía el rail. ── */}
+      {/* ── Preguntar a la IA — abre SU página (/dashboard/chat),
+          pedido del 12-ago; antes expandía el rail. ── */}
       <button type="button" className={`${BOTON_BARRA} px-3`}
         onClick={() => { setAbierto(null); router.push(hrefAsistente); }}>
         <MessageCircle width={14} height={14} strokeWidth={1.75} />

@@ -41,7 +41,7 @@ export default function AdminChrome({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-dvh tema-neutro" style={{ fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>
+    <div className="min-h-dvh tema-neutro" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
       <Fondo />
       <CommandPalette />
       <div className={MARCO_FILA}>
