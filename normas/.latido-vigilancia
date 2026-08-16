@@ -1,35 +1,35 @@
-fecha_corrida: 2026-08-15
+fecha_corrida: 2026-08-16
 ultimo_dia_barrido: null
-rango_intentado: 2026-07-24..2026-08-14
+rango_intentado: 2026-07-24..2026-08-15
 notas_revisadas: 0
 notas_por_edicion: {matutina: null, vespertina: null, extraordinaria: null}
 fichas_disparadas: 0
 etag_sat: null
-etag_sat_check: no_aplica_hoy_es_sabado
+etag_sat_check: no_aplica_hoy_es_domingo
 deriva_ley_check: no_aplica_no_es_dia_1_trimestre
 estado: "INFRA egress_bloqueado"
 detalle: >
-  Decimoquinta corrida consecutiva (15-ago, 14-ago, 13-ago, 11-ago, 10-ago,
-  09-ago, 08-ago, 07-ago, 05-ago, 04-ago, 03-ago, 31-jul, 28-jul, y antes)
-  bloqueada por la misma causa: el proxy de salida de esta sesión rechaza
-  todo tráfico hacia sidofqa.segob.gob.mx y www.sat.gob.mx. Confirmado hoy
-  con curl directo -v: `CONNECT sidofqa.segob.gob.mx:443` → HTTP/1.1 403
-  Forbidden desde el proxy (127.0.0.1:41607), igual sobre el HEAD al
-  minisitio del SAT. `$HTTPS_PROXY/__agentproxy/status` sigue sin ninguno de
-  los hosts del DOF/SAT en `noProxy` — solo paquetería (npm, pypi, jsr,
-  crates, proxy.golang.org) y dominios de anthropic.com/kubernetes internos.
-  No se probó diputados.gob.mx hoy (no aplica: no es día 1 de trimestre) ni
-  el ETag del SAT como chequeo semanal (hoy es sábado, no lunes) pero no hay
-  razón para esperar otro resultado — el mismo host ya dio 403 en el HEAD de
-  prueba.
-sin_verificar_esta_corrida: todas las fichas de normas/ (22 fichas) — cero verificación posible, decimoquinta vez consecutiva.
+  Decimosexta corrida consecutiva (16-ago, 15-ago, 14-ago, 13-ago, 11-ago,
+  10-ago, 09-ago, 08-ago, 07-ago, 05-ago, 04-ago, 03-ago, 31-jul, 28-jul, y
+  antes) bloqueada por la misma causa: el proxy de salida de esta sesión
+  rechaza todo tráfico hacia sidofqa.segob.gob.mx y dof.gob.mx. Confirmado
+  hoy con curl directo -v: `CONNECT sidofqa.segob.gob.mx:443` → HTTP/1.1 403
+  Forbidden desde el proxy (127.0.0.1:39209), igual sobre `dof/sidof/diarios/porFecha`
+  y sobre el respaldo `dof.gob.mx/index.php`. `$HTTPS_PROXY/__agentproxy/status`
+  sigue sin ninguno de los hosts del DOF/SAT en `noProxy` — solo paquetería
+  (npm, pypi, jsr, crates, proxy.golang.org) y dominios de
+  anthropic.com/kubernetes internos. No se probó www.sat.gob.mx ni
+  diputados.gob.mx hoy (no aplican: no es lunes ni día 1 de trimestre) pero
+  no hay razón para esperar otro resultado — el mismo proxy ya bloqueó los
+  tres hosts que sí se probaron.
+sin_verificar_esta_corrida: todas las fichas de normas/ (23 fichas) — cero verificación posible, decimosexta vez consecutiva.
 accion_requerida: >
-  Sin resolver desde hace 22 días y catorce corridas previas (ahora quince).
+  Sin resolver desde hace 23 días y quince corridas previas (ahora dieciséis).
   Habilitar en la política de egreso de esta sesión/entorno los hosts:
-  sidofqa.segob.gob.mx, www.sat.gob.mx, www.diputados.gob.mx (o la
-  alternativa comercial api.tlaloc.sh) en el noProxy / allowlist del proxy
-  de salida ($HTTPS_PROXY). Sin ese cambio de configuración, esta rutina no
-  puede correr en este entorno bajo ninguna cadencia diaria, semanal ni
-  trimestral. El rango sin barrer sigue creciendo: ya cubre desde el 24-jul,
-  ahora hasta el 14-ago — veintidós días y quince corridas sin una sola
-  verificación real de las fichas de normas/.
+  sidofqa.segob.gob.mx, dof.gob.mx, www.sat.gob.mx, www.diputados.gob.mx (o
+  la alternativa comercial api.tlaloc.sh) en el noProxy / allowlist del
+  proxy de salida ($HTTPS_PROXY). Sin ese cambio de configuración, esta
+  rutina no puede correr en este entorno bajo ninguna cadencia diaria,
+  semanal ni trimestral. El rango sin barrer sigue creciendo: ya cubre desde
+  el 24-jul, ahora hasta el 15-ago — veintitrés días y dieciséis corridas
+  sin una sola verificación real de las fichas de normas/.
