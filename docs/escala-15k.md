@@ -187,11 +187,16 @@ vigente (§5) — o ~$17.60 con el default.
   el cuadre deja de cerrar** — fail-closed y honesto, pero el producto deja
   de liquidar. El propio código lo anticipa: "un tenant que las pase necesita
   que esto sea un `sum()` en SQL" (repo.ts:916-918).
-  **Propuesta (rediseño, no quirúrgico):** RPC `acumulado_combustible_tenant
-  (p_tenant, p_ejercicio, p_claves)` con `sum() filter (where forma_pago =
-  '01')`, mismo patrón fail-closed de forma que `resumen_costo_ia_tenant`
-  (0064). Es una migración + un reemplazo del cuerpo de la función; sus
-  pruebas de forma ya existen como modelo en `costos.ts`.
+  **✅ RESUELTO 15-ago-2026 (mig. 0112) — Y fue un hallazgo, no una
+  propuesta nueva:** la RPC ya existía. `sumar_combustible_ejercicio`
+  (mig. 0084, 05-ago-2026) hacía exactamente este `sum() filter (where
+  forma_pago = '01')` y estaba APLICADA en producción — pero `getAcumulado
+  Combustible` nunca se cambió para llamarla, así que siguió paginando a
+  mano diez días con la RPC que lo resolvía ya viva y sin un solo llamador
+  en `src/`. Y la RPC muerta tenía un bug: no filtraba `monto > 0`. La 0112
+  corrigió el filtro (mismo `create or replace`) y conectó
+  `getAcumuladoCombustible`. Ver §6 para el detalle y la prueba de
+  equivalencia (`repo_acumulado.test.ts`).
 - **OCR inline, 1 llamada de visión por foto** (route → processor.ts:693/965
   → `intake/ocr.ts:251` `generateStructured`): no hay cola ni throttle
   global. La concurrencia entre instancias es la que Vercel decida; los
@@ -259,27 +264,47 @@ llamadas de OCR/mes (1 llamada de visión por foto — processor.ts:693/965);
 lee una tabla completa del tenant tiene fecha de caducidad CALCULABLE — y al
 llegar, la pantalla del CLIENTE muestra su estado de error:
 
-| Función (todas verificadas con `traerTodo`) | Tabla que agota | Rompe en |
-|---|---|---|
-| `getGastoPorConcepto` (analytics.ts:1018), `getGastoPorRuta` (:1042), `detectarAnomalias` (:354), `getTopRutasPorGasto` histórico (:1128), `getSerieComparativa` histórico (:88 vía `getSeriesKpiCards` :177), `getGastoPorSemana` 52 sem. (:468) | `gasto` (45k/mes) | **~mes 2.2** |
-| `getGastosFiscales` periodo 'ejercicio' — el **default** del contador (fiscal.ts:108, 811) | `gasto` del año | ~mes 2.2 de cada ejercicio |
-| `getAcumuladoCombustible` (repo.ts:910) — **camino del webhook** | `gasto` diésel del año | ~mes 6.7 (§4) |
-| `getViajesPorMes` (:599), `getStatsPorOperador.viaje` (:304), `getOperadoresDetalle.viaje` (:1227), `getTopRutasPorGasto.viaje` (:1141 — se trae TODOS los viajes aun con ventana de gasto) | `viaje` (15k/mes) | ~mes 6.7 |
-| `getKpis` sin ventana (:182), `getDineroObservadoPorTipo` (:267), `getAcreditables` sin ventana (:625), `getLiquidadoPorSemana` 52 sem. (:544), `getLiquidacionesFiscales` 'ejercicio' (fiscal.ts:979), `getStatsPorOperador.liquidacion` (:313), `getOperadoresDetalle.liquidacion` (:1232) | `liquidacion` (12k/mes) | ~mes 8.3 |
+| Función (todas verificadas con `traerTodo`) | Tabla que agota | Rompe en | Estado (15-ago-2026, mig. 0112) |
+|---|---|---|---|
+| `getGastoPorConcepto` (analytics.ts:1018), `getGastoPorRuta` (:1042), `detectarAnomalias` (:354), `getTopRutasPorGasto` histórico (:1128), `getGastoPorSemana` 52 sem. (:468) | `gasto` (45k/mes) | **~mes 2.2** | **SIGUE con fecha** — fuera del carril de esta pasada (mínimos: repo.ts/analytics.ts/fiscal.ts, no todo `analytics.ts`) |
+| `getSerieComparativa` histórico (vía `getSeriesKpiCards`) | `gasto`/`viaje`/`liquidacion` (45k/15k/12k por mes) | ~mes 2.2 | ✅ **RESUELTO** — `serie_comparativa_tenant` (0112), `sum()`/`count()` en SQL con los índices de la 0111. Prueba de equivalencia: `analytics_serie_comparativa.test.ts` |
+| `getGastosFiscales` periodo 'ejercicio' — el **default** del contador (fiscal.ts:108, 799) | `gasto` del año | ~mes 2.2 de cada ejercicio | **SIGUE con fecha, A PROPÓSITO** — no es un `sum()`/`count()`: sus filas alimentan `resumirFiscal`/`resumirPerdidas`, que evalúan deducibilidad por comprobante (IVA acreditable proporcional, EFOS, plazo de portal por comercio). Migrar esa lógica a SQL duplicaría la ley fiscal en dos lenguajes — razón completa en la cabecera de la mig. 0112 y en el JSDoc de `getGastosFiscales` |
+| `getAcumuladoCombustible` (repo.ts) — **camino del webhook, corre en CADA CUADRE** | `gasto` diésel del año | ~mes 6.7 (§4) | ✅ **RESUELTO — Y ERA UN HALLAZGO NUEVO.** La RPC (`sumar_combustible_ejercicio`) ya existía APLICADA en producción desde la mig. 0084 (05-ago-2026) y **nadie la llamaba** — código muerto durante 10 días con el `sum()` que resolvía esto ya viviendo en la base. Además tenía un bug real: no filtraba `monto > 0`, así que un ajuste/duplicado con monto negativo o cero se habría sumado al denominador del 15% de combustible en efectivo (RFA 2026 regla 2.9) en cuanto alguien la conectara. La 0112 corrigió el filtro y conectó `getAcumuladoCombustible`. Prueba de equivalencia: `repo_acumulado.test.ts` |
+| `getViajesPorMes` (:599), `getStatsPorOperador.viaje` (:304), `getOperadoresDetalle.viaje` (:1227), `getTopRutasPorGasto.viaje` (:1141) | `viaje` (15k/mes) | ~mes 6.7 | **SIGUE con fecha** — fuera del carril de esta pasada |
+| `getKpis` sin ventana | `liquidacion` (12k/mes) | ~mes 8.3 | ✅ **RESUELTO** — `kpis_liquidacion_tenant` (0112). Prueba de equivalencia: `analytics_kpis_acreditables.test.ts` |
+| `getAcreditables` sin ventana | `liquidacion` (12k/mes) | ~mes 8.3 | ✅ **RESUELTO** — `acreditables_liquidacion_tenant` (0112). Misma prueba de equivalencia que `getKpis` |
+| `getDineroObservadoPorTipo` (:267), `getLiquidadoPorSemana` 52 sem. (:544), `getLiquidacionesFiscales` 'ejercicio' (fiscal.ts:979), `getStatsPorOperador.liquidacion` (:313), `getOperadoresDetalle.liquidacion` (:1232) | `liquidacion` (12k/mes) | ~mes 8.3 | **SIGUE con fecha** — fuera del carril de esta pasada |
 
 Y ANTES de romper, cobran en latencia: cada 45,000 filas son 45 viajes de red
 en serie por función, y una carga del Resumen dispara varias en paralelo.
 
-**Propuesta (rediseño, fuera de esta pasada):** mover cada agregado a un RPC
-de SQL siguiendo el patrón que el repo YA adoptó y validó dos veces —
-`resumen_documentos_tenant` y `resumen_costo_ia_tenant` (mig. 0064), con el
-fail-closed de forma de `costos.ts:295-316`. El propio repo lo dictó:
-*"traer 790 mil filas al año para sumarlas en JavaScript sigue siendo el
-patrón equivocado aunque ya no se recorten"* (costos.ts:269-271). Prioridad
-por fecha de caducidad: (1) `getAcumuladoCombustible` (rompe el CIERRE),
-(2) `getGastosFiscales`/'ejercicio' + los de `gasto` (mes 2.2 — pantallas del
-contador y Resumen), (3) los de `viaje`/`liquidacion`. La 0111 no cambia
-estas fechas: baja el costo de filtrar, no el de acarrear.
+**Lo que se movió a RPC (15-ago-2026, mig. 0112):** los cuatro caminos con
+prioridad más alta por fecha de caducidad Y por correr en el camino
+CALIENTE (el cuadre gana sobre un panel aunque su fecha sea más lejana) —
+`getAcumuladoCombustible`/`sumar_combustible_ejercicio` (1º, camino del
+cuadre — y resultó ser una RPC ya escrita y dormida desde la 0084, con un bug
+que esta pasada corrigió de paso), `getSerieComparativa` (2º, mismo mes 2.2
+que `getGastosFiscales`, corre 3×/carga), `getKpis` y `getAcreditables` (3º,
+mismo mes 8.3, `liquidacion`). Las cuatro siguen el patrón que el repo ya
+validó dos veces — `resumen_documentos_tenant` / `resumen_costo_ia_tenant`
+(mig. 0064) — con el fail-closed de forma de `costos.ts:295-316` y
+`SECURITY INVOKER` (no `DEFINER`: la app llama con `service_role`, que ya
+salta RLS, así que un `definer` no daría más permiso y sí abriría una fuga
+entre flotas si algún `revoke` se olvida — el mismo argumento que la 0064).
+Cada una con su prueba de equivalencia JS-viejo-vs-RPC-nueva en TS, más el
+bloque `AGREGADOS_0112` en `supabase/verificaciones.sql` (aislamiento entre
+dos tenants sembrados a mano, y para el combustible, la regresión explícita
+del bug del `monto > 0`).
+
+**Lo que NO se movió, y por qué:** `getGastosFiscales` se quedó a propósito
+(lógica de deducibilidad fiscal, no aritmética — ver la fila de la tabla). El
+resto de la lista de §6 —los agregados de `gasto`/`viaje` restantes en
+`analytics.ts` y las cinco funciones más de `liquidacion`— sigue con fecha de
+caducidad calculable y es la tarea de fondo que queda para la siguiente
+pasada, en el mismo orden: `gasto` (mes 2.2) antes que `viaje`/`liquidacion`
+(mes 6.7-8.3). La 0111 (índices) no cambió estas fechas —baja el costo de
+filtrar, no el de acarrear— y la 0112 tampoco las cambió para lo que dejó
+sin mover.
 
 ---
 

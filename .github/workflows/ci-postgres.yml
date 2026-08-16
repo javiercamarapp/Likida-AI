@@ -1,0 +1,163 @@
+# LA PRUEBA QUE NADIE CORRÍA: que las 111+ migraciones apliquen limpias sobre
+# un Postgres virgen, y que las dos capas de aislamiento entre flotas se
+# demuestren contra una base REAL — no contra un mock de supabase-js.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# POR QUÉ EXISTE (auditoría externa, P1, 15-ago-2026)
+#
+# `supabase/verificaciones.sql` tenía ~88 bloques de ataque escritos a mano —
+# el más caro probó una fuga real entre flotas (0054, la vista `factura_saldo`
+# sin `security_invoker`) — y NINGUNO se corría en CI. Se pegaban a mano en el
+# SQL editor de Supabase, cuando alguien se acordaba. La primera corrida
+# automática de este archivo (15-ago-2026) encontró y arregló 4 bloques que
+# llevaban semanas rotos sin que nadie lo notara — la prueba misma de por qué
+# hacía falta este job.
+#
+# LAS DOS CAPAS QUE ESTE JOB DEMUESTRA POR SEPARADO (no es la misma garantía
+# dicha dos veces):
+#
+#   1. RLS — la red que protege una sesión de navegador con el rol
+#      `authenticated`. Es la que `supabase/pruebas-aislamiento/*.sql` y
+#      `verificaciones.sql` atacan aquí, con Postgres real.
+#   2. El filtro `tenant_id` que la APLICACIÓN pone a mano en cada consulta
+#      con `service_role` (que SALTA RLS — confirmado contra
+#      `supabase/migrations/0064:187` y contra `src/lib/supabase/admin.ts`).
+#      Ésta es la que de verdad protege el camino real del producto, y se
+#      prueba SIN base de datos —es un escaneo de fuente, offline— en
+#      `supabase/pruebas-aislamiento/consultas_admin_filtran_tenant.test.ts`,
+#      que corre en el job `verificar` de `ci.yml` (no aquí: no necesita
+#      Postgres, y correrla ahí no le agrega ni un segundo a este job).
+#
+# QUÉ NO SE PUDO REPRODUCIR FIELMENTE DE SUPABASE (documentado con detalle en
+# la cabecera de `andamio_ci.sql` — aquí solo el resumen):
+#
+#   · El esquema `storage` real (extensión, triggers de tamaño/mimetype). Se
+#     recrean SOLO las dos tablas y la función que las migraciones tocan —
+#     basta para que apliquen y para las policies de `avatares`/`comprobantes`,
+#     no es el servicio de storage completo.
+#   · PostgREST en sí. La batería simula lo que hace en cada request —
+#     `SET LOCAL ROLE` + `SET LOCAL request.jwt.claims` dentro de una
+#     transacción— que es la pieza que de verdad decide el aislamiento.
+#   · `service_role` se marca BYPASSRLS por documentación pública de Supabase
+#     (no se pudo confirmar contra un proyecto real con superusuario en esta
+#     ronda). Si alguna vez resulta impreciso, el efecto es quedar CORTO en
+#     fidelidad para `service_role` — la batería ataca con `authenticated`,
+#     no con `service_role`, así que no cambia lo que se prueba.
+#
+# COSTO: corre EN PARALELO al job `verificar` de `ci.yml` (no lo bloquea ni lo
+# alarga). Medido en local con Docker: andamio + 111 migraciones + 78 bloques
+# de batería, ~15 segundos de Postgres puro. En Actions, con el arranque del
+# contenedor de servicio y la instalación de node/psql, el job completo se
+# estima en 1-2 minutos — barato de sobra para correr en cada push, igual que
+# `verificar`.
+# ═══════════════════════════════════════════════════════════════════════════
+name: CI Postgres (aislamiento entre tenants)
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aislamiento-postgres:
+    name: Migraciones + aislamiento (Postgres efímero)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Contenedor de servicio: GitHub Actions lo levanta, espera su healthcheck
+    # y lo expone en localhost — ni `docker run` a mano ni gestionar su ciclo
+    # de vida en los pasos del job.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # El correr de las migraciones y de la batería no necesitan node_modules
+      # (los scripts de este job son JS puro, sin dependencias de npm), pero
+      # `npm ci` es barato con cache y deja el árbol consistente si algún
+      # paso futuro lo necesitara.
+      - run: npm ci
+
+      - name: psql (cliente) — verificar o instalar
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends postgresql-client
+          fi
+          psql --version
+
+      # ── El andamio, ANTES de la primera migración ──────────────────────
+      # Roles anon/authenticated/service_role, los GRANT por default que
+      # Supabase aplica al aprovisionar un proyecto, y un `auth`/`storage`
+      # mínimos — lo que las 111 migraciones dan por hecho que ya existe.
+      # Ver la cabecera de ese archivo para el detalle de cada pieza y por
+      # qué es fiel (o no) a Supabase real.
+      - name: Andamio de CI (roles, auth.uid(), storage mínimo)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/pruebas-aislamiento/andamio_ci.sql
+
+      # ── Las migraciones, TODAS, en orden, una por una ──────────────────
+      # Una por una (no concatenadas) para que un fallo señale EXACTAMENTE
+      # cuál migración no aplica limpia sobre base virgen — hoy nadie prueba
+      # la secuencia completa; `supabase db push` corre contra una base que
+      # ya trae acumulado el estado de todas las anteriores, nunca desde cero.
+      - name: Migraciones (todas, sobre base virgen)
+        run: |
+          set -e
+          n=0
+          for f in supabase/migrations/*.sql; do
+            n=$((n + 1))
+            if ! psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"; then
+              echo "::error::La migración $f no aplicó limpia sobre una base virgen."
+              exit 1
+            fi
+          done
+          echo "$n migraciones aplicadas limpias."
+
+      # ── Capa 1: la batería de aislamiento, contra Postgres real ────────
+      # Dos archivos, un solo runner: la auditoría estática (schema-driven,
+      # se auto-actualiza — una tabla/vista/función nueva sin protección se
+      # detecta sola) y `verificaciones.sql` (los ~88 ataques dinámicos con
+      # tenants reales). El runner parte cada `do $$…end$$;` en su propia
+      # transacción, compara el mensaje contra el `(esperado …)` que el
+      # propio bloque declara, y falla el job si algo no calza. Ver la
+      # cabecera de `scripts/ci/correr-verificaciones.mjs` para el formato y
+      # sus límites documentados.
+      # OJO: `{ echo …; node …; echo … } | tee` se ve inocente y ESCONDE el
+      # código de salida real — el grupo `{ }` toma el exit code de su ÚLTIMO
+      # comando (el segundo `echo`), no el de `node`, así que aunque la
+      # batería reprobara el step salía en verde. Probado en local antes de
+      # publicarlo: sin `${PIPESTATUS[0]}` explícito, un fallo real de la
+      # batería NO tumbaba el job. Por eso los `echo` de las cercas van
+      # SUELTOS y el código de salida se lee del arreglo, no del grupo.
+      - name: Capa 1 — batería de aislamiento (RLS estático + dinámico)
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          node scripts/ci/correr-verificaciones.mjs \
+            supabase/pruebas-aislamiento/capa1_auditoria_estatica.sql \
+            supabase/verificaciones.sql | tee -a "$GITHUB_STEP_SUMMARY"
+          ec=${PIPESTATUS[0]}
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $ec

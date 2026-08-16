@@ -11,6 +11,18 @@ const ROL_LABEL: Record<string, string> = {
   superadmin: 'Superadmin', flota_admin: 'Dueño / Admin de flota', encargado: 'Encargado', contador: 'Contador', operador: 'Operador / Chofer',
 };
 
+/** Tipos de imagen que el bucket acepta. Un `.svg` puede traer script
+ *  adentro y el bucket `avatares` es PÚBLICO — servirlo desde nuestro
+ *  dominio sería XSS almacenado, así que no entra. MISMA lista y MISMO
+ *  tope que `dashboard/mi-perfil/page.tsx` (auditoría 13, seguridad,
+ *  MEDIO): esta ruta —la del superadmin, no la del cliente— nació sin
+ *  esta puerta, aunque el hermano correcto ya la tenía documentada con
+ *  esta misma razón. Sin ella, subir aquí no validaba tipo ni peso: un
+ *  `.svg` renombrado o un archivo de varios MB entraban igual al bucket
+ *  público. */
+const TIPOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const TOPE_BYTES = 2 * 1024 * 1024;
+
 /**
  * Editable de verdad — nombre y foto de perfil escriben a `app_user`
  * (0046_perfil_avatar.sql), no son un formulario decorativo. Correo y rol
@@ -45,10 +57,17 @@ export default async function MiPerfilPage({
     const { userId } = await requireSuperadmin();
     const archivo = formData.get('avatar');
     if (!(archivo instanceof File) || archivo.size === 0) redirect('/admin/mi-perfil?error=avatar');
+    // TIPO y PESO, antes de tocar storage — mismo candado que
+    // dashboard/mi-perfil/page.tsx. `archivo.type` lo declara el navegador
+    // y es del cliente, pero decidir la extensión CON ÉL (y no con el
+    // nombre del archivo) es lo que impide que un `.svg` renombrado a
+    // `.png` decida cómo se sirve luego.
+    if (!TIPOS.has(archivo.type)) redirect('/admin/mi-perfil?error=tipo');
+    if (archivo.size > TOPE_BYTES) redirect('/admin/mi-perfil?error=peso');
     const admin2 = supabaseAdmin();
-    const ext = (archivo.name.split('.').pop() || 'jpg').toLowerCase();
+    const ext = archivo.type === 'image/png' ? 'png' : archivo.type === 'image/webp' ? 'webp' : 'jpg';
     const ruta = `${userId}/avatar.${ext}`;
-    const { error } = await admin2.storage.from('avatares').upload(ruta, archivo, { upsert: true, contentType: archivo.type || undefined });
+    const { error } = await admin2.storage.from('avatares').upload(ruta, archivo, { upsert: true, contentType: archivo.type });
     if (error) redirect('/admin/mi-perfil?error=avatar');
     const { data: pub } = admin2.storage.from('avatares').getPublicUrl(ruta);
     // `?t=` para reventar el caché del navegador — la ruta pública es

@@ -1,0 +1,60 @@
+# P2 de la auditoría externa (15-ago-2026): supply chain.
+#
+# Dos ecosistemas, cada uno agrupado en UN solo PR semanal en vez de uno por
+# paquete — el repo ya tiene el antecedente de por qué "un PR por cambio"
+# sale caro sin avisar (ver `vercel.json`/`CLAUDE.md`: 30 builds en 12 horas
+# de puro ruido de auditoría). Un PR de dependencias que además dispara un
+# build de Vercel por cada paquete que sube de versión es el mismo problema
+# con otro disfraz.
+#
+# `open-pull-requests-limit` cortos a propósito: la cola no debe crecer más
+# rápido de lo que alguien la revisa. Sube el número si empieza a rebasarse.
+version: 2
+updates:
+  # El código de la app — sharp, next, supabase-js, todo lo que corre en
+  # producción o en el build. `package.json` ya trae un `overrides.sharp`
+  # documentado por CVE (libvips, entra por la primera foto de WhatsApp sin
+  # autenticar): Dependabot sabe respetar `overrides`, no lo pisa.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Todo lo de producción en un solo PR: revisar 15 bumps sueltos de
+      # parches menores un lunes no es más seguro que revisar uno con los 15,
+      # y si algo rompe el build lo dice `verificar` (CI ya corre en cada
+      # push a la rama del PR).
+      produccion:
+        dependency-type: production
+        update-types: ['minor', 'patch']
+      desarrollo:
+        dependency-type: development
+        update-types: ['minor', 'patch']
+    # Los MAJOR quedan FUERA de los grupos a propósito: un salto mayor de
+    # Next.js o de React (19→20) puede traer breaking changes que un PR
+    # agrupado escondería entre ruido de parches. Cada major llega solo, con
+    # su propio PR, para que se revise como lo que es.
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    commit-message:
+      prefix: 'chore(deps)'
+
+  # Los workflows de este directorio (`ci.yml`, `ci-postgres.yml`,
+  # `codeql.yml`, `dependency-review.yml`) fijan sus Actions por versión
+  # mayor (`@v4`) — sin Dependabot, esas etiquetas quedan sin nadie
+  # vigilando si el upstream publica un parche de seguridad dentro de la
+  # misma mayor.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: 'chore(deps)'
