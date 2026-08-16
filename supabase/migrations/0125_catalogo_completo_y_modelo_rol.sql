@@ -24,7 +24,7 @@ alter table public.agente_definicion
   add column if not exists modelo_rol text
     constraint agente_definicion_modelo_rol_dominio check (modelo_rol is null or modelo_rol in
       ('ocr', 'cuadre', 'cuadre_fallback', 'chat', 'chat_ligero', 'router',
-       'back_office', 'analisis', 'extraccion', 'marketing', 'codigo', 'qa'));
+       'back_office', 'analisis', 'extraccion', 'marketing', 'codigo', 'codigo_escritura', 'qa'));
 
 comment on column public.agente_definicion.modelo_rol is
   'El rol de modelo (src/lib/llm/models.ts) con el que corre este agente (0125). NULL = no usa modelo de texto (determinista, parser, Playwright o motor de imagen/video externo). El default de cada rol se cambia por env, sin deploy.';
@@ -72,9 +72,9 @@ insert into public.agente_definicion (id, nombre, departamento, disparador, esta
   ('vigilante_calidad',  'Vigilante de calidad',         'back_office','cron',   'disenado', 'qa', '09-Operaciones-Internas/agente-vigilante-de-calidad.md', 'Audita a los otros agentes — juicio adversarial.'),
   ('documentacion',      'Documentación',                'back_office','cron',   'disenado', 'codigo', '09-Operaciones-Internas/agente-documentacion.md', 'Evita que el paquete envejezca respecto al código.'),
   -- 10 · Ingeniería y Producto (los coder-specialists)
-  ('auditor_codigo',     'Auditor de código',            'ingenieria', 'cron',   'disenado', 'codigo', '10-Ingenieria-y-Producto/agente-auditor-de-codigo.md', 'La skill auditoria-diaria ya existe; la auditoría seria escala a cuadre (Sonnet) por env.'),
+  ('auditor_codigo',     'Auditor de código',            'ingenieria', 'cron',   'disenado', 'codigo', '10-Ingenieria-y-Producto/agente-auditor-de-codigo.md', 'AUDITA (hallazgos, no diffs) — chinos OK por regla del 16-ago; el FIX que sale de sus hallazgos corre con codigo_escritura (USA). La skill auditoria-diaria ya existe.'),
   ('migraciones',        'Vigía de migraciones',         'ingenieria', 'cron',   'disenado', 'codigo', '10-Ingenieria-y-Producto/agente-de-migraciones.md', 'Vigila el contrato de la base de datos.'),
-  ('pruebas',            'Pruebas',                      'ingenieria', 'cron',   'disenado', 'codigo', '10-Ingenieria-y-Producto/agente-de-pruebas.md', 'Mantiene la suite.'),
+  ('pruebas',            'Pruebas',                      'ingenieria', 'cron',   'disenado', 'codigo_escritura', '10-Ingenieria-y-Producto/agente-de-pruebas.md', 'Mantiene la suite — ESCRIBE código de prueba, así que corre con modelo USA (regla del 16-ago: auditar con chinos OK; modificar código, solo USA). El diff va a aprobación.'),
   ('releases',           'Releases',                     'ingenieria', 'manual', 'disenado', 'codigo', '10-Ingenieria-y-Producto/agente-de-releases.md', 'Acompaña cada despliegue.'),
   ('rendimiento',        'Rendimiento',                  'ingenieria', 'cron',   'disenado', 'codigo', '10-Ingenieria-y-Producto/agente-de-rendimiento.md', 'La deuda con fecha de caducidad.'),
   ('producto',           'Producto',                     'ingenieria', 'cron',   'disenado', 'analisis', '10-Ingenieria-y-Producto/agente-de-producto.md', 'Traduce señal en backlog.'),

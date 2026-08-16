@@ -26,7 +26,7 @@
 //   Para el demo en vivo, tener keys directas de Google/Anthropic como respaldo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'chat_ligero' | 'router' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'qa';
+export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'chat_ligero' | 'router' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa';
 
 const DEFAULTS: Record<ModelRole, string> = {
   // OCR de comprobantes (visión). Gemini 3.6 Flash (21-jul-2026): #1 OCR Arena
@@ -101,10 +101,18 @@ const DEFAULTS: Record<ModelRole, string> = {
   // la fama de prosa de Moonshot, a precio medio. Las CIFRAS siguen
   // viniendo de la guía canónica en el prompt, jamás del modelo.
   marketing: 'moonshotai/kimi-k2.6',           // $0.54/$2.28
-  // CÓDIGO (auditor, migraciones, pruebas, releases, rendimiento): el
-  // especialista coder con la mejor relación del catálogo. La auditoría
-  // SERIA escala a claude-sonnet-5 (el rol cuadre) por env.
+  // CÓDIGO — SOLO AUDITORÍA/LECTURA (auditor, migraciones, releases,
+  // rendimiento): el especialista coder con la mejor relación del catálogo.
+  // REGLA DE JAVIER (16-ago-2026): "las auditorías pueden ser con chinos,
+  // pero MODIFICAR el código únicamente con modelos USA". Este rol produce
+  // HALLAZGOS y reportes; jamás un diff que se aplique.
   codigo: 'qwen/qwen3-coder-next',             // $0.12/$0.80
+  // CÓDIGO — ESCRITURA (pruebas y cualquier agente cuyo output sea un DIFF
+  // que se aplica al repo): SOLO USA, escalando a los mejores — "eso escala
+  // a mejores modelos, los que yo tengo que codificar" (Javier, 16-ago).
+  // Sonnet 5 es élite en código (τ²-bench, el mismo del cuadre); escala a
+  // opus-5 por env. El diff resultante TAMBIÉN pasa por aprobación humana.
+  codigo_escritura: 'anthropic/claude-sonnet-5', // $2/$10 (intro hasta 31-ago)
   // QA / TESTERS (vigilante de calidad, ejército QA de Fase 3): juicio
   // adversarial barato — open-weight de OpenAI, razonamiento por centavos.
   qa: 'openai/gpt-oss-120b',                   // $0.03/$0.17
@@ -122,6 +130,7 @@ const ENV_KEY: Record<ModelRole, string> = {
   extraccion: 'LIKIDA_MODEL_EXTRACCION',
   marketing: 'LIKIDA_MODEL_MARKETING',
   codigo: 'LIKIDA_MODEL_CODIGO',
+  codigo_escritura: 'LIKIDA_MODEL_CODIGO_ESCRITURA',
   qa: 'LIKIDA_MODEL_QA',
 };
 
@@ -142,6 +151,7 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   analisis: { temperature: 0.2 },             // dirección: cifras, poca prosa
   extraccion: { temperature: 0 },             // parseo determinístico
   marketing: { temperature: 0.7 },            // prosa con voz; cifras del guion
-  codigo: { temperature: 0 },                 // el diff no se improvisa
+  codigo: { temperature: 0 },                 // hallazgos, no diffs
+  codigo_escritura: { temperature: 0, reasoning: 'high' }, // el diff no se improvisa
   qa: { temperature: 0.3 },                   // adversarial, no caótico
 };
