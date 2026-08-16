@@ -21,6 +21,7 @@
 // una columna nullable o un tenant interno, no un tenant real de relleno.
 // ═══════════════════════════════════════════════════════════════════════════
 import { NextResponse } from 'next/server';
+import { rateLimit } from '@/lib/ratelimit';
 import { ejecutarCopiloto } from '@/lib/agents/copiloto';
 import { ejecutarAccionCopiloto } from '@/lib/agents/copiloto-acciones';
 import { guardarIntercambioCopiloto } from '@/lib/agents/copiloto-historial';
@@ -48,9 +49,33 @@ function validarMensajes(crudo: unknown): Array<{ rol: 'usuario' | 'asistente'; 
   return out;
 }
 
+/** Techo diario de TURNOS del copiloto. El mapeo del 16-ago encontró que
+ *  este era el ÚNICO camino de LLM sin freno de gasto: el chat del cliente
+ *  tiene topeDiaUsd, y aquí una sesión secuestrada o un bucle de la UI
+ *  gastaba sin techo. No se mide en USD porque el costo del copiloto no va
+ *  a llm_costo (decisión de arriba: es gasto de Likida, no de un tenant),
+ *  así que el freno cuenta TURNOS con el rate limiter persistente: 300/día
+ *  ≈ un día PESADO de dirección × margen; a ~$0.01/turno son ~$3/día de
+ *  techo. Override: LIKIDA_COPILOTO_TOPE_TURNOS_DIA. */
+function topeTurnosDia(): number {
+  const v = Number(process.env.LIKIDA_COPILOTO_TOPE_TURNOS_DIA);
+  return Number.isFinite(v) && v > 0 ? v : 300;
+}
+const DIA_MS = 24 * 60 * 60 * 1000;
+
 export async function POST(req: Request) {
   const { error: puerta, sesion } = await sesionSuperadmin();
   if (!sesion) return puerta;
+
+  // Anti-bucle (20/min) + techo diario de turnos. Por userId: el freno es
+  // contra el bucle y el secuestro, no contra Javier — y se le DICE cuál
+  // tope pegó, porque un freno silencioso se depura como si fuera un bug.
+  if (!(await rateLimit(`copiloto:min:${sesion.userId}`, 20, 60_000))) {
+    return NextResponse.json({ error: 'tope por minuto del copiloto (20/min) — espera un momento' }, { status: 429 });
+  }
+  if (!(await rateLimit(`copiloto:dia:${sesion.userId}`, topeTurnosDia(), DIA_MS))) {
+    return NextResponse.json({ error: `tope diario del copiloto (${topeTurnosDia()} turnos) — sube LIKIDA_COPILOTO_TOPE_TURNOS_DIA si es a propósito` }, { status: 429 });
+  }
 
   let cuerpo: Record<string, unknown>;
   try { cuerpo = await req.json() as Record<string, unknown>; } catch {

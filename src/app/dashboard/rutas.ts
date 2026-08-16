@@ -3,6 +3,8 @@ import {
   BellRing, Truck, Users, FileQuestion, Map, MessagesSquare, Scale, Fuel, Building2, Plug,
   ChartNoAxesCombined, UserRound, BookOpen, Container, Blocks, Handshake, FileText, KeyRound,
   ScrollText,
+  UsersRound,
+  ShieldCheck,
 } from 'lucide-react';
 
 /**
@@ -84,6 +86,13 @@ export const SISTEMA: Item[] = [
   // /v1. El openapi prometía "se emite desde el panel" sin que el panel
   // existiera — `tenant_api_key` no tenía un solo INSERT en src/.
   { href: '/dashboard/llaves-api', nombre: 'Llaves de API', Icono: KeyRound },
+  // Las tres huérfanas del sidebar (16-ago-2026): existían en AREA_POR_RUTA
+  // pero no aquí — el dueño no llegaba a ellas navegando, solo tecleando la
+  // URL. `puedeVerRuta` sigue decidiendo quién las ve (usuarios/políticas
+  // son administracion: solo el dueño; ARCO es operacion).
+  { href: '/dashboard/usuarios', nombre: 'Usuarios del equipo', Icono: UsersRound },
+  { href: '/dashboard/politicas', nombre: 'Políticas de gasto', Icono: Scale },
+  { href: '/dashboard/arco', nombre: 'Solicitudes ARCO', Icono: ShieldCheck },
 ];
 
 /** El bloque INFERIOR fijo (Soporte / Configuración),

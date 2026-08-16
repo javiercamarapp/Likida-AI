@@ -102,18 +102,16 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/conductores': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
-  // Notificaciones (14-ago-2026) — el "alertas primero", con página
-  // propia. Es `operacion` para que la vean TODOS los roles, y no porque sea
-  // inofensiva: cada alerta se filtra ADENTRO con este mismo `puedeVerRuta`
-  // contra la pantalla donde se resuelve, así que un encargado no recibe el
-  // renglón de huérfanos ni su conteo. Ponerla en `dinero` habría dejado al
-  // jefe de tráfico sin enterarse de un viaje escalado, que es suyo.
+  // Notificaciones (14-ago-2026) — el "alertas primero". Su VISIBILIDAD la
+  // da RUTAS_TODO_ROL (16-ago: el comentario viejo prometía "todos los
+  // roles" pero `operacion` dejaba fuera al contador); esta entrada se
+  // conserva porque cada alerta se filtra ADENTRO con `puedeVerRuta` contra
+  // la pantalla donde se resuelve — un encargado no recibe el renglón de
+  // huérfanos ni su conteo.
   '/dashboard/notificaciones': 'operacion',
-  // Mi perfil (14-ago-2026) — la mig. 0046 dejó `avatar_url` y el bucket
-  // `avatares` desde el 12-ago diciendo que servirían "el día que su propio
-  // panel tenga edición de perfil". Es `operacion` porque TODO rol edita su
-  // nombre y su foto; las server actions escriben contra el userId de la
-  // sesión, así que el área no gatea a quién, sino a qué pantalla.
+  // Mi perfil (14-ago-2026) — visibilidad por RUTAS_TODO_ROL (16-ago: TODO
+  // rol edita su nombre y su foto, incluido el contador que `operacion`
+  // dejaba fuera); las server actions escriben contra el userId de sesión.
   '/dashboard/mi-perfil': 'operacion',
 
   // Dinero — lo que el encargado no ve
@@ -179,11 +177,28 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/configuracion': 'administracion',
 };
 
+/**
+ * Rutas de la CUENTA/PERSONA, no de un área del negocio: las ve todo rol
+ * CONOCIDO (16-ago-2026). Antes vivían solo en `AREA_POR_RUTA` como
+ * `operacion` con comentarios que prometían "para todos los roles" — y el
+ * contador (que solo ve `dinero`) no las veía: la intención declarada y el
+ * mecanismo se contradecían. Explícito y no por prefijo, como todo aquí.
+ * Su entrada en `AREA_POR_RUTA` se conserva porque Notificaciones filtra
+ * cada alerta ADENTRO contra la pantalla donde se resuelve.
+ */
+const RUTAS_TODO_ROL: ReadonlySet<string> = new Set([
+  '/dashboard/notificaciones',
+  '/dashboard/mi-perfil',
+  '/dashboard/soporte',
+]);
+
 export function areaDeRuta(href: string): Area | undefined {
   return AREA_POR_RUTA[href];
 }
 
 export function puedeVerRuta(rol: string, href: string): boolean {
+  // Un rol desconocido no ve nada, ni siquiera su perfil: fail closed.
+  if (RUTAS_TODO_ROL.has(href)) return areasDe(rol).length > 0;
   const area = areaDeRuta(href);
   return area !== undefined && puedeVerArea(rol, area);
 }

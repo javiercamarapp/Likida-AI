@@ -319,3 +319,26 @@ describe('el vendedor: panel propio, cero flota', () => {
     expect(rolEfectivo('superadmin', 'vendedor')).toBe('superadmin');
   });
 });
+
+describe('las rutas de la cuenta/persona las ve TODO rol conocido (16-ago-2026)', () => {
+  const DE_TODOS = ['/dashboard/notificaciones', '/dashboard/mi-perfil', '/dashboard/soporte'];
+
+  it('el contador POR FIN las ve — el comentario viejo lo prometía y el área se lo negaba', () => {
+    for (const href of DE_TODOS) expect(puedeVerRuta('contador', href)).toBe(true);
+  });
+
+  it('encargado y dueño también, como siempre', () => {
+    for (const rol of ['encargado', 'flota_admin', 'superadmin']) {
+      for (const href of DE_TODOS) expect(puedeVerRuta(rol, href)).toBe(true);
+    }
+  });
+
+  it('un rol desconocido NO ve ni su perfil — fail closed, igual que el resto', () => {
+    for (const href of DE_TODOS) expect(puedeVerRuta('rol-fantasma', href)).toBe(false);
+  });
+
+  it('la excepción no se derrama: el contador sigue sin ver despacho ni el encargado facturación', () => {
+    expect(puedeVerRuta('contador', '/dashboard/despacho')).toBe(false);
+    expect(puedeVerRuta('encargado', '/dashboard/facturacion')).toBe(false);
+  });
+});

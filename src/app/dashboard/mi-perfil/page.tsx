@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { UserRound, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { requireSessionTenant } from '@/lib/auth/guard';
+import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import AvatarUploader from '../../admin/mi-perfil/avatar-uploader';
 import { BarraPagina } from '../resumen-visual';
@@ -45,6 +46,12 @@ export default async function MiPerfilFlota({
   searchParams: Promise<{ ok?: string; error?: string; tenant?: string; vista?: string; rol?: string }>;
 }) {
   const s = await requireSessionTenant('/dashboard/mi-perfil');
+  // El gate que faltaba (16-ago-2026): era la ÚNICA página del panel sin
+  // puedeVerRuta — el sidebar la escondía y la URL abría. Con RUTAS_TODO_ROL
+  // todo rol conocido pasa (es TU perfil); un rol desconocido rebota, igual
+  // que en el resto del panel. Esconder sin gatear es el patrón que la 0045
+  // ya cerró una vez.
+  if (!puedeVerRuta(s.rol, '/dashboard/mi-perfil')) redirect('/dashboard');
   const sp = await searchParams;
   const sufijo = sufijoTenant(sp);
 

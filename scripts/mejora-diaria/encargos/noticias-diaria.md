@@ -39,3 +39,10 @@ carrusel de relleno cuesta credibilidad y créditos.
 
 Termina con UNA línea:
 VEREDICTO: carrusel "<slug>" (<n> tarjetas, <X> cr) en cola de publicar | sin noticia relevante hoy | sin motor: brief listo
+
+## ⚠️ TENSIÓN VIVA del estímulo de diésel (16-ago-2026 — NO NEGOCIABLE)
+Dos lecturas legales del estímulo IEPS (cuota íntegra vs disminuida, factor
+3.5×) se sostienen del mismo texto de la LIF 20-A-IV. Hasta que un fiscalista
+con cédula firme una: JAMÁS publiques el estímulo en PESOS — solo LITROS
+acreditables y, si hace falta magnitud, el RANGO con la advertencia de que
+depende de la cuota semanal y de que es ingreso acumulable.
