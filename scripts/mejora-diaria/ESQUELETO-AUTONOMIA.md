@@ -17,6 +17,8 @@ reporte; ninguno publica, mergea ni manda nada solo.
 | `promos-diaria` | 10:00 | beneficio REAL de Likida en rotación, logo compuesto | cola `publicar/` |
 | `render-video` | 11:30 | pre-check gratis (grep); anima SOLO sequences `estado: aprobada` y ensambla el video completo (ElevenLabs) | cola `publicar/` |
 | `dof-diario` | 21:30 | barre las DOS ediciones del DOF (SIDOF); asienta en `normas/` con fuente, ESCRIBE el cambio de software si la norma lo exige, latido si no hubo nada; el veredicto grita "CAMBIO NORMATIVO" | PR + notificación |
+| `jarvis-brief` | 08:30 y 21:45 | el brief de mando por WhatsApp: qué corrió, qué espera SU acción, lo urgente primero — 10 líneas de teléfono | WhatsApp |
+| `vigia-produccion` | cada 2h | DETERMINISTA ($0): corre la guardia A0 contra la base de PRODUCCIÓN; incidente S1/S2 nuevo o fuente ciega → WhatsApp al instante (dedup: avisa el cambio, no taladra) | WhatsApp |
 
 ### Semanales
 
@@ -44,7 +46,11 @@ reporte; ninguno publica, mergea ni manda nada solo.
 Controles compartidos: kill switch `touch .mejora-diaria/APAGADO` (todas las
 del repo; el cazador se pausa con `launchctl unload`), `--max-turns` por
 corrida, taller worktree aislado (`likida-mejoras`), reportes en
-`.mejora-diaria/reportes/`, logs en `.mejora-diaria/logs/`. `instalar.sh`
+`.mejora-diaria/reportes/`, logs en `.mejora-diaria/logs/`. **TODO llega al
+WhatsApp personal de Javier** (`wa-notificar.sh`, Cloud API del producto,
+`LIKIDA_WA_JAVIER` en .env.local): veredictos, reportes como documento,
+piezas como imagen, y las alertas del vigía — la ventana de 24h se abre
+contestando cualquier cosa al bot. `instalar.sh`
 instala lo que hay en la carpeta y DESCARGA lo retirado (así murió la
 vigilancia-fiscal de solo-viernes cuando el DOF pasó a diario).
 

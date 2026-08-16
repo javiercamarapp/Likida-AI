@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.likida.jarvis-brief</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO__/scripts/mejora-diaria/rutina.sh</string>
+    <string>jarvis-brief</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>21</integer><key>Minute</key><integer>45</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>__REPO__/.mejora-diaria/logs/jarvis-brief.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/.mejora-diaria/logs/jarvis-brief.log</string>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>
