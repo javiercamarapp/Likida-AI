@@ -75,15 +75,26 @@ export interface ComparativoPeriodo {
  * tarjeta, independientes entre sí) necesitan poder seguir retrocediendo
  * más de un periodo, no solo comparar contra el inmediato anterior.
  *
- * UNA SOLA CONSULTA POR TABLA, no `pasos` consultas — se trae el rango
- * completo (`desdeGlobal` a `hoy`) una vez y se bucketea en memoria, mismo
- * criterio que `viajes` en `page.tsx` (una carga, varias tarjetas). `gasto`
- * y `viaje.fecha_inicio` son columnas `date` (comparación de string, sin
- * riesgo de zona horaria). `liquidacion.created_at` SÍ es `timestamptz`,
- * así que su bucket usa el día LOCAL (mismo patrón que
- * `getLiquidacionesPorDia`) — un filtro en la base solo por UTC habría
- * repetido el bug ya pagado ahí (cierres de tarde cayendo en el día
- * siguiente).
+ * ── AGREGADO EN SQL DESDE EL 15-AGO-2026 (mig. 0112) ────────────────────────
+ *
+ * La versión anterior traía el rango completo (`desdeGlobal` a `hoy`) de
+ * `gasto`, `viaje` y `liquidacion` con `traerTodo` y bucketeaba en memoria —
+ * UNA consulta por tabla, no `pasos` consultas, que ya era el criterio
+ * correcto para no repetir la misma ventana tres veces. Pero la vista
+ * "histórico" de `getSeriesKpiCards` (ventana ~10 años) lee prácticamente la
+ * tabla `gasto` ENTERA del tenant, y con 45,000 gastos/mes eso toca el techo
+ * de `traerTodo` (100 páginas) ~mes 2.2 (docs/escala-15k.md §6) — la MISMA
+ * fecha de caducidad que `getGastosFiscales`, y esta función corre en CADA
+ * carga del Resumen (tres veces: semanal/mensual/histórico).
+ *
+ * `serie_comparativa_tenant` (0112) recibe los mismos `ventanaDias`/`pasos`/
+ * `hoy` y hace la MISMA cuenta de límites de periodo, pero el `sum()`/
+ * `count()` corre en SQL: UN viaje de red para las tres tablas juntas, sin
+ * techo de páginas. `gasto.fecha`/`viaje.fecha_inicio` siguen siendo
+ * columnas `date` (comparación directa, usa los índices de la 0111);
+ * `liquidacion.created_at` sigue bucketeándose por el día LOCAL de México
+ * dentro de la función SQL — el mismo criterio que `diaLocalMx` evitaba el
+ * bug de cierres de tarde cayendo en el día siguiente.
  */
 export async function getSerieComparativa(
   tenantId: string,
@@ -91,62 +102,32 @@ export async function getSerieComparativa(
   pasos: number,
   hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
 ): Promise<ComparativoPeriodo[]> {
-  const limites = Array.from({ length: pasos }, (_, i) => {
-    const hastaD = new Date(`${hoy}T00:00:00Z`);
-    hastaD.setUTCDate(hastaD.getUTCDate() - i * ventanaDias);
-    const hasta = hastaD.toISOString().slice(0, 10);
-    const desdeD = new Date(hastaD);
-    desdeD.setUTCDate(desdeD.getUTCDate() - (ventanaDias - 1));
-    return { desde: desdeD.toISOString().slice(0, 10), hasta };
+  const { data, error } = await supabaseAdmin().rpc('serie_comparativa_tenant', {
+    p_tenant: tenantId,
+    p_ventana_dias: ventanaDias,
+    p_pasos: pasos,
+    p_hoy: hoy,
   });
-  const desdeGlobal = limites[limites.length - 1].desde;
+  if (error) throw new Error(`getSerieComparativa: ${error.message}`);
 
-  const admin = supabaseAdmin();
-  const [gastos, viajes, liquidaciones] = await Promise.all([
-    traerTodo<{ fecha: unknown; monto: unknown }>(
-      (desde, hasta) => admin.from('gasto').select('fecha, monto')
-        .eq('tenant_id', tenantId).gte('fecha', desdeGlobal).lte('fecha', hoy)
-        .order('id').range(desde, hasta),
-      'getSerieComparativa.gasto',
-    ),
-    traerTodo<{ fecha_inicio: unknown; estatus: unknown }>(
-      (desde, hasta) => admin.from('viaje').select('fecha_inicio, estatus')
-        .eq('tenant_id', tenantId).gte('fecha_inicio', desdeGlobal).lte('fecha_inicio', hoy)
-        .order('id').range(desde, hasta),
-      'getSerieComparativa.viaje',
-    ),
-    // Cota inferior generosa (medianoche UTC del día MX más viejo) — un
-    // poco de sobra hacia el pasado no rompe nada porque el bucket real de
-    // abajo filtra por día LOCAL; lo que sí rompería es una cota que
-    // recorte por el lado equivocado.
-    traerTodo<{ created_at: unknown; total_comprobado: unknown }>(
-      (desde, hasta) => admin.from('liquidacion').select('created_at, total_comprobado')
-        .eq('tenant_id', tenantId).gte('created_at', `${desdeGlobal}T00:00:00Z`)
-        .order('id').range(desde, hasta),
-      'getSerieComparativa.liquidacion',
-    ),
-  ]);
-
-  const diaLocalMx = (iso: string): string => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ_MX });
-  const enRango = (dia: string, desde: string, hasta: string) => dia >= desde && dia <= hasta;
-
-  return limites.map(({ desde, hasta }) => {
-    const gastoTotal = round2(
-      gastos.filter((g) => enRango(g.fecha as string, desde, hasta))
-        .reduce((s, g) => s + Number(g.monto ?? 0), 0),
+  // Fail-closed: una forma inesperada (¿migración 0112 sin aplicar?) no se
+  // lee como "cero periodos" — un Resumen con las tarjetas de KPI en $0 se ve
+  // exactamente como una flota sin actividad.
+  if (!Array.isArray(data) || data.length !== pasos) {
+    throw new Error(
+      `getSerieComparativa: serie_comparativa_tenant devolvió otra forma (¿migración 0112 sin aplicar?): `
+      + `esperaba ${pasos} periodo(s), llegaron ${Array.isArray(data) ? data.length : typeof data}`,
     );
-    const viajesDelPeriodo = viajes.filter((v) => v.fecha_inicio && enRango(v.fecha_inicio as string, desde, hasta));
-    const n = viajesDelPeriodo.length;
-    const viajesLiquidados = viajesDelPeriodo.filter((v) => v.estatus === 'liquidado').length;
-    const liquidado = round2(
-      liquidaciones.filter((l) => enRango(diaLocalMx(l.created_at as string), desde, hasta))
-        .reduce((s, l) => s + Number(l.total_comprobado ?? 0), 0),
-    );
-    return {
-      desde, hasta, gastoTotal, totalViajes: n, costoPorViaje: n === 0 ? null : round2(gastoTotal / n),
-      liquidado, viajesLiquidados,
-    };
-  });
+  }
+  return (data as Array<Record<string, unknown>>).map((p) => ({
+    desde: p.desde as string,
+    hasta: p.hasta as string,
+    gastoTotal: Number(p.gastoTotal ?? 0),
+    totalViajes: Number(p.totalViajes ?? 0),
+    costoPorViaje: p.costoPorViaje === null || p.costoPorViaje === undefined ? null : Number(p.costoPorViaje),
+    liquidado: Number(p.liquidado ?? 0),
+    viajesLiquidados: Number(p.viajesLiquidados ?? 0),
+  }));
 }
 
 export interface SeriesKpiCards {
@@ -179,32 +160,40 @@ export async function getSeriesKpiCards(
   return { semanal, mensual, historico };
 }
 
+/**
+ * AGREGADO EN SQL DESDE EL 15-AGO-2026 (mig. 0112).
+ *
+ * Traía TODA `liquidacion` del tenant con `traerTodo` para contar por estatus
+ * y sumar el dinero observado de `diferencias` (jsonb) en JavaScript — se lee
+ * en CADA carga de /dashboard y /dashboard/contador, y caduca ~mes 8.3 con
+ * 15,000 viajes/mes (docs/escala-15k.md §6). `kpis_liquidacion_tenant` hace
+ * el MISMO conteo/suma en SQL: UN viaje de red, sin techo de páginas. La
+ * prueba de equivalencia (`analytics_kpis_acreditables.test.ts`) compara la
+ * reducción JS vieja contra la forma nueva sobre el mismo dataset sintético.
+ */
 export async function getKpis(tenantId: string, ventanaDias?: number): Promise<DashboardKpis> {
   const corte = corteVentana(ventanaDias);
-  const rows = await traerTodo<{ total_comprobado: unknown; diferencia: unknown; estatus: unknown; diferencias: unknown }>(
-    (desde, hasta) => {
-      const q = supabaseAdmin()
-        .from('liquidacion')
-        .select('total_comprobado, diferencia, estatus, diferencias')
-        .eq('tenant_id', tenantId);
-      return (corte ? q.gte('created_at', corte) : q).order('id').range(desde, hasta);
-    },
-    'getKpis',
-  );
-  const conDif = rows.filter((r) => r.estatus === 'con_diferencias').length;
-  const revisar = rows.filter((r) => r.estatus === 'revisar').length;
-  const cuadradas = rows.filter((r) => r.estatus === 'cuadrada').length;
-  const dineroObservado = rows.reduce((s, r) => {
-    const difs = (r.diferencias as Array<{ tipo: string; monto: number }>) ?? [];
-    return s + difs.filter((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado').reduce((a, d) => a + Math.abs(d.monto), 0);
-  }, 0);
+  const { data, error } = await supabaseAdmin()
+    .rpc('kpis_liquidacion_tenant', { p_tenant: tenantId, p_desde: corte });
+  if (error) throw new Error(`getKpis: ${error.message}`);
+
+  const r = data as Partial<{
+    viajesLiquidados: unknown; montoComprobado: unknown; diferenciaDetectada: unknown;
+    conDiferencias: unknown; porRevisar: unknown; tasaCuadre: unknown;
+  }> | null;
+  const campos = [r?.viajesLiquidados, r?.montoComprobado, r?.diferenciaDetectada, r?.conDiferencias, r?.porRevisar, r?.tasaCuadre];
+  // Fail-closed: un `0` inventado sobre una forma inesperada se ve exactamente
+  // igual que una flota que de verdad no ha liquidado nada.
+  if (!r || campos.some((c) => typeof c !== 'number')) {
+    throw new Error('getKpis: kpis_liquidacion_tenant devolvió otra forma (¿migración 0112 sin aplicar?)');
+  }
   return {
-    viajesLiquidados: rows.length,
-    montoComprobado: round2(rows.reduce((s, r) => s + Number(r.total_comprobado ?? 0), 0)),
-    diferenciaDetectada: round2(dineroObservado),
-    conDiferencias: conDif,
-    porRevisar: revisar,
-    tasaCuadre: rows.length ? Math.round((cuadradas / rows.length) * 100) : 0,
+    viajesLiquidados: r.viajesLiquidados as number,
+    montoComprobado: round2(r.montoComprobado as number),
+    diferenciaDetectada: round2(r.diferenciaDetectada as number),
+    conDiferencias: r.conDiferencias as number,
+    porRevisar: r.porRevisar as number,
+    tasaCuadre: r.tasaCuadre as number,
   };
 }
 
@@ -632,26 +621,35 @@ export interface Acreditables {
   /** Litros de diésel elegibles. El estímulo en pesos lo calcula el contador. */
   litrosDiesel: number; ieps: number; iva: number; peaje: number; }
 
-/** Suma de estímulos acreditables del periodo (IEPS diésel + IVA + peaje 50%). */
+/**
+ * Suma de estímulos acreditables del periodo (IEPS diésel + IVA + peaje 50%).
+ *
+ * AGREGADO EN SQL DESDE EL 15-AGO-2026 (mig. 0112): traía TODA `liquidacion`
+ * del tenant con `traerTodo` para sumar cuatro columnas ya calculadas por
+ * liquidación —sin lógica fiscal que reimplementar, solo aritmética— y
+ * caducaba ~mes 8.3 con 15,000 viajes/mes (docs/escala-15k.md §6).
+ * `acreditables_liquidacion_tenant` hace las cuatro sumas en SQL: UN viaje de
+ * red. La prueba de equivalencia (`analytics_kpis_acreditables.test.ts`)
+ * compara la reducción JS vieja contra la forma nueva sobre el mismo dataset.
+ */
 export async function getAcreditables(tenantId: string, ventanaDias?: number): Promise<Acreditables> {
   const corte = corteVentana(ventanaDias);
-  const rows = await traerTodo<{ ieps_acreditable: unknown; iva_acreditable: unknown; peaje_acreditable: unknown; litros_diesel_acreditables: unknown }>(
-    (desde, hasta) => {
-      const q = supabaseAdmin()
-        .from('liquidacion')
-        .select('ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables')
-        .eq('tenant_id', tenantId);
-      return (corte ? q.gte('created_at', corte) : q).order('id').range(desde, hasta);
-    },
-    'getAcreditables',
-  );
+  const { data, error } = await supabaseAdmin()
+    .rpc('acreditables_liquidacion_tenant', { p_tenant: tenantId, p_desde: corte });
+  if (error) throw new Error(`getAcreditables: ${error.message}`);
+
+  const r = data as Partial<{ litrosDiesel: unknown; ieps: unknown; iva: unknown; peaje: unknown }> | null;
+  const campos = [r?.litrosDiesel, r?.ieps, r?.iva, r?.peaje];
+  if (!r || campos.some((c) => typeof c !== 'number')) {
+    throw new Error('getAcreditables: acreditables_liquidacion_tenant devolvió otra forma (¿migración 0112 sin aplicar?)');
+  }
   return {
-    ieps: round2(rows.reduce((s, r) => s + Number(r.ieps_acreditable ?? 0), 0)),
-    iva: round2(rows.reduce((s, r) => s + Number(r.iva_acreditable ?? 0), 0)),
-    peaje: round2(rows.reduce((s, r) => s + Number(r.peaje_acreditable ?? 0), 0)),
+    ieps: round2(r.ieps as number),
+    iva: round2(r.iva as number),
+    peaje: round2(r.peaje as number),
     // El IEPS ya no se presenta en pesos —el estímulo es cuota semanal × litros
     // y esa cuota no la tenemos—, así que lo que se entrega es el dato duro.
-    litrosDiesel: round2(rows.reduce((s, r) => s + Number(r.litros_diesel_acreditables ?? 0), 0)),
+    litrosDiesel: round2(r.litrosDiesel as number),
   };
 }
 

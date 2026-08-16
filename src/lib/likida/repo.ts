@@ -883,89 +883,69 @@ export async function liberarEnvioAviso(tenantId: string, operadorId: string): P
  * pago no se cuenta como efectivo: no se sabe, y suponerlo inflaría el
  * numerador contra la flota.
  *
- * ── POR QUÉ ESTO SE PAGINA Y NO SE PIDE DE UN JALÓN ─────────────────────────
+ * ── HALLAZGO 15-AGO-2026: LA RPC YA EXISTÍA, MUERTA, DESDE LA 0084 ──────────
  *
- * Esta consulta no llevaba `.limit()` ni `.range()`, y eso NO significaba "trae
- * todo": significaba "trae lo que PostgREST quiera darme". `max_rows` (Settings
- * → API en Supabase) recorta la respuesta EN SILENCIO —sin error, sin cabecera
- * que el cliente mire, sin nada— y el default de la plataforma son 1 000 filas.
+ * Esta consulta vivió años como un `traerTodo` paginado a mano (ronda 6): sin
+ * `.limit()` ni `.range()` no significaba "trae todo", significaba "trae lo
+ * que PostgREST quiera darme" — `max_rows` (Settings → API) recorta la
+ * respuesta EN SILENCIO, default 1 000 filas — así que se paginaba con
+ * `count: 'exact'` en la primera página y se lanzaba si la lectura quedaba
+ * incompleta. Correcto, pero con fecha de caducidad CALCULABLE: **esto corre
+ * EN CADA CUADRE** (el camino más caliente del producto), y su techo de 100
+ * páginas = 100 000 cargas de diésel se toca ~mes 6.7 con un cliente de
+ * 15 000 viajes/mes (docs/escala-15k.md §4/§6) — al tocarlo, el CIERRE deja
+ * de cerrar, no solo una pantalla.
  *
- * Una flota de 50 operadores hace ~18 000 cargas de diésel al año. Con el
- * recorte puesto, este contador leería el 5% de ellas y devolvería un acumulado
- * bajo, coherente y falso. Y no es un número de adorno: es el DENOMINADOR del
- * 15% de combustible en efectivo de la RFA 2026 regla 2.9. Un denominador
- * recortado hace parecer holgada a una flota que ya se pasó, que es justo el
- * error que el comentario de arriba dice venir a evitar.
+ * La migración 0084 (05-ago-2026, "sumar_combustible_ejercicio: la
+ * agregación del 15% en SQL") YA HABÍA ESCRITO el `sum()` en SQL para
+ * exactamente este problema — está aplicada en producción (verificaciones.sql
+ * bloque 81 lo confirma contra el catálogo real: `f_0084=1`) — pero
+ * `getAcumuladoCombustible` nunca se cambió para llamarla: quedó como código
+ * muerto, sin una sola referencia en `src/` (grepeado). Este archivo seguía
+ * paginando a mano un año después de que la RPC que lo resolvía ya estuviera
+ * viva en la base.
  *
- * Se pide `count: 'exact'` en la primera página —que viene en la misma
- * respuesta, sin viaje de red extra— para saber cuántas filas hay DE VERDAD
- * frente a cuántas entregó el servidor. Con eso: si el tenant cabe en una
- * página (el caso normal hoy) se paga exactamente una consulta, igual que
- * antes; y si no cabe, se sabe y se sigue paginando en vez de suponer.
- *
- * El orden es `fecha, id` y no `id`: `idx_gasto_acumulado` (mig. 0023) es
- * `(tenant_id, concepto, fecha)`, así que ese orden sale del índice y la
- * paginación no le añade un sort. `id` desempata para que `range` sea estable.
+ * Y la RPC muerta tenía un bug real: no filtraba `monto > 0`, así que una
+ * fila de monto 0 o NEGATIVO (un duplicado excluido, un ajuste) habría
+ * entrado al `sum()` — el mismo denominador que este comentario lleva años
+ * advirtiendo que no se puede inflar. La 0112 la corrige (`create or
+ * replace`, misma firma) agregando el filtro que el JS sí tenía, y AHORA
+ * `getAcumuladoCombustible` la llama. La prueba de equivalencia
+ * (`repo_acumulado.test.ts`) compara la suma JS vieja contra la RPC corregida
+ * sobre el MISMO dataset sintético, incluido el caso de montos no positivos
+ * que la RPC original habría contado de más.
  */
 export async function getAcumuladoCombustible(
   tenantId: string,
   ejercicio: number,
   claves?: string[],
 ): Promise<{ efectivo: number; totalCombustible: number }> {
-  const PAGINA = 1_000;
-  // 100 páginas son 100 000 cargas de diésel en un ejercicio. Un tenant que las
-  // pase no necesita más vueltas, necesita que esto sea un `sum()` en SQL: cien
-  // viajes de red no caben en el presupuesto del turno. Se corta y se dice.
-  const MAX_PAGINAS = 100;
+  const { data, error } = await acotada(supabaseAdmin()
+    .rpc('sumar_combustible_ejercicio', {
+      p_tenant: tenantId,
+      p_anio: ejercicio,
+      // Vacío o `undefined` caen al MISMO criterio angosto que el `.or()`
+      // original: sin claves, solo `concepto = 'diesel'` cuenta. La firma de
+      // la 0084 no tiene default en `p_claves` — hay que mandar `null`, no
+      // omitir el argumento.
+      p_claves: claves?.length ? claves : null,
+    }), 'getAcumuladoCombustible');
+  if (error) throw new Error(`getAcumuladoCombustible: ${error.message}`);
 
-  let efectivo = 0;
-  let totalCombustible = 0;
-  let leidas = 0;
-  let esperadas = 0;
-
-  for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
-    const { data, error, count } = await acotada(supabaseAdmin()
-      .from('gasto')
-      // El `count` solo en la primera vuelta: viene en la misma respuesta, así
-      // que saber cuántas filas hay DE VERDAD no cuesta un viaje de red extra,
-      // pero pedirlo en cada página sí haría contar de más.
-      .select('monto, forma_pago', pagina === 0 ? { count: 'exact' } : {})
-      .eq('tenant_id', tenantId)
-      // AUDITORÍA 14, MEDIO: el criterio de "combustible" era `concepto='diesel'`
-      // a secas; el motor usa además las claves del SAT (15101505/14/15). Tres
-      // contadores con tres criterios = el chat dice 8% y el motor 12%. Ahora
-      // se pasa la misma lista de claves que el motor; sin ella, diesel a secas.
-      .or(claves?.length ? `concepto.eq.diesel,clave_prod_serv.in.(${claves.join(',')})` : 'concepto.eq.diesel')
-      .gte('fecha', `${ejercicio}-01-01`)
-      .lte('fecha', `${ejercicio}-12-31`)
-      .order('fecha')
-      .order('id')
-      .range(leidas, leidas + PAGINA - 1), 'getAcumuladoCombustible');
-    if (error) throw new Error(`getAcumuladoCombustible: ${error.message}`);
-
-    const filas = data ?? [];
-    if (pagina === 0) esperadas = count ?? filas.length;
-
-    for (const g of filas) {
-      const monto = Number(g.monto);
-      if (!Number.isFinite(monto) || monto <= 0) continue;
-      totalCombustible += monto;
-      if (g.forma_pago === '01') efectivo += monto;
-    }
-    leidas += filas.length;
-
-    // Sin filas nuevas no hay progreso posible: cortar aquí es lo que impide que
-    // un `max_rows` de 0 o una respuesta rara conviertan esto en un bucle infinito
-    // dentro del presupuesto del turno.
-    if (!filas.length || leidas >= esperadas) break;
-  }
-
-  if (leidas < esperadas) {
-    // Fail-closed, igual que el resto del camino del dinero: devolver el
-    // acumulado de la mitad de las cargas es afirmar una cifra fiscal que no se
-    // midió, y a la baja es la dirección que nadie revisa.
-    logger.error('gasto.acumulado_incompleto', { tenantId, ejercicio, leidas, esperadas });
-    throw new Error(`getAcumuladoCombustible: solo se leyeron ${leidas} de ${esperadas} cargas del ejercicio ${ejercicio}`);
+  // `returns table (...)`: PostgREST siempre entrega un ARRAY, con exactamente
+  // una fila aquí (es un agregado sin GROUP BY: coalesce garantiza fila aunque
+  // no haya cargas). Un array vacío o de más de una fila es la misma señal de
+  // "otra forma" que un objeto roto.
+  const fila = Array.isArray(data) ? (data[0] as Partial<{ efectivo: unknown; total: unknown }> | undefined) : undefined;
+  const efectivo = Number(fila?.efectivo);
+  const totalCombustible = Number(fila?.total);
+  // Fail-closed, igual que el resto del camino del dinero: una forma
+  // inesperada (¿migración 0112 sin aplicar?) no se lee como "cero cargas de
+  // diésel" — ese cero se vería medido y es el denominador del 15% de
+  // combustible en efectivo de la RFA 2026 regla 2.9.
+  if (!Array.isArray(data) || data.length !== 1 || !fila || !Number.isFinite(efectivo) || !Number.isFinite(totalCombustible)) {
+    logger.error('gasto.acumulado_forma_inesperada', { tenantId, ejercicio, data });
+    throw new Error('getAcumuladoCombustible: sumar_combustible_ejercicio devolvió otra forma (¿migración 0112 sin aplicar?)');
   }
 
   return { efectivo: round2(efectivo), totalCombustible: round2(totalCombustible) };

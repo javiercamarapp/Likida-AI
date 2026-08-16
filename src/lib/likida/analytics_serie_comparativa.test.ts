@@ -1,113 +1,87 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// `getSerieComparativa` reemplazó a `getTendenciaKpis`/`comparativoEnRango`
-// el 8-ago-2026 — las flechas ‹ › de cada tarjeta de KPI necesitan una serie
-// de periodos, no solo un par actual/anterior. Lo que hay que comprobar,
-// igual que se hizo con `getLiquidacionesPorDia` (analytics_por_dia.test.ts):
+// `getSerieComparativa` — DESDE EL 15-AGO-2026 (mig. 0112) la agregación vive
+// EN SQL (`serie_comparativa_tenant`), no en TS: periodos consecutivos sin
+// traslape, bucketeo por día LOCAL MX de `liquidacion.created_at` y conteo de
+// liquidados son garantías de la función SQL, y ese SQL es runtime-ruidoso
+// (si falta la migración, la llamada al RPC falla).
 //
-//   1. Los periodos son consecutivos, SIN traslape, terminando en `hoy`.
-//   2. `gasto`/`viaje` bucketean por su columna `date` (comparación directa).
-//   3. `liquidacion.created_at` (timestamptz) bucketea por DÍA LOCAL MX, no
-//      por el UTC crudo — el mismo bug que ya se pagó en
-//      `getLiquidacionesPorDia` (un cierre de tarde cayendo en el día
-//      siguiente).
-//   4. `costoPorViaje` es `null` sin viajes en el bucket, no Infinity/0.
+// Lo que TS conserva y estos tests prueban:
+//   1. Llama al RPC con el contrato exacto (p_tenant/ventana/pasos/hoy).
+//   2. Exige EXACTAMENTE `pasos` periodos — forma distinta = fail-closed con
+//      aviso de la migración 0112 (no se lee "cero" como "flota sin actividad").
+//   3. Mapea a números y conserva `null` cuando no hay viajes en el bucket.
+//   4. El error del RPC se propaga, no se traga.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const filasPorTabla = new Map<string, unknown[]>();
+const rpcEstado: { args?: Record<string, unknown>; respuesta?: unknown; error?: unknown } = {};
 
-function mockPaginado(tabla: string) {
-  const b = {
-    select: () => b,
-    eq: () => b,
-    gte: () => b,
-    lte: () => b,
-    order: () => b,
-    range: (desde: number, hasta: number) => Promise.resolve({
-      data: (filasPorTabla.get(tabla) ?? []).slice(desde, hasta + 1), error: null, count: undefined,
-    }),
+function mockBuilder() {
+  return {
+    from: () => ({ select: () => ({ limit: () => ({ order: () => ({ data: [], error: null }) }) }) }),
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      if (name !== 'serie_comparativa_tenant') return { data: [], error: null };
+      rpcEstado.args = args;
+      if (rpcEstado.error) return { data: null, error: rpcEstado.error };
+      return { data: rpcEstado.respuesta, error: null };
+    },
   };
-  return b;
 }
 
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (tabla: string) => mockPaginado(tabla) }) }));
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => mockBuilder() }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('./cuadre/desde_db', () => ({ cuadrarDesdeDB: vi.fn(), ventanaDesdeDB: vi.fn() }));
 
 const { getSerieComparativa } = await import('./analytics');
 
-describe('getSerieComparativa', () => {
-  beforeEach(() => { filasPorTabla.clear(); });
+function periodo(desde: string, hasta: string, datos: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    desde,
+    hasta,
+    gastoTotal: 0,
+    totalViajes: 0,
+    costoPorViaje: null,
+    liquidado: 0,
+    viajesLiquidados: 0,
+    ...datos,
+  };
+}
 
-  it('devuelve `pasos` periodos consecutivos de `ventanaDias` días, sin traslape, terminando en hoy', async () => {
-    const r = await getSerieComparativa('t1', 7, 3, '2026-08-08');
-    expect(r).toHaveLength(3);
-    expect(r[0]).toMatchObject({ desde: '2026-08-02', hasta: '2026-08-08' });
-    expect(r[1]).toMatchObject({ desde: '2026-07-26', hasta: '2026-08-01' });
-    expect(r[2]).toMatchObject({ desde: '2026-07-19', hasta: '2026-07-25' });
+describe('getSerieComparativa (contrato TS → RPC, mig. 0112)', () => {
+  beforeEach(() => {
+    rpcEstado.args = undefined;
+    rpcEstado.respuesta = undefined;
+    rpcEstado.error = undefined;
   });
 
-  it('gasto y viajes bucketean por fecha simple en el periodo correcto', async () => {
-    // Periodos (7 días, hoy=8-ago): bucket0 = [02..08 ago], bucket1 = [26 jul..01 ago].
-    filasPorTabla.set('gasto', [
-      { fecha: '2026-08-08', monto: 100 }, // bucket 0
-      { fecha: '2026-08-01', monto: 50 },  // bucket 1 (justo el último día)
-      { fecha: '2026-07-26', monto: 30 },  // bucket 1
-    ]);
-    filasPorTabla.set('viaje', [
-      { fecha_inicio: '2026-08-05' }, // bucket 0
-      { fecha_inicio: '2026-08-05' }, // bucket 0
-      { fecha_inicio: '2026-07-30' }, // bucket 1
-    ]);
-    filasPorTabla.set('liquidacion', []);
+  it('llama al RPC con el contrato exacto (tenant, ventana, pasos, hoy) y devuelve `pasos` periodos', async () => {
+    rpcEstado.respuesta = [periodo('2026-08-02', '2026-08-08'), periodo('2026-07-26', '2026-08-01'), periodo('2026-07-19', '2026-07-25')];
+    const r = await getSerieComparativa('t1', 7, 3, '2026-08-08');
+    expect(rpcEstado.args).toMatchObject({ p_tenant: 't1', p_ventana_dias: 7, p_pasos: 3, p_hoy: '2026-08-08' });
+    expect(r).toHaveLength(3);
+    expect(r[0]).toMatchObject({ desde: '2026-08-02', hasta: '2026-08-08' });
+  });
 
+  it('mapea a números y conserva null cuando el periodo no tiene costo por viaje', async () => {
+    rpcEstado.respuesta = [
+      periodo('2026-08-02', '2026-08-08', { gastoTotal: '100', totalViajes: '2', costoPorViaje: '50' }),
+      periodo('2026-07-26', '2026-08-01', { gastoTotal: 80, totalViajes: 0, costoPorViaje: null }),
+    ];
     const r = await getSerieComparativa('t1', 7, 2, '2026-08-08');
     expect(r[0].gastoTotal).toBe(100);
     expect(r[0].totalViajes).toBe(2);
     expect(r[0].costoPorViaje).toBe(50);
+    expect(r[1].costoPorViaje).toBeNull();
     expect(r[1].gastoTotal).toBe(80);
-    expect(r[1].totalViajes).toBe(1);
   });
 
-  it('costoPorViaje es null sin viajes en el periodo, no Infinity ni 0', async () => {
-    filasPorTabla.set('gasto', [{ fecha: '2026-08-08', monto: 500 }]);
-    filasPorTabla.set('viaje', []);
-    filasPorTabla.set('liquidacion', []);
-
-    const r = await getSerieComparativa('t1', 7, 1, '2026-08-08');
-    expect(r[0].totalViajes).toBe(0);
-    expect(r[0].costoPorViaje).toBeNull();
+  it('fail-closed: forma distinta de `pasos` periodos lanza y avisa de la migración 0112', async () => {
+    rpcEstado.respuesta = [periodo('2026-08-02', '2026-08-08')]; // 1, pero pedimos 3
+    await expect(getSerieComparativa('t1', 7, 3, '2026-08-08')).rejects.toThrow(/0112|otra forma/);
   });
 
-  it('viajesLiquidados cuenta solo los del periodo con estatus=liquidado, no el histórico completo', async () => {
-    filasPorTabla.set('gasto', []);
-    filasPorTabla.set('viaje', [
-      { fecha_inicio: '2026-08-05', estatus: 'liquidado' }, // bucket 0
-      { fecha_inicio: '2026-08-06', estatus: 'abierto' },   // bucket 0
-      { fecha_inicio: '2026-07-30', estatus: 'liquidado' }, // bucket 1
-    ]);
-    filasPorTabla.set('liquidacion', []);
-
-    const r = await getSerieComparativa('t1', 7, 2, '2026-08-08');
-    expect(r[0]).toMatchObject({ totalViajes: 2, viajesLiquidados: 1 });
-    expect(r[1]).toMatchObject({ totalViajes: 1, viajesLiquidados: 1 });
-  });
-
-  it('liquidado bucketea por DÍA LOCAL MX, no por el UTC crudo del timestamptz', async () => {
-    // 31-jul-2026 20:00 CDMX (UTC-6) = 2026-08-01T02:00:00Z — un slice crudo
-    // lo pondría en el bucket que empieza el 1-ago; el día local es 31-jul.
-    filasPorTabla.set('gasto', []);
-    filasPorTabla.set('viaje', []);
-    filasPorTabla.set('liquidacion', [
-      { created_at: '2026-08-01T02:00:00.000000+00:00', total_comprobado: 1000 }, // día local 31-jul
-      { created_at: '2026-08-08T16:00:00.000000+00:00', total_comprobado: 500 },  // 10:00 CDMX, 8-ago
-    ]);
-
-    const r = await getSerieComparativa('t1', 7, 2, '2026-08-08');
-    // bucket 0 = 02..08 ago: solo el segundo cierre (día local 8-ago).
-    expect(r[0].liquidado).toBe(500);
-    // bucket 1 = 26 jul..01 ago: el cierre de "tarde" cae aquí, en su día local.
-    expect(r[1].liquidado).toBe(1000);
+  it('el error del RPC se propaga con contexto del caller', async () => {
+    rpcEstado.error = { message: 'relation public.serie_comparativa_tenant does not exist' };
+    await expect(getSerieComparativa('t1', 7, 2, '2026-08-08')).rejects.toThrow(/getSerieComparativa/);
   });
 });
