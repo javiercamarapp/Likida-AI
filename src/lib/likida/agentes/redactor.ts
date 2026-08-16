@@ -172,9 +172,9 @@ export async function redactarCorreoFrio(
   let costoUsd = 0;
   try {
     const r = await generateResponse({
-      // El rol BARATO del back office (16-ago-2026, decisión de Javier):
-      // DeepSeek V4 Flash — por aquí pasan datos de PROSPECTOS, nunca
-      // RFC/CFDI de un cliente (la frontera vive en models.ts).
+      // El rol BARATO del back office (16-ago-2026) — por aquí pasan datos
+      // de PROSPECTOS, nunca RFC/CFDI de un cliente (la frontera y el
+      // proveedor viven en models.ts).
       role: 'back_office',
       system: SYSTEM,
       messages: [{ role: 'user', content: `DOSSIER:\n${dossier}\n\nVENDEDOR (remitente): ${vendedorNombre}` }],

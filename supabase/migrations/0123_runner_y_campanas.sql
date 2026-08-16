@@ -16,8 +16,8 @@
 --     vivos + habilitados + con disparador cron + CON techo declarado: un
 --     agente sin presupuesto_dia_usd NO corre solo, por diseño.
 --     El redactor (C5) estrena la autonomía: cron, habilitado, techo $1/día
---     (~8,000 correos al precio medido de deepseek-v4-flash — el techo real
---     lo pone antes el tope de piezas y el de envío, este es el de DINERO).
+--     (miles de correos al precio del rol back_office — el techo real lo
+--     pone antes el tope de piezas y el de envío, este es el de DINERO).
 --  3. `campana` — el control del §4 del panel de adquisición: crear o subir
 --     presupuesto SIEMPRE es humano (el CHECK exige aprobador para estar
 --     activa); pausar es la acción de fricción mínima. El GASTO REAL llega

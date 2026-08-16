@@ -19,8 +19,8 @@
 // ⚖️ SOBERANÍA DE DATOS FISCALES (LFPDPPP, DOF 20-mar-2025): RFC y CFDI son
 //   datos personales. Todo lo que lleve RFC/CFDI va SOLO a proveedores US/EU
 //   con Zero Data Retention. El gateway fuerza ZDR con `data_collection:'deny'`
-//   en cada llamada. NUNCA usar APIs chinas directas (DeepSeek/Qwen/Kimi); si
-//   se usan sus pesos, solo vía host occidental. Fallbacks aquí son US.
+//   en cada llamada. REGLA (16-ago-2026): TODO el stack de este repo — defaults
+//   y fallbacks — es de proveedores USA. Sin excepciones por precio.
 //
 // 🔌 PLAN B DEMO: OpenRouter es punto único de falla (caídas ago-2025, feb-2026).
 //   Para el demo en vivo, tener keys directas de Google/Anthropic como respaldo.
@@ -58,35 +58,27 @@ const DEFAULTS: Record<ModelRole, string> = {
   // contesta charla y dudas del producto, y escala al analista (rol chat)
   // cuando hay que tocar datos. gpt-5-nano verificado ese día contra el
   // catálogo de OpenRouter: $0.05/$0.40 por M — 6× más barato que
-  // flash-lite y proveedor US (soberanía: los Qwen/DeepSeek baratos van a
-  // API china directa y RFC/CFDI no pueden pisar ahí).
+  // flash-lite, y proveedor US como todo el stack.
   chat_ligero: 'openai/gpt-5-nano',
   // Clasificador de intención por mensaje entrante.
   router: 'google/gemini-3.5-flash-lite',
-  // BACK OFFICE / agentes internos de LIKIDA (Redactor C5, runner nivel 2) —
-  // decisión de Javier del 16-ago-2026: "en mi back office y agentes usaremos
-  // modelos mucho más accesibles y chinos, no pasa nada; cuando toque escalar
-  // a un modelo mejor, sucede" (por env, sin deploy). Verificado ese día
-  // contra el catálogo de OpenRouter: deepseek-v4-flash $0.061/$0.123 por M,
-  // 1M ctx, tool calling — la mejor relación del catálogo barato (glm-4.7-
-  // flash $0.06/$0.40; gpt-5-nano $0.05/$0.40; qwen3.7-flash $0.03/$0.13).
-  //
-  // LA FRONTERA DE SOBERANÍA, AMPLIADA (16-ago, tercera pasada de Javier):
-  // por los roles chinos SOLO pasan datos de PROSPECTOS del censo público y
-  // contenido propio de Likida. JAMÁS: código del repo, RFC/CFDI,
-  // comprobantes, ni CUALQUIER información de usuarios/clientes — eso vive
-  // en roles USA (ocr/cuadre/chat/analisis/codigo/codigo_escritura/qa).
-  back_office: 'deepseek/deepseek-v4-flash',
+  // BACK OFFICE / agentes internos de LIKIDA (Redactor C5, runner nivel 2).
+  // REGLA FINAL DE JAVIER (16-ago-2026): TODO el stack que vive en este repo
+  // es de proveedores USA (OpenAI —incluidos sus open-weight—, Google,
+  // Anthropic). Cero exposición legal, y la información de usuarios jamás
+  // sale de esa jurisdicción. El piso de precio no se pierde: gpt-oss-120b
+  // (open-weight de OpenAI) da $0.03/$0.17 por M con tools — el mismo rango
+  // que cualquier alternativa barata del catálogo. Escalar sigue siendo por
+  // env, sin deploy. Verificado contra OpenRouter ese día.
+  back_office: 'openai/gpt-oss-120b',
   // ANÁLISIS DE DIRECCIÓN (el Copiloto del fundador y sus tools).
   // SEGUNDA verificación del 16-ago-2026 (Javier: "¿y Luna? cerciórate
-  // bien"): gpt-5.6-luna a $0.10/$0.60 por M, 1M ctx, tools — le GANA a
-  // glm-5.2 ($0.31/$0.97) en entrada Y salida, con proveedor US de paso.
+  // bien"): gpt-5.6-luna a $0.10/$0.60 por M, 1M ctx, tools — le gana en
+  // precio a todo lo comparado ese día en su banda de calidad.
   // Los otros candidatos del día, medidos y descartados: gemini-3.7-flash
   // $0.38/$1.88, grok-4.6 $2/$6, grok-4.20 $1.25/$2.50 (2M ctx — caro para
-  // este rol). Fallback: glm-5.2 (open-weight, cruce de proveedor).
-  // Escalación por env: kimi-k2-thinking ($0.60/$2.50) o deepseek-v4-pro
-  // ($0.66/$1.98). Por aquí pasan métricas agregadas de LIKIDA — no
-  // comprobantes de clientes.
+  // este rol). Fallback: flash-lite (cruce de proveedor). Por aquí pasan
+  // métricas agregadas de LIKIDA — no comprobantes de clientes.
   analisis: 'openai/gpt-5.6-luna',
   // ── Los roles POR ÁREA del organigrama de 54 agentes (16-ago-2026,
   // pedido de Javier: "cada agente su stack según su tipo de acción, los
@@ -95,19 +87,18 @@ const DEFAULTS: Record<ModelRole, string> = {
   // humana en docs/conocimiento/stack-modelos-agentes.md. ──────────────────
   //
   // EXTRACCIÓN (Cazador/Enriquecedor: parsear páginas y normalizar datos —
-  // volumen alto, cero creatividad): el piso absoluto con tools y 1M ctx.
-  extraccion: 'qwen/qwen3.7-flash',            // $0.03/$0.13
-  // MARKETING (contenido fiscal, lead magnet, SEO, guiones): Kimi K2.6 —
-  // la fama de prosa de Moonshot, a precio medio. Las CIFRAS siguen
-  // viniendo de la guía canónica en el prompt, jamás del modelo.
-  marketing: 'moonshotai/kimi-k2.6',           // $0.54/$2.28
+  // volumen alto, cero creatividad): el open-weight chico de OpenAI, el
+  // piso absoluto del catálogo USA.
+  extraccion: 'openai/gpt-oss-20b',            // $0.03/$0.13
+  // MARKETING (contenido fiscal, lead magnet, SEO, guiones): Luna escribe
+  // con oficio y cuesta centavos. Las CIFRAS siguen viniendo de la guía
+  // canónica en el prompt, jamás del modelo.
+  marketing: 'openai/gpt-5.6-luna',            // $0.10/$0.60
   // CÓDIGO — SOLO AUDITORÍA/LECTURA (auditor, migraciones, releases,
-  // rendimiento): produce HALLAZGOS y reportes; jamás un diff que se
-  // aplique. REGLA ENDURECIDA DE JAVIER (16-ago-2026, tercera pasada):
-  // "ningún modelo chino toca el código ni ve información de usuarios — no
-  // quiero meterme en problemas". La cacería queda en open-weight USA:
-  // gpt-oss-120b ($0.03/$0.17), el mismo de los testers — barato en manada.
-  // Escalación por env a luna/sonnet cuando un hallazgo lo amerite.
+  // rendimiento, seguridad): produce HALLAZGOS y reportes; jamás un diff
+  // que se aplique. La cacería es barata y en manada (mismo modelo que los
+  // testers); MODIFICAR el código es de codigo_escritura, y ese escala a
+  // los mejores.
   codigo: 'openai/gpt-oss-120b',               // $0.03/$0.17
   // CÓDIGO — ESCRITURA (pruebas y cualquier agente cuyo output sea un DIFF
   // que se aplica al repo): SOLO USA, escalando a los mejores — "eso escala
@@ -116,8 +107,8 @@ const DEFAULTS: Record<ModelRole, string> = {
   // opus-5 por env. El diff resultante TAMBIÉN pasa por aprobación humana.
   codigo_escritura: 'anthropic/claude-sonnet-5', // $2/$10 (intro hasta 31-ago)
   // QA / TESTERS (vigilante de calidad, ejército QA de Fase 3): juicio
-  // adversarial barato — open-weight de OpenAI (USA: los testers también
-  // ven código y producto, así que la regla del 16-ago aplica igual).
+  // adversarial barato — razonamiento por centavos, mismo modelo que la
+  // auditoría: cazan juntos.
   qa: 'openai/gpt-oss-120b',                   // $0.03/$0.17
 };
 

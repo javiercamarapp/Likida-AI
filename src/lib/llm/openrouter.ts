@@ -78,23 +78,13 @@ const FALLBACK: Record<string, string> = {
   'google/gemini-2.5-flash-lite': 'anthropic/claude-haiku-4.5',
   'google/gemini-2.5-flash': 'anthropic/claude-haiku-4.5',
   'google/gemini-3-flash-preview': 'anthropic/claude-haiku-4.5',
-  // El back office barato (16-ago-2026): DeepSeek caído cae a GLM (Z.AI) —
-  // cruce de proveedor dentro de la misma banda de precio; texto puro con
-  // tools, no visión.
-  'deepseek/deepseek-v4-flash': 'z-ai/glm-4.7-flash',
-  'z-ai/glm-4.7-flash': 'qwen/qwen3.7-flash',
-  // El análisis de dirección (copiloto): Luna caída cae a GLM-5.2 (cruce
-  // de proveedor, open-weight, 1M ctx); GLM a su vez cae a MiniMax M3.
-  'openai/gpt-5.6-luna': 'google/gemini-3.5-flash-lite',
-  'z-ai/glm-5.2': 'minimax/minimax-m3',
   // Los roles por área (16-ago-2026) — cruce de proveedor en cada uno.
-  // OJO REGLA: los roles que ven CÓDIGO o datos de usuarios (codigo, qa,
-  // analisis) caen SOLO a proveedores USA — un fallback chino violaría la
-  // frontera en el peor momento (el proveedor primario caído).
-  'qwen/qwen3.7-flash': 'deepseek/deepseek-v4-flash',
-  'moonshotai/kimi-k2.6': 'z-ai/glm-5.2',
-  'qwen/qwen3-coder-next': 'deepseek/deepseek-v4-flash',
-  'openai/gpt-oss-120b': 'openai/gpt-5-nano',
+  // REGLA FINAL de ese día: TODO el stack del repo —defaults Y respaldos—
+  // es de proveedores USA; un fallback fuera de esa lista violaría la
+  // regla justo cuando el primario está caído.
+  'openai/gpt-5.6-luna': 'google/gemini-3.5-flash-lite',
+  'openai/gpt-oss-120b': 'google/gemini-3.5-flash-lite',
+  'openai/gpt-oss-20b': 'google/gemini-3.5-flash-lite',
 };
 
 /**
@@ -165,16 +155,10 @@ const PRICES: Record<string, [number, number]> = {
   // Luna re-verificada el 16-ago-2026: bajó a $0.10/$0.60 (la entrada
   // anterior [1,6] era de su lanzamiento) — es el rol `analisis`.
   'openai/gpt-5.6-luna': [0.10, 0.60],
-  // El stack barato del back office — verificado contra el catálogo público
-  // de OpenRouter el 16-ago-2026.
-  'deepseek/deepseek-v4-flash': [0.061, 0.123],
-  'z-ai/glm-4.7-flash': [0.06, 0.4],
-  'qwen/qwen3.7-flash': [0.03, 0.13],
-  'z-ai/glm-5.2': [0.31, 0.97],
-  'minimax/minimax-m3': [0.3, 1.2],
-  'moonshotai/kimi-k2.6': [0.54, 2.28],
-  'qwen/qwen3-coder-next': [0.12, 0.8],
+  // El stack barato del back office (open-weight de OpenAI) — verificado
+  // contra el catálogo público de OpenRouter el 16-ago-2026.
   'openai/gpt-oss-120b': [0.03, 0.17],
+  'openai/gpt-oss-20b': [0.03, 0.13],
 };
 
 /**
