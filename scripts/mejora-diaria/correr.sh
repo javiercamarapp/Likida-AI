@@ -63,8 +63,13 @@ cd "$TALLER"
 git fetch origin --quiet || { log "Sin red hacia origin — no arreglo sobre una base vieja."; exit 1; }
 
 ABIERTOS=0
+INTENTOS=0
 for i in $(seq 0 $((N - 1))); do
-  [ "$ABIERTOS" -ge "$TOPE" ] && { log "Tope diario alcanzado ($TOPE) — el resto queda pendiente en el registro."; break; }
+  # El tope cuenta CORRIDAS de claude -p, no PRs: la bolsa de la suscripción
+  # se gasta por corrida — 5 descartes también consumen (medido 16-ago: la
+  # primera versión topaba PRs y una corrida de puros descartes hizo 5).
+  [ "$INTENTOS" -ge "$TOPE" ] && { log "Tope diario de corridas alcanzado ($TOPE) — el resto queda pendiente en el registro."; break; }
+  INTENTOS=$((INTENTOS + 1))
 
   H=$(python3 -c "import json;print(json.dumps(json.load(open('$CARPETA/hoy-hallazgos.json'))['hallazgos'][$i],ensure_ascii=False))")
   HASH=$(echo "$H" | python3 -c "import json,sys;print(json.load(sys.stdin)['hash'])")
