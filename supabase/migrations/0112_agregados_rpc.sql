@@ -97,16 +97,30 @@
 -- CUADRE, con el `sum()` que lo resolvía ya viviendo en la base sin que nada
 -- lo llamara. Esta migración no repite ese trabajo: lo TERMINA.
 --
--- Y la RPC muerta tenía un BUG real, que se corrige aquí de paso: no
--- filtraba `monto > 0`. `getAcumuladoCombustible` en TS sí lo hacía ("los
--- duplicados y los montos no positivos quedan fuera por el mismo criterio
--- que usa el motor"). Sin ese filtro, una fila de monto 0 o NEGATIVO —un
--- duplicado excluido, un ajuste— habría entrado al `sum()` en cuanto alguien
--- la conectara: el denominador del 15% de combustible en efectivo (RFA 2026
--- regla 2.9) inflado por filas que ni el motor cuenta. La prueba de
--- equivalencia (`repo_acumulado.test.ts`) lo cubre explícitamente: un
--- dataset con montos negativos y en cero, JS viejo vs RPC corregida, mismo
--- resultado.
+-- La RPC muerta tampoco filtraba `monto > 0`, y este archivo se lo agrega.
+--
+-- ⚠️ CORRECCIÓN DEL 15-AGO-2026 — este párrafo decía que eso arreglaba "un
+-- BUG real": que sin el filtro, una fila NEGATIVA inflaría el denominador
+-- del 15% de la RFA. **Es falso, y la primera corrida del bloque 89 de
+-- `verificaciones.sql` lo probó**: al intentar sembrar el -777 del caso de
+-- prueba, Postgres lo rechazó con
+--   ERROR 23514: violates check constraint "gasto_monto_no_negativo"
+-- `gasto` tiene DOS restricciones que este encabezado ignoraba:
+-- `gasto_monto_no_negativo` (CHECK monto >= 0) y `gasto_monto_no_nan`
+-- (CHECK monto <> 'NaN'). Una fila negativa NUNCA fue posible, y el único
+-- no-positivo que la base admite es el CERO — que no mueve una suma.
+--
+-- O sea: el filtro `monto > 0` **no corrige nada; es defensa en profundidad**
+-- por si algún día se cae la restricción, y así hay que leerlo. Se queda
+-- puesto (cuesta cero y cubre ese día), pero llamarlo "corrección de bug"
+-- era exactamente lo que CLAUDE.md prohíbe: un comentario que le miente al
+-- que lo lea después. El guardia real es la restricción, y el bloque 89
+-- ahora vigila que siga viva en vez de medir un filtro sobre datos
+-- imposibles.
+--
+-- Misma corrección aplica al párrafo de NaN más abajo (`gasto_monto_no_nan`
+-- ya lo impide en la base) y a `repo_acumulado.test.ts`, que siembra montos
+-- negativos en memoria: pasa, pero verifica un caso que producción rechaza.
 --
 -- El resto del criterio ya estaba bien y no cambia: `forma_pago = '01'` es
 -- efectivo en el catálogo del SAT (un gasto SIN forma de pago no cuenta como
