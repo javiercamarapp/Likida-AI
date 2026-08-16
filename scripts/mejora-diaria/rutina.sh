@@ -36,6 +36,7 @@ cd "$TALLER"
 git fetch origin --quiet || { log "Sin red hacia origin — no trabajo sobre base vieja."; exit 1; }
 RAMA="mejora/$RUTINA-$HOY"
 git checkout --quiet -B "$RAMA" origin/master
+CENTINELA="$(mktemp)"   # todo archivo creado por la corrida es más nuevo que esto
 
 log "claude -p con el encargo…"
 # --output-format json: veredicto del campo `result` + telemetría de turnos
@@ -71,6 +72,26 @@ else
   log "Sin commits — $RESUMEN"
   git checkout --quiet --detach origin/master; git branch -D "$RAMA" 2>/dev/null || true
 fi
+
+# ── WhatsApp al personal de Javier: veredicto + reportes + piezas nuevas ──
+WA="$REPO/scripts/mejora-diaria/wa-notificar.sh"
+MSG="🤖 $RUTINA — $RESUMEN"
+[ -n "${URL:-}" ] && MSG="$MSG
+PR: $URL"
+bash "$WA" "$MSG" || true
+# Reportes que esta corrida dejó (documento adjunto):
+find "$CARPETA/reportes" -type f -newer "$CENTINELA" 2>/dev/null | head -2 | while read -r F; do
+  bash "$WA" "📄 $RUTINA: $(basename "$F")" "$F" || true
+done
+# Piezas nuevas en la cola de marketing (hasta 4 imágenes + el copy):
+COLA="$HOME/javiercamarapp/likida-marketing-cola"
+find "$COLA" -type f \( -name '*.png' -o -name '*.jpg' \) -newer "$CENTINELA" 2>/dev/null | head -4 | while read -r F; do
+  bash "$WA" "🖼 $RUTINA: $(basename "$(dirname "$F")")/$(basename "$F")" "$F" || true
+done
+find "$COLA" -type f \( -name 'post.md' -o -name '*-guion*.md' -o -name 'guion.md' \) -newer "$CENTINELA" 2>/dev/null | head -2 | while read -r F; do
+  bash "$WA" "📝 $RUTINA: para tu tap — $(basename "$(dirname "$F")")" "$F" || true
+done
+rm -f "$CENTINELA"
 
 osascript -e "display notification \"$RESUMEN\" with title \"Likida · $RUTINA\"" 2>/dev/null || true
 log "Fin."
