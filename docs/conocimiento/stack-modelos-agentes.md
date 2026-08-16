@@ -38,14 +38,17 @@ redacta dentro del agente despachado. Ese es el diseño §4 del copiloto.
 
 ## Las TRES fronteras que el precio no mueve
 
-0. **Escritura de código (16-ago)**: auditar con chinos está bien; **modificar
-   el código únicamente con modelos USA**, escalando a los mejores (Sonnet→
-   Opus). El pipeline completo, en palabras de Javier: los auditores
-   (`codigo`, chinos baratos) **solo buscan errores, fallos, huecos y bugs —
-   con ayuda de los testers** (`qa`, gpt-oss); lo que encuentran se convierte
-   en encargo, y el FIX lo escribe `codigo_escritura` (USA) — cuyo diff
-   también pasa por aprobación humana. Cazar barato en manada, arreglar caro
-   y una sola vez.
+0. **Código y datos de usuarios (16-ago, versión FINAL de Javier): "ningún
+   modelo chino toca el código ni ve información de usuarios — no quiero
+   meterme en problemas."** El pipeline queda: los auditores (`codigo`,
+   gpt-oss-120b — open-weight USA a $0.03/$0.17) **solo buscan errores,
+   fallos, huecos y bugs, con ayuda de los testers** (`qa`, gpt-oss-120b);
+   lo que encuentran se vuelve encargo y el FIX lo escribe
+   `codigo_escritura` (Sonnet→Opus, USA), con su diff a aprobación humana.
+   Cazar barato en manada (open-weight USA), arreglar caro y una sola vez.
+   Los fallbacks de los roles que ven código o datos de usuarios caen SOLO
+   a USA. Los modelos chinos quedan ÚNICAMENTE en: prospectos del censo
+   público (back_office/extraccion) y contenido propio (marketing).
 
 
 1. **Soberanía fiscal**: RFC/CFDI/comprobantes del CLIENTE jamás pisan los
@@ -92,7 +95,7 @@ NULL = no usa modelo de texto):
 | Scrapers / extracción | cazador, enriquecedor | `extraccion` → qwen3.7-flash | 0.03–0.13 |
 | Back office redacción | redactor✅, scorer, dossier, vigía, sdr, demo_prep, propuestas, soporte, onboarding×2, atención_faq, cobranza_saas, retención | `back_office` → deepseek-v4-flash | 0.061–0.123 |
 | Marketing / contenido | contenido_fiscal, lead_magnet, seo_distribucion | `marketing` → kimi-k2.6 | 0.54–2.28 |
-| Auditoría de código (HALLAZGOS, no diffs) | auditor_codigo, migraciones, releases, rendimiento, documentacion | `codigo` → qwen3-coder-next | 0.12–0.80 |
+| Auditoría de código (HALLAZGOS, no diffs) | auditor_codigo, migraciones, releases, rendimiento, documentacion | `codigo` → **gpt-oss-120b (USA)** | 0.03–0.17 |
 | **ESCRITURA de código (diffs al repo)** | pruebas + todo agente que modifique código | `codigo_escritura` → **claude-sonnet-5, SOLO USA** (escala a opus-5) | 2–10 |
 | QA de agentes | vigilante_calidad + ejército QA (Fase 3) | `qa` → gpt-oss-120b | 0.03–0.17 |
 | Financieros | analista_metricas, control_costos, tesoreria, cierre_mensual | `analisis` → gpt-5.6-luna | 0.10–0.60 |

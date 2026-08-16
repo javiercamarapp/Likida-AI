@@ -71,11 +71,11 @@ const DEFAULTS: Record<ModelRole, string> = {
   // 1M ctx, tool calling — la mejor relación del catálogo barato (glm-4.7-
   // flash $0.06/$0.40; gpt-5-nano $0.05/$0.40; qwen3.7-flash $0.03/$0.13).
   //
-  // LA FRONTERA DE SOBERANÍA SIGUE VIVA: por este rol pasan datos de
-  // PROSPECTOS (empresa/ciudad del censo público) y operación interna de
-  // Likida — jamás RFC/CFDI ni comprobantes de un CLIENTE, que se quedan en
-  // sus roles de siempre (ocr/cuadre/chat). La orden del 16-ago cubre el
-  // back office; no reabre esa frontera.
+  // LA FRONTERA DE SOBERANÍA, AMPLIADA (16-ago, tercera pasada de Javier):
+  // por los roles chinos SOLO pasan datos de PROSPECTOS del censo público y
+  // contenido propio de Likida. JAMÁS: código del repo, RFC/CFDI,
+  // comprobantes, ni CUALQUIER información de usuarios/clientes — eso vive
+  // en roles USA (ocr/cuadre/chat/analisis/codigo/codigo_escritura/qa).
   back_office: 'deepseek/deepseek-v4-flash',
   // ANÁLISIS DE DIRECCIÓN (el Copiloto del fundador y sus tools).
   // SEGUNDA verificación del 16-ago-2026 (Javier: "¿y Luna? cerciórate
@@ -102,11 +102,13 @@ const DEFAULTS: Record<ModelRole, string> = {
   // viniendo de la guía canónica en el prompt, jamás del modelo.
   marketing: 'moonshotai/kimi-k2.6',           // $0.54/$2.28
   // CÓDIGO — SOLO AUDITORÍA/LECTURA (auditor, migraciones, releases,
-  // rendimiento): el especialista coder con la mejor relación del catálogo.
-  // REGLA DE JAVIER (16-ago-2026): "las auditorías pueden ser con chinos,
-  // pero MODIFICAR el código únicamente con modelos USA". Este rol produce
-  // HALLAZGOS y reportes; jamás un diff que se aplique.
-  codigo: 'qwen/qwen3-coder-next',             // $0.12/$0.80
+  // rendimiento): produce HALLAZGOS y reportes; jamás un diff que se
+  // aplique. REGLA ENDURECIDA DE JAVIER (16-ago-2026, tercera pasada):
+  // "ningún modelo chino toca el código ni ve información de usuarios — no
+  // quiero meterme en problemas". La cacería queda en open-weight USA:
+  // gpt-oss-120b ($0.03/$0.17), el mismo de los testers — barato en manada.
+  // Escalación por env a luna/sonnet cuando un hallazgo lo amerite.
+  codigo: 'openai/gpt-oss-120b',               // $0.03/$0.17
   // CÓDIGO — ESCRITURA (pruebas y cualquier agente cuyo output sea un DIFF
   // que se aplica al repo): SOLO USA, escalando a los mejores — "eso escala
   // a mejores modelos, los que yo tengo que codificar" (Javier, 16-ago).
@@ -114,7 +116,8 @@ const DEFAULTS: Record<ModelRole, string> = {
   // opus-5 por env. El diff resultante TAMBIÉN pasa por aprobación humana.
   codigo_escritura: 'anthropic/claude-sonnet-5', // $2/$10 (intro hasta 31-ago)
   // QA / TESTERS (vigilante de calidad, ejército QA de Fase 3): juicio
-  // adversarial barato — open-weight de OpenAI, razonamiento por centavos.
+  // adversarial barato — open-weight de OpenAI (USA: los testers también
+  // ven código y producto, así que la regla del 16-ago aplica igual).
   qa: 'openai/gpt-oss-120b',                   // $0.03/$0.17
 };
 

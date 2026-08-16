@@ -85,13 +85,16 @@ const FALLBACK: Record<string, string> = {
   'z-ai/glm-4.7-flash': 'qwen/qwen3.7-flash',
   // El análisis de dirección (copiloto): Luna caída cae a GLM-5.2 (cruce
   // de proveedor, open-weight, 1M ctx); GLM a su vez cae a MiniMax M3.
-  'openai/gpt-5.6-luna': 'z-ai/glm-5.2',
+  'openai/gpt-5.6-luna': 'google/gemini-3.5-flash-lite',
   'z-ai/glm-5.2': 'minimax/minimax-m3',
-  // Los roles por área (16-ago-2026) — cruce de proveedor en cada uno:
+  // Los roles por área (16-ago-2026) — cruce de proveedor en cada uno.
+  // OJO REGLA: los roles que ven CÓDIGO o datos de usuarios (codigo, qa,
+  // analisis) caen SOLO a proveedores USA — un fallback chino violaría la
+  // frontera en el peor momento (el proveedor primario caído).
   'qwen/qwen3.7-flash': 'deepseek/deepseek-v4-flash',
   'moonshotai/kimi-k2.6': 'z-ai/glm-5.2',
   'qwen/qwen3-coder-next': 'deepseek/deepseek-v4-flash',
-  'openai/gpt-oss-120b': 'qwen/qwen3.7-flash',
+  'openai/gpt-oss-120b': 'openai/gpt-5-nano',
 };
 
 /**
