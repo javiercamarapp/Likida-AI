@@ -97,7 +97,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 const {
   getResumenNegocio, getCostoPorFaseModelo, getConversacionesActivas,
   getConteosPlataforma, getCorridasRecientes, getUltimaCorridaPorAgente, AGENTES_BITACORA,
-  getCorridasFallidas, getLiquidacionesEnRevisar,
+  getCorridasFallidas, getLiquidacionesEnRevisar, costoIaMesActual, costoIaDeTenant,
 } = await import('./negocio');
 
 describe('getResumenNegocio', () => {
@@ -620,5 +620,43 @@ describe('getLiquidacionesEnRevisar', () => {
   it('un fallo de lectura LANZA — una bandeja vacía sobre una base caída diría "nadie espera revisión"', async () => {
     respuestas.set('liquidacion', { data: null, error: { message: 'fetch failed' } });
     await expect(getLiquidacionesEnRevisar()).rejects.toThrow('fetch failed');
+  });
+});
+
+
+describe('costoIaMesActual — el widget de uso del sidebar (16-ago-2026)', () => {
+  beforeEach(() => { rpcs.clear(); llamadasRpc.length = 0; });
+
+  it('pide el MES de México a la agregación SQL y redondea a centavos', async () => {
+    rpcs.set('resumen_costo_ia', {
+      data: { ...RESUMEN_VACIO, totales: { n: 12, costoUsd: 0.041234, tokensIn: 1, tokensOut: 2 } },
+      error: null,
+    });
+    const r = await costoIaMesActual();
+    expect(r.mesUsd).toBe(0.04);
+    expect(r.llamadas).toBe(12);
+    expect(r.etiquetaMes).toMatch(/agosto|julio|septiembre|enero|febrero|marzo|abril|mayo|junio|octubre|noviembre|diciembre/);
+    const arg = llamadasRpc[0].args as { p_desde: string };
+    expect(arg.p_desde).toMatch(/-01T06:00:00/); // medianoche MX = 06:00Z
+  });
+
+  it('con la base caída LANZA — el widget dice "no se pudo leer", jamás $0', async () => {
+    rpcs.set('resumen_costo_ia', { data: null, error: { message: 'db down' } });
+    await expect(costoIaMesActual()).rejects.toThrow();
+  });
+});
+
+describe('costoIaDeTenant — la ficha 360', () => {
+  beforeEach(() => { rpcs.clear(); llamadasRpc.length = 0; });
+
+  it('toma la fila del tenant de porTenant; un tenant sin filas es $0 REAL (la agregación corrió)', async () => {
+    rpcs.set('resumen_costo_ia', {
+      data: { ...RESUMEN_VACIO, porTenant: [{ tenantId: 't-1', costoUsd: 0.123456 }] },
+      error: null,
+    });
+    const r = await costoIaDeTenant('t-1');
+    expect(r).toEqual({ historicoUsd: 0.12, d30Usd: 0.12 });
+    const otro = await costoIaDeTenant('t-sin-uso');
+    expect(otro).toEqual({ historicoUsd: 0, d30Usd: 0 });
   });
 });

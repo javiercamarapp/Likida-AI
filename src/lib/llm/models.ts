@@ -77,16 +77,17 @@ const DEFAULTS: Record<ModelRole, string> = {
   // sus roles de siempre (ocr/cuadre/chat). La orden del 16-ago cubre el
   // back office; no reabre esa frontera.
   back_office: 'deepseek/deepseek-v4-flash',
-  // ANÁLISIS DE DIRECCIÓN (el Copiloto del fundador y sus tools) — el
-  // flagship open-weight que a hoy orquesta media industria: GLM-5.2 (Z.AI),
-  // $0.31/$0.97 por M con 1M de contexto y tool calling, verificado contra
-  // el catálogo de OpenRouter el 16-ago-2026. SALIDA MÁS BARATA que el
-  // flash-lite que el copiloto usaba ($2.5/M out) con un tier de capacidad
-  // arriba. Escalación declarada (por env, sin deploy): kimi-k2-thinking
-  // ($0.60/$2.50) o deepseek-v4-pro ($0.66/$1.98) si el análisis se queda
-  // corto. Por aquí pasan métricas de LIKIDA (cross-tenant agregado) — no
+  // ANÁLISIS DE DIRECCIÓN (el Copiloto del fundador y sus tools).
+  // SEGUNDA verificación del 16-ago-2026 (Javier: "¿y Luna? cerciórate
+  // bien"): gpt-5.6-luna a $0.10/$0.60 por M, 1M ctx, tools — le GANA a
+  // glm-5.2 ($0.31/$0.97) en entrada Y salida, con proveedor US de paso.
+  // Los otros candidatos del día, medidos y descartados: gemini-3.7-flash
+  // $0.38/$1.88, grok-4.6 $2/$6, grok-4.20 $1.25/$2.50 (2M ctx — caro para
+  // este rol). Fallback: glm-5.2 (open-weight, cruce de proveedor).
+  // Escalación por env: kimi-k2-thinking ($0.60/$2.50) o deepseek-v4-pro
+  // ($0.66/$1.98). Por aquí pasan métricas agregadas de LIKIDA — no
   // comprobantes de clientes.
-  analisis: 'z-ai/glm-5.2',
+  analisis: 'openai/gpt-5.6-luna',
 };
 
 const ENV_KEY: Record<ModelRole, string> = {
