@@ -27,8 +27,8 @@ function rotuloDias(dias: number[]): string {
 }
 
 /**
- * El render del Agente de Cobranza (Fase 1 del plan). Tres zonas de la
- * anatomía de referencia: la cola honesta (a quién va a insistir Y a quién no puede,
+ * El render del Agente de Cobranza (Fase 1 del plan). Tres zonas: la
+ * cola honesta (a quién va a insistir Y a quién no puede,
  * con el porqué), la bitácora de lo que ya hizo, y la estrategia que el
  * cliente edita con la vista previa del mensaje real.
  *

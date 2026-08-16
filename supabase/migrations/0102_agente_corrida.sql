@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0102 — LA BITÁCORA DE CORRIDAS DE LOS AGENTES (hallazgo B3, auditoría 4).
 --
--- Es la pieza de la arquitectura de referencia que más faltaba: su ficha de agente enseña
+-- Es la pieza que más faltaba: hace falta una ficha de agente que enseñe
 -- «Periodo · Estado · Tareas 2/2 · Duración · Fecha» por corrida. En Likida,
 -- el único rastro de que un agente corrió era `logger.info` — que el cliente
 -- no ve. La consecuencia está escrita en el plan de la ronda: **sin

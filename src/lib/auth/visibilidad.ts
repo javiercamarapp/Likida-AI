@@ -102,7 +102,7 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/conductores': 'operacion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
-  // Notificaciones (14-ago-2026) — el "alertas primero" de la referencia, con página
+  // Notificaciones (14-ago-2026) — el "alertas primero", con página
   // propia. Es `operacion` para que la vean TODOS los roles, y no porque sea
   // inofensiva: cada alerta se filtra ADENTRO con este mismo `puedeVerRuta`
   // contra la pantalla donde se resuelve, así que un encargado no recibe el

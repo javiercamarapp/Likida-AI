@@ -32,8 +32,8 @@ function duracion(ms: number | null): string {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * LA TRAZA DE UNA CORRIDA — anatomía FlowAI (misma factura que
- * /admin/soporte): una fila de `agente_corrida` (0102) abierta con todo lo
+ * LA TRAZA DE UNA CORRIDA — misma anatomía que
+ * /admin/soporte: una fila de `agente_corrida` (0102) abierta con todo lo
  * que se puede AFIRMAR de ella: agente, flota, estado, duración, tareas, su
  * resumen, su error redactado, y el costo de IA de esa flota EN LA VENTANA
  * de la corrida.
@@ -95,7 +95,7 @@ export default async function TrazaCorridaPage({
         />
 
         <div className="px-5 py-5 flex-1 space-y-2.5">
-          {/* ── El renglón de referencia: Estado · Tareas · Duración · Costo ──── */}
+          {/* ── El renglón resumen: Estado · Tareas · Duración · Costo ──── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
               <div className="text-xs" style={{ color: 'var(--muted)' }}>Estado</div>

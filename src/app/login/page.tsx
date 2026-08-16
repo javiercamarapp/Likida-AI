@@ -106,11 +106,10 @@ export default async function Login({
 
   // ── EL LOGIN HABLA EL IDIOMA DEL PRODUCTO ─────────────────────────────────
   //
-  // La estructura sigue siendo la de un login de referencia (dos columnas, imagen
-  // a la derecha), que es un buen layout y no hay por qué cambiarlo. Lo que se
-  // fue el 14-ago-2026 son los COLORES Y LA TIPOGRAFÍA de esa referencia, que estaban
-  // literales aquí (#0a0a0a, #e5e5e5, #6b6b6b) "a propósito, para que quede
-  // idéntico".
+  // La estructura es de dos columnas con imagen
+  // a la derecha, un layout que funciona bien y no hay por qué cambiar. Lo que se
+  // fue el 14-ago-2026 fueron unos COLORES Y TIPOGRAFÍA que estaban
+  // literales aquí (#0a0a0a, #e5e5e5, #6b6b6b) y no eran los de Likida.
   //
   // El problema de esa decisión: el login es la PRIMERA pantalla del producto
   // y era la única que no se parecía al producto. Un contralor entraba a una

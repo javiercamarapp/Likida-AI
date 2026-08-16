@@ -2,7 +2,7 @@
 // LA BITÁCORA DE CORRIDAS — el historial que el cliente SÍ ve (B3, aud. 4).
 //
 // Hasta hoy, el único rastro de que un agente corrió era `logger.info`, que
-// vive en Vercel y el cliente no puede abrir. La ficha de referencia enseña
+// vive en Vercel y el cliente no puede abrir. Hace falta una ficha que enseñe
 // «Periodo · Estado · Tareas 2/2 · Duración · Fecha» por corrida; esta tabla
 // (0102) es esa ficha, una fila por (corrida × flota).
 //

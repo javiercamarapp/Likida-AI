@@ -9,13 +9,11 @@
 //
 // POR QUÉ ESTO NO ES UN RAG VECTORIAL, Y NO DEBE SERLO:
 //
-// El producto de referencia presume "chatea con tus registros", y en su demo
-// se ven sus pasos
-// reales: `Counting sor_policy… ✓ Found 674`. Eso NO es búsqueda por
-// embeddings, es consulta estructurada sobre su sistema de registro — que es
+// "Chatea con tus registros" no necesita búsqueda por
+// embeddings: necesita consulta estructurada sobre el sistema de registro — que es
 // exactamente lo que `chat-tools.ts` ya hace aquí (kpis_flota, viajes_flota,
-// motor_fiscal). Copiar un vector store para el chat sería copiar algo que
-// esa referencia no tiene.
+// motor_fiscal). Un vector store para el chat sería resolver con búsqueda
+// difusa algo que ya se resuelve con una consulta exacta.
 //
 // Y para ESTE corpus sería peor que inútil. Un embedding devuelve "lo más
 // parecido" y no sabe distinguir una LEY de un criterio no vinculativo, ni una

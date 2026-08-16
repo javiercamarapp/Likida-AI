@@ -74,7 +74,7 @@ const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 
 const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
 /**
- * Inicio de /admin — la consola de Javier. Misma anatomía FlowAI que los
+ * Inicio de /admin — la consola de Javier. Misma anatomía que los
  * otros tres inicios (`inicio-contenido`, `inicio-contador`,
  * `inicio-operacion`): barra de página + saludo sobre el lienzo tenue
  * (`--g1`), tarjetas blancas encima.
@@ -156,8 +156,8 @@ export async function ConsolaAdmin({
 
   return (
     // El scroll vive en el marco del layout; el lienzo del contenido es
-    // TENUE (`--g1`) y las piezas son tarjetas blancas encima — la anatomía
-    // FlowAI de los otros tres inicios, en la casa del superadmin.
+    // TENUE (`--g1`) y las piezas son tarjetas blancas encima — la misma
+    // anatomía de los otros tres inicios, en la casa del superadmin.
     <main className="h-full">
       <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
         <BarraPagina
@@ -293,7 +293,7 @@ export async function ConsolaAdmin({
             </div>
 
             {/* Los agentes de FLOTA + ventas (bitácora `agente_corrida`,
-                0102/0105) — la ficha «Estado · Cuándo · Tareas» de referencia,
+                0102/0105) — la ficha «Estado · Cuándo · Tareas»,
                 cruzada por todas las flotas. El catálogo de nombres es el
                 mismo de notificaciones.ts, no una copia. */}
             <div className="mt-4">

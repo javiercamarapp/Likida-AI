@@ -33,7 +33,7 @@ function diasParaVencer(vence: string, hoy: string): number {
 
 /**
  * El Registro de Operadores (F2): quién maneja, cómo localizarlo y qué
- * vigencia lo ancla — el patrón de vigencias de referencia aplicado a la licencia (0053).
+ * vigencia lo ancla — el mismo patrón de vigencias aplicado a la licencia (0053).
  * "Sin registrar" se dice tal cual: inventar una fecha marcaría de vencido
  * (o de vigente) a quien no lo está.
  */

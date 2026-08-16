@@ -22,7 +22,7 @@ import { AvisoSinFlota } from './sin-flota';
 // no ve nada de eso (visibilidad.ts), así que aterrizaba en una pantalla
 // llena de huecos o, peor, en una que le enseñaba justo lo que no le toca.
 //
-// Esta es la misma casa con otro contenido: la MISMA anatomía FlowAI del
+// Esta es la misma casa con otro contenido: la MISMA anatomía del
 // Resumen (12-ago-2026 — barra de página, saludo sobre el lienzo tenue,
 // tarjetas blancas encima), pero lo que hay adentro es lo que él persigue en
 // la mañana: qué no tiene chofer, qué papel vence, quién trae cuánto, y qué
@@ -77,7 +77,7 @@ export async function InicioOperacion({
     safe<CargaOperador[]>(() => getCargaOperadores(tenantId)),
     safe<IncidenciaRow[]>(() => getIncidencias(tenantId)),
     safe<ViajeRow[]>(() => getViajes(tenantId)),
-    // Las vigencias que anclan (patrón de referencia, ver `vigencias.ts`): vivían
+    // Las vigencias que anclan (ver `vigencias.ts`): vivían
     // solo en /unidades y /operadores, o sea que avisaban únicamente a quien
     // ya había abierto la página — aquí suben al inicio, que es donde el
     // aviso sirve de algo.
@@ -168,7 +168,7 @@ export async function InicioOperacion({
   return (
     // El scroll vive DENTRO del panel (patrón FASE 1.5). El lienzo del
     // contenido es TENUE (`--g1`) y las piezas son tarjetas blancas encima —
-    // la anatomía de la referencia; la barra y el saludo van sobre blanco.
+    // misma anatomía en toda la app; la barra y el saludo van sobre blanco.
     <main className="h-full">
       <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
         <BarraPagina
