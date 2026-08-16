@@ -6,11 +6,10 @@
 // tratan) ni que `/aviso/[tenant]` (el aviso que la flota le da a SUS choferes):
 // esto es el CONTRATO de uso entre Likida y la empresa que la contrata.
 //
-// LA COBERTURA de secciones se modeló sobre usehandle.ai —mismo mercado, mismo
-// canal (WhatsApp Business Platform), misma jurisdicción—, pero el TEXTO es
-// propio y describe lo que Likida de verdad hace. Copiar sus términos habría
-// puesto el nombre de Likida sobre las obligaciones, la entidad y la
-// jurisdicción de otra empresa, y sobre un servicio que no es éste.
+// LA COBERTURA de secciones responde al mercado y canal propios de Likida
+// (WhatsApp Business Platform, jurisdicción mexicana), y el TEXTO es
+// propio y describe lo que Likida de verdad hace: las obligaciones, la
+// entidad y la jurisdicción son las de este servicio, no las de otro.
 //
 // LAS DOS CLÁUSULAS QUE MÁS IMPORTAN AQUÍ, y que no son de plantilla:
 //

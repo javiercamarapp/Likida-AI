@@ -71,7 +71,7 @@ function Conector({
  * usa Inicio), porque eso es lo único honesto que se puede decir de un
  * "proveedor de LLM": no cuáles se PODRÍAN usar, sino cuáles YA se usaron.
  *
- * Re-envuelta en la anatomía FlowAI (14-ago): lienzo `--g1` + `BarraPagina`
+ * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
  * con el ícono de `rutas.ts`.
  */
 export default async function IntegracionesPage() {

@@ -31,7 +31,7 @@ const FUERA_DE_ALCANCE = [
  * aquí mismo (mismo patrón que la sección "Conversaciones de WhatsApp" de
  * Inicio).
  *
- * Re-envuelta en la anatomía FlowAI (14-ago): lienzo `--g1` + `BarraPagina`
+ * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
  * con el ícono de `rutas.ts` (Server). Las mitades vacías siguen vacías y
  * lo dicen — solo cambió la envoltura.
  */

@@ -15,9 +15,9 @@ import type { TableroOperacion, CargaOperador } from '@/lib/likida/operacion';
 // (los formularios de asignar/crear viaje), inicio-operacion.tsx nunca las
 // usó — se fueron con la página.
 //
-// Restyleado el 14-ago-2026 a la anatomía FlowAI del Resumen del dueño: los
-// tres KPI de contexto pasaron de `KpiTile` a `StatCard` (la caja interna de
-// la referencia) para que las dos filas hablen el mismo lenguaje visual. Y
+// Restyleado el 14-ago-2026 a la anatomía de página del Resumen del dueño: los
+// tres KPI de contexto pasaron de `KpiTile` a `StatCard` (la misma caja
+// interna) para que las dos filas hablen el mismo lenguaje visual. Y
 // llegó `TablaViajesOperacion`: la tabla de viajes recientes SIN pesos — la
 // del dueño (`TablaViajes`, resumen-visual.tsx) enseña el anticipo, y esa
 // columna es exactamente lo que este rol no ve.

@@ -33,7 +33,7 @@ export function TituloSeccion({ children }: { children: ReactNode }) {
 
 // ── Encabezado de página ─────────────────────────────────────────────────
 
-/** La barra superior de la referencia FlowAI: breadcrumb de página a la
+/** La barra superior: breadcrumb de página a la
  *  izquierda, lo contextual (badge de superadmin, filtros) a la derecha,
  *  separada del contenido por un hairline. SIN buscador ni campana: no hay
  *  búsqueda ni notificaciones reales en /dashboard, y un control que no
@@ -50,7 +50,7 @@ export function BarraPagina({ icono, titulo, derecha }: { icono?: ReactNode; tit
   );
 }
 
-/** El chip de fecha de la referencia ("27 April, 2026") — la fecha REAL del
+/** El chip de fecha ("27 April, 2026") — la fecha REAL del
  *  servidor, formateada por `lib/formato` como todo lo demás. */
 export function ChipFecha({ icono, children }: { icono?: ReactNode; children: ReactNode }) {
   return (
@@ -61,8 +61,8 @@ export function ChipFecha({ icono, children }: { icono?: ReactNode; children: Re
   );
 }
 
-/** El saludo, limpio (patrón FlowAI: "Welcome Back, Jane!" — sin emoji,
- *  como la referencia). Se pinta en los tres estados (vacío, parcial, con
+/** El saludo, limpio (estilo "Welcome Back, Jane!" — sin emoji).
+ *  Se pinta en los tres estados (vacío, parcial, con
  *  datos): el tagline es una frase de bienvenida, no una cifra del negocio
  *  — no le aplica la regla de "nunca inventar". `derecha` es el slot del
  *  chip de fecha / CTA cuando exista una acción real. */
@@ -107,7 +107,7 @@ export const PILL_ESTATUS: Record<string, { estado: Estado; etiqueta: string }> 
 };
 
 /**
- * La tabla de la referencia FlowAI ("Active Workflows"), con los viajes
+ * La tabla de viajes
  * REALES de la flota: folio + ruta, operador, anticipo, estatus como pill y
  * fecha de inicio. "Ver" solo en los liquidados — `/dashboard/[id]` es el
  * detalle de la LIQUIDACIÓN (pantalla de dinero), un viaje abierto no tiene

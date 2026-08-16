@@ -83,7 +83,7 @@ const FASE_LABEL: Record<string, string> = {
  * magnitudes no-negativas por fase/modelo. `Dona` y la lista con
  * `IconoProveedor` ya son el mejor ajuste real para esa forma de dato.
  *
- * Anatomía FlowAI (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
+ * Anatomía de página (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
  * (--g1), como consola.tsx — solo cambió la envoltura visual; las server
  * actions y toda la lógica de cobro quedaron tal cual.
  */

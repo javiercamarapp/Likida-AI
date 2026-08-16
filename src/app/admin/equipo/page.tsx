@@ -38,7 +38,7 @@ function InsigniaRol({ rol }: { rol: string }) {
  * operativa del negocio (los de Likida primero: superadmin → vendedor;
  * luego la flota: dueño → encargado → contador), no alfabético.
  *
- * Anatomía FlowAI (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
+ * Anatomía de página (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
  * (--g1); el subtítulo que vivía en el header viejo ahora abre la tarjeta.
  */
 export default async function EquipoPage() {

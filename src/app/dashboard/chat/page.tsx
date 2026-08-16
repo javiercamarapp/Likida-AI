@@ -8,10 +8,9 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Preguntar a la IA — LA PRIMERA página reconstruida tras el borrado del
- * 10-ago-2026, pedida explícita el 12-ago: "cuando le aprietes a preguntarle
- * a AI que te abra una página idéntica así [usehandle.ai] pero con el logo
- * de Likida". La composición hero ya vivía en `ChatFlota` (variante 'hero',
- * sobrevivió al borrado porque el componente lo usa también el rail).
+ * 10-ago-2026, pedida explícita el 12-ago: una página hero propia con el
+ * logo de Likida. La composición hero ya vivía en `ChatFlota` (variante
+ * 'hero', sobrevivió al borrado porque el componente lo usa también el rail).
  *
  * REGLA DE SEGURIDAD HEREDADA (inventario §12, corregida en su momento):
  * `getKpis`/`getAcreditables` se piden DESPUÉS de `puedeVerArea(rol,

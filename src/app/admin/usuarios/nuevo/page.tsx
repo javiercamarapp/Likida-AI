@@ -20,7 +20,7 @@ const ROLES: Array<{ valor: RolAppUser; etiqueta: string }> = [
  * referencia no tenía equivalente real en Likida (no hay agentes que un
  * superadmin cree); esto sí es una tarea real y recurrente.
  *
- * Anatomía FlowAI (14-ago): BarraPagina + la forma en una tarjeta blanca
+ * Anatomía de página (14-ago): BarraPagina + la forma en una tarjeta blanca
  * sobre el lienzo tenue (--g1).
  */
 export default async function NuevoUsuario() {

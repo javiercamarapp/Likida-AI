@@ -30,7 +30,7 @@ export default async function VendedorLayout({ children }: { children: React.Rea
   }
 
   return (
-    <div className="min-h-dvh tema-neutro" style={{ fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>
+    <div className="min-h-dvh tema-neutro" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
       <Fondo />
       <div className="relative z-10 max-w-6xl mx-auto p-4 space-y-3">
         <header className="glass-panel rounded-2xl px-4 h-14 flex items-center gap-2.5">

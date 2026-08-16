@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
  * bot de WhatsApp conversando 1 a 1 con cada chofer (ver Conversaciones en
  * Inicio y en WhatsApp Infra), no un envío masivo.
  *
- * Re-envuelta en la anatomía FlowAI (14-ago): lienzo `--g1` + `BarraPagina`
+ * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
  * con el ícono de `rutas.ts` — el mismo chrome que el resto de /admin. El
  * mensaje honesto es el mismo de antes, ni una palabra cambiada.
  */

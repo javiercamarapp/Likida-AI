@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS CORRIDAS VISTAS DESDE ARRIBA — `agente_corrida` (0102) cruzada por
 // TODOS los tenants, para /admin/observabilidad (la lista) y
-// /admin/corridas/[id] (la traza de UNA corrida, anatomía FlowAI).
+// /admin/corridas/[id] (la traza de UNA corrida).
 //
 // La lectura POR FLOTA ya existe (`ultimasCorridas` en agentes/corridas.ts,
 // la ficha del cliente); esto es el otro ángulo: el superadmin mirando todas.

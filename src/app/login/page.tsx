@@ -180,7 +180,7 @@ export default async function Login({
                       Mono la «O» mayúscula es casi idéntica al cero, y en el
                       primer render este separador se leía «0». Un caracter
                       suelto no tiene contexto que lo desambigüe. */}
-                  <span className="text-[13px] lowercase" style={{ color: 'var(--faint)', fontFamily: 'var(--font-sans-handle), var(--font-sans)' }}>o</span>
+                  <span className="text-[13px] lowercase" style={{ color: 'var(--faint)', fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>o</span>
                   <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
                 </div>
 

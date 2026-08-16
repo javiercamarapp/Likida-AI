@@ -298,7 +298,7 @@ html, body {
 /* ── Voces tipográficas (12-ago-2026) ────────
    Tres voces, cada una con su papel — pedido explícito: "tipografía más
    corporativa":
-   · Inter (base, --font-sans-handle) — todo el texto de UI.
+   · Inter (base, --font-sans-ui) — todo el texto de UI.
    · Inter Tight (--font-display) — SOLO titulares y la cifra grande de una
      stat: la grotesca apretada de los encabezados.
    · IBM Plex Mono (--font-mono) — micro-rótulos en mayúsculas y cifras de

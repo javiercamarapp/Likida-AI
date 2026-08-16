@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
  * magic number, LTV/CAC — requiere datos financieros que este panel no
  * captura hoy, así que se dice en tono neutral, sin inventar ni disculparse.
  *
- * Anatomía FlowAI (14-ago): BarraPagina + tarjetas blancas sobre el lienzo
+ * Anatomía de página (14-ago): BarraPagina + tarjetas blancas sobre el lienzo
  * tenue (--g1), como consola.tsx — el contador Solari del MRR no cabe en la
  * barra de 44px, así que vive en la primera tarjeta, junto a la frase que
  * antes era el subtítulo del header.

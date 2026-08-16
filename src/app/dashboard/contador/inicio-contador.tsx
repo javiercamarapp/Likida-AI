@@ -33,7 +33,7 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 
 /**
  * Inicio del PANEL DEL CONTADOR — el Resumen de quien vive del dinero y del
- * papel, y no despacha. Misma anatomía FlowAI que el Resumen del dueño
+ * papel, y no despacha. Misma anatomía de página que el Resumen del dueño
  * (`inicio-contenido.tsx`): barra de página, saludo con chip de fecha sobre
  * el lienzo tenue, y tarjetas blancas encima. Lo que cambia es el contenido:
  * aquí no hay despacho, ni viajes recientes, ni carga por operador — hay

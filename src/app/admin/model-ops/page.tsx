@@ -28,7 +28,7 @@ const FASES = [
  * la regla del proyecto. Todo lo que se ve aquí sale de `llm_costo`
  * (`getResumenNegocio`/`getCostoPorFaseModelo`).
  *
- * Re-envuelta en la anatomía FlowAI (14-ago): lienzo `--g1` + `BarraPagina`
+ * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
  * con el ícono de `rutas.ts`; las fichas de fase son las fichas internas de
  * la consola (hairline sobre --surface). Cifras y fuente no cambian.
  */

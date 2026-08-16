@@ -17,7 +17,7 @@ const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
  * (`getResumenNegocio`/`getCostoPorFaseModelo`) y `gasto` para el histórico
  * de facturas.
  *
- * Re-envuelta en la anatomía FlowAI (14-ago): lienzo `--g1` + `BarraPagina`
+ * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
  * con el ícono de `rutas.ts` + `StatCard` del kit (el histórico de facturas
  * que vivía en el `ContadorRetro` del header viejo es ahora el tercer KPI —
  * misma cifra, misma fuente). Un cero aquí es MEDIDO: cero filas en
