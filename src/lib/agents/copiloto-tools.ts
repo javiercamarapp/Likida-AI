@@ -16,6 +16,7 @@
 import { registerTool } from '@/lib/llm/tool-executor';
 import { getResumenNegocio, getConteosPlataforma, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
+import { clasificacionDeGuardia } from '@/lib/admin/guardia';
 import { ultimasEntradasBitacora } from '@/lib/admin/bitacora';
 import { corridasRecientes, trazaDeCorrida } from '@/lib/admin/corridas-cruzadas';
 import { listarInterruptores } from '@/lib/likida/interruptores';
@@ -28,7 +29,7 @@ const SIN_PARAMS = { type: 'object', properties: {}, additionalProperties: false
 /** Los nombres que el motor del copiloto expone al modelo — la lista es el
  *  sandbox: una tool que no esté aquí no existe para este agente. */
 export const TOOLS_COPILOTO_LECTURA = [
-  'metrica_negocio', 'conteos_plataforma', 'bandeja', 'metrica_norte',
+  'metrica_negocio', 'conteos_plataforma', 'bandeja', 'guardia', 'metrica_norte',
   'estado_agentes', 'traza_corrida', 'pipeline_ventas', 'cobranza_saas',
   'costo_por_fase_modelo', 'bitacora',
 ] as const;
@@ -38,6 +39,7 @@ export const PANTALLA_POR_TOOL: Record<string, { ruta: string; etiqueta: string 
   metrica_negocio: { ruta: '/admin', etiqueta: 'Consola / Inicio' },
   conteos_plataforma: { ruta: '/admin', etiqueta: 'Consola / Inicio' },
   bandeja: { ruta: '/admin/escalaciones', etiqueta: 'Escalaciones' },
+  guardia: { ruta: '/admin/escalaciones', etiqueta: 'Escalaciones' },
   metrica_norte: { ruta: '/admin', etiqueta: 'Consola / Inicio' },
   estado_agentes: { ruta: '/admin/observabilidad', etiqueta: 'Observabilidad' },
   traza_corrida: { ruta: '/admin/corridas', etiqueta: 'Corridas' },
@@ -110,6 +112,27 @@ registerTool('bandeja', {
         fuente: i.fuente, titulo: i.titulo, flota: i.tenantNombre, desde: i.desde, vence: i.vence,
       })),
       enCola: b.cola.length,
+    };
+  },
+});
+
+registerTool('guardia', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'guardia',
+      description: 'El guardia de alertas (A0): clasifica la bandeja completa por severidad del runbook (S2 = una función dejó de operar; S3 = espera decisión con el sistema operando; fuente ciega = S2 por sí misma), con la regla citada por item. NO detecta S1 (el sistema mintiendo) — eso llega por otro canal y lo dice.',
+      parameters: SIN_PARAMS,
+    },
+  },
+  handler: async () => {
+    const c = await clasificacionDeGuardia(ahoraMs());
+    return {
+      pantalla: PANTALLA_POR_TOOL.guardia.ruta,
+      porSeveridad: c.porSeveridad,
+      fuentesCiegas: c.fuentesCiegas,
+      items: c.items.slice(0, 15),
+      limites: c.limites,
     };
   },
 });
