@@ -16,7 +16,7 @@ import {
   type GastoFiscal, type ResumenPerdidas, type GastosFiscalesSeries,
 } from '@/lib/likida/fiscal';
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, TZ_MX } from '@/lib/formato';
+import { fechaMx, mxn, pctCambio, TZ_MX } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
 import {
@@ -24,7 +24,7 @@ import {
   type FilaViaje,
 } from './resumen-visual';
 import { ViajesRecientes } from './viajes-recientes';
-import { StatCard } from '../admin/ui/kit';
+import { StatCard, BannerInsight } from '../admin/ui/kit';
 import { BarraAcciones, type ItemBusqueda } from './barra-acciones';
 import { KpiPeriodo } from './kpi-periodo';
 import { MotorFiscalPeriodo } from './motor-fiscal-periodo';
@@ -197,6 +197,17 @@ export async function InicioContenido({
     };
   });
 
+  // ── El insight de la semana (BannerInsight, 16-ago-2026) ────────────────
+  // La noticia POSITIVA del periodo, con la regla de siempre: solo se monta
+  // con dato real. La serie semanal ya está cargada para la gráfica
+  // "Liquidado" de abajo — el último bucket es la semana en curso y el
+  // penúltimo la anterior; `pctCambio` devuelve null sin comparable y el
+  // chip se omite. Con $0 liquidado esta semana NO hay banner: un insight
+  // de relleno es ruido, no noticia.
+  const bucketsLiq = liquidadoSemanalSeries?.semanal ?? [];
+  const liqSemanaActual = bucketsLiq.length > 0 ? bucketsLiq[bucketsLiq.length - 1].valor : 0;
+  const liqSemanaAnterior = bucketsLiq.length > 1 ? bucketsLiq[bucketsLiq.length - 2].valor : null;
+
   // La campana enseña PENDIENTES reales — los mismos que perdieron su
   // tarjeta cuando Cuadre se borró el 10-ago. Aquí son texto: el link
   // regresa cuando esa página exista.
@@ -257,6 +268,17 @@ export async function InicioContenido({
               no existe, y esa frase tiene que llegar antes que los ceros. */}
           {!tenantExiste && (
             <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
+          )}
+
+          {/* El insight ANTES que las alertas (patrón de la referencia): la
+              noticia del negocio abre; los pendientes accionables siguen
+              justo debajo, cada uno con su puerta. */}
+          {liqSemanaActual > 0 && (
+            <div className="mt-3">
+              <BannerInsight etiqueta="Esta semana" deltaPct={pctCambio(liqSemanaActual, liqSemanaAnterior)} href="#estadisticas">
+                Tu flota liquidó <b className="tabular">{mxn(liqSemanaActual)}</b> en viajes cerrados
+              </BannerInsight>
+            </div>
           )}
 
           {alertas.length > 0 && (
@@ -353,8 +375,9 @@ export async function InicioContenido({
 
               {/* ── Viajes / Actividad / Gasto por categoría / Liquidado /
                   Top rutas — UN SOLO selector Semanal/Mensual/Histórico que
-                  mueve las 5 juntas (pedido explícito, 8-ago-2026). */}
-              <div className="mt-2.5">
+                  mueve las 5 juntas (pedido explícito, 8-ago-2026). El id
+                  es el ancla del BannerInsight de arriba. */}
+              <div className="mt-2.5" id="estadisticas">
                 <PanelPeriodo
                   viajes={viajes ?? []}
                   porMes={viajesPorMes ?? []}

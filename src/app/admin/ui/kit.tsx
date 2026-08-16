@@ -272,6 +272,47 @@ export function EstadoError({ mensaje, onReintentar }: { mensaje: string; onRein
   );
 }
 
+/**
+ * El banner de insight (patrón "Update" de la referencia FlowAI/shadcn,
+ * 16-ago-2026): UNA noticia del periodo con cifra REAL y un link a donde
+ * se profundiza. La regla que lo gobierna es la del producto entero: el
+ * LLAMADOR solo lo monta cuando tiene un dato real que contar — este
+ * componente no tiene estado vacío a propósito, porque un insight de
+ * relleno ("$0 esta semana") es exactamente el ruido que no se pinta.
+ * `deltaPct` viene de `pctCambio` y llega `null` sin comparable: el chip
+ * se omite, nunca un "0%" con cara de medición.
+ */
+export function BannerInsight({ etiqueta, deltaPct, href, hrefTexto = 'Ver estadísticas', children }: {
+  /** Micro-rótulo mono uppercase: "ESTA SEMANA", "ESTE MES". */
+  etiqueta: string;
+  /** % de cambio real vs el periodo anterior, o `null` si no hay comparable. */
+  deltaPct: number | null;
+  /** A dónde se profundiza (ancla o ruta). */
+  href: string;
+  hrefTexto?: string;
+  /** La frase con la cifra ya formateada por el llamador (lib/formato). */
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="card p-3 flex items-center gap-2.5">
+      <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--ok)' }} />
+      <span className="etiqueta-mono shrink-0" style={{ color: 'var(--muted)' }}>{etiqueta}</span>
+      <span className="text-[13px] min-w-0 truncate">{children}</span>
+      {deltaPct !== null && (
+        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 tabular"
+          style={deltaPct >= 0
+            ? { color: 'var(--ok)', background: 'var(--okbg)' }
+            : { color: 'var(--bad)', background: 'var(--badbg)' }}>
+          {deltaPct >= 0 ? '↑' : '↓'} {Math.abs(deltaPct).toLocaleString('es-MX', { maximumFractionDigits: 1 })}% vs periodo anterior
+        </span>
+      )}
+      <a href={href} className="ml-auto text-[11px] font-medium shrink-0 hover:opacity-70 transition-opacity">
+        {hrefTexto} →
+      </a>
+    </div>
+  );
+}
+
 /** Shimmer, no spinner (§E). `filas`/`alto` cubren tanto una lista de KPI
  *  (pocas filas cortas) como el cuerpo de una gráfica (una sola fila alta). */
 export function EstadoCargando({ filas = 3, alto = 14 }: { filas?: number; alto?: number }) {
