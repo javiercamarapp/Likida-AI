@@ -11,9 +11,8 @@ import { ListaAlertas } from './lista';
 export const dynamic = 'force-dynamic';
 
 /**
- * NOTIFICACIONES DE LA FLOTA — el patrón que la referencia abre en su Inicio
- * ("alertas que necesitan tu atención" ANTES del panorama), aquí con página
- * propia como ya la tiene /admin.
+ * NOTIFICACIONES DE LA FLOTA — "alertas que necesitan tu atención" ANTES
+ * del panorama, aquí con página propia como ya la tiene /admin.
  *
  * Antes de esto el panel del cliente tenía una campana que solo abría un
  * dropdown con dos textos sin liga, y solo existía en el Inicio: para

@@ -9,8 +9,8 @@ import type { Correo } from '@/lib/correo/plantilla';
 // ═══════════════════════════════════════════════════════════════════════════
 // NOTIFICACIONES DE LOS AGENTES — a QUIÉN se le avisa y DE QUÉ (14-ago-2026).
 //
-// La pestaña «Notificaciones» del menú de cada agente en la arquitectura de referencia, traída a los
-// seis de Likida. Hasta hoy no se podía construir porque no había canal de
+// La pestaña «Notificaciones» del menú de cada uno de los
+// seis agentes de Likida. Hasta hoy no se podía construir porque no había canal de
 // salida; con `lib/correo/enviar.ts` ya lo hay, y este módulo es lo que
 // decide cuándo usarlo.
 //

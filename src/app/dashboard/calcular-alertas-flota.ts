@@ -1,12 +1,12 @@
 import type { Conector } from '@/lib/likida/conexiones';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ALERTAS DE LA FLOTA — el patrón de referencia que faltaba en el panel del
+// ALERTAS DE LA FLOTA — el patrón que faltaba en el panel del
 // cliente: "lo que requiere a un humano HOY", antes que cualquier gráfica.
 //
-// La referencia abre su Inicio con un banner rojo ("10 credenciales de portal están
-// fallando al iniciar sesión") y recién debajo el panorama. Aquí es igual, con
-// dos diferencias que son nuestras:
+// El Inicio abre con un banner rojo ("10 credenciales de portal están
+// fallando al iniciar sesión") y recién debajo el panorama, con
+// dos decisiones propias:
 //
 //  1. **Cada alerta lleva a SU pantalla.** Una alerta que no se puede resolver
 //     de un clic es un regaño, no una alerta. Por eso `href` no es opcional en
@@ -110,7 +110,7 @@ export function calcularAlertasFlota(
     });
   }
 
-  // 1 — El banner rojo de la referencia. Un conector incompleto NO es "sin
+  // 1 — El banner rojo. Un conector incompleto NO es "sin
   // configurar": incompleto significa que alguien lo empezó y se quedó a
   // medias, y eso sí es trabajo pendiente de una persona. `sin_configurar`
   // se queda fuera a propósito — una flota que nunca conectó rastreo no

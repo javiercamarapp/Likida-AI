@@ -36,8 +36,7 @@ const OPCIONES: Array<{ valor: Tema; Icono: typeof Sun; rotulo: string }> = [
 ];
 
 /**
- * El selector claro / sistema / oscuro de un producto de referencia (13-ago-2026,
- * pedido con captura). Activa los overrides `[data-theme]` que globals.css
+ * El selector claro / sistema / oscuro (13-ago-2026). Activa los overrides `[data-theme]` que globals.css
  * tenía esperando "para ESE switch, si algún día se construye" — hoy se
  * construyó. El default sigue siendo claro: la decisión del 12-ago (no
  * oscurecer la app solo porque el sistema operativo esté en oscuro) se

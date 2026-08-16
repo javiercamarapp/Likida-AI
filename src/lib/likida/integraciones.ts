@@ -2,8 +2,8 @@
 // INTEGRACIONES — los sistemas que la flota YA usa, y cómo se conecta Likida
 // con cada uno.
 //
-// La arquitectura de referencia tiene dos secciones separadas en su chasis y la diferencia importa:
-// «Aseguradoras» son CREDENCIALES (los accesos que sus agentes usan para
+// La arquitectura separa dos secciones en el chasis y la diferencia importa:
+// «Conexiones» son CREDENCIALES (los accesos que los agentes de Likida usan para
 // trabajar) e «Integraciones» son los SISTEMAS DE NEGOCIO del cliente (su CRM,
 // su ERP, su Drive). Aquí es igual: `/dashboard/conexiones` ya cubre las
 // credenciales medidas (WhatsApp, datos fiscales, portales, rastreo, timbrado);

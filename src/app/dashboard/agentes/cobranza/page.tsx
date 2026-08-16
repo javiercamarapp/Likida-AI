@@ -33,8 +33,7 @@ async function exigirPermiso(tenantId: string): Promise<string | null> {
 
 /**
  * Agente de Cobranza de comprobantes — la página del motor 0089 (Fase 1 del
- * plan). La anatomía es la de
- * referencia: cola honesta (a quién va, a quién NO puede y por qué), bitácora,
+ * plan): cola honesta (a quién va, a quién NO puede y por qué), bitácora,
  * estrategia configurable con vista previa del mensaje, y Ejecutar ahora.
  *
  * La cola y la config fallan CERRADO: base caída = página caída, no un

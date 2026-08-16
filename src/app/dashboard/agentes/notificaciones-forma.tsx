@@ -16,7 +16,7 @@ import type {
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PESTAÑA «NOTIFICACIONES» — una sola, para los seis agentes.
 //
-// La referencia le pone Notificaciones al menú de cada uno de sus 8 agentes; Likida
+// Cada agente necesita su propio menú de Notificaciones; Likida
 // no tenía ninguna porque hasta el 14-ago-2026 no había canal de salida. Este
 // componente es la pantalla de esa decisión: de QUÉ avisa este agente y a
 // QUIÉN, con la mitad honesta a la vista (a quién NO le llega y por qué),

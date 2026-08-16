@@ -10,18 +10,20 @@ import { SelectorTema } from '../selector-tema';
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors sb-centrable';
 
-/** Item activo = pill SUAVE (`--g1` de fondo, texto e ícono `--marca`) —
- *  dirección v3 (DESIGN.md). `hover` solo aplica al item INACTIVO. */
+/** Item activo = pill SÓLIDA en tinta (`--marca` de fondo, texto e ícono
+ *  `--marca-fg`) — dirección 16-ago-2026 (ref. shadcn-dashboard, pedido de
+ *  Javier); reemplaza a la pill suave `--g1` de la v3. `hover` solo aplica
+ *  al item INACTIVO. El gemelo de /admin cambia IGUAL — es la misma pieza. */
 function claseItem(activo: boolean): string {
   return activo
     ? `${ITEM} font-medium`
     : `${ITEM} hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]`;
 }
 function estiloItem(activo: boolean) {
-  return activo ? { background: 'var(--g1)', color: 'var(--marca)' } : undefined;
+  return activo ? { background: 'var(--marca)', color: 'var(--marca-fg)' } : undefined;
 }
 function estiloIcono(activo: boolean) {
-  return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--marca)' : 'var(--muted)' } as const;
+  return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--marca-fg)' : 'var(--muted)' } as const;
 }
 
 function Fila({ item, sufijo, pathname }: { item: Item; sufijo: string; pathname: string }) {
@@ -34,7 +36,7 @@ function Fila({ item, sufijo, pathname }: { item: Item; sufijo: string; pathname
 }
 
 function Seccion({ titulo, items, sufijo, pathname }: { titulo: string; items: Item[]; sufijo: string; pathname: string }) {
-  // PLEGABLE como la referencia (13-ago-2026): el encabezado es
+  // PLEGABLE (13-ago-2026): el encabezado es
   // botón con chevron. El estado es de la sesión — no persiste a propósito:
   // un sidebar que amanece plegado esconde el producto.
   const [plegada, setPlegada] = useState(false);
@@ -78,7 +80,7 @@ function useSufijoYRol(rol: string): { sufijo: string; rolMenu: string } {
 }
 
 /**
- * Navegación principal — estructura de la referencia usehandle.ai
+ * Navegación principal — estructura
  * (13-ago-2026): Resumen + categorías AGENTES / OPERACIÓN / DINERO Y
  * FISCAL / SISTEMA. Se filtra con la MISMA función que gatea la página
  * (`visibilidad.ts`): dos listas separadas se desincronizan y el modo de
@@ -116,10 +118,10 @@ export default function SidebarNav({ rol }: { rol: string }) {
   );
 }
 
-/** El bloque INFERIOR fijo (referencia: Help Center / Settings),
+/** El bloque INFERIOR fijo (Soporte / Configuración),
  *  montado por chrome.tsx en su zona con fondo propio — separado del nav
- *  principal para poder anclarlo abajo. El 13-ago llegaron dos piezas más
- *  de la referencia (con captura): "Centro de ayuda" como botón pill y el
+ *  principal para poder anclarlo abajo. El 13-ago llegaron dos piezas más:
+ *  "Centro de ayuda" como botón pill y el
  *  selector de tema claro / sistema / oscuro. */
 export function SidebarAbajo({ rol }: { rol: string }) {
   const pathname = usePathname();

@@ -56,21 +56,21 @@ export default function DashboardChrome({
                 tráfico". Se esconde solo en ese caso: para los roles reales
                 (flota_admin, contador, encargado) la insignia sí dice la
                 verdad y se queda, porque ahí sirve. */}
-{/* El rol vive en el user card de abajo (12-ago-2026, referencia
-                FlowAI) — junto al logo no hay badge. */}
+{/* El rol vive en el user card de abajo (12-ago-2026) — junto al logo
+                no hay badge. */}
           </div>
 
           <nav className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">
             <SidebarNav rol={rol} />
           </nav>
 
-          {/* El bloque inferior fijo de la referencia, con su propio
+          {/* El bloque inferior fijo, con su propio
               fondo (el "cambio de color de hasta abajo", 13-ago-2026). */}
           <div className="px-2 pt-2 pb-1.5 space-y-0.5 shrink-0" style={{ background: 'var(--canvas)', borderTop: '1px solid var(--line)' }}>
             <SidebarAbajo rol={rol} />
           </div>
 
-          {/* El user card de la referencia FlowAI: tarjeta con hairline,
+          {/* El user card: tarjeta con hairline,
               avatar + nombre + rol, y salir como icono al lado — el botón
               rojo de ancho completo gritaba más que cualquier contenido. */}
           <div className="px-2 pb-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>

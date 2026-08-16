@@ -110,7 +110,7 @@
 /* Antes había un `@media (prefers-color-scheme: dark)` aquí que cambiaba el
    tema solo por el ajuste del sistema operativo del contralor, sin que nadie
    lo pidiera en la app — así se veía "todo negro" sin que Likida lo hubiera
-   decidido. Se quita: el estilo de referencia (usehandle.ai) no tiene modo
+   decidido. Se quita: el sistema de diseño actual no tiene modo
    oscuro, y esta app tampoco tiene hoy un switch manual que lo active — las
    dos reglas `[data-theme]` de abajo quedan listas para ESE switch, si algún
    día se construye, pero ya no se disparan solas. */
@@ -161,7 +161,7 @@
 
 /* ── Tema NEUTRO de las consolas (12-ago-2026, pedido explícito) ───────────
    "Usa el logo en color negro, ya no paleta de color naranja" — los DOS
-   paneles (/admin y /dashboard) van como la referencia FlowAI: tinta, gris
+   paneles (/admin y /dashboard) van neutros: tinta, gris
    y blanco; el color solo en semáforos y estatus. El naranja QUEDA para la
    marca hacia afuera (login, landing, PDF, ads) — por eso esto es un
    override con alcance y no un cambio de los tokens base: los chromes de
@@ -295,12 +295,12 @@ html, body {
   .likida-respira { animation: none; opacity: 0.6; }
 }
 
-/* ── Voces tipográficas de la referencia usehandle.ai (12-ago-2026) ────────
+/* ── Voces tipográficas (12-ago-2026) ────────
    Tres voces, cada una con su papel — pedido explícito: "tipografía más
-   corporativa, tipo usehandle.ai":
+   corporativa":
    · Inter (base, --font-sans-handle) — todo el texto de UI.
    · Inter Tight (--font-display) — SOLO titulares y la cifra grande de una
-     stat: la grotesca apretada de los encabezados de la referencia.
+     stat: la grotesca apretada de los encabezados.
    · IBM Plex Mono (--font-mono) — micro-rótulos en mayúsculas y cifras de
      tabla: la voz que hace que el panel se lea como estado de cuenta. */
 .font-display {
@@ -316,7 +316,7 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Sidebar colapsable (botón tipo referencia, 12-ago-2026) ───────────────────
+/* ── Sidebar colapsable (12-ago-2026) ───────────────────
    `boton-sidebar.tsx` marca la raíz con data-sidebar='min' (y lo recuerda en
    localStorage). El CSS hace el resto: la lámina baja a 72px y todo lo
    textual marcado con .sb-texto desaparece — así el colapso no depende del
@@ -328,3 +328,23 @@ html, body {
    (que es el único camino de regreso). El logo vuelve al expandir. */
 :root[data-sidebar='min'] .sb-logo { display: none; }
 :root[data-sidebar='min'] .sb-aside .ml-auto { margin-left: 0; }
+
+/* ── Textura punteada (16-ago-2026, ref. shadcn-dashboard) ─────────────────
+   La convención nueva de la dirección visual: los DIVISORES INTERNOS de una
+   tarjeta van punteados — filas de tabla, y los pies de StatCard/KpiTile
+   (esos dos lo traen inline en kit.tsx). El borde EXTERNO de la tarjeta
+   sigue sólido: la textura distingue "separación dentro del mismo bloque"
+   de "límite del bloque". Se aplica al estilo del borde YA existente, nunca
+   agrega bordes donde no había. */
+.card table tbody tr { border-bottom-style: dashed; }
+.card table thead tr { border-bottom-style: solid; }
+
+/* ── Microinteracciones (16-ago-2026, ref. Amicro — principios, no la
+   librería): feedback de PRENSADO en todo botón y un lift sutil en las
+   tarjetas-link. CSS puro, cero dependencias, y TODO detrás de
+   prefers-reduced-motion — la misma regla que ya rige el count-up. */
+@media (prefers-reduced-motion: no-preference) {
+  button:not(:disabled):active { transform: scale(0.97); transition: transform 80ms ease-out; }
+  a.card { transition: transform 150ms ease-out, box-shadow 150ms ease-out, opacity 150ms ease, border-color 150ms ease; }
+  a.card:hover { transform: translateY(-1px); box-shadow: var(--shadow-card-hover, var(--shadow-card)); }
+}

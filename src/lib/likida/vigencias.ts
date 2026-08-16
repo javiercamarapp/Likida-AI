@@ -1,13 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// VIGENCIAS QUE ANCLAN — el mejor patrón visto en un producto de referencia, traído a carga.
+// VIGENCIAS QUE ANCLAN — patrón de vencimientos aplicado al sector de carga.
 //
-// La referencia le pone VIGENCIA al reporte médico de un siniestro: mientras está
-// vigente, ancla la ventana de cobertura de los gastos; al vencer, se necesita
-// uno nuevo. Un documento con fecha de caducidad que gobierna si un proceso
-// puede seguir.
+// Un documento con fecha de caducidad gobierna si un proceso puede seguir:
+// mientras está vigente, ancla la ventana de cobertura; al vencer, se
+// necesita uno nuevo.
 //
-// En autotransporte ese patrón vale MÁS que en seguros, porque aquí no es una
-// política de la aseguradora: es la ley. Una unidad con la verificación
+// En autotransporte ese patrón importa MÁS que en otros sectores, porque aquí no es una
+// política interna: es la ley. Una unidad con la verificación
 // vencida o el permiso SICT caducado no es una unidad con un papel pendiente,
 // es una unidad que no debería estar en la carretera — y el riesgo (multa,
 // detención, seguro que no responde) es del dueño de la flota, no nuestro.
@@ -115,9 +114,9 @@ export function contarVigencias(
 /**
  * La frase del banner del Inicio, o `null` si no hay nada que decir.
  *
- * La referencia abre con "10 credenciales de portal están fallando". Éste es su
- * equivalente, y se calla cuando no hay nada — un banner permanente deja de
- * leerse a la semana.
+ * El Inicio abre con avisos del tipo "10 credenciales de portal están
+ * fallando" cuando hay algo urgente, y se calla cuando no hay nada — un
+ * banner permanente deja de leerse a la semana.
  */
 export function avisoVigencias(c: ConteoVigencias): string | null {
   const partes: string[] = [];

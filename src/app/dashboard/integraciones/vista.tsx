@@ -16,8 +16,8 @@ const TONO: Record<string, { fg: string; bg: string }> = {
  * INTEGRACIONES — con qué sistemas de la flota se conecta Likida, y CÓMO se
  * conecta hoy con cada uno.
  *
- * Es la mitad del chasis de referencia que faltaba. Esa arquitectura separa «credenciales»
- * (los accesos que sus agentes usan) de «integraciones» (los sistemas de
+ * Es la mitad del chasis que faltaba. La arquitectura separa «credenciales»
+ * (los accesos que usan los agentes de Likida) de «integraciones» (los sistemas de
  * negocio del cliente), y la separación es correcta: `/dashboard/conexiones` ya
  * cubre lo primero con estado medido.
  *
