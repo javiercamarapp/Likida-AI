@@ -115,6 +115,21 @@ export async function costoIaMesActual(): Promise<{ mesUsd: number; llamadas: nu
   return { mesUsd: round2(r.totales.costoUsd), llamadas: r.totales.n, etiquetaMes };
 }
 
+/**
+ * El costo de IA de UNA flota (histórico y 30 días) — para la ficha 360.
+ * Reusa la agregación SQL global y toma la fila del tenant: dos llamadas al
+ * RPC, cero recorridos de llm_costo por JS. LANZA si la base no responde.
+ */
+export async function costoIaDeTenant(tenantId: string): Promise<{ historicoUsd: number; d30Usd: number }> {
+  const hace30d = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const [historico, d30] = await Promise.all([
+    traerResumenCostoIa(null, null),
+    traerResumenCostoIa(hace30d, null),
+  ]);
+  const de = (r: ResumenCostoIa) => r.porTenant.find((t) => t.tenantId === tenantId)?.costoUsd ?? 0;
+  return { historicoUsd: round2(de(historico)), d30Usd: round2(de(d30)) };
+}
+
 export interface ResumenNegocio {
   tenants: number;
   flotas: Array<{

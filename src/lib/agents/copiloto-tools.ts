@@ -14,6 +14,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { registerTool } from '@/lib/llm/tool-executor';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { getFichaCliente } from '@/lib/admin/ficha-cliente';
 import { getResumenNegocio, getConteosPlataforma, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
 import { clasificacionDeGuardia } from '@/lib/admin/guardia';
@@ -31,7 +33,7 @@ const SIN_PARAMS = { type: 'object', properties: {}, additionalProperties: false
 export const TOOLS_COPILOTO_LECTURA = [
   'metrica_negocio', 'conteos_plataforma', 'bandeja', 'guardia', 'metrica_norte',
   'estado_agentes', 'traza_corrida', 'pipeline_ventas', 'cobranza_saas',
-  'costo_por_fase_modelo', 'bitacora',
+  'costo_por_fase_modelo', 'bitacora', 'ficha_cliente',
 ] as const;
 
 /** tool → la pantalla de /admin que muestra lo mismo (la fuente clicable). */
@@ -47,6 +49,7 @@ export const PANTALLA_POR_TOOL: Record<string, { ruta: string; etiqueta: string 
   cobranza_saas: { ruta: '/admin/cobranza', etiqueta: 'Cobranza' },
   costo_por_fase_modelo: { ruta: '/admin/costos-facturacion', etiqueta: 'Costos' },
   bitacora: { ruta: '/admin/compliance', etiqueta: 'Compliance' },
+  ficha_cliente: { ruta: '/admin/flotas', etiqueta: 'Flotas / Clientes' },
 };
 
 registerTool('metrica_negocio', {
@@ -306,5 +309,39 @@ registerTool('bitacora', {
         actor: e.actor ?? 'sistema', flota: e.tenantNombre, cuando: e.ocurrioEn,
       })),
     };
+  },
+});
+
+registerTool('ficha_cliente', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'ficha_cliente',
+      description: 'La ficha 360 de UNA flota/cliente por su nombre (búsqueda parcial): de qué prospecto nació, operación (viajes, monto comprobado, por revisar), señales de PMF, costo de IA (30d e histórico), suscripción y facturas SaaS, tickets y últimas corridas de agentes. Para "¿cómo va el cliente X?" en una consulta.',
+      parameters: {
+        type: 'object',
+        properties: { nombre: { type: 'string', description: 'El nombre (o parte) de la flota, como aparece en /admin/flotas.' } },
+        required: ['nombre'],
+        additionalProperties: false,
+      },
+    },
+  },
+  handler: async (args) => {
+    const q = String((args as { nombre?: unknown }).nombre ?? '').trim();
+    if (q.length < 2) return { error: 'Dame al menos 2 letras del nombre de la flota.' };
+    // Resolución por nombre ANTES de armar nada: 0 = se dice; >1 = se listan
+    // para desambiguar — adivinar la flota equivocada respondería sobre otro
+    // cliente como si fuera este.
+    const { data, error } = await supabaseAdmin()
+      .from('tenant').select('id, nombre').ilike('nombre', `%${q}%`).limit(6);
+    if (error) return { error: 'No se pudo buscar la flota — la base no respondió.' };
+    const candidatos = (data ?? []) as Array<{ id: string; nombre: string }>;
+    if (candidatos.length === 0) return { error: `Ninguna flota coincide con «${q}».` };
+    if (candidatos.length > 1) {
+      return { desambiguar: candidatos.map((c) => c.nombre), nota: 'Más de una coincide — pregunta cuál.' };
+    }
+    const ficha = await getFichaCliente(candidatos[0].id);
+    if (!ficha) return { error: 'La flota desapareció entre la búsqueda y la lectura — reintenta.' };
+    return { pantalla: `/admin/flotas/${candidatos[0].id}`, ...ficha };
   },
 });
