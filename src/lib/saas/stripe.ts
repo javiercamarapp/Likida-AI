@@ -225,7 +225,7 @@ export interface DatosFiscales {
  * Crea la suscripción que la flota paga por TRANSFERENCIA, no con tarjeta.
  *
  * POR QUÉ ESTE CAMINO Y NO EL CHECKOUT. Medido el 4-ago-2026 en siete empresas
- * del mercado —Handle, Nowports, Yalo, leadsales y las tres de rastreo de
+ * del mercado —competidores de IA, Nowports, Yalo, leadsales y las tres de rastreo de
  * flotas—: ninguna publica precio ni tiene pasarela en su sitio. Se cotiza, se
  * factura y se cobra por SPEI. Un contralor no paga la mensualidad con tarjeta.
  *

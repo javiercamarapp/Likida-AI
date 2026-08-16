@@ -58,7 +58,7 @@ export function Logo({ alto, className = '' }: { alto: string; className?: strin
 }
 
 /** Solo el ÍCONO de la marca — para el indicador de "pensando" del chat
- *  (13-ago: como Handle, que pone su logo mientras la IA lee los records).
+ *  (13-ago: como la referencia, que pone su logo mientras la IA lee los records).
  *  Misma máscara y mismo token que la pieza del logo completo. */
 export function LogoIcono({ alto, className = '' }: { alto: string; className?: string }) {
   return (

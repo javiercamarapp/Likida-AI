@@ -293,7 +293,7 @@ export async function ConsolaAdmin({
             </div>
 
             {/* Los agentes de FLOTA + ventas (bitácora `agente_corrida`,
-                0102/0105) — la ficha «Estado · Cuándo · Tareas» de Handle,
+                0102/0105) — la ficha «Estado · Cuándo · Tareas» de referencia,
                 cruzada por todas las flotas. El catálogo de nombres es el
                 mismo de notificaciones.ts, no una copia. */}
             <div className="mt-4">

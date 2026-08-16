@@ -17,7 +17,7 @@ import { BotonPrueba, type EstadoPrueba } from './boton-prueba';
 // ═══════════════════════════════════════════════════════════════════════════
 // LA SECCIÓN «NOTIFICACIONES» — una sola, montada por los seis agentes.
 //
-// Handle le pone Notificaciones al menú de cada uno de sus agentes. Aquí no
+// La referencia le pone Notificaciones al menú de cada uno de sus agentes. Aquí no
 // hay pestañas —las páginas de agente de Likida son secciones apiladas— así
 // que es la última sección de cada una: se llega bajando, no cambiando de
 // vista, y el estado del canal se ve junto a la cola que lo dispara.

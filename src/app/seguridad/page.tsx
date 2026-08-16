@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * /seguridad (F7 del plan — el patrón de Handle de vender con la página de
+ * /seguridad (F7 del plan — el patrón de vender con la página de
  * seguridad). REGLA DURA: aquí solo se afirma lo que el código y la base
  * HACEN hoy — nada de certificaciones que no se tienen ni promesas en
  * futuro. Cada afirmación es rastreable a un mecanismo del repo.

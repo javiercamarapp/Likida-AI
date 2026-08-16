@@ -80,7 +80,7 @@ export default defineConfig({
         //
         // 14-ago-2026 — LA LISTA DECÍA UNA COSA Y HACÍA OTRA. Nombraba solo los
         // archivos especiales del router (page/layout/loading/error), pero las
-        // 8 fases del plan Handle metieron el grueso de la pantalla en HERMANOS
+        // 8 fases del plan de agentes metieron el grueso de la pantalla en HERMANOS
         // de esos archivos: `vista.tsx`, `estrategia.tsx`, `controles.tsx`,
         // `chat.tsx`, `inicio-contenido.tsx`. Esos SÍ se contaban.
         //

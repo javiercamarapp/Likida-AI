@@ -5,7 +5,7 @@ import { fechaHoraMx } from '@/lib/formato';
 
 /**
  * LA FICHA DE CORRIDAS — el «Periodo · Estado · Tareas · Duración · Fecha» de
- * Handle (B3, auditoría 4), compartida por las seis páginas de agentes.
+ * la referencia (B3, auditoría 4), compartida por las seis páginas de agentes.
  *
  * Server component puro-props: la página trae las corridas (o el error) y
  * esto solo pinta. Tres estados, como todo en este panel: historial real,

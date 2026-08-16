@@ -64,7 +64,7 @@ export default function DashboardChrome({
             <SidebarNav rol={rol} />
           </nav>
 
-          {/* El bloque inferior fijo de la referencia Handle, con su propio
+          {/* El bloque inferior fijo de la referencia, con su propio
               fondo (el "cambio de color de hasta abajo", 13-ago-2026). */}
           <div className="px-2 pt-2 pb-1.5 space-y-0.5 shrink-0" style={{ background: 'var(--canvas)', borderTop: '1px solid var(--line)' }}>
             <SidebarAbajo rol={rol} />

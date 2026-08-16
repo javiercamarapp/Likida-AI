@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
  * vista del encargado. El dinero por operador vive en el Agente de
  * Liquidación, que sí es pantalla de `dinero`.
  *
- * Lo que SÍ enseña es lo que Handle llama "vigencias que anclan": la
+ * Lo que SÍ enseña es lo que en la referencia se llama "vigencias que anclan": la
  * licencia (0053) contra el día de México — y "sin registrar" cuando es
  * null, que no es lo mismo que vencida.
  */

@@ -21,7 +21,7 @@ function leerColapsado(): boolean {
 }
 
 /**
- * El colapsador del sidebar de la referencia Handle (12-ago-2026) — alterna
+ * El colapsador del sidebar de referencia (12-ago-2026) — alterna
  * `data-sidebar='min'` en la raíz (el CSS de globals.css esconde lo textual
  * con .sb-texto y angosta la lámina .sb-aside) y lo recuerda en
  * localStorage. Vive como atributo en la raíz por la misma razón que la

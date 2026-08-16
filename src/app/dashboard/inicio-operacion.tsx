@@ -77,7 +77,7 @@ export async function InicioOperacion({
     safe<CargaOperador[]>(() => getCargaOperadores(tenantId)),
     safe<IncidenciaRow[]>(() => getIncidencias(tenantId)),
     safe<ViajeRow[]>(() => getViajes(tenantId)),
-    // Las vigencias que anclan (patrón Handle, ver `vigencias.ts`): vivían
+    // Las vigencias que anclan (patrón de referencia, ver `vigencias.ts`): vivían
     // solo en /unidades y /operadores, o sea que avisaban únicamente a quien
     // ya había abierto la página — aquí suben al inicio, que es donde el
     // aviso sirve de algo.

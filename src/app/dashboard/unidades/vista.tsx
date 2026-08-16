@@ -28,7 +28,7 @@ const ESTADO_UNIDAD: Record<string, string> = {
  * EL REGISTRO DE UNIDADES — el activo que produce el dinero, con los papeles
  * que la ley le exige para poder producirlo.
  *
- * Es el patrón de "vigencias que anclan" de Handle (su reporte médico con
+ * Es el patrón de "vigencias que anclan" de un producto de referencia (su reporte médico con
  * fecha de caducidad), y en carga pesa más: una unidad con la verificación
  * vencida no tiene un pendiente administrativo, tiene un riesgo de multa, de
  * detención y de un seguro que no responde.

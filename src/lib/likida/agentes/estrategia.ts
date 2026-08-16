@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ESTRATEGIA POR AGENTE — el escritor de `tenant.config.agentes` (B4, aud. 4).
 //
-// Handle deja editar la estrategia en sus ocho agentes; aquí se expone donde
+// La referencia deja editar la estrategia en sus ocho agentes; aquí se expone donde
 // hay una perilla que un motor DE VERDAD lee (config.ts documenta por qué las
 // demás no existen). El almacenamiento es `tenant.config` (jsonb) vía el
 // mismo `fusionarConfig` recursivo de getConfig: escribir con spread plano ya

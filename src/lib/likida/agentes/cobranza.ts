@@ -18,9 +18,8 @@ export * from './cobranza_pura';
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AGENTE DE COBRANZA DE COMPROBANTES (0089, 14-ago-2026).
 //
-// Es el recordatorio de comprobación (0087) PRODUCTIZADO con la anatomía del
-// Agente de Cobranza de Handle (docs/conocimiento/handle-el-mapa-completo-
-// para-likida.md, prioridad 1 del roadmap): el cliente configura tiers de
+// Es el recordatorio de comprobación (0087) PRODUCTIZADO con la anatomía de
+// un Agente de Cobranza (prioridad 1 del roadmap): el cliente configura tiers de
 // seguimiento, horario y ventana hábil, instrucciones y firma; cada contacto
 // queda en bitácora; y la página del agente enseña la cola honesta — a quién
 // va a contactar, a quién NO puede (sin teléfono) y por qué.

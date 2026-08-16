@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
  * Antes eran 168 líneas sin un solo formulario. Un contralor cuyos
  * tractocamiones rinden 2.4 km/L y no 3.0 tenía el motor calculando mal el
  * diésel esperado de CADA viaje, y su única salida era escribirle a Javier —
- * o sea, Likida era el cuello de botella de su propia operación. Handle deja
+ * o sea, Likida era el cuello de botella de su propia operación. La referencia deja
  * al cliente tunear a sus agentes sin código; esto es lo mismo para el motor.
  *
  * QUÉ SIGUE SIENDO DE LECTURA, Y POR QUÉ:

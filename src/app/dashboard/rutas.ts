@@ -75,10 +75,10 @@ export const SISTEMA: Item[] = [
   // El corpus de `normas/` consultable: de dónde sale el fundamento de cada
   // cifra fiscal, con su estado de verificación a la vista.
   { href: '/dashboard/conocimiento', nombre: 'Conocimiento normativo', Icono: BookOpen },
-  // F7 (chasis Handle): la salud MEDIDA de cada conector de la flota.
+  // F7 (chasis de agentes): la salud MEDIDA de cada conector de la flota.
   { href: '/dashboard/conexiones', nombre: 'Conexiones', Icono: Plug },
   // La otra mitad del chasis: los SISTEMAS del cliente (ERP, GPS, TAG), contra
-  // las CREDENCIALES que vive en Conexiones. Handle separa igual las dos.
+  // las CREDENCIALES que vive en Conexiones. La referencia separa igual las dos.
   { href: '/dashboard/integraciones', nombre: 'Integraciones', Icono: Blocks },
   // A6 (auditoría 4, 14-ago-2026): la emisión y revocación de las llaves de
   // /v1. El openapi prometía "se emite desde el panel" sin que el panel
@@ -86,10 +86,10 @@ export const SISTEMA: Item[] = [
   { href: '/dashboard/llaves-api', nombre: 'Llaves de API', Icono: KeyRound },
 ];
 
-/** El bloque INFERIOR fijo (referencia Handle: Help Center / Settings),
+/** El bloque INFERIOR fijo (referencia: Help Center / Settings),
  *  con fondo propio — las dos páginas existen desde antes del rediseño. */
 export const ABAJO: Item[] = [
-  // El "alertas primero" de Handle con página propia (14-ago-2026). Vive
+  // El "alertas primero" de la referencia con página propia (14-ago-2026). Vive
   // abajo y no en una categoría porque no es un área del negocio: es la
   // bandeja de lo que hoy te toca, cruzada de todas las áreas que tu rol ve.
   { href: '/dashboard/notificaciones', nombre: 'Notificaciones', Icono: BellRing },

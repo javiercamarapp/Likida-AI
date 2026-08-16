@@ -9,7 +9,7 @@ import { desglosarPrecio, desgloseCuadra } from './iva';
 // COBRAR POR TRANSFERENCIA A LA CUENTA DE LIKIDA.
 //
 // Sin pasarela: la flota transfiere a una cuenta bancaria de verdad. Es como
-// cobran las siete empresas que se midieron el 4-ago-2026 —Handle, Nowports,
+// cobran las siete empresas que se midieron el 4-ago-2026 —competidores de IA, Nowports,
 // Yalo, leadsales y las tres de rastreo de flotas—, ninguna con checkout.
 //
 // LA VERDAD INCÓMODA DE ESTE CAMINO: **un banco no manda webhooks.** BBVA no le

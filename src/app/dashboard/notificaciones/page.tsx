@@ -11,7 +11,7 @@ import { ListaAlertas } from './lista';
 export const dynamic = 'force-dynamic';
 
 /**
- * NOTIFICACIONES DE LA FLOTA — el patrón que Handle abre en su Inicio
+ * NOTIFICACIONES DE LA FLOTA — el patrón que la referencia abre en su Inicio
  * ("alertas que necesitan tu atención" ANTES del panorama), aquí con página
  * propia como ya la tiene /admin.
  *

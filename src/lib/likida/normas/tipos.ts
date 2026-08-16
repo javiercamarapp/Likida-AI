@@ -9,12 +9,13 @@
 //
 // POR QUÉ ESTO NO ES UN RAG VECTORIAL, Y NO DEBE SERLO:
 //
-// Handle presume "chatea con tus registros", y en el video se ven sus pasos
+// El producto de referencia presume "chatea con tus registros", y en su demo
+// se ven sus pasos
 // reales: `Counting sor_policy… ✓ Found 674`. Eso NO es búsqueda por
 // embeddings, es consulta estructurada sobre su sistema de registro — que es
 // exactamente lo que `chat-tools.ts` ya hace aquí (kpis_flota, viajes_flota,
 // motor_fiscal). Copiar un vector store para el chat sería copiar algo que
-// Handle no tiene.
+// esa referencia no tiene.
 //
 // Y para ESTE corpus sería peor que inútil. Un embedding devuelve "lo más
 // parecido" y no sabe distinguir una LEY de un criterio no vinculativo, ni una
