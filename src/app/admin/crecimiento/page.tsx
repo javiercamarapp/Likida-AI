@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import { getResumenNegocio } from '@/lib/admin/negocio';
+import { getAdquisicion } from '@/lib/admin/adquisicion';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { listarProspectos, ESTADOS_PROSPECTO, conteosVacios } from '@/lib/likida/vendedores';
 import { usd } from '@/lib/utils';
-import { numero } from '@/lib/formato';
-import { TrendingUp, CheckCircle2, DollarSign, Filter } from 'lucide-react';
+import { numero, fechaCorta } from '@/lib/formato';
+import { ahoraMs } from '@/lib/saludo';
+import { TrendingUp, CheckCircle2, DollarSign, Filter, Megaphone } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { AreaChartSimple } from '../charts';
 import { HBars } from '../ui/graficas';
@@ -31,6 +33,9 @@ export default async function CrecimientoPage() {
   // censo por estado del kanban. Cae por su lado a null y se DICE — un
   // embudo vacío por base caída afirmaría que no hay pipeline.
   const prospectos = await listarProspectos().catch(() => null);
+  // Costo por lead + alertas de adquisición (panel-de-adquisicion §2/§5):
+  // cae por su lado a null y se DICE.
+  const adquisicion = await getAdquisicion(ahoraMs()).catch(() => null);
   const datosCosto = r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }));
   const chipsTokens = r.porDia.slice(-8).map((d) => d.tokens);
   // AUDITORÍA 10, ALTO — el H1 y el párrafo de abajo decían "Con 1 flota
@@ -112,6 +117,79 @@ export default async function CrecimientoPage() {
               </div>
             );
           })()}
+
+          {/* ── Costo por lead + alertas (panel-de-adquisicion §2 y §5) ────
+              La regla del §2: costo real solo donde es $0 POR DISEÑO; donde
+              falta la integración de gasto se dice, jamás un $0 de encuadre.
+              Las alertas heredan sus umbrales de los documentos que ya los
+              fijaron; las dos sin fuente de datos se declaran por nombre. */}
+          {adquisicion === null ? (
+            <div className="card p-4">
+              <TituloSeccion>Costo por lead y alertas de adquisición</TituloSeccion>
+              <p className="text-sm mt-2" style={{ color: 'var(--bad)' }}>
+                No se pudo leer la adquisición — esto NO significa que no haya alertas.
+              </p>
+            </div>
+          ) : (
+            <>
+              {adquisicion.alertas.length > 0 && (
+                <div className="space-y-1.5">
+                  {adquisicion.alertas.map((a) => (
+                    <div key={`${a.id}-${a.titulo}`} className="card p-3 flex items-start gap-2.5" style={{ borderColor: 'var(--warn)' }}>
+                      <span className="inline-block w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium m-0">{a.titulo}</p>
+                        <p className="text-[12px] m-0 mt-0.5" style={{ color: 'var(--muted)' }}>{a.detalle}</p>
+                        <p className="text-[11px] m-0 mt-0.5 etiqueta-mono" style={{ color: 'var(--faint)' }}>{a.regla}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="card p-4">
+                <TituloSeccion>Costo por lead, por fuente</TituloSeccion>
+                <table className="w-full text-[12.5px] mt-2">
+                  <thead>
+                    <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Fuente</th>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Leads</th>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Último</th>
+                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Costo por lead</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adquisicion.porFuente.map((f) => (
+                      <tr key={f.fuente} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
+                        <td className="py-2 cifra-mono">{f.fuente}</td>
+                        <td className="py-2 text-right tabular">{numero(f.leads)}</td>
+                        <td className="py-2 text-right" style={{ color: 'var(--muted)' }}>{f.ultimoCapturado ? fechaCorta(f.ultimoCapturado) : '—'}</td>
+                        <td className="py-2 text-right">
+                          {f.costo ? <span className="tabular">{usd(f.costo.usd)}</span> : <span style={{ color: 'var(--muted)' }}>no disponible</span>}
+                          <span className="block text-[10.5px]" style={{ color: 'var(--faint)' }}>{f.costoNota}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {adquisicion.sinFuenteDeDatos.length > 0 && (
+                  <p className="text-[11px] mt-2 m-0" style={{ color: 'var(--faint)' }}>
+                    Alertas del blueprint sin fuente de datos todavía: {adquisicion.sinFuenteDeDatos.map((s) => `${s.alerta} (${s.falta})`).join(' · ')}.
+                  </p>
+                )}
+              </div>
+              <div className="card p-4">
+                <div className="flex items-center gap-2">
+                  <Megaphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                  <TituloSeccion>Control de campañas</TituloSeccion>
+                </div>
+                <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>
+                  Cero campañas activas — el control (presupuesto aprobado, gasto real, CPL vs objetivo,
+                  pausar de un clic) aparece con la primera. El agente de campañas solo PROPONE
+                  audiencia, creativos y presupuesto; activar o subir gasto exige tu aprobación explícita.
+                </p>
+              </div>
+            </>
+          )}
 
           {/* ChartCard (design system v2, ui/kit.tsx) — mismo AreaChartSimple
               de siempre (charts.tsx sigue vigente para esta forma de dato:
