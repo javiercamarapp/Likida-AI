@@ -9,7 +9,7 @@ import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { flushObservabilidad } from '@/lib/observability/sentry';
 import { estaApagado } from '@/lib/likida/interruptores';
-import { guardarEventosPendientes } from '@/lib/likida/wa_pendientes';
+import { guardarEventosPendientes, reclamarPendiente, marcarPendienteProcesado, anotarFalloPendiente } from '@/lib/likida/wa_pendientes';
 
 const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
 const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
@@ -161,6 +161,38 @@ export async function POST(req: NextRequest) {
   // el pool no hace nada, pero el `flushObservabilidad` del final sí — y sin él
   // los `wa.ratelimit_diferido` de un lote enteramente aplazado se congelan con
   // la invocación y no salen nunca.
+  // ── EL INBOX DURABLE GENERAL (auditoría externa 2, 16-ago-2026) ──────────
+  //
+  // receive → PERSIST → 2xx → worker. La bandeja 0119 dejó de ser solo la
+  // del kill switch: TODO mensaje permitido se persiste AQUÍ, ANTES del
+  // código de salida. Con eso, el 200 significa "recibido y GUARDADO" en
+  // cualquier camino — si la invocación muere después del acuse y antes de
+  // terminar el after(), la fila durable sigue ahí y el cron `wa-pendientes`
+  // (cada 5 min) la recupera por el motor real.
+  //
+  // Y EL CASO QUE ERA PÉRDIDA REAL SE VUELVE REINTENTO: si NI guardar se
+  // pudo (la base caída — la misma que antes hacía fallar-cerrado a
+  // `estaApagado` DESPUÉS del acuse), ya no se contesta 200: se contesta
+  // 503 y la cola durable es la de Meta, que reentrega lo no confirmado.
+  // Lo que sí alcanzó a guardarse queda dedupeado por la PK (wamid) cuando
+  // la reentrega vuelva.
+  let filasDurables: Array<{ id: string; evento: InboundMessage; guardado: boolean }> = [];
+  if (permitidos.length) {
+    const persistencia = await guardarEventosPendientes(permitidos);
+    filasDurables = persistencia.filas;
+    if (persistencia.fallidos > 0) {
+      logger.error('wa.inbox_no_persistido', {
+        fallidos: persistencia.fallidos, guardados: persistencia.guardados,
+        ids: filasDurables.filter((f) => !f.guardado).map((f) => f.id),
+      });
+      await flushObservabilidad();
+      return NextResponse.json(
+        { error: 'inbox no disponible', guardados: persistencia.guardados, fallidos: persistencia.fallidos },
+        { status: 503, headers: { 'Retry-After': '60' } },
+      );
+    }
+  }
+
   if (permitidos.length || diferidos.length) {
     if (permitidos.length > MAX_EN_PARALELO) {
       // Deja rastro de que hubo ráfaga grande ANTES de procesarla: si la
@@ -192,34 +224,43 @@ export async function POST(req: NextRequest) {
       // `interruptores.ts`), así que si la base está caída, mandar el aviso
       // sería justo lo que no se puede hacer.
       //
-      // ── APAGADO = PAUSADO Y DURABLE, NO ACUSAR-Y-TIRAR ──────────────────
-      // (P1 de la auditoría externa, 16-ago-2026.) La versión anterior de
-      // este bloque descartaba los mensajes afirmando que "Meta reintenta lo
-      // que no confirmamos" — falso: el 200 de esta ruta YA salió antes de
-      // que este after() corra, Meta lo toma como acuse y no reintenta. La
-      // foto del chofer se perdía para siempre.
-      //
-      // Ahora cada mensaje se PERSISTE en `wa_evento_pendiente` (0119) y el
-      // cron `wa-pendientes` los procesa por el motor real cuando la palanca
-      // sube. El 200 vuelve a ser verdad: "recibido y guardado". Si el
-      // insert mismo falla (la misma base caída que apagó el switch), eso SÍ
-      // es pérdida y `guardarEventosPendientes` la grita con ids completos —
-      // aquí ya no hay a quién contestarle otra cosa.
+      // ── APAGADO = PAUSADO Y DURABLE ─────────────────────────────────────
+      // (P1 de la auditoría externa, 16-ago-2026.) La persistencia ya
+      // ocurrió ANTES del código de salida (el inbox general): con la
+      // palanca abajo aquí no se procesa nada — las filas durables esperan
+      // al cron `wa-pendientes`, que las drena cuando la palanca suba.
       if (await estaApagado('global')) {
-        const r = await guardarEventosPendientes(permitidos);
         logger.warn('wa.entrante_apagado', {
           mensajes: permitidos.length,
-          guardados: r.guardados,
-          fallidos: r.fallidos,
           ids: permitidos.map((m) => m.waMessageId),
         });
         await flushObservabilidad();
         return;
       }
 
-      await conPool(permitidos, MAX_EN_PARALELO, (m) =>
-        processInbound(m).catch((e) => logger.error('processInbound', { err: e instanceof Error ? e.message : String(e) })),
-      );
+      // ── PROCESAR RECLAMANDO LA FILA DURABLE (inbox general) ─────────────
+      // Cada mensaje se procesa SOLO si esta invocación gana el claim de su
+      // fila (mismo mecanismo del cron — si el cron ya la tomó, aquí es un
+      // no-op). Éxito sella `procesado_en`; fallo anota el error y la fila
+      // queda para el reintento del cron. Si la invocación muere a media
+      // corrida, nada se pierde: lo no sellado lo recupera el cron.
+      await conPool(filasDurables, MAX_EN_PARALELO, async (f) => {
+        try {
+          const claim = await reclamarPendiente(f.id, 0);
+          if (!claim) return; // el cron (u otra entrega) ya lo tiene.
+          try {
+            await processInbound(claim.evento);
+            await marcarPendienteProcesado(f.id);
+          } catch (e) {
+            await anotarFalloPendiente(f.id, e instanceof Error ? e.message : String(e));
+            logger.error('processInbound', { id: f.id, err: e instanceof Error ? e.message : String(e) });
+          }
+        } catch (e) {
+          // Ni el claim se pudo leer: la fila sigue pendiente y el cron la
+          // recupera — se anota y no se tumba el pool.
+          logger.error('wa.claim_fallo', { id: f.id, err: e instanceof Error ? e.message : String(e) });
+        }
+      });
 
       // AL OPERADOR YA NO SE LE DICE NADA, y eso es parte del arreglo. El aviso
       // anterior —«espera un minuto y reenvíamelos»— describía una pérdida que

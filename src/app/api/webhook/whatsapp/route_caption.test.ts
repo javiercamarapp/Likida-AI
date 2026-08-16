@@ -34,6 +34,26 @@ vi.mock('next/server', async (orig) => {
   return { ...real, after: (fn: () => unknown) => { pendientes.push(fn); } };
 });
 
+
+// El inbox durable GENERAL (16-ago-2026): todo permitido se persiste antes
+// del 200 y se procesa reclamando su fila — el doble minimo que deja pasar
+// el flujo feliz sin base real.
+const { bandejaInbox } = vi.hoisted(() => ({ bandejaInbox: new Map<string, unknown>() }));
+vi.mock('@/lib/likida/wa_pendientes', () => ({
+  guardarEventosPendientes: async (ms: Array<{ waMessageId?: string }>) => {
+    const filas = ms.map((m, i) => {
+      const id = m.waMessageId ?? `f-${i}`;
+      bandejaInbox.set(id, m);
+      return { id, evento: m, guardado: true };
+    });
+    return { guardados: filas.length, fallidos: 0, filas };
+  },
+  reclamarPendiente: async (id: string) =>
+    (bandejaInbox.has(id) ? { id, evento: bandejaInbox.get(id), intentos: 1 } : null),
+  marcarPendienteProcesado: async () => undefined,
+  anotarFalloPendiente: async () => undefined,
+}));
+
 const { POST } = await import('./route');
 
 const firmar = (body: string) =>

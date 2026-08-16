@@ -30,9 +30,16 @@ export const MAX_INTENTOS_PENDIENTE = 5;
  * se GRITA con los ids completos: el log es lo único que queda para
  * reconstruir a mano.
  */
-export async function guardarEventosPendientes(mensajes: InboundMessage[]): Promise<{ guardados: number; fallidos: number }> {
+export async function guardarEventosPendientes(mensajes: InboundMessage[]): Promise<{
+  guardados: number;
+  fallidos: number;
+  /** Cada mensaje con el id de SU fila durable (o `guardado: false`) — el
+   *  inbox general (16-ago-2026) procesa reclamando por este id. */
+  filas: Array<{ id: string; evento: InboundMessage; guardado: boolean }>;
+}> {
   let guardados = 0;
   let fallidos = 0;
+  const filas: Array<{ id: string; evento: InboundMessage; guardado: boolean }> = [];
   for (const m of mensajes) {
     // Sin wamid (no debería pasar en mensajes reales) se fabrica un id
     // determinista-ish para no perder el evento por falta de llave.
@@ -42,18 +49,21 @@ export async function guardarEventosPendientes(mensajes: InboundMessage[]): Prom
       if (error) {
         // 23505 = ya guardado (reentrega de Meta del mismo evento): no es
         // pérdida, es el dedup de la PK haciendo su trabajo.
-        if (error.code === '23505') { guardados++; continue; }
+        if (error.code === '23505') { guardados++; filas.push({ id, evento: m, guardado: true }); continue; }
         fallidos++;
+        filas.push({ id, evento: m, guardado: false });
         logger.error('wa.pendiente_no_guardado', { id, from: m.from, err: error.message });
         continue;
       }
       guardados++;
+      filas.push({ id, evento: m, guardado: true });
     } catch (e) {
       fallidos++;
+      filas.push({ id, evento: m, guardado: false });
       logger.error('wa.pendiente_no_guardado', { id, from: m.from, err: e instanceof Error ? e.message : String(e) });
     }
   }
-  return { guardados, fallidos };
+  return { guardados, fallidos, filas };
 }
 
 export interface PendienteReclamado {

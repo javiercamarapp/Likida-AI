@@ -1,35 +1,34 @@
 fecha_corrida: 2026-08-16
-ultimo_dia_barrido: null
-rango_intentado: 2026-07-24..2026-08-15
-notas_revisadas: 0
-notas_por_edicion: {matutina: null, vespertina: null, extraordinaria: null}
+ultimo_dia_barrido: 2026-08-16
+rango_intentado: 2026-07-24..2026-08-16
+notas_revisadas: rango completo (17 dias con diario; 7 sin edicion, fines de semana)
+notas_por_edicion: {matutina: si, vespertina: si, extraordinaria: si}
 fichas_disparadas: 0
-etag_sat: null
-etag_sat_check: no_aplica_hoy_es_domingo
+etag_sat: '"6a7e7528-387cd"'
+etag_sat_check: baseline capturado 2026-08-16 (Last-Modified 14-ago-2026 01:53 GMT) — primer ETag registrado; el diff aplica desde la proxima corrida
 deriva_ley_check: no_aplica_no_es_dia_1_trimestre
-estado: "INFRA egress_bloqueado"
+estado: "OK — PRIMERA CORRIDA REAL tras 16 bloqueadas"
 detalle: >
-  Decimosexta corrida consecutiva (16-ago, 15-ago, 14-ago, 13-ago, 11-ago,
-  10-ago, 09-ago, 08-ago, 07-ago, 05-ago, 04-ago, 03-ago, 31-jul, 28-jul, y
-  antes) bloqueada por la misma causa: el proxy de salida de esta sesión
-  rechaza todo tráfico hacia sidofqa.segob.gob.mx y dof.gob.mx. Confirmado
-  hoy con curl directo -v: `CONNECT sidofqa.segob.gob.mx:443` → HTTP/1.1 403
-  Forbidden desde el proxy (127.0.0.1:39209), igual sobre `dof/sidof/diarios/porFecha`
-  y sobre el respaldo `dof.gob.mx/index.php`. `$HTTPS_PROXY/__agentproxy/status`
-  sigue sin ninguno de los hosts del DOF/SAT en `noProxy` — solo paquetería
-  (npm, pypi, jsr, crates, proxy.golang.org) y dominios de
-  anthropic.com/kubernetes internos. No se probó www.sat.gob.mx ni
-  diputados.gob.mx hoy (no aplican: no es lunes ni día 1 de trimestre) pero
-  no hay razón para esperar otro resultado — el mismo proxy ya bloqueó los
-  tres hosts que sí se probaron.
-sin_verificar_esta_corrida: todas las fichas de normas/ (23 fichas) — cero verificación posible, decimosexta vez consecutiva.
+  Corrida desde la sesion local de Claude Code (16-ago-2026), cuyo egress SI
+  alcanza sidofqa.segob.gob.mx y www.sat.gob.mx — el bloqueo de las 16
+  corridas previas era del proxy del entorno de la routine en la nube, no de
+  las fuentes. Barrido completo del backlog 24-jul..16-ago via SIDOF
+  (diarios/porFecha como canario + notas/{fecha}): 21 coincidencias del
+  diccionario. Las accionables: los 4 acuerdos semanales de cuotas IEPS
+  (viernes 24-jul, 31-jul, 07-ago, 14-ago, vespertina) — capturados en
+  normas/datos/cuota-ieps-diesel.yaml (NUEVO, primera captura historica) con
+  verificacion aritmetica estimulo+disminuida=7.3634 exacta en las 4
+  semanas. El resto de coincidencias, revisadas una por una sin ficha
+  contradicha: oficios 69-B/69-B Bis (listados EFOS — son ALTAS en los
+  listados que el validador ya consume, no cambios a la regla de las fichas
+  cff-69-B), nota aclaratoria de Comites Interinstitucionales (no fiscal),
+  anexos INFONAVIT/UNAM (no aplican), listado de prestadores digitales LIVA
+  (no toca autotransporte).
+sin_verificar_esta_corrida: ninguna publicacion del rango; las 23 fichas siguen en su estado (esta rutina no sube a verificado — eso exige lectura humana firmada).
 accion_requerida: >
-  Sin resolver desde hace 23 días y quince corridas previas (ahora dieciséis).
-  Habilitar en la política de egreso de esta sesión/entorno los hosts:
-  sidofqa.segob.gob.mx, dof.gob.mx, www.sat.gob.mx, www.diputados.gob.mx (o
-  la alternativa comercial api.tlaloc.sh) en el noProxy / allowlist del
-  proxy de salida ($HTTPS_PROXY). Sin ese cambio de configuración, esta
-  rutina no puede correr en este entorno bajo ninguna cadencia diaria,
-  semanal ni trimestral. El rango sin barrer sigue creciendo: ya cubre desde
-  el 24-jul, ahora hasta el 15-ago — veintitrés días y dieciséis corridas
-  sin una sola verificación real de las fichas de normas/.
+  1) La routine de la nube sigue ciega por su proxy: mover la cadencia diaria
+  a un entorno con egress (launchd local, como el Cazador) o pedir el host en
+  la allowlist. 2) Cablear el motor a cuota-ieps-diesel.yaml para calcular el
+  estimulo en pesos (hoy el panel muestra litros — honesto pero incompleto).
+  3) Barrido historico de cuotas anterior al 25-jul si el estimulo debe
+  calcularse retroactivo.

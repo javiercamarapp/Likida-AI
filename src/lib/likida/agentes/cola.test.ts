@@ -27,6 +27,7 @@ function builder(tabla: string) {
   Object.assign(b, {
     insert: (p: Record<string, unknown>) => { r.op = 'insert'; r.payload = p; llamadas.push(r); return b; },
     update: (p: Record<string, unknown>) => { r.op = 'update'; r.payload = p; llamadas.push(r); return b; },
+    delete: () => { r.op = 'delete'; llamadas.push(r); return b; },
     select: () => b,
     eq: (c: string, v: unknown) => { r.eq.push([c, v]); return b; },
     neq: () => b,
@@ -45,7 +46,15 @@ function builder(tabla: string) {
   return b;
 }
 
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
+const llamadasRpc: Array<{ fn: string; args: Record<string, unknown> }> = [];
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({
+  from: (t: string) => builder(t),
+  rpc: (fn: string, args: Record<string, unknown>) => {
+    llamadasRpc.push({ fn, args });
+    const cola = respuestas.get(`rpc:${fn}`);
+    return Promise.resolve(cola && cola.length > 0 ? cola.shift()! : { data: 'reserva-1', error: null });
+  },
+}) }));
 vi.mock('@/lib/logger', () => ({ logger: logs }));
 let resultadoEnvio: { ok: true; id: string } | { ok: false; motivo: 'rechazado' | 'red' | 'sin_configurar'; detalle?: string } = { ok: true, id: 're_123' };
 const enviarCorreo = vi.fn<(...a: unknown[]) => Promise<typeof resultadoEnvio>>(async () => resultadoEnvio);
@@ -58,6 +67,7 @@ const de = (tabla: string, op: string) => llamadas.filter((l) => l.tabla === tab
 
 beforeEach(() => {
   llamadas.length = 0;
+  llamadasRpc.length = 0;
   respuestas.clear();
   logs.error.mockClear();
   enviarCorreo.mockClear();
@@ -169,12 +179,11 @@ describe('enviarPiezaPorCorreo — el envío REAL (0120, P1 de la auditoría ext
     expect(enviarCorreo).not.toHaveBeenCalled();
   });
 
-  it('el camino feliz: claim → Resend → provider_message_id → contacto en el historial', async () => {
+  it('el camino feliz: claim → reserva atómica (0124) → Resend → provider_message_id', async () => {
     respuestas.set('cola_aprobacion', [
       { data: [FILA], error: null },        // el claim
       { data: null, error: null },          // la prueba (provider id)
     ]);
-    respuestas.set('prospecto_contacto', [{ data: null, error: null }]);
     const r = await enviarPiezaPorCorreo('p-1', 'u-1');
     expect(r).toMatchObject({ ok: true, destinatario: 'contacto@x.mx', providerId: 're_123' });
 
@@ -183,8 +192,9 @@ describe('enviarPiezaPorCorreo — el envío REAL (0120, P1 de la auditoría ext
     expect(claim.is).toContainEqual(['enviado_en', null]);
     const prueba = de('cola_aprobacion', 'update')[1];
     expect(prueba.payload).toMatchObject({ provider_message_id: 're_123' });
-    const contacto = de('prospecto_contacto', 'insert')[0];
-    expect(contacto.payload).toMatchObject({ prospecto_id: 'pr-9', canal: 'correo', pieza_id: 'p-1' });
+    // El contacto del historial ES la reserva de la RPC — cero inserts extra.
+    expect(llamadasRpc[0]).toMatchObject({ fn: 'reservar_envio_prospecto', args: { p_prospecto: 'pr-9' } });
+    expect(de('prospecto_contacto', 'insert')).toHaveLength(0);
   });
 
   it('la edición humana MANDA: sale cuerpo_final, no el original', async () => {
@@ -222,36 +232,57 @@ describe('enviarPiezaPorCorreo — el envío REAL (0120, P1 de la auditoría ext
   });
 });
 
-describe('la guardia de cadencia — el historial 0118 SE LEE antes de enviar', () => {
+describe('la guardia de cadencia, ATÓMICA (0124) — una transacción decide, no un SELECT', () => {
   const FILA_G = {
     id: 'p-1', titulo: 'Correo día 2', cuerpo: 'Seguimiento.', cuerpo_final: null,
     agente: 'ventas', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'c@x.mx' },
   };
 
-  it('un prospecto contactado hace <48h NO se vuelve a tocar: claim revertido y dicho con palabras', async () => {
+  it('la RPC bloquea (null): claim revertido, dicho con palabras, y CERO envío', async () => {
     respuestas.set('cola_aprobacion', [
       { data: [FILA_G], error: null },  // el claim
       { data: null, error: null },      // la reversión
     ]);
-    respuestas.set('prospecto_contacto', [
-      { data: [{ ocurrio_en: new Date().toISOString() }], error: null }, // la guardia: hay salida reciente
-    ]);
+    respuestas.set('rpc:reservar_envio_prospecto', [{ data: null, error: null }]);
     await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/48 horas.*cadencia/s);
     expect(enviarCorreo).not.toHaveBeenCalled();
+    expect(llamadasRpc[0]).toMatchObject({ fn: 'reservar_envio_prospecto', args: { p_prospecto: 'pr-9', p_pieza: 'p-1' } });
     const reversion = de('cola_aprobacion', 'update')[1];
     expect(reversion.payload).toMatchObject({ enviado_en: null });
   });
 
-  it('si el historial NO SE PUEDE leer, no se manda — la cadencia no se verifica a ciegas', async () => {
+  it('si la RPC no responde, no se manda — la cadencia no se decide a ciegas', async () => {
     respuestas.set('cola_aprobacion', [
       { data: [FILA_G], error: null },
       { data: null, error: null },
     ]);
-    respuestas.set('prospecto_contacto', [
-      { data: null, error: { message: 'db down' } },
-    ]);
-    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/historial.*Reintenta/s);
+    respuestas.set('rpc:reservar_envio_prospecto', [{ data: null, error: { message: 'db down' } }]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/cadencia.*Reintenta/s);
     expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+
+  it('la reserva ES el contacto del historial: el envío OK no inserta un segundo', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_G], error: null },  // el claim
+      { data: null, error: null },      // la prueba (provider id)
+    ]);
+    respuestas.set('rpc:reservar_envio_prospecto', [{ data: 'reserva-77', error: null }]);
+    const r = await enviarPiezaPorCorreo('p-1', 'u-1');
+    expect(r.ok).toBe(true);
+    expect(de('prospecto_contacto', 'insert')).toHaveLength(0);
+  });
+
+  it('Resend rechaza: la reserva se COMPENSA (delete) — no bloquea 48h por un correo que no salió', async () => {
+    resultadoEnvio = { ok: false, motivo: 'rechazado', detalle: 'HTTP 422' };
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_G], error: null },
+      { data: null, error: null },      // la reversión del claim
+    ]);
+    respuestas.set('rpc:reservar_envio_prospecto', [{ data: 'reserva-77', error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: null, error: null }]); // el delete
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/no aceptó/);
+    const borrado = de('prospecto_contacto', 'delete')[0];
+    expect(borrado.eq).toContainEqual(['id', 'reserva-77']);
   });
 });
 
