@@ -1,0 +1,95 @@
+{
+  "viaje": [
+    {
+      "id": "dde3790a-6386-4a9c-bcfd-3b3cf7a5e966",
+      "tenant_id": "aaaaaaaa-0000-4000-8000-000000009901",
+      "operador_id": "0a427a82-00dd-4895-b69c-043c6cfc2411",
+      "terminal_id": null,
+      "folio": "ZZZQA-V-998268",
+      "origen": "ZZZ Origen QA",
+      "destino": "ZZZ Destino QA",
+      "anticipo": 11100,
+      "fecha_inicio": "2026-08-15",
+      "fecha_fin": null,
+      "estatus": "liquidado",
+      "created_at": "2026-08-16T22:52:22.008579+00:00",
+      "intake_pendientes": 0,
+      "demora_no_imputable": null,
+      "intake_pendientes_en": null,
+      "unidad_id": null,
+      "cliente_id": null,
+      "ingreso_flete": null,
+      "km_recorridos": null,
+      "avisado_en": "2026-08-16T22:52:21.892+00:00",
+      "avisos_enviados": 0,
+      "aceptado_en": "2026-08-16T22:52:21.892+00:00",
+      "escalado_en": null,
+      "recordatorio_comprobacion_en": null,
+      "llegada_en": null,
+      "descarga_en": null,
+      "regreso_en": null,
+      "ccp_pisa_federal": null,
+      "ccp_radio_federal_km": null
+    }
+  ],
+  "gasto": [],
+  "liquidacion": [
+    {
+      "id": "b5ea540e-734f-49e3-b397-860448b68c9b",
+      "tenant_id": "aaaaaaaa-0000-4000-8000-000000009901",
+      "viaje_id": "dde3790a-6386-4a9c-bcfd-3b3cf7a5e966",
+      "total_comprobado": 2997.37,
+      "total_anticipo": 11100,
+      "diferencia": 8102.63,
+      "estatus": "cuadrada",
+      "diferencias": [],
+      "pdf_url": null,
+      "export_url": null,
+      "created_at": "2026-08-15T18:00:00+00:00",
+      "ieps_acreditable": 0,
+      "iva_acreditable": 0,
+      "peaje_acreditable": 0,
+      "litros_diesel_acreditables": 0,
+      "primera_descarga_en": null,
+      "descargas": 0,
+      "primera_descarga_rol": null
+    }
+  ],
+  "comprobante_huerfano": [
+    {
+      "id": "628a5e41-2264-4f37-b256-61302b83ecb2",
+      "tenant_id": "aaaaaaaa-0000-4000-8000-000000009901",
+      "operador_id": "0a427a82-00dd-4895-b69c-043c6cfc2411",
+      "ruta_imagen": "aaaaaaaa-0000-4000-8000-000000009901/sin-viaje/660acadc46d5b0126b5ba94f777eab5d6f128f306eaff9b09cceefc9ccfb0dfe.png",
+      "gasto": {
+        "id": "a4903f51-3d5c-48fb-afea-8f12e7de53c8",
+        "fecha": "2026-08-13",
+        "folio": "ZZZQA-687777",
+        "monto": 1076.8,
+        "concepto": "diesel",
+        "ocrExtra": {
+          "emisor": "GASOLINERA ZZZ QA SA DE CV",
+          "litros": 88,
+          "ivaTasa": 0.16,
+          "estacion": "9901",
+          "fechaRaw": "13/08/2026",
+          "ivaMonto": 148.52,
+          "producto": "DIESEL",
+          "fechaImpresa": "13/08/2026",
+          "precioUnitario": 10.549
+        },
+        "subTotal": 928.28,
+        "folioNorm": "ZZZQA-687777",
+        "formaPago": "04",
+        "imagenUrl": "aaaaaaaa-0000-4000-8000-000000009901/sin-viaje/660acadc46d5b0126b5ba94f777eab5d6f128f306eaff9b09cceefc9ccfb0dfe.png",
+        "ocrConfianza": 1
+      },
+      "motivo": "sin_viaje",
+      "creado_en": "2026-08-16T22:52:25.429606+00:00",
+      "viaje_id": null,
+      "resuelto_en": null,
+      "resolucion": null,
+      "ofrecido_en": null
+    }
+  ]
+}

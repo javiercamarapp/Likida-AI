@@ -1,0 +1,20 @@
+[
+  {
+    "nivel": "info",
+    "msg": "foto.acuse",
+    "meta": {
+      "viaje": "e3f398b8-a10e-438b-b284-da2f01caeefb",
+      "peldano": "silencio",
+      "porque": "lectura sólida"
+    }
+  },
+  {
+    "nivel": "info",
+    "msg": "foto.ya_en_otro_viaje",
+    "meta": {
+      "viaje": "d91875a0-8c70-45c5-9466-f8c804800cba",
+      "otro": "e3f398b8-a10e-438b-b284-da2f01caeefb",
+      "monto": 1196.47
+    }
+  }
+]

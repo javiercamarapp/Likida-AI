@@ -1,0 +1,16 @@
+[
+  {
+    "oraculo": "huerfano_post_cierre (#4)",
+    "estado": "ok",
+    "esperado": "liquidación intacta + huérfano visible + trigger CU001",
+    "real": "liquidación sin cambio; huérfano pendiente con monto; CU001: el viaje dde3790a-6386-4a9c-bcfd-3b3cf7a5e966 ya tiene liquidación emitida: el gasto llegó tarde"
+  },
+  {
+    "oraculo": "bitacora_registro (#8)",
+    "estado": "ok",
+    "esperado": [
+      "huerfano.guardado"
+    ],
+    "real": "los 1 eventos esperados se emitieron (1 eventos capturados en total)"
+  }
+]

@@ -1,0 +1,393 @@
+{
+  "corrida": "2026-08-16",
+  "tope": 2,
+  "filas": [
+    {
+      "t": "2026-08-16T22:46:37.882Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep1/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.001695
+    },
+    {
+      "t": "2026-08-16T22:46:37.882Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep1/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3800,
+      "tokOut": 283,
+      "cost": 0.001375
+    },
+    {
+      "t": "2026-08-16T22:46:48.459Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep2/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 3800,
+      "tokOut": 283,
+      "cost": 0.001375
+    },
+    {
+      "t": "2026-08-16T22:46:48.460Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep2/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.000799
+    },
+    {
+      "t": "2026-08-16T22:46:59.062Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep3/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.000799
+    },
+    {
+      "t": "2026-08-16T22:46:59.063Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep3/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.000799
+    },
+    {
+      "t": "2026-08-16T22:47:05.639Z",
+      "corrida": "2026-08-16",
+      "quien": "post_cierre#rep1/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.001695
+    },
+    {
+      "t": "2026-08-16T22:47:12.100Z",
+      "corrida": "2026-08-16",
+      "quien": "post_cierre#rep2/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.000799
+    },
+    {
+      "t": "2026-08-16T22:47:18.909Z",
+      "corrida": "2026-08-16",
+      "quien": "post_cierre#rep3/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.001695
+    },
+    {
+      "t": "2026-08-16T22:47:41.243Z",
+      "corrida": "2026-08-16",
+      "quien": "texto_sin_fotos#rep1/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 8958,
+      "tokOut": 699,
+      "cost": 0.028386
+    },
+    {
+      "t": "2026-08-16T22:48:02.376Z",
+      "corrida": "2026-08-16",
+      "quien": "texto_sin_fotos#rep2/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 8958,
+      "tokOut": 674,
+      "cost": 0.017464
+    },
+    {
+      "t": "2026-08-16T22:48:28.670Z",
+      "corrida": "2026-08-16",
+      "quien": "texto_sin_fotos#rep3/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 8959,
+      "tokOut": 886,
+      "cost": 0.01425
+    },
+    {
+      "t": "2026-08-16T22:49:05.665Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep1/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 286,
+      "cost": 0.0017
+    },
+    {
+      "t": "2026-08-16T22:49:05.666Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep1/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 285,
+      "cost": 0.001698
+    },
+    {
+      "t": "2026-08-16T22:49:05.667Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep1/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 2396,
+      "tokOut": 35,
+      "cost": 0.006302
+    },
+    {
+      "t": "2026-08-16T22:49:05.667Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep1/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 10001,
+      "tokOut": 478,
+      "cost": 0.022926
+    },
+    {
+      "t": "2026-08-16T22:49:38.445Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep2/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 286,
+      "cost": 0.0017
+    },
+    {
+      "t": "2026-08-16T22:49:38.446Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep2/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 285,
+      "cost": 0.001698
+    },
+    {
+      "t": "2026-08-16T22:49:38.446Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep2/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 9872,
+      "tokOut": 350,
+      "cost": 0.010716
+    },
+    {
+      "t": "2026-08-16T22:50:04.948Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep3/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 9879,
+      "tokOut": 364,
+      "cost": 0.016206
+    },
+    {
+      "t": "2026-08-16T22:50:04.949Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep3/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 286,
+      "cost": 0.000804
+    },
+    {
+      "t": "2026-08-16T22:50:04.949Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep3/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 285,
+      "cost": 0.000802
+    },
+    {
+      "t": "2026-08-16T22:51:44.846Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep1/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.001695
+    },
+    {
+      "t": "2026-08-16T22:51:44.848Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep1/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.000799
+    },
+    {
+      "t": "2026-08-16T22:51:55.472Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep2/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.000799
+    },
+    {
+      "t": "2026-08-16T22:51:55.473Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep2/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.000799
+    },
+    {
+      "t": "2026-08-16T22:52:06.819Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep3/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.001695
+    },
+    {
+      "t": "2026-08-16T22:52:06.820Z",
+      "corrida": "2026-08-16",
+      "quien": "foto_duplicada#rep3/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.000799
+    },
+    {
+      "t": "2026-08-16T22:52:12.811Z",
+      "corrida": "2026-08-16",
+      "quien": "post_cierre#rep1/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.001695
+    },
+    {
+      "t": "2026-08-16T22:52:20.621Z",
+      "corrida": "2026-08-16",
+      "quien": "post_cierre#rep2/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.001695
+    },
+    {
+      "t": "2026-08-16T22:52:26.289Z",
+      "corrida": "2026-08-16",
+      "quien": "post_cierre#rep3/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 283,
+      "cost": 0.001695
+    },
+    {
+      "t": "2026-08-16T22:52:49.576Z",
+      "corrida": "2026-08-16",
+      "quien": "texto_sin_fotos#rep1/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 8960,
+      "tokOut": 619,
+      "cost": 0.016918
+    },
+    {
+      "t": "2026-08-16T22:53:15.835Z",
+      "corrida": "2026-08-16",
+      "quien": "texto_sin_fotos#rep2/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 8952,
+      "tokOut": 715,
+      "cost": 0.012526
+    },
+    {
+      "t": "2026-08-16T22:53:42.691Z",
+      "corrida": "2026-08-16",
+      "quien": "texto_sin_fotos#rep3/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 5496,
+      "tokOut": 1281,
+      "cost": 0.020786
+    },
+    {
+      "t": "2026-08-16T22:54:08.916Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep1/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 9875,
+      "tokOut": 371,
+      "cost": 0.010932
+    },
+    {
+      "t": "2026-08-16T22:54:08.917Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep1/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 286,
+      "cost": 0.000804
+    },
+    {
+      "t": "2026-08-16T22:54:08.917Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep1/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 285,
+      "cost": 0.000802
+    },
+    {
+      "t": "2026-08-16T22:54:34.355Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep2/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 285,
+      "cost": 0.000802
+    },
+    {
+      "t": "2026-08-16T22:54:34.356Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep2/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 9861,
+      "tokOut": 369,
+      "cost": 0.01622
+    },
+    {
+      "t": "2026-08-16T22:54:34.357Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep2/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 286,
+      "cost": 0.0017
+    },
+    {
+      "t": "2026-08-16T22:55:00.836Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep3/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 286,
+      "cost": 0.000804
+    },
+    {
+      "t": "2026-08-16T22:55:00.838Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep3/ocr",
+      "modelo": "google/gemini-3.1-flash-lite",
+      "tokIn": 5084,
+      "tokOut": 285,
+      "cost": 0.000802
+    },
+    {
+      "t": "2026-08-16T22:55:00.838Z",
+      "corrida": "2026-08-16",
+      "quien": "borde_tope#rep3/cuadre",
+      "modelo": "anthropic/claude-sonnet-5",
+      "tokIn": 9884,
+      "tokOut": 343,
+      "cost": 0.01067
+    }
+  ]
+}

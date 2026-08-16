@@ -15,7 +15,8 @@
     "setup": "npm install && npm run seed",
     "ticket": "vitest run arnes_ticket_real",
     "auditoria": "vitest run --config vitest.audit.config.ts scripts/auditoria/loop.audit.ts",
-    "auditoria:baselina": "vitest run --config vitest.audit.config.ts scripts/auditoria/loop.audit.ts"
+    "auditoria:baselina": "vitest run --config vitest.audit.config.ts scripts/auditoria/loop.audit.ts",
+    "qa:nocturno": "vitest run --config vitest.qa.config.ts scripts/qa-agentes/orquestador.qa.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.0.0",

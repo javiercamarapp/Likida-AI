@@ -1,0 +1,22 @@
+[
+  {
+    "nivel": "info",
+    "msg": "agent.run",
+    "meta": {
+      "tenant": "aaaaaaaa-0000-4000-8000-000000009901",
+      "viaje": "be505b04-c97a-412f-8442-06420eee1887",
+      "tools": [
+        "consultar_politica",
+        "cuadrar_viaje"
+      ],
+      "costUsd": 0.020786
+    }
+  },
+  {
+    "nivel": "warn",
+    "msg": "agent.cifras_forzadas",
+    "meta": {
+      "viaje": "be505b04-c97a-412f-8442-06420eee1887"
+    }
+  }
+]

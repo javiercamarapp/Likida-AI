@@ -1,0 +1,76 @@
+[
+  {
+    "nivel": "info",
+    "msg": "foto.acuse",
+    "meta": {
+      "viaje": "3384e865-4a7c-44d9-9ced-168a552b0ef9",
+      "peldano": "silencio",
+      "porque": "lectura sólida"
+    }
+  },
+  {
+    "nivel": "info",
+    "msg": "foto.acuse",
+    "meta": {
+      "viaje": "3384e865-4a7c-44d9-9ced-168a552b0ef9",
+      "peldano": "silencio",
+      "porque": "lectura sólida"
+    }
+  },
+  {
+    "nivel": "error",
+    "msg": "corridas.no_registrada",
+    "meta": {
+      "tenant": "aaaaaaaa-0000-4000-8000-000000009901",
+      "agente": "liquidacion",
+      "err": "Could not find the 'costo_usd' column of 'agente_corrida' in the schema cache"
+    }
+  },
+  {
+    "nivel": "info",
+    "msg": "costo.vinculado",
+    "meta": {
+      "tenant": "aaaaaaaa-0000-4000-8000-000000009901",
+      "viaje": "3384e865-4a7c-44d9-9ced-168a552b0ef9",
+      "liquidacion": "5f9d8dc9-0ab6-4b39-a38b-8f5946718904",
+      "filas": 4
+    }
+  },
+  {
+    "nivel": "info",
+    "msg": "agent.run",
+    "meta": {
+      "tenant": "aaaaaaaa-0000-4000-8000-000000009901",
+      "viaje": "3384e865-4a7c-44d9-9ced-168a552b0ef9",
+      "tools": [
+        "consultar_politica",
+        "cuadrar_viaje",
+        "guardar_liquidacion"
+      ],
+      "costUsd": 0.01067
+    }
+  },
+  {
+    "nivel": "warn",
+    "msg": "agent.cifras_forzadas",
+    "meta": {
+      "viaje": "3384e865-4a7c-44d9-9ced-168a552b0ef9"
+    }
+  },
+  {
+    "nivel": "error",
+    "msg": "cierre.sin_telefono_de_jefe",
+    "meta": {
+      "tenantId": "aaaaaaaa-0000-4000-8000-000000009901",
+      "viaje": "3384e865-4a7c-44d9-9ced-168a552b0ef9"
+    }
+  },
+  {
+    "nivel": "warn",
+    "msg": "cierre.jefe_no_avisado",
+    "meta": {
+      "viaje": "3384e865-4a7c-44d9-9ced-168a552b0ef9",
+      "motivo": "Esa flota no tiene un teléfono de oficina registrado."
+    }
+  }
+]
