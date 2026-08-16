@@ -12,11 +12,13 @@ import {
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { crearFlota, mensajeParaPantalla } from '@/lib/likida/administracion';
 import { actualizarFacilidad15 } from '@/lib/likida/repo';
+import { getSenalesPmf, type SenalesPmf } from '@/lib/likida/pmf';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import ContadorRetro from '../contador-retro';
 import { HBars } from '../ui/graficas';
 import { ChartCard, EstadoVacio } from '../ui/kit';
 import { FormaConAviso, Campo, type ResultadoAccion } from '../ui/forma';
+import { SenalesPmfPorFlota } from './senales-pmf';
 
 export const dynamic = 'force-dynamic';
 
@@ -128,11 +130,16 @@ export default async function FlotasPage() {
   // Cada lectura cae POR SU LADO a `null`: si `telefonosJefe` falla, sus
   // casillas dicen "no se pudo medir" (que no es "pendiente") y las demás
   // siguen midiendo. La tabla maestra no depende de ninguna de las dos.
-  const [telefonos, onboarding] = await Promise.all([
+  const [telefonos, onboarding, senalesPmf] = await Promise.all([
     r.flotas.length === 0
       ? Promise.resolve<Record<string, string> | null>({})
       : telefonosJefe(r.flotas.map((f) => f.id)).catch(() => null),
     getOnboardingFlotas().catch(() => null as Map<string, OnboardingFlota> | null),
+    // Las 3 señales de PMF (mig. 0114), POR FLOTA y cada flota por su lado:
+    // si la lectura de una falla, SU ficha dice "no se pudo leer" y las demás
+    // siguen midiendo — mismo criterio que telefonos/onboarding.
+    Promise.all(r.flotas.map(async (f) => [f.id, await getSenalesPmf(f.id).catch(() => null)] as const))
+      .then((pares) => new Map<string, SenalesPmf | null>(pares)),
   ]);
   /** Una flota sin filas en las tablas de onboarding = ceros CONTADOS (la
    *  lectura sí se completó); `null` solo cuando la lectura entera falló. */
@@ -329,6 +336,20 @@ export default async function FlotasPage() {
                 que la consulta falló — no que la casilla esté pendiente.
               </p>
             </section>
+          )}
+
+          {/* ── Las 3 señales de PMF (mig. 0114): ¿el producto se USA, no
+              solo se firmó? El lector vive en lib/likida/pmf.ts; aquí y no
+              en una pantalla nueva porque con un cliente la pregunta se
+              contesta en la misma ficha del onboarding. */}
+          {flotasOrdenadas.length > 0 && (
+            <SenalesPmfPorFlota
+              flotas={flotasOrdenadas.map((f) => ({
+                id: f.id,
+                nombre: f.nombre,
+                senales: senalesPmf.get(f.id) ?? null,
+              }))}
+            />
           )}
 
           <section className="card p-4">
