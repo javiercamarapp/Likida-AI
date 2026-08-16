@@ -105,8 +105,44 @@ dispara aleatorio (reintentar); generar horizontal Y vertical por default. Verif
 
 ## §6 · La cadena de producción (quién hace qué)
 
-`agente-visuales.md` (blueprint, 13-Agentes-de-AI/06) **dirige** → el subagente
-**`likida-marketing`** ejecuta (lee ESTE archivo) → pipeline `likida-post` (brief →
-copy → imagen → export por canal → **cola de aprobación**) → Javier aprueba → se publica.
-Toda pieza deja rastro en `bitacora-visuales.md` (fecha, slug, modelo, créditos, quién
-aprobó, canal). La IA prepara; el humano aprueba — la misma regla de los 54 agentes.
+**Para VIDEO, la cadena es EL PROCESO DE JAVIER (dictado 16-ago-2026) — seis
+etapas en orden, cada una consume la salida de la anterior:**
+
+1. **Guiones** (`agente-guiones.md`, rutina `guiones-semanal`): Javier sube
+   videos que le gustan a `likida-marketing-cola/referencias/`; el agente los
+   transcribe (whisper local), destila HOOKS y estructuras al
+   `banco-de-hooks.md`, y escribe el guion — hook en 3 segundos, narración
+   para ElevenLabs, escenas numeradas. La cadena sigue sin esperar: el gate
+   de Javier vive en la etapa 5.
+2. **Character sheets**: los personajes del guion, con `gpt_image_2`
+   (skill `sequence-sheet`); identidad consistente con Soul ID si hay cara
+   recurrente.
+3. **Lugares sheets**: las hojas de escenarios/locaciones del guion — mismo
+   motor y skill que los characters; un sheet por locación con sus ángulos.
+4. **Sequence sheets**: la secuencia escena a escena, componiendo personajes
+   y lugares ya aprobados de las hojas anteriores.
+5. **Animación**: **EL GATE DE JAVIER VIVE AQUÍ (decisión 16-ago)** — la
+   cadena corre autónoma hasta las sequence sheets, y Javier autoriza
+   SEQUENCE POR SEQUENCE (`estado: aprobada` en su .md); aprobar la sequence
+   ES autorizar el gasto de animar esa escena. Lo aprobado se anima con el
+   motor vigente de §5 (seedance) en **std/480p** — se ahorra en píxeles,
+   NO en modo; el upscale va solo al corte final. Narración SIEMPRE
+   ElevenLabs.
+6. **Ensamblaje** (el que junta todo): cuando todas las escenas del video
+   están animadas — clips + narración + export por canal. El corte final va
+   a la **cola de publicar**, y publicar es el tap de Javier.
+
+**Los canales (decididos el 16-ago)**: LinkedIn + Instagram + TikTok. Todo
+post diario (carrusel de noticias, promo de beneficios, video) sale de las
+rutinas a `likida-marketing-cola/publicar/<fecha>-<slug>/` con su `post.md`
+de copy POR CANAL — publicar siempre es el tap de Javier, nunca del agente.
+
+Para IMAGEN suelta (posts, piezas de marca) la cadena corta sigue viva:
+`agente-visuales.md` dirige → el subagente **`likida-marketing`** ejecuta (lee
+ESTE archivo) → pipeline `likida-post` (brief → copy → imagen → export →
+**cola de aprobación**). Si la pieza lleva personaje recurrente, respeta las
+hojas de las etapas 2-3 — no se reinventa la cara en cada pieza.
+
+Toda pieza deja rastro en `bitacora-visuales.md` (fecha, slug, modelo, créditos,
+quién aprobó, canal). La IA prepara; el humano aprueba — la misma regla de
+todos los agentes.
