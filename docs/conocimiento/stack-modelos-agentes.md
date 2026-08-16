@@ -36,7 +36,14 @@ default (`src/lib/llm/models.ts` es la única fuente en código).
 reglas calculan (candados de kill switch, techo, backpressure), el LLM solo
 redacta dentro del agente despachado. Ese es el diseño §4 del copiloto.
 
-## Las dos fronteras que el precio no mueve
+## Las TRES fronteras que el precio no mueve
+
+0. **Escritura de código (16-ago)**: auditar con chinos está bien; **modificar
+   el código únicamente con modelos USA**, escalando a los mejores (Sonnet→
+   Opus). La línea operativa: si el output del agente es un DIFF que se
+   aplica al repo → `codigo_escritura`; si es un reporte de hallazgos →
+   `codigo`. Y el diff, como todo, pasa por aprobación humana.
+
 
 1. **Soberanía fiscal**: RFC/CFDI/comprobantes del CLIENTE jamás pisan los
    roles baratos — se quedan en `ocr`/`cuadre`/`chat` (proveedores US con
@@ -82,7 +89,8 @@ NULL = no usa modelo de texto):
 | Scrapers / extracción | cazador, enriquecedor | `extraccion` → qwen3.7-flash | 0.03–0.13 |
 | Back office redacción | redactor✅, scorer, dossier, vigía, sdr, demo_prep, propuestas, soporte, onboarding×2, atención_faq, cobranza_saas, retención | `back_office` → deepseek-v4-flash | 0.061–0.123 |
 | Marketing / contenido | contenido_fiscal, lead_magnet, seo_distribucion | `marketing` → kimi-k2.6 | 0.54–2.28 |
-| Devs / auditoría / testers de código | auditor_codigo, migraciones, pruebas, releases, rendimiento, documentacion | `codigo` → qwen3-coder-next (escala a Sonnet) | 0.12–0.80 |
+| Auditoría de código (HALLAZGOS, no diffs) | auditor_codigo, migraciones, releases, rendimiento, documentacion | `codigo` → qwen3-coder-next | 0.12–0.80 |
+| **ESCRITURA de código (diffs al repo)** | pruebas + todo agente que modifique código | `codigo_escritura` → **claude-sonnet-5, SOLO USA** (escala a opus-5) | 2–10 |
 | QA de agentes | vigilante_calidad + ejército QA (Fase 3) | `qa` → gpt-oss-120b | 0.03–0.17 |
 | Financieros | analista_metricas, control_costos, tesoreria, cierre_mensual | `analisis` → gpt-5.6-luna | 0.10–0.60 |
 | Dirección | copiloto✅, orquestadores, kpi_whatsapp, desempeño, especialistas(8), exito_cliente, producto | `analisis` → gpt-5.6-luna | 0.10–0.60 |
