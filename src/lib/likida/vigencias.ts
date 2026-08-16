@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// VIGENCIAS QUE ANCLAN — el mejor patrón del video de Handle, traído a carga.
+// VIGENCIAS QUE ANCLAN — el mejor patrón visto en un producto de referencia, traído a carga.
 //
-// Handle le pone VIGENCIA al reporte médico de un siniestro: mientras está
+// La referencia le pone VIGENCIA al reporte médico de un siniestro: mientras está
 // vigente, ancla la ventana de cobertura de los gastos; al vencer, se necesita
 // uno nuevo. Un documento con fecha de caducidad que gobierna si un proceso
 // puede seguir.
@@ -115,7 +115,7 @@ export function contarVigencias(
 /**
  * La frase del banner del Inicio, o `null` si no hay nada que decir.
  *
- * Handle abre con "10 credenciales de portal están fallando". Éste es su
+ * La referencia abre con "10 credenciales de portal están fallando". Éste es su
  * equivalente, y se calla cuando no hay nada — un banner permanente deja de
  * leerse a la semana.
  */

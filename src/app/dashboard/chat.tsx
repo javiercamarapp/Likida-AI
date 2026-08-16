@@ -39,7 +39,7 @@ type Visual =
 interface Respuesta { texto: string; visual?: Visual; visuales?: Visual[]; pendiente?: boolean }
 
 /** Cómo se lee cada tool del analista en la secuencia de pensamiento
- *  (13-ago: como Handle, que narra "Counting sor_policy…"). Pasos REALES
+ *  (13-ago: como la referencia, que narra "Counting sor_policy…"). Pasos REALES
  *  del ciclo — el servidor los transmite cuando de verdad ocurren. */
 const ETIQUETA_TOOL: Record<string, string> = {
   kpis_flota: 'Leyendo los KPIs de la flota',
@@ -385,7 +385,7 @@ export default function ChatFlota({
   const spChat = useSearchParams();
 
   // La lista del panel Historial — se carga al montar la página hero para
-  // que el botón traiga su conteo real (como la referencia Handle).
+  // que el botón traiga su conteo real (como la referencia).
   useEffect(() => {
     if (variante !== 'hero') return;
     let vivo = true;
@@ -711,7 +711,7 @@ export default function ChatFlota({
       </div>
     );
 
-    // ── HISTORIAL (0088, pedido con capturas de Handle/ChatGPT): botón pill
+    // ── HISTORIAL (0088, pedido con capturas de referencia/ChatGPT): botón pill
     // flotante con el conteo real, y un cajón izquierdo con Nuevo chat,
     // búsqueda y las conversaciones guardadas. Fixed a propósito: el hilo
     // scrollea y un absolute se iría con él.

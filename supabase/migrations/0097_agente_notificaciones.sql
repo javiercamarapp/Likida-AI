@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- NOTIFICACIONES POR AGENTE — a quién avisar, de qué, y sin volverse ruido
 --
--- Handle tiene «Notificaciones» en el menú de sus 8 agentes. Likida tenía cero,
+-- La arquitectura de referencia tiene «Notificaciones» en el menú de sus 8 agentes. Likida tenía cero,
 -- y hasta el 14-ago-2026 no se podía construir porque no había canal de
 -- entrega. Ya lo hay (Resend), así que esto es lo que faltaba.
 --

@@ -22,7 +22,6 @@
 | 07 | `07-no-fiscal.md` | SICT, permisos, licencias, seguros, NOM-068, NOM-087, NOM-012, régimen de tránsito 2026 y multas | Cuando modeles documentos de la unidad y del operador, o gastos por infracción | Toda multa federal se valida aritméticamente: monto = N × UMA ($117.31 en 2026) |
 | 08 | `08-competencia.md` | Mapa del mercado en 5 capas + perfiles de Zumma, Clara, FacturaGPT, Fotofacturas y **Mendel** | Antes de escribir pitch, precio o landing | La tabla de "qué robarle a quién" y los 7 huecos que nadie cubre |
 | 09 | `09-liquidacion.md` | Cómo se liquida un viaje hoy, el marco fiscal de cada peso del anticipo, el software que existe, y el proceso automático propuesto | Cuando definas el modelo de datos y la máquina de estados | Las 7 reglas duras, los 5 contadores acumulativos y la máquina de estados hasta `EN EXCEPCIÓN` |
-| 10 | `10-handle-ai.md` | Handle AI: posicionamiento, anatomía de landing de 20 secciones, vocabulario, precios y sistema visual | Cuando escribas la landing o el guion de venta | El plano de landing sección por sección y el sistema visual sin color de marca |
 | 11 | `11-datos-personales.md` | LFPDPPP vigente (DOF 20-mar-2025), consentimiento, oposición a decisiones automatizadas, nube, credenciales y ToS de portales | Antes de mandar un solo dato a un modelo o guardar una credencial | El semáforo verde/ámbar/rojo por portal y la decisión de arrancar SIN bóveda de credenciales |
 
 ---
@@ -50,9 +49,8 @@
 | ¿Diésel en efectivo es deducible? | 03 (regla 2.9: sí, hasta 15%), 04 (para el estímulo de IEPS: nunca) |
 | ¿Qué gastos son viáticos y cuáles no? | 09 §3 (Grupo A vs. Grupo B) |
 | ¿Qué me pueden multar y por cuánto? | 02 §9 (fiscal), 07 §10 (tránsito), 11 §12 (datos) |
-| ¿Contra quién compito de verdad? | 08 (Mendel), 09 §4 (Uvicuo), 10 (Handle) |
+| ¿Contra quién compito de verdad? | 08 (Mendel), 09 §4 (Uvicuo) |
 | ¿Puedo entrenar modelos con los comprobantes del cliente? | 11 §4 (no sin consentimiento expreso o disociación) |
-| ¿Cómo escribo la landing? | 10 §5 y §10 |
 
 ---
 

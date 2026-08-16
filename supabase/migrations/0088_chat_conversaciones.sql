@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0088 — Historial de conversaciones del chat "Chatea con tus datos".
 --
--- Pedido del 13-ago-2026 (con capturas de Handle/ChatGPT): botón Historial,
+-- Pedido del 13-ago-2026 (con capturas de referencia de ChatGPT): botón Historial,
 -- panel con búsqueda, y las conversaciones GUARDADAS. Hasta hoy el historial
 -- vivía en el estado de React y moría con la pestaña.
 --

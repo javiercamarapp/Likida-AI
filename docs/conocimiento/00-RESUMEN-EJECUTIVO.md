@@ -107,8 +107,8 @@ Cada línea es una promesa que hoy circula en el mercado (o en el pitch actual) 
 | "Somos los únicos por WhatsApp" | Clara, Zumma, Fotofacturas, Mendel y Uvicuo ya están ahí. WhatsApp es la mesa, no la carta | 08, 09 |
 | "Aprendemos de tus comprobantes" | Entrenar o afinar con datos de clientes sin disociación documentada requiere consentimiento **expreso** de cada operador (son datos patrimoniales) | LFPDPPP arts. 7 párr. 5, 9 fr. III y 11 |
 | "Todo se procesa en México" | En `mx-central-1` los modelos Claude aparecen solo bajo inferencia Global. Se puede **almacenar** en México; no inferir con residencia garantizada | Tabla de disponibilidad de Bedrock, consultada 27-jul-2026 |
-| Mencionar SOC 2, ISO 27001 o "cumplimiento SAT certificado" | No existen. Handle lo hace en su landing de anuncios y se contradice con su sitio principal. Para un producto que toca datos fiscales, es la mentira chica que cuesta el cliente grande | 10-handle-ai |
-| Fila de logos de clientes | **Likida no tiene clientes.** Las empresas del censo son prospectos de vacantes. La única prueba visual honesta hoy es una captura del producto con datos de demo marcados | memoria del proyecto + 10 |
+| Mencionar SOC 2, ISO 27001 o "cumplimiento SAT certificado" | No existen. Un competidor de IA en EUA lo hace en su landing de anuncios y se contradice con su sitio principal. Para un producto que toca datos fiscales, es la mentira chica que cuesta el cliente grande | análisis competitivo interno |
+| Fila de logos de clientes | **Likida no tiene clientes.** Las empresas del censo son prospectos de vacantes. La única prueba visual honesta hoy es una captura del producto con datos de demo marcados | memoria del proyecto |
 
 **Regla transversal:** el CFF arts. 89 y 90 sancionan a "quien asesore, aconseje, **preste servicios** o participe" en las prácticas indebidas de los criterios del Anexo 3. Esa es literalmente la posición de Likida. La propia ley da la mitigación (CFF 89 último párrafo y 90): **manifestar por escrito que el criterio puede ser contrario a la interpretación de las autoridades**. Esa leyenda tiene que ir en los términos de servicio y en las salidas del producto, y hay que redactarla antes de la primera demo.
 
@@ -160,9 +160,8 @@ Tres investigadores nombraron tres "competidores reales" distintos. No es contra
 
 - **Mendel** (`08`): compró TeFacturo, y en mayo-2026 lanzó con **Visa** la "Tarjeta Mendel Flotilla" — se activa con el viaje en curso, límite de litros por carga, categorías de combustible/casetas/viáticos, recuperación de CFDI validada contra el SAT. Declara 500+ flotillas. Es el vecindario exacto de Likida, con Visa detrás.
 - **Uvicuo** (`09`): CDMX, ~$4M USD, lanzamiento nov-2025, gastos de ruta para autotransporte por WhatsApp con tarjeta **Mastercard**, IA que extrae del ticket y pide foto del odómetro, integración de TAGs, alertas antifraude. Es el clon más cercano del pitch actual.
-- **Handle AI** (`10`): 6 MDD de a16z, fundador ex-Nowports, declaró en prensa (El Español, 17-mar-2026) que **su siguiente vertical es logística**.
 
-**Lectura conjunta:** Likida no puede competir en la capa de medio de pago (Mendel/Visa, Uvicuo/Mastercard: pelea de balance y plástico, ya perdida) ni en la capa de "agentes de IA" (Handle, con capital de a16z). El terreno libre es la **capa de deducibilidad y facilidades del sector**, y el comprador correspondiente es **el contralor que tiene que defender la deducción en una revisión**, no el dueño que quiere control del gasto. Eso también reordena el argumento de "no cambias de banco, ni de tarjeta, ni de sistema", que es la respuesta directa a Mendel: su ventaja es también su fricción de adopción.
+**Lectura conjunta:** Likida no puede competir en la capa de medio de pago (Mendel/Visa, Uvicuo/Mastercard: pelea de balance y plástico, ya perdida) ni en la capa de "agentes de IA" genéricos, ya ocupada por jugadores con capital de riesgo en EUA. El terreno libre es la **capa de deducibilidad y facilidades del sector**, y el comprador correspondiente es **el contralor que tiene que defender la deducción en una revisión**, no el dueño que quiere control del gasto. Eso también reordena el argumento de "no cambias de banco, ni de tarjeta, ni de sistema", que es la respuesta directa a Mendel: su ventaja es también su fricción de adopción.
 
 ---
 
@@ -233,7 +232,7 @@ La justificación de cada bloque es la misma: primero lo que hace defendible una
 - **El padrón público de la CNE no trae RFC** y tiene ~6 semanas de rezago. Cualquier "este permiso pertenece al RFC que me facturó" descansa en fuzzy match de razón social. La promesa honesta es "al corte de {fecha} de la CNE aparece como vigente".
 - **Emisores de monedero:** su autorización se renueva anualmente (ficha 7/ISR, agosto–octubre) y el SAT publica un padrón de no renovados. Si el emisor cae, el cliente se queda sin comprobante deducible de combustible.
 - **Proveedor de IA:** el inciso II.e del art. 52 del Reglamento (informar al responsable cuando una autoridad pida los datos) se cumple solo parcialmente — hay órdenes con mordaza en EE.UU. Ese residual hay que **declararlo** en la evaluación de riesgo. Un hueco declarado se defiende; escondido es negligencia.
-- **Competencia con ventana corta:** Handle declaró logística como siguiente vertical en marzo de 2026. La ventana para ocupar públicamente el término "liquidación de viajes" se mide en meses.
+- **Competencia con ventana corta:** un competidor de IA en EUA declaró logística como siguiente vertical en marzo de 2026. La ventana para ocupar públicamente el término "liquidación de viajes" se mide en meses.
 
 ---
 
@@ -277,10 +276,10 @@ Ordenados por lo que cuesta si están mal. Los primeros cinco valen 3–4 llamad
 23. **Nadie entrevistó a un contralor ni a un administrador de flota.** Toda la reconstrucción del proceso operativo sale de material de proveedores y de obligaciones legales, no de campo. Es la validación más urgente del paquete.
 24. **Qué porcentaje de las flotas objetivo ya usa monedero electrónico de combustible.** De esa respuesta depende si el pitch es "conectamos tu monedero" o "te salvamos el 15% de la regla 2.9". Es la pregunta que más cambia el producto.
 25. **Comportamiento real de la conciliación de factura (ficha 46/CFF).** Declara 6 días de resolución; no se verificó cuánto tarda ni con qué tasa de éxito. Levantar 5 o 10 solicitudes reales y medir antes de venderlo como feature.
-26. **Todas las cifras autodeclaradas de competidores** (96% de recupero y 500+ flotillas de Mendel, 92% de Fotofacturas, 99% de precisión y 6-8x ROI de Handle, "$7 millones ahorrados" de Zumma). Están **publicadas**; no están **auditadas**. Se citaron como evidencia de cómo comunican, no como hechos.
+26. **Todas las cifras autodeclaradas de competidores** (96% de recupero y 500+ flotillas de Mendel, 92% de Fotofacturas, "$7 millones ahorrados" de Zumma). Están **publicadas**; no están **auditadas**. Se citaron como evidencia de cómo comunican, no como hechos.
 27. **Tamaño de mercado citado por Visa/Mendel:** una fuente dice "1.4 billones de dólares" y otra "US$1.4 mil millones" para el mismo dato. Son órdenes de magnitud distintos. **No usar ninguno hasta confirmar.**
 28. **Datos del sector** (82% de la carga terrestre, 95% de las empresas con menos de 30 camiones, 200,000+ empresas). Vienen de prensa especializada, no de INEGI, SICT ni CANACAR. Confirmar en fuente oficial antes de ponerlos en una propuesta.
-29. **Si Handle ya empezó a construir para logística** más allá de la declaración del fundador. No se encontró producto, landing ni cliente.
+29. **Si ese competidor de IA en EUA ya empezó a construir para logística** más allá de la declaración del fundador. No se encontró producto, landing ni cliente.
 30. **Disponibilidad In-Region de modelos Claude en `mx-central-1`.** La tabla consultada muestra solo "Global". Reconfirmar en la consola de AWS antes de comprometer arquitectura de residencia.
 
 ---

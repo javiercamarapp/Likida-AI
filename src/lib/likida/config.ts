@@ -54,7 +54,7 @@ export interface LikidaConfig {
   };
   /**
    * Estrategia por agente (B4, auditoría 4) — SOLO las perillas que un motor
-   * de verdad lee. Handle la tiene en los ocho; aquí se expone donde hay
+   * de verdad lee. La referencia la tiene en los ocho; aquí se expone donde hay
    * estrategia real que editar: un knob que ningún código consume sería un
    * rótulo que miente. Cobranza tiene la suya aparte (mig. 0089, con tiers y
    * ventana horaria); peajes fija sus tolerancias A PROPÓSITO (el propio

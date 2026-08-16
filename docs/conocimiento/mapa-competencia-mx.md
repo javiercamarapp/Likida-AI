@@ -1,8 +1,8 @@
 # El mapa de la competencia mexicana — investigación de campo del 15-ago-2026
 
-> Handle (usehandle.ai) NO está en este mapa a propósito: es el referente de
-> producto del que Likida clona patrones, no un rival — no vende en México ni
-> compite por el mismo comprador. La competencia es la de abajo.
+> Los jugadores de "agentes de IA" en EUA NO están en este mapa a propósito:
+> no venden en México ni compiten por el mismo comprador. La competencia real
+> es la de abajo.
 
 ## Veredicto ejecutivo
 

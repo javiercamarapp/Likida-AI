@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0102 — LA BITÁCORA DE CORRIDAS DE LOS AGENTES (hallazgo B3, auditoría 4).
 --
--- Es la pieza de Handle que más faltaba: su ficha de agente enseña
+-- Es la pieza de la arquitectura de referencia que más faltaba: su ficha de agente enseña
 -- «Periodo · Estado · Tareas 2/2 · Duración · Fecha» por corrida. En Likida,
 -- el único rastro de que un agente corrió era `logger.info` — que el cliente
 -- no ve. La consecuencia está escrita en el plan de la ronda: **sin
@@ -55,7 +55,7 @@ create table if not exists public.agente_corrida (
 );
 
 comment on table public.agente_corrida is
-  'Historial de corridas por agente y flota — la ficha «Periodo · Estado · Tareas · Duración» de Handle. Se escribe best-effort: una anotación perdida es mejor que una corrida tumbada.';
+  'Historial de corridas por agente y flota — la ficha «Periodo · Estado · Tareas · Duración». Se escribe best-effort: una anotación perdida es mejor que una corrida tumbada.';
 
 -- La consulta de la ficha: las últimas N de un agente de una flota.
 create index if not exists agente_corrida_ficha_idx

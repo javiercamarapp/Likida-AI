@@ -26,7 +26,7 @@ export interface ConfigCobranza {
 
 /** La conducta del 0087, como default: sin fila de config, el agente se
  *  porta EXACTAMENTE como el recordatorio de siempre (primer tier = 3 días)
- *  más los tiers de insistencia que Handle nos enseñó a cobrar. */
+ *  más los tiers de insistencia que la referencia nos enseñó a cobrar. */
 export const CONFIG_COBRANZA_DEFAULT: ConfigCobranza = {
   activo: true,
   tiers: [3, 7, 14],

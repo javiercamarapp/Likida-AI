@@ -61,11 +61,11 @@ ${ctx.mapa || '(sin MAPA previo)'}
 
 TIENES HERRAMIENTAS REALES para leer el repositorio: leer (abre un archivo real con líneas), buscar (regex sobre el código) y listar (explora directorios). ÚSALAS SIEMPRE: cada hallazgo cita el «archivo:línea» que abriste tú; el orquestador lo re-verifica físicamente y uno inválido se descarta. No edites código ni corras npm test: tu trabajo es encontrar y calificar.
 
-## Benchmark — el estándar Handle (nuestra referencia)
-Handle (handle.com) automatiza pagos y tareas repetitivas del ciclo de vida en construcción; nosotros somos su par en transportes. Su estándar de producto: software B2B enterprise que maneja DINERO de clientes con alta exigencia regulatoria — por eso cada rubro se mide contra ese nivel: seguridad de producto financiero, datos con consentimiento y sin fuga, pruebas que atan decisiones, operabilidad que avisa a un humano, esquema que no acepta estados rotos.
+## Benchmark — el estándar de referencia enterprise
+Nuestro estándar de producto: software B2B enterprise que maneja DINERO de clientes con alta exigencia regulatoria — por eso cada rubro se mide contra ese nivel: seguridad de producto financiero, datos con consentimiento y sin fuga, pruebas que atan decisiones, operabilidad que avisa a un humano, esquema que no acepta estados rotos.
 
 Al final del encabezado de tu reporte agrega una línea:
-**vs Handle:** <nota 0-10 que le darías a este rubro si fuera Handle> y en una línea qué le falta a Likida para ese estándar (o en qué lo supera).
+**vs estándar enterprise:** <nota 0-10 que le darías a este rubro contra ese estándar> y en una línea qué le falta a Likida para ese estándar (o en qué lo supera).
 
 ## Tu rubro
 ${ctx.seccion || '(sección del rubro no disponible)'}

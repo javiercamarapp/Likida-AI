@@ -95,7 +95,7 @@ export default async function TrazaCorridaPage({
         />
 
         <div className="px-5 py-5 flex-1 space-y-2.5">
-          {/* ── El renglón de Handle: Estado · Tareas · Duración · Costo ──── */}
+          {/* ── El renglón de referencia: Estado · Tareas · Duración · Costo ──── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
               <div className="text-xs" style={{ color: 'var(--muted)' }}>Estado</div>

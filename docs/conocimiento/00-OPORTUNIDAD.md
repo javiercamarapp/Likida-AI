@@ -5,7 +5,8 @@
 > Orden de construcción y decisiones: `00-ROADMAP.md`. Cambios sobre el código: `00-MEJORAS.md`.
 
 **La tesis:** Likida no compite en la capa de medio de pago (Mendel/Visa, Uvicuo/Mastercard: pelea de
-balance y plástico, ya perdida) ni en la de "agentes de IA" (Handle, con 6 MDD de a16z). El terreno
+balance y plástico, ya perdida) ni en la de "agentes de IA" genéricos, ya ocupada por jugadores con
+capital de riesgo. El terreno
 libre es la **capa de deducibilidad y facilidades del sector**, y el comprador es **el contralor que
 tiene que defender la deducción en una revisión**, no el dueño que quiere control del gasto.
 
@@ -529,9 +530,9 @@ un tipo de intake nuevo. El mantenimiento correctivo cuesta 3x-55x el preventivo
    nadie midió cuánto tarda ni con qué tasa de éxito. Levantar 5 o 10 solicitudes reales antes de
    venderlo como feature.
 6. **Todas las cifras autodeclaradas de competidores** (96% de recupero y 500+ flotillas de Mendel,
-   92% de Fotofacturas, 99% de precisión y 6-8x ROI de Handle, "$7 millones ahorrados" de Zumma) están
+   92% de Fotofacturas, "$7 millones ahorrados" de Zumma) están
    **publicadas**, no **auditadas**. Se citan como evidencia de cómo comunican, jamás como hechos.
 
-**Ventana competitiva:** Handle AI (6 MDD de a16z, fundador ex-Nowports) declaró en prensa el
+**Ventana competitiva:** un competidor de IA con capital de riesgo reciente declaró en prensa el
 17-mar-2026 que su siguiente vertical es logística. La ventana para ocupar públicamente el término
 "liquidación de viajes" se mide en meses.

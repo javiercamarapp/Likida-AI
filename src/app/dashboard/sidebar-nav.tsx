@@ -34,7 +34,7 @@ function Fila({ item, sufijo, pathname }: { item: Item; sufijo: string; pathname
 }
 
 function Seccion({ titulo, items, sufijo, pathname }: { titulo: string; items: Item[]; sufijo: string; pathname: string }) {
-  // PLEGABLE como la referencia Handle (13-ago-2026): el encabezado es
+  // PLEGABLE como la referencia (13-ago-2026): el encabezado es
   // botón con chevron. El estado es de la sesión — no persiste a propósito:
   // un sidebar que amanece plegado esconde el producto.
   const [plegada, setPlegada] = useState(false);
@@ -116,7 +116,7 @@ export default function SidebarNav({ rol }: { rol: string }) {
   );
 }
 
-/** El bloque INFERIOR fijo (referencia Handle: Help Center / Settings),
+/** El bloque INFERIOR fijo (referencia: Help Center / Settings),
  *  montado por chrome.tsx en su zona con fondo propio — separado del nav
  *  principal para poder anclarlo abajo. El 13-ago llegaron dos piezas más
  *  de la referencia (con captura): "Centro de ayuda" como botón pill y el

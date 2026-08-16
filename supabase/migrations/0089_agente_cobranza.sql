@@ -2,8 +2,8 @@
 -- 0089 — El Agente de Cobranza de comprobantes, productizado (13-ago-2026).
 --
 -- El recordatorio de comprobación (0087) corre solo pero es UNO por viaje y
--- con umbral fijo en código. La prioridad 1 del blueprint de Handle
--- (docs/conocimiento/handle-el-mapa-completo-para-likida.md) es volverlo un
+-- con umbral fijo en código. La prioridad 1 del plan de producto
+-- es volverlo un
 -- agente que el CLIENTE configura: tiers de seguimiento, horario y ventana
 -- hábil, instrucciones y firma — y con bitácora de cada contacto.
 --

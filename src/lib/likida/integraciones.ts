@@ -2,7 +2,7 @@
 // INTEGRACIONES — los sistemas que la flota YA usa, y cómo se conecta Likida
 // con cada uno.
 //
-// Handle tiene dos secciones separadas en su chasis y la diferencia importa:
+// La arquitectura de referencia tiene dos secciones separadas en su chasis y la diferencia importa:
 // «Aseguradoras» son CREDENCIALES (los accesos que sus agentes usan para
 // trabajar) e «Integraciones» son los SISTEMAS DE NEGOCIO del cliente (su CRM,
 // su ERP, su Drive). Aquí es igual: `/dashboard/conexiones` ya cubre las

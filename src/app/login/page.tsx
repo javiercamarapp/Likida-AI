@@ -106,9 +106,9 @@ export default async function Login({
 
   // ── EL LOGIN HABLA EL IDIOMA DEL PRODUCTO ─────────────────────────────────
   //
-  // La estructura sigue siendo la de usehandle.ai/login (dos columnas, imagen
+  // La estructura sigue siendo la de un login de referencia (dos columnas, imagen
   // a la derecha), que es un buen layout y no hay por qué cambiarlo. Lo que se
-  // fue el 14-ago-2026 son los COLORES Y LA TIPOGRAFÍA de Handle, que estaban
+  // fue el 14-ago-2026 son los COLORES Y LA TIPOGRAFÍA de esa referencia, que estaban
   // literales aquí (#0a0a0a, #e5e5e5, #6b6b6b) "a propósito, para que quede
   // idéntico".
   //
@@ -128,7 +128,7 @@ export default async function Login({
   // `shouldCreateUser:false` siguen exactamente igual.
   //
   // La imagen de la derecha es propia, generada con Higgsfield (`nano_banana_2`)
-  // — fotorrealista, no la artwork de Handle: Javier lo pidió explícito el
+  // — fotorrealista, no artwork ilustrado: Javier lo pidió explícito el
   // 8-ago-2026, "camión real no pixeles", para que se sienta de la misma
   // familia fotográfica que el banner de `/dashboard`.
   return (

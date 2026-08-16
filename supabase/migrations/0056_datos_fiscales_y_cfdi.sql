@@ -2,8 +2,8 @@
 -- 0056 — LO QUE EL CFDI EXIGE Y LA 0052 NO GUARDABA.
 --
 -- Decisión del 4-ago-2026: las flotas pagan por TRANSFERENCIA SPEI, no con
--- tarjeta. Se midió cómo cobran siete empresas del mercado —Handle, Nowports,
--- Yalo, leadsales y las tres de rastreo de flotas (Encontrack, Detektor,
+-- tarjeta. Se midió cómo cobran siete empresas del mercado —competidores de IA,
+-- Nowports, Yalo, leadsales y las tres de rastreo de flotas (Encontrack, Detektor,
 -- Copiloto)— y las siete dan el mismo resultado: cero precios públicos, cero
 -- pasarela de pago en el sitio. Se cotiza, se factura y se cobra por
 -- transferencia. Un contralor de flota no paga la mensualidad con tarjeta.

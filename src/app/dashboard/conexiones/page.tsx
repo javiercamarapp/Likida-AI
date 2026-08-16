@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
 const RUTA = '/dashboard/conexiones';
 
 /**
- * Conexiones (F7 del plan — el chasis de Handle): qué tiene conectado la
+ * Conexiones (F7 del plan — el chasis de agentes): qué tiene conectado la
  * flota y qué le falta, con estado MEDIDO. Área `administracion`: es
  * configuración de la cuenta, del dueño.
  *

@@ -187,8 +187,9 @@ lados a la vez con profundidad real. Uvicuo entra por el chofer (tarjeta +
 WhatsApp) y no tiene el lado contable-fiscal serio (verificado por ausencia:
 "su cumplimiento SAT es recuperar facturas, no validarlas"). Los TMS legacy
 entran por la oficina del contador y no tienen al chofer en el loop (captura
-manual, "sin operador en el loop, sin IA ni validación fiscal"). Handle es
-el referente de producto, no compite en México.
+manual, "sin operador en el loop, sin IA ni validación fiscal"). Los
+jugadores de "agentes de IA" con capital de riesgo en EUA no compiten en
+México.
 
 **¿Alguien ya lo intenta? Sí — en narrativa, no en producto.** GetCastores
 promete explícitamente "liquidación + combustible + WhatsApp/IA" — es
@@ -284,8 +285,8 @@ honestidad que este documento debe tener:
   censo para el liquidador transportista. **Esto prueba que el dolor es
   real, grande y transversal a industrias que no son transporte — no que
   Likida ya tenga clientes ahí.**
-- **La categoría está validada por terceros con capital:** Handle (US,
-  referente de producto) y Uvicuo (MX, $4M, Mastercard) — nadie tiene que
+- **La categoría está validada por terceros con capital:** un jugador de IA
+  en EUA y Uvicuo (MX, $4M, Mastercard) — nadie tiene que
   evangelizar ya que este es un problema con presupuesto.
 
 ### Lo que NO es evidencia — el producto, cero

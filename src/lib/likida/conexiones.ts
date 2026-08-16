@@ -6,7 +6,7 @@ import { modoEfectivo, mandatoFiscalAceptado } from './facturacion/modo';
 import { correoConfigurado } from '@/lib/correo/enviar';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CONEXIONES (F7 del plan — el chasis de Handle): qué tiene conectado la
+// CONEXIONES (F7 del plan — el chasis de agentes): qué tiene conectado la
 // flota y qué le falta, con estado MEDIDO — nunca un semáforo decorativo.
 // La regla de la pantalla: cada renglón dice de dónde salió su verdad, y lo
 // que no se puede medir se declara 'no_medible' en vez de pintarse verde.

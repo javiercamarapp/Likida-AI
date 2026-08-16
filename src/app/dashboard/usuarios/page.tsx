@@ -41,7 +41,7 @@ async function getUsuarios(tenantId: string): Promise<UsuarioRow[]> {
  *
  * ── DOS PUERTAS, como en /dashboard/clientes ──────────────────────────────
  *  · VER es área `administracion` (`puedeVerRuta`): superadmin y flota_admin.
- *  · INVITAR es `puedeAdministrar`: el mismo criterio que Handle y que la RLS
+ *  · INVITAR es `puedeAdministrar`: el mismo criterio de la RLS
  *    de las llaves (0093) — repartir acceso es CONTROL de la cuenta.
  *
  * LAS DOS SE VUELVEN A COMPROBAR DENTRO DEL SERVER ACTION: el rol del render

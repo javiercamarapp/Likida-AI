@@ -8,7 +8,7 @@
 
 ## 1. Intake por correo (facturas@<flota>.likida.ai)
 
-**Qué es (Handle):** cada cliente recibe una dirección propia; lo que llega
+**Qué es:** cada cliente recibe una dirección propia; lo que llega
 (XML de proveedores, desgloses de peaje) entra al mismo pipeline que
 WhatsApp y las subidas del panel.
 
@@ -35,7 +35,7 @@ cubre el 90% del caso.
   buzón público que ejecuta pipelines es superficie de ataque.
 - El costo del OCR/parseo se registra con fase propia (`correo`).
 
-## 2. API por agente (el "API access" de Handle)
+## 2. API por agente
 
 **Qué es:** el cliente enterprise (Transportes Innovativos tiene TMS propio +
 SAP B1) lee la cola/bitácora de cada agente desde sus sistemas.

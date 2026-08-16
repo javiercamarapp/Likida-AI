@@ -9,7 +9,7 @@ import { VistaIntegraciones } from './vista';
 export const dynamic = 'force-dynamic';
 
 /**
- * Integraciones (chasis Handle) — con qué sistemas de la flota conecta Likida.
+ * Integraciones (chasis de agentes) — con qué sistemas de la flota conecta Likida.
  *
  * Solo UN estado se mide por tenant (las credenciales de rastreo); el resto son
  * verdades del producto, iguales para todas las flotas. Fingir una medición por
