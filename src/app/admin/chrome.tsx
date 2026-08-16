@@ -5,6 +5,7 @@ import { MARCO_FILA, MARCO_SIDEBAR, MARCO_COLUMNA, MARCO_SCROLL, CLASE_COLUMNA_C
 import SidebarNav, { SidebarAbajoAdmin } from './sidebar-nav';
 import { BotonSidebar } from '../boton-sidebar';
 import CommandPalette from './command-palette';
+import CopilotoPanel from './copiloto-panel';
 import { Logo } from '../logo';
 
 /**
@@ -17,9 +18,15 @@ import { Logo } from '../logo';
  *
  * EL ASISTENTE EXPANDIBLE SE FUE (14-ago-2026) — la misma decisión que el
  * rail del dashboard el 12-ago — y en la segunda pasada (mismo día) se
- * quitó también la página /admin/chat y sus entradas: /admin queda SIN
- * asistente de IA en ninguna forma. La campana de
+ * quitó también la página /admin/chat y sus entradas. La campana de
  * alertas se mudó al Resumen (`consola.tsx`), donde se miran las señales.
+ *
+ * EL COPILOTO REGRESÓ OTRA COSA (16-ago-2026): aquel asistente era el chat
+ * genérico; el Copiloto del fundador es la Fase 2 pieza 1 de su blueprint
+ * (`copiloto-del-fundador.md` §6: página propia Y panel lateral, "las dos,
+ * y no es indecisión"). El panel (⌘J, `copiloto-panel.tsx`) vive en el
+ * chrome para que la conversación sobreviva a la navegación; sigue siendo
+ * puro dibujo — la puerta real es /api/admin/copiloto en cada llamada.
  */
 export default function AdminChrome({
   nombre, avatarUrl, cerrarSesion, children,
@@ -46,7 +53,7 @@ export default function AdminChrome({
           </nav>
 
           {/* El bloque inferior fijo con su propio fondo — gemelo del de
-              chrome.tsx (la referencia Handle del 13-ago). */}
+              chrome.tsx (la referencia del 13-ago). */}
           <div className="px-2 pt-2 pb-1.5 space-y-0.5 shrink-0" style={{ background: 'var(--canvas)', borderTop: '1px solid var(--line)' }}>
             <SidebarAbajoAdmin />
           </div>
@@ -87,6 +94,8 @@ export default function AdminChrome({
             {children}
           </div>
         </div>
+
+        <CopilotoPanel />
       </div>
     </div>
   );

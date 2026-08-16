@@ -23,6 +23,10 @@ const ejecutarCopiloto = vi.fn(async (..._a: unknown[]) => ({
 vi.mock('@/lib/agents/copiloto', () => ({
   ejecutarCopiloto: (...a: unknown[]) => ejecutarCopiloto(...a),
 }));
+const guardarIntercambioCopiloto = vi.fn(async (..._a: unknown[]) => 'conv-guardada');
+vi.mock('@/lib/agents/copiloto-historial', () => ({
+  guardarIntercambioCopiloto: (...a: unknown[]) => guardarIntercambioCopiloto(...a),
+}));
 
 const { POST } = await import('./route');
 
@@ -34,6 +38,8 @@ beforeEach(() => {
   sesion = { userId: 'u-javier', rol: 'superadmin' };
   ejecutarAccionCopiloto.mockClear();
   ejecutarCopiloto.mockClear();
+  guardarIntercambioCopiloto.mockClear();
+  guardarIntercambioCopiloto.mockResolvedValue('conv-guardada');
 });
 
 describe('la puerta', () => {
@@ -88,5 +94,41 @@ describe('el chat', () => {
     const r = await POST(pedir({ mensajes: [{ rol: 'asistente', texto: 'yo primero' }] }));
     expect(r.status).toBe(400);
     expect(ejecutarCopiloto).not.toHaveBeenCalled();
+  });
+});
+
+describe('el historial (0121)', () => {
+  const UUID = '11111111-2222-3333-4444-555555555555';
+
+  it('el intercambio se persiste con el userId DE LA SESIÓN y el fin trae el id', async () => {
+    const r = await POST(pedir({
+      mensajes: [{ rol: 'usuario', texto: '¿qué espera decisión hoy?' }],
+      conversacionId: UUID,
+    }));
+    const eventos = (await r.text()).trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(eventos[eventos.length - 1]).toMatchObject({ t: 'fin', conversacionId: 'conv-guardada' });
+    expect(guardarIntercambioCopiloto).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'u-javier',
+      conversacionId: UUID,
+      pregunta: '¿qué espera decisión hoy?',
+    }));
+  });
+
+  it('un conversacionId basura viaja como null (conversación nueva), no a la base', async () => {
+    await POST(pedir({
+      mensajes: [{ rol: 'usuario', texto: 'hola' }],
+      conversacionId: "'; drop table copiloto_conversacion; --",
+    }));
+    expect(guardarIntercambioCopiloto).toHaveBeenCalledWith(expect.objectContaining({ conversacionId: null }));
+  });
+
+  it('si guardar revienta, la respuesta IGUAL sale — el historial es comodidad', async () => {
+    guardarIntercambioCopiloto.mockRejectedValueOnce(new Error('base caída'));
+    const r = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
+    const eventos = (await r.text()).trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+    const fin = eventos[eventos.length - 1];
+    expect(fin.t).toBe('fin');
+    expect(fin.bloques).toEqual([{ tipo: 'texto', texto: 'hola' }]);
+    expect(fin.conversacionId).toBeNull();
   });
 });

@@ -7,7 +7,9 @@
 // modelo por llamada. Sin sesión: 401. Otro rol: 403. Ninguna dice qué hay.
 //
 // DOS OPERACIONES, un discriminador en el cuerpo:
-//  · { mensajes }            → el chat (streaming NDJSON, como /dashboard/chat)
+//  · { mensajes }            → el chat (streaming NDJSON, como /dashboard/chat).
+//    Con `conversacionId` opcional: cada intercambio se persiste (0121) y el
+//    'fin' devuelve el id — la lista y la lectura viven en ./conversaciones.
 //  · { accion, confirmado }  → EJECUTAR una acción ya confirmada por Javier —
 //    determinista, sin modelo (copiloto-acciones.ts). El servidor RECHAZA
 //    sin `confirmado: true`: la confirmación del cliente no es decorativa.
@@ -19,22 +21,17 @@
 // una columna nullable o un tenant interno, no un tenant real de relleno.
 // ═══════════════════════════════════════════════════════════════════════════
 import { NextResponse } from 'next/server';
-import { getSessionTenant } from '@/lib/auth/session';
 import { ejecutarCopiloto } from '@/lib/agents/copiloto';
 import { ejecutarAccionCopiloto } from '@/lib/agents/copiloto-acciones';
+import { guardarIntercambioCopiloto } from '@/lib/agents/copiloto-historial';
+import { validarConversacionId } from '@/app/api/dashboard/chat/validacion';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
+import { sesionSuperadmin } from './puerta';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-async function sesionSuperadmin() {
-  const s = await getSessionTenant();
-  if (!s) return { error: new NextResponse(null, { status: 401 }), sesion: null };
-  if (s.rol !== 'superadmin') return { error: new NextResponse(null, { status: 403 }), sesion: null };
-  return { error: null, sesion: s };
-}
 
 /** Historial acotado (mismos topes que valida /dashboard/chat): 12 turnos,
  *  2,000 chars cada uno — el cliente no es frontera de confianza. */
@@ -85,6 +82,9 @@ export async function POST(req: Request) {
   // ── Camino 1: el chat (streaming NDJSON, patrón de /dashboard/chat) ──────
   const mensajes = validarMensajes(cuerpo.mensajes);
   if (!mensajes) return NextResponse.json({ error: 'mensajes inválidos' }, { status: 400 });
+  // El id de conversación al que anexar (historial 0121). Inválido o ajeno →
+  // conversación nueva, jamás la de otro (el anclaje vive en el módulo).
+  const conversacionPedida = validarConversacionId(cuerpo.conversacionId);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -102,7 +102,23 @@ export async function POST(req: Request) {
           costoUsd: r.costoUsd, tokensIn: r.tokensIn, tokensOut: r.tokensOut,
           modelo: r.modelo, tools: r.toolsUsadas.length,
         });
-        manda({ t: 'fin', bloques: r.bloques, toolsUsadas: r.toolsUsadas });
+        // Persistir el intercambio (0121). Si falla, la respuesta IGUAL sale —
+        // el historial es una comodidad; la respuesta ya costó dinero.
+        let conversacionId: string | null = null;
+        try {
+          conversacionId = await guardarIntercambioCopiloto({
+            userId: sesion.userId,
+            conversacionId: conversacionPedida,
+            pregunta: mensajes[mensajes.length - 1].texto,
+            textoRespuesta: r.bloques
+              .filter((b): b is { tipo: 'texto'; texto: string } => b.tipo === 'texto' && typeof (b as { texto?: unknown }).texto === 'string')
+              .map((b) => b.texto).join(' ') || 'Listo.',
+            bloques: r.bloques as unknown as Array<Record<string, unknown>>,
+          });
+        } catch (err) {
+          logger.error('copiloto.guardar_fallo', { err: err instanceof Error ? err.message : String(err) });
+        }
+        manda({ t: 'fin', bloques: r.bloques, toolsUsadas: r.toolsUsadas, conversacionId });
       } catch (err) {
         logger.error('copiloto.fallo', { err: err instanceof Error ? err.message : String(err) });
         manda({ t: 'error', error: 'el copiloto no pudo responder en este momento' });

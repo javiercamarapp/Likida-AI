@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, Check, ExternalLink, ShieldAlert } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowUp, Check, ExternalLink, History, PanelRightClose, PencilLine, Search, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
-import { mxn, litros, numero } from '@/lib/formato';
+import { mxn, litros, numero, fechaCorta } from '@/lib/formato';
 import { Logo, LogoIcono } from '../logo';
 import { CampoPixeles } from '../dashboard/pixeles';
 import { Dona, AreaChartSimple } from './charts';
@@ -18,9 +18,17 @@ import { Dona, AreaChartSimple } from './charts';
 //
 // LA CONFIRMACIÓN NO ES DEL MODELO: el botón manda un POST aparte con
 // `confirmado: true` y el motivo tecleado; el servidor ejecuta la MISMA
-// función del ⌘K y la rechaza sin motivo. Sin adjuntos ni historial
-// persistente en esta fase (el intercambio 0088 es por tenant) — dicho en
-// el reporte, no escondido.
+// función del ⌘K y la rechaza sin motivo. Sin adjuntos en esta fase.
+//
+// HISTORIAL PERSISTENTE (0121, cierre del pendiente declarado): tablas
+// propias porque 0088 exige tenant y el copiloto es de Likida. El cajón es
+// el MISMO del chat del cliente. Una acción reabierta del historial se
+// muestra ARCHIVADA, sin botón: la previsualización vieja no ejecuta — se
+// pide de nuevo y el servidor la re-propone con el estado de hoy.
+//
+// DOS VARIANTES del diseño §6 ("las dos, y no es indecisión"): `pagina`
+// (/admin/copiloto, sesiones largas) y `panel` (el lateral persistente del
+// chrome, copiloto-panel.tsx) — un componente, no una copia.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const SUGERENCIAS = [
@@ -56,6 +64,9 @@ interface Respuesta {
    *  tools corrieron, jamás de lo que el modelo diga. */
   fuentes?: Array<{ ruta: string; etiqueta: string }>;
   pendiente?: boolean;
+  /** Turno reabierto del historial (0121): su acción se muestra archivada,
+   *  sin botón de ejecutar. */
+  archivada?: boolean;
 }
 
 /** tool → verbo en español para la secuencia de pensamiento (mismo patrón
@@ -246,13 +257,86 @@ function TarjetaAccion({ a, onEjecutada }: {
   );
 }
 
-export default function Copiloto() {
+export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' | 'panel' }) {
   const [historial, setHistorial] = useState<Array<{ q: string; r: Respuesta }>>([]);
   const [texto, setTexto] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [fasePensando, setFasePensando] = useState('Pensando…');
   const [pasosVivos, setPasosVivos] = useState<Array<{ tool: string; listo: boolean }>>([]);
   const finConversacion = useRef<HTMLDivElement>(null);
+
+  // ── Historial persistente (0121) — el MISMO patrón 0088 del chat ─────────
+  // La conversación abierta vive en la base; este id la ancla. `convs` es la
+  // lista del panel: null = cargando, 'error' = no se pudo leer (y se DICE —
+  // una lista vacía por error afirmaría "no has chateado").
+  const [conversacionId, setConversacionId] = useState<string | null>(null);
+  const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [convs, setConvs] = useState<Array<{ id: string; titulo: string; actualizadoEn: string }> | 'error' | null>(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  // El ancla sticky marca el tope visible del área del chat; el cajón de la
+  // página se mide contra ella AL ABRIR — en el handler, no en un efecto.
+  const anclaChat = useRef<HTMLDivElement>(null);
+  const [topPanel, setTopPanel] = useState(16);
+
+  const cargarLista = useCallback(() => {
+    fetch('/api/admin/copiloto/conversaciones')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => setConvs(Array.isArray(d?.conversaciones) ? d.conversaciones : 'error'))
+      .catch(() => setConvs('error'));
+  }, []);
+
+  // La página carga la lista al montar (el botón trae su conteo real, como
+  // el chat); el panel lateral vive en TODAS las pantallas de /admin, así
+  // que ahí se carga hasta que el historial se abre — ver abrirHistorial.
+  useEffect(() => {
+    if (variante !== 'pagina') return;
+    cargarLista();
+  }, [variante, cargarLista]);
+
+  function abrirHistorial() {
+    const r = anclaChat.current?.getBoundingClientRect();
+    setTopPanel(Math.max(16, Math.round(r?.top ?? 16)));
+    setErrorCarga(null);
+    if (convs === null || convs === 'error') cargarLista();
+    setHistorialAbierto(true);
+  }
+
+  /** Reabre una conversación guardada: sus mensajes bajan al hilo y las
+   *  visuales se re-pintan desde los bloques crudos. Las acciones reabren
+   *  ARCHIVADAS — la previsualización vieja no ejecuta. */
+  async function cargarConversacion(id: string) {
+    if (ocupado) return;
+    setErrorCarga(null);
+    try {
+      const resp = await fetch(`/api/admin/copiloto/conversaciones/${id}`);
+      const d = await resp.json().catch(() => null);
+      if (!resp.ok || !d || !Array.isArray(d.mensajes)) throw new Error('respuesta inválida');
+      const pares: Array<{ q: string; r: Respuesta }> = [];
+      for (const m of d.mensajes as Array<{ rol: string; texto: string; bloques: unknown }>) {
+        if (m.rol === 'usuario') {
+          pares.push({ q: m.texto, r: { texto: '' } });
+        } else if (pares.length > 0) {
+          const r = Array.isArray(m.bloques) && m.bloques.length > 0
+            ? respuestaDeBloques(m.bloques as Array<Record<string, unknown>>)
+            : { texto: m.texto };
+          pares[pares.length - 1].r = { ...r, archivada: true };
+        }
+      }
+      setHistorial(pares);
+      setConversacionId(id);
+      setHistorialAbierto(false);
+    } catch {
+      setErrorCarga('No se pudo abrir esa conversación — inténtalo de nuevo.');
+    }
+  }
+
+  function nuevoChat() {
+    setHistorial([]);
+    setConversacionId(null);
+    setTexto('');
+    setHistorialAbierto(false);
+  }
 
   useEffect(() => {
     finConversacion.current?.scrollIntoView({ block: 'end' });
@@ -283,7 +367,7 @@ export default function Copiloto() {
       ]);
       const resp = await fetch('/api/admin/copiloto', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }] }),
+        body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }], conversacionId }),
         signal: AbortSignal.timeout(75_000),
       });
       let d: Record<string, unknown> | null = null;
@@ -339,6 +423,11 @@ export default function Copiloto() {
       } else {
         r = { texto: 'El copiloto no pudo responder en este momento — inténtalo de nuevo.' };
       }
+      // El id que el servidor asignó al persistir (0121): anexar aquí los
+      // turnos siguientes. Si guardar falló, viene null y no se toca.
+      if (resp.ok && d && typeof d.conversacionId === 'string') {
+        setConversacionId(d.conversacionId);
+      }
       setHistorial((h) => [...h.slice(0, -1), { q, r }]);
     } catch {
       setHistorial((h) => [...h.slice(0, -1), { q, r: { texto: 'El copiloto no pudo responder en este momento — inténtalo de nuevo.' } }]);
@@ -378,74 +467,243 @@ export default function Copiloto() {
 
   const vacio = historial.length === 0;
 
+  // El hilo de la conversación — COMPARTIDO por la página y el panel: un
+  // componente, no una copia (la regla de la única librería de UI).
+  const hilo = (
+    <div className="flex-1 space-y-4 py-2">
+      {historial.map((h, i) => (
+        <div key={i}>
+          <div className="flex justify-end">
+            <div className="hairline rounded-2xl rounded-br-md px-3.5 py-2 text-sm max-w-[85%]" style={{ background: 'var(--surface)' }}>
+              {h.q}
+            </div>
+          </div>
+          <div className="mt-2.5 text-sm max-w-[85%]">
+            {h.r.pendiente ? (
+              <div className="flex items-start gap-2.5">
+                <span className="likida-respira shrink-0 mt-0.5"><LogoIcono alto="h-[16px]" /></span>
+                <div>
+                  <div style={{ color: 'var(--muted)' }}>{fasePensando}</div>
+                  {pasosVivos.length > 0 && (
+                    <div className="mt-2 space-y-1.5">
+                      {pasosVivos.map((p, j) => (
+                        <div key={j} className="flex items-center gap-2 text-[12.5px]"
+                          style={{ color: p.listo ? 'var(--faint)' : 'var(--ink)' }}>
+                          {p.listo
+                            ? <Check width={12} height={12} strokeWidth={2} className="shrink-0" style={{ color: 'var(--muted)' }} />
+                            : <span className="skeleton inline-block w-2.5 h-2.5 rounded-full shrink-0" />}
+                          {rotuloTool(p.tool)}{p.listo ? '' : '…'}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div>{h.r.texto}</div>
+            )}
+            {h.r.visuales?.map((v, j) => <VisualRespuesta key={j} v={v} />)}
+            {h.r.accion && (h.r.archivada ? (
+              // Una acción reabierta del historial NO trae botón: la
+              // previsualización vieja describe el estado de AQUEL día —
+              // ejecutarla hoy firmaría sobre un efecto que ya no es verdad.
+              <div className="card p-3 mt-2 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+                Propuesta archivada del historial (<span className="cifra-mono">{h.r.accion.objetivo}</span>).
+                Para ejecutarla, pídela de nuevo — se re-propone con el estado de hoy.
+              </div>
+            ) : (
+              <TarjetaAccion a={h.r.accion}
+                onEjecutada={(mensaje) => {
+                  setHistorial((prev) => [...prev, { q: '(acción confirmada)', r: { texto: mensaje } }]);
+                }} />
+            ))}
+            {h.r.fuentes && h.r.fuentes.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Fuentes:</span>
+                {h.r.fuentes.map((f) => (
+                  <Link key={f.ruta} href={f.ruta}
+                    className="hairline inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full hover:opacity-70 transition-opacity"
+                    style={{ background: 'var(--surface)' }}>
+                    {f.etiqueta} <ExternalLink width={10} height={10} strokeWidth={1.75} />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+      <div ref={finConversacion} />
+    </div>
+  );
+
+  // ── HISTORIAL (0121) — el MISMO cajón del chat del cliente (0088) ────────
+  const listaFiltrada = Array.isArray(convs)
+    ? convs.filter((c) => c.titulo.toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : [];
+
+  // El cuerpo de la lista — compartido por el cajón de la página y la vista
+  // del panel lateral: búsqueda, estados honestos y las conversaciones.
+  const cuerpoLista = (
+    <>
+      <div className="hairline flex items-center gap-2 px-3 py-2 rounded-full" style={{ background: 'var(--canvas)' }}>
+        <Search width={13} height={13} strokeWidth={2} style={{ color: 'var(--muted)' }} />
+        <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="Buscar chats" aria-label="Buscar chats"
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px]" />
+      </div>
+
+      <div className="etiqueta-mono text-[10px] uppercase px-1 pt-1" style={{ color: 'var(--faint)' }}>
+        Recientes
+      </div>
+
+      {errorCarga && (
+        <p className="text-[12px] px-1" style={{ color: 'var(--bad)' }}>{errorCarga}</p>
+      )}
+
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5">
+        {convs === null && (
+          <div className="space-y-2 px-1 pt-1">
+            <div className="skeleton h-4 rounded" /><div className="skeleton h-4 rounded w-4/5" /><div className="skeleton h-4 rounded w-3/5" />
+          </div>
+        )}
+        {convs === 'error' && (
+          <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
+            No se pudo leer el historial ahora mismo — tus conversaciones siguen
+            guardadas; reintenta en un momento.
+          </p>
+        )}
+        {Array.isArray(convs) && listaFiltrada.length === 0 && (
+          <p className="text-[12.5px] px-1" style={{ color: 'var(--muted)' }}>
+            {convs.length === 0 ? 'Sin chats recientes.' : `Nada coincide con «${busqueda.trim()}».`}
+          </p>
+        )}
+        {listaFiltrada.map((c) => {
+          const activa = c.id === conversacionId;
+          return (
+            <button key={c.id} type="button" onClick={() => void cargarConversacion(c.id)}
+              className={`w-full text-left px-2.5 py-2 rounded-lg text-[13px] transition-colors ${activa ? 'font-medium' : 'hover:bg-[var(--canvas)]'}`}
+              style={activa ? { background: 'var(--g1)', color: 'var(--marca)' } : undefined}>
+              <span className="block truncate">{c.titulo}</span>
+              <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{fechaCorta(c.actualizadoEn)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  // El pill flotante con el conteo real y el cajón derecho EN FLUJO —
+  // mismas medidas, misma curva easeOutQuint y mismo sticky que chat.tsx.
+  const pillHistorial = (
+    <div ref={anclaChat} className="sticky top-0 z-30 h-0 w-full">
+      {!historialAbierto && (
+        <button type="button" onClick={abrirHistorial}
+          className="absolute top-3 right-4 hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]"
+          style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
+          <History width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+          Historial
+          {Array.isArray(convs) && (
+            <span className="cifra-mono text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
+              {numero(convs.length)}
+            </span>
+          )}
+        </button>
+      )}
+    </div>
+  );
+
+  const cajonHistorial = (
+    <div className="shrink-0 self-start sticky top-4 mt-4 overflow-hidden"
+      style={{ width: historialAbierto ? 352 : 0, height: `calc(100dvh - ${topPanel + 32}px)`, transition: 'width 480ms cubic-bezier(0.22, 1, 0.36, 1)' }}>
+      <div className="w-[320px] mx-4 h-full rounded-2xl hairline flex flex-col p-3 gap-2.5"
+        style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
+        <div className="flex items-center justify-between">
+          <button type="button" onClick={nuevoChat}
+            className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
+            <PencilLine width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+            Nuevo chat
+          </button>
+          <button type="button" aria-label="Cerrar historial" title="Cerrar historial" onClick={() => setHistorialAbierto(false)}
+            className="w-8 h-8 ml-1.5 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
+            style={{ color: 'var(--muted)' }}>
+            <PanelRightClose width={15} height={15} strokeWidth={1.75} />
+          </button>
+        </div>
+        {cuerpoLista}
+      </div>
+    </div>
+  );
+
+  // ── VARIANTE PANEL (diseño §6: el lateral persistente del chrome) ────────
+  // Compacto: sin portada de pixeles ni logo grande — el panel vive junto a
+  // la pantalla que Javier está mirando. El historial no cabe al lado en
+  // 400px, así que aquí es un CAMBIO DE VISTA, no un cajón.
+  if (variante === 'panel') {
+    return (
+      <div className="h-full min-h-0 flex flex-col px-3 pb-3">
+        <div className="flex items-center justify-between gap-1.5 py-2 shrink-0">
+          <button type="button" onClick={() => (historialAbierto ? setHistorialAbierto(false) : abrirHistorial())}
+            className="hairline inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)]"
+            style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
+            <History width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+            Historial
+            {Array.isArray(convs) && (
+              <span className="cifra-mono text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
+                {numero(convs.length)}
+              </span>
+            )}
+          </button>
+          <button type="button" onClick={nuevoChat} title="Nuevo chat" aria-label="Nuevo chat"
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
+            style={{ color: 'var(--muted)' }}>
+            <PencilLine width={14} height={14} strokeWidth={1.75} />
+          </button>
+        </div>
+
+        {historialAbierto ? (
+          <div className="flex-1 min-h-0 flex flex-col gap-2.5">{cuerpoLista}</div>
+        ) : vacio ? (
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 px-1">
+            <p className="text-sm text-center max-w-[260px]" style={{ color: 'var(--muted)' }}>
+              La compañía entera, con la cifra que ya calculó el motor — sin perder
+              la pantalla que estás mirando.
+            </p>
+            <div className="w-full">{caja}</div>
+            <div className="flex flex-wrap justify-center gap-2">
+              {SUGERENCIAS.map((pq) => (
+                <button key={pq} type="button" onClick={() => preguntar(pq)}
+                  className="text-xs px-3 py-1.5 rounded-full hairline transition-opacity hover:opacity-70"
+                  style={{ color: 'var(--ink2)', background: 'var(--surface)' }}>
+                  {pq}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 min-h-0 overflow-y-auto">{hilo}</div>
+            <div className="shrink-0 pt-2">{caja}</div>
+          </>
+        )}
+      </div>
+    );
+  }
+
   if (!vacio) {
     return (
       <div className="min-h-full w-full flex-1 flex">
         <div className="flex-1 min-w-0 flex flex-col">
+          {pillHistorial}
           <div className="flex-1 flex flex-col px-4 pt-4">
             <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col">
-              <div className="flex-1 space-y-4 py-2">
-                {historial.map((h, i) => (
-                  <div key={i}>
-                    <div className="flex justify-end">
-                      <div className="hairline rounded-2xl rounded-br-md px-3.5 py-2 text-sm max-w-[85%]" style={{ background: 'var(--surface)' }}>
-                        {h.q}
-                      </div>
-                    </div>
-                    <div className="mt-2.5 text-sm max-w-[85%]">
-                      {h.r.pendiente ? (
-                        <div className="flex items-start gap-2.5">
-                          <span className="likida-respira shrink-0 mt-0.5"><LogoIcono alto="h-[16px]" /></span>
-                          <div>
-                            <div style={{ color: 'var(--muted)' }}>{fasePensando}</div>
-                            {pasosVivos.length > 0 && (
-                              <div className="mt-2 space-y-1.5">
-                                {pasosVivos.map((p, j) => (
-                                  <div key={j} className="flex items-center gap-2 text-[12.5px]"
-                                    style={{ color: p.listo ? 'var(--faint)' : 'var(--ink)' }}>
-                                    {p.listo
-                                      ? <Check width={12} height={12} strokeWidth={2} className="shrink-0" style={{ color: 'var(--muted)' }} />
-                                      : <span className="skeleton inline-block w-2.5 h-2.5 rounded-full shrink-0" />}
-                                    {rotuloTool(p.tool)}{p.listo ? '' : '…'}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div>{h.r.texto}</div>
-                      )}
-                      {h.r.visuales?.map((v, j) => <VisualRespuesta key={j} v={v} />)}
-                      {h.r.accion && (
-                        <TarjetaAccion a={h.r.accion}
-                          onEjecutada={(mensaje) => {
-                            setHistorial((prev) => [...prev, { q: '(acción confirmada)', r: { texto: mensaje } }]);
-                          }} />
-                      )}
-                      {h.r.fuentes && h.r.fuentes.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                          <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Fuentes:</span>
-                          {h.r.fuentes.map((f) => (
-                            <Link key={f.ruta} href={f.ruta}
-                              className="hairline inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full hover:opacity-70 transition-opacity"
-                              style={{ background: 'var(--surface)' }}>
-                              {f.etiqueta} <ExternalLink width={10} height={10} strokeWidth={1.75} />
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                <div ref={finConversacion} />
-              </div>
+              {hilo}
               <div className="sticky bottom-0 shrink-0 pt-3 pb-4" style={{ background: 'var(--g1)' }}>
                 {caja}
               </div>
             </div>
           </div>
         </div>
+        {cajonHistorial}
       </div>
     );
   }
@@ -454,6 +712,9 @@ export default function Copiloto() {
     <div className="min-h-full w-full flex-1 flex">
       <div className="relative flex-1 min-w-0 flex flex-col">
         <CampoPixeles />
+        {pillHistorial}
+        {/* El centrado vive en ESTA capa: con el ancla sticky adentro del
+            justify-center, el pill saldría a media pantalla, no arriba. */}
         <div className="relative z-10 w-full flex-1 flex flex-col items-center justify-center px-4 py-10">
           <div className="w-full max-w-2xl flex flex-col items-center">
             <Logo alto="h-7" className="mb-6" />
@@ -489,6 +750,7 @@ export default function Copiloto() {
           </div>
         </div>
       </div>
+      {cajonHistorial}
     </div>
   );
 }
