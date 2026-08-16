@@ -82,6 +82,16 @@ export interface InboundMessage {
   text?: string;
   mediaId?: string;           // para image/document
   waMessageId?: string;       // id de Meta, para idempotencia
+  /** SOLO lo fija el motor de QA (scripts/qa-agentes/ y /api/admin/qa/*): un
+   *  data-URL ya resuelto que SUSTITUYE la descarga real de Meta — el arnés
+   *  no tiene un mediaId real de WhatsApp (es el número de prueba; un chofer
+   *  externo no puede escribir). `undefined` en TODO mensaje de producción:
+   *  el webhook público (api/webhook/whatsapp/route.ts) NUNCA construye este
+   *  campo, y `qa-panel.test.ts` vigila con un grep que siga siendo cero.
+   *  Cambio aditivo deliberado y acotado — el porqué completo está en
+   *  00-PANEL-DE-QA.md §3 (carril rápido): vi.mock cubre al ejército bajo
+   *  vitest, pero no existe dentro del runtime de Next/Vercel. */
+  mediaDataUrlQA?: string;
 }
 
 /**
@@ -687,7 +697,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // adjuntarlos. Un comprobante vale mucho más que una llamada de visión.
       if (msg.type === 'image' && msg.mediaId) {
         try {
-          const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
+          // El `??` es el gancho de QA (ver InboundMessage.mediaDataUrlQA):
+          // producción siempre trae el campo undefined y descarga de Meta.
+          const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
           if (!dataUrl) { await sendText(msg.from, 'No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
           const ruta = await subirComprobante(op.tenantId, 'sin-viaje', await hashImagen(dataUrl), dataUrl);
           const ex = await extraerComprobante(dataUrl, reloj.senal(25_000));
@@ -814,7 +826,8 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // encargado ya cuenta (`podPendientes`).
       if (esCaptionPod(msg.text)) {
         try {
-          const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
+          // Gancho de QA (ver InboundMessage.mediaDataUrlQA) — undefined en producción.
+          const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
           if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
           // El constraint pod_subido_tiene_archivo manda: sin archivo guardado
           // no hay "subido" que registrar. Fallar cerrado y decirlo.
@@ -888,7 +901,8 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // `intake/rafaga.ts` para por qué esa es la forma correcta aquí.
       const llegoSola = incrementado === 1;
       try {
-        const dataUrl = await downloadMediaAsDataUrl(msg.mediaId);
+        // Gancho de QA (ver InboundMessage.mediaDataUrlQA) — undefined en producción.
+        const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
         if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
 
         // FASE 2 (FLAG default-off): dedup por contenido. La idempotencia por
