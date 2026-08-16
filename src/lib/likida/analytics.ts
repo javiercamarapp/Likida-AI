@@ -94,7 +94,9 @@ export interface ComparativoPeriodo {
  * columnas `date` (comparación directa, usa los índices de la 0111);
  * `liquidacion.created_at` sigue bucketeándose por el día LOCAL de México
  * dentro de la función SQL — el mismo criterio que `diaLocalMx` evitaba el
- * bug de cierres de tarde cayendo en el día siguiente.
+ * bug de cierres de tarde cayendo en el día siguiente. La prueba de
+ * equivalencia (`analytics_serie_comparativa.test.ts`) compara el bucketeo JS
+ * viejo contra la forma nueva sobre el mismo dataset sintético.
  */
 export async function getSerieComparativa(
   tenantId: string,

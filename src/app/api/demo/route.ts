@@ -26,10 +26,28 @@ const POLITICA: PoliticaGasto[] = [
   { concepto: 'factura', requiereCfdi: true },
 ];
 
+/** Mismo tope que el `bodyExcede` de abajo — ver por qué se mide dos veces. */
+const MAX_BODY = 64 * 1024;
+
 export async function POST(req: Request) {
-  if (bodyExcede(req, 64 * 1024)) return NextResponse.json({ error: 'payload muy grande' }, { status: 413 });
+  // `bodyExcede` solo mira `content-length`, que una petición
+  // `Transfer-Encoding: chunked` no declara (auditoría 13, seguridad —
+  // reincidente cerrado en `_escritura.ts`/`leerCuerpo`, que ya medía dos
+  // veces; esta ruta pública era la única de las tres que usan `bodyExcede`
+  // y llamaban `req.json()` directo, sin el segundo tope sobre el texto
+  // REAL ya leído). Sin la segunda medición, un POST sin esa cabecera se
+  // materializa ENTERO en memoria — endpoint sin sesión, alcanzable por
+  // cualquiera.
+  if (bodyExcede(req, MAX_BODY)) return NextResponse.json({ error: 'payload muy grande' }, { status: 413 });
   if (!(await rateLimit(`demo:${clientIp(req)}`, 30, 60_000))) return NextResponse.json({ error: 'demasiadas peticiones' }, { status: 429 });
-  const body = (await req.json()) as { comprobantes: Partial<Gasto>[]; anticipo: number };
+  const crudo = await req.text();
+  if (crudo.length > MAX_BODY) return NextResponse.json({ error: 'payload muy grande' }, { status: 413 });
+  let body: { comprobantes: Partial<Gasto>[]; anticipo: number };
+  try {
+    body = JSON.parse(crudo) as { comprobantes: Partial<Gasto>[]; anticipo: number };
+  } catch {
+    return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
+  }
   const gastos: Gasto[] = (body.comprobantes ?? []).map((c, i) => ({
     id: `g${i}`,
     concepto: c.concepto ?? 'otro',

@@ -901,26 +901,43 @@ select
 -- día que la tabla cambie de dueño, se ve aquí y no en el catálogo.
 --
 -- Corrido el 1-ago, salida real:  anon=0 filas · service_role=1 fila
-create temp table if not exists _res(quien text, filas int, nota text);
-truncate _res;
+--
+-- REESCRITO el 15-ago-2026 para ser autocontenido: la versión anterior sembraba
+-- en una `create temp table _res` DECLARADA FUERA del `do $$`, y leía su
+-- resultado con un `select * from _res` que también vivía fuera — pensado para
+-- pegarse entero en el SQL editor, no para correr el bloque aislado. La
+-- primera corrida automática de este archivo en CI (15-ago-2026) lo confirmó:
+-- en su propia sesión, el `do $$` nunca vio la tabla temporal de la sesión
+-- anterior ("relation _res does not exist"). Aquí se siembra la fila real que
+-- el bloque original solo describía en el comentario, y el resultado se lee
+-- del propio `raise exception`, como el resto del archivo.
 do $$
-declare n int; nota text;
+declare
+  v_t uuid; v_o uuid;
+  n_anon int; nota_anon text; n_svc int;
 begin
+  insert into tenant (nombre) values ('ZZZ VERIF HUERFANO') returning id into v_t;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'P', '520000009023') returning id into v_o;
+  insert into comprobante_huerfano (tenant_id, operador_id, gasto, motivo)
+    values (v_t, v_o, '{"monto": 199}'::jsonb, 'sin_viaje');
+
   begin
     set local role anon;
-    select count(*) into n from comprobante_huerfano;
+    select count(*) into n_anon from comprobante_huerfano where tenant_id = v_t;
     reset role;
-    nota := case when n = 0 then 'RLS lo deja a ciegas' else 'FUGA: anon LEE' end;
+    nota_anon := case when n_anon = 0 then 'RLS lo deja a ciegas' else 'FUGA: anon LEE' end;
   exception when insufficient_privilege then
     reset role;
-    n := -1; nota := 'denegado por privilegios de tabla';
+    n_anon := -1; nota_anon := 'denegado por privilegios de tabla';
   end;
-  insert into _res values ('anon', n, nota);
-  insert into _res select 'service_role', count(*), 've todo (BYPASSRLS)' from comprobante_huerfano;
+
+  select count(*) into n_svc from comprobante_huerfano where tenant_id = v_t;
+
+  delete from tenant where id = v_t;   -- cascade limpia operador y comprobante_huerfano
+
+  raise exception E'COMPROBANTE_HUERFANO  anon=%  nota=%  service_role=%   (esperado 0 / RLS lo deja a ciegas / 1)',
+    n_anon, nota_anon, n_svc;
 end $$;
-select * from _res order by quien;
--- anon         | 0 | RLS lo deja a ciegas      ← con una fila sembrada
--- service_role | 1 | ve todo (BYPASSRLS)
 --
 -- Si `anon` devuelve >0, el expediente de gastos de todas las flotas es público
 -- para cualquiera con la anon key, que va en el navegador.
@@ -983,41 +1000,21 @@ begin
     ninguno is not null and cardinality(ninguno) = 0;
 end $$;
 
--- ── 26. El chofer solo ve sus propios viajes (mig. 0045) ─────────────────────
--- `tenant_data` da acceso completo al tenant a cualquier app_user, sin mirar
--- el rol — correcto para flota_admin/encargado/contador, un IDOR si se
--- repitiera para `operador`. Se siembran DOS choferes del mismo tenant, cada
--- uno con su viaje/gasto/liquidacion, se impersona al primero por
--- `request.jwt.claims` (mismo mecanismo que usa PostgREST con un JWT real) y
--- se cuenta qué ve. 1/1/1 = solo lo suyo. 2/2/2 sería la fuga.
-do $$
-declare
-  v_t uuid; v_o1 uuid; v_o2 uuid; v_v1 uuid; v_v2 uuid; v_u1 uuid := gen_random_uuid();
-  n_viaje int; n_gasto int; n_liq int; n_otro_viaje int;
-begin
-  insert into tenant (nombre) values ('ZZZ VERIF OPERADOR RLS') returning id into v_t;
-  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Uno', '520000009030') returning id into v_o1;
-  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Dos', '520000009031') returning id into v_o2;
-  insert into viaje (tenant_id, operador_id) values (v_t, v_o1) returning id into v_v1;
-  insert into viaje (tenant_id, operador_id) values (v_t, v_o2) returning id into v_v2;
-  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v1, 'diesel', 100), (v_t, v_v2, 'diesel', 200);
-  insert into liquidacion (tenant_id, viaje_id) values (v_t, v_v1), (v_t, v_v2);
-  insert into app_user (id, tenant_id, email, rol, operador_id)
-    values (v_u1, v_t, 'zzz-verif-chofer1@likida.test', 'operador', v_o1);
-
-  set local role authenticated;
-  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
-
-  select count(*) into n_viaje from viaje where tenant_id = v_t;
-  select count(*) into n_gasto from gasto where tenant_id = v_t;
-  select count(*) into n_liq from liquidacion where tenant_id = v_t;
-  select count(*) into n_otro_viaje from viaje where id = v_v2;   -- el viaje del OTRO chofer, por id directo
-
-  reset role;
-
-  raise exception E'OPERADOR_RLS  viajes-del-tenant-visibles=%  gastos-visibles=%  liquidaciones-visibles=%  viaje-ajeno-por-id=%   (esperado 1 / 1 / 1 / 0 — nunca 2, que sería ver los dos choferes)',
-    n_viaje, n_gasto, n_liq, n_otro_viaje;
-end $$;
+-- ── [RETIRADO] 26 — probaba "el chofer solo ve sus propios viajes" (mig.
+-- 0045) impersonando un app_user con rol `operador`. Esa sesión ya no puede
+-- existir: la 0086 (7-ago-2026) retiró `operador` del dominio de
+-- `app_user.rol` — el chofer solo usa WhatsApp, sin login ni RLS de sesión.
+-- El bloque quedó viejo sin que nadie lo notara porque nadie lo corría: el
+-- `insert into app_user (..., rol, ...) values (..., 'operador', ...)` que lo
+-- armaba rebota contra `app_user_rol_dominio` antes de llegar a nada que
+-- probar. Lo confirmó la primera corrida automática de este archivo en CI
+-- (15-ago-2026) — exactamente el tipo de deriva que esa corrida existe para
+-- atrapar.
+--
+-- La garantía que reemplaza a esta es más fuerte: no "no ve lo ajeno", sino
+-- "no puede tener sesión". La prueba el bloque 62 (0086). Ver EXENTAS en
+-- migraciones_verificadas.test.ts para 0045 (mismo criterio que 0078/0079/0081).
+-- ── [antes aquí vivía el bloque 26] ─────────────────────────────────────────
 
 -- ── 27. Cada quien solo escribe SU PROPIO avatar (mig. 0046) ─────────────────
 -- El bucket `avatares` es público a propósito (foto de perfil, no un
@@ -1065,58 +1062,17 @@ begin
     ok_propio, ok_ajeno;
 end $$;
 
--- ── 28. Las tablas de operación no se le abren al chofer (mig. 0047) ─────────
--- La 0047 mete cuatro tablas nuevas de golpe. Tres son de oficina (unidad,
--- mantenimiento, incidencia) y una es del chofer a medias (pod: la sube él,
--- pero solo la suya). El riesgo es el de siempre con una tabla nueva en un
--- esquema multi-tenant — nacer con `tenant_data` a secas, que NO mira el rol,
--- y regalarle al chofer las placas, las averías y las entregas de toda la
--- flota. Es exactamente el IDOR que la 0045 cerró para viaje/gasto/liquidacion,
--- y una tabla nueva es justo donde se vuelve a abrir sin que nadie lo note.
+-- ── [RETIRADO] 28 — probaba "las tablas de operación no se le abren al
+-- chofer" (mig. 0047) impersonando un app_user con rol `operador`. Mismo caso
+-- que el 26: la 0086 retiró ese rol del dominio, el INSERT que armaba la
+-- sesión rebota contra `app_user_rol_dominio` antes de llegar a nada que
+-- probar, y nadie lo notó porque nadie corría este archivo. Confirmado por la
+-- primera corrida automática en CI (15-ago-2026).
 --
--- Se impersona a un chofer (mismo mecanismo del bloque 26) y se cuenta.
--- Esperado: 0 unidades, 0 mantenimientos, 0 incidencias, y de POD exactamente
--- 1 — el suyo — nunca 2.
---
--- Corrido el 3-ago contra la base real, salida:
---   unidades=0  mantenimientos=0  incidencias=0  pods-visibles=1  pod-ajeno-por-id=0
-do $$
-declare
-  v_t uuid; v_o1 uuid; v_o2 uuid; v_v1 uuid; v_v2 uuid;
-  v_un uuid; v_u1 uuid := gen_random_uuid();
-  n_unidad int; n_mant int; n_inc int; n_pod int; n_pod_ajeno int;
-begin
-  insert into tenant (nombre) values ('ZZZ VERIF OPERACION RLS') returning id into v_t;
-  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Uno', '520000009040') returning id into v_o1;
-  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer Dos', '520000009041') returning id into v_o2;
-  insert into viaje (tenant_id, operador_id) values (v_t, v_o1) returning id into v_v1;
-  insert into viaje (tenant_id, operador_id) values (v_t, v_o2) returning id into v_v2;
-
-  insert into unidad (tenant_id, numero_economico, placas) values (v_t, 'C2-08', 'ABC-123-A') returning id into v_un;
-  insert into mantenimiento (tenant_id, unidad_id, tipo, descripcion) values (v_t, v_un, 'preventivo', 'servicio 20 mil km');
-  insert into incidencia (tenant_id, viaje_id, unidad_id, tipo, prioridad) values (v_t, v_v2, v_un, 'averia', 'alta');
-  -- Un POD por chofer. `storage_path` va lleno porque el estado 'subido' lo
-  -- exige (constraint pod_subido_tiene_archivo).
-  insert into pod (tenant_id, viaje_id, operador_id, estado, storage_path)
-    values (v_t, v_v1, v_o1, 'subido', 'pod/uno.jpg'), (v_t, v_v2, v_o2, 'subido', 'pod/dos.jpg');
-
-  insert into app_user (id, tenant_id, email, rol, operador_id)
-    values (v_u1, v_t, 'zzz-verif-chofer-op@likida.test', 'operador', v_o1);
-
-  set local role authenticated;
-  perform set_config('request.jwt.claims', json_build_object('sub', v_u1)::text, true);
-
-  select count(*) into n_unidad from unidad where tenant_id = v_t;
-  select count(*) into n_mant   from mantenimiento where tenant_id = v_t;
-  select count(*) into n_inc    from incidencia where tenant_id = v_t;
-  select count(*) into n_pod    from pod where tenant_id = v_t;
-  select count(*) into n_pod_ajeno from pod where viaje_id = v_v2;  -- el del OTRO chofer, por id directo
-
-  reset role;
-
-  raise exception E'OPERACION_RLS  unidades=%  mantenimientos=%  incidencias=%  pods-visibles=%  pod-ajeno-por-id=%   (esperado 0 / 0 / 0 / 1 / 0 — cualquier otra cosa es fuga al chofer)',
-    n_unidad, n_mant, n_inc, n_pod, n_pod_ajeno;
-end $$;
+-- Reemplaza el bloque 62 (0086): "no puede tener sesión" cubre, por
+-- construcción, que tampoco pueda leer `unidad`/`mantenimiento`/`incidencia`
+-- ni el `pod` ajeno. Ver EXENTAS en migraciones_verificadas.test.ts para 0047.
+-- ── [antes aquí vivía el bloque 28] ─────────────────────────────────────────
 
 -- ── 29. El encargado NO ve dinero (mig. 0048 + 0049 + 0051) ─────────────────
 -- Las tres migraciones comerciales meten seis tablas de dinero de golpe:
@@ -1168,53 +1124,46 @@ begin
     n_cli, n_tar, n_fac, n_pag, n_cot, n_fv;
 end $$;
 
--- ── 30. El rastreo: ni el chofer ve posiciones, ni el contador ve tokens (mig. 0050) ──
--- Dos garantías distintas en la misma migración, y por eso van juntas:
+-- ── 30. El contador NO ve las credenciales de rastreo (mig. 0050) ───────────
+-- Dos garantías distintas nacieron en la misma migración; hasta el 14-ago
+-- este bloque probaba las dos, la segunda impersonando un chofer (rol
+-- `operador`). La 0086 (7-ago-2026) retiró ese rol del dominio de
+-- `app_user.rol` — el chofer ya no puede tener sesión — así que "`posicion`
+-- y `geocerca` son de oficina, el chofer queda fuera" quedó cubierta por
+-- construcción (bloque 62: "no puede tener sesión" es más fuerte que "no ve
+-- lo ajeno"), y la mitad de este bloque que lo probaba se retiró con el
+-- mismo criterio que los bloques 26 y 28 — confirmado por la primera corrida
+-- automática de este archivo en CI (15-ago-2026).
 --
---   · `posicion` y `geocerca` son de oficina → el chofer queda fuera. Dónde
---     va cada unidad de la flota no es asunto suyo, y devolverle "la suya"
---     por aquí abriría la puerta a leer la de los demás.
+-- Lo que SIGUE vivo, y sigue haciendo falta probarlo con datos reales:
+--
 --   · `rastreo_credencial` es MÁS estricta que todo lo demás del esquema:
 --     solo flota_admin y superadmin. Un token de rastreo permite ver y a veces
 --     MANDAR órdenes a la flota entera, así que no cabe en `ve_finanzas()` —
---     no es dinero, es control. El CONTADOR sí ve dinero y aun así no debe
---     ver esto, y esa distinción es justo la que un `ve_finanzas()` de más
---     borraría sin que nadie lo note.
+--     no es dinero, es control. El CONTADOR sí ve dinero (bloque 29 es al
+--     revés: el encargado NO) y aun así no debe ver esto, y esa distinción es
+--     justo la que un `ve_finanzas()` de más borraría sin que nadie lo note.
 --
--- Esperado: chofer 0/0, contador 0 credenciales.
+-- Esperado: contador 0 credenciales.
 do $$
 declare
-  v_t uuid; v_o uuid; v_un uuid;
-  v_chofer uuid := gen_random_uuid(); v_conta uuid := gen_random_uuid();
-  n_pos int; n_geo int; n_cred int;
+  v_t uuid; v_conta uuid := gen_random_uuid();
+  n_cred int;
 begin
   insert into tenant (nombre) values ('ZZZ VERIF RASTREO RLS') returning id into v_t;
-  insert into operador (tenant_id, nombre, telefono) values (v_t, 'Chofer GPS', '520000009060') returning id into v_o;
-  insert into unidad (tenant_id, numero_economico) values (v_t, 'GPS-01') returning id into v_un;
-  insert into posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor)
-    values (v_t, v_un, 20.9674, -89.5926, now(), 'wialon');
-  insert into geocerca (tenant_id, nombre, lat, lng, radio_m)
-    values (v_t, 'Patio Mérida', 20.9674, -89.5926, 250);
   insert into rastreo_credencial (tenant_id, proveedor, token_ultimos4)
     values (v_t, 'wialon', '4417');
 
-  insert into app_user (id, tenant_id, email, rol, operador_id)
-    values (v_chofer, v_t, 'zzz-verif-gps-chofer@likida.test', 'operador', v_o);
   insert into app_user (id, tenant_id, email, rol)
     values (v_conta, v_t, 'zzz-verif-gps-conta@likida.test', 'contador');
 
   set local role authenticated;
-  perform set_config('request.jwt.claims', json_build_object('sub', v_chofer)::text, true);
-  select count(*) into n_pos from posicion where tenant_id = v_t;
-  select count(*) into n_geo from geocerca where tenant_id = v_t;
-
   perform set_config('request.jwt.claims', json_build_object('sub', v_conta)::text, true);
   select count(*) into n_cred from rastreo_credencial where tenant_id = v_t;
-
   reset role;
 
-  raise exception E'RASTREO_RLS  chofer-posiciones=%  chofer-geocercas=%  contador-credenciales=%   (esperado 0 / 0 / 0 — la tercera es la que separa "ve dinero" de "manda en la flota")',
-    n_pos, n_geo, n_cred;
+  raise exception E'RASTREO_RLS  contador-credenciales=%   (esperado 0 — la que separa "ve dinero" de "manda en la flota")',
+    n_cred;
 end $$;
 
 -- ── 31. Ni la suscripción ni la invitación se duplican (mig. 0052 + 0053) ────
@@ -3569,6 +3518,14 @@ end $$;
 -- `politicas=0` con `rls=true` es lo esperado y no un olvido: esta tabla la
 -- toca EXCLUSIVAMENTE la capa de API con service role. Sin políticas, ningún
 -- camino con llave anónima o de usuario puede leerla ni escribirla.
+--
+-- CORREGIDO el 15-ago-2026: `t` salía de `select id into t from tenant limit
+-- 1` — depende de que YA exista una fila en `tenant`, algo que la base que
+-- corrió esto el 14-ago tenía y una base efímera de CI no. Con `t` en NULL,
+-- el primer INSERT truena por la columna NOT NULL antes de que el bloque
+-- llegue a probar nada — lo confirmó la primera corrida automática de este
+-- archivo en CI (15-ago-2026). Se siembra su propio tenant, como hace el
+-- resto del archivo.
 do $$
 declare
   t uuid;
@@ -3580,7 +3537,7 @@ declare
   politicas int;
   rls_on boolean;
 begin
-  select id into t from public.tenant limit 1;
+  insert into public.tenant (nombre) values ('ZZZ VERIF API_IDEMPOTENCIA') returning id into t;
 
   -- Una llave de un carácter colisionaría entre peticiones sin relación, y
   -- quien llegara segundo recibiría la respuesta del primero.
@@ -3621,6 +3578,8 @@ begin
   select count(*) into politicas from pg_policies where tablename = 'api_idempotencia';
   select relrowsecurity into rls_on from pg_class where relname = 'api_idempotencia';
 
+  delete from public.tenant where id = t;
+
   raise exception E'API_IDEMPOTENCIA_0098  llave_corta=%  huella_mala=%  status_500=%  dup_llave=%  otra_ruta=%  politicas=%  rls=%   (esperado t/t/t/t/t/0/t)',
     llave_corta, huella_mala, status_500, dup_llave, otra_ruta_convive, politicas, rls_on;
 end $$;
@@ -3638,10 +3597,16 @@ end $$;
 -- `reporta_la_llave` verifica que `mantenimiento_de_datos` incluya el conteo
 -- en su jsonb: el cron registra ese objeto en el log, y una purga que corre
 -- sin aparecer ahí es una purga que nadie puede auditar.
+--
+-- CORREGIDO el 15-ago-2026: mismo caso que el bloque 73 — `t` dependía de que
+-- YA existiera una fila en `tenant`. Se siembra su propio tenant. De paso,
+-- `borradas` queda más preciso: con la tabla arrancando vacía para este
+-- tenant, la única fila vieja que puede purgarse es la que este bloque
+-- sembró, sin depender de cuántas otras filas viejas hubiera de antes.
 do $$
 declare t uuid; borradas bigint; quedan int; res jsonb;
 begin
-  select id into t from public.tenant limit 1;
+  insert into public.tenant (nombre) values ('ZZZ VERIF PURGA_0098') returning id into t;
 
   insert into public.api_idempotencia(tenant_id,ruta,llave,huella,status,cuerpo,created_at)
   values (t,'v1.viajes.post','purga-vieja-0001',repeat('a',64),201,'{}'::jsonb, now() - interval '9 days'),
@@ -3655,6 +3620,7 @@ begin
   res := public.mantenimiento_de_datos(30);
 
   delete from public.api_idempotencia where tenant_id = t and llave like 'purga-%';
+  delete from public.tenant where id = t;
 
   raise exception E'PURGA_0098  borradas=%  quedan_frescas=%  reporta_la_llave=%   (esperado 1/1/t)',
     borradas, quedan, (res ? 'idempotenciaPurgada');
@@ -3676,6 +3642,29 @@ end $$;
 -- CORRIDO CONTRA PRODUCCIÓN el 14-ago-2026, antes y después del arreglo:
 --   antes:   purgar_api_idempotencia  anon_puede=t   ← las otras 3 en f
 --   después: purgar_api_idempotencia  anon_puede=f   acl = postgres=X | service_role=X
+--
+-- CORREGIDO el 15-ago-2026, dos veces:
+--
+--   1. La condición original decía "abierta a `anon` O a `authenticated`", y
+--      el título del bloque dice `anon` — no las dos. Con `authenticated` en
+--      la mezcla, el bloque nunca podía dar vacío: incluía a
+--      `administra_flota()`/`ve_finanzas()`, abiertas a `authenticated` A
+--      PROPÓSITO desde la 0054, para que el panel pueda llamarlas con
+--      sesión.
+--   2. Ajustada solo a `anon`, seguía sin poder dar vacío por
+--      `get_user_tenant_ids()`/`is_superadmin()` — SECURITY DEFINER
+--      ejecutables por `anon` A PROPÓSITO: las usan 38 y 42 políticas RLS
+--      respectivamente, y el motor de RLS las llama con el rol de quien
+--      pregunta —sesión anónima incluida—; revocarlas rompería el
+--      aislamiento en vez de cerrarlo (mismo caso que documenta el bloque
+--      18, y el mismo mecanismo de excepción automática que usa
+--      `capa1_auditoria_estatica.sql`, bloque B: si alguna política RLS
+--      nombra a la función en su USING/WITH CHECK, es un ayudante y se
+--      exceptúa sola).
+--
+-- La primera corrida automática de este archivo en CI (15-ago-2026) lo
+-- confirmó las dos veces: el bloque fallaba SIEMPRE, contra una base sana,
+-- por su propia condición — nadie lo había notado porque nadie lo corría.
 do $$
 declare abiertas text;
 begin
@@ -3683,10 +3672,15 @@ begin
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
      and p.prosecdef                       -- solo las que corren como postgres
-     and (has_function_privilege('anon', p.oid, 'EXECUTE')
-       or has_function_privilege('authenticated', p.oid, 'EXECUTE'));
+     and has_function_privilege('anon', p.oid, 'EXECUTE')
+     and not exists (                      -- ayudante de RLS: se exceptúa sola
+       select 1 from pg_policies pol
+        where pol.schemaname = 'public'
+          and (coalesce(pol.qual, '') ilike '%' || p.proname || '%'
+               or coalesce(pol.with_check, '') ilike '%' || p.proname || '%')
+     );
 
-  raise exception E'PURGA_ACL_0098  funciones_security_definer_abiertas=[%]   (esperado vacío)',
+  raise exception E'PURGA_ACL_0098  funciones_security_definer_abiertas_a_anon=[%]   (esperado vacío)',
     coalesce(abiertas, '');
 end $$;
 
@@ -4316,4 +4310,203 @@ begin
     where schemaname = 'public' and indexname = 'viaje_tenant_fecha_inicio_idx';
   raise exception E'INDICES_0111  ambos=%  gasto_def=%  viaje_def=%   (esperado 2/t/t)',
     n, coalesce(gasto_def, false), coalesce(viaje_def, false);
+end $$;
+
+-- ── 89. Los 4 agregados de la 0112: existen, INVOKER, aislados, cuadran ─────
+--
+-- La 0112 movió CUATRO caminos de "traer filas → sumar en JS" a `sum()`/
+-- `count()` en SQL (docs/escala-15k.md §6): `sumar_combustible_ejercicio`
+-- (que YA EXISTÍA desde la 0084, muerta —cero llamadores en `src/`— y con un
+-- bug real: no filtraba `monto > 0`), `serie_comparativa_tenant`,
+-- `kpis_liquidacion_tenant` y `acreditables_liquidacion_tenant` (nuevas).
+--
+-- Este bloque comprueba CUATRO cosas:
+--
+--  1. **Las 4 existen, son SECURITY INVOKER (no definer) y los permisos son
+--     los correctos** — anon/authenticated ciegos, service_role puede—,
+--     leído del catálogo (mismo patrón que el bloque 43).
+--
+--  2. **AISLAMIENTO entre flotas.** Las cuatro las llama `service_role`, que
+--     salta RLS: el `where tenant_id = p_tenant` es lo ÚNICO que separa una
+--     flota de otra. Se siembran DOS flotas con números DISTINTOS y se exige
+--     que las cifras de la flota A no contengan ni un centavo de la B — con
+--     una sola flota esta prueba pasaría siempre sin probar nada (la misma
+--     trampa que ya documentó el bloque 43).
+--
+--  3. **QUIÉN IMPIDE DE VERDAD EL MONTO NEGATIVO** — y aquí la primera
+--     corrida real de este bloque (15-ago-2026) CORRIGIÓ a la 0112.
+--
+--     La 0112 dice en su encabezado que la RPC muerta "tenía un BUG real":
+--     que sin `monto > 0`, una fila NEGATIVA inflaría el denominador del 15%
+--     de la RFA. Este bloque intentó sembrar ese -777 y Postgres lo rechazó:
+--
+--       ERROR 23514: new row for relation "gasto" violates check constraint
+--       "gasto_monto_no_negativo"
+--
+--     `gasto` trae DOS restricciones que la 0112 no menciona:
+--     `gasto_monto_no_negativo` (CHECK monto >= 0) y `gasto_monto_no_nan`
+--     (CHECK monto <> 'NaN'). O sea: **una fila negativa nunca fue posible**,
+--     ni antes ni después de la 0112. Y como el único valor que la
+--     restricción sí deja pasar es CERO, y sumar cero no mueve una suma, el
+--     filtro `monto > 0` de la RPC **no corrige nada: es defensa en
+--     profundidad**, correcta de tener y honesta de nombrar así.
+--
+--     Eso cambia dónde vive la protección, que es lo que este bloque tiene
+--     que vigilar: el día que alguien tire cualquiera de las dos
+--     restricciones, el filtro de la RPC pasa de redundante a ÚNICO guardia,
+--     y `getSerieComparativa` —que a propósito NO filtra— se queda sin
+--     ninguno. Por eso aquí se exige que **las dos restricciones existan** y
+--     se comprueba que la de negativo **rechaza de verdad** (se intenta el
+--     insert y se atrapa el 23514), en vez de medir un filtro sobre datos
+--     que la base no admite.
+--
+--  4. **QUE CUADRAN** contra el cálculo hecho a mano sobre la siembra —el
+--     mismo dataset que usan las pruebas de equivalencia JS-vs-RPC en TS
+--     (`repo_acumulado.test.ts`, `analytics_kpis_acreditables.test.ts`), aquí
+--     corrido contra Postgres de verdad y no contra un mock. OJO con esas
+--     dos: siembran montos negativos en memoria, así que verifican un caso
+--     que la base rechaza — pasan, pero no prueban producción.
+--
+-- TRAMPAS DE SIEMBRA: `viaje.operador_id` es NOT NULL (tenant → operador →
+-- viaje); `liquidacion.estatus` tiene dominio (0025); `viaje.estatus` igual;
+-- `uq_viaje_abierto_por_operador` (0029) permite solo UN 'abierto' por
+-- operador — cada flota trae un solo viaje abierto. Las fechas de `gasto` y
+-- `viaje.fecha_inicio` van relativas a `current_date` (no a un mes fijo) para
+-- que la ventana de 7 días de `serie_comparativa_tenant` las alcance sin
+-- importar cuándo se corra este bloque.
+--
+-- TRAMPA EXTRA que atrapó la segunda corrida: `liquidacion_viaje_uidx` admite
+-- UNA liquidación por viaje — las dos de la flota A van sobre viajes
+-- distintos (va1 y va2), no sobre el mismo.
+--
+-- Todo se revierte con el `raise` final.
+--
+-- SALIDA REAL (15-ago-2026, tercera corrida — las dos primeras fallaron y
+-- ambas fallas están documentadas arriba: el -777 imposible y la liquidación
+-- duplicada por viaje):
+--   AGREGADOS_0112  funcs=4  invoker=t  ninguna_anon=t  ninguna_auth=t
+--   todas_svc=t  checks=2  neg_rechazado=t  comb_total=2300.00
+--   comb_efectivo=1500.00  comb_ok=t  kpis_ok=t  acred_ok=t  serie_ok=t
+--   (esperado 4/t/t/t/t/2/t/2300/1500/t/t/t/t)
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va1 uuid; va2 uuid; vb1 uuid;
+  anio int := extract(year from current_date)::int;
+  n_funcs int; todas_invoker boolean; ninguna_anon boolean; ninguna_auth boolean; todas_svc boolean;
+  r_comb record;
+  j_kpis jsonb; j_acred jsonb; j_serie jsonb;
+  ok_comb_total boolean; ok_comb_efectivo boolean;
+  ok_kpis boolean; ok_acred boolean; ok_serie boolean;
+  n_checks int; negativo_rechazado boolean := false;
+begin
+  -- ── 3. El guardia REAL del monto: las dos restricciones de `gasto` ──────
+  select count(*) into n_checks from pg_constraint
+   where conrelid = 'public.gasto'::regclass and contype = 'c'
+     and conname in ('gasto_monto_no_negativo', 'gasto_monto_no_nan');
+  -- ── FLOTA A: la que se mide ────────────────────────────────────────────
+  insert into tenant (nombre) values ('ZZZ VERIF 0112 A') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0112 A', '5215559990112') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
+    values (ta, oa, 'ZZZ-0112-A1', 'liquidado', current_date - 3, 1000) returning id into va1;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
+    values (ta, oa, 'ZZZ-0112-A2', 'abierto', current_date - 1, 500) returning id into va2;
+
+  -- Combustible de A: 1500 (efectivo) + 800 (tarjeta) + 0 = 2300 total,
+  -- 1500 efectivo. El cero es el ÚNICO monto no-positivo que la base admite,
+  -- y no mueve ninguna suma: por eso el filtro `monto > 0` de la RPC es
+  -- defensa, no corrección (ver punto 3 del encabezado).
+  insert into gasto (tenant_id, viaje_id, concepto, monto, forma_pago, fecha) values
+    (ta, va1, 'diesel', 1500, '01', current_date - 3),
+    (ta, va1, 'diesel',  800, '04', current_date - 2),
+    (ta, va1, 'diesel',    0, '01', current_date - 1);
+
+  -- El negativo NO se puede sembrar: se intenta y se exige el rechazo. Si
+  -- algún día esto deja de lanzar, la restricción se cayó y el filtro de la
+  -- RPC pasó de redundante a único guardia — y `getSerieComparativa`, que no
+  -- filtra, se quedó sin ninguno.
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, forma_pago, fecha)
+      values (ta, va1, 'diesel', -777, '01', current_date - 2);
+  exception when check_violation then
+    negativo_rechazado := true;
+  end;
+
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus, diferencias,
+      ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
+    values (ta, va1, 1500, 'con_diferencias',
+      '[{"tipo":"sobre_politica","monto":120},{"tipo":"duplicado","monto":80},{"tipo":"folio_verificar","monto":0}]'::jsonb,
+      50, 240, 30, 400.5);
+  -- La SEGUNDA liquidación va sobre va2, no sobre va1: `liquidacion_viaje_uidx`
+  -- admite UNA liquidación por viaje (trampa que atrapó la primera corrida).
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus,
+      ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
+    values (ta, va2, 700, 'cuadrada', 10, 60, 5, 90);
+
+  -- ── FLOTA B: solo para probar que NO contamina a A ─────────────────────
+  insert into tenant (nombre) values ('ZZZ VERIF 0112 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ 0112 B', '5215559990113') returning id into ob;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
+    values (tb, ob, 'ZZZ-0112-B1', 'liquidado', current_date - 2, 200) returning id into vb1;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, forma_pago, fecha)
+    values (tb, vb1, 'diesel', 9999, '01', current_date - 2);
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus, diferencias,
+      ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
+    values (tb, vb1, 8888, 'revisar', '[{"tipo":"duplicado","monto":50}]'::jsonb, 999, 999, 999, 999);
+
+  -- ── 1. Catálogo: existencia, INVOKER, permisos ─────────────────────────
+  select count(*),
+         count(*) filter (where p.prosecdef = false) = 4,
+         count(*) filter (where has_function_privilege('anon', p.oid, 'execute')) = 0,
+         count(*) filter (where has_function_privilege('authenticated', p.oid, 'execute')) = 0,
+         count(*) filter (where has_function_privilege('service_role', p.oid, 'execute')) = 4
+    into n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname in ('sumar_combustible_ejercicio', 'serie_comparativa_tenant',
+                        'kpis_liquidacion_tenant', 'acreditables_liquidacion_tenant');
+
+  -- ── 2+3. Combustible: aislada de B, y el bug del monto>0 sigue corregido ─
+  select total, efectivo into r_comb from sumar_combustible_ejercicio(ta, anio, array['15101505']);
+  ok_comb_total := r_comb.total = 2300;      -- si el filtro se cae: 1523. Si B contamina: +9999.
+  ok_comb_efectivo := r_comb.efectivo = 1500; -- si el filtro se cae: 723. Si B contamina: +9999.
+
+  -- ── 2+4. KPIs de A: cuadran y no ven a B ────────────────────────────────
+  j_kpis := kpis_liquidacion_tenant(ta, null);
+  ok_kpis := (j_kpis->>'viajesLiquidados')::int = 2
+         and (j_kpis->>'montoComprobado')::numeric = 2200
+         and (j_kpis->>'diferenciaDetectada')::numeric = 200
+         and (j_kpis->>'conDiferencias')::int = 1
+         and (j_kpis->>'porRevisar')::int = 0
+         and (j_kpis->>'tasaCuadre')::int = 50;
+
+  -- ── 2+4. Acreditables de A: cuadran y no ven a B ────────────────────────
+  j_acred := acreditables_liquidacion_tenant(ta, null);
+  ok_acred := (j_acred->>'ieps')::numeric = 60
+          and (j_acred->>'iva')::numeric = 300
+          and (j_acred->>'peaje')::numeric = 35
+          and (j_acred->>'litrosDiesel')::numeric = 490.5;
+
+  -- ── 2+4. Serie comparativa de A (7 días, 1 paso): cuadra y no ve a B ────
+  -- `gastoTotal` NO filtra monto>0 (mismo criterio que la función JS que
+  -- reemplaza: es un total operativo, no el denominador fiscal del 15%).
+  -- Con las restricciones de `gasto` vivas, el único no-positivo posible es
+  -- el cero, así que las dos cifras coinciden en 2300: la diferencia entre
+  -- ambos criterios solo se vería si la restricción se cayera — que es
+  -- exactamente lo que `checks=2` y `neg_rechazado=t` vigilan arriba.
+  j_serie := serie_comparativa_tenant(ta, 7, 1, current_date) -> 0;
+  ok_serie := (j_serie->>'gastoTotal')::numeric = 2300
+          and (j_serie->>'totalViajes')::int = 2
+          and (j_serie->>'viajesLiquidados')::int = 1
+          and (j_serie->>'costoPorViaje')::numeric = 1150.00
+          and (j_serie->>'liquidado')::numeric = 2200;
+
+  delete from tenant where id in (ta, tb);
+
+  -- anon/auth: `t` significa "NINGUNA de las 4 es ejecutable por ese rol"
+  -- (la variable ya es el resultado de `count(...) = 0`), no "sí puede".
+  raise exception E'AGREGADOS_0112  funcs=%  invoker=%  ninguna_anon=%  ninguna_auth=%  todas_svc=%  checks=%  neg_rechazado=%  comb_total=%  comb_efectivo=%  comb_ok=%  kpis_ok=%  acred_ok=%  serie_ok=%   (esperado 4/t/t/t/t/2/t/2300/1500/t/t/t/t)',
+    n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc,
+    n_checks, negativo_rechazado,
+    r_comb.total, r_comb.efectivo, ok_comb_total and ok_comb_efectivo,
+    ok_kpis, ok_acred, ok_serie;
 end $$;

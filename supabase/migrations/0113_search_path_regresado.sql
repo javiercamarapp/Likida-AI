@@ -1,0 +1,27 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- `search_path` DE `config_tenant_valida`, REGRESADO — auditoría 13, seguridad.
+--
+-- La 0035 fijó `search_path` en diez funciones, `config_tenant_valida` entre
+-- ellas, con `alter function ... set search_path`. La 0085 reescribió esa
+-- MISMA función con `CREATE OR REPLACE FUNCTION` para el bug del CHECK que
+-- crasheaba con la facilidad del 15% — y `CREATE OR REPLACE` no conserva el
+-- `proconfig` que dejó un `ALTER FUNCTION ... SET` anterior si el nuevo
+-- `CREATE` no lo repite: el WARN `function_search_path_mutable` que la 0035
+-- había cerrado volvió a aparecer, confirmado contra el advisor en vivo de
+-- Supabase (14-ago-2026, ronda de verificación de la auditoría 13).
+--
+-- El riesgo sigue siendo el mismo que documentó la 0035: la función es
+-- SECURITY INVOKER (no escala privilegios) y hoy la ejecuta `service_role`
+-- vía el CHECK `tenant_config_valida` de `tenant` — el hueco no está abierto
+-- HOY. Se cierra de todos modos porque el motivo de la 0035 sigue vigente
+-- (auth por usuario ya existe: `authenticated` puede acabar llamando
+-- funciones de este esquema) y porque el costo de la línea es cero: no
+-- redefine el cuerpo, no cambia permisos, no dejó dos firmas vivas.
+--
+-- LA LECCIÓN PARA LA PRÓXIMA VEZ QUE ALGUIEN toque `config_tenant_valida`
+-- con `CREATE OR REPLACE`: el `search_path` NO viaja solo. O se repite en el
+-- mismo `CREATE`, o se vuelve a fijar aquí abajo justo después — este
+-- comentario es la señal para no repetir el olvido.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+alter function public.config_tenant_valida(p_config jsonb) set search_path = public, pg_catalog;

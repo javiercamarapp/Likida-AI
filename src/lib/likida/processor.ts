@@ -2355,6 +2355,20 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // privado. `api/export/pdf/[id]/route.ts:59` ya nació con el TTL
         // correcto (60s, "la necesidad dura lo que tarda la descarga") — se
         // copia el mismo número aquí en vez del que se copió de más viejo.
+        //
+        // AUDITORÍA 13, seguridad (verificación con lectura real, reincidente
+        // "TTL de 7 días" heredado desde la ronda 11): se reconsideró subir
+        // este número, porque `sendDocument` acepta el mensaje y Meta descarga
+        // el `link` DESPUÉS, por su cuenta (`meta/client.ts`) — asíncrono, no
+        // simultáneo al POST. Aun así se deja en 60s: la ruta YA registra
+        // `pdf.no_entregado` con el código de error de Meta cuando el envío
+        // falla (auditoría 12, ALTO), y ninguna entrada de ese log documenta
+        // jamás un 403/404 de Storage — solo token vencido o documento
+        // rechazado por Meta. Subir el TTL sin esa evidencia sería inventar un
+        // riesgo para resolverlo, y reabriría en sentido contrario lo que las
+        // rondas 5-9 ya cerraron con evidencia. Si `pdf.no_entregado` empieza a
+        // traer un error de Storage (no de Meta), ESA es la señal para subirlo
+        // — no antes.
         const { data, error } = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(path, 60), 'createSignedUrl');
         if (error || !data?.signedUrl) throw new Error(error?.message ?? 'storage no devolvió URL firmada');
         // AUDITORÍA 12, ALTO (backend, reincidente de ronda 10): `sendDocument`
