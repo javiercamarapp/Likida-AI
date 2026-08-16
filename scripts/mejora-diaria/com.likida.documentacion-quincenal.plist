@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.likida.documentacion-quincenal</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO__/scripts/mejora-diaria/rutina.sh</string>
+    <string>documentacion-quincenal</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Day</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Day</key><integer>15</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>__REPO__/.mejora-diaria/logs/documentacion-quincenal.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/.mejora-diaria/logs/documentacion-quincenal.log</string>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>

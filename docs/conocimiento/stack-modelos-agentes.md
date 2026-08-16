@@ -93,7 +93,7 @@ prompt/proceso A LA COLA, como todo lo demás. Umbral: 5 casos por patrón.
 3. Medir una semana con `agente_corrida.costo_usd` y las ediciones; decidir
    quedarse o volver.
 
-## El organigrama completo: 64 agentes, cada área con su modelo (0125)
+## El organigrama completo: 65 agentes, cada área con su modelo (0125)
 
 Conteo oficial (00-Blueprint-Maestro/catalogo-de-agentes.md, actualizado
 16-ago): **8 vivos con código** (los 7 del catálogo + el Redactor) **+ el
@@ -108,7 +108,8 @@ datos_instrumentacion, fundraising, automejora y alianzas** — y el mismo día
 se sumaron los de la máquina de marketing autónoma: **guiones** (etapa 1 de
 la cadena de video de MARCA.md §6), **noticias_mercado** y **promos_diarias**
 (los canales LinkedIn/IG/TikTok quedaron decididos ese día — el "propuesto"
-de redes sociales por fin se diseñó): 64. La cadena de video corre autónoma
+de redes sociales por fin se diseñó) y **experto_fiscal** (DOF diario +
+profundidad dominical del corpus normas/): 65. La cadena de video corre autónoma
 hasta las sequence sheets; Javier autoriza sequence por sequence y publicar
 siempre es su tap.
 
@@ -124,7 +125,7 @@ NULL = no usa modelo de texto):
 | **ESCRITURA de código (diffs al repo)** | pruebas + todo agente que modifique código | `codigo_escritura` → **claude-sonnet-5** (escala a opus-5) | 2–10 |
 | QA de agentes | vigilante_calidad + ejército QA (Fase 3) | `qa` → gpt-oss-120b | 0.03–0.17 |
 | Financieros | analista_metricas, control_costos, tesoreria, cierre_mensual | `analisis` → gpt-5.6-luna | 0.10–0.60 |
-| Dirección y gobierno | copiloto✅, orquestadores, kpi_whatsapp, desempeño, especialistas(8), exito_cliente, producto, legal_compliance, fundraising, automejora, datos_instrumentacion | `analisis` → gpt-5.6-luna | 0.10–0.60 |
+| Dirección y gobierno | copiloto✅, orquestadores, kpi_whatsapp, desempeño, especialistas(8), exito_cliente, producto, legal_compliance, fundraising, automejora, datos_instrumentacion, experto_fiscal | `analisis` → gpt-5.6-luna | 0.10–0.60 |
 | Dinero del CLIENTE | liquidacion✅ | `cuadre` → claude-sonnet-5 | 2–10 |
 | Sin modelo de texto | facturas✅ (Playwright), cobranza✅ (plantillas), conductores✅, peajes✅ (parser), proveedores✅ (XML), ventas✅ (determinista), guardia✅ (reglas), visuales/video ×3 (Higgsfield vía likida-marketing) | NULL | $0 |
 
