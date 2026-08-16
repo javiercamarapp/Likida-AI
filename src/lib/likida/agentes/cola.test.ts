@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA COLA DE APROBACIÓN (0117) — los contratos que el código debe sostener
@@ -30,6 +30,7 @@ function builder(tabla: string) {
     select: () => b,
     eq: (c: string, v: unknown) => { r.eq.push([c, v]); return b; },
     neq: () => b,
+    not: () => b,
     is: (c: string, v: unknown) => { r.is.push([c, v]); return b; },
     gte: () => b,
     lte: () => b,
@@ -250,6 +251,63 @@ describe('la guardia de cadencia — el historial 0118 SE LEE antes de enviar', 
       { data: null, error: { message: 'db down' } },
     ]);
     await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/historial.*Reintenta/s);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+});
+
+describe('el tope diario de correo frío (Fase 2: 20-40/día, configurable)', () => {
+  const FILA_T = {
+    id: 'p-1', titulo: 'Correo frío', cuerpo: 'Hola.', cuerpo_final: null,
+    agente: 'redactor', prioridad: 'normal', prospecto_id: null, prospecto: { empresa: 'X', correo: 'c@x.mx' },
+  };
+  const envAntes = process.env.LIKIDA_TOPE_CORREO_FRIO_DIA;
+  beforeEach(() => { process.env.LIKIDA_TOPE_CORREO_FRIO_DIA = '2'; });
+  afterEach(() => {
+    if (envAntes === undefined) delete process.env.LIKIDA_TOPE_CORREO_FRIO_DIA;
+    else process.env.LIKIDA_TOPE_CORREO_FRIO_DIA = envAntes;
+  });
+
+  it('al llegar al tope, la pieza rebota, el claim se compensa y sale mañana', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_T], error: null },                       // el claim (cuenta como 1 de hoy)
+      { data: null, error: null, count: 3 } as never,        // 3 con enviado_en hoy = esta + 2 previas = tope lleno
+      { data: null, error: null },                           // la reversión
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/tope diario/i);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+    const reversion = de('cola_aprobacion', 'update')[1];
+    expect(reversion.payload).toMatchObject({ enviado_en: null });
+  });
+
+  it('debajo del tope, el correo sale', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{ ...FILA_T, prospecto: { empresa: 'X', correo: 'c@x.mx' } }], error: null },
+      { data: null, error: null, count: 1 } as never,        // solo esta pieza hoy
+      { data: null, error: null },                           // la prueba (provider id)
+    ]);
+    const r = await enviarPiezaPorCorreo('p-1', 'u-1');
+    expect(r.ok).toBe(true);
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
+  });
+
+  it('la bandeja URGENTE no cuenta contra el techo — su SLA es de minutos', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{ ...FILA_T, prioridad: 'urgente', prospecto: { empresa: 'X', correo: 'c@x.mx' } }], error: null },
+      { data: null, error: null },                           // la prueba
+    ]);
+    const r = await enviarPiezaPorCorreo('p-1', 'u-1');
+    expect(r.ok).toBe(true);
+    // Sin lectura de conteo que rebote: claim + prueba, y nada se compensó.
+    expect(de('cola_aprobacion', 'update')).toHaveLength(2);
+  });
+
+  it('sin poder LEER el conteo, no se manda (fail closed) y el claim se compensa', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{ ...FILA_T, prospecto: { empresa: 'X', correo: 'c@x.mx' } }], error: null },
+      { data: null, error: { message: 'base caída' } },       // el conteo truena
+      { data: null, error: null },                            // la reversión
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/tope diario/i);
     expect(enviarCorreo).not.toHaveBeenCalled();
   });
 });

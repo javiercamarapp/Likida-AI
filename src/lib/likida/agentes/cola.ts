@@ -20,6 +20,15 @@ import { traerTodo, conteo } from '../pg';
 import { DatoInvalido } from '../errores';
 import { logger } from '@/lib/logger';
 import { enviarCorreo } from '@/lib/correo/enviar';
+import { TZ_MX } from '@/lib/formato';
+
+/** El tope de correos FRÍOS aprobados por día (Fase 2: "20–40, máximo" —
+ *  reputación del dominio + lo que el embudo humano digiere). Vive en
+ *  config (env), no hardcodeado, para ajustarse sin tocar código. */
+export function topeCorreoFrioDia(): number {
+  const v = Number(process.env.LIKIDA_TOPE_CORREO_FRIO_DIA);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 30;
+}
 
 export type PrioridadPieza = 'normal' | 'urgente';
 
@@ -290,7 +299,7 @@ export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
     .update({ enviado_en: new Date().toISOString(), envio_error: null })
     .eq('id', id).eq('estado', 'aprobado').is('enviado_en', null)
-    .select('id, titulo, cuerpo, cuerpo_final, agente, prospecto_id, prospecto:prospecto_id(empresa, correo)'), 'enviarPiezaPorCorreo.claim');
+    .select('id, titulo, cuerpo, cuerpo_final, agente, prioridad, prospecto_id, prospecto:prospecto_id(empresa, correo)'), 'enviarPiezaPorCorreo.claim');
   if (error) throw new Error(`enviarPiezaPorCorreo: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
     throw new DatoInvalido('Solo una pieza APROBADA y aún no enviada se puede enviar — puede que otro click le ganara a este. Recarga.');
@@ -336,6 +345,34 @@ export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise
     if ((recientes ?? []).length > 0) {
       await revertir('Contactado hace menos de 48 h — la cadencia lo protege.');
       throw new DatoInvalido('A este prospecto ya se le escribió hace menos de 48 horas — la cadencia mínima lo protege. La pieza sigue aprobada; reintenta cuando pase la ventana.');
+    }
+  }
+
+  // ── EL TOPE DIARIO (Fase 2: "20–40 correos aprobados/día, máximo") ──
+  // Solo la prospección NORMAL cuenta contra el techo; la bandeja urgente
+  // (ads-respuesta) NO — su SLA se mide en minutos y el techo es de
+  // reputación de dominio para el FRÍO (panel-de-adquisicion §3, que ya
+  // decidió que lo urgente no cuenta). Fail closed: sin la lectura del
+  // conteo, no se manda — el día es el DE MÉXICO, no el UTC.
+  if ((fila.prioridad as string) === 'normal') {
+    const tope = topeCorreoFrioDia();
+    const diaMx = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date());
+    const inicioDia = new Date(`${diaMx}T00:00:00-06:00`).toISOString();
+    const { count, error: errTope } = await supabaseAdmin()
+      .from('cola_aprobacion')
+      .select('id', { count: 'exact', head: true })
+      .eq('prioridad', 'normal')
+      .not('enviado_en', 'is', null)
+      .gte('enviado_en', inicioDia);
+    if (errTope || typeof count !== 'number') {
+      await revertir('No se pudo verificar el tope diario de envíos.');
+      throw new DatoInvalido('No se pudo verificar el tope diario de envíos — sin esa lectura no se manda. Reintenta.');
+    }
+    // El claim de ESTA pieza ya estampó su enviado_en, así que ella misma
+    // viene en `count`: el tope se compara contra los DEMÁS envíos de hoy.
+    if (count - 1 >= tope) {
+      await revertir(`Tope diario de correo frío alcanzado (${tope}).`);
+      throw new DatoInvalido(`Hoy ya salieron ${tope} correos fríos — el tope diario protege la reputación del dominio (ajustable: LIKIDA_TOPE_CORREO_FRIO_DIA). La pieza sigue aprobada; sale mañana.`);
     }
   }
 

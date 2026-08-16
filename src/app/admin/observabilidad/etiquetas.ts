@@ -18,6 +18,7 @@ export const ETIQUETA_INTERRUPTOR: Record<string, string> = {
   'agente:peajes': 'Agente de Peajes',
   'agente:proveedores': 'Agente de Proveedores',
   'agente:ventas': 'Agente de Ventas',
+  'agente:redactor': 'Redactor de Primer Contacto',
 };
 
 export function etiquetaInterruptor(id: string): string {

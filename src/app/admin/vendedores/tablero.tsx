@@ -56,7 +56,7 @@ const PILL_COLUMNA: Record<string, Estado> = {
 };
 
 function Tarjeta({
-  t, orden, transiciones, rotulos, vendedores, mover, asignar, guardarNota, conVendedor,
+  t, orden, transiciones, rotulos, vendedores, mover, asignar, guardarNota, redactar, conVendedor,
 }: {
   t: TarjetaProspecto;
   orden: string[];
@@ -66,17 +66,23 @@ function Tarjeta({
   mover: (id: string, a: string) => Promise<ResultadoAccion>;
   asignar?: (id: string, vendedorId: string) => Promise<ResultadoAccion>;
   guardarNota?: (id: string, nota: string) => Promise<ResultadoAccion>;
+  /** El Redactor (C5, Fase 2): arma el primer correo y lo deja EN LA COLA de
+   *  aprobación — jamás lo envía. Solo /admin lo pasa. */
+  redactar?: (id: string) => Promise<ResultadoAccion>;
   conVendedor: boolean;
 }) {
   const [pendiente, empezar] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [hecho, setHecho] = useState<string | null>(null);
   const [nota, setNota] = useState(t.notas ?? '');
 
   const correr = (accion: () => Promise<ResultadoAccion>) => {
     setError(null);
+    setHecho(null);
     empezar(async () => {
       const r = await accion();
       if (!r.ok) setError(r.error);
+      else if (r.mensaje) setHecho(r.mensaje);
     });
   };
 
@@ -122,6 +128,20 @@ function Tarjeta({
         </div>
       )}
 
+      {/* El Redactor solo para etapas vivas — el servidor lo re-valida (un
+          botón escondido no es una regla, misma nota del encabezado). */}
+      {redactar && t.estado !== 'cerrado' && t.estado !== 'perdido' && (
+        <button type="button" disabled={pendiente}
+          onClick={() => correr(() => redactar(t.id))}
+          className={`${BOTON} w-full`}>
+          {pendiente ? 'Redactando…' : 'Redactar correo → cola de aprobación'}
+        </button>
+      )}
+
+      {hecho && (
+        <p className="text-[11px] m-0" style={{ color: 'var(--ok)' }}>{hecho}</p>
+      )}
+
       {asignar && (
         <select
           aria-label={`Vendedor de ${t.empresa}`}
@@ -159,7 +179,7 @@ function Tarjeta({
 }
 
 export function TableroProspectos({
-  columnas, orden, transiciones, rotulos, vendedores, mover, asignar, guardarNota, hayFiltro = false,
+  columnas, orden, transiciones, rotulos, vendedores, mover, asignar, guardarNota, redactar, hayFiltro = false,
   conVendedor = true,
 }: {
   columnas: ColumnaTablero[];
@@ -172,6 +192,8 @@ export function TableroProspectos({
   /** Ausente en /vendedor: asignar es del admin. */
   asignar?: (id: string, vendedorId: string) => Promise<ResultadoAccion>;
   guardarNota?: (id: string, nota: string) => Promise<ResultadoAccion>;
+  /** El Redactor (C5) — ausente en /vendedor por ahora: aprobar es de /admin. */
+  redactar?: (id: string) => Promise<ResultadoAccion>;
   /** Con filtros activos, la columna vacía dice la verdad completa: vacía
    *  BAJO ESTE FILTRO, no vacía en el negocio. */
   hayFiltro?: boolean;
@@ -204,7 +226,7 @@ export function TableroProspectos({
                 col.tarjetas.map((t) => (
                   <Tarjeta key={t.id} t={t} orden={orden} transiciones={transiciones} rotulos={rotulos}
                     vendedores={vendedores} mover={mover} asignar={asignar} guardarNota={guardarNota}
-                    conVendedor={conVendedor} />
+                    redactar={redactar} conVendedor={conVendedor} />
                 ))
               )}
               {col.total > col.tarjetas.length && (
