@@ -13,15 +13,15 @@ let sesion: { userId: string; rol: string } | null = null;
 vi.mock('@/lib/auth/session', () => ({ getSessionTenant: async () => sesion }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const ejecutarAccionCopiloto = vi.fn(async () => ({ ok: true, mensaje: 'hecho' }));
+const ejecutarAccionCopiloto = vi.fn(async (..._a: unknown[]) => ({ ok: true, mensaje: 'hecho' }));
 vi.mock('@/lib/agents/copiloto-acciones', () => ({
-  ejecutarAccionCopiloto: (...a: unknown[]) => ejecutarAccionCopiloto(...(a as [never])),
+  ejecutarAccionCopiloto: (...a: unknown[]) => ejecutarAccionCopiloto(...a),
 }));
-const ejecutarCopiloto = vi.fn(async () => ({
+const ejecutarCopiloto = vi.fn(async (..._a: unknown[]) => ({
   bloques: [{ tipo: 'texto', texto: 'hola' }], toolsUsadas: [], costoUsd: 0, tokensIn: 0, tokensOut: 0, modelo: 'prueba',
 }));
 vi.mock('@/lib/agents/copiloto', () => ({
-  ejecutarCopiloto: (...a: unknown[]) => ejecutarCopiloto(...(a as [never])),
+  ejecutarCopiloto: (...a: unknown[]) => ejecutarCopiloto(...a),
 }));
 
 const { POST } = await import('./route');
