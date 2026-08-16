@@ -795,6 +795,20 @@ const bool = (v: unknown): boolean | null => (v === null || v === undefined ? nu
  * Paginado con `traerTodo`: PostgREST recorta a 1,000 filas EN SILENCIO, y una
  * lista de deducciones perdidas recortada es exactamente la que hace creer al
  * contador que ya revisó todo.
+ *
+ * ── AUDITORÍA DE ESCALA 15-AGO-2026: NO SE MIGRÓ A RPC, Y QUEDA DICHO POR QUÉ
+ * `traerTodo` aquí caduca ~mes 2.2 con un cliente de 15,000 viajes/mes
+ * (docs/escala-15k.md §6) — la misma fecha que `getSerieComparativa`, que SÍ
+ * se movió a RPC en la mig. 0112. Esta NO, a propósito: cada `GastoFiscal`
+ * que devuelve alimenta `resumirFiscal`/`resumirPerdidas` de abajo, que
+ * evalúan DEDUCIBILIDAD por comprobante —proporción de IVA acreditable por
+ * tope de viáticos, vigencia 69-B, IEPS del diésel por forma de pago, y el
+ * plazo de caducidad del PORTAL DEL COMERCIO (`armarPorFacturar`)— reglas
+ * fiscales citadas contra `normas/`, no un `sum()`. Reescribirlas en SQL
+ * sería duplicar la ley fiscal en dos lenguajes que hay que mantener
+ * sincronizados cada vez que cambie una regla (la RFA es vigente por
+ * EJERCICIO); ese riesgo pesa más que el de una excepción `traerTodo` bien
+ * anunciada. Ver la cabecera de la mig. 0112 para el razonamiento completo.
  */
 export async function getGastosFiscales(
   tenantId: string,

@@ -50,10 +50,17 @@ function crearBuilder(tabla: string) {
 // ── Las agregaciones que la 0064 movió a la base ───────────────────────────
 const rpcs = new Map<string, Resp>();
 const llamadasRpc: Array<{ fn: string; args: unknown }> = [];
-/** Una flota sin actividad: las dos funciones devuelven ceros MEDIDOS. */
+/** Una flota sin actividad: las funciones devuelven ceros MEDIDOS. */
 const RPC_VACIO: Record<string, unknown> = {
   resumen_documentos_tenant: { procesados: 0, porMes: [] },
   resumen_costo_ia_tenant: { totales: { n: 0, viajes: 0, costoUsd: 0, tokensIn: 0, tokensOut: 0 }, porFase: [] },
+  // AUDITORÍA DE ESCALA 15-AGO-2026 (mig. 0112): getKpis/getAcreditables ya no
+  // leen `liquidacion` por filas, llaman a estas dos RPC.
+  kpis_liquidacion_tenant: {
+    viajesLiquidados: 0, montoComprobado: 0, diferenciaDetectada: 0,
+    conDiferencias: 0, porRevisar: 0, tasaCuadre: 0,
+  },
+  acreditables_liquidacion_tenant: { litrosDiesel: 0, ieps: 0, iva: 0, peaje: 0 },
 };
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -86,12 +93,15 @@ beforeEach(() => {
 
 describe('la base caída LANZA, no devuelve ceros', () => {
   it('getKpis lanza en vez de devolver 0 viajes liquidados', async () => {
-    respuestas.set('liquidacion', { data: null, error: ERROR_RED });
+    // AUDITORÍA DE ESCALA 15-AGO-2026 (mig. 0112): ya no lee `liquidacion` por
+    // filas, llama a `kpis_liquidacion_tenant` — el error por valor de la RPC
+    // tiene que traducirse a excepción igual que el de un `.from()`.
+    rpcs.set('kpis_liquidacion_tenant', { data: null, error: ERROR_RED });
     await expect(getKpis(TENANT)).rejects.toThrow(/fetch failed/);
   });
 
   it('getAcreditables lanza en vez de devolver 0 litros', async () => {
-    respuestas.set('liquidacion', { data: null, error: ERROR_RED });
+    rpcs.set('acreditables_liquidacion_tenant', { data: null, error: ERROR_RED });
     await expect(getAcreditables(TENANT)).rejects.toThrow(/fetch failed/);
   });
 
@@ -245,7 +255,9 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
 
 describe('el cero real sigue siendo cero — no todo error', () => {
   it('un tenant vacío devuelve ceros sin lanzar', async () => {
-    respuestas.set('liquidacion', { data: [], error: null });
+    // getKpis/getAcreditables ya no leen `liquidacion` por filas (mig. 0112):
+    // el default de `rpcs` (RPC_VACIO) YA es la respuesta de una flota sin
+    // actividad — no hace falta poner nada, y eso es lo que se prueba.
     await expect(getKpis(TENANT)).resolves.toMatchObject({ viajesLiquidados: 0, montoComprobado: 0 });
     await expect(getAcreditables(TENANT)).resolves.toMatchObject({ litrosDiesel: 0, iva: 0, peaje: 0 });
   });

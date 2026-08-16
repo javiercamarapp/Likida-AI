@@ -61,14 +61,68 @@ function constructor(tabla: string) {
   return b;
 }
 
+/** Llamadas a `.rpc()` — para afirmar `p_tenant` en las pruebas de aislamiento
+ *  de kpis_liquidacion_tenant/acreditables_liquidacion_tenant (mig. 0112),
+ *  que ya no pasan por el builder de `.from('liquidacion')`. */
+const llamadasRpc: Array<{ fn: string; args: Record<string, unknown> }> = [];
+
+/** Filas de `TABLAS.liquidacion` de un tenant, opcionalmente desde `p_desde`
+ *  — el MISMO filtro que `kpis_liquidacion_tenant`/`acreditables_liquidacion_
+ *  tenant` (mig. 0112) aplican en SQL. Fixture-Postgres para este archivo:
+ *  la prueba de equivalencia JS-vs-RPC de verdad vive en
+ *  `analytics_kpis_acreditables.test.ts`. */
+function liquidacionDelTenant(args: Record<string, unknown>): Array<Record<string, unknown>> {
+  const pTenant = args.p_tenant as string;
+  const pDesde = args.p_desde as string | null | undefined;
+  return (TABLAS.liquidacion ?? []).filter((f) =>
+    f.tenant_id === pTenant && (!pDesde || String(f.created_at ?? '') >= pDesde));
+}
+
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (t: string) => constructor(t),
-    rpc: (r: string) => r.startsWith('resumen_documentos')
-      ? Promise.resolve({ data: { procesados: 2, porMes: [{ mes: '2026-08', n: 2 }] }, error: null })
-      : r.startsWith('resumen_costo')
-        ? Promise.resolve({ data: { totales: { n: 0, viajes: 0, costoUsd: 0, tokensIn: 0, tokensOut: 0 }, porFase: [] }, error: null })
-        : Promise.resolve({ data: null, error: null }),
+    rpc: (r: string, args: Record<string, unknown> = {}) => {
+      llamadasRpc.push({ fn: r, args });
+      if (r.startsWith('resumen_documentos')) {
+        return Promise.resolve({ data: { procesados: 2, porMes: [{ mes: '2026-08', n: 2 }] }, error: null });
+      }
+      if (r.startsWith('resumen_costo')) {
+        return Promise.resolve({ data: { totales: { n: 0, viajes: 0, costoUsd: 0, tokensIn: 0, tokensOut: 0 }, porFase: [] }, error: null });
+      }
+      if (r === 'kpis_liquidacion_tenant') {
+        const filas = liquidacionDelTenant(args);
+        const dinero = filas.reduce((s, f) => {
+          const difs = (f.diferencias as Array<{ tipo: string; monto: number }>) ?? [];
+          return s + difs.filter((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado')
+            .reduce((a, d) => a + Math.abs(d.monto), 0);
+        }, 0);
+        const cuadradas = filas.filter((f) => f.estatus === 'cuadrada').length;
+        return Promise.resolve({
+          data: {
+            viajesLiquidados: filas.length,
+            montoComprobado: filas.reduce((s, f) => s + Number(f.total_comprobado ?? 0), 0),
+            diferenciaDetectada: dinero,
+            conDiferencias: filas.filter((f) => f.estatus === 'con_diferencias').length,
+            porRevisar: filas.filter((f) => f.estatus === 'revisar').length,
+            tasaCuadre: filas.length ? Math.round((cuadradas / filas.length) * 100) : 0,
+          },
+          error: null,
+        });
+      }
+      if (r === 'acreditables_liquidacion_tenant') {
+        const filas = liquidacionDelTenant(args);
+        return Promise.resolve({
+          data: {
+            litrosDiesel: filas.reduce((s, f) => s + Number(f.litros_diesel_acreditables ?? 0), 0),
+            ieps: filas.reduce((s, f) => s + Number(f.ieps_acreditable ?? 0), 0),
+            iva: filas.reduce((s, f) => s + Number(f.iva_acreditable ?? 0), 0),
+            peaje: filas.reduce((s, f) => s + Number(f.peaje_acreditable ?? 0), 0),
+          },
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    },
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -82,6 +136,7 @@ const {
 beforeEach(() => {
   for (const k of Object.keys(TABLAS)) delete TABLAS[k];
   consultas.length = 0;
+  llamadasRpc.length = 0;
 });
 
 describe('getKpis — el tablero del demo', () => {
@@ -114,10 +169,16 @@ describe('getKpis — el tablero del demo', () => {
   });
 
   it('solo cuenta las liquidaciones DE ESTE TENANT', async () => {
+    // AUDITORÍA DE ESCALA 15-AGO-2026 (mig. 0112): getKpis ya no arma un
+    // `.from('liquidacion').eq('tenant_id', …)` — el aislamiento por tenant lo
+    // hace el `where tenant_id = p_tenant` DENTRO de kpis_liquidacion_tenant.
+    // Lo único que este archivo puede afirmar es que el tenant viaja como
+    // argumento de la RPC: sin él, la 0112 no resuelve la firma (p_tenant sin
+    // default) y PostgREST responde 404 en vez de devolver todas las flotas.
     TABLAS.liquidacion = [liq('cuadrada', 100)];
     await getKpis('t-1');
-    const c = consultas.find((x) => x.tabla === 'liquidacion')!;
-    expect(c.filtros).toContainEqual(['tenant_id', 't-1']);
+    const llamada = llamadasRpc.find((x) => x.fn === 'kpis_liquidacion_tenant')!;
+    expect(llamada.args.p_tenant).toBe('t-1');
   });
 });
 
