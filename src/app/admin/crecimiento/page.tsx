@@ -1,9 +1,13 @@
+import Link from 'next/link';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
+import { listarProspectos, ESTADOS_PROSPECTO, conteosVacios } from '@/lib/likida/vendedores';
 import { usd } from '@/lib/utils';
-import { TrendingUp, CheckCircle2, DollarSign } from 'lucide-react';
+import { numero } from '@/lib/formato';
+import { TrendingUp, CheckCircle2, DollarSign, Filter } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { AreaChartSimple } from '../charts';
+import { HBars } from '../ui/graficas';
 import { KpiTile, ChartCard } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +27,10 @@ export const dynamic = 'force-dynamic';
  */
 export default async function CrecimientoPage() {
   const r = await getResumenNegocio();
+  // El embudo de ADQUISICIÓN sí es real desde la 0105: los prospectos del
+  // censo por estado del kanban. Cae por su lado a null y se DICE — un
+  // embudo vacío por base caída afirmaría que no hay pipeline.
+  const prospectos = await listarProspectos().catch(() => null);
   const datosCosto = r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }));
   const chipsTokens = r.porDia.slice(-8).map((d) => d.tokens);
   // AUDITORÍA 10, ALTO — el H1 y el párrafo de abajo decían "Con 1 flota
@@ -33,7 +41,9 @@ export default async function CrecimientoPage() {
   const sinInstrumentacion = [
     'DAU / WAU / MAU',
     'NPS',
-    'Embudo leads → activados → de pago',
+    // El embudo de LEADS ya existe arriba (0105); lo que sigue sin existir
+    // es la mitad de producto: activados → de pago.
+    'Embudo activados → de pago (la mitad de producto del funnel)',
     'Retención por cohortes',
     'Adopción por feature',
   ];
@@ -63,6 +73,45 @@ export default async function CrecimientoPage() {
               Con {r.tenants === 0 ? 'cero flotas' : `n=${r.tenants}`} cualquier tendencia de crecimiento sería un número inventado, no una señal real.
             </p>
           </div>
+
+          {/* ── El embudo de ADQUISICIÓN — real desde la 0105 (Fase 2) ─────
+              Los prospectos del censo por estado del kanban. Es pipeline de
+              PROSPECTOS, no de usuarios: la conversión que se muestra es
+              cerrados/total, y con cero cerrados se dice "sin cierres
+              todavía" — jamás un 0% con cara de medición. */}
+          {prospectos === null ? (
+            <div className="card p-4">
+              <TituloSeccion>Embudo de adquisición</TituloSeccion>
+              <p className="text-sm mt-2" style={{ color: 'var(--bad)' }}>
+                No se pudo leer el pipeline — esto NO significa que no haya prospectos.
+              </p>
+            </div>
+          ) : prospectos.length > 0 && (() => {
+            const porEstado = conteosVacios();
+            for (const p of prospectos) porEstado[p.estado]++;
+            const embudo = ESTADOS_PROSPECTO
+              .filter((e) => e.valor !== 'perdido')
+              .map((e) => ({ etiqueta: e.rotulo, valor: porEstado[e.valor] }));
+            return (
+              <div className="card p-4">
+                <div className="flex items-center gap-2">
+                  <Filter width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                  <TituloSeccion>Embudo de adquisición — {numero(prospectos.length)} prospectos del censo</TituloSeccion>
+                </div>
+                <div className="mt-3">
+                  <HBars datos={embudo} formato="entero" />
+                </div>
+                <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                  {porEstado.cerrado > 0
+                    ? `Conversión a cierre: ${porEstado.cerrado} de ${numero(prospectos.length)}.`
+                    : 'Sin cierres todavía — la conversión no se inventa con cero cerrados.'}
+                  {porEstado.perdido > 0 && ` ${numero(porEstado.perdido)} perdidos.`}
+                  {' '}El detalle por vendedor vive en <Link href="/admin/vendedores" className="underline">Vendedores</Link>;
+                  lo que espera tu aprobación, en <Link href="/admin/aprobaciones" className="underline">Aprobaciones</Link>.
+                </p>
+              </div>
+            );
+          })()}
 
           {/* ChartCard (design system v2, ui/kit.tsx) — mismo AreaChartSimple
               de siempre (charts.tsx sigue vigente para esta forma de dato:

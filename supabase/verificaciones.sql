@@ -4608,3 +4608,159 @@ begin
   raise exception E'DESCARGA_0114  cols=%  indice=%  invoker=%  anon_no=%  svc_si=%  primera=%  no_pisa=%  aislada=%   (esperado 3/t/t/t/t/t/t/t)',
     n_cols, hay_indice, es_invoker, anon_no, svc_si, ok_primera, ok_no_pisa, ok_aislada;
 end $$;
+
+-- ── 91. El catálogo declarativo y la mudanza del CHECK a FK (mig. 0116) ─────
+--
+-- La decisión de arquitectura del plan hacia el 90% §(b): un agente nuevo es
+-- una fila, no una migración. Lo que SOLO la base puede demostrar:
+--
+--  1. Los 7 agentes del producto están SEMBRADOS y `vivo` — es la garantía
+--     que el CHECK viejo daba y que la mudanza no puede perder (estandares
+--     §7: el dominio vive en tres lugares que tienen que coincidir).
+--  2. La FK manda: una corrida de un agente NO declarado rebota con
+--     foreign_key_violation — el CHECK enumerado murió, la referencia vive.
+--  3. Un agente NUEVO entra como fila y su corrida ENTRA — el punto entero
+--     de la 0116: de "migración + deploy" a un INSERT.
+--  4. Los dominios del catálogo vigilan: departamento inventado rebota,
+--     presupuesto negativo rebota.
+--  5. Deny-all: RLS activa, cero policies, `authenticated` ciego.
+--
+-- Todo se revierte con el raise final.
+do $$
+declare
+  n_vivos int;
+  fk_rebota boolean := false;
+  nuevo_entra boolean := false;
+  depto_malo boolean := false;
+  presupuesto_malo boolean := false;
+  rls_def boolean; pol_def int; n_lee int;
+begin
+  -- 1) los 7 del producto, sembrados y vivos
+  select count(*) into n_vivos from public.agente_definicion
+    where estado = 'vivo'
+      and id in ('liquidacion','facturas','cobranza','conductores','peajes','proveedores','ventas');
+
+  -- 2) una corrida de un agente no declarado rebota por FK
+  begin
+    insert into public.agente_corrida (tenant_id, agente, inicio, fin, estado, disparo)
+      values (null, 'agente_fantasma', now(), now(), 'ok', 'manual');
+  exception when foreign_key_violation then fk_rebota := true;
+  end;
+
+  -- 3) un agente nuevo es una fila, y su corrida entra
+  insert into public.agente_definicion (id, nombre, departamento, disparador, estado)
+    values ('verif_0116', 'Agente de verificación', 'ingenieria', 'manual', 'disenado');
+  insert into public.agente_corrida (tenant_id, agente, inicio, fin, estado, disparo)
+    values (null, 'verif_0116', now(), now(), 'ok', 'manual');
+  nuevo_entra := true;
+
+  -- 4) los dominios del catálogo
+  begin
+    insert into public.agente_definicion (id, nombre, departamento)
+      values ('verif_depto', 'X', 'marketing_viral');
+  exception when check_violation then depto_malo := true;
+  end;
+  begin
+    insert into public.agente_definicion (id, nombre, departamento, presupuesto_dia_usd)
+      values ('verif_presu', 'X', 'ingenieria', -5);
+  exception when check_violation then presupuesto_malo := true;
+  end;
+
+  -- 5) deny-all
+  select relrowsecurity into rls_def from pg_class where oid = 'public.agente_definicion'::regclass;
+  select count(*) into pol_def from pg_policies where schemaname = 'public' and tablename = 'agente_definicion';
+  set local role authenticated;
+  select count(*) into n_lee from public.agente_definicion;
+  reset role;
+
+  raise exception E'AGENTE_DEFINICION_0116  vivos_sembrados=%  fk_rebota=%  nuevo_entra=%  depto_malo_rebota=%  presupuesto_malo_rebota=%  rls=%  policies=%  lee_auth=%   (esperado 7/t/t/t/t/t/0/0)',
+    n_vivos, fk_rebota, nuevo_entra, depto_malo, presupuesto_malo, rls_def, pol_def, n_lee;
+end $$;
+
+-- ── 92. La cola de aprobación: enviar solo aprobado es de BASE (mig. 0117) ──
+--
+-- El candado de diseño de panel-de-adquisicion §3, que ninguna UI puede
+-- suplir: (a) estampar `enviado_en` sobre una pieza NO aprobada rebota —
+-- pendiente y rechazada por igual; sobre una aprobada cabe; (b) rechazar sin
+-- motivo rebota (vacío y espacios); (c) resolución coherente: una pieza
+-- aprobada sin `resuelto_en` rebota — no puede existir "aprobada por nadie";
+-- (d) `cuerpo_final` (la edición humana) solo existe en aprobadas;
+-- (e) la FK de `agente` manda: una pieza de un agente no declarado no entra;
+-- (f) deny-all: RLS activa, cero policies, `authenticated` ciego.
+--
+-- Todo se revierte con el raise final.
+do $$
+declare
+  pid uuid;
+  envio_pendiente_rebota boolean := false;
+  envio_rechazada_rebota boolean := false;
+  envio_aprobada_cabe boolean := false;
+  rechazo_sin_motivo boolean := false;
+  rechazo_blanco boolean := false;
+  aprobada_sin_resolucion boolean := false;
+  edicion_en_pendiente boolean := false;
+  agente_fantasma boolean := false;
+  rls_cola boolean; pol_cola int; n_lee int;
+begin
+  -- (a) enviar solo aprobado
+  insert into public.cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+    values ('correo_frio', 'normal', 'ventas', 'verif', 'cuerpo de prueba') returning id into pid;
+  begin
+    update public.cola_aprobacion set enviado_en = now() where id = pid;
+  exception when check_violation then envio_pendiente_rebota := true;
+  end;
+  begin
+    update public.cola_aprobacion
+      set estado = 'rechazado', motivo_rechazo = 'verif', resuelto_en = now(), enviado_en = now()
+      where id = pid;
+  exception when check_violation then envio_rechazada_rebota := true;
+  end;
+  update public.cola_aprobacion set estado = 'aprobado', resuelto_en = now() where id = pid;
+  update public.cola_aprobacion set enviado_en = now() where id = pid;
+  envio_aprobada_cabe := true;
+
+  -- (b) rechazar exige motivo (en fila nueva pendiente)
+  begin
+    insert into public.cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo, estado, resuelto_en)
+      values ('correo_frio', 'normal', 'ventas', 'v2', 'x', 'rechazado', now());
+  exception when check_violation then rechazo_sin_motivo := true;
+  end;
+  begin
+    insert into public.cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo, estado, motivo_rechazo, resuelto_en)
+      values ('correo_frio', 'normal', 'ventas', 'v2', 'x', 'rechazado', '   ', now());
+  exception when check_violation then rechazo_blanco := true;
+  end;
+
+  -- (c) aprobada sin resolución no existe
+  begin
+    insert into public.cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo, estado)
+      values ('correo_frio', 'normal', 'ventas', 'v3', 'x', 'aprobado');
+  exception when check_violation then aprobada_sin_resolucion := true;
+  end;
+
+  -- (d) la edición solo vive en aprobadas
+  begin
+    insert into public.cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo, cuerpo_final)
+      values ('correo_frio', 'normal', 'ventas', 'v4', 'x', 'editado');
+  exception when check_violation then edicion_en_pendiente := true;
+  end;
+
+  -- (e) el autor tiene que estar declarado
+  begin
+    insert into public.cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo)
+      values ('correo_frio', 'normal', 'agente_fantasma', 'v5', 'x');
+  exception when foreign_key_violation then agente_fantasma := true;
+  end;
+
+  -- (f) deny-all
+  select relrowsecurity into rls_cola from pg_class where oid = 'public.cola_aprobacion'::regclass;
+  select count(*) into pol_cola from pg_policies where schemaname = 'public' and tablename = 'cola_aprobacion';
+  set local role authenticated;
+  select count(*) into n_lee from public.cola_aprobacion;
+  reset role;
+
+  raise exception E'COLA_APROBACION_0117  envio_pendiente_rebota=%  envio_rechazada_rebota=%  envio_aprobada_cabe=%  rechazo_sin_motivo=%  rechazo_blanco=%  aprobada_sin_resolucion=%  edicion_en_pendiente=%  agente_fantasma_rebota=%  rls=%  policies=%  lee_auth=%   (esperado t/t/t/t/t/t/t/t/t/0/0)',
+    envio_pendiente_rebota, envio_rechazada_rebota, envio_aprobada_cabe, rechazo_sin_motivo,
+    rechazo_blanco, aprobada_sin_resolucion, edicion_en_pendiente, agente_fantasma,
+    rls_cola, pol_cola, n_lee;
+end $$;

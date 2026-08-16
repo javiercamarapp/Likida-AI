@@ -3,6 +3,7 @@ import {
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
   Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake, Inbox,
+  Bot, ListChecks, Sparkles,
 } from 'lucide-react';
 
 /**
@@ -17,6 +18,10 @@ import {
 export type Item = { href: string; nombre: string; Icono: typeof LayoutGrid };
 
 export const AGENTES: Item[] = [
+  // El copiloto va PRIMERO en Agentes: es la puerta que sustituye recorrer
+  // pantallas — las demás son fichas; esta opera (Fase 2 pieza 1).
+  { href: '/admin/copiloto', nombre: 'Copiloto', Icono: Sparkles },
+  { href: '/admin/agentes', nombre: 'Panel de agentes', Icono: Bot },
   { href: '/admin/agente-ocr', nombre: 'Agente OCR', Icono: ScanText },
   { href: '/admin/agente-cuadre', nombre: 'Agente de Cuadre', Icono: Calculator },
   { href: '/admin/agente-whatsapp', nombre: 'Agente de WhatsApp', Icono: MessagesSquare },
@@ -29,6 +34,10 @@ export const NEGOCIO: Item[] = [
   // (todo lo que espera a un humano, de todas las fuentes) — el resto de la
   // sección son vistas; esta es donde se destraba.
   { href: '/admin/escalaciones', nombre: 'Escalaciones', Icono: Inbox },
+  // La cola de lo que los agentes REDACTAN (0117) — hermana de Escalaciones
+  // (lo que el sistema no pudo resolver solo): allá se destraba, aquí se
+  // aprueba lo que va a salir.
+  { href: '/admin/aprobaciones', nombre: 'Aprobaciones', Icono: ListChecks },
   { href: '/admin/flotas', nombre: 'Flotas / Clientes', Icono: Truck },
   // El equipo de ventas (prospectos y comisiones) — la página vive en
   // /admin/vendedores. `Handshake` y no `Users`: Users ya es Equipo (RBAC) y
