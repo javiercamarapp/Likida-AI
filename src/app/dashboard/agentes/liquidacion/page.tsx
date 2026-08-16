@@ -7,8 +7,10 @@ import {
 } from '@/lib/likida/analytics';
 import { getConfig } from '@/lib/likida/config';
 import { traerResumenCostoIaTenant } from '@/lib/likida/costos';
+import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
 import { VistaAgenteLiquidacion, type ExtraAgenteLiquidacion } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
+import { FichaCorridas } from '../ficha-corridas';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { validarUmbralConfianza, guardarEstrategiaAgente } from '@/lib/likida/agentes/estrategia';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
@@ -43,7 +45,7 @@ export default async function PaginaAgenteLiquidacion({
   const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
 
   const [
-    kpis, liqs, costo, abiertos, enCuadre, liquidados, porDia, hechos, porTipo, stats, ahorro, config,
+    kpis, liqs, costo, abiertos, enCuadre, liquidados, porDia, hechos, porTipo, stats, ahorro, config, corridas,
   ] = await Promise.all([
     // Primarios: sin catch a propósito — no se pinta "0 por revisar" ciego.
     getKpis(tenantId),
@@ -59,6 +61,10 @@ export default async function PaginaAgenteLiquidacion({
     safe(() => getStatsPorOperador(tenantId)),
     safe(() => getValorAhorro(tenantId)),
     safe(() => getConfig(tenantId)),
+    // La ficha de corridas (B3): el corazón del producto era el ÚNICO de los
+    // 7 agentes sin bitácora hasta la Fase 1 del blueprint (0115); su corrida
+    // es el cierre por WhatsApp. null = no se pudo leer, y la ficha lo dice.
+    safe(() => ultimasCorridas(tenantId, 'liquidacion')),
   ]);
 
   const extra: ExtraAgenteLiquidacion = {
@@ -111,6 +117,7 @@ export default async function PaginaAgenteLiquidacion({
             <FormaEstrategiaLiquidacion accion={guardarEstrategia}
               umbralActual={config.agentes.liquidacion.umbralConfianza} />
           )}
+          <FichaCorridas corridas={corridas} />
           <SeccionNotificaciones tenantId={tenantId} agenteId="liquidacion" />
         </>
       }
