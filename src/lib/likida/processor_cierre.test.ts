@@ -118,7 +118,7 @@ vi.mock('@/lib/likida/costos', () => ({
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
-    from: (tabla: string) => {
+    from: (_tabla: string) => {
       const b: Record<string, unknown> = {};
       const self = () => b;
       for (const m of ['select', 'eq', 'gte', 'lte', 'or', 'order', 'in', 'is', 'limit']) b[m] = self;

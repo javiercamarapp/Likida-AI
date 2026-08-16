@@ -31,10 +31,13 @@ function builder(tabla: string) {
     eq: (c: string, v: unknown) => { r.eq.push([c, v]); return b; },
     neq: () => b,
     is: (c: string, v: unknown) => { r.is.push([c, v]); return b; },
+    gte: () => b,
+    lte: () => b,
     order: () => b,
     range: () => b,
     limit: () => b,
     single: () => b,
+    maybeSingle: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),
   });
@@ -43,8 +46,11 @@ function builder(tabla: string) {
 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
 vi.mock('@/lib/logger', () => ({ logger: logs }));
+let resultadoEnvio: { ok: true; id: string } | { ok: false; motivo: 'rechazado' | 'red' | 'sin_configurar'; detalle?: string } = { ok: true, id: 're_123' };
+const enviarCorreo = vi.fn<(...a: unknown[]) => Promise<typeof resultadoEnvio>>(async () => resultadoEnvio);
+vi.mock('@/lib/correo/enviar', () => ({ enviarCorreo: (...a: unknown[]) => enviarCorreo(...a) }));
 
-const { encolarPieza, aprobarPieza, rechazarPieza, marcarEnviada } = await import('./cola');
+const { encolarPieza, aprobarPieza, rechazarPieza, marcarEnviada, enviarPiezaPorCorreo } = await import('./cola');
 const { DatoInvalido } = await import('../errores');
 
 const de = (tabla: string, op: string) => llamadas.filter((l) => l.tabla === tabla && l.op === op);
@@ -53,6 +59,8 @@ beforeEach(() => {
   llamadas.length = 0;
   respuestas.clear();
   logs.error.mockClear();
+  enviarCorreo.mockClear();
+  resultadoEnvio = { ok: true, id: 're_123' };
 });
 
 describe('encolarPieza', () => {
@@ -73,20 +81,29 @@ describe('encolarPieza', () => {
 
 describe('aprobarPieza — anclada a pendiente', () => {
   it('cero filas = alguien la resolvió antes, y se dice', async () => {
+    respuestas.set('app_user', [{ data: { email: 'j@likida.ai' }, error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
     await expect(aprobarPieza('p-1', 'u-1')).rejects.toThrow(/ya no está pendiente/);
   });
 
-  it('el UPDATE va anclado a estado=pendiente — jamás pisa una resolución ajena', async () => {
+  it('el UPDATE va anclado a estado=pendiente y lleva el SNAPSHOT del actor (0120)', async () => {
+    respuestas.set('app_user', [{ data: { email: 'javier@likida.ai' }, error: null }]);
     respuestas.set('cola_aprobacion', [{ data: [{ id: 'p-1', cuerpo: 'original' }], error: null }]);
     respuestas.set('bitacora_auditoria', [{ data: null, error: null }]);
     await aprobarPieza('p-1', 'u-1');
     const up = de('cola_aprobacion', 'update')[0];
     expect(up.eq).toContainEqual(['estado', 'pendiente']);
-    expect(up.payload).toMatchObject({ estado: 'aprobado', resuelto_por: 'u-1' });
+    expect(up.payload).toMatchObject({ estado: 'aprobado', resuelto_por: 'u-1', resuelto_por_email: 'javier@likida.ai' });
+  });
+
+  it('sin poder confirmar QUIÉN resuelve, la resolución se detiene — nadie aprueba como nadie', async () => {
+    respuestas.set('app_user', [{ data: null, error: null }]);
+    await expect(aprobarPieza('p-1', 'u-fantasma')).rejects.toThrow(/quién resuelve/);
+    expect(de('cola_aprobacion', 'update')).toHaveLength(0);
   });
 
   it('la edición idéntica al original NO cuenta como edición', async () => {
+    respuestas.set('app_user', [{ data: { email: 'j@likida.ai' }, error: null }]);
     respuestas.set('cola_aprobacion', [
       { data: [{ id: 'p-1', cuerpo: 'mismo texto' }], error: null },
       { data: null, error: null }, // la limpieza de cuerpo_final
@@ -136,5 +153,103 @@ describe('marcarEnviada — el eslabón con el historial de contactos (0118)', (
     }]);
     await marcarEnviada('p-2', 'u-1');
     expect(de('prospecto_contacto', 'insert')).toHaveLength(0);
+  });
+});
+
+describe('enviarPiezaPorCorreo — el envío REAL (0120, P1 de la auditoría externa)', () => {
+  const FILA = {
+    id: 'p-1', titulo: 'Correo día 0', cuerpo: 'Hola,\n\nvi su vacante.', cuerpo_final: null,
+    agente: 'ventas', prospecto_id: 'pr-9', prospecto: { empresa: 'Transportes X', correo: 'contacto@x.mx' },
+  };
+
+  it('CLAIM anclado a (aprobada ∧ no enviada) — dos clicks: el segundo toca cero filas y se dice', async () => {
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/otro click|Recarga/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+
+  it('el camino feliz: claim → Resend → provider_message_id → contacto en el historial', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA], error: null },        // el claim
+      { data: null, error: null },          // la prueba (provider id)
+    ]);
+    respuestas.set('prospecto_contacto', [{ data: null, error: null }]);
+    const r = await enviarPiezaPorCorreo('p-1', 'u-1');
+    expect(r).toMatchObject({ ok: true, destinatario: 'contacto@x.mx', providerId: 're_123' });
+
+    const claim = de('cola_aprobacion', 'update')[0];
+    expect(claim.eq).toContainEqual(['estado', 'aprobado']);
+    expect(claim.is).toContainEqual(['enviado_en', null]);
+    const prueba = de('cola_aprobacion', 'update')[1];
+    expect(prueba.payload).toMatchObject({ provider_message_id: 're_123' });
+    const contacto = de('prospecto_contacto', 'insert')[0];
+    expect(contacto.payload).toMatchObject({ prospecto_id: 'pr-9', canal: 'correo', pieza_id: 'p-1' });
+  });
+
+  it('la edición humana MANDA: sale cuerpo_final, no el original', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{ ...FILA, cuerpo_final: 'Versión editada por Javier.' }], error: null },
+      { data: null, error: null },
+    ]);
+    respuestas.set('prospecto_contacto', [{ data: null, error: null }]);
+    await enviarPiezaPorCorreo('p-1', 'u-1');
+    const [, correo] = enviarCorreo.mock.calls[0] as unknown as [string, { parrafos: string[] }];
+    expect(correo.parrafos.join(' ')).toContain('Versión editada');
+    expect(correo.parrafos.join(' ')).not.toContain('vi su vacante');
+  });
+
+  it('Resend rechaza → COMPENSACIÓN: el claim se revierte, el error queda y la pieza sigue enviable', async () => {
+    resultadoEnvio = { ok: false, motivo: 'rechazado', detalle: 'HTTP 422' };
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA], error: null },   // el claim
+      { data: null, error: null },     // la reversión
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/no aceptó el envío.*reintentar/s);
+    const reversion = de('cola_aprobacion', 'update')[1];
+    expect(reversion.payload).toMatchObject({ enviado_en: null });
+    expect(String((reversion.payload as { envio_error: string }).envio_error)).toContain('rechazado');
+    expect(de('prospecto_contacto', 'insert')).toHaveLength(0);
+  });
+
+  it('prospecto sin correo → se revierte el claim y se dice dónde capturarlo', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [{ ...FILA, prospecto: { empresa: 'X', correo: null } }], error: null },
+      { data: null, error: null },
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/no tiene correo capturado/);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+  });
+});
+
+describe('la guardia de cadencia — el historial 0118 SE LEE antes de enviar', () => {
+  const FILA_G = {
+    id: 'p-1', titulo: 'Correo día 2', cuerpo: 'Seguimiento.', cuerpo_final: null,
+    agente: 'ventas', prospecto_id: 'pr-9', prospecto: { empresa: 'X', correo: 'c@x.mx' },
+  };
+
+  it('un prospecto contactado hace <48h NO se vuelve a tocar: claim revertido y dicho con palabras', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_G], error: null },  // el claim
+      { data: null, error: null },      // la reversión
+    ]);
+    respuestas.set('prospecto_contacto', [
+      { data: [{ ocurrio_en: new Date().toISOString() }], error: null }, // la guardia: hay salida reciente
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/48 horas.*cadencia/s);
+    expect(enviarCorreo).not.toHaveBeenCalled();
+    const reversion = de('cola_aprobacion', 'update')[1];
+    expect(reversion.payload).toMatchObject({ enviado_en: null });
+  });
+
+  it('si el historial NO SE PUEDE leer, no se manda — la cadencia no se verifica a ciegas', async () => {
+    respuestas.set('cola_aprobacion', [
+      { data: [FILA_G], error: null },
+      { data: null, error: null },
+    ]);
+    respuestas.set('prospecto_contacto', [
+      { data: null, error: { message: 'db down' } },
+    ]);
+    await expect(enviarPiezaPorCorreo('p-1', 'u-1')).rejects.toThrow(/historial.*Reintenta/s);
+    expect(enviarCorreo).not.toHaveBeenCalled();
   });
 });

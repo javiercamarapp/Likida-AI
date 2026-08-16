@@ -14,7 +14,7 @@ const configurado = vi.fn(() => true);
 const marcar = vi.fn(async () => true);
 const aplicarSuscripcion = vi.fn(async () => {});
 const aplicarFactura = vi.fn(async () => {});
-const desmarcar = vi.fn(async () => {});
+const _desmarcar = vi.fn(async () => {});
 
 vi.mock('@/lib/saas/stripe', () => ({ verificarFirmaStripe: firmaValida, webhookConfigurado: configurado }));
 vi.mock('@/lib/saas/suscripcion', () => ({

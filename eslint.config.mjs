@@ -30,6 +30,16 @@ const config = [
       // lleva su comentario del porqué. Como ERROR bloquearía por algo ya
       // razonado; como warning sigue visible.
       '@typescript-eslint/no-explicit-any': 'warn',
+      // La convención del repo para "este parámetro existe por la firma, no
+      // se usa" es el prefijo `_` (los `_prev`/`_fd` de las server actions,
+      // los `_a` de los dobles de prueba). La regla ahora la CONOCE: 26
+      // warnings de ruido intencional tapaban a los no usados de verdad
+      // (auditoría externa 16-ago-2026 — un repo enterprise llega sin ruido).
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
     },
   },
   {

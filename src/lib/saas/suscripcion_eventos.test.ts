@@ -38,7 +38,7 @@ function constructor(tabla: string) {
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => constructor(t) }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { marcarEvento, estadoDesdeStripe, aplicarSuscripcion, tenantDeCustomer, planDePrice } = await import('./suscripcion');
+const { marcarEvento, estadoDesdeStripe, aplicarSuscripcion, tenantDeCustomer } = await import('./suscripcion');
 
 beforeEach(() => {
   escrituras.length = 0;

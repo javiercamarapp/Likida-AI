@@ -19,6 +19,7 @@ import { traerTodo } from './pg';
 // cifra fiscal se lea diferente en dos pantallas, y eso se lee como dos
 // cálculos distintos.
 import { round2 } from '@/lib/formato';
+import { DatoInvalido } from './errores';
 
 // ── Clientes ───────────────────────────────────────────────────────────────
 
@@ -366,4 +367,49 @@ export async function getEstadoRastreo(tenantId: string): Promise<EstadoRastreo>
     unidadesConPosicion: unidades.size,
     ultimaPosicion: ultima,
   };
+}
+
+// ── Abrir un ticket — LA PUERTA de la señal de PMF #3 ──────────────────────
+//
+// Auditoría externa 16-ago-2026 (P2): la señal "el cliente se queja por su
+// cuenta" (`ticket_soporte.abierto_por`, leída por pmf.ts desde la Fase 1)
+// estaba instrumentada pero NADA en el producto podía producirla — la
+// pantalla de soporte era solo lectura. Esta función es la puerta.
+//
+// LA CONVENCIÓN DE LA 0051 PROTEGE LA SEÑAL: `abierto_por` NULL = lo abrió
+// Likida a nombre de la flota. Por eso el llamador decide `abiertoPor`:
+// una sesión superadmin (Javier con ?tenant= en un demo) pasa null y NO
+// contamina la señal de PMF; un usuario real de la flota pasa su id.
+
+export const CATEGORIAS_TICKET = ['facturacion', 'operacion', 'tecnico', 'cuenta', 'otro'] as const;
+export const PRIORIDADES_TICKET = ['baja', 'media', 'alta', 'urgente'] as const;
+
+export async function abrirTicket(
+  tenantId: string,
+  /** null = lo abre Likida (superadmin) a nombre de la flota — 0051. */
+  abiertoPor: string | null,
+  t: { asunto: string; descripcion: string; categoria: string; prioridad: string },
+): Promise<string> {
+  const asunto = t.asunto.trim();
+  if (!asunto || asunto.length > 200) throw new DatoInvalido('El asunto es obligatorio (máx. 200 caracteres).');
+  if (!(CATEGORIAS_TICKET as readonly string[]).includes(t.categoria)) {
+    throw new DatoInvalido('Esa categoría no existe.');
+  }
+  if (!(PRIORIDADES_TICKET as readonly string[]).includes(t.prioridad)) {
+    throw new DatoInvalido('Esa prioridad no existe.');
+  }
+  const descripcion = t.descripcion.trim();
+
+  const { data, error } = await supabaseAdmin().from('ticket_soporte').insert({
+    tenant_id: tenantId,
+    abierto_por: abiertoPor,
+    asunto,
+    descripcion: descripcion === '' ? null : descripcion.slice(0, 4000),
+    categoria: t.categoria,
+    prioridad: t.prioridad,
+  }).select('id').single();
+  if (error) throw new Error(`abrirTicket: ${error.message}`);
+  const id = (data as { id?: unknown } | null)?.id;
+  if (!id) throw new Error('abrirTicket: el insert no devolvió id');
+  return id as string;
 }

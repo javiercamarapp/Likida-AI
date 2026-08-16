@@ -1,0 +1,123 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CRON QUE DRENA LA BANDEJA DEL APAGADO — el contrato completo del P1:
+//  · sin secreto no corre; apagado NO drena (la pausa sigue) y lo dice;
+//  · encendido: reclama, procesa por el motor real, sella;
+//  · un evento que falla anota su error, NO se sella, y el cron sale 500;
+//  · el claim perdido (otra corrida lo tomó) no procesa ni cuenta;
+//  · las cartas muertas se gritan al operador.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const processInbound = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {});
+vi.mock('@/lib/likida/processor', () => ({ processInbound: (...a: unknown[]) => processInbound(...a) }));
+
+const estaApagado = vi.fn(async () => false);
+vi.mock('@/lib/likida/interruptores', () => ({ estaApagado }));
+
+const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+vi.mock('@/lib/logger', () => ({ logger }));
+vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'x' }));
+const alertarOperador = vi.fn(async () => {});
+vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])) }));
+
+const urgentesVencidas = vi.fn(async (..._a: unknown[]) => 0);
+vi.mock('@/lib/likida/agentes/cola', () => ({ urgentesVencidas: (...a: unknown[]) => urgentesVencidas(...a) }));
+
+const pendientesPorDrenar = vi.fn(async (): Promise<Array<{ id: string; intentos: number }>> => []);
+const reclamarPendiente = vi.fn(async (id: string, intentos: number): Promise<{ id: string; evento: object; intentos: number } | null> =>
+  ({ id, evento: { from: '521999', type: 'text', waMessageId: id }, intentos: intentos + 1 }));
+const marcarPendienteProcesado = vi.fn(async () => {});
+const anotarFalloPendiente = vi.fn(async () => {});
+const cartasMuertas = vi.fn(async () => 0);
+vi.mock('@/lib/likida/wa_pendientes', () => ({
+  pendientesPorDrenar: (...a: unknown[]) => pendientesPorDrenar(...(a as [])),
+  reclamarPendiente: (...a: unknown[]) => reclamarPendiente(...(a as [string, number])),
+  marcarPendienteProcesado: (...a: unknown[]) => marcarPendienteProcesado(...(a as [])),
+  anotarFalloPendiente: (...a: unknown[]) => anotarFalloPendiente(...(a as [])),
+  cartasMuertas: (...a: unknown[]) => cartasMuertas(...(a as [])),
+}));
+
+process.env.CRON_SECRET = 'secreto-de-prueba';
+const { GET } = await import('./route');
+const peticion = (auth?: string) => new Request('http://likida.test/api/cron/wa-pendientes', {
+  headers: auth ? { authorization: auth } : {},
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  urgentesVencidas.mockResolvedValue(0);
+  estaApagado.mockResolvedValue(false);
+  pendientesPorDrenar.mockResolvedValue([]);
+  cartasMuertas.mockResolvedValue(0);
+  processInbound.mockImplementation(async () => {});
+  reclamarPendiente.mockImplementation(async (id: string, intentos: number) =>
+    ({ id, evento: { from: '521999', type: 'text', waMessageId: id }, intentos: intentos + 1 }));
+});
+
+describe('la puerta y la pausa', () => {
+  it('sin el secreto: 401 y ni una lectura', async () => {
+    const r = await GET(peticion('Bearer equivocado'));
+    expect(r.status).toBe(401);
+    expect(pendientesPorDrenar).not.toHaveBeenCalled();
+  });
+
+  it('APAGADO: la bandeja espera — ese ES el contrato nuevo, y responde 200 con saltado', async () => {
+    estaApagado.mockResolvedValue(true);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ saltado: 'interruptor global' });
+    expect(pendientesPorDrenar).not.toHaveBeenCalled();
+  });
+});
+
+describe('el drenado', () => {
+  it('encendido: reclama, procesa por el motor y sella cada evento', async () => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.1', intentos: 0 }, { id: 'wamid.2', intentos: 0 }]);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ corrio: true, procesados: 2, fallidos: 0 });
+    expect(processInbound).toHaveBeenCalledTimes(2);
+    expect(marcarPendienteProcesado).toHaveBeenCalledTimes(2);
+  });
+
+  it('un evento que falla anota su error, NO se sella, y el cron sale 500 — nunca verde con fallos', async () => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.mal', intentos: 2 }]);
+    processInbound.mockRejectedValue(new Error('OCR reventó'));
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(500);
+    expect(marcarPendienteProcesado).not.toHaveBeenCalled();
+    expect(anotarFalloPendiente).toHaveBeenCalledWith('wamid.mal', 'OCR reventó');
+  });
+
+  it('el claim perdido (otra corrida lo tomó) no procesa ni cuenta como fallo', async () => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.ajeno', intentos: 0 }]);
+    reclamarPendiente.mockResolvedValue(null);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(processInbound).not.toHaveBeenCalled();
+    expect(await r.json()).toMatchObject({ procesados: 0, fallidos: 0 });
+  });
+
+  it('el monitor de SLA grita las urgentes vencidas — incluso con el sistema APAGADO', async () => {
+    estaApagado.mockResolvedValue(true);
+    urgentesVencidas.mockResolvedValue(2);
+    await GET(peticion('Bearer secreto-de-prueba'));
+    expect(alertarOperador).toHaveBeenCalledWith('aprobaciones.urgentes', expect.objectContaining({ codigo: 'sla_urgente' }));
+  });
+
+  it('el monitor de SLA caído NO tumba el drenado — se grita y se sigue', async () => {
+    urgentesVencidas.mockRejectedValue(new Error('db down'));
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.1', intentos: 0 }]);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(processInbound).toHaveBeenCalledTimes(1);
+  });
+
+  it('las cartas muertas se GRITAN al operador', async () => {
+    cartasMuertas.mockResolvedValue(3);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.wa_pendientes', expect.objectContaining({ codigo: 'cartas_muertas' }));
+  });
+});

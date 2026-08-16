@@ -301,8 +301,8 @@ describe('reabrirViaje', () => {
 
   it('toma el mutex del viaje ANTES de leer la liquidación y lo libera DESPUÉS de escribir', async () => {
     const orden: string[] = [];
-    acquireViajeLock.mockImplementation(async (...a: unknown[]) => { orden.push('lock'); return true; });
-    releaseViajeLock.mockImplementation(async (...a: unknown[]) => { orden.push('unlock'); });
+    acquireViajeLock.mockImplementation(async (..._a: unknown[]) => { orden.push('lock'); return true; });
+    releaseViajeLock.mockImplementation(async (..._a: unknown[]) => { orden.push('unlock'); });
     from.mockImplementation((tabla: string) => {
       if (tabla === 'viaje') {
         return {

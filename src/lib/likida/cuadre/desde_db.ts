@@ -6,7 +6,6 @@ import { cuadrarViaje } from './engine';
 import { ventanaDelViaje } from './fecha_dudosa';
 import { getViaje, getGastos, getOperador, getAcumuladoCombustible } from '../repo';
 import { getConfig } from '../config';
-import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { Liquidacion } from '@/types/likida';
 

@@ -5,7 +5,7 @@ import {
   MAX_DESTINATARIOS, PISO_ENTRE_AVISOS_MS, CONFIG_NOTIF_DEFAULT,
   agentePorId, eventosDe, rolesQuePueden, validarConfigNotificaciones,
   marcaAlcanzada, debeAvisar, motivoDeCorrida, repartoDe, puedeConfigurarAvisos,
-  PARES_CON_EMISOR, tieneEmisor,
+  PARES_CON_EMISOR,
   type ConfigNotificaciones, type EntradaDecision, type HuellaAviso,
   type UsuarioAvisable,
 } from './notificaciones';

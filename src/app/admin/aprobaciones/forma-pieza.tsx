@@ -104,3 +104,44 @@ export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
     </div>
   );
 }
+
+/** El paso de ENVÍO de una aprobada (0120): un click aparte con claim
+ *  anti-doble-click en el servidor. Dice a quién sale y con qué versión;
+ *  sin correo del prospecto, lo dice en vez de ofrecer un botón muerto. */
+export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
+  const [estado, enviar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
+
+  if (estado?.ok) {
+    return (
+      <div className="hairline rounded-lg px-3 py-2.5 text-[12.5px]" style={{ background: 'var(--surface)', color: 'var(--ok)' }}>
+        {estado.ok}
+      </div>
+    );
+  }
+  return (
+    <div className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 flex-wrap" style={{ background: 'var(--surface)' }}>
+      <span className="text-[13px] font-medium truncate">{pieza.titulo}</span>
+      {pieza.cuerpoFinal && <StatusPill estado="neutral">con edición</StatusPill>}
+      <span className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        {pieza.prospectoEmpresa ? `→ ${pieza.prospectoEmpresa}` : 'sin prospecto'}
+        {pieza.prospectoCorreo ? ` · ${pieza.prospectoCorreo}` : ''}
+      </span>
+      {pieza.envioError && (
+        <span className="text-[11.5px]" style={{ color: 'var(--bad)' }}>último intento: {pieza.envioError}</span>
+      )}
+      {estado?.error && <span className="text-[12px] basis-full" style={{ color: 'var(--bad)' }}>{estado.error}</span>}
+      <form action={enviar} className="ml-auto shrink-0">
+        <input type="hidden" name="pieza" value={pieza.id} />
+        {pieza.prospectoCorreo ? (
+          <button type="submit" disabled={pendiente}
+            className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
+            style={{ background: 'var(--ink)', color: 'var(--surface)' }}>
+            {pendiente ? 'Enviando…' : 'Enviar por correo'}
+          </button>
+        ) : (
+          <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>sin correo capturado — se captura en Vendedores</span>
+        )}
+      </form>
+    </div>
+  );
+}

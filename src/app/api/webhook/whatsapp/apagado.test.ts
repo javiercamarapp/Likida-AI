@@ -31,6 +31,17 @@ vi.mock('@/lib/observability/sentry', () => ({ flushObservabilidad }));
 const estaApagado = vi.fn(async () => false);
 vi.mock('@/lib/likida/interruptores', () => ({ estaApagado }));
 
+// La bandeja durable (0119, P1 de la auditoría externa): apagado ya no
+// descarta — guarda. El doble registra QUÉ se guardó para poder afirmarlo.
+const guardados: Array<Record<string, unknown>> = [];
+const guardarEventosPendientes = vi.fn(async (ms: Array<Record<string, unknown>>) => {
+  guardados.push(...ms);
+  return { guardados: ms.length, fallidos: 0 };
+});
+vi.mock('@/lib/likida/wa_pendientes', () => ({
+  guardarEventosPendientes: (...a: unknown[]) => guardarEventosPendientes(...(a as [never])),
+}));
+
 // `after()` fuera de una petición de Next lanza; se recogen las tareas y se
 // corren a mano para poder AFIRMAR qué llegó (o no) al procesador.
 const pendientes: Array<() => unknown> = [];
@@ -69,6 +80,8 @@ beforeEach(() => {
   flushObservabilidad.mockReset(); flushObservabilidad.mockImplementation(async () => {});
   estaApagado.mockReset(); estaApagado.mockImplementation(async () => false);
   warn.mockReset();
+  guardarEventosPendientes.mockClear();
+  guardados.length = 0;
   pendientes.length = 0;
 });
 
@@ -79,15 +92,36 @@ describe('el interruptor global apaga el WhatsApp entrante', () => {
     expect(processInbound).toHaveBeenCalledTimes(1);
   });
 
-  it('con el sistema APAGADO, NINGÚN mensaje llega al procesador', async () => {
+  it('con el sistema APAGADO, NINGÚN mensaje llega al procesador — y TODOS quedan GUARDADOS', async () => {
     estaApagado.mockImplementation(async () => true);
     const cuerpo = payload('5219990001002', [{ id: 'wamid.OFF', type: 'text', text: { body: 'hola' } }]);
     const res = await postear(cuerpo);
 
     expect(processInbound).not.toHaveBeenCalled();
-    // A Meta se le sigue contestando 200: un 500 haría que reintente en bucle
-    // contra un sistema que acabamos de declarar apagado a propósito.
+    // A Meta se le sigue contestando 200 — y desde la 0119 ese 200 es VERDAD:
+    // el mensaje quedó persistido en wa_evento_pendiente (P1 de la auditoría
+    // externa: antes se acusaba y se tiraba, porque Meta no reintenta lo
+    // acusado). El cron wa-pendientes lo procesa al subir la palanca.
     expect(res.status).toBe(200);
+    expect(guardarEventosPendientes).toHaveBeenCalledTimes(1);
+    expect(guardados.map((g) => g.waMessageId)).toEqual(['wamid.OFF']);
+  });
+
+  it('apagado, una RÁFAGA entera queda guardada — ningún mensaje se descarta', async () => {
+    estaApagado.mockImplementation(async () => true);
+    const cuerpo = payload('5219990001007', [
+      { id: 'wamid.G1', type: 'image', image: { id: 'media-1' } },
+      { id: 'wamid.G2', type: 'image', image: { id: 'media-2' } },
+    ]);
+    await postear(cuerpo);
+    expect(processInbound).not.toHaveBeenCalled();
+    expect(guardados.map((g) => g.waMessageId)).toEqual(['wamid.G1', 'wamid.G2']);
+  });
+
+  it('ENCENDIDO, la bandeja NI SE TOCA — el camino vivo no paga el desvío', async () => {
+    await postear(payload('5219990001008', [{ id: 'wamid.VIVO', type: 'text', text: { body: 'x' } }]));
+    expect(processInbound).toHaveBeenCalledTimes(1);
+    expect(guardarEventosPendientes).not.toHaveBeenCalled();
   });
 
   it('apagado, NI SIQUIERA el primero de una ráfaga se procesa', async () => {

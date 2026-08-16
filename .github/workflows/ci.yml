@@ -46,6 +46,20 @@ jobs:
       # se desincronizó del package.json, que es justo lo que se quiere saber.
       - run: npm ci
 
+      # ── LA PUERTA DE SUPPLY CHAIN (auditoría externa 16-ago-2026) ─────────
+      # "CI verde" mentía sobre las dependencias: npm ci reportaba 2 critical
+      # + 1 high y el workflow seguía de largo. La clasificación del 16-ago:
+      # las 6 vulnerabilidades eran 100% de TOOLING (vitest/vite/esbuild vía
+      # devDependencies) — `npm audit --omit=dev` daba CERO en runtime.
+      #
+      # Esta puerta convierte esa clasificación en regla permanente:
+      #   · runtime high/critical  → CI ROJO (es lo que corre en producción)
+      #   · tooling                → Dependabot lo va subiendo; no bloquea
+      # Sin `audit fix --force` ciego jamás: un fallo aquí se resuelve
+      # mirando el path (`npm audit --omit=dev`) y subiendo el paquete real.
+      - name: Auditoría de dependencias de RUNTIME
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Typecheck
         run: npm run typecheck
 
