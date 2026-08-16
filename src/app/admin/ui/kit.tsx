@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Info } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Info } from 'lucide-react';
 import { Sparkline, Tendencia } from '../charts';
 import { useCountUp } from './use-count-up';
 import { usePrefersReducedMotion } from './prefers-reduced-motion';
@@ -71,7 +71,9 @@ export function KpiTile({
       {vacio ? (
         <p className="text-xs mt-2" style={{ color: 'var(--faint)' }}>{vacio}</p>
       ) : sparkline && sparkline.length > 1 ? (
-        <div className="mt-2 flex items-center gap-2">
+        // Divisor PUNTEADO (dirección 16-ago-2026, ref. shadcn-dashboard): la
+        // textura que separa la cifra de su contexto secundario.
+        <div className="mt-2 pt-2 flex items-center gap-2" style={{ borderTop: '1px dashed var(--line2)' }}>
           <div className="flex-1 min-w-0"><Sparkline valores={sparkline} alto={20} /></div>
           {tendencia !== undefined && <Tendencia valor={tendencia} />}
         </div>
@@ -81,12 +83,12 @@ export function KpiTile({
   );
 }
 
-// ── StatCard (referencia FlowAI, 12-ago-2026) ────────────────────────────
+// ── StatCard (12-ago-2026) ────────────────────────────
 
-/** La stat card de la referencia FlowAI: chip de ícono neutro + etiqueta
+/** La stat card: chip de ícono neutro + etiqueta
  *  arriba, la CIFRA grande en tinta, y el delta como TEXTO verde/rojo bajo
- *  un hairline ("+12% vs periodo anterior") — así lo pinta la referencia,
- *  no como pill. Reemplaza a `KpiDegradado` (7-ago) en todo el producto.
+ *  un hairline ("+12% vs periodo anterior"), no como pill.
+ *  Reemplaza a `KpiDegradado` (7-ago) en todo el producto.
  *
  *  `delta.bueno` lo decide el LLAMADOR — gastar más no es buena noticia
  *  aunque el número suba. Sin dato comparable el llamador OMITE el delta:
@@ -132,8 +134,11 @@ export function StatCard({
       {/* El espaciador alinea los pies en una fila de tarjetas parejas
           (`h-full`) aunque una etiqueta envuelva a dos líneas. */}
       <div className="grow" />
+      {/* El PIE va tras un divisor PUNTEADO (dirección 16-ago-2026, ref.
+          shadcn-dashboard): la textura distintiva que separa la cifra de su
+          lectura secundaria. Solo existe cuando hay pie que separar. */}
       {delta ? (
-        <div className="px-1.5 pt-1.5 pb-0 text-xs flex items-baseline gap-1.5 min-w-0">
+        <div className="mx-1.5 mt-1.5 pt-1.5 pb-0 text-xs flex items-baseline gap-1.5 min-w-0" style={{ borderTop: '1px dashed var(--line2)' }}>
           {/* Un 0% real (comparó y no cambió) va en gris neutro, no en verde
               ni rojo: "no se movió" no es buena ni mala noticia. */}
           <span className="font-medium tabular shrink-0"
@@ -143,15 +148,75 @@ export function StatCard({
           <span className="truncate" style={{ color: 'var(--faint)' }}>{delta.pct === 0 ? 'sin cambio vs periodo anterior' : deltaNota}</span>
         </div>
       ) : nota ? (
-        <p className="text-xs px-1.5 pt-1.5 pb-0" style={{ color: 'var(--faint)' }}>{nota}</p>
+        <p className="text-xs mx-1.5 mt-1.5 pt-1.5 pb-0" style={{ borderTop: '1px dashed var(--line2)', color: 'var(--faint)' }}>{nota}</p>
       ) : delta === null ? (
         // Se intentó comparar y no hay contra qué: el pie no se queda vacío
         // (pedido del 12-ago), pero en gris y sin inventar dirección. Con
         // `delta` OMITIDO (undefined) no se pinta nada — métricas sin
         // concepto de comparativo (Diésel) van limpias, pedido del mismo día.
-        <p className="text-xs px-1.5 pt-1.5 pb-0 tabular" style={{ color: 'var(--faint)' }}>0% · sin movimiento</p>
+        <p className="text-xs mx-1.5 mt-1.5 pt-1.5 pb-0 tabular" style={{ borderTop: '1px dashed var(--line2)', color: 'var(--faint)' }}>0% · sin movimiento</p>
       ) : null}
     </div>
+  );
+}
+
+// ── WidgetUso (ref. shadcn-dashboard "plan usage", 16-ago-2026) ──────────
+
+/** La tarjeta de uso al pie del sidebar — el patrón "Basic Plan · 68/100"
+ *  de la referencia, con la regla de la casa: SIEMPRE dato medido. El
+ *  llamador que no pudo leer pasa `valor: null` y la tarjeta lo DICE —
+ *  jamás un $0 o un 0% con cara de medición. En /admin mide el costo de IA
+ *  del mes; en /dashboard, el presupuesto diario de análisis del tenant.
+ *  El widget de PLAN real llega cuando exista suscripción real (DESIGN §3). */
+export function WidgetUso({ etiqueta, valor, detalle, tope, href, hrefTexto = 'Ver' }: {
+  /** Micro-rótulo mono uppercase: "COSTO DE IA · AGOSTO". */
+  etiqueta: string;
+  /** La cifra YA formateada por el llamador (lib/formato) — `null` = no se
+   *  pudo leer, y se dice. */
+  valor: string | null;
+  detalle?: string;
+  /** Barra de progreso usado/límite (misma unidad). Omitida, no hay barra. */
+  tope?: { usado: number; limite: number } | null;
+  href?: string;
+  hrefTexto?: string;
+}) {
+  const pct = tope && tope.limite > 0 ? Math.min(100, Math.round((tope.usado / tope.limite) * 100)) : null;
+  return (
+    <div className="hairline rounded-xl p-2.5 mb-1 sb-texto" style={{ background: 'var(--surface)' }}>
+      <div className="etiqueta-mono text-[9.5px] uppercase" style={{ color: 'var(--faint)' }}>{etiqueta}</div>
+      {valor === null ? (
+        <p className="text-[11.5px] mt-1" style={{ color: 'var(--muted)' }}>No se pudo leer ahora mismo.</p>
+      ) : (
+        <>
+          <div className="font-display text-[17px] font-semibold tabular leading-tight mt-0.5">{valor}</div>
+          {pct !== null && (
+            <div className="mt-1.5 h-1 rounded-full overflow-hidden" style={{ background: 'var(--line2)' }}>
+              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--marca)' }} />
+            </div>
+          )}
+          {detalle && <p className="text-[10.5px] mt-1" style={{ color: 'var(--faint)' }}>{detalle}</p>}
+        </>
+      )}
+      {href && (
+        <a href={href} className="inline-block text-[10.5px] font-medium mt-1 hover:opacity-70 transition-opacity">{hrefTexto} →</a>
+      )}
+    </div>
+  );
+}
+
+// ── VerMas (botón fantasma, ref. shadcn-dashboard 16-ago-2026) ───────────
+
+/** El "Ver estadísticas →" fantasma que vive BAJO un grupo de métricas y
+ *  lleva a la pantalla (o ancla) donde se profundiza — el pariente chico del
+ *  link del `BannerInsight`. Es `<a>` y no `Link` a propósito: la mitad de
+ *  sus destinos son anclas (`#estadisticas`) en la misma página. */
+export function VerMas({ href, children = 'Ver estadísticas' }: { href: string; children?: React.ReactNode }) {
+  return (
+    <a href={href}
+      className="hairline inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full transition-colors hover:bg-[var(--canvas)]"
+      style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
+      {children} <ArrowRight width={12} height={12} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+    </a>
   );
 }
 
@@ -273,7 +338,7 @@ export function EstadoError({ mensaje, onReintentar }: { mensaje: string; onRein
 }
 
 /**
- * El banner de insight (patrón "Update" de la referencia FlowAI/shadcn,
+ * El banner de insight (patrón "Update" de shadcn,
  * 16-ago-2026): UNA noticia del periodo con cifra REAL y un link a donde
  * se profundiza. La regla que lo gobierna es la del producto entero: el
  * LLAMADOR solo lo monta cuando tiene un dato real que contar — este

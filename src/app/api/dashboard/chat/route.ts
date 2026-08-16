@@ -15,31 +15,17 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSessionTenant } from '@/lib/auth/session';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
-import { supabaseAdmin } from '@/lib/supabase/admin';
-import { acotada } from '@/lib/likida/presupuesto';
-import { traerTodo, conteo } from '@/lib/likida/pg';
 import { registrarCosto, faseDeModelo } from '@/lib/likida/costos';
 import { PartialExecutionError } from '@/lib/llm/openrouter';
 import { guardarIntercambio } from '@/lib/likida/chat/conversaciones';
 import { ejecutarAnalista } from '@/lib/agents/analista';
-import { ahoraMs } from '@/lib/saludo';
 import { logger } from '@/lib/logger';
-import { inicioDiaMxIso, validarMensajes, validarConversacionId } from './validacion';
+import { validarMensajes, validarConversacionId } from './validacion';
+import { topeDiaUsd, gastoChatHoyUsd } from './tope';
 import { tenantEfectivoChat } from './tenant';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-/** Tope diario de gasto de chat POR TENANT, en USD. Subió de 0.25 a 1.00 el
- *  12-ago-2026 cuando Javier confirmó su pricing ("a una flota le cobro
- *  mucho más"): a ~$0.005 el análisis medido, $1 son ~200 análisis/día —
- *  un contralor premium en cierre de semana no debe toparse con un muro
- *  por centavos. El techo absoluto queda en ~$30 USD/mes por tenant, ruido
- *  contra el ticket; el candado sigue atrapando bucles y curiosos. */
-function topeDiaUsd(): number {
-  const v = Number(process.env.LIKIDA_CHAT_TOPE_DIA_USD);
-  return Number.isFinite(v) && v > 0 ? v : 1.0;
-}
 
 export async function POST(req: NextRequest) {
   const sesion = await getSessionTenant();
@@ -69,31 +55,16 @@ export async function POST(req: NextRequest) {
     ? { nombre: docCrudo.nombre.trim().slice(0, 120), extracto: docCrudo.extracto.slice(0, 16_000) }
     : null;
 
-  // ── Tope diario ──
-  //
-  // Paginado con `traerTodo` (auditoría de escala 15k): sin él, PostgREST
-  // recortaba la lectura a 1,000 filas EN SILENCIO — no como error, como
-  // éxito — y a partir de la fila 1,001 del día `gastadoHoy` se congelaba
-  // por debajo del tope real: EL FRENO DE PRESUPUESTO dejaba de dispararse
-  // justo el día de más uso. El "fallar cerrado" de abajo solo cubría el
-  // error por valor; el recorte lo burlaba por el lado del éxito.
-  let filas: Array<{ costo_usd: unknown }>;
+  // ── Tope diario ── (la lectura vive en ./tope.ts, compartida con el
+  // widget de uso del sidebar: el freno y el widget miran el MISMO número.)
+  let gastadoHoy: number;
   try {
-    filas = await traerTodo<{ costo_usd: unknown }>(
-      (d, h) => acotada(
-        supabaseAdmin().from('llm_costo').select('costo_usd', conteo(d))
-          .eq('tenant_id', tenantId).eq('fase', 'chat')
-          .gte('created_at', inicioDiaMxIso(ahoraMs()))
-          .order('id').range(d, h),
-        'chat.tope_dia'),
-      'chat.tope_dia',
-    );
+    gastadoHoy = await gastoChatHoyUsd(tenantId);
   } catch (e) {
     // Fallar CERRADO: si no se pudo leer el gasto del día, no se gasta más.
     logger.error('chat.tope_dia.error', { err: e instanceof Error ? e.message : String(e) });
     return NextResponse.json({ agotado: true, bloques: [{ tipo: 'texto', texto: 'No pude verificar el presupuesto del día — el análisis con IA descansa un momento. Las respuestas rápidas siguen funcionando.' }] });
   }
-  const gastadoHoy = filas.reduce((s, f) => s + Number(f.costo_usd ?? 0), 0);
   if (gastadoHoy >= topeDiaUsd()) {
     return NextResponse.json({
       agotado: true,

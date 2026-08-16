@@ -1,8 +1,18 @@
-# Likida — Sistema de diseño v3
+# Likida — Sistema de diseño v3.1
 
 Dirección fijada el **12-ago-2026**, reemplazando la dirección "degradado de
 marca" del 7-ago-2026. Javier pidió explícito: **logo negro, ya no paleta
 naranja** en los paneles, tipografía más corporativa, y todo compacto.
+
+**v3.1 (16-ago-2026)**: Javier sumó como referencia el template MIT
+`shadcndashboard/next-shadcn-dashboard` ("visual minimalista y tipografía,
+todo") y ordenó 5 patrones suyos en LOS DOS paneles: divisores internos
+PUNTEADOS (filas de tabla y pies de stat), línea comparativa punteada en
+gráficas, pill activa del sidebar SÓLIDA en tinta, `WidgetUso` al pie del
+sidebar, y el fantasma "Ver estadísticas →" (`VerMas`) bajo grupos de
+métricas. Más microinteracciones de prensado/lift (principios de `Amicro`,
+CSS puro, cero dependencias, tras `prefers-reduced-motion`). Ningún patrón
+entra como librería nueva: todo con los tokens y el kit de la casa.
 
 **Las frases que gobiernan:**
 1. Los paneles son NEUTROS — tinta, gris y blanco (`.tema-neutro` en
@@ -83,22 +93,29 @@ llamador; sin comparable, el delta se omite (nunca "0.0%").
 **Pills de estatus** (dominio Likida): `liquidado → ok`, `en_cuadre → warn`,
 `abierto → neutral`, vencido/EFOS/error → `bad`. Siempre `StatusPill`.
 
-**Tablas:** header 11px uppercase `--muted`, filas 52-56px,
-divisores `--line2`, hover `--canvas`, cifras `.tabular` alineadas a la
-derecha, estatus como pill, acciones a la derecha (texto, no íconos sueltos).
-Las tablas viven DENTRO de una tarjeta con título y acción "Ver todo".
+**Tablas** (textura v3.1): header 11px uppercase `--muted` con divisor
+SÓLIDO, filas 52-56px con divisores `--line2` **punteados** (la regla vive
+en globals.css: `.card table tbody tr`), hover `--canvas`, cifras `.tabular`
+alineadas a la derecha, estatus como pill, acciones a la derecha (texto, no
+íconos sueltos). Las tablas viven DENTRO de una tarjeta con título y acción
+"Ver todo". La textura punteada es SOLO para divisores internos de una
+tarjeta; el borde externo sigue sólido.
 
 **Gráficas.** Serie principal en rampa `--g3/--g4`, comparativos en gris;
 la barra/punto del periodo actual puede ir `--marca` (una barra encendida
-marca el periodo). Tooltip = pill oscura (`--ink` bg, texto blanco). Ejes
+marca el periodo). El periodo ANTERIOR va como línea PUNTEADA gris
+(`AreaChartSimple.comparativa`, v3.1) — al MISMO max que la actual, y solo
+con serie real. Tooltip = pill oscura (`--ink` bg, texto blanco). Ejes
 `--faint` 11px. Nada de rejillas duras: hairlines `--line2` u omitidas.
 
 **Sidebar:** superficie blanca, logo arriba,
 secciones con rótulo 11px uppercase `--faint` (OPERACIÓN / DINERO / GESTIÓN),
-ítems `h-9 rounded-lg text-sm` con ícono 16px; activo = fondo `--g1`, texto e
-ícono `--marca`, `font-medium` (pill suave, NO bloque degradado); hover =
-`--canvas`. Abajo: tarjeta del tenant + usuario. El widget de plan
-queda reservado para cuando exista suscripción real.
+ítems `h-9 rounded-lg text-sm` con ícono 16px; activo = pill SÓLIDA en tinta
+(`--marca` de fondo, texto e ícono `--marca-fg`, `font-medium`) — v3.1
+reemplaza a la pill suave `--g1`; hover = `--canvas`. Abajo: `WidgetUso`
+(kit) con DATO MEDIDO — costo de IA del mes en /admin, % del presupuesto
+diario de análisis en /dashboard; el widget de PLAN real sigue reservado
+para cuando exista suscripción real. Luego tarjeta del tenant + usuario.
 
 **Encabezado de página.** Título 18-20px semibold + subtítulo `--muted` 13px
 a la izquierda; filtros/CTA a la derecha. El encabezado NO scrollea: patrón
@@ -108,8 +125,11 @@ a la izquierda; filtros/CTA a la derecha. El encabezado NO scrollea: patrón
 `gap-3`/`gap-4`, márgenes de página `px-5 py-4`. El sistema respira:
 ante la duda, un bloque menos por fila.
 
-**Microinteracción.** Lo ya existente: count-up (con `prefers-reduced-motion`),
-`animate-in`, skeleton shimmer. Nada nuevo de movimiento.
+**Microinteracción.** Count-up (con `prefers-reduced-motion`), `animate-in`,
+skeleton shimmer — y desde v3.1 (principios de Amicro, CSS puro en
+globals.css, cero dependencias): prensado `scale(0.97)` en todo botón
+activo y lift de 1px en tarjetas-link al hover. TODO detrás de
+`prefers-reduced-motion`; nada más de movimiento sin pasar por aquí.
 
 ## 4. Dónde vive cada cosa
 

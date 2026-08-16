@@ -32,12 +32,16 @@ const ROL_BADGE: Record<string, string> = {
 };
 
 export default function DashboardChrome({
-  nombre, rol, cerrarSesion, children,
+  nombre, rol, cerrarSesion, usoIa, children,
 }: {
   nombre: string | null;
   rol: string;
   /** Server action. Opcional: el render de prueba no cierra sesión de nadie. */
   cerrarSesion?: () => Promise<void>;
+  /** El % usado del presupuesto diario de análisis con IA (16-ago-2026).
+   *  Lo trae layout.tsx; omitido (render de prueba / preview de superadmin)
+   *  no se pinta. */
+  usoIa?: { pct: number } | null;
   children: React.ReactNode;
 }) {
   return (
@@ -67,7 +71,7 @@ export default function DashboardChrome({
           {/* El bloque inferior fijo, con su propio
               fondo (el "cambio de color de hasta abajo", 13-ago-2026). */}
           <div className="px-2 pt-2 pb-1.5 space-y-0.5 shrink-0" style={{ background: 'var(--canvas)', borderTop: '1px solid var(--line)' }}>
-            <SidebarAbajo rol={rol} />
+            <SidebarAbajo rol={rol} usoIa={usoIa} />
           </div>
 
           {/* El user card: tarjeta con hairline,

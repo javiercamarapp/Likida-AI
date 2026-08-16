@@ -24,7 +24,7 @@ import {
   type FilaViaje,
 } from './resumen-visual';
 import { ViajesRecientes } from './viajes-recientes';
-import { StatCard, BannerInsight } from '../admin/ui/kit';
+import { StatCard, BannerInsight, VerMas } from '../admin/ui/kit';
 import { BarraAcciones, type ItemBusqueda } from './barra-acciones';
 import { KpiPeriodo } from './kpi-periodo';
 import { MotorFiscalPeriodo } from './motor-fiscal-periodo';
@@ -39,7 +39,7 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 
 /**
  * Inicio / Resumen del panel de la FLOTA — todo filtrado al `tenantId` que
- * le pasan. Anatomía de la referencia FlowAI (12-ago-2026): barra de
+ * le pasan. Anatomía de página (12-ago-2026): barra de
  * página, saludo con chip de fecha, KPIs con caja interna, la tabla de
  * viajes recientes como protagonista y los bloques de periodo como
  * tarjetas blancas sobre el lienzo tenue.
@@ -342,6 +342,11 @@ export async function InicioContenido({
                   ) : (
                     <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el comparativo de KPIs.</p>
                   )}
+                  {/* El fantasma "Ver estadísticas →" (ref. shadcn): la puerta
+                      al bloque de gráficas — mismo ancla que el BannerInsight. */}
+                  <div className="mt-2 flex justify-end">
+                    <VerMas href="#estadisticas" />
+                  </div>
                 </div>
               )}
 

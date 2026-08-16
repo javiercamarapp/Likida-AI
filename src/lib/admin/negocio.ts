@@ -99,6 +99,22 @@ async function traerResumenCostoIa(
   return r as ResumenCostoIa;
 }
 
+/**
+ * El costo de IA del MES EN CURSO (mes de México) — alimenta el widget de
+ * uso del sidebar de /admin (16-ago-2026, ref. shadcn-dashboard). Reusa la
+ * MISMA agregación en SQL que la consola; LANZA si la base no responde y el
+ * llamador degrada diciéndolo — el widget jamás pinta $0 sin medición.
+ */
+export async function costoIaMesActual(): Promise<{ mesUsd: number; llamadas: number; etiquetaMes: string }> {
+  const ahora = new Date();
+  // El MES de México, no el UTC — misma trampa que ya cobró en facturasPorDia.
+  const mesMx = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX, year: 'numeric', month: '2-digit' }).format(ahora);
+  const desde = new Date(`${mesMx}-01T00:00:00-06:00`).toISOString();
+  const r = await traerResumenCostoIa(desde, null);
+  const etiquetaMes = new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, month: 'long' }).format(ahora);
+  return { mesUsd: round2(r.totales.costoUsd), llamadas: r.totales.n, etiquetaMes };
+}
+
 export interface ResumenNegocio {
   tenants: number;
   flotas: Array<{
