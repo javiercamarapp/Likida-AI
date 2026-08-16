@@ -1,0 +1,23 @@
+{
+  "ataque": "foto_duplicada",
+  "semillaTexto": "2026-08-16|nivel3|operador|foto_duplicada|0",
+  "seed": 3682408797,
+  "anticipo": 10600,
+  "topeDiesel": 4000,
+  "folioViaje": "ZZZQA-V-477674",
+  "fechaInicioViaje": "2026-08-15",
+  "folioViaje2": "ZZZQA-V-383081",
+  "invariantes": [
+    "#3 dedup",
+    "#8 bitacora"
+  ],
+  "tickets": [
+    {
+      "monto": 1196.47,
+      "fecha": "2026-08-16",
+      "folio": "ZZZQA-674980",
+      "litros": 75
+    }
+  ],
+  "textos": []
+}

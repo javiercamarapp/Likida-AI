@@ -1,0 +1,12 @@
+[
+  {
+    "nivel": "info",
+    "msg": "huerfano.guardado",
+    "meta": {
+      "tenant": "aaaaaaaa-0000-4000-8000-000000009901",
+      "operador": "0a427a82-00dd-4895-b69c-043c6cfc2411",
+      "monto": 1076.8,
+      "ok": true
+    }
+  }
+]

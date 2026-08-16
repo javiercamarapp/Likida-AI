@@ -1,0 +1,67 @@
+{
+  "viaje": [
+    {
+      "id": "bdd8f867-476e-4a2c-98a9-ad065ca76a7a",
+      "tenant_id": "aaaaaaaa-0000-4000-8000-000000009901",
+      "operador_id": "0a427a82-00dd-4895-b69c-043c6cfc2411",
+      "terminal_id": null,
+      "folio": "ZZZQA-V-442947",
+      "origen": "ZZZ Origen QA",
+      "destino": "ZZZ Destino QA",
+      "anticipo": 10600,
+      "fecha_inicio": "2026-08-15",
+      "fecha_fin": null,
+      "estatus": "liquidado",
+      "created_at": "2026-08-16T22:52:27.703477+00:00",
+      "intake_pendientes": 0,
+      "demora_no_imputable": null,
+      "intake_pendientes_en": null,
+      "unidad_id": null,
+      "cliente_id": null,
+      "ingreso_flete": null,
+      "km_recorridos": null,
+      "avisado_en": "2026-08-16T22:52:27.586+00:00",
+      "avisos_enviados": 0,
+      "aceptado_en": "2026-08-16T22:52:27.586+00:00",
+      "escalado_en": null,
+      "recordatorio_comprobacion_en": null,
+      "llegada_en": null,
+      "descarga_en": null,
+      "regreso_en": null,
+      "ccp_pisa_federal": null,
+      "ccp_radio_federal_km": null
+    }
+  ],
+  "gasto": [],
+  "liquidacion": [
+    {
+      "id": "4e86db6d-ecf0-4701-9f26-53ca6d54933f",
+      "tenant_id": "aaaaaaaa-0000-4000-8000-000000009901",
+      "viaje_id": "bdd8f867-476e-4a2c-98a9-ad065ca76a7a",
+      "total_comprobado": 0,
+      "total_anticipo": 10600,
+      "diferencia": 10600,
+      "estatus": "con_diferencias",
+      "diferencias": [
+        {
+          "nota": "Sobró $10,600.00 del anticipo — a favor de la empresa.",
+          "real": 0,
+          "tipo": "anticipo",
+          "monto": 10600,
+          "esperado": 10600
+        }
+      ],
+      "pdf_url": "aaaaaaaa-0000-4000-8000-000000009901/bdd8f867-476e-4a2c-98a9-ad065ca76a7a.pdf",
+      "export_url": null,
+      "created_at": "2026-08-16T22:52:44.225469+00:00",
+      "ieps_acreditable": 0,
+      "iva_acreditable": 0,
+      "peaje_acreditable": 0,
+      "litros_diesel_acreditables": 0,
+      "primera_descarga_en": null,
+      "descargas": 0,
+      "primera_descarga_rol": null
+    }
+  ],
+  "comprobante_huerfano": []
+}

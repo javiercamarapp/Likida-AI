@@ -1,0 +1,28 @@
+{
+  "ataque": "post_cierre",
+  "semillaTexto": "2026-08-16|nivel3|operador|post_cierre|0",
+  "seed": 3556574581,
+  "anticipo": 11100,
+  "topeDiesel": 4000,
+  "folioViaje": "ZZZQA-V-998268",
+  "fechaInicioViaje": "2026-08-15",
+  "fechaCierre": "2026-08-15",
+  "liquidacionSembrada": {
+    "totalComprobado": 2997.37,
+    "totalAnticipo": 11100,
+    "diferencia": 8102.63
+  },
+  "invariantes": [
+    "#4 huerfano_post_cierre",
+    "#8 bitacora"
+  ],
+  "tickets": [
+    {
+      "monto": 1076.8,
+      "fecha": "2026-08-13",
+      "folio": "ZZZQA-687777",
+      "litros": 88
+    }
+  ],
+  "textos": []
+}

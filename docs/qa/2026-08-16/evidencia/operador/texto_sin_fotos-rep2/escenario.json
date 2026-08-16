@@ -1,0 +1,18 @@
+{
+  "ataque": "texto_sin_fotos",
+  "semillaTexto": "2026-08-16|nivel3|operador|texto_sin_fotos|0",
+  "seed": 3671386848,
+  "anticipo": 10600,
+  "topeDiesel": 4000,
+  "folioViaje": "ZZZQA-V-442947",
+  "fechaInicioViaje": "2026-08-15",
+  "invariantes": [
+    "#1 cuadre_balancea (no debe cerrar)",
+    "#5 cifras_con_fuente",
+    "#8 bitacora"
+  ],
+  "tickets": [],
+  "textos": [
+    "ya subí todo"
+  ]
+}

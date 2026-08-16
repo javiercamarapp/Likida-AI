@@ -1,0 +1,38 @@
+[
+  {
+    "nivel": "info",
+    "msg": "privacidad.aviso_enviado",
+    "meta": {
+      "tenantId": "aaaaaaaa-0000-4000-8000-000000009901",
+      "operadorId": "0a427a82-00dd-4895-b69c-043c6cfc2411",
+      "id": "wamid.ZZZQA-3"
+    }
+  },
+  {
+    "nivel": "info",
+    "msg": "foto.acuse",
+    "meta": {
+      "viaje": "a65602af-13ac-43e4-b834-f9f0a04ee45b",
+      "peldano": "silencio",
+      "porque": "lectura sólida"
+    }
+  },
+  {
+    "nivel": "info",
+    "msg": "privacidad.aviso_enviado",
+    "meta": {
+      "tenantId": "aaaaaaaa-0000-4000-8000-000000009901",
+      "operadorId": "2a116b15-e455-4ae1-b2fe-428eb3a6411b",
+      "id": "wamid.ZZZQA-7"
+    }
+  },
+  {
+    "nivel": "info",
+    "msg": "foto.ya_en_otro_viaje",
+    "meta": {
+      "viaje": "93692578-d81d-423c-ae3a-0a3cc5084467",
+      "otro": "a65602af-13ac-43e4-b834-f9f0a04ee45b",
+      "monto": 1196.47
+    }
+  }
+]

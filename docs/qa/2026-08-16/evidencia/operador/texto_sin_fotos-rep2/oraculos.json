@@ -1,0 +1,27 @@
+[
+  {
+    "oraculo": "cuadre_balancea (#1)",
+    "estado": "fallo",
+    "esperado": "sin liquidación (no debe cerrar sin comprobantes)",
+    "real": {
+      "total_comprobado": 0,
+      "diferencia": 10600,
+      "estatus": "con_diferencias"
+    },
+    "detalle": "el sistema cerró una liquidación con cero comprobantes"
+  },
+  {
+    "oraculo": "cifras_con_fuente (#5)",
+    "estado": "ok",
+    "esperado": "toda cifra respaldada por DB/escenario/chofer (o blanco/derivada)",
+    "real": "2 mensajes verificados, 0 cifras huérfanas"
+  },
+  {
+    "oraculo": "bitacora_registro (#8)",
+    "estado": "ok",
+    "esperado": [
+      "agent.run"
+    ],
+    "real": "los 1 eventos esperados se emitieron (6 eventos capturados en total)"
+  }
+]
