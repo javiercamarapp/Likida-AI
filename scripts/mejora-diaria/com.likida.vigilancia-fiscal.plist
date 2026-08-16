@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.likida.vigilancia-fiscal</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO__/scripts/mejora-diaria/rutina.sh</string>
+    <string>vigilancia-fiscal</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>21</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>__REPO__/.mejora-diaria/logs/vigilancia-fiscal.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/.mejora-diaria/logs/vigilancia-fiscal.log</string>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>

@@ -93,7 +93,10 @@ barato reportó este hallazgo en el repo — tu trabajo, EN ESTE ORDEN:
 3. Verifica: npx tsc --noEmit -p . limpio y npx vitest run <las suites del
    área tocada> en verde. Si no logras dejarlo en verde, revierte todo
    (git checkout -- .) y termina con VEREDICTO: DESCARTADO — <por qué>.
-4. Commit (conventional, en español, SIN "[deploy]" en el asunto, con el
+4. SELF-REVIEW ADVERSARIAL: relee tu diff completo (git diff) con ojos de
+   revisor hostil — ¿rompe otro llamador? ¿el test nuevo afirma algo o pasa
+   vacío? ¿tocaste más de lo mínimo? Corrige lo que encuentres.
+5. Commit (conventional, en español, SIN "[deploy]" en el asunto, con el
    pie Co-Authored-By de la casa). NO hagas push. Termina con la línea:
    VEREDICTO: ARREGLADO — <qué cambió en una frase>
 
@@ -105,10 +108,22 @@ EL HALLAZGO (JSON del auditor):
 $H
 ENCARGO
 
-  SALIDA=$(claude -p "$(cat "$CARPETA/tmp-encargo.txt")" \
+  # --output-format json: el veredicto se lee del campo `result` (patrón
+  # headless de Anthropic: salida estructurada, no grep sobre texto libre).
+  CRUDO=$(claude -p "$(cat "$CARPETA/tmp-encargo.txt")" \
     --permission-mode acceptEdits \
     --allowedTools "Read Edit Write Glob Grep Bash" \
-    --max-turns 60 2>&1) || true
+    --max-turns 60 --output-format json 2>&1) || true
+  SALIDA=$(echo "$CRUDO" | python3 -c "
+import json,sys
+crudo=sys.stdin.read()
+try:
+    d=json.loads(crudo[crudo.index('{'):])
+    print(d.get('result',''))
+    print(f\"[meta] turnos={d.get('num_turns','?')} dur_s={round(d.get('duration_ms',0)/1000)} error={d.get('is_error',False)}\", file=sys.stderr)
+except Exception:
+    print(crudo)  # sin JSON (crash temprano): el texto crudo es la evidencia
+")
   echo "$SALIDA" | tail -5
 
   if echo "$SALIDA" | grep -q "VEREDICTO: ARREGLADO" && [ -n "$(git log origin/master..HEAD --oneline)" ]; then

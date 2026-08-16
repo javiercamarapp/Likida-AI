@@ -93,7 +93,7 @@ prompt/proceso A LA COLA, como todo lo demás. Umbral: 5 casos por patrón.
 3. Medir una semana con `agente_corrida.costo_usd` y las ediciones; decidir
    quedarse o volver.
 
-## El organigrama completo: 61 agentes, cada área con su modelo (0125)
+## El organigrama completo: 64 agentes, cada área con su modelo (0125)
 
 Conteo oficial (00-Blueprint-Maestro/catalogo-de-agentes.md, actualizado
 16-ago): **8 vivos con código** (los 7 del catálogo + el Redactor) **+ el
@@ -104,7 +104,13 @@ calificador de respuestas, WhatsApp comercial saliente — bloqueados por
 decisión o trámite; NO se siembran: una fila sin diseño afirmaría uno).
 Los 7 diseñados del 16-ago ("el sistema completo nivel YC") completaron los
 departamentos que faltaban: **legal_compliance, talento, seguridad,
-datos_instrumentacion, fundraising, automejora y alianzas**.
+datos_instrumentacion, fundraising, automejora y alianzas** — y el mismo día
+se sumaron los de la máquina de marketing autónoma: **guiones** (etapa 1 de
+la cadena de video de MARCA.md §6), **noticias_mercado** y **promos_diarias**
+(los canales LinkedIn/IG/TikTok quedaron decididos ese día — el "propuesto"
+de redes sociales por fin se diseñó): 64. La cadena de video corre autónoma
+hasta las sequence sheets; Javier autoriza sequence por sequence y publicar
+siempre es su tap.
 
 La asignación por TIPO DE ACCIÓN (columna `agente_definicion.modelo_rol`;
 NULL = no usa modelo de texto):
@@ -113,7 +119,7 @@ NULL = no usa modelo de texto):
 |---|---|---|---|
 | Scrapers / extracción | cazador, enriquecedor | `extraccion` → gpt-oss-20b | 0.03–0.13 |
 | Back office redacción | redactor✅, scorer, dossier, vigía, sdr, demo_prep, propuestas, soporte, onboarding×2, atención_faq, cobranza_saas, retención, talento, alianzas | `back_office` → gpt-oss-120b | 0.03–0.17 |
-| Marketing / contenido | contenido_fiscal, lead_magnet, seo_distribucion | `marketing` → gpt-5.6-luna | 0.10–0.60 |
+| Marketing / contenido | contenido_fiscal, lead_magnet, seo_distribucion, guiones, noticias_mercado, promos_diarias | `marketing` → gpt-5.6-luna | 0.10–0.60 |
 | Auditoría de código (HALLAZGOS, no diffs) | auditor_codigo, migraciones, releases, rendimiento, documentacion, seguridad | `codigo` → gpt-oss-120b | 0.03–0.17 |
 | **ESCRITURA de código (diffs al repo)** | pruebas + todo agente que modifique código | `codigo_escritura` → **claude-sonnet-5** (escala a opus-5) | 2–10 |
 | QA de agentes | vigilante_calidad + ejército QA (Fase 3) | `qa` → gpt-oss-120b | 0.03–0.17 |
