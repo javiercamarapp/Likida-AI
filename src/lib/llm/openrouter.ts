@@ -87,6 +87,11 @@ const FALLBACK: Record<string, string> = {
   // de proveedor, open-weight, 1M ctx); GLM a su vez cae a MiniMax M3.
   'openai/gpt-5.6-luna': 'z-ai/glm-5.2',
   'z-ai/glm-5.2': 'minimax/minimax-m3',
+  // Los roles por área (16-ago-2026) — cruce de proveedor en cada uno:
+  'qwen/qwen3.7-flash': 'deepseek/deepseek-v4-flash',
+  'moonshotai/kimi-k2.6': 'z-ai/glm-5.2',
+  'qwen/qwen3-coder-next': 'deepseek/deepseek-v4-flash',
+  'openai/gpt-oss-120b': 'qwen/qwen3.7-flash',
 };
 
 /**
@@ -164,6 +169,9 @@ const PRICES: Record<string, [number, number]> = {
   'qwen/qwen3.7-flash': [0.03, 0.13],
   'z-ai/glm-5.2': [0.31, 0.97],
   'minimax/minimax-m3': [0.3, 1.2],
+  'moonshotai/kimi-k2.6': [0.54, 2.28],
+  'qwen/qwen3-coder-next': [0.12, 0.8],
+  'openai/gpt-oss-120b': [0.03, 0.17],
 };
 
 /**
