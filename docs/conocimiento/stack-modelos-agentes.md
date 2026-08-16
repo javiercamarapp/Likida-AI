@@ -95,3 +95,16 @@ a mano · **F1 ✅** dirección (copiloto+guardia) · **F2 ✅** comercial
 cliente + financieros · **F5** gobernanza + WhatsApp comercial (bloqueada
 por Meta). Encender uno = fila a 'vivo' + motor despachable en el runner +
 kill switch — los tres lugares de estandares-tecnicos §7-8.
+
+
+## Stack de IMAGEN Y VIDEO (visuales, video_demo, video_marketing)
+
+Estos tres agentes no usan el stack de texto: su matriz vive en **MARCA.md §5**
+del repo (la fuente de verdad que leen likida-marketing y likida-post — la
+ruta rota se arregló el 16-ago). Resumen: `nano_banana_2` (ilimitadas) para
+piezas sin texto · `gpt_image_2` low/1k para texto quemado y para character/
+sequence sheets (skill `sequence-sheet`) · Soul ID para identidad de cara ·
+`seedance_2_0` std/480p→upscale para todo video (skills `producir-video` +
+`prompt-video-ia`; narración ElevenLabs, jamás voz del modelo) · veo/kling
+solo puntual, decidido con `costo-por-pieza`. El logo NUNCA se genera: se
+compone el archivo oficial. Nada se publica sin aprobación de Javier.
