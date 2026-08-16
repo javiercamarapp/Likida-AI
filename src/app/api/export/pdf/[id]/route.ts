@@ -108,5 +108,43 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return new NextResponse('No se pudo preparar la descarga. Intenta de nuevo en un momento.', { status: 502 });
   }
 
+  // ── LA SEÑAL DE QUE EL PAPEL LLEGÓ A ALGUIEN (mig. 0114) ─────────────────
+  //
+  // Un PDF generado y nunca abierto se ve idéntico en la base a uno que el
+  // contador imprimió y archivó. Esta es la diferencia, y es la señal de PMF
+  // más fuerte que el producto puede dar: no que Likida haya cerrado el viaje,
+  // sino que el papel entró al cierre de alguien.
+  //
+  // `primera_descarga_rol` importa tanto como la fecha: un `superadmin`
+  // bajando el PDF es Javier enseñando el producto, no un cliente usándolo.
+  // Sin esa columna, un demo se lee igual que un cierre contable.
+  //
+  // Va DESPUÉS de firmar y ANTES de redirigir, y NO puede impedir la descarga
+  // pase lo que pase: es telemetría, y una telemetría que le rompe el papel al
+  // contralor cuesta infinitamente más que el dato que iba a guardar. Mismo
+  // criterio que `registrarCorrida`, que nunca lanza.
+  //
+  // Los DOS caminos de falla, porque son distintos y este repo ya pagó por
+  // confundirlos: supabase-js reporta el error de Postgres POR VALOR (hay que
+  // leer `error`, no esperar una excepción), y aparte la llamada de red sí
+  // puede lanzar. Se atienden los dos: se lee `error` y además se envuelve.
+  try {
+    const { error: errDescarga } = await admin.rpc('registrar_descarga_liquidacion', {
+      p_liquidacion: id,
+      p_tenant: tenantId,
+      p_rol: t.rol,
+    });
+    if (errDescarga) {
+      logger.warn('export.pdf.descarga_no_registrada', {
+        tenant: tenantId, liquidacion: id, err: errDescarga.message,
+      });
+    }
+  } catch (e) {
+    logger.warn('export.pdf.descarga_no_registrada', {
+      tenant: tenantId, liquidacion: id,
+      err: e instanceof Error ? e.message : String(e),
+    });
+  }
+
   return NextResponse.redirect(firmada.data.signedUrl, 302);
 }

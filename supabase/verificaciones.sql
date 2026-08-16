@@ -4510,3 +4510,101 @@ begin
     r_comb.total, r_comb.efectivo, ok_comb_total and ok_comb_efectivo,
     ok_kpis, ok_acred, ok_serie;
 end $$;
+
+-- ── 90. La señal de PMF: la descarga del PDF se registra y no se pisa (0114) ─
+--
+-- La 0114 agregó tres columnas a `liquidacion` y la RPC que las escribe. Nace
+-- de una pregunta de producto, no de esquema: de las tres señales que dirían
+-- que Likida tiene PMF, dos ya se podían medir (`viaje.recordatorio_
+-- comprobacion_en` para "el chofer manda sin que le recuerden", y
+-- `ticket_soporte.abierto_por` para "el cliente se queja cuando algo se rompe")
+-- y la tercera —la más importante— no: nada distinguía un PDF generado y nunca
+-- abierto de uno que el contador imprimió y archivó.
+--
+-- Este bloque comprueba CUATRO cosas, y la tercera es la que de verdad importa:
+--
+--  1. Las tres columnas y el índice parcial existen; la RPC es SECURITY
+--     INVOKER con `anon` ciego y `service_role` habilitado (mismo patrón del
+--     bloque 89).
+--
+--  2. **La primera descarga fija fecha Y rol.** El rol importa tanto como la
+--     fecha: un `superadmin` bajando el PDF es Javier enseñando el producto,
+--     no un cliente usándolo. Sin esa columna, un demo se lee en la base
+--     exactamente igual que un cierre contable, y la señal de PMF quedaría
+--     contaminada por las propias demos.
+--
+--  3. **La segunda descarga NO pisa a la primera.** Se baja otra vez con rol
+--     'superadmin' y se exige que el contador siga registrado como el primero
+--     y que el contador de descargas llegue a 2. Ese `coalesce` dentro del
+--     UPDATE es lo que hace la operación segura ante dos descargas simultáneas
+--     —el contador y su auxiliar apretando a la vez— sin transacción explícita.
+--     Si alguien lo cambiara por un "leer y luego escribir", esta prueba lo
+--     atrapa.
+--
+--  4. **Aislamiento entre flotas.** Se llama con la liquidación de la flota B
+--     pero el tenant de la A: no debe tocar NADA. El filtro va dentro de la
+--     función, no confiado al llamador — `service_role` salta RLS, así que es
+--     lo único que separa una flota de otra.
+--
+-- TRAMPAS DE SIEMBRA: `viaje.operador_id` es NOT NULL; `liquidacion_viaje_uidx`
+-- admite UNA liquidación por viaje (por eso cada flota trae la suya sobre su
+-- propio viaje); los dominios de `viaje.estatus` y `liquidacion.estatus` aplican.
+--
+-- Todo se revierte con el `raise` final.
+--
+-- SALIDA REAL (15-ago-2026, primera corrida, en verde):
+--   DESCARGA_0114  cols=3  indice=t  invoker=t  anon_no=t  svc_si=t
+--   primera=t  no_pisa=t  aislada=t   (esperado 3/t/t/t/t/t/t/t)
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; vb uuid; la uuid; lb uuid;
+  n_cols int; hay_indice boolean; es_invoker boolean; anon_no boolean; svc_si boolean;
+  r record; r_b record;
+  ok_primera boolean; ok_no_pisa boolean; ok_aislada boolean;
+begin
+  select count(*) into n_cols from information_schema.columns
+   where table_schema='public' and table_name='liquidacion'
+     and column_name in ('primera_descarga_en','descargas','primera_descarga_rol');
+
+  select exists(select 1 from pg_indexes where schemaname='public'
+                and indexname='liquidacion_descargada_idx') into hay_indice;
+
+  select p.prosecdef = false,
+         not has_function_privilege('anon', p.oid, 'execute'),
+         has_function_privilege('service_role', p.oid, 'execute')
+    into es_invoker, anon_no, svc_si
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname='registrar_descarga_liquidacion';
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0114 A') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta,'ZZZ 0114 A','5215559990114') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
+    values (ta, oa, 'ZZZ-0114-A', 'liquidado', current_date, 1000) returning id into va;
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus)
+    values (ta, va, 900, 'cuadrada') returning id into la;
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0114 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (tb,'ZZZ 0114 B','5215559990115') returning id into ob;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
+    values (tb, ob, 'ZZZ-0114-B', 'liquidado', current_date, 500) returning id into vb;
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus)
+    values (tb, vb, 400, 'cuadrada') returning id into lb;
+
+  perform registrar_descarga_liquidacion(la, ta, 'contador');
+  select descargas, primera_descarga_rol, primera_descarga_en is not null as tiene_fecha
+    into r from liquidacion where id = la;
+  ok_primera := r.descargas = 1 and r.primera_descarga_rol = 'contador' and r.tiene_fecha;
+
+  perform registrar_descarga_liquidacion(la, ta, 'superadmin');
+  select descargas, primera_descarga_rol into r from liquidacion where id = la;
+  ok_no_pisa := r.descargas = 2 and r.primera_descarga_rol = 'contador';
+
+  perform registrar_descarga_liquidacion(lb, ta, 'contador');
+  select descargas, primera_descarga_en is null as sin_fecha into r_b from liquidacion where id = lb;
+  ok_aislada := r_b.descargas = 0 and r_b.sin_fecha;
+
+  delete from tenant where id in (ta, tb);
+
+  raise exception E'DESCARGA_0114  cols=%  indice=%  invoker=%  anon_no=%  svc_si=%  primera=%  no_pisa=%  aislada=%   (esperado 3/t/t/t/t/t/t/t)',
+    n_cols, hay_indice, es_invoker, anon_no, svc_si, ok_primera, ok_no_pisa, ok_aislada;
+end $$;
