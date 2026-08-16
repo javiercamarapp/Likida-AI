@@ -303,7 +303,10 @@ export function BannerInsight({ etiqueta, deltaPct, href, hrefTexto = 'Ver estad
           style={deltaPct >= 0
             ? { color: 'var(--ok)', background: 'var(--okbg)' }
             : { color: 'var(--bad)', background: 'var(--badbg)' }}>
-          {deltaPct >= 0 ? '↑' : '↓'} {Math.abs(deltaPct).toLocaleString('es-MX', { maximumFractionDigits: 1 })}% vs periodo anterior
+          {/* Sin toLocaleString: el formato vive SOLO en lib/formato (la
+              prueba de formato.test.ts caza cualquier copia) — y un % a un
+              decimal se pinta igual que el delta de StatCard, directo. */}
+          {deltaPct >= 0 ? '↑' : '↓'} {Math.abs(Math.round(deltaPct * 10) / 10)}% vs periodo anterior
         </span>
       )}
       <a href={href} className="ml-auto text-[11px] font-medium shrink-0 hover:opacity-70 transition-opacity">
