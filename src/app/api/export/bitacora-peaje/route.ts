@@ -20,12 +20,18 @@ export const runtime = 'nodejs';
  * 404, no datos ajenos.
  */
 export async function GET(req: Request) {
-  if (!rateLimit(`export-bitacora:${clientIp(req)}`, 10, 60_000)) {
+  if (!(await rateLimit(`export-bitacora:${clientIp(req)}`, 10, 60_000))) {
     return new NextResponse('Demasiadas peticiones', { status: 429 });
   }
 
   const t = await resolverTenantApi(req.url);
   if (!t.ok) return new NextResponse(t.motivo, { status: t.status });
+
+  // Cuota por flota además de por IP — ver la nota de export/liquidaciones,
+  // mismo criterio y mismo número que ya usaba esta ruta para su IP.
+  if (!(await rateLimit(`export-bitacora:tenant:${t.tenantId}`, 10, 60_000))) {
+    return new NextResponse('Demasiadas peticiones', { status: 429 });
+  }
 
   if (!puedeVerArea(t.rol, 'dinero')) {
     logger.warn('export.bitacora_area_sin_permiso', { rol: t.rol });

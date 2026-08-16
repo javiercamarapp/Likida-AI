@@ -742,7 +742,7 @@ export async function GET(req: Request) {
   // Acotado por IP aunque sea público: un documento estático que cualquiera
   // puede pedir sin límite es un amplificador barato, y el costo de servirlo lo
   // paga la función serverless.
-  if (!rateLimit(`v1:openapi:${clientIp(req)}`, 30, 60_000)) {
+  if (!(await rateLimit(`v1:openapi:${clientIp(req)}`, 30, 60_000))) {
     return errorApi('demasiadas_peticiones', 'Máximo 30 peticiones por minuto. El documento no cambia entre despliegues: guárdalo.');
   }
 

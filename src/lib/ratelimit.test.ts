@@ -3,24 +3,33 @@ import { rateLimit, bodyExcede, reiniciarLimites } from './ratelimit';
 
 afterEach(() => { reiniciarLimites(); vi.useRealTimers(); });
 
+// Sin UPSTASH_REDIS_REST_URL/TOKEN en este entorno de prueba, `rateLimit` cae
+// SIEMPRE al Map local (`limiteLocal`) — así que estas pruebas siguen siendo
+// las del backend de respaldo, ahora detrás de un `await` porque la firma
+// pública es async (ver la cabecera de ratelimit.ts: se migró para poder
+// hablarle a Redis sin que un `if` síncrono se tragara la Promise). Las
+// pruebas del backend de Redis, su degradación y su fallo viven en
+// `ratelimit_redis.test.ts` — necesitan `vi.resetModules()` por caso para
+// variar credenciales, y mezclarlas aquí habría obligado a todo este archivo
+// a pagar ese mismo costo por algo que no usa.
 describe('rateLimit', () => {
-  it('permite hasta el límite y luego bloquea', () => {
+  it('permite hasta el límite y luego bloquea', async () => {
     const k = 'unit-key-A';
-    for (let i = 0; i < 3; i++) expect(rateLimit(k, 3, 60_000)).toBe(true);
-    expect(rateLimit(k, 3, 60_000)).toBe(false); // 4to → bloqueado
+    for (let i = 0; i < 3; i++) expect(await rateLimit(k, 3, 60_000)).toBe(true);
+    expect(await rateLimit(k, 3, 60_000)).toBe(false); // 4to → bloqueado
   });
-  it('llaves distintas no interfieren', () => {
-    expect(rateLimit('unit-key-B', 1, 60_000)).toBe(true);
-    expect(rateLimit('unit-key-C', 1, 60_000)).toBe(true);
-    expect(rateLimit('unit-key-B', 1, 60_000)).toBe(false);
+  it('llaves distintas no interfieren', async () => {
+    expect(await rateLimit('unit-key-B', 1, 60_000)).toBe(true);
+    expect(await rateLimit('unit-key-C', 1, 60_000)).toBe(true);
+    expect(await rateLimit('unit-key-B', 1, 60_000)).toBe(false);
   });
-  it('la ventana se desliza: pasado el minuto vuelve a permitir', () => {
+  it('la ventana se desliza: pasado el minuto vuelve a permitir', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
-    expect(rateLimit('unit-key-D', 1, 60_000)).toBe(true);
-    expect(rateLimit('unit-key-D', 1, 60_000)).toBe(false);
+    expect(await rateLimit('unit-key-D', 1, 60_000)).toBe(true);
+    expect(await rateLimit('unit-key-D', 1, 60_000)).toBe(false);
     vi.setSystemTime(60_001);
-    expect(rateLimit('unit-key-D', 1, 60_000)).toBe(true);
+    expect(await rateLimit('unit-key-D', 1, 60_000)).toBe(true);
   });
 });
 
@@ -34,21 +43,21 @@ describe('rateLimit', () => {
 // hecho de que llegara tráfico nuevo.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('poda del backstop de memoria', () => {
-  it('un bloqueo vivo sobrevive a la avalancha de llaves que ya caducaron', () => {
+  it('un bloqueo vivo sobrevive a la avalancha de llaves que ya caducaron', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
 
     // La víctima: primera llave insertada, bloqueada, con ventana larga.
-    expect(rateLimit('acceso:1.2.3.4', 1, 60_000)).toBe(true);
-    expect(rateLimit('acceso:1.2.3.4', 1, 60_000)).toBe(false);
+    expect(await rateLimit('acceso:1.2.3.4', 1, 60_000)).toBe(true);
+    expect(await rateLimit('acceso:1.2.3.4', 1, 60_000)).toBe(false);
 
     // 5 200 llaves de ventana corta: pasan de MAX_KEYS y disparan la poda.
     vi.setSystemTime(5_000);
-    for (let i = 0; i < 5_200; i++) rateLimit(`ruido:${i}`, 1, 1_000);
+    for (let i = 0; i < 5_200; i++) await rateLimit(`ruido:${i}`, 1, 1_000);
 
     // Con la poda por orden de alta, la víctima era la PRIMERA en caer y esto
     // devolvía true. Con la poda por caducidad, sigue bloqueada.
-    expect(rateLimit('acceso:1.2.3.4', 1, 60_000)).toBe(false);
+    expect(await rateLimit('acceso:1.2.3.4', 1, 60_000)).toBe(false);
   });
 });
 

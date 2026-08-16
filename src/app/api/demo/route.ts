@@ -28,7 +28,7 @@ const POLITICA: PoliticaGasto[] = [
 
 export async function POST(req: Request) {
   if (bodyExcede(req, 64 * 1024)) return NextResponse.json({ error: 'payload muy grande' }, { status: 413 });
-  if (!rateLimit(`demo:${clientIp(req)}`, 30, 60_000)) return NextResponse.json({ error: 'demasiadas peticiones' }, { status: 429 });
+  if (!(await rateLimit(`demo:${clientIp(req)}`, 30, 60_000))) return NextResponse.json({ error: 'demasiadas peticiones' }, { status: 429 });
   const body = (await req.json()) as { comprobantes: Partial<Gasto>[]; anticipo: number };
   const gastos: Gasto[] = (body.comprobantes ?? []).map((c, i) => ({
     id: `g${i}`,

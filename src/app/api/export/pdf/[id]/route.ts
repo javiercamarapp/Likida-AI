@@ -27,7 +27,7 @@ export const runtime = 'nodejs';
 // es deliberada en `tools.ts` y aquí se respeta.
 // ═══════════════════════════════════════════════════════════════════════════
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!rateLimit(`export-pdf:${clientIp(req)}`, 30, 60_000)) {
+  if (!(await rateLimit(`export-pdf:${clientIp(req)}`, 30, 60_000))) {
     return new NextResponse('Demasiadas peticiones', { status: 429 });
   }
 
@@ -39,6 +39,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const t = await resolverTenantApi(req.url);
   if (!t.ok) return new NextResponse(t.motivo, { status: t.status });
   const tenantId = t.tenantId;
+
+  // Cuota por flota además de por IP — ver la nota de export/liquidaciones,
+  // mismo criterio y mismo número que ya usaba esta ruta para su IP.
+  if (!(await rateLimit(`export-pdf:tenant:${tenantId}`, 30, 60_000))) {
+    return new NextResponse('Demasiadas peticiones', { status: 429 });
+  }
 
   // ── QUIÉN PUEDE DESCARGAR, NO SOLO DE QUÉ FLOTA ──────────────────────────
   //
