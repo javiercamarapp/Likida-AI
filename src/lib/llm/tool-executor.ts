@@ -16,6 +16,16 @@ export interface ToolContext {
   conversationId?: string;
   telefono?: string;
   /**
+   * El operador YA confirmó (dos veces, vía el freno del processor) que quiere
+   * cerrar SIN comprobantes. Sin esta marca, `guardar_liquidacion` se niega a
+   * cerrar en ceros — el hallazgo crítico del QA del 16-ago-2026: "ya subí
+   * todo" sin fotos no disparaba `pareceCierre`, el freno nunca corría y el
+   * LLM cerraba solo con el anticipo entero en contra del chofer,
+   * irreversible. El candado vive en la TOOL porque la detección de frases es
+   * exactamente lo que el ataque esquivó.
+   */
+  cierreEnCerosConfirmado?: boolean;
+  /**
    * BAJO (auditoría 10, reincidente, sin resolver A PROPÓSITO). `run.ts` crea
    * un `AbortController` con `timeoutMs` y lo pasa aquí, pero NINGÚN handler de
    * `tools.ts` lo lee — ni `ctx.signal.throwIfAborted()` ni pasarlo a una

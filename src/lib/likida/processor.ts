@@ -2083,7 +2083,13 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       const res = await runAgent({
         agent: 'liquidacion',
         tenant,
-        ctx: { tenantId: op.tenantId, operadorId: op.operadorId, viajeId, telefono: msg.from, conversationId: conv.id },
+        ctx: {
+          tenantId: op.tenantId, operadorId: op.operadorId, viajeId, telefono: msg.from, conversationId: conv.id,
+          // La marca del freno de cierre-sin-comprobantes viaja a la tool: el
+          // candado real vive en `guardar_liquidacion` (QA 16-ago: una frase
+          // que `pareceCierre` no reconoce esquivaba el freno de arriba).
+          cierreEnCerosConfirmado: conv.cierreSinComprobantes === true,
+        },
         history,
         timeoutMs: reloj.acotar(40_000),
       });

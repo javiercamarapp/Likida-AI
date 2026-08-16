@@ -208,6 +208,29 @@ async function cerrarLiquidacion(ctx: ToolContext, inicioCorrida: Date) {
       getViaje(ctx.viajeId!, ctx.tenantId),
       ctx.operadorId ? getOperador(ctx.operadorId, ctx.tenantId) : Promise.resolve(null),
     ]);
+    // ── EL CANDADO DEL CIERRE EN CEROS (QA 16-ago-2026, hallazgo crítico) ──
+    // "Ya subí todo" sin una sola foto: `pareceCierre` no reconocía la frase,
+    // el freno del processor nunca corría, y el LLM cerraba solo con
+    // `total_comprobado: 0` — el anticipo ENTERO en contra del chofer,
+    // irreversible por los triggers 0036/0037. Reproducido 5/6 con semilla
+    // `2026-08-16|nivel3|operador|texto_sin_fotos|0`.
+    //
+    // El candado vive AQUÍ y no en la detección de frases porque la detección
+    // es justo lo que el ataque esquiva: no importa qué diga el operador ni
+    // qué decida el modelo — una liquidación sin comprobantes solo se cierra
+    // con la confirmación expresa del freno (conv.cierreSinComprobantes, que
+    // el processor pregunta UNA vez y el operador responde). El conteo sale
+    // del MISMO cuadre que se va a persistir: cero consultas extra y cero
+    // ventana entre lo contado y lo cerrado.
+    const comprobantesReales = liq.gastos.filter((g) => g.monto > 0).length;
+    if (comprobantesReales === 0 && ctx.cierreEnCerosConfirmado !== true) {
+      throw new Error(
+        'no hay ningún comprobante registrado en este viaje y cerrarlo así dejaría '
+        + 'el anticipo completo en contra del operador, de forma irreversible. '
+        + 'Pídele que mande sus fotos; si de verdad no trae comprobantes, que '
+        + 'escriba "listo" para confirmar el cierre en ceros.',
+      );
+    }
     // Generar PDF (determinístico, sin LLM). DOS ejemplares, y no es redundancia:
     // el completo es el registro de la liquidación —lo que el contralor archiva y
     // lo que queda en `liquidacion.pdf_path`— y el del operador lleva el mismo
