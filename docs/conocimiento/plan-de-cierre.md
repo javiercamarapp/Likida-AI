@@ -25,10 +25,12 @@ mando, banco de tickets). Regla transversal: la IA prepara, el humano aprueba.
    11.7.3 retroactiva al 1-abr) se cerró sin leer en 4 docs — los Anexos 21/22
    siguen sin revisar.
 
-## FASE A · La verdad y el orden (esta semana — agentes, casi todo)
+## FASE A · La verdad y el orden — ✅ CERRADA el 16-ago-2026
 
-*Criterio de salida: ningún documento del paquete contradice a otro; ninguna
-pantalla o doc del repo miente sobre el código.*
+*Criterio de salida CUMPLIDO: verificar-cifras.py en 557 archivos con 0
+cifras muertas; deuda de código cerrada con 13 pruebas (260dd81+2de1b35);
+fiscal verificado contra DOF (las 4 cuotas exactas; 11.7.3 ya incorporada;
+Anexos 21/22 no aplican). Vivo solo: lectura A/B del estímulo (fiscalista).*
 
 - **Higiene del escritorio**: borrar los 5 clones `enterprise*` (490 MB, 3
   marcados corrupted/broken), los 3 `.xlsx.bak`, indexar TICKETS/ (32 fotos →
@@ -51,10 +53,14 @@ pantalla o doc del repo miente sobre el código.*
   un 404); notificaciones visibles al contador o corregir el comentario;
   arreglar los 3 mapeos tool→pantalla del copiloto.
 
-## FASE B · Production-ready medible (semanas 1-2 — agentes)
+## FASE B · Production-ready medible — ✅ CERRADA el 16-ago-2026
 
-*Criterio de salida: una corrida repetible que responde "¿aguanta un piloto?"
-con calificación por rubro, y el CI cazando lo que la suite no ve.*
+*Criterio de salida CUMPLIDO: /admin/qa corre el guion del demo con un botón
+(corrida real: OCR exacto $855.26, PDF, tenant limpio verificado); el ejército
+cazó y se arregló su primer crítico (cierre en ceros, 65fa796); 5 propiedades
+del motor + red del service-role; banco con los 32 tickets reales sembrados.
+Suite: 4,776. Pendiente de fase B del QA: tablas qa_* (token) + captura de
+salientes + 9 escenarios.*
 
 - **QA fase 1** (diseño ya pagado): orquestador + 8 oráculos + agente Operador
   sintético con `processInbound` EN PROCESO, tenant `ZZZ QA`, semillas
