@@ -24,7 +24,7 @@ import { DatoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { generateResponse } from '@/lib/llm/openrouter';
 import { encolarPieza } from './cola';
-import { registrarCorrida } from './corridas';
+import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { logger } from '@/lib/logger';
 
 // Las ÚNICAS cifras que el correo puede decir (prompts/redactor.md §3,
@@ -73,6 +73,8 @@ FORMATO DE SALIDA (exacto, markdown):
 export interface PiezaRedactada {
   piezaId: string;
   asunto: string;
+  /** Gasto de modelo de esta pieza, USD — lo suma el runner contra el techo. */
+  costoUsd: number;
   /** Aviso honesto del agente (p. ej. "el prospecto no tiene correo capturado
    *  — conseguir el contacto ANTES de aprobar"). */
   aviso: string | null;
@@ -107,7 +109,13 @@ export function parsearVariantes(md: string): { a: Variante; b: Variante | null;
  * aprobación. LANZA con palabras de pantalla en todo rechazo — quien apretó
  * el botón debe enterarse, no creer que hay una pieza esperando.
  */
-export async function redactarCorreoFrio(prospectoId: string, vendedorNombre: string): Promise<PiezaRedactada> {
+export async function redactarCorreoFrio(
+  prospectoId: string,
+  vendedorNombre: string,
+  /** 'manual' = botón del tablero; 'cron' = el runner nivel 2 (0123) — la
+   *  corrida dice la verdad de quién la disparó. */
+  disparo: DisparoCorrida = 'manual',
+): Promise<PiezaRedactada> {
   const inicio = new Date();
 
   // 1) El kill switch — fail closed, como todos (interruptores.ts).
@@ -161,19 +169,24 @@ export async function redactarCorreoFrio(prospectoId: string, vendedorNombre: st
 
   // 5) El modelo — una sola completion, sin tools.
   let texto: string;
+  let costoUsd = 0;
   try {
     const r = await generateResponse({
-      role: 'chat',
+      // El rol BARATO del back office (16-ago-2026, decisión de Javier):
+      // DeepSeek V4 Flash — por aquí pasan datos de PROSPECTOS, nunca
+      // RFC/CFDI de un cliente (la frontera vive en models.ts).
+      role: 'back_office',
       system: SYSTEM,
       messages: [{ role: 'user', content: `DOSSIER:\n${dossier}\n\nVENDEDOR (remitente): ${vendedorNombre}` }],
       maxTokens: 900,
       temperature: 0.5,
     });
     texto = r.text;
+    costoUsd = r.cost;
     logger.info('redactor.costo', { costoUsd: r.cost, tokensIn: r.tokensIn, tokensOut: r.tokensOut, modelo: r.model });
   } catch (e) {
     await registrarCorrida(null, 'redactor', {
-      inicio, fin: new Date(), estado: 'fallo', disparo: 'manual',
+      inicio, fin: new Date(), estado: 'fallo', disparo,
       resumen: { prospecto: prospectoId },
       error: 'El modelo no respondió.',
     });
@@ -198,10 +211,12 @@ export async function redactarCorreoFrio(prospectoId: string, vendedorNombre: st
         ...(aviso ? { aviso } : {}),
       },
     });
-    pieza = { piezaId, asunto: v.a.asunto, aviso };
+    pieza = { piezaId, asunto: v.a.asunto, aviso, costoUsd };
   } catch (e) {
+    // El modelo YA gastó: el costo se registra aunque la pieza no entrara —
+    // tirarlo dejaría al techo diario ciego al modo de falla que más gasta.
     await registrarCorrida(null, 'redactor', {
-      inicio, fin: new Date(), estado: 'fallo', disparo: 'manual',
+      inicio, fin: new Date(), estado: 'fallo', disparo, costoUsd,
       resumen: { prospecto: prospectoId },
       error: e instanceof DatoInvalido ? e.message : 'No se pudo encolar la pieza.',
     });
@@ -209,7 +224,7 @@ export async function redactarCorreoFrio(prospectoId: string, vendedorNombre: st
   }
 
   await registrarCorrida(null, 'redactor', {
-    inicio, fin: new Date(), estado: 'ok', disparo: 'manual',
+    inicio, fin: new Date(), estado: 'ok', disparo, costoUsd,
     tareasHechas: 1, tareasTotal: 1,
     resumen: { prospecto: prospectoId, pieza: pieza.piezaId, con_correo: Boolean(prospecto.correo?.trim()) },
   });

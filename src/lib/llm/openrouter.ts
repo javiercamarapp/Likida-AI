@@ -78,6 +78,14 @@ const FALLBACK: Record<string, string> = {
   'google/gemini-2.5-flash-lite': 'anthropic/claude-haiku-4.5',
   'google/gemini-2.5-flash': 'anthropic/claude-haiku-4.5',
   'google/gemini-3-flash-preview': 'anthropic/claude-haiku-4.5',
+  // El back office barato (16-ago-2026): DeepSeek caído cae a GLM (Z.AI) —
+  // cruce de proveedor dentro de la misma banda de precio; texto puro con
+  // tools, no visión.
+  'deepseek/deepseek-v4-flash': 'z-ai/glm-4.7-flash',
+  'z-ai/glm-4.7-flash': 'qwen/qwen3.7-flash',
+  // El análisis de dirección (copiloto): GLM caído cae a MiniMax M3 — otro
+  // open-weight de 1M ctx con tools, mismo orden de precio.
+  'z-ai/glm-5.2': 'minimax/minimax-m3',
 };
 
 /**
@@ -146,6 +154,13 @@ const PRICES: Record<string, [number, number]> = {
   'anthropic/claude-haiku-4.5': [1, 5],
   'openai/gpt-5.6-terra': [2.5, 15],
   'openai/gpt-5.6-luna': [1, 6],
+  // El stack barato del back office — verificado contra el catálogo público
+  // de OpenRouter el 16-ago-2026.
+  'deepseek/deepseek-v4-flash': [0.061, 0.123],
+  'z-ai/glm-4.7-flash': [0.06, 0.4],
+  'qwen/qwen3.7-flash': [0.03, 0.13],
+  'z-ai/glm-5.2': [0.31, 0.97],
+  'minimax/minimax-m3': [0.3, 1.2],
 };
 
 /**

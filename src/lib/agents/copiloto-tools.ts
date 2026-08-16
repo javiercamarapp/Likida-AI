@@ -16,6 +16,9 @@
 import { registerTool } from '@/lib/llm/tool-executor';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getFichaCliente } from '@/lib/admin/ficha-cliente';
+import { getAdquisicion } from '@/lib/admin/adquisicion';
+import { gastoDelDiaUsd } from '@/lib/likida/agentes/runner';
+import { ultimasCorridasNegocio } from '@/lib/likida/agentes/corridas';
 import { getResumenNegocio, getConteosPlataforma, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
 import { clasificacionDeGuardia } from '@/lib/admin/guardia';
@@ -33,7 +36,7 @@ const SIN_PARAMS = { type: 'object', properties: {}, additionalProperties: false
 export const TOOLS_COPILOTO_LECTURA = [
   'metrica_negocio', 'conteos_plataforma', 'bandeja', 'guardia', 'metrica_norte',
   'estado_agentes', 'traza_corrida', 'pipeline_ventas', 'cobranza_saas',
-  'costo_por_fase_modelo', 'bitacora', 'ficha_cliente',
+  'costo_por_fase_modelo', 'bitacora', 'ficha_cliente', 'estado_runner', 'adquisicion',
 ] as const;
 
 /** tool → la pantalla de /admin que muestra lo mismo (la fuente clicable). */
@@ -50,6 +53,8 @@ export const PANTALLA_POR_TOOL: Record<string, { ruta: string; etiqueta: string 
   costo_por_fase_modelo: { ruta: '/admin/costos-facturacion', etiqueta: 'Costos' },
   bitacora: { ruta: '/admin/compliance', etiqueta: 'Compliance' },
   ficha_cliente: { ruta: '/admin/flotas', etiqueta: 'Flotas / Clientes' },
+  estado_runner: { ruta: '/admin/observabilidad', etiqueta: 'Observabilidad' },
+  adquisicion: { ruta: '/admin/crecimiento', etiqueta: 'Crecimiento' },
 };
 
 registerTool('metrica_negocio', {
@@ -343,5 +348,64 @@ registerTool('ficha_cliente', {
     const ficha = await getFichaCliente(candidatos[0].id);
     if (!ficha) return { error: 'La flota desapareció entre la búsqueda y la lectura — reintenta.' };
     return { pantalla: `/admin/flotas/${candidatos[0].id}`, ...ficha };
+  },
+});
+
+
+registerTool('estado_runner', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'estado_runner',
+      description: 'El pulso del runner nivel 2 (los agentes AUTONOMOS): que agentes estan habilitados, su techo de dinero declarado vs el gasto MEDIDO de hoy, las ultimas corridas del redactor y cuantas piezas esperan aprobacion. Para "que han hecho mis agentes" y "cuanto han gastado hoy".',
+      parameters: SIN_PARAMS,
+    },
+  },
+  handler: async () => {
+    const { data, error } = await supabaseAdmin()
+      .from('agente_definicion')
+      .select('id, nombre, estado, disparador, runner_habilitado, presupuesto_dia_usd')
+      .eq('runner_habilitado', true);
+    if (error) return { error: 'No se pudo leer el catalogo de agentes del runner.' };
+    const agentes = await Promise.all(((data ?? []) as Array<{ id: string; nombre: string; estado: string; presupuesto_dia_usd: number | null }>).map(async (a) => {
+      let gastadoHoyUsd: number | null = null;
+      try { gastadoHoyUsd = Math.round((await gastoDelDiaUsd(a.id)) * 10000) / 10000; } catch { /* se dice null */ }
+      return {
+        agente: a.id, nombre: a.nombre, estado: a.estado,
+        techoDiaUsd: a.presupuesto_dia_usd,
+        gastadoHoyUsd,
+        nota_gasto: gastadoHoyUsd === null ? 'el gasto del dia no se pudo leer — el runner tampoco correria asi (fail closed)' : undefined,
+      };
+    }));
+    let corridas: unknown = null;
+    try {
+      corridas = (await ultimasCorridasNegocio('redactor', 5)).map((c) => ({
+        estado: c.estado, disparo: c.disparo, fin: c.fin, resumen: c.resumen,
+      }));
+    } catch { /* se dice null */ }
+    const { count } = await supabaseAdmin().from('cola_aprobacion')
+      .select('id', { count: 'exact', head: true }).eq('estado', 'pendiente');
+    return {
+      pantalla: PANTALLA_POR_TOOL.estado_runner.ruta,
+      agentes,
+      ultimasCorridasRedactor: corridas,
+      piezasPendientesAprobacion: typeof count === 'number' ? count : null,
+      nota: 'El runner corre cada 4 horas (cron) y se puede adelantar con la accion correr_runner (confirmada). Todo lo fabricado espera aprobacion humana.',
+    };
+  },
+});
+
+registerTool('adquisicion', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'adquisicion',
+      description: 'Como van los ACERCAMIENTOS: costo por lead por fuente (real solo donde es $0 por diseno; sin integracion se dice), alertas de adquisicion con umbral heredado (fuente muerta, SLA de primer toque 48h, leads quemados) y el total de prospectos. Complementa a pipeline_ventas (que da el embudo por etapa).',
+      parameters: SIN_PARAMS,
+    },
+  },
+  handler: async () => {
+    const a = await getAdquisicion(ahoraMs());
+    return { pantalla: PANTALLA_POR_TOOL.adquisicion.ruta, ...a };
   },
 });

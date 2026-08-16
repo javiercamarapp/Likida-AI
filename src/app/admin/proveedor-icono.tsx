@@ -39,6 +39,30 @@ export function IconoProveedor({ modelo }: { modelo: string }) {
     );
   }
 
+  // Los proveedores del stack abierto/barato (16-ago-2026, pedido explícito
+  // con los logos): el prefijo del slug de OpenRouter decide. SVGs estáticos
+  // en public/images/logos/ — mismo camino que los 3 de arriba.
+  const SVGS: Array<[prefijo: string, archivo: string, alt: string]> = [
+    ['openai/', 'openai.svg', 'OpenAI'],
+    ['deepseek/', 'deepseek.svg', 'DeepSeek'],
+    ['qwen/', 'qwen.svg', 'Qwen'],
+    ['z-ai/', 'zai.svg', 'Z.AI'],
+    ['x-ai/', 'grok.svg', 'Grok'],
+    ['xiaomi/', 'xiaomi.svg', 'Xiaomi'],
+    ['moonshotai/', 'moonshotai.svg', 'Moonshot AI'],
+    ['minimax/', 'minimax.svg', 'MiniMax'],
+  ];
+  for (const [prefijo, archivo, alt] of SVGS) {
+    if (m.startsWith(prefijo)) {
+      return (
+        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 p-1.5" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- logo estático, no next/image en el resto del repo */}
+          <img src={`/images/logos/${archivo}`} alt={alt} className="w-full h-full object-contain" />
+        </div>
+      );
+    }
+  }
+
   const proveedor = modelo.includes('/') ? modelo.split('/')[0] : modelo;
   const letra = proveedor.charAt(0).toUpperCase();
   return (

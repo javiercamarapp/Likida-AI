@@ -1,6 +1,11 @@
 import Link from 'next/link';
+import { revalidatePath } from 'next/cache';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { getAdquisicion } from '@/lib/admin/adquisicion';
+import { listarCampanas, pausarCampana, refrescarGastoMeta, estadoIntegracionAds } from '@/lib/admin/campanas';
+import { getSessionTenant } from '@/lib/auth/session';
+import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { ControlCampanas, type AccionCampana } from './campanas';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { listarProspectos, ESTADOS_PROSPECTO, conteosVacios } from '@/lib/likida/vendedores';
 import { usd } from '@/lib/utils';
@@ -36,6 +41,37 @@ export default async function CrecimientoPage() {
   // Costo por lead + alertas de adquisición (panel-de-adquisicion §2/§5):
   // cae por su lado a null y se DICE.
   const adquisicion = await getAdquisicion(ahoraMs()).catch(() => null);
+  // El control de campañas (0123, §4) — leer y pausar; jamás crear ni subir.
+  const campanas = await listarCampanas().catch(() => null);
+  const integracionAds = estadoIntegracionAds();
+
+  async function accionPausarCampana(id: string): Promise<AccionCampana> {
+    'use server';
+    const s = await getSessionTenant();
+    if (s?.rol !== 'superadmin') return { ok: false, error: 'Solo el superadmin pausa campañas.' };
+    try {
+      const r = await pausarCampana(String(id), s.userId);
+      revalidatePath('/admin/crecimiento');
+      return { ok: true, mensaje: r.mensaje };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'pausar la campaña') };
+    }
+  }
+
+  async function accionRefrescarGasto(): Promise<AccionCampana> {
+    'use server';
+    const s = await getSessionTenant();
+    if (s?.rol !== 'superadmin') return { ok: false, error: 'Solo el superadmin mide el gasto.' };
+    try {
+      const r = await refrescarGastoMeta();
+      revalidatePath('/admin/crecimiento');
+      if (!r.configurada) return { ok: false, error: 'META_ADS_TOKEN no está configurado — no hay de dónde leer el gasto.' };
+      const fallo = r.fallidas.length > 0 ? ` · fallaron: ${r.fallidas.map((f) => `${f.nombre} (${f.motivo})`).join(', ')}` : '';
+      return { ok: true, mensaje: `Gasto medido en ${r.medidas} campaña${r.medidas === 1 ? '' : 's'}${fallo}.` };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'medir el gasto') };
+    }
+  }
   const datosCosto = r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }));
   const chipsTokens = r.porDia.slice(-8).map((d) => d.tokens);
   // AUDITORÍA 10, ALTO — el H1 y el párrafo de abajo decían "Con 1 flota
@@ -182,11 +218,19 @@ export default async function CrecimientoPage() {
                   <Megaphone width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
                   <TituloSeccion>Control de campañas</TituloSeccion>
                 </div>
-                <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>
-                  Cero campañas activas — el control (presupuesto aprobado, gasto real, CPL vs objetivo,
-                  pausar de un clic) aparece con la primera. El agente de campañas solo PROPONE
-                  audiencia, creativos y presupuesto; activar o subir gasto exige tu aprobación explícita.
-                </p>
+                {campanas === null ? (
+                  <p className="text-sm mt-2 m-0" style={{ color: 'var(--bad)' }}>
+                    No se pudieron leer las campañas — esto NO significa que no haya.
+                  </p>
+                ) : (
+                  <ControlCampanas
+                    campanas={campanas}
+                    integracion={integracionAds}
+                    leadsAds={adquisicion.porFuente.find((f) => f.fuente === 'ads')?.leads ?? 0}
+                    pausar={accionPausarCampana}
+                    refrescar={accionRefrescarGasto}
+                  />
+                )}
               </div>
             </>
           )}
