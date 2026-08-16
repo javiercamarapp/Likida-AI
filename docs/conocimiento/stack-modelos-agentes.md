@@ -53,6 +53,28 @@ redacta dentro del agente despachado. Ese es el diseño §4 del copiloto.
    real en `agente_corrida.costo_usd` (0123). Un agente sin techo declarado
    no corre solo.
 
+## La mejora diaria de código (suscripción, no API)
+
+Pedido del 16-ago: "las auditorías de los modelos baratos que traigan
+errores y bugs se les pasan a agentes de Claude Code y usan mi suscripción
+para mejorar el código todos los días." El pipeline vive en
+`scripts/mejora-diaria/` y corre por launchd a las 05:30:
+
+1. `auditor.mjs` — el rol `codigo` (gpt-oss-120b, centavos) lee el ÁREA DEL
+   DÍA (rotación semanal: llm→core→api→admin→dashboard→panel→migraciones) y
+   produce hasta 5 hallazgos JSON. El registro `.mejora-diaria/registro.jsonl`
+   evita reabrir lo ya visto.
+2. `correr.sh` — cada hallazgo pasa a `claude -p` (LA SUSCRIPCIÓN de Javier,
+   costo marginal $0) en el worktree AISLADO `likida-mejoras`: verifica el
+   hallazgo (los baratos se equivocan — descarta con motivo), arregla mínimo
+   + prueba, tsc + suites del área, commit y PR. Tope 3 fixes/día
+   (`MEJORA_TOPE_DIA`) para no comerse la bolsa con la que Javier trabaja.
+3. La aprobación es humana: el PR con el CI de 3 checks. NADA se mergea solo.
+
+Kill switch: `touch .mejora-diaria/APAGADO`. El rol `codigo_escritura` por
+API (Sonnet) queda de RESPALDO — el estimado de ~$45/mes del driver de costo
+se va a $0 mientras el pipeline corra por suscripción.
+
 ## Automejora continua (ya es un agente)
 
 Cada pieza aprobada-con-edición guarda el diff (`cuerpo` vs `cuerpo_final`,

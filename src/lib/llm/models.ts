@@ -105,6 +105,11 @@ const DEFAULTS: Record<ModelRole, string> = {
   // a mejores modelos, los que yo tengo que codificar" (Javier, 16-ago).
   // Sonnet 5 es élite en código (τ²-bench, el mismo del cuadre); escala a
   // opus-5 por env. El diff resultante TAMBIÉN pasa por aprobación humana.
+  //
+  // OJO: el camino PRIMARIO de este rol no es la API — es Claude Code por
+  // SUSCRIPCIÓN en la Mac de Javier (scripts/mejora-diaria/, decisión del
+  // 16-ago: costo marginal $0). Este default por API queda como respaldo y
+  // para motores que algún día corran en el server.
   codigo_escritura: 'anthropic/claude-sonnet-5', // $2/$10 (intro hasta 31-ago)
   // QA / TESTERS (vigilante de calidad, ejército QA de Fase 3): juicio
   // adversarial barato — razonamiento por centavos, mismo modelo que la
