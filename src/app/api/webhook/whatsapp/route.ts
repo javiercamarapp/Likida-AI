@@ -9,6 +9,7 @@ import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { flushObservabilidad } from '@/lib/observability/sentry';
 import { estaApagado } from '@/lib/likida/interruptores';
+import { guardarEventosPendientes } from '@/lib/likida/wa_pendientes';
 
 const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
 const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
@@ -189,12 +190,27 @@ export async function POST(req: NextRequest) {
       // WhatsApp que se acaba de declarar apagado. `estaApagado` es
       // fail-closed (una tabla ilegible cuenta como APAGADO, ver
       // `interruptores.ts`), así que si la base está caída, mandar el aviso
-      // sería justo lo que no se puede hacer. El mensaje NO se pierde: Meta
-      // reintenta la entrega de lo que no confirmamos, y el `waMessageId`
-      // queda en el log para cruzarlo después.
+      // sería justo lo que no se puede hacer.
+      //
+      // ── APAGADO = PAUSADO Y DURABLE, NO ACUSAR-Y-TIRAR ──────────────────
+      // (P1 de la auditoría externa, 16-ago-2026.) La versión anterior de
+      // este bloque descartaba los mensajes afirmando que "Meta reintenta lo
+      // que no confirmamos" — falso: el 200 de esta ruta YA salió antes de
+      // que este after() corra, Meta lo toma como acuse y no reintenta. La
+      // foto del chofer se perdía para siempre.
+      //
+      // Ahora cada mensaje se PERSISTE en `wa_evento_pendiente` (0119) y el
+      // cron `wa-pendientes` los procesa por el motor real cuando la palanca
+      // sube. El 200 vuelve a ser verdad: "recibido y guardado". Si el
+      // insert mismo falla (la misma base caída que apagó el switch), eso SÍ
+      // es pérdida y `guardarEventosPendientes` la grita con ids completos —
+      // aquí ya no hay a quién contestarle otra cosa.
       if (await estaApagado('global')) {
+        const r = await guardarEventosPendientes(permitidos);
         logger.warn('wa.entrante_apagado', {
           mensajes: permitidos.length,
+          guardados: r.guardados,
+          fallidos: r.fallidos,
           ids: permitidos.map((m) => m.waMessageId),
         });
         await flushObservabilidad();

@@ -1,7 +1,10 @@
-import { LifeBuoy, AlertTriangle, Timer } from 'lucide-react';
+import { revalidatePath } from 'next/cache';
+import { LifeBuoy, AlertTriangle, Timer, Plus } from 'lucide-react';
 import { exigirVerRuta } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { getTickets, type TicketRow } from '@/lib/likida/comercial';
+import { getTickets, abrirTicket, CATEGORIAS_TICKET, PRIORIDADES_TICKET, type TicketRow } from '@/lib/likida/comercial';
+import { mensajeParaPantalla } from '@/lib/likida/errores';
+import { FormaConAviso, Campo, type ResultadoAccion } from '../../admin/ui/forma';
 import { ahoraMs } from '@/lib/saludo';
 import { EstadoVacio, KpiTile, StatusPill } from '../../admin/ui/kit';
 import { fechaMx } from '@/lib/formato';
@@ -33,6 +36,33 @@ export default async function SoportePage({
   await exigirVerRuta('/dashboard/soporte');
   const sp = await searchParams;
   const { tenantId } = await resolverTenantEfectivo('/dashboard/soporte', sp);
+
+  // ── Abrir un ticket — la puerta de la señal de PMF #3 (auditoría externa
+  // 16-ago-2026: la señal estaba instrumentada y nada podía producirla).
+  // El chequeo se repite ADENTRO (patrón del repo): POST directo posible.
+  // La convención 0051 protege la señal: superadmin abre con abierto_por
+  // NULL ("lo abrió Likida"), un usuario real de la flota con su id —
+  // un demo de Javier jamás cuenta como queja del cliente.
+  async function accionAbrirTicket(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const sesion = await resolverTenantEfectivo('/dashboard/soporte', sp);
+    try {
+      await abrirTicket(
+        sesion.tenantId,
+        sesion.rol === 'superadmin' ? null : sesion.userId,
+        {
+          asunto: String(fd.get('asunto') ?? ''),
+          descripcion: String(fd.get('descripcion') ?? ''),
+          categoria: String(fd.get('categoria') ?? 'otro'),
+          prioridad: String(fd.get('prioridad') ?? 'media'),
+        },
+      );
+      revalidatePath('/dashboard/soporte');
+      return { ok: 'Ticket abierto — el equipo de Likida lo ve en su bandeja de escalaciones.' };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'abrir el ticket') };
+    }
+  }
   const ahora = ahoraMs();
   const tickets = await safe<TicketRow[]>(() => getTickets(tenantId, ahora));
 
@@ -131,6 +161,29 @@ export default async function SoportePage({
           </div>
         </>
       )}
+
+      <div className="glass-panel p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Plus width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+          <span className="text-sm font-medium">Abrir un ticket</span>
+        </div>
+        <FormaConAviso accion={accionAbrirTicket} boton="Abrir ticket">
+          <Campo nombre="asunto" etiqueta="Asunto" requerido placeholder="Qué pasó, en una línea" />
+          <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--muted)' }}>
+            Categoría
+            <select name="categoria" className="text-sm" defaultValue="otro">
+              {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--muted)' }}>
+            Prioridad
+            <select name="prioridad" className="text-sm" defaultValue="media">
+              {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </label>
+          <Campo nombre="descripcion" etiqueta="Detalle" placeholder="Opcional — folios, pantalla, qué esperabas" />
+        </FormaConAviso>
+      </div>
     </div>
   );
 }

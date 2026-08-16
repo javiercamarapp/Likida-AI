@@ -3,7 +3,7 @@
 // webhook (la puerta que convierte un pago en plan activo) y el modo de la llave.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import crypto from 'node:crypto';
 
 const ORIGINAL = { ...process.env };

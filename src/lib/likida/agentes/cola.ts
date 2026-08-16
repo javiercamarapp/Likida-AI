@@ -19,6 +19,7 @@ import { acotada } from '../presupuesto';
 import { traerTodo, conteo } from '../pg';
 import { DatoInvalido } from '../errores';
 import { logger } from '@/lib/logger';
+import { enviarCorreo } from '@/lib/correo/enviar';
 
 export type PrioridadPieza = 'normal' | 'urgente';
 
@@ -70,6 +71,8 @@ export interface PiezaEnCola {
   tenantId: string | null;
   prospectoId: string | null;
   prospectoEmpresa: string | null;
+  /** El correo del prospecto — el destinatario del envío, si existe. */
+  prospectoCorreo: string | null;
   titulo: string;
   cuerpo: string;
   fuentes: Record<string, unknown> | null;
@@ -77,6 +80,9 @@ export interface PiezaEnCola {
   cuerpoFinal: string | null;
   motivoRechazo: string | null;
   enviadoEn: string | null;
+  providerMessageId: string | null;
+  envioError: string | null;
+  resueltoPorEmail: string | null;
   creadoEn: string;
 }
 
@@ -88,7 +94,8 @@ function desdeFila(f: Record<string, unknown>): PiezaEnCola {
     agente: String(f.agente),
     tenantId: (f.tenant_id as string) ?? null,
     prospectoId: (f.prospecto_id as string) ?? null,
-    prospectoEmpresa: ((f.prospecto as { empresa?: string } | null)?.empresa) ?? null,
+    prospectoEmpresa: ((f.prospecto as { empresa?: string; correo?: string } | null)?.empresa) ?? null,
+    prospectoCorreo: ((f.prospecto as { empresa?: string; correo?: string } | null)?.correo) ?? null,
     titulo: String(f.titulo),
     cuerpo: String(f.cuerpo),
     fuentes: (f.fuentes as Record<string, unknown> | null) ?? null,
@@ -96,30 +103,57 @@ function desdeFila(f: Record<string, unknown>): PiezaEnCola {
     cuerpoFinal: (f.cuerpo_final as string) ?? null,
     motivoRechazo: (f.motivo_rechazo as string) ?? null,
     enviadoEn: (f.enviado_en as string) ?? null,
+    providerMessageId: (f.provider_message_id as string) ?? null,
+    envioError: (f.envio_error as string) ?? null,
+    resueltoPorEmail: (f.resuelto_por_email as string) ?? null,
     creadoEn: String(f.creado_en),
   };
 }
 
-const COLUMNAS = 'id, tipo, prioridad, agente, tenant_id, prospecto_id, titulo, cuerpo, fuentes, estado, cuerpo_final, motivo_rechazo, enviado_en, creado_en, prospecto:prospecto_id(empresa)';
+const COLUMNAS = 'id, tipo, prioridad, agente, tenant_id, prospecto_id, titulo, cuerpo, fuentes, estado, cuerpo_final, motivo_rechazo, enviado_en, provider_message_id, envio_error, resuelto_por_email, creado_en, prospecto:prospecto_id(empresa, correo)';
 
 /**
- * Las DOS bandejas de pendientes — separadas desde la consulta, no una lista
- * con etiqueta (la decisión de agente-respuesta-a-ads §5.5). LANZA ante
- * error: una bandeja vacía por base caída afirmaría "nada espera aprobación".
+ * UNA bandeja de pendientes, por prioridad — CONSULTA PROPIA por bandeja
+ * (auditoría externa P2, 16-ago-2026): la versión anterior traía todos los
+ * pendientes en una consulta y filtraba en JS, así que una cola normal
+ * enorme —o su lectura caída— arrastraba también a la urgente, que tiene
+ * SLA en minutos. Ahora cada bandeja lee, falla y se pinta POR SU LADO.
+ * LANZA ante error: vacía-por-base-caída afirmaría "nada espera aprobación".
  */
-export async function bandejasPendientes(): Promise<{ urgente: PiezaEnCola[]; normal: PiezaEnCola[] }> {
+export async function bandejaPendiente(prioridad: PrioridadPieza): Promise<PiezaEnCola[]> {
   const filas = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin().from('cola_aprobacion')
       .select(COLUMNAS, conteo(d))
       .eq('estado', 'pendiente')
-      .order('creado_en', { ascending: true }).order('id').range(d, h), 'bandejasPendientes'),
-    'bandejasPendientes',
+      .eq('prioridad', prioridad)
+      .order('creado_en', { ascending: true }).order('id').range(d, h), `bandejaPendiente.${prioridad}`),
+    `bandejaPendiente.${prioridad}`,
   );
-  const piezas = filas.map(desdeFila);
-  return {
-    urgente: piezas.filter((p) => p.prioridad === 'urgente'),
-    normal: piezas.filter((p) => p.prioridad === 'normal'),
-  };
+  return filas.map(desdeFila);
+}
+
+/** Las aprobadas que AÚN no se envían — la cola de salida real. */
+export async function aprobadasSinEnviar(limite = 20): Promise<PiezaEnCola[]> {
+  const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
+    .select(COLUMNAS)
+    .eq('estado', 'aprobado')
+    .is('enviado_en', null)
+    .order('resuelto_en', { ascending: true })
+    .limit(limite), 'aprobadasSinEnviar');
+  if (error) throw new Error(`aprobadasSinEnviar: ${error.message}`);
+  return ((data ?? []) as Array<Record<string, unknown>>).map(desdeFila);
+}
+
+/** El SNAPSHOT del actor (0120): la resolución exige saber QUIÉN, y el CHECK
+ *  de la base lo re-exige. Si el email no se puede leer, la resolución se
+ *  detiene — mejor reintentar que aprobar como nadie. */
+async function emailDeActor(actorId: string): Promise<string> {
+  const { data, error } = await supabaseAdmin()
+    .from('app_user').select('email').eq('id', actorId).maybeSingle();
+  if (error) throw new Error(`emailDeActor: ${error.message}`);
+  const email = (data as { email?: string } | null)?.email;
+  if (!email) throw new DatoInvalido('No se pudo confirmar quién resuelve — recarga y vuelve a intentar.');
+  return email;
 }
 
 /** Las últimas resueltas — el contexto de "qué ha estado saliendo". */
@@ -141,11 +175,13 @@ export async function ultimasResueltas(limite = 10): Promise<PiezaEnCola[]> {
  */
 export async function aprobarPieza(id: string, actorId: string, cuerpoEditado?: string): Promise<void> {
   const edicion = cuerpoEditado?.trim();
+  const actorEmail = await emailDeActor(actorId);
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
     .update({
       estado: 'aprobado',
       cuerpo_final: edicion || null,
       resuelto_por: actorId,
+      resuelto_por_email: actorEmail,
       resuelto_en: new Date().toISOString(),
     })
     .eq('id', id).eq('estado', 'pendiente')
@@ -168,10 +204,12 @@ export async function aprobarPieza(id: string, actorId: string, cuerpoEditado?: 
 export async function rechazarPieza(id: string, actorId: string, motivo: string): Promise<void> {
   const m = motivo.trim();
   if (!m) throw new DatoInvalido('Rechazar exige un motivo: sin él, la misma pieza se vuelve a proponer igual la próxima vez.');
+  const actorEmail = await emailDeActor(actorId);
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
     .update({
       estado: 'rechazado', motivo_rechazo: m,
-      resuelto_por: actorId, resuelto_en: new Date().toISOString(),
+      resuelto_por: actorId, resuelto_por_email: actorEmail,
+      resuelto_en: new Date().toISOString(),
     })
     .eq('id', id).eq('estado', 'pendiente')
     .select('id'), 'rechazarPieza');
@@ -218,4 +256,141 @@ async function anotar(accion: 'cola.aprobado' | 'cola.rechazado', piezaId: strin
     entidad: 'cola_aprobacion', entidad_id: piezaId, detalle,
   });
   if (error) logger.warn('cola.bitacora_no_escribio', { accion, pieza: piezaId, err: error.message });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL ENVÍO REAL (0120) — el P1 que la auditoría externa señaló: "aprobada"
+// era el final del camino; nada mandaba el correo.
+//
+// EL ORDEN ES CLAIM → PROVEEDOR → PRUEBA, y no al revés:
+//  1. El CLAIM estampa `enviado_en` anclado a (aprobada ∧ no enviada) — dos
+//     clicks simultáneos: el segundo toca cero filas y SE DICE. El CHECK de
+//     la 0117 re-rebota cualquier fila no aprobada aunque este código
+//     tuviera un bug.
+//  2. Se manda por Resend (enviarCorreo reporta POR VALOR, jamás lanza).
+//  3. Éxito → `provider_message_id` (la prueba de ACEPTADO — no de
+//     entregado; delivery/bounce es la capa siguiente, declarada) + el
+//     contacto al historial del prospecto (0118).
+//     Fallo → COMPENSACIÓN: el claim se revierte y `envio_error` queda — la
+//     pieza vuelve a ser enviable con el porqué a la vista. La ventana
+//     honesta: si el proceso muere ENTRE el envío y la prueba, la fila queda
+//     "enviada sin provider id" — inconsistencia VISIBLE que el panel pinta,
+//     no pérdida silenciosa.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ResultadoEnvioPieza {
+  ok: true;
+  destinatario: string;
+  providerId: string;
+}
+
+export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise<ResultadoEnvioPieza> {
+  // 1) EL CLAIM — anclado y con todo lo necesario para mandar en el RETURNING:
+  //    releer después del claim abriría la ventana que el claim cierra.
+  const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
+    .update({ enviado_en: new Date().toISOString(), envio_error: null })
+    .eq('id', id).eq('estado', 'aprobado').is('enviado_en', null)
+    .select('id, titulo, cuerpo, cuerpo_final, agente, prospecto_id, prospecto:prospecto_id(empresa, correo)'), 'enviarPiezaPorCorreo.claim');
+  if (error) throw new Error(`enviarPiezaPorCorreo: ${error.message}`);
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new DatoInvalido('Solo una pieza APROBADA y aún no enviada se puede enviar — puede que otro click le ganara a este. Recarga.');
+  }
+  const fila = data[0] as Record<string, unknown>;
+  const prospecto = fila.prospecto as { empresa?: string; correo?: string } | null;
+  const destinatario = prospecto?.correo?.trim() ?? '';
+
+  const revertir = async (motivo: string) => {
+    const { error: errRevertir } = await supabaseAdmin().from('cola_aprobacion')
+      .update({ enviado_en: null, envio_error: motivo.slice(0, 300) })
+      .eq('id', id);
+    // Si NI la compensación entra, la fila queda "enviada" sin provider id —
+    // la inconsistencia visible que el panel pinta. Se grita.
+    if (errRevertir) logger.error('cola.envio_sin_revertir', { pieza: id, motivo, err: errRevertir.message });
+  };
+
+  if (!destinatario) {
+    await revertir('El prospecto no tiene correo capturado.');
+    throw new DatoInvalido('El prospecto de esta pieza no tiene correo capturado — captúralo en Vendedores y vuelve a enviar.');
+  }
+
+  // ── LA GUARDIA DE CADENCIA (auditoría externa P2): el historial 0118 no
+  // impide nada por existir — lo impide LEERSE antes de enviar. Un lead del
+  // censo es finito: dos correos en menos de 48 h lo queman. La regla vive
+  // aquí, en la única puerta de salida, no en la buena voluntad del agente
+  // que redactó. Si el historial NO SE PUEDE leer, no se manda (fail
+  // closed): enviar a ciegas es exactamente el duplicado que se persigue.
+  const prospectoIdGuardia = (fila.prospecto_id as string) ?? null;
+  if (prospectoIdGuardia) {
+    const hace48h = new Date(Date.now() - 48 * 3_600_000).toISOString();
+    const { data: recientes, error: errHistorial } = await supabaseAdmin()
+      .from('prospecto_contacto')
+      .select('ocurrio_en')
+      .eq('prospecto_id', prospectoIdGuardia)
+      .eq('direccion', 'salida')
+      .gte('ocurrio_en', hace48h)
+      .limit(1);
+    if (errHistorial) {
+      await revertir('No se pudo leer el historial de contactos.');
+      throw new DatoInvalido('No se pudo consultar el historial del prospecto — sin él no se manda (la cadencia no se verifica a ciegas). Reintenta.');
+    }
+    if ((recientes ?? []).length > 0) {
+      await revertir('Contactado hace menos de 48 h — la cadencia lo protege.');
+      throw new DatoInvalido('A este prospecto ya se le escribió hace menos de 48 horas — la cadencia mínima lo protege. La pieza sigue aprobada; reintenta cuando pase la ventana.');
+    }
+  }
+
+  // 2) EL PROVEEDOR. Sale la versión FINAL (la edición humana manda).
+  const cuerpo = String(fila.cuerpo_final ?? fila.cuerpo);
+  const r = await enviarCorreo(destinatario, {
+    asunto: String(fila.titulo),
+    avance: cuerpo.slice(0, 90),
+    titulo: String(fila.titulo),
+    parrafos: cuerpo.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).slice(0, 12),
+    porQueLoRecibes: 'Recibes este correo porque tu empresa publicó una vacante relacionada con liquidación de viajes.',
+  });
+  if (!r.ok) {
+    const motivo = r.motivo === 'sin_configurar'
+      ? 'El canal de correo no está configurado (RESEND_API_KEY/RESEND_EMAIL_DOMAIN).'
+      : `Resend no aceptó el envío (${r.motivo}: ${'detalle' in r ? r.detalle : ''}).`;
+    await revertir(motivo);
+    throw new DatoInvalido(`${motivo} La pieza sigue aprobada y se puede reintentar.`);
+  }
+
+  // 3) LA PRUEBA + el historial del prospecto.
+  const { error: errPrueba } = await supabaseAdmin().from('cola_aprobacion')
+    .update({ provider_message_id: r.id || 'aceptado-sin-id' })
+    .eq('id', id);
+  if (errPrueba) logger.error('cola.provider_id_sin_guardar', { pieza: id, providerId: r.id, err: errPrueba.message });
+
+  const prospectoId = (fila.prospecto_id as string) ?? null;
+  if (prospectoId) {
+    const { error: errContacto } = await supabaseAdmin().from('prospecto_contacto').insert({
+      prospecto_id: prospectoId, canal: 'correo', direccion: 'salida', pieza_id: id,
+      resumen: `Salió «${String(fila.titulo).slice(0, 120)}» por correo (${String(fila.agente)}, aprobada en cola).`,
+      actor_id: actorId,
+    });
+    if (errContacto) logger.error('cola.contacto_no_registrado', { pieza: id, prospecto: prospectoId, err: errContacto.message });
+  }
+  return { ok: true, destinatario, providerId: r.id || 'aceptado-sin-id' };
+}
+
+
+/**
+ * Las piezas URGENTES que llevan más de `minutos` esperando — el monitor de
+ * SLA que la auditoría externa pidió: una urgente se mide en minutos, y sin
+ * esta lectura nadie se entera de que envejecen. La consume el heartbeat de
+ * 5 minutos (cron wa-pendientes). LANZA ante error: "0 vencidas" con la
+ * base caída sería la mentira exacta que el SLA existe para evitar.
+ */
+export async function urgentesVencidas(minutos = 10): Promise<number> {
+  const corte = new Date(Date.now() - minutos * 60_000).toISOString();
+  const { count, error } = await supabaseAdmin()
+    .from('cola_aprobacion')
+    .select('id', { count: 'exact', head: true })
+    .eq('estado', 'pendiente')
+    .eq('prioridad', 'urgente')
+    .lte('creado_en', corte);
+  if (error) throw new Error(`urgentesVencidas: ${error.message}`);
+  if (typeof count !== 'number') throw new Error('urgentesVencidas: la base no devolvió el conteo');
+  return count;
 }

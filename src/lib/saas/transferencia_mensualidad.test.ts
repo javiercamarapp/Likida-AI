@@ -22,7 +22,7 @@ const escrituras: Array<{ tabla: string; valores: Record<string, unknown> }> = [
 const consultas: string[] = [];
 
 function constructor(tabla: string) {
-  const registro: Record<string, unknown> = {};
+  const _registro: Record<string, unknown> = {};
   const api: Record<string, unknown> = {
     select: () => api,
     eq: () => api,

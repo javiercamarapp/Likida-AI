@@ -4732,7 +4732,10 @@ begin
       where id = pid;
   exception when check_violation then envio_rechazada_rebota := true;
   end;
-  update public.cola_aprobacion set estado = 'aprobado', resuelto_en = now() where id = pid;
+  -- Con actor (0120): desde cola_resolucion_con_actor, resolver sin
+  -- snapshot de email rebota — el bloque 94 lo prueba a propósito; aquí el
+  -- camino feliz lo lleva puesto.
+  update public.cola_aprobacion set estado = 'aprobado', resuelto_en = now(), resuelto_por_email = 'verif@likida.ai' where id = pid;
   update public.cola_aprobacion set enviado_en = now() where id = pid;
   envio_aprobada_cabe := true;
 
@@ -4780,4 +4783,63 @@ begin
     envio_pendiente_rebota, envio_rechazada_rebota, envio_aprobada_cabe, rechazo_sin_motivo,
     rechazo_blanco, aprobada_sin_resolucion, edicion_en_pendiente, agente_fantasma,
     rls_cola, pol_cola, n_lee;
+end $$;
+
+-- ── 93. La bandeja durable del webhook: dedup por PK y deny-all (mig. 0119) ─
+--
+-- Lo que solo la base puede demostrar del P1 del kill switch: (a) la PK es
+-- el wamid — la reentrega del MISMO evento por Meta rebota con
+-- unique_violation y no duplica; (b) deny-all: RLS activa, cero policies,
+-- `authenticated` ciego. Todo se revierte con el raise final.
+do $$
+declare
+  dedup boolean := false;
+  rls_wa boolean; pol_wa int; n_lee int;
+begin
+  insert into public.wa_evento_pendiente (id, evento) values ('wamid.verif.0119', '{"from":"x","type":"text"}'::jsonb);
+  begin
+    insert into public.wa_evento_pendiente (id, evento) values ('wamid.verif.0119', '{"from":"x","type":"text"}'::jsonb);
+  exception when unique_violation then dedup := true;
+  end;
+
+  select relrowsecurity into rls_wa from pg_class where oid = 'public.wa_evento_pendiente'::regclass;
+  select count(*) into pol_wa from pg_policies where schemaname = 'public' and tablename = 'wa_evento_pendiente';
+  set local role authenticated;
+  select count(*) into n_lee from public.wa_evento_pendiente;
+  reset role;
+
+  raise exception E'WA_PENDIENTE_0119  dedup_wamid=%  rls=%  policies=%  lee_auth=%   (esperado t/t/0/0)',
+    dedup, rls_wa, pol_wa, n_lee;
+end $$;
+
+-- ── 94. La resolución de la cola exige actor con snapshot (mig. 0120) ───────
+--
+-- El CHECK que la 0117 prometía en su comentario y no tenía: a nivel esquema
+-- podía existir una pieza aprobada por NADIE. Ahora `cola_resolucion_con_actor`
+-- lo exige en los dos sentidos: (a) aprobar sin `resuelto_por_email` rebota;
+-- (b) una pendiente CON email también rebota (un actor sin resolución es tan
+-- incoherente como una resolución sin actor); (c) el camino completo con
+-- actor cabe. Todo se revierte con el raise final.
+do $$
+declare
+  sin_actor boolean := false;
+  pendiente_con_actor boolean := false;
+  con_actor_cabe boolean := false;
+begin
+  begin
+    insert into public.cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo, estado, resuelto_en)
+      values ('correo_frio', 'normal', 'ventas', 'v94a', 'x', 'aprobado', now());
+  exception when check_violation then sin_actor := true;
+  end;
+  begin
+    insert into public.cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo, resuelto_por_email)
+      values ('correo_frio', 'normal', 'ventas', 'v94b', 'x', 'j@likida.ai');
+  exception when check_violation then pendiente_con_actor := true;
+  end;
+  insert into public.cola_aprobacion (tipo, prioridad, agente, titulo, cuerpo, estado, resuelto_en, resuelto_por_email)
+    values ('correo_frio', 'normal', 'ventas', 'v94c', 'x', 'aprobado', now(), 'j@likida.ai');
+  con_actor_cabe := true;
+
+  raise exception E'COLA_ACTOR_0120  aprobada_sin_actor_rebota=%  pendiente_con_actor_rebota=%  con_actor_cabe=%   (esperado t/t/t)',
+    sin_actor, pendiente_con_actor, con_actor_cabe;
 end $$;

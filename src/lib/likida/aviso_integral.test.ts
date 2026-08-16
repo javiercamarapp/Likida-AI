@@ -36,7 +36,12 @@ describe('los once elementos del checklist §5.4', () => {
   // texto cambió".
   const ELEMENTOS: Array<[string, string, RegExp]> = [
     ['1  identidad y domicilio del responsable', 'art. 15 fr. I', /responsable de tus datos personales/i],
-    ['2  catálogo de datos, marcando sensibles', 'art. 15 fr. II', /No se tratan datos sensibles/i],
+    ['2  catálogo de datos, marcando sensibles', 'art. 15 fr. II',
+      // La frase cambió el 16-ago-2026 (auditoría externa P2): 'no se
+      // tratan' prometía más de lo que el flujo hace — la foto viaja completa
+      // al motor de lectura y el filtro impide CONSERVAR lo sensible. El
+      // aviso ahora dice exactamente eso, y esta prueba ancla la frase nueva.
+      /No se piden ni se conservan datos sensibles/i],
     ['3  finalidades, separando las necesarias', 'art. 15 fr. III', /Finalidades necesarias/i],
     ['4  opciones para limitar uso o divulgación', 'art. 15 fr. IV', /Cómo limitar el uso/i],
     ['5  mecanismos y procedimiento ARCO', 'art. 15 fr. V', /20 días hábiles/i],

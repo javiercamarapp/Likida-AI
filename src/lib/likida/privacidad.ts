@@ -513,7 +513,14 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
         // AUDITORÍA 3, ALTO (LEG-A1): los hitos 0090 como categoría de dato,
         // con su límite dicho — la hora es la del mensaje, no telemetría.
         `Los **avisos del viaje** que decides mandar por el mismo chat —"ya llegué", "estoy descargando", "voy de regreso"— con la hora en que llega tu mensaje. **No hay GPS ni rastreo del teléfono:** se anota únicamente lo que tú escribes y cuándo lo mandaste.`,
-        `**No se tratan datos sensibles.** Ni salud, ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Si en una foto aparece algo así por accidente, no se usa para nada y puedes pedir que se borre.`,
+        // AUDITORÍA EXTERNA 16-AGO-2026 (P2): la versión anterior decía "no
+        // se usa para nada", y el flujo real es más matizado — la foto viaja
+        // COMPLETA al motor de lectura (no se puede enmascarar una imagen
+        // antes de leerla) y el filtro de sanitizar.ts actúa DESPUÉS: impide
+        // que lo sensible se guarde o participe del cuadre. El aviso ahora
+        // describe exactamente eso; un aviso que promete más de lo que el
+        // código hace es un hallazgo de due diligence, no una protección.
+        `**No se piden ni se conservan datos sensibles.** Ni salud, ni origen racial o étnico, ni creencias, ni afiliación sindical, ni preferencias sexuales, ni datos biométricos. Cada foto se procesa completa por el motor de lectura para extraer los campos del comprobante; si en ella aparece por accidente algo sensible (un ticket de farmacia, por ejemplo), un filtro lo detecta y lo excluye: **no se guarda, no participa en tu liquidación**, y puedes pedir que la foto se borre.`,
       ],
     },
     {
