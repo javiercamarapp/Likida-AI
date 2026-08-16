@@ -107,11 +107,18 @@ terminal.*
 - **El bus**: las 21 rutinas locales suben estado/piezas/colas a Supabase y
   leen de ahí tus órdenes; tablas nuevas + storage para imágenes.
 - **La UI**: bandeja única "Tu turno" (PRs + piezas + sequences + aprobaciones
-  + escalaciones, ordenada por dinero/riesgo), monitor de agentes con su
-  memoria y su bandeja de contexto (arrastras documentos, videos, noticias —
-  cada agente los procesa en su siguiente corrida), sequences visuales donde
-  subes tus characters/lugares y el pipeline produce solo lo que falta,
-  aprobar desde el teléfono.
+  + escalaciones, ordenada por dinero/riesgo), monitor de agentes, sequences
+  visuales donde subes tus characters/lugares y el pipeline produce solo lo
+  que falta, aprobar desde el teléfono.
+- **La bandeja de contexto UNIVERSAL** (orden del 16-ago: "los 65, fácil y
+  muy visual"): CADA agente del catálogo tiene su zona de arrastrar-y-soltar
+  tipificada según lo que le sirve — documentos y Exceles al financiero,
+  imágenes y videos de referencia a los de marca, links y noticias al vigía
+  de competencia, tickets al ejército QA, ideas en texto libre a cualquiera.
+  Todo insumo queda visible en la tarjeta del agente ("qué le has dado, qué
+  usó, qué aprendió de eso"), se procesa en su siguiente corrida, y alimenta
+  la memoria compartida — el principio dictado: "entre más le das, más
+  entienden".
 - **El editor visual de rutinas** (orden del 16-ago): cada rutina con su
   tarjeta — horario, encargo (el prompt, editable con historial y vuelta
   atrás), tope, kill switch individual, últimas corridas con veredicto — y
