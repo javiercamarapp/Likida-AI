@@ -40,9 +40,12 @@ redacta dentro del agente despachado. Ese es el diseño §4 del copiloto.
 
 0. **Escritura de código (16-ago)**: auditar con chinos está bien; **modificar
    el código únicamente con modelos USA**, escalando a los mejores (Sonnet→
-   Opus). La línea operativa: si el output del agente es un DIFF que se
-   aplica al repo → `codigo_escritura`; si es un reporte de hallazgos →
-   `codigo`. Y el diff, como todo, pasa por aprobación humana.
+   Opus). El pipeline completo, en palabras de Javier: los auditores
+   (`codigo`, chinos baratos) **solo buscan errores, fallos, huecos y bugs —
+   con ayuda de los testers** (`qa`, gpt-oss); lo que encuentran se convierte
+   en encargo, y el FIX lo escribe `codigo_escritura` (USA) — cuyo diff
+   también pasa por aprobación humana. Cazar barato en manada, arreglar caro
+   y una sola vez.
 
 
 1. **Soberanía fiscal**: RFC/CFDI/comprobantes del CLIENTE jamás pisan los
