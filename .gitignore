@@ -55,3 +55,8 @@ zzz-*.mjs
 # Config personal de Claude Code (hooks/permisos propios de esta máquina,
 # p.ej. el guardado automático a Obsidian) — no es config de equipo.
 .claude/settings.local.json
+
+# Estado local del pipeline de mejora diaria (registro de hallazgos, logs,
+# kill switch APAGADO). Los scripts SÍ van al repo; el estado no — y el
+# registro trae títulos de bugs aún sin arreglar en un repo público.
+.mejora-diaria/
