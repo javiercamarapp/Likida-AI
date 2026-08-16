@@ -49,9 +49,16 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
   `geocerca` SÍ EXISTEN (migs. 0047-0050), y `viaje` tiene `km_recorridos` e
   `ingreso_flete`. **Están vacías, pero YA NO por falta de escritor** — la
   distinción cambió el 14-ago-2026 y hay que leerla con cuidado:
-  - `cliente`, `unidad` y `tarifa` **ya tienen quien las escriba** (el panel y
-    `POST /v1/{viajes,unidades}`). Si vas a "construir el escritor", ya existe.
-  - `factura_emitida`, `pago_recibido`, `posicion` y `geocerca` siguen sin uno.
+  - `cliente`, `unidad`, `tarifa`, **`factura_emitida` y `pago_recibido` ya
+    tienen quien las escriba** (el panel, `POST /v1/{viajes,unidades}` y
+    `facturacion_escritura.ts` — verificado 16-ago con el insert en :279/:406
+    llamado desde `/dashboard/facturacion`). Si vas a "construir el escritor",
+    ya existe.
+  - Siguen SIN escritor: `posicion`, `geocerca`, `terminal` (huérfana desde
+    0001: la referencian operador/viaje y solo la lee un join en repo.ts),
+    `mantenimiento`, `cotizacion`, `ticket_mensaje` (el hilo del ticket nunca
+    se implementó), `portal_credencial`, `invitacion`, y las muertas de facto
+    `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
   - La base entera está en cero (0 viajes, 14-ago-2026) porque **no hay
     clientes todavía**, no porque falte código. Ver `project_likida_sin_clientes`.
 
