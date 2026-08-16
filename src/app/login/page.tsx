@@ -24,7 +24,7 @@ function siteUrl(): string {
 async function dentroDelLimite(llave: string): Promise<boolean> {
   const h = await headers();
   const ip = (h.get('x-forwarded-for')?.split(',')[0].trim() || h.get('x-real-ip')) ?? 'desconocida';
-  return rateLimit(`${llave}:${ip}`, 10, 5 * 60_000);
+  return await rateLimit(`${llave}:${ip}`, 10, 5 * 60_000);
 }
 
 /**

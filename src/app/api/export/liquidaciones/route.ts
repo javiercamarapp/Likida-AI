@@ -15,7 +15,7 @@ export const runtime = 'nodejs';
 // service-role salta RLS, así que se sigue filtrando EXPLÍCITO por
 // tenant_id, ahora tomado de la sesión en vez de un env var.
 export async function GET(req: Request) {
-  if (!rateLimit(`export:${clientIp(req)}`, 10, 60_000)) return new NextResponse('Demasiadas peticiones', { status: 429 });
+  if (!(await rateLimit(`export:${clientIp(req)}`, 10, 60_000))) return new NextResponse('Demasiadas peticiones', { status: 429 });
 
   // Ver la nota de `tenant-api.ts`: esto le devolvía 401 al superadmin, y
   // además ignoraba el `?tenant=` de la pantalla — o sea que aun arreglando el
@@ -23,6 +23,13 @@ export async function GET(req: Request) {
   const t = await resolverTenantApi(req.url);
   if (!t.ok) return new NextResponse(t.motivo, { status: t.status });
   const tenantId = t.tenantId;
+
+  // CUOTA GLOBAL POR FLOTA, no solo por IP (auditoría externa 15-ago, P1). Con
+  // Redis el conteo de arriba (`export:${ip}`) ya es global entre instancias,
+  // pero sigue siendo por RED: una sesión válida robada y usada desde varias
+  // IPs no lo toca. Esta segunda llave, por tenant, cierra esa otra puerta —
+  // mismo número que la de IP, no uno inventado.
+  if (!(await rateLimit(`export:tenant:${tenantId}`, 10, 60_000))) return new NextResponse('Demasiadas peticiones', { status: 429 });
 
   // ── QUIÉN PUEDE DESCARGAR, NO SOLO DE QUÉ FLOTA ──────────────────────────
   //

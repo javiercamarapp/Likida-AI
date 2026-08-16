@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
   const permitidos: InboundMessage[] = [];
   const diferidos: InboundMessage[] = [];
   for (const m of messages) {
-    if (rateLimit(`wa:${m.from}`, MSGS_POR_MIN, 60_000)) { permitidos.push(m); continue; }
+    if (await rateLimit(`wa:${m.from}`, MSGS_POR_MIN, 60_000)) { permitidos.push(m); continue; }
     diferidos.push(m);
     // WARN y no ERROR: ya no es un comprobante perdido, es uno que vuelve. Con
     // el id, porque si Meta se rinde ésta es la única línea que dice cuál era.

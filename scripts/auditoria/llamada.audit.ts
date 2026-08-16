@@ -1,12 +1,15 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// LLAMADA — una sola invocación a OpenRouter con modelo ARBITRARIO.
+// LLAMADA — invocaciones a OpenRouter con modelo ARBITRARIO (auditoría).
 //
-// Reusa el motor de Likida (getClient + costoReal) sin pasar por el router
-// por rol de producción: aquí el modelo lo decide la auditoría por RUBRO y
-// por FIXER. Reglas que se mantienen del motor:
-//   · ZDR: data_collection:'deny' (soberanía fiscal LFPDPPP).
+// Reusa el motor de Likida (getClient + costoReal) sin pasar por el router por
+// rol de producción: aquí el modelo lo decide la auditoría por RUBRO y por
+// FIXER. Reglas que se mantienen:
+//   · ZDR: data_collection:'deny' (soberanía fiscal LFPDPPP) — salvo el PRO
+//     0813 (su único proveedor no lo ofrece; política explícita).
 //   · usage.include → costo REAL del proveedor (con caché), no tabla.
-//   · Fallback: un reintento a Gemini (US) solo si el error es transitorio.
+//   · Fallback transitorio: reintento del mismo modelo y, si sigue cayendo,
+//     cambio a Gemini (US). Un "Connection error." puntual NO tumba la ronda
+//     (lección aud-13).
 //   · Cada llamada se registra en el ledger con su costo real.
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -24,15 +27,10 @@ export interface Llamada {
   tokIn: number;
   tokOut: number;
   cost: number;
+  tools?: number;
 }
 
-/**
- * ZDR por llamada. El PRO 0813 solo lo sirve DeepSeek (CN) y NO tiene
- * endpoint con data_collection:deny (404). Si se pide explícitamente
- * (AUDIT_DEEPSEEK_PRO=1), se le quita la política a ese modelo — es
- * material de decisión de política, no un bug.
- */
-const PROVIDER_AUDIT = {
+const ZDR = {
   provider: { data_collection: 'deny' },
   usage: { include: true },
 } as const;
@@ -46,81 +44,109 @@ export interface LlamadaOpts {
   temperatura?: number;
 }
 
-async function onceSola(opts: LlamadaOpts, modelo: string): Promise<Llamada> {
+const GEMINI_BACKUP = 'google/gemini-3.7-flash';
+
+function extraOpts(modelo: string): Record<string, unknown> {
+  return modelo.includes('deepseek')
+    ? { usage: { include: true }, reasoning: { effort: 'high' } }
+    : ZDR;
+}
+
+async function crearConReintento(
+  modelo: string,
+  msgs: OpenAI.Chat.ChatCompletionMessageParam[],
+  maxTokens: number,
+  temperatura: number,
+  extra: Record<string, unknown>,
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  let ultimo: unknown = null;
+  for (let i = 0; i < 2; i++) {
+    try {
+      return await getClient().chat.completions.create({
+        model: modelo,
+        messages: msgs,
+        max_tokens: maxTokens,
+        temperature: temperatura,
+        ...extra,
+      });
+    } catch (err) {
+      ultimo = err;
+      if (!isTransientError(err)) throw err;
+      await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  throw ultimo;
+}
+
+async function resolver(n: number, quien: string, modelo: string, res: OpenAI.Chat.ChatCompletion, tools = 0): Promise<Llamada> {
+  const tokIn = res.usage?.prompt_tokens ?? 0;
+  const tokOut = res.usage?.completion_tokens ?? 0;
+  const cost = costoReal(res.usage as { cost?: number } | undefined, modelo, tokIn, tokOut);
+  registrarUso(n, quien, modelo, tokIn, tokOut, cost);
+  return { text: (res.choices[0]?.message?.content ?? '').trim(), modelo: res.model ?? modelo, tokIn, tokOut, cost, tools };
+}
+
+/** Chat simple con fallback transitorio a Gemini. */
+export async function llamada(opts: LlamadaOpts): Promise<Llamada> {
   const n = rondaActual();
   const msgs: OpenAI.Chat.ChatCompletionMessageParam[] = [
     ...(opts.system ? [{ role: 'system' as const, content: opts.system }] : []),
     ...opts.mensajes.map((m) => ({ role: m.role, content: m.content })),
   ];
-  const res = await getClient().chat.completions.create({
-    model: modelo,
-    messages: msgs,
-    max_tokens: opts.maxTokens ?? 6000,
-    temperature: opts.temperatura ?? 0.3,
-    ...(modelo.includes('deepseek') ? { usage: { include: true }, reasoning: { effort: 'high' } } : PROVIDER_AUDIT),
-  });
-  const usage = res.usage;
-  const tokIn = usage?.prompt_tokens ?? 0;
-  const tokOut = usage?.completion_tokens ?? 0;
-  const cost = costoReal(usage as { cost?: number } | undefined, modelo, tokIn, tokOut);
-  registrarUso(n, opts.quien, modelo, tokIn, tokOut, cost);
-  return { text: (res.choices[0]?.message?.content ?? '').trim(), modelo: res.model ?? modelo, tokIn, tokOut, cost };
-}
-
-/** Ejecuta la llamada; si el proveedor falla de forma transitoria, cae a Gemini (US). */
-export async function llamada(opts: LlamadaOpts): Promise<Llamada> {
+  const extra = extraOpts(opts.modelo);
   try {
-    return await onceSola(opts, opts.modelo);
+    const res = await crearConReintento(opts.modelo, msgs, opts.maxTokens ?? 6000, opts.temperatura ?? 0.3, extra);
+    return await resolver(n, opts.quien, opts.modelo, res);
   } catch (err) {
-    if (opts.modelo === 'google/gemini-3.7-flash') throw err;
-    const transitorio = isTransientError(err);
-    if (!transitorio) throw err;
-    process.stderr.write(`[audit] fallback transitorio: ${opts.modelo} → gemini-flash (${String((err as Error).message ?? '').slice(0, 80)})\n`);
-    return await onceSola(opts, 'google/gemini-3.7-flash');
+    if (opts.modelo === GEMINI_BACKUP || !isTransientError(err)) throw err;
+    process.stderr.write(`[audit] fallback transitorio: ${opts.modelo} → gemini (${String((err as Error).message).slice(0, 70)})\n`);
+    const res = await crearConReintento(GEMINI_BACKUP, msgs, opts.maxTokens ?? 6000, opts.temperatura ?? 0.3, ZDR);
+    return await resolver(n, opts.quien, GEMINI_BACKUP, res);
   }
 }
 
-export interface LlamadaTools extends LlamadaOpts {
-  pasosMax?: number;
-}
-
-/**
- * Tool-loop para auditores: puede llamar leer/buscar/listar hasta pasosMax
- * vueltas y luego responde. Cada tool-call se cobra y va al ledger.
- */
-export async function llamadaConTools(opts: LlamadaTools): Promise<Llamada> {
+/** Tool-loop para auditores: leer/buscar/listar hasta pasosMax vueltas.
+ *  Tolerante a fallos transitorios: reintenta y si cae, migra a Gemini. */
+export async function llamadaConTools(opts: LlamadaOpts & { pasosMax?: number }): Promise<Llamada> {
   const n = rondaActual();
-  const maxPasos = Math.min(opts.pasosMax ?? 8, 12);
-  const mensajes: OpenAI.Chat.ChatCompletionMessageParam[] = [
+  const maxPasos = Math.min(opts.pasosMax ?? 12, 30);
+  const msgs: OpenAI.Chat.ChatCompletionMessageParam[] = [
     ...(opts.system ? [{ role: 'system' as const, content: opts.system }] : []),
     ...opts.mensajes.map((m) => ({ role: m.role, content: m.content })),
   ];
-  let modeloUsado = opts.modelo;
+  let modeloActivo = opts.modelo;
   let gasto = 0;
+  let herramientas = 0;
+
   for (let paso = 0; paso <= maxPasos; paso++) {
-    const res = await getClient().chat.completions.create({
-      model: opts.modelo,
-      messages: mensajes,
-      max_tokens: opts.maxTokens ?? 12000,
-      temperature: opts.temperatura ?? 0.3,
-      tools: TOOLS_DEF as unknown as OpenAI.Chat.ChatCompletionTool[],
-      tool_choice: 'auto',
-      ...(opts.modelo.includes('deepseek') ? { usage: { include: true }, reasoning: { effort: 'high' } } : PROVIDER_AUDIT),
-    });
+    let res: OpenAI.Chat.ChatCompletion;
+    try {
+      res = await crearConReintento(modeloActivo, msgs, opts.maxTokens ?? 12000, opts.temperatura ?? 0.3, {
+        ...extraOpts(opts.modelo),
+        tools: TOOLS_DEF as unknown as OpenAI.Chat.ChatCompletionTool[],
+        tool_choice: 'auto',
+      });
+    } catch (err) {
+      if (!isTransientError(err) || modeloActivo === GEMINI_BACKUP) throw err;
+      process.stderr.write(`[audit] tool-loop: ${modeloActivo} caído → ${GEMINI_BACKUP}\n`);
+      modeloActivo = GEMINI_BACKUP;
+      gasto += 0;
+      if (paso === maxPasos) break;
+      continue;
+    }
     const msg = res.choices[0]?.message;
     const texto = (msg?.content ?? '').trim();
-    const uso = res.usage;
-    const tokIn = uso?.prompt_tokens ?? 0;
-    const tokOut = uso?.completion_tokens ?? 0;
-    const cost = costoReal(uso as { cost?: number } | undefined, modeloUsado, tokIn, tokOut);
-    gasto += cost;
-    registrarUso(n, opts.quien, modeloUsado, tokIn, tokOut, cost);
+    const costo = costoReal(res.usage as { cost?: number } | undefined, modeloActivo, res.usage?.prompt_tokens ?? 0, res.usage?.completion_tokens ?? 0);
+    gasto += costo;
+    registrarUso(n, opts.quien, modeloActivo, res.usage?.prompt_tokens ?? 0, res.usage?.completion_tokens ?? 0, costo);
+
     if (msg?.tool_calls?.length) {
+      herramientas++;
       const tcs = msg.tool_calls as unknown as Array<{
         id?: string | null;
         function?: { name?: string | null; arguments?: string | null } | null;
       }>;
-      mensajes.push({
+      msgs.push({
         role: 'assistant',
         content: msg.content ?? '',
         tool_calls: tcs.map((tc) => ({
@@ -133,12 +159,12 @@ export async function llamadaConTools(opts: LlamadaTools): Promise<Llamada> {
         const nombre = tc.function?.name ?? '';
         const args = tc.function?.arguments ?? '{}';
         const result = ejecutarTool(nombre, args);
-        mensajes.push({ role: 'tool', tool_call_id: tc.id ?? '', content: result.slice(0, 12000) });
+        msgs.push({ role: 'tool', tool_call_id: tc.id ?? '', content: result.slice(0, 12000) });
         process.stderr.write(`[audit][${opts.quien}] 🧰 ${nombre}(${String(args).slice(0, 60)}) → ${result.length} chars\n`);
       }
       continue;
     }
-    return { text: texto, modelo: res.model ?? modeloUsado, tokIn, tokOut, cost: gasto };
+    return { text: texto, modelo: res.model ?? modeloActivo, tokIn: res.usage?.prompt_tokens ?? 0, tokOut: res.usage?.completion_tokens ?? 0, cost: gasto, tools: herramientas };
   }
-  return { text: '(sin respuesta final tras agotar pasos de herramienta)', modelo: modeloUsado, tokIn: 0, tokOut: 0, cost: gasto };
+  return { text: '(sin respuesta final tras agotar pasos de herramienta)', modelo: modeloActivo, tokIn: 0, tokOut: 0, cost: gasto, tools: herramientas };
 }

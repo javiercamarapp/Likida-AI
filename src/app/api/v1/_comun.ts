@@ -187,7 +187,7 @@ export function areaDeLlaveAlcanza(areaLlave: string, pedida: Area): boolean {
 
 export async function abrir(req: Request, area: Area): Promise<Acceso> {
   const ip = clientIp(req);
-  if (!rateLimit(`v1:ip:${ip}`, TASA_ANONIMA, VENTANA_MS)) {
+  if (!(await rateLimit(`v1:ip:${ip}`, TASA_ANONIMA, VENTANA_MS))) {
     return { ok: false, respuesta: errorApi('demasiadas_peticiones', `Máximo ${TASA_ANONIMA} peticiones por minuto sin identificar. Espera un momento.`) };
   }
 
@@ -215,7 +215,7 @@ export async function abrir(req: Request, area: Area): Promise<Acceso> {
       const codigo: CodigoError = l.status === 401 ? 'no_autenticado' : 'dependencia_no_disponible';
       return { ok: false, respuesta: errorApi(codigo, l.motivo) };
     }
-    if (!rateLimit(`v1:flota:${l.tenantId}`, TASA_POR_FLOTA, VENTANA_MS)) {
+    if (!(await rateLimit(`v1:flota:${l.tenantId}`, TASA_POR_FLOTA, VENTANA_MS))) {
       return { ok: false, respuesta: errorApi('demasiadas_peticiones', `Máximo ${TASA_POR_FLOTA} peticiones por minuto por flota. Espera un momento.`) };
     }
     // El área de la llave se compara con la que pide la ruta usando el MISMO
@@ -248,7 +248,7 @@ export async function abrir(req: Request, area: Area): Promise<Acceso> {
     return { ok: false, respuesta: errorApi(codigo, t.motivo) };
   }
 
-  if (!rateLimit(`v1:flota:${t.tenantId}`, TASA_POR_FLOTA, VENTANA_MS)) {
+  if (!(await rateLimit(`v1:flota:${t.tenantId}`, TASA_POR_FLOTA, VENTANA_MS))) {
     return { ok: false, respuesta: errorApi('demasiadas_peticiones', `Máximo ${TASA_POR_FLOTA} peticiones por minuto por flota. Espera un momento.`) };
   }
 

@@ -37,6 +37,7 @@ export interface ResultadoAuditor {
   tokOut: number;
   cost: number;
   nota?: number;
+  tools?: number;
 }
 
 const SALTO = `\n\n`;
@@ -59,6 +60,12 @@ ${evidenciaBaseline(n) || '(baseline sin correr: las notas no miden suite nueva)
 ${ctx.mapa || '(sin MAPA previo)'}
 
 TIENES HERRAMIENTAS REALES para leer el repositorio: leer (abre un archivo real con líneas), buscar (regex sobre el código) y listar (explora directorios). ÚSALAS SIEMPRE: cada hallazgo cita el «archivo:línea» que abriste tú; el orquestador lo re-verifica físicamente y uno inválido se descarta. No edites código ni corras npm test: tu trabajo es encontrar y calificar.
+
+## Benchmark — el estándar Handle (nuestra referencia)
+Handle (handle.com) automatiza pagos y tareas repetitivas del ciclo de vida en construcción; nosotros somos su par en transportes. Su estándar de producto: software B2B enterprise que maneja DINERO de clientes con alta exigencia regulatoria — por eso cada rubro se mide contra ese nivel: seguridad de producto financiero, datos con consentimiento y sin fuga, pruebas que atan decisiones, operabilidad que avisa a un humano, esquema que no acepta estados rotos.
+
+Al final del encabezado de tu reporte agrega una línea:
+**vs Handle:** <nota 0-10 que le darías a este rubro si fuera Handle> y en una línea qué le falta a Likida para ese estándar (o en qué lo supera).
 
 ## Tu rubro
 ${ctx.seccion || '(sección del rubro no disponible)'}
@@ -138,14 +145,31 @@ export async function correrUnAuditor(n: number, r: Rubro): Promise<ResultadoAud
   const prompt = promptRubro(n, r);
   const conTools = (process.env.AUDIT_TOOLS ?? '1') !== '0';
   const llamar = (o: Parameters<typeof llamada>[0]) => (conTools ? llamadaConTools(o) : llamada(o));
+  const pasos = Number(process.env.AUDIT_PASOS ?? '20');
   let out = await llamar({
     modelo,
     quien: `auditor-${r}`,
     mensajes: [{ role: 'user', content: prompt }],
     maxTokens: 24000,
     temperatura: 0.2,
-    ...(conTools ? { pasosMax: 10 } : {}),
+    ...(conTools ? { pasosMax: pasos } : {}),
   });
+  // AUDITORÍA PROFUNDA: un rubro sin LECTURA REAL no cuenta. Si el modelo
+  // respondió sin abrir ni un archivo, se relanza exigiéndole herramientas.
+  if (conTools && (out.tools ?? 0) === 0) {
+    process.stderr.write(`[audit] auditor-${r}: NO leyó archivos (0 tools) — relanzando con orden de lectura\n`);
+    out = await llamar({
+      modelo,
+      quien: `auditor-${r}`,
+      mensajes: [
+        { role: 'user', content: prompt },
+        { role: 'user', content: 'REGLA OBLIGATORIA: responde DESPUÉS de abrir al menos 3 archivos con la herramienta leer (o buscar). Abre archivos reales de tu rubro (listar + leer) y cita SOLO archivo:línea que hayas abierto. Si no abres ninguno, tu ronda queda SIN VALOR.' },
+      ],
+      maxTokens: 24000,
+      temperatura: 0.2,
+      ...(conTools ? { pasosMax: pasos } : {}),
+    });
+  }
   // Los modelos chinos de razonamiento a veces devuelven contenido corto o
   // simulan tool-calls. Un reporte vacío NO es un rubro limpio: se reintenta
   // una vez con la advertencia explícita, y se anota en el archivo si falló.
@@ -172,7 +196,7 @@ export async function correrUnAuditor(n: number, r: Rubro): Promise<ResultadoAud
   const texto = out.text;
   mkdirSync(dirRonda(n), { recursive: true });
   writeFileSync(`${dirRonda(n)}/${r}.md`, texto, 'utf8');
-  return { rubro: r, texto, modelo: out.modelo, tokIn: out.tokIn, tokOut: out.tokOut, cost: out.cost, nota: extraerNota(texto) };
+  return { rubro: r, texto, modelo: out.modelo, tokIn: out.tokIn, tokOut: out.tokOut, cost: out.cost, nota: extraerNota(texto), tools: out.tools };
 }
 
 function extraerNota(texto: string): number | undefined {

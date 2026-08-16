@@ -9,6 +9,7 @@ import { cofreConfigurado } from '@/lib/likida/conectores/cofre';
 import { envHealth, faltantes, type EnvGroup } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
+import { redisConfigurado } from '@/lib/ratelimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,13 @@ export const dynamic = 'force-dynamic';
 //   · Stripe / Facturapi / CLABE ya se miden en Costos & Facturación — se
 //     enlaza, no se duplica la medición (dos copias del mismo semáforo se
 //     desincronizan al primer cambio).
+//
+// AUDITORÍA EXTERNA DEL 15-AGO (P1) — una quinta: `redisConfigurado()`
+// (Upstash Redis, `UPSTASH_REDIS_REST_URL`/`TOKEN`). Sin ella `rateLimit`
+// sigue funcionando pero cae al Map en memoria de cada instancia: en Vercel,
+// "10 intentos" se vuelven "10 × instancias en paralelo". Se mide con la
+// MISMA función que ya usa `ratelimit.ts` para decidir su backend — ver la
+// nota de `renglonRatelimit()`.
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface Renglon {
@@ -171,6 +179,25 @@ function renglonQstash(): Renglon {
   };
 }
 
+/** Límite de tasa distribuido (auditoría externa 15-ago, P1). Sin las dos
+ *  variables de Upstash Redis, `rateLimit` sigue funcionando pero cae al Map
+ *  en memoria de CADA instancia — en Vercel, "10 intentos" se vuelven
+ *  "10 × instancias en paralelo": no hay límite global. Mismo `bad` que
+ *  Sentry (no `warn`, como QStash): a diferencia de la cola, esto no es "un
+ *  lote grande se corta", es "la protección contra fuerza bruta no protege". */
+function renglonRatelimit(): Renglon {
+  const titulo = 'Límite de tasa distribuido — Upstash Redis';
+  return redisConfigurado()
+    ? {
+      titulo, estado: 'ok', etiqueta: 'Configurado',
+      detalle: 'El conteo de login, export y el webhook de WhatsApp es global entre instancias, no por instancia.',
+    }
+    : {
+      titulo, estado: 'bad', etiqueta: 'Sin configurar — límite solo por instancia',
+      detalle: 'Falta UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN: el límite vive en la memoria de cada instancia y en Vercel eso ya no es un límite global.',
+    };
+}
+
 const NOMBRE_GRUPO: Record<EnvGroup, string> = {
   llm: 'IA (OpenRouter)',
   whatsapp: 'WhatsApp Cloud API',
@@ -208,6 +235,7 @@ export default async function SaludSistemaPage() {
     renglonCronSecret(),
     renglonCofre(),
     renglonQstash(),
+    renglonRatelimit(),
     {
       titulo: 'Uptime y deploys — Vercel', estado: 'neutral', etiqueta: 'No medido',
       // Un verde fijo aquí es mentira; un neutral honesto no. Desde adentro no

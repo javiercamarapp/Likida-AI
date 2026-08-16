@@ -144,6 +144,91 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  // ═══════════════════════════════════════════════════════════════════════
+  // CABECERAS DE SEGURIDAD — auditoría externa del 15-ago-2026, P2.
+  //
+  // LA AUDITORÍA DICE "no encontramos CSP en next.config.ts" Y TIENE RAZÓN
+  // EN LA LETRA: no está aquí. Pero SÍ EXISTE, enforced (no Report-Only),
+  // desde la auditoría 10 — vive en `src/proxy.ts` (Next 16 renombró
+  // `middleware.ts` a `proxy.ts`, que es probablemente por qué el escaneo
+  // externo no la vio: miró el archivo con el nombre de siempre). Esa CSP
+  // fue construida recorriendo qué carga esta app de verdad —no una
+  // plantilla— y tiene su propia batería de pruebas (`proxy.test.ts`):
+  // presencia del header en página pública, en el redirect a /login y en
+  // una respuesta con sesión, `unsafe-eval` SOLO en desarrollo (con una
+  // prueba que fija el incidente del 8-ago: sin él, Fast Refresh nunca
+  // hidrata y el panel se queda pegado en el skeleton para siempre), y el
+  // resto de las cabeceras (X-Frame-Options, X-Content-Type-Options,
+  // Referrer-Policy, Permissions-Policy, HSTS en producción).
+  //
+  // RE-VERIFICADO para esta entrega, no asumido: el fondo con shader WebGL
+  // que la CSP de `proxy.ts` documenta como riesgo ya NO EXISTE — cambió a
+  // un lienzo plano `var(--bg)` el 12-ago-2026 (`src/app/fondo.tsx`, ver su
+  // propio historial). Sentry sigue siendo server-only (no hay
+  // `NEXT_PUBLIC_SENTRY_DSN` ni `instrumentation-client.ts` en el repo), así
+  // que `connect-src 'self'` sigue siendo toda la excepción que hace falta.
+  //
+  // ESTA ENTREGA NO TOCA `proxy.ts` — no está en el alcance asignado, y
+  // duplicar la CSP aquí habría sido el riesgo real: dos cabeceras
+  // `Content-Security-Policy` para la MISMA respuesta no se promedian ni se
+  // ignoran, el navegador aplica cada directiva por la intersección más
+  // estricta de las dos — dos políticas escritas por separado, sin
+  // coordinarse, es exactamente "una CSP mal puesta tumba el producto".
+  //
+  // LA BRECHA REAL: el `matcher` de `proxy.ts` EXCLUYE `/api` a propósito
+  // ('/((?!api|_next/static|_next/image|favicon.ico).*)') — el webhook de
+  // WhatsApp, los cuatro export y /v1 no pasan por esa capa, y hasta esta
+  // entrega no llevaban NINGUNA cabecera de seguridad. Ese es el hueco que
+  // se cierra aquí, sin pisar lo que ya funciona.
+  //
+  // ENFORCE DIRECTO, NO REPORT-ONLY, y es una decisión — no un descuido.
+  // Report-Only tiene sentido cuando existe riesgo real de romper algo que
+  // SÍ se ejecuta (un script, un estilo, una imagen). `/api/*` nunca sirve
+  // HTML: es JSON (`/v1`, `/demo`), CSV (los cuatro export), o un 200/429
+  // sin cuerpo relevante (el webhook) — no hay script ni estilo que un
+  // navegador vaya a intentar correr desde esa respuesta, así que
+  // `default-src 'none'` no tiene nada legítimo que romper. Dejarla en modo
+  // reporte sin un endpoint que reciba los reportes (construir uno es una
+  // ruta nueva, `/api/algo`, fuera del alcance de esta entrega: solo se
+  // autorizó tocar `ratelimit.ts`, sus llamadores, este archivo y la
+  // migración 0113) habría sido ruido sin protección real.
+  //
+  // VERIFICADO con el dev server (`npm run dev`): `curl -i` contra una ruta
+  // de `/api` y contra `/login` confirma que cada una lleva SOLO su propio
+  // juego de cabeceras — no hay colisión porque no hay traslape de rutas.
+  // ═══════════════════════════════════════════════════════════════════════
+  async headers() {
+    const produccion = process.env.NODE_ENV === 'production';
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          // Sin script, sin estilo, sin imagen que cargar desde una
+          // respuesta que nunca es HTML: la política más cerrada que existe
+          // no tiene costo aquí. `frame-ancestors`/`base-uri` en 'none'
+          // porque nada de esto se sirve para incrustarse ni para servir de
+          // base de una página.
+          { key: 'Content-Security-Policy', value: "default-src 'none'; frame-ancestors 'none'; base-uri 'none'" },
+          // Cinturón sobre la CSP de arriba — mismo criterio "cinturón y
+          // tirantes" que ya usa proxy.ts entre CSP y X-Frame-Options.
+          { key: 'X-Frame-Options', value: 'DENY' },
+          // El que de verdad importa para /api: el export de CSV entrega
+          // texto que un chofer o un ERP no controlan del todo (conceptos,
+          // notas) — sin nosniff, un navegador que abra la URL directo
+          // podría intentar adivinar el tipo de contenido en vez de
+          // respetar el `Content-Type: text/csv` que la ruta ya declara.
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
+          // Mismo criterio que proxy.ts: HSTS solo tiene efecto sobre un
+          // origen HTTPS real, así que restringirla a producción evita
+          // publicar una cabecera que en `localhost` no hace nada, no una
+          // que haga daño — pero se sigue el mismo patrón por consistencia.
+          ...(produccion ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000' }] : []),
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
