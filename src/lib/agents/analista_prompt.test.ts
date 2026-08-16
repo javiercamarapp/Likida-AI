@@ -10,7 +10,7 @@ describe('el prompt del analista conserva sus reglas de fondo', () => {
   });
   it('cifras solo de tools; comparar sí, inventar no', () => {
     expect(p).toMatch(/LAS CIFRAS SOLO SALEN DE LAS TOOLS/);
-    expect(p).toMatch(/promedios propios, extrapolaciones/);
+    expect(p).toMatch(/promedios, extrapolaciones/); // guard vigente desde 64e032b: no narrar cifras derivadas sin tool
   });
   it('proyecciones SOLO por la tool determinística y con supuesto narrado', () => {
     expect(p).toMatch(/PROYECCIONES: SOLO con la tool proyectar_serie/);
