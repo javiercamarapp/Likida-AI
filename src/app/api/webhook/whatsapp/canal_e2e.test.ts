@@ -135,8 +135,22 @@ vi.mock('@/lib/observability/sentry', () => ({
 }));
 // La bandeja del apagado no participa: el sistema está ENCENDIDO en este E2E
 // (su propio contrato vive en apagado.test.ts + wa-pendientes).
+const { bandejaInbox } = vi.hoisted(() => ({ bandejaInbox: new Map<string, unknown>() }));
 vi.mock('@/lib/likida/wa_pendientes', () => ({
-  guardarEventosPendientes: vi.fn(async () => ({ guardados: 0, fallidos: 0 })),
+  // El inbox general (16-ago-2026): el E2E pasa por persistir → reclamar →
+  // procesar, como producción.
+  guardarEventosPendientes: vi.fn(async (ms: Array<{ waMessageId?: string }>) => {
+    const filas = ms.map((m, i) => {
+      const id = m.waMessageId ?? `f-${i}`;
+      bandejaInbox.set(id, m);
+      return { id, evento: m, guardado: true };
+    });
+    return { guardados: filas.length, fallidos: 0, filas };
+  }),
+  reclamarPendiente: async (id: string) =>
+    (bandejaInbox.has(id) ? { id, evento: bandejaInbox.get(id), intentos: 1 } : null),
+  marcarPendienteProcesado: async () => undefined,
+  anotarFalloPendiente: async () => undefined,
 }));
 
 // ── BORDE 4: la Graph API ───────────────────────────────────────────────────

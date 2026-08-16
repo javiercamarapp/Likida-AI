@@ -19,10 +19,10 @@ const { DatoInvalido } = await import('@/lib/likida/errores');
 beforeEach(() => { apagar.mockClear(); });
 
 describe('el catálogo de acciones', () => {
-  it('las 9 acciones del diseño §3c existen, y SOLO apagar_agente está implementada', () => {
-    expect(CATALOGO_ACCIONES).toHaveLength(9);
+  it('las 10 acciones del catálogo existen, y SOLO apagar_agente y correr_runner están implementadas', () => {
+    expect(CATALOGO_ACCIONES).toHaveLength(10);
     const implementadas = CATALOGO_ACCIONES.filter((a) => a.implementada).map((a) => a.id);
-    expect(implementadas).toEqual(['apagar_agente']);
+    expect(implementadas).toEqual(['apagar_agente', 'correr_runner']);
   });
 
   it('toda acción 🔴 del diseño está marcada doble — el gateo es contrato, no default', () => {

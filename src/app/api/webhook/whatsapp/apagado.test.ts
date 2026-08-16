@@ -36,10 +36,20 @@ vi.mock('@/lib/likida/interruptores', () => ({ estaApagado }));
 const guardados: Array<Record<string, unknown>> = [];
 const guardarEventosPendientes = vi.fn(async (ms: Array<Record<string, unknown>>) => {
   guardados.push(...ms);
-  return { guardados: ms.length, fallidos: 0 };
+  return {
+    guardados: ms.length, fallidos: 0,
+    filas: ms.map((m, i) => ({ id: (m.waMessageId as string) ?? `f-${i}`, evento: m, guardado: true })),
+  };
 });
 vi.mock('@/lib/likida/wa_pendientes', () => ({
   guardarEventosPendientes: (...a: unknown[]) => guardarEventosPendientes(...(a as [never])),
+  // El inbox general: el flujo normal reclama la fila para procesarla.
+  reclamarPendiente: async (id: string) => {
+    const m = guardados.find((x, i) => ((x.waMessageId as string) ?? `f-${i}`) === id);
+    return m ? { id, evento: m, intentos: 1 } : null;
+  },
+  marcarPendienteProcesado: async () => undefined,
+  anotarFalloPendiente: async () => undefined,
 }));
 
 // `after()` fuera de una petición de Next lanza; se recogen las tareas y se
@@ -118,10 +128,12 @@ describe('el interruptor global apaga el WhatsApp entrante', () => {
     expect(guardados.map((g) => g.waMessageId)).toEqual(['wamid.G1', 'wamid.G2']);
   });
 
-  it('ENCENDIDO, la bandeja NI SE TOCA — el camino vivo no paga el desvío', async () => {
+  it('ENCENDIDO, se persiste ANTES del 200 (inbox general) Y se procesa', async () => {
     await postear(payload('5219990001008', [{ id: 'wamid.VIVO', type: 'text', text: { body: 'x' } }]));
     expect(processInbound).toHaveBeenCalledTimes(1);
-    expect(guardarEventosPendientes).not.toHaveBeenCalled();
+    // Inbox durable GENERAL (16-ago-2026): también con la palanca ARRIBA se
+    // persiste ANTES del 200 — el 200 significa "recibido y guardado".
+    expect(guardarEventosPendientes).toHaveBeenCalledTimes(1);
   });
 
   it('apagado, NI SIQUIERA el primero de una ráfaga se procesa', async () => {
@@ -163,5 +175,15 @@ describe('el interruptor global apaga el WhatsApp entrante', () => {
   it('se consulta el interruptor GLOBAL, no otro', async () => {
     await postear(payload('5219990001006', [{ id: 'wamid.G', type: 'text', text: { body: 'x' } }]));
     expect(estaApagado).toHaveBeenCalledWith('global');
+  });
+
+  it('si NI GUARDAR se pudo, se contesta 503 — jamás un 200 mentiroso (la cola durable es la de Meta)', async () => {
+    guardarEventosPendientes.mockResolvedValueOnce({
+      guardados: 0, fallidos: 1,
+      filas: [{ id: 'wamid.H', evento: {}, guardado: false }],
+    });
+    const res = await postear(payload('5219990001007', [{ id: 'wamid.H', type: 'text', text: { body: 'x' } }]));
+    expect(res.status).toBe(503);
+    expect(processInbound).not.toHaveBeenCalled();
   });
 });

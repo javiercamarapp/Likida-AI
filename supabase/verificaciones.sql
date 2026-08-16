@@ -4939,3 +4939,38 @@ begin
   raise exception E'RUNNER_CAMPANA_0123  activa-sin-firma-rebota=%  activa-con-firma-cabe=%  costo-negativo-rebota=%  runner-nace-apagado=%   (esperado t / t / t / t)',
     activa_sin_firma_rebota, activa_con_firma_cabe, costo_negativo_rebota, runner_nace_apagado;
 end $$;
+
+-- ── 97. La cadencia es ATÓMICA: la reserva serializa por prospecto (mig. 0124) ─
+-- La carrera que la auditoría externa encontró: SELECT historial → enviar →
+-- INSERT permitía que dos piezas del MISMO prospecto salieran a la vez. La
+-- garantía de base: (a) la primera reserva ENTRA y devuelve id; (b) la
+-- segunda, dentro de la ventana, devuelve NULL — la decisión y el insert
+-- son la misma transacción con advisory lock por prospecto; (c) tras la
+-- COMPENSACIÓN (delete de la reserva — el proveedor rechazó), reservar
+-- vuelve a ser posible: el bloqueo era del contacto, no un residuo.
+--
+-- Escrito el 16-ago-2026 con la 0124 recién creada: primera corrida en el
+-- Postgres de CI; contra el proyecto real, tras aplicarla.
+--   (esperado t / t / t — los tres exactos)
+do $$
+declare
+  v_p uuid; v_r1 uuid; v_r2 uuid; v_r3 uuid;
+  primera_entra boolean := false;
+  segunda_rebota boolean := false;
+  tras_compensar_entra boolean := false;
+begin
+  insert into public.prospecto (empresa, fuente) values ('ZZZ VERIF 0124', 'manual') returning id into v_p;
+
+  v_r1 := public.reservar_envio_prospecto(v_p, null, null, 'ZZZ reserva 1', 48);
+  primera_entra := v_r1 is not null;
+
+  v_r2 := public.reservar_envio_prospecto(v_p, null, null, 'ZZZ reserva 2', 48);
+  segunda_rebota := v_r2 is null;
+
+  delete from public.prospecto_contacto where id = v_r1;
+  v_r3 := public.reservar_envio_prospecto(v_p, null, null, 'ZZZ reserva 3', 48);
+  tras_compensar_entra := v_r3 is not null;
+
+  raise exception E'CADENCIA_0124  primera-entra=%  segunda-rebota=%  tras-compensar-entra=%   (esperado t / t / t)',
+    primera_entra, segunda_rebota, tras_compensar_entra;
+end $$;

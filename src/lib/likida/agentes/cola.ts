@@ -91,6 +91,11 @@ export interface PiezaEnCola {
   enviadoEn: string | null;
   providerMessageId: string | null;
   envioError: string | null;
+  /** Lo que el PROVEEDOR reportó tras aceptar (webhook 0124): entregado /
+   *  rebotado / queja. `null` = aceptado sin noticia todavía — la pantalla
+   *  lo distingue de "entregado". */
+  entregaEstado: 'entregado' | 'rebotado' | 'queja' | null;
+  entregaEventoEn: string | null;
   resueltoPorEmail: string | null;
   creadoEn: string;
 }
@@ -114,12 +119,14 @@ function desdeFila(f: Record<string, unknown>): PiezaEnCola {
     enviadoEn: (f.enviado_en as string) ?? null,
     providerMessageId: (f.provider_message_id as string) ?? null,
     envioError: (f.envio_error as string) ?? null,
+    entregaEstado: (f.entrega_estado as PiezaEnCola['entregaEstado']) ?? null,
+    entregaEventoEn: (f.entrega_evento_en as string) ?? null,
     resueltoPorEmail: (f.resuelto_por_email as string) ?? null,
     creadoEn: String(f.creado_en),
   };
 }
 
-const COLUMNAS = 'id, tipo, prioridad, agente, tenant_id, prospecto_id, titulo, cuerpo, fuentes, estado, cuerpo_final, motivo_rechazo, enviado_en, provider_message_id, envio_error, resuelto_por_email, creado_en, prospecto:prospecto_id(empresa, correo)';
+const COLUMNAS = 'id, tipo, prioridad, agente, tenant_id, prospecto_id, titulo, cuerpo, fuentes, estado, cuerpo_final, motivo_rechazo, enviado_en, provider_message_id, envio_error, entrega_estado, entrega_evento_en, resuelto_por_email, creado_en, prospecto:prospecto_id(empresa, correo)';
 
 /**
  * UNA bandeja de pendientes, por prioridad — CONSULTA PROPIA por bandeja
@@ -322,32 +329,6 @@ export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise
     throw new DatoInvalido('El prospecto de esta pieza no tiene correo capturado — captúralo en Vendedores y vuelve a enviar.');
   }
 
-  // ── LA GUARDIA DE CADENCIA (auditoría externa P2): el historial 0118 no
-  // impide nada por existir — lo impide LEERSE antes de enviar. Un lead del
-  // censo es finito: dos correos en menos de 48 h lo queman. La regla vive
-  // aquí, en la única puerta de salida, no en la buena voluntad del agente
-  // que redactó. Si el historial NO SE PUEDE leer, no se manda (fail
-  // closed): enviar a ciegas es exactamente el duplicado que se persigue.
-  const prospectoIdGuardia = (fila.prospecto_id as string) ?? null;
-  if (prospectoIdGuardia) {
-    const hace48h = new Date(Date.now() - 48 * 3_600_000).toISOString();
-    const { data: recientes, error: errHistorial } = await supabaseAdmin()
-      .from('prospecto_contacto')
-      .select('ocurrio_en')
-      .eq('prospecto_id', prospectoIdGuardia)
-      .eq('direccion', 'salida')
-      .gte('ocurrio_en', hace48h)
-      .limit(1);
-    if (errHistorial) {
-      await revertir('No se pudo leer el historial de contactos.');
-      throw new DatoInvalido('No se pudo consultar el historial del prospecto — sin él no se manda (la cadencia no se verifica a ciegas). Reintenta.');
-    }
-    if ((recientes ?? []).length > 0) {
-      await revertir('Contactado hace menos de 48 h — la cadencia lo protege.');
-      throw new DatoInvalido('A este prospecto ya se le escribió hace menos de 48 horas — la cadencia mínima lo protege. La pieza sigue aprobada; reintenta cuando pase la ventana.');
-    }
-  }
-
   // ── EL TOPE DIARIO (Fase 2: "20–40 correos aprobados/día, máximo") ──
   // Solo la prospección NORMAL cuenta contra el techo; la bandeja urgente
   // (ads-respuesta) NO — su SLA se mide en minutos y el techo es de
@@ -376,6 +357,35 @@ export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise
     }
   }
 
+  // ── LA GUARDIA DE CADENCIA, ATÓMICA (0124 — auditoría externa 2): la
+  // versión anterior hacía SELECT historial → enviar → INSERT, con el claim
+  // sobre la PIEZA: dos piezas del MISMO prospecto podían ver ambas «cero
+  // contactos» y salir las dos. Ahora la decisión es UNA transacción en la
+  // base (`reservar_envio_prospecto`: advisory lock por prospecto +
+  // verificación + INSERT de la reserva) — la segunda serializa detrás de
+  // la primera y rebota. Fail closed: si la RPC no responde, no se manda.
+  const prospectoIdGuardia = (fila.prospecto_id as string) ?? null;
+  let reservaId: string | null = null;
+  if (prospectoIdGuardia) {
+    const { data: reserva, error: errReserva } = await supabaseAdmin()
+      .rpc('reservar_envio_prospecto', {
+        p_prospecto: prospectoIdGuardia,
+        p_pieza: id,
+        p_actor: actorId,
+        p_resumen: `Salió «${String(fila.titulo).slice(0, 120)}» por correo (${String(fila.agente)}, aprobada en cola).`,
+        p_horas: 48,
+      });
+    if (errReserva) {
+      await revertir('No se pudo reservar la cadencia del prospecto.');
+      throw new DatoInvalido('No se pudo verificar la cadencia del prospecto — sin esa reserva no se manda (¿migración 0124 aplicada?). Reintenta.');
+    }
+    if (reserva === null) {
+      await revertir('Contactado hace menos de 48 h — la cadencia lo protege.');
+      throw new DatoInvalido('A este prospecto ya se le escribió hace menos de 48 horas — la cadencia mínima lo protege. La pieza sigue aprobada; reintenta cuando pase la ventana.');
+    }
+    reservaId = String(reserva);
+  }
+
   // 2) EL PROVEEDOR. Sale la versión FINAL (la edición humana manda).
   const cuerpo = String(fila.cuerpo_final ?? fila.cuerpo);
   const r = await enviarCorreo(destinatario, {
@@ -389,25 +399,26 @@ export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise
     const motivo = r.motivo === 'sin_configurar'
       ? 'El canal de correo no está configurado (RESEND_API_KEY/RESEND_EMAIL_DOMAIN).'
       : `Resend no aceptó el envío (${r.motivo}: ${'detalle' in r ? r.detalle : ''}).`;
+    // La COMPENSACIÓN de la reserva (0124): el proveedor rechazó, así que el
+    // contacto reservado se borra — dejarlo bloquearía 48h de cadencia por
+    // un correo que nunca salió. Si NI borrarla se puede, queda del lado
+    // seguro (bloquea de más, jamás de menos) y se grita.
+    if (reservaId) {
+      const { error: errComp } = await supabaseAdmin()
+        .from('prospecto_contacto').delete().eq('id', reservaId);
+      if (errComp) logger.error('cola.reserva_sin_compensar', { pieza: id, reserva: reservaId, err: errComp.message });
+    }
     await revertir(motivo);
     throw new DatoInvalido(`${motivo} La pieza sigue aprobada y se puede reintentar.`);
   }
 
-  // 3) LA PRUEBA + el historial del prospecto.
+  // 3) LA PRUEBA. El contacto del historial YA existe: es la reserva de la
+  // cadencia (0124) — insertarlo aquí otra vez duplicaría el historial.
   const { error: errPrueba } = await supabaseAdmin().from('cola_aprobacion')
     .update({ provider_message_id: r.id || 'aceptado-sin-id' })
     .eq('id', id);
   if (errPrueba) logger.error('cola.provider_id_sin_guardar', { pieza: id, providerId: r.id, err: errPrueba.message });
 
-  const prospectoId = (fila.prospecto_id as string) ?? null;
-  if (prospectoId) {
-    const { error: errContacto } = await supabaseAdmin().from('prospecto_contacto').insert({
-      prospecto_id: prospectoId, canal: 'correo', direccion: 'salida', pieza_id: id,
-      resumen: `Salió «${String(fila.titulo).slice(0, 120)}» por correo (${String(fila.agente)}, aprobada en cola).`,
-      actor_id: actorId,
-    });
-    if (errContacto) logger.error('cola.contacto_no_registrado', { pieza: id, prospecto: prospectoId, err: errContacto.message });
-  }
   return { ok: true, destinatario, providerId: r.id || 'aceptado-sin-id' };
 }
 

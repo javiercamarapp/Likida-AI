@@ -1,0 +1,38 @@
+# Cuotas semanales del IEPS de diésel — la fuente del estímulo (ficha lif-2026-20-A).
+#
+# PRIMERA CAPTURA REAL: 16-ago-2026, tras 23 días de vigilancia bloqueada por
+# egress en el entorno de la routine. Este archivo NO existía — el motor no
+# tenía con qué calcular el estímulo en pesos para NINGUNA fecha (por eso el
+# panel muestra el diésel elegible en LITROS, nunca en pesos).
+#
+# CADA fila viene del acuerdo semanal del DOF (viernes, edición vespertina),
+# leído por SIDOF con su codNota — jamás de memoria. Verificación aritmética
+# en cada semana: estimulo + cuota_disminuida = 7.3634 (la cuota completa de
+# diésel de la LIF 2026) — las cuatro cuadran exacto.
+#
+# LO QUE FALTA, dicho: el histórico anterior al 25-jul-2026 no está capturado
+# (barrido histórico pendiente); el motor todavía NO consume este archivo
+# (cablearlo es el siguiente paso declarado — hoy la cifra en pesos seguiría
+# sin pintarse, que es el comportamiento honesto actual).
+cuota_completa_lif_2026: 7.3634   # $/litro, diésel (LIF 2026)
+semanas:
+  - vigencia: 2026-07-25 a 2026-07-31
+    porcentaje_estimulo: 71.58
+    estimulo_por_litro: 5.2709
+    cuota_disminuida_por_litro: 2.0925
+    fuente: { dof: 2026-07-24, edicion: vespertina, codNota: 5794737 }
+  - vigencia: 2026-08-01 a 2026-08-07
+    porcentaje_estimulo: 75.90
+    estimulo_por_litro: 5.5887
+    cuota_disminuida_por_litro: 1.7747
+    fuente: { dof: 2026-07-31, edicion: vespertina, codNota: 5795217 }
+  - vigencia: 2026-08-08 a 2026-08-14
+    porcentaje_estimulo: 64.96
+    estimulo_por_litro: 4.7833
+    cuota_disminuida_por_litro: 2.5801
+    fuente: { dof: 2026-08-07, edicion: vespertina, codNota: 5795798 }
+  - vigencia: 2026-08-15 a 2026-08-21
+    porcentaje_estimulo: 69.09
+    estimulo_por_litro: 5.0874
+    cuota_disminuida_por_litro: 2.2760
+    fuente: { dof: 2026-08-14, edicion: vespertina, codNota: 5796377 }
