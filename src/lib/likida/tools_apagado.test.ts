@@ -16,7 +16,7 @@ const LIQ: Omit<Liquidacion, 'id' | 'creadaEn'> = {
   viajeId: 'v1', totalComprobado: 8000, totalAnticipo: 8000, diferencia: 0, estatus: 'cuadrada',
   totalDeducible: 8000, totalNoDeducible: 0, totalPorConfirmar: 0,
   iepsAcreditable: 0, litrosDieselAcreditables: 0, ivaAcreditable: 0, peajeAcreditable: 0,
-  gastos: [], diferencias: [],
+  gastos: [{ id: 'g1', concepto: 'diesel', monto: 8000, ocrConfianza: 0.95 }], diferencias: [],
 };
 
 /** El interruptor, programable por prueba: sin fila (encendido), apagado, o
