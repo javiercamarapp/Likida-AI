@@ -24,8 +24,10 @@ export type AgenteConCorridas = 'liquidacion' | 'facturas' | 'cobranza' | 'condu
 export type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
 /** `correo` (0108): el agente de Proveedores no corre por reloj — corre
  *  cuando llega un correo al buzón. Registrarlo como 'cron' pintaría
- *  «Programado» en la ficha sobre algo que disparó un correo. */
-export type DisparoCorrida = 'cron' | 'manual' | 'correo';
+ *  «Programado» en la ficha sobre algo que disparó un correo.
+ *  `whatsapp` (0115): el cierre de una liquidación lo dispara el OPERADOR
+ *  confirmando por chat — ni reloj, ni botón del panel, ni correo. */
+export type DisparoCorrida = 'cron' | 'manual' | 'correo' | 'whatsapp';
 
 export interface CorridaNueva {
   inicio: Date;

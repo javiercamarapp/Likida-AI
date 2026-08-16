@@ -457,4 +457,39 @@ describe('asignarPendientes — el agente asignador', () => {
     const [corrida] = de('agente_corrida', 'insert');
     expect((corrida.payload as Record<string, unknown>).estado).toBe('ok');
   });
+
+  // ── El kill switch (0110) — Fase 1 del blueprint, 15-ago-2026 ────────────
+  // `agente:ventas` existía en el catálogo y ningún call site lo preguntaba.
+  // El módulo `interruptores` aquí es el REAL (el builder le contesta como
+  // cualquier tabla): se prueba la cadena completa, no un mock del mock.
+  it('APAGADO: no lee vendedores, no reparte, no anota corrida — y lo dice como apagado', async () => {
+    respuestas.set('interruptor', [{ data: { apagado: true }, error: null }]);
+    const r = await asignarPendientes();
+    expect(r.apagado).toBe(true);
+    expect(r.repartidos).toBe(0);
+    // Ni una lectura ni una escritura después de la palanca:
+    expect(de('app_user', 'select')).toHaveLength(0);
+    expect(de('prospecto', 'update')).toHaveLength(0);
+    expect(de('agente_corrida', 'insert')).toHaveLength(0);
+  });
+
+  it('FAIL-CLOSED: la lectura del interruptor que FALLA también detiene el reparto', async () => {
+    // Sin mockear estaApagado: el error por valor entra al módulo real y sale
+    // como apagado. Si alguien lo "normaliza" (error = encendido), esto cae.
+    respuestas.set('interruptor', [{ data: null, error: { message: 'fetch failed' } }]);
+    const r = await asignarPendientes();
+    expect(r.apagado).toBe(true);
+    expect(de('prospecto', 'update')).toHaveLength(0);
+    expect(de('agente_corrida', 'insert')).toHaveLength(0);
+  });
+
+  it('sin fila del interruptor (el default del catálogo), el reparto corre', async () => {
+    respuestas.set('app_user', [{ data: [{ id: 'v1', nombre: 'Ana', email: 'a@x.mx' }], error: null }]);
+    respuestas.set('prospecto', [
+      { data: [], error: null },
+      { data: [], error: null },
+    ]);
+    const r = await asignarPendientes();
+    expect(r.apagado).toBeUndefined();
+  });
 });

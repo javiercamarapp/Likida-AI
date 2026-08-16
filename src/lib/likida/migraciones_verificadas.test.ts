@@ -85,6 +85,7 @@ const EXENTAS: Record<string, string> = {
   '0079': 'RLS de app_user/bitacora_auditoria para el chofer. Mismo caso que 0078: retirada por la 0086, su bloque (antes 55) se borró por la misma razón — probaba un INSERT de sesión de chofer que hoy rebota en el constraint antes de llegar a RLS.',
   '0081': 'RLS de escritura del POD del chofer, scoped a su propio tenant. Mismo caso: retirada por la 0086, su bloque (antes 56) se borró — no hay sesión de chofer que pueda intentar el POD cruzado que probaba.',
   '0113': 'solo `alter function config_tenant_valida ... set search_path`, mismo caso que la 0035 (bloque 18 la cubre: comprobó que sea SECURITY INVOKER, no hay escalada). La 0085 había regresado el search_path al reescribir la función con CREATE OR REPLACE sin repetir el SET — esta migración solo lo vuelve a fijar, no cambia el cuerpo ni la garantía que ya cubre el bloque 18.',
+  '0115': 'extiende el dominio de `agente_corrida_disparo_dominio` con un valor más (whatsapp), mismo caso que la 0044: que basura sigue rechazada ya lo prueba el bloque 86 (0108, que recreó el mismo constraint); que `whatsapp` se acepta se prueba en TS (tools_apagado.test.ts, la corrida del cierre).',
 };
 
 const migraciones = readdirSync(DIR)

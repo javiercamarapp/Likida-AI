@@ -34,6 +34,7 @@ import { DatoInvalido } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { provisionarUsuario } from '@/lib/auth/provisionar';
 import { validarInvitacionVendedor } from '@/lib/auth/invitar';
+import { estaApagado } from './interruptores';
 import { registrarCorrida } from './agentes/corridas';
 import { logger } from '@/lib/logger';
 
@@ -547,6 +548,9 @@ export interface ResultadoReparto {
   pendientes: number;
   porVendedor: Array<{ vendedorId: string; nombre: string; n: number }>;
   sinVendedores: boolean;
+  /** `agente:ventas` (0110) está apagado: no se leyó ni repartió nada, y la
+   *  consola lo dice con esas palabras — no como "no había pendientes". */
+  apagado?: boolean;
 }
 
 /**
@@ -564,6 +568,15 @@ export interface ResultadoReparto {
  * es mil veces mejor que deshacer un reparto ya hecho.
  */
 export async function asignarPendientes(): Promise<ResultadoReparto> {
+  // ── EL KILL SWITCH (0110), ANTES DE LEER NADA ────────────────────────────
+  // Fase 1 del blueprint (15-ago-2026): `agente:ventas` existía en el
+  // catálogo y ningún call site lo preguntaba. Un reparto saltado NO anota
+  // corrida — no corrió — y no es un fallo: es la palanca haciendo su
+  // trabajo. Fail-closed: si el interruptor no se puede LEER, tampoco se
+  // reparte (estaApagado devuelve apagado con grito — ver interruptores.ts).
+  if (await estaApagado('agente:ventas')) {
+    return { repartidos: 0, pendientes: 0, porVendedor: [], sinVendedores: false, apagado: true };
+  }
   const inicio = new Date();
   const vendedores = await listarVendedores();
   const pendientesFilas = await traerTodo<Record<string, unknown>>(

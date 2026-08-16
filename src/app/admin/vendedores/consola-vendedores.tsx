@@ -156,6 +156,10 @@ export async function ConsolaVendedores({
     try {
       const r = await asignarPendientes();
       revalidatePath(RUTA);
+      if (r.apagado) {
+        // La palanca (0110) con sus palabras: "no había pendientes" mentiría.
+        return { ok: false, error: 'El asignador (agente:ventas) está apagado desde Observabilidad. Enciéndelo para repartir.' };
+      }
       if (r.sinVendedores) {
         return { ok: false, error: 'No hay vendedores a quienes repartir. Invita al primero aquí abajo y vuelve a correr.' };
       }

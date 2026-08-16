@@ -89,29 +89,38 @@ export async function GET(req: Request) {
   // 500, para que la plataforma cuente el cron como FALLIDO.
   let huboFallo = false;
 
-  try {
-    const r = await escalarViajesSinAceptar();
-    logger.info('cron.escalar.ok', { ...r });
-    resultado.aceptacion = r;
-  } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
-    // El `codigo` es lo que separa "token vencido" de "tabla no existe" en el
-    // fingerprint de Sentry (`discriminadores`): sin él, la causa nueva caía en
-    // el issue viejo y no notificaba (reincidencia de OP-A1). Estable por
-    // construcción — misma causa, mismo código, mismo issue. No hay tenant que
-    // emitir: el motor corre global, sobre todas las flotas a la vez.
-    const codigo = codigoDeError(e);
-    logger.error('cron.escalar.falló', { error, codigo });
-    await alertarOperador('cron.escalar', { error, codigo });
-    resultado.aceptacion = { error };
-    huboFallo = true;
+  // El primer motor ES el Agente de Conductores —`escalar_viaje.ts` registra
+  // sus corridas como 'conductores' desde la B3—, así que tiene su propia
+  // palanca además de la global (Fase 1 del blueprint, 15-ago-2026: el
+  // interruptor existía en el catálogo de la 0110 y ningún call site lo
+  // preguntaba — era decorativo). Un comentario aquí decía que la escalación
+  // "no es un agente del catálogo y no hay nombre honesto que darle": quedó
+  // viejo en cuanto la B3 le dio bitácora con nombre propio.
+  if (await estaApagado('agente:conductores')) {
+    logger.warn('cron.conductores.saltado', { interruptor: 'agente:conductores' });
+    resultado.aceptacion = { saltado: 'interruptor agente:conductores' };
+  } else {
+    try {
+      const r = await escalarViajesSinAceptar();
+      logger.info('cron.escalar.ok', { ...r });
+      resultado.aceptacion = r;
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      // El `codigo` es lo que separa "token vencido" de "tabla no existe" en el
+      // fingerprint de Sentry (`discriminadores`): sin él, la causa nueva caía en
+      // el issue viejo y no notificaba (reincidencia de OP-A1). Estable por
+      // construcción — misma causa, mismo código, mismo issue. No hay tenant que
+      // emitir: el motor corre global, sobre todas las flotas a la vez.
+      const codigo = codigoDeError(e);
+      logger.error('cron.escalar.falló', { error, codigo });
+      await alertarOperador('cron.escalar', { error, codigo });
+      resultado.aceptacion = { error };
+      huboFallo = true;
+    }
   }
 
-  // El segundo motor ES el Agente de Cobranza, así que tiene su propia
-  // palanca además de la global. El primero (aceptación) no la tiene: la
-  // escalación de aceptación no es un agente del catálogo (0102) y no hay
-  // nombre honesto que darle — se apaga con 'global', y se dice aquí para
-  // que nadie busque un interruptor que no existe.
+  // El segundo motor ES el Agente de Cobranza, con su propia palanca por la
+  // misma razón que el primero.
   if (await estaApagado('agente:cobranza')) {
     logger.warn('cron.cobranza.saltado', { interruptor: 'agente:cobranza' });
     resultado.comprobacion = { saltado: 'interruptor agente:cobranza' };

@@ -7,8 +7,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { randomUUID } from 'crypto';
-import { registerTool } from '@/lib/llm/tool-executor';
+import { registerTool, type ToolContext } from '@/lib/llm/tool-executor';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
+import { estaApagado } from './interruptores';
+import { registrarCorrida } from './agentes/corridas';
 import { getViaje, getOperador, saveLiquidacion } from './repo';
 import { getConfig } from './config';
 import { generarLiquidacionPDF } from './liquidacion/pdf';
@@ -161,9 +163,49 @@ registerTool('guardar_liquidacion', {
   },
   handler: async (_args, ctx) => {
     if (!ctx.viajeId) throw new Error('sin viaje activo');
+    // ── EL KILL SWITCH (0110), ANTES DE LA MUTACIÓN ─────────────────────────
+    // Es el único punto por el que se CIERRA una liquidación, así que la
+    // palanca `agente:liquidacion` vive aquí — no en `cuadrar_viaje`, que es
+    // lectura y puede seguir contestando "¿cómo voy?" con el agente apagado.
+    // El throw viaja como error de la tool (tool-executor lo atrapa) y el
+    // modelo se lo explica al operador; los comprobantes ya recibidos no se
+    // pierden. Fail-closed: si el interruptor no se puede LEER, `estaApagado`
+    // devuelve apagado con grito en el log (ver interruptores.ts).
+    if (await estaApagado('agente:liquidacion')) {
+      throw new Error(
+        'el agente de liquidación está apagado desde la consola de Likida. '
+        + 'La liquidación no se puede cerrar hasta que lo enciendan; los comprobantes ya recibidos siguen guardados.',
+      );
+    }
+    // La bitácora de corridas (0102 + 0115): `liquidacion` era el ÚNICO de
+    // los 7 agentes vivos sin una sola fila en `agente_corrida`. Su corrida
+    // es este cierre, y el disparo honesto es 'whatsapp' (0115): lo confirmó
+    // el operador por chat, no un reloj ni un botón.
+    const inicioCorrida = new Date();
+    try {
+      return await cerrarLiquidacion(ctx, inicioCorrida);
+    } catch (e) {
+      // `registrarCorrida` jamás lanza (estándar §7): anotar el fallo no
+      // puede tapar el error real, que sigue subiendo al modelo tal cual.
+      await registrarCorrida(ctx.tenantId, 'liquidacion', {
+        inicio: inicioCorrida,
+        fin: new Date(),
+        estado: 'fallo',
+        disparo: 'whatsapp',
+        error: 'El cierre de la liquidación no se pudo completar. El detalle quedó en los registros del sistema.',
+      });
+      throw e;
+    }
+  },
+});
+
+/** El cuerpo real del cierre — separado para que el try del handler registre
+ *  el fallo sin duplicar el camino feliz. El handler ya validó `viajeId`. */
+async function cerrarLiquidacion(ctx: ToolContext, inicioCorrida: Date) {
+  {
     const [liq, viaje, operador] = await Promise.all([
-      computeCuadre(ctx.tenantId, ctx.viajeId),
-      getViaje(ctx.viajeId, ctx.tenantId),
+      computeCuadre(ctx.tenantId, ctx.viajeId!),
+      getViaje(ctx.viajeId!, ctx.tenantId),
       ctx.operadorId ? getOperador(ctx.operadorId, ctx.tenantId) : Promise.resolve(null),
     ]);
     // Generar PDF (determinístico, sin LLM). DOS ejemplares, y no es redundancia:
@@ -176,7 +218,7 @@ registerTool('guardar_liquidacion', {
     let pdfOperadorPath: string | undefined;
     try {
       const full: Liquidacion = { ...liq, id: randomUUID(), creadaEn: new Date().toISOString() };
-      const v = viaje ?? { id: ctx.viajeId, anticipo: liq.totalAnticipo };
+      const v = viaje ?? { id: ctx.viajeId!, anticipo: liq.totalAnticipo };
       const o = operador ?? { id: ctx.operadorId ?? '', nombre: 'Operador', telefono: ctx.telefono ?? '' };
       const subir = async (bytes: Uint8Array, path: string) => {
         const up = await supabaseAdmin().storage.from('liquidaciones').upload(path, Buffer.from(bytes), {
@@ -205,6 +247,27 @@ registerTool('guardar_liquidacion', {
       logger.error('pdf.gen', { err: e instanceof Error ? e.message : String(e) });
     }
     const liquidacionId = await saveLiquidacion(ctx.tenantId, liq, pdfPath);
+    // ── LA CORRIDA SE ANOTA (0102 + 0115) ───────────────────────────────────
+    // Después de persistir — la liquidación YA está cerrada — y con el
+    // estándar §7: `registrarCorrida` jamás lanza, perder la anotación es mil
+    // veces mejor que tumbar un cierre hecho. `parcial` cuando algún ejemplar
+    // del PDF no subió: el cierre vale, pero a alguien le falta su papel.
+    // Resumen con id y banderas, sin datos personales (regla de la 0102).
+    await registrarCorrida(ctx.tenantId, 'liquidacion', {
+      inicio: inicioCorrida,
+      fin: new Date(),
+      estado: pdfPath && pdfOperadorPath ? 'ok' : 'parcial',
+      disparo: 'whatsapp',
+      resumen: {
+        liquidacionId,
+        estatus: liq.estatus,
+        pdfContralor: Boolean(pdfPath),
+        pdfOperador: Boolean(pdfOperadorPath),
+      },
+      error: pdfPath && pdfOperadorPath
+        ? undefined
+        : 'La liquidación cerró, pero algún ejemplar del PDF no se pudo generar o subir.',
+    });
     return {
       liquidacion_id: liquidacionId,
       estatus: liq.estatus,
@@ -234,5 +297,5 @@ registerTool('guardar_liquidacion', {
       // sola fotografía de la verdad por cierre, nunca dos.
       liq,
     };
-  },
-});
+  }
+}
