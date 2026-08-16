@@ -39,18 +39,14 @@ export function IconoProveedor({ modelo }: { modelo: string }) {
     );
   }
 
-  // Los proveedores del stack abierto/barato (16-ago-2026, pedido explícito
-  // con los logos): el prefijo del slug de OpenRouter decide. SVGs estáticos
-  // en public/images/logos/ — mismo camino que los 3 de arriba.
+  // Los demás proveedores del stack (16-ago-2026, pedido explícito con los
+  // logos): el prefijo del slug de OpenRouter decide. SVGs estáticos en
+  // public/images/logos/ — mismo camino que los 3 de arriba. Solo viven
+  // aquí los proveedores que el stack puede rutear (regla del 16-ago:
+  // proveedores USA).
   const SVGS: Array<[prefijo: string, archivo: string, alt: string]> = [
     ['openai/', 'openai.svg', 'OpenAI'],
-    ['deepseek/', 'deepseek.svg', 'DeepSeek'],
-    ['qwen/', 'qwen.svg', 'Qwen'],
-    ['z-ai/', 'zai.svg', 'Z.AI'],
     ['x-ai/', 'grok.svg', 'Grok'],
-    ['xiaomi/', 'xiaomi.svg', 'Xiaomi'],
-    ['moonshotai/', 'moonshotai.svg', 'Moonshot AI'],
-    ['minimax/', 'minimax.svg', 'MiniMax'],
   ];
   for (const [prefijo, archivo, alt] of SVGS) {
     if (m.startsWith(prefijo)) {
