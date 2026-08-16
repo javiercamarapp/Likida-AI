@@ -1,5 +1,19 @@
 # El stack de modelos por agente — verificado el 16-ago-2026
 
+Barrido COMPLETO del 16-ago (3ª pasada, pregunta directa de Javier — el más
+barato CON tools de cada familia, precios de ese día):
+mistral-nemo $0.02/$0.03 · gpt-oss-20b $0.03/$0.13 (open-weight de OpenAI) ·
+qwen3.7-flash $0.03/$0.13 (1M ctx) · llama-3.1-8b $0.05/$0.08 ·
+gemma-3-12b $0.05/$0.15 · glm-4.7-flash $0.06/$0.40 · deepseek-v4-flash
+$0.06/$0.12 (1M) · **xiaomi/mimo-v2.5 $0.14/$0.28 (1M)** · minimax-m2.5
+$0.22/$0.90 · claude-3-haiku $0.25/$1.25 · kimi-k2.6 $0.54/$2.28 ·
+grok-build $1/$2. Descartados con dato: gemini-3.7-flash ($0.38/$1.88 — no
+gana en ningún rol), grok-4.6 ($2/$6), grok-4.20 ($1.25/$2.50, 2M ctx —
+solo para contextos gigantes). Candidatos vivos anotados: mimo-v2.5 (salida
+más barata que Luna — probarlo si el copiloto se vuelve output-pesado) y
+qwen3.7-flash (el piso absoluto con 1M ctx — ya es fallback del back
+office).
+
 Decisión de Javier (16-ago-2026): el back office y los agentes internos corren
 sobre modelos abiertos/baratos ("chinos no pasa nada"), con escalación a un
 modelo mejor **por variable de entorno, sin deploy**, cuando la calidad lo
@@ -12,7 +26,7 @@ default (`src/lib/llm/models.ts` es la única fuente en código).
 | Rol (`models.ts`) | Agente / uso | Default | $/M in–out | Fallback | Escalación (env) |
 |---|---|---|---|---|---|
 | `back_office` | Redactor C5, runner nivel 2, piezas internas | `deepseek/deepseek-v4-flash` | 0.061 – 0.123 | `z-ai/glm-4.7-flash` → `qwen/qwen3.7-flash` | `LIKIDA_MODEL_BACK_OFFICE` |
-| `analisis` | Copiloto del fundador (tools de dirección, ficha 360) | `z-ai/glm-5.2` (1M ctx) | 0.31 – 0.97 | `minimax/minimax-m3` | `LIKIDA_MODEL_ANALISIS` → candidatos: `kimi-k2-thinking` (0.60–2.50), `deepseek-v4-pro` (0.66–1.98) |
+| `analisis` | Copiloto del fundador (tools de dirección, ficha 360) | `openai/gpt-5.6-luna` (1M ctx) | 0.10 – 0.60 | `z-ai/glm-5.2` → `minimax-m3` | `LIKIDA_MODEL_ANALISIS` → candidatos: `kimi-k2-thinking` (0.60–2.50), `deepseek-v4-pro` (0.66–1.98) |
 | `ocr` | Lectura de comprobantes del CLIENTE | Gemini (medido 4-ago) | — | Haiku 4.5 (visión) | `LIKIDA_MODEL_OCR` |
 | `cuadre` | Conciliación con dinero del CLIENTE | Claude Sonnet 5 | 2 – 10 | GPT-5.6-terra | `LIKIDA_MODEL_CUADRE` |
 | `chat` | Analista del CLIENTE | Gemini flash-lite | — | GPT-5.6-luna | `LIKIDA_MODEL_CHAT` |

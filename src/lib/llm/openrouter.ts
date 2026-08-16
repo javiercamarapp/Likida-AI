@@ -83,8 +83,9 @@ const FALLBACK: Record<string, string> = {
   // tools, no visión.
   'deepseek/deepseek-v4-flash': 'z-ai/glm-4.7-flash',
   'z-ai/glm-4.7-flash': 'qwen/qwen3.7-flash',
-  // El análisis de dirección (copiloto): GLM caído cae a MiniMax M3 — otro
-  // open-weight de 1M ctx con tools, mismo orden de precio.
+  // El análisis de dirección (copiloto): Luna caída cae a GLM-5.2 (cruce
+  // de proveedor, open-weight, 1M ctx); GLM a su vez cae a MiniMax M3.
+  'openai/gpt-5.6-luna': 'z-ai/glm-5.2',
   'z-ai/glm-5.2': 'minimax/minimax-m3',
 };
 
@@ -152,8 +153,10 @@ const PRICES: Record<string, [number, number]> = {
   'anthropic/claude-sonnet-5': [2, 10],       // intro VIGENTE hasta 31-ago-2026; revertir a [3,15] después
   'anthropic/claude-opus-5': [5, 25],
   'anthropic/claude-haiku-4.5': [1, 5],
-  'openai/gpt-5.6-terra': [2.5, 15],
-  'openai/gpt-5.6-luna': [1, 6],
+  'openai/gpt-5.6-terra': [1, 6],
+  // Luna re-verificada el 16-ago-2026: bajó a $0.10/$0.60 (la entrada
+  // anterior [1,6] era de su lanzamiento) — es el rol `analisis`.
+  'openai/gpt-5.6-luna': [0.10, 0.60],
   // El stack barato del back office — verificado contra el catálogo público
   // de OpenRouter el 16-ago-2026.
   'deepseek/deepseek-v4-flash': [0.061, 0.123],
