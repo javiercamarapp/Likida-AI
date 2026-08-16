@@ -15,11 +15,18 @@ const tablasTocadas: string[] = [];
 // para que el segundo insert sí entre.
 const correosRegistrados = new Set<string>();
 const borrados: string[] = [];
+/** El kill switch (0110), con el módulo `interruptores` REAL: la ruta lo
+ *  consulta antes de consumir el correo, y este doble programa la fila —
+ *  incluida la lectura reventada, que por fail-closed vale como apagado. */
+let interruptorResp: { data: { apagado: boolean } | null; error: { message: string } | null } = { data: null, error: null };
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from(tabla: string) {
       tablasTocadas.push(tabla);
+      if (tabla === 'interruptor') {
+        return { select: () => ({ eq: () => ({ maybeSingle: async () => interruptorResp }) }) };
+      }
       return {
         select: () => ({
           eq: () => ({ maybeSingle: async () => ({ data: flotaDevuelta, error: errorFlota }) }),
@@ -90,6 +97,7 @@ beforeEach(() => {
   process.env.RESEND_API_KEY = 'llave';
   flotaDevuelta = { id: 't-1', rfc: 'AAA010101AAA' };
   errorFlota = null; errorDedup = null; errorBorrado = null;
+  interruptorResp = { data: null, error: null }; // sin fila = ENCENDIDO
   tablasTocadas.length = 0;
   correosRegistrados.clear();
   borrados.length = 0;
@@ -366,5 +374,40 @@ describe('eventos que no son nuestros', () => {
   it('un evento sin email_id se ignora', async () => {
     const r = await POST(pedir({ type: 'email.received', data: {} }));
     expect(await r.json()).toMatchObject({ ignorado: 'sin_id' });
+  });
+});
+
+describe('el kill switch de agente:proveedores (0110) — Fase 1 del blueprint', () => {
+  it('APAGADO: 503 sin consumir el correo — Resend reintenta y el CFDI vuelve al encender', async () => {
+    // 503 y NO 200 a propósito (al revés que facturar/cola): un 200 le diría
+    // a Resend que no reintente y ese CFDI se perdería para siempre.
+    interruptorResp = { data: { apagado: true }, error: null };
+    const r = await POST(pedir(evento()));
+
+    expect(r.status).toBe(503);
+    expect(tablasTocadas, 'el correo NO debe quedar consumido').not.toContain('correo_procesado');
+    expect(correosRegistrados.size).toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith('correo_entrante.saltado',
+      expect.objectContaining({ emailId: 'em_1', interruptor: 'agente:proveedores' }));
+  });
+
+  it('FAIL-CLOSED de verdad: la LECTURA del interruptor falla y tampoco se procesa', async () => {
+    // El módulo `interruptores` es el REAL: el error por valor se convierte en
+    // apagado con grito en el log. Si alguien lo "normaliza" al patrón del
+    // resto del repo (error = encendido), esta prueba cae.
+    interruptorResp = { data: null, error: { message: 'fetch failed' } };
+    const r = await POST(pedir(evento()));
+
+    expect(r.status).toBe(503);
+    expect(correosRegistrados.size).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith('interruptores.lectura_fallo',
+      expect.objectContaining({ interruptor: 'agente:proveedores' }));
+  });
+
+  it('apagado, un correo SIN adjuntos procesables sigue saliendo 200: no hay nada que perder', async () => {
+    interruptorResp = { data: { apagado: true }, error: null };
+    const r = await POST(pedir(evento({ attachments: [] })));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ ignorado: 'sin_adjuntos' });
   });
 });

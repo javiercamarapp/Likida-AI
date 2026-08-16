@@ -20,6 +20,7 @@ const DISPARO: Record<string, string> = {
   cron: 'Programado (cron)',
   manual: 'Manual («Ejecutar ahora»)',
   correo: 'Por correo entrante',
+  whatsapp: 'Confirmado por WhatsApp (0115)',
 };
 
 function duracion(ms: number | null): string {

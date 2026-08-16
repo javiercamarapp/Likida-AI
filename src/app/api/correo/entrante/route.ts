@@ -5,6 +5,7 @@ import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
 import { tokenDeDestinatarios } from '@/lib/correo/buzon';
 import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
 import { guardarFacturaProveedor, estadoSatDeCfdi } from '@/lib/likida/proveedores';
+import { estaApagado } from '@/lib/likida/interruptores';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { sanitizarTexto } from '@/lib/likida/intake/sanitizar';
 
@@ -142,6 +143,22 @@ export async function POST(req: Request) {
     // Un humano contestando "gracias" al hilo. No es un error.
     logger.info('correo_entrante.sin_adjuntos', { emailId, tenantId: flota.id });
     return NextResponse.json({ ok: true, ignorado: 'sin_adjuntos' });
+  }
+
+  // ── EL KILL SWITCH (0110), ANTES DE CONSUMIR EL CORREO ──────────────────
+  // Fase 1 del blueprint (15-ago-2026): `agente:proveedores` existía en el
+  // catálogo y NINGÚN call site lo preguntaba — apagarlo no apagaba nada.
+  // Va DESPUÉS de los descartes (un "gracias" sin adjuntos sigue saliendo
+  // 200 con el agente apagado: no hay nada que perder) y ANTES del dedup,
+  // para que el correo no quede consumido. Se contesta 503 y NO 200 a
+  // propósito — al revés que el cron de facturar/cola—: aquí un 200 le diría
+  // a Resend que no reintente y ese CFDI se perdería PARA SIEMPRE; el 503
+  // hace que vuelva cuando enciendan la palanca. Fail-closed: si el
+  // interruptor no se puede LEER, no se procesa (estaApagado devuelve
+  // apagado con grito en el log — ver interruptores.ts).
+  if (await estaApagado('agente:proveedores')) {
+    logger.warn('correo_entrante.saltado', { emailId, tenantId: flota.id, interruptor: 'agente:proveedores' });
+    return NextResponse.json({ error: 'el agente de proveedores está apagado' }, { status: 503 });
   }
 
   // ── LA LLAVE DEL CANAL, ANTES DE CONSUMIR EL CORREO ──────────────────────

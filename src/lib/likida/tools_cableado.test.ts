@@ -55,6 +55,14 @@ const saveLiquidacion = vi.fn(async () => 'liq-1');
 const fallaEnRuta = new Set<string>();
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+// El kill switch (0110): sin este mock corre el REAL, que falla CERRADO contra
+// el supabase de mentira de abajo (solo tiene storage) y el cierre se niega por
+// una razón distinta de la que estas pruebas miden. Su comportamiento se prueba
+// en tools_apagado.test.ts; aquí queda ENCENDIDO.
+vi.mock('./interruptores', () => ({ estaApagado: vi.fn(async () => false) }));
+// La bitácora de corridas (0115) se anota best-effort al cerrar; aquí solo se
+// registra que se llamó — lo que mide es tools_apagado.test.ts.
+vi.mock('./agentes/corridas', () => ({ registrarCorrida: vi.fn(async () => {}) }));
 vi.mock('./cuadre/desde_db', () => ({ cuadrarDesdeDB: vi.fn(async () => LIQ) }));
 vi.mock('./config', () => ({ getConfig: vi.fn(async () => ({ politica: [] })) }));
 vi.mock('./repo', () => ({

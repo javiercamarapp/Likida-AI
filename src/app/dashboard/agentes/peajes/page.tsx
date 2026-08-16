@@ -12,6 +12,7 @@ import {
 } from '@/lib/likida/intake/desglose_peaje';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
+import { avisoAgentePeajesApagado } from './apagado';
 import { VistaAgentePeajes } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
@@ -84,6 +85,10 @@ export default async function PaginaAgentePeajes({
     const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede subir estados de cuenta.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    // El kill switch (0110), después de la puerta y antes de trabajar — el
+    // punto único vive en ./apagado.ts, las cuatro actions lo consultan.
+    const apagado = await avisoAgentePeajesApagado();
+    if (apagado) return { error: apagado };
 
     const archivo = fd.get('archivo');
     if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige el archivo XML del estado de cuenta.' };
@@ -119,6 +124,8 @@ export default async function PaginaAgentePeajes({
     const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede subir desgloses.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    const apagado = await avisoAgentePeajesApagado();
+    if (apagado) return { error: apagado };
 
     const archivo = fd.get('archivo');
     if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige el archivo del desglose (Excel, CSV o PDF).' };
@@ -164,6 +171,8 @@ export default async function PaginaAgentePeajes({
     const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar este agente.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    const apagado = await avisoAgentePeajesApagado();
+    if (apagado) return { error: apagado };
 
     const desgloseId = String(fd.get('desglose') ?? '').trim();
     if (!desgloseId) return { error: 'Falta el desglose a conciliar.' };
@@ -195,6 +204,8 @@ export default async function PaginaAgentePeajes({
     const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar este agente.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    const apagado = await avisoAgentePeajesApagado();
+    if (apagado) return { error: apagado };
 
     const inicio = new Date();
     try {

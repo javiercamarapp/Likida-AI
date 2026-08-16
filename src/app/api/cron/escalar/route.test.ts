@@ -123,6 +123,26 @@ describe('el kill switch (0110)', () => {
     expect(cuerpo.aceptacion).toEqual({ escalados: 0 });
   });
 
+  it("con 'agente:conductores' apagado: la aceptación salta Y LO DICE, la cobranza CORRE", async () => {
+    // Fase 1 del blueprint (15-ago-2026): este interruptor existía en el
+    // catálogo (0110) y NINGÚN call site lo preguntaba — apagar al Agente de
+    // Conductores no apagaba nada. Ahora sí, y con la misma forma que el de
+    // cobranza: 200, `saltado` en el cuerpo, y el otro motor sigue.
+    //
+    // El fail-closed viene incluido: `estaApagado` real devuelve este mismo
+    // `true` cuando la LECTURA falla (probado en interruptores.test.ts), así
+    // que "apagado" y "no se pudo leer" detienen el motor por el mismo cable.
+    estaApagado.mockImplementation(async (n: string) => n === 'agente:conductores');
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    const cuerpo = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(escalarViajesSinAceptar).not.toHaveBeenCalled();
+    expect(ejecutarCobranzaGlobal).toHaveBeenCalledTimes(1);
+    expect(cuerpo.aceptacion).toEqual({ saltado: 'interruptor agente:conductores' });
+    expect(logger.warn).toHaveBeenCalledWith('cron.conductores.saltado', { interruptor: 'agente:conductores' });
+  });
+
   it('sin fila (el default del catálogo) el cron corre entero', async () => {
     // `estaApagado` en false ES "sin fila = encendido" — el contrato del
     // default seguro, probado desde el cable.
