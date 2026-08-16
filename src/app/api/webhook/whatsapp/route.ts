@@ -8,6 +8,7 @@ import { processInbound, type InboundMessage } from '@/lib/likida/processor';
 import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { flushObservabilidad } from '@/lib/observability/sentry';
+import { estaApagado } from '@/lib/likida/interruptores';
 
 const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
 const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
@@ -166,6 +167,40 @@ export async function POST(req: NextRequest) {
       logger.info('wa.rafaga', { mensajes: permitidos.length, pool: MAX_EN_PARALELO });
     }
     after(async () => {
+      // ── EL BOTÓN DE PÁNICO NO APAGABA ESTO ────────────────────────────────
+      //
+      // `interruptor` (mig. 0110) existe para que Javier detenga a los agentes
+      // cuando algo va mal, y hasta hoy solo lo consultaban los CRONS: siete
+      // llamadas a `estaApagado`, las siete en `api/cron/*`. Apagar `global`
+      // paraba la escalación, la purga y la facturación — y un chofer le
+      // seguía escribiendo al bot, que le seguía contestando y gastando IA.
+      //
+      // Es el camino que MÁS importa apagar, no el que menos: es el único por
+      // el que un cliente real toca el producto, y por el que un error se le
+      // aparece a un operador enfrente de su jefe de flota. Se cierra ahora,
+      // antes del primer piloto, no después del primer susto.
+      //
+      // POR QUÉ AQUÍ Y NO EN `processInbound`: `processInbound` es el motor y
+      // se llama también desde pruebas y desde el simulador del demo, que
+      // deben seguir corriendo con el sistema apagado. La puerta va en el
+      // borde —donde entra el mundo real— igual que la verificación de firma.
+      //
+      // Y POR QUÉ NO SE CONTESTA NADA: el aviso tendría que salir por el mismo
+      // WhatsApp que se acaba de declarar apagado. `estaApagado` es
+      // fail-closed (una tabla ilegible cuenta como APAGADO, ver
+      // `interruptores.ts`), así que si la base está caída, mandar el aviso
+      // sería justo lo que no se puede hacer. El mensaje NO se pierde: Meta
+      // reintenta la entrega de lo que no confirmamos, y el `waMessageId`
+      // queda en el log para cruzarlo después.
+      if (await estaApagado('global')) {
+        logger.warn('wa.entrante_apagado', {
+          mensajes: permitidos.length,
+          ids: permitidos.map((m) => m.waMessageId),
+        });
+        await flushObservabilidad();
+        return;
+      }
+
       await conPool(permitidos, MAX_EN_PARALELO, (m) =>
         processInbound(m).catch((e) => logger.error('processInbound', { err: e instanceof Error ? e.message : String(e) })),
       );

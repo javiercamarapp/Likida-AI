@@ -27,6 +27,12 @@ vi.mock('@/lib/likida/processor', () => ({ processInbound }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/observability/sentry', () => ({ flushObservabilidad: vi.fn(async () => {}) }));
 
+// El webhook consulta el interruptor global antes de despachar (mig. 0110,
+// cableado el 15-ago-2026). Sin este mock corre el real, que falla CERRADO
+// —una base ilegible cuenta como apagado— y estas pruebas verían cero
+// mensajes procesados por una razón que no es la que están midiendo.
+vi.mock('@/lib/likida/interruptores', () => ({ estaApagado: vi.fn(async () => false) }));
+
 // `after()` fuera de una petición de Next lanza. Se recogen las tareas y se
 // corren a mano para poder AFIRMAR qué llegó al procesador.
 const pendientes: Array<() => unknown> = [];
