@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.likida.vigia-produccion</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>cd __REPO__ &amp;&amp; [ ! -f .mejora-diaria/APAGADO ] &amp;&amp; PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" npx tsx scripts/mejora-diaria/vigia-produccion.mts</string>
+  </array>
+  <key>StartInterval</key><integer>7200</integer>
+  <key>StandardOutPath</key><string>__REPO__/.mejora-diaria/logs/vigia-produccion.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/.mejora-diaria/logs/vigia-produccion.log</string>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>
