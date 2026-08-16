@@ -14,6 +14,7 @@ import {
   type ProspectoRow, type VendedorRow,
 } from '@/lib/likida/vendedores';
 import { ultimasCorridasNegocio, duracionLegible, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
+import { redactarCorreoFrio } from '@/lib/likida/agentes/redactor';
 import { descifrarErrorProvision } from '@/lib/auth/invitar';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { saludo, ahoraMs } from '@/lib/saludo';
@@ -101,6 +102,25 @@ export async function ConsolaVendedores({
   async function accionNota(id: string, nota: string): Promise<ResultadoAccion> {
     'use server';
     return ejecutarComoSuperadmin(() => actualizarNotasProspecto(String(id), String(nota)), 'guardar la nota');
+  }
+
+  // El Redactor (C5, Fase 2) devuelve mensaje al ok — no cabe en el
+  // envoltorio (que solo sabe {ok:true} pelón), así que re-gatea igual pero
+  // arma su propia respuesta con el asunto y el aviso del agente.
+  async function accionRedactar(id: string): Promise<ResultadoAccion> {
+    'use server';
+    const s = await getSessionTenant();
+    if (s?.rol !== 'superadmin') return { ok: false, error: 'Solo el superadmin administra la zona de vendedores.' };
+    try {
+      const r = await redactarCorreoFrio(String(id), s.nombre ?? 'Javier');
+      revalidatePath(RUTA);
+      return {
+        ok: true,
+        mensaje: `«${r.asunto}» quedó en la cola — apruébala en Aprobaciones.${r.aviso ? ` OJO: ${r.aviso}` : ''}`,
+      };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'redactar el correo') };
+    }
   }
 
   async function accionCrearProspecto(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
@@ -363,6 +383,7 @@ export async function ConsolaVendedores({
                     mover={accionMover}
                     asignar={accionAsignar}
                     guardarNota={accionNota}
+                    redactar={accionRedactar}
                     hayFiltro={hayFiltro}
                   />
                 )}

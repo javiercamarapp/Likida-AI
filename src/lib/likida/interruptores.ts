@@ -33,7 +33,7 @@ export const INTERRUPTORES = [
   'global',
   'agente:liquidacion', 'agente:facturas', 'agente:cobranza',
   'agente:conductores', 'agente:peajes', 'agente:proveedores',
-  'agente:ventas',
+  'agente:ventas', 'agente:redactor',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];
