@@ -3778,7 +3778,11 @@ begin
     values (t, 'cobranza', now() - interval '5 minutes', now(), 'ok', 'cron', 3, 3);
   begin
     insert into public.agente_corrida (tenant_id, agente, inicio, estado) values (t, 'inventado', now(), 'ok');
-  exception when check_violation then rebota_agente := true;
+  -- Desde la 0116 el guardián del agente es la FK contra agente_definicion,
+  -- no el CHECK enumerado — la garantía es la misma (un agente inventado no
+  -- escribe corridas), el mecanismo cambió. El bloque 91 prueba la mudanza
+  -- completa; aquí solo se acepta el error nuevo junto al viejo.
+  exception when check_violation or foreign_key_violation then rebota_agente := true;
   end;
   begin
     insert into public.agente_corrida (tenant_id, agente, inicio, estado) values (t, 'peajes', now(), 'verde');
@@ -3928,7 +3932,9 @@ begin
     values (null, 'ventas', now() - interval '3 seconds', now(), 'ok', 'manual', 2, 2);
   begin
     insert into public.agente_corrida (tenant_id, agente, inicio, estado) values (null, 'marketing', now(), 'ok');
-  exception when check_violation then agente_malo := true;
+  -- Desde la 0116 el guardián es la FK, no el CHECK — misma garantía, error
+  -- nuevo (ver la nota del bloque 79 y la mudanza completa en el 91).
+  exception when check_violation or foreign_key_violation then agente_malo := true;
   end;
 
   raise exception E'VENDEDORES_0105  rol_malo_rebota=%  estado_malo=%  cerrado_sin_fecha=%  fecha_sin_cerrado=%  tenant_sin_cerrar=%  empresa_vacia=%  rls=%  policies=%  indice=%  agente_malo=%   (esperado t/t/t/t/t/t/t/0/1/t)',
@@ -4626,6 +4632,11 @@ end $$;
 --  5. Deny-all: RLS activa, cero policies, `authenticated` ciego.
 --
 -- Todo se revierte con el raise final.
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 16-ago-2026 (Management API):
+--   AGENTE_DEFINICION_0116  vivos_sembrados=7  fk_rebota=t  nuevo_entra=t
+--   depto_malo_rebota=t  presupuesto_malo_rebota=t  rls=t  policies=0
+--   lee_auth=0   (esperado 7/t/t/t/t/t/0/0) — coincide; el RAISE revirtió todo.
 do $$
 declare
   n_vivos int;
@@ -4689,6 +4700,12 @@ end $$;
 -- (f) deny-all: RLS activa, cero policies, `authenticated` ciego.
 --
 -- Todo se revierte con el raise final.
+--
+-- CORRIDO CONTRA PRODUCCIÓN el 16-ago-2026 (Management API):
+--   COLA_APROBACION_0117  envio_pendiente_rebota=t  envio_rechazada_rebota=t
+--   envio_aprobada_cabe=t  rechazo_sin_motivo=t  rechazo_blanco=t
+--   aprobada_sin_resolucion=t  edicion_en_pendiente=t  agente_fantasma_rebota=t
+--   rls=t  policies=0  lee_auth=0   (esperado t/t/t/t/t/t/t/t/t/0/0) — coincide.
 do $$
 declare
   pid uuid;
