@@ -1,4 +1,5 @@
 import {
+  Cpu, GitCommitHorizontal,
   LayoutGrid, ScanText, Calculator, MessagesSquare, MessageCircle, UserPlus,
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
@@ -46,6 +47,10 @@ export const NEGOCIO: Item[] = [
   { href: '/admin/conversaciones', nombre: 'Conversaciones', Icono: MessageCircle },
   { href: '/admin/analitica', nombre: 'Analítica & Stats', Icono: LineChart },
   { href: '/admin/costos-facturacion', nombre: 'Costos & Facturación', Icono: DollarSign },
+  // A dónde y por qué se va el dinero de IA — por agente/modelo con insights
+  // deterministas (16-ago-2026). Hermana de Costos: allá el desglose contable,
+  // aquí el diagnóstico.
+  { href: '/admin/consumo', nombre: 'Consumo de IA', Icono: Cpu },
   { href: '/admin/cobranza', nombre: 'Cobranza', Icono: Receipt },
   { href: '/admin/crecimiento', nombre: 'Crecimiento', Icono: TrendingUp },
   { href: '/admin/ejecutivo', nombre: 'Ejecutivo / Board', Icono: Presentation },
@@ -71,6 +76,7 @@ export const SISTEMA: Item[] = [
   { href: '/admin/calidad-evals', nombre: 'Calidad & Evals', Icono: ClipboardCheck },
   { href: '/admin/dev', nombre: 'Dev', Icono: Code2 },
   { href: '/admin/salud-sistema', nombre: 'Salud del sistema', Icono: HeartPulse },
+  { href: '/admin/actividad-codigo', nombre: 'Actividad de código', Icono: GitCommitHorizontal },
   { href: '/admin/soporte', nombre: 'Soporte', Icono: LifeBuoy },
   { href: '/admin/capacidad-forecast', nombre: 'Capacidad & Forecast', Icono: Gauge },
 ];
