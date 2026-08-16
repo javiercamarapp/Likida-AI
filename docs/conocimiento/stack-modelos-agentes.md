@@ -62,3 +62,36 @@ el ajuste de guion, A LA COLA como todo lo demás.
    (openrouter.ts) o el respaldo/costo se apagan EN SILENCIO (gotcha 4-ago).
 3. Medir una semana con `agente_corrida.costo_usd` y las ediciones; decidir
    quedarse o volver.
+
+## El organigrama completo: 54 agentes, cada área con su modelo (0125)
+
+Conteo oficial del catálogo (00-Blueprint-Maestro/catalogo-de-agentes.md) +
+lo que cambió HOY: **8 vivos con código** (los 7 del catálogo + el Redactor,
+que pasó de diseñado a vivo el 16-ago) **+ el Copiloto y la Guardia A0 vivos
+como interfaz/reglas**, **~37 diseñados** (blueprint sin código, sembrados en
+`agente_definicion` por la 0125 — /admin/agentes los enseña como lo que son)
+y **3 propuestos sin blueprint** (redes sociales, calificador de respuestas,
+WhatsApp comercial saliente — bloqueados por decisión o trámite; NO se
+siembran: una fila sin diseño afirmaría uno).
+
+La asignación por TIPO DE ACCIÓN (columna `agente_definicion.modelo_rol`;
+NULL = no usa modelo de texto):
+
+| Área / tipo de acción | Agentes | Rol → modelo | $/M |
+|---|---|---|---|
+| Scrapers / extracción | cazador, enriquecedor | `extraccion` → qwen3.7-flash | 0.03–0.13 |
+| Back office redacción | redactor✅, scorer, dossier, vigía, sdr, demo_prep, propuestas, soporte, onboarding×2, atención_faq, cobranza_saas, retención | `back_office` → deepseek-v4-flash | 0.061–0.123 |
+| Marketing / contenido | contenido_fiscal, lead_magnet, seo_distribucion | `marketing` → kimi-k2.6 | 0.54–2.28 |
+| Devs / auditoría / testers de código | auditor_codigo, migraciones, pruebas, releases, rendimiento, documentacion | `codigo` → qwen3-coder-next (escala a Sonnet) | 0.12–0.80 |
+| QA de agentes | vigilante_calidad + ejército QA (Fase 3) | `qa` → gpt-oss-120b | 0.03–0.17 |
+| Financieros | analista_metricas, control_costos, tesoreria, cierre_mensual | `analisis` → gpt-5.6-luna | 0.10–0.60 |
+| Dirección | copiloto✅, orquestadores, kpi_whatsapp, desempeño, especialistas(8), exito_cliente, producto | `analisis` → gpt-5.6-luna | 0.10–0.60 |
+| Dinero del CLIENTE | liquidacion✅ | `cuadre` → claude-sonnet-5 | 2–10 |
+| Sin modelo de texto | facturas✅ (Playwright), cobranza✅ (plantillas), conductores✅, peajes✅ (parser), proveedores✅ (XML), ventas✅ (determinista), guardia✅ (reglas), visuales/video ×3 (Higgsfield vía likida-marketing) | NULL | $0 |
+
+Por FASE del plan hacia el 90%: **F0** todos los diseñados corren con prompt
+a mano · **F1 ✅** dirección (copiloto+guardia) · **F2 ✅** comercial
+(redactor→cola, runner) · **F3** marketing + QA testers · **F4** éxito del
+cliente + financieros · **F5** gobernanza + WhatsApp comercial (bloqueada
+por Meta). Encender uno = fila a 'vivo' + motor despachable en el runner +
+kill switch — los tres lugares de estandares-tecnicos §7-8.

@@ -26,7 +26,7 @@
 //   Para el demo en vivo, tener keys directas de Google/Anthropic como respaldo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'chat_ligero' | 'router' | 'back_office' | 'analisis';
+export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'chat_ligero' | 'router' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'qa';
 
 const DEFAULTS: Record<ModelRole, string> = {
   // OCR de comprobantes (visión). Gemini 3.6 Flash (21-jul-2026): #1 OCR Arena
@@ -88,6 +88,26 @@ const DEFAULTS: Record<ModelRole, string> = {
   // ($0.66/$1.98). Por aquí pasan métricas agregadas de LIKIDA — no
   // comprobantes de clientes.
   analisis: 'openai/gpt-5.6-luna',
+  // ── Los roles POR ÁREA del organigrama de 54 agentes (16-ago-2026,
+  // pedido de Javier: "cada agente su stack según su tipo de acción, los
+  // mejores en su área"). Verificados contra OpenRouter ese día; la matriz
+  // agente→rol vive en agente_definicion.modelo_rol (0125) y la tabla
+  // humana en docs/conocimiento/stack-modelos-agentes.md. ──────────────────
+  //
+  // EXTRACCIÓN (Cazador/Enriquecedor: parsear páginas y normalizar datos —
+  // volumen alto, cero creatividad): el piso absoluto con tools y 1M ctx.
+  extraccion: 'qwen/qwen3.7-flash',            // $0.03/$0.13
+  // MARKETING (contenido fiscal, lead magnet, SEO, guiones): Kimi K2.6 —
+  // la fama de prosa de Moonshot, a precio medio. Las CIFRAS siguen
+  // viniendo de la guía canónica en el prompt, jamás del modelo.
+  marketing: 'moonshotai/kimi-k2.6',           // $0.54/$2.28
+  // CÓDIGO (auditor, migraciones, pruebas, releases, rendimiento): el
+  // especialista coder con la mejor relación del catálogo. La auditoría
+  // SERIA escala a claude-sonnet-5 (el rol cuadre) por env.
+  codigo: 'qwen/qwen3-coder-next',             // $0.12/$0.80
+  // QA / TESTERS (vigilante de calidad, ejército QA de Fase 3): juicio
+  // adversarial barato — open-weight de OpenAI, razonamiento por centavos.
+  qa: 'openai/gpt-oss-120b',                   // $0.03/$0.17
 };
 
 const ENV_KEY: Record<ModelRole, string> = {
@@ -99,6 +119,10 @@ const ENV_KEY: Record<ModelRole, string> = {
   router: 'LIKIDA_MODEL_ROUTER',
   back_office: 'LIKIDA_MODEL_BACK_OFFICE',
   analisis: 'LIKIDA_MODEL_ANALISIS',
+  extraccion: 'LIKIDA_MODEL_EXTRACCION',
+  marketing: 'LIKIDA_MODEL_MARKETING',
+  codigo: 'LIKIDA_MODEL_CODIGO',
+  qa: 'LIKIDA_MODEL_QA',
 };
 
 /** Devuelve el slug del modelo para un rol, respetando override por env. */
@@ -116,4 +140,8 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   router: { temperature: 0 },
   back_office: { temperature: 0.4 },          // redacción interna con guion fijo
   analisis: { temperature: 0.2 },             // dirección: cifras, poca prosa
+  extraccion: { temperature: 0 },             // parseo determinístico
+  marketing: { temperature: 0.7 },            // prosa con voz; cifras del guion
+  codigo: { temperature: 0 },                 // el diff no se improvisa
+  qa: { temperature: 0.3 },                   // adversarial, no caótico
 };
