@@ -4893,3 +4893,49 @@ begin
   raise exception E'COPILOTO_0121  rol-rebota=%  rls-conv=%  rls-msj=%  msjs-tras-borrar=%   (esperado t / 0 / 0 / 0)',
     rol_rebota, n_conv_rls, n_msj_rls, n_msjs_tras_borrar;
 end $$;
+
+-- ── 96. Runner acotado y campañas: activa exige aprobador (mig. 0123) ───────
+-- Tres garantías de base del runner/campañas: (a) el CHECK
+-- `campana_activa_solo_aprobada` rebota una campaña ACTIVA sin aprobador —
+-- ninguna ruta puede activar gasto sin firma humana aunque el código
+-- tuviera un bug; (b) la activa CON aprobador cabe; (c) un costo de corrida
+-- negativo rebota (la medición del techo no admite gasto negativo) y
+-- `runner_habilitado` nace en false — la autonomía es opt-in explícito.
+--
+-- Escrito el 16-ago-2026 con la 0123 recién creada: primera corrida en el
+-- Postgres de CI; la corrida contra el proyecto real va tras aplicarla.
+--   (esperado t / t / t / t — los cuatro exactos)
+do $$
+declare
+  activa_sin_firma_rebota boolean := false;
+  activa_con_firma_cabe boolean := false;
+  costo_negativo_rebota boolean := false;
+  runner_nace_apagado boolean := false;
+  v_u uuid := gen_random_uuid(); v_t uuid; v_c uuid;
+begin
+  begin
+    insert into public.campana (canal, nombre, presupuesto_aprobado_usd, estado)
+      values ('meta', 'ZZZ v96a', 100, 'activa');
+  exception when check_violation then activa_sin_firma_rebota := true;
+  end;
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0123') returning id into v_t;
+  insert into app_user (id, tenant_id, email, rol) values (v_u, v_t, 'zzz-verif-campana@likida.test', 'superadmin');
+  insert into public.campana (canal, nombre, presupuesto_aprobado_usd, estado, aprobado_por, aprobado_por_email, aprobado_en)
+    values ('meta', 'ZZZ v96b', 100, 'activa', v_u, 'zzz-verif-campana@likida.test', now())
+    returning id into v_c;
+  activa_con_firma_cabe := v_c is not null;
+
+  begin
+    insert into public.agente_corrida (tenant_id, agente, inicio, fin, estado, disparo, costo_usd)
+      values (null, 'redactor', now(), now(), 'ok', 'cron', -1);
+  exception when check_violation then costo_negativo_rebota := true;
+  end;
+
+  insert into public.agente_definicion (id, nombre, departamento, disparador, estado)
+    values ('zzz_v96', 'ZZZ Verif', 'leads', 'cron', 'disenado');
+  select not runner_habilitado into runner_nace_apagado from public.agente_definicion where id = 'zzz_v96';
+
+  raise exception E'RUNNER_CAMPANA_0123  activa-sin-firma-rebota=%  activa-con-firma-cabe=%  costo-negativo-rebota=%  runner-nace-apagado=%   (esperado t / t / t / t)',
+    activa_sin_firma_rebota, activa_con_firma_cabe, costo_negativo_rebota, runner_nace_apagado;
+end $$;

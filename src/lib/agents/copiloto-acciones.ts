@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { INTERRUPTORES, apagar, type NombreInterruptor } from '@/lib/likida/interruptores';
+import { correrRunner } from '@/lib/likida/agentes/runner';
 import { DatoInvalido } from '@/lib/likida/errores';
 
 export type Gateo = 'confirma' | 'doble';
@@ -77,6 +78,11 @@ export const CATALOGO_ACCIONES: readonly AccionCatalogo[] = [
     efecto: 'Reabre una liquidación cerrada — solo por la vía del panel, jamás por SQL.',
     revertir: 'Volver a cerrar el viaje.',
   },
+  {
+    id: 'correr_runner', gateo: 'confirma', implementada: true,
+    efecto: 'Dispara UNA vuelta del runner nivel 2 sin esperar su cron: despacha los agentes autónomos habilitados con sus cuatro candados (kill switch, opt-in, techo de dinero del día, backpressure de la bandeja). Gasta modelo del rol barato y fabrica borradores hacia Aprobaciones — jamás envía nada.',
+    revertir: 'Lo fabricado espera en la bandeja: se rechaza pieza por pieza. La corrida que corrió, corrió.',
+  },
 ] as const;
 
 export function accionDelCatalogo(id: string): AccionCatalogo | null {
@@ -116,8 +122,21 @@ export async function ejecutarAccionCopiloto(
     return { ok: true, mensaje: `Listo: ${id} quedó apagado y el motivo en la bitácora. Se enciende desde Observabilidad (doble confirmación).` };
   }
 
-  // Inalcanzable mientras solo apagar_agente esté implementada — el guard de
-  // arriba ya rechazó las no implementadas. Queda como red por si el catálogo
-  // marca implementada una acción sin rama.
+  if (accionId === 'correr_runner') {
+    // El motivo es la nota de POR QUÉ se adelantó el cron — a la bitácora.
+    const motivo = (params.motivo ?? '').trim();
+    if (!motivo) throw new DatoInvalido('El motivo es obligatorio: por qué se adelanta la vuelta del runner.');
+    const r = await correrRunner();
+    if (r.apagadoGlobal) {
+      return { ok: true, mensaje: 'El runner no corrió: el kill switch GLOBAL está abajo. Se enciende desde Observabilidad.' };
+    }
+    const partes = r.agentes.map((a) => a.resultado === 'corrio'
+      ? `${a.agente}: ${a.piezas ?? 0} pieza${(a.piezas ?? 0) === 1 ? '' : 's'} a la bandeja (${a.saltados ?? 0} saltados, $${(a.costoUsd ?? 0).toFixed(4)} USD)`
+      : `${a.agente}: saltado — ${a.motivo}`);
+    return { ok: true, mensaje: partes.length > 0 ? `Vuelta del runner: ${partes.join(' · ')}. Lo fabricado espera en Aprobaciones.` : 'Vuelta del runner: ningún agente habilitado que despachar.' };
+  }
+
+  // Inalcanzable mientras el catálogo y las ramas coincidan. Queda como red
+  // por si el catálogo marca implementada una acción sin rama.
   throw new DatoInvalido(`"${accionId}" no tiene ejecutor todavía.`);
 }

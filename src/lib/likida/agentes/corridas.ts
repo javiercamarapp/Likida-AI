@@ -42,6 +42,9 @@ export interface CorridaNueva {
   resumen?: Record<string, unknown>;
   /** El motivo del fallo YA redactado para una persona. */
   error?: string;
+  /** Gasto de modelo de ESTA corrida, USD (0123) — la medición que alimenta
+   *  el techo diario del runner. Omitido = sin gasto medido (NULL en base). */
+  costoUsd?: number | null;
 }
 
 export async function registrarCorrida(
@@ -64,6 +67,7 @@ export async function registrarCorrida(
       tareas_total: c.tareasTotal ?? null,
       resumen: c.resumen ?? null,
       error: c.error ?? null,
+      costo_usd: c.costoUsd ?? null,
     });
     if (error) logger.error('corridas.no_registrada', { tenant: tenantId, agente, err: error.message });
   } catch (e) {

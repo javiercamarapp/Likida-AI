@@ -84,6 +84,8 @@ const ETIQUETA_TOOL: Record<string, string> = {
   costo_por_fase_modelo: 'Desglosando el costo de IA',
   bitacora: 'Leyendo la bitácora de auditoría',
   ficha_cliente: 'Armando la ficha 360 del cliente',
+  estado_runner: 'Leyendo el pulso del runner',
+  adquisicion: 'Midiendo la adquisición',
   proponer_accion: 'Armando la previsualización',
   entregar_respuesta_admin: 'Armando la respuesta',
 };
@@ -105,6 +107,8 @@ const PANTALLA_UI: Record<string, { ruta: string; etiqueta: string }> = {
   costo_por_fase_modelo: { ruta: '/admin/costos-facturacion', etiqueta: 'Costos' },
   bitacora: { ruta: '/admin/compliance', etiqueta: 'Compliance' },
   ficha_cliente: { ruta: '/admin/flotas', etiqueta: 'Flotas / Clientes' },
+  estado_runner: { ruta: '/admin/observabilidad', etiqueta: 'Observabilidad' },
+  adquisicion: { ruta: '/admin/crecimiento', etiqueta: 'Crecimiento' },
 };
 
 const FASES_PENSANDO: Array<[number, string]> = [
