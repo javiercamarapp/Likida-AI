@@ -9,7 +9,7 @@ const base: ProspectoMapa = {
   id: 'x', empresa: 'Transportes Ejemplo', ciudad: 'Mérida', entidad: 'Yucatán',
   lat: 21, lng: -89.6, telefono: '9991234567', correo: 'dg@ejemplo.mx',
   contacto: null, vacante: null, estado: 'nuevo', fuente: 'censo',
-  giro: 'transportista', urgencia: 50, cierre: 40,
+  giro: 'transportista', urgencia: 50, cierre: 40, tamano: null, completitud: 45,
   mensajeWaIa: null, correoAsuntoIa: null, correoCuerpoIa: null, mensajesGeneradosEn: null,
 };
 
