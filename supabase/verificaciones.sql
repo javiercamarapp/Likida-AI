@@ -5226,3 +5226,36 @@ begin
   raise exception E'SEGURIDAD_0133  tabla-rls=%  tipo-invalido-rebota=%   (esperado t / t)',
     coalesce(tabla_rls, false), tipo_invalido_rebota;
 end $$;
+
+-- ── 106. EvalOps existe, con dominio y con el examen sembrado (mig. 0134) ───
+-- (a) las 3 tablas CON RLS; (b) el examen del analista tiene casos y AL MENOS
+-- una trampa (el diseño de 22-evaluacion.md exige trampas); (c) funcional: un
+-- veredicto fuera del dominio REBOTA.   (esperado 3 / >0 / >0 / t — exactos)
+do $$
+declare
+  tablas_rls int;
+  casos int;
+  trampas int;
+  veredicto_invalido_rebota boolean := false;
+  v_caso uuid;
+  v_corrida uuid;
+begin
+  select count(*) into tablas_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname in ('eval_caso', 'eval_corrida', 'eval_resultado')
+     and c.relrowsecurity;
+
+  select count(*) into casos from public.eval_caso where agente = 'analista' and activo;
+  select count(*) into trampas from public.eval_caso where agente = 'analista' and tipo = 'trampa';
+
+  select id into v_caso from public.eval_caso limit 1;
+  insert into public.eval_corrida (agente, prompt_hash) values ('analista', 'zzz-verif') returning id into v_corrida;
+  begin
+    insert into public.eval_resultado (corrida_id, caso_id, veredicto) values (v_corrida, v_caso, 'diez-de-diez');
+  exception when check_violation then
+    veredicto_invalido_rebota := true;
+  end;
+
+  raise exception E'EVALOPS_0134  tablas-rls=%  casos=%  trampas=%  veredicto-invalido-rebota=%   (esperado 3 / >0 / >0 / t)',
+    tablas_rls, casos, trampas, veredicto_invalido_rebota;
+end $$;
