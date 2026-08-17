@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getActividadGitHub, getMapaCommits, getAutoresCommits } from '@/lib/admin/github';
 import { MapaActividad } from './mapa-actividad';
 import { getEventosSeguridad, type FilaSeguridad } from '@/lib/seguridad/eventos';
+import { getSLOs, type Slo } from '@/lib/admin/slo';
 import { fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio, StatusPill } from '../ui/kit';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -28,12 +29,14 @@ export default async function DevPage() {
   // T&S (0133): errors-by-value hecho a mano — null = no se pudo leer, y la
   // tarjeta lo dice (cero eventos ≠ ciego).
   const seguridadP: Promise<FilaSeguridad[] | null> = getEventosSeguridad(12).catch(() => null);
-  const [{ count }, actividad, mapa, autores, seguridad] = await Promise.all([
+  const slosP: Promise<Slo[] | null> = getSLOs().catch(() => null);
+  const [{ count }, actividad, mapa, autores, seguridad, slos] = await Promise.all([
     supabaseAdmin().from('tenant').select('id', { count: 'exact', head: true }),
     getActividadGitHub(),
     getMapaCommits(),
     getAutoresCommits(),
     seguridadP,
+    slosP,
   ]);
   const tenants = count ?? 0;
   return (
@@ -96,6 +99,29 @@ export default async function DevPage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* ── SLOs (fase 7): objetivos DECLARADOS contra datos reales.
+                cumple=null jamás se pinta verde — sin muestra o sin lectura
+                se dice con esas palabras. ── */}
+          <div className="card p-3">
+            <TituloSeccion>SLOs — objetivos contra lo medido</TituloSeccion>
+            <div className="mt-2">
+              {slos === null && (
+                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudieron leer los SLOs.</p>
+              )}
+              {slos !== null && slos.map((s) => (
+                <div key={s.clave} className="flex items-center gap-2.5 py-1.5 text-[12.5px]" style={{ borderBottom: '1px solid var(--line)' }}>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{
+                    background: s.cumple === true ? 'var(--ok)' : s.cumple === false ? 'var(--bad)' : 'var(--muted)',
+                  }} />
+                  <span className="min-w-0 flex-1" style={{ color: 'var(--ink)' }}>{s.nombre}</span>
+                  <span className="shrink-0" style={{ color: 'var(--muted)' }}>obj. {s.objetivo}</span>
+                  <span className="shrink-0 tabular font-medium" style={{ color: s.cumple === false ? 'var(--bad)' : 'var(--ink)' }}>{s.medido}</span>
+                  <span className="etiqueta-mono text-[10px] uppercase shrink-0" style={{ color: 'var(--faint)' }}>{s.ventana}</span>
+                </div>
+              ))}
             </div>
           </div>
 
