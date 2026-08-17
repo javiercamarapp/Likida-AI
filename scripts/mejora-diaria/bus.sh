@@ -302,7 +302,59 @@ for o in pendientes:
                 f.write(f"\n## {ahora()}\n{payload.get('texto', '')}\n")
             ok, resultado = True, "anotada en notas-javier.md"
         elif tipo == "editar_encargo":
-            resultado = "editar_encargo aún no está cableado en la Mac (llega con el editor de rutinas)"
+            # PR CHICO, jamás escritura directa (diseño Fase D). El cambio se
+            # arma en un WORKTREE TEMPORAL desde origin/master: el árbol
+            # compartido del repo (donde trabajan otras sesiones) ni se toca.
+            import re as _re, tempfile, shutil
+            contenido = payload.get("contenido") or ""
+            nombre = _re.sub(r"[^a-z0-9-]", "", (rutina or "").lower())
+            if not nombre or not contenido.strip():
+                resultado = "editar_encargo sin rutina o sin contenido"
+            elif not (REPO / "scripts" / "mejora-diaria" / "encargos" / f"{nombre}.md").is_file():
+                resultado = f"no existe el encargo {nombre}.md — el editor edita, no crea"
+            else:
+                stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
+                rama = f"rutinas/encargo-{nombre}-{stamp}"
+                wt = pathlib.Path(tempfile.mkdtemp(prefix="encargo-"))
+                try:
+                    subprocess.run(["git", "-C", str(REPO), "fetch", "origin", "master"],
+                                   capture_output=True, timeout=60)
+                    r = subprocess.run(["git", "-C", str(REPO), "worktree", "add", str(wt / "w"),
+                                        "origin/master", "-b", rama],
+                                       capture_output=True, text=True, timeout=60)
+                    if r.returncode != 0:
+                        raise RuntimeError(f"worktree: {r.stderr.strip()[:150]}")
+                    destino = wt / "w" / "scripts" / "mejora-diaria" / "encargos" / f"{nombre}.md"
+                    destino.write_text(contenido[:20000])
+                    for cmd in (["git", "add", f"scripts/mejora-diaria/encargos/{nombre}.md"],
+                                ["git", "commit", "-m",
+                                 f"rutinas: encargo de {nombre} editado desde /admin/tu-turno\n\n"
+                                 "Orden editar_encargo del bus (0127): el cambio viaja como PR chico\n"
+                                 "y Javier lo aprueba en GitHub — jamás escritura directa.\n\n"
+                                 "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"],
+                                ["git", "push", "origin", rama]):
+                        r = subprocess.run(cmd, cwd=wt / "w", capture_output=True, text=True, timeout=120)
+                        if r.returncode != 0:
+                            raise RuntimeError(f"{cmd[1]}: {(r.stderr or r.stdout).strip()[:150]}")
+                    # gh contra la API de GitHub: un 503 transitorio no debe
+                    # tirar el PR con la rama ya empujada — un reintento.
+                    for intento_pr in (1, 2):
+                        r = subprocess.run(["gh", "pr", "create", "--base", "master", "--head", rama,
+                                        "--title", f"rutinas: encargo de {nombre} (editor de /admin)",
+                                        "--body", "Orden `editar_encargo` del bus de mando — revisa el diff y aprueba.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"],
+                                       cwd=wt / "w", capture_output=True, text=True, timeout=120)
+                        if r.returncode == 0:
+                            break
+                        if intento_pr == 2:
+                            raise RuntimeError(f"gh pr: {(r.stderr or r.stdout).strip()[:150]}")
+                        import time; time.sleep(10)
+                    ok, resultado = True, f"PR abierto: {r.stdout.strip().splitlines()[-1]}"
+                except Exception as e_pr:
+                    resultado = str(e_pr)[:250]
+                finally:
+                    subprocess.run(["git", "-C", str(REPO), "worktree", "remove", "--force", str(wt / "w")],
+                                   capture_output=True, timeout=60)
+                    shutil.rmtree(wt, ignore_errors=True)
         else:
             resultado = f"tipo desconocido: {tipo}"
     except Exception as e:
