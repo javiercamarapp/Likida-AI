@@ -16,6 +16,7 @@ import { fechaMx, mxn } from '@/lib/formato';
 import { SOLO_CONTRALOR, type Destinatario } from '../cuadre/resumen';
 
 import { leyendaPdf } from '../cuadre/leyendas';
+import { LOGO_PNG_BASE64 } from '@/lib/correo/logo';
 import type { Liquidacion, Viaje, Operador } from '@/types/likida';
 
 // Paleta (Apple) en 0–1 para pdf-lib
@@ -25,6 +26,11 @@ const HAIRLINE = rgb(0.88, 0.89, 0.91);
 const GREEN = rgb(0.2, 0.78, 0.35);
 const RED = rgb(1.0, 0.23, 0.19);
 const AMBER = rgb(1.0, 0.62, 0.04);
+// Los dos grises de superficie del rediseño (17-ago, "nivel Handle"): la
+// banda de cabeceras de tabla y la zebra de filas alternas. Sutiles a
+// propósito — el papel es contable, no un folleto.
+const PANEL = rgb(0.955, 0.957, 0.965);
+const ZEBRA = rgb(0.977, 0.978, 0.982);
 
 // (Aquí vivía CONCEPTO_LABEL, un mapa gemelo del que tiene el motor. Se borró
 // al pasar a `etiquetaConcepto`: dos mapas que alguien tiene que mantener
@@ -170,8 +176,19 @@ export async function generarLiquidacionPDF(
     if (actual) lineas.push(actual);
     return lineas.length ? lineas : [''];
   };
-  const rule = (yy: number, color = HAIRLINE) =>
-    page.drawLine({ start: { x: M, y: yy }, end: { x: 595.28 - M, y: yy }, thickness: 0.75, color });
+  const rule = (yy: number, color = HAIRLINE, grosor = 0.75) =>
+    page.drawLine({ start: { x: M, y: yy }, end: { x: 595.28 - M, y: yy }, thickness: grosor, color });
+  const caja = (x: number, yy: number, w: number, h: number, fill: ReturnType<typeof rgb>) =>
+    page.drawRectangle({ x, y: yy, width: w, height: h, color: fill });
+  /** Rótulo de sección con su marcador de tinta — la firma visual del
+   *  rediseño: un cuadrito INK de 6pt antes de las versalitas. */
+  const seccionTitulo = (titulo: string) => {
+    caja(M, y - 1, 5, 7.5, INK);
+    text(titulo, M + 11, y, 8, bold, MUTED);
+    y -= 6;
+    rule(y);
+    y -= 18;
+  };
   const circulo = (x: number, yy: number, color: ReturnType<typeof rgb>) =>
     page.drawCircle({ x, y: yy, size: 2.5, color });
 
@@ -204,17 +221,27 @@ export async function generarLiquidacionPDF(
   // es que un nombre NUNCA se inventa, y poner "Tu flota" o el nombre comercial
   // adivinado en un documento archivable sería justo eso.
   const encabezado = razonSocial?.trim() || null;
-  text(encabezado ?? 'Likida', M, y, encabezado ? 16 : 20, bold, INK);
+  text(encabezado ?? 'Likida', M, y, encabezado ? 17 : 20, bold, INK);
   if (encabezado) {
     // Debajo y en gris: presente, verificable, y sin competirle al nombre del
     // cliente en su propio documento.
-    text('Procesado por Likida', M, y - 12, 7.5, font, MUTED);
+    text('Procesado por Likida', M, y - 13, 7.5, font, MUTED);
   }
-  right('LIQUIDACIÓN DE VIAJE', 595.28 - M, y + 3, 9, bold, MUTED);
-  right(`Folio ${viaje.folio ?? liq.id.slice(0, 8).toUpperCase()}`, 595.28 - M, y - 10, 9, font, MUTED);
+  right('LIQUIDACIÓN DE VIAJE', 595.28 - M, y + 5, 9, bold, MUTED);
+  // El folio en su CHIP: caja de superficie con borde de pelo — el dato que
+  // el contralor busca primero, con jerarquía propia.
+  {
+    const folioTxt = wa(`Folio ${viaje.folio ?? liq.id.slice(0, 8).toUpperCase()}`);
+    const wFolio = bold.widthOfTextAtSize(folioTxt, 9) + 16;
+    page.drawRectangle({ x: 595.28 - M - wFolio, y: y - 14, width: wFolio, height: 17, color: PANEL, borderColor: HAIRLINE, borderWidth: 0.75 });
+    right(folioTxt, 595.28 - M - 8, y - 9, 9, bold, INK);
+  }
+  y -= 30;
+  // La doble línea de apertura: 1.4pt de tinta + un pelo debajo — la firma
+  // tipográfica de un documento contable serio.
+  rule(y, INK, 1.4);
+  rule(y - 3);
   y -= 28;
-  rule(y);
-  y -= 26;
 
   // ─── Datos del viaje / operador (dos columnas) ──────────────────────────────
   const col2 = 320;
@@ -232,18 +259,16 @@ export async function generarLiquidacionPDF(
   y -= 40;
 
   // ─── Tabla de gastos comprobados ────────────────────────────────────────────
-  text('COMPROBANTES', M, y, 8, bold, MUTED);
-  y -= 6;
-  rule(y);
-  y -= 18;
+  seccionTitulo('COMPROBANTES');
   const cFolio = M, cConcepto = 150, cFecha = 300, cEstado = 400, cMonto = 595.28 - M;
   const cabeceraTabla = () => {
+    caja(M - 6, y - 5, 595.28 - 2 * M + 12, 16, PANEL);
     text('Concepto', cConcepto, y, 8, bold, MUTED);
     text('Folio', cFolio, y, 8, bold, MUTED);
     text('Fecha', cFecha, y, 8, bold, MUTED);
     text('Estado', cEstado, y, 8, bold, MUTED);
     right('Monto', cMonto, y, 8, bold, MUTED);
-    y -= 14;
+    y -= 16;
   };
   cabeceraTabla();
 
@@ -258,8 +283,9 @@ export async function generarLiquidacionPDF(
     // cabían se resumían en una línea. Con el desglose de deducibilidad ya no
     // cabía casi nada. Ahora la tabla continúa en la hoja siguiente, con su
     // encabezado repetido para que las columnas no queden huérfanas.
-    if (asegurar(18)) { text('COMPROBANTES (cont.)', M, y, 8, bold, MUTED); y -= 6; rule(y); y -= 18; cabeceraTabla(); }
+    if (asegurar(18)) { seccionTitulo('COMPROBANTES (cont.)'); cabeceraTabla(); }
     const flagged = gastoConDif.has(g.id);
+    if (impresos % 2 === 1) caja(M - 6, y - 5, 595.28 - 2 * M + 12, 17, ZEBRA);
     // El producto impreso manda: un ticket de PLUS no puede decir "Diésel".
     text(cortar(etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined), 140, font, 10), cConcepto, y, 10, font, INK);
     text(g.folio ?? '—', cFolio, y, 9, font, MUTED);
@@ -340,7 +366,10 @@ export async function generarLiquidacionPDF(
   const difColor = liq.diferencia === 0 ? GREEN : liq.diferencia > 0 ? INK : AMBER;
   const difLabel = liq.diferencia > 0 ? 'Diferencia a favor de la empresa'
     : liq.diferencia < 0 ? 'Diferencia a favor del operador' : 'Cuadra exacto';
-  totalRow(difLabel, mxn(Math.abs(liq.diferencia)), bold, difColor, 13);
+  // El VEREDICTO del papel vive en su banda de superficie, a 14pt: es la
+  // línea por la que se abre este documento.
+  caja(M - 6, y - 7, 595.28 - 2 * M + 12, 26, PANEL);
+  totalRow(difLabel, mxn(Math.abs(liq.diferencia)), bold, difColor, 14);
 
   // ─── Estímulos acreditables (IEPS diésel + IVA + peaje) — "lo que vende" ────
   //
@@ -358,10 +387,7 @@ export async function generarLiquidacionPDF(
   if (acreditable) {
     y -= 10;
     asegurar(90);
-    text('ACREDITABLE / RECUPERABLE', M, y, 8, bold, MUTED);
-    y -= 6;
-    rule(y);
-    y -= 16;
+    seccionTitulo('ACREDITABLE / RECUPERABLE');
     // VERDE solo para lo que el motor sostiene entero. Lo condicionado va en
     // tinta neutra: el color es parte de la afirmación, y pintar de verde una
     // cifra que depende de cuatro condiciones sin verificar es prometer con el
@@ -409,12 +435,9 @@ export async function generarLiquidacionPDF(
   });
   if (lab) {
     asegurar(64);
-    text('LO QUE SE LE REEMBOLSA AL OPERADOR', M, y, 8, bold, MUTED);
-    y -= 6;
-    rule(y);
-    y -= 16;
+    seccionTitulo('LO QUE SE LE REEMBOLSA AL OPERADOR');
     for (const linea of envolver(lab.texto, 105)) {
-      if (asegurar(13)) { text('LO QUE SE LE REEMBOLSA AL OPERADOR (cont.)', M, y, 8, bold, MUTED); y -= 6; rule(y); y -= 16; }
+      if (asegurar(13)) { seccionTitulo('LO QUE SE LE REEMBOLSA AL OPERADOR (cont.)'); }
       text(linea, M + 14, y, 8.5, font, INK);
       y -= 11;
     }
@@ -432,10 +455,7 @@ export async function generarLiquidacionPDF(
     // El encabezado no se queda solo al pie de una hoja: se lleva su primera
     // observación consigo.
     asegurar(48);
-    text('DIFERENCIAS DETECTADAS', M, y, 8, bold, MUTED);
-    y -= 6;
-    rule(y);
-    y -= 16;
+    seccionTitulo('DIFERENCIAS DETECTADAS');
     let difImpresas = 0;
     for (const d of obsPdf) {
       // Las diferencias son lo ÚNICO accionable del papel: nunca se truncan —
@@ -445,7 +465,7 @@ export async function generarLiquidacionPDF(
       const alto = 16 + (lineas.length - 1) * 11;
       // El bloque entero cabe o se va completo a la hoja siguiente: una
       // observación partida por la mitad se lee como dos cosas distintas.
-      if (asegurar(alto)) { text('DIFERENCIAS DETECTADAS (cont.)', M, y, 8, bold, MUTED); y -= 6; rule(y); y -= 16; }
+      if (asegurar(alto)) { seccionTitulo('DIFERENCIAS DETECTADAS (cont.)'); }
       circulo(M + 3, y + 3, d.tipo === 'sin_comprobante' ? RED : AMBER);
       lineas.forEach((ln, i) => text(ln, M + 14, y - i * 11, 9.5, font, INK));
       // El monto se ancla a la PRIMERA línea, junto a la viñeta.
@@ -464,7 +484,18 @@ export async function generarLiquidacionPDF(
   // Posiciones FIJAS al fondo: el contenido de arriba se corta en PISO_PIE, así
   // que esta zona siempre está libre.
   rule(PISO_PIE - 12);
-  text(`Generado por Likida · ${fecha(liq.creadaEn)}`, M, PISO_PIE - 26, 8, font, MUTED);
+  // El logo REAL en el pie — chico, donde le toca: quien procesó, no quien
+  // firma. El mismo PNG incrustado que viaja en los correos (correo/logo.ts).
+  try {
+    const logo = await doc.embedPng(Uint8Array.from(atob(LOGO_PNG_BASE64), (c) => c.charCodeAt(0)));
+    const hLogo = 9;
+    const wLogo = (logo.width / logo.height) * hLogo;
+    page.drawImage(logo, { x: M, y: PISO_PIE - 29, width: wLogo, height: hLogo });
+    text(`Generado por Likida · ${fecha(liq.creadaEn)}`, M + wLogo + 7, PISO_PIE - 27.5, 8, font, MUTED);
+  } catch {
+    // Si el PNG no incrusta, el texto solo — el papel jamás truena por un logo.
+    text(`Generado por Likida · ${fecha(liq.creadaEn)}`, M, PISO_PIE - 26, 8, font, MUTED);
+  }
   // `cuadra.mx` NO ES NUESTRO. Es un dominio parkeado: devuelve un redirect a
   // `/lander`, o sea la página de "en venta". Estuvo impreso en el pie de cada
   // liquidación —el papel que el contralor archiva y que puede ver un tercero—
