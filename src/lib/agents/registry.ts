@@ -15,10 +15,12 @@ export const AGENT_REGISTRY: Record<AgentName, AgentConfig> = {
     name: 'liquidacion',
     role: 'cuadre', // Claude Sonnet — razonamiento con dinero de por medio
     description:
-      'Recibe comprobantes del operador por WhatsApp, los cuadra contra el anticipo y la política, detecta diferencias y cierra la liquidación',
+      'El Ayudante de Ruta: acompaña al operador por WhatsApp durante el viaje (dudas, estado, política, emergencias), cuadra sus comprobantes contra el anticipo y la política, y cierra la liquidación',
     // extraer_comprobante corre en el pipeline al llegar la foto (el LLM no
     // pasa bytes de imagen); el agente ve el gasto extraído como contexto.
-    tools: ['consultar_politica', 'cuadrar_viaje', 'guardar_liquidacion'],
+    // `estado_viaje` (17-ago-2026) es lectura pura: la foto del viaje para
+    // contestar dudas en ruta sin correr el cuadre completo.
+    tools: ['consultar_politica', 'cuadrar_viaje', 'guardar_liquidacion', 'estado_viaje'],
     systemPromptKey: 'liquidacion',
   },
 };

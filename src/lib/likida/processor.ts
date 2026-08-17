@@ -34,6 +34,7 @@ import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
 import { esCaptionPod, guardarPodDelChofer, mensajePod } from '@/lib/likida/pod_wa';
 import { atenderInformeOficina } from '@/lib/likida/informes_wa';
+import { pideInformePdf, mandarInformePdf, atenderPreguntaLibre } from '@/lib/likida/oficina_wa';
 import { atenderAsignacionOficina } from '@/lib/likida/asignar_wa';
 import { violaIndice, llegoTarde } from '@/lib/likida/pg_errores';
 import { mxn, fechaMx } from '@/lib/formato';
@@ -53,7 +54,7 @@ import {
   registrarSolicitudArco,
 } from '@/lib/likida/repo';
 import {
-  resolveOperador, getOpenViaje, getTenantContext,
+  resolveOperador, getOpenViaje, getTenantContext, type ResolvedOperador,
   loadConversation, saveConversation, claimMessage,
   acquireViajeLock, releaseViajeLock, releaseMessageClaim,
   intakeDelta, esperarIntake, ConsultaFallida, OperadorAmbiguo, type ConvTurn,
@@ -67,7 +68,7 @@ import {
   MAX_CONFIRMACIONES_SEGUIDAS, type LecturaTicket,
 } from './acuse_ticket';
 import { estadoDelViaje, responderConsulta } from './consulta_chofer';
-import { resolverCuentaOficina } from './contactos';
+import { resolverCuentaOficina, telefonoJefeDe } from './contactos';
 import { atenderConfirmacion, aceptarPorActividad } from './confirmar_viaje';
 import { avisarCierreAlJefe } from './avisar_cierre';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -75,12 +76,15 @@ import { logger } from '@/lib/logger';
 
 export interface InboundMessage {
   from: string;               // teléfono E.164
-  type: 'text' | 'image' | 'document' | 'other';
+  type: 'text' | 'image' | 'document' | 'location' | 'other';
   /** El cuerpo del texto — o, en una imagen, su CAPTION (el rótulo que el
    *  chofer escribe al pie de la foto; F4: así se distingue la carta porte
    *  y la nota de talacha de un comprobante cualquiera). */
   text?: string;
   mediaId?: string;           // para image/document
+  /** El pin de WhatsApp (type 'location') — ambas o ninguna (webhook). */
+  lat?: number;
+  lng?: number;
   waMessageId?: string;       // id de Meta, para idempotencia
   /** SOLO lo fija el motor de QA (scripts/qa-agentes/ y /api/admin/qa/*): un
    *  data-URL ya resuelto que SUSTITUYE la descarga real de Meta — el arnés
@@ -92,6 +96,43 @@ export interface InboundMessage {
    *  00-PANEL-DE-QA.md §3 (carril rápido): vi.mock cubre al ejército bajo
    *  vitest, pero no existe dentro del runtime de Next/Vercel. */
   mediaDataUrlQA?: string;
+}
+
+/**
+ * La ubicación del chofer (F-Ruta): guarda en `posicion` si el viaje trae
+ * unidad y avisa al jefe con el link del mapa. BEST-EFFORT en cada pata por
+ * separado: que falle el INSERT no debe callar el aviso al jefe, y viceversa.
+ * Nunca lanza — el llamador confirma al chofer pase lo que pase.
+ */
+async function registrarUbicacionChofer(op: ResolvedOperador, viajeId: string, lat: number, lng: number): Promise<void> {
+  const admin = supabaseAdmin();
+  try {
+    const { data: viaje, error } = await admin.from('viaje')
+      .select('unidad_id, origen, destino').eq('id', viajeId).eq('tenant_id', op.tenantId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (viaje?.unidad_id) {
+      const { error: eIns } = await admin.from('posicion').insert({
+        tenant_id: op.tenantId, unidad_id: viaje.unidad_id, lat, lng,
+        // El pin de WhatsApp se mide al mandarlo — no hay lote que reordenar.
+        medida_en: new Date().toISOString(), proveedor: 'whatsapp',
+      });
+      if (eIns) throw new Error(eIns.message);
+    } else {
+      // Sin unidad no hay dónde colgarla (la tabla la exige) — se dice en el
+      // log, no se inventa una unidad ni se calla el aviso al jefe.
+      logger.warn('ubicacion.sin_unidad', { viaje: viajeId });
+    }
+  } catch (e) {
+    logger.error('ubicacion.insert', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+  }
+  try {
+    const jefe = await telefonoJefeDe(op.tenantId);
+    if (jefe) {
+      await sendText(jefe, `📍 ${op.nombre} compartió su ubicación en ruta.\nhttps://maps.google.com/?q=${lat},${lng}`);
+    }
+  } catch (e) {
+    logger.error('ubicacion.aviso_jefe', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /**
@@ -547,6 +588,27 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
             logger.error('oficina.asignacion_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
           }
 
+          // ── "MÁNDAME EL INFORME EN PDF" (17-ago-2026, oficina_wa) ──────────
+          //
+          // Más específico que el informe de texto, así que va ANTES. El PDF
+          // sale del motor de informes (canon de la casa), viaja por el mismo
+          // camino que el PDF de liquidación, y el dinero solo entra al
+          // documento del rol que lo ve. Un fallo se CONTESTA — silencio
+          // tras una petición es la peor respuesta.
+          if (cuenta.tenantId && pideInformePdf(msg.text)) {
+            try {
+              const acuse = await mandarInformePdf(
+                { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId, nombre: cuenta.nombre }, msg.from,
+              );
+              logger.info('oficina.informe_pdf', { user: cuenta.userId, rol: cuenta.rol });
+              await sendText(msg.from, acuse);
+            } catch (e) {
+              logger.error('oficina.informe_pdf_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+              await sendText(msg.from, 'No pude armar tu informe en PDF ahorita. Pregúntame «¿cómo van?» y te paso las cifras en texto, o inténtalo de nuevo en unos minutos. 🙏');
+            }
+            return;
+          }
+
           // ── "¿CÓMO VAN?" — EL INFORME CON CIFRAS REALES (F4, informes_wa) ──
           //
           // Consulta estructurada y plantilla, SIN modelo — el molde de
@@ -564,6 +626,23 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
             }
           } catch (e) {
             logger.error('oficina.informe_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+          }
+        }
+
+        // ── LA PREGUNTA LIBRE → EL ANALISTA (17-ago-2026, oficina_wa) ────────
+        //
+        // "¿cuánto gastamos en diésel este mes?" del dueño o del contador ya
+        // no cae al saludo: lo contesta el MISMO analista del panel (tools de
+        // lectura + guardia de cifras) en texto de WhatsApp. `null` = rol sin
+        // analista (encargado) — sigue al saludo de siempre.
+        if (cuenta.tenantId && msg.type === 'text' && msg.text) {
+          const rLibre = await atenderPreguntaLibre(
+            { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId, nombre: cuenta.nombre }, msg.text,
+          );
+          if (rLibre) {
+            logger.info('oficina.pregunta_libre', { user: cuenta.userId, rol: cuenta.rol });
+            await sendText(msg.from, rLibre);
+            return;
           }
         }
 
@@ -1698,9 +1777,22 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       return; // silencioso
     }
 
+    // ── UBICACIÓN DEL CHOFER (F-Ruta, 17-ago-2026) ───────────────────────────
+    //
+    // El pin de "Compartir ubicación": se registra en `posicion` (si el viaje
+    // trae unidad — la tabla la exige, 0050) y SIEMPRE le llega al jefe con el
+    // link del mapa: un chofer comparte su posición cuando algo pasa. Todo
+    // best-effort menos la confirmación: perder el INSERT es malo, dejarlo sin
+    // respuesta creyendo que nadie la vio es peor.
+    if (msg.type === 'location' && typeof msg.lat === 'number' && typeof msg.lng === 'number') {
+      await registrarUbicacionChofer(op, viajeId, msg.lat, msg.lng);
+      await say('📍 Recibida tu ubicación — queda registrada en tu viaje y ya se la pasé a tu jefe.');
+      return;
+    }
+
     // ── TEXTO: corre el agente UNA vez → respuesta consolidada ───────────────
     if (!(msg.type === 'text' && msg.text)) {
-      await say('Por ahora solo proceso texto, fotos de comprobantes y el XML del CFDI. Mándame la foto de tu ticket o el XML. 📸');
+      await say('Por ahora solo proceso texto, fotos de comprobantes, el XML del CFDI y tu ubicación 📍. Mándame la foto de tu ticket o el XML. 📸');
       return;
     }
 
