@@ -14,6 +14,8 @@
 
 import { useEffect, useRef } from 'react';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { COLOR_EMBUDO, NOMBRE_GIRO, type ProspectoMapa } from '@/lib/admin/prospectos-mapa';
 import { hrefWa, hrefCorreo } from './mensajes';
 
@@ -33,6 +35,8 @@ export default function Calles({ prospectos, titulo, onCerrar }: {
     let mapa: import('leaflet').Map | null = null;
     (async () => {
       const L = (await import('leaflet')).default;
+      // El plugin se cuelga de L al importarse — el orden importa.
+      await import('leaflet.markercluster');
       if (!vivo || !ref.current) return;
       const conCoords = prospectos.filter((p) => p.lat !== null && p.lng !== null);
       mapa = L.map(ref.current, { zoomControl: true, attributionControl: true });
@@ -41,6 +45,14 @@ export default function Calles({ prospectos, titulo, onCerrar }: {
         attribution: '© OpenStreetMap',
       }).addTo(mapa);
       if (conCoords.length) {
+        // CLUSTERING (del análisis del 17-ago — Prospect Hub): a nivel ciudad
+        // cien pines encimados mienten; el racimo dice cuántos hay y se abre
+        // al acercarse. spiderfy separa los que comparten dirección exacta.
+        const racimos = L.markerClusterGroup({
+          maxClusterRadius: 44,
+          spiderfyOnMaxZoom: true,
+          showCoverageOnHover: false,
+        });
         const grupo = L.featureGroup(conCoords.map((p) => {
           const c = COLOR_EMBUDO[p.estado]?.color ?? '#64748b';
           const marcador = L.circleMarker([p.lat!, p.lng!], {
@@ -70,7 +82,8 @@ export default function Calles({ prospectos, titulo, onCerrar }: {
             </div>`);
           return marcador;
         }));
-        grupo.addTo(mapa);
+        racimos.addLayer(grupo);
+        mapa.addLayer(racimos);
         mapa.fitBounds(grupo.getBounds().pad(0.25), { maxZoom: 14 });
       } else {
         mapa.setView([23.6, -102.5], 5);
