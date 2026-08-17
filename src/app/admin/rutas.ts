@@ -4,7 +4,7 @@ import {
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
   Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake, Inbox,
-  Bot, Bug, ListChecks, Sparkles, Hand,
+  Bot, Bug, ListChecks, Sparkles, Hand, Globe2,
 } from 'lucide-react';
 
 /**
@@ -39,6 +39,10 @@ export const NEGOCIO: Item[] = [
   // una pantalla operable desde el teléfono. Escalaciones sigue viva como la
   // cola profunda de lo escalado; Tu turno la resume y enlaza.
   { href: '/admin/tu-turno', nombre: 'Tu turno', Icono: Hand },
+  // El mundo de la cartera (17-ago): país → estado → calles, luces por etapa
+  // del embudo, refresco solo. Globe2 y no Map: Map es literal de más para
+  // un "cerebro" y Globe2 no choca con ningún ícono vivo del sidebar.
+  { href: '/admin/mapa-prospectos', nombre: 'Cerebro de ventas', Icono: Globe2 },
   { href: '/admin/escalaciones', nombre: 'Escalaciones', Icono: Inbox },
   // La cola de lo que los agentes REDACTAN (0117) — hermana de Escalaciones
   // (lo que el sistema no pudo resolver solo): allá se destraba, aquí se
