@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { areasDe, puedeVerArea, puedeVerRuta, areaDeRuta, inicioDe, rolEfectivo } from './visibilidad';
-import { AGENTES, OPERACION, DINERO_FISCAL, SISTEMA, ABAJO } from '@/app/dashboard/rutas';
+import { AUTOMATIZACIONES, OPERACION, DINERO_FISCAL, SISTEMA, ABAJO } from '@/app/dashboard/rutas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // El encargado entraba al mismo panel que el dueño y veía TODO: rentabilidad,
@@ -70,8 +70,8 @@ describe('el contador — su panel volvió, y la operación le sigue cerrada', (
   // el 14-ago (`/dashboard/contador`, área `dinero`). Mientras estuvo
   // borrado, `inicioDe` lo mandaba a Suscripción; hoy vuelve a mandarlo a
   // su casa — ver el describe de rebotes, abajo.
-  it('AGENTES: liquidación/facturas/cobranza son dinero (el contador los ve); Conductores es operación', () => {
-    expect(AGENTES.map((i) => i.href)).toEqual([
+  it('AUTOMATIZACIONES: liquidación/facturas/cobranza son dinero (el contador los ve); Conductores es operación', () => {
+    expect(AUTOMATIZACIONES.map((i) => i.href)).toEqual([
       '/dashboard/agentes/liquidacion', '/dashboard/agentes/facturas',
       // Cobranza (0089, 14-ago-2026): sin pesos en pantalla, pero es la cola
       // del cierre contable — el dolor del contador.
@@ -131,7 +131,7 @@ describe('el mapa de rutas no se queda atrás del sidebar', () => {
   // Es la prueba que importa a futuro: una pantalla nueva que alguien agregue
   // al sidebar y olvide clasificar quedaría SIN área, y `puedeVerRuta` la
   // negaría a todos — incluido el dueño. Falla aquí, no en producción.
-  const todas = [...AGENTES, ...OPERACION, ...DINERO_FISCAL, ...SISTEMA, ...ABAJO];
+  const todas = [...AUTOMATIZACIONES, ...OPERACION, ...DINERO_FISCAL, ...SISTEMA, ...ABAJO];
   it('toda ruta del sidebar tiene área declarada', () => {
     const huerfanas = todas.filter((i) => areaDeRuta(i.href) === undefined).map((i) => i.href);
     expect(
@@ -264,7 +264,7 @@ describe('a dónde se rebota a cada quien', () => {
   });
 
   const TODAS_LAS_RUTAS = [
-    ...AGENTES, ...OPERACION, ...DINERO_FISCAL, ...SISTEMA, ...ABAJO,
+    ...AUTOMATIZACIONES, ...OPERACION, ...DINERO_FISCAL, ...SISTEMA, ...ABAJO,
   ].map((i) => i.href);
 
   it.each(TODAS_LAS_RUTAS)('%s le sigue negada al chofer aunque teclee la URL', (href) => {
@@ -306,7 +306,7 @@ describe('el vendedor: panel propio, cero flota', () => {
   });
 
   const TODAS_LAS_RUTAS = [
-    ...AGENTES, ...OPERACION, ...DINERO_FISCAL, ...SISTEMA, ...ABAJO,
+    ...AUTOMATIZACIONES, ...OPERACION, ...DINERO_FISCAL, ...SISTEMA, ...ABAJO,
   ].map((i) => i.href);
 
   it.each(TODAS_LAS_RUTAS)('%s le está negada al vendedor aunque teclee la URL', (href) => {
