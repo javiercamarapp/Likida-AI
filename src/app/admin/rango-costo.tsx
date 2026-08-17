@@ -26,7 +26,10 @@ export default function GraficaCostoConRango({ porDia, anidado = false }: { porD
           {([[7, '7d'], [30, '30d'], [0, 'Todo']] as const).map(([v, label]) => (
             <button key={v} type="button" onClick={() => setDias(v)}
               className="px-2.5 py-1 rounded-md transition-colors"
-              style={dias === v ? { background: 'var(--marca)', color: 'white' } : { color: 'var(--muted)' }}>
+              // `--marca-fg`, no 'white' fijo: en tema claro la marca puede
+              // ser clara y el texto blanco desaparecía (reporte 17-ago) —
+              // el token de contraste existe exactamente para esto.
+              style={dias === v ? { background: 'var(--marca)', color: 'var(--marca-fg)' } : { color: 'var(--muted)' }}>
               {label}
             </button>
           ))}
