@@ -7,6 +7,7 @@ import { verifyWebhookChallenge, verifySignature } from '@/lib/meta/client';
 import { processInbound, type InboundMessage } from '@/lib/likida/processor';
 import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { flushObservabilidad } from '@/lib/observability/sentry';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { guardarEventosPendientes, reclamarPendiente, marcarPendienteProcesado, anotarFalloPendiente } from '@/lib/likida/wa_pendientes';
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
   const raw = await req.text();
   if (raw.length > MAX_BODY) return new NextResponse('Payload too large', { status: 413 }); // por si falta content-length
   if (!verifySignature(raw, req.headers.get('x-hub-signature-256'))) {
+    void registrarEventoSeguridad({ origen: 'wa_webhook', tipo: 'firma_invalida', severidad: 'alta' });
     return new NextResponse('Invalid signature', { status: 401 });
   }
 
@@ -249,7 +251,16 @@ export async function POST(req: NextRequest) {
           const claim = await reclamarPendiente(f.id, 0);
           if (!claim) return; // el cron (u otra entrega) ya lo tiene.
           try {
-            await processInbound(claim.evento);
+            const r = await processInbound(claim.evento);
+            if (r === 'duplicado') {
+              const wamid = (claim.evento as { waMessageId?: string }).waMessageId;
+              if (wamid) {
+                const { releaseMessageClaim } = await import('@/lib/likida/conv');
+                await releaseMessageClaim(wamid);
+              }
+              await anotarFalloPendiente(f.id, 'claim huérfano: el mensaje se tomó y no se terminó');
+              return;
+            }
             await marcarPendienteProcesado(f.id);
           } catch (e) {
             await anotarFalloPendiente(f.id, e instanceof Error ? e.message : String(e));

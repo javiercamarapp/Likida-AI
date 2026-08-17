@@ -5204,3 +5204,25 @@ begin
   raise exception E'STRIPE_CICLO_0132  columna=%  filas-viejas-sin-sellar=%   (esperado t / 0)',
     columna, sin_sellar_viejas;
 end $$;
+
+-- ── 105. La telemetría de seguridad existe y su dominio aprieta (mig. 0133) ─
+-- (a) tabla CON RLS; (b) funcional: un tipo fuera del dominio REBOTA.
+--   (esperado t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  tipo_invalido_rebota boolean := false;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'evento_seguridad';
+
+  begin
+    insert into public.evento_seguridad (origen, tipo) values ('wa_webhook', 'chisme-de-pasillo');
+  exception when check_violation then
+    tipo_invalido_rebota := true;
+  end;
+
+  raise exception E'SEGURIDAD_0133  tabla-rls=%  tipo-invalido-rebota=%   (esperado t / t)',
+    coalesce(tabla_rls, false), tipo_invalido_rebota;
+end $$;
