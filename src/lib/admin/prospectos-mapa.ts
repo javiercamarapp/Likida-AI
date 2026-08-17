@@ -243,6 +243,10 @@ export interface ProspectoMapa {
   correo: string | null;
   contacto: string | null;
   vacante: string | null;
+  /** Texto libre de procedencia y detalle (giro/tamaño/domicilio citados,
+   *  cruces DENUE, sucursales) — la fuente NUNCA se lee de aquí en código
+   *  (para eso está giroDe/tamanoDe), solo se enseña al vendedor. */
+  notas: string | null;
   estado: string;
   fuente: string;
   giro: Giro;
@@ -322,6 +326,7 @@ export async function getDatosMapa(): Promise<DatosMapa> {
         correo: p.correo,
         contacto: p.contacto_nombre,
         vacante: p.vacante,
+        notas: p.notas,
         estado: p.estado,
         fuente: p.fuente,
         giro: giroDe(p.empresa, p.vacante, p.notas),
