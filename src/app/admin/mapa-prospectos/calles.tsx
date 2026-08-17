@@ -95,14 +95,14 @@ export default function Calles({ prospectos, titulo, onCerrar }: {
   const conCoords = prospectos.filter((p) => p.lat !== null).length;
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col rounded-3xl overflow-hidden" style={{ background: '#0b1220' }}>
-      <div className="flex items-center gap-3 px-4 py-2.5" style={{ background: '#0b1220', color: '#e2e8f0' }}>
+    <div className="absolute inset-0 z-30 flex flex-col rounded-3xl overflow-hidden" style={{ background: 'var(--surface)' }}>
+      <div className="flex items-center gap-3 px-4 py-2.5" style={{ background: 'var(--surface)', color: 'var(--ink)', borderBottom: '1px solid var(--line)' }}>
         <span className="text-sm font-medium">{titulo} — nivel calle</span>
-        <span className="text-xs" style={{ color: '#94a3b8' }}>
+        <span className="text-xs" style={{ color: 'var(--muted)' }}>
           {conCoords} de {prospectos.length} con dirección real (DENUE); al resto no se le inventa lugar
         </span>
         <button onClick={onCerrar} className="ml-auto px-3 py-1 rounded-lg text-xs font-medium"
-          style={{ background: '#1e293b', color: '#e2e8f0' }}>
+          style={{ background: 'var(--canvas)', color: 'var(--ink)', border: '1px solid var(--line)' }}>
           ← Volver al país
         </button>
       </div>
