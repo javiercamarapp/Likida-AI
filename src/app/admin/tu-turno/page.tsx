@@ -69,14 +69,19 @@ export default async function PaginaTuTurno({
     const s = await requireSuperadmin();
     const tipo = String(fd.get('tipo') ?? '');
     const rutina = String(fd.get('rutina') ?? '') || null;
+    // El contenido SOLO viaja en editar_encargo (validarOrden lo exige ahí);
+    // en las demás órdenes un campo fantasma no debe colarse al payload.
+    const contenido = String(fd.get('contenido') ?? '').trim();
     try {
       if (!esOrdenUi(tipo)) throw new Error('Esa orden no existe.');
-      await crearOrden(tipo, rutina, s.userId);
+      await crearOrden(tipo, rutina, s.userId, tipo === 'editar_encargo' ? { contenido } : {});
       revalidatePath('/admin/tu-turno');
     } catch (e) {
       redirect(`/admin/tu-turno?error=${encodeURIComponent(mensajeParaPantalla(e, 'encolar la orden'))}`);
     }
-    redirect(`/admin/tu-turno?aviso=${encodeURIComponent('Orden encolada — la Mac la toma en su siguiente latido (≤5 min).')}`);
+    redirect(`/admin/tu-turno?aviso=${encodeURIComponent(tipo === 'editar_encargo'
+      ? 'Encargo encolado — la Mac abre un PR chico con el cambio (tú lo apruebas en GitHub).'
+      : 'Orden encolada — la Mac la toma en su siguiente latido (≤5 min).')}`);
   }
 
   return (
