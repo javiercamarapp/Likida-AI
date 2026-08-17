@@ -168,13 +168,18 @@ function Reveal({ children, retraso = 0 }: { children: React.ReactNode; retraso?
   );
 }
 
-function TarjetaProspecto({ p, nuevo, afinando, onAfinar }: {
+function TarjetaProspecto({ p, nuevo, afinando, onAfinar, plana }: {
   p: ProspectoMapa; nuevo: boolean; afinando?: boolean; onAfinar?: (id: string) => void;
+  /** true = tarjeta de sección (plana, sin blur ni sombra — abajo del mapa
+   *  no hay país sobre el que flotar). */
+  plana?: boolean;
 }) {
   const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
   return (
-    <article className={`rounded-2xl p-3.5 space-y-2 backdrop-blur-md ${nuevo ? 'cerebro-recien' : ''}`}
-      style={{ background: 'color-mix(in srgb, var(--surface) 90%, transparent)', border: `1px solid ${LINEA}`, boxShadow: '0 10px 30px color-mix(in srgb, var(--ink) 10%, transparent)' }}>
+    <article className={`rounded-2xl p-3.5 space-y-2 ${plana ? '' : 'backdrop-blur-md'} ${nuevo ? 'cerebro-recien' : ''}`}
+      style={plana
+        ? { background: 'var(--canvas)', border: `1px solid ${LINEA}` }
+        : { background: 'color-mix(in srgb, var(--surface) 90%, transparent)', border: `1px solid ${LINEA}`, boxShadow: '0 10px 30px color-mix(in srgb, var(--ink) 10%, transparent)' }}>
       <div className="flex items-start gap-2">
         <span className="mt-1 w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color, boxShadow: `0 0 8px ${c.color}` }} />
         <div className="min-w-0">
@@ -812,8 +817,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       {/* ── Lo que se revela al hacer scroll ─────────────────────────────── */}
       <Reveal>
         <section className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-3xl p-5" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
-            <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>El embudo, en luces</h3>
+          <div className="rounded-2xl p-4" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
+            <h3 className="etiqueta-mono text-[10px] font-medium uppercase mb-3" style={{ color: TENUE }}>El embudo, en luces</h3>
             <div className="space-y-2.5">
               {ORDEN_EMBUDO.map((e) => {
                 const n = filtrados.filter((p) => p.estado === e).length;
@@ -821,7 +826,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 return (
                   <div key={e} className="flex items-center gap-3 text-[12px]" style={{ color: TENUE }}>
                     <span className="w-28 shrink-0">{COLOR_EMBUDO[e].nombre}</span>
-                    <span className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: LINEA }}>
+                    <span className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: LINEA }}>
                       <span className="block h-full rounded-full cerebro-llenado" style={{ width: `${Math.max(pct, n ? 2 : 0)}%`, background: COLOR_EMBUDO[e].color }} />
                     </span>
                     <span className="w-10 text-right tabular-nums" style={{ color: TINTA }}>{n}</span>
@@ -830,14 +835,14 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               })}
             </div>
           </div>
-          <div className="rounded-3xl p-5" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
-            <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>Dónde vive la cartera</h3>
+          <div className="rounded-2xl p-4" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
+            <h3 className="etiqueta-mono text-[10px] font-medium uppercase mb-3" style={{ color: TENUE }}>Dónde vive la cartera</h3>
             <div className="space-y-2">
               {[...porEstado.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 8).map(([nombre, lista]) => (
                 <div key={nombre} className="flex items-center gap-3 text-[12px]" style={{ color: TENUE }}>
                   <span className="w-28 shrink-0 truncate">{nombre}</span>
-                  <span className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: LINEA }}>
-                    <span className="block h-full rounded-full cerebro-llenado" style={{ width: `${Math.round((lista.length / maxEstado) * 100)}%`, background: '#22d3ee' }} />
+                  <span className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: LINEA }}>
+                    <span className="block h-full rounded-full cerebro-llenado" style={{ width: `${Math.round((lista.length / maxEstado) * 100)}%`, background: 'color-mix(in srgb, var(--ink) 55%, transparent)' }} />
                   </span>
                   <span className="w-10 text-right tabular-nums" style={{ color: TINTA }}>{lista.length}</span>
                 </div>
@@ -851,11 +856,11 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       </Reveal>
 
       <Reveal retraso={80}>
-        <section className="rounded-3xl p-5" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
-          <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>Los 12 más cerrables del país</h3>
+        <section className="rounded-2xl p-4" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
+          <h3 className="etiqueta-mono text-[10px] font-medium uppercase mb-3" style={{ color: TENUE }}>Los 12 más cerrables del país</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {ordenar(filtrados).slice(0, 12).map((p) => (
-              <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
+              <TarjetaProspecto key={p.id} p={p} plana nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
             ))}
           </div>
         </section>
