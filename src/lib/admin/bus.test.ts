@@ -13,8 +13,13 @@ describe('bus de mando — órdenes de la UI', () => {
     for (const tipo of ORDENES_UI) expect(dominio).toContain(tipo);
   });
 
-  it('editar_encargo NO es ofertable desde la bandeja (llega con el editor de rutinas)', () => {
-    expect(esOrdenUi('editar_encargo')).toBe(false);
+  it('editar_encargo YA es ofertable (el editor de rutinas llegó, 17-ago-2026) y exige rutina + contenido', () => {
+    expect(esOrdenUi('editar_encargo')).toBe(true);
+    expect(validarOrden('editar_encargo', null, { contenido: 'x' })).toMatch(/rutina/);
+    expect(validarOrden('editar_encargo', 'dof-diario', {})).toMatch(/vacío/);
+    expect(validarOrden('editar_encargo', 'dof-diario', { contenido: '   ' })).toMatch(/vacío/);
+    expect(validarOrden('editar_encargo', 'dof-diario', { contenido: 'x'.repeat(20001) })).toMatch(/20,000/);
+    expect(validarOrden('editar_encargo', 'dof-diario', { contenido: '# Encargo nuevo' })).toBeNull();
   });
 
   it('correr_ahora sin rutina se rechaza con una frase, no con un error de base', () => {
