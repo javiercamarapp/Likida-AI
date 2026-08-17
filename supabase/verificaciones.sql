@@ -5093,3 +5093,38 @@ begin
   raise exception E'GEO_0128  columnas=%  checks=%  media-coordenada-rebota=%   (esperado 2 / 3 / t)',
     v_cols, v_checks, media_coordenada_rebota;
 end $$;
+
+-- ── 101. Los mensajes del agente experto son coherentes (mig. 0129) ────────
+-- (a) las 5 columnas mensaje* existen en prospecto;
+-- (b) funcional: un mensaje sin fecha de generación REBOTA, y un modelo sin
+--     generación REBOTA — el candado es de base, no de UI.
+--   (esperado 5 / t / t — exactos)
+do $$
+declare
+  v_cols int;
+  sin_fecha_rebota boolean := false;
+  modelo_suelto_rebota boolean := false;
+begin
+  select count(*) into v_cols
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'prospecto'
+     and column_name in ('mensaje_wa', 'mensaje_correo_asunto', 'mensaje_correo',
+                         'mensajes_generados_en', 'mensajes_modelo');
+
+  begin
+    insert into public.prospecto (empresa, fuente, mensaje_wa)
+    values ('ZZZ VERIF 0129a', 'manual', 'hola');
+  exception when check_violation then
+    sin_fecha_rebota := true;
+  end;
+
+  begin
+    insert into public.prospecto (empresa, fuente, mensajes_modelo)
+    values ('ZZZ VERIF 0129b', 'manual', 'un-modelo');
+  exception when check_violation then
+    modelo_suelto_rebota := true;
+  end;
+
+  raise exception E'MENSAJES_0129  columnas=%  sin-fecha-rebota=%  modelo-suelto-rebota=%   (esperado 5 / t / t)',
+    v_cols, sin_fecha_rebota, modelo_suelto_rebota;
+end $$;

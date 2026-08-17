@@ -1,6 +1,10 @@
 import { Code2, ExternalLink } from 'lucide-react';
-import { EstadoVacio } from '../ui/kit';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { getActividadGitHub } from '@/lib/admin/github';
+import { fechaHoraMx } from '@/lib/formato';
+import { EstadoVacio, StatusPill } from '../ui/kit';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
+import { SelectorVista } from '../selector-vista';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +19,15 @@ const REPO_URL = 'https://github.com/javiercamarapp/likida.ai';
  * SÍ se puede ofrecer es el link directo al repositorio (mismo patrón que
  * "Salud del sistema" en Inicio: se enlaza, no se reconstruye).
  */
-export default function DevPage() {
+export default async function DevPage() {
+  // El selector de vistas necesita saber si HAY flotas (con cero, sus ligas
+  // rebotarían a paneles vacíos y lo dice). Conteo directo y barato — la
+  // tabla `tenant` no tiene tenant_id: es la lista de tenants misma.
+  const [{ count }, actividad] = await Promise.all([
+    supabaseAdmin().from('tenant').select('id', { count: 'exact', head: true }),
+    getActividadGitHub(),
+  ]);
+  const tenants = count ?? 0;
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
@@ -24,7 +36,59 @@ export default function DevPage() {
           titulo="Dev"
         />
 
+        {/* "Entrar a los otros paneles" — vivía en el Inicio; Javier lo mandó
+            aquí el 17-ago: es herramienta de desarrollo, no de operación. */}
+        <SelectorVista tenants={tenants} />
+
         <div className="px-5 py-5 flex-1 space-y-2.5">
+          {/* ── Actividad en vivo (17-ago): commits y CI reales, cada carga.
+                Tres estados honestos — sin llave / API caída / datos. ── */}
+          <div className="card p-3">
+            <TituloSeccion>Actividad del código — en vivo</TituloSeccion>
+            <div className="mt-2">
+              {actividad.estado === 'sin_token' && (
+                <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                  Sin la llave <code>GITHUB_TOKEN</code> esta sección no puede ver el repo — no es que no haya actividad.
+                </EstadoVacio>
+              )}
+              {actividad.estado === 'error' && (
+                <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                  GitHub no contestó — no se sabe qué hay (que no es lo mismo que nada).
+                </EstadoVacio>
+              )}
+              {actividad.estado === 'ok' && (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--muted)' }}>Últimos commits</p>
+                    <ul className="space-y-1">
+                      {actividad.commits.map((c) => (
+                        <li key={c.sha} className="text-[12px] flex items-center gap-2">
+                          <code className="shrink-0 text-[11px]" style={{ color: 'var(--muted)' }}>{c.sha}</code>
+                          <a href={c.url} target="_blank" rel="noreferrer" className="truncate hover:opacity-70">{c.mensaje}</a>
+                          <span className="shrink-0 text-[11px]" style={{ color: 'var(--muted)' }}>{fechaHoraMx(c.fecha)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--muted)' }}>CI — últimas corridas</p>
+                    <ul className="space-y-1">
+                      {actividad.ci.map((w, i) => (
+                        <li key={`${w.url}-${i}`} className="text-[12px] flex items-center gap-2">
+                          <StatusPill estado={w.conclusion === 'success' ? 'ok' : w.conclusion === 'failure' ? 'bad' : 'neutral'}>
+                            {w.conclusion ?? w.estado}
+                          </StatusPill>
+                          <a href={w.url} target="_blank" rel="noreferrer" className="truncate hover:opacity-70">{w.nombre}</a>
+                          <span className="shrink-0 text-[11px]" style={{ color: 'var(--muted)' }}>{w.rama}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="card p-3">
             <TituloSeccion>Repositorio</TituloSeccion>
             <div className="mt-2">
@@ -44,9 +108,9 @@ export default function DevPage() {
             <TituloSeccion>Lo que falta</TituloSeccion>
             <div className="mt-2">
               <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Calendario de contribuciones, deploys recientes con estado de build, feature flags & kill switches,
-                PRs abiertos/tiempo de merge/cobertura/error budget, changelog — este panel no tiene integración con la
-                API de GitHub ni con la de Vercel para traer esto en vivo hoy. Vercel y Sentry ya están enlazados desde
+                Calendario de contribuciones, deploys de Vercel con estado de build, feature flags,
+                tiempo de merge/cobertura/error budget y changelog — lo de GitHub ya entra en vivo arriba (17-ago);
+                lo de Vercel sigue sin integración. Vercel y Sentry ya están enlazados desde
                 Inicio/Observabilidad.
               </EstadoVacio>
             </div>

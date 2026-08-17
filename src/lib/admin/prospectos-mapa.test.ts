@@ -35,6 +35,12 @@ describe('giroDe — transportista o qué', () => {
   it('la actividad DENUE en notas también clasifica', () => {
     expect(giroDe('AVE', null, 'DENUE: Autotransporte foráneo de carga general')).toBe('transportista');
   });
+  it('las categorías del TAM del 17-ago: embotelladora y mayoreo', () => {
+    expect(giroDe('Bebidas del Bajío', null, 'UNIVERSO DENUE: Elaboración de refrescos y otras bebidas')).toBe('embotelladora');
+    expect(giroDe('Grupo Surtidor', null, 'UNIVERSO DENUE: Comercio al por mayor de abarrotes')).toBe('abarrotes_mayoreo');
+    // La embotelladora gana al mayoreo cuando ambas señales aparecen: fabrica ella.
+    expect(giroDe('Embotelladora X', null, 'comercio al por mayor de bebidas · elaboración de refrescos')).toBe('embotelladora');
+  });
 });
 
 describe('scoreUrgencia — la conducta del prospecto, no un vibe', () => {
