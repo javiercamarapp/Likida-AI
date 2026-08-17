@@ -110,6 +110,8 @@ export interface AgenteDefinido {
   estado: EstadoAgente;
   presupuestoDiaUsd: number | null;
   promptRef: string | null;
+  /** El rol de modelo que lo corre (matriz 0125) — null = sin declarar. */
+  modeloRol: string | null;
   creadoEn: string;
 }
 
@@ -118,7 +120,7 @@ export interface AgenteDefinido {
 export async function listarAgentes(): Promise<AgenteDefinido[]> {
   const filas = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin().from('agente_definicion')
-      .select('id, nombre, departamento, descripcion, disparador, estado, presupuesto_dia_usd, prompt_ref, creado_en', conteo(d))
+      .select('id, nombre, departamento, descripcion, disparador, estado, presupuesto_dia_usd, prompt_ref, modelo_rol, creado_en', conteo(d))
       .order('id').range(d, h), 'listarAgentes'),
     'listarAgentes',
   );
@@ -132,6 +134,7 @@ export async function listarAgentes(): Promise<AgenteDefinido[]> {
     estado: f.estado as EstadoAgente,
     presupuestoDiaUsd: f.presupuesto_dia_usd === null || f.presupuesto_dia_usd === undefined ? null : Number(f.presupuesto_dia_usd),
     promptRef: (f.prompt_ref as string) ?? null,
+    modeloRol: (f.modelo_rol as string) ?? null,
     creadoEn: String(f.creado_en),
   })).sort((a, b) => orden[a.estado] - orden[b.estado] || a.departamento.localeCompare(b.departamento) || a.id.localeCompare(b.id));
 }

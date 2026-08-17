@@ -1,13 +1,19 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════
-# EL BUS DE MANDO, LADO MAC (0127) — el puente entre las rutinas launchd y
-# /admin/tu-turno. Cuatro verbos:
+# EL BUS DE MANDO, LADO MAC (0127 · 0135) — el puente entre las rutinas
+# launchd y /admin/tu-turno. Cuatro verbos:
 #
 #   bus.sh corrida-inicio <rutina>                 → imprime el id de la corrida
 #   bus.sh corrida-fin <id> <exit> [pr] [veredicto…]
 #   bus.sh pieza <rutina> <carpeta-absoluta>       → espeja una pieza de la cola
 #   bus.sh sembrar-catalogo                        → encargos/*.md + plists → bus_rutina
 #   bus.sh ordenes                                 → ejecuta lo pendiente de bus_orden
+#
+# ── IDENTIDAD (0135, fase 7): LIKIDA_WORKER_KEY (lkw_…) contra la API del
+# producto — la Mac ya NO carga el service role. Si la llave no está en
+# .env.local todavía, cae al camino viejo (service role) con un AVISO: el
+# fallback existe para no romper las rutinas la noche de la migración, y
+# desaparece cuando la llave quede sembrada (crear-worker-llave.py).
 #
 # Filosofía: este script JAMÁS rompe a la rutina que lo llama — todo error
 # aquí es un aviso a stderr y exit 0 (menos en `ordenes`, que corre solo).
@@ -18,16 +24,31 @@ set -uo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 REPO="$HOME/javiercamarapp/likida"
 COLA="$HOME/javiercamarapp/likida-marketing-cola"
-TALLER="$HOME/javiercamarapp/likida-mejoras"
 
 leer() { grep "^$1=" "$REPO/.env.local" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/[[:space:]]*#.*//' | tr -d '"' | tr -d "'" | xargs; }
+export WORKER_KEY="$(leer LIKIDA_WORKER_KEY)"
+export APP_URL="$(leer NEXT_PUBLIC_APP_URL)"
 export BUS_URL="$(leer NEXT_PUBLIC_SUPABASE_URL)"
 export BUS_KEY="$(leer SUPABASE_SERVICE_ROLE_KEY)"
-[ -z "$BUS_URL" ] || [ -z "$BUS_KEY" ] && { echo "[bus] sin credenciales en .env.local — no reporto." >&2; exit 0; }
+
+if [ -n "$WORKER_KEY" ] && [ -n "$APP_URL" ]; then
+  export BUS_MODO="worker"
+else
+  export BUS_MODO="legacy"
+  echo "[bus] AVISO: sin LIKIDA_WORKER_KEY — usando service role (migra con crear-worker-llave.py)" >&2
+  [ -z "$BUS_URL" ] || [ -z "$BUS_KEY" ] && { echo "[bus] sin credenciales en .env.local — no reporto." >&2; exit 0; }
+fi
 
 CMD="${1:-}"; shift || true
 
-api() { # api <metodo> <ruta+query> [json] [prefer]
+# wapi <accion> <json>  → POST a la API de workers; imprime el cuerpo.
+wapi() {
+  curl -sS -m 30 -X POST "$APP_URL/api/worker/bus/$1" \
+    -H "x-worker-key: $WORKER_KEY" -H "Content-Type: application/json" \
+    ${2:+-d "$2"}
+}
+
+api() { # legacy: api <metodo> <ruta+query> [json] [prefer]
   local m="$1" r="$2" d="${3:-}" p="${4:-}"
   curl -sS -m 20 -X "$m" "$BUS_URL/rest/v1/$r" \
     -H "apikey: $BUS_KEY" -H "Authorization: Bearer $BUS_KEY" \
@@ -38,16 +59,36 @@ case "$CMD" in
 
 corrida-inicio)
   RUTINA="${1:?rutina}"
-  api POST "bus_corrida" "{\"rutina\":\"$RUTINA\"}" "return=representation" \
-    | python3 -c "import json,sys
+  if [ "$BUS_MODO" = "worker" ]; then
+    wapi corrida-inicio "{\"rutina\":\"$RUTINA\"}" | python3 -c "import json,sys
+try: print(json.load(sys.stdin)['id'])
+except Exception: pass" 2>/dev/null
+  else
+    api POST "bus_corrida" "{\"rutina\":\"$RUTINA\"}" "return=representation" \
+      | python3 -c "import json,sys
 try: print(json.load(sys.stdin)[0]['id'])
 except Exception: pass" 2>/dev/null
+  fi
   exit 0 ;;
 
 corrida-fin)
   ID="${1:?id}"; CODIGO="${2:-0}"; PR="${3:-}"; shift 3 2>/dev/null || shift $# 2>/dev/null || true
   VERE="${*:-}"
-  python3 - "$ID" "$CODIGO" "$PR" "$VERE" <<'PY' 2>/dev/null || true
+  if [ "$BUS_MODO" = "worker" ]; then
+    python3 - "$ID" "$CODIGO" "$PR" "$VERE" <<'PY' 2>/dev/null || true
+import json, os, sys, urllib.request
+id_, codigo, pr, vere = sys.argv[1:5]
+cuerpo = {"id": id_, "exitCode": int(codigo) if codigo.lstrip('-').isdigit() else None,
+          "veredicto": (vere or None) and vere[:300]}
+if pr: cuerpo["prUrl"] = pr
+req = urllib.request.Request(
+    f"{os.environ['APP_URL']}/api/worker/bus/corrida-fin",
+    data=json.dumps(cuerpo).encode(), method="POST",
+    headers={"x-worker-key": os.environ['WORKER_KEY'], "Content-Type": "application/json"})
+urllib.request.urlopen(req, timeout=30).read()
+PY
+  else
+    python3 - "$ID" "$CODIGO" "$PR" "$VERE" <<'PY' 2>/dev/null || true
 import json, os, sys, urllib.request, datetime
 id_, codigo, pr, vere = sys.argv[1:5]
 cuerpo = {"fin": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -61,24 +102,19 @@ req = urllib.request.Request(
              "Content-Type": "application/json", "Prefer": "return=minimal"})
 urllib.request.urlopen(req, timeout=20).read()
 PY
+  fi
   exit 0 ;;
 
 pieza)
   RUTINA="${1:?rutina}"; CARPETA="${2:?carpeta}"
   python3 - "$RUTINA" "$CARPETA" <<'PY' 2>/dev/null || true
-import json, os, sys, urllib.request, urllib.parse, mimetypes, pathlib
+import base64, json, os, sys, urllib.request, urllib.parse, mimetypes, pathlib
 rutina, carpeta = sys.argv[1], pathlib.Path(sys.argv[2])
 COLA = pathlib.Path.home() / "javiercamarapp" / "likida-marketing-cola"
-URL, KEY = os.environ["BUS_URL"], os.environ["BUS_KEY"]
+MODO = os.environ.get("BUS_MODO", "legacy")
 if not carpeta.is_dir(): sys.exit(0)
 try: rel = str(carpeta.relative_to(COLA))
 except ValueError: rel = carpeta.name
-
-def pedir(metodo, ruta, data=None, headers=None):
-    h = {"apikey": KEY, "Authorization": f"Bearer {KEY}"}
-    h.update(headers or {})
-    req = urllib.request.Request(f"{URL}{ruta}", data=data, method=metodo, headers=h)
-    return urllib.request.urlopen(req, timeout=30).read()
 
 # El tipo por lo que la carpeta contiene — el video manda sobre la imagen.
 archivos = [f for f in carpeta.rglob("*") if f.is_file()]
@@ -97,23 +133,43 @@ for candidato in ("post.md", "guion.md", "copy.md", "META.md"):
     if f.is_file():
         copy_md = f.read_text(errors="replace")[:4000]; break
 
-# El preview: la primera imagen (o nada — la tarjeta vive sin foto).
-media_path = None
+preview = None
 for f in sorted(archivos):
-    if f.suffix.lower() in (".png", ".jpg", ".jpeg"):
-        objeto = f"piezas/{rel}/{f.name}"
-        mime = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
-        try:
-            pedir("POST", f"/storage/v1/object/bus/{urllib.parse.quote(objeto)}", data=f.read_bytes(),
-                  headers={"Content-Type": mime, "x-upsert": "true"})
-            media_path = objeto
-        except Exception: pass
-        break
+    if f.suffix.lower() in (".png", ".jpg", ".jpeg") and f.stat().st_size < 4 * 1024 * 1024:
+        preview = f; break
 
+if MODO == "worker":
+    cuerpo = {"rutina": rutina, "carpeta": rel, "titulo": carpeta.name, "tipo": tipo, "copyMd": copy_md}
+    if preview:
+        cuerpo["mediaBase64"] = base64.b64encode(preview.read_bytes()).decode()
+        cuerpo["mediaNombre"] = preview.name
+        cuerpo["mediaMime"] = mimetypes.guess_type(preview.name)[0] or "application/octet-stream"
+    req = urllib.request.Request(
+        f"{os.environ['APP_URL']}/api/worker/bus/pieza",
+        data=json.dumps(cuerpo).encode(), method="POST",
+        headers={"x-worker-key": os.environ["WORKER_KEY"], "Content-Type": "application/json"})
+    urllib.request.urlopen(req, timeout=60).read()
+    print(f"[bus] pieza espejada (worker): {rel} ({tipo})")
+    sys.exit(0)
+
+# ── legacy (service role) ──
+URL, KEY = os.environ["BUS_URL"], os.environ["BUS_KEY"]
+def pedir(metodo, ruta, data=None, headers=None):
+    h = {"apikey": KEY, "Authorization": f"Bearer {KEY}"}
+    h.update(headers or {})
+    req = urllib.request.Request(f"{URL}{ruta}", data=data, method=metodo, headers=h)
+    return urllib.request.urlopen(req, timeout=30).read()
+media_path = None
+if preview:
+    objeto = f"piezas/{rel}/{preview.name}"
+    mime = mimetypes.guess_type(preview.name)[0] or "application/octet-stream"
+    try:
+        pedir("POST", f"/storage/v1/object/bus/{urllib.parse.quote(objeto)}", data=preview.read_bytes(),
+              headers={"Content-Type": mime, "x-upsert": "true"})
+        media_path = objeto
+    except Exception: pass
 fila = {"rutina": rutina, "carpeta": rel, "titulo": carpeta.name, "tipo": tipo,
         "copy_md": copy_md, "media_path": media_path}
-# Upsert por carpeta SIN tocar `estado`: re-espejar una pieza ya aprobada no
-# la regresa a pendiente.
 pedir("POST", "/rest/v1/bus_pieza?on_conflict=carpeta",
       data=json.dumps(fila).encode(),
       headers={"Content-Type": "application/json",
@@ -126,7 +182,7 @@ sembrar-catalogo)
   python3 - <<'PY'
 import json, os, plistlib, pathlib, urllib.request, datetime
 BASE = pathlib.Path.home() / "javiercamarapp" / "likida" / "scripts" / "mejora-diaria"
-URL, KEY = os.environ["BUS_URL"], os.environ["BUS_KEY"]
+MODO = os.environ.get("BUS_MODO", "legacy")
 DIAS = {0: "dom", 1: "lun", 2: "mar", 3: "mié", 4: "jue", 5: "vie", 6: "sáb", 7: "dom"}
 
 def horario_de(nombre):
@@ -153,14 +209,24 @@ for enc in sorted((BASE / "encargos").glob("*.md")):
     texto = enc.read_text(errors="replace")
     desc = next((l.lstrip("# ").strip() for l in texto.splitlines() if l.strip()), "")[:200]
     filas.append({"nombre": nombre, "horario": horario_de(nombre), "descripcion": desc,
-                  "encargo_md": texto[:20000],
-                  "actualizado_en": datetime.datetime.now(datetime.timezone.utc).isoformat()})
-req = urllib.request.Request(
-    f"{URL}/rest/v1/bus_rutina?on_conflict=nombre",
-    data=json.dumps(filas).encode(), method="POST",
-    headers={"apikey": KEY, "Authorization": f"Bearer {KEY}", "Content-Type": "application/json",
-             "Prefer": "resolution=merge-duplicates,return=minimal"})
-urllib.request.urlopen(req, timeout=30).read()
+                  "encargo_md": texto[:20000]})
+
+if MODO == "worker":
+    req = urllib.request.Request(
+        f"{os.environ['APP_URL']}/api/worker/bus/catalogo",
+        data=json.dumps({"rutinas": filas}).encode(), method="POST",
+        headers={"x-worker-key": os.environ["WORKER_KEY"], "Content-Type": "application/json"})
+    urllib.request.urlopen(req, timeout=30).read()
+else:
+    for f in filas:
+        f["actualizado_en"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    req = urllib.request.Request(
+        f"{os.environ['BUS_URL']}/rest/v1/bus_rutina?on_conflict=nombre",
+        data=json.dumps(filas).encode(), method="POST",
+        headers={"apikey": os.environ['BUS_KEY'], "Authorization": f"Bearer {os.environ['BUS_KEY']}",
+                 "Content-Type": "application/json",
+                 "Prefer": "resolution=merge-duplicates,return=minimal"})
+    urllib.request.urlopen(req, timeout=30).read()
 print(f"[bus] catálogo sembrado: {len(filas)} rutinas")
 PY
   exit $? ;;
@@ -168,29 +234,45 @@ PY
 ordenes)
   python3 - <<'PY'
 import json, os, subprocess, pathlib, urllib.request, datetime
-URL, KEY = os.environ["BUS_URL"], os.environ["BUS_KEY"]
+MODO = os.environ.get("BUS_MODO", "legacy")
 REPO = pathlib.Path.home() / "javiercamarapp" / "likida"
 APAGADO = REPO / ".mejora-diaria" / "APAGADO"
 NOTAS = REPO / ".mejora-diaria" / "notas-javier.md"
 
-def pedir(metodo, ruta, cuerpo=None, prefer=None):
-    h = {"apikey": KEY, "Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
-    if prefer: h["Prefer"] = prefer
-    req = urllib.request.Request(f"{URL}/rest/v1/{ruta}",
-                                 data=json.dumps(cuerpo).encode() if cuerpo is not None else None,
-                                 method=metodo, headers=h)
-    crudo = urllib.request.urlopen(req, timeout=30).read()
-    return json.loads(crudo) if crudo else None
-
 def ahora(): return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-pendientes = pedir("GET", "bus_orden?estado=eq.pendiente&order=creado_en&limit=10") or []
+if MODO == "worker":
+    def wapi(accion, cuerpo=None):
+        req = urllib.request.Request(
+            f"{os.environ['APP_URL']}/api/worker/bus/{accion}",
+            data=json.dumps(cuerpo or {}).encode(), method="POST",
+            headers={"x-worker-key": os.environ["WORKER_KEY"], "Content-Type": "application/json"})
+        crudo = urllib.request.urlopen(req, timeout=30).read()
+        return json.loads(crudo) if crudo else {}
+    pendientes = wapi("ordenes").get("ordenes", [])
+    tomar = lambda oid: wapi("ordenes-claim", {"id": oid}).get("tomada", False)
+    resolver = lambda oid, ok, res: wapi("ordenes-resolver", {"id": oid, "ok": ok, "resultado": res})
+else:
+    URL, KEY = os.environ["BUS_URL"], os.environ["BUS_KEY"]
+    def pedir(metodo, ruta, cuerpo=None, prefer=None):
+        h = {"apikey": KEY, "Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
+        if prefer: h["Prefer"] = prefer
+        req = urllib.request.Request(f"{URL}/rest/v1/{ruta}",
+                                     data=json.dumps(cuerpo).encode() if cuerpo is not None else None,
+                                     method=metodo, headers=h)
+        crudo = urllib.request.urlopen(req, timeout=30).read()
+        return json.loads(crudo) if crudo else None
+    pendientes = pedir("GET", "bus_orden?estado=eq.pendiente&order=creado_en&limit=10") or []
+    tomar = lambda oid: bool(pedir("PATCH", f"bus_orden?id=eq.{oid}&estado=eq.pendiente",
+                                   {"estado": "tomada", "tomada_en": ahora()}, "return=representation"))
+    resolver = lambda oid, ok, res: pedir("PATCH", f"bus_orden?id=eq.{oid}",
+                                          {"estado": "hecha" if ok else "fallida", "resuelta_en": ahora(),
+                                           "resultado": res or ("hecha" if ok else "falló sin decir por qué")})
+
 for o in pendientes:
     # Claim anclado a pendiente (mismo patrón que wa_pendientes): si otra
-    # instancia la tomó entre el GET y este PATCH, la respuesta viene vacía.
-    tomada = pedir("PATCH", f"bus_orden?id=eq.{o['id']}&estado=eq.pendiente",
-                   {"estado": "tomada", "tomada_en": ahora()}, "return=representation")
-    if not tomada: continue
+    # instancia la tomó entre el GET y el claim, aquí viene False.
+    if not tomar(o["id"]): continue
     tipo, rutina = o["tipo"], o.get("rutina")
     payload = o.get("payload") or {}
     ok, resultado = False, ""
@@ -217,16 +299,12 @@ for o in pendientes:
                 f.write(f"\n## {ahora()}\n{payload.get('texto', '')}\n")
             ok, resultado = True, "anotada en notas-javier.md"
         elif tipo == "editar_encargo":
-            # Fase D dice PR chico, no escritura directa — llega con el editor
-            # visual de rutinas. Hasta entonces la orden se rechaza con causa.
             resultado = "editar_encargo aún no está cableado en la Mac (llega con el editor de rutinas)"
         else:
             resultado = f"tipo desconocido: {tipo}"
     except Exception as e:
         resultado = str(e)[:200]
-    pedir("PATCH", f"bus_orden?id=eq.{o['id']}",
-          {"estado": "hecha" if ok else "fallida", "resuelta_en": ahora(),
-           "resultado": resultado or ("hecha" if ok else "falló sin decir por qué")})
+    resolver(o["id"], ok, resultado)
     print(f"[bus] orden {tipo}{' · ' + rutina if rutina else ''}: {'✓' if ok else '✗'} {resultado}")
 print(f"[bus] órdenes atendidas: {len(pendientes)}")
 PY
