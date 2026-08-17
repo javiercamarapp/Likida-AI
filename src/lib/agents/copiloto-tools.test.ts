@@ -116,7 +116,7 @@ describe('el contrato de las 14 tools del copiloto', () => {
   });
 
   it('las 14 se ejecutan sin lanzar y todas devuelven su `pantalla`', async () => {
-    const conArgs: Record<string, object> = {
+    const conArgs: Record<string, Record<string, unknown>> = {
       traza_corrida: { id: '11111111-1111-4111-8111-111111111111' },
       ficha_cliente: { nombre: 'DEMO' },
       bitacora: {},
