@@ -228,6 +228,17 @@ export const NORMAS: Record<string, Norma> = {
     estado: "verificado_fuente_primaria",
     ficha: "normas/lisr-28-V.yaml",
   },
+  'lisr-28-fr-XX': {
+    id: 'lisr-28-fr-XX',
+    instrumento: "Ley del Impuesto sobre la Renta",
+    articulo: "28",
+    fraccion: "XX",
+    titulo: "Consumos en restaurantes — 91.5% no deducible, 0% en bares",
+    citas: ["LISR 28-XX"],
+    jerarquia: 1,
+    estado: "evidencia_corroborante",
+    ficha: "normas/lisr-28-XX.yaml",
+  },
   'liva-art-5': {
     id: 'liva-art-5',
     instrumento: "Ley del Impuesto al Valor Agregado",
