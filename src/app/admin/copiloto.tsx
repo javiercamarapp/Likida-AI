@@ -16,9 +16,12 @@ import { Dona, AreaChartSimple } from './charts';
 // que cambia: el catálogo (compañía, no flota), las sugerencias, y el
 // bloque `accion` — la previsualización gateada que aquí se confirma.
 //
-// LA CONFIRMACIÓN NO ES DEL MODELO: el botón manda un POST aparte con
-// `confirmado: true` y el motivo tecleado; el servidor ejecuta la MISMA
-// función del ⌘K y la rechaza sin motivo. Sin adjuntos en esta fase.
+// LA CONFIRMACIÓN NO ES DEL MODELO NI DEL CLIENTE: al proponer, el servidor
+// crea un AdminActionIntent (copiloto-intents.ts) y el bloque llega con su
+// `intentId`; el botón manda un POST aparte con ESA llave y el motivo
+// tecleado, y el servidor la valida y la gasta antes de ejecutar la MISMA
+// función del ⌘K. `gateo: 'doble'` = dos POSTs con el mismo intent. Sin
+// adjuntos en esta fase.
 //
 // HISTORIAL PERSISTENTE (0121, cierre del pendiente declarado): tablas
 // propias porque 0088 exige tenant y el copiloto es de Likida. El cajón es
@@ -53,6 +56,10 @@ interface AccionPropuesta {
   efecto: string;
   revertir: string;
   motivoSugerido: string | null;
+  /** La llave de ejecución que el SERVIDOR creó al proponer (AdminActionIntent,
+   *  copiloto-intents.ts). Sin ella no hay botón: `confirmado: true` del
+   *  cliente dejó de ser la autoridad. Vive 2 minutos y se gasta una vez. */
+  intentId?: string;
 }
 
 interface Respuesta {
@@ -103,9 +110,9 @@ const PANTALLA_UI: Record<string, { ruta: string; etiqueta: string }> = {
   estado_agentes: { ruta: '/admin/observabilidad', etiqueta: 'Observabilidad' },
   traza_corrida: { ruta: '/admin/corridas', etiqueta: 'Corridas' },
   pipeline_ventas: { ruta: '/admin/vendedores', etiqueta: 'Vendedores' },
-  cobranza_saas: { ruta: '/admin/cobranza', etiqueta: 'Cobranza' },
+  cobranza_saas: { ruta: '/admin/costos-facturacion', etiqueta: 'Costos y facturación' },
   costo_por_fase_modelo: { ruta: '/admin/costos-facturacion', etiqueta: 'Costos' },
-  bitacora: { ruta: '/admin/compliance', etiqueta: 'Compliance' },
+  bitacora: { ruta: '/admin/observabilidad', etiqueta: 'Observabilidad' },
   ficha_cliente: { ruta: '/admin/flotas', etiqueta: 'Flotas / Clientes' },
   estado_runner: { ruta: '/admin/observabilidad', etiqueta: 'Observabilidad' },
   adquisicion: { ruta: '/admin/crecimiento', etiqueta: 'Crecimiento' },
@@ -178,13 +185,20 @@ function VisualRespuesta({ v }: { v: Visual }) {
 
 /** La previsualización de una acción gateada — el mockup del diseño §6:
  *  efecto, cómo se revierte, motivo OBLIGATORIO y dos botones. La 🔴 y la
- *  no implementada se dicen, sin botón de ejecutar. */
+ *  no implementada se dicen, sin botón de ejecutar.
+ *
+ *  EJECUTAR presenta el `intentId` que el servidor creó al proponer — el
+ *  botón dejó de mandar `confirmado: true` porque un booleano del cliente no
+ *  es una autoridad. Para `gateo: 'doble'` son DOS POSTs con el mismo
+ *  intent: el primero lo arma (`armado: true` en la respuesta), el segundo
+ *  ejecuta. Un intent expirado/usado vuelve como 409 con instrucción de
+ *  pedir la acción de nuevo. */
 function TarjetaAccion({ a, onEjecutada }: {
   a: AccionPropuesta;
   onEjecutada: (mensaje: string, ok: boolean) => void;
 }) {
   const [motivo, setMotivo] = useState(a.motivoSugerido ?? '');
-  const [estado, setEstado] = useState<'lista' | 'ejecutando' | 'hecha' | 'cancelada'>('lista');
+  const [estado, setEstado] = useState<'lista' | 'ejecutando' | 'armada' | 'hecha' | 'cancelada'>('lista');
   const [error, setError] = useState<string | null>(null);
 
   if (!a.implementada) {
@@ -199,6 +213,16 @@ function TarjetaAccion({ a, onEjecutada }: {
       </div>
     );
   }
+  // Sin intent no hay botón (defensa: una propuesta vieja re-pintada sin su
+  // llave no puede fingir que ejecuta) — mismo texto que la archivada.
+  if (!a.intentId) {
+    return (
+      <div className="card p-3 mt-2 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        Esta propuesta ya no trae su llave de ejecución. Pídela de nuevo —
+        el copiloto la re-propone con el estado de hoy.
+      </div>
+    );
+  }
   if (estado === 'hecha' || estado === 'cancelada') {
     return (
       <div className="card p-3 mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
@@ -209,27 +233,33 @@ function TarjetaAccion({ a, onEjecutada }: {
 
   async function ejecutar() {
     if (!motivo.trim()) { setError('El motivo es obligatorio: sin nota, en tres semanas nadie sabe si ya se puede encender.'); return; }
+    const veniaArmada = estado === 'armada';
     setEstado('ejecutando');
     setError(null);
     try {
       const resp = await fetch('/api/admin/copiloto', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          intentId: a.intentId,
           accion: { id: a.accion, objetivo: a.objetivo, motivo: motivo.trim() },
-          confirmado: true,
         }),
         signal: AbortSignal.timeout(20_000),
       });
       const d = await resp.json().catch(() => null);
       if (!resp.ok || !d?.ok) {
-        setEstado('lista');
+        setEstado(veniaArmada ? 'armada' : 'lista');
         setError(typeof d?.error === 'string' ? d.error : 'No se pudo ejecutar. Inténtalo de nuevo.');
+        return;
+      }
+      if (d.armado === true) {
+        // 'doble': el intent quedó armado — falta la segunda confirmación.
+        setEstado('armada');
         return;
       }
       setEstado('hecha');
       onEjecutada(String(d.mensaje ?? 'Hecho.'), true);
     } catch {
-      setEstado('lista');
+      setEstado(veniaArmada ? 'armada' : 'lista');
       setError('No se pudo ejecutar. Inténtalo de nuevo.');
     }
   }
@@ -247,6 +277,12 @@ function TarjetaAccion({ a, onEjecutada }: {
       </label>
       <p className="text-[12px] mt-2" style={{ color: 'var(--muted)' }}><b>Efecto:</b> {a.efecto}</p>
       <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}><b>Revertir:</b> {a.revertir}</p>
+      {estado === 'armada' && (
+        <p className="text-[12px] mt-2 font-medium" style={{ color: 'var(--warn)' }}>
+          Primera confirmación registrada — esta acción exige doble
+          confirmación. Aprieta de nuevo para ejecutar.
+        </p>
+      )}
       {error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{error}</p>}
       <div className="flex items-center justify-end gap-2 mt-3">
         <button type="button" onClick={() => setEstado('cancelada')}
@@ -256,7 +292,11 @@ function TarjetaAccion({ a, onEjecutada }: {
         <button type="button" onClick={() => void ejecutar()} disabled={estado === 'ejecutando'}
           className="text-[12.5px] font-medium px-3.5 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
           style={{ background: 'var(--ink)', color: 'var(--surface)' }}>
-          {estado === 'ejecutando' ? 'Apagando…' : 'Apagar'}
+          {estado === 'ejecutando'
+            ? (a.accion === 'apagar_agente' ? 'Apagando…' : 'Ejecutando…')
+            : estado === 'armada'
+              ? 'Confirmar de nuevo'
+              : (a.accion === 'apagar_agente' ? 'Apagar' : 'Ejecutar')}
         </button>
       </div>
     </div>

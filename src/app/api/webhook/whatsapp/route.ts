@@ -7,6 +7,7 @@ import { verifyWebhookChallenge, verifySignature } from '@/lib/meta/client';
 import { processInbound, type InboundMessage } from '@/lib/likida/processor';
 import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { flushObservabilidad } from '@/lib/observability/sentry';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { guardarEventosPendientes, reclamarPendiente, marcarPendienteProcesado, anotarFalloPendiente } from '@/lib/likida/wa_pendientes';
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
   const raw = await req.text();
   if (raw.length > MAX_BODY) return new NextResponse('Payload too large', { status: 413 }); // por si falta content-length
   if (!verifySignature(raw, req.headers.get('x-hub-signature-256'))) {
+    void registrarEventoSeguridad({ origen: 'wa_webhook', tipo: 'firma_invalida', severidad: 'alta' });
     return new NextResponse('Invalid signature', { status: 401 });
   }
 
@@ -369,6 +371,10 @@ interface WaWebhook {
           // objeto image y hasta el 14-ago-2026 se tiraba aquí.
           image?: { id: string; caption?: string };
           document?: { id: string };
+          // El pin de "Compartir ubicación" (F-Ruta, 17-ago-2026): el chofer
+          // en emergencia manda su posición y el sistema la registra y se la
+          // pasa al jefe. Meta la manda como `type: 'location'`.
+          location?: { latitude?: number; longitude?: number };
           // El chofer apretó un botón. Meta manda `type: 'interactive'` y dentro
           // un `interactive.type` que dice CUÁL de los interactivos fue:
           // `button_reply` (botones de respuesta rápida) o `list_reply` (lista
@@ -409,6 +415,11 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
         // `|| undefined` para que un caption vacío no se distinga de ninguno.
         else if (m.type === 'image' && m.image) out.push({ ...base, type: 'image', mediaId: m.image.id, text: m.image.caption || undefined });
         else if (m.type === 'document' && m.document) out.push({ ...base, type: 'document', mediaId: m.document.id });
+        // UBICACIÓN → lat/lng planos. Solo con AMBAS coordenadas numéricas:
+        // un pin a medias no es una posición, es ruido.
+        else if (m.type === 'location' && typeof m.location?.latitude === 'number' && typeof m.location?.longitude === 'number') {
+          out.push({ ...base, type: 'location', lat: m.location.latitude, lng: m.location.longitude });
+        }
         // BOTÓN APRETADO → entra como TEXTO con el id del botón por cuerpo.
         //
         // Antes caía en `other` y se perdía: el chofer apretaba, el webhook

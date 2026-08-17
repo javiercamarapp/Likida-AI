@@ -4,10 +4,12 @@
 //
 // EL MODELO PROPONE, EL HUMANO CONFIRMA, EL SERVIDOR EJECUTA SIN MODELO.
 // El LLM solo arma el bloque de previsualización (tipo 'accion' en la
-// respuesta); la ejecución llega por un POST aparte con `confirmado: true`
-// que corre ESTE módulo — la misma función que ya usa el ⌘K
-// (api/admin/palette), jamás una decisión del modelo. La bitácora la
-// escribe la función real (apagar() anota interruptor.apagado en 0053).
+// respuesta); al proponer, el route crea un AdminActionIntent
+// (copiloto-intents.ts) y la ejecución llega por un POST aparte que presenta
+// ese `intentId` — validado y gastado por el servidor— y corre ESTE módulo,
+// la misma función que ya usa el ⌘K (api/admin/palette), jamás una decisión
+// del modelo. La bitácora la escribe la función real (apagar() anota
+// interruptor.apagado en 0053).
 //
 // FASE 1 (diseño §10): solo `apagar_agente` está implementada. Las demás
 // existen en el catálogo con `implementada: false` — el copiloto las
@@ -17,6 +19,8 @@
 import { INTERRUPTORES, apagar, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { correrRunner } from '@/lib/likida/agentes/runner';
 import { DatoInvalido } from '@/lib/likida/errores';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 
 export type Gateo = 'confirma' | 'doble';
 
@@ -123,10 +127,18 @@ export async function ejecutarAccionCopiloto(
   }
 
   if (accionId === 'correr_runner') {
-    // El motivo es la nota de POR QUÉ se adelantó el cron — a la bitácora.
+    // El motivo es la nota de POR QUÉ se adelantó el cron — a la bitácora
+    // (la escribe `anotarCorridaEnBitacora`, abajo; exigir el motivo sin
+    // anotarlo era un contrato declarado que no se cumplía).
     const motivo = (params.motivo ?? '').trim();
     if (!motivo) throw new DatoInvalido('El motivo es obligatorio: por qué se adelanta la vuelta del runner.');
     const r = await correrRunner();
+    // Se firma TAMBIÉN la vuelta que el kill switch dejó en nada: la acción
+    // confirmada fue "correr el runner", y eso es lo que la bitácora audita.
+    await anotarCorridaEnBitacora(userId, motivo, {
+      apagado_global: r.apagadoGlobal === true,
+      agentes: r.agentes.map((a) => ({ agente: a.agente, resultado: a.resultado })),
+    });
     if (r.apagadoGlobal) {
       return { ok: true, mensaje: 'El runner no corrió: el kill switch GLOBAL está abajo. Se enciende desde Observabilidad.' };
     }
@@ -139,4 +151,35 @@ export async function ejecutarAccionCopiloto(
   // Inalcanzable mientras el catálogo y las ramas coincidan. Queda como red
   // por si el catálogo marca implementada una acción sin rama.
   throw new DatoInvalido(`"${accionId}" no tiene ejecutor todavía.`);
+}
+
+/**
+ * La corrida manual del runner queda en `bitacora_auditoria` (0053) con su
+ * motivo — el porqué de adelantar el cron es exactamente lo que en tres
+ * semanas nadie recuerda. Best-effort A PROPÓSITO (mismo criterio que
+ * `anotarEnBitacora` en interruptores.ts): la vuelta YA corrió; contestarle
+ * un error a Javier porque la bitácora no pudo escribir mentiría sobre un
+ * runner que sí despachó. El fallo se loguea para que no muera en silencio.
+ */
+async function anotarCorridaEnBitacora(
+  userId: string,
+  motivo: string,
+  detalle: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
+      tenant_id: null, // el runner barre TODAS las flotas: acción de plataforma
+      actor_id: userId,
+      accion: 'runner.corrida_manual',
+      entidad: 'runner',
+      entidad_id: 'nivel2',
+      detalle: { motivo, ...detalle },
+    });
+    if (error) logger.warn('copiloto.bitacora_no_escribio', { accion: 'runner.corrida_manual', err: error.message });
+  } catch (e) {
+    logger.warn('copiloto.bitacora_no_escribio', {
+      accion: 'runner.corrida_manual',
+      err: e instanceof Error ? e.message : String(e),
+    });
+  }
 }

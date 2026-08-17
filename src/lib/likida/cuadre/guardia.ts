@@ -21,6 +21,7 @@ import { cuadrarDesdeDB } from './desde_db';
 import { resumenCuadre } from './resumen';
 import { tieneCifrasDeDinero, cifrasSinRespaldo, hablaDeDineroSinCifraVerificable } from './cifras';
 import { logger } from '@/lib/logger';
+import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import type { ToolCallRecord } from '@/lib/llm/openrouter';
 import type { Liquidacion } from '@/types/likida';
 
@@ -96,6 +97,7 @@ export async function guardiaCifras(
       const fuera = cifrasSinRespaldo(reply, respaldos);
       if (fuera.length === 0) return { reply, forzado: false };
       logger.warn('guardia_cifras_sin_respaldo', { tenantId, viajeId, cifras: fuera });
+      void registrarEventoSeguridad({ origen: 'chat', tipo: 'cifra_sin_respaldo', tenantId, detalle: { viajeId, cifras: fuera.slice(0, 8) } });
     }
   }
 

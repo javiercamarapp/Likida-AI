@@ -4,7 +4,7 @@ import {
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
   Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake, Inbox,
-  Bot, Bug, ListChecks, Sparkles,
+  Bot, Bug, ListChecks, Sparkles, Hand, Globe2,
 } from 'lucide-react';
 
 /**
@@ -27,6 +27,8 @@ export const AGENTES: Item[] = [
   { href: '/admin/agente-cuadre', nombre: 'Agente de Cuadre', Icono: Calculator },
   { href: '/admin/agente-whatsapp', nombre: 'Agente de WhatsApp', Icono: MessagesSquare },
   { href: '/admin/model-ops', nombre: 'Model Ops', Icono: Settings2 },
+  // EvalOps (0134): el examen del agente y la regla de re-examen visible.
+  { href: '/admin/evals', nombre: 'Evals', Icono: Bug },
   { href: '/admin/playground', nombre: 'Playground', Icono: FlaskConical },
   // El panel de QA (Fase A): fotos reales contra el pipeline real, veredicto
   // por oráculos del ejército (scripts/qa-agentes/). Diseño: 00-PANEL-DE-QA.md.
@@ -34,9 +36,15 @@ export const AGENTES: Item[] = [
 ];
 
 export const NEGOCIO: Item[] = [
-  // La bandeja va PRIMERA en Negocio: es la cola de trabajo del superadmin
-  // (todo lo que espera a un humano, de todas las fuentes) — el resto de la
-  // sección son vistas; esta es donde se destraba.
+  // Tu turno va PRIMERO: es la bandeja única de Fase D — todo lo que espera
+  // el tap de Javier (piezas del bus, envíos, PRs, escalaciones, rutinas) en
+  // una pantalla operable desde el teléfono. Escalaciones sigue viva como la
+  // cola profunda de lo escalado; Tu turno la resume y enlaza.
+  { href: '/admin/tu-turno', nombre: 'Tu turno', Icono: Hand },
+  // El mundo de la cartera (17-ago): país → estado → calles, luces por etapa
+  // del embudo, refresco solo. Globe2 y no Map: Map es literal de más para
+  // un "cerebro" y Globe2 no choca con ningún ícono vivo del sidebar.
+  { href: '/admin/mapa-prospectos', nombre: 'Cerebro de ventas', Icono: Globe2 },
   { href: '/admin/escalaciones', nombre: 'Escalaciones', Icono: Inbox },
   // La cola de lo que los agentes REDACTAN (0117) — hermana de Escalaciones
   // (lo que el sistema no pudo resolver solo): allá se destraba, aquí se

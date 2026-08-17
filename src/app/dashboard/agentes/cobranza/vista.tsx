@@ -55,7 +55,7 @@ export function VistaAgenteCobranza({
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
         <BarraPagina
           icono={<BellRing width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Agente de Cobranza"
+          titulo="Seguimiento de comprobantes"
         />
         <div className="px-5 py-5 flex-1 space-y-4">
 

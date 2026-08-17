@@ -19,7 +19,7 @@ import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, mxn, TZ_MX } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { areaDeRuta } from '@/lib/auth/visibilidad';
-import { AGENTES, DINERO_FISCAL, SISTEMA, type Item } from '../rutas';
+import { AUTOMATIZACIONES, DINERO_FISCAL, SISTEMA, type Item } from '../rutas';
 import { BarraPagina, ChipFecha, HeroSaludo, MotorFiscal, TituloSeccion } from '../resumen-visual';
 import { StatCard, EstadoVacio } from '../../admin/ui/kit';
 import { MotorFiscalPeriodo } from '../motor-fiscal-periodo';
@@ -161,7 +161,7 @@ export async function InicioContador({
   // (`areaDeRuta`), no de una lista escrita a mano: una pantalla de dinero
   // nueva aparece aquí sola, y una que cambie de área desaparece sola. El
   // chat se excluye porque ya tiene su botón fijo en la barra de arriba.
-  const pantallas: Item[] = [...AGENTES, ...DINERO_FISCAL, ...SISTEMA]
+  const pantallas: Item[] = [...AUTOMATIZACIONES, ...DINERO_FISCAL, ...SISTEMA]
     .filter((it) => areaDeRuta(it.href) === 'dinero' && it.href !== '/dashboard/chat');
 
   const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--muted)' } } as const;

@@ -30,6 +30,9 @@ import { KpiPeriodo } from './kpi-periodo';
 import { MotorFiscalPeriodo } from './motor-fiscal-periodo';
 import { PanelPeriodo } from './panel-periodo';
 import { AvisoSinFlota } from './sin-flota';
+import { getPrimerosPasos } from '@/lib/likida/primeros-pasos';
+import { PrimeraLiquidacion } from './primera-liquidacion';
+import { OperaWhatsApp } from './opera-whatsapp';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
  *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
@@ -84,7 +87,7 @@ export async function InicioContenido({
     acred, kpis, anomalias, viajes,
     gastoSemanalSeries, liquidadoSemanalSeries, seriesKpis,
     cfgFiscal, gastosFiscales, gastosFiscalesSeries, viajesPorMes, topRutasSeries,
-    liquidaciones, escalados, huerfanosPendientes,
+    liquidaciones, escalados, huerfanosPendientes, pasos,
   ] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId, diasEjercicio)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
@@ -117,6 +120,7 @@ export async function InicioContenido({
     // simplemente no se pinta — una alerta no puede afirmar en falso.
     safe<number | null>(() => contarEscalados(tenantId)),
     safe<number | null>(() => contarHuerfanosPendientes(tenantId)),
+    safe(() => getPrimerosPasos(tenantId)),
   ]);
   const resumenPerdidas: ResumenPerdidas | null = cfgFiscal && gastosFiscales
     ? resumirPerdidas(gastosFiscales, opcionesDe(cfgFiscal))
@@ -268,6 +272,20 @@ export async function InicioContenido({
               no existe, y esa frase tiene que llegar antes que los ceros. */}
           {!tenantExiste && (
             <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
+          )}
+
+          {/* La guía del arranque (auditoría 5): solo mientras no exista la
+              primera liquidación; si la consulta falla, no se pinta — jamás
+              se palomea de cortesía. */}
+          {tenantExiste && pasos && !pasos.completado && (
+            <div className="mt-3"><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
+          )}
+
+          {/* El canal, presentado con sus mensajes literales — solo mientras
+              la flota arranca: ya operando, el guion lo tiene aprendido y la
+              tarjeta cede el lugar a las cifras. */}
+          {tenantExiste && pasos && !pasos.completado && (
+            <div className="mt-3"><OperaWhatsApp rol="jefe" /></div>
           )}
 
           {/* El insight ANTES que las alertas (patrón de la referencia): la

@@ -46,10 +46,12 @@ export default function AvisoRol({ rolReal }: { rolReal: string }) {
   if (rolReal !== 'superadmin') return null;
 
   const comoRol = rolVista && NOMBRE[rolVista] ? NOMBRE[rolVista] : null;
-  // Sin rol previsualizado, la cinta solo tiene sentido si de verdad estás en
-  // el panel de una flota: `?vista=demo` o `?tenant=`. Un superadmin en
-  // /dashboard sin ninguno de los dos ni siquiera llega — `esRaiz` lo rebota a
-  // /admin (tenant-efectivo.ts).
+  // Sin rol previsualizado, esta cinta solo aplica al "ver como" por query
+  // string (`?vista=demo` o `?tenant=`). Un superadmin SIN esos params está en
+  // la flota que eligió en /admin/elegir-flota (cookie de admin-context.ts,
+  // 16-ago-2026) — ese camino no pasa por aquí (esto es un Client Component
+  // que solo ve la URL): su aviso es el badge "viendo como superadmin ·
+  // <flota>" que las páginas pintan con `tenantNombre` del servidor.
   const enPanelDeFlota = sp.get('vista') !== null || sp.get('tenant') !== null;
   if (!comoRol && !enPanelDeFlota) return null;
 

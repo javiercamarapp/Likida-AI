@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {
   LayoutGrid, CalendarDays, Truck, DollarSign, Cpu, CheckCircle2, ReceiptText,
   UserRound, Users, MessageCircle, ChevronDown, ExternalLink, ArrowRight,
-  LifeBuoy, UserPlus, Handshake, HeartPulse, Bot,
+  LifeBuoy, UserPlus, Handshake, Bot,
 } from 'lucide-react';
 import {
   getResumenNegocio, getConversacionesActivas, getConteosPlataforma,
@@ -21,10 +21,9 @@ import ContadorRetro from './contador-retro';
 import { IconoProveedor } from './proveedor-icono';
 import { GlobalFilter, resolverRango } from './ui/global-filter';
 import { StatCard, StatusPill, EstadoVacio, VerMas, type Estado } from './ui/kit';
-import { SelectorVista } from './selector-vista';
 import Notificaciones from './notificaciones';
 import { calcularAlertas } from './calcular-alertas';
-import { AGENTES, SECCIONES } from './rutas';
+import { AGENTES } from './rutas';
 
 /** `llm_costo.fase` → cómo se llama el agente en pantalla (para la dona). */
 const FASE_LABEL: Record<string, string> = {
@@ -188,12 +187,9 @@ export async function ConsolaAdmin({
           }
         />
 
-        {/* Arriba de todo lo demás a propósito: con la base casi vacía,
-            entrar a los otros paneles a mirar el frontend es lo que más se
-            hace desde aquí. (Trae su propio p-5, por eso vive fuera del
-            contenedor px-5 de abajo — mismo ancho útil, sin doble padding.) */}
-        <SelectorVista tenants={r.tenants} />
-
+        {/* El selector de vistas ("entrar a los otros paneles") vivió aquí
+            arriba hasta el 17-ago; Javier lo mandó a /admin/dev — el Inicio
+            es de operación diaria y ese bloque es herramienta de desarrollo. */}
         <div className="px-5 pb-5 flex-1 space-y-2.5">
           {/* ── KPIs — StatCard (kit compartido), todo dato real ──────────── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -617,64 +613,13 @@ export async function ConsolaAdmin({
             )}
           </section>
 
-          {/* ── Accesos — TODAS las páginas, generado desde rutas.ts (una
-              página nueva aparece aquí sola; una lista a mano no) ─────────── */}
-          <div className="card p-3">
-            <TituloSeccion>Todas las páginas</TituloSeccion>
-            <div className="mt-2 space-y-3">
-              {SECCIONES.map(({ titulo, items }) => (
-                <div key={titulo}>
-                  <div className="etiqueta-mono text-[10px] font-medium uppercase" style={{ color: 'var(--faint)' }}>{titulo}</div>
-                  <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5">
-                    {items.map((it) => (
-                      <Link key={it.href} href={it.href}
-                        className="hairline rounded-lg px-3 py-2 flex items-center gap-2 text-[13px] transition-colors hover:bg-[var(--canvas)]"
-                        style={{ background: 'var(--surface)' }}>
-                        <it.Icono width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                        <span className="truncate">{it.nombre}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* El grid "Todas las páginas" vivió aquí hasta el 17-ago; Javier
+              lo mandó borrar del resumen — el sidebar (y ⌘K) ya son ese
+              índice, y el Inicio es para operar, no para navegar. */}
 
-          {/* ── Salud del sistema ─────────────────────────────────────────── */}
-          <div className="card p-3">
-            <TituloSeccion>Salud del sistema</TituloSeccion>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5 mt-2">
-              <Link href="/admin/salud-sistema"
-                className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
-                style={{ background: 'var(--surface)' }}>
-                <HeartPulse width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium">Salud del sistema</div>
-                  <div className="text-xs" style={{ color: 'var(--muted)' }}>La medición viva — base, WhatsApp, correo.</div>
-                </div>
-                <ArrowRight width={13} height={13} strokeWidth={1.75} className="ml-auto shrink-0" style={{ color: 'var(--muted)' }} />
-              </Link>
-              {/* Sentry y Vercel ya lo miden — se enlaza, no se reconstruye. */}
-              <a href="https://sentry.io" target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
-                style={{ background: 'var(--surface)' }}>
-                <ExternalLink width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium">Errores — Sentry</div>
-                  <div className="text-xs" style={{ color: 'var(--muted)' }}>Ya conectado. Se enlaza en vez de reconstruirse.</div>
-                </div>
-              </a>
-              <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
-                style={{ background: 'var(--surface)' }}>
-                <ExternalLink width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium">Uptime y deploys — Vercel</div>
-                  <div className="text-xs" style={{ color: 'var(--muted)' }}>Vercel ya lo mide. Se enlaza en vez de reconstruirse.</div>
-                </div>
-              </a>
-            </div>
-          </div>
+          {/* "Salud del sistema" (los 3 links) salió del resumen el 17-ago por
+              orden de Javier — viven en el sidebar (Sistema) y en
+              Observabilidad; el resumen es de operación. */}
         </div>
       </div>
     </main>

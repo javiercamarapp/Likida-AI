@@ -13,6 +13,9 @@ import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from './resumen-vis
 import { TableroCifras, TablaCarga, TablaViajesOperacion, type FilaViajeOperacion } from './tablero-operacion';
 import AvanceCierre from './avance-cierre';
 import { AvisoSinFlota } from './sin-flota';
+import { getPrimerosPasos } from '@/lib/likida/primeros-pasos';
+import { PrimeraLiquidacion } from './primera-liquidacion';
+import { OperaWhatsApp } from './opera-whatsapp';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CASA DEL ENCARGADO.
@@ -71,7 +74,7 @@ export async function InicioOperacion({
   // vencida. Mismo cálculo que `operadores/page.tsx`.
   const diaMx = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahora));
 
-  const [tablero, sinAsignar, carga, incidencias, viajes, unidades, operadores] = await Promise.all([
+  const [tablero, sinAsignar, carga, incidencias, viajes, unidades, operadores, pasos] = await Promise.all([
     safe<TableroOperacion>(() => getTableroOperacion(tenantId)),
     safe<ViajeSinAsignar[]>(() => getViajesSinAsignar(tenantId)),
     safe<CargaOperador[]>(() => getCargaOperadores(tenantId)),
@@ -86,6 +89,7 @@ export async function InicioOperacion({
     // (anticipos, % comprobado) SE QUEDA EN EL SERVIDOR, igual que en
     // `operadores/page.tsx` (la fuga del 4-ago fue exactamente eso).
     safe<OperadorDetalle[]>(() => getOperadoresDetalle(tenantId)),
+    safe(() => getPrimerosPasos(tenantId)),
   ]);
 
   // ── Alertas accionables — SOLO si hay fuego real ─────────────────────────
@@ -212,6 +216,17 @@ export async function InicioOperacion({
               no existe, y esa frase tiene que llegar antes que los ceros. */}
           {!tenantExiste && (
             <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
+          )}
+
+          {/* La guía del arranque (auditoría 5) — misma pieza que el Resumen
+              del dueño; el encargado también puede llevar a la flota a su
+              primera liquidación. */}
+          {tenantExiste && pasos && !pasos.completado && (
+            <div className="mt-3"><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
+          )}
+
+          {tenantExiste && pasos && !pasos.completado && (
+            <div className="mt-3"><OperaWhatsApp rol="jefe" /></div>
           )}
 
           {ciegas.length > 0 && (

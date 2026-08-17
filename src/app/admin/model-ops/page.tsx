@@ -10,11 +10,12 @@ export const dynamic = 'force-dynamic';
 
 const FASE_LABEL: Record<string, string> = { ocr: 'Agente OCR', cuadre: 'Agente de Cuadre', whatsapp: 'Agente de WhatsApp' };
 
-/** Las TRES fases reales del pipeline — en ese orden, porque es el orden en
- *  el que de verdad corren para cada viaje. No hay una cuarta fase, ni un
- *  "crear agente nuevo": Likida no tiene tool-calling configurable, son
- *  pasos fijos en código. Los íconos son los mismos de `rutas.ts` para que
- *  cada fase se lea como la misma cosa que su página en el sidebar. */
+/** Las TRES fases del pipeline DEL VIAJE — en el orden en que corren. Esta
+ *  página gobierna solo ese camino; NO es el inventario de agentes de la
+ *  compañía: el catálogo vive en /admin/agentes (58 definiciones), el
+ *  runner acotado (0123) los corre, y la matriz operativa por rol está en
+ *  `agente_definicion.modelo_rol` (0125). Decir aquí "no hay más fases"
+ *  fue verdad hasta ago-2026 y dejó de serlo — auditoría 5: truth drift. */
 const FASES = [
   { fase: 'ocr', nombre: 'Agente OCR', Icono: ScanText, queHace: 'Lee la foto de un comprobante (diésel, caseta, factura) y extrae monto, folio y CFDI.' },
   { fase: 'cuadre', nombre: 'Agente de Cuadre', Icono: Calculator, queHace: 'Compara los gastos ya capturados contra el anticipo y la política de la flota.' },

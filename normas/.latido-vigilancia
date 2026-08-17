@@ -1,30 +1,25 @@
-fecha_corrida: 2026-08-16
+fecha_corrida: 2026-08-16 21:30
 ultimo_dia_barrido: 2026-08-16
-rango_intentado: 2026-07-24..2026-08-16
-notas_revisadas: rango completo (17 dias con diario; 7 sin edicion, fines de semana)
-notas_por_edicion: {matutina: si, vespertina: si, extraordinaria: si}
+rango_intentado: 2026-08-16 (barrido diario vespertino; el backlog 24-jul..16-ago quedo cubierto por la corrida de la manana)
+notas_revisadas: 0 titulos — domingo SIN edicion del DOF
+notas_por_edicion: {matutina: no_hubo, vespertina: no_hubo, extraordinaria: no_hubo}
 fichas_disparadas: 0
 etag_sat: '"6a7e7528-387cd"'
-etag_sat_check: baseline capturado 2026-08-16 (Last-Modified 14-ago-2026 01:53 GMT) — primer ETag registrado; el diff aplica desde la proxima corrida
+etag_sat_check: sin recheck esta corrida (cadencia semanal jue/vie; baseline del 16-ago vigente)
 deriva_ley_check: no_aplica_no_es_dia_1_trimestre
-estado: "OK — PRIMERA CORRIDA REAL tras 16 bloqueadas"
+estado: "OK — sin edicion dominical, verificado con cruce anti-silencio"
 detalle: >
-  Corrida desde la sesion local de Claude Code (16-ago-2026), cuyo egress SI
-  alcanza sidofqa.segob.gob.mx y www.sat.gob.mx — el bloqueo de las 16
-  corridas previas era del proxy del entorno de la routine en la nube, no de
-  las fuentes. Barrido completo del backlog 24-jul..16-ago via SIDOF
-  (diarios/porFecha como canario + notas/{fecha}): 21 coincidencias del
-  diccionario. Las accionables: los 4 acuerdos semanales de cuotas IEPS
-  (viernes 24-jul, 31-jul, 07-ago, 14-ago, vespertina) — capturados en
-  normas/datos/cuota-ieps-diesel.yaml (NUEVO, primera captura historica) con
-  verificacion aritmetica estimulo+disminuida=7.3634 exacta en las 4
-  semanas. El resto de coincidencias, revisadas una por una sin ficha
-  contradicha: oficios 69-B/69-B Bis (listados EFOS — son ALTAS en los
-  listados que el validador ya consume, no cambios a la regla de las fichas
-  cff-69-B), nota aclaratoria de Comites Interinstitucionales (no fiscal),
-  anexos INFONAVIT/UNAM (no aplican), listado de prestadores digitales LIVA
-  (no toca autotransporte).
-sin_verificar_esta_corrida: ninguna publicacion del rango; las 23 fichas siguen en su estado (esta rutina no sube a verificado — eso exige lectura humana firmada).
+  Barrido diario de las 21:30 desde la sesion local (egress OK). SIDOF
+  respondio: diarios/porFecha/16-08-2026 devuelve 404 NOT_FOUND y
+  notas/16-08-2026 devuelve 200 con los tres arreglos vacios — ambas
+  senales coinciden en "no hubo diario hoy". No es fallo del API: la fecha
+  de control (viernes 14-ago) responde 200 con matutina y vespertina. Es
+  domingo, dia no habil; el canario de "0 notas en dia habil = fallo" no
+  aplica. Cero titulos que filtrar, cero fichas tocadas. La corrida de la
+  manana de hoy (backlog 24-jul..16-ago, 21 coincidencias, 4 cuotas IEPS
+  capturadas en normas/datos/cuota-ieps-diesel.yaml) sigue siendo el
+  ultimo barrido con contenido.
+sin_verificar_esta_corrida: nada pendiente del dia; las 23 fichas siguen en su estado (esta rutina no sube a verificado — eso exige lectura humana firmada).
 accion_requerida: >
   1) La routine de la nube sigue ciega por su proxy: mover la cadencia diaria
   a un entorno con egress (launchd local, como el Cazador) o pedir el host en
