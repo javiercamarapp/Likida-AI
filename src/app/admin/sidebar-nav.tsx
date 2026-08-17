@@ -45,20 +45,19 @@ function Fila({ item, pathname }: { item: Item; pathname: string }) {
   );
 }
 
-function Seccion({ titulo, items, pathname }: { titulo: string; items: Item[]; pathname: string }) {
-  // Solo AGENTES amanece abierta; el resto pliega (orden de Javier del
-  // 17-ago, que SUSTITUYE a la del 14-ago de "todo abierto": con las
-  // pantallas de Fase D el sidebar completo ya no cabe sin scroll y los
-  // encabezados dejan de ser pelones — cada uno anuncia su sección). La
-  // sección de la ruta ACTIVA también abre: llegar por link directo a una
-  // pantalla y no verla iluminada en el menú desorienta. Estado de sesión —
-  // no persiste a propósito.
-  const contieneActiva = items.some((it) => it.href === pathname);
-  const [plegada, setPlegada] = useState(titulo !== 'Agentes' && !contieneActiva);
+function Seccion({ titulo, items, pathname, abierta, onAbrir }: {
+  titulo: string; items: Item[]; pathname: string; abierta: string | null;
+  onAbrir: (titulo: string) => void;
+}) {
+  // ACORDEÓN (orden de Javier, 17-ago, que SUSTITUYE al "todo abierto" del
+  // 14-ago): UNA sola sección abierta a la vez — AGENTES por default, o la
+  // de la ruta activa al llegar por link directo (el padre decide). Abrir
+  // una cierra la anterior; el estado vive arriba por eso mismo.
+  const plegada = abierta !== titulo;
   if (items.length === 0) return null;
   return (
     <div>
-      <button type="button" onClick={() => setPlegada((v) => !v)}
+      <button type="button" onClick={() => onAbrir(titulo)}
         className="w-full flex items-center justify-between px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide sb-texto transition-opacity hover:opacity-70"
         style={{ color: 'var(--muted)' }}>
         {titulo}
@@ -71,9 +70,23 @@ function Seccion({ titulo, items, pathname }: { titulo: string; items: Item[]; p
   );
 }
 
+const TITULOS_ADMIN: Array<[string, Item[]]> = [
+  ['Agentes', AGENTES], ['Negocio', NEGOCIO], ['Plataforma', PLATAFORMA],
+  ['Control', CONTROL], ['Sistema', SISTEMA],
+];
+
 export default function SidebarNav() {
   const pathname = usePathname();
   const resumenActivo = pathname === '/admin';
+  // El acordeón: default AGENTES, o la sección de la ruta activa. Toggle
+  // sobre la abierta la cierra (null = todas plegadas, también válido).
+  const [abierta, setAbierta] = useState<string | null>(() => {
+    for (const [titulo, items] of TITULOS_ADMIN) {
+      if (items.some((it) => it.href === pathname)) return titulo;
+    }
+    return 'Agentes';
+  });
+  const alternar = (titulo: string) => setAbierta((a) => (a === titulo ? null : titulo));
   return (
     <>
       <div>
@@ -81,11 +94,10 @@ export default function SidebarNav() {
           <LayoutGrid {...estiloIcono(resumenActivo)} /> <span className="sb-texto truncate">Resumen</span>
         </Link>
       </div>
-      <Seccion titulo="Agentes" items={AGENTES} pathname={pathname} />
-      <Seccion titulo="Negocio" items={NEGOCIO} pathname={pathname} />
-      <Seccion titulo="Plataforma" items={PLATAFORMA} pathname={pathname} />
-      <Seccion titulo="Control" items={CONTROL} pathname={pathname} />
-      <Seccion titulo="Sistema" items={SISTEMA} pathname={pathname} />
+      {TITULOS_ADMIN.map(([titulo, items]) => (
+        <Seccion key={titulo} titulo={titulo} items={items} pathname={pathname}
+          abierta={abierta} onAbrir={alternar} />
+      ))}
     </>
   );
 }
@@ -111,7 +123,7 @@ export function SidebarAbajoAdmin({ usoIa }: {
           href="/admin/costos-facturacion" hrefTexto="Ver costos"
         />
       )}
-      <Link href="/admin#vistas" title="Entrar a los paneles de los otros roles"
+      <Link href="/admin/dev" title="Entrar a los paneles de los otros roles (vive en Dev desde el 17-ago)"
         className="hairline flex items-center gap-2 px-3 py-1.5 mb-1 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
         style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
         <ArrowLeftRight width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />

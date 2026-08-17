@@ -118,7 +118,7 @@ export function ElegirFlotaContenido({
       <div className="etiqueta-mono text-[10px] uppercase mt-6 mb-2" style={{ color: 'var(--faint)' }}>
         Demostración
       </div>
-      {tarjeta({ id: demoId, nombre: 'FLOTA DEMO' }, true)}
+      {tarjeta({ id: demoId, nombre: 'Flota Javier Prueba' }, true)}
 
       {seleccionActual && (
         <form action={accionQuitar} className="mt-6">

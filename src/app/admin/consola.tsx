@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {
   LayoutGrid, CalendarDays, Truck, DollarSign, Cpu, CheckCircle2, ReceiptText,
   UserRound, Users, MessageCircle, ChevronDown, ExternalLink, ArrowRight,
-  LifeBuoy, UserPlus, Handshake, HeartPulse, Bot,
+  LifeBuoy, UserPlus, Handshake, Bot,
 } from 'lucide-react';
 import {
   getResumenNegocio, getConversacionesActivas, getConteosPlataforma,
@@ -617,41 +617,9 @@ export async function ConsolaAdmin({
               lo mandó borrar del resumen — el sidebar (y ⌘K) ya son ese
               índice, y el Inicio es para operar, no para navegar. */}
 
-          {/* ── Salud del sistema ─────────────────────────────────────────── */}
-          <div className="card p-3">
-            <TituloSeccion>Salud del sistema</TituloSeccion>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5 mt-2">
-              <Link href="/admin/salud-sistema"
-                className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
-                style={{ background: 'var(--surface)' }}>
-                <HeartPulse width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium">Salud del sistema</div>
-                  <div className="text-xs" style={{ color: 'var(--muted)' }}>La medición viva — base, WhatsApp, correo.</div>
-                </div>
-                <ArrowRight width={13} height={13} strokeWidth={1.75} className="ml-auto shrink-0" style={{ color: 'var(--muted)' }} />
-              </Link>
-              {/* Sentry y Vercel ya lo miden — se enlaza, no se reconstruye. */}
-              <a href="https://sentry.io" target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
-                style={{ background: 'var(--surface)' }}>
-                <ExternalLink width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium">Errores — Sentry</div>
-                  <div className="text-xs" style={{ color: 'var(--muted)' }}>Ya conectado. Se enlaza en vez de reconstruirse.</div>
-                </div>
-              </a>
-              <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
-                style={{ background: 'var(--surface)' }}>
-                <ExternalLink width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium">Uptime y deploys — Vercel</div>
-                  <div className="text-xs" style={{ color: 'var(--muted)' }}>Vercel ya lo mide. Se enlaza en vez de reconstruirse.</div>
-                </div>
-              </a>
-            </div>
-          </div>
+          {/* "Salud del sistema" (los 3 links) salió del resumen el 17-ago por
+              orden de Javier — viven en el sidebar (Sistema) y en
+              Observabilidad; el resumen es de operación. */}
         </div>
       </div>
     </main>
