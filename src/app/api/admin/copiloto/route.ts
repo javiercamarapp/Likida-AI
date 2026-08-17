@@ -37,6 +37,10 @@ import { validarConversacionId } from '@/app/api/dashboard/chat/validacion';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { sesionSuperadmin } from './puerta';
+import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
+import { supabaseServer } from '@/lib/supabase/server';
+import { exigirAal2SiHayFactor, MSG_STEP_UP } from '@/lib/auth/mfa';
+import { CATALOGO_ACCIONES } from '@/lib/agents/copiloto-acciones';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -105,6 +109,18 @@ export async function POST(req: Request) {
         error: 'La acción llegó sin un intent del servidor — pide la acción al copiloto y confirma desde su previsualización.',
       }, { status: 409 });
     }
+    // ── STEP-UP (fase 7): una acción 'doble' de un usuario CON segundo
+    // factor exige la sesión en AAL2 — ANTES de tocar el intent, para no
+    // gastarlo en un intento que va a rebotar. Sin factor inscrito pasa
+    // (política incremental de lib/auth/mfa.ts).
+    const defAccion = CATALOGO_ACCIONES.find((x) => x.id === accionId);
+    if (defAccion?.gateo === 'doble') {
+      const paso = await exigirAal2SiHayFactor(await supabaseServer());
+      if (!paso.ok) {
+        void registrarEventoSeguridad({ origen: 'copiloto', tipo: 'step_up_rechazado', severidad: 'info', actor: sesion.userId, detalle: { accion: accionId } });
+        return NextResponse.json({ error: MSG_STEP_UP }, { status: 403 });
+      }
+    }
     const reclamo = await reclamarIntent({
       intentId,
       actorId: sesion.userId,
@@ -113,7 +129,11 @@ export async function POST(req: Request) {
     });
     if (!reclamo.ok) {
       // 'motivo' es validación de entrada (400); lo demás es un intent que
-      // ya no autoriza nada (409) — y en ambos se dice qué hacer.
+      // ya no autoriza nada (409) — y en ambos se dice qué hacer. El 409 es
+      // señal de T&S: replay, otro actor o args cambiados.
+      if (reclamo.codigo !== 'motivo') {
+        void registrarEventoSeguridad({ origen: 'copiloto', tipo: 'intent_invalido', actor: sesion.userId, detalle: { accion: accionId, codigo: reclamo.codigo } });
+      }
       return NextResponse.json({ error: reclamo.error }, { status: reclamo.codigo === 'motivo' ? 400 : 409 });
     }
     if (reclamo.fase === 'armado') {

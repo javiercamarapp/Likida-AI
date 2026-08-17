@@ -6,6 +6,7 @@ import {
 } from '@/lib/saas/suscripcion';
 import { bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 
 const MAX_BODY = 256 * 1024;
 
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
   // `stringify` antes de esto cambia bytes y la firma deja de validar.
   if (!verificarFirmaStripe(crudo, req.headers.get('stripe-signature'))) {
     logger.warn('stripe.webhook.firma_invalida', {});
+    void registrarEventoSeguridad({ origen: 'stripe_webhook', tipo: 'firma_invalida', severidad: 'alta' });
     return new NextResponse('Firma inválida', { status: 401 });
   }
 

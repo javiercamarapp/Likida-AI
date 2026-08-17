@@ -5204,3 +5204,84 @@ begin
   raise exception E'STRIPE_CICLO_0132  columna=%  filas-viejas-sin-sellar=%   (esperado t / 0)',
     columna, sin_sellar_viejas;
 end $$;
+
+-- ── 105. La telemetría de seguridad existe y su dominio aprieta (mig. 0133) ─
+-- (a) tabla CON RLS; (b) funcional: un tipo fuera del dominio REBOTA.
+--   (esperado t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  tipo_invalido_rebota boolean := false;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'evento_seguridad';
+
+  begin
+    insert into public.evento_seguridad (origen, tipo) values ('wa_webhook', 'chisme-de-pasillo');
+  exception when check_violation then
+    tipo_invalido_rebota := true;
+  end;
+
+  raise exception E'SEGURIDAD_0133  tabla-rls=%  tipo-invalido-rebota=%   (esperado t / t)',
+    coalesce(tabla_rls, false), tipo_invalido_rebota;
+end $$;
+
+-- ── 106. EvalOps existe, con dominio y con el examen sembrado (mig. 0134) ───
+-- (a) las 3 tablas CON RLS; (b) el examen del analista tiene casos y AL MENOS
+-- una trampa (el diseño de 22-evaluacion.md exige trampas); (c) funcional: un
+-- veredicto fuera del dominio REBOTA.   (esperado 3 / >0 / >0 / t — exactos)
+do $$
+declare
+  tablas_rls int;
+  casos int;
+  trampas int;
+  veredicto_invalido_rebota boolean := false;
+  v_caso uuid;
+  v_corrida uuid;
+begin
+  select count(*) into tablas_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname in ('eval_caso', 'eval_corrida', 'eval_resultado')
+     and c.relrowsecurity;
+
+  select count(*) into casos from public.eval_caso where agente = 'analista' and activo;
+  select count(*) into trampas from public.eval_caso where agente = 'analista' and tipo = 'trampa';
+
+  select id into v_caso from public.eval_caso limit 1;
+  insert into public.eval_corrida (agente, prompt_hash) values ('analista', 'zzz-verif') returning id into v_corrida;
+  begin
+    insert into public.eval_resultado (corrida_id, caso_id, veredicto) values (v_corrida, v_caso, 'diez-de-diez');
+  exception when check_violation then
+    veredicto_invalido_rebota := true;
+  end;
+
+  raise exception E'EVALOPS_0134  tablas-rls=%  casos=%  trampas=%  veredicto-invalido-rebota=%   (esperado 3 / >0 / >0 / t)',
+    tablas_rls, casos, trampas, veredicto_invalido_rebota;
+end $$;
+
+-- ── 107. La identidad de worker existe y su hash es único (mig. 0135) ───────
+-- (a) tabla CON RLS; (b) el índice parcial de llaves vivas; (c) funcional:
+-- dos llaves con el mismo hash REBOTAN.   (esperado t / t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  indice boolean;
+  hash_duplicado_rebota boolean := false;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'worker_llave';
+
+  select exists (select 1 from pg_indexes where indexname = 'idx_worker_llave_hash') into indice;
+
+  insert into public.worker_llave (nombre, hash, capacidades) values ('zzz-verif', 'hash-verif', '{bus.latido}');
+  begin
+    insert into public.worker_llave (nombre, hash, capacidades) values ('zzz-verif-2', 'hash-verif', '{bus.latido}');
+  exception when unique_violation then
+    hash_duplicado_rebota := true;
+  end;
+
+  raise exception E'WORKER_0135  tabla-rls=%  indice=%  hash-duplicado-rebota=%   (esperado t / t / t)',
+    coalesce(tabla_rls, false), indice, hash_duplicado_rebota;
+end $$;
