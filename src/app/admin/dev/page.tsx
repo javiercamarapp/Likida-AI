@@ -2,6 +2,7 @@ import { Code2, ExternalLink } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getActividadGitHub, getMapaCommits, getAutoresCommits } from '@/lib/admin/github';
 import { MapaActividad } from './mapa-actividad';
+import { getEventosSeguridad, type FilaSeguridad } from '@/lib/seguridad/eventos';
 import { fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio, StatusPill } from '../ui/kit';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -24,11 +25,15 @@ export default async function DevPage() {
   // El selector de vistas necesita saber si HAY flotas (con cero, sus ligas
   // rebotarían a paneles vacíos y lo dice). Conteo directo y barato — la
   // tabla `tenant` no tiene tenant_id: es la lista de tenants misma.
-  const [{ count }, actividad, mapa, autores] = await Promise.all([
+  // T&S (0133): errors-by-value hecho a mano — null = no se pudo leer, y la
+  // tarjeta lo dice (cero eventos ≠ ciego).
+  const seguridadP: Promise<FilaSeguridad[] | null> = getEventosSeguridad(12).catch(() => null);
+  const [{ count }, actividad, mapa, autores, seguridad] = await Promise.all([
     supabaseAdmin().from('tenant').select('id', { count: 'exact', head: true }),
     getActividadGitHub(),
     getMapaCommits(),
     getAutoresCommits(),
+    seguridadP,
   ]);
   const tenants = count ?? 0;
   return (
@@ -91,6 +96,34 @@ export default async function DevPage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* ── Trust & Safety (0133): lo que los detectores atraparon.
+                Firma inválida, intents rechazados, cifras sin respaldo —
+                la memoria de seguridad consultable, no solo logs. ── */}
+          <div className="card p-3">
+            <TituloSeccion>Eventos de seguridad</TituloSeccion>
+            <div className="mt-2">
+              {seguridad === null && (
+                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                  No se pudieron leer — que no es lo mismo que "no hay eventos".
+                </p>
+              )}
+              {seguridad !== null && seguridad.length === 0 && (
+                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                  Sin eventos registrados. Los detectores están cableados (firmas, intents, guardia de cifras) — el silencio aquí es bueno de verdad.
+                </p>
+              )}
+              {seguridad !== null && seguridad.map((e) => (
+                <div key={e.id} className="flex items-center gap-2 py-1 text-[12px]" style={{ borderBottom: '1px solid var(--line)' }}>
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: e.severidad === 'alta' ? 'var(--bad)' : e.severidad === 'media' ? 'var(--warn, #d97706)' : 'var(--muted)' }} />
+                  <span className="font-medium" style={{ color: 'var(--ink)' }}>{e.tipo.replace(/_/g, ' ')}</span>
+                  <span style={{ color: 'var(--muted)' }}>· {e.origen}</span>
+                  {e.actor && <span className="truncate" style={{ color: 'var(--faint)' }}>· {e.actor}</span>}
+                  <span className="ml-auto tabular shrink-0" style={{ color: 'var(--muted)' }}>{fechaHoraMx(e.creadoEn)}</span>
+                </div>
+              ))}
             </div>
           </div>
 
