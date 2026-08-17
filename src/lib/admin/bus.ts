@@ -252,7 +252,7 @@ export type ResultadoPrs =
 export async function getPrsAbiertos(): Promise<ResultadoPrs> {
   const token = process.env.GITHUB_TOKEN;
   if (!token) return { estado: 'sin_token' };
-  const repo = process.env.GITHUB_REPO || 'javiercamarapp/likida';
+  const repo = process.env.GITHUB_REPO || 'javiercamarapp/likida.ai';
   try {
     const r = await fetch(`https://api.github.com/repos/${repo}/pulls?state=open&per_page=20`, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
