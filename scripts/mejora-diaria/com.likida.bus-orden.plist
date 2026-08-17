@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.likida.bus-orden</string>
+  <!-- SIN el check de APAGADO, a propósito: este latido es el ÚNICO camino
+       por el que la orden kill_switch_off puede llegar estando todo apagado.
+       Un poller que obedece al kill switch deja a Javier sin botón de
+       encendido remoto — el switch apaga rutinas, no el oído. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>cd __REPO__ &amp;&amp; bash scripts/mejora-diaria/bus.sh ordenes</string>
+  </array>
+  <key>StartInterval</key><integer>300</integer>
+  <key>StandardOutPath</key><string>__REPO__/.mejora-diaria/logs/bus-orden.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/.mejora-diaria/logs/bus-orden.log</string>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>

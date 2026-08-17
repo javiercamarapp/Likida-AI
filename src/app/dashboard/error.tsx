@@ -48,27 +48,51 @@ export default function DashboardError({
     );
   }, [error]);
 
+  // El MISMO lenguaje que el 404 (orden del 17-ago): display grande, mucho
+  // aire, salidas en texto. El digest sigue en pantalla y seleccionable —
+  // es el único puente con la línea del log.
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="card p-10 text-center max-w-md">
-        <p className="text-xl font-semibold tracking-tight">No se pudo cargar el panel</p>
-        <p className="mt-2 text-base" style={{ color: 'var(--muted)' }}>
-          Hubo un problema al leer los datos. Puedes reintentar.
+    <div
+      className="min-h-screen flex flex-col justify-between px-8 py-8 md:px-14 md:py-12"
+      style={{ background: 'var(--bg)' }}
+    >
+      <div />
+      <div className="max-w-3xl">
+        <p className="text-xs font-medium uppercase" style={{ color: 'var(--muted)', letterSpacing: '0.14em' }}>
+          Algo falló
         </p>
-        <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>
-          Esto NO significa que no haya liquidaciones: significa que no se pudieron leer.
+        <h1
+          className="mt-5 font-medium"
+          style={{
+            fontFamily: 'var(--font-display), system-ui, sans-serif',
+            fontSize: 'clamp(34px, 6vw, 72px)',
+            lineHeight: 0.98,
+            letterSpacing: '-0.042em',
+            textWrap: 'balance',
+          }}
+        >
+          No se pudo cargar el panel
+        </h1>
+        <p className="mt-6 max-w-lg" style={{ color: 'var(--muted)', fontSize: 'clamp(16px, 1.5vw, 19px)', lineHeight: 1.55 }}>
+          Hubo un problema al leer los datos — que no es lo mismo que no haya datos.
+          Reintenta; si sigue, el código de abajo es lo que soporte necesita.
         </p>
-        <div className="mt-6 flex items-center justify-center gap-3">
-          <button onClick={reset} className="px-4 py-2 rounded-lg text-sm font-medium"
-            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>Reintentar</button>
-          <Link href="/" className="px-4 py-2 rounded-lg text-sm font-medium hairline">Inicio</Link>
+        <div className="mt-9 flex items-center gap-7">
+          <button onClick={reset} className="group inline-flex items-center gap-2 text-base font-medium" style={{ color: 'var(--ink)' }}>
+            <span className="pb-0.5" style={{ borderBottom: '1px solid color-mix(in srgb, var(--ink) 28%, transparent)' }}>Reintentar</span>
+            <span aria-hidden className="transition-transform duration-200 group-hover:translate-x-1 motion-reduce:transform-none motion-reduce:transition-none">→</span>
+          </button>
+          <Link href="/" className="text-base font-medium" style={{ color: 'var(--muted)' }}>Inicio</Link>
         </div>
         {error.digest && (
-          <p className="mt-6 pt-4 border-t text-xs select-all" style={{ color: 'var(--muted)', borderColor: 'var(--line)' }}>
+          <p className="mt-8 text-xs select-all" style={{ color: 'var(--faint, var(--muted))' }}>
             Código del incidente: <span className="tabular font-medium">{error.digest}</span>
           </p>
         )}
       </div>
+      <p className="text-xs" style={{ color: 'var(--faint, var(--muted))' }}>
+        Likida · Liquidación de viajes por WhatsApp
+      </p>
     </div>
   );
 }

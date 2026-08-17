@@ -4974,3 +4974,314 @@ begin
   raise exception E'CADENCIA_0124  primera-entra=%  segunda-rebota=%  tras-compensar-entra=%   (esperado t / t / t)',
     primera_entra, segunda_rebota, tras_compensar_entra;
 end $$;
+
+-- ── 98. El hardening quedó puesto: anon fuera, índices calientes, initplan (mig. 0126) ─
+-- Lo que el advisor midió y la 0126 corrigió, verificado como ESTADO:
+-- (a) anon NO puede ejecutar ninguna de las 4 SECURITY DEFINER — un anon que
+--     pudiera preguntarle a is_superadmin() no escala hoy, pero no pinta
+--     nada ahí y una diligencia pregunta exactamente esto;
+-- (b) los 12 índices de FKs calientes existen por nombre;
+-- (c) las 4 policies re-escritas quedaron en patrón initplan: su expresión
+--     contiene un sub-SELECT de auth/función, no la llamada desnuda por fila.
+--   (esperado f / 12 / 4 — exactos)
+do $$
+declare
+  anon_puede boolean;
+  v_indices int;
+  v_policies int;
+begin
+  select bool_or(has_function_privilege('anon', p.oid, 'execute'))
+    into anon_puede
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace
+     and p.proname in ('is_superadmin','get_user_tenant_ids','administra_flota','ve_finanzas');
+
+  select count(*) into v_indices
+    from pg_indexes
+   where schemaname = 'public'
+     and indexname in (
+       'idx_agente_corrida_agente','idx_cola_aprobacion_tenant','idx_cola_aprobacion_prospecto',
+       'idx_cola_aprobacion_agente','idx_prospecto_tenant','idx_prospecto_contacto_pieza',
+       'idx_chat_conversacion_user','idx_ccl_gasto','idx_desglose_peaje_linea_viaje',
+       'idx_factura_saas_suscripcion','idx_incidencia_gasto','idx_codigo_pendiente_tenant');
+
+  -- Las 2 de public reescritas por la 0126 (las 2 de storage.objects no se
+  -- cuentan aquí: el CI efímero no monta el schema storage de Supabase).
+  select count(*) into v_policies
+    from pg_policy
+   where pg_get_expr(polqual, polrelid) ~ 'SELECT'
+     and polname in ('app_user_self','plan_lectura');
+
+  raise exception E'HARDENING_0126  anon-ejecuta=%  indices=%  policies-initplan=%   (esperado f / 12 / 2)',
+    coalesce(anon_puede, false), v_indices, v_policies;
+end $$;
+
+-- ── 99. El bus de mando existe y falla cerrado (mig. 0127) ─────────────────
+-- (a) las 4 tablas bus_* existen CON RLS encendido — sin policies, el único
+--     actor es el service-role (el bucket 'bus' no se verifica aquí: el CI
+--     efímero no monta el schema storage, mismo criterio que el bloque 98);
+-- (b) los CHECKs que hacen imposible el estado mudo existen por nombre;
+-- (c) el índice parcial de pendientes existe (el latido de la Mac pregunta
+--     cada 5 min — no debe recorrer el historial);
+-- (d) funcional: una orden marcada fallida SIN motivo REBOTA (el 23514 es el
+--     candado, no una validación de UI).
+--   (esperado 4 / 4 / t / t — exactos)
+do $$
+declare
+  v_tablas_rls int;
+  v_checks int;
+  indice_existe boolean;
+  fallida_sin_motivo_rebota boolean := false;
+begin
+  select count(*) into v_tablas_rls
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public'
+     and c.relname in ('bus_corrida', 'bus_pieza', 'bus_orden', 'bus_rutina')
+     and c.relrowsecurity;
+
+  select count(*) into v_checks
+    from pg_constraint
+   where conname in ('bus_orden_tipo_dominio', 'bus_orden_fallo_con_motivo',
+                     'bus_pieza_resolucion_coherente', 'bus_orden_rutina_requerida');
+
+  select exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and indexname = 'idx_bus_orden_pendientes'
+  ) into indice_existe;
+
+  begin
+    insert into public.bus_orden (tipo, estado, creado_por, tomada_en, resuelta_en)
+    values ('nota', 'fallida', 'ZZZ VERIF 0127', now(), now());
+  exception when check_violation then
+    fallida_sin_motivo_rebota := true;
+  end;
+
+  raise exception E'BUS_0127  tablas-rls=%  checks=%  indice=%  fallida-sin-motivo-rebota=%   (esperado 4 / 4 / t / t)',
+    v_tablas_rls, v_checks, indice_existe, fallida_sin_motivo_rebota;
+end $$;
+
+-- ── 100. Las coordenadas del prospecto existen y son coherentes (mig. 0128) ─
+-- (a) lat/lng existen como double precision;
+-- (b) los CHECKs de rango (México continental) y el de "o las dos o ninguna"
+--     existen por nombre;
+-- (c) funcional: un punto a medias (lat sin lng) REBOTA — media coordenada
+--     pintaría un pin en el ecuador, no un prospecto.
+--   (esperado 2 / 3 / t — exactos)
+do $$
+declare
+  v_cols int;
+  v_checks int;
+  media_coordenada_rebota boolean := false;
+begin
+  select count(*) into v_cols
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'prospecto'
+     and column_name in ('lat', 'lng') and data_type = 'double precision';
+
+  select count(*) into v_checks
+    from pg_constraint
+   where conname in ('prospecto_lat_rango', 'prospecto_lng_rango', 'prospecto_geo_completa');
+
+  begin
+    insert into public.prospecto (empresa, fuente, lat)
+    values ('ZZZ VERIF 0128', 'manual', 20.67);
+  exception when check_violation then
+    media_coordenada_rebota := true;
+  end;
+
+  raise exception E'GEO_0128  columnas=%  checks=%  media-coordenada-rebota=%   (esperado 2 / 3 / t)',
+    v_cols, v_checks, media_coordenada_rebota;
+end $$;
+
+-- ── 101. Los mensajes del agente experto son coherentes (mig. 0129) ────────
+-- (a) las 5 columnas mensaje* existen en prospecto;
+-- (b) funcional: un mensaje sin fecha de generación REBOTA, y un modelo sin
+--     generación REBOTA — el candado es de base, no de UI.
+--   (esperado 5 / t / t — exactos)
+do $$
+declare
+  v_cols int;
+  sin_fecha_rebota boolean := false;
+  modelo_suelto_rebota boolean := false;
+begin
+  select count(*) into v_cols
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'prospecto'
+     and column_name in ('mensaje_wa', 'mensaje_correo_asunto', 'mensaje_correo',
+                         'mensajes_generados_en', 'mensajes_modelo');
+
+  begin
+    insert into public.prospecto (empresa, fuente, mensaje_wa)
+    values ('ZZZ VERIF 0129a', 'manual', 'hola');
+  exception when check_violation then
+    sin_fecha_rebota := true;
+  end;
+
+  begin
+    insert into public.prospecto (empresa, fuente, mensajes_modelo)
+    values ('ZZZ VERIF 0129b', 'manual', 'un-modelo');
+  exception when check_violation then
+    modelo_suelto_rebota := true;
+  end;
+
+  raise exception E'MENSAJES_0129  columnas=%  sin-fecha-rebota=%  modelo-suelto-rebota=%   (esperado 5 / t / t)',
+    v_cols, sin_fecha_rebota, modelo_suelto_rebota;
+end $$;
+
+-- ── 102. El historial de toques existe y su canal tiene dominio (mig. 0130) ─
+-- (a) la tabla existe CON RLS; (b) el índice del último-toque existe;
+-- (c) funcional: un canal fuera del dominio REBOTA.
+--   (esperado t / t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  indice boolean;
+  canal_invalido_rebota boolean := false;
+  v_p uuid;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'prospecto_toque';
+
+  select exists (select 1 from pg_indexes where indexname = 'idx_toque_prospecto_fecha') into indice;
+
+  insert into public.prospecto (empresa, fuente) values ('ZZZ VERIF 0130', 'manual') returning id into v_p;
+  begin
+    insert into public.prospecto_toque (prospecto_id, canal, actor) values (v_p, 'paloma-mensajera', 'verif');
+  exception when check_violation then
+    canal_invalido_rebota := true;
+  end;
+
+  raise exception E'TOQUES_0130  tabla-rls=%  indice=%  canal-invalido-rebota=%   (esperado t / t / t)',
+    coalesce(tabla_rls, false), indice, canal_invalido_rebota;
+end $$;
+
+-- ── 103. El intent persistente existe y su gateo tiene dominio (mig. 0131) ──
+-- (a) tabla CON RLS; (b) índice de expiración; (c) funcional: gateo fuera
+-- del dominio REBOTA.   (esperado t / t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  indice boolean;
+  gateo_invalido_rebota boolean := false;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'admin_action_intent';
+
+  select exists (select 1 from pg_indexes where indexname = 'idx_intent_expira') into indice;
+
+  begin
+    insert into public.admin_action_intent (id, actor_id, accion, args_hash, gateo, expira_en)
+    values (gen_random_uuid(), gen_random_uuid(), 'zzz_verif', 'hash', 'triple-salto', now());
+  exception when check_violation then
+    gateo_invalido_rebota := true;
+  end;
+
+  raise exception E'INTENTS_0131  tabla-rls=%  indice=%  gateo-invalido-rebota=%   (esperado t / t / t)',
+    coalesce(tabla_rls, false), indice, gateo_invalido_rebota;
+end $$;
+
+-- ── 104. El ciclo de vida del evento Stripe (mig. 0132) ─────────────────────
+-- (a) la columna aplicado_en existe; (b) el backfill corrió: NINGUNA fila
+-- anterior a la migración quedó sin sellar (las viejas se aplicaron todas —
+-- el flujo viejo borraba la marca al fallar).   (esperado t / 0 — exactos)
+do $$
+declare
+  columna boolean;
+  sin_sellar_viejas int;
+begin
+  select exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'evento_stripe' and column_name = 'aplicado_en'
+  ) into columna;
+
+  select count(*) into sin_sellar_viejas
+    from public.evento_stripe
+   where aplicado_en is null and procesado_en < '2026-08-17';
+
+  raise exception E'STRIPE_CICLO_0132  columna=%  filas-viejas-sin-sellar=%   (esperado t / 0)',
+    columna, sin_sellar_viejas;
+end $$;
+
+-- ── 105. La telemetría de seguridad existe y su dominio aprieta (mig. 0133) ─
+-- (a) tabla CON RLS; (b) funcional: un tipo fuera del dominio REBOTA.
+--   (esperado t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  tipo_invalido_rebota boolean := false;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'evento_seguridad';
+
+  begin
+    insert into public.evento_seguridad (origen, tipo) values ('wa_webhook', 'chisme-de-pasillo');
+  exception when check_violation then
+    tipo_invalido_rebota := true;
+  end;
+
+  raise exception E'SEGURIDAD_0133  tabla-rls=%  tipo-invalido-rebota=%   (esperado t / t)',
+    coalesce(tabla_rls, false), tipo_invalido_rebota;
+end $$;
+
+-- ── 106. EvalOps existe, con dominio y con el examen sembrado (mig. 0134) ───
+-- (a) las 3 tablas CON RLS; (b) el examen del analista tiene casos y AL MENOS
+-- una trampa (el diseño de 22-evaluacion.md exige trampas); (c) funcional: un
+-- veredicto fuera del dominio REBOTA.   (esperado 3 / >0 / >0 / t — exactos)
+do $$
+declare
+  tablas_rls int;
+  casos int;
+  trampas int;
+  veredicto_invalido_rebota boolean := false;
+  v_caso uuid;
+  v_corrida uuid;
+begin
+  select count(*) into tablas_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname in ('eval_caso', 'eval_corrida', 'eval_resultado')
+     and c.relrowsecurity;
+
+  select count(*) into casos from public.eval_caso where agente = 'analista' and activo;
+  select count(*) into trampas from public.eval_caso where agente = 'analista' and tipo = 'trampa';
+
+  select id into v_caso from public.eval_caso limit 1;
+  insert into public.eval_corrida (agente, prompt_hash) values ('analista', 'zzz-verif') returning id into v_corrida;
+  begin
+    insert into public.eval_resultado (corrida_id, caso_id, veredicto) values (v_corrida, v_caso, 'diez-de-diez');
+  exception when check_violation then
+    veredicto_invalido_rebota := true;
+  end;
+
+  raise exception E'EVALOPS_0134  tablas-rls=%  casos=%  trampas=%  veredicto-invalido-rebota=%   (esperado 3 / >0 / >0 / t)',
+    tablas_rls, casos, trampas, veredicto_invalido_rebota;
+end $$;
+
+-- ── 107. La identidad de worker existe y su hash es único (mig. 0135) ───────
+-- (a) tabla CON RLS; (b) el índice parcial de llaves vivas; (c) funcional:
+-- dos llaves con el mismo hash REBOTAN.   (esperado t / t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  indice boolean;
+  hash_duplicado_rebota boolean := false;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'worker_llave';
+
+  select exists (select 1 from pg_indexes where indexname = 'idx_worker_llave_hash') into indice;
+
+  insert into public.worker_llave (nombre, hash, capacidades) values ('zzz-verif', 'hash-verif', '{bus.latido}');
+  begin
+    insert into public.worker_llave (nombre, hash, capacidades) values ('zzz-verif-2', 'hash-verif', '{bus.latido}');
+  exception when unique_violation then
+    hash_duplicado_rebota := true;
+  end;
+
+  raise exception E'WORKER_0135  tabla-rls=%  indice=%  hash-duplicado-rebota=%   (esperado t / t / t)',
+    coalesce(tabla_rls, false), indice, hash_duplicado_rebota;
+end $$;

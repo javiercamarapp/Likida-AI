@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 import { UserRound, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { supabaseServer } from '@/lib/supabase/server';
+import { estadoMfa } from '@/lib/auth/mfa';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -43,7 +45,7 @@ const TOPE_BYTES = 2 * 1024 * 1024;
 export default async function MiPerfilFlota({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string; tenant?: string; vista?: string; rol?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; tenant?: string; vista?: string; rol?: string; mfa?: string }>;
 }) {
   const s = await requireSessionTenant('/dashboard/mi-perfil');
   // El gate que faltaba (16-ago-2026): era la ÚNICA página del panel sin
@@ -57,6 +59,23 @@ export default async function MiPerfilFlota({
 
   const { data: fila } = await supabaseAdmin()
     .from('app_user').select('email').eq('id', s.userId).maybeSingle();
+
+  // ── MFA (fase 7): el estado del factor y, si está inscribiendo, el QR. ──
+  // El enroll corre EN EL RENDER cuando ?mfa=inscribir (no en la action: el
+  // QR/SVG no cabe en un redirect). Antes se barren los factores a medias —
+  // un enroll abandonado bloquea el siguiente.
+  const sb = await supabaseServer();
+  const mfa = await estadoMfa(sb);
+  let qr: { factorId: string; svg: string; secreto: string } | null = null;
+  if (sp.mfa === 'inscribir' && !mfa.inscrito) {
+    for (const idViejo of mfa.sinVerificar) {
+      await sb.auth.mfa.unenroll({ factorId: idViejo }).catch(() => undefined);
+    }
+    const { data: en, error: eEn } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Likida' });
+    if (!eEn && en?.type === 'totp') {
+      qr = { factorId: en.id, svg: en.totp.qr_code, secreto: en.totp.secret };
+    }
+  }
 
   /** El destino de vuelta, conservando el `?tenant=` del superadmin. */
   function volverA(estado: string) {
@@ -102,9 +121,44 @@ export default async function MiPerfilFlota({
     redirect(volverA('ok=avatar'));
   }
 
+  async function verificarMfa(formData: FormData) {
+    'use server';
+    await requireSessionTenant('/dashboard/mi-perfil');
+    const sb2 = await supabaseServer();
+    const factorId = String(formData.get('factorId') ?? '');
+    const codigo = String(formData.get('codigo') ?? '').trim();
+    if (!factorId || !/^\d{6}$/.test(codigo)) redirect(volverA('error=mfa_codigo'));
+    const reto = await sb2.auth.mfa.challenge({ factorId });
+    if (reto.error || !reto.data) redirect(volverA('error=mfa'));
+    const v = await sb2.auth.mfa.verify({ factorId, challengeId: reto.data.id, code: codigo });
+    if (v.error) redirect(volverA('error=mfa_codigo'));
+    redirect(volverA('ok=mfa'));
+  }
+
+  async function quitarMfa(formData: FormData) {
+    'use server';
+    await requireSessionTenant('/dashboard/mi-perfil');
+    const sb2 = await supabaseServer();
+    const factorId = String(formData.get('factorId') ?? '');
+    if (!factorId) redirect(volverA('error=mfa'));
+    // Quitar el factor EXIGE el código vigente: sin esto, una sesión robada
+    // en AAL1 podría bajarle la protección al dueño de la cuenta.
+    const codigo = String(formData.get('codigo') ?? '').trim();
+    if (!/^\d{6}$/.test(codigo)) redirect(volverA('error=mfa_codigo'));
+    const reto = await sb2.auth.mfa.challenge({ factorId });
+    if (reto.error || !reto.data) redirect(volverA('error=mfa'));
+    const v = await sb2.auth.mfa.verify({ factorId, challengeId: reto.data.id, code: codigo });
+    if (v.error) redirect(volverA('error=mfa_codigo'));
+    const r = await sb2.auth.mfa.unenroll({ factorId });
+    if (r.error) redirect(volverA('error=mfa'));
+    redirect(volverA('ok=mfa_fuera'));
+  }
+
   const OK: Record<string, string> = {
     avatar: 'Foto de perfil actualizada.',
     nombre: 'Nombre guardado.',
+    mfa: 'Segundo factor verificado — tu sesión queda al nivel alto un rato.',
+    mfa_fuera: 'Segundo factor eliminado.',
   };
   const ERROR: Record<string, string> = {
     avatar: 'No se pudo subir la foto — intenta con otra imagen.',
@@ -112,6 +166,8 @@ export default async function MiPerfilFlota({
     largo: 'El nombre no puede pasar de 80 caracteres.',
     tipo: 'Solo se aceptan imágenes JPG, PNG o WebP.',
     peso: 'La imagen pasa de 2 MB — usa una más ligera.',
+    mfa: 'No se pudo completar la operación del segundo factor — intenta de nuevo.',
+    mfa_codigo: 'El código no es válido — revisa tu app de autenticación y vuelve a intentar.',
   };
 
   return (
@@ -155,6 +211,67 @@ export default async function MiPerfilFlota({
                 Guardar nombre
               </button>
             </form>
+
+            {/* ── SEGURIDAD: segundo factor TOTP (fase 7 enterprise) ────────
+                La política es incremental: inscribirlo es OPTAR por que las
+                acciones sensibles exijan AAL2 (lib/auth/mfa.ts). ── */}
+            <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
+              <h2 className="text-[13px] font-semibold mb-1">Seguridad — segundo factor</h2>
+              {mfa.inscrito ? (
+                <div className="space-y-3">
+                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                    Activo. Las acciones sensibles exigen el código de tu app; verifícalo aquí para subir esta sesión al nivel alto.
+                  </p>
+                  <form action={verificarMfa} className="flex gap-2 items-center">
+                    <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
+                    <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
+                      className="w-28 text-[13px] px-3 py-2 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
+                    <button type="submit" className="text-[12.5px] px-3 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
+                      Verificar sesión
+                    </button>
+                  </form>
+                  <form action={quitarMfa} className="flex gap-2 items-center">
+                    <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
+                    <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="código" required
+                      className="w-24 text-[12px] px-3 py-1.5 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
+                    <button type="submit" className="text-[11.5px]" style={{ color: 'var(--bad)' }}>
+                      Quitar el factor (exige el código)
+                    </button>
+                  </form>
+                </div>
+              ) : qr ? (
+                <div className="space-y-3">
+                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                    Escanea el código con tu app (Google Authenticator, 1Password…) y escribe el código de 6 dígitos.
+                  </p>
+                  {/* El SVG lo genera Supabase en el enroll — sin librerías. */}
+                  <img src={qr.svg} alt="Código QR del segundo factor" width={168} height={168}
+                    className="rounded-lg hairline p-2" style={{ background: 'white' }} />
+                  <p className="text-[11px] break-all" style={{ color: 'var(--faint)' }}>
+                    Si no puedes escanear: {qr.secreto}
+                  </p>
+                  <form action={verificarMfa} className="flex gap-2 items-center">
+                    <input type="hidden" name="factorId" value={qr.factorId} />
+                    <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
+                      className="w-28 text-[13px] px-3 py-2 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
+                    <button type="submit" className="text-[13px] px-4 py-2 rounded-lg font-medium transition-opacity hover:opacity-85"
+                      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+                      Activar
+                    </button>
+                  </form>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                    Un código de tu teléfono además de tu correo. Al activarlo, las acciones sensibles lo van a exigir.
+                  </p>
+                  <a href={volverA('mfa=inscribir')}
+                    className="inline-block text-[12.5px] px-3.5 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
+                    Activar segundo factor
+                  </a>
+                </div>
+              )}
+            </div>
 
             <dl className="mt-6 pt-6 border-t space-y-3 text-[13px]" style={{ borderColor: 'var(--line)' }}>
               <div className="flex justify-between gap-4">

@@ -6,10 +6,21 @@ vi.mock('next/navigation', () => ({ redirect: (...a: unknown[]) => redirect(...(
 const getSessionTenant = vi.fn();
 vi.mock('./session', () => ({ getSessionTenant: (...a: unknown[]) => getSessionTenant(...a) }));
 
+// La selección explícita de flota (admin-context, 16-ago-2026): default SIN
+// selección — que es exactamente el caso donde antes vivía el tenant
+// implícito. Los casos con selección la ponen a mano.
+const leerSeleccionFlota = vi.fn(async (): Promise<string | null> => null);
+vi.mock('./admin-context', () => ({ leerSeleccionFlota: () => leerSeleccionFlota() }));
+
 const { requireSessionTenant, requireSuperadmin } = await import('./guard');
 
 describe('requireSessionTenant', () => {
-  beforeEach(() => { redirect.mockClear(); getSessionTenant.mockReset(); });
+  beforeEach(() => {
+    redirect.mockClear();
+    getSessionTenant.mockReset();
+    leerSeleccionFlota.mockReset();
+    leerSeleccionFlota.mockResolvedValue(null);
+  });
 
   it('sin sesión, manda a /login con el next codificado', async () => {
     getSessionTenant.mockResolvedValue(null);
@@ -35,13 +46,59 @@ describe('requireSessionTenant', () => {
     expect(redirect).toHaveBeenCalledWith('/sin-acceso');
   });
 
-  it('superadmin (tenant_id null por diseño) NO va a /sin-acceso — cae al tenant demo', async () => {
-    vi.stubEnv('DEMO_TENANT_ID', 'demo-tenant-id');
-    getSessionTenant.mockResolvedValue({ userId: 'u-2', tenantId: null, rol: 'superadmin', nombre: 'Javier' });
+  // ═════════════════════════════════════════════════════════════════════════
+  // EL TENANT IMPLÍCITO MURIÓ (16-ago-2026, hallazgo #1 de la auditoría
+  // externa). Aquí vivía «superadmin cae al tenant demo»: sin selector, un
+  // superadmin en /dashboard miraba la demo SIN haberla elegido. Ahora la
+  // flota es siempre explícita: la cookie firmada de /admin/elegir-flota, o
+  // el "ver como" auditado (`?tenant=`/`?vista=demo`/`?rol=`) — y sin
+  // ninguna, el selector.
+  // ═════════════════════════════════════════════════════════════════════════
+  const SUPER = { userId: 'u-2', tenantId: null, rol: 'superadmin', nombre: 'Javier' };
+
+  it('superadmin SIN selección ni params: al selector de flota, jamás a la demo en silencio', async () => {
+    getSessionTenant.mockResolvedValue(SUPER);
+    leerSeleccionFlota.mockResolvedValue(null);
+    await expect(requireSessionTenant('/dashboard/viajes')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(`/admin/elegir-flota?next=${encodeURIComponent('/dashboard/viajes')}`);
+  });
+
+  it('superadmin CON flota elegida (cookie firmada): esa flota, sin rebote', async () => {
+    getSessionTenant.mockResolvedValue(SUPER);
+    leerSeleccionFlota.mockResolvedValue('t-elegida');
     const r = await requireSessionTenant('/dashboard');
     expect(redirect).not.toHaveBeenCalled();
-    expect(r).toEqual({ userId: 'u-2', tenantId: 'demo-tenant-id', rol: 'superadmin', nombre: 'Javier' });
+    expect(r).toEqual({ ...SUPER, tenantId: 't-elegida' });
+  });
+
+  it('una cookie ILEGIBLE (firma rota/expirada → null) es NO-selección: al selector', async () => {
+    // `leerSeleccionFlota` ya devuelve null para toda cookie que no valida
+    // (admin-context.test.ts prueba el porqué); aquí se fija que el guard
+    // trate ese null como "no eligió", nunca como demo.
+    getSessionTenant.mockResolvedValue(SUPER);
+    leerSeleccionFlota.mockResolvedValue(null);
+    await expect(requireSessionTenant('/dashboard')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(`/admin/elegir-flota?next=${encodeURIComponent('/dashboard')}`);
+  });
+
+  it('el "ver como" auditado SIGUE: con `?tenant=`/`?vista=demo`/`?rol=`, la base demo de tenant-efectivo', async () => {
+    vi.stubEnv('DEMO_TENANT_ID', 'demo-tenant-id');
+    getSessionTenant.mockResolvedValue(SUPER);
+    for (const sp of [{ tenant: 't-7' }, { vista: 'demo' }, { rol: 'contador' }]) {
+      const r = await requireSessionTenant('/dashboard', sp);
+      expect(r.tenantId).toBe('demo-tenant-id');
+    }
+    expect(redirect).not.toHaveBeenCalled();
+    // Y la cookie NI SE LEE en ese camino: el preview no depende de ella.
+    expect(leerSeleccionFlota).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
+  });
+
+  it('`?vista=` con otro valor que "demo" NO es intención de preview: al selector', async () => {
+    getSessionTenant.mockResolvedValue(SUPER);
+    leerSeleccionFlota.mockResolvedValue(null);
+    await expect(requireSessionTenant('/dashboard', { vista: 'rara' })).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(`/admin/elegir-flota?next=${encodeURIComponent('/dashboard')}`);
   });
 
   it('con sesión y tenant, regresa el SessionTenant tal cual', async () => {

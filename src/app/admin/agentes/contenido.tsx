@@ -23,8 +23,28 @@ export const dynamic = 'force-dynamic';
  * terminado de la pieza: una fila, no una migración.
  */
 
+import { getConsumoPorAgente } from '@/lib/admin/consumo';
+import { ahoraMs } from '@/lib/saludo';
+
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try { return await fn(); } catch { return null; }
+}
+
+/** Éxito de 30 días POR agente: ok / total de agente_corrida. LANZA en
+ *  error — el llamador pinta "no se pudo leer" en su celda. */
+async function exitoTreintaDias(): Promise<Map<string, { ok: number; total: number }>> {
+  const desde = new Date(ahoraMs() - 30 * 86_400_000).toISOString();
+  const { data, error } = await supabaseAdmin()
+    .from('agente_corrida').select('agente, estado').gte('inicio', desde).limit(5000);
+  if (error) throw new Error(`exitoTreintaDias: ${error.message}`);
+  const acc = new Map<string, { ok: number; total: number }>();
+  for (const f of data ?? []) {
+    const a = acc.get(f.agente) ?? { ok: 0, total: 0 };
+    a.total += 1;
+    if (f.estado === 'ok') a.ok += 1;
+    acc.set(f.agente, a);
+  }
+  return acc;
 }
 
 /** La última corrida de UN agente del catálogo (dinámico — a diferencia de
@@ -51,10 +71,15 @@ const PILL_CORRIDA: Record<string, Estado> = { ok: 'ok', parcial: 'warn', fallo:
  *  componente real, nunca una copia. La server action llega por props. */
 export async function PanelAgentesContenido({ accionAlta }: { accionAlta: AccionAlta }) {
 
-  const [agentes, interruptores] = await Promise.all([
+  const [agentes, interruptores, exito, consumo] = await Promise.all([
     listarAgentes(),
     safe(() => listarInterruptores()),
+    safe(() => exitoTreintaDias()),
+    safe(() => getConsumoPorAgente(ahoraMs())),
   ]);
+  const costoDe = new Map<string, number>(
+    (consumo?.agentes ?? []).map((a) => [a.agente, a.gastado30dUsd]),
+  );
   // Llave como string plano: el Map se consulta con ids del CATÁLOGO
   // dinámico ('agente:<id>'), no solo con los 8 del tipo cerrado.
   const apagadoDe = new Map<string, (NonNullable<typeof interruptores>)[number]>(
@@ -110,6 +135,28 @@ export async function PanelAgentesContenido({ accionAlta }: { accionAlta: Accion
             <StatusPill estado="ok">Encendido</StatusPill>
           )}
         </td>
+        <td className="px-4 py-2.5 text-[12px]">
+          {a.modeloRol
+            ? <span className="cifra-mono">{a.modeloRol}</span>
+            : <span style={{ color: 'var(--faint)' }}>Sin declarar</span>}
+        </td>
+        <td className="px-4 py-2.5 text-right tabular text-[12.5px]">
+          {exito === null ? (
+            <span style={{ color: 'var(--bad)' }}>No se pudo leer</span>
+          ) : (() => {
+            const e = exito.get(a.id);
+            if (!e || e.total === 0) return <span style={{ color: 'var(--faint)' }}>—</span>;
+            const pct = Math.round((e.ok / e.total) * 100);
+            return <span style={{ color: pct >= 90 ? 'var(--ok)' : pct >= 60 ? 'inherit' : 'var(--bad)' }}>{pct}% <span style={{ color: 'var(--faint)' }}>/{e.total}</span></span>;
+          })()}
+        </td>
+        <td className="px-4 py-2.5 text-right tabular text-[12.5px]">
+          {consumo === null
+            ? <span style={{ color: 'var(--bad)' }}>No se pudo leer</span>
+            : (costoDe.get(a.id) ?? 0) > 0
+              ? usd(costoDe.get(a.id) ?? 0)
+              : <span style={{ color: 'var(--faint)' }}>$0 medido</span>}
+        </td>
         <td className="px-4 py-2.5 text-right tabular text-[12.5px]">
           {a.presupuestoDiaUsd === null
             ? <span style={{ color: 'var(--faint)' }}>Sin tope declarado</span>
@@ -150,6 +197,9 @@ export async function PanelAgentesContenido({ accionAlta }: { accionAlta: Accion
                       <th className="px-4 py-2 font-medium">Disparador</th>
                       <th className="px-4 py-2 font-medium">Última corrida</th>
                       <th className="px-4 py-2 font-medium">Kill switch</th>
+                      <th className="px-4 py-2 font-medium">Modelo</th>
+                      <th className="px-4 py-2 font-medium text-right">Éxito 30d</th>
+                      <th className="px-4 py-2 font-medium text-right">Costo 30d</th>
                       <th className="px-4 py-2 font-medium text-right">Presupuesto</th>
                     </tr>
                   </thead>

@@ -81,6 +81,55 @@ registerTool('consultar_politica', {
 // ── cuadrar_viaje ───────────────────────────────────────────────────────────
 const computeCuadre = cuadrarDesdeDB; // alias local (fuente compartida)
 
+// ── estado_viaje ────────────────────────────────────────────────────────────
+// La foto del viaje para el AYUDANTE DE RUTA (17-ago-2026): origen/destino,
+// anticipo, cuánto lleva comprobado y el desglose por concepto (con litros de
+// diésel cuando el OCR los leyó). LECTURA PURA — no toca nada, y el agente la
+// usa para contestar "¿cuánto llevo?", "¿cuánto me queda?" o "¿cuánto diésel
+// he cargado?" sin correr el cuadre completo.
+registerTool('estado_viaje', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'estado_viaje',
+      description: 'El estado actual del viaje del operador: origen/destino, anticipo, total comprobado, desglose por concepto y litros de diésel leídos. Solo lectura — para dudas del chofer en ruta.',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+    },
+  },
+  handler: async (_args, ctx) => {
+    if (!ctx.viajeId) return { error: 'sin_viaje' };
+    const admin = supabaseAdmin();
+    const [rViaje, rGastos] = await Promise.all([
+      admin.from('viaje').select('origen, destino, anticipo, estatus').eq('id', ctx.viajeId).eq('tenant_id', ctx.tenantId).maybeSingle(),
+      admin.from('gasto').select('concepto, monto, ocr_extra').eq('viaje_id', ctx.viajeId).eq('tenant_id', ctx.tenantId),
+    ]);
+    // Fallar cerrado: un error de lectura NO se convierte en "cero gastos".
+    if (rViaje.error) throw new Error(`estado_viaje/viaje: ${rViaje.error.message}`);
+    if (rGastos.error) throw new Error(`estado_viaje/gastos: ${rGastos.error.message}`);
+    if (!rViaje.data) return { error: 'viaje_no_encontrado' };
+    const porConcepto = new Map<string, { total: number; n: number }>();
+    let comprobado = 0;
+    let litrosDiesel = 0;
+    for (const g of rGastos.data ?? []) {
+      const monto = typeof g.monto === 'number' ? g.monto : 0;
+      comprobado += monto;
+      const c = porConcepto.get(g.concepto) ?? { total: 0, n: 0 };
+      c.total += monto; c.n += 1;
+      porConcepto.set(g.concepto, c);
+      // Los litros SOLO si el OCR los leyó — jamás se estiman de pesos.
+      const litros = (g.ocr_extra as Record<string, unknown> | null)?.litros;
+      if (g.concepto === 'diesel' && typeof litros === 'number' && Number.isFinite(litros)) litrosDiesel += litros;
+    }
+    return {
+      origen: rViaje.data.origen, destino: rViaje.data.destino,
+      estatus: rViaje.data.estatus, anticipo: rViaje.data.anticipo,
+      comprobado, comprobantes: (rGastos.data ?? []).length,
+      por_concepto: [...porConcepto.entries()].map(([concepto, v]) => ({ concepto, total: v.total, n: v.n })),
+      litros_diesel_leidos: litrosDiesel > 0 ? litrosDiesel : null,
+    };
+  },
+});
+
 registerTool('cuadrar_viaje', {
   schema: {
     type: 'function',

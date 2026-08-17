@@ -55,12 +55,12 @@ const EVENTO = JSON.stringify({ type: 'email.bounced', data: { email_id: 're_123
 beforeEach(() => {
   respuestas.length = 0;
   filtros.length = 0;
-  process.env.RESEND_WEBHOOK_SECRET = SECRETO;
+  process.env.RESEND_EVENTOS_WEBHOOK_SECRET = SECRETO;
 });
 
 describe('la puerta', () => {
   it('sin secreto configurado: 500 — Resend reintenta, nadie procesa sin firma', async () => {
-    delete process.env.RESEND_WEBHOOK_SECRET;
+    delete process.env.RESEND_EVENTOS_WEBHOOK_SECRET;
     expect((await postear(EVENTO)).status).toBe(500);
   });
 

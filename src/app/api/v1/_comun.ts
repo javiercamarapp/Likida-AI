@@ -26,15 +26,14 @@
 //
 // ── LO QUE ESTA PUERTA NO ES (todavía) ───────────────────────────────────
 //
-// `resolverTenantApi` autentica por la COOKIE de sesión de Supabase
-// (`getSessionTenant` → `supabaseServer()` → `cookies()`). O sea: hoy /v1 lo
-// consume un navegador o un agente con sesión del panel, NO un TMS headless con
-// una llave. La llave por flota (tabla `tenant_api_key`, hash + `last_used_at`,
-// y una rama en `resolverTenantApi` que la acepte antes de mirar la cookie) es
-// el siguiente paso y toca archivos que esta entrega no puede tocar. Está
-// anotado, no resuelto, y el OpenAPI lo dice con todas sus letras: prometer una
-// llave que no existe sería la clase de cifra inventada que este producto no se
-// permite.
+// `resolverTenantApi` autentica por DOS vías, en este orden: la LLAVE por
+// flota (`tenant_api_key`, hash + `last_used_at`, emitida en
+// /dashboard/llaves-api — A6 de la auditoría 4) y, si no viene llave, la
+// COOKIE de sesión de Supabase (`getSessionTenant`). O sea: /v1 lo consume
+// tanto un TMS headless con llave como un navegador con sesión del panel.
+// (Este encabezado decía "la llave es el siguiente paso" cuando el código de
+// abajo ya la aceptaba — auditoría 5, 17-ago-2026: un comentario desfasado
+// es la misma mentira que un rótulo falso.)
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';

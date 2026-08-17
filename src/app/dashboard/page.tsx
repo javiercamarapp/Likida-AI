@@ -8,16 +8,16 @@ export const dynamic = 'force-dynamic';
 /** La página real: resuelve quién eres y a qué flota apuntas, y pinta el
  *  contenido (`inicio-contenido.tsx` — vive aparte para que el preview
  *  headless pueda montarlo sin sesión y porque Next rechaza exports extra
- *  en una Page). `esRaiz` hace que un superadmin sin `?tenant=` ni
- *  `?vista=demo` se vaya a SU consola (/admin) en vez de quedarse viendo la
- *  demo por accidente — ver `resolverTenantEfectivo`. */
+ *  en una Page). Un superadmin sin `?tenant=`/`?vista=demo` NI flota elegida
+ *  en /admin/elegir-flota ya no llega aquí: `requireSessionTenant` lo manda
+ *  al selector — el tenant implícito murió el 16-ago-2026 (ver guard.ts). */
 export default async function DashboardInicio({
   searchParams,
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rango?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, tenantNombre, nombre, rol, tenantExiste } = await resolverTenantEfectivo('/dashboard', sp, { esRaiz: true });
+  const { tenantId, tenantNombre, nombre, rol, tenantExiste } = await resolverTenantEfectivo('/dashboard', sp);
 
   // DOS CASAS DISTINTAS EN LA MISMA PUERTA.
   //

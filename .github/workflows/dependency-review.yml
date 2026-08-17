@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # LÍMITE CONOCIDO, sin resolver: `package.json` trae `"xlsx":
       # "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"` — no viene del
@@ -32,7 +32,7 @@ jobs:
       # "no se pudo determinar la licencia". Si el primer PR real revienta
       # por esto, es este paquete — la esquina lo confirmaría.
       - name: Revisar dependencias nuevas del PR
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           # Reprueba en cualquier severidad MODERADA o peor — el mismo
           # criterio que ya usa `npm audit` de facto en este repo (ver el

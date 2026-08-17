@@ -72,6 +72,9 @@ export default defineConfig({
         '**/*.d.ts',
         // Solo tipos: no hay líneas que ejecutar.
         'src/types/**',
+        // GENERADO, puro dato (los 32 estados como paths SVG horneados el
+        // 17-ago): cero lógica que ejecutar — mismo criterio que src/types.
+        'src/app/admin/mapa-prospectos/mexico-estados-geo.ts',
         // VISTAS de React. No hay una sola prueba de nodo sobre ellas y no la
         // va a haber: el rubro de frontend las cubre por otro camino (mirar el
         // render). Contarlas aquí ahoga la señal de la lógica que mueve dinero,

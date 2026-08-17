@@ -38,6 +38,12 @@ RAMA="mejora/$RUTINA-$HOY"
 git checkout --quiet -B "$RAMA" origin/master
 CENTINELA="$(mktemp)"   # todo archivo creado por la corrida es más nuevo que esto
 
+# El bus de mando (0127): la corrida queda visible en /admin/tu-turno desde
+# que arranca. Si el bus no contesta, la rutina sigue igual (bus.sh jamás
+# rompe a quien lo llama).
+BUS="$REPO/scripts/mejora-diaria/bus.sh"
+BUS_ID="$(bash "$BUS" corrida-inicio "$RUTINA" 2>/dev/null || true)"
+
 log "claude -p con el encargo…"
 # --output-format json: veredicto del campo `result` + telemetría de turnos
 # (patrón headless de Anthropic: salida estructurada, no grep de texto libre).
@@ -91,6 +97,16 @@ done
 find "$COLA" -type f \( -name 'post.md' -o -name '*-guion*.md' -o -name 'guion.md' \) -newer "$CENTINELA" 2>/dev/null | head -2 | while read -r F; do
   bash "$WA" "📝 $RUTINA: para tu tap — $(basename "$(dirname "$F")")" "$F" || true
 done
+# Cierre en el bus: veredicto + PR, y el espejo de las piezas nuevas de la
+# cola (las mismas que se acaban de mandar por WhatsApp — /admin/tu-turno
+# las enseña como tarjeta con su tap).
+if [ -n "${BUS_ID:-}" ]; then
+  bash "$BUS" corrida-fin "$BUS_ID" 0 "${URL:-}" "$RESUMEN" 2>/dev/null || true
+fi
+find "$COLA" -type d -mindepth 2 -maxdepth 2 -newer "$CENTINELA" 2>/dev/null | head -6 | while read -r D; do
+  bash "$BUS" pieza "$RUTINA" "$D" 2>/dev/null || true
+done
+
 rm -f "$CENTINELA"
 
 osascript -e "display notification \"$RESUMEN\" with title \"Likida · $RUTINA\"" 2>/dev/null || true
