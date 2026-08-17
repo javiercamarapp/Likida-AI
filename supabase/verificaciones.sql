@@ -5015,3 +5015,116 @@ begin
   raise exception E'HARDENING_0126  anon-ejecuta=%  indices=%  policies-initplan=%   (esperado f / 12 / 2)',
     coalesce(anon_puede, false), v_indices, v_policies;
 end $$;
+
+-- ── 99. El bus de mando existe y falla cerrado (mig. 0127) ─────────────────
+-- (a) las 4 tablas bus_* existen CON RLS encendido — sin policies, el único
+--     actor es el service-role (el bucket 'bus' no se verifica aquí: el CI
+--     efímero no monta el schema storage, mismo criterio que el bloque 98);
+-- (b) los CHECKs que hacen imposible el estado mudo existen por nombre;
+-- (c) el índice parcial de pendientes existe (el latido de la Mac pregunta
+--     cada 5 min — no debe recorrer el historial);
+-- (d) funcional: una orden marcada fallida SIN motivo REBOTA (el 23514 es el
+--     candado, no una validación de UI).
+--   (esperado 4 / 4 / t / t — exactos)
+do $$
+declare
+  v_tablas_rls int;
+  v_checks int;
+  indice_existe boolean;
+  fallida_sin_motivo_rebota boolean := false;
+begin
+  select count(*) into v_tablas_rls
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public'
+     and c.relname in ('bus_corrida', 'bus_pieza', 'bus_orden', 'bus_rutina')
+     and c.relrowsecurity;
+
+  select count(*) into v_checks
+    from pg_constraint
+   where conname in ('bus_orden_tipo_dominio', 'bus_orden_fallo_con_motivo',
+                     'bus_pieza_resolucion_coherente', 'bus_orden_rutina_requerida');
+
+  select exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and indexname = 'idx_bus_orden_pendientes'
+  ) into indice_existe;
+
+  begin
+    insert into public.bus_orden (tipo, estado, creado_por, tomada_en, resuelta_en)
+    values ('nota', 'fallida', 'ZZZ VERIF 0127', now(), now());
+  exception when check_violation then
+    fallida_sin_motivo_rebota := true;
+  end;
+
+  raise exception E'BUS_0127  tablas-rls=%  checks=%  indice=%  fallida-sin-motivo-rebota=%   (esperado 4 / 4 / t / t)',
+    v_tablas_rls, v_checks, indice_existe, fallida_sin_motivo_rebota;
+end $$;
+
+-- ── 100. Las coordenadas del prospecto existen y son coherentes (mig. 0128) ─
+-- (a) lat/lng existen como double precision;
+-- (b) los CHECKs de rango (México continental) y el de "o las dos o ninguna"
+--     existen por nombre;
+-- (c) funcional: un punto a medias (lat sin lng) REBOTA — media coordenada
+--     pintaría un pin en el ecuador, no un prospecto.
+--   (esperado 2 / 3 / t — exactos)
+do $$
+declare
+  v_cols int;
+  v_checks int;
+  media_coordenada_rebota boolean := false;
+begin
+  select count(*) into v_cols
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'prospecto'
+     and column_name in ('lat', 'lng') and data_type = 'double precision';
+
+  select count(*) into v_checks
+    from pg_constraint
+   where conname in ('prospecto_lat_rango', 'prospecto_lng_rango', 'prospecto_geo_completa');
+
+  begin
+    insert into public.prospecto (empresa, fuente, lat)
+    values ('ZZZ VERIF 0128', 'manual', 20.67);
+  exception when check_violation then
+    media_coordenada_rebota := true;
+  end;
+
+  raise exception E'GEO_0128  columnas=%  checks=%  media-coordenada-rebota=%   (esperado 2 / 3 / t)',
+    v_cols, v_checks, media_coordenada_rebota;
+end $$;
+
+-- ── 101. Los mensajes del agente experto son coherentes (mig. 0129) ────────
+-- (a) las 5 columnas mensaje* existen en prospecto;
+-- (b) funcional: un mensaje sin fecha de generación REBOTA, y un modelo sin
+--     generación REBOTA — el candado es de base, no de UI.
+--   (esperado 5 / t / t — exactos)
+do $$
+declare
+  v_cols int;
+  sin_fecha_rebota boolean := false;
+  modelo_suelto_rebota boolean := false;
+begin
+  select count(*) into v_cols
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'prospecto'
+     and column_name in ('mensaje_wa', 'mensaje_correo_asunto', 'mensaje_correo',
+                         'mensajes_generados_en', 'mensajes_modelo');
+
+  begin
+    insert into public.prospecto (empresa, fuente, mensaje_wa)
+    values ('ZZZ VERIF 0129a', 'manual', 'hola');
+  exception when check_violation then
+    sin_fecha_rebota := true;
+  end;
+
+  begin
+    insert into public.prospecto (empresa, fuente, mensajes_modelo)
+    values ('ZZZ VERIF 0129b', 'manual', 'un-modelo');
+  exception when check_violation then
+    modelo_suelto_rebota := true;
+  end;
+
+  raise exception E'MENSAJES_0129  columnas=%  sin-fecha-rebota=%  modelo-suelto-rebota=%   (esperado 5 / t / t)',
+    v_cols, sin_fecha_rebota, modelo_suelto_rebota;
+end $$;
