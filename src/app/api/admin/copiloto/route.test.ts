@@ -17,10 +17,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let sesion: { userId: string; rol: string } | null = null;
 vi.mock('@/lib/auth/session', () => ({ getSessionTenant: async () => sesion }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+// El step-up (fase 7): por default pasa (usuario sin factor); cada prueba
+// que lo necesite lo aprieta.
+const stepUp = vi.fn(async (): Promise<{ ok: true } | { ok: false; motivo: 'verificar' }> => ({ ok: true }));
+vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({}) }));
+vi.mock('@/lib/auth/mfa', () => ({
+  exigirAal2SiHayFactor: () => stepUp(),
+  MSG_STEP_UP: 'Esta acción exige tu segundo factor',
+}));
 
 const ejecutarAccionCopiloto = vi.fn(async (..._a: unknown[]) => ({ ok: true, mensaje: 'hecho' }));
 vi.mock('@/lib/agents/copiloto-acciones', () => ({
   ejecutarAccionCopiloto: (...a: unknown[]) => ejecutarAccionCopiloto(...a),
+  // El catálogo REAL no se mockea en espíritu: el route solo lee `gateo`
+  // para el step-up. Se declara chico y fiel a los ids que estas pruebas usan.
+  CATALOGO_ACCIONES: [
+    { id: 'apagar_agente', gateo: 'confirma', implementada: true },
+    { id: 'correr_runner', gateo: 'confirma', implementada: true },
+    { id: 'encender_agente', gateo: 'doble', implementada: false },
+  ],
 }));
 interface RespuestaMock {
   bloques: Array<Record<string, unknown>>;
@@ -78,6 +93,8 @@ beforeEach(() => {
   guardarIntercambioCopiloto.mockClear();
   guardarIntercambioCopiloto.mockResolvedValue('conv-guardada');
   _vaciarIntentsParaPruebas();
+  stepUp.mockClear();
+  stepUp.mockImplementation(async () => ({ ok: true }));
 });
 
 describe('la puerta', () => {
@@ -164,6 +181,21 @@ describe('la acción con intent (AdminActionIntent)', () => {
     const cuerpo = await r.json() as { error: string };
     expect(cuerpo.error).toContain('no coincide');
     expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+  });
+});
+
+describe("step-up (fase 7): el 'doble' con factor inscrito exige AAL2", () => {
+  it('sesión en AAL1 → 403 con instrucción, SIN gastar el intent', async () => {
+    stepUp.mockImplementation(async () => ({ ok: false, motivo: 'verificar' }));
+    const i = await crearIntent({ actorId: 'u-javier', accion: 'encender_agente', objetivo: 'agente:cobranza', gateo: 'doble' });
+    const r = await POST(pedir({ intentId: i.id, accion: { id: 'encender_agente', objetivo: 'agente:cobranza', motivo: 'x' } }));
+    expect(r.status).toBe(403);
+    expect(((await r.json()) as { error: string }).error).toContain('segundo factor');
+    expect(ejecutarAccionCopiloto).not.toHaveBeenCalled();
+    // El intent NO se quemó: verificado el factor, el MISMO intent arma.
+    stepUp.mockImplementation(async () => ({ ok: true }));
+    const r2 = await POST(pedir({ intentId: i.id, accion: { id: 'encender_agente', objetivo: 'agente:cobranza', motivo: 'x' } }));
+    expect(r2.status).toBe(200);
   });
 });
 
