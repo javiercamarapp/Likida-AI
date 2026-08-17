@@ -44,8 +44,10 @@ const GIROS: Giro[] = ['transportista', 'embotelladora', 'abarrotes_mayoreo', 'f
 const FUENTES = [
   { clave: 'censo', nombre: 'Censo (vacantes)' },
   { clave: 'denue', nombre: 'Universo DENUE' },
+  { clave: 'canacar', nombre: 'Directorio CANACAR' },
   { clave: 'bolsa', nombre: 'Bolsas (histórico)' },
   { clave: 'aaag', nombre: 'Padrón AAAG' },
+  { clave: 'scribd-tampico', nombre: 'Directorio Tampico' },
   { clave: 'manual', nombre: 'Cuentas a mano' },
 ] as const;
 
