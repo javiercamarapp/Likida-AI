@@ -252,6 +252,8 @@ export interface ProspectoMapa {
   tamano: Tamano | null;
   /** 0-100: qué tan completo está el expediente (ver CRITERIO_SCORES.datos). */
   completitud: number;
+  /** El último contacto registrado (0130) — null = nunca tocado. */
+  ultimoToque: string | null;
   /** El primer toque redactado por el agente experto (0129) — null hasta que
    *  se genera; los botones caen a la plantilla determinista mientras. */
   mensajeWaIa: string | null;
@@ -273,6 +275,7 @@ interface FilaProspecto {
   vacante: string | null; estado: string; fuente: string; notas: string | null;
   mensaje_wa: string | null; mensaje_correo_asunto: string | null;
   mensaje_correo: string | null; mensajes_generados_en: string | null;
+  prospecto_toque: Array<{ creado_en: string }> | null;
 }
 
 export async function getDatosMapa(): Promise<DatosMapa> {
@@ -285,7 +288,7 @@ export async function getDatosMapa(): Promise<DatosMapa> {
     filas = await traerTodo<FilaProspecto>(
       (d, h) => supabaseAdmin()
         .from('prospecto')
-        .select('id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en', conteo(d))
+        .select('id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en, prospecto_toque(creado_en)', conteo(d))
         // El orden secundario por id NO es adorno: created_at se repite (los
         // lotes de siembra comparten el now() de su transacción) y paginar
         // sobre un orden no único duplica y salta filas entre páginas — se
@@ -331,6 +334,8 @@ export async function getDatosMapa(): Promise<DatosMapa> {
         correoAsuntoIa: p.mensaje_correo_asunto,
         correoCuerpoIa: p.mensaje_correo,
         mensajesGeneradosEn: p.mensajes_generados_en,
+        ultimoToque: (p.prospecto_toque ?? []).reduce<string | null>(
+          (max, t) => (max === null || t.creado_en > max ? t.creado_en : max), null),
         urgencia: scoreUrgencia({ vacante: p.vacante, notas: p.notas }),
         cierre: scoreCierre({
           telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
