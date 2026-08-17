@@ -13,24 +13,48 @@
 //
 // SUPERADMIN ES EL CASO APARTE. `app_user.tenant_id` nulo es AMBIGUO por
 // diseño (0001_init.sql:17): puede ser "sin alta" o puede ser "superadmin,
-// no pertenece a ningún tenant". Hoy el panel no tiene selector de flota, así
-// que un superadmin ve el tenant de la demo — el mismo que veía todo el mundo
-// antes de que existiera login por usuario. El día que haga falta elegir
-// entre varias flotas, esto se reemplaza por un selector; construirlo hoy
-// sería una pantalla para un caso de uso que todavía no existe.
+// no pertenece a ningún tenant". Hasta el 16-ago-2026 aquí vivía el tenant
+// IMPLÍCITO: sin selector de flota, un superadmin caía a `tenantDemo()` en
+// silencio — el hallazgo #1 de la auditoría externa. Ahora la flota que mira
+// un superadmin SIEMPRE es explícita (ver `admin-context.ts`): o la eligió
+// en /admin/elegir-flota (cookie firmada), o viene del "ver como" auditado
+// (`?tenant=`/`?vista=demo`/`?rol=`, el flujo de tenant-efectivo.ts que se
+// firma en bitácora) — y sin ninguna de las dos, se le enseña el selector en
+// vez de una flota que no pidió.
 // ═══════════════════════════════════════════════════════════════════════════
 import { redirect } from 'next/navigation';
 import { tenantDemo } from './tenant-demo';
+import { leerSeleccionFlota } from './admin-context';
 import { getSessionTenant, type SessionTenant } from './session';
 
 
 export async function requireSessionTenant(
   destino: string,
+  /**
+   * Los searchParams de previsualización, cuando la página los tiene
+   * (`resolverTenantEfectivo` los pasa). Su ÚNICO efecto: un superadmin que
+   * llega con intención de "ver como" (`?tenant=`, `?vista=demo` o `?rol=`)
+   * conserva el flujo auditado de tenant-efectivo.ts — la base demo que ese
+   * flujo siempre usó, con `?tenant=` resolviendo la flota real encima y la
+   * impersonación firmada allá. Para cualquier otro rol no hace nada.
+   */
+  sp?: { vista?: string; tenant?: string; rol?: string },
 ): Promise<SessionTenant & { tenantId: string }> {
   const s = await getSessionTenant();
   if (!s) redirect(`/login?next=${encodeURIComponent(destino)}`);
   if (!s.tenantId) {
-    if (s.rol === 'superadmin') return { ...s, tenantId: tenantDemo() };
+    if (s.rol === 'superadmin') {
+      // "Ver como" (previsualización auditada): la base sigue siendo la demo
+      // — `resolverTenantEfectivo` resuelve `?tenant=` encima y firma.
+      if (sp?.tenant || sp?.vista === 'demo' || sp?.rol) return { ...s, tenantId: tenantDemo() };
+      // Selección EXPLÍCITA de /admin/elegir-flota (cookie httpOnly firmada,
+      // admin-context.ts). Puede ser una flota real o la demo — pero elegida.
+      const seleccion = await leerSeleccionFlota();
+      if (seleccion) return { ...s, tenantId: seleccion };
+      // SIN selección NO hay tenant implícito: al selector, con el destino
+      // para volver. Este redirect es el que mató el fallback a demo.
+      redirect(`/admin/elegir-flota?next=${encodeURIComponent(destino)}`);
+    }
     // El vendedor (0105) no tiene tenant NI pantalla en /dashboard: su casa
     // es /vendedor. Sin esta rama, el aterrizaje post-login (que por default
     // apunta a /dashboard) lo mandaba a /sin-acceso TENIENDO acceso — la
