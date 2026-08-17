@@ -27,6 +27,7 @@ import {
   COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, TAMANOS, type DatosMapa, type Giro, type ProspectoMapa, type Tamano,
 } from '@/lib/admin/prospectos-mapa';
 import { fechaHoraMx, numero } from '@/lib/formato';
+import { ahoraMs } from '@/lib/saludo';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
 import { useCountUp } from '../ui/use-count-up';
 import { hrefWa, hrefCorreo } from './mensajes';
@@ -62,6 +63,9 @@ interface Filtros {
   orden: 'cierre' | 'urgencia' | 'recientes' | 'completos';
   tamanos: Set<Tamano | 'n/d'> | null;   // null = todos
   minCompletitud: 0 | 50 | 75;
+  /** "Sin contactar en N días" (0130): 0 = apagado; N = sin toque registrado
+   *  en los últimos N días (o nunca tocado). */
+  sinToqueDias: 0 | 7 | 14 | 30;
   soloMensajeIA: boolean;
   soloVacante: boolean;
   /** "Todos a 50 km de Nuevo Laredo" (backlog 17-ago): centro elegido de la
@@ -74,6 +78,7 @@ const SIN_FILTROS: Filtros = {
   giros: null, etapas: null, fuentes: null, minUrgencia: 0,
   soloTel: false, soloDecisor: false, orden: 'cierre',
   tamanos: null, minCompletitud: 0, soloMensajeIA: false, soloVacante: false,
+  sinToqueDias: 0,
   centro: null, radioKm: 0,
 };
 const TAMANOS_UI: Array<Tamano | 'n/d'> = [...TAMANOS, 'n/d'];
@@ -177,8 +182,9 @@ function Reveal({ children, retraso = 0 }: { children: React.ReactNode; retraso?
   );
 }
 
-function TarjetaProspecto({ p, nuevo, afinando, onAfinar, plana }: {
+function TarjetaProspecto({ p, nuevo, afinando, onAfinar, onToque, plana }: {
   p: ProspectoMapa; nuevo: boolean; afinando?: boolean; onAfinar?: (id: string) => void;
+  onToque?: (id: string, canal: 'whatsapp' | 'correo') => void;
   /** true = tarjeta de sección (plana, sin blur ni sombra — abajo del mapa
    *  no hay país sobre el que flotar). */
   plana?: boolean;
@@ -211,10 +217,14 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar, plana }: {
       {p.mensajesGeneradosEn && (
         <p className="text-[10px]" style={{ color: 'var(--marca)' }}>✨ mensaje del agente experto listo</p>
       )}
+      {p.ultimoToque && (
+        <p className="text-[10px]" style={{ color: TENUE }}>Último toque: {fechaHoraMx(p.ultimoToque)}</p>
+      )}
       {(p.telefono || p.correo || p.lat !== null) && (
         <div className="flex flex-wrap gap-2 pt-1">
           {p.telefono && (
             <a href={hrefWa(p)!} target="_blank" rel="noreferrer"
+              onClick={() => onToque?.(p.id, 'whatsapp')}
               className="px-2.5 py-1 rounded-lg text-[11px] font-medium"
               style={{ border: '1px solid #16a34a55', color: '#15803d', background: 'color-mix(in srgb, #16a34a 8%, var(--surface))' }}>
               WhatsApp →
@@ -222,6 +232,7 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar, plana }: {
           )}
           {p.correo && (
             <a href={hrefCorreo(p)!}
+              onClick={() => onToque?.(p.id, 'correo')}
               className="px-2.5 py-1 rounded-lg text-[11px] font-medium"
               style={{ border: '1px solid #2563eb55', color: '#1d4ed8', background: 'color-mix(in srgb, #2563eb 8%, var(--surface))' }}>
               Correo →
@@ -294,6 +305,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     (filtros.minUrgencia ? 1 : 0) + (filtros.soloTel ? 1 : 0) + (filtros.soloDecisor ? 1 : 0) +
     (filtros.tamanos ? 1 : 0) + (filtros.minCompletitud ? 1 : 0) +
     (filtros.soloMensajeIA ? 1 : 0) + (filtros.soloVacante ? 1 : 0) +
+    (filtros.sinToqueDias ? 1 : 0) +
     (filtros.centro && filtros.radioKm ? 1 : 0);
   const filtrados = useMemo(() => datos.prospectos.filter((p) =>
     (!filtros.giros || filtros.giros.has(p.giro))
@@ -306,6 +318,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     && p.completitud >= filtros.minCompletitud
     && (!filtros.soloMensajeIA || p.mensajesGeneradosEn !== null)
     && (!filtros.soloVacante || p.vacante !== null)
+    && (filtros.sinToqueDias === 0 || !p.ultimoToque
+      || (ahoraMs() - new Date(p.ultimoToque).getTime()) >= filtros.sinToqueDias * 86_400_000)
     && (!filtros.centro || filtros.radioKm === 0
       || (p.lat !== null && haversineKm(filtros.centro, { lat: p.lat, lng: p.lng! }) <= filtros.radioKm)),
   ), [datos, filtros]);
@@ -336,6 +350,20 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     a.download = `cerebro-prospectos-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
+  };
+
+  // ── El toque se registra solo (0130): al abrir WhatsApp/correo, fila al
+  // historial — fuego y olvido, el link abre igual aunque la red falle. ────
+  const tocar = (id: string, canal: 'whatsapp' | 'correo') => {
+    void fetch('/api/admin/mapa-prospectos/toque', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, canal }),
+    }).catch(() => undefined);
+    setDatos((d) => ({
+      ...d,
+      prospectos: d.prospectos.map((p) => (p.id === id ? { ...p, ultimoToque: new Date().toISOString() } : p)),
+    }));
   };
 
   // ── El agente experto en vivo: afinar el mensaje de UNA tarjeta ──────────
@@ -635,6 +663,17 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 </div>
               </div>
               <div>
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Sin toque en</p>
+                <div className="flex gap-1.5">
+                  {([0, 7, 14, 30] as const).map((d) => (
+                    <Chip key={d} activo={filtros.sinToqueDias === d}
+                      onClick={() => setFiltros((f) => ({ ...f, sinToqueDias: d }))}>
+                      {d === 0 ? 'Todos' : `≥${d} días`}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+              <div>
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Ordenar por</p>
                 <div className="flex gap-1.5">
                   {([['cierre', '% cierre'], ['urgencia', '% urgencia'], ['completos', 'Datos'], ['recientes', 'Recientes']] as const).map(([k, n]) => (
@@ -852,7 +891,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               ) : (
                 <>
                   {listaSeleccion.slice(0, 60).map((p) => (
-                    <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
+                    <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} />
                   ))}
                   {listaSeleccion.length > 60 && (
                     <p className="text-[11px] px-3.5 py-2 rounded-2xl backdrop-blur-sm"
@@ -918,7 +957,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <h3 className="etiqueta-mono text-[10px] font-medium uppercase mb-3" style={{ color: TENUE }}>Los 12 más cerrables del país</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {ordenar(filtrados).slice(0, 12).map((p) => (
-              <TarjetaProspecto key={p.id} p={p} plana nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
+              <TarjetaProspecto key={p.id} p={p} plana nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} />
             ))}
           </div>
         </section>
