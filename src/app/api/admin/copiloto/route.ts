@@ -10,9 +10,16 @@
 //  · { mensajes }            → el chat (streaming NDJSON, como /dashboard/chat).
 //    Con `conversacionId` opcional: cada intercambio se persiste (0121) y el
 //    'fin' devuelve el id — la lista y la lectura viven en ./conversaciones.
-//  · { accion, confirmado }  → EJECUTAR una acción ya confirmada por Javier —
-//    determinista, sin modelo (copiloto-acciones.ts). El servidor RECHAZA
-//    sin `confirmado: true`: la confirmación del cliente no es decorativa.
+//    Si la respuesta trae un bloque `accion` implementada, el SERVIDOR crea
+//    un AdminActionIntent (copiloto-intents.ts) y el bloque viaja con su
+//    `intentId` — esa es la única llave que después ejecuta.
+//  · { intentId, accion }    → EJECUTAR presentando el intent que ESTE
+//    servidor creó al proponer. Ya NO existe `confirmado: true` como
+//    autoridad: el intent se valida (existe, no usado, no expirado, mismo
+//    actor, mismos args) y se gasta — inválido/expirado es 409. Las acciones
+//    `gateo: 'doble'` exigen motivo y DOS POSTs con el mismo intent (armar →
+//    ejecutar); las 'confirma' ejecutan con uno. Determinista, sin modelo
+//    (copiloto-acciones.ts).
 //
 // COSTO: se loguea por turno (copiloto.costo). NO va a llm_costo a propósito:
 // esa tabla exige tenant_id (0003) y el copiloto es gasto de LIKIDA, no de
@@ -22,8 +29,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/ratelimit';
-import { ejecutarCopiloto } from '@/lib/agents/copiloto';
+import { ejecutarCopiloto, type BloqueCopiloto, type BloqueAccion } from '@/lib/agents/copiloto';
 import { ejecutarAccionCopiloto } from '@/lib/agents/copiloto-acciones';
+import { crearIntent, reclamarIntent, hashArgsAccion } from '@/lib/agents/copiloto-intents';
 import { guardarIntercambioCopiloto } from '@/lib/agents/copiloto-historial';
 import { validarConversacionId } from '@/app/api/dashboard/chat/validacion';
 import { DatoInvalido } from '@/lib/likida/errores';
@@ -82,22 +90,50 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'cuerpo inválido' }, { status: 400 });
   }
 
-  // ── Camino 2: ejecutar una acción confirmada (sin modelo, sin stream) ────
-  if (cuerpo.accion !== undefined) {
+  // ── Camino 2: ejecutar una acción con su INTENT (sin modelo, sin stream) ─
+  if (cuerpo.accion !== undefined || cuerpo.intentId !== undefined) {
     const a = cuerpo.accion as { id?: unknown; objetivo?: unknown; motivo?: unknown } | null;
-    if (cuerpo.confirmado !== true) {
-      // La regla del diseño §5.3: ninguna acción con consecuencia sin
-      // confirmación explícita — y la valida el SERVIDOR, no el botón.
-      return NextResponse.json({ error: 'La acción llegó sin confirmación explícita — no se ejecuta.' }, { status: 400 });
-    }
     const accionId = typeof a?.id === 'string' ? a.id : '';
+    const objetivo = typeof a?.objetivo === 'string' ? a.objetivo : '';
+    const motivo = typeof a?.motivo === 'string' ? a.motivo : undefined;
+    // La regla del diseño §5.3, versión intent: ninguna acción sin la llave
+    // que ESTE servidor emitió al proponer. Un `confirmado: true` del
+    // cliente ya no pinta nada — el booleano dejó de ser la autoridad.
+    const intentId = typeof cuerpo.intentId === 'string' ? cuerpo.intentId : '';
+    if (!intentId) {
+      return NextResponse.json({
+        error: 'La acción llegó sin un intent del servidor — pide la acción al copiloto y confirma desde su previsualización.',
+      }, { status: 409 });
+    }
+    const reclamo = reclamarIntent({
+      intentId,
+      actorId: sesion.userId,
+      argsHash: hashArgsAccion(accionId, objetivo),
+      motivo,
+    });
+    if (!reclamo.ok) {
+      // 'motivo' es validación de entrada (400); lo demás es un intent que
+      // ya no autoriza nada (409) — y en ambos se dice qué hacer.
+      return NextResponse.json({ error: reclamo.error }, { status: reclamo.codigo === 'motivo' ? 400 : 409 });
+    }
+    if (reclamo.fase === 'armado') {
+      // 'doble': primer POST válido. NO ejecutó — falta repetir el POST con
+      // el mismo intentId para gastar el intent.
+      return NextResponse.json({
+        ok: true,
+        armado: true,
+        mensaje: 'Primera confirmación registrada. Confirma de nuevo para ejecutar — esta acción exige doble confirmación.',
+      });
+    }
     try {
       const r = await ejecutarAccionCopiloto(accionId, {
-        id: typeof a?.objetivo === 'string' ? a.objetivo : undefined,
-        motivo: typeof a?.motivo === 'string' ? a.motivo : undefined,
+        id: objetivo || undefined,
+        motivo: reclamo.motivo ?? undefined,
       }, sesion.userId);
       return NextResponse.json(r);
     } catch (e) {
+      // El intent ya se gastó: un fallo aquí NO deja una llave viva para
+      // reintentar a ciegas — se re-propone (fallar cerrado, sin replay).
       if (e instanceof DatoInvalido) return NextResponse.json({ error: e.message }, { status: 400 });
       logger.error('copiloto.accion_fallo', { accion: accionId, err: e instanceof Error ? e.message : String(e) });
       return NextResponse.json({ error: 'No se pudo ejecutar la acción. El detalle quedó en los registros.' }, { status: 500 });
@@ -123,6 +159,16 @@ export async function POST(req: Request) {
           mensajes,
           onPaso: (p) => manda({ t: 'paso', fase: p.fase, tool: p.tool }),
         });
+        // EL INTENT NACE AL PROPONER (copiloto-intents.ts): cada bloque
+        // `accion` implementada sale con el `intentId` que el servidor acaba
+        // de crear para ESTA sesión — la única llave que después ejecuta. Las
+        // no implementadas no llevan intent: no hay nada que autorizar.
+        type BloqueConIntent = BloqueCopiloto | (BloqueAccion & { intentId: string });
+        const bloques: BloqueConIntent[] = r.bloques.map((b) => (
+          b.tipo === 'accion' && b.implementada
+            ? { ...b, intentId: crearIntent({ actorId: sesion.userId, accion: b.accion, objetivo: b.objetivo, gateo: b.gateo }).id }
+            : b
+        ));
         logger.info('copiloto.costo', {
           costoUsd: r.costoUsd, tokensIn: r.tokensIn, tokensOut: r.tokensOut,
           modelo: r.modelo, tools: r.toolsUsadas.length,
@@ -135,15 +181,17 @@ export async function POST(req: Request) {
             userId: sesion.userId,
             conversacionId: conversacionPedida,
             pregunta: mensajes[mensajes.length - 1].texto,
-            textoRespuesta: r.bloques
+            textoRespuesta: bloques
               .filter((b): b is { tipo: 'texto'; texto: string } => b.tipo === 'texto' && typeof (b as { texto?: unknown }).texto === 'string')
               .map((b) => b.texto).join(' ') || 'Listo.',
-            bloques: r.bloques as unknown as Array<Record<string, unknown>>,
+            // Con intentId incluido — inofensivo en el historial: las
+            // reaperturas se pintan ARCHIVADAS y el intent expira en 2 min.
+            bloques: bloques as unknown as Array<Record<string, unknown>>,
           });
         } catch (err) {
           logger.error('copiloto.guardar_fallo', { err: err instanceof Error ? err.message : String(err) });
         }
-        manda({ t: 'fin', bloques: r.bloques, toolsUsadas: r.toolsUsadas, conversacionId });
+        manda({ t: 'fin', bloques, toolsUsadas: r.toolsUsadas, conversacionId });
       } catch (err) {
         logger.error('copiloto.fallo', { err: err instanceof Error ? err.message : String(err) });
         manda({ t: 'error', error: 'el copiloto no pudo responder en este momento' });

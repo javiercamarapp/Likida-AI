@@ -4,10 +4,12 @@
 //
 // EL MODELO PROPONE, EL HUMANO CONFIRMA, EL SERVIDOR EJECUTA SIN MODELO.
 // El LLM solo arma el bloque de previsualización (tipo 'accion' en la
-// respuesta); la ejecución llega por un POST aparte con `confirmado: true`
-// que corre ESTE módulo — la misma función que ya usa el ⌘K
-// (api/admin/palette), jamás una decisión del modelo. La bitácora la
-// escribe la función real (apagar() anota interruptor.apagado en 0053).
+// respuesta); al proponer, el route crea un AdminActionIntent
+// (copiloto-intents.ts) y la ejecución llega por un POST aparte que presenta
+// ese `intentId` — validado y gastado por el servidor— y corre ESTE módulo,
+// la misma función que ya usa el ⌘K (api/admin/palette), jamás una decisión
+// del modelo. La bitácora la escribe la función real (apagar() anota
+// interruptor.apagado en 0053).
 //
 // FASE 1 (diseño §10): solo `apagar_agente` está implementada. Las demás
 // existen en el catálogo con `implementada: false` — el copiloto las
