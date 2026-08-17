@@ -81,6 +81,40 @@ export async function getMapaCommits(): Promise<MapaCommits> {
   }
 }
 
+export type AutoresCommits =
+  | { estado: 'sin_token' | 'error' | 'generando' }
+  | { estado: 'ok'; autores: Array<{ nombre: string; pushes: number }> };
+
+/**
+ * Quién ha empujado cuánto — el "por integrante" del mapa de actividad
+ * (orden del 17-ago). GitHub lo sirve en /stats/contributors (52 semanas);
+ * 202 = está recalculando, igual que el histograma.
+ */
+export async function getAutoresCommits(): Promise<AutoresCommits> {
+  if (!process.env.GITHUB_TOKEN) return { estado: 'sin_token' };
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo()}/stats/contributors`, {
+      headers: {
+        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        Accept: 'application/vnd.github+json',
+      },
+      signal: AbortSignal.timeout(6000),
+      cache: 'no-store',
+    });
+    if (r.status === 202) return { estado: 'generando' };
+    if (!r.ok) throw new Error(`GitHub ${r.status}`);
+    const crudo = (await r.json()) as Array<{ total: number; author: { login?: string } | null }>;
+    const autores = crudo
+      .map((c) => ({ nombre: c.author?.login ?? 'desconocido', pushes: c.total }))
+      .sort((a, b) => b.pushes - a.pushes)
+      .slice(0, 8);
+    return { estado: 'ok', autores };
+  } catch (e) {
+    logger.error('github.autores', { err: e instanceof Error ? e.message : String(e) });
+    return { estado: 'error' };
+  }
+}
+
 export async function getActividadGitHub(): Promise<ActividadGitHub> {
   if (!process.env.GITHUB_TOKEN) return { estado: 'sin_token' };
   try {
