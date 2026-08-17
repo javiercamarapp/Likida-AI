@@ -111,15 +111,22 @@ function Chip({ activo, color, onClick, children }: {
   );
 }
 
-function Kpi({ etiqueta, valor, animar }: { etiqueta: string; valor: number; animar: boolean }) {
+/** Stat inline de la barra premium: etiqueta chica + número tabular, sin
+ *  cajón propio — la barra los junta con divisores de pelo (orden 17-ago:
+ *  "minimalista premium elegante"). */
+function Kpi({ etiqueta, valor, animar, divisor }: { etiqueta: string; valor: number; animar: boolean; divisor?: boolean }) {
   const mostrado = useCountUp(valor, animar);
   return (
-    <div className="px-4 py-2.5 rounded-2xl backdrop-blur-sm" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
-      <div className="text-[11px] uppercase tracking-wider" style={{ color: TENUE }}>{etiqueta}</div>
-      <div className="text-xl font-semibold tabular-nums" style={{ color: TINTA }}>{mostrado}</div>
+    <div className="px-3.5 py-1.5 flex items-baseline gap-2 whitespace-nowrap"
+      style={divisor ? { borderLeft: `1px solid ${LINEA}` } : undefined}>
+      <span className="text-[10px] uppercase tracking-[0.08em]" style={{ color: TENUE }}>{etiqueta}</span>
+      <span className="text-[15px] font-semibold tabular-nums" style={{ color: TINTA }}>{numero(mostrado)}</span>
     </div>
   );
 }
+
+const SOMBRA_FLOTANTE = '0 10px 30px color-mix(in srgb, var(--ink) 10%, transparent)';
+const BOTON_BARRA = 'px-3 py-1.5 rounded-full text-[12px] font-medium backdrop-blur-sm transition-colors';
 
 /** Barra de % con su animación de llenado — usada por urgencia y cierre. */
 function Barra({ etiqueta, pct, color }: { etiqueta: string; pct: number; color: string }) {
@@ -166,8 +173,8 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar }: {
 }) {
   const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
   return (
-    <article className={`rounded-2xl p-3.5 space-y-2 ${nuevo ? 'cerebro-recien' : ''}`}
-      style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
+    <article className={`rounded-2xl p-3.5 space-y-2 backdrop-blur-md ${nuevo ? 'cerebro-recien' : ''}`}
+      style={{ background: 'color-mix(in srgb, var(--surface) 90%, transparent)', border: `1px solid ${LINEA}`, boxShadow: '0 10px 30px color-mix(in srgb, var(--ink) 10%, transparent)' }}>
       <div className="flex items-start gap-2">
         <span className="mt-1 w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color, boxShadow: `0 0 8px ${c.color}` }} />
         <div className="min-w-0">
@@ -429,8 +436,11 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   };
 
   // La rueda necesita listener NO pasivo (preventDefault) — React no lo da.
+  // Y si la página llegó con un estado inicial (deep-link), la cámara vuela
+  // hacia él al montar — la cámara imperativa no lo haría sola.
   useEffect(() => {
-    aplicarCam(false);
+    if (seleccion) volarA(seleccion);
+    else aplicarCam(false);
     const svg = svgRef.current;
     if (!svg) return;
     svg.addEventListener('wheel', alRodar, { passive: false });
@@ -485,27 +495,30 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               {seleccion ? `${seleccion.nombre} — ${listaSeleccion.length} prospectos` : 'Rueda para acercar, arrastra para moverte, toca un estado para volar a él. Se actualiza solo.'}
             </p>
           </div>
-          <div className="ml-auto flex flex-wrap gap-2 pointer-events-auto">
-            <Kpi etiqueta="Prospectos" valor={filtrados.length} animar={!reducido} />
-            <Kpi etiqueta="Con teléfono" valor={conTelefono} animar={!reducido} />
-            <Kpi etiqueta="Con decisor" valor={conDecisor} animar={!reducido} />
-            <Kpi etiqueta="Urgencia ≥70" valor={calientes} animar={!reducido} />
+          <div className="ml-auto flex flex-wrap items-center gap-2 pointer-events-auto">
+            <div className="flex items-center rounded-full backdrop-blur-sm overflow-hidden"
+              style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, boxShadow: SOMBRA_FLOTANTE }}>
+              <Kpi etiqueta="Prospectos" valor={filtrados.length} animar={!reducido} />
+              <Kpi etiqueta="Teléfono" valor={conTelefono} animar={!reducido} divisor />
+              <Kpi etiqueta="Decisor" valor={conDecisor} animar={!reducido} divisor />
+              <Kpi etiqueta="Urgentes" valor={calientes} animar={!reducido} divisor />
+            </div>
             {(camK > 1.02 || seleccion) && (
               <button onClick={() => { setSeleccion(null); setCalles(false); volarA(null); }}
-                className="px-3.5 py-2.5 rounded-2xl text-sm backdrop-blur-sm hover:brightness-95"
-                style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TINTA }}>
-                ⌂ México
+                className={`${BOTON_BARRA} hover:bg-[var(--canvas)]`} title="Volver al país"
+                style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TINTA, boxShadow: SOMBRA_FLOTANTE }}>
+                ⌂
               </button>
             )}
             <button ref={botonFiltrosRef} onClick={() => setFiltrosAbiertos((v) => !v)}
-              className="px-3.5 py-2.5 rounded-2xl text-sm backdrop-blur-sm hover:brightness-125"
-              style={{ background: filtrosActivos ? 'var(--ink)' : SUPERFICIE, border: `1px solid ${filtrosActivos ? 'var(--ink)' : LINEA}`, color: filtrosActivos ? 'var(--canvas)' : TINTA }}>
-              ☰ Filtros{filtrosActivos ? ` · ${filtrosActivos}` : ''}
+              className={`${BOTON_BARRA} ${filtrosActivos ? '' : 'hover:bg-[var(--canvas)]'}`}
+              style={{ background: filtrosActivos ? 'var(--ink)' : SUPERFICIE, border: `1px solid ${filtrosActivos ? 'var(--ink)' : LINEA}`, color: filtrosActivos ? 'var(--canvas)' : TINTA, boxShadow: SOMBRA_FLOTANTE }}>
+              Filtros{filtrosActivos ? ` · ${filtrosActivos}` : ''}
             </button>
             <button onClick={alternarPantalla} title="Pantalla completa"
-              className="px-3.5 py-2.5 rounded-2xl text-sm backdrop-blur-sm hover:brightness-125"
-              style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TINTA }}>
-              {pantallaCompleta ? '⤡ Salir' : '⤢ Pantalla completa'}
+              className={`${BOTON_BARRA} hover:bg-[var(--canvas)]`}
+              style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TINTA, boxShadow: SOMBRA_FLOTANTE }}>
+              {pantallaCompleta ? '⤡' : '⤢'}
             </button>
           </div>
         </div>
@@ -730,7 +743,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           const e = ESTADOS_GEO.find((x) => x.id === hover)!;
           const lista = porEstado.get(e.nombre) ?? [];
           return (
-            <div className="absolute bottom-5 left-5 z-20 px-4 py-3 rounded-2xl backdrop-blur-sm"
+            <div className="absolute bottom-16 left-5 z-20 px-4 py-3 rounded-2xl backdrop-blur-sm"
               style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TINTA }}>
               <div className="text-sm font-semibold">{e.nombre}</div>
               <div className="text-[12px]" style={{ color: TENUE }}>
@@ -741,13 +754,13 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         })()}
 
         {lucesRecortadas && (
-          <p className="absolute bottom-16 right-5 z-20 text-[11px] px-3 py-1.5 rounded-xl backdrop-blur-sm"
+          <p className="absolute bottom-5 right-4 z-10 text-[11px] px-3 py-1.5 rounded-full backdrop-blur-sm"
             style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TENUE }}>
             Luces: las {numero(TOPE_LUCES_PAIS)} más calientes de {numero(conCoords.length)} — filtra o entra a un estado para verlas todas.
           </p>
         )}
         {/* Leyenda del embudo */}
-        <div className="absolute bottom-5 right-5 z-20 flex flex-wrap gap-x-3 gap-y-1 px-4 py-2.5 rounded-2xl backdrop-blur-sm"
+        <div className="absolute bottom-5 left-5 z-10 flex flex-wrap gap-x-3 gap-y-1 px-4 py-2 rounded-full backdrop-blur-sm"
           style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
           {ORDEN_EMBUDO.map((e) => (
             <span key={e} className="flex items-center gap-1.5 text-[11px]" style={{ color: TENUE }}>
@@ -757,36 +770,37 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           ))}
         </div>
 
-        {/* El panel del estado */}
+        {/* Los leads del estado: tarjetas FLOTANDO al lateral del país —
+            sin recuadro contenedor (orden 17-ago). El país respira entre
+            ellas; solo la columna hace scroll. */}
         {seleccion && !calles && (
-          <aside className="absolute top-0 right-0 bottom-0 z-20 w-full sm:w-[380px] flex flex-col cerebro-panel"
-            style={{ background: 'color-mix(in srgb, var(--surface) 96%, transparent)', borderLeft: `1px solid ${LINEA}`, backdropFilter: 'blur(6px)' }}>
-            <div className="px-5 pt-16 pb-3 flex items-center gap-2">
-              <h2 className="text-base font-semibold" style={{ color: TINTA }}>{seleccion.nombre}</h2>
-              <span className="text-[12px]" style={{ color: TENUE }}>{listaSeleccion.length} prospectos</span>
-              <div className="ml-auto flex gap-2">
-                {listaSeleccion.some((p) => p.lat !== null) && (
-                  <button onClick={() => setCalles(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium"
-                    style={{ background: 'var(--ink)', color: 'var(--canvas)' }}>
-                    Ver calles →
-                  </button>
-                )}
-                <button onClick={() => setSeleccion(null)} className="px-3 py-1.5 rounded-lg text-[12px]"
-                  style={{ background: 'var(--canvas)', color: TINTA, border: `1px solid ${LINEA}` }}>
-                  ✕
+          <div className="absolute top-[4.4rem] right-4 bottom-4 z-20 w-[min(92vw,330px)] flex flex-col gap-2.5 cerebro-panel pointer-events-none">
+            <div className="pointer-events-auto self-end flex items-center gap-2.5 px-3.5 py-1.5 rounded-full backdrop-blur-sm"
+              style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, boxShadow: SOMBRA_FLOTANTE }}>
+              <span className="text-[13px] font-semibold" style={{ color: TINTA }}>{seleccion.nombre}</span>
+              <span className="text-[11px] tabular-nums" style={{ color: TENUE }}>{numero(listaSeleccion.length)}</span>
+              {listaSeleccion.some((p) => p.lat !== null) && (
+                <button onClick={() => setCalles(true)} className="px-2.5 py-1 rounded-full text-[11px] font-medium"
+                  style={{ background: 'var(--ink)', color: 'var(--canvas)' }}>
+                  Calles →
                 </button>
-              </div>
+              )}
+              <button onClick={() => { setSeleccion(null); volarA(null); }} title="Cerrar"
+                className="text-[13px] leading-none px-1" style={{ color: TENUE }}>
+                ✕
+              </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-3">
+            <div className="pointer-events-auto flex-1 overflow-y-auto space-y-2.5 pr-0.5 cerebro-scroll">
               {listaSeleccion.length === 0 ? (
-                <p className="text-sm" style={{ color: TENUE }}>
+                <p className="text-[12px] px-3.5 py-2.5 rounded-2xl backdrop-blur-sm"
+                  style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TENUE, boxShadow: SOMBRA_FLOTANTE }}>
                   El censo todavía no encuentra a nadie aquí — cuando un agente lo haga, aparece solo.
                 </p>
               ) : listaSeleccion.map((p) => (
                 <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
               ))}
             </div>
-          </aside>
+          </div>
         )}
 
         {/* El nivel calles */}
@@ -868,6 +882,9 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         .cerebro-panel { animation: cerebroPanel 420ms cubic-bezier(.22,1,.36,1); }
         @keyframes cerebroPanel { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
         .cerebro-llenado { transition: width 900ms cubic-bezier(.22,1,.36,1); }
+        .cerebro-scroll::-webkit-scrollbar { width: 5px; }
+        .cerebro-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 16%, transparent); border-radius: 99px; }
+        .cerebro-scroll::-webkit-scrollbar-track { background: transparent; }
         /* El ala izquierda solo existe donde sobra pantalla (Odyssey 49 y
            similares): en laptop taparía el país. */
         @media (min-width: 1900px) { .cerebro-ala { display: flex; } }
