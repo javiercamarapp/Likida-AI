@@ -23,7 +23,7 @@ import dynamic from 'next/dynamic';
 import { proyectar } from '../../dashboard/mapa/mexico-geo';
 import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-geo';
 import {
-  COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, type DatosMapa, type Giro, type ProspectoMapa,
+  COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, TAMANOS, type DatosMapa, type Giro, type ProspectoMapa, type Tamano,
 } from '@/lib/admin/prospectos-mapa';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
@@ -56,7 +56,11 @@ interface Filtros {
   minUrgencia: 0 | 50 | 70;
   soloTel: boolean;
   soloDecisor: boolean;
-  orden: 'cierre' | 'urgencia' | 'recientes';
+  orden: 'cierre' | 'urgencia' | 'recientes' | 'completos';
+  tamanos: Set<Tamano | 'n/d'> | null;   // null = todos
+  minCompletitud: 0 | 50 | 75;
+  soloMensajeIA: boolean;
+  soloVacante: boolean;
   /** "Todos a 50 km de Nuevo Laredo" (backlog 17-ago): centro elegido de la
    *  lista de plazas + radio. 0 = apagado. Con radio activo solo pasan los
    *  prospectos CON coordenadas — al resto no se le adivina distancia. */
@@ -66,8 +70,10 @@ interface Filtros {
 const SIN_FILTROS: Filtros = {
   giros: null, etapas: null, fuentes: null, minUrgencia: 0,
   soloTel: false, soloDecisor: false, orden: 'cierre',
+  tamanos: null, minCompletitud: 0, soloMensajeIA: false, soloVacante: false,
   centro: null, radioKm: 0,
 };
+const TAMANOS_UI: Array<Tamano | 'n/d'> = [...TAMANOS, 'n/d'];
 
 /** Distancia esférica en km — suficiente para un radio comercial. */
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -185,7 +191,7 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar, plana }: {
         <div className="min-w-0">
           <h4 className="text-sm font-medium leading-snug truncate" style={{ color: TINTA }}>{p.empresa}</h4>
           <p className="text-[11px]" style={{ color: TENUE }}>
-            {c.nombre} · {NOMBRE_GIRO[p.giro]}{p.ciudad ? ` · ${p.ciudad}` : ''}
+            {c.nombre} · {NOMBRE_GIRO[p.giro]}{p.tamano ? ` · ${p.tamano} pers.` : ''}{p.ciudad ? ` · ${p.ciudad}` : ''} · datos {p.completitud}%
           </p>
         </div>
       </div>
@@ -282,7 +288,10 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   }, [filtrosAbiertos]);
   const filtrosActivos =
     (filtros.giros ? 1 : 0) + (filtros.etapas ? 1 : 0) + (filtros.fuentes ? 1 : 0) +
-    (filtros.minUrgencia ? 1 : 0) + (filtros.soloTel ? 1 : 0) + (filtros.soloDecisor ? 1 : 0);
+    (filtros.minUrgencia ? 1 : 0) + (filtros.soloTel ? 1 : 0) + (filtros.soloDecisor ? 1 : 0) +
+    (filtros.tamanos ? 1 : 0) + (filtros.minCompletitud ? 1 : 0) +
+    (filtros.soloMensajeIA ? 1 : 0) + (filtros.soloVacante ? 1 : 0) +
+    (filtros.centro && filtros.radioKm ? 1 : 0);
   const filtrados = useMemo(() => datos.prospectos.filter((p) =>
     (!filtros.giros || filtros.giros.has(p.giro))
     && (!filtros.etapas || filtros.etapas.has(p.estado))
@@ -290,6 +299,10 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     && p.urgencia >= filtros.minUrgencia
     && (!filtros.soloTel || p.telefono !== null)
     && (!filtros.soloDecisor || p.contacto !== null)
+    && (!filtros.tamanos || filtros.tamanos.has(p.tamano ?? 'n/d'))
+    && p.completitud >= filtros.minCompletitud
+    && (!filtros.soloMensajeIA || p.mensajesGeneradosEn !== null)
+    && (!filtros.soloVacante || p.vacante !== null)
     && (!filtros.centro || filtros.radioKm === 0
       || (p.lat !== null && haversineKm(filtros.centro, { lat: p.lat, lng: p.lng! }) <= filtros.radioKm)),
   ), [datos, filtros]);
@@ -310,7 +323,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   const ordenar = useMemo(() => (lista: ProspectoMapa[]) => [...lista].sort((a, b) =>
     filtros.orden === 'urgencia' ? (b.urgencia - a.urgencia || b.cierre - a.cierre)
       : filtros.orden === 'recientes' ? 0 // ya vienen por created_at desc del servidor
-        : (b.cierre - a.cierre || b.urgencia - a.urgencia),
+        : filtros.orden === 'completos' ? (b.completitud - a.completitud || b.cierre - a.cierre)
+          : (b.cierre - a.cierre || b.urgencia - a.urgencia),
   ), [filtros.orden]);
   const exportarCsv = () => {
     const blob = new Blob([csvDe(ordenar(filtrados))], { type: 'text/csv;charset=utf-8' });
@@ -554,6 +568,17 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 ))}
               </div>
             </div>
+            <div>
+              <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Tamaño (personal DENUE)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {TAMANOS_UI.map((t) => (
+                  <Chip key={t} activo={!filtros.tamanos || filtros.tamanos.has(t)}
+                    onClick={() => setFiltros((f) => ({ ...f, tamanos: alternarEnSet(f.tamanos, t, TAMANOS_UI) }))}>
+                    {t === 'n/d' ? 'Sin dato' : t}
+                  </Chip>
+                ))}
+              </div>
+            </div>
             <div className="flex flex-wrap gap-x-5 gap-y-3">
               <div>
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Fuente</p>
@@ -584,12 +609,25 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 <div className="flex gap-1.5">
                   <Chip activo={filtros.soloTel} onClick={() => setFiltros((f) => ({ ...f, soloTel: !f.soloTel }))}>Con teléfono</Chip>
                   <Chip activo={filtros.soloDecisor} onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>Con decisor</Chip>
+                  <Chip activo={filtros.soloMensajeIA} onClick={() => setFiltros((f) => ({ ...f, soloMensajeIA: !f.soloMensajeIA }))}>✨ Mensaje listo</Chip>
+                  <Chip activo={filtros.soloVacante} onClick={() => setFiltros((f) => ({ ...f, soloVacante: !f.soloVacante }))}>Con vacante</Chip>
+                </div>
+              </div>
+              <div>
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Datos completos</p>
+                <div className="flex gap-1.5">
+                  {([0, 50, 75] as const).map((c) => (
+                    <Chip key={c} activo={filtros.minCompletitud === c}
+                      onClick={() => setFiltros((f) => ({ ...f, minCompletitud: c }))}>
+                      {c === 0 ? 'Todos' : `≥${c}%`}
+                    </Chip>
+                  ))}
                 </div>
               </div>
               <div>
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Ordenar por</p>
                 <div className="flex gap-1.5">
-                  {([['cierre', '% cierre'], ['urgencia', '% urgencia'], ['recientes', 'Recientes']] as const).map(([k, n]) => (
+                  {([['cierre', '% cierre'], ['urgencia', '% urgencia'], ['completos', 'Datos'], ['recientes', 'Recientes']] as const).map(([k, n]) => (
                     <Chip key={k} activo={filtros.orden === k} onClick={() => setFiltros((f) => ({ ...f, orden: k }))}>{n}</Chip>
                   ))}
                 </div>
@@ -870,6 +908,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         <footer className="text-[11px] leading-relaxed px-1 space-y-1" style={{ color: 'var(--muted)' }}>
           <p>{CRITERIO_SCORES.urgencia}</p>
           <p>{CRITERIO_SCORES.cierre}</p>
+          <p>{CRITERIO_SCORES.datos}</p>
           <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {fechaHoraMx(datos.generadoEn)} · se refresca cada 60 s.</p>
         </footer>
       </Reveal>
