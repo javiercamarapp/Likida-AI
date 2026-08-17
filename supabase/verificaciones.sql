@@ -5060,3 +5060,36 @@ begin
   raise exception E'BUS_0127  tablas-rls=%  checks=%  indice=%  fallida-sin-motivo-rebota=%   (esperado 4 / 4 / t / t)',
     v_tablas_rls, v_checks, indice_existe, fallida_sin_motivo_rebota;
 end $$;
+
+-- ── 100. Las coordenadas del prospecto existen y son coherentes (mig. 0128) ─
+-- (a) lat/lng existen como double precision;
+-- (b) los CHECKs de rango (México continental) y el de "o las dos o ninguna"
+--     existen por nombre;
+-- (c) funcional: un punto a medias (lat sin lng) REBOTA — media coordenada
+--     pintaría un pin en el ecuador, no un prospecto.
+--   (esperado 2 / 3 / t — exactos)
+do $$
+declare
+  v_cols int;
+  v_checks int;
+  media_coordenada_rebota boolean := false;
+begin
+  select count(*) into v_cols
+    from information_schema.columns
+   where table_schema = 'public' and table_name = 'prospecto'
+     and column_name in ('lat', 'lng') and data_type = 'double precision';
+
+  select count(*) into v_checks
+    from pg_constraint
+   where conname in ('prospecto_lat_rango', 'prospecto_lng_rango', 'prospecto_geo_completa');
+
+  begin
+    insert into public.prospecto (empresa, fuente, lat)
+    values ('ZZZ VERIF 0128', 'manual', 20.67);
+  exception when check_violation then
+    media_coordenada_rebota := true;
+  end;
+
+  raise exception E'GEO_0128  columnas=%  checks=%  media-coordenada-rebota=%   (esperado 2 / 3 / t)',
+    v_cols, v_checks, media_coordenada_rebota;
+end $$;
