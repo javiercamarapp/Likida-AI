@@ -50,3 +50,13 @@ no toques prospectos en estado cerrado/perdido/negociacion.
 
 Termina con UNA línea:
 VEREDICTO: <n> decisores hallados de <m> trabajados, <k> mensajes en prospeccion/, <faltas notables>
+
+## El guardado del agente experto (0129)
+
+Para CADA prospecto de los 5 mejores, además del archivo en `prospeccion/`,
+escribe el primer toque a la base por curl PATCH al mismo prospecto:
+`mensaje_wa` (la variante WhatsApp), `mensaje_correo_asunto`,
+`mensaje_correo` (la de correo), `mensajes_generados_en` (now, ISO) y
+`mensajes_modelo` con el valor `claude-suscripcion`. El Cerebro de ventas
+abre sus botones con ESTE texto — escríbelo listo para mandar, no como
+borrador con huecos.

@@ -31,10 +31,14 @@ export const COLOR_EMBUDO: Record<string, { color: string; nombre: string }> = {
   perdido: { color: '#94a3b8', nombre: 'Perdido' },
 };
 
-export type Giro = 'transportista' | 'flota_propia' | 'logistica' | 'otro';
+export type Giro =
+  | 'transportista' | 'embotelladora' | 'abarrotes_mayoreo'
+  | 'flota_propia' | 'logistica' | 'otro';
 
 export const NOMBRE_GIRO: Record<Giro, string> = {
   transportista: 'Transportista',
+  embotelladora: 'Embotelladora',
+  abarrotes_mayoreo: 'Abarrotes / Mayoreo',
   flota_propia: 'Flota propia',
   logistica: 'Logística',
   otro: 'Otro giro',
@@ -120,10 +124,14 @@ export function plazaDe(ciudadCruda: string | null): { ciudad: string | null; en
 export function giroDe(empresa: string, vacante: string | null, notas: string | null): Giro {
   const nombre = normalizar(empresa);
   const todo = normalizar(`${empresa} ${vacante ?? ''} ${notas ?? ''}`);
+  // La actividad DENUE (viaja en notas) es la clasificación más confiable —
+  // se evalúa antes que las heurísticas de nombre.
+  if (/(elaboracion|purificacion|manufactura).{0,30}(bebida|refresco|cerveza|agua)|embotellad/.test(todo)) return 'embotelladora';
+  if (/comercio al por mayor de (abarrotes|alimentos|bebidas|hielo|tabaco|frutas|carnes|leche|semillas)/.test(todo)) return 'abarrotes_mayoreo';
   if (/\b(transportes|transporte|autotransportes|autotransporte|fletes|trucking|carga|tractocamion|freight)\b/.test(nombre)
     || /autotransporte (foraneo|de carga|local)/.test(todo)) return 'transportista';
   if (/\b(logistica|logistics|forwarding|almacenadora|freight forward|3pl)\b/.test(todo)) return 'logistica';
-  if (/\b(reparto|cedis|distribucion|distribuidora|comercializadora|ruta de venta|autoventa|embotellador|panificad)\b/.test(todo)
+  if (/\b(reparto|cedis|distribucion|distribuidora|comercializadora|ruta de venta|autoventa|panificad)\b/.test(todo)
     || /comercio al por mayor/.test(todo)) return 'flota_propia';
   return 'otro';
 }
@@ -202,9 +210,16 @@ export interface ProspectoMapa {
   contacto: string | null;
   vacante: string | null;
   estado: string;
+  fuente: string;
   giro: Giro;
   urgencia: number;
   cierre: number;
+  /** El primer toque redactado por el agente experto (0129) — null hasta que
+   *  se genera; los botones caen a la plantilla determinista mientras. */
+  mensajeWaIa: string | null;
+  correoAsuntoIa: string | null;
+  correoCuerpoIa: string | null;
+  mensajesGeneradosEn: string | null;
 }
 
 export interface DatosMapa {
@@ -218,6 +233,8 @@ interface FilaProspecto {
   id: string; empresa: string; ciudad: string | null; lat: number | null; lng: number | null;
   telefono: string | null; correo: string | null; contacto_nombre: string | null;
   vacante: string | null; estado: string; fuente: string; notas: string | null;
+  mensaje_wa: string | null; mensaje_correo_asunto: string | null;
+  mensaje_correo: string | null; mensajes_generados_en: string | null;
 }
 
 export async function getDatosMapa(): Promise<DatosMapa> {
@@ -230,11 +247,21 @@ export async function getDatosMapa(): Promise<DatosMapa> {
     filas = await traerTodo<FilaProspecto>(
       (d, h) => supabaseAdmin()
         .from('prospecto')
-        .select('id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas', conteo(d))
+        .select('id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en', conteo(d))
+        // El orden secundario por id NO es adorno: created_at se repite (los
+        // lotes de siembra comparten el now() de su transacción) y paginar
+        // sobre un orden no único duplica y salta filas entre páginas — se
+        // vio como pines duplicados en el mapa (17-ago).
         .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
         .range(d, h),
       'prospecto (mapa)',
     );
+  // Cinturón sobre los tirantes: si aun así llegara un id repetido, una fila
+  // gana y las demás se tiran — dos luces del mismo prospecto mienten.
+  const porId = new Map<string, FilaProspecto>();
+  for (const f of filas) if (!porId.has(f.id)) porId.set(f.id, f);
+  filas = [...porId.values()];
   } catch (e) {
     logger.error('mapa_prospectos.leer', { err: e instanceof Error ? e.message : String(e) });
     return { prospectos: [], generadoEn, fallo: true };
@@ -255,7 +282,12 @@ export async function getDatosMapa(): Promise<DatosMapa> {
         contacto: p.contacto_nombre,
         vacante: p.vacante,
         estado: p.estado,
+        fuente: p.fuente,
         giro: giroDe(p.empresa, p.vacante, p.notas),
+        mensajeWaIa: p.mensaje_wa,
+        correoAsuntoIa: p.mensaje_correo_asunto,
+        correoCuerpoIa: p.mensaje_correo,
+        mensajesGeneradosEn: p.mensajes_generados_en,
         urgencia: scoreUrgencia({ vacante: p.vacante, notas: p.notas }),
         cierre: scoreCierre({
           telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,

@@ -15,6 +15,7 @@
 import { useEffect, useRef } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { COLOR_EMBUDO, NOMBRE_GIRO, type ProspectoMapa } from '@/lib/admin/prospectos-mapa';
+import { hrefWa, hrefCorreo } from './mensajes';
 
 function escapar(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -45,6 +46,13 @@ export default function Calles({ prospectos, titulo, onCerrar }: {
           const marcador = L.circleMarker([p.lat!, p.lng!], {
             radius: 9, color: '#ffffff', weight: 2, fillColor: c, fillOpacity: 0.95,
           });
+          // Los href de WhatsApp/correo salen de hrefWa/hrefCorreo (URLs que
+          // NOSOTROS construimos y codificamos) — lo único del prospecto que
+          // entra crudo al HTML pasa por `escapar`.
+          const wa = hrefWa(p);
+          const correo = hrefCorreo(p);
+          const boton = (href: string, texto: string, fondo: string, tinta: string) =>
+            `<a href="${href}" target="_blank" rel="noreferrer" style="display:inline-block;margin:2px 4px 0 0;padding:3px 8px;border-radius:8px;background:${fondo};color:${tinta};text-decoration:none;font-weight:600">${texto}</a>`;
           marcador.bindPopup(`
             <div style="font: 13px/1.45 system-ui; min-width: 220px">
               <strong>${escapar(p.empresa)}</strong><br/>
@@ -54,6 +62,11 @@ export default function Calles({ prospectos, titulo, onCerrar }: {
               ${p.correo ? `✉️ ${escapar(p.correo)}<br/>` : ''}
               Urgencia <strong>${p.urgencia}%</strong> · Cierre <strong>${p.cierre}%</strong>
               <div style="color:#64748b;margin-top:4px">${escapar(p.ciudad ?? '')}</div>
+              <div style="margin-top:6px">
+                ${wa ? boton(wa, 'WhatsApp →', '#14532d', '#86efac') : ''}
+                ${correo ? boton(correo, 'Correo →', '#1e3a8a', '#bfdbfe') : ''}
+                ${p.lat !== null ? boton(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`, 'Cómo llegar', '#1e293b', '#e2e8f0') : ''}
+              </div>
             </div>`);
           return marcador;
         }));

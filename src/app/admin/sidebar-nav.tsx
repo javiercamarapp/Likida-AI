@@ -46,13 +46,15 @@ function Fila({ item, pathname }: { item: Item; pathname: string }) {
 }
 
 function Seccion({ titulo, items, pathname }: { titulo: string; items: Item[]; pathname: string }) {
-  // ARRANCA ABIERTA, exactamente como su gemelo del dashboard: "un sidebar
-  // que amanece plegado esconde el producto" (dashboard/sidebar-nav.tsx). La
-  // primera versión de este archivo arrancaba plegada salvo la sección
-  // activa, y en producción /admin se veía como cinco encabezados pelones —
-  // justo el "no sigue el estilo" que Javier reportó (14-ago). El estado es
-  // de la sesión — no persiste a propósito.
-  const [plegada, setPlegada] = useState(false);
+  // Solo AGENTES amanece abierta; el resto pliega (orden de Javier del
+  // 17-ago, que SUSTITUYE a la del 14-ago de "todo abierto": con las
+  // pantallas de Fase D el sidebar completo ya no cabe sin scroll y los
+  // encabezados dejan de ser pelones — cada uno anuncia su sección). La
+  // sección de la ruta ACTIVA también abre: llegar por link directo a una
+  // pantalla y no verla iluminada en el menú desorienta. Estado de sesión —
+  // no persiste a propósito.
+  const contieneActiva = items.some((it) => it.href === pathname);
+  const [plegada, setPlegada] = useState(titulo !== 'Agentes' && !contieneActiva);
   if (items.length === 0) return null;
   return (
     <div>

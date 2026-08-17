@@ -19,10 +19,12 @@ import dynamic from 'next/dynamic';
 import { proyectar } from '../../dashboard/mapa/mexico-geo';
 import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-geo';
 import {
-  COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, type DatosMapa, type ProspectoMapa,
+  COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, type DatosMapa, type Giro, type ProspectoMapa,
 } from '@/lib/admin/prospectos-mapa';
+import { fechaHoraMx, numero } from '@/lib/formato';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
 import { useCountUp } from '../ui/use-count-up';
+import { hrefWa, hrefCorreo } from './mensajes';
 
 const Calles = dynamic(() => import('./calles'), { ssr: false });
 
@@ -32,6 +34,52 @@ const TENUE = '#7c8aa5';
 const LINEA = '#1c2a42';
 
 const ORDEN_EMBUDO = ['negociacion', 'demo', 'contactado', 'nuevo', 'cerrado', 'perdido'] as const;
+const GIROS: Giro[] = ['transportista', 'embotelladora', 'abarrotes_mayoreo', 'flota_propia', 'logistica', 'otro'];
+const FUENTES = [
+  { clave: 'censo', nombre: 'Censo (vacantes)' },
+  { clave: 'denue', nombre: 'Universo DENUE' },
+  { clave: 'manual', nombre: 'Cuentas a mano' },
+] as const;
+
+/** Con más de este número de luces a nivel país, el DOM se arrastra: se
+ *  enseñan las N más calientes y el pie lo DICE (nunca se recorta callado). */
+const TOPE_LUCES_PAIS = 2200;
+
+interface Filtros {
+  giros: Set<Giro> | null;      // null = todas
+  etapas: Set<string> | null;
+  fuentes: Set<string> | null;
+  minUrgencia: 0 | 50 | 70;
+  soloTel: boolean;
+  soloDecisor: boolean;
+  orden: 'cierre' | 'urgencia' | 'recientes';
+}
+const SIN_FILTROS: Filtros = {
+  giros: null, etapas: null, fuentes: null, minUrgencia: 0,
+  soloTel: false, soloDecisor: false, orden: 'cierre',
+};
+
+function alternarEnSet<T>(actual: Set<T> | null, valor: T, universo: readonly T[]): Set<T> | null {
+  const s = new Set(actual ?? universo);
+  if (s.has(valor)) s.delete(valor); else s.add(valor);
+  return s.size === universo.length ? null : s;
+}
+
+function Chip({ activo, color, onClick, children }: {
+  activo: boolean; color?: string; onClick: () => void; children: React.ReactNode;
+}) {
+  return (
+    <button onClick={onClick}
+      className="px-2.5 py-1 rounded-full text-[11px] transition-all"
+      style={{
+        background: activo ? (color ? `color-mix(in srgb, ${color} 24%, #0f182c)` : '#164e63') : 'transparent',
+        border: `1px solid ${activo ? (color ?? '#67e8f9') : LINEA}`,
+        color: activo ? TINTA : TENUE,
+      }}>
+      {children}
+    </button>
+  );
+}
 
 function Kpi({ etiqueta, valor, animar }: { etiqueta: string; valor: number; animar: boolean }) {
   const mostrado = useCountUp(valor, animar);
@@ -83,16 +131,9 @@ function Reveal({ children, retraso = 0 }: { children: React.ReactNode; retraso?
   );
 }
 
-/** El primer toque, pre-armado — honesto, corto, editable en WhatsApp antes
- *  de mandar. Sin "nuestros clientes": no hay clientes todavía. */
-export function mensajeWa(p: ProspectoMapa): string {
-  const gancho = p.vacante
-    ? `vi que buscan "${p.vacante}" — ese trabajo es exactamente el que automatizamos`
-    : 'la liquidación de viajes de los operadores se sigue haciendo a mano en casi todas las flotas';
-  return `Hola, soy Javier, de Likida. En ${p.empresa}, ${gancho}: el operador manda sus comprobantes por WhatsApp y la liquidación sale cuadrada, con lo fiscal separado. Estamos eligiendo a las primeras flotas. ¿Le interesan 15 minutos?`;
-}
-
-function TarjetaProspecto({ p, nuevo }: { p: ProspectoMapa; nuevo: boolean }) {
+function TarjetaProspecto({ p, nuevo, afinando, onAfinar }: {
+  p: ProspectoMapa; nuevo: boolean; afinando?: boolean; onAfinar?: (id: string) => void;
+}) {
   const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
   return (
     <article className={`rounded-2xl p-3.5 space-y-2 ${nuevo ? 'cerebro-recien' : ''}`}
@@ -116,14 +157,23 @@ function TarjetaProspecto({ p, nuevo }: { p: ProspectoMapa; nuevo: boolean }) {
       {p.vacante && <p className="text-[11px] truncate" style={{ color: TENUE }}>Vacante: {p.vacante}</p>}
       <Barra etiqueta="Urgencia" pct={p.urgencia} color="#f59e0b" />
       <Barra etiqueta="Cierre" pct={p.cierre} color="#34d399" />
-      {(p.telefono || p.lat !== null) && (
-        <div className="flex gap-2 pt-1">
+      {p.mensajesGeneradosEn && (
+        <p className="text-[10px]" style={{ color: '#67e8f9' }}>✨ mensaje del agente experto listo</p>
+      )}
+      {(p.telefono || p.correo || p.lat !== null) && (
+        <div className="flex flex-wrap gap-2 pt-1">
           {p.telefono && (
-            <a href={`https://wa.me/52${p.telefono.replace(/^52/, '')}?text=${encodeURIComponent(mensajeWa(p))}`}
-              target="_blank" rel="noreferrer"
+            <a href={hrefWa(p)!} target="_blank" rel="noreferrer"
               className="px-2.5 py-1 rounded-lg text-[11px] font-medium"
               style={{ background: '#14532d', color: '#86efac' }}>
               WhatsApp →
+            </a>
+          )}
+          {p.correo && (
+            <a href={hrefCorreo(p)!}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-medium"
+              style={{ background: '#1e3a8a', color: '#bfdbfe' }}>
+              Correo →
             </a>
           )}
           {p.lat !== null && (
@@ -133,6 +183,14 @@ function TarjetaProspecto({ p, nuevo }: { p: ProspectoMapa; nuevo: boolean }) {
               style={{ background: '#1e293b', color: TINTA }}>
               Cómo llegar
             </a>
+          )}
+          {onAfinar && (p.telefono || p.correo) && (
+            <button onClick={() => onAfinar(p.id)} disabled={afinando}
+              title="El agente experto redacta el primer toque con toda la info de este prospecto"
+              className="px-2.5 py-1 rounded-lg text-[11px]"
+              style={{ background: '#312e81', color: '#c7d2fe', opacity: afinando ? 0.6 : 1 }}>
+              {afinando ? 'redactando…' : p.mensajesGeneradosEn ? '↻ IA' : '✨ Mensaje IA'}
+            </button>
           )}
         </div>
       )}
@@ -163,6 +221,47 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     else void zonaRef.current?.requestFullscreen();
   };
 
+  // ── Filtros y orden (orden del 17-ago: "filtro y orden, muy chingón") ────
+  const [filtros, setFiltros] = useState<Filtros>(SIN_FILTROS);
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
+  const filtrosActivos =
+    (filtros.giros ? 1 : 0) + (filtros.etapas ? 1 : 0) + (filtros.fuentes ? 1 : 0) +
+    (filtros.minUrgencia ? 1 : 0) + (filtros.soloTel ? 1 : 0) + (filtros.soloDecisor ? 1 : 0);
+  const filtrados = useMemo(() => datos.prospectos.filter((p) =>
+    (!filtros.giros || filtros.giros.has(p.giro))
+    && (!filtros.etapas || filtros.etapas.has(p.estado))
+    && (!filtros.fuentes || filtros.fuentes.has(p.fuente))
+    && p.urgencia >= filtros.minUrgencia
+    && (!filtros.soloTel || p.telefono !== null)
+    && (!filtros.soloDecisor || p.contacto !== null),
+  ), [datos, filtros]);
+  const ordenar = useMemo(() => (lista: ProspectoMapa[]) => [...lista].sort((a, b) =>
+    filtros.orden === 'urgencia' ? (b.urgencia - a.urgencia || b.cierre - a.cierre)
+      : filtros.orden === 'recientes' ? 0 // ya vienen por created_at desc del servidor
+        : (b.cierre - a.cierre || b.urgencia - a.urgencia),
+  ), [filtros.orden]);
+
+  // ── El agente experto en vivo: afinar el mensaje de UNA tarjeta ──────────
+  const [afinando, setAfinando] = useState<string | null>(null);
+  const afinar = async (id: string) => {
+    setAfinando(id);
+    try {
+      const r = await fetch('/api/admin/mapa-prospectos/mensaje', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      if (!r.ok) return; // el botón sigue con la plantilla; el error ya quedó en el log del servidor
+      const m = (await r.json()) as Pick<ProspectoMapa, 'mensajeWaIa' | 'correoAsuntoIa' | 'correoCuerpoIa' | 'mensajesGeneradosEn'>;
+      setDatos((d) => ({
+        ...d,
+        prospectos: d.prospectos.map((p) => (p.id === id ? { ...p, ...m } : p)),
+      }));
+    } finally {
+      setAfinando(null);
+    }
+  };
+
   // El latido: cada 60 s el mapa pregunta por la cartera y lo nuevo se
   // enciende con su animación de llegada.
   useEffect(() => {
@@ -183,21 +282,21 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
   const porEstado = useMemo(() => {
     const m = new Map<string, ProspectoMapa[]>();
-    for (const p of datos.prospectos) {
+    for (const p of filtrados) {
       if (!p.entidad) continue;
       const lista = m.get(p.entidad) ?? [];
       lista.push(p);
       m.set(p.entidad, lista);
     }
-    for (const lista of m.values()) lista.sort((a, b) => b.cierre - a.cierre || b.urgencia - a.urgencia);
+    for (const [k, lista] of m) m.set(k, ordenar(lista));
     return m;
-  }, [datos]);
+  }, [filtrados, ordenar]);
 
-  const sinPlaza = useMemo(() => datos.prospectos.filter((p) => !p.entidad).length, [datos]);
+  const sinPlaza = useMemo(() => filtrados.filter((p) => !p.entidad).length, [filtrados]);
   const maxEstado = useMemo(() => Math.max(1, ...[...porEstado.values()].map((l) => l.length)), [porEstado]);
-  const conTelefono = useMemo(() => datos.prospectos.filter((p) => p.telefono).length, [datos]);
-  const conDecisor = useMemo(() => datos.prospectos.filter((p) => p.contacto).length, [datos]);
-  const calientes = useMemo(() => datos.prospectos.filter((p) => p.urgencia >= 70).length, [datos]);
+  const conTelefono = useMemo(() => filtrados.filter((p) => p.telefono).length, [filtrados]);
+  const conDecisor = useMemo(() => filtrados.filter((p) => p.contacto).length, [filtrados]);
+  const calientes = useMemo(() => filtrados.filter((p) => p.urgencia >= 70).length, [filtrados]);
 
   // El zoom del país al estado: transform sobre el <g> con transición CSS.
   const zoom = useMemo(() => {
@@ -211,11 +310,14 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   }, [seleccion]);
 
   const listaSeleccion = seleccion ? porEstado.get(seleccion.nombre) ?? [] : [];
-  const pines = useMemo(
-    () => datos.prospectos.filter((p) => p.lat !== null && p.lng !== null)
-      .map((p) => ({ p, xy: proyectar(p.lat!, p.lng!) })),
-    [datos],
-  );
+  const conCoords = useMemo(() => filtrados.filter((p) => p.lat !== null && p.lng !== null), [filtrados]);
+  const lucesRecortadas = seleccion === null && conCoords.length > TOPE_LUCES_PAIS;
+  const pines = useMemo(() => {
+    const base = lucesRecortadas
+      ? [...conCoords].sort((a, b) => (b.urgencia + b.cierre) - (a.urgencia + a.cierre)).slice(0, TOPE_LUCES_PAIS)
+      : conCoords;
+    return base.map((p) => ({ p, xy: proyectar(p.lat!, p.lng!) }));
+  }, [conCoords, lucesRecortadas]);
 
   return (
     <div className="space-y-10">
@@ -232,10 +334,15 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             </p>
           </div>
           <div className="ml-auto flex flex-wrap gap-2 pointer-events-auto">
-            <Kpi etiqueta="Prospectos" valor={datos.prospectos.length} animar={!reducido} />
+            <Kpi etiqueta="Prospectos" valor={filtrados.length} animar={!reducido} />
             <Kpi etiqueta="Con teléfono" valor={conTelefono} animar={!reducido} />
             <Kpi etiqueta="Con decisor" valor={conDecisor} animar={!reducido} />
             <Kpi etiqueta="Urgencia ≥70" valor={calientes} animar={!reducido} />
+            <button onClick={() => setFiltrosAbiertos((v) => !v)}
+              className="px-3.5 py-2.5 rounded-2xl text-sm backdrop-blur-sm hover:brightness-125"
+              style={{ background: filtrosActivos ? '#164e63' : 'rgba(12,20,36,0.72)', border: `1px solid ${filtrosActivos ? '#67e8f9' : LINEA}`, color: TINTA }}>
+              ☰ Filtros{filtrosActivos ? ` · ${filtrosActivos}` : ''}
+            </button>
             <button onClick={alternarPantalla} title="Pantalla completa"
               className="px-3.5 py-2.5 rounded-2xl text-sm backdrop-blur-sm hover:brightness-125"
               style={{ background: 'rgba(12,20,36,0.72)', border: `1px solid ${LINEA}`, color: TINTA }}>
@@ -244,6 +351,83 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           </div>
         </div>
 
+        {/* ── La barra de filtros y orden ─────────────────────────────────── */}
+        {filtrosAbiertos && (
+          <div className="absolute top-20 right-4 z-30 w-[min(94vw,560px)] rounded-2xl p-4 space-y-3 backdrop-blur-md cerebro-panel"
+            style={{ background: 'rgba(10,17,32,0.94)', border: `1px solid ${LINEA}` }}>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Categoría</p>
+              <div className="flex flex-wrap gap-1.5">
+                {GIROS.map((g) => (
+                  <Chip key={g} activo={!filtros.giros || filtros.giros.has(g)}
+                    onClick={() => setFiltros((f) => ({ ...f, giros: alternarEnSet(f.giros, g, GIROS) }))}>
+                    {NOMBRE_GIRO[g]} · {datos.prospectos.filter((p) => p.giro === g).length}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Etapa del embudo</p>
+              <div className="flex flex-wrap gap-1.5">
+                {ORDEN_EMBUDO.map((e) => (
+                  <Chip key={e} color={COLOR_EMBUDO[e].color} activo={!filtros.etapas || filtros.etapas.has(e)}
+                    onClick={() => setFiltros((f) => ({ ...f, etapas: alternarEnSet(f.etapas, e, ORDEN_EMBUDO) }))}>
+                    {COLOR_EMBUDO[e].nombre}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Fuente</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {FUENTES.map((f) => (
+                    <Chip key={f.clave} activo={!filtros.fuentes || filtros.fuentes.has(f.clave)}
+                      onClick={() => setFiltros((v) => ({ ...v, fuentes: alternarEnSet(v.fuentes, f.clave, FUENTES.map((x) => x.clave)) }))}>
+                      {f.nombre}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Urgencia mínima</p>
+                <div className="flex gap-1.5">
+                  {([0, 50, 70] as const).map((u) => (
+                    <Chip key={u} activo={filtros.minUrgencia === u}
+                      onClick={() => setFiltros((f) => ({ ...f, minUrgencia: u }))}>
+                      {u === 0 ? 'Todas' : `≥${u}%`}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-3 items-end">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Alcanzables</p>
+                <div className="flex gap-1.5">
+                  <Chip activo={filtros.soloTel} onClick={() => setFiltros((f) => ({ ...f, soloTel: !f.soloTel }))}>Con teléfono</Chip>
+                  <Chip activo={filtros.soloDecisor} onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>Con decisor</Chip>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Ordenar por</p>
+                <div className="flex gap-1.5">
+                  {([['cierre', '% cierre'], ['urgencia', '% urgencia'], ['recientes', 'Recientes']] as const).map(([k, n]) => (
+                    <Chip key={k} activo={filtros.orden === k} onClick={() => setFiltros((f) => ({ ...f, orden: k }))}>{n}</Chip>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => setFiltros(SIN_FILTROS)}
+                className="ml-auto px-3 py-1.5 rounded-lg text-[11px]" style={{ background: '#1e293b', color: TINTA }}>
+                Limpiar todo
+              </button>
+            </div>
+            <p className="text-[11px]" style={{ color: TENUE }}>
+              {numero(filtrados.length)} de {numero(datos.prospectos.length)} prospectos pasan el filtro.
+            </p>
+          </div>
+        )}
+
         {/* El ala izquierda — solo en pantallas anchas (el Odyssey la pide):
             el embudo y los más cerrables VIVEN junto al país, sin taparlo. */}
         <aside className="cerebro-ala absolute left-4 top-24 bottom-5 z-10 w-[300px] hidden flex-col gap-3 overflow-y-auto pr-1 pointer-events-auto">
@@ -251,7 +435,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             <h3 className="text-[12px] font-semibold mb-2.5 uppercase tracking-wider" style={{ color: TENUE }}>El embudo</h3>
             <div className="space-y-2">
               {ORDEN_EMBUDO.map((e) => {
-                const n = datos.prospectos.filter((p) => p.estado === e).length;
+                const n = filtrados.filter((p) => p.estado === e).length;
                 return (
                   <div key={e} className="flex items-center gap-2 text-[12px]" style={{ color: TENUE }}>
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLOR_EMBUDO[e].color, boxShadow: `0 0 5px ${COLOR_EMBUDO[e].color}` }} />
@@ -265,7 +449,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <div className="rounded-2xl p-4 backdrop-blur-sm flex-1 min-h-0 overflow-y-auto" style={{ background: 'rgba(12,20,36,0.72)', border: `1px solid ${LINEA}` }}>
             <h3 className="text-[12px] font-semibold mb-2.5 uppercase tracking-wider" style={{ color: TENUE }}>Más cerrables</h3>
             <div className="space-y-2.5">
-              {[...datos.prospectos].sort((a, b) => b.cierre - a.cierre || b.urgencia - a.urgencia).slice(0, 7).map((p) => (
+              {ordenar(filtrados).slice(0, 7).map((p) => (
                 <div key={p.id} className="text-[12px] leading-snug">
                   <p className="truncate font-medium" style={{ color: TINTA }}>{p.empresa}</p>
                   <p style={{ color: TENUE }}>
@@ -345,6 +529,12 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           );
         })()}
 
+        {lucesRecortadas && (
+          <p className="absolute bottom-16 right-5 z-20 text-[11px] px-3 py-1.5 rounded-xl backdrop-blur-sm"
+            style={{ background: 'rgba(12,20,36,0.8)', border: `1px solid ${LINEA}`, color: TENUE }}>
+            Luces: las {numero(TOPE_LUCES_PAIS)} más calientes de {numero(conCoords.length)} — filtra o entra a un estado para verlas todas.
+          </p>
+        )}
         {/* Leyenda del embudo */}
         <div className="absolute bottom-5 right-5 z-20 flex flex-wrap gap-x-3 gap-y-1 px-4 py-2.5 rounded-2xl backdrop-blur-sm"
           style={{ background: 'rgba(12,20,36,0.8)', border: `1px solid ${LINEA}` }}>
@@ -382,7 +572,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                   El censo todavía no encuentra a nadie aquí — cuando un agente lo haga, aparece solo.
                 </p>
               ) : listaSeleccion.map((p) => (
-                <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} />
+                <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
               ))}
             </div>
           </aside>
@@ -401,8 +591,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>El embudo, en luces</h3>
             <div className="space-y-2.5">
               {ORDEN_EMBUDO.map((e) => {
-                const n = datos.prospectos.filter((p) => p.estado === e).length;
-                const pct = datos.prospectos.length ? Math.round((n / datos.prospectos.length) * 100) : 0;
+                const n = filtrados.filter((p) => p.estado === e).length;
+                const pct = filtrados.length ? Math.round((n / filtrados.length) * 100) : 0;
                 return (
                   <div key={e} className="flex items-center gap-3 text-[12px]" style={{ color: TENUE }}>
                     <span className="w-28 shrink-0">{COLOR_EMBUDO[e].nombre}</span>
@@ -439,8 +629,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         <section className="rounded-3xl p-5" style={{ background: FONDO, border: `1px solid ${LINEA}` }}>
           <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>Los 12 más cerrables del país</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[...datos.prospectos].sort((a, b) => b.cierre - a.cierre || b.urgencia - a.urgencia).slice(0, 12).map((p) => (
-              <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} />
+            {ordenar(filtrados).slice(0, 12).map((p) => (
+              <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
             ))}
           </div>
         </section>
@@ -450,7 +640,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         <footer className="text-[11px] leading-relaxed px-1 space-y-1" style={{ color: 'var(--muted)' }}>
           <p>{CRITERIO_SCORES.urgencia}</p>
           <p>{CRITERIO_SCORES.cierre}</p>
-          <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {new Date(datos.generadoEn).toLocaleTimeString('es-MX')} · se refresca cada 60 s.</p>
+          <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {fechaHoraMx(datos.generadoEn)} · se refresca cada 60 s.</p>
         </footer>
       </Reveal>
 

@@ -37,10 +37,13 @@ function Fila({ item, sufijo, pathname }: { item: Item; sufijo: string; pathname
 }
 
 function Seccion({ titulo, items, sufijo, pathname }: { titulo: string; items: Item[]; sufijo: string; pathname: string }) {
-  // PLEGABLE (13-ago-2026): el encabezado es
-  // botón con chevron. El estado es de la sesión — no persiste a propósito:
-  // un sidebar que amanece plegado esconde el producto.
-  const [plegada, setPlegada] = useState(false);
+  // PLEGABLE (13-ago-2026), y desde el 17-ago solo AGENTES amanece abierta
+  // (orden de Javier, misma regla que el sidebar de /admin): los encabezados
+  // anuncian su sección y el menú cabe sin scroll. La sección de la ruta
+  // activa también abre — llegar por link directo y no ver la pantalla
+  // iluminada en el menú desorienta. Estado de sesión, no persiste.
+  const contieneActiva = items.some((it) => pathname === it.href || pathname.startsWith(it.href + '/'));
+  const [plegada, setPlegada] = useState(titulo !== 'Agentes' && !contieneActiva);
   // Una sección sin items para este rol no se pinta: un encabezado con nada
   // debajo le anuncia al usuario justo lo que no puede ver.
   if (items.length === 0) return null;
