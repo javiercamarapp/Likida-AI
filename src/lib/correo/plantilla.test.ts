@@ -30,7 +30,9 @@ describe('el wordmark va arriba a la IZQUIERDA y NO puede romperse', () => {
 
   it('va alineado a la IZQUIERDA y antes que la tarjeta', () => {
     const posLogo = html.indexOf('cid:likida-logo');
-    const posTarjeta = html.indexOf('border-radius:14px');
+    // La tarjeta se localiza por su fondo de papel con radio — el número
+    // exacto del radio es decisión de diseño, no contrato.
+    const posTarjeta = html.search(/bgcolor="#ffffff"[^>]*border-radius/);
     expect(posLogo).toBeGreaterThan(-1);
     expect(posLogo).toBeLessThan(posTarjeta);
     expect(html).toMatch(/<td align="left"[^>]*>\s*<img src="cid:/);
