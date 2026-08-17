@@ -1,0 +1,85 @@
+id: lisr-28-fr-XX
+tipo: ley
+jerarquia: 1
+instrumento: "Ley del Impuesto sobre la Renta"
+articulo_o_regla: "28"
+fraccion: "XX"
+titulo: "Consumos en restaurantes — 91.5% no deducible, 0% en bares"
+citas_en_codigo: ["LISR 28-XX"]
+texto_vigente: >
+  XX. El 91.5% de los consumos en restaurantes. Para que proceda la deducción
+  de la diferencia, el pago deberá hacerse invariablemente mediante tarjeta de
+  crédito, de débito o de servicios, o a través de los monederos electrónicos
+  que al efecto autorice el Servicio de Administración Tributaria. Serán
+  deducibles al 100% los consumos en restaurantes que reúnan los requisitos de
+  la fracción V de este artículo sin que se excedan los límites establecidos
+  en dicha fracción. En ningún caso los consumos en bares serán deducibles.
+fuente_url: "https://leyes-mx.com/ley_del_impuesto_sobre_la_renta/28.htm"
+fuente_tipo: fuente_secundaria
+estado_verificacion: evidencia_corroborante
+nota_verificacion: >
+  Texto idéntico entre leyes-mx.com y el resumen independiente de sdv.com.mx
+  (Art. 28 LISR 2026, "Gastos No Deducibles"), y coincide con lo ya
+  investigado en `docs/conocimiento/03-isr-facilidades.md` §1.6 (27-jul-2026).
+  NO se leyó el PDF de diputados.gob.mx esta sesión: el fetch devolvió el
+  binario sin decodificar (313 páginas, sin extracción de texto disponible
+  con las herramientas de esta corrida) y las herramientas de scraping con
+  parser de PDF no tenían permiso concedido en esta sesión no interactiva.
+  PARA CERRAR: releer el PDF de diputados.gob.mx o el DOF/SIDOF de la reforma
+  del 30-nov-2016 (que introdujo esta fracción) y confirmar que no hubo
+  reforma posterior — `03-isr-facilidades.md` ya documentó que la LISR no se
+  reformó para 2026 y que la última reforma general es del 01-abr-2024, pero
+  esa afirmación tampoco se releyó hoy contra el índice de reformas.
+dato_relevante_no_verificado: >
+  Hay una iniciativa de reforma (SIL, expediente asun_5026478, presentada
+  03-mar-2026, y una previa de feb-2024) que propondría deducir al 100% los
+  consumos en restaurantes. Es una INICIATIVA, no ley vigente — no cambia
+  nada hoy. Vigilar solo si avanza a dictamen; no actuar sobre ella.
+relacion_con_fraccion_V: >
+  La propia fracción XX remite a la V: un consumo en restaurante que YA
+  califica como viático (relación laboral o servicios profesionales, fuera de
+  la faja de 50km, con CFDI de hospedaje o transporte que lo ampare, dentro
+  de $750/$1,500 diarios) es 100% deducible por la V y NO pasa por el 8.5%.
+  El 8.5%/91.5% es el régimen SUPLETORIO: aplica cuando la comida NO califica
+  como viático (dentro de los 50km, sin relación laboral, sin el comprobante
+  que la ampare, o simplemente un consumo ordinario). Confundir ambas
+  fracciones subestima o sobreestima la deducción según el caso.
+norma_relacionada: lisr-28-fr-V
+hallazgos_que_el_codigo_NO_implementa:
+  - id: H4
+    estado: NO_IMPLEMENTADO
+    severidad: media
+    que_dice_la_ley: >
+      Los consumos en BARES nunca son deducibles (0%), y los consumos en
+      restaurantes que NO califican como viático de la fracción V solo son
+      deducibles al 8.5% (y únicamente si el pago fue con tarjeta/monedero
+      electrónico — el efectivo tumba también ese 8.5%).
+    que_hace_el_codigo: >
+      No existe. El intake solo tiene el concepto `alimentacion` (`ocr.ts:98`
+      agrupa "restaurante, fonda, tortas, agua, café" bajo una sola etiqueta,
+      sin capturar si es un bar ni si hubo consumo de alcohol) y el motor
+      aplica a TODA `alimentacion` el mismo criterio del tope de $750/día de
+      la fracción V (`tope_alimentacion.ts` — `llevaTopeAlimentacion` no
+      distingue; `engine.ts` líneas ~893-920 aplica el tope sin verificar si
+      el gasto en realidad califica como viático).
+    consecuencia: >
+      Un consumo de bar, o una comida ordinaria que no califica como viático
+      (p. ej. dentro de la faja de 50km — ya cubierto por H3 de
+      `lisr-28-V.yaml` pero con la MISMA causa raíz: la clasificación
+      restaurante/viático/bar no existe), hoy se trata como si fuera 100%
+      deducible hasta $750/día en vez de 8.5% o 0%. Esto SOBREESTIMA la
+      deducción, exactamente el modo de falla que la regla del producto
+      prohíbe ("nunca inventar una cifra").
+    para_cerrarlo: >
+      Requiere (a) que el intake distinga bar/restaurante/viático — un campo
+      nuevo en el prompt de OCR y en `Gasto`, y (b) la base del operador para
+      la faja de 50km (H3, ya pendiente). Sin ambos, el motor no puede
+      afirmar el 8.5%/0% con la misma disciplina fail-closed que ya usa para
+      combustible en efectivo (RFA 2.9): mejor no afirmarlo que afirmarlo mal.
+usado_en_codigo: []
+pendiente_en_producto: >
+  Esta ficha documenta una regla que el producto TODAVÍA NO implementa. No
+  hay `usado_en_codigo` porque no hay código que la use. El hallazgo H4 es
+  para el pipeline de mejora diaria, no para esta ficha resolverlo.
+verificado_por: "experto fiscal semanal, área 3 (viáticos/efectivo), 16-ago-2026"
+verificado_el: 2026-08-16
