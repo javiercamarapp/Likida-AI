@@ -5128,3 +5128,31 @@ begin
   raise exception E'MENSAJES_0129  columnas=%  sin-fecha-rebota=%  modelo-suelto-rebota=%   (esperado 5 / t / t)',
     v_cols, sin_fecha_rebota, modelo_suelto_rebota;
 end $$;
+
+-- ── 102. El historial de toques existe y su canal tiene dominio (mig. 0130) ─
+-- (a) la tabla existe CON RLS; (b) el índice del último-toque existe;
+-- (c) funcional: un canal fuera del dominio REBOTA.
+--   (esperado t / t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  indice boolean;
+  canal_invalido_rebota boolean := false;
+  v_p uuid;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'prospecto_toque';
+
+  select exists (select 1 from pg_indexes where indexname = 'idx_toque_prospecto_fecha') into indice;
+
+  insert into public.prospecto (empresa, fuente) values ('ZZZ VERIF 0130', 'manual') returning id into v_p;
+  begin
+    insert into public.prospecto_toque (prospecto_id, canal, actor) values (v_p, 'paloma-mensajera', 'verif');
+  exception when check_violation then
+    canal_invalido_rebota := true;
+  end;
+
+  raise exception E'TOQUES_0130  tabla-rls=%  indice=%  canal-invalido-rebota=%   (esperado t / t / t)',
+    coalesce(tabla_rls, false), indice, canal_invalido_rebota;
+end $$;
