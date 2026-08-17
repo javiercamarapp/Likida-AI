@@ -24,6 +24,9 @@ export interface RutinaBus {
   nombre: string;
   horario: string;
   descripcion: string;
+  /** El encargo completo (bus_rutina.encargo_md) — el texto que el editor
+   *  pre-llena. Vacío si el sembrado aún no corre para esa rutina. */
+  encargoMd: string;
   ultimaCorrida: {
     inicio: string;
     fin: string | null;
@@ -65,9 +68,10 @@ export interface EstadoBus {
 }
 
 /** Los tipos de orden que la UI puede encolar. El dominio completo vive en el
- *  CHECK de la 0127; este subconjunto es lo que la bandeja ofrece HOY (editar
- *  encargo llega con el editor visual de rutinas). */
-export const ORDENES_UI = ['correr_ahora', 'kill_switch_on', 'kill_switch_off', 'nota'] as const;
+ *  CHECK de la 0127. `editar_encargo` (17-ago-2026) cierra el ciclo del
+ *  editor de rutinas: la orden lleva el contenido nuevo y la Mac abre un
+ *  PR CHICO — jamás escritura directa (diseño de la Fase D). */
+export const ORDENES_UI = ['correr_ahora', 'kill_switch_on', 'kill_switch_off', 'nota', 'editar_encargo'] as const;
 export type TipoOrdenUi = (typeof ORDENES_UI)[number];
 
 export function esOrdenUi(tipo: string): tipo is TipoOrdenUi {
@@ -75,9 +79,17 @@ export function esOrdenUi(tipo: string): tipo is TipoOrdenUi {
 }
 
 /** correr_ahora exige rutina (mismo criterio que el CHECK de la base — se
- *  valida aquí para que el error sea una frase, no un 23514 de Postgres). */
-export function validarOrden(tipo: TipoOrdenUi, rutina: string | null): string | null {
+ *  valida aquí para que el error sea una frase, no un 23514 de Postgres).
+ *  editar_encargo exige rutina Y contenido: un encargo vacío borraría la
+ *  rutina por accidente. */
+export function validarOrden(tipo: TipoOrdenUi, rutina: string | null, payload: Record<string, unknown> = {}): string | null {
   if (tipo === 'correr_ahora' && !rutina) return 'Correr ahora necesita saber qué rutina.';
+  if (tipo === 'editar_encargo') {
+    if (!rutina) return 'Editar encargo necesita saber qué rutina.';
+    const contenido = typeof payload.contenido === 'string' ? payload.contenido.trim() : '';
+    if (!contenido) return 'El encargo no puede quedar vacío — escribe el contenido nuevo completo.';
+    if (contenido.length > 20000) return 'El encargo pasa de 20,000 caracteres.';
+  }
   if (rutina && !/^[a-z0-9-]{2,40}$/.test(rutina)) return 'Ese nombre de rutina no tiene la forma esperada.';
   return null;
 }
@@ -95,7 +107,7 @@ export async function getEstadoBus(): Promise<EstadoBus> {
   let rutinas: RutinaBus[] = [];
   try {
     const [cat, corridas] = await Promise.all([
-      admin.from('bus_rutina').select('nombre, horario, descripcion').order('nombre'),
+      admin.from('bus_rutina').select('nombre, horario, descripcion, encargo_md').order('nombre'),
       admin
         .from('bus_corrida')
         .select('rutina, inicio, fin, veredicto, pr_url, exit_code')
@@ -125,11 +137,12 @@ export async function getEstadoBus(): Promise<EstadoBus> {
         nombre: r.nombre,
         horario: r.horario,
         descripcion: r.descripcion,
+        encargoMd: (r as { encargo_md?: string | null }).encargo_md ?? '',
         ultimaCorrida: ultimaDe.get(r.nombre) ?? null,
       })),
       ...[...ultimaDe.keys()]
         .filter((n) => !enCatalogo.has(n))
-        .map((n) => ({ nombre: n, horario: '', descripcion: '', ultimaCorrida: ultimaDe.get(n)! })),
+        .map((n) => ({ nombre: n, horario: '', descripcion: '', encargoMd: '', ultimaCorrida: ultimaDe.get(n)! })),
     ];
   } catch (e) {
     errores.push('rutinas: no se pudieron leer (bus_rutina/bus_corrida)');
@@ -205,7 +218,7 @@ export async function crearOrden(
   actorEmail: string,
   payload: Record<string, unknown> = {},
 ): Promise<void> {
-  const invalida = validarOrden(tipo, rutina);
+  const invalida = validarOrden(tipo, rutina, payload);
   if (invalida) throw new Error(invalida);
   const { error } = await supabaseAdmin()
     .from('bus_orden')

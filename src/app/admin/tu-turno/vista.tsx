@@ -273,18 +273,49 @@ export function VistaTuTurno({
                       ) : '—'}
                     </td>
                     <td className="py-2 text-right">
-                      <form action={accionOrden}>
-                        <input type="hidden" name="tipo" value="correr_ahora" />
-                        <input type="hidden" name="rutina" value={r.nombre} />
-                        <button className="px-2.5 py-1 rounded-lg text-xs hairline inline-flex items-center gap-1.5 hover:opacity-70">
-                          <Play {...ICONO} /> Correr ahora
-                        </button>
-                      </form>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <form action={accionOrden}>
+                          <input type="hidden" name="tipo" value="correr_ahora" />
+                          <input type="hidden" name="rutina" value={r.nombre} />
+                          <button className="px-2.5 py-1 rounded-lg text-xs hairline inline-flex items-center gap-1.5 hover:opacity-70">
+                            <Play {...ICONO} /> Correr ahora
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {/* ── EL EDITOR DE RUTINAS (Fase D, cerrado 17-ago-2026) ────────
+                  El encargo se edita AQUÍ y viaja como orden editar_encargo:
+                  la Mac abre un PR chico con el cambio — jamás escritura
+                  directa. Solo rutinas con encargo sembrado se pueden editar
+                  (sin el texto original no hay qué pre-llenar ni qué PR). */}
+            <div className="mt-3 space-y-1.5">
+              {bus.rutinas.filter((r) => r.encargoMd).map((r) => (
+                <details key={`ed-${r.nombre}`} className="rounded-xl hairline px-3 py-2" style={{ background: 'var(--surface)' }}>
+                  <summary className="text-xs cursor-pointer" style={{ color: 'var(--muted)' }}>
+                    Editar encargo · <span className="font-medium" style={{ color: 'var(--ink)' }}>{r.nombre}</span>
+                  </summary>
+                  <form action={accionOrden} className="mt-2 space-y-2">
+                    <input type="hidden" name="tipo" value="editar_encargo" />
+                    <input type="hidden" name="rutina" value={r.nombre} />
+                    <textarea name="contenido" defaultValue={r.encargoMd} required maxLength={20000} rows={12}
+                      className="w-full text-[12px] leading-relaxed px-3 py-2 rounded-lg hairline cifra-mono"
+                      style={{ background: 'var(--canvas)', resize: 'vertical' }} />
+                    <div className="flex items-center gap-3">
+                      <button className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+                        Encolar el cambio (la Mac abre el PR)
+                      </button>
+                      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+                        Nada se escribe directo: apruebas el PR en GitHub y el sembrado nocturno actualiza el catálogo.
+                      </p>
+                    </div>
+                  </form>
+                </details>
+              ))}
+            </div>
           </div>
         )}
       </section>
