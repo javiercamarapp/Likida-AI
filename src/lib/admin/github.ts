@@ -49,6 +49,38 @@ async function gh<T>(ruta: string): Promise<T> {
   return (await r.json()) as T;
 }
 
+/** El mapa de puntos de contribuciones (orden 17-ago: "mapa por puntos en
+ *  tiempo real de los push"). GitHub precalcula 52 semanas × 7 días en
+ *  stats/commit_activity; la PRIMERA consulta tras un push puede contestar
+ *  202 ("lo estoy generando") — ese estado se enseña, no se finge un cero. */
+export type MapaCommits =
+  | { estado: 'sin_token' }
+  | { estado: 'error' }
+  | { estado: 'generando' }
+  | { estado: 'ok'; semanas: Array<{ inicio: number; dias: number[] }>; total: number };
+
+export async function getMapaCommits(): Promise<MapaCommits> {
+  if (!process.env.GITHUB_TOKEN) return { estado: 'sin_token' };
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo()}/stats/commit_activity`, {
+      headers: {
+        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        Accept: 'application/vnd.github+json',
+      },
+      signal: AbortSignal.timeout(6000),
+      cache: 'no-store',
+    });
+    if (r.status === 202) return { estado: 'generando' };
+    if (!r.ok) throw new Error(`GitHub ${r.status}`);
+    const crudo = (await r.json()) as Array<{ week: number; days: number[]; total: number }>;
+    const semanas = crudo.map((s) => ({ inicio: s.week * 1000, dias: s.days }));
+    return { estado: 'ok', semanas, total: crudo.reduce((a, s) => a + s.total, 0) };
+  } catch (e) {
+    logger.error('github.mapa_commits', { err: e instanceof Error ? e.message : String(e) });
+    return { estado: 'error' };
+  }
+}
+
 export async function getActividadGitHub(): Promise<ActividadGitHub> {
   if (!process.env.GITHUB_TOKEN) return { estado: 'sin_token' };
   try {

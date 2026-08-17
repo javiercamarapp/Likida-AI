@@ -36,20 +36,20 @@ function Fila({ item, sufijo, pathname }: { item: Item; sufijo: string; pathname
   );
 }
 
-function Seccion({ titulo, items, sufijo, pathname }: { titulo: string; items: Item[]; sufijo: string; pathname: string }) {
-  // PLEGABLE (13-ago-2026), y desde el 17-ago solo AGENTES amanece abierta
-  // (orden de Javier, misma regla que el sidebar de /admin): los encabezados
-  // anuncian su sección y el menú cabe sin scroll. La sección de la ruta
-  // activa también abre — llegar por link directo y no ver la pantalla
-  // iluminada en el menú desorienta. Estado de sesión, no persiste.
-  const contieneActiva = items.some((it) => pathname === it.href || pathname.startsWith(it.href + '/'));
-  const [plegada, setPlegada] = useState(titulo !== 'Agentes' && !contieneActiva);
+function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir }: {
+  titulo: string; items: Item[]; sufijo: string; pathname: string;
+  abierta: string | null; onAbrir: (titulo: string) => void;
+}) {
+  // ACORDEÓN (17-ago, misma regla que /admin): UNA sección abierta a la vez,
+  // AGENTES por default o la de la ruta activa; el estado vive en el padre
+  // porque abrir una CIERRA la anterior.
+  const plegada = abierta !== titulo;
   // Una sección sin items para este rol no se pinta: un encabezado con nada
   // debajo le anuncia al usuario justo lo que no puede ver.
   if (items.length === 0) return null;
   return (
     <div>
-      <button type="button" onClick={() => setPlegada((v) => !v)}
+      <button type="button" onClick={() => onAbrir(titulo)}
         className="w-full flex items-center justify-between px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide sb-texto transition-opacity hover:opacity-70"
         style={{ color: 'var(--muted)' }}>
         {titulo}
@@ -90,10 +90,24 @@ function useSufijoYRol(rol: string): { sufijo: string; rolMenu: string } {
  * (`visibilidad.ts`): dos listas separadas se desincronizan y el modo de
  * falla es el peor — el link existe, el clic rebota.
  */
+const TITULOS_DASHBOARD: Array<[string, Item[]]> = [
+  ['Agentes', AGENTES], ['Operación', OPERACION],
+  ['Dinero y fiscal', DINERO_FISCAL], ['Sistema', SISTEMA],
+];
+
 export default function SidebarNav({ rol }: { rol: string }) {
   const pathname = usePathname();
   const { sufijo, rolMenu } = useSufijoYRol(rol);
   const visibles = (items: Item[]) => items.filter((it) => puedeVerRuta(rolMenu, it.href));
+  // El acordeón (17-ago): default AGENTES, o la sección de la ruta activa.
+  // Toggle sobre la abierta la cierra (todas plegadas también es válido).
+  const [abierta, setAbierta] = useState<string | null>(() => {
+    for (const [titulo, items] of TITULOS_DASHBOARD) {
+      if (items.some((it) => pathname === it.href || pathname.startsWith(it.href + '/'))) return titulo;
+    }
+    return 'Agentes';
+  });
+  const alternar = (titulo: string) => setAbierta((a) => (a === titulo ? null : titulo));
   // El Resumen de CADA QUIEN, un solo link. `/dashboard` es de `operacion`,
   // así que el contador no lo ve — su casa es `/dashboard/contador` (dinero,
   // reconstruida el 14-ago-2026) y sin esta rama se quedaba sin link de
@@ -114,10 +128,10 @@ export default function SidebarNav({ rol }: { rol: string }) {
           </Link>
         </div>
       )}
-      <Seccion titulo="Agentes" items={visibles(AGENTES)} sufijo={sufijo} pathname={pathname} />
-      <Seccion titulo="Operación" items={visibles(OPERACION)} sufijo={sufijo} pathname={pathname} />
-      <Seccion titulo="Dinero y fiscal" items={visibles(DINERO_FISCAL)} sufijo={sufijo} pathname={pathname} />
-      <Seccion titulo="Sistema" items={visibles(SISTEMA)} sufijo={sufijo} pathname={pathname} />
+      {TITULOS_DASHBOARD.map(([titulo, items]) => (
+        <Seccion key={titulo} titulo={titulo} items={visibles(items)} sufijo={sufijo}
+          pathname={pathname} abierta={abierta} onAbrir={alternar} />
+      ))}
     </>
   );
 }
