@@ -222,6 +222,7 @@ function ventanaDeCadena(fuente: string, desde: number): string {
  * una vez en el mismo archivo con destinos distintos.
  */
 const ALLOWLIST: Record<string, string> = {
+  'src/lib/admin/slo.ts': 'Los SLOs (fase 7, 17-ago-2026) miden la salud DEL PRODUCTO — tasa de éxito y p95 de agente_corrida de TODOS los tenants a propósito: un SLO por flota mediría a la flota, no al servicio. Solo lo lee la tarjeta de /admin/dev, detrás de requireSuperadmin.',
   'src/lib/admin/capacidad.ts': 'El modelo de capacidad (fase 7, 17-ago-2026) agrega llm_costo y cuenta liquidaciones DE TODA la operación a propósito: mide el costo unitario del PRODUCTO para los escenarios de escala del superadmin (/admin/capacidad-forecast, detrás de requireSuperadmin). Un filtro por tenant mediría la capacidad de una flota, no la de Likida.',
   'src/lib/admin/negocio.ts': 'CLAUDE.md la nombra, textual, como "la única función con ese permiso": la consola /admin (superadmin) cruza TODOS los tenants a propósito para ver costo de IA, flotas y agentes de TODAS las flotas a la vez.',
   'src/lib/admin/consumo.ts': 'El panel de consumo de IA (/admin/consumo, 16-ago-2026) agrega agente_corrida POR AGENTE a través de todos los tenants a propósito — es la vista de gasto del back office de LIKIDA, solo alcanzable tras requireSuperadmin (layout de /admin). Mismo dominio y misma puerta que negocio.ts.',
