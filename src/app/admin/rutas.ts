@@ -27,6 +27,8 @@ export const AGENTES: Item[] = [
   { href: '/admin/agente-cuadre', nombre: 'Agente de Cuadre', Icono: Calculator },
   { href: '/admin/agente-whatsapp', nombre: 'Agente de WhatsApp', Icono: MessagesSquare },
   { href: '/admin/model-ops', nombre: 'Model Ops', Icono: Settings2 },
+  // EvalOps (0134): el examen del agente y la regla de re-examen visible.
+  { href: '/admin/evals', nombre: 'Evals', Icono: Bug },
   { href: '/admin/playground', nombre: 'Playground', Icono: FlaskConical },
   // El panel de QA (Fase A): fotos reales contra el pipeline real, veredicto
   // por oráculos del ejército (scripts/qa-agentes/). Diseño: 00-PANEL-DE-QA.md.
