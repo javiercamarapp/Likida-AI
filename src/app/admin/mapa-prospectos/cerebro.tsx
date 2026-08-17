@@ -7,8 +7,12 @@
 // (Leaflet). Se refresca solo cada 60 s: cuando un agente encuentra o
 // enriquece un prospecto, su luz aparece sin recargar.
 //
-// Compromiso visual declarado: esta zona vive OSCURA en ambos temas — es un
-// mundo, no un formulario — con todos sus colores pintados explícitos aquí.
+// Visual (orden 17-ago, 2ª dirección): el Cerebro viste los TOKENS del
+// software — blanco/gris/negro por tema (claro y oscuro), como el resto de
+// /admin. Los únicos colores firmes son los SEMÁNTICOS: el embudo en los
+// pines y las barras de urgencia/cierre. La cámara es LIBRE (rueda = zoom
+// al cursor, arrastre = paneo, clic = vuelo al estado) — de un estado a
+// otro sin pasar por el país.
 // Toda animación respeta prefers-reduced-motion (regla de la casa).
 // Los % son estimaciones deterministas; el pie enseña el criterio con las
 // mismas palabras del módulo que las calcula (CRITERIO_SCORES).
@@ -28,10 +32,10 @@ import { hrefWa, hrefCorreo } from './mensajes';
 
 const Calles = dynamic(() => import('./calles'), { ssr: false });
 
-const FONDO = '#070d19';
-const TINTA = '#e2e8f0';
-const TENUE = '#7c8aa5';
-const LINEA = '#1c2a42';
+const TINTA = 'var(--ink)';
+const TENUE = 'var(--muted)';
+const LINEA = 'var(--line)';
+const SUPERFICIE = 'var(--surface)';
 
 const ORDEN_EMBUDO = ['negociacion', 'demo', 'contactado', 'nuevo', 'cerrado', 'perdido'] as const;
 const GIROS: Giro[] = ['transportista', 'embotelladora', 'abarrotes_mayoreo', 'flota_propia', 'logistica', 'otro'];
@@ -53,11 +57,37 @@ interface Filtros {
   soloTel: boolean;
   soloDecisor: boolean;
   orden: 'cierre' | 'urgencia' | 'recientes';
+  /** "Todos a 50 km de Nuevo Laredo" (backlog 17-ago): centro elegido de la
+   *  lista de plazas + radio. 0 = apagado. Con radio activo solo pasan los
+   *  prospectos CON coordenadas — al resto no se le adivina distancia. */
+  centro: { lat: number; lng: number; nombre: string } | null;
+  radioKm: number;
 }
 const SIN_FILTROS: Filtros = {
   giros: null, etapas: null, fuentes: null, minUrgencia: 0,
   soloTel: false, soloDecisor: false, orden: 'cierre',
+  centro: null, radioKm: 0,
 };
+
+/** Distancia esférica en km — suficiente para un radio comercial. */
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** El CSV de la vista actual — columnas fijas, comillas escapadas, BOM para
+ *  que Excel en español lo abra con acentos bien. */
+function csvDe(lista: ProspectoMapa[]): string {
+  const cab = ['empresa', 'giro', 'etapa', 'urgencia_pct', 'cierre_pct', 'contacto', 'telefono', 'correo', 'ciudad', 'entidad', 'vacante', 'fuente', 'lat', 'lng'];
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const filas = lista.map((p) => [
+    p.empresa, NOMBRE_GIRO[p.giro], COLOR_EMBUDO[p.estado]?.nombre ?? p.estado, p.urgencia, p.cierre,
+    p.contacto, p.telefono, p.correo, p.ciudad, p.entidad, p.vacante, p.fuente, p.lat, p.lng,
+  ].map(esc).join(','));
+  return '\ufeff' + [cab.join(','), ...filas].join('\n');
+}
 
 function alternarEnSet<T>(actual: Set<T> | null, valor: T, universo: readonly T[]): Set<T> | null {
   const s = new Set(actual ?? universo);
@@ -72,9 +102,9 @@ function Chip({ activo, color, onClick, children }: {
     <button onClick={onClick}
       className="px-2.5 py-1 rounded-full text-[11px] transition-all"
       style={{
-        background: activo ? (color ? `color-mix(in srgb, ${color} 24%, #0f182c)` : '#164e63') : 'transparent',
-        border: `1px solid ${activo ? (color ?? '#67e8f9') : LINEA}`,
-        color: activo ? TINTA : TENUE,
+        background: activo ? (color ? `color-mix(in srgb, ${color} 18%, var(--surface))` : 'var(--ink)') : 'transparent',
+        border: `1px solid ${activo ? (color ?? 'var(--ink)') : LINEA}`,
+        color: activo ? (color ? 'var(--ink)' : 'var(--canvas)') : TENUE,
       }}>
       {children}
     </button>
@@ -84,7 +114,7 @@ function Chip({ activo, color, onClick, children }: {
 function Kpi({ etiqueta, valor, animar }: { etiqueta: string; valor: number; animar: boolean }) {
   const mostrado = useCountUp(valor, animar);
   return (
-    <div className="px-4 py-2.5 rounded-2xl backdrop-blur-sm" style={{ background: 'rgba(12,20,36,0.72)', border: `1px solid ${LINEA}` }}>
+    <div className="px-4 py-2.5 rounded-2xl backdrop-blur-sm" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
       <div className="text-[11px] uppercase tracking-wider" style={{ color: TENUE }}>{etiqueta}</div>
       <div className="text-xl font-semibold tabular-nums" style={{ color: TINTA }}>{mostrado}</div>
     </div>
@@ -137,7 +167,7 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar }: {
   const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
   return (
     <article className={`rounded-2xl p-3.5 space-y-2 ${nuevo ? 'cerebro-recien' : ''}`}
-      style={{ background: 'rgba(15,24,44,0.85)', border: `1px solid ${LINEA}` }}>
+      style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
       <div className="flex items-start gap-2">
         <span className="mt-1 w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color, boxShadow: `0 0 8px ${c.color}` }} />
         <div className="min-w-0">
@@ -158,21 +188,21 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar }: {
       <Barra etiqueta="Urgencia" pct={p.urgencia} color="#f59e0b" />
       <Barra etiqueta="Cierre" pct={p.cierre} color="#34d399" />
       {p.mensajesGeneradosEn && (
-        <p className="text-[10px]" style={{ color: '#67e8f9' }}>✨ mensaje del agente experto listo</p>
+        <p className="text-[10px]" style={{ color: 'var(--marca)' }}>✨ mensaje del agente experto listo</p>
       )}
       {(p.telefono || p.correo || p.lat !== null) && (
         <div className="flex flex-wrap gap-2 pt-1">
           {p.telefono && (
             <a href={hrefWa(p)!} target="_blank" rel="noreferrer"
               className="px-2.5 py-1 rounded-lg text-[11px] font-medium"
-              style={{ background: '#14532d', color: '#86efac' }}>
+              style={{ border: '1px solid #16a34a55', color: '#15803d', background: 'color-mix(in srgb, #16a34a 8%, var(--surface))' }}>
               WhatsApp →
             </a>
           )}
           {p.correo && (
             <a href={hrefCorreo(p)!}
               className="px-2.5 py-1 rounded-lg text-[11px] font-medium"
-              style={{ background: '#1e3a8a', color: '#bfdbfe' }}>
+              style={{ border: '1px solid #2563eb55', color: '#1d4ed8', background: 'color-mix(in srgb, #2563eb 8%, var(--surface))' }}>
               Correo →
             </a>
           )}
@@ -180,7 +210,7 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar }: {
             <a href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`}
               target="_blank" rel="noreferrer"
               className="px-2.5 py-1 rounded-lg text-[11px]"
-              style={{ background: '#1e293b', color: TINTA }}>
+              style={{ background: 'var(--canvas)', color: TINTA, border: `1px solid ${LINEA}` }}>
               Cómo llegar
             </a>
           )}
@@ -188,7 +218,7 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar }: {
             <button onClick={() => onAfinar(p.id)} disabled={afinando}
               title="El agente experto redacta el primer toque con toda la info de este prospecto"
               className="px-2.5 py-1 rounded-lg text-[11px]"
-              style={{ background: '#312e81', color: '#c7d2fe', opacity: afinando ? 0.6 : 1 }}>
+              style={{ border: '1px solid #7c3aed55', color: '#6d28d9', background: 'color-mix(in srgb, #7c3aed 8%, var(--surface))', opacity: afinando ? 0.6 : 1 }}>
               {afinando ? 'redactando…' : p.mensajesGeneradosEn ? '↻ IA' : '✨ Mensaje IA'}
             </button>
           )}
@@ -224,6 +254,20 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   // ── Filtros y orden (orden del 17-ago: "filtro y orden, muy chingón") ────
   const [filtros, setFiltros] = useState<Filtros>(SIN_FILTROS);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
+  // El popup se cierra al hacer clic FUERA (orden 17-ago: "sino no se
+  // quita") — pointerdown en captura, ignorando el propio botón de Filtros.
+  const popupRef = useRef<HTMLDivElement>(null);
+  const botonFiltrosRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!filtrosAbiertos) return;
+    const fuera = (ev: PointerEvent) => {
+      const t = ev.target as Node;
+      if (popupRef.current?.contains(t) || botonFiltrosRef.current?.contains(t)) return;
+      setFiltrosAbiertos(false);
+    };
+    document.addEventListener('pointerdown', fuera, true);
+    return () => document.removeEventListener('pointerdown', fuera, true);
+  }, [filtrosAbiertos]);
   const filtrosActivos =
     (filtros.giros ? 1 : 0) + (filtros.etapas ? 1 : 0) + (filtros.fuentes ? 1 : 0) +
     (filtros.minUrgencia ? 1 : 0) + (filtros.soloTel ? 1 : 0) + (filtros.soloDecisor ? 1 : 0);
@@ -233,13 +277,37 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     && (!filtros.fuentes || filtros.fuentes.has(p.fuente))
     && p.urgencia >= filtros.minUrgencia
     && (!filtros.soloTel || p.telefono !== null)
-    && (!filtros.soloDecisor || p.contacto !== null),
+    && (!filtros.soloDecisor || p.contacto !== null)
+    && (!filtros.centro || filtros.radioKm === 0
+      || (p.lat !== null && haversineKm(filtros.centro, { lat: p.lat, lng: p.lng! }) <= filtros.radioKm)),
   ), [datos, filtros]);
+  // Las plazas con coordenadas (centro del radio): promedio por ciudad.
+  const plazas = useMemo(() => {
+    const acc = new Map<string, { lat: number; lng: number; n: number }>();
+    for (const p of datos.prospectos) {
+      if (p.lat === null || !p.ciudad) continue;
+      const k = p.entidad ? `${p.ciudad}, ${p.entidad}` : p.ciudad;
+      const a = acc.get(k) ?? { lat: 0, lng: 0, n: 0 };
+      acc.set(k, { lat: a.lat + p.lat, lng: a.lng + p.lng!, n: a.n + 1 });
+    }
+    return [...acc.entries()]
+      .map(([nombre, a]) => ({ nombre, lat: a.lat / a.n, lng: a.lng / a.n, n: a.n }))
+      .sort((x, y) => y.n - x.n)
+      .slice(0, 250);
+  }, [datos]);
   const ordenar = useMemo(() => (lista: ProspectoMapa[]) => [...lista].sort((a, b) =>
     filtros.orden === 'urgencia' ? (b.urgencia - a.urgencia || b.cierre - a.cierre)
       : filtros.orden === 'recientes' ? 0 // ya vienen por created_at desc del servidor
         : (b.cierre - a.cierre || b.urgencia - a.urgencia),
   ), [filtros.orden]);
+  const exportarCsv = () => {
+    const blob = new Blob([csvDe(ordenar(filtrados))], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `cerebro-prospectos-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   // ── El agente experto en vivo: afinar el mensaje de UNA tarjeta ──────────
   const [afinando, setAfinando] = useState<string | null>(null);
@@ -298,16 +366,100 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   const conDecisor = useMemo(() => filtrados.filter((p) => p.contacto).length, [filtrados]);
   const calientes = useMemo(() => filtrados.filter((p) => p.urgencia >= 70).length, [filtrados]);
 
-  // El zoom del país al estado: transform sobre el <g> con transición CSS.
-  const zoom = useMemo(() => {
-    if (!seleccion) return { transform: 'translate(0px, 0px) scale(1)' };
-    const margen = 1.35;
-    const s = Math.min(6.5, VIEWBOX_ESTADOS.w / (seleccion.bw * margen), VIEWBOX_ESTADOS.h / (seleccion.bh * margen));
-    // El estado queda al centro-izquierda: el panel de tarjetas vive a la derecha.
-    const cxDestino = VIEWBOX_ESTADOS.w * 0.36;
-    const cyDestino = VIEWBOX_ESTADOS.h * 0.5;
-    return { transform: `translate(${cxDestino - s * seleccion.cx}px, ${cyDestino - s * seleccion.cy}px) scale(${s})` };
-  }, [seleccion]);
+  // ── LA CÁMARA LIBRE (orden 17-ago: "completamente fluido") ───────────────
+  // La cámara vive en un ref y se aplica DIRECTO al <g> (sin re-render por
+  // frame): la rueda acerca hacia el cursor, el arrastre panea, el clic en
+  // un estado VUELA hacia él con transición — y de ahí puedes rodar o
+  // arrastrarte a otro estado sin regresar al país. `camK` es la copia en
+  // estado de React (para el grosor de trazos y el radio de las luces) y se
+  // sincroniza al SOLTAR el gesto, no a 60fps.
+  const svgRef = useRef<SVGSVGElement>(null);
+  const gRef = useRef<SVGGElement>(null);
+  const cam = useRef({ x: 0, y: 0, k: 1 });
+  const [camK, setCamK] = useState(1);
+  const arrastro = useRef(false);
+  const arrastrando = useRef<{ cx: number; cy: number; acumulado: number } | null>(null);
+  const sincro = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const aplicarCam = (transicion: boolean) => {
+    const g = gRef.current;
+    if (!g) return;
+    g.style.transition = transicion && !reducido ? 'transform 750ms cubic-bezier(.22,1,.36,1)' : 'none';
+    g.style.transform = `translate(${cam.current.x}px, ${cam.current.y}px) scale(${cam.current.k})`;
+  };
+
+  /** Coordenadas de pantalla → unidades del viewBox (preserveAspectRatio meet). */
+  const factorViewBox = () => {
+    const r = svgRef.current?.getBoundingClientRect();
+    if (!r) return { f: 1, ox: 0, oy: 0, left: 0, top: 0 };
+    const f = Math.min(r.width / VIEWBOX_ESTADOS.w, r.height / VIEWBOX_ESTADOS.h);
+    return { f, ox: (r.width - VIEWBOX_ESTADOS.w * f) / 2, oy: (r.height - VIEWBOX_ESTADOS.h * f) / 2, left: r.left, top: r.top };
+  };
+
+  const volarA = (e: EstadoGeo | null) => {
+    if (!e) {
+      cam.current = { x: 0, y: 0, k: 1 };
+    } else {
+      const margen = 1.35;
+      const k = Math.min(9, VIEWBOX_ESTADOS.w / (e.bw * margen), VIEWBOX_ESTADOS.h / (e.bh * margen));
+      // El estado aterriza al centro-izquierda: el panel vive a la derecha.
+      cam.current = {
+        x: VIEWBOX_ESTADOS.w * 0.36 - k * e.cx,
+        y: VIEWBOX_ESTADOS.h * 0.5 - k * e.cy,
+        k,
+      };
+    }
+    aplicarCam(true);
+    setCamK(cam.current.k);
+  };
+
+  const alRodar = (ev: WheelEvent) => {
+    ev.preventDefault();
+    const { f, ox, oy, left, top } = factorViewBox();
+    const px = (ev.clientX - left - ox) / f;
+    const py = (ev.clientY - top - oy) / f;
+    const { x, y, k } = cam.current;
+    const k2 = Math.min(16, Math.max(1, k * Math.exp(-ev.deltaY * 0.0016)));
+    if (k2 === k) return;
+    cam.current = { x: px - ((px - x) * k2) / k, y: py - ((py - y) * k2) / k, k: k2 };
+    if (k2 === 1) cam.current = { x: 0, y: 0, k: 1 }; // al fondo, el país completo
+    aplicarCam(false);
+    if (sincro.current) clearTimeout(sincro.current);
+    sincro.current = setTimeout(() => setCamK(cam.current.k), 120);
+  };
+
+  // La rueda necesita listener NO pasivo (preventDefault) — React no lo da.
+  useEffect(() => {
+    aplicarCam(false);
+    const svg = svgRef.current;
+    if (!svg) return;
+    svg.addEventListener('wheel', alRodar, { passive: false });
+    return () => svg.removeEventListener('wheel', alRodar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- alRodar solo lee refs
+  }, []);
+
+  const alBajarPuntero = (ev: React.PointerEvent<SVGSVGElement>) => {
+    arrastro.current = false;
+    arrastrando.current = { cx: ev.clientX, cy: ev.clientY, acumulado: 0 };
+    (ev.target as Element).setPointerCapture?.(ev.pointerId);
+  };
+  const alMoverPuntero = (ev: React.PointerEvent<SVGSVGElement>) => {
+    const a = arrastrando.current;
+    if (!a) return;
+    const { f } = factorViewBox();
+    const dx = ev.clientX - a.cx;
+    const dy = ev.clientY - a.cy;
+    a.acumulado += Math.abs(dx) + Math.abs(dy);
+    a.cx = ev.clientX;
+    a.cy = ev.clientY;
+    if (a.acumulado > 4) arrastro.current = true;
+    cam.current = { ...cam.current, x: cam.current.x + dx / f, y: cam.current.y + dy / f };
+    aplicarCam(false);
+  };
+  const alSoltarPuntero = () => {
+    if (arrastrando.current) setCamK(cam.current.k);
+    arrastrando.current = null;
+  };
 
   const listaSeleccion = seleccion ? porEstado.get(seleccion.nombre) ?? [] : [];
   const conCoords = useMemo(() => filtrados.filter((p) => p.lat !== null && p.lng !== null), [filtrados]);
@@ -322,15 +474,15 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   return (
     <div className="space-y-10">
       {/* ── El mundo ─────────────────────────────────────────────────────── */}
-      <section ref={zonaRef} className="relative rounded-3xl overflow-hidden cerebro-zona cerebro-ambiente"
-        style={{ height: pantallaCompleta ? '100vh' : 'calc(100vh - 7.5rem)', minHeight: 540, background: `radial-gradient(120% 90% at 50% 8%, #0d1830 0%, ${FONDO} 55%, #04070f 100%)` }}>
+      <section ref={zonaRef} className="relative rounded-3xl overflow-hidden cerebro-zona"
+        style={{ height: pantallaCompleta ? '100vh' : 'calc(100vh - 7.5rem)', minHeight: 540, background: 'var(--canvas)', border: '1px solid var(--line)' }}>
 
         {/* KPIs flotantes */}
         <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-start gap-2 pointer-events-none">
           <div className="pointer-events-auto">
             <h1 className="text-lg font-semibold" style={{ color: TINTA }}>Cerebro de ventas</h1>
             <p className="text-[12px]" style={{ color: TENUE }}>
-              {seleccion ? `${seleccion.nombre} — ${listaSeleccion.length} prospectos` : 'Toca un estado para entrar. Se actualiza solo: lo que los agentes encuentran, aparece.'}
+              {seleccion ? `${seleccion.nombre} — ${listaSeleccion.length} prospectos` : 'Rueda para acercar, arrastra para moverte, toca un estado para volar a él. Se actualiza solo.'}
             </p>
           </div>
           <div className="ml-auto flex flex-wrap gap-2 pointer-events-auto">
@@ -338,14 +490,21 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             <Kpi etiqueta="Con teléfono" valor={conTelefono} animar={!reducido} />
             <Kpi etiqueta="Con decisor" valor={conDecisor} animar={!reducido} />
             <Kpi etiqueta="Urgencia ≥70" valor={calientes} animar={!reducido} />
-            <button onClick={() => setFiltrosAbiertos((v) => !v)}
+            {(camK > 1.02 || seleccion) && (
+              <button onClick={() => { setSeleccion(null); setCalles(false); volarA(null); }}
+                className="px-3.5 py-2.5 rounded-2xl text-sm backdrop-blur-sm hover:brightness-95"
+                style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TINTA }}>
+                ⌂ México
+              </button>
+            )}
+            <button ref={botonFiltrosRef} onClick={() => setFiltrosAbiertos((v) => !v)}
               className="px-3.5 py-2.5 rounded-2xl text-sm backdrop-blur-sm hover:brightness-125"
-              style={{ background: filtrosActivos ? '#164e63' : 'rgba(12,20,36,0.72)', border: `1px solid ${filtrosActivos ? '#67e8f9' : LINEA}`, color: TINTA }}>
+              style={{ background: filtrosActivos ? 'var(--ink)' : SUPERFICIE, border: `1px solid ${filtrosActivos ? 'var(--ink)' : LINEA}`, color: filtrosActivos ? 'var(--canvas)' : TINTA }}>
               ☰ Filtros{filtrosActivos ? ` · ${filtrosActivos}` : ''}
             </button>
             <button onClick={alternarPantalla} title="Pantalla completa"
               className="px-3.5 py-2.5 rounded-2xl text-sm backdrop-blur-sm hover:brightness-125"
-              style={{ background: 'rgba(12,20,36,0.72)', border: `1px solid ${LINEA}`, color: TINTA }}>
+              style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TINTA }}>
               {pantallaCompleta ? '⤡ Salir' : '⤢ Pantalla completa'}
             </button>
           </div>
@@ -353,10 +512,10 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
         {/* ── La barra de filtros y orden ─────────────────────────────────── */}
         {filtrosAbiertos && (
-          <div className="absolute top-20 right-4 z-30 w-[min(94vw,560px)] rounded-2xl p-4 space-y-3 backdrop-blur-md cerebro-panel"
-            style={{ background: 'rgba(10,17,32,0.94)', border: `1px solid ${LINEA}` }}>
+          <div ref={popupRef} className="absolute top-20 right-4 z-40 w-[min(94vw,560px)] rounded-2xl p-4 space-y-3 cerebro-panel"
+            style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, boxShadow: '0 16px 40px color-mix(in srgb, var(--ink) 14%, transparent)' }}>
             <div>
-              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Categoría</p>
+              <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Categoría</p>
               <div className="flex flex-wrap gap-1.5">
                 {GIROS.map((g) => (
                   <Chip key={g} activo={!filtros.giros || filtros.giros.has(g)}
@@ -367,7 +526,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               </div>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Etapa del embudo</p>
+              <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Etapa del embudo</p>
               <div className="flex flex-wrap gap-1.5">
                 {ORDEN_EMBUDO.map((e) => (
                   <Chip key={e} color={COLOR_EMBUDO[e].color} activo={!filtros.etapas || filtros.etapas.has(e)}
@@ -379,7 +538,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             </div>
             <div className="flex flex-wrap gap-x-5 gap-y-3">
               <div>
-                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Fuente</p>
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Fuente</p>
                 <div className="flex flex-wrap gap-1.5">
                   {FUENTES.map((f) => (
                     <Chip key={f.clave} activo={!filtros.fuentes || filtros.fuentes.has(f.clave)}
@@ -390,7 +549,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 </div>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Urgencia mínima</p>
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Urgencia mínima</p>
                 <div className="flex gap-1.5">
                   {([0, 50, 70] as const).map((u) => (
                     <Chip key={u} activo={filtros.minUrgencia === u}
@@ -403,14 +562,14 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             </div>
             <div className="flex flex-wrap gap-x-5 gap-y-3 items-end">
               <div>
-                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Alcanzables</p>
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Alcanzables</p>
                 <div className="flex gap-1.5">
                   <Chip activo={filtros.soloTel} onClick={() => setFiltros((f) => ({ ...f, soloTel: !f.soloTel }))}>Con teléfono</Chip>
                   <Chip activo={filtros.soloDecisor} onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>Con decisor</Chip>
                 </div>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Ordenar por</p>
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Ordenar por</p>
                 <div className="flex gap-1.5">
                   {([['cierre', '% cierre'], ['urgencia', '% urgencia'], ['recientes', 'Recientes']] as const).map(([k, n]) => (
                     <Chip key={k} activo={filtros.orden === k} onClick={() => setFiltros((f) => ({ ...f, orden: k }))}>{n}</Chip>
@@ -418,8 +577,44 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 </div>
               </div>
               <button onClick={() => setFiltros(SIN_FILTROS)}
-                className="ml-auto px-3 py-1.5 rounded-lg text-[11px]" style={{ background: '#1e293b', color: TINTA }}>
+                className="ml-auto px-3 py-1.5 rounded-lg text-[11px]" style={{ background: 'var(--canvas)', color: TINTA, border: `1px solid ${LINEA}` }}>
                 Limpiar todo
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-3 items-end">
+              <div className="min-w-[220px]">
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Cerca de (plaza)</p>
+                <input list="cerebro-plazas" placeholder="Escribe una ciudad…"
+                  defaultValue={filtros.centro?.nombre ?? ''}
+                  onChange={(e) => {
+                    const plaza = plazas.find((x) => x.nombre === e.target.value);
+                    setFiltros((f) => ({
+                      ...f,
+                      centro: plaza ? { lat: plaza.lat, lng: plaza.lng, nombre: plaza.nombre } : null,
+                      radioKm: plaza ? (f.radioKm || 50) : 0,
+                    }));
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg text-[12px] outline-none"
+                  style={{ background: 'var(--canvas)', border: `1px solid ${LINEA}`, color: TINTA }} />
+                <datalist id="cerebro-plazas">
+                  {plazas.map((x) => <option key={x.nombre} value={x.nombre} />)}
+                </datalist>
+              </div>
+              <div>
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Radio</p>
+                <div className="flex gap-1.5">
+                  {[25, 50, 100, 200].map((km) => (
+                    <Chip key={km} activo={filtros.radioKm === km && filtros.centro !== null}
+                      onClick={() => setFiltros((f) => ({ ...f, radioKm: f.radioKm === km ? 0 : km }))}>
+                      {km} km
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+              <button onClick={exportarCsv}
+                className="ml-auto px-3 py-1.5 rounded-lg text-[11px] font-medium"
+                style={{ background: 'var(--ink)', color: 'var(--canvas)' }}>
+                ⬇ Exportar CSV ({numero(filtrados.length)})
               </button>
             </div>
             <p className="text-[11px]" style={{ color: TENUE }}>
@@ -431,7 +626,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         {/* El ala izquierda — solo en pantallas anchas (el Odyssey la pide):
             el embudo y los más cerrables VIVEN junto al país, sin taparlo. */}
         <aside className="cerebro-ala absolute left-4 top-24 bottom-5 z-10 w-[300px] hidden flex-col gap-3 overflow-y-auto pr-1 pointer-events-auto">
-          <div className="rounded-2xl p-4 backdrop-blur-sm" style={{ background: 'rgba(12,20,36,0.72)', border: `1px solid ${LINEA}` }}>
+          <div className="rounded-2xl p-4 backdrop-blur-sm" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
             <h3 className="text-[12px] font-semibold mb-2.5 uppercase tracking-wider" style={{ color: TENUE }}>El embudo</h3>
             <div className="space-y-2">
               {ORDEN_EMBUDO.map((e) => {
@@ -446,7 +641,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               })}
             </div>
           </div>
-          <div className="rounded-2xl p-4 backdrop-blur-sm flex-1 min-h-0 overflow-y-auto" style={{ background: 'rgba(12,20,36,0.72)', border: `1px solid ${LINEA}` }}>
+          <div className="rounded-2xl p-4 backdrop-blur-sm flex-1 min-h-0 overflow-y-auto" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
             <h3 className="text-[12px] font-semibold mb-2.5 uppercase tracking-wider" style={{ color: TENUE }}>Más cerrables</h3>
             <div className="space-y-2.5">
               {ordenar(filtrados).slice(0, 7).map((p) => (
@@ -461,9 +656,17 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           </div>
         </aside>
 
-        {/* El país */}
-        <svg viewBox={`0 0 ${VIEWBOX_ESTADOS.w} ${VIEWBOX_ESTADOS.h}`} className="absolute inset-0 w-full h-full" role="img" aria-label="Mapa de México con la cartera de prospectos">
-          <g style={{ ...zoom, transformOrigin: '0 0', transition: reducido ? 'none' : 'transform 750ms cubic-bezier(.22,1,.36,1)' }}>
+        {/* El país — cámara libre: rueda, arrastre y vuelo */}
+        <svg ref={svgRef} viewBox={`0 0 ${VIEWBOX_ESTADOS.w} ${VIEWBOX_ESTADOS.h}`}
+          className="absolute inset-0 w-full h-full"
+          style={{ cursor: 'grab', touchAction: 'none' }}
+          onPointerDown={alBajarPuntero} onPointerMove={alMoverPuntero}
+          onPointerUp={alSoltarPuntero} onPointerCancel={alSoltarPuntero}
+          role="img" aria-label="Mapa de México con la cartera de prospectos">
+          {/* El mar: clic fuera de un estado = volver al país (si no fue arrastre). */}
+          <rect x={0} y={0} width={VIEWBOX_ESTADOS.w} height={VIEWBOX_ESTADOS.h} fill="transparent"
+            onClick={() => { if (arrastro.current) return; setCalles(false); setSeleccion(null); volarA(null); }} />
+          <g ref={gRef} style={{ transformOrigin: '0 0', willChange: 'transform' }}>
             {ESTADOS_GEO.map((e, i) => {
               const lista = porEstado.get(e.nombre) ?? [];
               const intensidad = lista.length / maxEstado;
@@ -475,18 +678,25 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                   style={{
                     animationDelay: `${i * 22}ms`,
                     fill: activo
-                      ? '#14263f'
-                      : `color-mix(in srgb, #22d3ee ${Math.round(intensidad * 34)}%, #0e1a30)`,
-                    stroke: hover === e.id || activo ? '#67e8f9' : '#223550',
-                    strokeWidth: activo ? 0.7 : 0.5,
+                      ? 'color-mix(in srgb, var(--ink) 5%, var(--surface))'
+                      : `color-mix(in srgb, var(--ink) ${8 + Math.round(intensidad * 24)}%, var(--surface))`,
+                    stroke: hover === e.id || activo ? 'var(--ink)' : 'var(--line)',
+                    strokeWidth: Math.max(0.12, (activo ? 0.8 : 0.55) / camK),
                     opacity: apagado ? 0.18 : 1,
                     cursor: 'pointer',
                     transition: 'fill 300ms, opacity 500ms, stroke 200ms',
-                    filter: hover === e.id && !seleccion ? 'drop-shadow(0 0 6px rgba(103,232,249,0.55))' : undefined,
+                    filter: hover === e.id && !seleccion ? 'drop-shadow(0 1px 4px color-mix(in srgb, var(--ink) 30%, transparent))' : undefined,
                   }}
                   onMouseEnter={() => setHover(e.id)}
                   onMouseLeave={() => setHover((h) => (h === e.id ? null : h))}
-                  onClick={() => { setCalles(false); setSeleccion(activo ? null : e); }}
+                  onClick={() => {
+                    if (arrastro.current) return; // fue paneo, no clic
+                    setCalles(false);
+                    setFiltrosAbiertos(false);
+                    const destino = activo ? null : e;
+                    setSeleccion(destino);
+                    volarA(destino);
+                  }}
                 />
               );
             })}
@@ -496,7 +706,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               const enSeleccion = !seleccion || p.entidad === seleccion.nombre;
               return (
                 <circle key={p.id} cx={xy.x} cy={xy.y}
-                  r={seleccion ? 1.1 : 2.2}
+                  r={Math.max(0.5, Math.min(2.4, 2.4 / camK))}
                   className={
                     recientes.has(p.id) ? 'cerebro-pin-nuevo'
                       : !reducido && p.urgencia >= 70 && enSeleccion ? 'cerebro-pin-pulso' : undefined
@@ -504,7 +714,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                   style={{
                     fill: c.color,
                     opacity: enSeleccion ? 0.95 : 0.12,
-                    filter: `drop-shadow(0 0 3px ${c.color})`,
+                    stroke: 'var(--surface)',
+                    strokeWidth: Math.max(0.1, 0.4 / camK),
                     pointerEvents: 'none',
                     transition: 'opacity 500ms, r 750ms',
                   }}
@@ -520,7 +731,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           const lista = porEstado.get(e.nombre) ?? [];
           return (
             <div className="absolute bottom-5 left-5 z-20 px-4 py-3 rounded-2xl backdrop-blur-sm"
-              style={{ background: 'rgba(12,20,36,0.85)', border: `1px solid ${LINEA}`, color: TINTA }}>
+              style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TINTA }}>
               <div className="text-sm font-semibold">{e.nombre}</div>
               <div className="text-[12px]" style={{ color: TENUE }}>
                 {lista.length} prospectos · {lista.filter((p) => p.telefono).length} con teléfono · {lista.filter((p) => p.urgencia >= 70).length} urgentes
@@ -531,13 +742,13 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
         {lucesRecortadas && (
           <p className="absolute bottom-16 right-5 z-20 text-[11px] px-3 py-1.5 rounded-xl backdrop-blur-sm"
-            style={{ background: 'rgba(12,20,36,0.8)', border: `1px solid ${LINEA}`, color: TENUE }}>
+            style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TENUE }}>
             Luces: las {numero(TOPE_LUCES_PAIS)} más calientes de {numero(conCoords.length)} — filtra o entra a un estado para verlas todas.
           </p>
         )}
         {/* Leyenda del embudo */}
         <div className="absolute bottom-5 right-5 z-20 flex flex-wrap gap-x-3 gap-y-1 px-4 py-2.5 rounded-2xl backdrop-blur-sm"
-          style={{ background: 'rgba(12,20,36,0.8)', border: `1px solid ${LINEA}` }}>
+          style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
           {ORDEN_EMBUDO.map((e) => (
             <span key={e} className="flex items-center gap-1.5 text-[11px]" style={{ color: TENUE }}>
               <span className="w-2 h-2 rounded-full" style={{ background: COLOR_EMBUDO[e].color, boxShadow: `0 0 5px ${COLOR_EMBUDO[e].color}` }} />
@@ -549,19 +760,19 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         {/* El panel del estado */}
         {seleccion && !calles && (
           <aside className="absolute top-0 right-0 bottom-0 z-20 w-full sm:w-[380px] flex flex-col cerebro-panel"
-            style={{ background: 'linear-gradient(270deg, rgba(7,13,25,0.97) 75%, rgba(7,13,25,0))' }}>
+            style={{ background: 'color-mix(in srgb, var(--surface) 96%, transparent)', borderLeft: `1px solid ${LINEA}`, backdropFilter: 'blur(6px)' }}>
             <div className="px-5 pt-16 pb-3 flex items-center gap-2">
               <h2 className="text-base font-semibold" style={{ color: TINTA }}>{seleccion.nombre}</h2>
               <span className="text-[12px]" style={{ color: TENUE }}>{listaSeleccion.length} prospectos</span>
               <div className="ml-auto flex gap-2">
                 {listaSeleccion.some((p) => p.lat !== null) && (
                   <button onClick={() => setCalles(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium"
-                    style={{ background: '#164e63', color: '#a5f3fc' }}>
+                    style={{ background: 'var(--ink)', color: 'var(--canvas)' }}>
                     Ver calles →
                   </button>
                 )}
                 <button onClick={() => setSeleccion(null)} className="px-3 py-1.5 rounded-lg text-[12px]"
-                  style={{ background: '#1e293b', color: TINTA }}>
+                  style={{ background: 'var(--canvas)', color: TINTA, border: `1px solid ${LINEA}` }}>
                   ✕
                 </button>
               </div>
@@ -587,7 +798,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       {/* ── Lo que se revela al hacer scroll ─────────────────────────────── */}
       <Reveal>
         <section className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-3xl p-5" style={{ background: FONDO, border: `1px solid ${LINEA}` }}>
+          <div className="rounded-3xl p-5" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
             <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>El embudo, en luces</h3>
             <div className="space-y-2.5">
               {ORDEN_EMBUDO.map((e) => {
@@ -605,7 +816,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               })}
             </div>
           </div>
-          <div className="rounded-3xl p-5" style={{ background: FONDO, border: `1px solid ${LINEA}` }}>
+          <div className="rounded-3xl p-5" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
             <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>Dónde vive la cartera</h3>
             <div className="space-y-2">
               {[...porEstado.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 8).map(([nombre, lista]) => (
@@ -626,7 +837,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       </Reveal>
 
       <Reveal retraso={80}>
-        <section className="rounded-3xl p-5" style={{ background: FONDO, border: `1px solid ${LINEA}` }}>
+        <section className="rounded-3xl p-5" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
           <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>Los 12 más cerrables del país</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {ordenar(filtrados).slice(0, 12).map((p) => (
@@ -653,24 +864,15 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         @keyframes cerebroPulso { 0%, 100% { opacity: 0.95; } 50% { opacity: 0.35; } }
         .cerebro-pin-nuevo { animation: cerebroLlega 1.1s cubic-bezier(.22,1,.36,1) 3; }
         @keyframes cerebroLlega { 0% { opacity: 0; } 35% { opacity: 1; } 65% { opacity: 0.25; } 100% { opacity: 0.95; } }
-        .cerebro-recien { outline: 1px solid #22d3ee; box-shadow: 0 0 14px rgba(34,211,238,0.35); }
+        .cerebro-recien { outline: 1px solid var(--marca); box-shadow: 0 0 10px color-mix(in srgb, var(--marca) 30%, transparent); }
         .cerebro-panel { animation: cerebroPanel 420ms cubic-bezier(.22,1,.36,1); }
         @keyframes cerebroPanel { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
         .cerebro-llenado { transition: width 900ms cubic-bezier(.22,1,.36,1); }
-        /* El resplandor ambiental: la zona respira, muy lento y muy tenue. */
-        .cerebro-ambiente::before {
-          content: ''; position: absolute; inset: -20%; pointer-events: none; z-index: 0;
-          background: radial-gradient(45% 35% at 30% 30%, rgba(34,211,238,0.07), transparent 70%),
-                      radial-gradient(40% 30% at 72% 62%, rgba(124,58,237,0.06), transparent 70%);
-          animation: cerebroDeriva 26s ease-in-out infinite alternate;
-        }
-        @keyframes cerebroDeriva { from { transform: translate(0,0) } to { transform: translate(4%, 3%) } }
         /* El ala izquierda solo existe donde sobra pantalla (Odyssey 49 y
            similares): en laptop taparía el país. */
         @media (min-width: 1900px) { .cerebro-ala { display: flex; } }
         @media (prefers-reduced-motion: reduce) {
-          .cerebro-ambiente::before { animation: none; }
-          .cerebro-estado-entra, .cerebro-pin-pulso, .cerebro-pin-nuevo, .cerebro-panel { animation: none !important; opacity: 1; }
+                    .cerebro-estado-entra, .cerebro-pin-pulso, .cerebro-pin-nuevo, .cerebro-panel { animation: none !important; opacity: 1; }
           .cerebro-llenado { transition: none; }
         }
       `}</style>
