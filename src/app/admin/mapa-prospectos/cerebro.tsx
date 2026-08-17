@@ -5,7 +5,8 @@
 // cartera: México entero respirando, cada prospecto una luz con el color de
 // su etapa del embudo. Se navega país → estado (zoom animado) → calles
 // (Leaflet). Se refresca solo cada 60 s: cuando un agente encuentra o
-// enriquece un prospecto, su luz aparece sin recargar.
+// enriquece un prospecto, su luz aparece sin recargar (cada 5 min — con
+// 30k filas el latido de 1 min pesaba de más).
 //
 // Visual (orden 17-ago, 2ª dirección): el Cerebro viste los TOKENS del
 // software — blanco/gris/negro por tema (claro y oscuro), como el resto de
@@ -42,6 +43,8 @@ const GIROS: Giro[] = ['transportista', 'embotelladora', 'abarrotes_mayoreo', 'f
 const FUENTES = [
   { clave: 'censo', nombre: 'Censo (vacantes)' },
   { clave: 'denue', nombre: 'Universo DENUE' },
+  { clave: 'bolsa', nombre: 'Bolsas (histórico)' },
+  { clave: 'aaag', nombre: 'Padrón AAAG' },
   { clave: 'manual', nombre: 'Cuentas a mano' },
 ] as const;
 
@@ -370,7 +373,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         setDatos(d);
         if (nuevos.size) setRecientes(nuevos);
       } catch { /* sin red: el mapa vigente sigue */ }
-    }, 60_000);
+    }, 300_000);
     return () => clearInterval(t);
   }, []);
 
@@ -492,13 +495,20 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
   const listaSeleccion = seleccion ? porEstado.get(seleccion.nombre) ?? [] : [];
   const conCoords = useMemo(() => filtrados.filter((p) => p.lat !== null && p.lng !== null), [filtrados]);
-  const lucesRecortadas = seleccion === null && conCoords.length > TOPE_LUCES_PAIS;
+  const TOPE_LUCES_ESTADO = 1500;
+  const lucesRecortadas = seleccion === null
+    ? conCoords.length > TOPE_LUCES_PAIS
+    : conCoords.filter((p) => p.entidad === seleccion.nombre).length > TOPE_LUCES_ESTADO;
   const pines = useMemo(() => {
-    const base = lucesRecortadas
-      ? [...conCoords].sort((a, b) => (b.urgencia + b.cierre) - (a.urgencia + a.cierre)).slice(0, TOPE_LUCES_PAIS)
-      : conCoords;
+    // Con estado elegido solo se pintan SUS luces (las 30k del país detrás
+    // eran el jank); a nivel país, las más calientes hasta el tope.
+    const universo = seleccion ? conCoords.filter((p) => p.entidad === seleccion.nombre) : conCoords;
+    const tope = seleccion ? TOPE_LUCES_ESTADO : TOPE_LUCES_PAIS;
+    const base = universo.length > tope
+      ? [...universo].sort((a, b) => (b.urgencia + b.cierre) - (a.urgencia + a.cierre)).slice(0, tope)
+      : universo;
     return base.map((p) => ({ p, xy: proyectar(p.lat!, p.lng!) }));
-  }, [conCoords, lucesRecortadas]);
+  }, [conCoords, seleccion]);
 
   return (
     <div className="space-y-10">
@@ -759,7 +769,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             {/* Las luces: cada prospecto con coordenadas reales */}
             {pines.map(({ p, xy }) => {
               const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
-              const enSeleccion = !seleccion || p.entidad === seleccion.nombre;
+              const enSeleccion = true;
               return (
                 <circle key={p.id} cx={xy.x} cy={xy.y}
                   r={Math.max(0.5, Math.min(2.4, 2.4 / camK))}
@@ -799,7 +809,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         {lucesRecortadas && (
           <p className="absolute bottom-5 right-4 z-10 text-[11px] px-3 py-1.5 rounded-full backdrop-blur-sm"
             style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TENUE }}>
-            Luces: las {numero(TOPE_LUCES_PAIS)} más calientes de {numero(conCoords.length)} — filtra o entra a un estado para verlas todas.
+            Luces: las más calientes ({numero(pines.length)} de {numero(seleccion ? conCoords.filter((p) => p.entidad === seleccion.nombre).length : conCoords.length)}) — afina el filtro para verlas todas.
           </p>
         )}
         {/* Leyenda del embudo */}
@@ -839,9 +849,19 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                   style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TENUE, boxShadow: SOMBRA_FLOTANTE }}>
                   El censo todavía no encuentra a nadie aquí — cuando un agente lo haga, aparece solo.
                 </p>
-              ) : listaSeleccion.map((p) => (
-                <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
-              ))}
+              ) : (
+                <>
+                  {listaSeleccion.slice(0, 60).map((p) => (
+                    <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
+                  ))}
+                  {listaSeleccion.length > 60 && (
+                    <p className="text-[11px] px-3.5 py-2 rounded-2xl backdrop-blur-sm"
+                      style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TENUE, boxShadow: SOMBRA_FLOTANTE }}>
+                      Se enseñan las 60 mejores de {numero(listaSeleccion.length)} — afina el filtro o ⬇ exporta el CSV completo.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}
@@ -909,7 +929,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <p>{CRITERIO_SCORES.urgencia}</p>
           <p>{CRITERIO_SCORES.cierre}</p>
           <p>{CRITERIO_SCORES.datos}</p>
-          <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {fechaHoraMx(datos.generadoEn)} · se refresca cada 60 s.</p>
+          <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {fechaHoraMx(datos.generadoEn)} · se refresca cada 5 min.</p>
         </footer>
       </Reveal>
 
