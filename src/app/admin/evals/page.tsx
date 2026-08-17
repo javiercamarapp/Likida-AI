@@ -1,11 +1,42 @@
+import { revalidatePath } from 'next/cache';
 import { Bug } from 'lucide-react';
-import { getEstadoEvals } from '@/lib/admin/evals';
+import { getEstadoEvals, veredictoAgregado } from '@/lib/admin/evals';
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '@/app/dashboard/resumen-visual';
 import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
+
+/** El JUEZ HUMANO del diseño (22-evaluacion.md): las trampas quedan en
+ *  'revisar' a propósito y aquí se marcan. Al marcar, el veredicto de la
+ *  CORRIDA se recalcula con la misma regla binaria (una trampa fallada
+ *  tumba todo). */
+async function marcarResultado(fd: FormData) {
+  'use server';
+  await requireSuperadmin();
+  const id = String(fd.get('id') ?? '');
+  const corridaId = String(fd.get('corridaId') ?? '');
+  const veredicto = String(fd.get('veredicto') ?? '');
+  if (!/^[0-9a-f-]{36}$/.test(id) || !/^[0-9a-f-]{36}$/.test(corridaId)) return;
+  if (veredicto !== 'paso' && veredicto !== 'fallo') return;
+  const admin = supabaseAdmin();
+  // Solo lo que sigue en revisión se marca — un veredicto emitido no se
+  // reescribe en silencio (el WHERE es el candado).
+  const { data } = await admin.from('eval_resultado')
+    .update({ veredicto, detalle: `juez humano: ${veredicto}` })
+    .eq('id', id).eq('veredicto', 'revisar').select('id');
+  if (!data?.length) return;
+  const { data: todos } = await admin.from('eval_resultado')
+    .select('veredicto').eq('corrida_id', corridaId);
+  if (todos) {
+    await admin.from('eval_corrida')
+      .update({ veredicto: veredictoAgregado(todos.map((t) => t.veredicto as 'paso' | 'fallo' | 'revisar')) })
+      .eq('id', corridaId);
+  }
+  revalidatePath('/admin/evals');
+}
 
 /**
  * EVALOPS (0134) — el estado del examen del agente y la REGLA DE RE-EXAMEN
@@ -16,7 +47,7 @@ export const dynamic = 'force-dynamic';
 export default async function Evals() {
   let estado: Awaited<ReturnType<typeof getEstadoEvals>> | null = null;
   let corridas: Array<{ id: string; veredicto: string | null; iniciada_en: string; casos: number | null; costo_usd: number | null; prompt_hash: string }> = [];
-  let porCaso: Array<{ veredicto: string; detalle: string | null; pregunta: string; tipo: string }> = [];
+  let porCaso: Array<{ id: string; veredicto: string; detalle: string | null; pregunta: string; tipo: string }> = [];
   try {
     estado = await getEstadoEvals('analista');
     const admin = supabaseAdmin();
@@ -26,11 +57,11 @@ export default async function Evals() {
     corridas = r.data ?? [];
     if (estado.ultima) {
       const rr = await admin.from('eval_resultado')
-        .select('veredicto, detalle, eval_caso(pregunta, tipo)')
+        .select('id, veredicto, detalle, eval_caso(pregunta, tipo)')
         .eq('corrida_id', estado.ultima.id).order('creado_en');
       porCaso = (rr.data ?? []).map((f) => {
         const caso = f.eval_caso as unknown as { pregunta: string; tipo: string } | null;
-        return { veredicto: f.veredicto, detalle: f.detalle, pregunta: caso?.pregunta ?? '—', tipo: caso?.tipo ?? '—' };
+        return { id: f.id, veredicto: f.veredicto, detalle: f.detalle, pregunta: caso?.pregunta ?? '—', tipo: caso?.tipo ?? '—' };
       });
     }
   } catch { estado = null; }
@@ -88,6 +119,21 @@ export default async function Evals() {
                       </div>
                       <span className="etiqueta-mono text-[10px] uppercase shrink-0" style={{ color: 'var(--muted)' }}>{c.tipo}</span>
                       <span className="text-[11px] font-medium shrink-0" style={{ color: COLOR[c.veredicto] ?? 'var(--muted)' }}>{c.veredicto}</span>
+                      {c.veredicto === 'revisar' && estado.ultima && (
+                        <span className="flex gap-1 shrink-0">
+                          {(['paso', 'fallo'] as const).map((v) => (
+                            <form key={v} action={marcarResultado}>
+                              <input type="hidden" name="id" value={c.id} />
+                              <input type="hidden" name="corridaId" value={estado.ultima?.id ?? ''} />
+                              <input type="hidden" name="veredicto" value={v} />
+                              <button className="px-2 py-0.5 rounded-md text-[10.5px] font-medium hairline hover:opacity-70"
+                                style={{ color: v === 'paso' ? 'var(--ok)' : 'var(--bad)' }}>
+                                {v === 'paso' ? '✓ pasó' : '✗ falló'}
+                              </button>
+                            </form>
+                          ))}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
