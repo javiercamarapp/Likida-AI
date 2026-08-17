@@ -369,6 +369,10 @@ interface WaWebhook {
           // objeto image y hasta el 14-ago-2026 se tiraba aquí.
           image?: { id: string; caption?: string };
           document?: { id: string };
+          // El pin de "Compartir ubicación" (F-Ruta, 17-ago-2026): el chofer
+          // en emergencia manda su posición y el sistema la registra y se la
+          // pasa al jefe. Meta la manda como `type: 'location'`.
+          location?: { latitude?: number; longitude?: number };
           // El chofer apretó un botón. Meta manda `type: 'interactive'` y dentro
           // un `interactive.type` que dice CUÁL de los interactivos fue:
           // `button_reply` (botones de respuesta rápida) o `list_reply` (lista
@@ -409,6 +413,11 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
         // `|| undefined` para que un caption vacío no se distinga de ninguno.
         else if (m.type === 'image' && m.image) out.push({ ...base, type: 'image', mediaId: m.image.id, text: m.image.caption || undefined });
         else if (m.type === 'document' && m.document) out.push({ ...base, type: 'document', mediaId: m.document.id });
+        // UBICACIÓN → lat/lng planos. Solo con AMBAS coordenadas numéricas:
+        // un pin a medias no es una posición, es ruido.
+        else if (m.type === 'location' && typeof m.location?.latitude === 'number' && typeof m.location?.longitude === 'number') {
+          out.push({ ...base, type: 'location', lat: m.location.latitude, lng: m.location.longitude });
+        }
         // BOTÓN APRETADO → entra como TEXTO con el id del botón por cuerpo.
         //
         // Antes caía en `other` y se perdía: el chofer apretaba, el webhook

@@ -49,7 +49,7 @@ export function VistaAgenteConductores({ kpis, esperan, sinAvisar, eventos, sufi
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
         <BarraPagina
           icono={<MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Agente de Conductores"
+          titulo="Comunicación con operadores"
         />
         <div className="px-5 py-5 flex-1 space-y-4">
 

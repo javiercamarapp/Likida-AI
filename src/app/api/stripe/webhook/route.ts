@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verificarFirmaStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import {
-  marcarEvento, aplicarSuscripcion, aplicarFactura, estadoDesdeStripe,
+  marcarEvento, sellarEventoAplicado, aplicarSuscripcion, aplicarFactura, estadoDesdeStripe,
   tenantDeCustomer, planDePrice,
 } from '@/lib/saas/suscripcion';
 import { bodyExcede } from '@/lib/ratelimit';
@@ -59,32 +59,24 @@ export async function POST(req: NextRequest) {
 
   try {
     // Candado ANTES de aplicar: el insert es la carrera ganada, no un select.
-    const nuevo = await marcarEvento(evt.id, evt.type, evt.data?.object ?? null);
-    if (!nuevo) return NextResponse.json({ ok: true, repetido: true });
+    // CICLO DE VIDA (0132): 'aplicada' contesta repetido; 'pendiente' es un
+    // intento anterior muerto a medias y se RE-aplica (los apliques son
+    // idempotentes); la marca NO se borra jamás — la "marca huérfana" dejó
+    // de existir como modo de falla.
+    const marca = await marcarEvento(evt.id, evt.type, evt.data?.object ?? null);
+    if (marca === 'aplicada') return NextResponse.json({ ok: true, repetido: true });
 
     await aplicar(evt);
+    await sellarEventoAplicado(evt.id);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    // 500 A PROPÓSITO: que Stripe reintente. El evento quedó marcado, así que
-    // el reintento lo vería como repetido y NO se volvería a aplicar — por eso
-    // se borra la marca antes de rendirse.
+    // 500 A PROPÓSITO: que Stripe reintente. La fila queda con
+    // `aplicado_en = null`, así que el reintento entra como 'pendiente' y
+    // vuelve a aplicar — nada que borrar, nada que quede huérfano.
     logger.error('stripe.webhook.fallo', {
       id: evt.id, tipo: evt.type, err: e instanceof Error ? e.message : String(e),
     });
-    await desmarcar(evt.id);
     return new NextResponse('Error al aplicar', { status: 500 });
-  }
-}
-
-async function desmarcar(id: string): Promise<void> {
-  try {
-    const { supabaseAdmin } = await import('@/lib/supabase/admin');
-    await supabaseAdmin().from('evento_stripe').delete().eq('id', id);
-  } catch (e) {
-    // Si ni esto se puede, el evento queda marcado sin aplicar y el reintento
-    // lo saltará. Se loguea fuerte porque es el caso que deja un pago cobrado
-    // sin plan activo, y se arregla a mano desde /admin.
-    logger.error('stripe.webhook.marca_huerfana', { id, err: e instanceof Error ? e.message : String(e) });
   }
 }
 
