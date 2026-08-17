@@ -44,7 +44,7 @@ export default async function Evals() {
         <div className="px-5 py-5 flex-1 space-y-4">
           {estado === null && (
             <EstadoVacio icono={<Bug width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              No se pudo leer el estado del examen — que no es lo mismo que "todo pasó".
+              No se pudo leer el estado del examen — que no es lo mismo que «todo pasó».
             </EstadoVacio>
           )}
           {estado !== null && (
