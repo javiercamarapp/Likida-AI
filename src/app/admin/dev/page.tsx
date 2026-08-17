@@ -133,7 +133,7 @@ export default async function DevPage() {
             <div className="mt-2">
               {seguridad === null && (
                 <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                  No se pudieron leer — que no es lo mismo que "no hay eventos".
+                  No se pudieron leer — que no es lo mismo que «no hay eventos».
                 </p>
               )}
               {seguridad !== null && seguridad.length === 0 && (
