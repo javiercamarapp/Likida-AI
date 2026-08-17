@@ -60,12 +60,12 @@ const SIN_INTEGRACION: Record<string, string> = {
   maps: 'falta integración con el consumo de la API de Google Cloud',
   linkedin: 'costo de suscripción, no por lead — sin integración',
   ads: 'falta integración con Meta/Google Ads',
-  // NO es $0: directorio de socios COMPRADO a CANACAR (~$800 USD, pago
+  // NO es $0: directorio de socios COMPRADO a CANACAR (~$800 MXN, pago
   // único, 17-ago) — no hay integración de gasto que lo trackee por lead,
   // así que no se reparte un costo-por-lead que nadie midió. El monto real
   // vive aquí en texto, no como cifra — inventar un $/lead sería la
   // "proyección con cara de medición" que la regla de arriba prohíbe.
-  canacar: 'directorio comprado (~$800 USD, pago único, 17-ago-2026) — sin integración de gasto que reparta el costo por lead',
+  canacar: 'directorio comprado (~$800 MXN, pago único, 17-ago-2026) — sin integración de gasto que reparta el costo por lead',
 };
 
 const DIAS_FUENTE_MUERTA = 7;
