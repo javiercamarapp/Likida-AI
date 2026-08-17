@@ -4,7 +4,7 @@ import {
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
   Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake, Inbox,
-  Bot, Bug, ListChecks, Sparkles,
+  Bot, Bug, ListChecks, Sparkles, Hand,
 } from 'lucide-react';
 
 /**
@@ -34,9 +34,11 @@ export const AGENTES: Item[] = [
 ];
 
 export const NEGOCIO: Item[] = [
-  // La bandeja va PRIMERA en Negocio: es la cola de trabajo del superadmin
-  // (todo lo que espera a un humano, de todas las fuentes) — el resto de la
-  // sección son vistas; esta es donde se destraba.
+  // Tu turno va PRIMERO: es la bandeja única de Fase D — todo lo que espera
+  // el tap de Javier (piezas del bus, envíos, PRs, escalaciones, rutinas) en
+  // una pantalla operable desde el teléfono. Escalaciones sigue viva como la
+  // cola profunda de lo escalado; Tu turno la resume y enlaza.
+  { href: '/admin/tu-turno', nombre: 'Tu turno', Icono: Hand },
   { href: '/admin/escalaciones', nombre: 'Escalaciones', Icono: Inbox },
   // La cola de lo que los agentes REDACTAN (0117) — hermana de Escalaciones
   // (lo que el sistema no pudo resolver solo): allá se destraba, aquí se
