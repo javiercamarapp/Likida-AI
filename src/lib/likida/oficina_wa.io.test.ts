@@ -9,7 +9,7 @@ let anticipos: { data: Array<{ anticipo: number }> | null; error: { message: str
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
-    from: (tabla: string) => ({
+    from: (_tabla: string) => ({
       select: () => ({
         eq: () => ({
           maybeSingle: () => Promise.resolve({ data: { nombre: 'Transportes Prueba' }, error: null }),

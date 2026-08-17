@@ -47,18 +47,26 @@ beforeEach(() => {
   for (const k of Object.keys(TABLAS)) delete TABLAS[k];
 });
 
-describe('marcarEvento — el candado de idempotencia del webhook', () => {
-  it('registra un evento nuevo', async () => {
-    const ok = await marcarEvento('evt-1', 'checkout.session.completed', { total: 100 });
-    expect(ok).toBe(true);
+describe('marcarEvento — el ciclo de vida del evento (0132)', () => {
+  it("registra un evento nuevo → 'nueva', con aplicado_en null (sin aplicar aún)", async () => {
+    const marca = await marcarEvento('evt-1', 'checkout.session.completed', { total: 100 });
+    expect(marca).toBe('nueva');
     expect(escrituras[0]).toMatchObject({ tabla: 'evento_stripe', op: 'insert' });
-    expect(escrituras[0].valores).toMatchObject({ id: 'evt-1', tipo: 'checkout.session.completed' });
+    expect(escrituras[0].valores).toMatchObject({ id: 'evt-1', tipo: 'checkout.session.completed', aplicado_en: null });
   });
 
-  it('devuelve false en un evento repetido (23505) — el idempotente manda', async () => {
+  it("repetido (23505) YA aplicado → 'aplicada' (el reintento contesta repetido)", async () => {
     insertError = { code: '23505', message: 'duplicate key' };
-    const ok = await marcarEvento('evt-1', 'checkout.session.completed', {});
-    expect(ok).toBe(false);
+    TABLAS['evento_stripe'] = [{ aplicado_en: '2026-08-17T00:00:00Z' }];
+    const marca = await marcarEvento('evt-1', 'checkout.session.completed', {});
+    expect(marca).toBe('aplicada');
+  });
+
+  it("repetido (23505) SIN aplicar → 'pendiente': un intento anterior murió a medias y se RE-aplica", async () => {
+    insertError = { code: '23505', message: 'duplicate key' };
+    TABLAS['evento_stripe'] = [{ aplicado_en: null }];
+    const marca = await marcarEvento('evt-1', 'checkout.session.completed', {});
+    expect(marca).toBe('pendiente');
   });
 
   it('LANZA ante cualquier otro error — un fallo de base no se lee como repetido', async () => {

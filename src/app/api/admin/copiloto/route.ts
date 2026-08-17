@@ -105,7 +105,7 @@ export async function POST(req: Request) {
         error: 'La acción llegó sin un intent del servidor — pide la acción al copiloto y confirma desde su previsualización.',
       }, { status: 409 });
     }
-    const reclamo = reclamarIntent({
+    const reclamo = await reclamarIntent({
       intentId,
       actorId: sesion.userId,
       argsHash: hashArgsAccion(accionId, objetivo),
@@ -164,11 +164,11 @@ export async function POST(req: Request) {
         // de crear para ESTA sesión — la única llave que después ejecuta. Las
         // no implementadas no llevan intent: no hay nada que autorizar.
         type BloqueConIntent = BloqueCopiloto | (BloqueAccion & { intentId: string });
-        const bloques: BloqueConIntent[] = r.bloques.map((b) => (
+        const bloques: BloqueConIntent[] = await Promise.all(r.bloques.map(async (b) => (
           b.tipo === 'accion' && b.implementada
-            ? { ...b, intentId: crearIntent({ actorId: sesion.userId, accion: b.accion, objetivo: b.objetivo, gateo: b.gateo }).id }
+            ? { ...b, intentId: (await crearIntent({ actorId: sesion.userId, accion: b.accion, objetivo: b.objetivo, gateo: b.gateo })).id }
             : b
-        ));
+        )));
         logger.info('copiloto.costo', {
           costoUsd: r.costoUsd, tokensIn: r.tokensIn, tokensOut: r.tokensOut,
           modelo: r.modelo, tools: r.toolsUsadas.length,

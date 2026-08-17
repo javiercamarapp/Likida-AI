@@ -5156,3 +5156,51 @@ begin
   raise exception E'TOQUES_0130  tabla-rls=%  indice=%  canal-invalido-rebota=%   (esperado t / t / t)',
     coalesce(tabla_rls, false), indice, canal_invalido_rebota;
 end $$;
+
+-- ── 103. El intent persistente existe y su gateo tiene dominio (mig. 0131) ──
+-- (a) tabla CON RLS; (b) índice de expiración; (c) funcional: gateo fuera
+-- del dominio REBOTA.   (esperado t / t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  indice boolean;
+  gateo_invalido_rebota boolean := false;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'admin_action_intent';
+
+  select exists (select 1 from pg_indexes where indexname = 'idx_intent_expira') into indice;
+
+  begin
+    insert into public.admin_action_intent (id, actor_id, accion, args_hash, gateo, expira_en)
+    values (gen_random_uuid(), gen_random_uuid(), 'zzz_verif', 'hash', 'triple-salto', now());
+  exception when check_violation then
+    gateo_invalido_rebota := true;
+  end;
+
+  raise exception E'INTENTS_0131  tabla-rls=%  indice=%  gateo-invalido-rebota=%   (esperado t / t / t)',
+    coalesce(tabla_rls, false), indice, gateo_invalido_rebota;
+end $$;
+
+-- ── 104. El ciclo de vida del evento Stripe (mig. 0132) ─────────────────────
+-- (a) la columna aplicado_en existe; (b) el backfill corrió: NINGUNA fila
+-- anterior a la migración quedó sin sellar (las viejas se aplicaron todas —
+-- el flujo viejo borraba la marca al fallar).   (esperado t / 0 — exactos)
+do $$
+declare
+  columna boolean;
+  sin_sellar_viejas int;
+begin
+  select exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'evento_stripe' and column_name = 'aplicado_en'
+  ) into columna;
+
+  select count(*) into sin_sellar_viejas
+    from public.evento_stripe
+   where aplicado_en is null and procesado_en < '2026-08-17';
+
+  raise exception E'STRIPE_CICLO_0132  columna=%  filas-viejas-sin-sellar=%   (esperado t / 0)',
+    columna, sin_sellar_viejas;
+end $$;
