@@ -251,16 +251,7 @@ export async function POST(req: NextRequest) {
           const claim = await reclamarPendiente(f.id, 0);
           if (!claim) return; // el cron (u otra entrega) ya lo tiene.
           try {
-            const r = await processInbound(claim.evento);
-            if (r === 'duplicado') {
-              const wamid = (claim.evento as { waMessageId?: string }).waMessageId;
-              if (wamid) {
-                const { releaseMessageClaim } = await import('@/lib/likida/conv');
-                await releaseMessageClaim(wamid);
-              }
-              await anotarFalloPendiente(f.id, 'claim huérfano: el mensaje se tomó y no se terminó');
-              return;
-            }
+            await processInbound(claim.evento);
             await marcarPendienteProcesado(f.id);
           } catch (e) {
             await anotarFalloPendiente(f.id, e instanceof Error ? e.message : String(e));
