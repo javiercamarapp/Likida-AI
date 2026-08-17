@@ -197,7 +197,7 @@ export async function ejecutarCopiloto(opts: {
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 40_000);
   try {
     const res = await generateWithTools({
-      role: 'chat',
+      role: 'analisis',
       system,
       messages: history,
       tools: toolSchemas(TOOLS),
@@ -223,7 +223,7 @@ export async function ejecutarCopiloto(opts: {
     if (!bloques || !cifrasRespaldadas(bloques, respaldo)) {
       logger.warn('copiloto.reintento_correctivo', {});
       const res2 = await generateWithTools({
-        role: 'chat',
+        role: 'analisis',
         system,
         messages: [...history, {
           role: 'assistant', content: res.finalText || '(sin respuesta)',
