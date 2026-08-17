@@ -2,7 +2,7 @@
 // sin llave, API caída y datos son cosas DISTINTAS y ninguna se disfraza de
 // cero (la regla de la casa aplicada a GitHub).
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getActividadGitHub, getMapaCommits } from './github';
+import { getActividadGitHub, getMapaCommits, getAutoresCommits } from './github';
 
 const conToken = () => vi.stubEnv('GITHUB_TOKEN', 'github_pat_prueba');
 
@@ -62,5 +62,28 @@ describe('getMapaCommits — el mapa de puntos', () => {
     expect(r.total).toBe(11);
     expect(r.semanas[0].inicio).toBe(1_755_000_000_000);
     expect(r.semanas[0].dias).toHaveLength(7);
+  });
+});
+
+describe('getAutoresCommits — el por-integrante del mapa', () => {
+  it('ordena por pushes y aguanta un author nulo (commits sin cuenta ligada)', async () => {
+    conToken();
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json([
+      { total: 12, author: { login: 'javiercamarapp' } },
+      { total: 851, author: { login: 'claude' } },
+      { total: 3, author: null },
+    ])));
+    const r = await getAutoresCommits();
+    if (r.estado !== 'ok') throw new Error(`esperaba ok, vino ${r.estado}`);
+    expect(r.autores[0]).toEqual({ nombre: 'claude', pushes: 851 });
+    expect(r.autores.map((a) => a.nombre)).toContain('desconocido');
+  });
+
+  it('202 = generando; sin token = se dice (no "cero autores")', async () => {
+    conToken();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 202 })));
+    expect((await getAutoresCommits()).estado).toBe('generando');
+    vi.stubEnv('GITHUB_TOKEN', '');
+    expect((await getAutoresCommits()).estado).toBe('sin_token');
   });
 });
