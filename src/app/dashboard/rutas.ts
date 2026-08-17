@@ -21,22 +21,23 @@ import {
  */
 export type Item = { href: string; nombre: string; Icono: typeof LayoutGrid };
 
-/** Los agentes de Likida — cada página es la ventana de un agente que
- *  trabaja solo: qué hizo, qué trae en cola, qué necesita de un humano. */
-export const AGENTES: Item[] = [
-  // El rótulo del sidebar es más corto que el título de la página (Agente de
-  // Liquidación de Ruta) a propósito — 13-ago: "que el nombre no se corte".
-  { href: '/dashboard/agentes/liquidacion', nombre: 'Agente de Liquidación', Icono: Route },
-  { href: '/dashboard/agentes/facturas', nombre: 'Agente de Facturas', Icono: ReceiptText },
-  // El tercero (Fase 1 del plan, 14-ago-2026): cobra COMPROBANTES, no dinero.
-  { href: '/dashboard/agentes/cobranza', nombre: 'Agente de Cobranza', Icono: BellRing },
-  // El cuarto (F4): habla con los choferes — avisos, hitos, despacho por WA.
-  { href: '/dashboard/agentes/conductores', nombre: 'Agente de Conductores', Icono: MessagesSquare },
-  // El quinto (F5): el conciliador del "martirio" — estado de cuenta del
-  // TAG/monedero contra los gastos reales de los viajes.
-  { href: '/dashboard/agentes/peajes', nombre: 'Agente de Peajes', Icono: Scale },
-  // El sexto (F6): la factura del taller que hoy se captura a mano en el ERP.
-  { href: '/dashboard/agentes/proveedores', nombre: 'Agente de Proveedores', Icono: Building2 },
+/** Las automatizaciones de Likida — nombradas por la TAREA que le quitan al
+ *  cliente, no por la tecnología (auditoría 5, 17-ago-2026: el jefe de
+ *  tráfico no compra seis agentes; compra liquidar viajes). "Agentes" como
+ *  concepto vive en /admin: es arquitectura nuestra, no modelo mental del
+ *  cliente. Las RUTAS no cambian — solo el lenguaje. */
+export const AUTOMATIZACIONES: Item[] = [
+  { href: '/dashboard/agentes/liquidacion', nombre: 'Liquidación automática', Icono: Route },
+  { href: '/dashboard/agentes/facturas', nombre: 'Facturas en automático', Icono: ReceiptText },
+  // Fase 1 del plan (14-ago-2026): cobra COMPROBANTES, no dinero.
+  { href: '/dashboard/agentes/cobranza', nombre: 'Seguimiento de comprobantes', Icono: BellRing },
+  // F4: habla con los choferes — avisos, hitos, despacho por WA.
+  { href: '/dashboard/agentes/conductores', nombre: 'Comunicación con operadores', Icono: MessagesSquare },
+  // F5: el conciliador del "martirio" — estado de cuenta del TAG/monedero
+  // contra los gastos reales de los viajes.
+  { href: '/dashboard/agentes/peajes', nombre: 'Conciliación de peajes', Icono: Scale },
+  // F6: la factura del taller que hoy se captura a mano en el ERP.
+  { href: '/dashboard/agentes/proveedores', nombre: 'Facturas de proveedores', Icono: Building2 },
 ];
 
 export const OPERACION: Item[] = [
@@ -73,7 +74,6 @@ export const DINERO_FISCAL: Item[] = [
 ];
 
 export const SISTEMA: Item[] = [
-  { href: '/dashboard/chat', nombre: 'Chatea con tus datos', Icono: MessageCircle },
   // El corpus de `normas/` consultable: de dónde sale el fundamento de cada
   // cifra fiscal, con su estado de verificación a la vista.
   { href: '/dashboard/conocimiento', nombre: 'Conocimiento normativo', Icono: BookOpen },
@@ -116,5 +116,8 @@ export const ABAJO: Item[] = [
 /** Lista plana — punto de extensión del ⌘K de este panel. */
 export const TODAS_LAS_RUTAS: Item[] = [
   { href: '/dashboard', nombre: 'Resumen', Icono: LayoutGrid },
-  ...AGENTES, ...OPERACION, ...DINERO_FISCAL, ...SISTEMA, ...ABAJO,
+  // El chat vive a PRIMER NIVEL del sidebar (no en una categoría) desde el
+  // 17-ago-2026 — pero el ⌘K lo sigue necesitando aquí.
+  { href: '/dashboard/chat', nombre: 'Pregunta a tus datos', Icono: MessageCircle },
+  ...OPERACION, ...DINERO_FISCAL, ...AUTOMATIZACIONES, ...SISTEMA, ...ABAJO,
 ];
