@@ -60,3 +60,11 @@ escribe el primer toque a la base por curl PATCH al mismo prospecto:
 `mensajes_modelo` con el valor `claude-suscripcion`. El Cerebro de ventas
 abre sus botones con ESTE texto — escríbelo listo para mandar, no como
 borrador con huecos.
+
+## Prioridad por toques (17-ago-2026)
+
+Desde la 0130 cada tap de WhatsApp/correo del Cerebro deja fila en
+`prospecto_toque`. Al armar la lista del día, PRIORIZA los prospectos con
+señal alta que lleven **≥14 días sin toque** (el filtro «Sin toque en» del
+Cerebro es exactamente esa consulta): un prospecto caliente que nadie ha
+tocado en dos semanas vale más que uno nuevo tibio.
