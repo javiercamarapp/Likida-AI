@@ -4974,3 +4974,44 @@ begin
   raise exception E'CADENCIA_0124  primera-entra=%  segunda-rebota=%  tras-compensar-entra=%   (esperado t / t / t)',
     primera_entra, segunda_rebota, tras_compensar_entra;
 end $$;
+
+-- ── 98. El hardening quedó puesto: anon fuera, índices calientes, initplan (mig. 0126) ─
+-- Lo que el advisor midió y la 0126 corrigió, verificado como ESTADO:
+-- (a) anon NO puede ejecutar ninguna de las 4 SECURITY DEFINER — un anon que
+--     pudiera preguntarle a is_superadmin() no escala hoy, pero no pinta
+--     nada ahí y una diligencia pregunta exactamente esto;
+-- (b) los 12 índices de FKs calientes existen por nombre;
+-- (c) las 4 policies re-escritas quedaron en patrón initplan: su expresión
+--     contiene un sub-SELECT de auth/función, no la llamada desnuda por fila.
+--   (esperado f / 12 / 4 — exactos)
+do $$
+declare
+  anon_puede boolean;
+  v_indices int;
+  v_policies int;
+begin
+  select bool_or(has_function_privilege('anon', p.oid, 'execute'))
+    into anon_puede
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace
+     and p.proname in ('is_superadmin','get_user_tenant_ids','administra_flota','ve_finanzas');
+
+  select count(*) into v_indices
+    from pg_indexes
+   where schemaname = 'public'
+     and indexname in (
+       'idx_agente_corrida_agente','idx_cola_aprobacion_tenant','idx_cola_aprobacion_prospecto',
+       'idx_cola_aprobacion_agente','idx_prospecto_tenant','idx_prospecto_contacto_pieza',
+       'idx_chat_conversacion_user','idx_ccl_gasto','idx_desglose_peaje_linea_viaje',
+       'idx_factura_saas_suscripcion','idx_incidencia_gasto','idx_codigo_pendiente_tenant');
+
+  -- Las 2 de public reescritas por la 0126 (las 2 de storage.objects no se
+  -- cuentan aquí: el CI efímero no monta el schema storage de Supabase).
+  select count(*) into v_policies
+    from pg_policy
+   where pg_get_expr(polqual, polrelid) ~ 'SELECT'
+     and polname in ('app_user_self','plan_lectura');
+
+  raise exception E'HARDENING_0126  anon-ejecuta=%  indices=%  policies-initplan=%   (esperado f / 12 / 2)',
+    coalesce(anon_puede, false), v_indices, v_policies;
+end $$;
