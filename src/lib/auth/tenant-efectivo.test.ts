@@ -339,3 +339,62 @@ describe('la impersonación con ?tenant= real queda firmada', () => {
     expect(de('bitacora_auditoria')).toHaveLength(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA FLOTA ELEGIDA EN EL SELECTOR (16-ago-2026, muerte del tenant implícito).
+// Sin params de preview, el tenantId del superadmin YA es su selección
+// explícita (la cookie firmada que `requireSessionTenant` resolvió — aquí
+// mockeado). Lo que se fija: una flota real elegida trae su nombre (la cinta
+// dice la verdad) y se FIRMA igual que el `?tenant=`; la demo elegida no es
+// un cliente y no se firma; y una selección hacia una flota borrada se
+// declara (`tenantExiste=false`), no se pinta en ceros.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la flota elegida por cookie (sin params) — nombre y firma', () => {
+  const de = (tabla: string) => llamadas.filter((l) => l.tabla === tabla);
+  const SUPER_CON_SELECCION = { userId: 'u-0', tenantId: 't-9', rol: 'superadmin', nombre: 'Javier', operadorId: null, avatarUrl: null };
+
+  it('flota real elegida: nombre resuelto e impersonación firmada con el mismo dedup', async () => {
+    colas.set('tenant', [{ data: { id: 't-9', nombre: 'Fletes del Golfo' }, error: null }]);
+    colas.set('impersonacion_dia', [{ data: [{ dia: '2026-08-16' }], error: null }]);
+
+    requireSessionTenant.mockResolvedValue(SUPER_CON_SELECCION);
+    const r = await resolverTenantEfectivo('/dashboard', undefined);
+
+    expect(r.tenantId).toBe('t-9');
+    expect(r.tenantNombre).toBe('Fletes del Golfo');
+    expect(r.tenantExiste).toBe(true);
+
+    const [dedup] = de('impersonacion_dia');
+    expect(dedup.op).toBe('upsert');
+    expect(dedup.payload).toMatchObject({ actor_id: 'u-0', tenant_id: 't-9' });
+    const [firma] = de('bitacora_auditoria');
+    expect(firma.payload).toMatchObject({ accion: 'impersonacion.dashboard', tenant_id: 't-9' });
+  });
+
+  it('la DEMO elegida no se firma: mirar la demo no es mirar a un cliente', async () => {
+    vi.stubEnv('DEMO_TENANT_ID', 'demo-fija');
+    colas.set('tenant', [{ data: { id: 'demo-fija' }, error: null }]);
+    requireSessionTenant.mockResolvedValue({ ...SUPER_CON_SELECCION, tenantId: 'demo-fija' });
+    const r = await resolverTenantEfectivo('/dashboard', undefined);
+    expect(r.tenantNombre).toBeNull();
+    expect(de('impersonacion_dia')).toHaveLength(0);
+    expect(de('bitacora_auditoria')).toHaveLength(0);
+    vi.unstubAllEnvs();
+  });
+
+  it('la selección apunta a una flota BORRADA: tenantExiste=false y sin firma', async () => {
+    // El mock default contesta `{ data: null }`: la fila no está.
+    requireSessionTenant.mockResolvedValue(SUPER_CON_SELECCION);
+    const r = await resolverTenantEfectivo('/dashboard', undefined);
+    expect(r.tenantExiste).toBe(false);
+    expect(de('impersonacion_dia')).toHaveLength(0);
+  });
+
+  it('un ERROR de la consulta no marca la flota inexistente: no saber no es un "no"', async () => {
+    colas.set('tenant', [{ data: null, error: { message: 'fetch failed' } }]);
+    requireSessionTenant.mockResolvedValue(SUPER_CON_SELECCION);
+    const r = await resolverTenantEfectivo('/dashboard', undefined);
+    expect(r.tenantExiste).toBe(true);
+    expect(de('impersonacion_dia')).toHaveLength(0);
+  });
+});

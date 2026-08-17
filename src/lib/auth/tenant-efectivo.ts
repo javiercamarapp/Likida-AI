@@ -3,22 +3,25 @@
 //
 // `requireSessionTenant` ya resuelve el tenant REAL de un flota_admin/
 // operador/contador — para esos roles esta función no hace nada extra, solo
-// pasa la sesión tal cual. El caso especial es SUPERADMIN: sin selector de
-// flota (Fase 1 del roadmap), su `tenantId` por default es el del demo
-// (0001_init.sql), y `?tenant=<id>` (desde "Ver dashboard" en /admin/flotas)
-// o `?vista=demo` (desde el link del sidebar de /admin) son las dos formas
-// de decirle a esta página CUÁL flota real quiere ver.
+// pasa la sesión tal cual. El caso especial es SUPERADMIN, y desde el
+// 16-ago-2026 su flota es SIEMPRE explícita (hallazgo #1 de la auditoría
+// externa — murió el fallback silencioso a demo):
 //
-// `esRaiz` es el único parámetro que distingue la página de aterrizaje
-// (`/dashboard`) del resto: SOLO ahí un superadmin que llega sin `?tenant=`
-// ni `?vista=demo` (p.ej. por bookmark) se rebota a /admin — es SU consola,
-// no la de un cliente. Las subpáginas (Viajes, Documentos, Cuadre…) NUNCA
-// hacen ese rebote: si superadmin llegó aquí navegando desde el sidebar (que
-// ya propaga `?tenant=`/`?vista=demo` en cada link, ver sidebar-nav.tsx), se
-// respeta; si no trae ninguno, cae al tenant demo sin más — igual que
-// `requireSessionTenant` ya hace, sin sorpresas.
+//  · `?tenant=<id>` (desde "Ver dashboard" en /admin/flotas) o `?vista=demo`
+//    (el link del sidebar de /admin) — el "ver como" auditado de siempre,
+//    firmado abajo. `?rol=` cuenta como la misma intención.
+//  · SIN params: la flota que eligió en /admin/elegir-flota (cookie httpOnly
+//    firmada — admin-context.ts), que `requireSessionTenant` ya trae en la
+//    sesión. Si es una flota real, aquí se resuelve su nombre (la cinta
+//    "viendo como superadmin") y se firma la impersonación igual que con
+//    `?tenant=` — el acceso más privilegiado nunca vuelve a ser invisible.
+//  · Sin params NI selección, `requireSessionTenant` ya lo mandó al selector:
+//    a esta altura ese caso no existe. Por eso el viejo rebote `esRaiz` →
+//    /admin se retiró: su única razón era "no quedarse viendo la demo por
+//    accidente", y ya no hay accidente posible.
 import { redirect } from 'next/navigation';
 import { requireSessionTenant } from './guard';
+import { tenantDemo } from './tenant-demo';
 import { puedeVerRuta, inicioDe, rolEfectivo } from './visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
@@ -146,9 +149,11 @@ async function firmarImpersonacion(actorId: string, tenantId: string): Promise<v
 export async function resolverTenantEfectivo(
   destino: string,
   sp: { vista?: string; tenant?: string; rol?: string } | undefined,
-  opts: { esRaiz?: boolean } = {},
 ): Promise<TenantEfectivo> {
-  const sesionReal = await requireSessionTenant(destino);
+  // `sp` viaja a la puerta: con intención de "ver como" el superadmin
+  // conserva la base demo del flujo auditado; sin ella, la puerta devuelve
+  // su selección explícita o lo manda al selector (guard.ts).
+  const sesionReal = await requireSessionTenant(destino, sp);
 
   // "Ver como": un superadmin puede mirar el panel con los ojos de otro rol
   // (`?rol=encargado`) para comparar qué ve cada quien. Solo QUITA visibilidad
@@ -175,14 +180,6 @@ export async function resolverTenantEfectivo(
     redirect(`${inicioDe(sesion.rol)}${sufijoPrevisualizacion(sesionReal.rol === 'superadmin', sp)}`);
   }
 
-  // `?rol=` cuenta como intención de ver el panel del cliente, igual que
-  // `?vista=demo` — si no, "ver como encargado" desde la raíz rebotaba a
-  // /admin y la comparación era imposible justo en la pantalla de inicio,
-  // que es la que más cambia entre un rol y otro.
-  if (opts.esRaiz && sesionReal.rol === 'superadmin' && sp?.vista !== 'demo' && !sp?.tenant && !sp?.rol) {
-    redirect('/admin');
-  }
-
   let tenantId = sesion.tenantId;
   let tenantNombre: string | null = null;
   let tenantExiste = true;
@@ -199,16 +196,34 @@ export async function resolverTenantEfectivo(
     }
   }
 
-  // ¿EXISTE LA FLOTA QUE ESTA PÁGINA VA A CONSULTAR?
-  //
-  // Solo para superadmin, y no por ahorrar: `app_user.tenant_id` tiene llave
-  // foránea contra `tenant` (app_user_tenant_id_fkey), así que el tenant de un
-  // dueño, un contador o un encargado NO PUEDE no existir. El del superadmin
-  // sí: sale de `DEMO_TENANT_ID`, una variable de entorno que nada obliga a
-  // apuntar a una fila viva. Preguntarlo para todos sería una consulta de más
-  // en cada carga de cada cliente para responder algo que el esquema ya
-  // garantiza.
-  if (sesionReal.rol === 'superadmin' && tenantNombre === null) {
+  // ¿LA FLOTA ELEGIDA EN EL SELECTOR? — superadmin SIN params de preview y
+  // con un tenant que no es la demo: solo puede venir de la cookie firmada de
+  // admin-context.ts. Se resuelve el nombre (la cinta "viendo como
+  // superadmin" del panel dice la verdad también en este camino) y se FIRMA
+  // la impersonación con el mismo dedup por día que el `?tenant=` de arriba:
+  // que la selección viaje por cookie no la vuelve menos privilegiada.
+  const esSeleccionExplicita = sesionReal.rol === 'superadmin'
+    && !sp?.tenant && sp?.vista !== 'demo' && !sp?.rol
+    && tenantId !== tenantDemo();
+  if (esSeleccionExplicita) {
+    const { data: t, error } = await supabaseAdmin().from('tenant').select('id, nombre').eq('id', tenantId).maybeSingle();
+    if (t) {
+      tenantNombre = t.nombre as string;
+      await firmarImpersonacion(sesionReal.userId, tenantId);
+    } else if (!error) {
+      // Igual que abajo: solo un "no" COMPROBADO marca la flota inexistente.
+      tenantExiste = false;
+    }
+  } else if (sesionReal.rol === 'superadmin' && tenantNombre === null) {
+    // ¿EXISTE LA FLOTA QUE ESTA PÁGINA VA A CONSULTAR?
+    //
+    // Solo para superadmin, y no por ahorrar: `app_user.tenant_id` tiene llave
+    // foránea contra `tenant` (app_user_tenant_id_fkey), así que el tenant de un
+    // dueño, un contador o un encargado NO PUEDE no existir. El del superadmin
+    // sí: sale de `DEMO_TENANT_ID`, una variable de entorno que nada obliga a
+    // apuntar a una fila viva. Preguntarlo para todos sería una consulta de más
+    // en cada carga de cada cliente para responder algo que el esquema ya
+    // garantiza.
     const { data, error } = await supabaseAdmin().from('tenant').select('id').eq('id', tenantId).maybeSingle();
     if (!error) tenantExiste = data !== null;
   }
