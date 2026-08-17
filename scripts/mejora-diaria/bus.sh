@@ -27,7 +27,10 @@ COLA="$HOME/javiercamarapp/likida-marketing-cola"
 
 leer() { grep "^$1=" "$REPO/.env.local" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/[[:space:]]*#.*//' | tr -d '"' | tr -d "'" | xargs; }
 export WORKER_KEY="$(leer LIKIDA_WORKER_KEY)"
-export APP_URL="$(leer NEXT_PUBLIC_APP_URL)"
+# El worker le habla a PRODUCCIÓN: el NEXT_PUBLIC_APP_URL local suele ser
+# localhost (dev). LIKIDA_WORKER_URL manda si existe.
+export APP_URL="$(leer LIKIDA_WORKER_URL)"
+[ -z "$APP_URL" ] && export APP_URL="https://app.likida.ai"
 export BUS_URL="$(leer NEXT_PUBLIC_SUPABASE_URL)"
 export BUS_KEY="$(leer SUPABASE_SERVICE_ROLE_KEY)"
 
