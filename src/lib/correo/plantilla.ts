@@ -150,34 +150,40 @@ export function aTextoPlano(c: Correo): string {
 export function armarHtml(c: Correo): string {
   const tono = TONO[c.tono ?? 'neutral'];
 
-  // Micro-rótulo en versalitas espaciadas: el mismo recurso que la app usa en
-  // `etiqueta-mono` para los rótulos de tarjeta.
+  // Micro-rótulo con su punto de color: el mismo recurso `etiqueta-mono` de
+  // las tarjetas de la app — el tono se dice en UNA palabra, no en bandas.
   const rotulo = tono.rotulo
-    ? `<p style="margin:0 0 10px 0;font-family:${SANS};font-size:10px;line-height:14px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:${tono.color};">${esc(tono.rotulo)}</p>`
+    ? `<p style="margin:0 0 14px 0;font-family:${SANS};font-size:10px;line-height:14px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:${tono.color};"><span style="color:${tono.color};">&#9679;</span>&nbsp;&nbsp;${esc(tono.rotulo)}</p>`
     : '';
 
+  // El grid de datos, nivel documento: etiqueta en versalitas espaciadas a la
+  // izquierda, valor en seminegrita a la derecha, un pelo de línea por fila.
   const datos = c.datos?.length
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:26px 0 6px 0;border-collapse:collapse;">
-${c.datos.map(([k, v], i) => `        <tr>
-          <td style="padding:11px 0;${i === 0 ? `border-top:1px solid ${C.linea};` : `border-top:1px solid ${C.linea};`}font-family:${SANS};font-size:13px;line-height:19px;color:${C.muted};">${esc(k)}</td>
-          <td align="right" style="padding:11px 0;border-top:1px solid ${C.linea};font-family:${SANS};font-size:13px;line-height:19px;color:${C.tinta};font-weight:600;">${esc(v)}</td>
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:30px 0 4px 0;border-collapse:collapse;">
+${c.datos.map(([k, v]) => `        <tr>
+          <td style="padding:13px 0;border-top:1px solid ${C.linea};font-family:${SANS};font-size:10.5px;line-height:16px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:${C.faint};">${esc(k)}</td>
+          <td align="right" style="padding:13px 0;border-top:1px solid ${C.linea};font-family:${SANS};font-size:14px;line-height:20px;color:${C.tinta};font-weight:600;">${esc(v)}</td>
         </tr>`).join('\n')}
         <tr><td colspan="2" style="border-top:1px solid ${C.linea};font-size:0;line-height:0;">&nbsp;</td></tr>
       </table>`
     : '';
 
-  // Botón NEGRO, como los primarios de la app bajo .tema-neutro.
+  // Botón NEGRO en píldora — el primario de la app bajo .tema-neutro.
   const boton = c.boton
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 2px 0;">
-        <tr><td bgcolor="${C.marca}" style="border-radius:8px;">
-          <a href="${hrefSeguro(c.boton.href)}" style="display:inline-block;padding:11px 20px;font-family:${SANS};font-size:13px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">${esc(c.boton.texto)}</a>
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:30px 0 4px 0;">
+        <tr><td bgcolor="${C.marca}" style="border-radius:999px;">
+          <a href="${hrefSeguro(c.boton.href)}" style="display:inline-block;padding:13px 26px;font-family:${SANS};font-size:14px;line-height:20px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:999px;">${esc(c.boton.texto)}</a>
         </td></tr>
       </table>`
     : '';
 
   const parrafos = c.parrafos
-    .map((p) => `<p style="margin:0 0 14px 0;font-family:${SANS};font-size:14px;line-height:23px;color:${C.muted};">${esc(p)}</p>`)
+    .map((p) => `<p style="margin:0 0 16px 0;font-family:${SANS};font-size:15px;line-height:24px;color:#52525b;">${esc(p)}</p>`)
     .join('\n      ');
+
+  // El relleno del avance: sin él, Gmail completa el preheader con el cuerpo
+  // (y arrancaría con el alt del logo). Espacios de ancho cero, el estándar.
+  const rellenoAvance = '&nbsp;&zwnj;'.repeat(90);
 
   return `<!doctype html>
 <html lang="es">
@@ -191,10 +197,10 @@ ${c.datos.map(([k, v], i) => `        <tr>
 <body style="margin:0;padding:0;background-color:${C.lienzo};">
 <!-- El avance: lo que se lee en la bandeja bajo el asunto. Se esconde del
      cuerpo con el truco estándar de altura cero y color transparente. -->
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;">${esc(c.avance)}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;">${esc(c.avance)}${rellenoAvance}</div>
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:${C.lienzo};">
-  <tr><td align="center" style="padding:40px 12px;">
+  <tr><td align="center" style="padding:44px 16px 36px 16px;">
 
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px;max-width:100%;border-collapse:collapse;">
 
@@ -203,28 +209,30 @@ ${c.datos.map(([k, v], i) => `        <tr>
            externas, y Gmail las bloquea por defecto: así llegó roto la primera
            vez, aunque el archivo respondía 200. Incrustado viaja con el correo.
 
-           Y EL TEXTO ALTERNO LLEVA ESTILO. Es la mitad que faltaba: cuando un
-           cliente no pinta la imagen, la mayoría aplica los estilos del <img>
-           a su texto alterno. Así, en el peor caso, no se ve un ícono roto:
-           se ve LIKIDA en versalitas espaciadas, que es el wordmark de todos
-           modos. Nunca hay un estado feo. -->
-      <tr><td align="left" style="padding:0 0 24px 2px;">
+           Y EL TEXTO ALTERNO LLEVA ESTILO: cuando un cliente no pinta la
+           imagen, la mayoría aplica los estilos del <img> a su alt. El peor
+           caso no es un ícono roto — es LIKIDA en versalitas espaciadas, el
+           wordmark de todos modos. Nunca hay un estado feo. -->
+      <tr><td align="left" style="padding:0 0 26px 2px;">
         <img src="cid:${LOGO_CID}" alt="LIKIDA" width="112" height="23"
           style="display:block;border:0;outline:none;text-decoration:none;height:23px;width:112px;font-family:${DISPLAY};font-size:15px;font-weight:600;letter-spacing:0.34em;color:${C.marca};">
       </td></tr>
 
-      <tr><td bgcolor="${C.papel}" style="padding:34px 34px 32px 34px;border:1px solid ${C.linea};border-radius:14px;">
+      <tr><td bgcolor="${C.papel}" style="padding:42px 44px 38px 44px;border:1px solid ${C.linea};border-radius:16px;">
         ${rotulo}
-        <h1 style="margin:0 0 16px 0;font-family:${DISPLAY};font-size:22px;line-height:29px;font-weight:600;letter-spacing:-0.015em;color:${C.tinta};">${esc(c.titulo)}</h1>
+        <h1 style="margin:0 0 18px 0;font-family:${DISPLAY};font-size:26px;line-height:34px;font-weight:600;letter-spacing:-0.02em;color:${C.tinta};">${esc(c.titulo)}</h1>
       ${parrafos}
       ${datos}
       ${boton}
       </td></tr>
 
-      <tr><td align="left" style="padding:22px 4px 0 4px;">
+      <!-- El pie: la casa editorial del correo. Primera línea, quiénes somos;
+           segunda, por qué te llegó; tercera, a dónde volver. Sin gritos. -->
+      <tr><td align="left" style="padding:26px 6px 0 6px;">
+        <p style="margin:0 0 7px 0;font-family:${SANS};font-size:11px;line-height:17px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${C.muted};">Likida&nbsp;&nbsp;&#183;&nbsp;&nbsp;Liquidaci&oacute;n de viajes por WhatsApp</p>
         <p style="margin:0 0 5px 0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">${esc(c.porQueLoRecibes)}</p>
         <p style="margin:0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">
-          <a href="${BASE}" style="color:${C.faint};text-decoration:none;">${esc(BASE.replace(/^https?:\/\//, ''))}</a>
+          <a href="${BASE}" style="color:${C.faint};text-decoration:underline;text-decoration-color:${C.linea};">${esc(BASE.replace(/^https?:\/\//, ''))}</a>
         </p>
       </td></tr>
 

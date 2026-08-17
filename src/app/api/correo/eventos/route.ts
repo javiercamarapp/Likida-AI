@@ -45,7 +45,10 @@ function firmaValida(cuerpo: string, id: string | null, ts: string | null, firma
 }
 
 export async function POST(req: Request) {
-  const secreto = process.env.RESEND_WEBHOOK_SECRET;
+  // Variable PROPIA (17-ago): Resend firma cada webhook con SU secreto — el
+  // de correo entrante (RESEND_WEBHOOK_SECRET) es OTRO webhook con OTRO
+  // secreto, y compartir el nombre hacía imposible que ambos verificaran.
+  const secreto = process.env.RESEND_EVENTOS_WEBHOOK_SECRET;
   if (!secreto) {
     logger.error('correo.eventos.sin_secreto', {});
     return NextResponse.json({ error: 'RESEND_WEBHOOK_SECRET no está configurado.' }, { status: 500 });
