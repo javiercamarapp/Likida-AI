@@ -5,7 +5,7 @@ instrumento: "Ley del Impuesto sobre la Renta"
 articulo_o_regla: "28"
 fraccion: "XX"
 titulo: "Consumos en restaurantes — 91.5% no deducible, 0% en bares"
-citas_en_codigo: []
+citas_en_codigo: ["LISR 28-XX"]
 texto_vigente: >
   XX. El 91.5% de los consumos en restaurantes. Para que proceda la deducción
   de la diferencia, el pago deberá hacerse invariablemente mediante tarjeta de

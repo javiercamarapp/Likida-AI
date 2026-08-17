@@ -48,4 +48,4 @@ impacto_en_el_motor: >
   operador subordinado, eso es INCORRECTO por este artículo.
 usado_en_codigo:
   - "cuadre/engine.ts — regla rfc_receptor con la excepción de viáticos IMPLEMENTADA: si el receptor coincide con operadorRfc no se reporta nada, y sin ese dato se emite viatico_rfc_operador (revisión, sin tirar la deducción)"
-  - "cuadre/desde_db.ts:52 — puebla operadorRfc desde operador.rfc (mig. 0080); sin escritor de UI el campo llega null en la práctica"
+  - "cuadre/desde_db.ts — puebla operadorRfc desde operador.rfc (mig. 0080); sin escritor de UI el campo llega null en la práctica"

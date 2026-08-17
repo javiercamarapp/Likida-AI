@@ -221,6 +221,21 @@ export const NORMAS: readonly Norma[] = [
     ]
   },
   {
+    "archivo": "lisr-28-XX.yaml",
+    "id": "lisr-28-fr-XX",
+    "tipo": "ley",
+    "instrumento": "Ley del Impuesto sobre la Renta",
+    "articulo_o_regla": "28",
+    "titulo": "Consumos en restaurantes — 91.5% no deducible, 0% en bares",
+    "estado_verificacion": "evidencia_corroborante",
+    "fuente_url": "https://leyes-mx.com/ley_del_impuesto_sobre_la_renta/28.htm",
+    "verificado_el": "2026-08-16",
+    "jerarquia": 1,
+    "citasEnCodigo": [
+      "LISR 28-XX"
+    ]
+  },
+  {
     "archivo": "liva-5.yaml",
     "id": "liva-art-5",
     "tipo": "ley",
