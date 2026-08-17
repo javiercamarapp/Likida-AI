@@ -96,11 +96,11 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
 /** El CSV de la vista actual — columnas fijas, comillas escapadas, BOM para
  *  que Excel en español lo abra con acentos bien. */
 function csvDe(lista: ProspectoMapa[]): string {
-  const cab = ['empresa', 'giro', 'etapa', 'urgencia_pct', 'cierre_pct', 'contacto', 'telefono', 'correo', 'ciudad', 'entidad', 'vacante', 'fuente', 'lat', 'lng'];
+  const cab = ['empresa', 'giro', 'etapa', 'urgencia_pct', 'cierre_pct', 'contacto', 'telefono', 'correo', 'ciudad', 'entidad', 'vacante', 'fuente', 'lat', 'lng', 'notas'];
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const filas = lista.map((p) => [
     p.empresa, NOMBRE_GIRO[p.giro], COLOR_EMBUDO[p.estado]?.nombre ?? p.estado, p.urgencia, p.cierre,
-    p.contacto, p.telefono, p.correo, p.ciudad, p.entidad, p.vacante, p.fuente, p.lat, p.lng,
+    p.contacto, p.telefono, p.correo, p.ciudad, p.entidad, p.vacante, p.fuente, p.lat, p.lng, p.notas,
   ].map(esc).join(','));
   return '\ufeff' + [cab.join(','), ...filas].join('\n');
 }
@@ -221,6 +221,7 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar, onToque, plana }: {
         </div>
       )}
       {p.vacante && <p className="text-[11px] truncate" style={{ color: TENUE }}>Vacante: {p.vacante}</p>}
+      {p.notas && <p className="text-[11px] line-clamp-2" style={{ color: TENUE }} title={p.notas}>{p.notas}</p>}
       <Barra etiqueta="Urgencia" pct={p.urgencia} color="#f59e0b" />
       <Barra etiqueta="Cierre" pct={p.cierre} color="#34d399" />
       {p.mensajesGeneradosEn && (

@@ -74,6 +74,7 @@ export default function Calles({ prospectos, titulo, onCerrar }: {
               ${p.correo ? `✉️ ${escapar(p.correo)}<br/>` : ''}
               Urgencia <strong>${p.urgencia}%</strong> · Cierre <strong>${p.cierre}%</strong>
               <div style="color:#64748b;margin-top:4px">${escapar(p.ciudad ?? '')}</div>
+              ${p.notas ? `<div style="color:#64748b;margin-top:4px;font-size:11px;max-width:260px">${escapar(p.notas)}</div>` : ''}
               <div style="margin-top:6px">
                 ${wa ? boton(wa, 'WhatsApp →', '#14532d', '#86efac') : ''}
                 ${correo ? boton(correo, 'Correo →', '#1e3a8a', '#bfdbfe') : ''}
