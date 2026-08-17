@@ -114,11 +114,14 @@ function Chip({ activo, color, onClick, children }: {
 }) {
   return (
     <button onClick={onClick}
-      className="px-2.5 py-1 rounded-full text-[11px] transition-all"
+      className={`px-2.5 py-1 rounded-full text-[11px] transition-all ${activo ? 'font-medium' : ''}`}
       style={{
-        background: activo ? (color ? `color-mix(in srgb, ${color} 18%, var(--surface))` : 'var(--ink)') : 'transparent',
+        // Activo SIN color de embudo: tinta SUAVE, no relleno negro — con
+        // media docena de chips activos el popup se volvía una pared negra
+        // (orden del 17-ago). El borde en tinta ya dice "seleccionado".
+        background: activo ? (color ? `color-mix(in srgb, ${color} 18%, var(--surface))` : 'color-mix(in srgb, var(--ink) 7%, var(--surface))') : 'transparent',
         border: `1px solid ${activo ? (color ?? 'var(--ink)') : LINEA}`,
-        color: activo ? (color ? 'var(--ink)' : 'var(--canvas)') : TENUE,
+        color: activo ? 'var(--ink)' : TENUE,
       }}>
       {children}
     </button>
@@ -582,8 +585,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
         {/* ── La barra de filtros y orden ─────────────────────────────────── */}
         {filtrosAbiertos && (
-          <div ref={popupRef} className="absolute top-20 right-4 z-40 w-[min(94vw,560px)] rounded-2xl p-4 space-y-3 cerebro-panel"
-            style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, boxShadow: '0 16px 40px color-mix(in srgb, var(--ink) 14%, transparent)' }}>
+          <div ref={popupRef} className="absolute top-20 right-4 z-40 w-[min(94vw,560px)] rounded-2xl p-4 space-y-3 cerebro-panel overflow-y-auto"
+            style={{ maxHeight: 'calc(100% - 6.5rem)', background: SUPERFICIE, border: `1px solid ${LINEA}`, boxShadow: '0 16px 40px color-mix(in srgb, var(--ink) 14%, transparent)' }}>
             <div>
               <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Categoría</p>
               <div className="flex flex-wrap gap-1.5">

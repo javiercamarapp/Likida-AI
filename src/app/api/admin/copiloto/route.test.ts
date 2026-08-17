@@ -136,7 +136,7 @@ describe('la acción con intent (AdminActionIntent)', () => {
 
   it('intent EXPIRADO (2 min) → 409 con instrucción de re-proponer', async () => {
     // Nacido hace TTL+1 ms: el mismo Map real, sin reloj falso.
-    const viejo = crearIntent({
+    const viejo = await crearIntent({
       actorId: 'u-javier', accion: 'apagar_agente', objetivo: 'agente:cobranza',
       gateo: 'confirma', ahoraMs: Date.now() - INTENT_TTL_MS - 1,
     });
@@ -146,7 +146,7 @@ describe('la acción con intent (AdminActionIntent)', () => {
   });
 
   it('intent de OTRO actor → 409: la sesión que confirma es la que lo pidió', async () => {
-    const ajeno = crearIntent({
+    const ajeno = await crearIntent({
       actorId: 'u-otro-superadmin', accion: 'apagar_agente', objetivo: 'agente:cobranza', gateo: 'confirma',
     });
     const r = await POST(pedir({ intentId: ajeno.id, accion: ACCION }));
@@ -169,12 +169,12 @@ describe('la acción con intent (AdminActionIntent)', () => {
 
 describe("gateo 'doble' — dos POSTs con el mismo intent, motivo obligatorio", () => {
   const DOBLE = { id: 'encender_agente', objetivo: 'agente:cobranza' };
-  const intentDoble = () => crearIntent({
+  const intentDoble = async () => crearIntent({
     actorId: 'u-javier', accion: 'encender_agente', objetivo: 'agente:cobranza', gateo: 'doble',
   });
 
   it('sin motivo NO se arma: 400 y el ejecutor ni se toca', async () => {
-    const i = intentDoble();
+    const i = await intentDoble();
     const r = await POST(pedir({ intentId: i.id, accion: { ...DOBLE, motivo: '  ' } }));
     expect(r.status).toBe(400);
     const cuerpo = await r.json() as { error: string };
@@ -183,7 +183,7 @@ describe("gateo 'doble' — dos POSTs con el mismo intent, motivo obligatorio", 
   });
 
   it('primer POST ARMA sin ejecutar; el segundo ejecuta con el motivo del armado', async () => {
-    const i = intentDoble();
+    const i = await intentDoble();
     const r1 = await POST(pedir({ intentId: i.id, accion: { ...DOBLE, motivo: 'lo pidió el cliente' } }));
     expect(r1.status).toBe(200);
     expect(await r1.json()).toMatchObject({ ok: true, armado: true });
@@ -203,7 +203,7 @@ describe("gateo 'doble' — dos POSTs con el mismo intent, motivo obligatorio", 
     // La declaración del catálogo real: apagar_agente y correr_runner son
     // 'confirma' — el flujo de un POST les basta (el de arriba lo prueba
     // para apagar_agente vía proponer(); aquí correr_runner).
-    const i = crearIntent({ actorId: 'u-javier', accion: 'correr_runner', objetivo: 'runner', gateo: 'confirma' });
+    const i = await crearIntent({ actorId: 'u-javier', accion: 'correr_runner', objetivo: 'runner', gateo: 'confirma' });
     const r = await POST(pedir({ intentId: i.id, accion: { id: 'correr_runner', objetivo: 'runner', motivo: 'adelantar el cron' } }));
     expect(r.status).toBe(200);
     expect(ejecutarAccionCopiloto).toHaveBeenCalledTimes(1);
@@ -250,10 +250,14 @@ describe('el historial (0121)', () => {
   });
 
   it('un conversacionId basura viaja como null (conversación nueva), no a la base', async () => {
-    await POST(pedir({
+    // El cuerpo se CONSUME (como en los demás casos): la respuesta es un
+    // stream y el guardado corre dentro de él — sin leerlo, el aserto
+    // llegaría antes que el trabajo.
+    const r = await POST(pedir({
       mensajes: [{ rol: 'usuario', texto: 'hola' }],
       conversacionId: "'; drop table copiloto_conversacion; --",
     }));
+    await r.text();
     expect(guardarIntercambioCopiloto).toHaveBeenCalledWith(expect.objectContaining({ conversacionId: null }));
   });
 

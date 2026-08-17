@@ -272,25 +272,54 @@ export async function guardarPriceDePlan(
 // ── Escritura desde el webhook ─────────────────────────────────────────────
 
 /**
- * ¿Este evento ya se aplicó?
+ * El CICLO DE VIDA del evento (0132, auditoría 5) — antes esto era un booleano
+ * y la marca se BORRABA si aplicar fallaba; si el delete también fallaba
+ * quedaba la "marca huérfana": evento marcado que nunca se aplicó y que el
+ * reintento de Stripe saltaría para siempre.
  *
- * Stripe REINTENTA hasta recibir un 2xx y manda el mismo evento más de una vez
- * por diseño. Se marca ANTES de aplicar y con el insert como candado: si dos
- * entregas llegan a la vez, la segunda choca con la llave primaria y se sale.
- * Comprobar con un `select` antes tendría la carrera justo en medio.
+ * Ahora la marca no se borra jamás y `aplicado_en` dice la verdad:
+ *  · 'nueva'     → el insert ganó (el candado sigue siendo la llave primaria;
+ *                  un select antes tendría la carrera justo en medio);
+ *  · 'pendiente' → ya estaba PERO sin aplicar: un intento anterior murió a
+ *                  medias — se RE-aplica (aplicarSuscripcion/aplicarFactura
+ *                  son idempotentes: fijan estado, no acumulan);
+ *  · 'aplicada'  → ya estaba y aplicada: el reintento contesta "repetido".
  */
-export async function marcarEvento(id: string, tipo: string, payload: unknown): Promise<boolean> {
+export type MarcaEvento = 'nueva' | 'pendiente' | 'aplicada';
+
+export async function marcarEvento(id: string, tipo: string, payload: unknown): Promise<MarcaEvento> {
   const { error } = await supabaseAdmin()
     .from('evento_stripe')
-    .insert({ id, tipo, payload: payload ?? null });
+    .insert({ id, tipo, payload: payload ?? null, aplicado_en: null });
 
-  if (!error) return true;
-  // 23505 = unique_violation: ya estaba, o sea que ya se aplicó.
+  if (!error) return 'nueva';
+  // 23505 = unique_violation: ya estaba. ¿Aplicada o a medio morir?
   if ((error as { code?: string }).code === '23505') {
-    logger.info('stripe.evento_repetido', { id, tipo });
-    return false;
+    const { data, error: eSel } = await supabaseAdmin()
+      .from('evento_stripe').select('aplicado_en').eq('id', id).maybeSingle();
+    // Si ni leer se puede, se lanza: el 500 hace que Stripe reintente, que es
+    // exactamente el comportamiento seguro cuando no sabemos en qué quedó.
+    if (eSel) throw new Error(`marcarEvento/leer: ${eSel.message}`);
+    if (data?.aplicado_en) {
+      logger.info('stripe.evento_repetido', { id, tipo });
+      return 'aplicada';
+    }
+    logger.warn('stripe.evento_pendiente_reaplicando', { id, tipo });
+    return 'pendiente';
   }
   throw new Error(`marcarEvento: ${error.message}`);
+}
+
+/**
+ * Sella el evento como aplicado. Si el sello falla, el evento SÍ se aplicó:
+ * se loguea fuerte y NO se lanza — un 500 aquí haría que Stripe reintentara
+ * un aplique ya hecho (inofensivo por idempotencia, pero ruido); y la fila
+ * sin sello queda visible en la base para el reconciliador, no solo en un log.
+ */
+export async function sellarEventoAplicado(id: string): Promise<void> {
+  const { error } = await supabaseAdmin()
+    .from('evento_stripe').update({ aplicado_en: new Date().toISOString() }).eq('id', id);
+  if (error) logger.error('stripe.evento_sin_sello', { id, err: error.message });
 }
 
 /** Mapea el estado de Stripe al dominio de `suscripcion.estado` (0052). */

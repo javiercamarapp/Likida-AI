@@ -1,6 +1,7 @@
 import { Code2, ExternalLink } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { getActividadGitHub, getMapaCommits } from '@/lib/admin/github';
+import { getActividadGitHub, getMapaCommits, getAutoresCommits } from '@/lib/admin/github';
+import { MapaActividad } from './mapa-actividad';
 import { fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio, StatusPill } from '../ui/kit';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -23,10 +24,11 @@ export default async function DevPage() {
   // El selector de vistas necesita saber si HAY flotas (con cero, sus ligas
   // rebotarían a paneles vacíos y lo dice). Conteo directo y barato — la
   // tabla `tenant` no tiene tenant_id: es la lista de tenants misma.
-  const [{ count }, actividad, mapa] = await Promise.all([
+  const [{ count }, actividad, mapa, autores] = await Promise.all([
     supabaseAdmin().from('tenant').select('id', { count: 'exact', head: true }),
     getActividadGitHub(),
     getMapaCommits(),
+    getAutoresCommits(),
   ]);
   const tenants = count ?? 0;
   return (
@@ -64,32 +66,31 @@ export default async function DevPage() {
                   GitHub está recalculando el histograma tras el último push — recarga en unos segundos.
                 </EstadoVacio>
               )}
-              {mapa.estado === 'ok' && (() => {
-                const semanas = mapa.semanas.slice(-26);
-                const tope = Math.max(1, ...semanas.flatMap((s) => s.dias));
-                return (
-                  <div>
-                    <div className="flex gap-[3px] overflow-x-auto pb-1">
-                      {semanas.map((sem) => (
-                        <div key={sem.inicio} className="flex flex-col gap-[3px]">
-                          {sem.dias.map((n, di) => (
-                            <span key={di} title={`${n} commit${n === 1 ? '' : 's'} · ${fechaHoraMx(new Date(sem.inicio + di * 86_400_000).toISOString()).split(',')[0]}`}
-                              className="w-[11px] h-[11px] rounded-[3px]"
-                              style={{
-                                background: n === 0
-                                  ? 'color-mix(in srgb, var(--muted) 14%, transparent)'
-                                  : `color-mix(in srgb, var(--marca) ${Math.round(25 + (n / tope) * 75)}%, transparent)`,
-                              }} />
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-xs mt-1.5" style={{ color: 'var(--muted)' }}>
-                      {mapa.total} commits en 52 semanas (se enseñan 26) · un punto = un día · más tinta, más pushes.
-                    </p>
+              {mapa.estado === 'ok' && (
+                <div className="flex gap-5 items-start">
+                  <div className="min-w-0 flex-1">
+                    <MapaActividad semanas={mapa.semanas.slice(-26)} total={mapa.total} />
                   </div>
-                );
-              })()}
+                  {/* Por integrante (orden del 17-ago): quién empujó cuánto —
+                      52 semanas de /stats/contributors, mismos tres estados
+                      honestos que el histograma. */}
+                  <div className="w-44 shrink-0">
+                    <p className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--muted)' }}>Por integrante</p>
+                    {autores.estado === 'ok' && autores.autores.map((a) => (
+                      <div key={a.nombre} className="flex items-center justify-between py-0.5">
+                        <span className="text-[12px] truncate" style={{ color: 'var(--ink2)' }}>{a.nombre}</span>
+                        <span className="text-[12px] tabular font-medium" style={{ color: 'var(--ink)' }}>{a.pushes}</span>
+                      </div>
+                    ))}
+                    {autores.estado === 'generando' && (
+                      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>GitHub lo está recalculando…</p>
+                    )}
+                    {(autores.estado === 'error' || autores.estado === 'sin_token') && (
+                      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>No se pudo leer — no es que nadie haya empujado.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
