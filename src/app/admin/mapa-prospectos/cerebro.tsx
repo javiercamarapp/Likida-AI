@@ -53,11 +53,37 @@ interface Filtros {
   soloTel: boolean;
   soloDecisor: boolean;
   orden: 'cierre' | 'urgencia' | 'recientes';
+  /** "Todos a 50 km de Nuevo Laredo" (backlog 17-ago): centro elegido de la
+   *  lista de plazas + radio. 0 = apagado. Con radio activo solo pasan los
+   *  prospectos CON coordenadas — al resto no se le adivina distancia. */
+  centro: { lat: number; lng: number; nombre: string } | null;
+  radioKm: number;
 }
 const SIN_FILTROS: Filtros = {
   giros: null, etapas: null, fuentes: null, minUrgencia: 0,
   soloTel: false, soloDecisor: false, orden: 'cierre',
+  centro: null, radioKm: 0,
 };
+
+/** Distancia esférica en km — suficiente para un radio comercial. */
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** El CSV de la vista actual — columnas fijas, comillas escapadas, BOM para
+ *  que Excel en español lo abra con acentos bien. */
+function csvDe(lista: ProspectoMapa[]): string {
+  const cab = ['empresa', 'giro', 'etapa', 'urgencia_pct', 'cierre_pct', 'contacto', 'telefono', 'correo', 'ciudad', 'entidad', 'vacante', 'fuente', 'lat', 'lng'];
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const filas = lista.map((p) => [
+    p.empresa, NOMBRE_GIRO[p.giro], COLOR_EMBUDO[p.estado]?.nombre ?? p.estado, p.urgencia, p.cierre,
+    p.contacto, p.telefono, p.correo, p.ciudad, p.entidad, p.vacante, p.fuente, p.lat, p.lng,
+  ].map(esc).join(','));
+  return '\ufeff' + [cab.join(','), ...filas].join('\n');
+}
 
 function alternarEnSet<T>(actual: Set<T> | null, valor: T, universo: readonly T[]): Set<T> | null {
   const s = new Set(actual ?? universo);
@@ -233,13 +259,37 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     && (!filtros.fuentes || filtros.fuentes.has(p.fuente))
     && p.urgencia >= filtros.minUrgencia
     && (!filtros.soloTel || p.telefono !== null)
-    && (!filtros.soloDecisor || p.contacto !== null),
+    && (!filtros.soloDecisor || p.contacto !== null)
+    && (!filtros.centro || filtros.radioKm === 0
+      || (p.lat !== null && haversineKm(filtros.centro, { lat: p.lat, lng: p.lng! }) <= filtros.radioKm)),
   ), [datos, filtros]);
+  // Las plazas con coordenadas (centro del radio): promedio por ciudad.
+  const plazas = useMemo(() => {
+    const acc = new Map<string, { lat: number; lng: number; n: number }>();
+    for (const p of datos.prospectos) {
+      if (p.lat === null || !p.ciudad) continue;
+      const k = p.entidad ? `${p.ciudad}, ${p.entidad}` : p.ciudad;
+      const a = acc.get(k) ?? { lat: 0, lng: 0, n: 0 };
+      acc.set(k, { lat: a.lat + p.lat, lng: a.lng + p.lng!, n: a.n + 1 });
+    }
+    return [...acc.entries()]
+      .map(([nombre, a]) => ({ nombre, lat: a.lat / a.n, lng: a.lng / a.n, n: a.n }))
+      .sort((x, y) => y.n - x.n)
+      .slice(0, 250);
+  }, [datos]);
   const ordenar = useMemo(() => (lista: ProspectoMapa[]) => [...lista].sort((a, b) =>
     filtros.orden === 'urgencia' ? (b.urgencia - a.urgencia || b.cierre - a.cierre)
       : filtros.orden === 'recientes' ? 0 // ya vienen por created_at desc del servidor
         : (b.cierre - a.cierre || b.urgencia - a.urgencia),
   ), [filtros.orden]);
+  const exportarCsv = () => {
+    const blob = new Blob([csvDe(ordenar(filtrados))], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `cerebro-prospectos-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   // ── El agente experto en vivo: afinar el mensaje de UNA tarjeta ──────────
   const [afinando, setAfinando] = useState<string | null>(null);
@@ -420,6 +470,42 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               <button onClick={() => setFiltros(SIN_FILTROS)}
                 className="ml-auto px-3 py-1.5 rounded-lg text-[11px]" style={{ background: '#1e293b', color: TINTA }}>
                 Limpiar todo
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-3 items-end">
+              <div className="min-w-[220px]">
+                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Cerca de (plaza)</p>
+                <input list="cerebro-plazas" placeholder="Escribe una ciudad…"
+                  defaultValue={filtros.centro?.nombre ?? ''}
+                  onChange={(e) => {
+                    const plaza = plazas.find((x) => x.nombre === e.target.value);
+                    setFiltros((f) => ({
+                      ...f,
+                      centro: plaza ? { lat: plaza.lat, lng: plaza.lng, nombre: plaza.nombre } : null,
+                      radioKm: plaza ? (f.radioKm || 50) : 0,
+                    }));
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg text-[12px] outline-none"
+                  style={{ background: '#0f182c', border: `1px solid ${LINEA}`, color: TINTA }} />
+                <datalist id="cerebro-plazas">
+                  {plazas.map((x) => <option key={x.nombre} value={x.nombre} />)}
+                </datalist>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: TENUE }}>Radio</p>
+                <div className="flex gap-1.5">
+                  {[25, 50, 100, 200].map((km) => (
+                    <Chip key={km} activo={filtros.radioKm === km && filtros.centro !== null}
+                      onClick={() => setFiltros((f) => ({ ...f, radioKm: f.radioKm === km ? 0 : km }))}>
+                      {km} km
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+              <button onClick={exportarCsv}
+                className="ml-auto px-3 py-1.5 rounded-lg text-[11px] font-medium"
+                style={{ background: '#164e63', color: '#a5f3fc' }}>
+                ⬇ Exportar CSV ({numero(filtrados.length)})
               </button>
             </div>
             <p className="text-[11px]" style={{ color: TENUE }}>
