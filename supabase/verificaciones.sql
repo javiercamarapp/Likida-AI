@@ -5259,3 +5259,29 @@ begin
   raise exception E'EVALOPS_0134  tablas-rls=%  casos=%  trampas=%  veredicto-invalido-rebota=%   (esperado 3 / >0 / >0 / t)',
     tablas_rls, casos, trampas, veredicto_invalido_rebota;
 end $$;
+
+-- ── 107. La identidad de worker existe y su hash es único (mig. 0135) ───────
+-- (a) tabla CON RLS; (b) el índice parcial de llaves vivas; (c) funcional:
+-- dos llaves con el mismo hash REBOTAN.   (esperado t / t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  indice boolean;
+  hash_duplicado_rebota boolean := false;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'worker_llave';
+
+  select exists (select 1 from pg_indexes where indexname = 'idx_worker_llave_hash') into indice;
+
+  insert into public.worker_llave (nombre, hash, capacidades) values ('zzz-verif', 'hash-verif', '{bus.latido}');
+  begin
+    insert into public.worker_llave (nombre, hash, capacidades) values ('zzz-verif-2', 'hash-verif', '{bus.latido}');
+  exception when unique_violation then
+    hash_duplicado_rebota := true;
+  end;
+
+  raise exception E'WORKER_0135  tabla-rls=%  indice=%  hash-duplicado-rebota=%   (esperado t / t / t)',
+    coalesce(tabla_rls, false), indice, hash_duplicado_rebota;
+end $$;
