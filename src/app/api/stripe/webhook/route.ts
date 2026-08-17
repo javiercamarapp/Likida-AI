@@ -88,6 +88,18 @@ async function desmarcar(id: string): Promise<void> {
   }
 }
 
+// ── La distinción que sostiene este switch ─────────────────────────────────
+// · "Evento que NO nos concierne" (el default): se contesta 200 y se ignora.
+//   Stripe manda decenas de tipos; no reconocerlos no es un fallo.
+// · "Evento que SÍ nos concierne pero cuya lógica falló" (sin tenant, price
+//   sin plan): se LANZA. Un `return` aquí dejaría el evento marcado como
+//   aplicado + 200 → Stripe JAMÁS lo reintenta y el pago se pierde en
+//   silencio. Lanzando, el catch del POST desmarca y contesta 500, y el
+//   reintento de Stripe (con backoff de días) vuelve a intentar — que además
+//   es el camino que SÍ se arregla solo: un invoice que llegó antes que su
+//   subscription resuelve el tenant al reintento, y un price recién creado
+//   aplica en cuanto /admin lo liga al plan.
+// ───────────────────────────────────────────────────────────────────────────
 async function aplicar(evt: EventoStripe): Promise<void> {
   const obj = evt.data?.object ?? {};
 
@@ -98,8 +110,11 @@ async function aplicar(evt: EventoStripe): Promise<void> {
       const tenantId = (obj.client_reference_id as string) ?? (obj.metadata as Record<string, string>)?.tenant_id;
       const subId = obj.subscription as string | null;
       if (!tenantId || !subId) {
-        logger.warn('stripe.checkout.sin_atribucion', { evt: evt.id });
-        return;
+        // `crearCheckout` SIEMPRE manda client_reference_id + metadata.tenant_id
+        // y solo crea checkouts de suscripción: que falte cualquiera de los dos
+        // es un pago real que no se puede atribuir, no un evento ajeno.
+        logger.error('stripe.checkout.sin_atribucion', { evt: evt.id, tenantId: tenantId ?? null, subId });
+        throw new Error(`checkout ${evt.id} sin flota o sin suscripción atribuible — un pago real quedaría sin aplicar; se lanza para que Stripe lo reintente`);
       }
       // El estado real lo trae `customer.subscription.*`, que Stripe manda
       // junto con este. Aquí solo se ata el customer para no perderlo.
@@ -117,17 +132,22 @@ async function aplicar(evt: EventoStripe): Promise<void> {
 
       if (!tenantId) {
         // Sin flota no se puede atribuir. NO se inventa una: activarle el plan
-        // a la flota equivocada es peor que no activárselo a nadie.
+        // a la flota equivocada es peor que no activárselo a nadie. Pero
+        // tampoco se traga: se lanza para que el reintento vuelva — cuando el
+        // customer ya esté atado (el checkout puede llegar después), resuelve.
         logger.error('stripe.suscripcion.sin_tenant', { evt: evt.id, subId, customerId });
-        return;
+        throw new Error(`suscripción ${subId} sin flota atribuible (customer ${customerId ?? 'ausente'} desconocido) — sin lanzar, el plan pagado no se activaría nunca`);
       }
 
       const item = (obj.items as { data?: Array<{ price?: { id?: string } }> })?.data?.[0];
       const priceId = item?.price?.id;
       const planClave = priceId ? await planDePrice(priceId) : null;
       if (!planClave) {
+        // Un price sin plan en la base es configuración incompleta, no un
+        // evento ajeno: se lanza para que el reintento aplique en cuanto
+        // /admin ligue el price al plan.
         logger.error('stripe.suscripcion.price_desconocido', { evt: evt.id, priceId });
-        return;
+        throw new Error(`price ${priceId ?? 'ausente'} sin plan que le corresponda — no se sabe qué plan activar; se lanza para que Stripe reintente cuando el price esté ligado`);
       }
 
       const finUnix = obj.current_period_end as number | undefined;
@@ -150,8 +170,11 @@ async function aplicar(evt: EventoStripe): Promise<void> {
       const tenantId = ((obj.metadata as Record<string, string>)?.tenant_id)
         ?? (customerId ? await tenantDeCustomer(customerId) : null);
       if (!tenantId) {
+        // El invoice puede llegar ANTES que el subscription que ata el
+        // customer: al reintento de Stripe el tenant ya resuelve. Tragarse
+        // este caso dejaría el cobro real sin registrar para siempre.
         logger.error('stripe.factura.sin_tenant', { evt: evt.id, customerId });
-        return;
+        throw new Error(`factura ${String(obj.id)} sin flota atribuible (customer ${customerId ?? 'ausente'} desconocido) — se lanza para que el reintento la registre cuando el customer esté atado`);
       }
 
       const linea = (obj.lines as { data?: Array<{ period?: { start?: number; end?: number } }> })?.data?.[0];

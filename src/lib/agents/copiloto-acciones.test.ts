@@ -4,7 +4,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // LAS ACCIONES DEL COPILOTO — el ejecutor determinista. Lo que se fija:
 // el catálogo rechaza lo desconocido y lo no implementado CON PALABRAS,
 // apagar_agente valida el interruptor y delega en la MISMA función del ⌘K
-// (que ya exige motivo y ya anota bitácora — una puerta más, un mecanismo).
+// (que ya exige motivo y ya anota bitácora — una puerta más, un mecanismo),
+// y correr_runner CUMPLE su contrato: el motivo que exige llega de verdad a
+// bitacora_auditoria (P2 de la auditoría externa del 16-ago: el comentario
+// lo prometía y la implementación no escribía nada).
 // ═══════════════════════════════════════════════════════════════════════════
 
 const apagar = vi.fn(async () => {});
@@ -13,10 +16,29 @@ vi.mock('@/lib/likida/interruptores', async (orig) => {
   return { ...real, apagar };
 });
 
+const correrRunner = vi.fn(async () => ({
+  apagadoGlobal: false,
+  agentes: [{ agente: 'redactor', resultado: 'corrio' as const, piezas: 2, saltados: 1, costoUsd: 0.0123 }],
+}));
+vi.mock('@/lib/likida/agentes/runner', () => ({ correrRunner }));
+
+// La bitácora del copiloto se escribe directo (patrón de interruptores.ts);
+// `insertBitacora` captura la fila para poder afirmar qué se anotó.
+const insertBitacora = vi.fn((_fila: Record<string, unknown>) => ({ error: null as { message: string } | null }));
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({
+    from: (tabla: string) => ({ insert: (fila: Record<string, unknown>) => insertBitacora({ tabla, ...fila }) }),
+  }),
+}));
+vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+
 const { ejecutarAccionCopiloto, CATALOGO_ACCIONES, accionDelCatalogo } = await import('./copiloto-acciones');
 const { DatoInvalido } = await import('@/lib/likida/errores');
 
-beforeEach(() => { apagar.mockClear(); });
+beforeEach(() => {
+  apagar.mockClear(); correrRunner.mockClear(); insertBitacora.mockClear();
+  insertBitacora.mockImplementation(() => ({ error: null }));
+});
 
 describe('el catálogo de acciones', () => {
   it('las 10 acciones del catálogo existen, y SOLO apagar_agente y correr_runner están implementadas', () => {
@@ -59,5 +81,47 @@ describe('ejecutarAccionCopiloto', () => {
     apagar.mockRejectedValueOnce(new DatoInvalido('Apagar exige un motivo.'));
     await expect(ejecutarAccionCopiloto('apagar_agente', { id: 'agente:cobranza' }, 'u-1'))
       .rejects.toThrow(/motivo/);
+  });
+});
+
+describe('correr_runner y su bitácora — el contrato que el comentario declara', () => {
+  it('sin motivo se rechaza SIN correr el runner ni tocar la bitácora', async () => {
+    await expect(ejecutarAccionCopiloto('correr_runner', {}, 'u-1')).rejects.toThrow(/motivo/);
+    expect(correrRunner).not.toHaveBeenCalled();
+    expect(insertBitacora).not.toHaveBeenCalled();
+  });
+
+  it('escribe SU entrada en bitacora_auditoria: el motivo, el userId de la sesión y qué corrió', async () => {
+    const r = await ejecutarAccionCopiloto('correr_runner', { motivo: 'demo con GAL en una hora' }, 'u-javier');
+    expect(r.ok).toBe(true);
+    expect(insertBitacora).toHaveBeenCalledTimes(1);
+    const fila = insertBitacora.mock.calls[0][0];
+    expect(fila).toMatchObject({
+      tabla: 'bitacora_auditoria',
+      tenant_id: null, // el runner es de PLATAFORMA, no de una flota
+      actor_id: 'u-javier',
+      accion: 'runner.corrida_manual',
+      entidad: 'runner',
+    });
+    const detalle = fila.detalle as Record<string, unknown>;
+    expect(detalle.motivo).toBe('demo con GAL en una hora');
+    expect(detalle.apagado_global).toBe(false);
+    expect(detalle.agentes).toEqual([{ agente: 'redactor', resultado: 'corrio' }]);
+  });
+
+  it('la vuelta que el kill switch global dejó en nada TAMBIÉN se firma — la acción confirmada fue correr', async () => {
+    correrRunner.mockResolvedValueOnce({ apagadoGlobal: true, agentes: [] });
+    const r = await ejecutarAccionCopiloto('correr_runner', { motivo: 'probar tras el incidente' }, 'u-1');
+    expect(r.ok).toBe(true);
+    expect(insertBitacora).toHaveBeenCalledTimes(1);
+    const detalle = insertBitacora.mock.calls[0][0].detalle as Record<string, unknown>;
+    expect(detalle.apagado_global).toBe(true);
+  });
+
+  it('la bitácora es best-effort: si no escribe, la acción NO se cae (el runner ya corrió)', async () => {
+    insertBitacora.mockReturnValueOnce({ error: { message: 'la base se cayó' } });
+    const r = await ejecutarAccionCopiloto('correr_runner', { motivo: 'una razón' }, 'u-1');
+    expect(r.ok).toBe(true);
+    expect(r.mensaje).toContain('runner');
   });
 });
