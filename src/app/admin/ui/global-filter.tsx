@@ -95,7 +95,10 @@ export function GlobalFilter({
   return (
     <div className="inline-flex items-center gap-1 p-0.5 rounded-full shrink-0" style={{ background: 'var(--canvas)' }}>
       {OPCIONES.map((o) => (
-        <Link key={o.valor} href={construir(o.valor)}
+        // scroll={false}: cambiar 7d/30d/Todo re-navega con el query nuevo y
+        // Next, por default, te regresa HASTA ARRIBA — el filtro vive a media
+        // página y perder el lugar en cada clic desorienta (orden 17-ago).
+        <Link key={o.valor} href={construir(o.valor)} scroll={false}
           className="text-xs font-medium px-2.5 py-1 rounded-full transition-colors"
           style={activo === o.valor ? { background: 'var(--marca)', color: 'var(--marca-fg)' } : { color: 'var(--muted)' }}>
           {o.etiqueta}
