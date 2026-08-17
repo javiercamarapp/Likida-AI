@@ -5,7 +5,8 @@
 // cartera: México entero respirando, cada prospecto una luz con el color de
 // su etapa del embudo. Se navega país → estado (zoom animado) → calles
 // (Leaflet). Se refresca solo cada 60 s: cuando un agente encuentra o
-// enriquece un prospecto, su luz aparece sin recargar.
+// enriquece un prospecto, su luz aparece sin recargar (cada 5 min — con
+// 30k filas el latido de 1 min pesaba de más).
 //
 // Visual (orden 17-ago, 2ª dirección): el Cerebro viste los TOKENS del
 // software — blanco/gris/negro por tema (claro y oscuro), como el resto de
@@ -23,7 +24,7 @@ import dynamic from 'next/dynamic';
 import { proyectar } from '../../dashboard/mapa/mexico-geo';
 import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-geo';
 import {
-  COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, type DatosMapa, type Giro, type ProspectoMapa,
+  COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, TAMANOS, type DatosMapa, type Giro, type ProspectoMapa, type Tamano,
 } from '@/lib/admin/prospectos-mapa';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
@@ -42,6 +43,8 @@ const GIROS: Giro[] = ['transportista', 'embotelladora', 'abarrotes_mayoreo', 'f
 const FUENTES = [
   { clave: 'censo', nombre: 'Censo (vacantes)' },
   { clave: 'denue', nombre: 'Universo DENUE' },
+  { clave: 'bolsa', nombre: 'Bolsas (histórico)' },
+  { clave: 'aaag', nombre: 'Padrón AAAG' },
   { clave: 'manual', nombre: 'Cuentas a mano' },
 ] as const;
 
@@ -56,7 +59,11 @@ interface Filtros {
   minUrgencia: 0 | 50 | 70;
   soloTel: boolean;
   soloDecisor: boolean;
-  orden: 'cierre' | 'urgencia' | 'recientes';
+  orden: 'cierre' | 'urgencia' | 'recientes' | 'completos';
+  tamanos: Set<Tamano | 'n/d'> | null;   // null = todos
+  minCompletitud: 0 | 50 | 75;
+  soloMensajeIA: boolean;
+  soloVacante: boolean;
   /** "Todos a 50 km de Nuevo Laredo" (backlog 17-ago): centro elegido de la
    *  lista de plazas + radio. 0 = apagado. Con radio activo solo pasan los
    *  prospectos CON coordenadas — al resto no se le adivina distancia. */
@@ -66,8 +73,10 @@ interface Filtros {
 const SIN_FILTROS: Filtros = {
   giros: null, etapas: null, fuentes: null, minUrgencia: 0,
   soloTel: false, soloDecisor: false, orden: 'cierre',
+  tamanos: null, minCompletitud: 0, soloMensajeIA: false, soloVacante: false,
   centro: null, radioKm: 0,
 };
+const TAMANOS_UI: Array<Tamano | 'n/d'> = [...TAMANOS, 'n/d'];
 
 /** Distancia esférica en km — suficiente para un radio comercial. */
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -168,19 +177,24 @@ function Reveal({ children, retraso = 0 }: { children: React.ReactNode; retraso?
   );
 }
 
-function TarjetaProspecto({ p, nuevo, afinando, onAfinar }: {
+function TarjetaProspecto({ p, nuevo, afinando, onAfinar, plana }: {
   p: ProspectoMapa; nuevo: boolean; afinando?: boolean; onAfinar?: (id: string) => void;
+  /** true = tarjeta de sección (plana, sin blur ni sombra — abajo del mapa
+   *  no hay país sobre el que flotar). */
+  plana?: boolean;
 }) {
   const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
   return (
-    <article className={`rounded-2xl p-3.5 space-y-2 backdrop-blur-md ${nuevo ? 'cerebro-recien' : ''}`}
-      style={{ background: 'color-mix(in srgb, var(--surface) 90%, transparent)', border: `1px solid ${LINEA}`, boxShadow: '0 10px 30px color-mix(in srgb, var(--ink) 10%, transparent)' }}>
+    <article className={`rounded-2xl p-3.5 space-y-2 ${plana ? '' : 'backdrop-blur-md'} ${nuevo ? 'cerebro-recien' : ''}`}
+      style={plana
+        ? { background: 'var(--canvas)', border: `1px solid ${LINEA}` }
+        : { background: 'color-mix(in srgb, var(--surface) 90%, transparent)', border: `1px solid ${LINEA}`, boxShadow: '0 10px 30px color-mix(in srgb, var(--ink) 10%, transparent)' }}>
       <div className="flex items-start gap-2">
         <span className="mt-1 w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color, boxShadow: `0 0 8px ${c.color}` }} />
         <div className="min-w-0">
           <h4 className="text-sm font-medium leading-snug truncate" style={{ color: TINTA }}>{p.empresa}</h4>
           <p className="text-[11px]" style={{ color: TENUE }}>
-            {c.nombre} · {NOMBRE_GIRO[p.giro]}{p.ciudad ? ` · ${p.ciudad}` : ''}
+            {c.nombre} · {NOMBRE_GIRO[p.giro]}{p.tamano ? ` · ${p.tamano} pers.` : ''}{p.ciudad ? ` · ${p.ciudad}` : ''} · datos {p.completitud}%
           </p>
         </div>
       </div>
@@ -277,7 +291,10 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   }, [filtrosAbiertos]);
   const filtrosActivos =
     (filtros.giros ? 1 : 0) + (filtros.etapas ? 1 : 0) + (filtros.fuentes ? 1 : 0) +
-    (filtros.minUrgencia ? 1 : 0) + (filtros.soloTel ? 1 : 0) + (filtros.soloDecisor ? 1 : 0);
+    (filtros.minUrgencia ? 1 : 0) + (filtros.soloTel ? 1 : 0) + (filtros.soloDecisor ? 1 : 0) +
+    (filtros.tamanos ? 1 : 0) + (filtros.minCompletitud ? 1 : 0) +
+    (filtros.soloMensajeIA ? 1 : 0) + (filtros.soloVacante ? 1 : 0) +
+    (filtros.centro && filtros.radioKm ? 1 : 0);
   const filtrados = useMemo(() => datos.prospectos.filter((p) =>
     (!filtros.giros || filtros.giros.has(p.giro))
     && (!filtros.etapas || filtros.etapas.has(p.estado))
@@ -285,6 +302,10 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     && p.urgencia >= filtros.minUrgencia
     && (!filtros.soloTel || p.telefono !== null)
     && (!filtros.soloDecisor || p.contacto !== null)
+    && (!filtros.tamanos || filtros.tamanos.has(p.tamano ?? 'n/d'))
+    && p.completitud >= filtros.minCompletitud
+    && (!filtros.soloMensajeIA || p.mensajesGeneradosEn !== null)
+    && (!filtros.soloVacante || p.vacante !== null)
     && (!filtros.centro || filtros.radioKm === 0
       || (p.lat !== null && haversineKm(filtros.centro, { lat: p.lat, lng: p.lng! }) <= filtros.radioKm)),
   ), [datos, filtros]);
@@ -305,7 +326,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
   const ordenar = useMemo(() => (lista: ProspectoMapa[]) => [...lista].sort((a, b) =>
     filtros.orden === 'urgencia' ? (b.urgencia - a.urgencia || b.cierre - a.cierre)
       : filtros.orden === 'recientes' ? 0 // ya vienen por created_at desc del servidor
-        : (b.cierre - a.cierre || b.urgencia - a.urgencia),
+        : filtros.orden === 'completos' ? (b.completitud - a.completitud || b.cierre - a.cierre)
+          : (b.cierre - a.cierre || b.urgencia - a.urgencia),
   ), [filtros.orden]);
   const exportarCsv = () => {
     const blob = new Blob([csvDe(ordenar(filtrados))], { type: 'text/csv;charset=utf-8' });
@@ -351,7 +373,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         setDatos(d);
         if (nuevos.size) setRecientes(nuevos);
       } catch { /* sin red: el mapa vigente sigue */ }
-    }, 60_000);
+    }, 300_000);
     return () => clearInterval(t);
   }, []);
 
@@ -473,13 +495,20 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
   const listaSeleccion = seleccion ? porEstado.get(seleccion.nombre) ?? [] : [];
   const conCoords = useMemo(() => filtrados.filter((p) => p.lat !== null && p.lng !== null), [filtrados]);
-  const lucesRecortadas = seleccion === null && conCoords.length > TOPE_LUCES_PAIS;
+  const TOPE_LUCES_ESTADO = 1500;
+  const lucesRecortadas = seleccion === null
+    ? conCoords.length > TOPE_LUCES_PAIS
+    : conCoords.filter((p) => p.entidad === seleccion.nombre).length > TOPE_LUCES_ESTADO;
   const pines = useMemo(() => {
-    const base = lucesRecortadas
-      ? [...conCoords].sort((a, b) => (b.urgencia + b.cierre) - (a.urgencia + a.cierre)).slice(0, TOPE_LUCES_PAIS)
-      : conCoords;
+    // Con estado elegido solo se pintan SUS luces (las 30k del país detrás
+    // eran el jank); a nivel país, las más calientes hasta el tope.
+    const universo = seleccion ? conCoords.filter((p) => p.entidad === seleccion.nombre) : conCoords;
+    const tope = seleccion ? TOPE_LUCES_ESTADO : TOPE_LUCES_PAIS;
+    const base = universo.length > tope
+      ? [...universo].sort((a, b) => (b.urgencia + b.cierre) - (a.urgencia + a.cierre)).slice(0, tope)
+      : universo;
     return base.map((p) => ({ p, xy: proyectar(p.lat!, p.lng!) }));
-  }, [conCoords, lucesRecortadas]);
+  }, [conCoords, seleccion]);
 
   return (
     <div className="space-y-10">
@@ -549,6 +578,17 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 ))}
               </div>
             </div>
+            <div>
+              <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Tamaño (personal DENUE)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {TAMANOS_UI.map((t) => (
+                  <Chip key={t} activo={!filtros.tamanos || filtros.tamanos.has(t)}
+                    onClick={() => setFiltros((f) => ({ ...f, tamanos: alternarEnSet(f.tamanos, t, TAMANOS_UI) }))}>
+                    {t === 'n/d' ? 'Sin dato' : t}
+                  </Chip>
+                ))}
+              </div>
+            </div>
             <div className="flex flex-wrap gap-x-5 gap-y-3">
               <div>
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Fuente</p>
@@ -579,12 +619,25 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 <div className="flex gap-1.5">
                   <Chip activo={filtros.soloTel} onClick={() => setFiltros((f) => ({ ...f, soloTel: !f.soloTel }))}>Con teléfono</Chip>
                   <Chip activo={filtros.soloDecisor} onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>Con decisor</Chip>
+                  <Chip activo={filtros.soloMensajeIA} onClick={() => setFiltros((f) => ({ ...f, soloMensajeIA: !f.soloMensajeIA }))}>✨ Mensaje listo</Chip>
+                  <Chip activo={filtros.soloVacante} onClick={() => setFiltros((f) => ({ ...f, soloVacante: !f.soloVacante }))}>Con vacante</Chip>
+                </div>
+              </div>
+              <div>
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Datos completos</p>
+                <div className="flex gap-1.5">
+                  {([0, 50, 75] as const).map((c) => (
+                    <Chip key={c} activo={filtros.minCompletitud === c}
+                      onClick={() => setFiltros((f) => ({ ...f, minCompletitud: c }))}>
+                      {c === 0 ? 'Todos' : `≥${c}%`}
+                    </Chip>
+                  ))}
                 </div>
               </div>
               <div>
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Ordenar por</p>
                 <div className="flex gap-1.5">
-                  {([['cierre', '% cierre'], ['urgencia', '% urgencia'], ['recientes', 'Recientes']] as const).map(([k, n]) => (
+                  {([['cierre', '% cierre'], ['urgencia', '% urgencia'], ['completos', 'Datos'], ['recientes', 'Recientes']] as const).map(([k, n]) => (
                     <Chip key={k} activo={filtros.orden === k} onClick={() => setFiltros((f) => ({ ...f, orden: k }))}>{n}</Chip>
                   ))}
                 </div>
@@ -716,7 +769,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
             {/* Las luces: cada prospecto con coordenadas reales */}
             {pines.map(({ p, xy }) => {
               const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
-              const enSeleccion = !seleccion || p.entidad === seleccion.nombre;
+              const enSeleccion = true;
               return (
                 <circle key={p.id} cx={xy.x} cy={xy.y}
                   r={Math.max(0.5, Math.min(2.4, 2.4 / camK))}
@@ -756,7 +809,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         {lucesRecortadas && (
           <p className="absolute bottom-5 right-4 z-10 text-[11px] px-3 py-1.5 rounded-full backdrop-blur-sm"
             style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TENUE }}>
-            Luces: las {numero(TOPE_LUCES_PAIS)} más calientes de {numero(conCoords.length)} — filtra o entra a un estado para verlas todas.
+            Luces: las más calientes ({numero(pines.length)} de {numero(seleccion ? conCoords.filter((p) => p.entidad === seleccion.nombre).length : conCoords.length)}) — afina el filtro para verlas todas.
           </p>
         )}
         {/* Leyenda del embudo */}
@@ -796,9 +849,19 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                   style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TENUE, boxShadow: SOMBRA_FLOTANTE }}>
                   El censo todavía no encuentra a nadie aquí — cuando un agente lo haga, aparece solo.
                 </p>
-              ) : listaSeleccion.map((p) => (
-                <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
-              ))}
+              ) : (
+                <>
+                  {listaSeleccion.slice(0, 60).map((p) => (
+                    <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
+                  ))}
+                  {listaSeleccion.length > 60 && (
+                    <p className="text-[11px] px-3.5 py-2 rounded-2xl backdrop-blur-sm"
+                      style={{ background: SUPERFICIE, border: `1px solid ${LINEA}`, color: TENUE, boxShadow: SOMBRA_FLOTANTE }}>
+                      Se enseñan las 60 mejores de {numero(listaSeleccion.length)} — afina el filtro o ⬇ exporta el CSV completo.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}
@@ -812,8 +875,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       {/* ── Lo que se revela al hacer scroll ─────────────────────────────── */}
       <Reveal>
         <section className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-3xl p-5" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
-            <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>El embudo, en luces</h3>
+          <div className="rounded-2xl p-4" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
+            <h3 className="etiqueta-mono text-[10px] font-medium uppercase mb-3" style={{ color: TENUE }}>El embudo, en luces</h3>
             <div className="space-y-2.5">
               {ORDEN_EMBUDO.map((e) => {
                 const n = filtrados.filter((p) => p.estado === e).length;
@@ -821,7 +884,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 return (
                   <div key={e} className="flex items-center gap-3 text-[12px]" style={{ color: TENUE }}>
                     <span className="w-28 shrink-0">{COLOR_EMBUDO[e].nombre}</span>
-                    <span className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: LINEA }}>
+                    <span className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: LINEA }}>
                       <span className="block h-full rounded-full cerebro-llenado" style={{ width: `${Math.max(pct, n ? 2 : 0)}%`, background: COLOR_EMBUDO[e].color }} />
                     </span>
                     <span className="w-10 text-right tabular-nums" style={{ color: TINTA }}>{n}</span>
@@ -830,14 +893,14 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               })}
             </div>
           </div>
-          <div className="rounded-3xl p-5" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
-            <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>Dónde vive la cartera</h3>
+          <div className="rounded-2xl p-4" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
+            <h3 className="etiqueta-mono text-[10px] font-medium uppercase mb-3" style={{ color: TENUE }}>Dónde vive la cartera</h3>
             <div className="space-y-2">
               {[...porEstado.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 8).map(([nombre, lista]) => (
                 <div key={nombre} className="flex items-center gap-3 text-[12px]" style={{ color: TENUE }}>
                   <span className="w-28 shrink-0 truncate">{nombre}</span>
-                  <span className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: LINEA }}>
-                    <span className="block h-full rounded-full cerebro-llenado" style={{ width: `${Math.round((lista.length / maxEstado) * 100)}%`, background: '#22d3ee' }} />
+                  <span className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: LINEA }}>
+                    <span className="block h-full rounded-full cerebro-llenado" style={{ width: `${Math.round((lista.length / maxEstado) * 100)}%`, background: 'color-mix(in srgb, var(--ink) 55%, transparent)' }} />
                   </span>
                   <span className="w-10 text-right tabular-nums" style={{ color: TINTA }}>{lista.length}</span>
                 </div>
@@ -851,11 +914,11 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       </Reveal>
 
       <Reveal retraso={80}>
-        <section className="rounded-3xl p-5" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
-          <h3 className="text-sm font-semibold mb-3" style={{ color: TINTA }}>Los 12 más cerrables del país</h3>
+        <section className="rounded-2xl p-4" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
+          <h3 className="etiqueta-mono text-[10px] font-medium uppercase mb-3" style={{ color: TENUE }}>Los 12 más cerrables del país</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {ordenar(filtrados).slice(0, 12).map((p) => (
-              <TarjetaProspecto key={p.id} p={p} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
+              <TarjetaProspecto key={p.id} p={p} plana nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} />
             ))}
           </div>
         </section>
@@ -865,7 +928,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         <footer className="text-[11px] leading-relaxed px-1 space-y-1" style={{ color: 'var(--muted)' }}>
           <p>{CRITERIO_SCORES.urgencia}</p>
           <p>{CRITERIO_SCORES.cierre}</p>
-          <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {fechaHoraMx(datos.generadoEn)} · se refresca cada 60 s.</p>
+          <p>{CRITERIO_SCORES.datos}</p>
+          <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {fechaHoraMx(datos.generadoEn)} · se refresca cada 5 min.</p>
         </footer>
       </Reveal>
 
