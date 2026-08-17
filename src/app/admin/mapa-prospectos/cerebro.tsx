@@ -103,10 +103,14 @@ function csvDe(lista: ProspectoMapa[]): string {
   return '\ufeff' + [cab.join(','), ...filas].join('\n');
 }
 
-function alternarEnSet<T>(actual: Set<T> | null, valor: T, universo: readonly T[]): Set<T> | null {
-  const s = new Set(actual ?? universo);
+// ADITIVO (orden del 17-ago): default NADA seleccionado (null = sin filtro,
+// se ve todo y los chips van apagados); un clic AGREGA el chip (se pinta),
+// otro clic lo quita; el conjunto vacío vuelve a null. Antes null pintaba
+// TODOS los chips como activos — la pared de chips marcados del popup.
+function alternarEnSet<T>(actual: Set<T> | null, valor: T): Set<T> | null {
+  const s = new Set(actual ?? []);
   if (s.has(valor)) s.delete(valor); else s.add(valor);
-  return s.size === universo.length ? null : s;
+  return s.size === 0 ? null : s;
 }
 
 function Chip({ activo, color, onClick, children }: {
@@ -591,8 +595,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Categoría</p>
               <div className="flex flex-wrap gap-1.5">
                 {GIROS.map((g) => (
-                  <Chip key={g} activo={!filtros.giros || filtros.giros.has(g)}
-                    onClick={() => setFiltros((f) => ({ ...f, giros: alternarEnSet(f.giros, g, GIROS) }))}>
+                  <Chip key={g} activo={filtros.giros?.has(g) ?? false}
+                    onClick={() => setFiltros((f) => ({ ...f, giros: alternarEnSet(f.giros, g) }))}>
                     {NOMBRE_GIRO[g]} · {datos.prospectos.filter((p) => p.giro === g).length}
                   </Chip>
                 ))}
@@ -602,8 +606,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Etapa del embudo</p>
               <div className="flex flex-wrap gap-1.5">
                 {ORDEN_EMBUDO.map((e) => (
-                  <Chip key={e} color={COLOR_EMBUDO[e].color} activo={!filtros.etapas || filtros.etapas.has(e)}
-                    onClick={() => setFiltros((f) => ({ ...f, etapas: alternarEnSet(f.etapas, e, ORDEN_EMBUDO) }))}>
+                  <Chip key={e} color={COLOR_EMBUDO[e].color} activo={filtros.etapas?.has(e) ?? false}
+                    onClick={() => setFiltros((f) => ({ ...f, etapas: alternarEnSet(f.etapas, e) }))}>
                     {COLOR_EMBUDO[e].nombre}
                   </Chip>
                 ))}
@@ -613,8 +617,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Tamaño (personal DENUE)</p>
               <div className="flex flex-wrap gap-1.5">
                 {TAMANOS_UI.map((t) => (
-                  <Chip key={t} activo={!filtros.tamanos || filtros.tamanos.has(t)}
-                    onClick={() => setFiltros((f) => ({ ...f, tamanos: alternarEnSet(f.tamanos, t, TAMANOS_UI) }))}>
+                  <Chip key={t} activo={filtros.tamanos?.has(t) ?? false}
+                    onClick={() => setFiltros((f) => ({ ...f, tamanos: alternarEnSet(f.tamanos, t) }))}>
                     {t === 'n/d' ? 'Sin dato' : t}
                   </Chip>
                 ))}
@@ -625,8 +629,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Fuente</p>
                 <div className="flex flex-wrap gap-1.5">
                   {FUENTES.map((f) => (
-                    <Chip key={f.clave} activo={!filtros.fuentes || filtros.fuentes.has(f.clave)}
-                      onClick={() => setFiltros((v) => ({ ...v, fuentes: alternarEnSet(v.fuentes, f.clave, FUENTES.map((x) => x.clave)) }))}>
+                    <Chip key={f.clave} activo={filtros.fuentes?.has(f.clave) ?? false}
+                      onClick={() => setFiltros((v) => ({ ...v, fuentes: alternarEnSet(v.fuentes, f.clave) }))}>
                       {f.nombre}
                     </Chip>
                   ))}
@@ -636,8 +640,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Urgencia mínima</p>
                 <div className="flex gap-1.5">
                   {([0, 50, 70] as const).map((u) => (
-                    <Chip key={u} activo={filtros.minUrgencia === u}
-                      onClick={() => setFiltros((f) => ({ ...f, minUrgencia: u }))}>
+                    <Chip key={u} activo={u !== 0 && filtros.minUrgencia === u}
+                      onClick={() => setFiltros((f) => ({ ...f, minUrgencia: f.minUrgencia === u ? 0 : u }))}>
                       {u === 0 ? 'Todas' : `≥${u}%`}
                     </Chip>
                   ))}
@@ -658,8 +662,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Datos completos</p>
                 <div className="flex gap-1.5">
                   {([0, 50, 75] as const).map((c) => (
-                    <Chip key={c} activo={filtros.minCompletitud === c}
-                      onClick={() => setFiltros((f) => ({ ...f, minCompletitud: c }))}>
+                    <Chip key={c} activo={c !== 0 && filtros.minCompletitud === c}
+                      onClick={() => setFiltros((f) => ({ ...f, minCompletitud: f.minCompletitud === c ? 0 : c }))}>
                       {c === 0 ? 'Todos' : `≥${c}%`}
                     </Chip>
                   ))}
@@ -669,8 +673,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Sin toque en</p>
                 <div className="flex gap-1.5">
                   {([0, 7, 14, 30] as const).map((d) => (
-                    <Chip key={d} activo={filtros.sinToqueDias === d}
-                      onClick={() => setFiltros((f) => ({ ...f, sinToqueDias: d }))}>
+                    <Chip key={d} activo={d !== 0 && filtros.sinToqueDias === d}
+                      onClick={() => setFiltros((f) => ({ ...f, sinToqueDias: f.sinToqueDias === d ? 0 : d }))}>
                       {d === 0 ? 'Todos' : `≥${d} días`}
                     </Chip>
                   ))}
