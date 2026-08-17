@@ -3,7 +3,7 @@
 // pie del mapa (que enseña CRITERIO_SCORES) se actualiza con él.
 import { describe, expect, it } from 'vitest';
 import {
-  plazaDe, giroDe, scoreUrgencia, scoreCierre, COLOR_EMBUDO, CRITERIO_SCORES,
+  plazaDe, giroDe, scoreUrgencia, scoreCierre, tamanoDe, completitudDe, COLOR_EMBUDO, CRITERIO_SCORES,
 } from './prospectos-mapa';
 
 describe('plazaDe — la plaza sin adivinar', () => {
@@ -87,5 +87,19 @@ describe('la paleta del embudo cubre el dominio completo del CHECK 0105', () => 
   it('el criterio publicado dice "estimación", porque lo es', () => {
     expect(CRITERIO_SCORES.urgencia).toMatch(/[Ee]stimación/);
     expect(CRITERIO_SCORES.cierre).toMatch(/[Ee]stimación/);
+  });
+});
+
+describe('tamaño y completitud — los filtros de la ronda 2 (17-ago)', () => {
+  it('el estrato DENUE de las notas se vuelve etiqueta de tamaño', () => {
+    expect(tamanoDe('UNIVERSO DENUE: Autotransporte · 11 a 30 personas')).toBe('11-30');
+    expect(tamanoDe('algo · 101 a 250 personas · más')).toBe('101-250');
+    expect(tamanoDe('gigante · 251 y más personas')).toBe('250+');
+    expect(tamanoDe('DOLOR DIRECTO: sin estrato')).toBeNull();
+  });
+  it('la completitud suma solo lo que existe y llega a 100 con todo', () => {
+    expect(completitudDe({ telefono: null, correo: null, contacto_nombre: null, lat: null, notas: null })).toBe(0);
+    expect(completitudDe({ telefono: '55', correo: 'a@b.mx', contacto_nombre: 'Ana, DG', lat: 20, notas: 'sitio: x.mx' })).toBe(100);
+    expect(completitudDe({ telefono: '55', correo: null, contacto_nombre: null, lat: 20, notas: null })).toBe(45);
   });
 });

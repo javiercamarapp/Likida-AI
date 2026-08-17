@@ -136,6 +136,39 @@ export function giroDe(empresa: string, vacante: string | null, notas: string | 
   return 'otro';
 }
 
+// ── Tamaño de flota (el estrato DENUE viaja en notas) ──────────────────────
+
+export const TAMANOS = ['11-30', '31-50', '51-100', '101-250', '250+'] as const;
+export type Tamano = (typeof TAMANOS)[number];
+
+export function tamanoDe(notas: string | null): Tamano | null {
+  const m = (notas ?? '').match(/·\s*(\d+) a (\d+) personas|·\s*251 y más personas/);
+  if (!m) return null;
+  if (!m[1]) return '250+';
+  const desde = Number(m[1]);
+  if (desde >= 101) return '101-250';
+  if (desde >= 51) return '51-100';
+  if (desde >= 31) return '31-50';
+  if (desde >= 11) return '11-30';
+  return null; // 0-10: fuera del ICP, no se etiqueta
+}
+
+/** Qué tan COMPLETO está el expediente para salir a venderle (0-100):
+ *  teléfono 30 + correo 25 + decisor 20 + ubicación 15 + sitio web 10.
+ *  Determinista y declarado, como los otros dos (CRITERIO_SCORES). */
+export function completitudDe(p: {
+  telefono: string | null; correo: string | null; contacto_nombre: string | null;
+  lat: number | null; notas: string | null;
+}): number {
+  let s = 0;
+  if (p.telefono) s += 30;
+  if (p.correo) s += 25;
+  if (p.contacto_nombre) s += 20;
+  if (p.lat !== null) s += 15;
+  if (/sitio:/.test(p.notas ?? '')) s += 10;
+  return s;
+}
+
 // ── Los dos porcentajes (0-100, deterministas, criterio a la vista) ────────
 
 /** Cuántos anuncios dice la nota del censo ("· 3 anuncios en el censo"). */
@@ -194,6 +227,7 @@ export function scoreCierre(p: {
 export const CRITERIO_SCORES = {
   urgencia: 'Urgencia = su propia conducta: la vacante que nombra la liquidación (+45), cuántos anuncios (+4 c/u, tope 20), qué tan reciente el último (+20 si es de hoy) y la ficha trabajada (+15). Estimación determinista, no medición.',
   cierre: 'Cierre = alcanzabilidad (tel +20, correo +15, decisor +20), fit del giro (transportista +15), etapa del embudo (contactado +15 … negociación +35; cliente=100, perdido=0) y ficha a mano (+10). Estimación determinista, no medición.',
+  datos: 'Datos = qué tan completo está el expediente para salir a venderle: teléfono +30, correo +25, decisor +20, ubicación +15, sitio web +10. El tamaño (11-30 … 250+) es el personal ocupado que reporta la DENUE.',
 } as const;
 
 // ── La lectura completa para el mapa ────────────────────────────────────────
@@ -214,6 +248,10 @@ export interface ProspectoMapa {
   giro: Giro;
   urgencia: number;
   cierre: number;
+  /** Estrato DENUE de personal ocupado — null cuando la fuente no lo trae. */
+  tamano: Tamano | null;
+  /** 0-100: qué tan completo está el expediente (ver CRITERIO_SCORES.datos). */
+  completitud: number;
   /** El primer toque redactado por el agente experto (0129) — null hasta que
    *  se genera; los botones caen a la plantilla determinista mientras. */
   mensajeWaIa: string | null;
@@ -284,6 +322,11 @@ export async function getDatosMapa(): Promise<DatosMapa> {
         estado: p.estado,
         fuente: p.fuente,
         giro: giroDe(p.empresa, p.vacante, p.notas),
+        tamano: tamanoDe(p.notas),
+        completitud: completitudDe({
+          telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
+          lat: p.lat, notas: p.notas,
+        }),
         mensajeWaIa: p.mensaje_wa,
         correoAsuntoIa: p.mensaje_correo_asunto,
         correoCuerpoIa: p.mensaje_correo,
