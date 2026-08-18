@@ -237,8 +237,16 @@ async function escribir(
       return;
     }
 
-    const m = /column "?([a-z_]+)"? of relation|column prospecto\.([a-z_]+) does not exist/.exec(error.message);
-    const falta = m?.[1] ?? m?.[2];
+    // DOS REDACCIONES, DOS CAPAS DISTINTAS. Postgres dice «column
+    // prospecto.unidades does not exist»; PostgREST, que es quien contesta el
+    // INSERT, dice «Could not find the 'unidades' column of 'prospecto' in the
+    // schema cache». Esta ruta se probó primero contra el texto de Postgres y
+    // en producción se perdió un lead entero: el INSERT real nunca usa esa
+    // redacción. Las dos van aquí, y las dos tienen prueba.
+    const m = /column prospecto\.([a-z_]+) does not exist/.exec(error.message)
+      ?? /column "?([a-z_]+)"? of relation/.exec(error.message)
+      ?? /find the '([a-z_]+)' column/.exec(error.message);
+    const falta = m?.[1];
     if (!falta || !DE_LA_0137.has(falta) || !(falta in actual)) throw new Error(error.message);
 
     const valor = actual[falta];
