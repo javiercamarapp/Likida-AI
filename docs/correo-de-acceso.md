@@ -1,11 +1,11 @@
 # El correo de acceso
 
-> Estado al 18-ago-2026: código probado y `SUPABASE_AUTH_HOOK_SECRET` ya
-> puesta en Vercel (producción). Este commit la publica: **hasta que el
-> deployment termine, el endpoint no tiene la variable y contesta 500**, así
-> que el hook de Supabase se enciende DESPUÉS de comprobar que
-> `POST /api/auth/correo` sin firma contesta 401 (401 = tiene el secreto y
-> verifica; 500 = todavía no lo tiene).
+> **Estado al 18-ago-2026, medido:**
+> - `SUPABASE_AUTH_HOOK_SECRET` en Vercel (producción) ✓
+> - `/api/auth/correo` **vivo** en `da4f944`: sin firma contesta **401**, con
+>   firma válida contesta **200** y el correo sale por Resend ✓
+> - **Falta lo único que necesita un token `sbp_`:** subir las plantillas y
+>   encender el hook. Un comando, abajo.
 
 ## Qué estaba mal
 
@@ -38,10 +38,25 @@ El hook es el destino. Las plantillas del panel son la red: si el hook se
 apaga —o antes de encenderlo— el correo sigue siendo de la marca en vez de
 volver al de fábrica.
 
-## Paso 1 — Pegar las plantillas (5 min, sin desplegar)
+## Lo que falta: un comando
 
-Se generan del mismo redactor que usa el hook, así que no hay dos versiones
-del texto:
+Un token personal de Supabase (`sbp_…`), que se genera en
+<https://supabase.com/dashboard/account/tokens>, y:
+
+```bash
+# 1. Sube las seis plantillas (reversible, no toca el camino de entrada)
+SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts
+
+# 2. Y enciende el hook (correo por Resend, logo incrustado)
+SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --con-hook
+```
+
+El script tiene tres candados: no enciende el hook si el endpoint no contesta
+401 (o sea, si el deployment no trae el secreto), relee la configuración y
+compara lo que quedó contra lo que mandó, y coteja `mailer_otp_exp` contra los
+minutos que el correo promete.
+
+## A mano (si se prefiere el panel)
 
 ```bash
 npx vite-node scripts/correo/plantillas-auth.ts
@@ -62,17 +77,17 @@ Emails**, pegar cada uno en su plantilla:
 Traen las variables de Supabase (`{{ .ConfirmationURL }}`, `{{ .Token }}`) ya
 puestas. **No editar el HTML a mano**: se regenera y se pierde el cambio.
 
-## Paso 2 — Encender el hook (el destino)
+## El hook a mano (si se prefiere el panel)
 
 1. **Supabase → Authentication → Hooks → Send Email Hook** → *Add hook* →
    tipo **HTTPS**.
 2. URL: `https://app.likida.ai/api/auth/correo`.
-3. Copiar el secreto que genera (viene como `v1,whsec_…`).
-4. Ponerlo en Vercel como `SUPABASE_AUTH_HOOK_SECRET`
-   (`vercel env add SUPABASE_AUTH_HOOK_SECRET production`) **y volver a
-   desplegar**: Vercel congela las variables en el build, así que sin un
-   deploy nuevo el endpoint sigue sin verla y contesta 500.
-5. Con el hook activo, Supabase **deja de mandar por su cuenta**. Probar de
+3. Secreto: el MISMO que ya está en Vercel como `SUPABASE_AUTH_HOOK_SECRET`
+   (está también en `.env.local`). Si se genera uno nuevo allá, hay que
+   cambiarlo en Vercel **y redesplegar** — Vercel congela las variables en el
+   build, así que sin deploy nuevo el endpoint sigue con el viejo y contesta
+   401 a todo: nadie entra.
+4. Con el hook activo, Supabase **deja de mandar por su cuenta**. Probar de
    inmediato: pedir un magic link en `/login` y confirmar que llega desde
    `acceso@mail.likida.ai` con el logo.
 
