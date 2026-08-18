@@ -7,8 +7,19 @@ import { Logo } from '../logo';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Sobre esto se arman el `emailRedirectTo` del magic link y el `redirectTo` de
+ * Google: es el dominio donde tiene que aterrizar `/auth/callback`.
+ *
+ * EL SUELO DEJÓ DE SER `likida.ai` el 17-ago-2026. Ese dominio ya no sirve esta
+ * app — hoy es la landing de marketing, un proyecto de HTML estático aparte —,
+ * así que sin `NEXT_PUBLIC_APP_URL` el correo llegaba, el link abría, y el
+ * usuario caía en un sitio que NO TIENE `/auth/callback`: sesión nunca
+ * completada, cero errores en ningún log, nadie entra. El suelo tiene que ser
+ * el dominio del SOFTWARE (ver CLAUDE.md: la variable debe valer esto mismo).
+ */
 function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL || 'https://likida.ai';
+  return process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
 }
 
 /**

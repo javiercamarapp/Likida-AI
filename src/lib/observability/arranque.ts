@@ -12,10 +12,16 @@
 //     se lee como "el producto no guardó nada". Es el caso de manual del rubro.
 //   · `LIKIDA_WHATSAPP_MSG_USD` ausente → el costo por liquidación se calcula con
 //     un default, y esa cifra es la que decide el precio del producto.
-//   · `NEXT_PUBLIC_APP_URL` ausente → `login/page.tsx` cae a `https://likida.ai`
-//     y manda los magic links y el retorno de Google a un dominio que no es el
-//     desplegado. El correo llega, el link abre, y la sesión se completa en otro
-//     sitio: no hay error en ninguna parte, simplemente nadie entra.
+//   · `NEXT_PUBLIC_APP_URL` ausente → `login/page.tsx` cae a
+//     `https://app.likida.ai` y manda los magic links y el retorno de Google a
+//     PRODUCCIÓN, sea cual sea el despliegue que los emitió. El correo llega, el
+//     link abre, y la sesión se completa en otro sitio: no hay error en ninguna
+//     parte, simplemente nadie entra donde creía.
+//     El suelo era `https://likida.ai` hasta el 17-ago-2026, y ahí el fallo era
+//     peor: ese dominio dejó de servir esta app (hoy es la landing estática) y
+//     no tiene `/auth/callback`, así que el magic link no completaba sesión en
+//     NINGÚN sitio. Hoy el suelo al menos es una app que existe — la variable
+//     sigue haciendo falta para que un preview no se robe el login de prod.
 //
 // `DASHBOARD_PASSCODE` YA NO VIVE AQUÍ. Hasta el 5-ago-2026 esta lista traía
 // «`DASHBOARD_PASSCODE` ausente → `proxy.ts` no bloquea `/dashboard`» — y era
@@ -37,7 +43,7 @@ const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   {
     nombre: 'NEXT_PUBLIC_APP_URL',
     consecuencia:
-      'login arma sus redirects contra https://likida.ai (el fallback del código) en vez del dominio desplegado: el magic link y el retorno de Google apuntan a otro sitio y nadie entra, sin un solo error',
+      'login arma sus redirects contra https://app.likida.ai (el fallback del código) en vez del dominio desplegado: el magic link y el retorno de Google apuntan a otro sitio y nadie entra donde creía, sin un solo error',
   },
   // El canal de alerta del operador (observability/alerta.ts). Sin ella el
   // sistema arranca y atiende igual — que es exactamente lo que califica para

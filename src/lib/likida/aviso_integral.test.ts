@@ -24,7 +24,10 @@ import { avisoIntegral, avisoSimplificado, revisarAvisoIntegral, versionAviso } 
 const FLOTA = {
   razonSocial: 'FLOTA DEMO SA DE CV',
   domicilio: 'Carretera Silao-Romita Km 4.5, 36100 Silao, Guanajuato',
-  urlAvisoIntegral: 'https://likida.ai/aviso/11111111-1111-1111-1111-111111111111',
+  // El mismo valor que siembra `supabase/seed.sql` para la flota demo, host
+  // incluido: se copió de ahí y se movió con él a `app.likida.ai` el
+  // 17-ago-2026 (`likida.ai/aviso/…` da 404 — es la landing estática).
+  urlAvisoIntegral: 'https://app.likida.ai/aviso/11111111-1111-1111-1111-111111111111',
 };
 
 const todo = (r = FLOTA) => avisoIntegral(r).flatMap((s) => [s.titulo, ...s.parrafos]).join('\n');
