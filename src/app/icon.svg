@@ -7,7 +7,7 @@
     @media (prefers-color-scheme: dark) { svg { color: #fbfbfd; } }
   </style>
   <g transform="translate(-180.131309,1490.000000) scale(0.100000,-0.100000)"
-fill="currentColor"" stroke="none">
+fill="currentColor" stroke="none">
 <path d="M4570 14887 c0 -20 -51 -63 -90 -76 -19 -6 -66 -19 -105 -30 -110
 -30 -346 -114 -505 -180 -160 -66 -263 -119 -450 -235 -281 -175 -280 -174
 -653 -551 -158 -158 -234 -244 -275 -305 -30 -47 -88 -135 -129 -196 -82 -125
