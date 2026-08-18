@@ -5285,3 +5285,48 @@ begin
   raise exception E'WORKER_0135  tabla-rls=%  indice=%  hash-duplicado-rebota=%   (esperado t / t / t)',
     coalesce(tabla_rls, false), indice, hash_duplicado_rebota;
 end $$;
+
+-- ── 108. El catálogo de planes con precio live es coherente (mig. 0136 + 0055) ──
+-- Un plan a medio configurar no revienta: MIENTE en silencio, y cada forma de
+-- mentir cuesta distinto.
+--   · con price y sin `precio_mensual` → la tarjeta dice "Sin precio
+--     configurado" al lado de un botón de contratar que sí funciona: el cliente
+--     descubre cuánto paga hasta el estado de cuenta;
+--   · con price y `precio_iva_incluido` NULL → se cobra pero `emitirMensualidad`
+--     se niega a timbrar (0066), y el cliente se queda sin CFDI sin que nadie
+--     se entere hasta su declaración;
+--   · `empresa` con un price viejo de sandbox → con llaves live ese id NO existe
+--     y el checkout truena en la cara del cliente.
+-- (d) es lo único que solo la base demuestra: el índice único de la 0055 impide
+-- que dos planes compartan price. Dos planes con el mismo price cobran lo mismo
+-- diciendo cosas distintas, y el webhook (que resuelve el plan POR price id, ver
+-- suscripcion.ts) le asignaría a la flota el plan equivocado.
+--   (esperado 0 / 0 / t / t — exactos)
+do $$
+declare
+  con_price_sin_monto int;
+  con_price_sin_iva int;
+  empresa_sin_price boolean;
+  price_duplicado_rebota boolean := false;
+begin
+  select count(*) into con_price_sin_monto
+    from public.plan where stripe_price_id is not null and precio_mensual is null;
+
+  select count(*) into con_price_sin_iva
+    from public.plan where stripe_price_id is not null and precio_iva_incluido is null;
+
+  select stripe_price_id is null into empresa_sin_price
+    from public.plan where clave = 'empresa';
+
+  -- Funcional: robarle a `demo` el price de `flota` tiene que rebotar.
+  begin
+    update public.plan
+       set stripe_price_id = (select stripe_price_id from public.plan where clave = 'flota')
+     where clave = 'demo';
+  exception when unique_violation then
+    price_duplicado_rebota := true;
+  end;
+
+  raise exception E'PLANES_0136  con-price-sin-monto=%  con-price-sin-iva=%  empresa-sin-price=%  price-duplicado-rebota=%   (esperado 0 / 0 / t / t)',
+    con_price_sin_monto, con_price_sin_iva, coalesce(empresa_sin_price, false), price_duplicado_rebota;
+end $$;
