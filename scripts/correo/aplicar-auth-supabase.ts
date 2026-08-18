@@ -97,7 +97,7 @@ function plantilla(accion: AccionAuth) {
 
 /** Cada acción con el par de campos que le toca en la Management API. */
 const CAMPOS: Array<{ accion: AccionAuth; asunto: string; contenido: string; nombre: string }> = [
-  { accion: 'login', asunto: 'mailer_subjects_magic_link', contenido: 'mailer_templates_magic_link_content', nombre: 'Magic Link' },
+  { accion: 'magiclink', asunto: 'mailer_subjects_magic_link', contenido: 'mailer_templates_magic_link_content', nombre: 'Magic Link' },
   { accion: 'signup', asunto: 'mailer_subjects_confirmation', contenido: 'mailer_templates_confirmation_content', nombre: 'Confirm signup' },
   { accion: 'invite', asunto: 'mailer_subjects_invite', contenido: 'mailer_templates_invite_content', nombre: 'Invite user' },
   { accion: 'recovery', asunto: 'mailer_subjects_recovery', contenido: 'mailer_templates_recovery_content', nombre: 'Reset password' },

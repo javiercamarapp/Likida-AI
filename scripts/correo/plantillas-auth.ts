@@ -43,6 +43,9 @@ const LIGA = 'https://sentinela.likida.ai/liga';
 const CODIGO = '000000';
 
 const ARCHIVO: Record<AccionAuth, string> = {
+  // `magiclink` es el nombre que Supabase manda de verdad; `login` es el mismo
+  // correo con el otro nombre. Un solo archivo para los dos.
+  magiclink: 'magic-link',
   login: 'magic-link',
   signup: 'confirmar-alta',
   invite: 'invitacion',
@@ -56,7 +59,7 @@ const ARCHIVO: Record<AccionAuth, string> = {
 /** Las seis plantillas que el panel de Supabase sabe editar. Las dos mitades
  *  del cambio de correo comparten plantilla allá. */
 const PARA_EL_PANEL: AccionAuth[] = [
-  'login', 'signup', 'invite', 'recovery', 'email_change', 'reauthentication',
+  'magiclink', 'signup', 'invite', 'recovery', 'email_change', 'reauthentication',
 ];
 
 const minutos = minutosDeCaducidad();

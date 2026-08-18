@@ -38,8 +38,19 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import type { Correo } from './plantilla';
 
-/** Las acciones que Supabase Auth manda por correo (`email_action_type`). */
+/**
+ * Las acciones que Supabase Auth manda por correo (`email_action_type`).
+ *
+ * `magiclink` Y `login` son la MISMA acción con dos nombres, y aquí están las
+ * dos a propósito. Medido en producción el 18-ago-2026: el hook recibió
+ * `"magiclink"` — el nombre de GoTrue de toda la vida—, no `"login"`, que es
+ * como aparece en parte de la documentación. Aceptar uno solo costó el
+ * incidente que dejó esta línea escrita: el endpoint contestaba 400, Supabase
+ * traducía a 500 y NADIE PODÍA ENTRAR, con el error apareciendo del lado de
+ * Supabase, lejos de la causa.
+ */
 export type AccionAuth =
+  | 'magiclink'
   | 'login'
   | 'signup'
   | 'invite'
@@ -57,6 +68,7 @@ export type AccionAuth =
  * que es el fallo más caro de depurar porque parece un problema de sesión.
  */
 const TIPO_VERIFY: Record<AccionAuth, string> = {
+  magiclink: 'magiclink',
   login: 'magiclink',
   signup: 'signup',
   invite: 'invite',
@@ -192,6 +204,7 @@ export function correoDeAuth(d: DatosCorreoAuth): Correo {
   };
 
   switch (d.accion) {
+    case 'magiclink':
     case 'login':
       return {
         ...base,
