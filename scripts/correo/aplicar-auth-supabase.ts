@@ -159,7 +159,9 @@ if (process.argv.includes('--afinar')) {
   await api('PATCH', {
     rate_limit_email_sent: 100,
     smtp_host: 'smtp.resend.com',
-    smtp_port: 465,
+    // STRING, no número: la API contesta 400 «expected string, received
+    // number». Medido el 18-ago contra el proyecto real.
+    smtp_port: '465',
     smtp_user: 'resend',
     smtp_pass: resend,
     smtp_admin_email: 'acceso@mail.likida.ai',
