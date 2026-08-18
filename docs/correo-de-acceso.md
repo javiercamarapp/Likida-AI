@@ -47,6 +47,41 @@ El hook es el destino. Las plantillas del panel son la red: si el hook se
 apaga —o antes de encenderlo— el correo sigue siendo de la marca en vez de
 volver al de fábrica.
 
+## Incidente del 18-ago y lo que dejó escrito
+
+Al encender el hook, pedir un magic link devolvió **HTTP 500**. El log de
+nuestro lado dijo la causa en una línea:
+
+```
+auth.correo.accion_desconocida  {"accion":"magiclink"}
+```
+
+Supabase manda `email_action_type: "magiclink"`, no `login`. La firma estaba
+bien, el transporte estaba bien: era el nombre. Arreglado en `4fea994`, con
+las dos acciones aceptadas y una prueba que fija el valor MEDIDO.
+
+Lo que enseñó, y vale más que el arreglo: **una acción desconocida ya no
+tumba el login**. Contestar 400 "por fallar cerrado" no es fallar cerrado
+cuando Supabase ya no manda por su cuenta — es dejar a todos afuera. Ahora,
+con token en mano, se manda el correo de acceso genérico y el error se grita
+en el log.
+
+Y al mirar la configuración después, dos cosas más:
+
+- **El límite de correo estaba en 2 por hora** para todo el proyecto. Dos
+  personas de la misma flota entrando la misma mañana dejaban a la tercera
+  fuera.
+- **Encender el hook borró la configuración SMTP.** Con el hook prendido da
+  igual, pero convierte el interruptor de pánico en una trampa: apagarlo
+  devolvería el envío a Supabase, que sin SMTP propio cae a su servicio
+  interno, limitado y solo para el equipo.
+
+Las dos se corrigen con:
+
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --afinar
+```
+
 ## Lo que falta: un comando
 
 Un token personal de Supabase (`sbp_…`), que se genera en
