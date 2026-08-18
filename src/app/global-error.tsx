@@ -37,60 +37,94 @@ export default function GlobalError({
     );
   }, [error]);
 
-  // El MISMO lenguaje que el 404 (orden del 17-ago), pero TODO en línea: si
-  // esto se pinta es porque el layout raíz murió y globals.css puede no haber
-  // llegado. El logo va como <img> del asset estático (sobrevive al crash del
-  // árbol de React) y la tipografía display cae a la del sistema.
+  // El MISMO lenguaje que el 404 (revisado el 17-ago-2026 contra la landing
+  // nueva: papel, tinta, hairlines, kicker en mono, titular en serif,
+  // píldoras), pero TODO EN LÍNEA y sin importar `editorial.tsx`: si esto se
+  // pinta es porque el layout raíz murió, y ni `globals.css` ni el CSS que
+  // `next/font` inyecta tienen por qué haber llegado. Un `var(--ink)` aquí se
+  // resolvería a nada y la pantalla saldría en negro sobre negro.
+  //
+  // Por eso los hex son literales —y son los de la paleta clara, la única que
+  // sobrevive a un fallo de carga de la hoja de estilos— y la serif se pide
+  // por NOMBRE con su cascada: si Fraunces alcanzó a cargarse, se usa; si no,
+  // cae en Georgia, exactamente la misma cascada que declara likida.ai.
+  //
+  // El logo va como <img> del asset estático: sobrevive al crash del árbol de
+  // React, que es justo lo que el <Logo> enmascarado no garantiza aquí.
+  const PAPEL = '#fbfbfd', TINTA = '#17100d', GRIS = '#6b7280', LINEA = '#ececef';
+  const SERIF = 'Fraunces, Georgia, "Times New Roman", serif';
+  const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
+  const PILDORA: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', borderRadius: 999,
+    padding: '12px 22px', fontSize: 15, fontWeight: 600,
+    border: '1px solid transparent', cursor: 'pointer', textDecoration: 'none',
+  };
+
   return (
     <html lang="es">
       <body style={{
         margin: 0, minHeight: '100vh', display: 'flex', flexDirection: 'column',
-        justifyContent: 'space-between', background: '#fbfbfd', color: '#0b0b0f',
-        padding: 'clamp(2rem, 5vw, 3.5rem)',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, system-ui, sans-serif',
+        background: PAPEL, color: TINTA,
+        fontFamily: '"Instrument Sans", Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
       }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/logo.png" alt="Likida" style={{ height: 24, width: 'auto', alignSelf: 'flex-start' }} />
+        <header style={{ padding: '20px clamp(1.5rem, 4vw, 3rem)', borderBottom: `1px solid ${LINEA}` }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/logo.png" alt="Likida" style={{ height: 20, width: 'auto', display: 'block' }} />
+        </header>
 
-        <div style={{ maxWidth: '48rem' }}>
-          <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.14em', color: '#6b7280' }}>
-            Algo se rompió
-          </p>
-          <h1 style={{
-            margin: '1.25rem 0 0', fontWeight: 500,
-            fontSize: 'clamp(34px, 6vw, 72px)', lineHeight: 0.98, letterSpacing: '-0.042em',
-          }}>
-            La aplicación no pudo continuar
-          </h1>
-          <p style={{ marginTop: '1.5rem', maxWidth: '32rem', color: '#6b7280', fontSize: 'clamp(16px, 1.5vw, 19px)', lineHeight: 1.55 }}>
-            Vuelve a intentarlo en un momento. Si sigue igual, el código de abajo
-            es exactamente lo que soporte necesita para encontrar qué pasó.
-          </p>
-          <div style={{ marginTop: '2.25rem', display: 'flex', alignItems: 'center', gap: '1.75rem' }}>
-            <button onClick={reset} style={{
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              fontSize: '1rem', fontWeight: 500, color: '#0b0b0f',
-              borderBottom: '1px solid rgba(11,11,15,0.28)', paddingBottom: 2,
-            }}>Reintentar →</button>
-            {/* `<a>` y no `<Link>` a propósito: lo que falló es el layout raíz,
-                así que una navegación suave vuelve a entrar al mismo árbol roto.
-                Aquí hace falta una recarga completa del documento. */}
-            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-            <a href="/dashboard" style={{ fontSize: '1rem', fontWeight: 500, color: '#6b7280', textDecoration: 'none' }}>
-              Ir al panel
-            </a>
-          </div>
-          {error.digest && (
-            <p style={{ marginTop: '2rem', fontSize: '0.75rem', color: '#9ca3af', userSelect: 'all' }}>
-              Código del incidente:{' '}
-              <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{error.digest}</span>
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center',
+          padding: 'clamp(3rem, 7vw, 5rem) clamp(1.5rem, 4vw, 3rem)',
+        }}>
+          <div style={{ maxWidth: '46rem' }}>
+            <span style={{
+              display: 'inline-block', fontFamily: MONO, fontSize: 11, textTransform: 'uppercase',
+              letterSpacing: '0.14em', color: GRIS,
+              border: `1px solid ${LINEA}`, borderRadius: 8, padding: '6px 12px', background: '#ffffff',
+            }}>
+              Algo se rompió
+            </span>
+            <h1 style={{
+              margin: '1.75rem 0 0', fontFamily: SERIF, fontWeight: 400,
+              fontSize: 'clamp(36px, 5.4vw, 74px)', lineHeight: 1.06, letterSpacing: '-0.015em',
+            }}>
+              La aplicación no pudo continuar.
+            </h1>
+            <p style={{ marginTop: '1.5rem', maxWidth: '34rem', color: GRIS, fontSize: 'clamp(16px, 1.3vw, 18.5px)', lineHeight: 1.65 }}>
+              Vuelve a intentarlo en un momento. Si sigue igual, el código de abajo
+              es exactamente lo que soporte necesita para encontrar qué pasó.
             </p>
-          )}
+            <div style={{ marginTop: '2.25rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+              <button onClick={reset} style={{ ...PILDORA, background: TINTA, color: PAPEL }}>
+                Reintentar
+              </button>
+              {/* `<a>` y no `<Link>` a propósito: lo que falló es el layout raíz,
+                  así que una navegación suave vuelve a entrar al mismo árbol roto.
+                  Aquí hace falta una recarga completa del documento. */}
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+              <a href="/" style={{ ...PILDORA, background: 'transparent', borderColor: LINEA, color: TINTA }}>
+                Volver al inicio
+              </a>
+            </div>
+            {error.digest && (
+              <p style={{ marginTop: '2rem', fontSize: '0.75rem', color: GRIS, userSelect: 'all' }}>
+                Código del incidente:{' '}
+                <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{error.digest}</span>
+              </p>
+            )}
+          </div>
         </div>
 
-        <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: 0 }}>
-          Likida · Liquidación de viajes por WhatsApp
-        </p>
+        <footer style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          padding: '20px clamp(1.5rem, 4vw, 3rem)', borderTop: `1px solid ${LINEA}`,
+          fontSize: '0.75rem', color: GRIS,
+        }}>
+          <p style={{ margin: 0 }}>Likida · Liquidación de viajes por WhatsApp</p>
+          <p style={{ margin: 0, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em' }}>
+            app.likida.ai
+          </p>
+        </footer>
       </body>
     </html>
   );

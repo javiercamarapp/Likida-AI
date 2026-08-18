@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect } from 'react';
+import { Kicker, Pildora, TituloEditorial, serifEditorial } from '../editorial';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Error boundary del segmento dashboard: un fallo de red/render NO deja
@@ -48,41 +48,34 @@ export default function DashboardError({
     );
   }, [error]);
 
-  // El MISMO lenguaje que el 404 (orden del 17-ago): display grande, mucho
-  // aire, salidas en texto. El digest sigue en pantalla y seleccionable —
-  // es el único puente con la línea del log.
+  // El MISMO lenguaje que el 404 (revisado el 17-ago-2026 contra la landing
+  // nueva): kicker en mono, titular en serif, píldoras de tinta. Las piezas
+  // salen de `editorial.tsx`, no se re-escriben aquí — si el 404 cambia de
+  // registro, esta pantalla lo cambia con él.
+  //
+  // LO QUE NO COPIA DEL 404 es el marco: esto se pinta DENTRO del chrome del
+  // panel (sidebar, asistente, el logo ya en pantalla). Repetir ahí la
+  // cabecera con logo y el pie de marca sería enseñar la marca dos veces en la
+  // misma vista. La consistencia que importa es la de la voz, no la del marco.
+  //
+  // El digest sigue en pantalla y seleccionable — es el único puente con la
+  // línea del log.
   return (
     <div
-      className="min-h-screen flex flex-col justify-between px-8 py-8 md:px-14 md:py-12"
+      className={`${serifEditorial.variable} min-h-screen flex flex-col justify-between px-8 py-8 md:px-14 md:py-12`}
       style={{ background: 'var(--bg)' }}
     >
       <div />
       <div className="max-w-3xl">
-        <p className="text-xs font-medium uppercase" style={{ color: 'var(--muted)', letterSpacing: '0.14em' }}>
-          Algo falló
-        </p>
-        <h1
-          className="mt-5 font-medium"
-          style={{
-            fontFamily: 'var(--font-display), system-ui, sans-serif',
-            fontSize: 'clamp(34px, 6vw, 72px)',
-            lineHeight: 0.98,
-            letterSpacing: '-0.042em',
-            textWrap: 'balance',
-          }}
-        >
-          No se pudo cargar el panel
-        </h1>
-        <p className="mt-6 max-w-lg" style={{ color: 'var(--muted)', fontSize: 'clamp(16px, 1.5vw, 19px)', lineHeight: 1.55 }}>
+        <Kicker>Algo falló</Kicker>
+        <TituloEditorial>No se pudo cargar el panel.</TituloEditorial>
+        <p className="mt-6 max-w-lg" style={{ color: 'var(--muted)', fontSize: 'clamp(16px, 1.3vw, 18.5px)', lineHeight: 1.65 }}>
           Hubo un problema al leer los datos — que no es lo mismo que no haya datos.
           Reintenta; si sigue, el código de abajo es lo que soporte necesita.
         </p>
-        <div className="mt-9 flex items-center gap-7">
-          <button onClick={reset} className="group inline-flex items-center gap-2 text-base font-medium" style={{ color: 'var(--ink)' }}>
-            <span className="pb-0.5" style={{ borderBottom: '1px solid color-mix(in srgb, var(--ink) 28%, transparent)' }}>Reintentar</span>
-            <span aria-hidden className="transition-transform duration-200 group-hover:translate-x-1 motion-reduce:transform-none motion-reduce:transition-none">→</span>
-          </button>
-          <Link href="/" className="text-base font-medium" style={{ color: 'var(--muted)' }}>Inicio</Link>
+        <div className="mt-9 flex flex-wrap items-center gap-3">
+          <Pildora onClick={reset}>Reintentar</Pildora>
+          <Pildora href="/" variante="borde">Volver al inicio</Pildora>
         </div>
         {error.digest && (
           <p className="mt-8 text-xs select-all" style={{ color: 'var(--faint, var(--muted))' }}>

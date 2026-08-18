@@ -76,3 +76,35 @@ export function LogoIcono({ alto, className = '' }: { alto: string; className?: 
     />
   );
 }
+
+/** El glifo como ADORNO — el que asoma dentro de una píldora al pasar el
+ *  cursor (el gesto que la landing de likida.ai hace en sus CTAs).
+ *
+ *  Tres diferencias con `LogoIcono`, y las tres son a propósito:
+ *  · `aria-hidden` y sin `role`: el botón ya se nombra solo con su texto. Un
+ *    segundo "Likida" ahí dentro se lo lee el lector de pantalla en medio de
+ *    la etiqueta de la acción.
+ *  · El color se pasa: dentro de una píldora de tinta el glifo tiene que ser
+ *    del color del TEXTO del botón (`--bg`), no de `--marca` — y sobre la
+ *    píldora de borde, al revés.
+ *  · Sin `alto` obligatorio: quien lo envuelve le fija la altura, porque el
+ *    contenedor es el que anima el ancho de 0 a 18px.
+ */
+export function GlifoAdorno({ color = 'var(--marca)', className = '' }: {
+  color?: string;
+  className?: string;
+}) {
+  return (
+    <span
+      aria-hidden
+      className={`block h-full ${className}`}
+      style={{
+        aspectRatio: '161 / 149',
+        background: color,
+        WebkitMaskImage: 'url(/images/logo-icono.png)',
+        maskImage: 'url(/images/logo-icono.png)',
+        ...MASCARA,
+      }}
+    />
+  );
+}
