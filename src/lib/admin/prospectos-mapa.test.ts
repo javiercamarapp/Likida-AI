@@ -103,3 +103,50 @@ describe('tamaño y completitud — los filtros de la ronda 2 (17-ago)', () => {
     expect(completitudDe({ telefono: '55', correo: null, contacto_nombre: null, lat: 20, notas: null })).toBe(45);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LO QUE EL PROSPECTO DICE DE SÍ MISMO (18-ago-2026)
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la declaración del prospecto manda sobre la inferencia', () => {
+  const vacanteQueGrita = { vacante: 'Cajero Liquidador de viajes', notas: 'DOLOR DIRECTO · 5 anuncios en el censo' };
+
+  it('quien dijo "ya" queda en 100 aunque no tenga ni vacante', () => {
+    expect(scoreUrgencia({ vacante: null, notas: null, urgenciaDeclarada: 'inmediata' })).toBe(100);
+  });
+
+  it('quien dijo "estoy explorando" NO se ordena arriba del que dijo "ya"', () => {
+    // Es el punto entero: si la declaración solo sumara, este —que avisó que
+    // no corre prisa— treparía por su vacante y desplazaría al que sí urge.
+    const explorando = scoreUrgencia({ ...vacanteQueGrita, urgenciaDeclarada: 'explorando' });
+    const inmediato = scoreUrgencia({ vacante: null, notas: null, urgenciaDeclarada: 'inmediata' });
+    expect(explorando).toBeLessThan(inmediato);
+  });
+
+  it('sin declaración se sigue infiriendo de la vacante, como siempre', () => {
+    expect(scoreUrgencia(vacanteQueGrita)).toBeGreaterThan(50);
+  });
+});
+
+describe('quien llegó solo pesa más que uno scrapeado', () => {
+  const base = {
+    telefono: '8112345678', correo: 'a@b.mx', contacto_nombre: 'Ana',
+    estado: 'nuevo', empresa: 'Autotransportes X', vacante: null, notas: null,
+  };
+
+  it('un lead de anuncio pagado supera al mismo prospecto sacado del censo', () => {
+    expect(scoreCierre({ ...base, fuente: 'ads-meta' }))
+      .toBeGreaterThan(scoreCierre({ ...base, fuente: 'censo' }));
+  });
+
+  it('un decisor con contacto verificado suma; el inferido no llega aquí', () => {
+    // `personasVerificadas` cuenta SOLO lo no inferido (0138). Un correo
+    // adivinado pintaría de verde un camino que rebota.
+    expect(scoreCierre({ ...base, fuente: 'censo', personasVerificadas: 2 }))
+      .toBeGreaterThan(scoreCierre({ ...base, fuente: 'censo', personasVerificadas: 0 }));
+  });
+
+  it('nunca se pasa de 100 por más señales que se acumulen', () => {
+    expect(scoreCierre({ ...base, fuente: 'ads-meta', estado: 'negociacion', personasVerificadas: 9 }))
+      .toBeLessThanOrEqual(100);
+  });
+});

@@ -177,7 +177,21 @@ function anunciosDe(notas: string): number {
   return m ? Number(m[1]) : 0;
 }
 
-export function scoreUrgencia(p: { vacante: string | null; notas: string | null }): number {
+export function scoreUrgencia(p: {
+  vacante: string | null; notas: string | null; urgenciaDeclarada?: string | null;
+}): number {
+  // ── LO QUE DICE DE SÍ MISMO MANDA SOBRE LO QUE INFERIMOS DE ÉL ────────────
+  // Todo lo que sigue es arqueología: se deduce el dolor de una vacante que
+  // alguien publicó. Cuando la persona lo declaró en /getdemo ya no hay nada
+  // que deducir, así que su respuesta FIJA el score en vez de sumarle puntos.
+  //
+  // Y manda en LOS DOS SENTIDOS, que es lo que hace honesto al número: quien
+  // contestó "estoy explorando opciones" queda con TECHO aunque su vacante
+  // grite. Si solo subiera, el que te dijo que no corre prisa se ordenaría
+  // arriba del que te dijo que sí — el tablero contradiría al prospecto y
+  // mandaría a Javier a llamar al equivocado.
+  if (p.urgenciaDeclarada === 'inmediata') return 100;
+
   const notas = p.notas ?? '';
   let s = 0;
   // La confesión directa: su propia vacante nombra la liquidación.
@@ -199,6 +213,8 @@ export function scoreUrgencia(p: { vacante: string | null; notas: string | null 
 export function scoreCierre(p: {
   telefono: string | null; correo: string | null; contacto_nombre: string | null;
   estado: string; fuente: string; empresa: string; vacante: string | null; notas: string | null;
+  /** Personas de `prospecto_persona` con contacto NO inferido (0138). */
+  personasVerificadas?: number;
 }): number {
   let s = 0;
   // Alcanzabilidad: no se cierra a quien no se puede llamar.
@@ -219,14 +235,29 @@ export function scoreCierre(p: {
   else if (p.estado === 'perdido') return 0;
   // Cuenta trabajada a mano (ficha) — ya hay contexto para personalizar.
   if (p.fuente === 'manual') s += 10;
+
+  // ── QUIEN VINO SOLO NO SE COMPARA CON UNO SCRAPEADO ──────────────────────
+  // Un renglón del censo es una empresa que NO sabe que existimos. Uno de
+  // `landing`/`ads-*`/`campana` llenó un formulario con su nombre y su
+  // teléfono: ya hay permiso y ya hay intención. Ordenar los dos con el mismo
+  // criterio manda a Javier a llamar en frío teniendo una mano levantada
+  // esperando.
+  if (p.fuente === 'landing' || p.fuente === 'campana') s += 20;
+  else if (p.fuente.startsWith('ads-')) s += 25; // además costó dinero traerlo
+
+  // Un decisor con nombre y correo VERIFICADO vale más que el buzón genérico
+  // de contacto@. `inferido` no cuenta: un correo adivinado no es alcance, es
+  // una apuesta, y sumarlo aquí pintaría de verde un camino que rebota.
+  s += Math.min(20, (p.personasVerificadas ?? 0) * 10);
+
   return Math.min(100, s);
 }
 
 /** El criterio, en una línea por score — el pie del mapa lo enseña TAL CUAL
  *  (misma fuente que el cálculo, no una copia que se desincronice). */
 export const CRITERIO_SCORES = {
-  urgencia: 'Urgencia = su propia conducta: la vacante que nombra la liquidación (+45), cuántos anuncios (+4 c/u, tope 20), qué tan reciente el último (+20 si es de hoy) y la ficha trabajada (+15). Estimación determinista, no medición.',
-  cierre: 'Cierre = alcanzabilidad (tel +20, correo +15, decisor +20), fit del giro (transportista +15), etapa del embudo (contactado +15 … negociación +35; cliente=100, perdido=0) y ficha a mano (+10). Estimación determinista, no medición.',
+  urgencia: 'Urgencia = lo que él DECLARA manda sobre lo que inferimos: si contestó «ya, este mes nos está costando» en /getdemo vale 100, y si contestó «estoy explorando» queda con techo aunque su vacante grite. Sin declaración se infiere: la vacante que nombra la liquidación (+45), cuántos anuncios (+4 c/u, tope 20), qué tan reciente el último (+20 si es de hoy) y la ficha trabajada (+15). Estimación determinista, no medición.',
+  cierre: 'Cierre = alcanzabilidad (tel +20, correo +15, decisor +20, +10 por decisor con contacto VERIFICADO —el inferido no cuenta—), quién llegó a quién (entró solo por la landing +20, por un anuncio pagado +25), fit del giro (transportista +15), etapa del embudo (contactado +15 … negociación +35; cliente=100, perdido=0) y ficha a mano (+10). Estimación determinista, no medición: con cero tratos cerrados no hay con qué calibrar una probabilidad, así que esto ORDENA la cola, no predice el cierre.',
   datos: 'Datos = qué tan completo está el expediente para salir a venderle: teléfono +30, correo +25, decisor +20, ubicación +15, sitio web +10. El tamaño (11-30 … 250+) es el personal ocupado que reporta la DENUE.',
 } as const;
 
