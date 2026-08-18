@@ -397,7 +397,7 @@ Las once claves y sus nomenclaturas. **Las claves están VERIFICADAS** contra el
 | `SP25` | Diésel agrícola | `15101505` |
 | `SP48` | Gasóleo doméstico | `15101505` |
 
-**Para autotransporte de carga federal, el valor esperado es `SP18` (diésel automotriz), y ocasionalmente `SP24` (DUBA).** Si en la liquidación de un tractocamión aparece `SP25` (agrícola) o `SP23` (industrial), es una anomalía de negocio digna de alerta: son subproductos con precio y tratamiento distintos, y el estímulo de IEPS del art. 16-A-IV de la LIF está pensado para uso automotriz.
+**Para autotransporte de carga federal, el valor esperado es `SP18` (diésel automotriz), y ocasionalmente `SP24` (DUBA).** Si en la liquidación de un tractocamión aparece `SP25` (agrícola) o `SP23` (industrial), es una anomalía de negocio digna de alerta: son subproductos con precio y tratamiento distintos, y el estímulo de IEPS del art. 20, apartado A, fracción IV de la LIF está pensado para uso automotriz.
 
 ---
 
@@ -522,7 +522,7 @@ Dos fundamentos independientes que llegan al mismo lugar:
 
 ### 6.3 Se cae también el estímulo de IEPS al diésel
 
-**LIF 2026 (DOF 07-11-2025), art. 16, apartado A, fracción IV:** estímulo para quienes adquieran diésel o biodiésel para consumo final en vehículos destinados exclusivamente al **transporte público y privado de personas o de carga**, consistente en acreditar el IEPS causado, contra el **ISR causado del mismo ejercicio**.
+**LIF 2026 (DOF 07-11-2025), art. 20, apartado A, fracción IV:** estímulo para quienes adquieran diésel o biodiésel para consumo final en vehículos destinados exclusivamente al **transporte público y privado de personas o de carga**, consistente en acreditar el IEPS causado, contra el **ISR causado del mismo ejercicio**.
 
 Requisito de forma de pago, textual:
 
@@ -710,7 +710,7 @@ Lo que **no** pude comprobar en fuente primaria. Cada punto está aquí porque a
 **Legislación (Cámara de Diputados, texto vigente)**
 - Código Fiscal de la Federación, última reforma DOF 09-04-2026 — arts. 28 fr. I apartado B; 29-A fr. V inciso f) y fr. IX; 29-A penúltimo párrafo; 29 Bis; 55 fr. VII; 81 fr. XXV; 82 fr. XXV; 83 fr. VII; 84 fr. IV; 111 Bis — https://www.diputados.gob.mx/LeyesBiblio/pdf/CFF.pdf
 - Ley del Impuesto sobre la Renta — art. 27 fr. III (párrafo reformado DOF 12-11-2021) — https://www.diputados.gob.mx/LeyesBiblio/pdf/LISR.pdf
-- Ley de Ingresos de la Federación para 2026 (DOF 07-11-2025) — art. 16 apartado A fr. IV — https://www.diputados.gob.mx/LeyesBiblio/pdf/LIF_2026.pdf
+- Ley de Ingresos de la Federación para 2026 (DOF 07-11-2025) — art. 20 apartado A fr. IV — https://www.diputados.gob.mx/LeyesBiblio/pdf/LIF_2026.pdf
 - Ley del Sector Hidrocarburos (Nueva Ley DOF 18-03-2025) — arts. 5, 76; transitorios Segundo y Quinto — https://www.diputados.gob.mx/LeyesBiblio/pdf/LSH.pdf
 - Decreto de expedición, DOF 18-03-2025 (edición vespertina) — https://www.diputados.gob.mx/LeyesBiblio/ref/lsh/LSH_orig_18mar25.pdf
 - Reglamento de la Ley del Sector Hidrocarburos — https://www.diputados.gob.mx/LeyesBiblio/regley/Reg_LSH.pdf
