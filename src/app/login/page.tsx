@@ -1,11 +1,50 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { Fraunces, Instrument_Sans } from 'next/font/google';
 import { supabaseServer } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
-import { Logo } from '../logo';
+import { Logo, GlifoAdorno } from '../logo';
+import './login.css';
 
 export const dynamic = 'force-dynamic';
+
+// ── LAS DOS VOCES QUE EL SOFTWARE NO TENÍA ────────────────────────────────
+//
+// `layout.tsx` carga Inter, Inter Tight e IBM Plex Mono para TODA la app. Son
+// las voces de un panel de trabajo y están bien ahí. La landing de likida.ai
+// habla otras dos —Fraunces para los titulares, Instrument Sans para el
+// cuerpo— y el login es la bisagra entre las dos pantallas: se ve después de
+// la landing y antes del panel.
+//
+// SE CARGAN AQUÍ Y NO EN `layout.tsx` a propósito. `next/font` emite el
+// `<link rel=preload>` y el `@font-face` SOLO en las rutas que importan el
+// módulo, así que estas dos familias viajan únicamente en `/login`: ni el
+// dashboard ni el admin ni el PDF pagan dos tipografías que no pintan.
+// Ponerlas en el layout raíz habría metido ~90 KB de fuentes en cada pantalla
+// del panel.
+//
+// Y se aplican POR VARIABLE CSS (`--font-fraunces`, `--font-instrument`), no
+// cambiando `--font-sans`: la clase que las declara vive en el `<main>` de
+// esta página, así que ninguna regla global de `globals.css` se mueve. Quien
+// quiera ver de dónde salen los valores, `login.css` los mapea a
+// `--serif-marca`/`--sans-marca` y ahí se acaba su alcance.
+//
+// `<link>` suelto NO: sin `next/font` la fuente se pide después de que el CSS
+// se descargó y se parseó (una cascada más), no hay `size-adjust` calculado
+// contra el fallback —así que al cambiar Georgia por Fraunces el titular
+// SALTA— y en producción el archivo sale de fonts.gstatic.com en vez del
+// propio dominio.
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-fraunces',
+});
+const instrument = Instrument_Sans({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-instrument',
+});
 
 /**
  * Sobre esto se arman el `emailRedirectTo` del magic link y el `redirectTo` de
@@ -115,143 +154,247 @@ export default async function Login({
     redirect(`/login?next=${encodeURIComponent(dest)}&enviado=1`);
   }
 
-  // ── EL LOGIN HABLA EL IDIOMA DEL PRODUCTO ─────────────────────────────────
+  // ── EL LOGIN HABLA EL IDIOMA DE LA MARCA ──────────────────────────────────
   //
-  // La estructura es de dos columnas con imagen
-  // a la derecha, un layout que funciona bien y no hay por qué cambiar. Lo que se
-  // fue el 14-ago-2026 fueron unos COLORES Y TIPOGRAFÍA que estaban
-  // literales aquí (#0a0a0a, #e5e5e5, #6b6b6b) y no eran los de Likida.
+  // La estructura de dos columnas con foto a la derecha se queda: funciona y no
+  // hay por qué cambiarla. Lo que cambió el 17-ago-2026 es EL IDIOMA, porque
+  // ese día la landing se mudó a https://likida.ai con uno nuevo y esta
+  // pantalla quedó siendo la única que no lo hablaba.
   //
-  // El problema de esa decisión: el login es la PRIMERA pantalla del producto
-  // y era la única que no se parecía al producto. Un contralor entraba a una
-  // pantalla con botón naranja y tipografía de sistema, y caía en una consola
-  // negra con Inter Tight. La promesa visual se rompía en el primer clic.
+  // Los cinco cambios, y cada uno es una cosa que se veía mal:
   //
-  // Ahora usa los tokens de la app bajo `.tema-neutro` —la misma clase que
-  // ponen `admin/layout.tsx` y `dashboard/chrome.tsx`—, así que el negro de
-  // aquí es EL MISMO negro de allá y cambia en un solo lugar. Los radios pasan
-  // de pastilla (`rounded-full`) a `rounded-lg`, que es el de los botones del
-  // panel, y los titulares a `font-display` (Inter Tight).
+  //  1. TIPOGRAFÍA. El titular iba en la sans del sistema. Ahora va en
+  //     Fraunces —la serif de la landing— y el cuerpo en Instrument Sans, las
+  //     dos cargadas arriba con `next/font` y aplicadas por variable CSS.
+  //     Los micro-rótulos van en IBM Plex Mono, que la app ya cargaba.
+  //  2. LA FOTO. Era un tráiler naranja al atardecer: saturación media 0.331 y
+  //     un sesgo cálido de +43 (R−B) contra una paleta de papel y tinta. La
+  //     nueva es un patio de cajas secas en niebla — 0.074 de saturación,
+  //     sesgo −12: neutra fría. Medido, no a ojo (ver el commit).
+  //  3. EL GESTO DEL GLIFO. Los botones de la landing revelan el glifo de
+  //     Likida al pasar el cursor; el botón negro de aquí no hacía nada. Está
+  //     portado con los mismos números en `login.css`.
+  //  4. GEOMETRÍA. Píldoras de 999px y hairlines, no `rounded-lg` — ese radio
+  //     es el de los botones del PANEL, correcto allá y ajeno aquí.
+  //  5. COMPOSICIÓN. El bloque estaba centrado; la landing es editorial y va
+  //     alineada a la izquierda, con el kicker ordenando la jerarquía antes
+  //     del titular.
   //
-  // NADA de la lógica de arriba se tocó: el límite por IP, la respuesta
-  // idéntica para un correo sin cuenta (el oráculo de enumeración) y
-  // `shouldCreateUser:false` siguen exactamente igual.
+  // NADA de la lógica de arriba se tocó: `siteUrl()`, el `emailRedirectTo`, el
+  // límite por IP, la respuesta idéntica para un correo sin cuenta (el oráculo
+  // de enumeración) y `shouldCreateUser:false` siguen exactamente igual. Este
+  // archivo cambió de piel, no de puerta.
   //
-  // La imagen de la derecha es propia, generada con Higgsfield (`nano_banana_2`)
-  // — fotorrealista, no artwork ilustrado: Javier lo pidió explícito el
-  // 8-ago-2026, "camión real no pixeles", para que se sienta de la misma
-  // familia fotográfica que el banner de `/dashboard`.
+  // TEMA: esta pantalla es SIEMPRE clara, y no por descuido. El script de
+  // `layout.tsx` que aplica el tema guardado arranca con
+  // `if (location.pathname.indexOf('/dashboard') !== 0) return` — el oscuro es
+  // del panel. Aquí no hay `data-theme`, así que los tokens quedan en su rama
+  // clara y la pantalla se ve igual para todos. `tema-neutro` se conserva por
+  // otra razón: pone `--marca` en tinta y no en el naranja #c2410c, que es lo
+  // que hace que el glifo del logo salga negro — la landing no tiene naranja.
   return (
-    <main className="tema-neutro min-h-screen flex" style={{ background: 'var(--surface)' }}>
-      <div className="flex w-full flex-col lg:w-1/2">
-        <div className="flex items-center px-6 py-6 md:px-10 lg:px-12 lg:py-12">
-          <Logo alto="h-6" />
-        </div>
+    <main
+      className={`login tema-neutro ${fraunces.variable} ${instrument.variable} min-h-screen lg:grid lg:grid-cols-2`}
+    >
+      {/* ── COLUMNA DEL FORMULARIO ──
+          UNA SOLA COLUMNA ÓPTICA. El logo, el titular, los botones y la línea
+          legal cuelgan todos del MISMO borde izquierdo (`max-w-[392px]`
+          centrado en la mitad), en vez de que el logo se vaya al filo de la
+          pantalla y el formulario se quede a 100px de distancia. Con el logo
+          pegado al margen y el bloque centrado había dos ejes verticales
+          compitiendo, que es exactamente lo que hace que una pantalla se vea
+          armada por partes. */}
+      <section className="flex min-h-screen flex-col px-6 py-7 sm:px-10 lg:px-14 lg:py-10">
+        <div className="mx-auto flex w-full max-w-[392px] flex-1 flex-col">
+          <header className="login-entra flex items-center">
+            <Logo alto="h-6" />
+          </header>
 
-        <div className="flex flex-1 items-center justify-center px-6 pb-16 md:px-10">
-          <div className="w-full max-w-[340px]">
-            <h1 className="font-display text-center text-[30px] font-semibold leading-[1.1] tracking-[-0.025em]"
-              style={{ color: 'var(--ink)' }}>
-              Bienvenido a Likida
-            </h1>
-            <p className="mt-3 text-center text-[14px] leading-relaxed" style={{ color: 'var(--muted)' }}>
-              El panel de liquidación de tu flota.
-            </p>
-
-            {sp?.enviado ? (
-              <div className="mt-8 rounded-xl p-4 text-center hairline" style={{ background: 'var(--g1)' }}>
-                <p className="text-[14px] font-medium" style={{ color: 'var(--ink)' }}>
-                  Te mandamos un enlace a tu correo.
-                </p>
-                <p className="mt-1 text-[13px]" style={{ color: 'var(--muted)' }}>
-                  Ábrelo desde este mismo dispositivo.
-                </p>
-              </div>
-            ) : (
-              <>
-                <form action={entrarConGoogle} className="mt-8">
-                  <input type="hidden" name="next" value={next} />
-                  <button type="submit"
-                    className="hairline flex w-full items-center justify-center gap-2.5 rounded-lg px-5 py-3 text-[14px] font-medium transition-colors hover:bg-[var(--canvas)]"
-                    style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-                    <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
-                      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z" />
-                      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
-                      <path fill="#FBBC05" d="M3.97 10.72a5.41 5.41 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z" />
-                      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
-                    </svg>
-                    Continuar con Google
-                  </button>
-                </form>
-
-                <div className="my-6 flex items-center gap-4">
-                  <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
-                  {/* NI mono NI versalitas para esta palabra, aunque el resto
-                      de los micro-rótulos de la app sí lo sean: en IBM Plex
-                      Mono la «O» mayúscula es casi idéntica al cero, y en el
-                      primer render este separador se leía «0». Un caracter
-                      suelto no tiene contexto que lo desambigüe. */}
-                  <span className="text-[13px] lowercase" style={{ color: 'var(--faint)', fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>o</span>
-                  <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
-                </div>
-
-                <form action={entrarConEmail} className="flex flex-col gap-3.5">
-                  <input type="hidden" name="next" value={next} />
-                  <label htmlFor="login-email" className="sr-only">Tu correo</label>
-                  <input id="login-email" name="email" type="email" required placeholder="tu@flota.com"
-                    autoComplete="email"
-                    className="hairline rounded-lg px-3.5 py-2.5 text-[14px] outline-none transition-colors focus:border-[var(--marca)]"
-                    style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
-                  <button type="submit"
-                    className="mt-1 inline-flex w-full items-center justify-center rounded-lg px-5 py-3 text-[14px] font-medium transition-opacity hover:opacity-85"
-                    style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                    Continuar con correo
-                  </button>
-                </form>
-
-                <p className="mt-6 text-center text-[13px]" style={{ color: 'var(--muted)' }}>
-                  ¿Tu correo no tiene acceso?{' '}
-                  <span className="font-medium" style={{ color: 'var(--ink)' }}>
-                    Pídele a tu flota que te dé de alta.
-                  </span>
-                </p>
-              </>
-            )}
-
-            {sp?.error && (
-              <p className="mt-4 text-center text-[13px]" style={{ color: 'var(--color-bad)' }}>
-                Algo falló. Intenta otra vez.
+          <div className="flex flex-1 items-center py-12">
+            <div className="w-full">
+              <p className="login-entra login-kicker" style={{ animationDelay: '40ms' }}>
+                Acceso al panel
               </p>
-            )}
+              <h1
+                className="login-entra login-serif mt-5 text-[38px] sm:text-[44px]"
+                style={{ color: 'var(--ink)', animationDelay: '90ms' }}
+              >
+                Bienvenido a Likida
+              </h1>
+              <p
+                className="login-entra mt-4 text-[15px] leading-[1.6]"
+                style={{ color: 'var(--muted)', animationDelay: '140ms' }}
+              >
+                El panel de liquidación de tu flota.
+              </p>
 
-            {/* Los DOS, no solo privacidad: aquí es donde se acepta el contrato,
-                y hasta hoy la única liga era la del aviso — se aceptaban unos
-                términos que no había forma de leer desde esta pantalla. */}
-            <p className="mt-8 text-center text-[11px] leading-relaxed" style={{ color: 'var(--faint)' }}>
-              Al continuar, aceptas los{' '}
-              <a href="/terminos" className="underline underline-offset-2 transition-opacity hover:opacity-70"
-                style={{ color: 'var(--ink)' }}>
-                Términos de Servicio
-              </a>{' '}
-              y el{' '}
-              <a href="/privacidad" className="underline underline-offset-2 transition-opacity hover:opacity-70"
-                style={{ color: 'var(--ink)' }}>
-                Aviso de Privacidad
-              </a>{' '}
-              de Likida.
-            </p>
+              {sp?.enviado ? (
+                <div
+                  role="status"
+                  className="login-entra mt-9 rounded-[18px] p-5"
+                  style={{ background: 'var(--crema)', border: '1px solid var(--line)', animationDelay: '190ms' }}
+                >
+                  <p className="text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>
+                    Te mandamos un enlace a tu correo.
+                  </p>
+                  <p className="mt-1.5 text-[14px] leading-relaxed" style={{ color: 'var(--muted)' }}>
+                    Ábrelo desde este mismo dispositivo.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* El hairline que separa el encabezado de las acciones. Es la
+                      línea de 1px de la landing, no un margen más: marca dónde
+                      deja de leerse y empieza a hacerse algo. */}
+                  <div
+                    className="login-entra mt-9 h-px"
+                    style={{ background: 'var(--line)', animationDelay: '180ms' }}
+                  />
+
+                  <form action={entrarConGoogle} className="login-entra mt-8" style={{ animationDelay: '220ms' }}>
+                    <input type="hidden" name="next" value={next} />
+                    <button type="submit" className="login-btn login-btn-borde">
+                      <svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true">
+                        <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z" />
+                        <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z" />
+                        <path fill="#FBBC05" d="M3.97 10.72a5.41 5.41 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z" />
+                        <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
+                      </svg>
+                      Continuar con Google
+                    </button>
+                  </form>
+
+                  <div className="login-entra my-6 flex items-center gap-4" style={{ animationDelay: '250ms' }}>
+                    <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
+                    {/* NI mono NI versalitas para esta palabra, aunque el resto
+                        de los micro-rótulos de esta pantalla sí lo sean: en IBM
+                        Plex Mono la «O» mayúscula es casi idéntica al cero, y en
+                        el primer render este separador se leía «0». Un caracter
+                        suelto no tiene contexto que lo desambigüe. */}
+                    <span className="text-[13px] lowercase" style={{ color: 'var(--faint)' }}>o</span>
+                    <span className="h-px flex-1" style={{ background: 'var(--line)' }} />
+                  </div>
+
+                  <form
+                    action={entrarConEmail}
+                    className="login-entra flex flex-col gap-3"
+                    style={{ animationDelay: '280ms' }}
+                  >
+                    <input type="hidden" name="next" value={next} />
+                    <label htmlFor="login-email" className="sr-only">Tu correo</label>
+                    <input
+                      id="login-email"
+                      name="email"
+                      type="email"
+                      required
+                      placeholder="tu@flota.com"
+                      autoComplete="email"
+                      className="login-campo"
+                    />
+                    {/* EL BOTÓN CON EL GESTO. `GlifoAdorno` pinta el glifo con
+                        `mask-image`, así que toma el color que se le pase: aquí
+                        `--bg` (papel), que es el color del TEXTO de esta píldora
+                        —nunca `--marca`—. El envoltorio es el que anima de 0 a
+                        17px de ancho; por eso el glifo va sin altura propia. */}
+                    <button type="submit" className="login-btn login-btn-tinta mt-1">
+                      <span aria-hidden className="login-glifo">
+                        <GlifoAdorno color="var(--bg)" />
+                      </span>
+                      <span>Continuar con correo</span>
+                    </button>
+                  </form>
+
+                  <p
+                    className="login-entra mt-7 text-pretty text-[14px] leading-relaxed"
+                    style={{ color: 'var(--muted)', animationDelay: '320ms' }}
+                  >
+                    ¿Tu correo no tiene acceso?{' '}
+                    <span className="font-semibold" style={{ color: 'var(--ink)' }}>
+                      Pídele a tu flota que te dé de alta.
+                    </span>
+                  </p>
+                </>
+              )}
+
+              {/* `role="alert"` — antes era un <p> mudo: quien usa lector de
+                  pantalla enviaba el formulario, volvía a la misma página y nada
+                  le anunciaba que había fallado. */}
+              {sp?.error && (
+                <p role="alert" className="mt-5 text-[14px]" style={{ color: 'var(--color-bad)' }}>
+                  Algo falló. Intenta otra vez.
+                </p>
+              )}
+
+              {/* Los DOS, no solo privacidad: aquí es donde se acepta el contrato,
+                  y hasta hoy la única liga era la del aviso — se aceptaban unos
+                  términos que no había forma de leer desde esta pantalla. */}
+              <p
+                className="login-entra mt-10 text-pretty text-[12px] leading-[1.7]"
+                style={{ color: 'var(--faint)', animationDelay: '360ms' }}
+              >
+                Al continuar, aceptas los{' '}
+                <a
+                  href="/terminos"
+                  className="underline underline-offset-2 transition-opacity hover:opacity-70"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  Términos de Servicio
+                </a>{' '}
+                y el{' '}
+                <a
+                  href="/privacidad"
+                  className="underline underline-offset-2 transition-opacity hover:opacity-70"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  Aviso de Privacidad
+                </a>{' '}
+                de Likida.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Panel derecho — solo desktop, igual que el original (`hidden lg:flex`). */}
-      <div className="hidden lg:flex lg:w-1/2 lg:flex-col lg:pb-12 lg:pl-3 lg:pr-12 lg:pt-12">
-        <div className="relative mt-8 min-h-0 flex-1 overflow-hidden rounded-[28px]" style={{ background: 'var(--marca)' }}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- imagen estática de fondo, no contenido de producto */}
-          <img src="/images/login-hero.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/25" />
-        </div>
-      </div>
+      {/* ── LA LÁMINA DE LA FOTO ──────────────────────────────────────────────
+          `hidden lg:flex`, igual que siempre: por debajo de 1024px NO se pinta.
+          Esa es la respuesta a "que en móvil la foto no aplaste el formulario"
+          — en 390px no hay foto que aplastar nada, la pantalla es papel, serif
+          y aire. Meter aquí una banda de imagen le habría robado alto vertical
+          al único formulario que importa, en el dispositivo donde menos alto
+          hay. Y como está en `display:none`, tampoco se descarga ni la lee un
+          lector de pantalla en el teléfono. */}
+      <aside className="hidden lg:flex lg:flex-col lg:py-10 lg:pl-6 lg:pr-10">
+        <figure className="login-lamina min-h-0 flex-1">
+          {/* eslint-disable-next-line @next/next/no-img-element -- fondo estático de marca, no contenido de producto: `next/image` aquí solo agrega un pase de optimización sobre un JPEG que ya se sirve al tamaño exacto */}
+          <img
+            src="/images/login-hero.jpg"
+            alt="Fila de cajas secas estacionadas en un patio de maniobras, perdiéndose en la niebla de la mañana."
+            className="login-foto"
+          />
+          <div className="login-velo" />
+          <figcaption className="absolute inset-x-0 bottom-0 p-9">
+            <p className="login-kicker" style={{ color: 'color-mix(in srgb, var(--bg) 78%, transparent)' }}>
+              Liquidación de viajes
+            </p>
+            {/* Las dos frases son literales de lo que el producto ES (CLAUDE.md
+                y la `description` del layout). Cero cifras, cero promesas: la
+                regla de "un rótulo tiene que ser verdad" también aplica a un
+                pie de foto en la pantalla de entrada. */}
+            {/* Tamaño FLUIDO, no fijo. A 27px clavados el pie cabía en 1440 y
+                en 1024 —donde la lámina mide ~460px— "El cierre del día, por
+                WhatsApp." se partía en tres renglones con "WhatsApp." solo. El
+                `clamp` lo baja a 20px justo en ese ancho y lo deja en dos. */}
+            <p
+              className="login-serif mt-3.5"
+              style={{ color: 'var(--bg)', fontSize: 'clamp(20px, 1.9vw, 27px)' }}
+            >
+              Flotas de carga en México.
+              <br />
+              El cierre del día, por WhatsApp.
+            </p>
+          </figcaption>
+        </figure>
+      </aside>
     </main>
   );
 }
