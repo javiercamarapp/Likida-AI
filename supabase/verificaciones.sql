@@ -5377,3 +5377,38 @@ begin
   raise exception E'PERSONAS_0138  tabla-rls=%  indice=%  inferido-alta-rebota=%  correo-duplicado-rebota=%   (esperado t / t / t / t)',
     coalesce(tabla_rls, false), indice, inferido_alta_rebota, correo_duplicado_rebota;
 end $$;
+
+-- ── 110. Un duplicado marcado no puede esconder la fila buena (mig. 0139) ───
+-- `duplicado_de` decide qué prospecto VE el vendedor: el tablero filtra por
+-- `duplicado_de is null`. Una fila que se apunte a sí misma desaparecería para
+-- siempre sin dejar a dónde ir, y un ciclo A→B→A escondería las dos.
+-- (a) el check impide la autorreferencia; (b) la FK impide apuntar a un id
+-- inexistente —que dejaría la fila invisible apuntando a la nada—; (c) los
+-- índices de calidad existen.   (esperado t / t / t)
+do $$
+declare
+  auto_rebota boolean := false;
+  fantasma_rebota boolean := false;
+  indices boolean;
+  v_id uuid;
+begin
+  insert into public.prospecto (empresa) values ('zzz-verif-dup') returning id into v_id;
+
+  begin
+    update public.prospecto set duplicado_de = v_id where id = v_id;
+  exception when check_violation then
+    auto_rebota := true;
+  end;
+
+  begin
+    update public.prospecto set duplicado_de = '00000000-0000-0000-0000-000000000000' where id = v_id;
+  exception when foreign_key_violation then
+    fantasma_rebota := true;
+  end;
+
+  select count(*) = 3 into indices from pg_indexes
+   where indexname in ('idx_prospecto_sitio', 'idx_prospecto_scian', 'idx_prospecto_vivos');
+
+  raise exception E'CALIDAD_0139  auto-rebota=%  fantasma-rebota=%  indices=%   (esperado t / t / t)',
+    auto_rebota, fantasma_rebota, indices;
+end $$;
