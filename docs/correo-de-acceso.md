@@ -1,9 +1,11 @@
 # El correo de acceso
 
-> Estado al 18-ago-2026: **el código está listo y probado; falta encender el
-> hook en el panel de Supabase** (paso 2). Mientras no se encienda, Supabase
-> sigue mandando con sus plantillas — por eso el paso 1 se puede hacer solo y
-> ya arregla el correo hoy mismo.
+> Estado al 18-ago-2026: código probado y `SUPABASE_AUTH_HOOK_SECRET` ya
+> puesta en Vercel (producción). Este commit la publica: **hasta que el
+> deployment termine, el endpoint no tiene la variable y contesta 500**, así
+> que el hook de Supabase se enciende DESPUÉS de comprobar que
+> `POST /api/auth/correo` sin firma contesta 401 (401 = tiene el secreto y
+> verifica; 500 = todavía no lo tiene).
 
 ## Qué estaba mal
 
