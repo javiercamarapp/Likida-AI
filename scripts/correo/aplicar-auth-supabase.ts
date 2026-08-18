@@ -3,6 +3,7 @@
 //
 //   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts
 //   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --con-hook
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --afinar
 //
 // Sin bandera: sube las TRECE plantillas y sus asuntos (Authentication →
 // Emails): las seis con liga o código, y los siete avisos de seguridad. Es
@@ -120,6 +121,59 @@ const AVISOS: Array<{ tipo: AvisoAuth; asunto: string; contenido: string; nombre
   { tipo: 'identity_linked', asunto: 'mailer_subjects_identity_linked_notification', contenido: 'mailer_templates_identity_linked_notification_content', nombre: 'Identidad ligada' },
   { tipo: 'identity_unlinked', asunto: 'mailer_subjects_identity_unlinked_notification', contenido: 'mailer_templates_identity_unlinked_notification_content', nombre: 'Identidad quitada' },
 ];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// `--afinar` — las dos cosas que encender el hook dejó rotas por debajo, y que
+// no se ven hasta que duelen. Ambas medidas el 18-ago-2026 DESPUÉS de
+// encenderlo.
+//
+//  1. **El límite de correos estaba en 2 POR HORA** para todo el proyecto —el
+//     default de la infraestructura de correo de Supabase—. Con eso, dos
+//     personas de la misma flota entrando la misma mañana dejan a la tercera
+//     sin poder entrar, y el error que ve es "email rate limit exceeded", que
+//     no le dice nada. Quien manda ahora es Resend por nuestro hook: el techo
+//     real es nuestra cuota, no la suya. Se sube a 100/h, que le da aire a una
+//     flota entera y sigue cortando un bucle desbocado. El freno fino sigue
+//     siendo el de `/login`: 10 intentos por IP cada 5 minutos.
+//
+//  2. **Encender el hook BORRÓ la configuración SMTP.** Antes tenía
+//     `smtp.resend.com`; después quedó vacía. Con el hook prendido da igual
+//     —mandamos nosotros—, pero convierte el interruptor de pánico en una
+//     trampa: apagarlo devuelve el envío a Supabase, que sin SMTP propio cae a
+//     su servicio interno, limitado y solo para miembros del equipo. O sea que
+//     el "rollback" dejaría a los clientes sin poder entrar. Se repone la
+//     configuración para que apagar el hook vuelva a ser seguro.
+//
+//     OJO: repuesta no es lo mismo que probada. Mientras el hook esté
+//     encendido, ese SMTP no se usa y no hay forma de verificarlo sin apagarlo.
+// ═══════════════════════════════════════════════════════════════════════════
+if (process.argv.includes('--afinar')) {
+  const resend = process.env.RESEND_API_KEY ?? deEnvLocal('RESEND_API_KEY');
+  if (!resend) {
+    console.error('Falta RESEND_API_KEY (en el entorno o en .env.local): es la contraseña del SMTP.');
+    process.exit(1);
+  }
+  const previo = await api('GET');
+  console.log(`Antes: ${previo.rate_limit_email_sent} correos/hora · SMTP ${previo.smtp_host ?? '(vacío)'}`);
+
+  await api('PATCH', {
+    rate_limit_email_sent: 100,
+    smtp_host: 'smtp.resend.com',
+    smtp_port: 465,
+    smtp_user: 'resend',
+    smtp_pass: resend,
+    smtp_admin_email: 'acceso@mail.likida.ai',
+    smtp_sender_name: 'Likida',
+  });
+
+  const ya = await api('GET');
+  const okLimite = ya.rate_limit_email_sent === 100;
+  const okSmtp = ya.smtp_host === 'smtp.resend.com' && ya.smtp_admin_email === 'acceso@mail.likida.ai';
+  console.log(`  ${okLimite ? '✓' : '✗'} ${ya.rate_limit_email_sent} correos/hora`);
+  console.log(`  ${okSmtp ? '✓' : '✗'} SMTP de respaldo: ${ya.smtp_sender_name} <${ya.smtp_admin_email}> por ${ya.smtp_host}`);
+  console.log('\n(El SMTP no se usa mientras el hook esté encendido: es la red del interruptor de pánico.)');
+  process.exit(okLimite && okSmtp ? 0 : 1);
+}
 
 // ── 0. Estado actual ──────────────────────────────────────────────────────
 const antes = await api('GET');
