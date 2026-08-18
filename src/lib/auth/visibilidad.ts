@@ -277,3 +277,24 @@ export function inicioDe(rol: string): string {
   if (puedeVerArea(rol, 'dinero')) return '/dashboard/contador';
   return '/sin-acceso';
 }
+
+/**
+ * LA PUERTA DE ENTRADA: a qué panel aterriza una sesión que llega SIN destino
+ * explícito — el `/auth/callback` de un magic link, y desde el 17-ago-2026
+ * también la raíz `/`, que dejó de ser landing de marketing (esa vive en
+ * likida.ai, otro proyecto) y ahora solo reparte.
+ *
+ * NO ES `inicioDe`, y la diferencia importa: `inicioDe` responde "a dónde
+ * rebote a quien NO puede ver donde está parado" y por eso trabaja por área,
+ * mandando al superadmin —que ve las tres— a /dashboard. Aquí la pregunta es
+ * otra: cuál es la CASA de ese rol. La del superadmin es /admin, su consola de
+ * negocio; /dashboard es el panel de un cliente y, sin flota elegida,
+ * `requireSessionTenant` lo mandaría al selector.
+ *
+ * Solo decide el aterrizaje: quien no deba estar ahí lo rebota la puerta de
+ * ese panel (`requireSuperadmin`, `requireSessionTenant` — que resuelve
+ * también al `vendedor` y al rol sin fila). Esta función no autoriza nada.
+ */
+export function puertaDeEntrada(rol: string): string {
+  return rol === 'superadmin' ? '/admin' : '/dashboard';
+}

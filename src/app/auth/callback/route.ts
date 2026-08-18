@@ -6,6 +6,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
 import { getSessionTenant } from '@/lib/auth/session';
+import { puertaDeEntrada } from '@/lib/auth/visibilidad';
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code');
@@ -21,10 +22,16 @@ export async function GET(req: NextRequest) {
         // no en el panel del tenant demo — antes de esto no tenía a dónde
         // ir que fuera suyo. Un `next` explícito (un link a /dashboard/[id]
         // que alguien mandó) se respeta tal cual, para todos los roles.
+        //
+        // La regla vive en `puertaDeEntrada` (visibilidad.ts) desde el
+        // 17-ago-2026 porque la raíz `/` la necesita idéntica: dejó de ser
+        // landing y ahora también reparte. Dos copias del mismo ternario en
+        // dos archivos es cómo el magic link y el dominio a secas acaban
+        // aterrizando en paneles distintos.
         let dest = destinoExplicito ?? '/dashboard';
         if (!destinoExplicito) {
           const s = await getSessionTenant();
-          if (s?.rol === 'superadmin') dest = '/admin';
+          if (s) dest = puertaDeEntrada(s.rol);
         }
         return NextResponse.redirect(new URL(dest, req.url));
       }

@@ -36,23 +36,28 @@ insert into tenant (id, nombre, rfc, ciudad, plan,
    -- estos mismos datos. El responsable sigue siendo la flota (art. 14); Likida
    -- solo aloja el documento como persona encargada, y el texto lo dice.
    --
-   -- El host es `likida.ai` porque HOY ese dominio sirve esta app: se comprobó
-   -- con curl el 31-jul (título de `layout.tsx`, `/acceso` 200, y el webhook
-   -- devolviendo 403 al token malo, o sea que la ruta existe). La primera
-   -- versión de esta línea decía `cuadra.mx`, que NO es nuestro: es un dominio
-   -- parkeado que redirige a su página de venta. Habría mandado al operador al
-   -- anuncio de un desconocido desde su aviso de privacidad.
+   -- La primera versión de esta línea decía `cuadra.mx`, que NO es nuestro: es
+   -- un dominio parkeado que redirige a su página de venta. Habría mandado al
+   -- operador al anuncio de un desconocido desde su aviso de privacidad.
    --
-   -- DECIDIDO el 31-jul: el software se muda a `app.likida.ai` y `likida.ai`
-   -- queda para la landing. Esta línea NO se adelanta a ese cambio a propósito
-   -- —hoy `app.likida.ai` da 404— porque una liga que todavía no resuelve es el
-   -- bug que esto vino a cerrar. Se mueve en el paso 3 del orden de §6 del
-   -- handoff, junto con `NEXT_PUBLIC_APP_URL`. En localhost
-   -- `revisarAvisoIntegral` marca la liga `inservible` a propósito, así que en
-   -- dev el operador recibe el aviso degradado, que es lo correcto.
+   -- EL HOST YA ES `app.likida.ai` (17-ago-2026). La mudanza que el 31-jul se
+   -- dejó pendiente a propósito —«hoy `app.likida.ai` da 404», y una liga que
+   -- no resuelve era el bug que esto vino a cerrar— ya ocurrió: la app vive en
+   -- `app.likida.ai` y `likida.ai` quedó para la landing, que es un proyecto de
+   -- HTML estático APARTE y no tiene la ruta `/aviso/[tenant]`. Comprobado con
+   -- curl el 17-ago, que es lo que volvió obligatorio el cambio:
+   --   · https://likida.ai/aviso/1111…      → 404  ← la liga estaba MUERTA
+   --   · https://app.likida.ai/aviso/1111…  → 200
+   -- En localhost `revisarAvisoIntegral` marca la liga `inservible` a
+   -- propósito, así que en dev el operador recibe el aviso degradado, que es lo
+   -- correcto.
+   --
+   -- ESTE ARCHIVO NO ACTUALIZA LA FILA QUE YA EXISTE EN PRODUCCIÓN: el seed
+   -- solo corre cuando alguien lo corre. La flota demo sembrada antes de hoy
+   -- sigue con el host viejo hasta que se vuelva a sembrar.
    'FLOTA DEMO SA DE CV',
    'Carretera Silao-Romita Km 4.5, Parque Industrial, 36100 Silao, Guanajuato',
-   'https://likida.ai/aviso/11111111-1111-1111-1111-111111111111')
+   'https://app.likida.ai/aviso/11111111-1111-1111-1111-111111111111')
 on conflict (id) do update set
   -- Se actualiza aunque el tenant ya exista: el `do nothing` de antes dejaba a
   -- las flotas ya sembradas sin los campos nuevos para siempre.

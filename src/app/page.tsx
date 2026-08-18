@@ -1,49 +1,55 @@
-import Link from 'next/link';
+// ═══════════════════════════════════════════════════════════════════════════
+// LA RAÍZ DE app.likida.ai NO ES UNA LANDING — ES UNA PUERTA.
+//
+// Hasta el 17-ago-2026 aquí vivía la página de marketing ("El cierre diario de
+// tu flota, resuelto por WhatsApp", botones a /demo y /login). El marketing se
+// mudó a https://likida.ai, que es OTRO proyecto (HTML estático), así que dos
+// páginas afirmando lo mismo en dos dominios es exactamente la forma en la que
+// una cifra o una promesa se quedan desfasadas sin que nadie se entere.
+//
+// `app.likida.ai` es el software. Quien escribe el dominio a secas quiere
+// entrar, no que le vendan: con sesión se le reparte a su panel, sin sesión al
+// login. Esta página no renderiza nada — todos sus caminos terminan en
+// `redirect()`.
+//
+// LA SESIÓN SE LEE CON `getSessionTenant()`, la misma de guard.ts: no hay una
+// segunda forma de saber quién eres, y el reparte-por-rol es `puertaDeEntrada`
+// (visibilidad.ts), compartido con `/auth/callback` para que el aterrizaje del
+// magic link y el de la raíz no puedan divergir.
+//
+// EL QUERY STRING SÍ VIAJA. `?tenant=`/`?vista=demo`/`?rol=` es el "ver como"
+// auditado de un superadmin (guard.ts, tenant-efectivo.ts): si llega con esa
+// intención explícita, va a /dashboard con su sufijo — no a /admin, que la
+// tiraría. Se arma con `sufijoTenant`, el mismo helper que arrastra esos
+// parámetros en el resto del panel, porque `requireSessionTenant` pierde el
+// query string al redirigir (ver dashboard/sufijo.ts).
+// ═══════════════════════════════════════════════════════════════════════════
+import { redirect } from 'next/navigation';
+import { getSessionTenant } from '@/lib/auth/session';
+import { puertaDeEntrada } from '@/lib/auth/visibilidad';
+import { sufijoTenant } from './dashboard/sufijo';
 
-export default function Home() {
-  return (
-    <main className="min-h-screen flex flex-col">
-      <header className="glass sticky top-0 z-10 border-b" style={{ borderColor: 'var(--line)' }}>
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-          <span className="font-semibold tracking-tight text-lg">Likida</span>
-          <nav className="flex items-center gap-6 text-sm" style={{ color: 'var(--muted)' }}>
-            <Link href="/demo" className="hover:opacity-70">Demo</Link>
-            <Link href="/login" className="hover:opacity-70">Entrar</Link>
-          </nav>
-        </div>
-      </header>
+// Lee cookies de sesión: nunca se prerenderiza.
+export const dynamic = 'force-dynamic';
 
-      <section className="flex-1 flex items-center">
-        <div className="max-w-3xl mx-auto px-6 py-24 text-center animate-in">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1 rounded-full mb-6"
-               style={{ color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)' }}>
-            Liquidación de viajes, automática
-          </div>
-          <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.1]">
-            El cierre diario de tu flota,<br />resuelto por WhatsApp.
-          </h1>
-          <p className="mt-6 text-lg" style={{ color: 'var(--muted)' }}>
-            El operador manda sus comprobantes por WhatsApp. Likida los lee, los cuadra contra el
-            anticipo y la política, detecta diferencias al instante y entrega la liquidación en PDF.
-          </p>
-          <div className="mt-10 flex items-center justify-center gap-3">
-            <Link href="/demo"
-              className="px-5 py-2.5 rounded-xl text-sm font-medium"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-              Ver el demo
-            </Link>
-            <Link href="/login"
-              className="px-5 py-2.5 rounded-xl text-sm font-medium hairline"
-              style={{ color: 'var(--ink)' }}>
-              Entrar al panel
-            </Link>
-          </div>
-        </div>
-      </section>
+export default async function Raiz({
+  searchParams,
+}: {
+  searchParams: Promise<{ tenant?: string; vista?: string; rol?: string }>;
+}) {
+  const sp = await searchParams;
+  const sufijo = sufijoTenant(sp);
+  const s = await getSessionTenant();
 
-      <footer className="border-t py-6 text-center text-sm" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
-        Likida · liquidación de operaciones logísticas en México
-      </footer>
-    </main>
-  );
+  if (!s) {
+    // `next` solo se pone si hay algo que preservar. El callback lo honra
+    // únicamente cuando empieza con /dashboard, así que un `next` vacío o
+    // trivial sería ruido: sin él, ese mismo callback reparte por rol.
+    redirect(sufijo ? `/login?next=${encodeURIComponent(`/dashboard${sufijo}`)}` : '/login');
+  }
+
+  // Intención explícita de "ver como" — la resuelve y la firma /dashboard.
+  if (sufijo) redirect(`/dashboard${sufijo}`);
+
+  redirect(puertaDeEntrada(s.rol));
 }
