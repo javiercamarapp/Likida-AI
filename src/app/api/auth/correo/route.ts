@@ -55,7 +55,7 @@ interface PayloadHook {
 }
 
 const ACCIONES: readonly AccionAuth[] = [
-  'login', 'signup', 'invite', 'recovery',
+  'magiclink', 'login', 'signup', 'invite', 'recovery',
   'email_change', 'email_change_current', 'email_change_new', 'reauthentication',
 ];
 
@@ -113,15 +113,23 @@ export async function POST(req: Request) {
     return fallo(400, 'JSON inválido.');
   }
 
+  // UNA ACCIÓN QUE NO CONOCEMOS DEGRADA, NO TUMBA EL LOGIN.
+  //
+  // La primera versión contestaba 400 aquí, "por fallar cerrado". El 18-ago
+  // eso costó el incidente: Supabase manda `magiclink` y este código esperaba
+  // `login`, así que el endpoint rechazó el correo más importante del
+  // producto, Supabase tradujo a 500 y nadie podía entrar — con el error
+  // apareciendo de su lado, lejos de la causa.
+  //
+  // La lección no es "acepta lo que sea": es que en el camino crítico del
+  // login, un nombre inesperado NO puede valer lo mismo que un ataque. Con
+  // token en mano se manda el correo genérico —marca, liga buena, un solo
+  // uso— y el error queda GRITADO en el log para arreglarlo con calma. Sin
+  // token no hay correo que armar, y ahí sí se rechaza.
   const accionCruda = payload.email_data?.email_action_type;
-  if (!esAccion(accionCruda)) {
-    // Fallar aquí deja a esa persona sin entrar, y aun así es lo correcto: con
-    // el hook encendido Supabase ya no manda nada por su cuenta, así que un
-    // 200 en falso sería un correo que jamás llega y nadie sabe por qué.
-    logger.error('auth.correo.accion_desconocida', { accion: accionCruda ?? null });
-    return fallo(400, `Acción de correo no soportada: ${accionCruda ?? 'sin tipo'}.`);
-  }
-  const accion: AccionAuth = accionCruda;
+  const conocida = esAccion(accionCruda);
+  if (!conocida) logger.error('auth.correo.accion_desconocida', { accion: accionCruda ?? null });
+  const accion: AccionAuth = conocida ? accionCruda : 'magiclink';
 
   // A quién se le manda. En el cambio de correo con verificación doble,
   // Supabase llama al hook dos veces: la mitad `email_change_new` va a la

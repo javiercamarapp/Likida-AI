@@ -189,13 +189,6 @@ describe('payloads que no se pueden atender', () => {
     expect(r.status).toBe(400);
   });
 
-  it('una acción que no conocemos se rechaza RUIDOSA, no en silencio', async () => {
-    const r = await postear({ ...MAGIC, email_data: { ...MAGIC.email_data, email_action_type: 'inventada' } });
-    expect(r.status).toBe(400);
-    expect(enviados).toHaveLength(0);
-    expect(logs.some(([n, e]) => n === 'error' && e === 'auth.correo.accion_desconocida')).toBe(true);
-  });
-
   it('sin destinatario o sin token: 400', async () => {
     expect((await postear({ email_data: MAGIC.email_data })).status).toBe(400);
     expect((await postear({ user: { email: 'a@b.mx' }, email_data: { email_action_type: 'login' } })).status).toBe(400);
@@ -220,5 +213,38 @@ describe('payloads que no se pueden atender', () => {
   it('un cuerpo gigante se corta antes del HMAC', async () => {
     const r = await postear(null, { cuerpo: 'x'.repeat(33 * 1024) });
     expect(r.status).toBe(413);
+  });
+});
+
+describe('el incidente del 18-ago: Supabase manda `magiclink`, no `login`', () => {
+  // MEDIDO EN PRODUCCIÓN, no supuesto. El log decía:
+  //   auth.correo.accion_desconocida {"accion":"magiclink"}
+  // y Supabase traducía nuestro 400 a un 500 que dejaba a todos fuera.
+  it('`magiclink` manda el correo de acceso', async () => {
+    const r = await postear({ ...MAGIC, email_data: { ...MAGIC.email_data, email_action_type: 'magiclink' } });
+    expect(r.status).toBe(200);
+    expect(enviados[0].correo.asunto).toBe('Tu acceso a Likida');
+    expect(new URL(enviados[0].correo.boton!.href).searchParams.get('type')).toBe('magiclink');
+  });
+
+  it('`login` sigue funcionando: son la misma acción con dos nombres', async () => {
+    const r = await postear(MAGIC);
+    expect(r.status).toBe(200);
+    expect(enviados[0].correo.asunto).toBe('Tu acceso a Likida');
+  });
+
+  it('una acción DESCONOCIDA degrada al correo de acceso en vez de tumbar el login', async () => {
+    // La regla vieja —400 por fallar cerrado— es justo lo que rompió el
+    // login. Con token en mano se manda algo bueno; el error se GRITA.
+    const r = await postear({ ...MAGIC, email_data: { ...MAGIC.email_data, email_action_type: 'inventada_v3' } });
+    expect(r.status).toBe(200);
+    expect(enviados).toHaveLength(1);
+    expect(logs.some(([n, e]) => n === 'error' && e === 'auth.correo.accion_desconocida')).toBe(true);
+  });
+
+  it('pero sin token no hay correo que armar: eso sí se rechaza', async () => {
+    const r = await postear({ user: { email: 'a@b.mx' }, email_data: { email_action_type: 'inventada_v3' } });
+    expect(r.status).toBe(400);
+    expect(enviados).toHaveLength(0);
   });
 });
