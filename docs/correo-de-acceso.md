@@ -1,11 +1,20 @@
 # El correo de acceso
 
-> **Estado al 18-ago-2026, medido:**
-> - `SUPABASE_AUTH_HOOK_SECRET` en Vercel (producción) ✓
-> - `/api/auth/correo` **vivo** en `da4f944`: sin firma contesta **401**, con
->   firma válida contesta **200** y el correo sale por Resend ✓
-> - **Falta lo único que necesita un token `sbp_`:** subir las plantillas y
->   encender el hook. Un comando, abajo.
+> **Estado al 18-ago-2026, medido contra el proyecto real:**
+> - **Las 13 plantillas ya están puestas** en Supabase (`gngoqsvrxdguxvsizpbw`),
+>   releídas y comparadas campo por campo ✓
+> - **El remitente se arregló:** era `onboarding@resend.dev` —el sandbox de
+>   Resend, que solo entrega al dueño de la cuenta—, o sea que **un contralor
+>   de una flota real no habría recibido nunca su enlace**. Hoy es
+>   `Likida <acceso@mail.likida.ai>`, dominio verificado ✓
+> - `mailer_otp_exp` = 3600 s = los 60 min que el correo promete ✓
+> - `SUPABASE_AUTH_HOOK_SECRET` en Vercel y `/api/auth/correo` vivo en
+>   `da4f944`: sin firma **401**, con firma válida **200** y el correo llegó
+>   (`last_event: delivered`) ✓
+> - **Pendiente, opcional:** encender el hook (`--con-hook`). Cambia el logo
+>   enlazado por incrustado y el envío de SMTP a la API de Resend.
+> - **Sin verificar:** que el SMTP entregue con el remitente nuevo. Se
+>   comprueba pidiendo un magic link en `/login`.
 
 ## Qué estaba mal
 
@@ -30,7 +39,7 @@ El correo más importante del producto era el único que no parecía Likida.
 |---|---|---|
 | Quién manda | Supabase (su SMTP) | Likida, por Resend |
 | Logo | enlazado (`https://app.likida.ai/images/logo.png`) | **incrustado** (`cid:`), no depende de que el cliente autorice imágenes |
-| Remitente | el de Supabase | `Likida <acceso@mail.likida.ai>` |
+| Remitente | `Likida <acceso@mail.likida.ai>` (era el sandbox de Resend) | `Likida <acceso@mail.likida.ai>` |
 | Entregabilidad | la de Supabase, con su **cuota diaria** | la de nuestro dominio, medida en `/api/correo/eventos` |
 | Se enciende | pegando HTML, sin desplegar | un endpoint + un secreto |
 
@@ -73,6 +82,18 @@ Emails**, pegar cada uno en su plantilla:
 | `recuperar-acceso.html` | Reset password |
 | `cambio-de-correo.html` | Change email address |
 | `reautenticacion.html` | Reauthentication |
+| `aviso-correo-cambiado.html` | Email changed (notification) |
+| `aviso-contrasena.html` | Password changed (notification) |
+| `aviso-telefono-cambiado.html` | Phone changed (notification) |
+| `aviso-segundo-factor-agregado.html` | MFA factor enrolled |
+| `aviso-segundo-factor-quitado.html` | MFA factor unenrolled |
+| `aviso-identidad-ligada.html` | Identity linked |
+| `aviso-identidad-quitada.html` | Identity unlinked |
+
+Las siete últimas son las de NOTIFICACIÓN, y no aparecen donde uno las busca:
+se encontraron leyendo la configuración por API. Las que sí pueden dispararse
+hoy en Likida son el cambio de correo, el alta y baja de segundo factor
+(`lib/auth/mfa.ts`) y el ligado de una identidad de Google.
 
 Traen las variables de Supabase (`{{ .ConfirmationURL }}`, `{{ .Token }}`) ya
 puestas. **No editar el HTML a mano**: se regenera y se pierde el cambio.
