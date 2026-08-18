@@ -348,3 +348,72 @@ html, body {
   a.card { transition: transform 150ms ease-out, box-shadow 150ms ease-out, opacity 150ms ease, border-color 150ms ease; }
   a.card:hover { transform: translateY(-1px); box-shadow: var(--shadow-card-hover, var(--shadow-card)); }
 }
+
+/* ── Píldora de marca (17-ago-2026, ref. likida.ai) ────────────────────────
+   El CTA de la landing nueva: cápsula de tinta, y el GLIFO de Likida que sale
+   de la nada al pasar el cursor —empieza con ancho 0, encogido y girado, y se
+   despliega empujando el texto—. Vive aquí y no en línea porque todo el gesto
+   es un `:hover`, que un `style=` no puede expresar.
+
+   Es la píldora de `.btn`/`.btn-tinta`/`.btn-borde` de main.css traducida a
+   los TOKENS del software, no copiada en hex: así el 404 respeta el tema
+   oscuro del panel (tinta y papel se invierten solos) en vez de quedarse
+   con un #17100d fijo sobre fondo negro.
+
+   El color del glifo lo pone quien lo monta (`editorial.tsx`), y nunca es
+   `--marca`: la landing no tiene naranja. */
+.pildora {
+  display: inline-flex; align-items: center; gap: 9px;
+  border-radius: 999px; padding: 12px 22px;
+  font-size: 15px; font-weight: 600; letter-spacing: 0.005em;
+  border: 1px solid transparent; cursor: pointer; text-decoration: none;
+}
+.pildora-tinta { background: var(--ink); color: var(--bg); }
+.pildora-borde { background: transparent; border-color: var(--line); color: var(--ink); }
+.pildora-borde:hover { border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
+/* La caja que se abre. `overflow: hidden` + ancho 0 es lo que hace que el
+   glifo no ocupe lugar mientras está guardado; el margen negativo se come el
+   `gap` para que el texto no baile 9px de más al aparecer. */
+.pildora-glifo {
+  display: block; height: 16px; width: 0; margin-right: -9px;
+  opacity: 0; overflow: hidden;
+  transform: scale(0.55) rotate(-35deg); transform-origin: center;
+}
+.pildora:hover .pildora-glifo,
+.pildora:focus-visible .pildora-glifo { width: 18px; margin-right: 0; opacity: 1; transform: none; }
+/* Todo el movimiento detrás de la misma puerta que el resto del repo: quien
+   pidió menos animación ve el glifo aparecer de golpe, sin rebote ni lift. */
+@media (prefers-reduced-motion: no-preference) {
+  .pildora { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+  .pildora:hover { transform: translateY(-1px); }
+  .pildora-tinta:hover { box-shadow: 0 10px 26px color-mix(in srgb, var(--ink) 26%, transparent); }
+  .pildora-glifo {
+    transition: width .3s cubic-bezier(.22,1,.36,1), margin-right .3s cubic-bezier(.22,1,.36,1),
+                opacity .2s ease, transform .45s cubic-bezier(.34,1.56,.64,1);
+  }
+}
+
+/* La rejilla punteada tenue del papel — el fondo de las figuras del 404. Se
+   desvanece hacia los bordes con una máscara para que no choque contra el
+   hairline de la tarjeta. Va en un <span> propio y no en la tarjeta: la
+   máscara recortaría también el diagrama que va encima. */
+.rejilla-punteada {
+  background-image: radial-gradient(circle at 1px 1px,
+    color-mix(in srgb, var(--ink) 16%, transparent) 1px, transparent 0);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(ellipse 72% 72% at 50% 50%, #000 35%, transparent 100%);
+  mask-image: radial-gradient(ellipse 72% 72% at 50% 50%, #000 35%, transparent 100%);
+}
+
+/* Los rótulos del diagrama del 404. Van en CSS y no como atributo del <text>
+   porque necesitan MEDIA QUERY: el texto de un SVG escala con el viewBox, así
+   que un solo `font-size` no puede servir a los dos anchos — 9.5 unidades son
+   12px en escritorio y 6.8px en un teléfono. Bajo 640px suben a 13 unidades
+   (≈9px reales) y los dos rótulos marcados como opcionales se retiran: a ese
+   tamaño los cuatro se encimarían, y la pareja que cuenta la historia es
+   "último punto → sin destino". */
+.rotulos-diagrama text { font-size: 9.5px; letter-spacing: 1.3px; }
+@media (max-width: 640px) {
+  .rotulos-diagrama text { font-size: 13px; letter-spacing: 0.7px; }
+  .rotulos-diagrama .rotulo-opcional { display: none; }
+}
