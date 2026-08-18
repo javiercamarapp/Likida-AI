@@ -159,13 +159,28 @@ export function tamanoDe(notas: string | null): Tamano | null {
 export function completitudDe(p: {
   telefono: string | null; correo: string | null; contacto_nombre: string | null;
   lat: number | null; notas: string | null;
+  /** De la 0139. `false` = el enriquecedor lo trajo y nadie lo comprobó. */
+  sitioVerificado?: boolean | null;
 }): number {
   let s = 0;
   if (p.telefono) s += 30;
   if (p.correo) s += 25;
   if (p.contacto_nombre) s += 20;
   if (p.lat !== null) s += 15;
-  if (/sitio:/.test(p.notas ?? '')) s += 10;
+  // ── TENER UN SITIO NO ES TENER EL SITIO CORRECTO ─────────────────────────
+  // Estos 10 puntos se regalaban con solo encontrar el texto «sitio:» en las
+  // notas, y eso convertía el error de scraping en PRIORIDAD DE VENTA: una
+  // fila con el dominio equivocado puntuaba 100 igual que una correcta y subía
+  // en el tablero por encima de prospectos buenos.
+  //
+  // No es teórico. La auditoría del 18-ago midió 820 filas cuyo dominio está
+  // pegado a varias empresas distintas —`grupomodelo.com` aparece en 38,
+  // `fedex.com` en 20—, porque el enriquecedor se queda con el del corporativo
+  // padre cuando la razón social no tiene sitio propio. Y una fila llegó con
+  // el dominio de un PERIÓDICO DE IDAHO.
+  //
+  // Ahora los puntos los da `sitio_verificado`, no la presencia del texto.
+  if (p.sitioVerificado === true) s += 10;
   return s;
 }
 

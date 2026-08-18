@@ -99,7 +99,10 @@ describe('tamaño y completitud — los filtros de la ronda 2 (17-ago)', () => {
   });
   it('la completitud suma solo lo que existe y llega a 100 con todo', () => {
     expect(completitudDe({ telefono: null, correo: null, contacto_nombre: null, lat: null, notas: null })).toBe(0);
-    expect(completitudDe({ telefono: '55', correo: 'a@b.mx', contacto_nombre: 'Ana, DG', lat: 20, notas: 'sitio: x.mx' })).toBe(100);
+    // Desde la 0139 el 100 exige el sitio VERIFICADO, no solo presente: ver
+    // "tener un sitio no es tener el sitio correcto" más abajo.
+    expect(completitudDe({ telefono: '55', correo: 'a@b.mx', contacto_nombre: 'Ana, DG', lat: 20, notas: 'sitio: x.mx', sitioVerificado: true })).toBe(100);
+    expect(completitudDe({ telefono: '55', correo: 'a@b.mx', contacto_nombre: 'Ana, DG', lat: 20, notas: 'sitio: x.mx' })).toBe(90);
     expect(completitudDe({ telefono: '55', correo: null, contacto_nombre: null, lat: 20, notas: null })).toBe(45);
   });
 });
@@ -148,5 +151,21 @@ describe('quien llegó solo pesa más que uno scrapeado', () => {
   it('nunca se pasa de 100 por más señales que se acumulen', () => {
     expect(scoreCierre({ ...base, fuente: 'ads-meta', estado: 'negociacion', personasVerificadas: 9 }))
       .toBeLessThanOrEqual(100);
+  });
+});
+
+describe('tener un sitio no es tener el sitio correcto', () => {
+  const base = { telefono: null, correo: null, contacto_nombre: null, lat: null, notas: 'sitio: grupomodelo.com' };
+
+  it('un sitio SIN verificar ya no regala puntos', () => {
+    // Es el caso medido: 820 filas con el dominio del corporativo padre o de
+    // un tercero. Antes puntuaban igual que una fila correcta y subían en el
+    // tablero — el error de scraping se volvía prioridad de venta.
+    expect(completitudDe(base)).toBe(0);
+    expect(completitudDe({ ...base, sitioVerificado: false })).toBe(0);
+  });
+
+  it('verificado sí los da', () => {
+    expect(completitudDe({ ...base, sitioVerificado: true })).toBe(10);
   });
 });
