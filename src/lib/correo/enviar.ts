@@ -47,10 +47,22 @@ export function correoConfigurado(): boolean {
  * la reputación de envío, de modo que un correo marcado como spam no arrastre
  * la entregabilidad del dominio principal.
  */
-function remitente(): string | null {
+function remitente(local = 'avisos'): string | null {
   const dominio = process.env.RESEND_EMAIL_DOMAIN;
   if (!dominio) return null;
-  return `Likida <avisos@${dominio}>`;
+  return `Likida <${local}@${dominio}>`;
+}
+
+export interface OpcionesEnvio {
+  /**
+   * La parte local del remitente. El default es `avisos`, que es lo que dice
+   * un correo del sistema; los correos de ACCESO salen de `acceso@` porque no
+   * son un aviso — son la llave de la cuenta, y quien archiva "avisos" en una
+   * carpeta no puede perder ahí su enlace de entrada. Mismo dominio, misma
+   * reputación (SPF/DKIM/DMARC se firman por dominio, no por buzón): esto es
+   * legibilidad para quien recibe, no un canal nuevo que verificar.
+   */
+  remitenteLocal?: string;
 }
 
 /** Un destinatario que no parece correo no se manda: la API lo rechazaría
@@ -62,9 +74,10 @@ function destinatarioValido(d: string): boolean {
 export async function enviarCorreo(
   para: string | string[],
   correo: Correo,
+  op: OpcionesEnvio = {},
 ): Promise<ResultadoEnvio> {
   const llave = process.env.RESEND_API_KEY;
-  const from = remitente();
+  const from = remitente(op.remitenteLocal);
   if (!llave || !from) {
     // A nivel `info`, no `error`: en un entorno sin correo configurado —el de
     // desarrollo, el de pruebas— esto es lo esperado, y sacarlo como error

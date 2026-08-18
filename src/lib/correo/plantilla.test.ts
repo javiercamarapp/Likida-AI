@@ -183,3 +183,72 @@ describe('el tono es un micro-rótulo, no una banda de color', () => {
     expect(html).toContain('#b45309');
   });
 });
+
+describe('lo que un correo de ACCESO necesita y un aviso no', () => {
+  const ACCESO: Correo = {
+    ...BASE,
+    asunto: 'Tu acceso a Likida',
+    titulo: 'Entra a Likida',
+    boton: { texto: 'Entrar a Likida', href: 'https://abc.supabase.co/auth/v1/verify?token=t&type=magiclink' },
+    enlaceLiteral: true,
+    nota: 'Si no fuiste tú, ignora este correo.',
+  };
+
+  it('la liga va TAMBIÉN en texto: los escáneres corporativos queman el href', () => {
+    // Defender y Proofpoint reescriben —y a veces VISITAN— el enlace del
+    // botón. Un enlace de un solo uso ya visitado deja fuera al humano.
+    const html = armarHtml(ACCESO);
+    expect(html).toContain('&iquest;El bot&oacute;n no abre?');
+    expect(html).toContain(esc(ACCESO.boton!.href));
+  });
+
+  it('la liga literal se parte: una URL de verificación desborda los 600px', () => {
+    expect(armarHtml(ACCESO)).toContain('word-break:break-all');
+  });
+
+  it('sin `enlaceLiteral` no aparece — un aviso no la necesita', () => {
+    expect(armarHtml({ ...ACCESO, enlaceLiteral: false })).not.toContain('&iquest;El bot&oacute;n no abre?');
+  });
+
+  it('la nota de seguridad va en su propio bloque, no como un párrafo más', () => {
+    const html = armarHtml(ACCESO);
+    const posBoton = html.indexOf('Entrar a Likida');
+    const posNota = html.indexOf('Si no fuiste t');
+    expect(posNota).toBeGreaterThan(posBoton);
+    expect(html).toMatch(/bgcolor="#f9f9fa"[^>]*>Si no fuiste t/);
+  });
+
+  it('el código se pinta en mono, grande y espaciado — se teclea a mano', () => {
+    const html = armarHtml({ ...ACCESO, codigo: '123456' });
+    expect(html).toMatch(/font-family:'IBM Plex Mono'[^"]*;font-size:27px/);
+    expect(html).toContain('letter-spacing:0.2em');
+    expect(html).toContain('123456');
+    expect(html).toContain('C&oacute;digo de un solo uso');
+  });
+
+  it('el código y la nota también van en la parte de texto plano', () => {
+    const texto = aTextoPlano({ ...ACCESO, codigo: '123456' });
+    expect(texto).toContain('Código: 123456');
+    expect(texto).toContain('Si no fuiste tú');
+  });
+
+  it('el código se escapa: es un dato, no marcado', () => {
+    expect(armarHtml({ ...ACCESO, codigo: '<img onerror=x>' })).not.toContain('<img onerror');
+  });
+});
+
+describe('el logo enlazado — solo para las plantillas del panel de Supabase', () => {
+  it('por default sigue siendo incrustado', () => {
+    expect(armarHtml(BASE)).toContain('src="cid:likida-logo"');
+  });
+
+  it('en modo url apunta a producción, y conserva el alt con estilo', () => {
+    // Ese correo sale por el SMTP de Supabase: no hay forma de adjuntarle
+    // nada. El peor caso sigue siendo el wordmark, no un ícono roto.
+    const html = armarHtml(BASE, { logo: 'url' });
+    expect(html).toContain('src="https://app.likida.ai/images/logo.png"');
+    expect(html).not.toContain('cid:likida-logo');
+    expect(html).toMatch(/<img[^>]+alt="LIKIDA"[^>]*/);
+    expect(html).toMatch(/letter-spacing:0\.34em/);
+  });
+});

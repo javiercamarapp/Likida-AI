@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { sentryActivo } from '@/lib/observability/sentry';
 import { correoConfigurado } from '@/lib/correo/enviar';
+import { hookDeCorreoConfigurado } from '@/lib/correo/auth';
 import { envHealth, faltantes } from '@/lib/env';
 import { IconoProveedor } from '../proveedor-icono';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -89,6 +90,13 @@ export default async function IntegracionesPage() {
   const medResend: Medicion = correoConfigurado()
     ? { estado: 'ok', etiqueta: 'Configurado' }
     : { estado: 'warn', etiqueta: 'Sin configurar', detalle: 'Falta RESEND_API_KEY o RESEND_EMAIL_DOMAIN: ningún correo sale (esperado en local).' };
+  // EL CORREO DE ACCESO (18-ago). Se mide el SECRETO, que es lo único que se
+  // puede medir desde aquí; que el hook esté encendido vive en el panel de
+  // Supabase. El caso caro es el inverso —encendido allá, sin secreto acá—:
+  // el endpoint contesta 500 y nadie entra, así que eso se pinta en ámbar.
+  const medHookCorreo: Medicion = hookDeCorreoConfigurado()
+    ? { estado: 'ok', etiqueta: 'Secreto configurado' }
+    : { estado: 'warn', etiqueta: 'Sin secreto', detalle: 'Si el hook está ENCENDIDO en Supabase, nadie puede entrar: /api/auth/correo contesta 500. Ver docs/correo-de-acceso.md.' };
   const medSentry: Medicion = sentryActivo()
     ? { estado: 'ok', etiqueta: 'DSN configurado' }
     : { estado: 'bad', etiqueta: 'Sin DSN', detalle: 'Los errores solo quedan en el runtime log de Vercel.' };
@@ -120,7 +128,12 @@ export default async function IntegracionesPage() {
               />
               <Conector
                 Icono={Mail} titulo="Resend" href="https://resend.com/emails" medicion={medResend}
-                subtitulo="Correo transaccional — los magic-links de inicio de sesión."
+                subtitulo="Correo transaccional — avisos, invitaciones y, con el hook encendido, los correos de acceso."
+              />
+              <Conector
+                Icono={KeyRound} titulo="Correo de acceso (Auth Hook)"
+                href="https://supabase.com/dashboard/project/_/auth/hooks" medicion={medHookCorreo}
+                subtitulo="El magic link sale por Resend con la plantilla de la marca en vez de la de fábrica de Supabase. Que el hook esté encendido se ve en su panel; aquí solo se mide el secreto."
               />
               <Conector
                 Icono={Bug} titulo="Sentry" href="https://sentry.io" medicion={medSentry}

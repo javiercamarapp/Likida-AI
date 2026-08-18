@@ -43,8 +43,20 @@
 
 import { LOGO_CID } from './logo';
 
-/** La URL pública de la app, para los enlaces. */
-const BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
+/**
+ * La URL pública de la app, para los enlaces y para el logo enlazado.
+ *
+ * SE LEE AL ARMAR, no al importar. La diferencia se vio mirando el render: el
+ * generador de plantillas corre en la máquina de desarrollo, donde
+ * `NEXT_PUBLIC_APP_URL` vale `http://localhost:3000`, y con la constante
+ * capturada en el import no había forma de pisarla — las plantillas salieron
+ * con el logo apuntando a localhost y el pie diciendo «localhost:3000». En
+ * producción daba igual; en el archivo que se pega en el panel de Supabase,
+ * no.
+ */
+function base(): string {
+  return process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
+}
 
 /**
  * Los tokens de `globals.css` bajo `.tema-neutro`, copiados como literales
@@ -72,6 +84,9 @@ const C = {
  */
 const DISPLAY = `'Inter Tight',Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif`;
 const SANS = `Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif`;
+/** La mono de los micro-rótulos de la app. Un código en proporcional se
+ *  transcribe mal: el 1 y la l, el 0 y la O. */
+const MONO = `'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,'Courier New',monospace`;
 
 export type TonoCorreo = 'neutral' | 'atencion' | 'urgente';
 
@@ -104,6 +119,25 @@ export interface Correo {
   /** Renglones de datos (etiqueta → valor). */
   datos?: Array<[string, string]>;
   boton?: Boton;
+  /**
+   * El código de un solo uso, cuando el correo lleva uno. Se pinta en mono,
+   * grande y espaciado: un código que hay que TECLEAR se lee dígito por
+   * dígito, y agrupado apretado se teclea mal.
+   */
+  codigo?: string;
+  /**
+   * Imprime la URL del botón también como texto seleccionable.
+   *
+   * NO es adorno y no es opcional en un correo de acceso: los escaneadores de
+   * correo corporativo (Defender, Proofpoint) reescriben el href y a veces lo
+   * VISITAN antes que la persona — y un enlace de un solo uso visitado por un
+   * robot ya no sirve cuando el humano hace clic. Con la liga literal a la
+   * vista, el peor caso es copiar y pegar; sin ella, es no poder entrar.
+   */
+  enlaceLiteral?: boolean;
+  /** Nota al pie DE LA TARJETA (no del correo): qué hacer si no lo pediste.
+   *  Va en un bloque aparte para que no se lea como parte del cuerpo. */
+  nota?: string;
   tono?: TonoCorreo;
   /** Por qué le llegó este correo. Va al pie. */
   porQueLoRecibes: string;
@@ -130,7 +164,7 @@ export function esc(s: string): string {
  */
 export function hrefSeguro(url: string): string {
   const limpio = url.trim();
-  if (!/^https?:\/\//i.test(limpio)) return BASE;
+  if (!/^https?:\/\//i.test(limpio)) return base();
   return esc(limpio);
 }
 
@@ -142,13 +176,33 @@ export function aTextoPlano(c: Correo): string {
     lineas.push('');
     for (const [k, v] of c.datos) lineas.push(`${k}: ${v}`);
   }
+  if (c.codigo) lineas.push('', `Código: ${c.codigo}`);
   if (c.boton) lineas.push('', `${c.boton.texto}: ${c.boton.href}`);
-  lineas.push('', '—', c.porQueLoRecibes, `Likida · ${BASE}`);
+  if (c.nota) lineas.push('', c.nota);
+  lineas.push('', '—', c.porQueLoRecibes, `Likida · ${base()}`);
   return lineas.join('\n');
 }
 
-export function armarHtml(c: Correo): string {
+/** Cómo viaja el logo. Son dos mundos distintos y no hay uno que sirva para
+ *  los dos, así que se elige al armar. */
+export interface OpcionesHtml {
+  /**
+   * `'cid'` (el default) incrusta el logo como adjunto en línea: es lo que
+   * manda `enviar.ts` por Resend y no depende de que el cliente autorice
+   * imágenes externas.
+   *
+   * `'url'` lo enlaza a producción. Se usa SOLO para las plantillas que se
+   * pegan en el panel de Supabase: ese correo sale por SMTP desde su
+   * infraestructura y no hay forma de adjuntarle nada. Peor caso allá: el
+   * cliente bloquea la imagen y el alt con estilo pinta el wordmark, que es
+   * exactamente el mismo peor caso de siempre.
+   */
+  logo?: 'cid' | 'url';
+}
+
+export function armarHtml(c: Correo, op: OpcionesHtml = {}): string {
   const tono = TONO[c.tono ?? 'neutral'];
+  const logoSrc = op.logo === 'url' ? `${base()}/images/logo.png` : `cid:${LOGO_CID}`;
 
   // Micro-rótulo con su punto de color: el mismo recurso `etiqueta-mono` de
   // las tarjetas de la app — el tono se dice en UNA palabra, no en bandas.
@@ -174,6 +228,33 @@ ${c.datos.map(([k, v]) => `        <tr>
         <tr><td bgcolor="${C.marca}" style="border-radius:999px;">
           <a href="${hrefSeguro(c.boton.href)}" style="display:inline-block;padding:13px 26px;font-family:${SANS};font-size:14px;line-height:20px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:999px;">${esc(c.boton.texto)}</a>
         </td></tr>
+      </table>`
+    : '';
+
+  // EL CÓDIGO DE UN SOLO USO. Mono, 27px y bien espaciado, sobre un bloque de
+  // reposo: se teclea mirando el correo en el teléfono y tecleando en la
+  // computadora, así que lo que importa es que NO se confundan 1/l ni 0/O.
+  const codigo = c.codigo
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 4px 0;">
+        <tr><td style="padding:0 0 9px 0;font-family:${SANS};font-size:10px;line-height:14px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:${C.faint};">C&oacute;digo de un solo uso</td></tr>
+        <tr><td bgcolor="${C.g1}" align="center" style="padding:17px 30px;border:1px solid ${C.linea};border-radius:12px;font-family:${MONO};font-size:27px;line-height:33px;font-weight:600;letter-spacing:0.2em;color:${C.tinta};white-space:nowrap;">${esc(c.codigo)}</td></tr>
+      </table>`
+    : '';
+
+  // LA LIGA LITERAL. `word-break:break-all` no es cosmético: una URL de
+  // verificación pasa de los 200 caracteres y sin él desborda los 600px y
+  // rompe la tarjeta en Outlook.
+  const ligaLiteral = c.boton && c.enlaceLiteral
+    ? `<p style="margin:24px 0 0 0;font-family:${SANS};font-size:11.5px;line-height:18px;color:${C.faint};">&iquest;El bot&oacute;n no abre? Copia esta liga en tu navegador:<br>
+        <span style="word-break:break-all;">${esc(c.boton.href)}</span></p>`
+    : '';
+
+  // LA NOTA DE SEGURIDAD, en su propio bloque. Dentro del cuerpo se leería
+  // como un párrafo más y es justo lo que no puede pasar: es la línea que le
+  // dice a alguien que no pidió esto que no tiene que hacer nada.
+  const nota = c.nota
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:26px 0 0 0;border-collapse:collapse;">
+        <tr><td bgcolor="${C.lienzo}" style="padding:15px 18px;border:1px solid ${C.linea};border-radius:10px;font-family:${SANS};font-size:12px;line-height:19px;color:${C.muted};">${esc(c.nota)}</td></tr>
       </table>`
     : '';
 
@@ -214,7 +295,7 @@ ${c.datos.map(([k, v]) => `        <tr>
            caso no es un ícono roto — es LIKIDA en versalitas espaciadas, el
            wordmark de todos modos. Nunca hay un estado feo. -->
       <tr><td align="left" style="padding:0 0 26px 2px;">
-        <img src="cid:${LOGO_CID}" alt="LIKIDA" width="112" height="23"
+        <img src="${logoSrc}" alt="LIKIDA" width="112" height="23"
           style="display:block;border:0;outline:none;text-decoration:none;height:23px;width:112px;font-family:${DISPLAY};font-size:15px;font-weight:600;letter-spacing:0.34em;color:${C.marca};">
       </td></tr>
 
@@ -222,8 +303,11 @@ ${c.datos.map(([k, v]) => `        <tr>
         ${rotulo}
         <h1 style="margin:0 0 18px 0;font-family:${DISPLAY};font-size:26px;line-height:34px;font-weight:600;letter-spacing:-0.02em;color:${C.tinta};">${esc(c.titulo)}</h1>
       ${parrafos}
+      ${codigo}
       ${datos}
       ${boton}
+      ${ligaLiteral}
+      ${nota}
       </td></tr>
 
       <!-- El pie: la casa editorial del correo. Primera línea, quiénes somos;
@@ -232,7 +316,7 @@ ${c.datos.map(([k, v]) => `        <tr>
         <p style="margin:0 0 7px 0;font-family:${SANS};font-size:11px;line-height:17px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${C.muted};">Likida&nbsp;&nbsp;&#183;&nbsp;&nbsp;Liquidaci&oacute;n de viajes por WhatsApp</p>
         <p style="margin:0 0 5px 0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">${esc(c.porQueLoRecibes)}</p>
         <p style="margin:0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">
-          <a href="${BASE}" style="color:${C.faint};text-decoration:underline;text-decoration-color:${C.linea};">${esc(BASE.replace(/^https?:\/\//, ''))}</a>
+          <a href="${base()}" style="color:${C.faint};text-decoration:underline;text-decoration-color:${C.linea};">${esc(base().replace(/^https?:\/\//, ''))}</a>
         </p>
       </td></tr>
 
