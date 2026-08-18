@@ -1,0 +1,281 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   EL LENGUAJE DE likida.ai, SOLO EN /login.
+   ──────────────────────────────────────────────────────────────────────────
+   El 17-ago-2026 la landing se mudó a https://likida.ai con una voz propia:
+   papel, tinta, hairlines de 1px, píldoras de 999px, kicker en mono
+   mayúsculas con tracking .14em y TITULARES EN SERIF (Fraunces). El login era
+   la única pantalla que no la hablaba: título en la sans del sistema, botones
+   `rounded-lg` y una foto de tráiler naranja al atardecer. Quien venía de la
+   landing y daba clic en "Entrar" cambiaba de marca a media frase.
+
+   POR QUÉ ESTO ES UN ARCHIVO PROPIO Y NO UN BLOQUE EN `globals.css`:
+
+   · `globals.css` lo carga TODA la app —las dos consolas, el PDF, el aviso
+     del operador—. El lenguaje editorial es de MARCA (hacia afuera), no del
+     panel de trabajo: un estado de cuenta no se escribe en serif ni con
+     botones de píldora. Metiendo esto allá, cualquier `.btn` futuro del
+     dashboard heredaría una decisión que no le toca.
+   · Next.js resuelve el import de CSS por ruta: este archivo solo viaja en el
+     bundle de `/login`. Un bloque en `globals.css` viaja en todas.
+   · Y el árbol lo comparten varias sesiones a la vez (ver MEMORY): tocar
+     `globals.css` para esto habría metido el rediseño del login dentro del
+     diff de quien esté trabajando ahí en paralelo.
+
+   LOS COLORES NO SE COPIAN EN HEX. `--bg` (#fbfbfd), `--ink` (#17100d),
+   `--line` (#ececef) y `--muted` (#6b7280) de `globals.css` YA son, hex por
+   hex, la paleta de la landing (`--papel`/`--tinta`/`--linea`/`--gris` de
+   `css/main.css`). Se usan los tokens: así el día que la paleta se mueva, se
+   mueve aquí sola. Lo único que no existía es la crema del papel secundario.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.login {
+  /* La crema de la landing, el único valor que el software no tenía: es el
+     papel de la CANALETA entre la columna del formulario y la foto. Sin ella
+     las dos mitades son el mismo blanco y la foto —que es casi blanca— se
+     derrama en la página en vez de leerse como una lámina montada encima. */
+  --crema: #f2f1ee;
+  --serif-marca: var(--font-fraunces), Fraunces, Georgia, 'Times New Roman', serif;
+  --sans-marca: var(--font-instrument), 'Instrument Sans', var(--font-sans-ui), var(--font-sans);
+
+  font-family: var(--sans-marca);
+  /* `html, body` de globals.css aprieta todo el texto a -0.011em. Ese tracking
+     está calibrado para Inter; Instrument Sans ya viene con su propio ajuste
+     óptico y con el de Inter encima se ve estrecha. Se devuelve a 0 SOLO aquí. */
+  letter-spacing: 0;
+  background: var(--bg);
+}
+
+/* ── Las tres voces ───────────────────────────────────────────────────────── */
+
+.login-serif {
+  font-family: var(--serif-marca);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.06;
+  /* Sin él, "Bienvenido a Likida" parte en 390px dejando "Likida" solo en la
+     segunda línea. `balance` reparte las dos líneas por peso, no por ancho. */
+  text-wrap: balance;
+}
+
+/* El micro-rótulo de la landing, medido de `main.css`: mono, mayúsculas,
+   tracking .14em. IBM Plex Mono YA está cargada globalmente por `layout.tsx`
+   (`--font-mono`), así que esta voz no cuesta una petición más. */
+.login-kicker {
+  font-family: var(--font-mono), ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+/* ── Píldoras ─────────────────────────────────────────────────────────────
+   La geometría de `.btn` de la landing: 999px de radio, gap de 9px, peso 600.
+   El `rounded-lg` de antes es el radio de los botones del PANEL — correcto
+   allá, ajeno aquí.
+
+   HAY UNA PRIMA HERMANA Y NO ES DESCUIDO: `.pildora` en `globals.css`, que
+   entró el mismo día con el rediseño del 404 (cc86485). Se parecen porque
+   las dos portan el mismo `.btn` de la landing, pero no son la misma pieza y
+   fundirlas costaría más de lo que ahorra:
+
+   · Aquélla es un CTA suelto que se ajusta a su texto ("Volver al panel").
+     Ésta es un botón de FORMULARIO: `width: 100%`, más alto (14px de padding
+     contra 12px) y a 15px, para hacer par con el campo de correo que tiene
+     encima. Reusarla aquí sería reusarla sobrescribiéndole ancho, padding y
+     tamaño de letra — que es tenerla dos veces con pasos extra.
+   · Aquélla vive en `globals.css` y viaja a TODAS las pantallas. Esto vive
+     en la ruta.
+
+   Si algún día el software necesita esta píldora en una tercera pantalla, ahí
+   sí vale la pena una sola pieza compartida. Con dos, no. */
+.login-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  border-radius: 999px;
+  padding: 14px 22px;
+  font-family: var(--sans-marca);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+/* TINTA, no `--marca`. Bajo `.tema-neutro` `--marca` vale #18181b (el negro
+   frío de las consolas) y la landing es #17100d, un negro CÁLIDO. A 14px de
+   diferencia no se nota; en un plano de 400px de botón, sí — y el punto del
+   ejercicio es que las dos pantallas se vean de la misma marca. */
+.login-btn-tinta { background: var(--ink); color: var(--bg); }
+.login-btn-borde {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+.login-btn-borde:hover { border-color: color-mix(in srgb, var(--ink) 26%, transparent); }
+
+/* ── EL GESTO: el glifo de Likida se revela al pasar el cursor ────────────
+   Portado tal cual de `.btn .glifo` en `css/main.css` (líneas 422-430) — los
+   mismos números, porque el gesto ES los números: el glifo arranca con ancho
+   0, encogido a .55 y girado -35°, y se despliega EMPUJANDO el texto.
+
+   Las tres piezas que lo hacen funcionar y que es fácil romper:
+   · `overflow: hidden` + `width: 0` — sin eso el glifo ocupa lugar mientras
+     está guardado y el botón nace con un hueco a la izquierda del texto.
+   · `margin-right: -9px` — se come el `gap` del flex mientras está oculto,
+     para que al aparecer el texto se recorra 17px, no 26px.
+   · La curva del `transform` es `cubic-bezier(.34,1.56,.64,1)`, que PASA DE 1
+     (1.56 en el segundo control): el glifo se pasa de tamaño y regresa. Eso
+     es el rebote. Con una curva normal el gesto se ve barato.
+
+   `:focus-visible` además de `:hover`: quien navega con teclado ve el mismo
+   gesto que quien usa mouse. Y el estado FINAL vive FUERA de la media query
+   de movimiento — con `prefers-reduced-motion` el glifo aparece igual, solo
+   que de golpe. Ocultarlo del todo sería esconder información por preferir
+   menos animación. */
+.login-glifo {
+  display: block;
+  height: 17px;
+  width: 0;
+  margin-right: -9px;
+  opacity: 0;
+  overflow: hidden;
+  transform: scale(0.55) rotate(-35deg);
+  transform-origin: center;
+}
+.login-btn:hover .login-glifo,
+.login-btn:focus-visible .login-glifo {
+  width: 17px;
+  margin-right: 0;
+  opacity: 1;
+  transform: none;
+}
+
+/* ── Campo de correo ─────────────────────────────────────────────────────── */
+.login-campo {
+  width: 100%;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--sans-marca);
+  font-size: 15px;
+  font-weight: 500;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.login-campo::placeholder { color: var(--faint); }
+
+/* ── Foco visible ────────────────────────────────────────────────────────
+   El `outline: none` del campo anterior dejaba el foco de teclado invisible
+   salvo por un cambio de borde de #ececef a naranja — 1px, sin halo. Aquí
+   cada control tiene un anillo que se ve: halo para el campo (respeta la
+   píldora sin recortarla), contorno para botones y ligas. */
+.login-campo:focus-visible {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+.login-btn:focus-visible,
+.login a:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* ── La lámina de la foto ─────────────────────────────────────────────────
+   Hairline + radio grande: es una LÁMINA montada sobre el papel crema, el
+   mismo material que `.card` en el panel, en grande y sin sombra. */
+.login-lamina {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  /* La crema debajo de la foto, no el blanco: mientras la imagen carga, el
+     hueco tiene el color del papel y no un rectángulo blanco que parpadea. */
+  background: var(--crema);
+}
+.login-foto {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* El punto de interés de la foto es la fuga de las cajas, abajo a la
+     izquierda: al recortar en vertical se conserva ESO y no el cielo vacío. */
+  object-position: 42% 62%;
+}
+/* El velo de tinta al pie: la foto es casi blanca (luminancia media 176/255)
+   y el pie de foto en papel encima de ella no se leería. Solo el tercio
+   inferior, y muy tenue — el resto de la imagen se queda limpio. */
+.login-velo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--ink) 72%, transparent) 0%,
+    color-mix(in srgb, var(--ink) 34%, transparent) 22%,
+    transparent 46%
+  );
+}
+
+/* ── Movimiento, todo detrás de la misma puerta ──────────────────────────
+   Nada de esto pinta información: son entradas y un zoom. Con
+   `prefers-reduced-motion: reduce` la pantalla queda idéntica, quieta. */
+@media (prefers-reduced-motion: no-preference) {
+  .login-btn {
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+  .login-btn:hover { transform: translateY(-1px); }
+  .login-btn-tinta:hover {
+    box-shadow: 0 10px 26px color-mix(in srgb, var(--ink) 28%, transparent);
+  }
+  .login-glifo {
+    transition:
+      width 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+      margin-right 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.2s ease,
+      transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Ken Burns de 30 s por tramo (60 s ida y vuelta): 8 puntos de escala en
+     medio minuto son ~0.5 px/s en la pantalla. No se ve moverse; se nota que
+     la pantalla está viva cuando uno vuelve a mirarla. Un zoom más rápido
+     compite con el formulario, que es lo único que aquí importa.
+
+     Las DOS animaciones no chocan porque tocan propiedades distintas: el
+     Ken Burns solo `transform`, la entrada solo `opacity`. Si `login-revela`
+     tocara transform, machacaría la escala y el zoom no correría. */
+  .login-foto {
+    animation:
+      login-kenburns 30s ease-in-out infinite alternate,
+      login-revela 1.1s ease-out both;
+    transform-origin: 45% 60%;
+  }
+
+  /* La entrada escalonada del formulario. El `delay` lo pone cada elemento en
+     línea. `opacity: 0` vive DENTRO de la media query a propósito: si el CSS
+     no llega o el usuario pidió menos movimiento, el contenido está visible,
+     nunca invisible esperando una animación. */
+  .login-entra {
+    opacity: 0;
+    animation: login-sube 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes login-kenburns {
+  from { transform: scale(1.05); }
+  to { transform: scale(1.13); }
+}
+@keyframes login-revela {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes login-sube {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
