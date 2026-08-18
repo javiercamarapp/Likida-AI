@@ -35,6 +35,26 @@ describe('giroDe — transportista o qué', () => {
   it('la actividad DENUE en notas también clasifica', () => {
     expect(giroDe('AVE', null, 'DENUE: Autotransporte foráneo de carga general')).toBe('transportista');
   });
+
+  describe('el SCIAN veta el nombre (18-ago) — no todo "transporte" es autotransporte de carga', () => {
+    it('484 (carga) no cambia nada — el nombre sigue mandando', () => {
+      expect(giroDe('AZ TRANSPORTES DE CARGA', null, null, '484222')).toBe('transportista');
+    });
+    it('485 (pasajeros): el nombre miente, el SCIAN gana — "AAZ TRANSPORTE" es un concesionario de autobuses', () => {
+      expect(giroDe('AAZ TRANSPORTE', null, null, '485111')).not.toBe('transportista');
+    });
+    it('488 (aduanales/grúas) igual se veta, aunque el nombre diga "transportes internacionales"', () => {
+      expect(giroDe('24-7 TRANSPORTES INTERNACIONALES', null, null, '488511')).not.toBe('transportista');
+    });
+    it('492 (paquetería) y 493 (almacenamiento) también quedan fuera de "transportista"', () => {
+      expect(giroDe('EXPRESS TRANSPORTES', null, null, '492110')).not.toBe('transportista');
+      expect(giroDe('BODEGAS TRANSPORTES DEL NORTE', null, null, '493110')).not.toBe('transportista');
+    });
+    it('sin SCIAN (la mayoría del censo hoy) el comportamiento no cambia — sigue siendo heurística de nombre', () => {
+      expect(giroDe('Transportes Castores', null, null)).toBe('transportista');
+      expect(giroDe('Transportes Castores', null, null, null)).toBe('transportista');
+    });
+  });
   it('las categorías del TAM del 17-ago: embotelladora y mayoreo', () => {
     expect(giroDe('Bebidas del Bajío', null, 'UNIVERSO DENUE: Elaboración de refrescos y otras bebidas')).toBe('embotelladora');
     expect(giroDe('Grupo Surtidor', null, 'UNIVERSO DENUE: Comercio al por mayor de abarrotes')).toBe('abarrotes_mayoreo');
