@@ -29,7 +29,10 @@ process.env.NEXT_PUBLIC_APP_URL = process.env.PLANTILLAS_BASE ?? 'https://app.li
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { armarHtml } from '../../src/lib/correo/plantilla';
-import { correoDeAuth, minutosDeCaducidad, type AccionAuth } from '../../src/lib/correo/auth';
+import {
+  correoDeAuth, correoDeAvisoAuth, minutosDeCaducidad,
+  type AccionAuth, type AvisoAuth,
+} from '../../src/lib/correo/auth';
 import { LOGO_PNG_BASE64, LOGO_CID } from '../../src/lib/correo/logo';
 
 /** Sentinelas: se meten como URL/código válidos para que pasen por
@@ -88,6 +91,28 @@ for (const accion of Object.keys(ARCHIVO) as AccionAuth[]) {
   writeFileSync(join(previa, `${ARCHIVO[accion]}.html`), vista, 'utf8');
 }
 
-console.log(`Plantillas del panel → ${destino}/ (${PARA_EL_PANEL.length})`);
+// Los siete avisos de seguridad: sin liga ni código, con las variables Go
+// tal cual. Van a las dos salidas por lo mismo que los demás.
+const AVISOS: Record<AvisoAuth, string> = {
+  email_changed: 'aviso-correo-cambiado',
+  password_changed: 'aviso-contrasena',
+  phone_changed: 'aviso-telefono-cambiado',
+  mfa_enrolled: 'aviso-segundo-factor-agregado',
+  mfa_unenrolled: 'aviso-segundo-factor-quitado',
+  identity_linked: 'aviso-identidad-ligada',
+  identity_unlinked: 'aviso-identidad-quitada',
+};
+
+for (const [tipo, archivo] of Object.entries(AVISOS) as Array<[AvisoAuth, string]>) {
+  const correo = correoDeAvisoAuth(tipo);
+  writeFileSync(join(destino, `${archivo}.html`), armarHtml(correo, { logo: 'url' }), 'utf8');
+  writeFileSync(
+    join(previa, `${archivo}.html`),
+    armarHtml(correo).replaceAll(`cid:${LOGO_CID}`, `data:image/png;base64,${LOGO_PNG_BASE64}`),
+    'utf8',
+  );
+}
+
+console.log(`Plantillas del panel → ${destino}/ (${PARA_EL_PANEL.length + Object.keys(AVISOS).length})`);
 console.log(`Vista previa         → ${previa}/ (${Object.keys(ARCHIVO).length})`);
 console.log(`Caducidad declarada  → ${minutos} min (AUTH_CORREO_CADUCIDAD_MIN)`);

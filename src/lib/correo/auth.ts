@@ -283,3 +283,134 @@ export function correoDeAuth(d: DatosCorreoAuth): Correo {
       };
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS AVISOS DE SEGURIDAD — las siete plantillas que nadie mira hasta que
+// importan.
+//
+// Supabase manda un correo cada vez que algo toca el ACCESO de una cuenta:
+// se ligó un método de entrada, se quitó un segundo factor, cambió la
+// dirección. Se descubrieron el 18-ago-2026 leyendo la configuración del
+// proyecto por la Management API: seguían en inglés y con el HTML de fábrica,
+// porque no aparecen en la lista de plantillas que uno espera.
+//
+// Cuáles pueden dispararse HOY en Likida: el cambio de correo, el alta y baja
+// de segundo factor (`lib/auth/mfa.ts`) y el ligado de una identidad de
+// Google. Las de contraseña y teléfono no deberían dispararse nunca —Likida
+// entra por enlace, sin contraseña—, y por eso su texto NO finge que sí:
+// dicen lo que significaría verlas, que es que alguien le puso una contraseña
+// a una cuenta que no debería tenerla.
+//
+// No llevan botón ni código: no hay nada que confirmar. Llevan los datos del
+// cambio y la línea de qué hacer si no fuiste tú. Y NO se pueden desactivar,
+// lo cual se dice en el pie: un aviso de seguridad silenciable no es un aviso.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type AvisoAuth =
+  | 'email_changed'
+  | 'password_changed'
+  | 'phone_changed'
+  | 'mfa_enrolled'
+  | 'mfa_unenrolled'
+  | 'identity_linked'
+  | 'identity_unlinked';
+
+/** Qué hacer si el cambio no fue tuyo. Sin dirección de soporte inventada:
+ *  Likida no tiene una hoy, y mandar a un buzón que nadie lee es peor que
+ *  mandar a la persona que sí puede quitar el acceso. */
+const NO_FUISTE_TU_AVISO =
+  'Si no fuiste tú, alguien más está dentro de tu cuenta: entra a Likida, quítale el acceso a ese método y avísale de inmediato a quien administra la cuenta de tu empresa.';
+
+const PORQUE_AVISO =
+  'Recibes este correo porque cambió algo en el acceso a tu cuenta de Likida. Estos avisos no se pueden desactivar: son la única señal de que alguien tocó tu entrada.';
+
+/**
+ * Redacta un aviso de seguridad de Auth.
+ *
+ * Los valores llevan las variables Go de Supabase tal cual (`{{ .Provider }}`)
+ * porque estas plantillas las rellena SU motor, no el nuestro. Pasan intactas
+ * por `esc()` —no traen `<`, `&` ni comillas—, así que no hace falta ningún
+ * sentinela como en las plantillas con liga.
+ */
+export function correoDeAvisoAuth(tipo: AvisoAuth): Correo {
+  const base = { porQueLoRecibes: PORQUE_AVISO, nota: NO_FUISTE_TU_AVISO };
+
+  switch (tipo) {
+    case 'email_changed':
+      return {
+        ...base,
+        asunto: 'Cambió el correo de tu cuenta — Likida',
+        avance: 'Los accesos y los avisos ahora llegan a la dirección nueva.',
+        titulo: 'Cambió el correo de tu cuenta',
+        parrafos: ['La dirección de tu cuenta de Likida se cambió. A partir de ahora, los enlaces de acceso y los avisos llegan a la nueva.'],
+        datos: [['Antes', '{{ .OldEmail }}'], ['Ahora', '{{ .Email }}']],
+        tono: 'atencion',
+      };
+
+    case 'password_changed':
+      return {
+        ...base,
+        asunto: 'Se puso una contraseña en tu cuenta — Likida',
+        avance: 'Likida entra por enlace, sin contraseña. Esto no debería pasar.',
+        titulo: 'Se registró una contraseña en tu cuenta',
+        parrafos: [
+          'Likida no usa contraseña: se entra con el enlace de acceso que llega a tu correo.',
+          'Que este aviso exista significa que alguien le puso una contraseña a tu cuenta. Revísalo.',
+        ],
+        tono: 'urgente',
+      };
+
+    case 'phone_changed':
+      return {
+        ...base,
+        asunto: 'Cambió el teléfono de tu cuenta — Likida',
+        avance: 'El teléfono ligado a tu cuenta ya no es el mismo.',
+        titulo: 'Cambió el teléfono de tu cuenta',
+        parrafos: ['El número ligado a tu cuenta de Likida se cambió.'],
+        datos: [['Antes', '{{ .OldPhone }}'], ['Ahora', '{{ .Phone }}']],
+        tono: 'atencion',
+      };
+
+    case 'mfa_enrolled':
+      return {
+        ...base,
+        asunto: 'Agregaste un segundo factor — Likida',
+        avance: 'Tu cuenta ahora pide un paso más para entrar.',
+        titulo: 'Se agregó un segundo factor a tu cuenta',
+        parrafos: ['A partir de ahora, entrar a Likida pide este paso extra además del enlace de acceso.'],
+        datos: [['Método', '{{ .FactorType }}']],
+      };
+
+    case 'mfa_unenrolled':
+      return {
+        ...base,
+        asunto: 'Se quitó un segundo factor — Likida',
+        avance: 'Tu cuenta quedó con un candado menos.',
+        titulo: 'Se quitó un segundo factor de tu cuenta',
+        parrafos: ['Tu cuenta de Likida quedó con un candado menos: ya no pide este paso extra para entrar.'],
+        datos: [['Método', '{{ .FactorType }}']],
+        tono: 'atencion',
+      };
+
+    case 'identity_linked':
+      return {
+        ...base,
+        asunto: 'Nueva forma de entrar a tu cuenta — Likida',
+        avance: 'Se ligó un método de acceso a tu cuenta.',
+        titulo: 'Se ligó una nueva forma de entrar',
+        parrafos: ['Ahora también se puede entrar a tu cuenta de Likida con este método.'],
+        datos: [['Método', '{{ .Provider }}'], ['Cuenta', '{{ .Email }}']],
+      };
+
+    case 'identity_unlinked':
+      return {
+        ...base,
+        asunto: 'Se quitó una forma de entrar — Likida',
+        avance: 'Ese método ya no sirve para entrar a tu cuenta.',
+        titulo: 'Se quitó una forma de entrar',
+        parrafos: ['Ese método ya no sirve para entrar a tu cuenta de Likida.'],
+        datos: [['Método', '{{ .Provider }}'], ['Cuenta', '{{ .Email }}']],
+        tono: 'atencion',
+      };
+  }
+}

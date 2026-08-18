@@ -2,11 +2,13 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
   caducidadEnPalabras,
   correoDeAuth,
+  correoDeAvisoAuth,
   destinoPermitido,
   hookDeCorreoConfigurado,
   minutosDeCaducidad,
   urlDeVerificacion,
   type AccionAuth,
+  type AvisoAuth,
 } from './auth';
 import { armarHtml, aTextoPlano } from './plantilla';
 
@@ -187,5 +189,58 @@ describe('el secreto del hook se mide, pero no se sobreafirma', () => {
     process.env.SUPABASE_AUTH_HOOK_SECRET = 'v1,whsec_abc';
     expect(hookDeCorreoConfigurado()).toBe(true);
     delete process.env.SUPABASE_AUTH_HOOK_SECRET;
+  });
+});
+
+describe('los avisos de seguridad — las siete que nadie mira hasta que importan', () => {
+  const TODOS: AvisoAuth[] = [
+    'email_changed', 'password_changed', 'phone_changed',
+    'mfa_enrolled', 'mfa_unenrolled', 'identity_linked', 'identity_unlinked',
+  ];
+
+  it.each(TODOS)('%s sale con la marca, en español y sin botón', (tipo) => {
+    const c = correoDeAvisoAuth(tipo);
+    const html = armarHtml(c, { logo: 'url' });
+    expect(html).toContain('/images/logo.png');
+    expect(c.boton).toBeUndefined();      // no hay nada que confirmar
+    expect(c.codigo).toBeUndefined();
+    expect(c.asunto).toMatch(/Likida/);
+    expect(JSON.stringify(c)).not.toMatch(/your |was changed|contact support/i);
+  });
+
+  it.each(TODOS)('%s dice qué hacer si no fuiste tú, y que no se puede apagar', (tipo) => {
+    const c = correoDeAvisoAuth(tipo);
+    expect(c.nota).toMatch(/Si no fuiste tú/);
+    // Un aviso de seguridad silenciable no es un aviso: el pie lo dice.
+    expect(c.porQueLoRecibes).toMatch(/no se pueden desactivar/);
+  });
+
+  it('las variables Go de Supabase sobreviven el escapado', () => {
+    // Las rellena el motor de Supabase, no el nuestro. No traen < & ni
+    // comillas, así que pasan intactas por esc() — sin sentinela.
+    const html = armarHtml(correoDeAvisoAuth('identity_linked'), { logo: 'url' });
+    expect(html).toContain('{{ .Provider }}');
+    expect(html).toContain('{{ .Email }}');
+    expect(armarHtml(correoDeAvisoAuth('email_changed'))).toContain('{{ .OldEmail }}');
+    expect(armarHtml(correoDeAvisoAuth('mfa_enrolled'))).toContain('{{ .FactorType }}');
+  });
+
+  it('quitar un candado pesa más que ponerlo', () => {
+    // Agregar un factor es rutina; quitarlo es la señal de que alguien está
+    // debilitando la cuenta. El tono lo distingue con una palabra, no con
+    // una banda de color.
+    expect(correoDeAvisoAuth('mfa_enrolled').tono).toBeUndefined();
+    expect(correoDeAvisoAuth('mfa_unenrolled').tono).toBe('atencion');
+    expect(correoDeAvisoAuth('identity_linked').tono).toBeUndefined();
+    expect(correoDeAvisoAuth('identity_unlinked').tono).toBe('atencion');
+  });
+
+  it('la de contraseña NO finge que Likida tiene contraseñas', () => {
+    // Likida entra por enlace (decisión 4-ago, no se reabre). Si este correo
+    // llega, significa que alguien le puso una contraseña a la cuenta — y eso
+    // es lo que dice, en vez de traducir el texto de fábrica.
+    const c = correoDeAvisoAuth('password_changed');
+    expect(c.parrafos.join(' ')).toMatch(/no usa contraseña/);
+    expect(c.tono).toBe('urgente');
   });
 });

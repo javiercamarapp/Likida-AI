@@ -4,9 +4,10 @@
 //   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts
 //   SUPABASE_ACCESS_TOKEN=sbp_xxx npx vite-node scripts/correo/aplicar-auth-supabase.ts --con-hook
 //
-// Sin bandera: sube las SEIS plantillas y sus asuntos (Authentication →
-// Emails). Es reversible, no toca el camino de entrada, y arregla el correo
-// aunque el hook nunca se encienda.
+// Sin bandera: sube las TRECE plantillas y sus asuntos (Authentication →
+// Emails): las seis con liga o código, y los siete avisos de seguridad. Es
+// reversible, no toca el camino de entrada, y arregla el correo aunque el
+// hook nunca se encienda.
 //
 // Con `--con-hook`: además enciende el Send Email Hook, que le quita el envío
 // a Supabase y lo pasa por Resend con el logo incrustado.
@@ -31,7 +32,10 @@ process.env.NEXT_PUBLIC_APP_URL = process.env.PLANTILLAS_BASE ?? 'https://app.li
 
 import { readFileSync } from 'node:fs';
 import { armarHtml } from '../../src/lib/correo/plantilla';
-import { correoDeAuth, minutosDeCaducidad, type AccionAuth } from '../../src/lib/correo/auth';
+import {
+  correoDeAuth, correoDeAvisoAuth, minutosDeCaducidad,
+  type AccionAuth, type AvisoAuth,
+} from '../../src/lib/correo/auth';
 
 const API = 'https://api.supabase.com/v1';
 const ENDPOINT = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/correo`;
@@ -101,6 +105,22 @@ const CAMPOS: Array<{ accion: AccionAuth; asunto: string; contenido: string; nom
   { accion: 'reauthentication', asunto: 'mailer_subjects_reauthentication', contenido: 'mailer_templates_reauthentication_content', nombre: 'Reauthentication' },
 ];
 
+/**
+ * Los SIETE avisos de seguridad. No aparecen en la lista de plantillas que uno
+ * espera —se descubrieron leyendo la config por API el 18-ago— y seguían en
+ * inglés con el HTML de fábrica. No llevan liga ni código: sus variables las
+ * rellena el motor de Supabase y pasan intactas por el escapado.
+ */
+const AVISOS: Array<{ tipo: AvisoAuth; asunto: string; contenido: string; nombre: string }> = [
+  { tipo: 'email_changed', asunto: 'mailer_subjects_email_changed_notification', contenido: 'mailer_templates_email_changed_notification_content', nombre: 'Correo cambiado' },
+  { tipo: 'password_changed', asunto: 'mailer_subjects_password_changed_notification', contenido: 'mailer_templates_password_changed_notification_content', nombre: 'Contraseña' },
+  { tipo: 'phone_changed', asunto: 'mailer_subjects_phone_changed_notification', contenido: 'mailer_templates_phone_changed_notification_content', nombre: 'Teléfono cambiado' },
+  { tipo: 'mfa_enrolled', asunto: 'mailer_subjects_mfa_factor_enrolled_notification', contenido: 'mailer_templates_mfa_factor_enrolled_notification_content', nombre: 'Segundo factor +' },
+  { tipo: 'mfa_unenrolled', asunto: 'mailer_subjects_mfa_factor_unenrolled_notification', contenido: 'mailer_templates_mfa_factor_unenrolled_notification_content', nombre: 'Segundo factor −' },
+  { tipo: 'identity_linked', asunto: 'mailer_subjects_identity_linked_notification', contenido: 'mailer_templates_identity_linked_notification_content', nombre: 'Identidad ligada' },
+  { tipo: 'identity_unlinked', asunto: 'mailer_subjects_identity_unlinked_notification', contenido: 'mailer_templates_identity_unlinked_notification_content', nombre: 'Identidad quitada' },
+];
+
 // ── 0. Estado actual ──────────────────────────────────────────────────────
 const antes = await api('GET');
 const otpSeg = Number(antes.mailer_otp_exp ?? 0);
@@ -121,11 +141,16 @@ for (const c of CAMPOS) {
   patch[c.asunto] = asunto;
   patch[c.contenido] = html;
 }
+for (const a of AVISOS) {
+  const correo = correoDeAvisoAuth(a.tipo);
+  patch[a.asunto] = correo.asunto;
+  patch[a.contenido] = armarHtml(correo, { logo: 'url' });
+}
 await api('PATCH', patch);
 
 const despues = await api('GET');
 let fallas = 0;
-for (const c of CAMPOS) {
+for (const c of [...CAMPOS, ...AVISOS]) {
   const ok = despues[c.contenido] === patch[c.contenido] && despues[c.asunto] === patch[c.asunto];
   console.log(`  ${ok ? '✓' : '✗'} ${c.nombre.padEnd(18)} ${String(patch[c.asunto])}`);
   if (!ok) fallas++;

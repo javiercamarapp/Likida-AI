@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light only">
+<title>Nueva forma de entrar a tu cuenta — Likida</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f9f9fa;">
+<!-- El avance: lo que se lee en la bandeja bajo el asunto. Se esconde del
+     cuerpo con el truco estándar de altura cero y color transparente. -->
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;">Se ligó un método de acceso a tu cuenta.&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f9f9fa;">
+  <tr><td align="center" style="padding:44px 16px 36px 16px;">
+
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px;max-width:100%;border-collapse:collapse;">
+
+      <!-- EL LOGO REAL, arriba a la izquierda, INCRUSTADO (cid:) y no enlazado.
+           Un <img src="https://…"> depende de que el cliente autorice imágenes
+           externas, y Gmail las bloquea por defecto: así llegó roto la primera
+           vez, aunque el archivo respondía 200. Incrustado viaja con el correo.
+
+           Y EL TEXTO ALTERNO LLEVA ESTILO: cuando un cliente no pinta la
+           imagen, la mayoría aplica los estilos del <img> a su alt. El peor
+           caso no es un ícono roto — es LIKIDA en versalitas espaciadas, el
+           wordmark de todos modos. Nunca hay un estado feo. -->
+      <tr><td align="left" style="padding:0 0 26px 2px;">
+        <img src="https://app.likida.ai/images/logo.png" alt="LIKIDA" width="112" height="23"
+          style="display:block;border:0;outline:none;text-decoration:none;height:23px;width:112px;font-family:'Inter Tight',Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;letter-spacing:0.34em;color:#18181b;">
+      </td></tr>
+
+      <tr><td bgcolor="#ffffff" style="padding:42px 44px 38px 44px;border:1px solid #ececef;border-radius:16px;">
+        
+        <h1 style="margin:0 0 18px 0;font-family:'Inter Tight',Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:26px;line-height:34px;font-weight:600;letter-spacing:-0.02em;color:#17100d;">Se ligó una nueva forma de entrar</h1>
+      <p style="margin:0 0 16px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:24px;color:#52525b;">Ahora también se puede entrar a tu cuenta de Likida con este método.</p>
+      
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:30px 0 4px 0;border-collapse:collapse;">
+        <tr>
+          <td style="padding:13px 0;border-top:1px solid #ececef;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;line-height:16px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:#73737c;">Método</td>
+          <td align="right" style="padding:13px 0;border-top:1px solid #ececef;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:20px;color:#17100d;font-weight:600;">{{ .Provider }}</td>
+        </tr>
+        <tr>
+          <td style="padding:13px 0;border-top:1px solid #ececef;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;line-height:16px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:#73737c;">Cuenta</td>
+          <td align="right" style="padding:13px 0;border-top:1px solid #ececef;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:20px;color:#17100d;font-weight:600;">{{ .Email }}</td>
+        </tr>
+        <tr><td colspan="2" style="border-top:1px solid #ececef;font-size:0;line-height:0;">&nbsp;</td></tr>
+      </table>
+      
+      
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:26px 0 0 0;border-collapse:collapse;">
+        <tr><td bgcolor="#f9f9fa" style="padding:15px 18px;border:1px solid #ececef;border-radius:10px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;line-height:19px;color:#6b7280;">Si no fuiste tú, alguien más está dentro de tu cuenta: entra a Likida, quítale el acceso a ese método y avísale de inmediato a quien administra la cuenta de tu empresa.</td></tr>
+      </table>
+      </td></tr>
+
+      <!-- El pie: la casa editorial del correo. Primera línea, quiénes somos;
+           segunda, por qué te llegó; tercera, a dónde volver. Sin gritos. -->
+      <tr><td align="left" style="padding:26px 6px 0 6px;">
+        <p style="margin:0 0 7px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;line-height:17px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;">Likida&nbsp;&nbsp;&#183;&nbsp;&nbsp;Liquidaci&oacute;n de viajes por WhatsApp</p>
+        <p style="margin:0 0 5px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;line-height:18px;color:#73737c;">Recibes este correo porque cambió algo en el acceso a tu cuenta de Likida. Estos avisos no se pueden desactivar: son la única señal de que alguien tocó tu entrada.</p>
+        <p style="margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;line-height:18px;color:#73737c;">
+          <a href="https://app.likida.ai" style="color:#73737c;text-decoration:underline;text-decoration-color:#ececef;">app.likida.ai</a>
+        </p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>
