@@ -200,6 +200,23 @@ describe('la red de seguridad de la 0137', () => {
     expect(ultima.fuente).toBe('ads-meta');
   });
 
+  it('reconoce la redacción de PostgREST, que es la que sale en un INSERT real', async () => {
+    // Esta prueba existe porque en producción se perdió un lead: la ruta solo
+    // sabía el texto de Postgres («column prospecto.x does not exist»), y el
+    // INSERT lo contesta PostgREST con otra redacción. Es el mensaje LITERAL
+    // que devolvió la base el 18-ago-2026.
+    respuestas.push(
+      { data: [], error: null },
+      { data: null, error: { message: "Could not find the 'urgencia' column of 'prospecto' in the schema cache" } },
+      { data: null, error: null },
+    );
+    const r = await postear({ ...LEAD, unidades: '' });
+    expect(r.status).toBe(200);
+    expect(llamadas).toHaveLength(2);
+    expect(llamadas[1].payload).not.toHaveProperty('urgencia');
+    expect(String(llamadas[1].payload.notas)).toContain('inmediata');
+  });
+
   it('si lo que falta NO es de la 0137, GRITA: la tabla no es la que se cree', async () => {
     respuestas.push(
       { data: [], error: null },
