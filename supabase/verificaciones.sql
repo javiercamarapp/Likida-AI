@@ -5330,3 +5330,50 @@ begin
   raise exception E'PLANES_0136  con-price-sin-monto=%  con-price-sin-iva=%  empresa-sin-price=%  price-duplicado-rebota=%   (esperado 0 / 0 / t / t)',
     con_price_sin_monto, con_price_sin_iva, coalesce(empresa_sin_price, false), price_duplicado_rebota;
 end $$;
+
+-- ── 109. La libreta de decisores no deja pasar un dato adivinado (mig. 0138) ──
+-- La 0138 existe para separar "lo leí en su sitio" de "lo adiviné", y esa
+-- separación solo vale si la base la HACE CUMPLIR: un agente investigando
+-- deduce correos del patrón nombre.apellido@dominio, y si esos se guardan
+-- indistinguibles de los verificados, se mandan, rebotan y queman la
+-- reputación del dominio de Likida — lo que degrada la entregabilidad de todo
+-- lo demás, incluida la factura de un cliente real.
+-- (a) tabla CON RLS; (b) el índice único por correo; (c) funcional: un
+-- `inferido` declarado de confianza 'alta' REBOTA; (d) funcional: el mismo
+-- correo dos veces en el mismo prospecto REBOTA.
+--   (esperado t / t / t / t — exactos)
+do $$
+declare
+  tabla_rls boolean;
+  indice boolean;
+  inferido_alta_rebota boolean := false;
+  correo_duplicado_rebota boolean := false;
+  v_prospecto uuid;
+begin
+  select c.relrowsecurity into tabla_rls
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'prospecto_persona';
+
+  select exists (select 1 from pg_indexes where indexname = 'idx_prospecto_persona_correo_unico') into indice;
+
+  insert into public.prospecto (empresa) values ('zzz-verif-persona') returning id into v_prospecto;
+
+  begin
+    insert into public.prospecto_persona (prospecto_id, nombre, origen, confianza)
+      values (v_prospecto, 'zzz Adivinado', 'inferido', 'alta');
+  exception when check_violation then
+    inferido_alta_rebota := true;
+  end;
+
+  insert into public.prospecto_persona (prospecto_id, nombre, correo, origen, confianza)
+    values (v_prospecto, 'zzz Uno', 'zzz@ejemplo.invalid', 'sitio_empresa', 'alta');
+  begin
+    insert into public.prospecto_persona (prospecto_id, nombre, correo, origen, confianza)
+      values (v_prospecto, 'zzz Dos', 'ZZZ@ejemplo.invalid', 'linkedin', 'media');
+  exception when unique_violation then
+    correo_duplicado_rebota := true;
+  end;
+
+  raise exception E'PERSONAS_0138  tabla-rls=%  indice=%  inferido-alta-rebota=%  correo-duplicado-rebota=%   (esperado t / t / t / t)',
+    coalesce(tabla_rls, false), indice, inferido_alta_rebota, correo_duplicado_rebota;
+end $$;
