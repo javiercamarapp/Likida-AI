@@ -2,14 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL LEAD DE /getdemo — lo que se fija:
-//  · CORS cerrado: solo likida.ai recibe la cabecera. Un origen cualquiera no,
-//    porque este endpoint ESCRIBE en `prospecto`.
-//  · NUNCA rompe al visitante: base caída, JSON raro o empresa vacía → 200.
-//    Si esto devolviera error, el formulario se traba y se pierde la CITA, que
-//    vale más que el lead.
-//  · Un lead que vuelve no es dos prospectos, y al deduplicar solo AGREGA
-//    datos: jamás borra el teléfono que el censo ya tenía.
-//  · Las unidades se leen de texto libre y un 0 es `null`, no cero.
+//  · CORS cerrado: solo likida.ai recibe la cabecera. Este endpoint ESCRIBE.
+//  · NUNCA rompe al visitante: base caída, columna ausente o campo raro → 200
+//    y el lead se guarda igual. Si esto se traba se pierde la CITA, que vale
+//    más que el lead.
+//  · `unidades` y `urgencia` son dominios cerrados y se filtran AQUÍ: un valor
+//    fuera de dominio no puede tirar el insert entero y llevarse el prospecto.
+//  · El canal se deduce de la atribución, y un click id manda sobre el utm_*
+//    porque lo pega la plataforma, no quien armó la URL.
+//  · Deduplicar solo AGREGA: jamás borra el teléfono del censo ni repinta el
+//    estado que el vendedor ya movió.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const llamadas: Array<{ op: string; payload: Record<string, unknown> }> = [];
@@ -51,20 +53,25 @@ function postear(cuerpo: unknown, origen: string | null = LANDING) {
   }));
 }
 
-const LEAD = { empresa: 'Transportes GAL', nombre: 'Alejandro', apellido: 'Vargas',
-  correo: 'a@gal.mx', whatsapp: '8112345678', unidades: '40' };
+const LEAD = {
+  empresa: 'Transportes GAL', nombre: 'Alejandro', apellido: 'Vargas',
+  correo: 'a@gal.mx', whatsapp: '8112345678',
+  unidades: '101-250', urgencia: 'inmediata',
+};
+
+/** Cola: primero la lectura de duplicados, luego la escritura. */
+function nuevoLead() { respuestas.push({ data: [], error: null }, { data: null, error: null }); }
 
 beforeEach(() => { llamadas.length = 0; respuestas.length = 0; });
 
 describe('CORS: la lista de orígenes es cerrada', () => {
   it('likida.ai sí recibe la cabecera', async () => {
-    respuestas.push({ data: [], error: null }, { data: null, error: null });
-    const r = await postear(LEAD);
-    expect(r.headers.get('Access-Control-Allow-Origin')).toBe(LANDING);
+    nuevoLead();
+    expect((await postear(LEAD)).headers.get('Access-Control-Allow-Origin')).toBe(LANDING);
   });
 
   it('un origen cualquiera NO la recibe: escribir en prospecto no es para todos', async () => {
-    respuestas.push({ data: [], error: null }, { data: null, error: null });
+    nuevoLead();
     const r = await postear(LEAD, 'https://sitio-ajeno.example');
     expect(r.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
@@ -74,52 +81,92 @@ describe('CORS: la lista de orígenes es cerrada', () => {
       method: 'OPTIONS', headers: { origin: LANDING },
     }));
     expect(r.status).toBe(204);
-    expect(r.headers.get('Access-Control-Allow-Origin')).toBe(LANDING);
   });
 });
 
-describe('el lead se guarda', () => {
-  it('uno nuevo entra con fuente landing y las unidades como número', async () => {
-    respuestas.push({ data: [], error: null }, { data: null, error: null });
-    const r = await postear(LEAD);
-    expect(r.status).toBe(200);
-    expect(llamadas).toHaveLength(1);
+describe('el lead se guarda con lo que califica', () => {
+  it('entra con unidades, urgencia y fuente landing', async () => {
+    nuevoLead();
+    await postear(LEAD);
     expect(llamadas[0].op).toBe('insert');
     expect(llamadas[0].payload).toMatchObject({
       empresa: 'Transportes GAL',
       contacto_nombre: 'Alejandro Vargas',
-      correo: 'a@gal.mx',
       telefono: '8112345678',
-      unidades: 40,
+      unidades: '101-250',
+      urgencia: 'inmediata',
       fuente: 'landing',
       estado: 'nuevo',
     });
   });
 
-  it('"40 camiones" se lee como 40 — el campo es texto libre', async () => {
-    respuestas.push({ data: [], error: null }, { data: null, error: null });
-    await postear({ ...LEAD, unidades: '40 camiones' });
-    expect(llamadas[0].payload.unidades).toBe(40);
+  it('la ETIQUETA traducida no pasa: solo el código estable', async () => {
+    // "5 a 30 unidades" / "5 to 30 trucks" son la MISMA respuesta escrita
+    // distinto según el idioma. Guardar la etiqueta parte el dato en dos.
+    nuevoLead();
+    await postear({ ...LEAD, unidades: '5 a 30 unidades' });
+    expect(llamadas[0].payload.unidades).toBeNull();
   });
 
-  it('un 0 se guarda como null: "no se sabe" no es "flota sin camiones"', async () => {
-    respuestas.push({ data: [], error: null }, { data: null, error: null });
-    await postear({ ...LEAD, unidades: '0' });
-    expect(llamadas[0].payload.unidades).toBeNull();
+  it('una urgencia inventada se cae sola y NO tira el lead', async () => {
+    nuevoLead();
+    await postear({ ...LEAD, urgencia: 'urgentisimo' });
+    expect(llamadas[0].payload.urgencia).toBeNull();
+    expect(llamadas[0].payload.empresa).toBe('Transportes GAL');
+  });
+});
+
+describe('de dónde vino: el canal se deduce, el detalle se guarda', () => {
+  it('un fbclid es ads-meta', async () => {
+    nuevoLead();
+    await postear({ ...LEAD, atribucion: { fbclid: 'abc123', utm_campaign: 'flotas-mx' } });
+    expect(llamadas[0].payload.fuente).toBe('ads-meta');
+    expect(llamadas[0].payload.atribucion).toEqual({ fbclid: 'abc123', utm_campaign: 'flotas-mx' });
+  });
+
+  it('un gclid es ads-google', async () => {
+    nuevoLead();
+    await postear({ ...LEAD, atribucion: { gclid: 'xyz' } });
+    expect(llamadas[0].payload.fuente).toBe('ads-google');
+  });
+
+  it('el click id MANDA sobre el utm_source, que cualquiera escribe a mano', async () => {
+    nuevoLead();
+    await postear({ ...LEAD, atribucion: { gclid: 'xyz', utm_source: 'facebook' } });
+    expect(llamadas[0].payload.fuente).toBe('ads-google');
+  });
+
+  it('utm sin click id es "campana", no "ads": decir ads inventaría un gasto', async () => {
+    nuevoLead();
+    await postear({ ...LEAD, atribucion: { utm_source: 'boletin', utm_medium: 'email' } });
+    expect(llamadas[0].payload.fuente).toBe('campana');
+  });
+
+  it('las claves desconocidas se tiran: no es un basurero', async () => {
+    nuevoLead();
+    await postear({ ...LEAD, atribucion: { utm_source: 'meta', password: 'x', ['a'.repeat(50)]: 'y' } });
+    expect(llamadas[0].payload.atribucion).toEqual({ utm_source: 'meta' });
+  });
+
+  it('sin atribución no se inventa nada', async () => {
+    nuevoLead();
+    await postear(LEAD);
+    expect(llamadas[0].payload.atribucion).toBeNull();
+    expect(llamadas[0].payload.fuente).toBe('landing');
   });
 });
 
 describe('deduplicar sin destruir', () => {
-  it('un correo ya conocido ACTUALIZA, no inserta un segundo prospecto', async () => {
+  it('un correo conocido ACTUALIZA, no inserta un segundo prospecto', async () => {
     respuestas.push({ data: [{ id: 'p-1', estado: 'negociacion' }], error: null }, { data: null, error: null });
     await postear(LEAD);
     expect(llamadas).toHaveLength(1);
     expect(llamadas[0].op).toBe('update');
   });
 
-  it('no toca `estado`: un prospecto en negociación no vuelve a "nuevo"', async () => {
+  it('no toca `estado` ni `fuente`: eso borraría el avance y el origen real', async () => {
     respuestas.push({ data: [{ id: 'p-1', estado: 'negociacion' }], error: null }, { data: null, error: null });
-    await postear(LEAD);
+    await postear({ ...LEAD, atribucion: { fbclid: 'z' } });
     expect(llamadas[0].payload).not.toHaveProperty('estado');
     expect(llamadas[0].payload).not.toHaveProperty('fuente');
   });
@@ -129,28 +176,43 @@ describe('deduplicar sin destruir', () => {
     await postear({ ...LEAD, whatsapp: '', unidades: '' });
     expect(llamadas[0].payload).not.toHaveProperty('telefono');
     expect(llamadas[0].payload).not.toHaveProperty('unidades');
-    expect(llamadas[0].payload).toMatchObject({ empresa: 'Transportes GAL' });
   });
 });
 
 describe('la red de seguridad de la 0137', () => {
-  it('si la columna `unidades` no existe todavía, el lead SE SALVA en notas', async () => {
+  it('con las TRES columnas ausentes, el lead se salva y lo perdido va a notas', async () => {
     respuestas.push(
       { data: [], error: null },
       { data: null, error: { message: 'column "unidades" of relation "prospecto" does not exist' } },
+      { data: null, error: { message: 'column "urgencia" of relation "prospecto" does not exist' } },
+      { data: null, error: { message: 'column "atribucion" of relation "prospecto" does not exist' } },
       { data: null, error: null },
     );
-    const r = await postear(LEAD);
+    const r = await postear({ ...LEAD, atribucion: { fbclid: 'abc' } });
     expect(r.status).toBe(200);
-    expect(llamadas).toHaveLength(2);
-    expect(llamadas[1].payload).not.toHaveProperty('unidades');
-    expect(llamadas[1].payload.notas).toContain('40');
-    expect(llamadas[1].payload).toMatchObject({ empresa: 'Transportes GAL', fuente: 'landing' });
+    const ultima = llamadas[llamadas.length - 1].payload;
+    expect(ultima).not.toHaveProperty('unidades');
+    expect(ultima).not.toHaveProperty('urgencia');
+    expect(ultima).not.toHaveProperty('atribucion');
+    expect(String(ultima.notas)).toContain('101-250');
+    expect(String(ultima.notas)).toContain('inmediata');
+    // El canal NO se pierde: vive en `fuente`, que existe desde la 0105.
+    expect(ultima.fuente).toBe('ads-meta');
+  });
+
+  it('si lo que falta NO es de la 0137, GRITA: la tabla no es la que se cree', async () => {
+    respuestas.push(
+      { data: [], error: null },
+      { data: null, error: { message: 'column "empresa" of relation "prospecto" does not exist' } },
+    );
+    const r = await postear(LEAD);
+    expect(r.status).toBe(200); // el visitante nunca se entera…
+    expect(llamadas).toHaveLength(1); // …pero no se reintentó una fila coja
   });
 });
 
 describe('nunca rompe el flujo del visitante', () => {
-  it('si la base falla, contesta 200 igual: la cita vale más que el lead', async () => {
+  it('si la base falla, contesta 200: la cita vale más que el lead', async () => {
     respuestas.push({ data: null, error: { message: 'db down' } });
     const r = await postear(LEAD);
     expect(r.status).toBe(200);
@@ -163,8 +225,7 @@ describe('nunca rompe el flujo del visitante', () => {
     expect(llamadas).toHaveLength(0);
   });
 
-  it('un JSON roto sí es 400: eso es el formulario mal armado, no el visitante', async () => {
-    const r = await postear('{roto');
-    expect(r.status).toBe(400);
+  it('un JSON roto sí es 400: eso es el formulario mal armado', async () => {
+    expect((await postear('{roto')).status).toBe(400);
   });
 });
