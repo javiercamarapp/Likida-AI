@@ -60,3 +60,6 @@ zzz-*.mjs
 # kill switch APAGADO). Los scripts SÍ van al repo; el estado no — y el
 # registro trae títulos de bugs aún sin arreglar en un repo público.
 .mejora-diaria/
+
+# Cache del CLI de Supabase (project-ref, versiones) — local, no del repo.
+supabase/.temp/
