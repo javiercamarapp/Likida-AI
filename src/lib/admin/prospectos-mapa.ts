@@ -121,15 +121,25 @@ export function plazaDe(ciudadCruda: string | null): { ciudad: string | null; en
 
 // ── Giro ────────────────────────────────────────────────────────────────────
 
-export function giroDe(empresa: string, vacante: string | null, notas: string | null): Giro {
+export function giroDe(empresa: string, vacante: string | null, notas: string | null, scian?: string | null): Giro {
   const nombre = normalizar(empresa);
   const todo = normalizar(`${empresa} ${vacante ?? ''} ${notas ?? ''}`);
   // La actividad DENUE (viaja en notas) es la clasificación más confiable —
   // se evalúa antes que las heurísticas de nombre.
   if (/(elaboracion|purificacion|manufactura).{0,30}(bebida|refresco|cerveza|agua)|embotellad/.test(todo)) return 'embotelladora';
   if (/comercio al por mayor de (abarrotes|alimentos|bebidas|hielo|tabaco|frutas|carnes|leche|semillas)/.test(todo)) return 'abarrotes_mayoreo';
-  if (/\b(transportes|transporte|autotransportes|autotransporte|fletes|trucking|carga|tractocamion|freight)\b/.test(nombre)
-    || /autotransporte (foraneo|de carga|local)/.test(todo)) return 'transportista';
+  // El SCIAN, cuando existe, es el único veredicto duro (0139) — el sector
+  // 48-49 completo comparte la palabra "transporte" con decenas de giros que
+  // NO son autotransporte de carga: 485 pasajeros, 488 aduanales/grúas, 492
+  // paquetería, 493 almacenamiento. Sin este candado, "AAZ TRANSPORTE"
+  // (concesionario de pasajeros) o "24-7 TRANSPORTES INTERNACIONALES"
+  // (bróker) calificaban como transportista por el nombre solo — el mismo
+  // error que decenas de agentes de investigación han venido corrigiendo a
+  // mano, empresa por empresa (18-ago).
+  const esOtroSectorDeTransporte = !!scian && /^(48[1235-9]|49)/.test(scian);
+  if (!esOtroSectorDeTransporte
+    && (/\b(transportes|transporte|autotransportes|autotransporte|fletes|trucking|carga|tractocamion|freight)\b/.test(nombre)
+      || /autotransporte (foraneo|de carga|local)/.test(todo))) return 'transportista';
   if (/\b(logistica|logistics|forwarding|almacenadora|freight forward|3pl)\b/.test(todo)) return 'logistica';
   if (/\b(reparto|cedis|distribucion|distribuidora|comercializadora|ruta de venta|autoventa|panificad)\b/.test(todo)
     || /comercio al por mayor/.test(todo)) return 'flota_propia';
@@ -230,6 +240,8 @@ export function scoreCierre(p: {
   estado: string; fuente: string; empresa: string; vacante: string | null; notas: string | null;
   /** Personas de `prospecto_persona` con contacto NO inferido (0138). */
   personasVerificadas?: number;
+  /** Código DENUE (0139) — el veredicto duro que usa giroDe. */
+  scian?: string | null;
 }): number {
   let s = 0;
   // Alcanzabilidad: no se cierra a quien no se puede llamar.
@@ -238,7 +250,7 @@ export function scoreCierre(p: {
   if (p.contacto_nombre) s += 20;
   // Fit del giro: el transportista vive el ciclo completo (RFA/IEPS/peaje);
   // la flota propia solo una parte.
-  const g = giroDe(p.empresa, p.vacante, p.notas);
+  const g = giroDe(p.empresa, p.vacante, p.notas, p.scian);
   if (g === 'transportista') s += 15;
   else if (g === 'logistica') s += 10;
   else if (g === 'flota_propia') s += 8;
@@ -323,6 +335,7 @@ interface FilaProspecto {
   id: string; empresa: string; ciudad: string | null; lat: number | null; lng: number | null;
   telefono: string | null; correo: string | null; contacto_nombre: string | null;
   vacante: string | null; estado: string; fuente: string; notas: string | null;
+  scian: string | null;
   mensaje_wa: string | null; mensaje_correo_asunto: string | null;
   mensaje_correo: string | null; mensajes_generados_en: string | null;
   prospecto_toque: Array<{ creado_en: string }> | null;
@@ -338,7 +351,7 @@ export async function getDatosMapa(): Promise<DatosMapa> {
     filas = await traerTodo<FilaProspecto>(
       (d, h) => supabaseAdmin()
         .from('prospecto')
-        .select('id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en, prospecto_toque(creado_en)', conteo(d))
+        .select('id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en, prospecto_toque(creado_en)', conteo(d))
         // El orden secundario por id NO es adorno: created_at se repite (los
         // lotes de siembra comparten el now() de su transacción) y paginar
         // sobre un orden no único duplica y salta filas entre páginas — se
@@ -375,7 +388,7 @@ export async function getDatosMapa(): Promise<DatosMapa> {
         notas: p.notas,
         estado: p.estado,
         fuente: p.fuente,
-        giro: giroDe(p.empresa, p.vacante, p.notas),
+        giro: giroDe(p.empresa, p.vacante, p.notas, p.scian),
         tamano: tamanoDe(p.notas),
         completitud: completitudDe({
           telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
@@ -391,6 +404,7 @@ export async function getDatosMapa(): Promise<DatosMapa> {
         cierre: scoreCierre({
           telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
           estado: p.estado, fuente: p.fuente, empresa: p.empresa, vacante: p.vacante, notas: p.notas,
+          scian: p.scian,
         }),
       };
     });
