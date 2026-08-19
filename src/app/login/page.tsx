@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { mensajeDeError } from '@/lib/auth/motivo_login';
+import { guardarCorreoParaReenvio } from '@/lib/auth/reenvio_enlace';
 import { Logo, GlifoAdorno } from '../logo';
 import './login.css';
 
@@ -98,7 +99,7 @@ function esCorreoSinCuenta(error: { code?: string; message?: string }): boolean 
 export default async function Login({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; enviado?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; enviado?: string; reenviado?: string; error?: string }>;
 }) {
   const sp = await searchParams;
   const next = sp?.next && sp.next.startsWith('/dashboard') ? sp.next : '/dashboard';
@@ -130,6 +131,10 @@ export default async function Login({
     }
     const email = String(formData.get('email') ?? '').trim();
     if (!email) redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
+    // Deja dicho a quién reenviar si este enlace muere (reenvio_enlace.ts).
+    // ANTES de saber si el correo tiene cuenta, a propósito: guardarlo solo
+    // para los que existen reabriría el oráculo de enumeración por cookie.
+    await guardarCorreoParaReenvio(email);
     const sb = await supabaseServer();
     const { error } = await sb.auth.signInWithOtp({
       email,
@@ -236,10 +241,14 @@ export default async function Login({
                   style={{ background: 'var(--crema)', border: '1px solid var(--line)', animationDelay: '190ms' }}
                 >
                   <p className="text-[15px] font-semibold" style={{ color: 'var(--ink)' }}>
-                    Te mandamos un enlace a tu correo.
+                    {sp?.reenviado
+                      ? 'Ese enlace ya se había usado o caducado — te mandamos uno nuevo.'
+                      : 'Te mandamos un enlace a tu correo.'}
                   </p>
                   <p className="mt-1.5 text-[14px] leading-relaxed" style={{ color: 'var(--muted)' }}>
-                    Ábrelo desde este mismo dispositivo.
+                    {sp?.reenviado
+                      ? 'Abre el correo más reciente, desde este mismo dispositivo.'
+                      : 'Ábrelo desde este mismo dispositivo.'}
                   </p>
                 </div>
               ) : (
