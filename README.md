@@ -1,114 +1,190 @@
-# Likida
+<p align="center">
+  <img src="public/images/logo.png" alt="Likida" width="280" />
+</p>
 
-**Agente de IA por WhatsApp que liquida viajes de autotransporte federal en México.**
+<h3 align="center">El back-office del transporte, automatizado con agentes de IA.</h3>
 
-El operador manda por WhatsApp fotos de sus comprobantes de viaje (diésel,
-casetas, viáticos) → Likida hace OCR, lee el CFDI, **cuadra contra el anticipo
-y la política de la empresa**, aplica la ley fiscal mexicana y entrega la
-liquidación en PDF con el registro listo para el ERP de la flota.
+<p align="center">
+  <a href="https://likida.ai">likida.ai</a> ·
+  <a href="https://app.likida.ai">app.likida.ai</a>
+</p>
 
-> **No reemplaza el ERP: lo alimenta.** El agente hace la captura que hoy es
-> manual y escribe el sistema que la flota ya usa. Es un complemento.
+---
+
+> **Liquidar era un día. Ahora es un mensaje.**
+
+El operador manda por WhatsApp la foto de su comprobante — diésel, casetas,
+viáticos. Likida lo lee, valida el CFDI contra el SAT, lo cuadra contra el
+anticipo y la política de la empresa, avisa lo que falta y entrega la
+liquidación en PDF y en el ERP de la flota. Sin instalar nada en la cabina.
+
+Cada ticket. Cada viaje. Cada litro. Cada faltante. **Cuadrado.**
 
 ---
 
-## Estado actual (ver `docs/REPORTE-ESTADO.md`)
+## El problema
 
-- **3,149 pruebas verdes** · `tsc` 0 errores · `eslint` 0 errores · build limpio
-- **42 tablas con RLS activo** · 61 bloques de verificación contra la base real
-- **En producción**: app.likida.ai · webhook de WhatsApp verificado · cron de
-  facturación vía QStash con fallback síncrono · datos demo genéricos
+El back-office del autotransporte de carga en México todavía corre en papel,
+portales y Excel. Cerrar un viaje significa que el operador junte tickets en
+la guantera, que alguien en oficina los capture a mano, que el contralor
+persiga lo que falta y que el contador descubra semanas después qué era
+deducible y qué no. El combustible es el gasto mayor de una flota y el
+comprobante que lo ampara es el que más trabajo cuesta convertir en dato
+timbrado. Todo ese trabajo es captura — y la captura no debería existir.
 
----
+## La tesis del producto
+
+Tres decisiones definen a Likida y están documentadas en el corpus de
+investigación de este repo (`docs/conocimiento/`):
+
+1. **La foto no es el comprobante; el CFDI sí.** El modelo de datos separa
+   `comprobante_recibido` (la foto: control operativo, hora, odómetro) de
+   `cfdi_validado` (el XML verificado contra el SAT). Ningún veredicto de
+   dinero se dicta sobre una foto.
+2. **Un comprobante no tiene un veredicto: tiene varios.** El mismo ticket
+   puede ser deducible para un impuesto y no para otro. El motor emite
+   veredictos separados, cada uno con su fundamento legal citado.
+3. **El motor es determinista.** El LLM solo extrae y redacta; toda la
+   lógica de dinero, deducibilidad y aprobación vive en código auditable con
+   pruebas. Lo que no se puede verificar se marca "por confirmar" —
+   **nunca se inventa una cifra**, ni un régimen, ni una deducción. El
+   comprador es un contralor: va a cruzar lo que ve contra su PDF y su
+   contador, y el producto está diseñado para ganar esa comparación.
+
+## Por qué ahora
+
+- El SAT ya digitalizó el insumo: CFDI 4.0 y Carta Porte hacen que el dato
+  timbrado exista para cada gasto y cada viaje. Falta quien lo cuadre.
+- WhatsApp es el canal que el operador ya usa. Cero capacitación, cero app
+  nueva, cero hardware.
+- Los modelos de visión actuales leen un ticket térmico arrugado con sol
+  encima — la barrera que mataba la captura automática ya cayó.
+
+## Estado — dicho como es
+
+**Pre-launch. Sin clientes todavía.** El producto está completo y desplegado
+en producción ([app.likida.ai](https://app.likida.ai)): intake por WhatsApp,
+motor de cuadre, liquidación en PDF, dos paneles (flota y consola de
+negocio), portal del chofer y agentes de back-office con página propia.
+
+No hay logos ni testimonios en este README porque no existen aún — cuando
+haya un cliente real, se leerá aquí con su permiso y no antes. Las cifras de
+ahorro fiscal que el motor calcula se prometen en material de venta solo
+cuando su implementación está verificada contra la norma vigente; las que
+están en auditoría se marcan así.
+
+Verificado al 19-ago-2026 sobre este árbol:
+
+- **5,032 pruebas en verde** (29 omitidas a propósito) — `npx vitest run`
+- `tsc --noEmit` **0 errores** · `eslint` **0 errores** · build de producción limpio
+- **136 migraciones** de base con RLS, y verificaciones contra la base real
+  (`supabase/verificaciones.sql`): mutex de doble liquidación, aislamiento
+  entre flotas, RLS del chofer, "nada entra tras liquidar". Cada migración
+  nueva exige su bloque de verificación o una exención con razón escrita.
+
+*(Las cifras crecen; no las cites de memoria — córrelas.)*
 
 ## Arquitectura
 
 ```
-WhatsApp Cloud API → webhook → intake (OCR + CFDI) → cuadre (motor fiscal) → liquidación (PDF) → ERP
+WhatsApp Cloud API → webhook → intake (OCR + CFDI) → cuadre (motor fiscal determinista) → liquidación (PDF) → ERP
 ```
 
 | Módulo | Ruta | Qué hace |
 |---|---|---|
-| **Intake** | `src/lib/likida/intake` | Fotografías por WhatsApp → OCR con IA de visión → JSON estructurado + lectura del CFDI |
-| **Cuadre** | `src/lib/likida/cuadre` | Concilia gastos vs anticipo + política + ley fiscal → diferencias, faltantes y veredictos de deducibilidad con fundamento |
+| **Intake** | `src/lib/likida/intake` | Fotos por WhatsApp → visión → JSON estructurado + lectura y validación del CFDI |
+| **Cuadre** | `src/lib/likida/cuadre` | Concilia gastos vs anticipo + política + norma → diferencias, faltantes y veredictos con fundamento |
+| **Fiscal** | `src/lib/likida/fiscal.ts` + `normas/` | Los contadores de la ley, cada uno con su cita y su prueba |
 | **Liquidación** | `src/lib/likida/liquidacion` | PDF (pdf-lib) + export a ERP (CSV/JSON) |
-| **Fiscal** | `src/lib/likida/fiscal.ts` y `normas/` | Contadores de la ley: 15% en efectivo (RFA 2.9), viáticos (RLISR 57/152), estímulo de casetas (RMF 9.1.8), IEPS diésel, faja de 50 km |
-| **Facturación** | `src/lib/likida/facturacion` | Portales (CAPUFE, gasolineras) con Playwright, cola QStash, autofactura |
+| **Facturación** | `src/lib/likida/facturacion` | Portales de autofactura con Playwright, cola QStash |
 | **Agentes** | `src/lib/agents` | Conversación por WhatsApp, prompts, dedup de mutaciones |
 | **SaaS** | `src/lib/saas` | Stripe, suscripciones, FacturAPI |
-| **Observabilidad** | `src/lib/observability` | Logger redactado, Sentry (si hay DSN), arranque con sondeo de migraciones |
+| **Observabilidad** | `src/lib/observability` | Logger redactado, Sentry, arranque que grita la config ausente |
 
-Paneles web: **dashboard** (jefe de flota: resumen, despacho, fiscal, ARCO,
-operadores), **admin** (consola de negocio del operador del SaaS: flotas,
-cumplimiento, suscripciones), **portal del chofer** (`/chofer`) y **demo**
-(simulador de la conversación).
+Paneles: **`/dashboard`** (la flota: resumen, despacho, fiscal, operadores,
+ARCO), **`/admin`** (consola de negocio del operador del SaaS), **`/chofer`**
+(portal del operador) y **`/demo`** (simulador de la conversación).
+
+> **No reemplaza el ERP: lo alimenta.** Likida hace la captura que hoy es
+> manual y escribe en el sistema que la flota ya usa.
 
 ## Stack
 
 | Para qué | Qué |
 |---|---|
 | App | Next.js 16 (App Router) · React 19 · TypeScript estricto |
-| Estilos | Tailwind v4 · sistema de diseño en `src/app/globals.css` (paleta: `--marca #c2410c`, tinta `#17100d`) |
 | Datos | Supabase (Postgres + RLS + RPCs) — migraciones en `supabase/migrations/` |
-| IA | **OpenRouter** — Gemini 3.6 Flash (visión), Sonnet 5 (cuadre), fallback cross-provider |
+| IA | OpenRouter — visión para OCR, modelos de razonamiento para el cuadre, fallback cross-provider |
 | Canal | WhatsApp Cloud API (Meta) |
 | Comprobantes | zxing-wasm (QR/barras) · sharp · fast-xml-parser |
-| Facturación en portales | Playwright + `@sparticuz/chromium` (solo en el cron) |
-| Colas | QStash (enqueue + callback con firma) · Postgres para la barrera de intake |
-| Salida | pdf-lib · export CSV/JSON a ERP |
+| Portales | Playwright + `@sparticuz/chromium` (solo en el cron) |
+| Colas | QStash (enqueue + callback firmado) · Postgres para la barrera de intake |
+| Salida | pdf-lib · export CSV/JSON |
 | Pruebas | Vitest (offline) + arneses `pruebas-manuales/*.prueba.ts` que sí llaman a los modelos |
 
-## Calidad (las puertas que no se negocian)
+## Las reglas que no se negocian
 
-```bash
-npx tsc --noEmit -p .      # 0 errores
-npx eslint src/            # 0 errores
-npx vitest run             # ~3,150 pruebas · cobertura con trinquete (vitest.config.ts)
-npm run build              # build de producción limpio
-```
+- **Nunca inventar una cifra.** Si no hay dato real, la pantalla dice qué
+  falta y por qué. Una estimación se muestra declarada, con su supuesto a la
+  vista.
+- **Un rótulo tiene que ser verdad.** Si dice "del periodo", la consulta
+  filtra por fecha. Los datos de demo se marcan como demo; los RFC de prueba
+  son ficticios con dígito verificador válido.
+- **Fallar cerrado y decirlo.** Una base caída jamás se lee como "no hay
+  liquidaciones". Una variable de entorno ausente se grita en el arranque,
+  no se descubre en la demo.
+- **El formato de cifras vive en un solo lugar** (`lib/formato.ts`) — hay
+  una prueba que falla si aparece en otro. Una cifra fiscal que se lee
+  distinto en dos pantallas se lee como dos cálculos.
 
-- **Verificaciones de base**: `supabase/verificaciones.sql` — 61 bloques que
-  prueban lo que solo la DB puede demostrar (mutex de doble liquidación,
-  aislamiento entre flotas, RLS del chofer, triggers de "nada entra tras
-  liquidar"). Cada migración nueva exige un bloque o una exención con razón
-  (`src/lib/likida/migraciones_verificadas.test.ts`).
-- **Fail-closed**: lo que no se puede verificar se marca "por confirmar" —
-  nunca se inventa una cifra, un régimen ni una deducción.
-- **Un rótulo tiene que ser verdad**: los datos de demo se marcan como tales;
-  los RFC de prueba son ficticios con dígito verificador válido.
-
-## Correr el demo
+## Correr en local
 
 ```bash
 npm install
-cp .env.example .env.local   # completa las llaves
+cp .env.example .env.local   # completa las llaves — el archivo documenta cada una
 npm run dev
 ```
 
-Flujo del demo: el operador manda fotos de comprobantes al número de WhatsApp
-de prueba → Likida responde con la liquidación cuadrada, señala diferencias y
-devuelve el PDF. También está el simulador en `/demo`.
+Puertas de calidad, en orden:
+
+```bash
+npx tsc --noEmit -p .   # 0 errores
+npx eslint src/         # 0 errores
+npx vitest run          # todas en verde
+npm run build           # build limpio
+```
+
+El flujo de demo: fotos de comprobantes al número de WhatsApp de prueba →
+Likida responde con la liquidación cuadrada, señala diferencias y devuelve el
+PDF. Sin número, el simulador vive en `/demo`.
 
 ## Despliegue
 
-- Vercel, alias `app.likida.ai`. El build es **opt-in**: el commit debe llevar
-  `[deploy]` en el asunto (`vercel.json` → `ignoreCommand`).
-- Cron de facturación: `vercel.json` → `/api/cron/facturar` (necesita
-  `CRON_SECRET`), encola a QStash (`UPSTASH_QSTASH_TOKEN`,
-  `QSTASH_CURRENT/NEXT_SIGNING_KEY`, `QSTASH_URL`).
-- Webhook de WhatsApp: apunta a `app.likida.ai/api/webhook/whatsapp`.
+- Vercel, alias `app.likida.ai`. El build es **opt-in**: el commit debe
+  llevar `[deploy]` en la primera línea del mensaje (`vercel.json` →
+  `ignoreCommand`). Un push sin bandera sube código y no publica nada.
+- Webhook de WhatsApp → `app.likida.ai/api/webhook/whatsapp`.
+- Crons en `vercel.json`; el de facturación necesita `CRON_SECRET` y encola
+  a QStash.
 
 ## Documentación
 
 ```
 docs/
-├── REPORTE-ESTADO.md        ← UN reporte del estado actual del software
-└── conocimiento/            ← fiscal, legal, industria e investigaciones
+└── conocimiento/                    ← el corpus: fiscal, legal, industria, competencia
     ├── 00-RESUMEN-EJECUTIVO.md      (el marco fiscal en una página)
-    ├── 30-dolores-flota.md          (los 9 dolores de una flota)
+    ├── 30-dolores-flota.md          (el mapa completo de dolores de una flota)
     ├── 34-proceso-liquidacion.md    (el proceso que Likida automatiza)
-    ├── HANDOFF.md                   (arquitectura y estado para agentes)
-    ├── investigacion/               (competencia, portales, decisiones)
-    ├── fase1/  fiscal/  legal/      (normas, RFA 2.9, borrador ToS)
+    ├── fase1/  fiscal/  legal/      (normas y fundamentos, con fuente primaria)
     └── CONFIGURAR-META.md           (WhatsApp Cloud API, paso a paso)
 ```
+
+El corpus cita fuente primaria (DOF, SAT, leyes federales y estatales) o
+marca la afirmación como pista sin fundamento. La misma regla que el
+producto: cifra con fuente, o decir qué falta.
+
+---
+
+<p align="center">
+  <sub>Hecho en México, para las flotas de carga de México. · <a href="https://likida.ai">likida.ai</a></sub>
+</p>
