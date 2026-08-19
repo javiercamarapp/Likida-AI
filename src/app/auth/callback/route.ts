@@ -8,6 +8,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { getSessionTenant } from '@/lib/auth/session';
 import { puertaDeEntrada } from '@/lib/auth/visibilidad';
 import { aParametro, motivoDeIntercambio, motivoSinCode } from '@/lib/auth/motivo_login';
+import { reenviarEnlaceCaducado } from '@/lib/auth/reenvio_enlace';
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code');
@@ -47,6 +48,25 @@ export async function GET(req: NextRequest) {
       // Fallo inesperado del SDK o supabaseServer() — cae al mismo fallback
       // para evitar que un error raro se vuelva un 500 genérico en la pantalla
       // de login más importante
+    }
+  }
+
+  // Enlace ya usado o caducado: antes de mandar a la persona a teclear su
+  // correo otra vez, se intenta reenviarle uno nuevo solo (los frenos —uno
+  // cada 5 min, mismo límite por IP que el formulario— viven en el módulo).
+  // Si el reenvío mismo falla raro, se degrada al mensaje de caducado: este
+  // camino jamás puede empeorar un login que ya falló.
+  if (motivo === 'caducado') {
+    try {
+      const reenvio = await reenviarEnlaceCaducado(destinoExplicito ?? '/dashboard');
+      if (reenvio === 'reenviado') {
+        return NextResponse.redirect(new URL('/login?enviado=1&reenviado=1', req.url));
+      }
+      if (reenvio === 'reciente') {
+        return NextResponse.redirect(new URL('/login?error=caducado_reciente', req.url));
+      }
+    } catch {
+      // sin red ni Supabase no hay reenvío — el mensaje de caducado basta
     }
   }
   return NextResponse.redirect(new URL(`/login?error=${aParametro(motivo)}`, req.url));

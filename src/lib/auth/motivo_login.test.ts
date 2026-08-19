@@ -57,6 +57,12 @@ describe('el parámetro y el texto', () => {
     expect(mensajeDeError('navegador')).toMatch(/navegador/);
   });
 
+  it('caducado_reciente manda a la bandeja, no al formulario', () => {
+    const texto = mensajeDeError('caducado_reciente');
+    expect(texto).toMatch(/te mandamos uno nuevo/i);
+    expect(texto).toMatch(/correo más reciente/i);
+  });
+
   it('cualquier valor desconocido (incluido el `1` histórico) cae al genérico', () => {
     expect(mensajeDeError('1')).toBe('Algo falló. Intenta otra vez.');
     expect(mensajeDeError('lo-que-sea')).toBe('Algo falló. Intenta otra vez.');

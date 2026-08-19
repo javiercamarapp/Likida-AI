@@ -88,6 +88,11 @@ export function mensajeDeError(parametro: string): string {
   if (parametro === 'caducado') {
     return 'Ese enlace ya se usó o ya caducó. Pide uno nuevo con tu correo.';
   }
+  // El reenvío automático (reenvio_enlace.ts) ya mandó uno hace <5 minutos:
+  // mandar a la bandeja, no al formulario — otro clic aquí no manda nada.
+  if (parametro === 'caducado_reciente') {
+    return 'Ese enlace ya se usó o ya caducó, y te mandamos uno nuevo hace unos minutos. Abre el correo más reciente.';
+  }
   if (parametro === 'navegador') {
     return 'Ese enlace se pidió desde otro navegador. Ábrelo en el navegador donde escribiste tu correo, o pide uno nuevo desde aquí.';
   }
