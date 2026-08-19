@@ -4,6 +4,7 @@ import { Fraunces, Instrument_Sans } from 'next/font/google';
 import { supabaseServer } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+import { mensajeDeError } from '@/lib/auth/motivo_login';
 import { Logo, GlifoAdorno } from '../logo';
 import './login.css';
 
@@ -318,10 +319,13 @@ export default async function Login({
 
               {/* `role="alert"` — antes era un <p> mudo: quien usa lector de
                   pantalla enviaba el formulario, volvía a la misma página y nada
-                  le anunciaba que había fallado. */}
+                  le anunciaba que había fallado.
+                  El TEXTO depende del motivo (`mensajeDeError`): un enlace ya
+                  usado decía «intenta otra vez», que ahí es el único consejo
+                  garantizado a fallar — reintentar un enlace de un solo uso. */}
               {sp?.error && (
                 <p role="alert" className="mt-5 text-[14px]" style={{ color: 'var(--color-bad)' }}>
-                  Algo falló. Intenta otra vez.
+                  {mensajeDeError(sp.error)}
                 </p>
               )}
 

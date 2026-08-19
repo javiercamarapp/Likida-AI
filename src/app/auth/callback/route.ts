@@ -7,16 +7,24 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
 import { getSessionTenant } from '@/lib/auth/session';
 import { puertaDeEntrada } from '@/lib/auth/visibilidad';
+import { aParametro, motivoDeIntercambio, motivoSinCode } from '@/lib/auth/motivo_login';
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code');
   const next = req.nextUrl.searchParams.get('next');
   const destinoExplicito = next && next.startsWith('/dashboard') ? next : null;
 
+  // Con qué se vuelve a /login si esto no acaba en sesión. Empieza en el
+  // motivo que Supabase pegó al redirect cuando rechazó el token ANTES de
+  // emitir un code (enlace ya usado o caducado → `error_code=otp_expired`);
+  // si el code sí llegó, el canje de abajo lo puede refinar.
+  let motivo = motivoSinCode(req.nextUrl.searchParams.get('error_code'));
+
   if (code) {
     try {
       const sb = await supabaseServer();
       const { error } = await sb.auth.exchangeCodeForSession(code);
+      if (error) motivo = motivoDeIntercambio(error);
       if (!error) {
         // Sin `next` explícito, superadmin aterriza en SU consola (/admin),
         // no en el panel del tenant demo — antes de esto no tenía a dónde
@@ -41,5 +49,5 @@ export async function GET(req: NextRequest) {
       // de login más importante
     }
   }
-  return NextResponse.redirect(new URL('/login?error=1', req.url));
+  return NextResponse.redirect(new URL(`/login?error=${aParametro(motivo)}`, req.url));
 }
