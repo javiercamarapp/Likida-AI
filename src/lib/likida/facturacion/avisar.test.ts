@@ -1,6 +1,27 @@
-import { describe, it, expect } from 'vitest';
-import { armarAviso } from './avisar';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { armarAviso, avisarPorFacturar } from './avisar';
 import { armar } from './pendientes';
+
+// ── Mocks SOLO para `avisarPorFacturar` (el cableado). `armarAviso` es pura y
+// sus pruebas de abajo no tocan nada de esto. `armar` sigue siendo el real: el
+// spread del original solo sustituye `getPorFacturar`.
+const sendText = vi.fn();
+const sendTemplate = vi.fn();
+const getPorFacturar = vi.fn();
+const insert = vi.fn(async () => ({ error: null }));
+
+vi.mock('@/lib/meta/client', () => ({
+  sendText: (...a: unknown[]) => sendText(...a),
+  sendTemplate: (...a: unknown[]) => sendTemplate(...a),
+  motivoDeFalloWhatsApp: () => 'la plantilla no está aprobada (prueba)',
+}));
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({ from: () => ({ insert } as unknown) }),
+}));
+vi.mock('./pendientes', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  getPorFacturar: (...a: unknown[]) => getPorFacturar(...a),
+}));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO POR WHATSAPP — cierra el camino que empieza en la foto del ticket.
@@ -94,5 +115,53 @@ describe('armarAviso', () => {
 
   it('sin nada que hacer NO arma mensaje — no se gasta una plantilla en vacío', () => {
     expect(armarAviso([]).texto).toBe('');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CABLEADO: `avisarPorFacturar` manda el TEXTO COMPLETO primero.
+//
+// Hasta el 20-ago-2026 el texto de `armarAviso` —la liga, los campos, el
+// plazo— se armaba y SE TIRABA: lo único que salía era la plantilla con el
+// conteo. El mismo patrón que este repo ya pagó en `escalar_viaje.ts`
+// (`armarAvisoJefe` escrito, probado y sin un llamador). Estas pruebas
+// ejercitan la función real con Meta y la base sustituidas, no el texto del
+// código fuente.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('avisarPorFacturar', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Un ticket de OXXO Gas: pide cuenta, así que va con la persona y el aviso
+    // tiene cuerpo. La fecha cae dentro del mes de HOY para que no esté vencido.
+    getPorFacturar.mockResolvedValue([armar(g({ id: '1', fecha: '2026-08-04', extra: CON_CUENTA }), HOY)]);
+  });
+
+  it('dentro de la ventana: sale el texto con la liga y NO se gasta plantilla', async () => {
+    sendText.mockResolvedValue('wamid-texto');
+    const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(r.enviado).toBe(true);
+    expect(r.via).toBe('texto');
+    // Lo que hace útil al aviso: la liga del portal viaja en el mensaje.
+    expect(sendText.mock.calls[0][1]).toContain('oxxogas');
+    expect(sendTemplate).not.toHaveBeenCalled();
+  });
+
+  it('fuera de la ventana: Meta rechaza el texto y entra la plantilla', async () => {
+    sendText.mockResolvedValue(null);
+    sendTemplate.mockResolvedValue({ ok: true, id: 'wamid-plantilla' });
+    const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(r.enviado).toBe(true);
+    expect(r.via).toBe('plantilla');
+    expect(sendTemplate).toHaveBeenCalledOnce();
+  });
+
+  it('los DOS caminos caídos: se dice el motivo, no se afirma enviado', async () => {
+    sendText.mockResolvedValue(null);
+    sendTemplate.mockResolvedValue({ ok: false, error: 'x', codigo: 132001 });
+    const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(r.enviado).toBe(false);
+    expect(r.motivo).toBeTruthy();
+    // El texto se devuelve igual: es lo que la pantalla enseña para reenviar a mano.
+    expect(r.texto).toContain('oxxogas');
   });
 });
