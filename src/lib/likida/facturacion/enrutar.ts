@@ -66,8 +66,16 @@ export type Ruta =
  * leído, plazo vigente, sin cuenta que pedir — y el operador nunca supo que
  * tenía que entrar a facturarlo. El silencio es el modo de falla que este repo
  * persigue en todos lados menos aquí.
+ *
+ * @param cuentaCompartida  ¿La flota compartió en el cofre su cuenta de ESTE
+ * portal? (`facturacion/cuentas.ts`). Cambia la premisa de `requiere_cuenta`:
+ * «la sesión la tiene la persona» deja de ser cierto cuando la persona la
+ * entregó, y entonces el ticket sigue el mismo camino que los sin cuenta —
+ * robot si hay quien opere el portal, persona si no, y CAPTCHA siempre con la
+ * persona. El default `false` es el estado del mundo antes del cofre, y es el
+ * lado seguro: sin cuenta confirmada, con el encargado.
  */
-export function enrutar(t: TicketPorFacturar, sabeOperarlo: boolean): Ruta {
+export function enrutar(t: TicketPorFacturar, sabeOperarlo: boolean, cuentaCompartida = false): Ruta {
   const falta: string[] = [];
 
   if (!t.comercio) {
@@ -91,7 +99,11 @@ export function enrutar(t: TicketPorFacturar, sabeOperarlo: boolean): Ruta {
     return { via: 'incompleto', falta: ['el plazo para facturar ya venció'] };
   }
 
-  if (t.comercio.requiereCuenta) {
+  // CON LA CUENTA COMPARTIDA, `requiere_cuenta` deja de ser destino: la razón
+  // de mandarlo a la persona era que solo ella tenía la sesión, y ya no. El
+  // ticket sigue por los mismos filtros que los sin cuenta — bloqueo, robot
+  // escrito o no. Sin cuenta compartida, todo queda exactamente como antes.
+  if (t.comercio.requiereCuenta && !cuentaCompartida) {
     return { via: 'mensaje', portal: t.comercio.portal, motivo: 'requiere_cuenta', campos: t.campos };
   }
 
@@ -181,8 +193,19 @@ export function mensajeParaEncargado(t: TicketPorFacturar, ruta: Extract<Ruta, {
  * misma lista trae tickets de portales distintos, y el que tiene adaptador y el
  * que no van por caminos distintos.
  */
-export function repartir(tickets: TicketPorFacturar[], sabeOperarlo: (clave: string) => boolean) {
-  const rutas = tickets.map((t) => ({ t, r: enrutar(t, t.comercio ? sabeOperarlo(t.comercio.clave) : false) }));
+export function repartir(
+  tickets: TicketPorFacturar[],
+  sabeOperarlo: (clave: string) => boolean,
+  cuentaCompartida: (clave: string) => boolean = () => false,
+) {
+  const rutas = tickets.map((t) => ({
+    t,
+    r: enrutar(
+      t,
+      t.comercio ? sabeOperarlo(t.comercio.clave) : false,
+      t.comercio ? cuentaCompartida(t.comercio.clave) : false,
+    ),
+  }));
   return {
     automaticos: rutas.filter((x) => x.r.via === 'automatico'),
     mensajes: rutas.filter((x) => x.r.via === 'mensaje'),

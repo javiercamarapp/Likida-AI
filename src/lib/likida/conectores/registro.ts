@@ -5,6 +5,7 @@ import {
 import { CONECTORES_ERP } from './erp';
 import { CONECTORES_GPS } from './gps';
 import { CONECTORES_PEAJE } from './peaje';
+import { CONECTORES_PORTALES_FACTURACION } from './portales_facturacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CATÁLOGO POR CATEGORÍA. Todo lo que Likida sabe conectar, en un lugar.
@@ -53,6 +54,8 @@ export const CONECTORES: readonly Conector[] = [
   ...CONECTORES_ERP,
   ...CONECTORES_GPS,
   ...CONECTORES_PEAJE,
+  // Derivados de `facturacion/comercios.ts`: uno por comercio con cuenta.
+  ...CONECTORES_PORTALES_FACTURACION,
 ];
 
 /**

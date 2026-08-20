@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { CONECTORES_PORTALES_FACTURACION } from '@/lib/likida/conectores/portales_facturacion';
 import {
   SeccionCredenciales, catalogoParaCaptura, pistasConRotulo, type CredencialPantalla,
 } from './seccion-credenciales';
@@ -43,8 +44,15 @@ function pintar(p: {
 describe('catalogoParaCaptura — derivado del catálogo, nunca una segunda lista', () => {
   it('trae exactamente los que piden credenciales y no tienen almacén propio', () => {
     const ids = catalogoParaCaptura().flatMap((g) => g.conectores.map((c) => c.id));
-    // Los 4 capturables de hoy (si el catálogo crece, este arreglo crece con él).
-    expect(ids.sort()).toEqual(['odoo', 'oracle_fusion', 'powergas', 'sap_b1']);
+    // Los 4 capturables de siempre + los portales de facturación con cuenta
+    // (20-ago-2026). Esa mitad se DERIVA del mismo registro que la pantalla,
+    // porque su lista vive en `comercios.ts` y crece con él; los 4 fijos se
+    // quedan escritos para que un cambio ahí no pase sin que esta prueba lo vea.
+    const esperados = [
+      'odoo', 'oracle_fusion', 'powergas', 'sap_b1',
+      ...CONECTORES_PORTALES_FACTURACION.map((c) => c.id),
+    ].sort();
+    expect(ids.sort()).toEqual(esperados);
   });
 
   it('los GPS NO vienen — guardan en rastreo_credencial, no aquí', () => {
@@ -54,9 +62,9 @@ describe('catalogoParaCaptura — derivado del catálogo, nunca una segunda list
     }
   });
 
-  it('agrupa ERP y Peajes, y todo conector trae sus campos con forma', () => {
+  it('agrupa ERP, Peajes y Portales, y todo conector trae sus campos con forma', () => {
     const grupos = catalogoParaCaptura();
-    expect(grupos.map((g) => g.categoria)).toEqual(['ERP y contabilidad', 'Peaje y monederos']);
+    expect(grupos.map((g) => g.categoria)).toEqual(['ERP y contabilidad', 'Peaje y monederos', 'Portal de facturación']);
     for (const c of grupos.flatMap((g) => g.conectores)) {
       expect(c.campos.length).toBeGreaterThan(0);
       for (const campo of c.campos) expect(campo.rotulo).toBeTruthy();

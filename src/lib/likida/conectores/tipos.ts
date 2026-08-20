@@ -67,7 +67,8 @@ export type CategoriaConector =
   | 'Hoja de cálculo y archivo'
   | 'ERP y contabilidad'
   | 'Rastreo GPS'
-  | 'Peaje y monederos';
+  | 'Peaje y monederos'
+  | 'Portal de facturación';
 
 /** El orden en que se enseñan. Escrito, no derivado: es una decisión de venta. */
 export const CATEGORIAS: readonly CategoriaConector[] = [
@@ -75,6 +76,10 @@ export const CATEGORIAS: readonly CategoriaConector[] = [
   'ERP y contabilidad',
   'Rastreo GPS',
   'Peaje y monederos',
+  // Al final a propósito: es la categoría donde el cliente ENTREGA un acceso
+  // suyo, y esa decisión se toma después de ver lo que el producto ya hace con
+  // lo que no pide contraseñas.
+  'Portal de facturación',
 ];
 
 /**
@@ -195,7 +200,15 @@ export type Capacidad =
   /** Los cruces o las cargas, línea por línea. Es lo que concilia contra el viaje. */
   | 'leer_movimientos'
   /** Bajar el CFDI que ampara los consumos del periodo. */
-  | 'leer_cfdi';
+  | 'leer_cfdi'
+  // ── Portales de facturación ──
+  /**
+   * Apretar el botón que CREA un CFDI en el portal del comercio. ESCRITURA, y
+   * de la irreversible: cancelar fuera de plazo se le queda al cliente en su
+   * contabilidad. Por eso pasa por el candado del mandato
+   * (`facturacion/modo.ts`) y el modo por defecto del agente es `ensayo`.
+   */
+  | 'emitir_factura';
 
 /**
  * El vocabulario completo, enumerable.
@@ -216,6 +229,7 @@ export const CAPACIDADES: readonly Capacidad[] = [
   'leer_estado_cuenta',
   'leer_movimientos',
   'leer_cfdi',
+  'emitir_factura',
 ];
 
 /** La forma de un campo de credencial. No es el valor: es cómo se captura. */

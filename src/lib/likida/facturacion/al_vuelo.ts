@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { llegoTarde, violaIndice } from '@/lib/likida/pg_errores';
 import { armar, type TicketPorFacturar } from './pendientes';
 import { enrutar } from './enrutar';
+import { cuentasCompartidas } from './cuentas';
 import { modoEfectivo } from './modo';
 import {
   facturarConAgente,
@@ -85,6 +86,8 @@ export function decidirAutofactura(
   t: TicketPorFacturar,
   confianzaOcr: number | null,
   tieneAdaptador: boolean,
+  /** ¿La flota compartió la cuenta de este portal? Ver `cuentas.ts`. */
+  cuentaCompartida = false,
 ): DecisionAutofactura {
   // `tieneAdaptador` ENTRA A `enrutar`, y ya no se comprueba aparte aquí abajo.
   //
@@ -92,7 +95,7 @@ export function decidirAutofactura(
   // cron rechazaba el ticket con `sin_adaptador` —correcto— mientras `enrutar`
   // seguía llamándolo `automatico`, y por eso el aviso de WhatsApp no lo
   // llevaba. Dos opiniones sobre quién factura un mismo ticket.
-  const ruta = enrutar(t, tieneAdaptador);
+  const ruta = enrutar(t, tieneAdaptador, cuentaCompartida);
 
   if (ruta.via === 'mensaje') {
     // Cada motivo se declara como es. Confundirlos manda a arreglar otra cosa:
@@ -224,6 +227,11 @@ export async function facturarAlVuelo(args: {
 
   const hoy = args.hoy ?? new Date().toISOString().slice(0, 10);
   const t = armar(data as Parameters<typeof armar>[0], hoy);
+  // El cofre SOLO se consulta cuando el portal pide cuenta: es una lectura de
+  // base por gasto, y para los sin cuenta —la mayoría— no cambia nada.
+  const conCuenta = t.comercio?.requiereCuenta
+    ? (await cuentasCompartidas(args.tenantId)).has(t.comercio.clave)
+    : false;
   const decision = decidirAutofactura(
     t,
     data.ocr_confianza === null ? null : Number(data.ocr_confianza),
@@ -231,6 +239,7 @@ export async function facturarAlVuelo(args: {
     // adaptador de quien hubiera facturado antes en esta misma instancia, con
     // SUS datos fiscales dentro.
     t.comercio ? adaptadorDe(args.tenantId, t.comercio.clave) !== null : false,
+    conCuenta,
   );
 
   if (!decision.procede) {
@@ -376,6 +385,8 @@ export async function facturarLoteAlVuelo(args: {
 
   const tickets: TicketDeLote[] = [];
   const ticketPorGasto = new Map<string, TicketPorFacturar>();
+  /** El cofre se lee UNA vez por lote, y solo si algún portal pide cuenta. */
+  let cuentas: Set<string> | null = null;
 
   for (const gastoId of args.gastoIds) {
     const f = filas.get(gastoId);
@@ -396,10 +407,14 @@ export async function facturarLoteAlVuelo(args: {
 
     const t = armar(f, hoy);
     ticketPorGasto.set(gastoId, t);
+    if (t.comercio?.requiereCuenta && cuentas === null) {
+      cuentas = await cuentasCompartidas(args.tenantId);
+    }
     const decision = decidirAutofactura(
       t,
       f.ocr_confianza === null ? null : Number(f.ocr_confianza),
       t.comercio ? adaptadorDe(args.tenantId, t.comercio.clave) !== null : false,
+      t.comercio?.requiereCuenta ? (cuentas?.has(t.comercio.clave) ?? false) : false,
     );
 
     if (!decision.procede) {
