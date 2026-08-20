@@ -3,7 +3,7 @@ import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client
 import { logger } from '@/lib/logger';
 import { getPorFacturar, type TicketPorFacturar } from './pendientes';
 import { enrutar, mensajeParaEncargado, repartir } from './enrutar';
-import { PORTALES_CONOCIDOS } from './adaptadores/registro';
+import { portalesOperables } from './adaptadores/registro';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO POR WHATSAPP DE LO QUE HAY QUE FACTURAR.
@@ -55,15 +55,17 @@ export interface ResultadoAviso {
  * tienes pendientes"— gasta una plantilla de pago y enseña a ignorar el canal.
  */
 /**
- * `sabeOperarlo` sale de `PORTALES_CONOCIDOS`, que es «qué sé hacer» y no «qué
- * puedo hacer ahora con la flota cargada» (eso es `portalesAutomatizados`). La
- * distinción importa aquí: al encargado hay que avisarle de un portal sin
- * adaptador ESCRITO —eso no se va a arreglar solo—, no de uno que simplemente
- * no está registrado en esta invocación.
+ * `sabeOperarlo` sale de `portalesOperables()` —los adaptadores escritos más
+ * los pilotables cuando el piloto está encendido—, que es «qué sé hacer» y no
+ * «qué puedo hacer ahora con la flota cargada» (eso es `portalesAutomatizados`).
+ * La distinción importa aquí dos veces: al encargado hay que avisarle de un
+ * portal que NADIE va a operar —eso no se arregla solo—, y NO hay que avisarle
+ * de uno que el piloto va a intentar en la siguiente corrida: avisar de algo
+ * que ya se está haciendo entrena a ignorar el aviso.
  */
 export function armarAviso(
   tickets: TicketPorFacturar[],
-  sabeOperarlo: (clave: string) => boolean = (c) => PORTALES_CONOCIDOS.includes(c),
+  sabeOperarlo: (clave: string) => boolean = (c) => portalesOperables().includes(c),
 ): { texto: string; cuantos: number } {
   const { mensajes, incompletos } = repartir(tickets, sabeOperarlo);
 

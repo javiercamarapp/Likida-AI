@@ -121,6 +121,10 @@ const conPortales = vi.fn(async (_op: unknown, fn: (r: unknown) => Promise<unkno
 vi.mock('@/lib/likida/facturacion/adaptadores/registro', () => ({
   conPortales,
   PORTALES_CONOCIDOS: ['capufe'] as readonly string[],
+  // El piloto de visión queda APAGADO en estas pruebas: miden el camino de
+  // los adaptadores escritos. Con la palanca apagada, operables == conocidos.
+  portalesOperables: () => ['capufe'] as readonly string[],
+  pilotoHabilitado: () => false,
 }));
 
 /**

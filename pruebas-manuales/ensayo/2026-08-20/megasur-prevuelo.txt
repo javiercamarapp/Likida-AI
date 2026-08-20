@@ -1,0 +1,61 @@
+# Pre-vuelo Megasur — 2026-08-20T05:39:24.339Z
+
+Portal (de `comercios.ts`): http://megasur.com.mx:8029/
+Campos que la ficha declara: webId*, folio
+POST permitido: false
+
+## Navegación
+- cargó: sí
+- url final: http://megasur.com.mx:8029/Account/Login?ReturnUrl=%2F
+- título: Login
+
+## Campos del formulario
+(`*` = required. El adaptador escribe por `#id` cuando lo hay, y por `[name=…]` si no.)
+- input  #RFC · [name="RFC"] · type=text
+    placeholder: «RFC»
+- input  #button-login · type=button
+- input  #login_pass · [name="login_pass"] · type=password · (OCULTO)
+    etiqueta: «Contraseña»
+
+## Botones
+- input «» #button-login
+- button «×» (OCULTO)
+- button «×» (OCULTO)
+- button «Cancelar» (OCULTO)
+- button «Acceder» (OCULTO)
+
+## Formularios
+- (sin id) action="" method=""
+
+## ¿Captcha?
+🔴 https://www.gstatic.com/recaptcha/releases/xg_pWYS8-HRESiV6Rdg4aY_R/recaptcha__es_419.js · https://www.gstatic.com/recaptcha/releases/xg_pWYS8-HRESiV6Rdg4aY_R/recaptcha__es_419.js · https://www.google.com/recaptcha/api.js · col-lg-12 col-md-12 re-captcha-google · https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit
+
+## Texto visible de la página
+```
+Facturación Electrónica Version 4.0
+BIENVENIDO
+	
+
+Registrate
+
+AVISOS
+
+Este servicio permite a nuestros clientes de contado y tarjetas debito/credito facturar tickets de combustible despues de 24 hrs de emitidos
+
+Solo podremos facturarle tickets del mes vigente
+
+Si se desea facturar las ultimas horas del mes, le ofrecemos la facturacion en ventanilla o en la terminal punto de venta
+
+SOPORTE PARA FACTURACION WEB AL NUMERO 9999429622 , WHATSAPP 9991637528 , EN HORARIO DE LUNES A VIERNES DE 09:00 AM - 05:00 PM, SABADOS DE 09:00 AM - 01:00 PM
+
+ Se recomienda usar Google Chrome
+ Se requiere Adobe PDF Reader
+Su explorador debe de ser compatible con Javascript, debe de tener habilitado cookies y ventanas emergentes.
+```
+
+## La pantalla
+- pruebas-manuales/ensayo/2026-08-20/portal-1787204367574-ovhg20.jpg
+
+## Red
+- peticiones NO-GET abortadas: 0
+- peticiones fallidas (no abortadas por nosotros): 0

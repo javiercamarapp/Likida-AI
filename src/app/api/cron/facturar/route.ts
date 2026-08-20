@@ -6,7 +6,8 @@ import { armar } from '@/lib/likida/facturacion/pendientes';
 import { getFiscalDeFlota } from '@/lib/likida/facturacion/flota_fiscal';
 import { avisarPorFacturar } from '@/lib/likida/facturacion/avisar';
 import { telefonoJefeDe } from '@/lib/likida/contactos';
-import { conPortales, PORTALES_CONOCIDOS } from '@/lib/likida/facturacion/adaptadores/registro';
+import { conPortales, PORTALES_CONOCIDOS, portalesOperables, pilotoHabilitado } from '@/lib/likida/facturacion/adaptadores/registro';
+import { credencialesDePortales } from '@/lib/likida/facturacion/cuentas';
 import { conNavegador } from '@/lib/likida/facturacion/adaptadores/pagina_playwright';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -418,11 +419,15 @@ export async function procesarLoteEnCola(
     const porFlota = new Map<string, Map<string, FilaCola[]>>();
     const sinPortal: FilaCola[] = [];
     const comercioDe = new Map<string, string | null>();
+    // Escritos + pilotables (si la palanca del piloto está puesta). Mirar solo
+    // los escritos con el piloto encendido despacharía "sin navegador" tickets
+    // que la máquina sí va a intentar.
+    const operables = portalesOperables();
 
     for (const g of lote) {
       const clave = armar(g, hoy).comercio?.clave ?? null;
       comercioDe.set(g.id, clave);
-      if (!clave || !PORTALES_CONOCIDOS.includes(clave)) {
+      if (!clave || !operables.includes(clave)) {
         sinPortal.push(g);
         continue;
       }
@@ -543,11 +548,16 @@ export async function procesarLoteEnCola(
       // segunda no, lo de la segunda sigue siendo un fallo de arranque. Con una
       // bandera compartida ese caso se reportaría como 500 y los tickets de la
       // segunda quedarían marcados como intentados sin haberlo sido.
+      // Las cuentas de portal compartidas, para el piloto de visión. Solo se
+      // leen con la palanca puesta: sin piloto nadie las consume, y el
+      // descifrado de credenciales no se pasea por gusto.
+      const cuentas = pilotoHabilitado() ? await credencialesDePortales(tenantId) : undefined;
+
       let arranco = false;
       try {
         await conNavegador(async (abrirPagina) => {
           arranco = true;
-          await conPortales({ flota, abrirPagina }, async (registro) => {
+          await conPortales({ flota, abrirPagina, cuentas }, async (registro) => {
             flotas.push({
               tenantId,
               tickets: tickets.length,

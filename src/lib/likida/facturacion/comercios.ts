@@ -385,6 +385,16 @@ export const COMERCIOS: Comercio[] = [
     // nuevo, pero los datos fiscales quedan guardados y después solo se
     // confirman. Para el operador en carretera eso es la diferencia entre poder
     // facturar desde el celular y no poder.
+    //
+    // ── PRE-VUELO DEL 20-AGO-2026: LA ENTRADA TRAE reCAPTCHA ────────────────
+    // (`pruebas-manuales/ensayo/2026-08-20/megasur-prevuelo.txt`.) La raíz
+    // redirige a /Account/Login: un campo #RFC, un password OCULTO y reCAPTCHA
+    // de Google renderizado explícito. Para la PERSONA sigue siendo "RFC y ya"
+    // —por eso `requiereCuenta` se queda en false y el aviso no la manda a
+    // buscar contraseñas—, pero para la MÁQUINA el captcha es techo: el piloto
+    // de visión lo declara (`requiereCaptcha`) sin gastar una llamada, el
+    // ticket sale de la cola automática y el encargado recibe la liga con el
+    // WebID listo. Ese captcha NO se rodea; es la regla de todo el módulo.
     requiereCuenta: false,
     plazo: 'mes_natural',
     plazoVerificado: true, // impreso en el ticket Y en los avisos del portal
