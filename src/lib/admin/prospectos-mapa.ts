@@ -17,7 +17,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { conteo, traerTodo } from '@/lib/likida/pg';
+import { conteo, exigir, traerTodo } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 
 // ── El embudo → color. UNA fuente para pines SVG, marcadores de calle,
@@ -409,4 +409,103 @@ export async function getDatosMapa(): Promise<DatosMapa> {
       };
     });
   return { prospectos, generadoEn, fallo: false };
+}
+
+// ── La ficha de UN prospecto — /admin/mapa-prospectos/[id] ─────────────────
+// Todo lo que el mapa resume, aquí desglosado: los hechos crudos (0140:
+// num_unidades/historia, NULL si no se encontró — nunca se infiere), los tres
+// derivados GENERADOS (similitud_icp_pct/necesidad_pct/viajes_mes_estimado —
+// se leen, jamás se calculan aquí, para no desincronizarse de la fórmula de
+// la migración) y las personas investigadas (0138, prospecto_persona).
+
+export interface PersonaProspecto {
+  id: string;
+  nombre: string;
+  puesto: string | null;
+  correo: string | null;
+  telefono: string | null;
+  linkedin: string | null;
+  origen: string;
+  confianza: 'alta' | 'media' | 'baja';
+  evidencia: string | null;
+}
+
+export interface DetalleProspecto extends ProspectoMapa {
+  sitio: string | null;
+  sitioVerificado: boolean;
+  numUnidades: number | null;
+  historia: string | null;
+  similitudIcpPct: number;
+  necesidadPct: number;
+  viajesMesEstimado: number | null;
+  fuenteCruda: string;
+  creadoEn: string;
+  personas: PersonaProspecto[];
+}
+
+interface FilaDetalle extends FilaProspecto {
+  sitio: string | null;
+  sitio_verificado: boolean;
+  num_unidades: number | null;
+  historia: string | null;
+  similitud_icp_pct: number;
+  necesidad_pct: number;
+  viajes_mes_estimado: number | null;
+  duplicado_de: string | null;
+  created_at: string;
+  prospecto_persona: Array<{
+    id: string; nombre: string; puesto: string | null; correo: string | null;
+    telefono: string | null; linkedin: string | null; origen: string;
+    confianza: 'alta' | 'media' | 'baja'; evidencia: string | null;
+  }> | null;
+}
+
+/** null = no existe, es un duplicado (0139: se navega a la ficha principal,
+ *  no a una copia), o la lectura falló — el llamador decide el 404. */
+export async function getDetalleProspecto(id: string): Promise<DetalleProspecto | null> {
+  const admin = supabaseAdmin();
+  const res = await admin
+    .from('prospecto')
+    .select(`id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado,
+      fuente, notas, scian, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en,
+      sitio, sitio_verificado, num_unidades, historia, similitud_icp_pct, necesidad_pct,
+      viajes_mes_estimado, duplicado_de, created_at,
+      prospecto_toque(creado_en),
+      prospecto_persona(id, nombre, puesto, correo, telefono, linkedin, origen, confianza, evidencia)`)
+    .eq('id', id)
+    .maybeSingle();
+  const p = exigir(res as { data: FilaDetalle | null; error: { message: string } | null }, 'prospecto (detalle)');
+  if (!p || p.duplicado_de) return null;
+
+  const { ciudad, entidad } = plazaDe(p.ciudad);
+  return {
+    id: p.id, empresa: p.empresa, ciudad, entidad, lat: p.lat, lng: p.lng,
+    telefono: p.telefono, correo: p.correo, contacto: p.contacto_nombre,
+    vacante: p.vacante, notas: p.notas, estado: p.estado, fuente: p.fuente,
+    giro: giroDe(p.empresa, p.vacante, p.notas, p.scian),
+    tamano: tamanoDe(p.notas),
+    completitud: completitudDe({
+      telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
+      lat: p.lat, notas: p.notas, sitioVerificado: p.sitio_verificado,
+    }),
+    mensajeWaIa: p.mensaje_wa, correoAsuntoIa: p.mensaje_correo_asunto,
+    correoCuerpoIa: p.mensaje_correo, mensajesGeneradosEn: p.mensajes_generados_en,
+    ultimoToque: (p.prospecto_toque ?? []).reduce<string | null>(
+      (max, t) => (max === null || t.creado_en > max ? t.creado_en : max), null),
+    urgencia: scoreUrgencia({ vacante: p.vacante, notas: p.notas }),
+    cierre: scoreCierre({
+      telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
+      estado: p.estado, fuente: p.fuente, empresa: p.empresa, vacante: p.vacante, notas: p.notas,
+      scian: p.scian, personasVerificadas: (p.prospecto_persona ?? []).filter((x) => x.confianza !== 'baja').length,
+    }),
+    sitio: p.sitio, sitioVerificado: p.sitio_verificado,
+    numUnidades: p.num_unidades, historia: p.historia,
+    similitudIcpPct: p.similitud_icp_pct, necesidadPct: p.necesidad_pct,
+    viajesMesEstimado: p.viajes_mes_estimado,
+    fuenteCruda: p.fuente, creadoEn: p.created_at,
+    personas: (p.prospecto_persona ?? []).map((x) => ({
+      id: x.id, nombre: x.nombre, puesto: x.puesto, correo: x.correo, telefono: x.telefono,
+      linkedin: x.linkedin, origen: x.origen, confianza: x.confianza, evidencia: x.evidencia,
+    })),
+  };
 }
