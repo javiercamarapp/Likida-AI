@@ -38,6 +38,11 @@ export interface Gasto {
   rfcEmisor?: string;
   rfcReceptor?: string;    // debe ser el RFC de la empresa (no el chofer)
   cfdiUuid?: string;
+  // Qué renglón de ESE CFDI ampara este gasto (migración 0065). 1 = el gasto
+  // nació del comprobante, o es el primero; >1 solo lo escribe el reparto de
+  // una factura que ampara varios cargos (la consolidada de CAPUFE). Sin él,
+  // el dedup por uuid confunde "amparado por" (N:1) con "copia" (1:1).
+  cfdiOrden?: number;
   imagenUrl?: string;
   imgHash?: string;        // SHA-256 del contenido de la foto (dedup de reenvíos)
   ocrConfianza?: number;   // 0–1

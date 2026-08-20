@@ -169,7 +169,20 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
   const originalDe = new Map<string, string>();
   for (const g of gastos) {
     if (g.cfdiUuid) {
-      const u = g.cfdiUuid.toLowerCase();
+      // POR `(uuid, orden)`, NO POR EL UUID SOLO.
+      //
+      // La migración 0065 separó "este gasto NACIÓ de ese CFDI" (1:1, el
+      // duplicado que hay que impedir) de "este gasto está AMPARADO por ese
+      // CFDI" (N:1, la factura consolidada de CAPUFE), y movió el índice único
+      // a `(tenant_id, cfdi_uuid, cfdi_orden)`. El dedup se quedó mirando solo
+      // el uuid: las ocho casetas de una factura entraban como UNA y las otras
+      // siete salían del comprobado como "duplicado". El operador cobraba $250
+      // de $2,000 y el PDF lo acusaba de duplicar.
+      //
+      // El default `1` es lo que conserva la regla vieja intacta: dos fotos del
+      // mismo comprobante no traen orden, caen ambas en 1, y siguen siendo
+      // copias.
+      const u = `${g.cfdiUuid.toLowerCase()}#${g.cfdiOrden ?? 1}`;
       const previo = vistoUuid.get(u);
       if (previo) originalDe.set(g.id, previo);
       else vistoUuid.set(u, g.id);
