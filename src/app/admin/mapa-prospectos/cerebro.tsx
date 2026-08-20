@@ -63,9 +63,12 @@ interface Filtros {
   minUrgencia: 0 | 50 | 70;
   soloTel: boolean;
   soloDecisor: boolean;
-  orden: 'cierre' | 'urgencia' | 'recientes' | 'completos';
+  orden: 'cierre' | 'urgencia' | 'recientes' | 'completos' | 'similitud' | 'necesidad';
   tamanos: Set<Tamano | 'n/d'> | null;   // null = todos
   minCompletitud: 0 | 50 | 75;
+  /** 0140, GENERADAS — ver CRITERIO_SCORES.similitud/.necesidad. */
+  minSimilitud: 0 | 40 | 65 | 85;
+  minNecesidad: 0 | 40 | 65 | 85;
   /** "Sin contactar en N días" (0130): 0 = apagado; N = sin toque registrado
    *  en los últimos N días (o nunca tocado). */
   sinToqueDias: 0 | 7 | 14 | 30;
@@ -81,7 +84,7 @@ const SIN_FILTROS: Filtros = {
   giros: null, etapas: null, fuentes: null, minUrgencia: 0,
   soloTel: false, soloDecisor: false, orden: 'cierre',
   tamanos: null, minCompletitud: 0, soloMensajeIA: false, soloVacante: false,
-  sinToqueDias: 0,
+  sinToqueDias: 0, minSimilitud: 0, minNecesidad: 0,
   centro: null, radioKm: 0,
 };
 const TAMANOS_UI: Array<Tamano | 'n/d'> = [...TAMANOS, 'n/d'];
@@ -97,10 +100,11 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
 /** El CSV de la vista actual — columnas fijas, comillas escapadas, BOM para
  *  que Excel en español lo abra con acentos bien. */
 function csvDe(lista: ProspectoMapa[]): string {
-  const cab = ['empresa', 'giro', 'etapa', 'urgencia_pct', 'cierre_pct', 'contacto', 'telefono', 'correo', 'ciudad', 'entidad', 'vacante', 'fuente', 'lat', 'lng', 'notas'];
+  const cab = ['empresa', 'giro', 'etapa', 'urgencia_pct', 'cierre_pct', 'similitud_icp_pct', 'necesidad_pct', 'num_unidades', 'contacto', 'telefono', 'correo', 'ciudad', 'entidad', 'vacante', 'fuente', 'lat', 'lng', 'notas'];
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const filas = lista.map((p) => [
     p.empresa, NOMBRE_GIRO[p.giro], COLOR_EMBUDO[p.estado]?.nombre ?? p.estado, p.urgencia, p.cierre,
+    p.similitudIcpPct, p.necesidadPct, p.numUnidades,
     p.contacto, p.telefono, p.correo, p.ciudad, p.entidad, p.vacante, p.fuente, p.lat, p.lng, p.notas,
   ].map(esc).join(','));
   return '\ufeff' + [cab.join(','), ...filas].join('\n');
@@ -213,7 +217,9 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar, onToque, plana }: {
             {p.empresa}
           </Link>
           <p className="text-[11px]" style={{ color: TENUE }}>
-            {c.nombre} · {NOMBRE_GIRO[p.giro]}{p.tamano ? ` · ${p.tamano} pers.` : ''}{p.ciudad ? ` · ${p.ciudad}` : ''} · datos {p.completitud}%
+            {c.nombre} · {NOMBRE_GIRO[p.giro]}
+            {p.numUnidades !== null ? ` · ${numero(p.numUnidades)} unidades` : p.tamano ? ` · ${p.tamano} pers.` : ''}
+            {p.ciudad ? ` · ${p.ciudad}` : ''} · datos {p.completitud}%
           </p>
         </div>
       </div>
@@ -228,6 +234,8 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar, onToque, plana }: {
       {p.notas && <p className="text-[11px] line-clamp-2" style={{ color: TENUE }} title={p.notas}>{p.notas}</p>}
       <Barra etiqueta="Urgencia" pct={p.urgencia} color="#f59e0b" />
       <Barra etiqueta="Cierre" pct={p.cierre} color="#34d399" />
+      <Barra etiqueta="ICP" pct={p.similitudIcpPct} color="#8b5cf6" />
+      <Barra etiqueta="Necesid." pct={p.necesidadPct} color="#ef4444" />
       {p.mensajesGeneradosEn && (
         <p className="text-[10px]" style={{ color: 'var(--marca)' }}>✨ mensaje del agente experto listo</p>
       )}
@@ -320,6 +328,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     (filtros.tamanos ? 1 : 0) + (filtros.minCompletitud ? 1 : 0) +
     (filtros.soloMensajeIA ? 1 : 0) + (filtros.soloVacante ? 1 : 0) +
     (filtros.sinToqueDias ? 1 : 0) +
+    (filtros.minSimilitud ? 1 : 0) + (filtros.minNecesidad ? 1 : 0) +
     (filtros.centro && filtros.radioKm ? 1 : 0);
   const filtrados = useMemo(() => datos.prospectos.filter((p) =>
     (!filtros.giros || filtros.giros.has(p.giro))
@@ -330,6 +339,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     && (!filtros.soloDecisor || p.contacto !== null)
     && (!filtros.tamanos || filtros.tamanos.has(p.tamano ?? 'n/d'))
     && p.completitud >= filtros.minCompletitud
+    && p.similitudIcpPct >= filtros.minSimilitud
+    && p.necesidadPct >= filtros.minNecesidad
     && (!filtros.soloMensajeIA || p.mensajesGeneradosEn !== null)
     && (!filtros.soloVacante || p.vacante !== null)
     && (filtros.sinToqueDias === 0 || !p.ultimoToque
@@ -355,7 +366,9 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     filtros.orden === 'urgencia' ? (b.urgencia - a.urgencia || b.cierre - a.cierre)
       : filtros.orden === 'recientes' ? 0 // ya vienen por created_at desc del servidor
         : filtros.orden === 'completos' ? (b.completitud - a.completitud || b.cierre - a.cierre)
-          : (b.cierre - a.cierre || b.urgencia - a.urgencia),
+          : filtros.orden === 'similitud' ? (b.similitudIcpPct - a.similitudIcpPct || b.necesidadPct - a.necesidadPct)
+            : filtros.orden === 'necesidad' ? (b.necesidadPct - a.necesidadPct || b.similitudIcpPct - a.similitudIcpPct)
+              : (b.cierre - a.cierre || b.urgencia - a.urgencia),
   ), [filtros.orden]);
   const exportarCsv = () => {
     const blob = new Blob([csvDe(ordenar(filtrados))], { type: 'text/csv;charset=utf-8' });
@@ -675,6 +688,32 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                   ))}
                 </div>
               </div>
+              <div>
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }} title={CRITERIO_SCORES.similitud}>
+                  Similitud ICP mínima (0140)
+                </p>
+                <div className="flex gap-1.5">
+                  {([0, 40, 65, 85] as const).map((u) => (
+                    <Chip key={u} activo={u !== 0 && filtros.minSimilitud === u}
+                      onClick={() => setFiltros((f) => ({ ...f, minSimilitud: f.minSimilitud === u ? 0 : u }))}>
+                      {u === 0 ? 'Todas' : `≥${u}%`}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }} title={CRITERIO_SCORES.necesidad}>
+                  Necesidad mínima (0140)
+                </p>
+                <div className="flex gap-1.5">
+                  {([0, 40, 65, 85] as const).map((u) => (
+                    <Chip key={u} activo={u !== 0 && filtros.minNecesidad === u}
+                      onClick={() => setFiltros((f) => ({ ...f, minNecesidad: f.minNecesidad === u ? 0 : u }))}>
+                      {u === 0 ? 'Todas' : `≥${u}%`}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="flex flex-wrap gap-x-5 gap-y-3 items-end">
               <div>
@@ -711,7 +750,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               <div>
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }}>Ordenar por</p>
                 <div className="flex gap-1.5">
-                  {([['cierre', '% cierre'], ['urgencia', '% urgencia'], ['completos', 'Datos'], ['recientes', 'Recientes']] as const).map(([k, n]) => (
+                  {([['cierre', '% cierre'], ['urgencia', '% urgencia'], ['similitud', '% similitud ICP'], ['necesidad', '% necesidad'], ['completos', 'Datos'], ['recientes', 'Recientes']] as const).map(([k, n]) => (
                     <Chip key={k} activo={filtros.orden === k} onClick={() => setFiltros((f) => ({ ...f, orden: k }))}>{n}</Chip>
                   ))}
                 </div>
@@ -1003,6 +1042,8 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <p>{CRITERIO_SCORES.urgencia}</p>
           <p>{CRITERIO_SCORES.cierre}</p>
           <p>{CRITERIO_SCORES.datos}</p>
+          <p>{CRITERIO_SCORES.similitud}</p>
+          <p>{CRITERIO_SCORES.necesidad}</p>
           <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {fechaHoraMx(datos.generadoEn)} · se refresca cada 5 min.</p>
         </footer>
       </Reveal>
