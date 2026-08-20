@@ -18,6 +18,7 @@ import ContadorRetro from '../contador-retro';
 import { HBars } from '../ui/graficas';
 import { ChartCard, EstadoVacio } from '../ui/kit';
 import { FormaConAviso, Campo, type ResultadoAccion } from '../ui/forma';
+import { REGIMENES, USOS_CFDI } from '@/lib/saas/fiscal';
 import { SenalesPmfPorFlota } from './senales-pmf';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,12 @@ export const dynamic = 'force-dynamic';
  * try porque redirige lanzando, y atraparlo convertiría "no eres superadmin"
  * en un aviso rojo dentro de una consola que no debería estar sirviéndose.
  */
+/** ¿Vienen los CINCO del receptor? Es la condición exacta de `getFiscalDeFlota`. */
+function fiscalListo(fd: FormData): boolean {
+  return ['rfc', 'razonSocial', 'regimenFiscal', 'codigoPostalFiscal', 'usoCfdi']
+    .every((c) => String(fd.get(c) ?? '').trim().length > 0);
+}
+
 async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
   'use server';
   const s = await requireSuperadmin();
@@ -47,15 +54,27 @@ async function accionCrearFlota(_previo: ResultadoAccion, fd: FormData): Promise
         telefonoAdmin: String(fd.get('telefonoAdmin') ?? '') || undefined,
         dedicacionExclusivaCarga: fd.get('dedicacionExclusivaCarga') === 'on' ? true : undefined,
         regimenFiscal: String(fd.get('regimenFiscal') ?? '') || undefined,
+        razonSocial: String(fd.get('razonSocial') ?? '') || undefined,
+        codigoPostalFiscal: String(fd.get('codigoPostalFiscal') ?? '') || undefined,
+        usoCfdi: String(fd.get('usoCfdi') ?? '') || undefined,
       },
       { id: s.userId },
     );
 
     revalidatePath('/admin/flotas');
+    // SE DICE SI PUEDE FACTURAR O NO, aquí y ahora. El alta callaba: una flota
+    // sin los cinco datos del receptor se creaba con el mismo mensaje verde que
+    // una completa, y el hueco se descubría semanas después como un cron de
+    // facturación que no hacía nada. Un "listo" que no distingue entre las dos
+    // cosas es peor que no decir nada.
+    const faltaFiscal = !fiscalListo(fd);
+    const base = userId
+      ? `"${nombre}" dada de alta, con ${emailAdmin} como administrador. Ya puede entrar a su panel.`
+      : `"${nombre}" dada de alta. Todavía no tiene a nadie que pueda entrar: falta darle de alta un usuario.`;
     return {
-      ok: userId
-        ? `"${nombre}" dada de alta, con ${emailAdmin} como administrador. Ya puede entrar a su panel.`
-        : `"${nombre}" dada de alta. Todavía no tiene a nadie que pueda entrar: falta darle de alta un usuario.`,
+      ok: faltaFiscal
+        ? `${base} OJO: le faltan datos fiscales (RFC, razón social, régimen, CP fiscal y uso del CFDI). Hasta que estén los CINCO, esta flota no factura ni un ticket. Se capturan en su panel, en Suscripción.`
+        : base,
     };
   } catch (e) {
     return { error: mensajeParaPantalla(e, 'dar de alta la flota') };
@@ -369,6 +388,26 @@ export default async function FlotasPage() {
                 <Campo nombre="rfc" etiqueta="RFC" placeholder="Opcional"
                   ayuda="Se rechaza si no pasa el dígito verificador." />
                 <Campo nombre="ciudad" etiqueta="Ciudad" placeholder="Opcional" />
+                {/* LOS CINCO DEL RECEPTOR. Sin ellos `getFiscalDeFlota` se niega
+                    a registrar la flota y NADA de esa flota se factura — el alta
+                    pedía tres, así que cada flota nueva nacía sin poder facturar
+                    y el hueco solo aparecía semanas después, como un cron que no
+                    hacía nada. Siguen siendo opcionales: se pueden capturar en
+                    /dashboard/suscripcion. Lo que ya no pasa es capturarlos a
+                    medias y que parezca completo. */}
+                <Campo nombre="razonSocial" etiqueta="Razón social" placeholder="MI FLOTA SA DE CV — opcional"
+                  ayuda="TAL CUAL su Constancia de Situación Fiscal: el SAT la compara contra lo que tiene para ese RFC y rechaza por diferencias que se ven inofensivas." />
+                <Campo nombre="codigoPostalFiscal" etiqueta="Código postal fiscal" placeholder="5 dígitos — opcional"
+                  ayuda="El del domicilio FISCAL ante el SAT, no el del patio. El PAC lo compara contra el registrado para ese RFC." />
+                <label className="flex items-start gap-2 text-xs" style={{ color: 'var(--muted)' }}>
+                  <span className="mt-1">Uso del CFDI:</span>
+                  <select name="usoCfdi" className="text-xs" defaultValue="">
+                    <option value="">Sin declarar</option>
+                    {USOS_CFDI.map((u) => (
+                      <option key={u.clave} value={u.clave}>{u.clave} — {u.nombre}</option>
+                    ))}
+                  </select>
+                </label>
                 <Campo nombre="emailAdmin" etiqueta="Correo del administrador" tipo="email" placeholder="dueño@flota.mx"
                   ayuda="Sin él, la flota nace sin quién pueda entrar." />
                 <Campo nombre="nombreAdmin" etiqueta="Nombre del administrador" placeholder="Opcional" />
@@ -385,18 +424,19 @@ export default async function FlotasPage() {
                 </label>
                 <label className="flex items-start gap-2 text-xs" style={{ color: 'var(--muted)' }}>
                   <span className="mt-1">Régimen fiscal (c_RegimenFiscal SAT):</span>
+                  {/* EL MISMO CATÁLOGO QUE VALIDA `validarDatosFiscales`, y no
+                      por gusto: esta lista ofrecía 605, 606, 607, 608, 610, 611,
+                      615 y 616 —sueldos, arrendamiento, dividendos— que el
+                      validador fiscal rechaza con "elige uno de la lista",
+                      hablándole de una lista donde el valor SÍ estaba. Dos
+                      catálogos del mismo dato siempre acaban discrepando; el que
+                      manda es el que la facturación acepta. De paso entran 603 y
+                      626 (RESICO), que esta lista no ofrecía y sí califican. */}
                   <select name="regimenFiscal" className="text-xs" defaultValue="">
                     <option value="">Sin declarar</option>
-                    <option value="601">601 — General de Ley PM (coordinados)</option>
-                    <option value="612">612 — PF con actividades empresariales</option>
-                    <option value="605">605 — Sueldos y Salarios</option>
-                    <option value="606">606 — Arrendamiento</option>
-                    <option value="607">607 — Régimen de Enajenación</option>
-                    <option value="608">608 — Demás ingresos</option>
-                    <option value="610">610 — Residentes en el Extranjero</option>
-                    <option value="611">611 — Ingresos por Dividendos</option>
-                    <option value="615">615 — Incorporación Fiscal</option>
-                    <option value="616">616 — Otros regímenes</option>
+                    {REGIMENES.map((r) => (
+                      <option key={r.clave} value={r.clave}>{r.clave} — {r.nombre}</option>
+                    ))}
                   </select>
                   <span>
                     — la facilidad del 15% (RFA 2.9) exige 601 o 612; cualquier otro

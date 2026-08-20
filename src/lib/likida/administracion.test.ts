@@ -86,6 +86,68 @@ describe('crearFlota', () => {
   it('un nombre de dos letras no pasa', async () => {
     await expect(crearFlota({ nombre: 'AB' })).rejects.toThrow(DatoInvalido);
   });
+
+  // ── LOS CINCO DEL RECEPTOR (20-ago-2026) ─────────────────────────────────
+  //
+  // El quinto modo de fallo silencioso de esta familia, y el más caro: el alta
+  // pedía nombre, RFC y régimen, pero `getFiscalDeFlota` exige CINCO —le faltan
+  // razón social, CP fiscal y uso—. Sin los cinco devuelve `falta` y la flota no
+  // se registra para facturar. O sea que toda flota nueva nacía sin poder
+  // facturar un solo ticket, con el mismo mensaje verde que una completa, y el
+  // hueco aparecía semanas después como un cron que no hacía nada.
+  it('con los CINCO, el insert los lleva — la flota nace pudiendo facturar', async () => {
+    const insert = vi.fn((_fila: Record<string, unknown>) => cadena({ data: { id: 't-1' }, error: null }));
+    from.mockImplementation((tabla: string) =>
+      tabla === 'tenant' ? { insert } : { insert: () => Promise.resolve({ error: null }) });
+
+    await crearFlota({
+      nombre: 'Transportes Prueba', rfc: 'gmx0902279i1', razonSocial: '  FLOTA SA DE CV  ',
+      regimenFiscal: '601', codigoPostalFiscal: '36100', usoCfdi: 'G03',
+    });
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      rfc: 'GMX0902279I1',
+      razon_social: 'FLOTA SA DE CV', // solo se recortan espacios: el SAT compara literal
+      regimen_fiscal: '601',
+      codigo_postal_fiscal: '36100',
+      uso_cfdi: 'G03',
+    }));
+  });
+
+  it('un CP de cuatro dígitos se rechaza ANTES de insertar, no deja la flota a medias', async () => {
+    // Si la comprobación viviera dentro del update de la pantalla fiscal, este
+    // clic ya habría creado el tenant y el error llegaría después del cambio.
+    await expect(crearFlota({
+      nombre: 'Transportes Prueba', rfc: 'GMX0902279I1', razonSocial: 'FLOTA SA DE CV',
+      regimenFiscal: '601', codigoPostalFiscal: '3610', usoCfdi: 'G03',
+    })).rejects.toThrow(DatoInvalido);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('un régimen fuera del catálogo que la facturación acepta se rechaza', async () => {
+    // 605 (sueldos y salarios) lo ofrecía el <select> del alta y lo rechazaba el
+    // validador fiscal: dos catálogos del mismo dato. Ahora la pantalla usa el
+    // catálogo bueno, y aquí se fija cuál es el bueno.
+    await expect(crearFlota({
+      nombre: 'Transportes Prueba', rfc: 'GMX0902279I1', razonSocial: 'FLOTA SA DE CV',
+      regimenFiscal: '605', codigoPostalFiscal: '36100', usoCfdi: 'G03',
+    })).rejects.toThrow(DatoInvalido);
+  });
+
+  it('sin los fiscales se sigue pudiendo dar de alta, y NO se escriben a medias', async () => {
+    // Una flota se da de alta para operar viajes y captura lo fiscal después.
+    // Lo que ya no pasa es que se capture a medias y parezca completo.
+    const insert = vi.fn((_fila: Record<string, unknown>) => cadena({ data: { id: 't-1' }, error: null }));
+    from.mockImplementation((tabla: string) =>
+      tabla === 'tenant' ? { insert } : { insert: () => Promise.resolve({ error: null }) });
+
+    await crearFlota({ nombre: 'Transportes Prueba', rfc: 'GMX0902279I1', razonSocial: 'FLOTA SA DE CV' });
+
+    const fila = insert.mock.calls[0][0];
+    expect(fila.razon_social).toBeUndefined();
+    expect(fila.codigo_postal_fiscal).toBeUndefined();
+    expect(fila.uso_cfdi).toBeUndefined();
+  });
 });
 
 describe('crearOperador', () => {

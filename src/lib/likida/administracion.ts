@@ -18,6 +18,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { esRfcValido, rfcChecksumOk } from './intake/cfdi';
+import { validarDatosFiscales } from '@/lib/saas/fiscal';
 import { variantesTelefono, acquireViajeLock, releaseViajeLock } from './conv';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { getConfig } from './config';
@@ -80,6 +81,16 @@ export interface NuevaFlota {
    *  código SAT real (c_RegimenFiscal) en `tenant.regimen_fiscal`, y la
    *  elegibilidad se DERIVA de él (los códigos 601/612 son los que califican). */
   regimenFiscal?: string;
+  /** Razón social TAL CUAL la Constancia de Situación Fiscal. Junto con el RFC,
+   *  el régimen, el CP fiscal y el uso, forma los CINCO datos que el CFDI 4.0
+   *  exige del receptor — y sin los cinco, `getFiscalDeFlota` se niega a
+   *  registrar la flota y NADA de esa flota se factura. */
+  razonSocial?: string;
+  /** CP del domicilio fiscal registrado ante el SAT. No es el de la calle donde
+   *  está el patio: el PAC lo compara contra el que el SAT tiene para ese RFC. */
+  codigoPostalFiscal?: string;
+  /** Clave `c_UsoCFDI`. G03 (gastos en general) es lo normal para una flota. */
+  usoCfdi?: string;
 }
 
 /**
@@ -111,6 +122,32 @@ export async function crearFlota(
     }
   }
 
+  // ── LOS CINCO DEL RECEPTOR, O NINGUNO ──────────────────────────────────────
+  //
+  // Se validan ANTES del insert y con el MISMO validador que la pantalla de
+  // datos fiscales, para que no existan dos criterios de qué es un CP bueno.
+  //
+  // Por qué esto entró al alta (20-ago-2026): `getFiscalDeFlota` exige los cinco
+  // —RFC, razón social, régimen, CP fiscal y uso— y sin ellos devuelve `falta` y
+  // la flota NO se registra para facturar. El alta solo pedía tres, así que toda
+  // flota nueva nacía sin poder facturar y nada lo decía: el hueco aparecía
+  // semanas después, como un cron que no hacía nada, sin un error que mirar.
+  //
+  // OPCIONALES A PROPÓSITO. Una flota se puede dar de alta para operar viajes y
+  // capturar lo fiscal más tarde en `/dashboard/suscripcion`. Lo que ya no pasa
+  // es que se capture a MEDIAS y parezca completo: o van los cinco, o va solo el
+  // RFC suelto como hasta hoy.
+  const fiscalCompleto = Boolean(
+    f.rfc?.trim() && f.razonSocial?.trim() && f.regimenFiscal?.trim()
+    && f.codigoPostalFiscal?.trim() && f.usoCfdi?.trim(),
+  );
+  const filaFiscal = fiscalCompleto
+    ? validarDatosFiscales({
+        rfc: f.rfc!, razonSocial: f.razonSocial!, regimenFiscal: f.regimenFiscal!,
+        codigoPostal: f.codigoPostalFiscal!, usoCfdi: f.usoCfdi!,
+      })
+    : null;
+
   const admin = supabaseAdmin();
   // RFA 2026 regla 2.9: el régimen se captura como el código SAT REAL
   // (tenant.regimen_fiscal — la columna que la facturación ya lee) y la
@@ -130,7 +167,14 @@ export async function crearFlota(
     : undefined;
   const { data, error } = await admin
     .from('tenant')
-    .insert({ nombre, rfc: rfc ?? null, ciudad: f.ciudad?.trim() || null, regimen_fiscal: f.regimenFiscal ?? null, ...(facilidad15 ? { config: facilidad15 } : {}) })
+    .insert({
+      nombre, rfc: rfc ?? null, ciudad: f.ciudad?.trim() || null,
+      regimen_fiscal: f.regimenFiscal ?? null,
+      ...(facilidad15 ? { config: facilidad15 } : {}),
+      // Va al final para que gane: `filaFiscal` trae el RFC y el régimen ya
+      // normalizados por el mismo validador que usa la pantalla fiscal.
+      ...(filaFiscal ?? {}),
+    })
     .select('id')
     .maybeSingle();
 

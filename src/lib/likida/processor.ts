@@ -68,7 +68,7 @@ import {
   MAX_CONFIRMACIONES_SEGUIDAS, type LecturaTicket,
 } from './acuse_ticket';
 import { estadoDelViaje, responderConsulta } from './consulta_chofer';
-import { resolverCuentaOficina, telefonoJefeDe } from './contactos';
+import { resolverCuentaOficina, telefonoJefeDe, type CuentaOficina } from './contactos';
 import { atenderConfirmacion, aceptarPorActividad } from './confirmar_viaje';
 import { avisarCierreAlJefe } from './avisar_cierre';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -415,6 +415,141 @@ function pareceCierre(texto: string): boolean {
   return /^\s*(listo|ya est[aá]|ya qued[óo]|ya no tengo m[áa]s|(ya\s+)?termin[éeoó]|(ya\s+)?acab[éeoó]|cierra|cerrar|eso es todo|es todo)(?!\p{L})/iu.test(texto);
 }
 
+/**
+ * Los mandos de OFICINA que caben en un texto: talacha, despacho, asignación,
+ * informe (PDF o texto) y —solo cuando se pide— la pregunta libre al analista.
+ *
+ * VIVE APARTE PORQUE SE LLAMA DOS VECES, y esa es toda la razón de existir.
+ * Hasta aquí este bloque estaba DENTRO de `if (!op)`, así que un número dado de
+ * alta como operador no lo alcanzaba nunca: `resolveOperador` acierta primero y
+ * el camino de oficina ni se prueba. En una flota chica donde el dueño maneja
+ * —el caso que `contactos.ts` documenta como NORMAL, y para el que devuelve a
+ * propósito las dos caras— eso significaba que el dueño podía mandar tickets y
+ * no podía preguntar «¿cómo van?»: su propio número se lo impedía. El comentario
+ * de `contactos.ts` prometía "quien llama decide con su contexto"; aquí nadie
+ * decidía, porque aquí no se preguntaba.
+ *
+ * ── POR QUÉ EL ANALISTA VA DETRÁS DE UN INTERRUPTOR ─────────────────────────
+ *
+ * Los demás reconocedores devuelven `null` ante un texto que no es suyo: cada
+ * módulo trae su propio criterio y se aparta solo. El analista NO — contesta
+ * cualquier cosa. Puesto delante del camino del chofer se comería «ya llegué»,
+ * «listo» y cada acuse de ruta, que son justo los textos con los que se cierra
+ * un viaje. Por eso desde el camino del chofer entra en `false`: ahí el texto
+ * que nadie de oficina reclamó le pertenece al chofer.
+ *
+ * Devuelve `true` si YA contestó y no queda nada que hacer con este mensaje.
+ */
+async function atenderTextoOficina(
+  cuenta: CuentaOficina,
+  from: string,
+  texto: string,
+  opciones: { incluirPreguntaLibre: boolean },
+): Promise<boolean> {
+  // La talacha va PRIMERO: el botón `tal_si:<uuid>` responde a una pregunta
+  // concreta que le mandamos, y con un viaje pendiente de despacho ese módulo
+  // se quedaría con todo lo que no sea sí/no — un id crudo de botón acabaría en
+  // el resumen del viaje. El tenant sale del LOOKUP, jamás del texto.
+  try {
+    const rTalacha = await atenderAutorizacionTalacha(
+      { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, texto,
+    );
+    if (rTalacha) {
+      logger.info('oficina.talacha_decision', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rTalacha);
+      return true;
+    }
+  } catch (e) {
+    logger.error('oficina.talacha_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // Sin flota no hay nada que despachar ni sobre qué informar. Es el caso del
+  // superadmin, que no pertenece a ninguna.
+  if (!cuenta.tenantId) return false;
+
+  // ── EL JEFE DESPACHA POR WHATSAPP (F4, despacho_wa.ts) ────────────────────
+  // "nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000" → resumen
+  // → SÍ/NO → crearViaje (que ya avisa al chofer solo). El rol se re-verifica
+  // ADENTRO (`puedeAsignar`); un error aquí NO deja al jefe sin respuesta.
+  try {
+    const rDespacho = await atenderDespachoOficina(
+      { tenantId: cuenta.tenantId, rol: cuenta.rol }, from, texto,
+    );
+    if (rDespacho) {
+      logger.info('oficina.despacho', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rDespacho);
+      return true;
+    }
+  } catch (e) {
+    logger.error('oficina.despacho_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // ── ASIGNAR UNIDAD / REASIGNAR CHOFER (F4, asignar_wa.ts) ─────────────────
+  // Va DESPUÉS de despacho: si hay un viaje esperando confirmación, ese "sí" es
+  // del viaje (ver el encabezado de `asignar_wa.ts` sobre el pendiente único).
+  try {
+    const rAsignacion = await atenderAsignacionOficina(
+      { tenantId: cuenta.tenantId, rol: cuenta.rol }, from, texto,
+    );
+    if (rAsignacion) {
+      logger.info('oficina.asignacion', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rAsignacion);
+      return true;
+    }
+  } catch (e) {
+    logger.error('oficina.asignacion_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // ── "MÁNDAME EL INFORME EN PDF" ──────────────────────────────────────────
+  // Más específico que el informe de texto, así que va ANTES. Un fallo se
+  // CONTESTA: silencio tras una petición es la peor respuesta.
+  if (pideInformePdf(texto)) {
+    try {
+      const acuse = await mandarInformePdf(
+        { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId, nombre: cuenta.nombre }, from,
+      );
+      logger.info('oficina.informe_pdf', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, acuse);
+    } catch (e) {
+      logger.error('oficina.informe_pdf_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+      await sendText(from, 'No pude armar tu informe en PDF ahorita. Pregúntame «¿cómo van?» y te paso las cifras en texto, o inténtalo de nuevo en unos minutos. 🙏');
+    }
+    return true;
+  }
+
+  // ── "¿CÓMO VAN?" — EL INFORME CON CIFRAS REALES (F4, informes_wa) ─────────
+  // Consulta estructurada y plantilla, SIN modelo. El dinero solo sale para el
+  // rol que lo ve en el panel (`visibilidad.ts`); si una consulta falla, el
+  // informe DICE que no pudo leer, nunca un cero que parezca medición.
+  try {
+    const rInforme = await atenderInformeOficina(
+      { tenantId: cuenta.tenantId, rol: cuenta.rol }, texto,
+    );
+    if (rInforme) {
+      logger.info('oficina.informe', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rInforme);
+      return true;
+    }
+  } catch (e) {
+    logger.error('oficina.informe_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // ── LA PREGUNTA LIBRE → EL ANALISTA (oficina_wa) ──────────────────────────
+  // `null` = rol sin analista (encargado) — el llamador sigue a lo suyo.
+  if (opciones.incluirPreguntaLibre) {
+    const rLibre = await atenderPreguntaLibre(
+      { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId, nombre: cuenta.nombre }, texto,
+    );
+    if (rLibre) {
+      logger.info('oficina.pregunta_libre', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rLibre);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function processInbound(msg: InboundMessage): Promise<void> {
   // Idempotencia: si Meta reintenta el webhook, no re-procesar (no duplicar gasto).
   const claim = msg.waMessageId ? await claimMessage(msg.waMessageId) : 'nuevo';
@@ -525,127 +660,17 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           }
         }
 
-        // ── ¿ES LA DECISIÓN DE UNA TALACHA? (F4, talacha_wa.ts) ──────────────
+        // ── LOS MANDOS DE OFICINA, TODOS EN UN SITIO ─────────────────────────
         //
-        // Va ANTES del despacho a propósito: el botón `tal_si:<uuid>` es la
-        // respuesta a una pregunta CONCRETA que le mandamos, y con un viaje
-        // pendiente de despacho ese módulo se queda con todo lo que no sea
-        // sí/no — un id crudo de botón terminaría en el resumen del viaje. El
-        // tenant va del LOOKUP (cuenta), jamás del texto: un id de otra flota
-        // toca cero filas y recibe "no encontré esa solicitud".
-        if (msg.type === 'text' && msg.text) {
-          try {
-            const rTalacha = await atenderAutorizacionTalacha(
-              { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, msg.text,
-            );
-            if (rTalacha) {
-              logger.info('oficina.talacha_decision', { user: cuenta.userId, rol: cuenta.rol });
-              await sendText(msg.from, rTalacha);
-              return;
-            }
-          } catch (e) {
-            logger.error('oficina.talacha_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
-          }
+        // Talacha, despacho, asignación, informe y analista viven en
+        // `atenderTextoOficina` desde que el camino del chofer también los
+        // necesita (un dueño que maneja es su propio operador). Aquí entra con
+        // el analista ENCENDIDO: este número no es de nadie más, así que una
+        // pregunta suelta es suya y no se le disputa a ningún acuse de ruta.
+        if (msg.type === 'text' && msg.text
+            && await atenderTextoOficina(cuenta, msg.from, msg.text, { incluirPreguntaLibre: true })) {
+          return;
         }
-
-        // ── EL JEFE DESPACHA POR WHATSAPP (F4, despacho_wa.ts) ───────────────
-        //
-        // "nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000" →
-        // resumen → SÍ/NO → crearViaje (que ya avisa al chofer solo). El
-        // módulo devuelve null cuando el mensaje no es de despacho y este
-        // bloque cae al saludo de siempre. El rol se re-verifica ADENTRO
-        // (`puedeAsignar`); un error aquí NO deja al jefe sin respuesta.
-        if (cuenta.tenantId && msg.type === 'text' && msg.text) {
-          try {
-            const rDespacho = await atenderDespachoOficina(
-              { tenantId: cuenta.tenantId, rol: cuenta.rol }, msg.from, msg.text,
-            );
-            if (rDespacho) {
-              logger.info('oficina.despacho', { user: cuenta.userId, rol: cuenta.rol });
-              await sendText(msg.from, rDespacho);
-              return;
-            }
-          } catch (e) {
-            logger.error('oficina.despacho_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
-          }
-
-          // ── ASIGNAR UNIDAD / REASIGNAR CHOFER (F4, asignar_wa.ts) ──────────
-          //
-          // "asígnale la unidad 12 al viaje de Juan" → resumen → SÍ/NO →
-          // asignarUnidad/reasignarOperador. Va DESPUÉS de despacho: si hay un
-          // viaje esperando confirmación, ese "sí" es del viaje (ver el
-          // encabezado de asignar_wa.ts sobre el pendiente único).
-          try {
-            const rAsignacion = await atenderAsignacionOficina(
-              { tenantId: cuenta.tenantId, rol: cuenta.rol }, msg.from, msg.text,
-            );
-            if (rAsignacion) {
-              logger.info('oficina.asignacion', { user: cuenta.userId, rol: cuenta.rol });
-              await sendText(msg.from, rAsignacion);
-              return;
-            }
-          } catch (e) {
-            logger.error('oficina.asignacion_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
-          }
-
-          // ── "MÁNDAME EL INFORME EN PDF" (17-ago-2026, oficina_wa) ──────────
-          //
-          // Más específico que el informe de texto, así que va ANTES. El PDF
-          // sale del motor de informes (canon de la casa), viaja por el mismo
-          // camino que el PDF de liquidación, y el dinero solo entra al
-          // documento del rol que lo ve. Un fallo se CONTESTA — silencio
-          // tras una petición es la peor respuesta.
-          if (cuenta.tenantId && pideInformePdf(msg.text)) {
-            try {
-              const acuse = await mandarInformePdf(
-                { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId, nombre: cuenta.nombre }, msg.from,
-              );
-              logger.info('oficina.informe_pdf', { user: cuenta.userId, rol: cuenta.rol });
-              await sendText(msg.from, acuse);
-            } catch (e) {
-              logger.error('oficina.informe_pdf_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
-              await sendText(msg.from, 'No pude armar tu informe en PDF ahorita. Pregúntame «¿cómo van?» y te paso las cifras en texto, o inténtalo de nuevo en unos minutos. 🙏');
-            }
-            return;
-          }
-
-          // ── "¿CÓMO VAN?" — EL INFORME CON CIFRAS REALES (F4, informes_wa) ──
-          //
-          // Consulta estructurada y plantilla, SIN modelo — el molde de
-          // consulta_chofer. El dinero solo sale para el rol que lo ve en el
-          // panel (visibilidad.ts); si una consulta falla, el informe DICE que
-          // no pudo leer, nunca un cero que parezca medición.
-          try {
-            const rInforme = await atenderInformeOficina(
-              { tenantId: cuenta.tenantId, rol: cuenta.rol }, msg.text,
-            );
-            if (rInforme) {
-              logger.info('oficina.informe', { user: cuenta.userId, rol: cuenta.rol });
-              await sendText(msg.from, rInforme);
-              return;
-            }
-          } catch (e) {
-            logger.error('oficina.informe_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
-          }
-        }
-
-        // ── LA PREGUNTA LIBRE → EL ANALISTA (17-ago-2026, oficina_wa) ────────
-        //
-        // "¿cuánto gastamos en diésel este mes?" del dueño o del contador ya
-        // no cae al saludo: lo contesta el MISMO analista del panel (tools de
-        // lectura + guardia de cifras) en texto de WhatsApp. `null` = rol sin
-        // analista (encargado) — sigue al saludo de siempre.
-        if (cuenta.tenantId && msg.type === 'text' && msg.text) {
-          const rLibre = await atenderPreguntaLibre(
-            { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId, nombre: cuenta.nombre }, msg.text,
-          );
-          if (rLibre) {
-            logger.info('oficina.pregunta_libre', { user: cuenta.userId, rol: cuenta.rol });
-            await sendText(msg.from, rLibre);
-            return;
-          }
-        }
-
         const quien = cuenta.nombre ? `${cuenta.nombre}` : 'Qué tal';
         // Se le dice lo que SÍ puede hacer hoy por aquí y se le manda al panel
         // para lo demás — y desde F4, despachar por aquí YA existe, así que el
@@ -692,6 +717,55 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     ctxTenant = op.tenantId;
     const viajeId = await getOpenViaje(op.tenantId, op.operadorId);
     ctxViaje = viajeId;
+
+    // ── EL DUEÑO QUE MANEJA TAMBIÉN DESPACHA ────────────────────────────────
+    //
+    // `resolveOperador` acertó, así que hasta aquí este mensaje era del chofer y
+    // solo del chofer. Pero en una flota chica el dueño maneja, y `contactos.ts`
+    // devuelve LAS DOS caras justamente porque un número puede ser las dos
+    // cosas; lo que faltaba era que alguien preguntara por la segunda. Sin esto,
+    // dar de alta al dueño como operador —para que pueda mandar sus tickets—
+    // le apagaba el despacho y los informes por WhatsApp, y nada se lo decía.
+    //
+    // SOLO TEXTO. Una foto, un XML, un pin o un botón son de ruta por
+    // definición; el mando de oficina viaja escrito.
+    //
+    // DESPUÉS DE `getOpenViaje` Y ANTES DEL GATE DE AVISO, y las dos cosas a
+    // propósito. Después, porque el viaje abierto es el desempate y hace falta
+    // tenerlo. Antes, porque pedir el informe de la flota no trata datos
+    // personales del operador: bloquear un «¿cómo van?» del dueño porque su
+    // propia empresa no publicó su aviso sería cobrarle una deuda que tiene
+    // consigo mismo.
+    if (msg.type === 'text' && msg.text) {
+      const cuentaPropia = await resolverCuentaOficina(msg.from).catch((e) => {
+        // Ambigüedad o base caída: NO se afirma que no tiene cuenta de oficina.
+        // Se sigue como chofer, que es lo que ya se sabe cierto de este número.
+        logger.error('chofer.oficina_no_resuelta', { err: e instanceof Error ? e.message : String(e) });
+        return null;
+      });
+      // EL TENANT TIENE QUE SER EL MISMO. Dos filas del mismo número apuntando a
+      // flotas distintas es dato corrupto, y aquí decidiría SOBRE QUÉ FLOTA se
+      // despacha: se registra y se sigue como chofer, que es la cara que ya
+      // trae tenant comprobado. Mismo criterio que `resolveOperador` ante dos
+      // filas — negarse a adivinar es lo único correcto cuando el que decide el
+      // tenant es el dato que está roto.
+      if (cuentaPropia?.tenantId && cuentaPropia.tenantId !== op.tenantId) {
+        logger.error('chofer.oficina_otro_tenant', {
+          telefono: msg.from, operadorTenant: op.tenantId, cuentaTenant: cuentaPropia.tenantId,
+        });
+      } else if (cuentaPropia
+          // EL ANALISTA SE ENCIENDE SOLO SIN VIAJE ABIERTO, y ése es justo el
+          // desempate que `contactos.ts` describe: "si trae viaje abierto, es
+          // chofer; si pregunta por su flota, es oficina". Importa porque el
+          // analista contesta CUALQUIER texto —los demás reconocedores se
+          // apartan solos devolviendo null, él no—, así que en ruta se comería
+          // «ya llegué» y «listo», que son con los que se cierra un viaje. Sin
+          // viaje abierto no hay nada de ruta que decir y la pregunta es del
+          // dueño. Lo que ningún reconocedor reclame sigue su camino intacto.
+          && await atenderTextoOficina(cuentaPropia, msg.from, msg.text, { incluirPreguntaLibre: !viajeId })) {
+        return;
+      }
+    }
 
     // ── Aviso de privacidad, ANTES de CUALQUIER tratamiento (LFPDPPP 16-II) ──
     // AUDITORÍA 3, LEG-C1 (CRÍTICO, reincidente): el gate vivía después de la
