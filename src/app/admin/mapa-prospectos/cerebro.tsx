@@ -21,6 +21,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { proyectar } from '../../dashboard/mapa/mexico-geo';
 import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-geo';
 import {
@@ -207,7 +208,10 @@ function TarjetaProspecto({ p, nuevo, afinando, onAfinar, onToque, plana }: {
       <div className="flex items-start gap-2">
         <span className="mt-1 w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color, boxShadow: `0 0 8px ${c.color}` }} />
         <div className="min-w-0">
-          <h4 className="text-sm font-medium leading-snug truncate" style={{ color: TINTA }}>{p.empresa}</h4>
+          <Link href={`/admin/mapa-prospectos/${p.id}`}
+            className="text-sm font-medium leading-snug truncate block hover:underline" style={{ color: TINTA }}>
+            {p.empresa}
+          </Link>
           <p className="text-[11px]" style={{ color: TENUE }}>
             {c.nombre} · {NOMBRE_GIRO[p.giro]}{p.tamano ? ` · ${p.tamano} pers.` : ''}{p.ciudad ? ` · ${p.ciudad}` : ''} · datos {p.completitud}%
           </p>
@@ -577,6 +581,27 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
                 ⌂
               </button>
             )}
+            {/* Los dos atajos más pedidos (orden 20-ago): un clic, sin abrir
+                el popup de Filtros. Mismo estado que sus chips de adentro —
+                se puede apagar desde cualquiera de los dos lados. */}
+            <button onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}
+              className={BOTON_BARRA}
+              style={{
+                background: filtros.soloDecisor ? '#16a34a' : SUPERFICIE,
+                border: `1px solid ${filtros.soloDecisor ? '#16a34a' : LINEA}`,
+                color: filtros.soloDecisor ? '#fff' : TINTA, boxShadow: SOMBRA_FLOTANTE,
+              }}>
+              ✓ Con decisor
+            </button>
+            <button onClick={() => setFiltros((f) => ({ ...f, minUrgencia: f.minUrgencia === 70 ? 0 : 70 }))}
+              className={BOTON_BARRA}
+              style={{
+                background: filtros.minUrgencia === 70 ? '#ea580c' : SUPERFICIE,
+                border: `1px solid ${filtros.minUrgencia === 70 ? '#ea580c' : LINEA}`,
+                color: filtros.minUrgencia === 70 ? '#fff' : TINTA, boxShadow: SOMBRA_FLOTANTE,
+              }}>
+              🔥 Urgentes
+            </button>
             <button ref={botonFiltrosRef} onClick={() => setFiltrosAbiertos((v) => !v)}
               className={`${BOTON_BARRA} ${filtrosActivos ? '' : 'hover:bg-[var(--canvas)]'}`}
               style={{ background: filtrosActivos ? 'var(--ink)' : SUPERFICIE, border: `1px solid ${filtrosActivos ? 'var(--ink)' : LINEA}`, color: filtrosActivos ? 'var(--canvas)' : TINTA, boxShadow: SOMBRA_FLOTANTE }}>
