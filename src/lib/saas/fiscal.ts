@@ -75,10 +75,31 @@ export async function getDatosFiscales(tenantId: string): Promise<DatosFiscalesF
  * inofensivas. Se guarda tal cual la capturó quien tiene la constancia enfrente
  * — nosotros no sabemos mejor que su Constancia de Situación Fiscal.
  */
-export async function guardarDatosFiscales(
-  tenantId: string,
-  d: { rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string; usoCfdi: string },
-): Promise<void> {
+export interface DatosFiscalesCapturados {
+  rfc: string; razonSocial: string; regimenFiscal: string; codigoPostal: string; usoCfdi: string;
+}
+
+/** Las cinco columnas de `tenant`, ya normalizadas y listas para escribir. */
+export interface FilaFiscalTenant {
+  rfc: string;
+  razon_social: string;
+  regimen_fiscal: string;
+  codigo_postal_fiscal: string;
+  uso_cfdi: string;
+}
+
+/**
+ * Valida y normaliza los cinco datos del receptor. Lanza `DatoInvalido` con la
+ * frase que va a leer una persona.
+ *
+ * VIVE APARTE DE `guardarDatosFiscales` PORQUE EL ALTA TAMBIÉN LO NECESITA, y
+ * necesita validar ANTES de insertar el tenant: si la comprobación viviera solo
+ * dentro del update, un CP de cuatro dígitos dejaría la flota ya creada y a
+ * medio configurar, y quien la dio de alta vería un error después de que su
+ * clic ya cambió la base. Duplicar las reglas era la otra salida, y dos copias
+ * de un validador fiscal se separan: la copia laxa acaba siendo la que escribe.
+ */
+export function validarDatosFiscales(d: DatosFiscalesCapturados): FilaFiscalTenant {
   const rfc = d.rfc.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '');
   if (!esRfcValido(rfc) || !rfcChecksumOk(rfc)) {
     throw new DatoInvalido(
@@ -86,6 +107,10 @@ export async function guardarDatosFiscales(
     );
   }
 
+  // LA RAZÓN SOCIAL NO SE "LIMPIA" MÁS ALLÁ DE LOS ESPACIOS. El SAT la compara
+  // con lo que tiene registrado para ese RFC y rechaza por diferencias que se
+  // ven inofensivas. Se guarda tal cual la capturó quien tiene la constancia
+  // enfrente — nosotros no sabemos mejor que su Constancia de Situación Fiscal.
   const razonSocial = d.razonSocial.trim();
   if (razonSocial.length < 3) {
     throw new DatoInvalido('Falta la razón social, tal como aparece en tu Constancia de Situación Fiscal.');
@@ -103,15 +128,31 @@ export async function guardarDatosFiscales(
     throw new DatoInvalido('Elige un uso de CFDI de la lista.');
   }
 
+  return {
+    rfc,
+    razon_social: razonSocial,
+    regimen_fiscal: d.regimenFiscal,
+    codigo_postal_fiscal: cp,
+    uso_cfdi: d.usoCfdi,
+  };
+}
+
+/**
+ * Guarda los datos fiscales con los que se le va a facturar a la flota.
+ *
+ * EL RFC SE VALIDA CON DÍGITO VERIFICADOR, igual que en el alta de flota. Aquí
+ * el costo de uno malo es distinto y peor: el PAC rechaza el timbrado cuando ya
+ * hay pagos cobrados, y quien se queda sin poder deducir es el cliente.
+ */
+export async function guardarDatosFiscales(
+  tenantId: string,
+  d: DatosFiscalesCapturados,
+): Promise<void> {
+  const fila = validarDatosFiscales(d);
+
   const { error } = await supabaseAdmin()
     .from('tenant')
-    .update({
-      rfc,
-      razon_social: razonSocial,
-      regimen_fiscal: d.regimenFiscal,
-      codigo_postal_fiscal: cp,
-      uso_cfdi: d.usoCfdi,
-    })
+    .update(fila)
     .eq('id', tenantId);
 
   if (error) throw new Error(`guardarDatosFiscales: ${error.message}`);
