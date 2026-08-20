@@ -55,6 +55,46 @@ export async function cuentasCompartidas(tenantId: string): Promise<Set<string>>
 }
 
 /**
+ * TODAS las credenciales de portal de la flota, descifradas: clave de comercio
+ * → valores. Es lo que el cron le pasa al registro de adaptadores para que el
+ * piloto de visión pueda entrar a los portales con cuenta.
+ *
+ * Una fila que no descifra SE SALTA con grito en el log — el resto de las
+ * cuentas no puede pagar por una corrupta — y el secreto jamás viaja en el
+ * error.
+ */
+export async function credencialesDePortales(tenantId: string): Promise<Map<string, ValoresCredencial>> {
+  const vacio = new Map<string, ValoresCredencial>();
+  if (!cofreConfigurado()) return vacio;
+
+  const { data, error } = await supabaseAdmin()
+    .from('conector_credencial')
+    .select('conector_id, valores_cifrados')
+    .eq('tenant_id', tenantId)
+    .eq('activo', true)
+    .like('conector_id', 'portal_facturacion:%');
+
+  if (error) {
+    logger.warn('facturacion.credenciales_sin_leer', { tenant: tenantId, err: error.message });
+    return vacio;
+  }
+
+  for (const f of data ?? []) {
+    const fila = f as { conector_id: unknown; valores_cifrados: unknown };
+    const clave = comercioDeConector(String(fila.conector_id));
+    if (!clave || !fila.valores_cifrados) continue;
+    try {
+      vacio.set(clave, descifrar(String(fila.valores_cifrados)));
+    } catch (e) {
+      logger.error('facturacion.credencial_no_descifra', {
+        tenant: tenantId, comercio: clave, err: e instanceof Error ? e.message : 'error',
+      });
+    }
+  }
+  return vacio;
+}
+
+/**
  * La credencial del portal de UN comercio, descifrada, para el robot que va a
  * entrar. `null` = no hay cuenta compartida activa (o no se pudo leer), y el
  * llamador manda el ticket con la persona.

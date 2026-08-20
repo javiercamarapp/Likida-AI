@@ -83,6 +83,61 @@ export interface PaginaPortal {
 
 export type FabricaDePagina = () => Promise<PaginaPortal>;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EL INVENTARIO DE UNA PÁGINA — lo que el piloto de visión necesita LEER para
+// poder actuar sin selectores escritos a mano.
+//
+// Es la MISMA extracción que los pre-vuelos hacían inline (megasur-prevuelo,
+// capufe-prevuelo): campos con sus señas, botones con su texto, marcas de
+// captcha y el texto visible. Vive en el contrato y no en el piloto porque es
+// una capacidad de la PÁGINA (la implementa Playwright con `evaluate`), y así
+// el piloto entero se prueba con un doble, sin Chromium — el mismo trato que
+// `PaginaPortal` le da a los adaptadores de selector.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface CampoInventariado {
+  tag: string;
+  type: string;
+  id: string;
+  name: string;
+  placeholder: string;
+  /** La etiqueta que un humano ve junto al campo. */
+  etiqueta: string;
+  visible: boolean;
+  /** Solo para `<select>`: `value=texto`, recortadas. */
+  opciones: string[];
+}
+
+export interface BotonInventariado {
+  tag: string;
+  id: string;
+  name: string;
+  texto: string;
+  visible: boolean;
+}
+
+export interface InventarioPagina {
+  url: string;
+  titulo: string;
+  campos: CampoInventariado[];
+  botones: BotonInventariado[];
+  /** Señales de reCAPTCHA/hCaptcha/Turnstile. No vacío = persona. */
+  captcha: string[];
+  /** El texto visible, recortado: contexto, no transcripción. */
+  texto: string;
+}
+
+/**
+ * Una página que además sabe describirse. Lo que el piloto de visión exige:
+ * sin inventario no hay selectores reales que elegir, y un selector inventado
+ * sobre una captura es exactamente la clase de apuesta que los pre-vuelos
+ * existen para matar.
+ */
+export interface PaginaConInventario extends PaginaPortal {
+  inventario(): Promise<InventarioPagina>;
+  seleccionar?(selector: string, valor: string): Promise<void>;
+}
+
 /**
  * Cuánto se le da a un portal para enseñar el UUID DESPUÉS de apretar emitir.
  *

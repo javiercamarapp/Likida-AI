@@ -26,7 +26,7 @@
 //   Para el demo en vivo, tener keys directas de Google/Anthropic como respaldo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'chat_ligero' | 'router' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa';
+export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'chat_ligero' | 'router' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto';
 
 const DEFAULTS: Record<ModelRole, string> = {
   // OCR de comprobantes (visión). Gemini 3.6 Flash (21-jul-2026): #1 OCR Arena
@@ -115,6 +115,13 @@ const DEFAULTS: Record<ModelRole, string> = {
   // adversarial barato — razonamiento por centavos, mismo modelo que la
   // auditoría: cazan juntos.
   qa: 'openai/gpt-oss-120b',                   // $0.03/$0.17
+  // PILOTO DE VISIÓN (portales de facturación sin adaptador escrito): mira la
+  // pantalla del portal y decide la SIGUIENTE acción del navegador. Sonnet 5 y
+  // no un modelo barato a propósito: cada acción toca un formulario fiscal
+  // real, y el techo de daño lo pone el código (el piloto no emite nunca, ver
+  // piloto_vision.ts), pero un selector mal elegido quema una corrida entera.
+  // Se paga por PASO (~8-14 por portal), solo cuando FACTURACION_PILOTO=si.
+  piloto: 'anthropic/claude-sonnet-5',         // $2/$10 (intro hasta 31-ago)
 };
 
 const ENV_KEY: Record<ModelRole, string> = {
@@ -131,6 +138,7 @@ const ENV_KEY: Record<ModelRole, string> = {
   codigo: 'LIKIDA_MODEL_CODIGO',
   codigo_escritura: 'LIKIDA_MODEL_CODIGO_ESCRITURA',
   qa: 'LIKIDA_MODEL_QA',
+  piloto: 'LIKIDA_MODEL_PILOTO',
 };
 
 /** Devuelve el slug del modelo para un rol, respetando override por env. */
@@ -153,4 +161,5 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   codigo: { temperature: 0 },                 // hallazgos, no diffs
   codigo_escritura: { temperature: 0, reasoning: 'high' }, // el diff no se improvisa
   qa: { temperature: 0.3 },                   // adversarial, no caótico
+  piloto: { temperature: 0 },                 // un formulario fiscal no se improvisa
 };

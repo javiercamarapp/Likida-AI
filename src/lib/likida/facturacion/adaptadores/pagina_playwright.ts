@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page, type Locator } from 'playwright-core';
 import { logger } from '@/lib/logger';
-import type { FabricaDePagina, PaginaPortal } from './playwright_base';
+import type { FabricaDePagina, InventarioPagina, PaginaPortal } from './playwright_base';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL NAVEGADOR DE VERDAD. La pieza que le faltaba a todo lo demás.
@@ -778,6 +778,64 @@ export class PaginaPlaywright implements PaginaPortal {
       logger.warn('portal.existe_fallo', { selector, error: texto(e) });
       return false;
     }
+  }
+
+  /**
+   * El inventario de la página, para el piloto de visión.
+   *
+   * Es la MISMA extracción que el pre-vuelo de Megasur hacía inline (y de la
+   * que salió, palabra por palabra): campos con sus señas para armar un
+   * selector real, botones con su texto, señales de captcha y el texto
+   * visible recortado. Solo LECTURA: `evaluate` no toca el DOM.
+   */
+  async inventario(): Promise<InventarioPagina> {
+    return acotar(async () => {
+      const bruto = await this.page.evaluate(() => {
+        const visible = (el: Element) => {
+          const r = (el as HTMLElement).getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        };
+        const etiqueta = (el: Element): string => {
+          const id = el.getAttribute('id');
+          if (id) {
+            const l = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+            if (l?.textContent?.trim()) return l.textContent.trim();
+          }
+          const padre = el.closest('label');
+          if (padre?.textContent?.trim()) return padre.textContent.trim();
+          return el.previousElementSibling?.textContent?.trim() ?? '';
+        };
+        return {
+          url: location.href,
+          titulo: document.title,
+          campos: [...document.querySelectorAll('input, select, textarea')].map((el) => ({
+            tag: el.tagName.toLowerCase(),
+            type: el.getAttribute('type') ?? '',
+            id: el.getAttribute('id') ?? '',
+            name: el.getAttribute('name') ?? '',
+            placeholder: el.getAttribute('placeholder') ?? '',
+            etiqueta: etiqueta(el).slice(0, 80),
+            visible: visible(el),
+            opciones: el.tagName === 'SELECT'
+              ? [...(el as HTMLSelectElement).options].slice(0, 12).map((o) => `${o.value}=${o.text}`.slice(0, 60))
+              : [],
+          })),
+          botones: [...document.querySelectorAll('button, input[type=submit], input[type=button], a[role=button]')].map((el) => ({
+            tag: el.tagName.toLowerCase(),
+            id: el.getAttribute('id') ?? '',
+            name: el.getAttribute('name') ?? '',
+            texto: (el.textContent ?? (el as HTMLInputElement).value ?? '').trim().slice(0, 60),
+            visible: visible(el),
+          })),
+          captcha: [...document.querySelectorAll('iframe, div, script')]
+            .map((el) => el.getAttribute('src') ?? el.getAttribute('class') ?? '')
+            .filter((s) => /recaptcha|hcaptcha|turnstile|captcha/i.test(s))
+            .slice(0, 5),
+          texto: (document.body.innerText ?? '').replace(/\n{3,}/g, '\n\n').slice(0, 1800),
+        };
+      });
+      return bruto as InventarioPagina;
+    }, this.topes.lectura, 'inventario');
   }
 
   /**

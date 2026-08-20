@@ -1,6 +1,9 @@
 import { logger } from '@/lib/logger';
 import { registrarAdaptador, portalesAutomatizados, type AdaptadorPortal, type ModoAgente } from '../agente';
+import { COMERCIOS, type Comercio } from '../comercios';
 import { registrarCapufe, revisarReceptor, type DatosReceptorCapufe, type OpcionesCapufe } from './capufe';
+import { crearPilotoVision } from './piloto_vision';
+import type { ValoresCredencial } from '../../conectores/tipos';
 import type { FabricaDePagina } from './playwright_base';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -94,6 +97,13 @@ export interface OpcionesRegistro {
   abrirPagina: FabricaDePagina;
   /** Ajustes por portal, para cuando uno resulte distinto en campo. */
   capufe?: Omit<Partial<OpcionesCapufe>, 'abrirPagina' | 'receptor'>;
+  /**
+   * Las cuentas de portal que ESTA flota compartió, descifradas
+   * (`credencialesDePortales`). Solo las mira el piloto de visión: un portal
+   * con cuenta y sin credencial aquí no se registra, y el ticket va con el
+   * encargado como siempre.
+   */
+  cuentas?: ReadonlyMap<string, ValoresCredencial>;
 }
 
 export interface ResultadoRegistro {
@@ -154,6 +164,39 @@ const TABLA: ReadonlyArray<{
  */
 export const PORTALES_CONOCIDOS: readonly string[] = TABLA.map((p) => p.comercio);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PILOTO DE VISIÓN — los portales SIN adaptador escrito, cuando se enciende.
+//
+// `FACTURACION_PILOTO=si` es la palanca, y es opt-in por la misma razón que
+// el modo `emitir`: el piloto paga llamadas de visión por paso y toca
+// formularios fiscales reales (en ensayo: llena, captura y NUNCA emite — ver
+// piloto_vision.ts). Encendido, todo comercio con ficha COMPLETA (campos
+// leídos, sin `camposPendientes`) y sin entrada en TABLA se vuelve operable;
+// si su portal pide cuenta, además hace falta la credencial compartida de esa
+// flota (`op.cuentas`), o el portal se queda con el encargado como siempre.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export function pilotoHabilitado(): boolean {
+  return process.env.FACTURACION_PILOTO === 'si';
+}
+
+/** Fichas que el piloto sabría volar: completas y sin adaptador escrito. */
+export const COMERCIOS_PILOTABLES: readonly Comercio[] = COMERCIOS.filter(
+  (c) => c.campos.length > 0 && !c.camposPendientes && !PORTALES_CONOCIDOS.includes(c.clave),
+);
+
+/**
+ * QUÉ PORTALES SE PUEDEN OPERAR EN ESTA CORRIDA: los escritos siempre, y los
+ * pilotables cuando la palanca está puesta. Es la lista que el cron y el aviso
+ * tienen que mirar — mirar solo `PORTALES_CONOCIDOS` con el piloto encendido
+ * mandaría al encargado tickets que la máquina va a intentar sola.
+ */
+export function portalesOperables(): readonly string[] {
+  return pilotoHabilitado()
+    ? [...PORTALES_CONOCIDOS, ...COMERCIOS_PILOTABLES.map((c) => c.clave)]
+    : PORTALES_CONOCIDOS;
+}
+
 /** De qué flota son los adaptadores que están puestos ahora mismo. */
 let flotaVigente: string | null = null;
 
@@ -187,6 +230,43 @@ export function registrarPortales(op: OpcionesRegistro): ResultadoRegistro {
     portal.registrar(op);
     ESTADO.set(marca(tenantId, portal.comercio), 'vivo');
     registrados.push(portal.comercio);
+  }
+
+  // ── El piloto de visión, para lo que TABLA no cubre ────────────────────
+  if (pilotoHabilitado()) {
+    const faltaReceptor = revisarReceptor(op.flota);
+    for (const comercio of COMERCIOS_PILOTABLES) {
+      if (faltaReceptor.length > 0) {
+        problemas.push(`${comercio.clave}: ${faltaReceptor.join('; ')}`);
+        registrarAdaptador(tenantId, centinela(comercio.clave, `Los datos fiscales de esta flota no sirven para facturar en ${comercio.clave}: ${faltaReceptor.join('; ')}.`));
+        ESTADO.set(marca(tenantId, comercio.clave), 'centinela');
+        continue;
+      }
+      const credencial = op.cuentas?.get(comercio.clave) ?? null;
+      if (comercio.requiereCuenta && !credencial) {
+        // NO es un problema: es el estado normal de un portal cuya cuenta no
+        // se ha compartido. `enrutar` lo manda con el encargado, que es el
+        // camino que siempre funcionó. Ni adaptador ni centinela.
+        ESTADO.delete(marca(tenantId, comercio.clave));
+        continue;
+      }
+      registrarAdaptador(tenantId, crearPilotoVision({
+        comercio,
+        // Campo por campo, no spread: el tenantId no viaja dentro del receptor.
+        receptor: {
+          rfc: op.flota.rfc,
+          nombre: op.flota.nombre,
+          codigoPostal: op.flota.codigoPostal,
+          regimenFiscal: op.flota.regimenFiscal,
+          usoCfdi: op.flota.usoCfdi,
+          correo: op.flota.correo,
+        },
+        abrirPagina: op.abrirPagina,
+        credencial,
+      }));
+      ESTADO.set(marca(tenantId, comercio.clave), 'vivo');
+      registrados.push(comercio.clave);
+    }
   }
 
   flotaVigente = op.flota.tenantId;
@@ -237,9 +317,13 @@ export function exigirTenantRegistrado(tenantId: string): void {
  * el cajón entero.
  */
 export function olvidarPortales(tenantId: string): void {
-  for (const portal of TABLA) {
-    registrarAdaptador(tenantId, centinela(portal.comercio, `El lote de facturación ya cerró: hay que volver a registrar ${portal.comercio} con los datos fiscales de la flota antes de facturar otra vez.`));
-    ESTADO.set(marca(tenantId, portal.comercio), 'centinela');
+  // TABLA y pilotables por igual: un piloto viejo lleva DENTRO la credencial y
+  // los datos fiscales con los que se registró, y dejarlo vivo tras el lote es
+  // exactamente el adaptador cacheado que este archivo existe para impedir.
+  const claves = [...TABLA.map((p) => p.comercio), ...COMERCIOS_PILOTABLES.map((c) => c.clave)];
+  for (const comercio of claves) {
+    registrarAdaptador(tenantId, centinela(comercio, `El lote de facturación ya cerró: hay que volver a registrar ${comercio} con los datos fiscales de la flota antes de facturar otra vez.`));
+    ESTADO.set(marca(tenantId, comercio), 'centinela');
   }
   if (flotaVigente === tenantId) flotaVigente = null;
 }
