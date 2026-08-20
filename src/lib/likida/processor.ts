@@ -971,14 +971,17 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // nada en vuelo, así que lo que quedara anotado es de una anterior que
       // murió sin cerrarse y no puede sumarse a ésta.
       anotarFoto(viajeId, incrementado === 1);
-      // ¿ESTA FOTO LLEGÓ SOLA? El contador es atómico, así que `1` significa
-      // exactamente eso: no hay otra en vuelo. Es la única situación en la que
-      // contestarle por la foto NO produce una avalancha, y es la que preserva
-      // el comportamiento de una foto suelta tal cual estaba.
+      // AQUÍ VIVÍA `llegoSola = incrementado === 1`, y era falso justo cuando
+      // más importaba. `1` no significa «llegó sola»: significa «es la primera
+      // en vuelo», y toda ráfaga tiene una primera. El incremento es atómico,
+      // así que en un fajo de 22 exactamente una foto lo veía, contestaba por
+      // su cuenta, y luego el resumen la volvía a contar — el chofer leía el
+      // mismo trabón dos veces (medido, 20-ago-2026).
       //
-      // En ráfaga se anota y se calla; el `finally` lo dice todo junto. Ver
-      // `intake/rafaga.ts` para por qué esa es la forma correcta aquí.
-      const llegoSola = incrementado === 1;
+      // Los tres caminos que contestaban por foto ahora ANOTAN su mensaje en la
+      // libreta (`mensajeSolo`) y se callan. Quien sí sabe si hubo ráfaga es el
+      // `finally`: cuando el contador vuelve a 0 tiene el `vistas`. Ver
+      // `intake/rafaga.ts`.
       try {
         // Gancho de QA (ver InboundMessage.mediaDataUrlQA) — undefined en producción.
         const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
@@ -1134,25 +1137,26 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
             motivo: 'fallo_ocr', rutaImagen: ruta,
           });
           logger.warn('foto.fallo_tecnico_guardado', { viaje: viajeId, tenant: op.tenantId, guardado, conImagen: Boolean(ruta) });
-          // SE ANOTA SIEMPRE, se DICE solo si llegó sola. Anotarla también cuando
-          // ya se contestó por ella es lo que hace que el resumen cuadre con lo
-          // que el operador mandó: "de tus 22 fotos, 22 se me trabaron" en vez de
-          // un mensaje suelto más un resumen que dice 21 y parece otra cosa.
-          anotarIncidencia(viajeId, { tipo: 'fallo_tecnico' });
-          if (llegoSola) {
-            await say(guardado
+          // SE ANOTA SIEMPRE, y con ella el texto que le tocaría si resultara
+          // que llegó sola. Anotarla también cuando venía acompañada es lo que
+          // hace que el resumen cuadre con lo que el operador mandó: "de tus 22
+          // fotos, 22 se me trabaron" en vez de un resumen que dice 21 y parece
+          // otra cosa. Quién habla —éste o el resumen— lo decide el `finally`.
+          anotarIncidencia(viajeId, {
+            tipo: 'fallo_tecnico',
+            mensajeSolo: guardado
               ? 'Se me trabó a mí al leer ese comprobante ⚙️ — no es tu foto. Ya lo guardé, así que *no se pierde*. ¿Me lo reenvías en un momento? Si no alcanza a entrar en este viaje, te lo ofrezco en el siguiente. 📸'
-              : 'Se me trabó a mí al leer ese comprobante ⚙️ y tampoco lo pude guardar. Conserva el ticket y reenvíamelo en un rato, por favor. 🙏');
-          }
+              : 'Se me trabó a mí al leer ese comprobante ⚙️ y tampoco lo pude guardar. Conserva el ticket y reenvíamelo en un rato, por favor. 🙏',
+          });
           return;
         }
         if (decision.accion === 'pedir_reenvio') {
           // Mismo criterio: una gasolinera mal iluminada de noche no arruina una
           // foto, arruina las veintidós. Se consolidan en el resumen.
-          anotarIncidencia(viajeId, { tipo: 'ilegible' });
-          if (llegoSola) {
-            await say('Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?');
-          }
+          anotarIncidencia(viajeId, {
+            tipo: 'ilegible',
+            mensajeSolo: 'Esa foto salió difícil de leer 🔍. ¿Me la reenvías con buena luz y completo el ticket?',
+          });
           return;
         }
         // Acercamiento del protocolo de dos fotos: hizo lo correcto, no se le
@@ -1375,9 +1379,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
             tipo: 'fecha_dudosa',
             monto: gasto.monto,
             etiqueta: etiquetaConcepto(gasto.concepto, extra),
-          });
-          if (llegoSola) {
-            await say(mensajePideFechaOtraVez({
+            mensajeSolo: mensajePideFechaOtraVez({
               etiqueta: etiquetaConcepto(gasto.concepto, extra),
               monto: gasto.monto,
               folio: gasto.folio,
@@ -1386,8 +1388,8 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
               fecha: gasto.fecha!,
               fechaImpresa: extra.fechaImpresa as string | undefined,
               ejercicioHoy: ventana?.hoy ? Number(ventana.hoy.slice(0, 4)) : null,
-            }, dudosa));
-          }
+            }, dudosa),
+          });
         }
         // MANDAR UN COMPROBANTE ES ACEPTAR EL VIAJE.
         //
@@ -1579,16 +1581,44 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           // ésta sea la última —aunque no haya nada anotado— para no dejar la
           // libreta viva sobre un viaje cuya ráfaga ya terminó.
           const rafaga = ultima ? cerrarRafaga(viajeId) : null;
-          const incidencias = rafaga ? lineaIncidencias(rafaga.vistas, rafaga.incidencias) : null;
           // HUBO RÁFAGA si por aquí pasó más de una foto (`vistas`) o si el
           // contador vio más de una en vuelo (`incrementado`). Se miran las dos
           // porque cada una ve una mitad: `incrementado` es el instante en que
           // ESTA foto se registró —la primera de una ráfaga simultánea ve 1— y
           // `vistas` es todo lo que pasó por este proceso.
+          const huboRafaga = !!rafaga && (rafaga.vistas > 1 || incrementado > 1);
+
+          // UNA SOLA COSA QUE CONTAR SE CUENTA ENTERA.
           //
-          // Con UNA sola foto no se resume: su propio camino ya habló, y decirlo
-          // dos veces es el mismo ruido que esto vino a quitar.
-          if (ultima && rafaga && (rafaga.vistas > 1 || incrementado > 1)) {
+          // El resumen consolida porque veintidós mensajes son ruido; pero
+          // cuando en todo el fajo hay UNA incidencia, consolidarla PIERDE. El
+          // caso concreto: seis fotos buenas y una con la fecha fuera del
+          // viaje. Consolidado se lee «*1* trae fecha dudosa: la de $45.00», y
+          // con eso el chofer no encuentra el papel entre los otros seis —que
+          // es justo lo que `pedir_fecha.ts` existe para evitar—. Entero trae
+          // comercio, folio y la fecha tal como venía impresa.
+          //
+          // Así que el umbral no es «llegó sola»: es «hay una sola cosa que
+          // decir». Vale para una foto suelta y para la única que falló de un
+          // fajo de veinte.
+          const unicaEntera = rafaga && rafaga.incidencias.length === 1
+            ? rafaga.incidencias[0].mensajeSolo
+            : undefined;
+
+          // NO HUBO RÁFAGA, y esto es lo único que puede afirmarlo: la libreta
+          // ya cerró, así que `vistas` es definitivo. Le toca el mensaje que su
+          // propio camino escribió, y NO el resumen: decirle las dos cosas es
+          // el ruido que esto vino a quitar. Va por `say` y no por `sendText`
+          // para que siga contando su costo de WhatsApp, igual que cuando lo
+          // mandaba el camino de la foto.
+          if (ultima && rafaga && !huboRafaga) {
+            if (unicaEntera) await say(unicaEntera);
+          }
+          const incidencias = rafaga
+            ? (unicaEntera ?? lineaIncidencias(rafaga.vistas, rafaga.incidencias))
+            : null;
+          // Con UNA sola foto no se resume: su mensaje de arriba ya habló.
+          if (ultima && rafaga && huboRafaga) {
             const puestos = await getGastos(viajeId, op.tenantId);
             const total = puestos.reduce((s, g) => s + (g.monto > 0 ? g.monto : 0), 0);
             // Las que se pasaron del tope de botones llevan su propia frase, que

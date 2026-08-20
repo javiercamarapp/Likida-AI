@@ -3,6 +3,7 @@ import { sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 import { logger } from '@/lib/logger';
 import { getPorFacturar, type TicketPorFacturar } from './pendientes';
 import { enrutar, mensajeParaEncargado, repartir } from './enrutar';
+import { PORTALES_CONOCIDOS } from './adaptadores/registro';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO POR WHATSAPP DE LO QUE HAY QUE FACTURAR.
@@ -46,8 +47,18 @@ export interface ResultadoAviso {
  * NO MANDA NADA si no hay nada que la persona pueda hacer. Un aviso vacío —"no
  * tienes pendientes"— gasta una plantilla de pago y enseña a ignorar el canal.
  */
-export function armarAviso(tickets: TicketPorFacturar[]): { texto: string; cuantos: number } {
-  const { mensajes, incompletos } = repartir(tickets);
+/**
+ * `sabeOperarlo` sale de `PORTALES_CONOCIDOS`, que es «qué sé hacer» y no «qué
+ * puedo hacer ahora con la flota cargada» (eso es `portalesAutomatizados`). La
+ * distinción importa aquí: al encargado hay que avisarle de un portal sin
+ * adaptador ESCRITO —eso no se va a arreglar solo—, no de uno que simplemente
+ * no está registrado en esta invocación.
+ */
+export function armarAviso(
+  tickets: TicketPorFacturar[],
+  sabeOperarlo: (clave: string) => boolean = (c) => PORTALES_CONOCIDOS.includes(c),
+): { texto: string; cuantos: number } {
+  const { mensajes, incompletos } = repartir(tickets, sabeOperarlo);
 
   // Los que necesitan a una persona: los de cuenta, y los incompletos que aún
   // no vencen (esos sí se pueden salvar buscando el dato en el papel).
@@ -75,7 +86,7 @@ export function armarAviso(tickets: TicketPorFacturar[]): { texto: string; cuant
   // cuenta al final — decir "y 14 más" es honesto; listar 20 hace que no se lea
   // ninguno.
   for (const t of orden.slice(0, 6)) {
-    const r = enrutar(t);
+    const r = enrutar(t, t.comercio ? sabeOperarlo(t.comercio.clave) : false);
     if (r.via === 'mensaje') {
       lineas.push(mensajeParaEncargado(t, r));
     } else {

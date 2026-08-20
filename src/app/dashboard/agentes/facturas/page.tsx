@@ -6,6 +6,7 @@ import { getPorFacturar, contarConCfdi, validarUuidCfdi } from '@/lib/likida/fac
 import { mandatoFiscalAceptado, modoEfectivo } from '@/lib/likida/facturacion/modo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { PORTALES_CONOCIDOS } from '@/lib/likida/facturacion/adaptadores/registro';
 import { VistaAgenteFacturas } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
@@ -98,6 +99,7 @@ export default async function PaginaAgenteFacturas({
   return (
     <VistaAgenteFacturas
       tickets={tickets}
+      portalesConAdaptador={PORTALES_CONOCIDOS}
       extra={{ conCfdi, emite }}
       marcarFacturada={marcarFacturada}
       notificaciones={

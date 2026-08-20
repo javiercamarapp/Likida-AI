@@ -86,22 +86,25 @@ export function decidirAutofactura(
   confianzaOcr: number | null,
   tieneAdaptador: boolean,
 ): DecisionAutofactura {
-  const ruta = enrutar(t);
+  // `tieneAdaptador` ENTRA A `enrutar`, y ya no se comprueba aparte aquí abajo.
+  //
+  // Antes esta función lo sabía y `enrutar` no, y esa asimetría era el bug: el
+  // cron rechazaba el ticket con `sin_adaptador` —correcto— mientras `enrutar`
+  // seguía llamándolo `automatico`, y por eso el aviso de WhatsApp no lo
+  // llevaba. Dos opiniones sobre quién factura un mismo ticket.
+  const ruta = enrutar(t, tieneAdaptador);
 
   if (ruta.via === 'mensaje') {
-    // Un ticket BLOQUEADO también sale por aquí —`enrutar` lo manda con una
-    // persona— pero se declara con su propio motivo. Confundirlo con
-    // "requiere_cuenta" diría que el portal pide sesión, y lo que pasó es que la
-    // máquina lo intentó y se topó con un muro: son dos arreglos distintos.
-    return ruta.motivo === 'bloqueado'
-      ? { procede: false, motivo: 'bloqueado', detalle: ruta.detalle }
-      : { procede: false, motivo: 'requiere_cuenta', detalle: t.comercio?.nombre };
+    // Cada motivo se declara como es. Confundirlos manda a arreglar otra cosa:
+    // "requiere_cuenta" dice que la sesión es del encargado, "bloqueado" que la
+    // máquina se topó con un muro, y "sin_robot" que el hueco es NUESTRO —no
+    // hay adaptador escrito—, que es el `sin_adaptador` de este módulo.
+    if (ruta.motivo === 'bloqueado') return { procede: false, motivo: 'bloqueado', detalle: ruta.detalle };
+    if (ruta.motivo === 'sin_robot') return { procede: false, motivo: 'sin_adaptador', detalle: t.comercio?.clave };
+    return { procede: false, motivo: 'requiere_cuenta', detalle: t.comercio?.nombre };
   }
   if (ruta.via === 'incompleto') {
     return { procede: false, motivo: 'incompleto', detalle: ruta.falta.join('; ') };
-  }
-  if (!tieneAdaptador) {
-    return { procede: false, motivo: 'sin_adaptador', detalle: t.comercio?.clave };
   }
 
   // La confianza es del OCR, no del portal. Lo que NO es un número se trata como

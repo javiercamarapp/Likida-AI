@@ -153,6 +153,68 @@ describe('el reconocimiento no puede ser ambiguo', () => {
     const choques = [...de].filter(([, cs]) => cs.length > 1);
     expect(choques, `textos ambiguos: ${choques.map(([t, cs]) => `"${t}" → ${cs.join('/')}`).join(', ')}`).toEqual([]);
   });
+
+  // ESTA INVARIANTE DABA FALSA CONFIANZA. La de arriba compara tokens
+  // IDÉNTICOS, y en tiempo de ejecución el emparejamiento es `\b…\b` sobre el
+  // texto del ticket: «G500» casa DENTRO de «G500 MEGASUR» sin ser igual a él.
+  // Por eso pasaba en verde mientras el ticket verificado de Mérida se iba a
+  // `null`. Un token anidado no es un error —la red y su franquicia—, pero
+  // tiene que estar DECLARADO, que es lo que esto fija.
+  it('un token contenido en otro solo se permite entre la red y su franquicia', () => {
+    const ANIDADOS_ESPERADOS = [['G500', 'G500 MEGASUR']];
+    const todos = COMERCIOS.flatMap((c) => (c.reconocer.texto ?? []).map((t) => ({ clave: c.clave, t: t.toUpperCase().trim() })));
+    const anidados: string[][] = [];
+    for (const a of todos) {
+      for (const b of todos) {
+        if (a.clave === b.clave || a.t === b.t) continue;
+        // Palabra completa, igual que `identificarComercio`.
+        if (new RegExp(`\\b${a.t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(b.t)) anidados.push([a.t, b.t]);
+      }
+    }
+    expect(anidados.sort(), 'hay un token que casa dentro de otro y no está declarado').toEqual(ANIDADOS_ESPERADOS.sort());
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL TICKET DE MÉRIDA QUE SE IBA AL PORTAL EQUIVOCADO — 20-ago-2026.
+//
+// Medido con un ticket real de G500 Sureste en la mano (Mérida, 18-ago-2026,
+// $1,022.70, WebID 5498441008183). El papel trae DOS señales:
+//
+//   · `www.g500network.com`   marca de agua, repetida por todo el ticket
+//   · `…g500sureste.com.mx`   el pie, una sola vez
+//
+// La primera es la que el OCR lee con más probabilidad, y mandaba el ticket a
+// `g500` —la RED—, que declara `requiereCuenta: true` y cuyo propio comentario
+// dice que ahí NO se factura este papel. El operador acababa pidiendo cuenta en
+// un portal que no le sirve.
+//
+// Y por texto era peor: el emisor literal «G500 MEGASUR» —el MISMO que el
+// catálogo cita como verificado, timbrado el 29-jul-2026— casaba con las dos
+// entradas y se iba a `null`. Sin portal, a que lo facture una persona,
+// teniendo la ficha correcta escrita al lado.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la red y su franquicia no son dos marcas', () => {
+  it('con los dos dominios impresos gana el ESPECÍFICO, no el que esté antes en la lista', () => {
+    const c = identificarComercio({ urlFacturacion: 'www.g500network.com g500sureste.com.mx' });
+    expect(c?.clave, 'la marca de agua de la red no puede ganarle al pie de la franquicia').toBe('megasur');
+    expect(c?.requiereCuenta, 'y el de Mérida entra con el RFC y nada más').toBe(false);
+  });
+
+  it('«G500 MEGASUR» identifica a la franquicia, no se va a null', () => {
+    expect(identificarComercio({ textoTicket: 'G500 MEGASUR ESTACIONES DE SERVICIO' })?.clave).toBe('megasur');
+  });
+
+  it('pero «G500» a secas sigue siendo la RED: hay estaciones fuera del sureste', () => {
+    expect(identificarComercio({ textoTicket: 'G500 ESTACIONES DE SERVICIO' })?.clave).toBe('g500');
+  });
+
+  it('CONTROL — dos marcas DE VERDAD siguen sin respuesta única', () => {
+    // Lo que el desempate NO puede romper: tokens que no están uno dentro del
+    // otro son dos comercios distintos, y ahí adivinar es mandar al operador a
+    // pedir un dato que su ticket nunca tuvo.
+    expect(identificarComercio({ textoTicket: 'OXXO GAS y PETROMAX en el mismo papel' })).toBeNull();
+  });
 });
 
 describe('lo verificado se distingue de la hipótesis', () => {

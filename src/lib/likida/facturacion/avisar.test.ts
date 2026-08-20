@@ -30,10 +30,33 @@ const g = (o: Record<string, unknown>) => ({
 const CON_CUENTA = { urlFacturacion: 'https://facturacion.oxxogas.com/', webId: '650', estacion: 'E1' };
 const SIN_CUENTA = { urlFacturacion: 'https://facturacion.enerser.com.mx/', webId: '650', estacion: 'E1' };
 
+/** «Sí hay adaptador para ese portal». El default real lo saca de
+ *  `PORTALES_CONOCIDOS`, y con un solo adaptador escrito ese default haría que
+ *  estas pruebas midieran otra cosa. Se declara el supuesto en vez de heredarlo. */
+const HAY_ROBOT = () => true;
+const NO_HAY_ROBOT = () => false;
+
 describe('armarAviso', () => {
   it('NO avisa de lo que la máquina puede hacer sola', () => {
     const t = [armar(g({ id: '1', fecha: '2026-08-04', extra: SIN_CUENTA }), HOY)];
-    expect(armarAviso(t).cuantos).toBe(0);
+    expect(armarAviso(t, HAY_ROBOT).cuantos).toBe(0);
+  });
+
+  // ── Y EL OTRO LADO, QUE ERA EL SILENCIO (20-ago-2026) ──────────────────
+  //
+  // El mismo ticket, cuando NADIE sabe operar ese portal, tiene que llegarle a
+  // la persona: el portal existe, los datos están leídos y el plazo corre. Lo
+  // que faltaba era el adaptador, y de eso el encargado no se enteraba.
+  it('pero SÍ avisa cuando no hay adaptador: si no, no lo factura nadie', () => {
+    const t = [armar(g({ id: '1', fecha: '2026-08-04', extra: SIN_CUENTA }), HOY)];
+    const a = armarAviso(t, NO_HAY_ROBOT);
+    expect(a.cuantos, 'sin este aviso el ticket se vence en silencio').toBe(1);
+    // Y con lo que hace falta para cerrarlo desde el teléfono: la liga y el
+    // campo que ESE portal pide (Enerser pide el número de referencia, o sea
+    // el folio — no todos los portales piden lo mismo).
+    expect(a.texto).toContain('enerser');
+    expect(a.texto).toContain('12345');
+    expect(a.texto).toMatch(/todavía no lo sé llenar solo/i);
   });
 
   it('avisa de los que piden cuenta, que son los que necesitan a la persona', () => {

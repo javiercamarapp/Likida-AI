@@ -21,7 +21,7 @@ export interface FilaJefe {
   concepto: string;
   monto: number;
   caducidad: TicketPorFacturar['caducidad'];
-  motivo: 'requiere_cuenta' | 'bloqueado';
+  motivo: 'requiere_cuenta' | 'bloqueado' | 'sin_robot';
   detalle?: string;
   /** Los campos que el portal va a pedir, con su etiqueta LITERAL. */
   campos: Array<{ etiqueta: string; valor: string | null; requerido: boolean }>;
@@ -67,6 +67,16 @@ export function ColaJefe({ filas, marcarFacturada, maxFilas, totalFilas }: {
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium justify-self-start"
                   style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
                   <UserRound width={11} height={11} strokeWidth={2} /> Tu cuenta
+                </span>
+              ) : f.motivo === 'sin_robot' ? (
+                // NO va en rojo de alerta: no está roto ni bloqueado, y el
+                // encargado no hizo nada mal. Falta que ESCRIBAMOS el portal, y
+                // mientras tanto el ticket se factura igual — a mano, con la
+                // liga y los campos que ya trae esta misma fila.
+                <span title="Todavía no sabemos llenar ese portal solos"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium justify-self-start"
+                  style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
+                  <UserRound width={11} height={11} strokeWidth={2} /> A mano
                 </span>
               ) : (
                 <span title={f.detalle} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium justify-self-start"

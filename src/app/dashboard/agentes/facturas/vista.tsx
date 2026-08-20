@@ -31,7 +31,7 @@ export interface ExtraAgenteFacturas {
  * Nada se pinta que no salga de un ticket real; el modo de emisión se
  * declara (en ensayo no se promete emisión).
  */
-export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones }: {
+export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones, portalesConAdaptador }: {
   tickets: TicketPorFacturar[];
   extra: ExtraAgenteFacturas;
   /** Server action de la puerta: escribe el CFDI capturado y re-verifica
@@ -41,6 +41,14 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
   notificaciones?: React.ReactNode;
+  /**
+   * Los portales para los que HAY adaptador escrito (`PORTALES_CONOCIDOS`).
+   *
+   * Llega como prop y no por import por la misma razón que `notificaciones`:
+   * ese registro arrastra los adaptadores de Playwright, y esta vista corre en
+   * el cliente. Lo resuelve la página, que sí es servidor.
+   */
+  portalesConAdaptador: readonly string[];
 }) {
   // Orden por VENCIMIENTO real (no por fecha del ticket): vencidos arriba,
   // desconocidos al final. Cotas finitas — Infinity-Infinity da NaN.
@@ -49,7 +57,9 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
   const ordenados = [...tickets].sort((a, b) => orden(a) - orden(b));
 
   // El reparto del código, tal cual: quién factura cada ticket.
-  const rutas = ordenados.map((t) => ({ t, r: enrutar(t) }));
+  const rutas = ordenados.map((t) => ({
+    t, r: enrutar(t, t.comercio ? portalesConAdaptador.includes(t.comercio.clave) : false),
+  }));
   const teToca = rutas.filter((x) => x.r.via === 'mensaje');
   const maquina = rutas.filter((x) => x.r.via === 'automatico');
   const incompletos = rutas.filter((x) => x.r.via === 'incompleto');
