@@ -1,5 +1,27 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { COMERCIOS } from './comercios';
+import { cuentasCompartidas, credencialDePortal } from './cuentas';
+
+// ── Mocks SOLO para el lector del cofre (`cuentas.ts`). Las pruebas del conteo
+// de abajo no tocan base ni cofre.
+const respuesta = vi.fn();
+const cofreOk = vi.fn(() => true);
+const descifrarMock = vi.fn();
+
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => {
+    const q = {
+      select: () => q, eq: () => q,
+      like: async () => respuesta(),
+      maybeSingle: async () => respuesta(),
+    };
+    return { from: () => q };
+  },
+}));
+vi.mock('../conectores/cofre', () => ({
+  cofreConfigurado: () => cofreOk(),
+  descifrar: (s: string) => descifrarMock(s),
+}));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CUÁNTOS PORTALES EXIGEN CUENTA — el dato que decide la arquitectura.
@@ -17,6 +39,71 @@ import { COMERCIOS } from './comercios';
 // Esta prueba existe para que la cifra del comentario no vuelva a divergir de la
 // tabla que tiene debajo.
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL LECTOR DEL COFRE (`cuentas.ts`): qué portales tienen cuenta compartida.
+//
+// Las dos reglas que estas pruebas fijan:
+//   1. FALLA CERRADO HACIA EL ENCARGADO. Base caída o cofre sin configurar =
+//      "no hay cuentas", que es el mundo de antes; nunca un ticket esperando a
+//      un robot que no va a poder entrar.
+//   2. El secreto no sale de aquí: si el descifrado falla, se devuelve null y
+//      el error dice el hecho, no el contenido.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cuentasCompartidas', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cofreOk.mockReturnValue(true);
+  });
+
+  it('traduce los conector_id del cofre a claves de comercio', async () => {
+    respuesta.mockResolvedValue({
+      data: [
+        { conector_id: 'portal_facturacion:oxxo_gas' },
+        { conector_id: 'portal_facturacion:la_gas' },
+      ],
+      error: null,
+    });
+    const s = await cuentasCompartidas('t1');
+    expect([...s].sort()).toEqual(['la_gas', 'oxxo_gas']);
+  });
+
+  it('base caída → conjunto vacío, no un throw: el ticket va con la persona', async () => {
+    respuesta.mockResolvedValue({ data: null, error: { message: 'boom' } });
+    expect((await cuentasCompartidas('t1')).size).toBe(0);
+  });
+
+  it('sin LIKIDA_COFRE_LLAVE ni siquiera se consulta: no habría cómo descifrar', async () => {
+    cofreOk.mockReturnValue(false);
+    expect((await cuentasCompartidas('t1')).size).toBe(0);
+    expect(respuesta).not.toHaveBeenCalled();
+  });
+});
+
+describe('credencialDePortal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cofreOk.mockReturnValue(true);
+  });
+
+  it('descifra y entrega los valores al robot', async () => {
+    respuesta.mockResolvedValue({ data: { valores_cifrados: 'v1.xxx' }, error: null });
+    descifrarMock.mockReturnValue({ usuario: 'flota@correo.mx', contrasena: 's3creta' });
+    const v = await credencialDePortal('t1', 'la_gas');
+    expect(v?.usuario).toBe('flota@correo.mx');
+  });
+
+  it('cofre rotado o fila corrupta → null, y el secreto no viaja en el error', async () => {
+    respuesta.mockResolvedValue({ data: { valores_cifrados: 'v1.corrupta' }, error: null });
+    descifrarMock.mockImplementation(() => { throw new Error('no descifra'); });
+    expect(await credencialDePortal('t1', 'la_gas')).toBeNull();
+  });
+
+  it('sin credencial activa → null: el llamador manda el ticket con la persona', async () => {
+    respuesta.mockResolvedValue({ data: null, error: null });
+    expect(await credencialDePortal('t1', 'oxxo_gas')).toBeNull();
+  });
+});
 
 describe('cuántos comercios exigen cuenta', () => {
   const conCuenta = COMERCIOS.filter((c) => c.requiereCuenta);

@@ -36,6 +36,34 @@ describe('enrutar', () => {
     if (r.via === 'mensaje') expect(r.motivo).toBe('requiere_cuenta');
   });
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // LA CUENTA COMPARTIDA — 20-ago-2026, el cofre entra a la decisión.
+  //
+  // «Con cuenta → persona» descansaba en una premisa: solo el encargado tiene
+  // la sesión. Cuando la flota comparte su acceso en /dashboard/conexiones, la
+  // premisa se cae, y el ticket sigue el mismo filtro que los sin cuenta.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('con cuenta COMPARTIDA y robot escrito → lo hace la máquina', () => {
+    const r = enrutar(armar(g({ extra: CON_CUENTA }), HOY), true, true);
+    expect(r.via, 'la razón de mandarlo a la persona era la sesión, y ya la tiene la máquina').toBe('automatico');
+  });
+
+  it('con cuenta compartida pero SIN robot → persona, y el motivo es sin_robot, no la cuenta', () => {
+    const r = enrutar(armar(g({ extra: CON_CUENTA }), HOY), false, true);
+    expect(r.via).toBe('mensaje');
+    // El motivo importa: "requiere_cuenta" mandaría al encargado a buscar una
+    // contraseña que él mismo ya entregó.
+    if (r.via === 'mensaje') expect(r.motivo).toBe('sin_robot');
+  });
+
+  it('la cuenta compartida NO salta el bloqueo: un CAPTCHA sigue siendo de persona', () => {
+    const conBloqueo = armar(g({ extra: CON_CUENTA }), HOY);
+    conBloqueo.bloqueo = { motivo: 'el portal pidió CAPTCHA', desde: '2026-08-04T10:00:00Z' };
+    const r = enrutar(conBloqueo, true, true);
+    expect(r.via).toBe('mensaje');
+    if (r.via === 'mensaje') expect(r.motivo).toBe('bloqueado');
+  });
+
   it('portal no reconocido → incompleto, y dice cuál es el problema', () => {
     const r = enrutar(armar(g({ extra: {} }), HOY), true);
     expect(r.via).toBe('incompleto');
