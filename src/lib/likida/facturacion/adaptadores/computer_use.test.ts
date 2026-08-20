@@ -39,6 +39,19 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 const { AdaptadorComputerUse, extraerUuid } = await import('./computer_use');
 
+/**
+ * Las tools de tipo `function`, ya estrechadas.
+ *
+ * `ChatCompletionTool` es una UNIÓN en el SDK que fija el lockfile
+ * (`function` | `custom`), así que `.function` no existe sobre la unión. Se
+ * estrecha por el discriminante en vez de castear: un cast habría compilado y
+ * reventado en tiempo de ejecución el día que llegue una tool `custom`.
+ */
+type ToolFuncion = Extract<OpenAI.Chat.ChatCompletionTool, { type: 'function' }>;
+const funciones = (ts: OpenAI.Chat.ChatCompletionTool[]): ToolFuncion[] =>
+  ts.filter((t): t is ToolFuncion => t.type === 'function');
+const nombresDeTools = () => funciones(capturadoTools).map((t) => t.function.name);
+
 /** Lo que el adaptador de verdad le hizo a la página. */
 const escrito: Array<[string, string]> = [];
 const clicado: string[] = [];
@@ -88,7 +101,7 @@ describe('el modelo NO puede inventar un dato fiscal', () => {
     expect(escrito).toEqual([['#rfc', 'GMX0902279I1']]);
     // Y el esquema de la tool lo fija: `clave` es un enum cerrado, así que un
     // valor libre ni siquiera se puede expresar en la llamada.
-    const escribir = capturadoTools.find((t) => t.function.name === 'escribir');
+    const escribir = funciones(capturadoTools).find((t) => t.function.name === 'escribir');
     const clave = (escribir?.function.parameters as { properties: { clave: { enum: string[] } } }).properties.clave;
     expect(clave.enum).toContain('webId');
     expect(clave.enum).not.toContain('monto'); // no se ofreció, no existe
@@ -99,12 +112,12 @@ describe('el botón de emitir', () => {
   it('en ENSAYO la herramienta ni siquiera se le ofrece al modelo', async () => {
     await armar().facturar(CAMPOS, 'ensayo');
     // No es que se le pida que no la use: no está en su lista.
-    expect(capturadoTools.map((t) => t.function.name)).not.toContain('emitir');
+    expect(nombresDeTools()).not.toContain('emitir');
   });
 
   it('en EMITIR sí existe', async () => {
     await armar().facturar(CAMPOS, 'emitir');
-    expect(capturadoTools.map((t) => t.function.name)).toContain('emitir');
+    expect(nombresDeTools()).toContain('emitir');
   });
 
   it('si se emitió y no hay UUID, se declara `emisionSinConfirmar`', async () => {
@@ -142,6 +155,38 @@ describe('lo que no se toca nunca', () => {
     await armar().facturar(CAMPOS, 'ensayo');
 
     expect(clicado).toEqual(['#validar']);
+  });
+});
+
+describe('rendirse dice POR QUÉ, y el captcha se declara aparte', () => {
+  it('un captcha no es "no pude": es "no se puede", y sale marcado', async () => {
+    // `requiereCaptcha` es lo que separa reintentar cada hora contra el mismo
+    // muro, de mandarlo con una persona. Ver `pideCaptcha()` en agente.ts.
+    guion = [{ tool: 'rendirse', args: { motivo: 'el portal pide CAPTCHA' } }];
+    const r = await armar().facturar(CAMPOS, 'ensayo');
+
+    expect(r.ok).toBe(false);
+    expect(r.requiereCaptcha).toBe(true);
+    expect(r.error).toMatch(/captcha/i);
+  });
+
+  it('rendirse por otra razón NO se marca como captcha', async () => {
+    guion = [{ tool: 'rendirse', args: { motivo: 'el portal pide un dato que no tengo' } }];
+    const r = await armar().facturar(CAMPOS, 'ensayo');
+
+    expect(r.ok).toBe(false);
+    expect(r.requiereCaptcha).toBeUndefined();
+    expect(r.error).toContain('no tengo');
+  });
+});
+
+describe('los <select> del portal', () => {
+  it('se eligen por valor y quedan en `capturado`, que es lo que hace auditable el ensayo', async () => {
+    guion = [{ tool: 'seleccionar', args: { selector: '#regimen', valor: '601' } }];
+    const r = await armar().facturar(CAMPOS, 'ensayo');
+
+    expect(escrito).toEqual([['#regimen', '601']]);
+    expect(r.capturado['#regimen']).toBe('601');
   });
 });
 
