@@ -285,7 +285,9 @@ export function scoreCierre(p: {
 export const CRITERIO_SCORES = {
   urgencia: 'Urgencia = lo que él DECLARA manda sobre lo que inferimos: si contestó «ya, este mes nos está costando» en /getdemo vale 100, y si contestó «estoy explorando» queda con techo aunque su vacante grite. Sin declaración se infiere: la vacante que nombra la liquidación (+45), cuántos anuncios (+4 c/u, tope 20), qué tan reciente el último (+20 si es de hoy) y la ficha trabajada (+15). Estimación determinista, no medición.',
   cierre: 'Cierre = alcanzabilidad (tel +20, correo +15, decisor +20, +10 por decisor con contacto VERIFICADO —el inferido no cuenta—), quién llegó a quién (entró solo por la landing +20, por un anuncio pagado +25), fit del giro (transportista +15), etapa del embudo (contactado +15 … negociación +35; cliente=100, perdido=0) y ficha a mano (+10). Estimación determinista, no medición: con cero tratos cerrados no hay con qué calibrar una probabilidad, así que esto ORDENA la cola, no predice el cierre.',
-  datos: 'Datos = qué tan completo está el expediente para salir a venderle: teléfono +30, correo +25, decisor +20, ubicación +15, sitio web +10. El tamaño (11-30 … 250+) es el personal ocupado que reporta la DENUE.',
+  datos: 'Datos = qué tan completo está el expediente para salir a venderle: teléfono +30, correo +25, decisor +20, ubicación +15, sitio web VERIFICADO +10. El tamaño (11-30 … 250+) es el personal ocupado que reporta la DENUE.',
+  similitud: 'Similitud con el ICP (0140, GENERADA — nadie la escribe a mano) = giro correcto (SCIAN 484/485/488) +40, vacante publicada +25, flota investigada ≥10 unidades +20, sitio web verificado +15.',
+  necesidad: 'Necesidad (0140, GENERADA) = vacante de liquidación/cuadre/auxiliar administrativo +50 (cualquier otra vacante +25), flota investigada ≥20 unidades +25.',
 } as const;
 
 // ── La lectura completa para el mapa ────────────────────────────────────────
@@ -322,6 +324,15 @@ export interface ProspectoMapa {
   correoAsuntoIa: string | null;
   correoCuerpoIa: string | null;
   mensajesGeneradosEn: string | null;
+  /** Los tres hechos/derivados de la 0140 que SÍ hacen falta a nivel mapa
+   *  (filtrar y ordenar) — historia y viajes_mes_estimado se quedan en la
+   *  ficha, son de lectura, no de criba. */
+  numUnidades: number | null;
+  /** 0-100, GENERADA (scian+vacante+num_unidades+sitio_verificado) — se lee,
+   *  nunca se recalcula aquí (ver CRITERIO_SCORES.similitud). */
+  similitudIcpPct: number;
+  /** 0-100, GENERADA — ver CRITERIO_SCORES.necesidad. */
+  necesidadPct: number;
 }
 
 export interface DatosMapa {
@@ -339,6 +350,11 @@ interface FilaProspecto {
   mensaje_wa: string | null; mensaje_correo_asunto: string | null;
   mensaje_correo: string | null; mensajes_generados_en: string | null;
   prospecto_toque: Array<{ creado_en: string }> | null;
+  /** 0140 — solo lo que hace falta para filtrar/ordenar el mapa. */
+  sitio_verificado: boolean;
+  num_unidades: number | null;
+  similitud_icp_pct: number;
+  necesidad_pct: number;
 }
 
 export async function getDatosMapa(): Promise<DatosMapa> {
@@ -351,7 +367,7 @@ export async function getDatosMapa(): Promise<DatosMapa> {
     filas = await traerTodo<FilaProspecto>(
       (d, h) => supabaseAdmin()
         .from('prospecto')
-        .select('id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en, prospecto_toque(creado_en)', conteo(d))
+        .select('id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, mensaje_wa, mensaje_correo_asunto, mensaje_correo, mensajes_generados_en, sitio_verificado, num_unidades, similitud_icp_pct, necesidad_pct, prospecto_toque(creado_en)', conteo(d))
         // El orden secundario por id NO es adorno: created_at se repite (los
         // lotes de siembra comparten el now() de su transacción) y paginar
         // sobre un orden no único duplica y salta filas entre páginas — se
@@ -392,7 +408,7 @@ export async function getDatosMapa(): Promise<DatosMapa> {
         tamano: tamanoDe(p.notas),
         completitud: completitudDe({
           telefono: p.telefono, correo: p.correo, contacto_nombre: p.contacto_nombre,
-          lat: p.lat, notas: p.notas,
+          lat: p.lat, notas: p.notas, sitioVerificado: p.sitio_verificado,
         }),
         mensajeWaIa: p.mensaje_wa,
         correoAsuntoIa: p.mensaje_correo_asunto,
@@ -406,6 +422,9 @@ export async function getDatosMapa(): Promise<DatosMapa> {
           estado: p.estado, fuente: p.fuente, empresa: p.empresa, vacante: p.vacante, notas: p.notas,
           scian: p.scian,
         }),
+        numUnidades: p.num_unidades,
+        similitudIcpPct: p.similitud_icp_pct,
+        necesidadPct: p.necesidad_pct,
       };
     });
   return { prospectos, generadoEn, fallo: false };

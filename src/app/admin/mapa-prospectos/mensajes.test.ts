@@ -11,6 +11,7 @@ const base: ProspectoMapa = {
   contacto: null, vacante: null, notas: null, estado: 'nuevo', fuente: 'censo',
   giro: 'transportista', urgencia: 50, cierre: 40, tamano: null, completitud: 45, ultimoToque: null,
   mensajeWaIa: null, correoAsuntoIa: null, correoCuerpoIa: null, mensajesGeneradosEn: null,
+  numUnidades: null, similitudIcpPct: 0, necesidadPct: 0,
 };
 
 describe('la plantilla determinista (el respaldo)', () => {
