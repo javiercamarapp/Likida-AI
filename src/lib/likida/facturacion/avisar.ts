@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
+import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 import { logger } from '@/lib/logger';
 import { getPorFacturar, type TicketPorFacturar } from './pendientes';
 import { enrutar, mensajeParaEncargado, repartir } from './enrutar';
@@ -39,6 +39,13 @@ export interface ResultadoAviso {
   motivo?: string;
   /** El texto que se armó, para poder enseñarlo aunque el envío falle. */
   texto: string;
+  /**
+   * Por cuál de los dos caminos salió. `texto` es el bueno —lleva la liga, los
+   * campos y el plazo—; `plantilla` es el plan B y solo dice el conteo, así que
+   * quien lea `via: 'plantilla'` sabe que el encargado NO tiene el detalle en
+   * el teléfono y lo va a buscar en el panel.
+   */
+  via?: 'texto' | 'plantilla';
 }
 
 /**
@@ -107,10 +114,13 @@ export function armarAviso(
 /**
  * Manda el aviso al encargado de una flota.
  *
- * FUERA DE LA VENTANA DE 24 H HACE FALTA PLANTILLA APROBADA. Likida inicia esta
- * conversación —el chofer no preguntó nada—, así que va por `sendTemplate`. Si
- * la plantilla no está aprobada, se DICE: un aviso que falla en silencio deja al
- * encargado sin saber que tiene tickets venciéndose.
+ * PRIMERO EL TEXTO COMPLETO, y la plantilla solo de respaldo. Dentro de la
+ * ventana de 24 h WhatsApp entrega texto libre, y ese texto lleva lo que el
+ * encargado necesita para facturar desde el teléfono: la liga, los campos y el
+ * plazo. Fuera de la ventana Meta lo rechaza y entra `sendTemplate` con la
+ * plantilla aprobada — que solo puede decir el conteo. Si la plantilla tampoco
+ * sale, se DICE: un aviso que falla en silencio deja al encargado sin saber
+ * que tiene tickets venciéndose.
  */
 export async function avisarPorFacturar(args: {
   tenantId: string;
@@ -128,25 +138,46 @@ export async function avisarPorFacturar(args: {
     return { enviado: false, tickets: cuantos, texto, motivo: 'Esa flota no tiene un teléfono de encargado registrado.' };
   }
 
-  const r = await sendTemplate(args.telefono, PLANTILLA_PLAZO, {
-    parametros: [String(cuantos)],
-  });
+  // ── EL TEXTO BUENO PRIMERO, LA PLANTILLA DESPUÉS ─────────────────────────
+  //
+  // `armarAviso` construye el mensaje completo —la liga del portal, el WebID y
+  // cada campo que ese portal pide, el plazo— y hasta el 20-ago-2026 ese texto
+  // SE TIRABA: lo único que salía era la plantilla con el conteo, y el
+  // encargado recibía "tienes 3 comprobantes" sin la liga ni los datos que son
+  // el punto del aviso. El mismo bug que `escalar_viaje.ts` ya pagó con
+  // `armarAvisoJefe`: el texto que sí se escribió para esto, sin un llamador.
+  //
+  // El texto libre solo lo entrega WhatsApp dentro de la ventana de 24 h desde
+  // el último mensaje del destinatario. Fuera de ella Meta lo rechaza (131047)
+  // y ahí entra la plantilla, que es lo único que sí se entrega — dice el
+  // conteo y deja el detalle en el panel. Por eso se intenta en este orden y
+  // no al revés: el aviso rico cuando se puede, el pobre solo como respaldo.
+  const wamidTexto = await sendText(args.telefono, texto);
+  const via: 'texto' | 'plantilla' = wamidTexto ? 'texto' : 'plantilla';
+  let wamid = wamidTexto;
 
-  if (!r.ok) {
-    logger.warn('facturacion.aviso_no_salio', { tenantId: args.tenantId, codigo: r.codigo });
-    return { enviado: false, tickets: cuantos, texto, motivo: motivoDeFalloWhatsApp(r.error, r.codigo) };
+  if (!wamid) {
+    const r = await sendTemplate(args.telefono, PLANTILLA_PLAZO, {
+      parametros: [String(cuantos)],
+    });
+    if (!r.ok) {
+      logger.warn('facturacion.aviso_no_salio', { tenantId: args.tenantId, codigo: r.codigo });
+      return { enviado: false, tickets: cuantos, texto, motivo: motivoDeFalloWhatsApp(r.error, r.codigo) };
+    }
+    wamid = r.id ?? null;
   }
 
-  // Queda constancia de a quién se le avisó y de cuántos: sin eso, mañana nadie
-  // sabe si el encargado no facturó porque no quiso o porque nunca le llegó.
+  // Queda constancia de a quién se le avisó, de cuántos, y POR CUÁL camino: un
+  // aviso por plantilla no llevó el detalle, y mañana eso explica por qué el
+  // encargado preguntó "¿cuáles?" en vez de facturar.
   const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
     tenant_id: args.tenantId,
     accion: 'facturacion.aviso_enviado',
     entidad: 'gasto',
     entidad_id: args.tenantId,
-    detalle: { tickets: cuantos, wamid: r.id },
+    detalle: { tickets: cuantos, wamid, via },
   });
   if (error) logger.warn('facturacion.bitacora', { err: error.message });
 
-  return { enviado: true, tickets: cuantos, texto };
+  return { enviado: true, tickets: cuantos, texto, via };
 }
