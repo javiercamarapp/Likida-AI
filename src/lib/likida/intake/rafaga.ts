@@ -52,6 +52,26 @@ export interface Incidencia {
   /** Solo cuando se conoce: un fallo técnico no trae monto que enseñar. */
   monto?: number | null;
   etiqueta?: string | null;
+  /**
+   * El mensaje que se le manda SI resulta que esta foto llegó sola.
+   *
+   * ── POR QUÉ SE GUARDA EN VEZ DE MANDARSE ─────────────────────────────────
+   *
+   * El camino de cada foto NO PUEDE SABER si hubo ráfaga. Lo intentaba con
+   * «el contador de intake pasó de 0 a 1», y esa condición es verdadera para
+   * la PRIMERA foto de toda ráfaga —el incremento es atómico, así que en un
+   * fajo de 22 exactamente una ve el 1—. O sea que el fajo entero producía el
+   * mensaje individual de esa primera foto Y DESPUÉS el resumen contándola
+   * otra vez: el chofer leía «se me trabó ese comprobante» y, debajo, «de tus
+   * 22 fotos, 22 se me trabaron». El mismo hecho, dos veces, y la segunda con
+   * un número que parecía contradecir a la primera.
+   *
+   * Quien SÍ lo sabe es el cierre: cuando el contador vuelve a 0, `vistas`
+   * dice cuántas pasaron. Así que el detalle que solo este camino conoce —el
+   * ticket concreto, si el huérfano se guardó o no— se anota aquí, y el cierre
+   * elige: una foto → este texto; varias → el resumen. Nunca los dos.
+   */
+  mensajeSolo?: string;
 }
 
 interface Bandeja {
@@ -204,8 +224,35 @@ export function lineaIncidencias(vistas: number, incidencias: Incidencia[]): str
   const cuerpo = frases.length === 1
     ? frases[0]
     : `${frases.slice(0, -1).join(', ')} y ${frases[frases.length - 1]}`;
-  const pide = ilegibles || tecnicos || dudosas
-    ? '\n\nReenvíame esas fotos —tomadas otra vez, con buena luz— y las dejo bien. 📸'
-    : '';
+  // LO QUE SE LE PIDE TIENE QUE CUADRAR CON LO QUE FALLÓ. Esto decía siempre
+  // «tomadas otra vez, con buena luz», y sobre un `fallo_tecnico` eso
+  // CONTRADICE al renglón que acaba de escribirse encima —«no son tus fotos»—
+  // y le echa encima la culpa de un 429 nuestro: vuelve a tomar veintidós
+  // fotos que estaban bien y vuelven a fallar igual, porque la luz nunca fue
+  // el problema. Es la misma mentira que la rama sin-viaje ya había quitado de
+  // su mensaje individual (`huerfanos_flujo.test.ts`), viva todavía aquí.
+  const uno = (n: number) => n === 1;
+  let pide = '';
+  if (ilegibles && !tecnicos && !dudosas) {
+    pide = uno(ilegibles)
+      ? '\n\nReenvíamela con buena luz y la dejo bien. 📸'
+      : '\n\nReenvíamelas con buena luz y las dejo bien. 📸';
+  } else if (tecnicos && !ilegibles && !dudosas) {
+    pide = uno(tecnicos)
+      ? '\n\nReenvíamela en un rato —el problema fue mío, no tu foto— y la dejo bien. 📸'
+      : '\n\nReenvíamelas en un rato —el problema fue mío, no tus fotos— y las dejo bien. 📸';
+  } else if (dudosas && !ilegibles && !tecnicos) {
+    pide = uno(dudosas)
+      ? '\n\nMándame otra foto de ese ticket donde se alcance a ver la fecha. 📸'
+      : '\n\nMándame otra foto de esos tickets donde se alcance a ver la fecha. 📸';
+  } else if (ilegibles) {
+    // Mezcla CON ilegibles: la luz solo aplica a ésas, y se dice así. Atribuirla
+    // a todas volvería a echarle la culpa de un 429 nuestro.
+    pide = '\n\nReenvíame esas fotos —las que salieron oscuras, con buena luz— y las dejo bien. 📸';
+  } else if (tecnicos || dudosas) {
+    // Mezcla SIN ilegibles: ninguna falló por la foto, así que no se menciona
+    // la luz por ningún lado.
+    pide = '\n\nReenvíame esas fotos y las dejo bien. 📸';
+  }
   return `${encabezado}${cuerpo}.${pide}`;
 }

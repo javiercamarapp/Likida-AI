@@ -32,7 +32,15 @@ export type MotivoDeMensaje =
    * un CAPTCHA, una emisión sin confirmar, un viaje ya liquidado. Ver
    * `TicketPorFacturar.bloqueo`.
    */
-  | 'bloqueado';
+  | 'bloqueado'
+  /**
+   * El portal se reconoce y no pide cuenta, pero NADIE SABE OPERARLO todavía:
+   * no hay adaptador escrito para él. Es distinto de `bloqueado` —aquello es
+   * "lo intenté y no pude"— y distinto de `requiere_cuenta` —aquello es "la
+   * sesión es tuya"—. Aquí el hueco es nuestro, y mientras exista, quien puede
+   * facturar es la persona.
+   */
+  | 'sin_robot';
 
 export type Ruta =
   /** Sin cuenta y con todos los datos: lo hace la máquina. */
@@ -42,7 +50,24 @@ export type Ruta =
   /** No se puede facturar con lo que hay. Se dice qué falta. */
   | { via: 'incompleto'; falta: string[] };
 
-export function enrutar(t: TicketPorFacturar): Ruta {
+/**
+ * @param sabeOperarlo  ¿Hay un adaptador ESCRITO para el portal de este ticket?
+ *
+ * OBLIGATORIO, y por eso rompe la compilación de quien no lo pase.
+ *
+ * Sin este dato, esta función mandaba al robot todo lo que no pidiera cuenta
+ * —«sin cuenta (26 de 37) → lo hace la máquina», dice el encabezado— cuando
+ * adaptadores hay UNO. Los otros 25 comercios quedaban enrutados a un robot
+ * inexistente: `facturarAlVuelo` los rechazaba con `sin_adaptador`, y el aviso
+ * de WhatsApp NO los llevaba, porque `avisar.ts` solo manda lo que `enrutar`
+ * marcó para una persona. Ni se facturaban ni nadie se enteraba.
+ *
+ * Medido el 20-ago-2026 con un ticket de G500 Sureste: portal reconocido, WebID
+ * leído, plazo vigente, sin cuenta que pedir — y el operador nunca supo que
+ * tenía que entrar a facturarlo. El silencio es el modo de falla que este repo
+ * persigue en todos lados menos aquí.
+ */
+export function enrutar(t: TicketPorFacturar, sabeOperarlo: boolean): Ruta {
   const falta: string[] = [];
 
   if (!t.comercio) {
@@ -91,6 +116,17 @@ export function enrutar(t: TicketPorFacturar): Ruta {
     };
   }
 
+  // NO HAY QUIÉN LO OPERE → va con la persona, no a un robot que no existe.
+  //
+  // Va al final a propósito: `requiere_cuenta` y `bloqueado` cuentan historias
+  // más específicas, y de las tres ésta es la única cuyo arreglo es NUESTRO
+  // (escribir el adaptador). Mientras no esté escrito, el ticket igual se puede
+  // facturar —el portal está ahí y los datos ya se leyeron—, solo que lo hace
+  // una persona con la liga en el teléfono.
+  if (!sabeOperarlo) {
+    return { via: 'mensaje', portal: t.comercio.portal, motivo: 'sin_robot', campos: t.campos };
+  }
+
   return { via: 'automatico', portal: t.comercio.portal, campos: t.campos };
 }
 
@@ -129,14 +165,24 @@ export function mensajeParaEncargado(t: TicketPorFacturar, ruta: Extract<Ruta, {
   lineas.push(
     ruta.motivo === 'requiere_cuenta'
       ? 'Ese portal pide cuenta, por eso no se pudo hacer solo.'
-      : `Se intentó solo y no se pudo: ${ruta.detalle ?? 'el portal lo bloqueó'}. Reintentarlo daría lo mismo, por eso te llega a ti.`,
+      : ruta.motivo === 'sin_robot'
+        // SE DICE QUE EL HUECO ES NUESTRO. «No se pudo» a secas manda al
+        // encargado a buscar qué hizo mal, y no hizo nada mal.
+        ? 'Ese portal todavía no lo sé llenar solo. Con la liga y los datos de arriba se hace en un minuto.'
+        : `Se intentó solo y no se pudo: ${ruta.detalle ?? 'el portal lo bloqueó'}. Reintentarlo daría lo mismo, por eso te llega a ti.`,
   );
   return lineas.join('\n');
 }
 
-/** El reparto de una lista: cuántos van por cada camino. */
-export function repartir(tickets: TicketPorFacturar[]) {
-  const rutas = tickets.map((t) => ({ t, r: enrutar(t) }));
+/**
+ * El reparto de una lista: cuántos van por cada camino.
+ *
+ * `sabeOperarlo` se pregunta POR COMERCIO —no es un booleano suelto— porque una
+ * misma lista trae tickets de portales distintos, y el que tiene adaptador y el
+ * que no van por caminos distintos.
+ */
+export function repartir(tickets: TicketPorFacturar[], sabeOperarlo: (clave: string) => boolean) {
+  const rutas = tickets.map((t) => ({ t, r: enrutar(t, t.comercio ? sabeOperarlo(t.comercio.clave) : false) }));
   return {
     automaticos: rutas.filter((x) => x.r.via === 'automatico'),
     mensajes: rutas.filter((x) => x.r.via === 'mensaje'),

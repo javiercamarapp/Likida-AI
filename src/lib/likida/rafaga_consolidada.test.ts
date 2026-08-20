@@ -137,8 +137,10 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
     extraerComprobante.mockResolvedValue(FALLO_TECNICO);
     await rafaga(22);
 
-    // El número es el hallazgo entero. Antes: 22.
-    expect(salientes.length, `el chofer recibió ${salientes.length} mensajes`).toBeLessThanOrEqual(2);
+    // El número es el hallazgo entero. Antes: 22. Y después de esta ronda, UNO:
+    // el `≤ 2` de la primera versión dejaba pasar justo el mensaje de más que
+    // se midió el 20-ago (ver el describe de abajo).
+    expect(salientes.length, `el chofer recibió ${salientes.length} mensajes: ${JSON.stringify(salientes)}`).toBe(1);
     const todo = salientes.join('\n');
     expect(todo).toContain('De tus 22 fotos');
     expect(todo).toMatch(/\*22\*/);
@@ -149,7 +151,7 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
     extraerComprobante.mockResolvedValue(ILEGIBLE);
     await rafaga(22);
 
-    expect(salientes.length).toBeLessThanOrEqual(2);
+    expect(salientes.length, JSON.stringify(salientes)).toBe(1);
     expect(salientes.join('\n')).toMatch(/no las pude leer/i);
   });
 
@@ -163,10 +165,13 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
     });
     await rafaga(3);
 
-    expect(salientes.length).toBeLessThanOrEqual(2);
+    expect(salientes.length, JSON.stringify(salientes)).toBe(1);
     const todo = salientes.join('\n');
     expect(todo).toMatch(/fecha dudosa/i);
     expect(todo).toContain('$100.00');
+    // Y NO el mensaje largo de UN ticket concreto: en ráfaga ese detalle vive
+    // en la lista de montos, no en un mensaje aparte por el primero del fajo.
+    expect(todo).not.toMatch(/• Comercio:/);
   });
 
   it('CONTROL — una foto sola SIGUE recibiendo su mensaje individual', async () => {
@@ -177,6 +182,77 @@ describe('22 fotos que fallan NO son 22 mensajes', () => {
     expect(salientes[0]).toMatch(/difícil de leer/i);
     // Y NO se le manda además el resumen: sería decirle lo mismo dos veces.
     expect(salientes.join('\n')).not.toContain('Ya revisé tus fotos');
+  });
+
+  // ── LO MEDIDO EL 20-AGO-2026, EN UNA SALA, CON SEIS FOTOS ───────────────
+  //
+  // El chofer mandó seis y recibió esto, en este orden:
+  //
+  //   1. «Se me trabó a mí al leer ese comprobante ⚙️ — no es tu foto…»
+  //   2. «Ya revisé tus fotos… De tus 6 fotos, *6* se me trabaron de mi lado…»
+  //
+  // El mismo trabón, dos veces, y la segunda con un número que parecía
+  // desmentir a la primera. La causa: `llegoSola` se calculaba como «el
+  // contador de intake pasó de 0 a 1», y toda ráfaga tiene una primera foto que
+  // ve el 1. O sea que NO era el caso raro — pasaba en cada fajo.
+  it('la primera foto del fajo ya no contesta por su cuenta antes del resumen', async () => {
+    extraerComprobante.mockResolvedValue(FALLO_TECNICO);
+    await rafaga(6);
+
+    expect(salientes, 'un fajo es UN mensaje, no uno suelto más el resumen').toHaveLength(1);
+    expect(salientes[0]).toContain('De tus 6 fotos');
+    // El texto individual es correcto para una foto sola; suelto DELANTE del
+    // resumen es la repetición que se midió.
+    expect(salientes[0]).not.toMatch(/al leer ese comprobante/i);
+  });
+
+  // ── Y LA SEGUNDA MITAD DEL MISMO MENSAJE ────────────────────────────────
+  //
+  // El resumen cerraba SIEMPRE con «Reenvíame esas fotos —tomadas otra vez, con
+  // buena luz—», también cuando lo único que falló fue NUESTRO OCR. En el mismo
+  // párrafo le decía «no son tus fotos» y acto seguido lo mandaba a repetirlas
+  // por la luz: la contradicción es visible a simple vista, y obedecerla no
+  // arregla nada — un 429 vuelve a fallar con la mejor luz del mundo.
+  it('un fallo NUESTRO no le manda repetir la foto por la luz', async () => {
+    extraerComprobante.mockResolvedValue(FALLO_TECNICO);
+    await rafaga(6);
+
+    const todo = salientes.join('\n');
+    expect(todo, 'la luz nunca fue el problema').not.toMatch(/luz/i);
+    expect(todo, 'sigue teniendo que pedir el reenvío: es lo único que recupera el monto').toMatch(/reenv/i);
+    expect(todo).toMatch(/no son tus fotos/i);
+  });
+
+  it('pero a la foto que de verdad salió oscura SÍ le pide luz', async () => {
+    extraerComprobante.mockResolvedValue(ILEGIBLE);
+    await rafaga(6);
+
+    expect(salientes.join('\n')).toMatch(/buena luz/i);
+  });
+
+  // ── EL OTRO LADO DE CONSOLIDAR: UNA SOLA COSA SE DICE ENTERA ────────────
+  //
+  // Consolidar existe porque veintidós mensajes son ruido. Pero cuando en todo
+  // el fajo falló UNA, consolidarla pierde: «*1* trae fecha dudosa: la de
+  // $600.00» no le deja encontrar ese papel entre los otros cinco, que es justo
+  // para lo que existe `pedir_fecha.ts`. El umbral no es «llegó sola», es «hay
+  // una sola cosa que decir».
+  it('seis fotos y una con la fecha mala: el resumen trae las señas del ticket', async () => {
+    ventanaDesdeDB.mockResolvedValue({ inicio: '2026-08-01', fin: '2026-08-05', hoy: '2026-08-04' });
+    let n = 0;
+    extraerComprobante.mockImplementation(async () => {
+      n += 1;
+      if (n !== 3) return bueno(100 * n);
+      const g = bueno(600).gasto;
+      return { ...bueno(600), gasto: { ...g, fecha: '2019-03-02', folio: '05461', ocrExtra: { emisor: 'NUEVA WAL MART DE MEXICO' } } };
+    });
+    await rafaga(6);
+
+    const todo = salientes.join('\n');
+    expect(todo, 'sin las señas no sabe cuál de los seis papeles es').toContain('NUEVA WAL MART');
+    expect(todo).toContain('05461');
+    // Y sigue siendo UN mensaje: el detalle va DENTRO del resumen, no aparte.
+    expect(salientes.length, JSON.stringify(salientes)).toBe(1);
   });
 
   it('CONTROL — una ráfaga que sale bien no inventa incidencias', async () => {

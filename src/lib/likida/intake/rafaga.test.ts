@@ -121,3 +121,50 @@ describe('lineaIncidencias — lo que se le dice al cerrar la ráfaga', () => {
     expect(t).toMatch(/no la pude leer/i);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LO QUE SE LE PIDE TIENE QUE CUADRAR CON LO QUE FALLÓ.
+//
+// El párrafo cerraba SIEMPRE con «Reenvíame esas fotos —tomadas otra vez, con
+// buena luz—», sin mirar el motivo. Sobre un `fallo_tecnico` eso contradice al
+// renglón de encima —que acaba de decir «no son tus fotos»— y le echa la culpa
+// de un 429 nuestro: repetir veintidós fotos que estaban bien las vuelve a
+// tumbar igual, porque la luz nunca fue el problema. La rama sin-viaje ya había
+// quitado esa mentira de su mensaje individual; aquí seguía viva.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('lineaIncidencias — la instrucción no puede contradecir al diagnóstico', () => {
+  it('si el que se cayó fui yo, no le pido repetir la foto por la luz', () => {
+    const t = lineaIncidencias(6, Array.from({ length: 6 }, () => ({ tipo: 'fallo_tecnico' as const })))!;
+    expect(t, 'la luz nunca fue el problema').not.toMatch(/luz/i);
+    expect(t, 'el reenvío es lo único que recupera el monto').toMatch(/reenv/i);
+    expect(t).toMatch(/el problema fue mío/i);
+  });
+
+  it('a la que de verdad salió oscura sí le pido luz', () => {
+    const t = lineaIncidencias(6, Array.from({ length: 6 }, () => ({ tipo: 'ilegible' as const })))!;
+    expect(t).toMatch(/buena luz/i);
+  });
+
+  it('a la de fecha dudosa le pido la fecha, que es lo que falta ver', () => {
+    const t = lineaIncidencias(3, [{ tipo: 'fecha_dudosa', monto: 100 }])!;
+    expect(t).toMatch(/se alcance a ver la fecha/i);
+    expect(t, 'la foto se leyó completa: no era la luz').not.toMatch(/luz/i);
+  });
+
+  it('mezclado con oscuras, la luz se atribuye SOLO a las oscuras', () => {
+    const t = lineaIncidencias(6, [{ tipo: 'fallo_tecnico' }, { tipo: 'ilegible' }])!;
+    expect(t).toMatch(/las que salieron oscuras, con buena luz/i);
+  });
+
+  it('mezclado SIN oscuras, la luz no se menciona', () => {
+    const t = lineaIncidencias(6, [{ tipo: 'fallo_tecnico' }, { tipo: 'fecha_dudosa', monto: 100 }])!;
+    expect(t).not.toMatch(/luz/i);
+    expect(t).toMatch(/reenv/i);
+  });
+
+  it('el singular no dice "tus fotos" de una sola', () => {
+    const t = lineaIncidencias(3, [{ tipo: 'fallo_tecnico' }])!;
+    expect(t).toMatch(/no tu foto/);
+    expect(t).not.toMatch(/no tus fotos/);
+  });
+});

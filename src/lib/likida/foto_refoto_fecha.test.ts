@@ -46,7 +46,13 @@ vi.mock('@/lib/likida/conv', async (original) => ({
   claimMessage: vi.fn(async () => 'nuevo' as const),
   acquireViajeLock: vi.fn(async () => true), releaseViajeLock: vi.fn(),
   releaseMessageClaim: vi.fn(),
-  intakeDelta: vi.fn(async () => 1), esperarIntake: vi.fn(async () => true),
+  // ATÓMICO, como el de verdad: `+1` sube y `-1` baja. Devolver `1` siempre
+  // —que es lo que había— modela un contador que NUNCA vuelve a 0, y con eso
+  // la ráfaga no cierra nunca. Da igual mientras cada camino conteste por su
+  // cuenta; deja de dar igual desde que el cierre es quien decide si habla el
+  // mensaje del ticket o el resumen.
+  intakeDelta: vi.fn(async (_v: string, d: number) => (enVuelo = Math.max(0, enVuelo + d))),
+  esperarIntake: vi.fn(async () => true),
 }));
 vi.mock('@/lib/likida/repo', () => ({
   ubicarGastoPorHash: vi.fn(async () => null),
@@ -100,6 +106,8 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const { processInbound } = await import('./processor');
 
 const salientes: string[] = [];
+/** Fotos en vuelo: el estado del contador de intake, que el mock de abajo mueve. */
+let enVuelo = 0;
 const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => {
   const body = JSON.parse(String(init?.body ?? '{}'));
   salientes.push(String((body.text as { body?: string } | undefined)?.body ?? ''));
@@ -117,7 +125,7 @@ const WALMART_MAL = {
 
 describe('processInbound — pedir la re-foto y saber recibirla', () => {
   beforeEach(() => {
-    salientes.length = 0;
+    salientes.length = 0; enVuelo = 0;
     for (const m of [addGasto, corregirFechaGasto, gastoExistePorHash, gastoPorHash, getGastos, extraerComprobante, runAgent, subirComprobante]) m.mockReset();
     vi.stubGlobal('fetch', fetchSpy);
     fetchSpy.mockClear();
@@ -272,7 +280,7 @@ describe('processInbound — el comprobante se archiva', () => {
     // Bloque HERMANO del de arriba: no hereda su `beforeEach`, así que el
     // arranque se repite entero. Sin esto, los mocks llegaban con el estado del
     // último caso del otro bloque y dos pruebas pasaban por arrastre.
-    salientes.length = 0;
+    salientes.length = 0; enVuelo = 0;
     for (const m of [addGasto, corregirFechaGasto, gastoExistePorHash, gastoPorHash, getGastos, extraerComprobante, runAgent, subirComprobante]) m.mockReset();
     vi.stubGlobal('fetch', fetchSpy);
     fetchSpy.mockClear();
