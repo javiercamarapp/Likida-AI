@@ -117,7 +117,8 @@ describe('processInbound — el dueño que maneja es chofer Y oficina', () => {
     process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
   });
 
-  it('despacha aunque el número esté dado de alta como operador', async () => {
+  it('SIN viaje propio abierto, despacha aunque el número sea operador', async () => {
+    getOpenViaje.mockResolvedValue(null); // el dueño no trae viaje propio: puede despachar
     atenderDespachoOficina.mockResolvedValue('Voy a crear este viaje: …');
     await processInbound(msg('nuevo viaje para Juan, Puebla a Monterrey'));
 
@@ -125,6 +126,23 @@ describe('processInbound — el dueño que maneja es chofer Y oficina', () => {
       { tenantId: 't1', rol: 'flota_admin' }, TEL, 'nuevo viaje para Juan, Puebla a Monterrey',
     );
     expect(salientes[0]).toContain('Voy a crear este viaje');
+  });
+
+  // ── AUDITORÍA 1, CRÍTICO (Agéntico) ──────────────────────────────────────
+  it('CON VIAJE ABIERTO no se despacha: el «va» del chofer no confirma un viaje ajeno', async () => {
+    // getOpenViaje devuelve 'v1' por defecto. Un «va» soltado en ruta —muletilla,
+    // o respuesta a otra cosa— NO debe llegar a despacho_wa (donde esAfirmacion
+    // lo tomaría como "sí" y crearía un viaje con anticipo real).
+    atenderDespachoOficina.mockResolvedValue('NO DEBERÍA CREAR NADA');
+    await processInbound(msg('va'));
+    expect(atenderDespachoOficina).not.toHaveBeenCalled();
+    expect(salientes.join('\n')).not.toContain('NO DEBERÍA CREAR NADA');
+  });
+
+  it('CON VIAJE ABIERTO tampoco se despacha un «nuevo viaje…»: primero cierra el suyo', async () => {
+    atenderDespachoOficina.mockResolvedValue('no debería');
+    await processInbound(msg('nuevo viaje para Juan, Puebla a Monterrey'));
+    expect(atenderDespachoOficina).not.toHaveBeenCalled();
   });
 
   it('«¿cómo van?» le contesta el informe, no el camino del chofer', async () => {
