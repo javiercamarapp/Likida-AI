@@ -12,7 +12,7 @@
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { logger } from '@/lib/logger';
-import { generateStructured, StructuredError, TruncatedError } from '@/lib/llm/openrouter';
+import { generateStructured, StructuredError, TruncatedError, resumenCausa } from '@/lib/llm/openrouter';
 import { decodeCodigosFromImage, bufferFromDataUrl, esRfcValido, esUuidValido, rfcChecksumOk } from './cfdi';
 import { normalizarFecha } from './fecha';
 import { sanitizarFolio, sanitizarTexto, sanitizarProducto } from './sanitizar';
@@ -269,6 +269,11 @@ export async function extraerComprobante(
     const truncado = e instanceof TruncatedError;
     logger.error('ocr.fallo_tecnico', {
       err: e instanceof Error ? e.message : String(e),
+      // AUDITORÍA 1, CRÍTICO (Operabilidad): la causa real —401 por llave rota,
+      // provider caído, schema— para que el log distinga QUÉ falló en vez de
+      // repetir el mensaje fijo. Es lo que faltó el 20-ago con las env en
+      // "[SENSITIVE]": 25 fallos idénticos sin decir por qué.
+      causa: resumenCausa(e),
       truncado,
       ...(truncado ? { tope: (e as TruncatedError).tope, usados: (e as TruncatedError).tokensUsados } : {}),
     });
