@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Fuel } from 'lucide-react';
-import { KpiTile, ChartCard } from './kit';
+import { KpiTile, ChartCard, StatCard } from './kit';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 10, ALTO — `KpiTile` manda "$0.00" en el HTML servido, sea cual
@@ -89,5 +89,34 @@ describe('KpiTile y ChartCard — el rótulo ya no se corta a la mitad', () => {
     expect(html).not.toContain('truncate');
     expect(html).toContain('line-clamp-2');
     expect(html).toContain('El gasto del periodo, por su suerte fiscal');
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 1, CRÍTICO (Frontend) — `StatCard` colapsaba `null` a `0` y pintaba
+// "$0.00" + "0% · sin movimiento" en la primera tarjeta del Resumen cuando NO
+// había viajes que medir (costo por viaje = división indefinida). El backend
+// devuelve `null` a propósito; la UI lo tapaba con un cero con cara de medición.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('StatCard — no medible (valor null) NO es "$0.00"', () => {
+  it('con valor null pinta un guion y DICE por qué, sin cifra ni "sin movimiento"', () => {
+    const html = renderToStaticMarkup(
+      <StatCard icono={ICONO} etiqueta="Costo por viaje" valor={null} formato="mxn"
+        sinDato="sin viajes en el periodo" />,
+    );
+    expect(html).toContain('—');
+    expect(html).toContain('sin viajes en el periodo');
+    expect(html).not.toContain('$0.00');
+    expect(html).not.toContain('sin movimiento');
+  });
+
+  it('con un 0 REAL (medido) sigue mostrando la cifra, no el guion', () => {
+    const html = renderToStaticMarkup(
+      <StatCard icono={ICONO} etiqueta="Liquidado" valor={0} formato="mxn" />,
+    );
+    // Un 0 medido es "$0.00", no "sin dato": la distinción que el arreglo protege.
+    expect(html).toContain('$0.00');
+    expect(html).not.toContain('sin viajes en el periodo');
   });
 });
