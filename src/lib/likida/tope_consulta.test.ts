@@ -33,7 +33,12 @@ describe('ninguna consulta del cierre se queda sin techo', () => {
   it.each(CAMINO_DEL_CIERRE)('%s no llama a supabaseAdmin() en crudo', (archivo) => {
     const src = sinComentarios(readFileSync(archivo, 'utf8'));
     // `await supabaseAdmin()` sin `acotada(` delante es una consulta sin tope.
-    const crudas = [...src.matchAll(/await supabaseAdmin\(\)/g)].length;
+    // Y el ALIAS: `const admin = supabaseAdmin(); await admin.rpc/from(…)` — el
+    // patrón que se coló en `acquireViajeLock` (auditoría 2) porque el regex
+    // literal no lo veía. Una llamada envuelta es `acotada(admin.rpc(…`, así que
+    // `await admin.(rpc|from)(` solo matchea las CRUDAS.
+    const crudas = [...src.matchAll(/await supabaseAdmin\(\)/g)].length
+      + [...src.matchAll(/await admin\.(rpc|from)\(/g)].length;
     expect(
       crudas,
       `${archivo} tiene consultas sin tope. Envuélvelas: await acotada(supabaseAdmin()…, 'etiqueta'). ` +
