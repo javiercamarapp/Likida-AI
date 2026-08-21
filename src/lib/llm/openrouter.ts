@@ -103,6 +103,30 @@ export function modelosAisladosDeFallback(): string[] {
   return Object.keys(PRICES).filter((modelo) => !enLaRed.has(modelo));
 }
 
+/**
+ * Un resumen legible de POR QUÉ falló una llamada al modelo, cavando en la
+ * cadena de `.cause` (el SDK de OpenAI entierra ahí el detalle real: status,
+ * mensaje del provider, el `fetch failed` de undici). Devuelve algo como
+ * "401 Unauthorized" o "getaddrinfo ENOTFOUND" en vez de perder la causa.
+ *
+ * AUDITORÍA 1 (Operabilidad + tool-calling): sin esto, todo fallo de OCR/tools
+ * salía al log como el mismo string fijo y era indistinguible en Sentry.
+ */
+export function resumenCausa(err: unknown, profundidad = 3): string {
+  const partes: string[] = [];
+  let cur: unknown = err;
+  for (let i = 0; i < profundidad && cur; i++) {
+    const o = cur as { status?: unknown; code?: unknown; message?: unknown; cause?: unknown };
+    if (typeof o?.status === 'number' || typeof o?.status === 'string') partes.push(`status=${o.status}`);
+    if (typeof o?.code === 'string') partes.push(o.code);
+    const m = cur instanceof Error ? cur.message : typeof cur === 'string' ? cur : undefined;
+    if (m && !partes.includes(m)) partes.push(m);
+    cur = o?.cause;
+  }
+  const txt = [...new Set(partes)].filter(Boolean).join(' · ').slice(0, 300);
+  return txt || 'sin detalle de causa';
+}
+
 export function isTransientError(err: unknown): boolean {
   // POR TIPO ANTES QUE POR TEXTO. El SDK de OpenAI aplasta CUALQUIER fallo de
   // conexión —DNS, TCP rechazado, TLS, `fetch failed` de undici— en un
@@ -483,7 +507,12 @@ export async function generateStructured<T>(opts: {
    * justo en el caso más caro: el que falló varias veces antes de rendirse.
    */
   const conGastado = (e: unknown, msg: string): StructuredError => {
-    const err = e instanceof StructuredError ? e : new StructuredError(msg, e);
+    // AUDITORÍA 1, CRÍTICO (Operabilidad) + tool-calling: el mensaje llevaba
+    // solo "Falló generación estructurada", y la causa real (401 por llave rota,
+    // provider caído, schema roto) quedaba enterrada en `.cause` — indistinguible
+    // en el log y en Sentry. Se sube al MENSAJE, que es lo único que casi todos
+    // los `logger.error({ err: e.message })` del repo leen.
+    const err = e instanceof StructuredError ? e : new StructuredError(`${msg}: ${resumenCausa(e)}`, e);
     err.usage = { model, ...gastado };
     return err;
   };
