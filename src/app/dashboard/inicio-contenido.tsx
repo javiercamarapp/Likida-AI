@@ -355,7 +355,12 @@ export async function InicioContenido({
                         nombre="Costo por viaje" campo="costoPorViaje" formato="mxn" subeEsBueno={false} series={seriesKpis} />
                       <StatCard icono={<PiggyBank width={15} height={15} strokeWidth={1.75} />}
                         etiqueta={`Ahorro generado — ${periodoFiscal.etiqueta}`}
-                        valor={resumenPerdidas?.montoRecuperable ?? 0} formato="mxn" delta={null} />
+                        // AUDITORÍA 1, ALTO: si la lectura fiscal falló (o no hay
+                        // config), es `null` — se PRESERVA y la tarjeta dice "—",
+                        // en vez de afirmar "$0.00 de ahorro" que suena a medición.
+                        valor={resumenPerdidas ? resumenPerdidas.montoRecuperable : null}
+                        sinDato="no se pudo leer el dato fiscal"
+                        formato="mxn" delta={null} />
                     </div>
                   ) : (
                     <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el comparativo de KPIs.</p>

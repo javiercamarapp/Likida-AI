@@ -188,7 +188,10 @@ export default async function CombustibleCasetasPage({
                 etiqueta="Litros elegibles para el estímulo" valor={acred?.litrosDiesel ?? 0} formato="litros"
                 nota="LIF 2026, Art. 20-A" />
               <KpiTile icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                etiqueta="Sin CFDI (combustible y casetas)" valor={pctSinCfdi ?? 0} formato="porcentaje"
+                // AUDITORÍA 1, ALTO: sin comprobantes, `pctSinCfdi` es null — se
+                // PRESERVA para que el encabezado diga "—" y no un "0%" que se
+                // lee como "todo facturado" (buena noticia falsa en un vistazo).
+                etiqueta="Sin CFDI (combustible y casetas)" valor={pctSinCfdi} formato="porcentaje"
                 vacio={pctSinCfdi === null ? 'Sin comprobantes de estos conceptos todavía' : undefined}
                 nota={pctSinCfdi === null ? undefined : `${sinCfdi} de ${combustibleYCasetas.length} sin factura — es deducible que se pierde`} />
             </div>

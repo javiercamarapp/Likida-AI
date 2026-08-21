@@ -99,6 +99,18 @@ describe('KpiTile y ChartCard — el rótulo ya no se corta a la mitad', () => {
 // había viajes que medir (costo por viaje = división indefinida). El backend
 // devuelve `null` a propósito; la UI lo tapaba con un cero con cara de medición.
 // ═══════════════════════════════════════════════════════════════════════════
+describe('KpiTile — no medible (valor null) pinta guion, no 0/0%', () => {
+  it('con valor null muestra "—" y el mensaje de `vacio`, sin "0%"', () => {
+    const html = renderToStaticMarkup(
+      <KpiTile icono={ICONO} etiqueta="Sin CFDI" valor={null} formato="porcentaje"
+        vacio="Sin comprobantes de estos conceptos todavía" />,
+    );
+    expect(html).toContain('—');
+    expect(html).toContain('Sin comprobantes de estos conceptos');
+    expect(html).not.toContain('0%');
+  });
+});
+
 describe('StatCard — no medible (valor null) NO es "$0.00"', () => {
   it('con valor null pinta un guion y DICE por qué, sin cifra ni "sin movimiento"', () => {
     const html = renderToStaticMarkup(
