@@ -64,7 +64,11 @@ export function KpiPeriodo({
     <StatCard
       icono={icono}
       etiqueta={`${nombre} — ${ETIQUETA_MODO[modo]}`}
-      valor={valorActual ?? 0}
+      // AUDITORÍA 1, CRÍTICO: se PRESERVA el `null` que el backend devuelve a
+      // propósito (p. ej. costo por viaje con 0 viajes es división indefinida,
+      // no cero). Colapsarlo a 0 pintaba un $0.00 inventado — la regla #1.
+      valor={valorActual}
+      sinDato="sin viajes en el periodo"
       formato={formato}
       delta={pct === null ? null : { pct, bueno: subeEsBueno ? pct >= 0 : pct <= 0 }}
       flechas={
