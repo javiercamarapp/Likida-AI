@@ -1003,7 +1003,13 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // que colgaba todo el exceso de un solo gasto.
     const proporcion = Math.max(0, Math.min(1, proporcionDeducible.get(g.id) ?? 1));
 
-    if ((g.ivaTraslado ?? 0) > 0) ivaAcreditable += (g.ivaTraslado as number) * proporcion;
+    // AUDITORÍA 2, CRÍTICO (fiscal): LIVA 5-III exige que el IVA trasladado esté
+    // "efectivamente pagado en el mes". Un CFDI con forma de pago '99' (Por
+    // definir — la contraprestación no se ha pagado, RMF 2.7.1.29 fr. II) trae
+    // IVA trasladado pero NO acreditable aún. Se excluye igual que ya se hace
+    // con peaje/diésel en la lógica de forma de pago. Un '99' se acreditará el
+    // mes en que se pague (con su complemento de pago), no éste.
+    if ((g.ivaTraslado ?? 0) > 0 && g.formaPago !== '99') ivaAcreditable += (g.ivaTraslado as number) * proporcion;
     // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas.
     if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0) peajeAcreditable += (g.subTotal as number) * peajeFactor;
     // IEPS de DIÉSEL (7): el estímulo (LIF 2026 art. 20, ap. A) es SOLO diésel — NO
