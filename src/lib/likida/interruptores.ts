@@ -25,6 +25,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { DatoInvalido } from './errores';
+import { acotada } from './presupuesto';
 
 /** El catálogo completo: 'global' + los 7 agentes del dominio de
  *  `agente_corrida` (0102 + ventas en 0105). El CHECK de la 0110 vigila lo
@@ -64,11 +65,16 @@ function esNombreValido(nombre: string): nombre is NombreInterruptor {
  */
 export async function estaApagado(nombre: NombreInterruptor): Promise<boolean> {
   try {
-    const { data, error } = await supabaseAdmin()
+    // AUDITORÍA 2 (backend): el kill switch es la red de seguridad manual — no
+    // puede colgarse. Con `acotada` un socket que Supabase acepta y no contesta
+    // corta en el tope (no en el default de undici de 300 s), y el timeout cae
+    // por la rama `if (error)` de abajo → fail-closed (apagado). El backstop del
+    // cliente (admin.ts) ya lo acotaba a 25 s; esto lo baja al tope de consulta.
+    const { data, error } = await acotada(supabaseAdmin()
       .from('interruptor')
       .select('apagado')
       .eq('id', nombre)
-      .maybeSingle();
+      .maybeSingle(), 'estaApagado');
     if (error) {
       // Se GRITA: el salto por fail-closed no puede pasar desapercibido — un
       // cron saltándose corridas por una base con hipo se parece demasiado a

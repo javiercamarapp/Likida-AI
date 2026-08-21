@@ -460,7 +460,12 @@ export async function acquireViajeLock(viajeId: string, opts?: { ttlMs?: number;
   let delay = 150;
   let ultimoError: { code?: string; message?: string } | null = null;
   for (;;) {
-    const { data, error } = await admin.rpc('try_lock_viaje', { p_viaje: viajeId, p_ttl_ms: ttlMs });
+    // AUDITORÍA 2 (backend): el ÚNICO punto de espera del bucle. Sin `acotada`,
+    // un socket que Supabase acepta y no contesta se queda aquí sin volver, así
+    // que el `maxWaitMs` de abajo nunca se revisa y la función muere al
+    // `maxDuration` sin tomar el lock ni cuadrar. Con `acotada` cada intento
+    // corta en el tope de consulta y el bucle sí puede revisar su `maxWaitMs`.
+    const { data, error } = await acotada(admin.rpc('try_lock_viaje', { p_viaje: viajeId, p_ttl_ms: ttlMs }), 'acquireViajeLock');
     if (!error && data === true) return true;
     if (error) {
       ultimoError = error;
