@@ -32,6 +32,41 @@ import type { RolOficina } from './contactos';
 // EXACTAMENTE el falso positivo que el parser se cuida de no crear. La
 // intención expira a los 30 minutos; después, el "sí" recibe el saludo de
 // siempre y no crea nada.
+//
+// ── LA FUSIÓN, NO EL REEMPLAZO (auditoría 2, ronda 2) ───────────────────────
+// Esta fila la escriben TRES módulos bajo la MISMA llave única (tenant,
+// teléfono): este archivo (`viajePendiente`), `asignar_wa.ts`
+// (`asignacionPendiente`) y `conv.ts::saveConversation` (`turns` y sus
+// marcas). Chocan cuando el mismo teléfono es OFICINA y CHOFER a la vez —el
+// dueño-que-maneja que `contactos.ts` documenta como caso normal en una
+// flota chica—, y antes cada uno REEMPLAZABA `estado` entero: un despacho
+// pendiente armado un instante antes de que el chofer mandara "ya llegué" se
+// comía sus `turns` y nulificaba el `viaje_id` que `saveConversation` acababa
+// de poner.
+//
+// `incluirDespacho=!viajeId` (processor.ts) ya evita el peor caso —despachar
+// mientras el chofer trae un viaje abierto—, así que lo que queda es más
+// angosto: el dueño SIN viaje abierto que aun así trae una charla en curso
+// (p. ej. "¿cuál viaje arrancas?" a medio responder). Esta ronda cierra eso:
+// cada escritor LEE la fila, fusiona SOLO su propia llave sobre lo que haya, y
+// escribe el objeto completo — nunca un objeto con una sola llave.
+//
+// `viaje_id` NO lo toca este módulo (se omite del payload a propósito): el
+// que de verdad lo maneja es `saveConversation`, y con `.upsert()` una
+// columna ausente del payload no entra al `SET` del `ON CONFLICT` —queda
+// intacta—. Antes se mandaba `viaje_id: null` en cada escritura, y ESO era lo
+// que nulificaba el viaje real del chofer.
+//
+// LA CARRERA QUE QUEDA: el SELECT de abajo y el UPDATE/UPSERT que le sigue no
+// son un solo statement —un merge `estado || jsonb` de Postgres SÍ lo sería,
+// pero exige una función (RPC) nueva, fuera del alcance de este fix—. Entre
+// los dos, otro escritor puede meter su cambio y perderlo cuando este aterrice.
+// Se acepta: hace falta el MISMO teléfono en dos roles Y dos mensajes casi
+// simultáneos —una ventana de milisegundos—, y lo peor que pasa es perder un
+// turno de charla o una marca de conteo (se re-pregunta), no un cobro ni un
+// despacho duplicado. El claim de `reclamarPendiente` —que si tiene que ser
+// atómico, porque decide si `crearViaje` corre una vez o dos— sigue siéndolo:
+// ver su comentario.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface CuentaDespacho {
@@ -78,14 +113,34 @@ async function cargarPendiente(tenantId: string, telefono: string, ahora: Date):
 
 /** `true` si la escritura quedó. Quien restaura un pendiente NECESITA saberlo. */
 async function guardarPendiente(tenantId: string, telefono: string, p: PendienteViaje | null): Promise<boolean> {
+  // LEE-MODIFICA-ESCRIBE (ver el encabezado del archivo): se trae lo que haya
+  // en la fila y se fusiona SOLO `viajePendiente` encima — nunca se reemplaza
+  // `estado` entero. Un fallo de lectura no bloquea el despacho por un
+  // tropiezo transitorio: se degrada al comportamiento previo a esta ronda
+  // (escribir solo la llave propia), y queda anotado para diagnóstico.
+  const { data: filaActual, error: errLectura } = await acotada(supabaseAdmin()
+    .from('wa_conversacion')
+    .select('estado')
+    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .maybeSingle(), 'despachoWa.guardarPendiente.leer');
+  if (errLectura) {
+    logger.warn('despacho_wa.pendiente_fusion_ilegible', { err: errLectura.message });
+  }
+  const previo = (filaActual?.estado as Record<string, unknown> | null) ?? {};
+  const fusionado: Record<string, unknown> = { ...previo };
+  if (p) fusionado.viajePendiente = p; else delete fusionado.viajePendiente;
+
+  // `viaje_id` y `operador_id` NO van en el payload: con `.upsert()`, una
+  // columna ausente no entra al `SET` del `ON CONFLICT` y queda intacta —eso
+  // es lo que evita nulificar el `viaje_id` real que puso `saveConversation`.
+  // En un INSERT (fila nueva) quedan en su default de columna (`null`), que
+  // es el mismo valor que se mandaba antes explícito.
   const { error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .upsert({
       tenant_id: tenantId,
-      operador_id: null,
       telefono,
-      viaje_id: null,
-      estado: p ? { viajePendiente: p } : {},
+      estado: fusionado,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'tenant_id,telefono' }), 'despachoWa.guardarPendiente');
   if (error) {
@@ -106,11 +161,34 @@ async function guardarPendiente(tenantId: string, telefono: string, p: Pendiente
  * llegaban a `crearViaje`. Este UPDATE condicional es leer-y-borrar en UN solo
  * statement — la condición `estado->viajePendiente is not null` solo puede
  * cumplirse para uno, así que gana exactamente uno y el claim ES el borrado.
+ *
+ * FUSIÓN, RONDA 2: lo que hace el claim atómico es el `WHERE`
+ * (`not('estado->viajePendiente', 'is', null)`) — eso es lo único que decide
+ * quién gana, sin importar QUÉ valor de `estado` se escriba. Antes se
+ * escribía `{}` a ciegas, y eso se llevaba `asignacionPendiente`/`turns`/
+ * marcas si el mismo teléfono los traía puestos (dueño-que-maneja). Ahora se
+ * lee la fila primero y se quita SOLO `viajePendiente` de lo que haya — el
+ * `UPDATE` condicional de abajo sigue siendo el mismo statement atómico, nada
+ * más cambia el valor que entra en su `SET`. Si la lectura falla, se falla
+ * cerrado (sin ella no se sabe qué preservar): el pendiente queda intacto y
+ * el jefe reintenta.
  */
 async function reclamarPendiente(tenantId: string, telefono: string): Promise<'reclamado' | 'ya_reclamado' | 'fallo'> {
+  const { data: filaActual, error: errLectura } = await acotada(supabaseAdmin()
+    .from('wa_conversacion')
+    .select('estado')
+    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .maybeSingle(), 'despachoWa.reclamarPendiente.leer');
+  if (errLectura) {
+    logger.error('despacho_wa.reclamo_lectura_fallo', { err: errLectura.message });
+    return 'fallo';
+  }
+  const sinPendiente: Record<string, unknown> = { ...((filaActual?.estado as Record<string, unknown> | null) ?? {}) };
+  delete sinPendiente.viajePendiente;
+
   const { data, error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
-    .update({ estado: {}, updated_at: new Date().toISOString() })
+    .update({ estado: sinPendiente, updated_at: new Date().toISOString() })
     .eq('tenant_id', tenantId).eq('telefono', telefono)
     .not('estado->viajePendiente', 'is', null)
     .select('telefono'), 'despachoWa.reclamarPendiente');

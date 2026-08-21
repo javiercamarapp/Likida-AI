@@ -35,6 +35,29 @@ import type { RolOficina } from './contactos';
 // Dos "sí" en la misma ventana no pueden ejecutar dos veces: el claim es un
 // UPDATE condicional sobre `estado->asignacionPendiente` — leer-y-borrar en
 // un statement, gana exactamente uno.
+//
+// ── LA FUSIÓN, NO EL REEMPLAZO (auditoría 2, ronda 2) ───────────────────────
+// "Guardar un pendiente REEMPLAZA al que hubiera" (arriba) es correcto ENTRE
+// `viajePendiente` y `asignacionPendiente` —un solo pendiente a la vez, por
+// diseño—. El bug real era que ese reemplazo se hacía escribiendo `estado`
+// ENTERO, así que también se llevaba lo que NO le tocaba: los `turns` que
+// `conv.ts::saveConversation` puso para el chofer, cuando el mismo teléfono
+// es oficina Y chofer (dueño-que-maneja, ver `contactos.ts`). Ahora cada
+// escritor LEE la fila y fusiona SOLO su llave — este módulo puede seguir
+// reemplazando `viajePendiente` con su propio `asignacionPendiente` (ES la
+// regla de arriba), pero ya no toca `turns` ni marcas ajenas.
+//
+// `viaje_id` NO lo toca este módulo: se omite del payload del `.upsert()`
+// para que, en el `ON CONFLICT`, la columna quede intacta en vez de
+// nulificarse — lo maneja `saveConversation`, no aquí.
+//
+// LA CARRERA QUE QUEDA es la misma que documenta `despacho_wa.ts`: el SELECT
+// y el UPDATE/UPSERT no son un solo statement (eso exigiría un merge
+// `estado || jsonb` vía RPC, fuera de alcance). Se acepta por la misma razón:
+// ventana de milisegundos, exige el mismo teléfono en dos roles y dos
+// mensajes casi simultáneos, y lo peor que se pierde es un turno o una marca
+// — no un cobro ni una asignación duplicada. El claim de `reclamarPendiente`
+// sigue siendo el UPDATE condicional atómico de siempre.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const MAX_LARGO = 160;
@@ -148,14 +171,31 @@ async function cargarPendiente(tenantId: string, telefono: string, ahora: Date):
 }
 
 async function guardarPendiente(tenantId: string, telefono: string, p: AsignacionPendiente | null): Promise<boolean> {
+  // LEE-MODIFICA-ESCRIBE (ver el encabezado): se fusiona SOLO
+  // `asignacionPendiente` sobre lo que ya haya en la fila. Un fallo de
+  // lectura degrada al comportamiento previo (escribir solo la llave propia)
+  // en vez de bloquear la asignación por un tropiezo transitorio.
+  const { data: filaActual, error: errLectura } = await acotada(supabaseAdmin()
+    .from('wa_conversacion')
+    .select('estado')
+    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .maybeSingle(), 'asignarWa.guardarPendiente.leer');
+  if (errLectura) {
+    logger.warn('asignar_wa.pendiente_fusion_ilegible', { err: errLectura.message });
+  }
+  const previo = (filaActual?.estado as Record<string, unknown> | null) ?? {};
+  const fusionado: Record<string, unknown> = { ...previo };
+  if (p) fusionado.asignacionPendiente = p; else delete fusionado.asignacionPendiente;
+
+  // `viaje_id`/`operador_id` fuera del payload a propósito: en el
+  // `ON CONFLICT` del `.upsert()`, una columna ausente queda intacta —no se
+  // nulifica el `viaje_id` real de `saveConversation`.
   const { error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .upsert({
       tenant_id: tenantId,
-      operador_id: null,
       telefono,
-      viaje_id: null,
-      estado: p ? { asignacionPendiente: p } : {},
+      estado: fusionado,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'tenant_id,telefono' }), 'asignarWa.guardarPendiente');
   if (error) {
@@ -165,11 +205,30 @@ async function guardarPendiente(tenantId: string, telefono: string, p: Asignacio
   return true;
 }
 
-/** Leer-y-borrar en un statement: gana exactamente un "sí". */
+/**
+ * Leer-y-borrar en un statement: gana exactamente un "sí". El `WHERE`
+ * (`not('estado->asignacionPendiente', 'is', null)`) es lo que hace el claim
+ * atómico, sin importar qué valor de `estado` se escriba — por eso se puede
+ * leer la fila primero y quitar SOLO `asignacionPendiente` de lo que haya
+ * (fusión, ronda 2) sin perder la garantía de "gana exactamente uno". Si la
+ * lectura falla, se falla cerrado: el pendiente queda intacto.
+ */
 async function reclamarPendiente(tenantId: string, telefono: string): Promise<'reclamado' | 'ya_reclamado' | 'fallo'> {
+  const { data: filaActual, error: errLectura } = await acotada(supabaseAdmin()
+    .from('wa_conversacion')
+    .select('estado')
+    .eq('tenant_id', tenantId).eq('telefono', telefono)
+    .maybeSingle(), 'asignarWa.reclamarPendiente.leer');
+  if (errLectura) {
+    logger.error('asignar_wa.reclamo_lectura_fallo', { err: errLectura.message });
+    return 'fallo';
+  }
+  const sinPendiente: Record<string, unknown> = { ...((filaActual?.estado as Record<string, unknown> | null) ?? {}) };
+  delete sinPendiente.asignacionPendiente;
+
   const { data, error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
-    .update({ estado: {}, updated_at: new Date().toISOString() })
+    .update({ estado: sinPendiente, updated_at: new Date().toISOString() })
     .eq('tenant_id', tenantId).eq('telefono', telefono)
     .not('estado->asignacionPendiente', 'is', null)
     .select('telefono'), 'asignarWa.reclamarPendiente');
