@@ -299,6 +299,52 @@ export async function crearSuscripcionPorTransferencia(opciones: {
   return { subscriptionId: s.id, customerId, urlFactura };
 }
 
+/**
+ * CAMBIA EL PRICE DE UNA SUSCRIPCIÓN QUE YA EXISTE, en vez de crear una nueva.
+ *
+ * ES EL CAMINO CANÓNICO PARA "CAMBIAR DE PLAN" (auditoría 2, hallazgo real).
+ * `crearSuscripcionPorTransferencia` SIEMPRE crea un objeto de suscripción
+ * nuevo en Stripe; si "cambiar de plan" la llamara sin más, la flota terminaría
+ * con DOS suscripciones vivas —la vieja nadie la tocó— y Stripe le cobraría
+ * las dos mensualidades. El índice único de la 0052 ("una viva por tenant")
+ * solo se entera de eso cuando el webhook intenta insertar la segunda fila y
+ * revienta la restricción: para entonces las dos ya cobraron.
+ *
+ * Actualizar el PRICE de la MISMA suscripción evita el doble cobro por
+ * construcción — sigue habiendo un solo objeto de Stripe, con el mismo
+ * `collection_method: send_invoice` y los mismos `payment_settings` que ya
+ * tenía (no se repiten aquí: Stripe los conserva si no se mandan).
+ *
+ * Se lee la suscripción primero porque el update pide el `item.id` a
+ * reemplazar, no solo el price nuevo — mandar el price solo AGREGARÍA un
+ * segundo item a la misma suscripción en vez de sustituir el primero, que es
+ * su propia variante del mismo bug.
+ */
+export async function cambiarPriceDeSuscripcion(opciones: {
+  subscriptionId: string;
+  priceId: string;
+}): Promise<{ subscriptionId: string }> {
+  const actual = await pedir<{ id: string; items: { data: Array<{ id: string }> } }>(
+    `/subscriptions/${encodeURIComponent(opciones.subscriptionId)}`,
+    { metodo: 'GET' },
+  );
+
+  const itemId = actual.items?.data?.[0]?.id;
+  if (!itemId) {
+    throw new Error(`Stripe subscriptions/${opciones.subscriptionId}: no tiene ningún item que reemplazar.`);
+  }
+
+  const s = await pedir<{ id: string }>(`/subscriptions/${encodeURIComponent(opciones.subscriptionId)}`, {
+    cuerpo: { items: [{ id: itemId, price: opciones.priceId }] },
+    // Sin esto, un reintento de red mandaría el mismo cambio dos veces — inofensivo
+    // aquí porque es idempotente por naturaleza (fija el price, no lo acumula),
+    // pero la misma disciplina que el resto del archivo.
+    idempotencia: `sub-update-${opciones.subscriptionId}-${opciones.priceId}`,
+  });
+
+  return { subscriptionId: s.id };
+}
+
 /** El portal donde el cliente cambia su tarjeta o cancela, sin escribirle a nadie. */
 export async function crearPortal(customerId: string, urlVolver: string): Promise<string> {
   const s = await pedir<{ url: string }>('/billing_portal/sessions', {

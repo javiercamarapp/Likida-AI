@@ -8,10 +8,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import {
-  getPlanes, getSuscripcion, getFacturasSaas, getUso,
+  getPlanes, getSuscripcion, getFacturasSaas, getUso, cambiarPlan,
   type Plan, type Suscripcion, type FacturaSaas, type UsoDelPlan,
 } from '@/lib/saas/suscripcion';
-import { crearSuscripcionPorTransferencia, crearPortal, stripeConfigurado, modoStripe } from '@/lib/saas/stripe';
+import { crearPortal, stripeConfigurado, modoStripe } from '@/lib/saas/stripe';
 import { datosBancarios } from '@/lib/saas/transferencia';
 import {
   getDatosFiscales, guardarDatosFiscales, estanCompletos, REGIMENES, USOS_CFDI,
@@ -108,7 +108,8 @@ export default async function SuscripcionPage({
    * en un aviso rojo — el cliente vería "no se pudo" de un cobro que sí iba.
    */
   /**
-   * Contrata el plan PARA PAGARSE POR TRANSFERENCIA.
+   * Contrata el plan, O CAMBIA AL PLAN NUEVO si ya había una suscripción —
+   * PAGADO POR TRANSFERENCIA.
    *
    * No es un checkout: la documentación de Stripe dice que las transferencias
    * bancarias no son compatibles con Checkout en modo suscripción. Se crea la
@@ -118,6 +119,15 @@ export default async function SuscripcionPage({
    * SE EXIGEN LOS DATOS FISCALES ANTES. Cobrarle a una flota a la que después
    * no le puedes facturar es el peor orden posible: ya tienes su dinero y su
    * contador no tiene con qué deducirlo.
+   *
+   * "CAMBIAR DE PLAN" VA POR `cambiarPlan`, no por `crearSuscripcionPorTransferencia`
+   * directo (auditoría 2, hallazgo real). Ese atajo creaba una SEGUNDA
+   * suscripción de Stripe cada vez que alguien apretaba "Cambiar a…" sin
+   * cancelar la primera: la flota terminaba pagando dos mensualidades, y la
+   * base solo se enteraba cuando el webhook de la segunda reventaba el índice
+   * único de la 0052 — para entonces las dos ya habían cobrado.
+   * `cambiarPlan` decide adentro: si ya hay una suscripción viva de Stripe le
+   * cambia el price a ESA MISMA, y solo crea una nueva si no había ninguna.
    */
   async function accionContratar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
@@ -126,6 +136,7 @@ export default async function SuscripcionPage({
 
     const clave = String(fd.get('plan') ?? '');
     let destino: string | null;
+    let huboCambioDePrice: boolean;
     try {
       const f = await getDatosFiscales(t);
       if (!estanCompletos(f)) {
@@ -137,21 +148,27 @@ export default async function SuscripcionPage({
         return { error: `El plan ${p.nombre} todavía no tiene precio configurado en Stripe. Avísale a Likida.` };
       }
       const s = await getSuscripcion(t);
-      const r2 = await crearSuscripcionPorTransferencia({
+      const r2 = await cambiarPlan({
         priceId: p.stripePriceId,
         tenantId: t,
-        customerId: s?.stripeCustomerId ?? undefined,
+        suscripcionActual: s,
         fiscales: {
           rfc: f!.rfc!, razonSocial: f!.razonSocial!, regimenFiscal: f!.regimenFiscal!,
           codigoPostal: f!.codigoPostal!, email: email ?? '',
         },
       });
       destino = r2.urlFactura;
+      huboCambioDePrice = r2.huboCambioDePrice;
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'generar la factura para transferencia') };
+      return { error: mensajeParaPantalla(e, 'cambiar de plan') };
     }
 
     revalidatePath('/dashboard/suscripcion');
+    // Cambiar el price de una suscripción existente no genera una URL de pago
+    // nueva a la que mandar al cliente: se actualizó, no se creó.
+    if (huboCambioDePrice) {
+      return { ok: 'Plan cambiado. El ajuste llega en tu próxima factura de Likida.' };
+    }
     // Sin URL la suscripción SÍ quedó creada: se dice, en vez de fingir que
     // falló y provocar que la contrate dos veces.
     if (!destino) {

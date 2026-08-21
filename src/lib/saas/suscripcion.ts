@@ -1,7 +1,10 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { exigir } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
-import { leerPrecio } from './stripe';
+import {
+  leerPrecio, cambiarPriceDeSuscripcion, crearSuscripcionPorTransferencia,
+  type DatosFiscales,
+} from './stripe';
 import { DatoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -267,6 +270,67 @@ export async function guardarPriceDePlan(
 
   if (r.error) throw new Error(`guardarPriceDePlan: ${r.error.message}`);
   return { montoMensual: precio.montoMensual, moneda: precio.moneda, ivaIncluido: precio.ivaIncluido };
+}
+
+// ── Escritura desde /dashboard/suscripcion ──────────────────────────────────
+
+/**
+ * CONTRATA o CAMBIA de plan por transferencia — la misma acción del panel de
+ * la flota para las dos cosas (auditoría 2, hallazgo real: "cambiar de plan
+ * crea una segunda suscripción sin cancelar la primera").
+ *
+ * SI YA HAY UNA SUSCRIPCIÓN VIVA CON ID DE STRIPE, se ACTUALIZA el price de
+ * ESA MISMA suscripción (`cambiarPriceDeSuscripcion`) — nunca se crea una
+ * segunda. Antes de este fix, la pantalla llamaba directo a
+ * `crearSuscripcionPorTransferencia`, que SIEMPRE crea una suscripción nueva:
+ * la flota terminaba con dos suscripciones vivas en Stripe, cada una cobrando
+ * su mensualidad, y la base solo se enteraba cuando el webhook de la segunda
+ * chocaba contra el índice único de la 0052 ("una viva por tenant") — para
+ * entonces las dos ya habían cobrado.
+ *
+ * SI NO HAY SUSCRIPCIÓN VIVA (primera contratación) o la que hay no tiene id
+ * de Stripe (la de prueba que se crea a mano), se crea una nueva como antes.
+ *
+ * FALLA CERRADO A PROPÓSITO: esta función NO toca la base. El estado real
+ * —qué plan, qué precio, qué periodo— lo escribe `aplicarSuscripcion` cuando
+ * llega el webhook (`customer.subscription.updated`/`.created`), que es la
+ * única fuente que sabe si Stripe de verdad cobró. Si la llamada a Stripe
+ * truena a la mitad, no queda ninguna fila en `suscripcion` diciendo que hay
+ * un plan nuevo, ni una segunda suscripción cobrando: el panel simplemente
+ * sigue enseñando el plan y el precio de antes hasta que el reintento (del
+ * usuario, dando clic de nuevo) tenga éxito.
+ */
+export async function cambiarPlan(opciones: {
+  tenantId: string;
+  priceId: string;
+  fiscales: DatosFiscales;
+  suscripcionActual: Suscripcion | null;
+}): Promise<{ subscriptionId: string; customerId: string | null; urlFactura: string | null; huboCambioDePrice: boolean }> {
+  const { tenantId, priceId, fiscales, suscripcionActual } = opciones;
+
+  if (suscripcionActual?.stripeSubscriptionId) {
+    const r = await cambiarPriceDeSuscripcion({
+      subscriptionId: suscripcionActual.stripeSubscriptionId,
+      priceId,
+    });
+    return {
+      subscriptionId: r.subscriptionId,
+      customerId: suscripcionActual.stripeCustomerId,
+      // No hay factura nueva que enseñar: se actualizó la suscripción, no se
+      // creó una. El próximo cobro de Stripe (con la prorrata, si aplica)
+      // llega por el webhook de siempre.
+      urlFactura: null,
+      huboCambioDePrice: true,
+    };
+  }
+
+  const r = await crearSuscripcionPorTransferencia({
+    priceId,
+    tenantId,
+    fiscales,
+    customerId: suscripcionActual?.stripeCustomerId ?? undefined,
+  });
+  return { subscriptionId: r.subscriptionId, customerId: r.customerId, urlFactura: r.urlFactura, huboCambioDePrice: false };
 }
 
 // ── Escritura desde el webhook ─────────────────────────────────────────────
