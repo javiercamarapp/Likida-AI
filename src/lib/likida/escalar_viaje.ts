@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from './presupuesto';
 import { logger } from '@/lib/logger';
 import { avisar, avisarCorridasPorFlota } from './agentes/notificaciones';
 import { registrarCorrida } from './agentes/corridas';
@@ -90,7 +91,7 @@ export interface ViajeSinAceptar {
 export async function viajesSinAceptar(ahora: Date = new Date(), horas: number = HORAS_PARA_ESCALAR): Promise<ViajeSinAceptar[]> {
   const limite = new Date(ahora.getTime() - horas * 3_600_000).toISOString();
 
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await acotada(supabaseAdmin()
     .from('viaje')
     // `operador:operador_id` y no `operador` a secas: viaje tiene MÁS de una
     // relación con operador y PostgREST rechaza el embed ambiguo — este cron
@@ -110,7 +111,7 @@ export async function viajesSinAceptar(ahora: Date = new Date(), horas: number =
     // sella `escalado_en` y lo saca del filtro). El techo de 100 por corrida
     // se queda: es el presupuesto de envíos del cron, no una ventana de vista.
     .order('avisado_en', { ascending: true })
-    .limit(100);
+    .limit(100), 'viajesSinAceptar');
 
   if (error) throw new Error(`viajesSinAceptar: ${error.message}`);
 
@@ -465,7 +466,7 @@ async function reclamarEscalacion(
   v: ViajeSinAceptar,
   ahora?: string,
 ): Promise<{ ganado: boolean; error?: string }> {
-  const { data, error } = await admin
+  const { data, error } = await acotada(admin
     .from('viaje')
     .update({ escalado_en: ahora ?? new Date().toISOString(), avisos_enviados: v.avisosEnviados + 1 })
     .eq('id', v.id)
@@ -474,7 +475,7 @@ async function reclamarEscalacion(
     // inofensivo se copia mañana a uno que sí puede cruzar flotas.
     .eq('tenant_id', v.tenantId)
     .is('escalado_en', null)
-    .select('id');
+    .select('id'), 'reclamarEscalacion');
 
   if (error) {
     logger.warn('escalacion.claim_sin_guardar', { viaje: v.id, err: error.message });
