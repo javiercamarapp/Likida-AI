@@ -3,9 +3,12 @@ import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
+import { FormaOperador, Plegable, type AccionForma } from './forma';
 
 /** La fila del registro — SIN el dinero que `OperadorDetalle` trae (ver
- *  encabezado de page.tsx: la fuga del 4-ago). */
+ *  encabezado de page.tsx: la fuga del 4-ago). `licencia` y `rfc` SÍ viajan:
+ *  no son dinero, y el formulario de edición (A2) los necesita para
+ *  precargarse. */
 export interface FilaOperador {
   operadorId: string;
   nombre: string;
@@ -13,9 +16,12 @@ export interface FilaOperador {
   numeroEmpleado: string | null;
   activo: boolean;
   viajes: number;
+  licencia: string | null;
   licenciaTipo: string | null;
   /** ISO AAAA-MM-DD, o null = NO CAPTURADA (≠ vencida). */
   licenciaVence: string | null;
+  /** RFC del trabajador (mig. 0080, RLISR 57). */
+  rfc: string | null;
 }
 
 /** A cuántos días de hoy vence — comparación lexicográfica de ISO AAAA-MM-DD
@@ -37,7 +43,15 @@ function diasParaVencer(vence: string, hoy: string): number {
  * "Sin registrar" se dice tal cual: inventar una fecha marcaría de vencido
  * (o de vigente) a quien no lo está.
  */
-export function VistaOperadores({ filas, hoy }: { filas: FilaOperador[]; hoy: string }) {
+export function VistaOperadores({ filas, hoy, puedeEditar, guardarOperador }: {
+  filas: FilaOperador[];
+  hoy: string;
+  /** `puedeAdministrar(rol)` — solo quien administra la flota corrige datos
+   *  de un operador (auditoría 2, A2). Sin esto la fila de edición ni se
+   *  pinta: la pantalla no ofrece un botón que el rol no puede usar. */
+  puedeEditar: boolean;
+  guardarOperador: AccionForma;
+}) {
   const activos = filas.filter((f) => f.activo);
   const sinTelefono = activos.filter((f) => !f.telefono).length;
   const conVencida = activos.filter((f) => f.licenciaVence !== null && diasParaVencer(f.licenciaVence, hoy) < 0).length;
@@ -79,39 +93,13 @@ export function VistaOperadores({ filas, hoy }: { filas: FilaOperador[]; hoy: st
                       <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Viajes</th>
                       <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Licencia</th>
                       <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Estado</th>
+                      {puedeEditar && <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2" />}
                     </tr>
                   </thead>
                   <tbody>
                     {filas.map((f) => (
-                      <tr key={f.operadorId} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                        <td className="py-2">
-                          <span className="font-medium block">{f.nombre}</span>
-                          {f.numeroEmpleado && (
-                            <span className="block text-[11px] cifra-mono" style={{ color: 'var(--faint)' }}>Nº {f.numeroEmpleado}</span>
-                          )}
-                        </td>
-                        <td className="py-2">
-                          {f.telefono ? (
-                            <span className="inline-flex items-center gap-1.5 cifra-mono" style={{ color: 'var(--muted)' }}>
-                              <Phone width={12} height={12} strokeWidth={1.75} /> {f.telefono}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--warn)' }}>
-                              <PhoneOff width={12} height={12} strokeWidth={1.75} /> Sin teléfono
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 pr-6 text-right cifra-mono">{numero(f.viajes)}</td>
-                        <td className="py-2"><PillLicencia f={f} hoy={hoy} /></td>
-                        <td className="py-2">
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-                            style={f.activo
-                              ? { color: 'var(--ok)', background: 'var(--okbg)' }
-                              : { color: 'var(--muted)', background: 'var(--canvas)' }}>
-                            {f.activo ? 'Activo' : 'Inactivo'}
-                          </span>
-                        </td>
-                      </tr>
+                      <RenglonOperador key={f.operadorId} f={f} hoy={hoy}
+                        puedeEditar={puedeEditar} guardarOperador={guardarOperador} />
                     ))}
                   </tbody>
                 </table>
@@ -121,6 +109,81 @@ export function VistaOperadores({ filas, hoy }: { filas: FilaOperador[]; hoy: st
         </div>
       </div>
     </main>
+  );
+}
+
+/**
+ * Un renglón del registro + su forma de edición (auditoría 2, A2). La forma
+ * va en un `<tr>` aparte con `colSpan` completo, plegada por default
+ * (`Plegable`/`<details>`) — mismo patrón que `RenglonCliente` en
+ * `dashboard/clientes/vista.tsx`: no pintar el formulario cuando `puedeEditar`
+ * es falso, en vez de pintarlo deshabilitado, porque el rol de operación no
+ * tiene ningún botón que darle.
+ */
+function RenglonOperador({ f, hoy, puedeEditar, guardarOperador }: {
+  f: FilaOperador;
+  hoy: string;
+  puedeEditar: boolean;
+  guardarOperador: AccionForma;
+}) {
+  return (
+    <>
+      <tr className="border-t" style={{ borderColor: 'var(--line2)' }}>
+        <td className="py-2">
+          <span className="font-medium block">{f.nombre}</span>
+          {f.numeroEmpleado && (
+            <span className="block text-[11px] cifra-mono" style={{ color: 'var(--faint)' }}>Nº {f.numeroEmpleado}</span>
+          )}
+        </td>
+        <td className="py-2">
+          {f.telefono ? (
+            <span className="inline-flex items-center gap-1.5 cifra-mono" style={{ color: 'var(--muted)' }}>
+              <Phone width={12} height={12} strokeWidth={1.75} /> {f.telefono}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--warn)' }}>
+              <PhoneOff width={12} height={12} strokeWidth={1.75} /> Sin teléfono
+            </span>
+          )}
+        </td>
+        <td className="py-2 pr-6 text-right cifra-mono">{numero(f.viajes)}</td>
+        <td className="py-2"><PillLicencia f={f} hoy={hoy} /></td>
+        <td className="py-2">
+          <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
+            style={f.activo
+              ? { color: 'var(--ok)', background: 'var(--okbg)' }
+              : { color: 'var(--muted)', background: 'var(--canvas)' }}>
+            {f.activo ? 'Activo' : 'Inactivo'}
+          </span>
+        </td>
+        {puedeEditar && <td className="py-2" />}
+      </tr>
+      {puedeEditar && (
+        <tr style={{ borderColor: 'var(--line2)' }}>
+          <td colSpan={6} className="pb-3">
+            <Plegable resumen="Editar">
+              <FormaOperador
+                accion={guardarOperador}
+                operadorId={f.operadorId}
+                idPrefijo={`operador-${f.operadorId}`}
+                // La fila COMPLETA, no solo lo que se ve en la tabla:
+                // `actualizarOperador` reemplaza los campos que reciba, y un
+                // formulario que no trajera el nombre lo dejaría vacío si
+                // alguien lo borra sin querer del campo.
+                inicial={{
+                  nombre: f.nombre,
+                  numeroEmpleado: f.numeroEmpleado ?? '',
+                  licencia: f.licencia ?? '',
+                  licenciaTipo: f.licenciaTipo ?? '',
+                  licenciaVence: f.licenciaVence ?? '',
+                  rfc: f.rfc ?? '',
+                }}
+              />
+            </Plegable>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 

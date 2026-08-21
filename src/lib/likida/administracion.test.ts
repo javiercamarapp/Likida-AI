@@ -42,7 +42,7 @@ vi.mock('./conv', async (original) => ({
   releaseViajeLock: (...a: unknown[]) => releaseViajeLock(...a),
 }));
 
-const { crearFlota, crearOperador, guardarPolitica, reabrirViaje, DatoInvalido, armarPolitica, mensajeParaPantalla } =
+const { crearFlota, crearOperador, actualizarOperador, guardarPolitica, reabrirViaje, DatoInvalido, armarPolitica, mensajeParaPantalla } =
   await import('./administracion');
 
 /** Nodo encadenable: `.select().eq().in().limit().maybeSingle()` → `resultado`. */
@@ -196,6 +196,87 @@ describe('crearOperador', () => {
   it('un teléfono de 7 dígitos se rechaza con el conteo a la vista', async () => {
     await expect(crearOperador('t-1', { nombre: 'Juan Pérez', telefono: '370 0779' }))
       .rejects.toThrow(/7 dígitos/);
+  });
+});
+
+// El id de un operador de prueba. `actualizarOperador` valida forma de uuid
+// ANTES de tocar la base, así que un `'o-1'` de los otros describes no sirve.
+const OPERADOR_ID = '11111111-1111-1111-1111-111111111111';
+
+/** Nodo de ESCRITURA: registra cada `.eq()` (para comprobar que el `WHERE`
+ *  llevó el tenant) y resuelve en `resultado` al `await` — igual que `cadena`
+ *  pero sin `maybeSingle`, porque `actualizarOperador` hace `.select('id')`
+ *  sin `.single()` (el punto de la 0-filas es justo poder ver el arreglo vacío). */
+function cadenaEscritura(resultado: unknown, eqs: Array<[string, unknown]> = []) {
+  const nodo: Record<string, unknown> = {
+    eq: (col: string, val: unknown) => { eqs.push([col, val]); return nodo; },
+    select: () => nodo,
+  };
+  nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(resultado).then(r);
+  return nodo;
+}
+
+describe('actualizarOperador', () => {
+  it('RECHAZA editar un operador de OTRA flota: 0 filas tocadas es error, no éxito silencioso', async () => {
+    // El modo de fallo que esto impide: `.update().eq('tenant_id', ...)` de un
+    // id que no es de esta flota toca CERO filas y Postgres no lo marca como
+    // error — sin mirar `data.length`, la pantalla diría "guardado" sobre un
+    // cambio que nunca ocurrió.
+    from.mockImplementation((tabla: string) =>
+      tabla === 'operador'
+        ? { update: () => cadenaEscritura({ data: [], error: null }) }
+        : { insert: () => Promise.resolve({ error: null }) });
+
+    await expect(actualizarOperador('t-1', OPERADOR_ID, { licencia: 'ABC123' }))
+      .rejects.toThrow(/no se encontró ese operador/i);
+  });
+
+  it('actualiza los campos editables, ANCLADO al tenant en el WHERE', async () => {
+    let filaGuardada: Record<string, unknown> | undefined;
+    const eqs: Array<[string, unknown]> = [];
+    from.mockImplementation((tabla: string) =>
+      tabla === 'operador'
+        ? {
+            update: (fila: Record<string, unknown>) => {
+              filaGuardada = fila;
+              return cadenaEscritura({ data: [{ id: OPERADOR_ID }], error: null }, eqs);
+            },
+          }
+        : { insert: () => Promise.resolve({ error: null }) });
+
+    await actualizarOperador('t-1', OPERADOR_ID, {
+      licencia: 'B12345678', licenciaTipo: 'C', licenciaVence: '2027-03-12', rfc: 'gmx0902279i1',
+    });
+
+    expect(filaGuardada).toEqual({
+      licencia: 'B12345678', licencia_tipo: 'C', licencia_vence: '2027-03-12', rfc: 'GMX0902279I1',
+    });
+    expect(eqs).toContainEqual(['id', OPERADOR_ID]);
+    expect(eqs).toContainEqual(['tenant_id', 't-1']);
+  });
+
+  it('rechaza una licencia_vence que no es una fecha, sin tocar la base', async () => {
+    await expect(actualizarOperador('t-1', OPERADOR_ID, { licenciaVence: 'ayer' }))
+      .rejects.toThrow(DatoInvalido);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un RFC con dígito verificador malo, sin tocar la base', async () => {
+    await expect(actualizarOperador('t-1', OPERADOR_ID, { rfc: 'GMX0902279XX' }))
+      .rejects.toThrow(DatoInvalido);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un id de operador que no es un uuid, sin tocar la base', async () => {
+    await expect(actualizarOperador('t-1', 'no-es-un-uuid', { licencia: 'ABC' }))
+      .rejects.toThrow(DatoInvalido);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('sin ningún cambio, no hay nada que guardar', async () => {
+    await expect(actualizarOperador('t-1', OPERADOR_ID, {}))
+      .rejects.toThrow(DatoInvalido);
+    expect(from).not.toHaveBeenCalled();
   });
 });
 

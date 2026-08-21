@@ -17,7 +17,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { esRfcValido, rfcChecksumOk } from './intake/cfdi';
+import { esRfcValido, rfcChecksumOk, esUuidValido } from './intake/cfdi';
 import { validarDatosFiscales } from '@/lib/saas/fiscal';
 import { variantesTelefono, acquireViajeLock, releaseViajeLock } from './conv';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
@@ -281,6 +281,119 @@ export async function crearOperador(
 
   await anotar(tenantId, 'operador.creado', 'operador', id, { nombre, telefono }, actor);
   return id;
+}
+
+/** Lo que la pantalla deja editar de un operador ya dado de alta. `undefined`
+ *  en cualquier llave = "no se tocó" (no se manda al `update`); `null` o `''`
+ *  en las que lo aceptan = "bórralo". El teléfono NO vive aquí: cambiarlo
+ *  reabriría la comprobación de duplicado entre flotas que `crearOperador`
+ *  hace al dar de alta, y esta pantalla (auditoría 2, A2) solo necesitaba
+ *  arreglar la licencia y el RFC — ampliarla a teléfono es otro cambio. */
+export interface CambiosOperador {
+  nombre?: string;
+  numeroEmpleado?: string | null;
+  licencia?: string | null;
+  licenciaTipo?: string | null;
+  /** ISO `AAAA-MM-DD`, o `null`/`''` para borrarla. */
+  licenciaVence?: string | null;
+  /** RFC del trabajador (migración 0080, RLISR 57). */
+  rfc?: string | null;
+}
+
+/**
+ * Corrige los datos de un operador ya existente — la puerta que faltaba
+ * (auditoría 2): un chofer con la licencia mal tecleada o sin RFC se quedaba
+ * así para siempre, porque `operadores/vista.tsx` solo listaba.
+ *
+ * ANCLADO A `tenant_id` EN EL WHERE Y COMPROBADO CON `.select('id')` DESPUÉS,
+ * igual que `editarCliente` (clientes.ts): con el id de un operador de OTRA
+ * flota, un `.update().eq('id', ...)` sin el `.eq('tenant_id', ...)` lo
+ * editaría igual — y CON el tenant en el where pero SIN mirar cuántas filas
+ * tocó, Postgres no marca error: el update de cero filas y el de una se ven
+ * idénticos, y la pantalla diría "guardado" sobre un cambio que nunca ocurrió.
+ * Es el mismo `fallar cerrado y decirlo` que ya cuesta este archivo entero.
+ */
+export async function actualizarOperador(
+  tenantId: string,
+  operadorId: string,
+  cambios: CambiosOperador,
+  actor?: { id?: string; email?: string },
+): Promise<void> {
+  if (!esUuidValido(operadorId)) {
+    throw new DatoInvalido('No se reconoce ese operador. Vuelve a abrir la pantalla.');
+  }
+
+  const fila: Record<string, unknown> = {};
+
+  if (cambios.nombre !== undefined) {
+    const nombre = cambios.nombre.trim();
+    if (nombre.length < 3) throw new DatoInvalido('El nombre del operador necesita al menos 3 caracteres.');
+    fila.nombre = nombre;
+  }
+
+  if (cambios.numeroEmpleado !== undefined) {
+    fila.numero_empleado = cambios.numeroEmpleado?.trim() || null;
+  }
+
+  if (cambios.licencia !== undefined) {
+    fila.licencia = cambios.licencia?.trim() || null;
+  }
+
+  if (cambios.licenciaTipo !== undefined) {
+    fila.licencia_tipo = cambios.licenciaTipo?.trim() || null;
+  }
+
+  if (cambios.licenciaVence !== undefined) {
+    const v = cambios.licenciaVence?.trim();
+    if (!v) {
+      fila.licencia_vence = null;
+    } else {
+      // Mismo criterio que `operador.licencia_vence` (0053): una fecha que no
+      // se pueda interpretar tal cual se guardaría vencida o vigente sin
+      // serlo — ninguna de las dos es honesta si lo tecleado no es una fecha.
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
+        throw new DatoInvalido(`"${cambios.licenciaVence}" no es una fecha válida (AAAA-MM-DD).`);
+      }
+      fila.licencia_vence = v;
+    }
+  }
+
+  if (cambios.rfc !== undefined) {
+    const crudo = cambios.rfc?.trim();
+    if (!crudo) {
+      fila.rfc = null;
+    } else {
+      // Mismo candado que `crearFlota`: un RFC con el dígito verificador mal
+      // no truena aquí, pero sí más adelante en `engine.ts` (RLISR 57) — mejor
+      // rechazarlo en la captura, que es la oportunidad barata de corregirlo.
+      const rfc = crudo.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '');
+      if (!esRfcValido(rfc) || !rfcChecksumOk(rfc)) {
+        throw new DatoInvalido(
+          `El RFC "${cambios.rfc}" no pasa el dígito verificador. Revísalo antes de guardar.`,
+        );
+      }
+      fila.rfc = rfc;
+    }
+  }
+
+  if (Object.keys(fila).length === 0) {
+    throw new DatoInvalido('No hay ningún cambio que guardar.');
+  }
+
+  const admin = supabaseAdmin();
+  const { data, error } = await admin
+    .from('operador')
+    .update(fila)
+    .eq('id', operadorId)
+    .eq('tenant_id', tenantId) // el tenant SIEMPRE en el where: ver comentario de arriba
+    .select('id');
+
+  if (error) throw new Error(`actualizarOperador: ${error.message}`);
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new DatoInvalido('No se encontró ese operador en tu flota. Puede que alguien lo haya borrado — recarga la pantalla.');
+  }
+
+  await anotar(tenantId, 'operador.editado', 'operador', operadorId, fila, actor);
 }
 
 // ── 3. Editar la política de gastos ────────────────────────────────────────
