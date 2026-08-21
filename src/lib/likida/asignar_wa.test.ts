@@ -285,6 +285,35 @@ describe('reasignar chofer', () => {
   });
 });
 
+describe('la fusión de estado — no se pisa lo del dueño-que-maneja (auditoría 2, ronda 2)', () => {
+  it('los turns del chofer SOBREVIVEN a un pendiente de asignación armado en la misma fila', async () => {
+    // Mismo tenant+teléfono: la fila ya trae `turns` de `saveConversation`
+    // para el lado de chofer del dueño-que-maneja. Antes el `upsert` de
+    // `guardarPendiente` reemplazaba `estado` entero y se los comía.
+    estadoGuardado = { turns: [{ role: 'user', content: 'ya casi llego' }] };
+    viajesPorFolio = [{ id: 'v7', folio: 'VJ-2026-0847' }];
+    resolverUnidad.mockResolvedValue({ unidadId: 'u-12', numeroEconomico: 'C2-12' });
+    const r = await atenderAsignacionOficina(JEFE, TEL, 'asígnale la unidad 12 al VJ-2026-0847', AHORA);
+    expect(r).toContain('Responde *SÍ*');
+    expect(estadoGuardado?.turns).toEqual([{ role: 'user', content: 'ya casi llego' }]);
+    expect((estadoGuardado?.asignacionPendiente as { viajeId: string }).viajeId).toBe('v7');
+  });
+
+  it('el claim del "sí" también preserva los turns ajenos al borrar asignacionPendiente', async () => {
+    estadoGuardado = {
+      turns: [{ role: 'user', content: 'voy llegando' }],
+      asignacionPendiente: {
+        accion: 'unidad', viajeId: 'v1', viajeEtiqueta: 'el viaje de *Juan*',
+        unidadId: 'u-12', unidadEco: 'C2-12', en: AHORA.toISOString(),
+      },
+    };
+    const r = await atenderAsignacionOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('asignada');
+    expect(estadoGuardado?.turns).toEqual([{ role: 'user', content: 'voy llegando' }]);
+    expect(estadoGuardado?.asignacionPendiente).toBeUndefined();
+  });
+});
+
 describe('los candados', () => {
   it('el contador no asigna, aunque la petición sea perfecta', async () => {
     const r = await atenderAsignacionOficina({ tenantId: 't1', rol: 'contador' }, TEL, 'asígnale la unidad 12 al viaje de Juan', AHORA);

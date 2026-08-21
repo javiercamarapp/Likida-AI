@@ -376,6 +376,36 @@ describe('el claim del pendiente (BE-A2)', () => {
   });
 });
 
+describe('la fusión de estado — no se pisa lo del dueño-que-maneja (auditoría 2, ronda 2)', () => {
+  it('los turns del chofer SOBREVIVEN a un pendiente de despacho armado en la misma fila', async () => {
+    // Mismo tenant+teléfono: la fila ya trae `turns`/`viaje_id` que puso
+    // `saveConversation` para el lado de chofer del dueño-que-maneja. Antes
+    // el `upsert` de `guardarPendiente` reemplazaba `estado` entero y se los
+    // comía.
+    estadoGuardado = {
+      turns: [{ role: 'user', content: 'ya casi llego' }],
+      intentosConfirmacion: 1,
+    };
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });
+    const r = await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para Juan, Puebla a Monterrey, anticipo 8000', AHORA);
+    expect(r).toContain('Responde SÍ');
+    expect(estadoGuardado?.turns).toEqual([{ role: 'user', content: 'ya casi llego' }]);
+    expect(estadoGuardado?.intentosConfirmacion).toBe(1);
+    expect((estadoGuardado?.viajePendiente as { operadorId: string }).operadorId).toBe('op-9');
+  });
+
+  it('el claim del "sí" también preserva los turns ajenos al borrar viajePendiente', async () => {
+    estadoGuardado = {
+      turns: [{ role: 'user', content: 'voy llegando' }],
+      viajePendiente: { operadorId: 'op-9', operadorNombre: 'Juan Pérez', origen: 'Puebla', destino: 'Monterrey', anticipo: 8000, unidad: null, en: AHORA.toISOString() },
+    };
+    const r = await atenderDespachoOficina(JEFE, TEL, 'sí', new Date(AHORA.getTime() + 60_000));
+    expect(r).toContain('Viaje creado');
+    expect(estadoGuardado?.turns).toEqual([{ role: 'user', content: 'voy llegando' }]);
+    expect(estadoGuardado?.viajePendiente).toBeUndefined();
+  });
+});
+
 describe('la verdad sobre el aviso al chofer (AG-A4)', () => {
   async function proponer() {
     resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez' });

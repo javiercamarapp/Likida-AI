@@ -361,15 +361,37 @@ export async function claimMessage(waMessageId: string): Promise<Claim> {
 // menos queda un ERROR en el log — se pierde el turno, no el rastro de que se
 // perdió.
 /**
- * `marcas` OMITIDAS SE BORRAN, y es a propósito.
+ * `marcas` OMITIDAS SE BORRAN, y sigue siendo a propósito — eso NO cambió.
+ * `turns`/`intentosConfirmacion`/`cierreSinComprobantes` son las llaves de
+ * ESTE módulo, y quien guarda sin marcas es el turno normal del agente (sin
+ * pregunta nuestra pendiente): el default sigue siendo el estado limpio DE
+ * SUS PROPIAS llaves.
  *
- * El `estado` se reescribe entero (es un jsonb, no hay UPDATE parcial sin RPC),
- * así que no hay forma de "no tocar" una marca sin releer la fila —y releerla
- * abriría una carrera con las fotos, que escriben esta misma fila sin mutex—.
- * El default es el estado LIMPIO porque es el que corresponde al camino normal:
- * quien guarda sin marcas es el turno del agente, que corre justamente cuando
- * no hay ninguna pregunta nuestra pendiente de respuesta. Los atajos que sí
- * tienen algo pendiente las pasan explícitamente (ver `processor.ts`).
+ * LO QUE SÍ CAMBIÓ (auditoría 2, ronda 2 — defensa en profundidad): esta fila
+ * también la escriben `despacho_wa.ts` (`viajePendiente`) y `asignar_wa.ts`
+ * (`asignacionPendiente`) bajo la MISMA llave única (tenant, teléfono) cuando
+ * el número es a la vez chofer y oficina (dueño-que-maneja). Antes este
+ * UPDATE reemplazaba `estado` entero con solo `{turns, marcas}` — un
+ * despacho pendiente armado un instante antes desaparecía sin que el jefe se
+ * enterara, y el "sí" que mandara después no encontraba nada que confirmar.
+ *
+ * Se lee la fila (por `convId`, la misma que identifica esta conversación) y
+ * se preserva lo ajeno por debajo de lo propio: `turns` y las marcas se
+ * escriben siempre (reemplazando lo que hubiera de este módulo, que es la
+ * regla de arriba), y cualquier otra llave que ya estuviera —los pendientes
+ * de los otros dos escritores— pasa intacta. Antes esto exigía releer la
+ * fila, y releerla habría abierto una carrera con las fotos —pero las fotos
+ * no tocan `wa_conversacion.estado`, escriben `viaje.intake_pendientes`
+ * (ver `intakeDelta`/`intakePendientes` abajo): esa carrera nunca existió
+ * aquí, era una fila distinta.
+ *
+ * LA CARRERA QUE SÍ QUEDA es la misma que documentan `despacho_wa.ts` y
+ * `asignar_wa.ts`: el SELECT y el UPDATE no son un solo statement (un merge
+ * `estado || jsonb` de Postgres sí lo sería, pero exige una función RPC nueva,
+ * fuera del alcance de este fix). Se acepta por la misma razón: ventana de
+ * milisegundos, exige el mismo teléfono en dos roles y dos mensajes casi
+ * simultáneos, y lo peor que se pierde es un pendiente de despacho (se vuelve
+ * a pedir el "sí"), no un cobro ni un despacho duplicado.
  */
 export async function saveConversation(
   convId: string,
@@ -377,16 +399,31 @@ export async function saveConversation(
   viajeId: string | null,
   marcas: MarcasConversacion = {},
 ): Promise<void> {
+  // Un fallo de lectura no bloquea el guardado del turno —eso perdería la
+  // respuesta que el operador SÍ leyó, el hallazgo original de esta
+  // función—: se degrada a escribir solo las llaves propias, tal como se
+  // hacía antes de esta ronda, y queda anotado para diagnóstico.
+  const { data: filaActual, error: errLectura } = await acotada(supabaseAdmin()
+    .from('wa_conversacion')
+    .select('estado')
+    .eq('id', convId)
+    .maybeSingle(), 'saveConversation.leerEstado');
+  if (errLectura) {
+    logger.warn('conv.estado_previo_ilegible', { convId, err: errLectura.message });
+  }
+  const nuevoEstado: Record<string, unknown> = { ...((filaActual?.estado as Record<string, unknown> | null) ?? {}) };
+  nuevoEstado.turns = turns.slice(-MAX_TURNS);
+  // Solo las que valen algo: escribir `0`/`false` en cada guardado ensucia
+  // el jsonb de todas las conversaciones para no decir nada.
+  if (marcas.intentosConfirmacion) nuevoEstado.intentosConfirmacion = marcas.intentosConfirmacion;
+  else delete nuevoEstado.intentosConfirmacion;
+  if (marcas.cierreSinComprobantes) nuevoEstado.cierreSinComprobantes = true;
+  else delete nuevoEstado.cierreSinComprobantes;
+
   const { error } = await acotada(supabaseAdmin()
     .from('wa_conversacion')
     .update({
-      estado: {
-        turns: turns.slice(-MAX_TURNS),
-        // Solo las que valen algo: escribir `0`/`false` en cada guardado ensucia
-        // el jsonb de todas las conversaciones para no decir nada.
-        ...(marcas.intentosConfirmacion ? { intentosConfirmacion: marcas.intentosConfirmacion } : {}),
-        ...(marcas.cierreSinComprobantes ? { cierreSinComprobantes: true } : {}),
-      },
+      estado: nuevoEstado,
       viaje_id: viajeId,
       updated_at: new Date().toISOString(),
     })
