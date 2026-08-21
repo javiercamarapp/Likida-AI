@@ -444,7 +444,7 @@ async function atenderTextoOficina(
   cuenta: CuentaOficina,
   from: string,
   texto: string,
-  opciones: { incluirPreguntaLibre: boolean },
+  opciones: { incluirPreguntaLibre: boolean; incluirDespacho: boolean },
 ): Promise<boolean> {
   // La talacha va PRIMERO: el botón `tal_si:<uuid>` responde a una pregunta
   // concreta que le mandamos, y con un viaje pendiente de despacho ese módulo
@@ -467,37 +467,56 @@ async function atenderTextoOficina(
   // superadmin, que no pertenece a ninguna.
   if (!cuenta.tenantId) return false;
 
-  // ── EL JEFE DESPACHA POR WHATSAPP (F4, despacho_wa.ts) ────────────────────
-  // "nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000" → resumen
-  // → SÍ/NO → crearViaje (que ya avisa al chofer solo). El rol se re-verifica
-  // ADENTRO (`puedeAsignar`); un error aquí NO deja al jefe sin respuesta.
-  try {
-    const rDespacho = await atenderDespachoOficina(
-      { tenantId: cuenta.tenantId, rol: cuenta.rol }, from, texto,
-    );
-    if (rDespacho) {
-      logger.info('oficina.despacho', { user: cuenta.userId, rol: cuenta.rol });
-      await sendText(from, rDespacho);
-      return true;
+  // ── DESPACHO Y ASIGNACIÓN: SOLO SIN VIAJE ABIERTO ────────────────────────
+  //
+  // AUDITORÍA 1, CRÍTICO (Agéntico): estos dos son los ÚNICOS que crean un
+  // `pendiente` en `wa_conversacion` y confirman con un "sí". Y `esAfirmacion`
+  // (huerfanos.ts) cuenta como "sí" a «va», «vale», «sale», «dale», «ok». Para
+  // el dueño-que-maneja —chofer Y oficina, el caso que `contactos.ts` documenta
+  // como normal— eso era una trampa doble: con un despacho pendiente vivo, su
+  // «listo» de cierre se lo comía el recordatorio ("tengo un viaje esperando
+  // confirmación") y su «va» soltaba un viaje con anticipo real que nadie quiso
+  // confirmar en ese momento. Además `guardarPendiente` reemplazaba el `estado`
+  // entero de su fila, borrando los `turns` del chofer.
+  //
+  // El desempate es el mismo que `contactos.ts` ya nombra y que este archivo
+  // respeta para el analista: CON VIAJE ABIERTO, ES CHOFER. Un dueño despacha
+  // cuando NO trae viaje propio abierto; mientras maneja, su texto suelto es de
+  // ruta. `incluirDespacho` es `false` en ese caso. El informe ("¿cómo van?")
+  // y la talacha (por botón) SÍ siguen — son de solo-lectura o de un id
+  // concreto, no consumen un "sí" ambiguo.
+  if (opciones.incluirDespacho) {
+    // "nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 8000" → resumen
+    // → SÍ/NO → crearViaje (que ya avisa al chofer solo). El rol se re-verifica
+    // ADENTRO (`puedeAsignar`); un error aquí NO deja al jefe sin respuesta.
+    try {
+      const rDespacho = await atenderDespachoOficina(
+        { tenantId: cuenta.tenantId, rol: cuenta.rol }, from, texto,
+      );
+      if (rDespacho) {
+        logger.info('oficina.despacho', { user: cuenta.userId, rol: cuenta.rol });
+        await sendText(from, rDespacho);
+        return true;
+      }
+    } catch (e) {
+      logger.error('oficina.despacho_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
     }
-  } catch (e) {
-    logger.error('oficina.despacho_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
-  }
 
-  // ── ASIGNAR UNIDAD / REASIGNAR CHOFER (F4, asignar_wa.ts) ─────────────────
-  // Va DESPUÉS de despacho: si hay un viaje esperando confirmación, ese "sí" es
-  // del viaje (ver el encabezado de `asignar_wa.ts` sobre el pendiente único).
-  try {
-    const rAsignacion = await atenderAsignacionOficina(
-      { tenantId: cuenta.tenantId, rol: cuenta.rol }, from, texto,
-    );
-    if (rAsignacion) {
-      logger.info('oficina.asignacion', { user: cuenta.userId, rol: cuenta.rol });
-      await sendText(from, rAsignacion);
-      return true;
+    // ── ASIGNAR UNIDAD / REASIGNAR CHOFER (F4, asignar_wa.ts) ───────────────
+    // Va DESPUÉS de despacho: si hay un viaje esperando confirmación, ese "sí"
+    // es del viaje (ver el encabezado de `asignar_wa.ts` sobre el pendiente único).
+    try {
+      const rAsignacion = await atenderAsignacionOficina(
+        { tenantId: cuenta.tenantId, rol: cuenta.rol }, from, texto,
+      );
+      if (rAsignacion) {
+        logger.info('oficina.asignacion', { user: cuenta.userId, rol: cuenta.rol });
+        await sendText(from, rAsignacion);
+        return true;
+      }
+    } catch (e) {
+      logger.error('oficina.asignacion_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
     }
-  } catch (e) {
-    logger.error('oficina.asignacion_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
   }
 
   // ── "MÁNDAME EL INFORME EN PDF" ──────────────────────────────────────────
@@ -668,7 +687,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // el analista ENCENDIDO: este número no es de nadie más, así que una
         // pregunta suelta es suya y no se le disputa a ningún acuse de ruta.
         if (msg.type === 'text' && msg.text
-            && await atenderTextoOficina(cuenta, msg.from, msg.text, { incluirPreguntaLibre: true })) {
+            && await atenderTextoOficina(cuenta, msg.from, msg.text, { incluirPreguntaLibre: true, incluirDespacho: true })) {
           return;
         }
         const quien = cuenta.nombre ? `${cuenta.nombre}` : 'Qué tal';
@@ -762,7 +781,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
           // «ya llegué» y «listo», que son con los que se cierra un viaje. Sin
           // viaje abierto no hay nada de ruta que decir y la pregunta es del
           // dueño. Lo que ningún reconocedor reclame sigue su camino intacto.
-          && await atenderTextoOficina(cuentaPropia, msg.from, msg.text, { incluirPreguntaLibre: !viajeId })) {
+          && await atenderTextoOficina(cuentaPropia, msg.from, msg.text, { incluirPreguntaLibre: !viajeId, incluirDespacho: !viajeId })) {
         return;
       }
     }
