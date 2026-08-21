@@ -1,36 +1,35 @@
-fecha_corrida: 2026-08-20 (jueves)
+fecha_corrida: 2026-08-21 (viernes)
 ultimo_dia_barrido: 2026-08-16 (sin cambio — esta corrida no pudo barrer nada)
-rango_intentado: 2026-08-17..2026-08-19 (3 dias habiles, lun-mie, quedaron sin cubrir)
+rango_intentado: 2026-08-17..2026-08-20 (4 dias habiles, lun-jue, quedaron sin cubrir)
 notas_revisadas: 0 — bloqueo de red antes de la primera llamada
 notas_por_edicion: {matutina: no_alcanzado, vespertina: no_alcanzado, extraordinaria: no_alcanzado}
 fichas_disparadas: 0
-etag_sat: sin_recheck — hoy es jueves, no lunes; ademas el host esta bloqueado igual
+etag_sat: sin_recheck — hoy es viernes, no lunes; ademas el host esta bloqueado igual
 etag_sat_check: no_intentado_bloqueo_previo
 deriva_ley_check: no_aplica_no_es_dia_1_trimestre
-estado: "INFRA egress bloqueado — sesion en la nube, mismo patron que las 16 corridas previas al 16-ago"
+estado: "INFRA egress bloqueado — sesion en la nube, mismo patron que las 17 corridas previas al 16-ago mas las de 20-ago"
 detalle: >
   curl directo a sidofqa.segob.gob.mx:443 -> proxy responde 403 a nivel
   CONNECT (policy denial), confirmado tambien via $HTTPS_PROXY/__agentproxy/status
-  (recentRelayFailures: connect_rejected, sidofqa.segob.gob.mx:443). WebFetch
-  al mismo host y a www.sat.gob.mx -> EGRESS_BLOCKED explicito. Segun
-  /root/.ccr/README.md esto es un 403 de politica de organizacion para este
-  entorno: "Do not retry or route around it — report the blocked host." No
-  se intento ninguna llamada a SIDOF/SAT/diputados mas alla de estas pruebas
-  de diagnostico porque el bloqueo es total, no intermitente. El barrido
-  local del 16-ago (commit d3dfeb7) ya documento el mismo bloqueo en 16
-  corridas anteriores de la nube y que la unica corrida real hasta ahora fue
-  manual desde una sesion local con egress. Ese diagnostico sigue vigente
-  sin cambios: la sesion de hoy es identica en sintoma y causa.
+  (recentRelayFailures: connect_rejected, sidofqa.segob.gob.mx:443, timestamp
+  2026-08-21T14:14:01Z). Se leyo /root/.ccr/README.md de nuevo: confirma que
+  un 403/407 en el CONNECT es una denegacion de politica de organizacion para
+  este entorno y que no se debe reintentar ni rodear, solo reportar el host
+  bloqueado. No se intento ninguna llamada a SIDOF/SAT/diputados mas alla de
+  esta prueba de diagnostico porque el bloqueo es total, no intermitente, y
+  es identico en sintoma y causa a la corrida del 20-ago (commit 2e41a14) y
+  a las 16 anteriores documentadas el 16-ago (commit d3dfeb7).
 sin_verificar_esta_corrida: >
-  Todo el rango 17..19-ago-2026 (3 dias habiles) sin barrer. Ademas quedan
-  sin intentar: ETag del minisitio SAT (cadencia semanal) y las 23 fichas
-  sin tocar desde el 16-ago.
+  Todo el rango 17..20-ago-2026 (4 dias habiles) sin barrer. Ademas quedan
+  sin intentar: ETag del minisitio SAT (cadencia semanal, ya paso un lunes
+  — 17-ago — sin poder chequearse) y las 23 fichas sin tocar desde el 16-ago.
 accion_requerida: >
-  MISMA accion pendiente desde el 16-ago, aun no tomada: (1) mover la
-  cadencia diaria de esta routine a un entorno con egress real —
-  ejecucion local (launchd/cron en una maquina con salida a internet), no
-  esta sesion en la nube — o (2) pedir a un admin que agregue
-  sidofqa.segob.gob.mx, www.sat.gob.mx y diputados.gob.mx a la allowlist de
-  egress de este entorno. Mientras ninguna de las dos pase, CADA corrida
-  programada en la nube va a fallar identico y el backlog de dias sin
-  barrer sigue creciendo (van 4 dias habiles: 17,18,19,20-ago).
+  MISMA accion pendiente desde el 16-ago, AUN NO TOMADA tras 5 corridas
+  consecutivas documentando el mismo bloqueo: (1) mover la cadencia diaria
+  de esta routine a un entorno con egress real — ejecucion local
+  (launchd/cron en una maquina con salida a internet), no esta sesion en la
+  nube — o (2) pedir a un admin que agregue sidofqa.segob.gob.mx,
+  www.sat.gob.mx y diputados.gob.mx a la allowlist de egress de este
+  entorno. Mientras ninguna de las dos pase, CADA corrida programada en la
+  nube va a fallar identico y el backlog de dias sin barrer sigue creciendo
+  (van 5 dias habiles: 17,18,19,20,21-ago).
