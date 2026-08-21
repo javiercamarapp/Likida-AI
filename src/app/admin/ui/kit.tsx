@@ -27,7 +27,9 @@ export function KpiTile({
    *  `asistente-expandible.tsx` ya usa para `main`/`asideTop`). */
   icono: React.ReactNode;
   etiqueta: string;
-  valor: number;
+  /** `null` = NO MEDIBLE (auditoría 1): pinta "—" en el encabezado en vez de un
+   *  0/0% con cara de medición. El pie lo explica con `vacio`. */
+  valor: number | null;
   formato?: FormatoPreset;
   tendencia?: number | null;
   sparkline?: number[];
@@ -46,8 +48,9 @@ export function KpiTile({
   nota?: string;
 }) {
   const reducido = usePrefersReducedMotion();
-  const mostrado = useCountUp(valor, !reducido);
+  const mostrado = useCountUp(valor ?? 0, !reducido);
   const fmt = resolverFormato(formato);
+  const noMedible = valor === null;
 
   return (
     <div className="card p-3.5" style={destacar ? { borderColor: 'var(--accent)' } : undefined}>
@@ -56,7 +59,9 @@ export function KpiTile({
           {icono}
         </div>
         <div className="min-w-0">
-          <div className="text-xl font-semibold tracking-tight tabular leading-tight">{fmt(mostrado)}</div>
+          {/* No medible → guion, nunca un 0/0% con cara de medición (auditoría 1). */}
+          <div className="text-xl font-semibold tracking-tight tabular leading-tight"
+            style={noMedible ? { color: 'var(--faint)' } : undefined}>{noMedible ? '—' : fmt(mostrado)}</div>
           {/* AUDITORÍA 10, MEDIO — `truncate` (una sola línea + "…") cortaba
               la palabra que carga el significado fiscal: "IVA acreditable
               document…" perdía justo "documentado". `line-clamp-2` deja
