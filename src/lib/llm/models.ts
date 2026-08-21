@@ -26,6 +26,8 @@
 //   Para el demo en vivo, tener keys directas de Google/Anthropic como respaldo.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { envPuesta } from '../env';
+
 export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'chat_ligero' | 'router' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto';
 
 const DEFAULTS: Record<ModelRole, string> = {
@@ -141,9 +143,15 @@ const ENV_KEY: Record<ModelRole, string> = {
   piloto: 'LIKIDA_MODEL_PILOTO',
 };
 
-/** Devuelve el slug del modelo para un rol, respetando override por env. */
+/** Devuelve el slug del modelo para un rol, respetando override por env.
+ *
+ * AUDITORÍA 1, CRÍTICO (Operabilidad): un override MARCADOR es truthy pero NO
+ * es un slug. El 20-ago `LIKIDA_MODEL_OCR` quedó en "[SENSITIVE]" (el enmascarado
+ * de Vercel re-guardado) y `|| DEFAULTS` no lo atrapó: OpenRouter recibió
+ * "[SENSITIVE]" como modelo → 400 → el OCR facturó cero durante horas. `envPuesta`
+ * rechaza el marcador y cae al default, que sí es un slug real. */
 export function modelFor(role: ModelRole): string {
-  return process.env[ENV_KEY[role]] || DEFAULTS[role];
+  return envPuesta(ENV_KEY[role]) ? (process.env[ENV_KEY[role]] as string) : DEFAULTS[role];
 }
 
 /** Parámetros por defecto por rol (esfuerzo de razonamiento, temperatura). */

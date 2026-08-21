@@ -35,7 +35,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
-import { faltantes } from '@/lib/env';
+import { faltantes, envPuesta } from '@/lib/env';
 
 const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   { nombre: 'DEMO_TENANT_ID', consecuencia: 'el panel consulta el tenant del seed y pinta cero liquidaciones' },
@@ -65,7 +65,7 @@ export function avisarConfiguracionSilenciosa(): void {
   const desplegado = !!process.env.VERCEL_ENV || process.env.NODE_ENV === 'production';
   if (!desplegado) return;
 
-  const faltan = SILENCIOSAS.filter((v) => !process.env[v.nombre]);
+  const faltan = SILENCIOSAS.filter((v) => !envPuesta(v.nombre));
   if (faltan.length === 0) {
     logger.info('startup.config_silenciosa', { ok: true, revisadas: SILENCIOSAS.length });
   } else {
