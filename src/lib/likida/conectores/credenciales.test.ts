@@ -246,4 +246,17 @@ describe('desactivarCredencial — 0 filas no es éxito', () => {
     respuestas.set('conector_credencial', { data: null, error: { message: 'fetch failed' } });
     await expect(desactivarCredencial(TENANT, 'sap_b1')).rejects.toThrow(/desactivarCredencial: fetch failed/);
   });
+
+  // AUDITORÍA 1, ALTO (Legal): desactivar tiene que cortar el acceso, y una
+  // sesión de portal ya iniciada vive en una fila aparte `#sesion`.
+  it('TAMBIÉN apaga la sesión de portal cacheada (fila #sesion) — el ToS promete cortar el acceso', async () => {
+    respuestas.set('conector_credencial', { data: [{ id: 'cred-1' }], error: null });
+    await desactivarCredencial(TENANT, 'portal_facturacion:g500', { id: 'u-1' });
+
+    const updates = toquesDeCredencial().filter((l) => l.op === 'update');
+    // Uno apaga la credencial; otro apaga la sesión.
+    const sesion = updates.find((u) => u.eq.some(([c, v]) => c === 'conector_id' && v === 'portal_facturacion:g500#sesion'));
+    expect(sesion, 'debe haber un update sobre la fila #sesion').toBeTruthy();
+    expect((sesion!.payload as Record<string, unknown>).activo).toBe(false);
+  });
 });
