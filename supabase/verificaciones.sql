@@ -5412,3 +5412,21 @@ begin
   raise exception E'CALIDAD_0139  auto-rebota=%  fantasma-rebota=%  indices=%   (esperado t / t / t)',
     auto_rebota, fantasma_rebota, indices;
 end $$;
+
+-- ── 111. La RLS de liquidacion gatea por rol financiero (mig. 0144) ─────────
+-- Un `encargado` (ve_finanzas() = false) NO debe poder leer/escribir el dinero
+-- de las liquidaciones por PostgREST directo. La policy debe checar ve_finanzas(),
+-- igual que cliente/pago_recibido/factura_emitida (0048). Si alguien la revierte
+-- a solo tenant_id, este bloque lo grita. También fija el CHECK de factura_proveedor.
+do $$
+declare gatea boolean; tiene_check boolean;
+begin
+  select bool_or((qual::text ilike '%ve_finanzas%')) into gatea
+    from pg_policies where schemaname = 'public' and tablename = 'liquidacion';
+  select count(*) = 2 into tiene_check
+    from pg_constraint
+   where conrelid = 'public.factura_proveedor'::regclass and contype = 'c'
+     and conname in ('factura_proveedor_total_positivo', 'factura_proveedor_conceptos_positivo');
+  raise exception E'RLS_LIQUIDACION_0144  gatea_finanzas=%  check_factura_proveedor=%   (esperado t / t)',
+    coalesce(gatea, false), coalesce(tiene_check, false);
+end $$;
