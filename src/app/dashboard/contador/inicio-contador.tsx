@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import {
   Calculator, CalendarDays, Plus, MessageCircle, Landmark, Route as RouteIcon,
-  ReceiptText, Fuel, Wallet, FileX2, FileSearch,
+  ReceiptText, Fuel, Wallet, FileX2, FileSearch, Download,
 } from 'lucide-react';
 import {
   getAcreditables, getKpis, detectarAnomalias,
@@ -205,6 +205,18 @@ export async function InicioContador({
               {/* La acción primaria del contador no es despachar: es meter el
                   papel. Facturación es lectura Y captura desde la auditoría
                   4 (A1), y este botón es su puerta. */}
+              {/* AUDITORÍA 2, ALTO (proceso faltante): el CSV de liquidaciones
+                  para el ERP/Excel ya existía en /api/export/liquidaciones —bien
+                  protegido por sesión, rol (`puedeExportar`) y tenant— pero NO
+                  tenía puerta en ninguna pantalla, así que el contador no podía
+                  sacar sus datos. Un `<a download>` a esa ruta, con el `?tenant=`
+                  del sufijo del superadmin (vacío para roles reales, que usan su
+                  sesión). Es la puerta que faltaba, no un endpoint nuevo. */}
+              <a href={`/api/export/liquidaciones${sufijo}`} download
+                className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85 border"
+                style={{ borderColor: 'var(--line)', color: 'var(--ink)' }}>
+                <Download width={15} height={15} strokeWidth={2} /> Exportar CSV
+              </a>
               <Link href={`/dashboard/facturacion${sufijo}`}
                 className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85"
                 style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
