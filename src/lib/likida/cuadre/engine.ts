@@ -105,6 +105,15 @@ const ES_VIATICO = ['alimentacion', 'hospedaje', 'transporte', 'viaticos'];
 /** En cuál de las tres cubetas de deducibilidad cae un gasto. */
 export type Cubeta = 'deducible' | 'no_deducible' | 'por_confirmar';
 
+// AUDITORÍA 2 (fiscal): los medios de pago que la LISR 27-III / LIF 20-A-IV
+// aceptan para acreditar un estímulo. Lista CERRADA (02 cheque, 03 transferencia,
+// 04 tarjeta crédito, 05 monedero, 28 débito, 29 servicios) — NO "cualquiera que
+// no sea 01 efectivo": eso dejaba pasar 06 dinero electrónico, 08 vales, 30/31 y
+// sobre todo '99 Por definir', que la RMF 2.7.1.29 fr. II define como NO PAGADO.
+export const MEDIOS_LISR_27_III = ['02', '03', '04', '05', '28', '29'] as const;
+/** '99 Por definir' = la contraprestación no se ha pagado (RMF 2.7.1.29 fr. II). */
+export const FORMA_PAGO_SIN_PAGAR = '99';
+
 const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
 const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente'];
 
@@ -1010,8 +1019,12 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // con peaje/diésel en la lógica de forma de pago. Un '99' se acreditará el
     // mes en que se pague (con su complemento de pago), no éste.
     if ((g.ivaTraslado ?? 0) > 0 && g.formaPago !== '99') ivaAcreditable += (g.ivaTraslado as number) * proporcion;
-    // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas.
-    if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0) peajeAcreditable += (g.subTotal as number) * peajeFactor;
+    // Peaje (1.6): 50% del SubTotal (sin IVA) de casetas, SOLO con pago
+    // electrónico. AUDITORÍA 2 (fiscal): sin forma de pago o con '99' (Por
+    // definir = no pagado) no se afirma el estímulo — es el tercer estado, "no se
+    // pudo verificar" nunca es "sí". Mismo criterio que diésel e IVA.
+    const peajePagadoElectronicamente = !!g.formaPago && g.formaPago !== '01' && g.formaPago !== FORMA_PAGO_SIN_PAGAR;
+    if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0 && peajePagadoElectronicamente) peajeAcreditable += (g.subTotal as number) * peajeFactor;
     // IEPS de DIÉSEL (7): el estímulo (LIF 2026 art. 20, ap. A) es SOLO diésel — NO
     // gasolina. Se identifica por la clave de producto del SAT (15101505).
     const clavesDiesel = input.estimulos?.clavesDieselIeps ?? [];
@@ -1038,7 +1051,9 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // Los litros los lee el OCR del ticket y viven en `ocrExtra` (el XML del
       // CFDI no siempre trae la cantidad desglosada por concepto).
       const litros = Number((g.ocrExtra as Record<string, unknown> | undefined)?.litros ?? 0);
-      const pagoElectronico = !!g.formaPago && g.formaPago !== '01';
+      // AUDITORÍA 2 (fiscal): lista CERRADA de la LIF 20-A-IV, no "cualquiera !=
+      // 01". Antes admitía 06, 08, 30, 31 y 99 (no pagado), que la ley no cubre.
+      const pagoElectronico = !!g.formaPago && (MEDIOS_LISR_27_III as readonly string[]).includes(g.formaPago);
       if (pagoElectronico && Number.isFinite(litros) && litros > 0) {
         // AUDITORÍA 8, CRÍTICO: los litros salen del OCR y nada los cotejaba —
         // ni contra el XML (no siempre trae la cantidad desglosada), ni contra
