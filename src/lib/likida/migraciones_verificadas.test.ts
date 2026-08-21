@@ -60,6 +60,17 @@ const EXENTAS: Record<string, string> = {
   '0083': 'redefine config_tenant_valida exigiendo la FORMA de la facilidad: si falta, una config con "sí" en la llave revienta ruidoso en el UPDATE del tenant.',
   '0084': 'RPC sumar_combustible_ejercicio: si falta, getAcumuladoCombustible lanza ruidoso en el primer cuadre (el RPC no existe). El resultado se prueba en TS contra el esquema de migraciones.',
   '0085': 'redefine config_tenant_valida: la 0083 asignaba jsonb a una variable record (crash "anonymous composite types") en cada UPDATE de tenant con la facilidad declarada. El bloque 61 de verificaciones.sql reproduce el escenario exacto (update con facilidad en config).',
+  // ── Prospecto / scoring de ventas (pipeline de Likida, NO dinero de flota) ──
+  // Mismo criterio que 0137: columnas aditivas y ajustes de un SCORE de ventas.
+  // No crean una garantía que solo la base pueda demostrar (unicidad/atomicidad/
+  // permisos): si una columna falta, el código que la lee falla ruidoso; si el
+  // cálculo del score cambia, es lógica de negocio del embudo, probada en TS, y
+  // un score mal solo mueve el ORDEN de la lista de prospectos —nunca una cifra
+  // fiscal ni un cobro—. Ninguna toca `gasto`/`liquidacion`/`viaje`/`suscripcion`.
+  '0140': 'columnas de investigación profunda + score de filtrado en `prospecto`. Aditivas; su ausencia rompe ruidoso la escritura del censo, no corrompe en silencio. El score es orden de ventas, no dinero.',
+  '0141': 'columna `mensaje_linkedin` en `prospecto` (el tercer toque). Aditiva, sin garantía que la base sea la única en demostrar — misma forma que 0129.',
+  '0142': 'ajuste del cálculo de `necesidad_pct` (excluye "auxiliar administrativo" suelto). Es un SCORE de prospección; su corrección es lógica de negocio del embudo, no un invariante de dinero. Un valor mal reordena la lista, no corrompe.',
+  '0143': 'ajuste del cálculo de `necesidad_pct` (excluye "liquidación de pagos", que no es "liquidación de viajes"). Mismo criterio que 0142: score de ventas, no dinero.',
   '0001': 'esquema base: si falta, no arranca nada. Un bloque no aporta información que el primer INSERT no dé.',
   '0003': 'tabla de costos de LLM: telemetría. No hay garantía que romper.',
   '0004': 'columna de config fiscal. El bloque 7 (0026) sí comprueba lo que importa: que esa config no pueda apagar un tope de dinero.',
