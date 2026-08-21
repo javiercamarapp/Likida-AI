@@ -1,0 +1,61 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# GATE DE LA RUTINA — auditar el PR y mergear si está bien, o dejarlo (no mergea).
+#
+# La rutina de mejora-diaria empuja a una rama `mejora/*` y abre un PR (nunca a
+# master directo, y su commit va SIN [deploy]). El CI ("verificar" de ci.yml) es
+# la auditoría: tsc + lint + toda la suite. Este workflow cierra el ciclo que
+# pidió Javier (21-ago): cuando el CI de un PR `mejora/*` termina,
+#   · si PASÓ  → se mergea (squash) y se borra la rama.
+#   · si FALLÓ → se comenta y NO se mergea (queda abierto, visible, "cancelado").
+#
+# `workflow_run` corre desde la versión de master de este archivo, con permisos
+# de escritura acotados. Solo actúa sobre ramas `mejora/*`: el trabajo humano y
+# los PRs de otras ramas no se auto-mergean.
+# ═══════════════════════════════════════════════════════════════════════════
+name: Gate rutina (auto-merge si la auditoría pasa)
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  verde-mergea:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'mejora/')
+    steps:
+      - name: Mergear el PR de la rutina (auditoría verde)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RAMA: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          NUM=$(gh pr list --repo "$REPO" --head "$RAMA" --state open --json number,isDraft --jq '.[] | select(.isDraft==false) | .number' | head -1)
+          if [ -z "$NUM" ]; then echo "Sin PR abierto no-draft para $RAMA — nada que mergear."; exit 0; fi
+          echo "Auditoría verde para $RAMA (PR #$NUM) → merge squash."
+          gh pr merge "$NUM" --repo "$REPO" --squash --delete-branch
+
+  rojo-avisa:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      startsWith(github.event.workflow_run.head_branch, 'mejora/')
+    steps:
+      - name: Comentar que la auditoría falló (no se mergea)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RAMA: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          NUM=$(gh pr list --repo "$REPO" --head "$RAMA" --state open --json number --jq '.[0].number')
+          if [ -n "$NUM" ] && [ "$NUM" != "null" ]; then
+            gh pr comment "$NUM" --repo "$REPO" --body "🔴 La auditoría (CI) salió en rojo — este PR NO se mergea. Revisa los checks; el siguiente push lo vuelve a evaluar."
+          fi
