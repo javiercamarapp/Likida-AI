@@ -27,6 +27,7 @@ export const ROTULO_DIFERENCIA: Record<TipoDiferencia, string> = {
   cfdi_cancelado: 'CFDI cancelado',
   cfdi_efos: 'Emisor en lista 69-B (EFOS)',
   cfdi_efos_indeterminado: 'Emisor 69-B por confirmar',
+  consumo_bar: 'Consumo en bar por confirmar (LISR 28-XX)',
   cfdi_no_encontrado: 'CFDI no encontrado en el SAT',
   cfdi_pendiente: 'CFDI pendiente de validar',
   monto_invalido: 'Monto inválido',
