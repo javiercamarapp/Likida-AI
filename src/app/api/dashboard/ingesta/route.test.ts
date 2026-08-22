@@ -101,3 +101,34 @@ describe('la contabilidad', () => {
     expect(registrarCosto).not.toHaveBeenCalled();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA PROD (22-ago-2026) · RES-20 — el tope prometía un límite que la
+// plataforma no daba.
+//
+// El tope estaba en 9 MB "porque Vercel corta mucho más arriba". Es al revés:
+// el cuerpo de una función serverless se corta en 4.5 MB, en la plataforma,
+// antes de que esta ruta corra. Entre 4.5 y 9 MB el contralor recibía el 413
+// de Vercel —una página ajena, sin nuestro texto y sin una línea de log—
+// mientras este archivo creía estar dando el mensaje amable.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el tope de la imagen cabe DENTRO del límite real de Vercel', () => {
+  const LIMITE_VERCEL = 4.5 * 1024 * 1024;
+
+  it('lo que esta ruta acepta siempre llega a esta ruta', async () => {
+    const { MAX_DATAURL } = await import('./route');
+    expect(MAX_DATAURL).toBeLessThan(LIMITE_VERCEL);
+    // Con aire para el resto del sobre JSON y las cabeceras.
+    expect(MAX_DATAURL).toBeLessThanOrEqual(LIMITE_VERCEL - 400_000);
+  });
+
+  it('una imagen por encima del tope se rechaza con 413 y con nuestras palabras', async () => {
+    const { MAX_DATAURL } = await import('./route');
+    const gorda = `data:image/png;base64,${'A'.repeat(MAX_DATAURL)}`;
+    const r = await postear({ imagen: gorda });
+    expect(r.status).toBe(413);
+    // El mensaje dice qué hacer, no solo que no se pudo.
+    expect((await r.json()).error).toMatch(/calidad normal|recórtala/i);
+    expect(extraer).not.toHaveBeenCalled();
+  });
+});
