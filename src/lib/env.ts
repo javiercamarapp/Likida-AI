@@ -77,3 +77,28 @@ export function envHealth(): Record<EnvGroup, boolean> {
     supabase: GROUPS.supabase.every(envPuesta),
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// URL BASE DE LA APP — UN SOLO ACCESOR (auditoría 18, A2)
+//
+// `process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai'` estaba copiado
+// a mano en 10 archivos y ya había divergido: `suscripcion/page.tsx` caía a
+// `''` y mandaba a Stripe una `return_url` RELATIVA, que Billing Portal
+// rechaza. El 17-ago el suelo cambió de `likida.ai` a `app.likida.ai` y hubo
+// que tocar cada copia; olvidar una no rompe el build ni ningún test.
+//
+// Este módulo no importa nada, así que sirve igual en servidor y en cliente:
+// `NEXT_PUBLIC_*` se inyecta en build en los dos bundles.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Suelo: el dominio del SOFTWARE. `likida.ai` es la landing y no tiene `/auth/callback`. */
+export const APP_URL_SUELO = 'https://app.likida.ai';
+
+/**
+ * URL base de la app, SIN barra final, lista para concatenar `/ruta`.
+ * Cae al suelo si la variable falta o trae un marcador (`[SENSITIVE]`).
+ */
+export function appUrl(): string {
+  const v = envPuesta('NEXT_PUBLIC_APP_URL') ? String(process.env.NEXT_PUBLIC_APP_URL).trim() : APP_URL_SUELO;
+  return v.replace(/\/+$/, '');
+}
