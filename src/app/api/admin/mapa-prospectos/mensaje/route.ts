@@ -19,6 +19,8 @@ import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { generateStructured } from '@/lib/llm/openrouter';
 import { giroDe, NOMBRE_GIRO } from '@/lib/admin/prospectos-mapa';
+import { pieAvisoProspectos } from '@/lib/likida/privacidad';
+import { lineaDecisor, notasSinPersona, reponerDecisor, MARCADOR_DECISOR } from './seudonimo';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { sesionSuperadmin } from '../puerta';
@@ -37,7 +39,7 @@ const SYSTEM = `Eres el redactor de primeros toques B2B de Likida.ai (liquidaci�
 Reglas DURAS (violarlas invalida el mensaje):
 - Likida NO tiene clientes todavía: jamás "nuestros clientes"; el framing es "estamos eligiendo a las primeras flotas".
 - Cifras SOLO canónicas — no inventes ninguna otra: $35 por viaje (tabulador por volumen $38 / $35 / $31.25), ciclo manual ~$105 por viaje. El diésel SOLO se habla en litros elegibles; JAMÁS en pesos del estímulo — esa es la línea que no se cruza (es materia fiscal delicada, litros sí, pesos del estímulo no).
-- La PERSONALIZACIÓN es la causa del mensaje: si hay vacante publicada, se cita textual y es el gancho ("vi que buscan X — ese trabajo es el que automatizamos"); si no, el gancho es su giro y su plaza. Si hay nombre del decisor, se le habla a él por su nombre de pila, de usted.
+- La PERSONALIZACIÓN es la causa del mensaje: si hay vacante publicada, se cita textual y es el gancho ("vi que buscan X — ese trabajo es el que automatizamos"); si no, el gancho es su giro y su plaza. Si el decisor está identificado, se le habla a él de usted y donde iría su nombre de pila se escribe LITERALMENTE el marcador ${MARCADOR_DECISOR} (se sustituye después). Jamás inventes ni adivines un nombre de persona.
 - Qué hace Likida (esto sí, en una línea): el operador manda sus comprobantes por WhatsApp y la liquidación sale cuadrada, con lo fiscal separado y su PDF; el número lo calcula un motor, no una IA.
 - CTA única: 15 minutos esta semana.
 - WhatsApp: máximo 6 líneas, sin saludos largos. Correo: máximo 120 palabras, asunto anclado al gancho (nunca "Propuesta comercial"), firma "Javier Cámara — Likida.ai".
@@ -67,13 +69,17 @@ export async function POST(req: Request) {
   if (errLeer || !p) return NextResponse.json({ error: 'Ese prospecto no existe.' }, { status: 404 });
 
   const giro = giroDe(p.empresa, p.vacante, p.notas);
+  // AUDITORÍA 18 (C2): a OpenRouter sale la EMPRESA, no la PERSONA. El nombre
+  // del decisor se queda aquí (marcador en la ficha, repuesto al volver) y las
+  // notas van sin correos, teléfonos ni el nombre. Ver seudonimo.ts.
+  const notas = notasSinPersona(p.notas, p.contacto_nombre);
   const ficha = [
     `Empresa: ${p.empresa}`,
     `Giro: ${NOMBRE_GIRO[giro]}`,
     p.ciudad ? `Plaza: ${p.ciudad}` : null,
-    p.contacto_nombre ? `Decisor: ${p.contacto_nombre}` : 'Decisor: no identificado aún',
+    lineaDecisor(p.contacto_nombre),
     p.vacante ? `Vacante publicada (el gancho, cítala): "${p.vacante}"` : 'Sin vacante conocida — el gancho es el giro y la plaza.',
-    p.notas ? `Todo lo que sabemos (censo/fichas/DENUE):\n${p.notas.slice(0, 1500)}` : null,
+    notas ? `Todo lo que sabemos (censo/fichas/DENUE):\n${notas.slice(0, 1500)}` : null,
   ].filter(Boolean).join('\n');
 
   try {
@@ -88,12 +94,19 @@ export async function POST(req: Request) {
       signal: AbortSignal.timeout(30_000),
     });
     const ahora = new Date().toISOString();
+    // El nombre vuelve aquí, sin haber salido; y cada toque cierra con la
+    // liga del aviso de prospectos (art. 16 fr. II: el aviso simplificado se
+    // pone a disposición en el primer contacto por medio electrónico).
+    const pie = pieAvisoProspectos();
+    const mensajeWa = `${reponerDecisor(r.data.mensaje_wa, p.contacto_nombre)}\n${pie}`;
+    const correoAsunto = reponerDecisor(r.data.correo_asunto, p.contacto_nombre);
+    const correoCuerpo = `${reponerDecisor(r.data.correo_cuerpo, p.contacto_nombre)}\n\n${pie}`;
     const { error: errEscribir } = await admin
       .from('prospecto')
       .update({
-        mensaje_wa: r.data.mensaje_wa,
-        mensaje_correo_asunto: r.data.correo_asunto,
-        mensaje_correo: r.data.correo_cuerpo,
+        mensaje_wa: mensajeWa,
+        mensaje_correo_asunto: correoAsunto,
+        mensaje_correo: correoCuerpo,
         mensajes_generados_en: ahora,
         mensajes_modelo: r.model,
       })
@@ -104,9 +117,9 @@ export async function POST(req: Request) {
       costoUsd: r.cost, actor: sesion.userId,
     });
     return NextResponse.json({
-      mensajeWaIa: r.data.mensaje_wa,
-      correoAsuntoIa: r.data.correo_asunto,
-      correoCuerpoIa: r.data.correo_cuerpo,
+      mensajeWaIa: mensajeWa,
+      correoAsuntoIa: correoAsunto,
+      correoCuerpoIa: correoCuerpo,
       mensajesGeneradosEn: ahora,
     });
   } catch (e) {
