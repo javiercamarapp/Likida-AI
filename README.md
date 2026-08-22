@@ -60,30 +60,6 @@ investigación de este repo (`docs/conocimiento/`):
 - Los modelos de visión actuales leen un ticket térmico arrugado con sol
   encima — la barrera que mataba la captura automática ya cayó.
 
-## Estado — dicho como es
-
-**Pre-launch. Sin clientes todavía.** El producto está completo y desplegado
-en producción ([app.likida.ai](https://app.likida.ai)): intake por WhatsApp,
-motor de cuadre, liquidación en PDF, dos paneles (flota y consola de
-negocio), portal del chofer y agentes de back-office con página propia.
-
-No hay logos ni testimonios en este README porque no existen aún — cuando
-haya un cliente real, se leerá aquí con su permiso y no antes. Las cifras de
-ahorro fiscal que el motor calcula se prometen en material de venta solo
-cuando su implementación está verificada contra la norma vigente; las que
-están en auditoría se marcan así.
-
-Verificado al 19-ago-2026 sobre este árbol:
-
-- **5,032 pruebas en verde** (29 omitidas a propósito) — `npx vitest run`
-- `tsc --noEmit` **0 errores** · `eslint` **0 errores** · build de producción limpio
-- **136 migraciones** de base con RLS, y verificaciones contra la base real
-  (`supabase/verificaciones.sql`): mutex de doble liquidación, aislamiento
-  entre flotas, RLS del chofer, "nada entra tras liquidar". Cada migración
-  nueva exige su bloque de verificación o una exención con razón escrita.
-
-*(Las cifras crecen; no las cites de memoria — córrelas.)*
-
 ## Arquitectura
 
 ```
