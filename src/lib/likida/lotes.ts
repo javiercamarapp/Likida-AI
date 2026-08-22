@@ -31,3 +31,38 @@ export async function enLotes<T, R>(
   }
   return salida;
 }
+
+/**
+ * Corre `fn` sobre cada elemento con N EN VUELO a la vez — un pool de verdad,
+ * no tandas: en cuanto un elemento termina, el hueco lo toma el siguiente.
+ *
+ * La diferencia con `enLotes` importa cuando los tiempos son desiguales (una
+ * foto con OCR contra un texto): con tandas, cada tanda dura lo que su
+ * elemento más lento y los otros cuatro esperan de brazos cruzados. Con pool,
+ * el ancho de banda se mantiene ocupado — que es lo que hace que el drenado de
+ * la bandeja de WhatsApp entre en su minuto (ESC-1).
+ *
+ * Mismo contrato que `enLotes`: resultados EN EL ORDEN de entrada y un
+ * elemento que lanza no tumba a los demás (`{ error }`).
+ */
+export async function conPool<T, R>(
+  items: readonly T[],
+  ancho: number,
+  fn: (item: T, indice: number) => Promise<R>,
+): Promise<Array<{ ok: R } | { error: unknown }>> {
+  if (ancho < 1) throw new Error('conPool: el ancho del pool debe ser ≥ 1');
+  const salida = new Array<{ ok: R } | { error: unknown }>(items.length);
+  let siguiente = 0;
+  const obrero = async (): Promise<void> => {
+    for (;;) {
+      const i = siguiente++;
+      if (i >= items.length) return;
+      salida[i] = await fn(items[i], i).then(
+        (ok) => ({ ok }) as { ok: R },
+        (error) => ({ error }) as { error: unknown },
+      );
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(ancho, items.length) }, obrero));
+  return salida;
+}
