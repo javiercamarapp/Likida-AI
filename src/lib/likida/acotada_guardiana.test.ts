@@ -32,6 +32,9 @@ const GUARDADOS = [
   // ESCALA 50k (regla 5, 22-ago-2026): lo que queda del dashboard en JS va
   // envuelto en `acotada()`. El registro de viajes (RPC keyset + conteos).
   'src/lib/likida/viajes_registro.ts',
+  // Escala 50k (mig. 0151): el panel fiscal lee UNA RPC de celdas agregadas;
+  // cualquier lectura que quede en el archivo lleva techo.
+  'src/lib/likida/fiscal.ts',
 ];
 
 describe('toda consulta de los módulos del camino caliente lleva techo', () => {

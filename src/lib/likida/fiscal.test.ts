@@ -561,3 +561,55 @@ describe('AUDITORÍA 13 — el estándar del motor se propaga al panel del conta
     expect(r.ivaAcreditable).toBe(137.93);
   });
 });
+
+// ── Celdas agregadas (mig. 0151) ───────────────────────────────────────────
+
+describe('celdas agregadas — la ley pesa una celda por sus n comprobantes', () => {
+  const celda = (n: number, over: Partial<GastoFiscal> = {}, c: Partial<NonNullable<GastoFiscal['celda']>> = {}): GastoFiscal =>
+    gasto({ ...over, celda: { n, sobreTopeEfectivo: false, ivaEstado: 'nulo', iepsNulos: n, subTotalNulos: n, totalTimbradoDia: null, ...c } });
+
+  it('resumirFiscal cuenta n, no 1, y el monto ya viene sumado', () => {
+    const r = resumirFiscal([celda(7, { monto: 7000, ivaTraslado: 1120 }, { ivaEstado: 'positivo' }), celda(2, { cfdiUuid: null, estadoSat: null, monto: 200 })], OPTS);
+    expect(r.n).toBe(9);
+    expect(r.conCfdi).toBe(7);
+    expect(r.sinCfdi).toBe(2);
+    expect(r.vigentes).toBe(7);
+    expect(r.gastoTotal).toBe(7200);
+    expect(r.ivaAcreditable).toBe(1120);
+  });
+
+  it('el tope de efectivo se lee de la PARTICIÓN de SQL, no de la suma de la celda', () => {
+    // $3,000 en tres tickets de $1,000 NO rebasan un tope de $2,000.
+    const bajo = celda(3, { concepto: 'otro', formaPago: '01', monto: 3000, ivaTraslado: 480 }, { ivaEstado: 'positivo', sobreTopeEfectivo: false });
+    const sobre = celda(1, { concepto: 'otro', formaPago: '01', monto: 2500, ivaTraslado: 400 }, { ivaEstado: 'positivo', sobreTopeEfectivo: true });
+    expect(causasDe(bajo, OPTS)).toEqual([]);
+    expect(causasDe(sobre, OPTS).map((c) => c.causa)).toEqual(['efectivo_sobre_tope']);
+    const r = resumirFiscal([bajo, sobre], OPTS);
+    expect(r.ivaAcreditable).toBe(480);
+    expect(r.ivaNoAcreditable).toBe(400);
+  });
+
+  it('una celda de un día sobre el tope acredita en proporción 750/total, como el motor', () => {
+    const r = resumirFiscal([celda(2, { concepto: 'alimentacion', monto: 900, ivaTraslado: 124.14 }, { ivaEstado: 'positivo', totalTimbradoDia: 900 })], OPTS);
+    expect(r.ivaAcreditable).toBe(103.45);
+    expect(r.ivaNoAcreditable).toBe(20.69);
+  });
+
+  it('casetas: la celda trae la base sumada y cuántas no la traen', () => {
+    const r = resumirFiscal([celda(5, { concepto: 'caseta', subTotal: 900 }, { subTotalNulos: 2 })], OPTS);
+    expect(r.subTotalCasetas).toBe(900);
+    expect(r.casetasSinSubTotal).toBe(2);
+  });
+
+  it('resumirPerdidas: porCausa.n y sinFormaPago/sinFecha pesan n', () => {
+    const r = resumirPerdidas([celda(4, { efos: true, monto: 400 }), celda(3, { formaPago: null, fecha: null })], OPTS);
+    expect(r.porCausa[0]).toMatchObject({ causa: 'efos', n: 4, monto: 400 });
+    expect(r.sinDesgloseDeIva).toBe(4);
+    expect(r.sinFormaPago).toBe(3);
+    expect(r.sinFecha).toBe(3);
+  });
+
+  it('aFilasExport RECHAZA celdas: una celda no es una fila de Excel', () => {
+    expect(() => aFilasExport([celda(2)], OPTS)).toThrow(/celdas agregadas/);
+  });
+});
