@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   validarFactura, validarPago, evaluarAbono, sumarDias,
   type FacturaCruda, type PagoCrudo,
@@ -145,5 +146,41 @@ describe('sumarDias — de aquí sale el vencimiento', () => {
   it('el año bisiesto no lo corre un día', () => {
     expect(sumarDias('2028-02-28', 1)).toBe('2028-02-29');
     expect(sumarDias('2026-02-28', 1)).toBe('2026-03-01');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RES-22 (auditoría prod) — EL ÍNDICE DE FOLIO ES MÁS ESTRECHO QUE EL SAT
+//
+// `factura_folio_unico` (0049) es `(tenant_id, folio)`: sin serie y sin
+// ejercicio. Un CFDI se identifica por SERIE + FOLIO, y el folio se reinicia
+// cada año, así que A-1 de 2025 y B-1 de 2026 chocan siendo distintas.
+//
+// No se arregla aquí —hace falta columna `serie`, captura y UI—, así que lo
+// que este guardia sostiene es lo único que hoy se puede sostener: que el
+// mensaje al cliente NO mienta sobre la causa, y que el día que alguien
+// cambie el índice esta prueba lo mande a revisar el mensaje.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('el choque de folio dice la verdad sobre su alcance (RES-22)', () => {
+  const sql = readFileSync('supabase/migrations/0049_cobranza_factura_emitida_pago.sql', 'utf8');
+  const fuente = readFileSync('src/lib/likida/facturacion_escritura.ts', 'utf8');
+
+  it('el índice sigue siendo (tenant_id, folio), sin serie ni ejercicio', () => {
+    // Si esto se pone rojo es porque la migración propuesta YA se aplicó:
+    // entonces toca actualizar el mensaje de abajo, que dejó de ser cierto.
+    expect(sql).toMatch(/factura_folio_unico\s+on public\.factura_emitida \(tenant_id, folio\)/);
+    expect(sql).not.toMatch(/factura_emitida[\s\S]{0,400}\bserie\b/);
+  });
+
+  it('y el mensaje avisa que serie y año no se distinguen', () => {
+    // El texto anterior —«Búscala en la lista en vez de capturarla otra
+    // vez»— mandaba a buscar una factura que puede no ser la misma.
+    expect(fuente).toMatch(/El folio se compara sin serie ni año/);
+  });
+
+  it('la migración propuesta queda escrita donde se ve el problema', () => {
+    expect(fuente).toContain('add column if not exists serie text');
+    expect(fuente).toContain("(tenant_id, coalesce(serie, ''), folio, extract(year from fecha))");
   });
 });
