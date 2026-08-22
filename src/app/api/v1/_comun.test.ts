@@ -52,7 +52,8 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const { reiniciarLimites } = await import('@/lib/ratelimit');
 const { LecturaIncompleta } = await import('@/lib/likida/pg');
 const {
-  abrir, urlSinTenant, leerPagina, sobre, rebanar, fallo, errorApi, areaDeLlaveAlcanza,
+  abrir, urlSinTenant, leerPagina, leerCursor, codificarCursor, decodificarCursor,
+  sobre, rebanar, fallo, errorApi, areaDeLlaveAlcanza,
   LIMITE_DEFECTO, LIMITE_MAXIMO, VENTANA_MAXIMA, TASA_ANONIMA, TASA_POR_FLOTA,
 } = await import('./_comun');
 
@@ -340,5 +341,78 @@ describe('areaDeLlaveAlcanza — una llave no puede leer de más', () => {
       expect(areaDeLlaveAlcanza('inventada', a), a).toBe(false);
       expect(areaDeLlaveAlcanza('', a), a).toBe(false);
     }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESC-15 (escala 50k) — EL CURSOR. `desplazamiento` se topa en la ventana de
+// 1,000 filas, que a 50k viajes/mes es menos de UN DÍA: el TMS que quiera el
+// histórico no tenía por dónde. El cursor es `(created_at, id)` de la última
+// fila entregada, opaco para el integrador. Aquí se fija que va y vuelve
+// intacto, que lo inválido es 400 (no una consulta rara a la base) y que
+// `?conteo=1` es opt-in.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el cursor de /v1/viajes', () => {
+  const url = (q: string) => `https://app.likida.ai/api/v1/viajes${q}`;
+  const PAG = { limite: 50, desplazamiento: 0 };
+  const ID = '11111111-2222-3333-4444-555555555555';
+  const CREADO = '2026-08-22T18:04:05.123456+00:00';
+
+  it('ida y vuelta: el cursor conserva el instante COMPLETO (microsegundos incluidos)', () => {
+    const c = codificarCursor({ creadoEn: CREADO, id: ID });
+    expect(decodificarCursor(c)).toEqual({ creadoEn: CREADO, id: ID });
+    // Opaco: nada de la forma interna se lee a simple vista.
+    expect(c).not.toContain(ID);
+    expect(c).not.toContain('|');
+  });
+
+  it('sin ?despues= no hay cursor y el conteo NO se pide (es opt-in: cuesta un count(*) por petición)', () => {
+    const r = leerCursor(url(''), PAG);
+    expect(r.ok && r).toMatchObject({ despues: null, conteo: false });
+  });
+
+  it('?conteo=1 lo pide; ?conteo=0 no; cualquier otra cosa es 400', () => {
+    expect(leerCursor(url('?conteo=1'), PAG)).toMatchObject({ ok: true, conteo: true });
+    expect(leerCursor(url('?conteo=0'), PAG)).toMatchObject({ ok: true, conteo: false });
+    expect(leerCursor(url('?conteo=si'), PAG).ok).toBe(false);
+  });
+
+  it('un cursor válido se lee', () => {
+    const r = leerCursor(url(`?despues=${codificarCursor({ creadoEn: CREADO, id: ID })}`), PAG);
+    expect(r.ok && r.despues).toEqual({ creadoEn: CREADO, id: ID });
+  });
+
+  it('un cursor inventado es 400 — NUNCA una consulta con basura dentro', async () => {
+    const basura = [
+      'no-es-base64!!',
+      Buffer.from('sin-separador', 'utf8').toString('base64url'),
+      Buffer.from(`${CREADO}|no-es-uuid`, 'utf8').toString('base64url'),
+      Buffer.from(`no-es-fecha|${ID}`, 'utf8').toString('base64url'),
+      // Inyección al filtro `.or()` de PostgREST, que separa por comas y
+      // paréntesis: el instante no puede traerlos.
+      Buffer.from(`2026-08-22T00:00:00Z,and(id.eq.otro)|${ID}`, 'utf8').toString('base64url'),
+    ];
+    for (const malo of basura) {
+      const r = leerCursor(url(`?despues=${malo}`), PAG);
+      expect(r.ok, malo).toBe(false);
+      if (r.ok) continue;
+      expect(r.respuesta.status).toBe(400);
+      expect((await r.respuesta.json()).error.codigo).toBe('parametro_invalido');
+    }
+  });
+
+  it('cursor y desplazamiento NO se combinan: 400 en vez de una página ambigua', () => {
+    const c = codificarCursor({ creadoEn: CREADO, id: ID });
+    expect(leerCursor(url(`?despues=${c}`), { limite: 50, desplazamiento: 50 }).ok).toBe(false);
+    expect(leerCursor(url(`?despues=${c}`), PAG).ok).toBe(true);
+  });
+
+  it('el sobre lleva `siguiente` y un hayMas MEDIDO que gana sobre la derivación', () => {
+    const s = sobre(['a', 'b'], { limite: 2, desplazamiento: 0 }, null, { hayMas: false, siguiente: null });
+    // Sin el extra, `hayMas` sería true (página llena, total desconocido).
+    expect(s.pagina.hayMas).toBe(false);
+    expect(s.pagina.siguiente).toBeNull();
+    // Y sin extra, el sobre de las otras rutas no inventa la llave.
+    expect('siguiente' in sobre(['a'], { limite: 2, desplazamiento: 0 }, 1).pagina).toBe(false);
   });
 });

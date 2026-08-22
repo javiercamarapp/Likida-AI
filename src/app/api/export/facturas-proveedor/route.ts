@@ -7,6 +7,7 @@ import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
+import { LecturaIncompleta } from '@/lib/likida/pg';
 
 export const runtime = 'nodejs';
 
@@ -62,14 +63,12 @@ export async function GET(req: Request) {
 
   const inicio = new Date();
   try {
-    // El tope de la bandeja (100) aquí se sube — y si algún día una flota lo
-    // rebasa, el CSV corto se DICE, no se manda callado (misma doctrina que
-    // el export de liquidaciones).
-    const { filas, ids, recortado } = await exportarAprobadas(t.tenantId, formato);
-    if (recortado) {
-      logger.error('export.proveedor_tope', { tenant: t.tenantId });
-      return new NextResponse('La flota tiene más facturas de las que el export puede traer en una pasada. Avísanos: necesitamos paginar el archivo.', { status: 500 });
-    }
+    // ESC-8: `exportarAprobadas` pagina hasta DEMOSTRAR que trajo todas las
+    // aprobadas (traerTodo + count); si no puede, lanza `LecturaIncompleta` y
+    // aquí se dice — el CSV corto con cara de completo ya no existe como
+    // salida. (Antes: `.limit(5000)` recortado a 1,000 por PostgREST y un
+    // `recortado` que jamás se cumplía.)
+    const { filas, ids } = await exportarAprobadas(t.tenantId, formato);
     const csv = toCsv(filas);
 
     // El archivo ya existe: lo que sigue anota, no decide.
@@ -95,6 +94,10 @@ export async function GET(req: Request) {
       },
     });
   } catch (e) {
+    if (e instanceof LecturaIncompleta) {
+      logger.error('export.proveedor_incompleto', { tenant: t.tenantId, leidas: e.leidas, esperadas: e.esperadas });
+      return new NextResponse('La flota tiene más facturas de las que el export puede traer demostrando que están todas. No se manda un archivo corto: avísanos.', { status: 500 });
+    }
     logger.error('export.proveedor', { tenant: t.tenantId, err: e instanceof Error ? e.message : String(e) });
     return new NextResponse('No se pudo generar el export. Intenta de nuevo en un momento.', { status: 500 });
   }

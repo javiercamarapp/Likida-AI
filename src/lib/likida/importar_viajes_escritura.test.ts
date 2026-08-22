@@ -48,8 +48,14 @@ let lotesUpsert: FilaInsert[][];
 let ocupadosResp: Array<Array<{ operador_id: string }>>;
 let ocupadosError: { message: string } | null;
 
+/** La RPC de ANALYZE (0157, ESC-18): se anota cada llamada; `rpcError` la
+ *  hace fallar para probar que el import NO se cae por ella. */
+const rpc = vi.fn(async (_nombre: string) => (rpcError ? { data: null, error: rpcError } : { data: null, error: null }));
+let rpcError: { message: string } | null;
+
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
+    rpc: (nombre: string) => rpc(nombre),
     from: (tabla: string) => {
       // Los catálogos de unidad/cliente van por SU camino: comparten cola con
       // nada — el amarre corre en paralelo (Promise.all) y una cola única
@@ -123,7 +129,7 @@ function fromViaje() {
   };
 }
 
-const { importarViajes } = await import('./importar_viajes');
+const { importarViajes, UMBRAL_ANALYZE } = await import('./importar_viajes');
 
 // Cada folio trae SU operador (distinto): desde el lateral AUD3 una fila sin
 // operador amarrado ya no se inserta (operador_id es NOT NULL), y dos filas
@@ -145,6 +151,8 @@ beforeEach(() => {
   catalogoClientes = [];
   catalogoError = null;
   catalogoServido = {};
+  rpcError = null;
+  rpc.mockClear();
   resolver.mockClear();
   logger.error.mockClear();
 });
@@ -299,5 +307,50 @@ describe('unidad, cliente e ingreso del archivo (auditoría 4, A7)', () => {
     expect(r.error).toBeUndefined();
     expect(r.creados).toBe(1);
     expect(lotesUpsert.flat()[0]).toMatchObject({ unidad_id: null, cliente_id: null });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESC-18 (escala 50k): tras un import que pasa de 1,000 filas se pide ANALYZE
+// por la RPC `analizar_tablas_operacion` (0157). Un import chico no la toca;
+// y si la RPC falla, el acuse sale igual: los viajes ya están en la base.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('ESC-18 — ANALYZE después de un import grande', () => {
+  const archivo = (n: number) => Array.from({ length: n }, (_, i) => fila(`V-${i}`));
+
+  it(`con más de ${UMBRAL_ANALYZE} filas creadas se llama analizar_tablas_operacion UNA vez, después de insertar`, async () => {
+    const r = await importarViajes('t1', archivo(UMBRAL_ANALYZE + 1));
+    expect(r.creados).toBe(UMBRAL_ANALYZE + 1);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('analizar_tablas_operacion');
+    expect(llamadasUpsert).toBe(11);
+  });
+
+  it(`con ${UMBRAL_ANALYZE} o menos NO se pide ANALYZE`, async () => {
+    await importarViajes('t1', archivo(UMBRAL_ANALYZE));
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('creados cuenta lo que ENTRÓ: 1,500 filas con 600 ya en la base no llegan al umbral', async () => {
+    enBase = new Set(Array.from({ length: 600 }, (_, i) => `V-${i}`));
+    const r = await importarViajes('t1', archivo(1_500));
+    expect(r.creados).toBe(900);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('si la RPC falla, el import ya quedó: mismo acuse, sin `error`, y se loguea como warn', async () => {
+    rpcError = { message: 'permission denied for function analizar_tablas_operacion' };
+    const r = await importarViajes('t1', archivo(UMBRAL_ANALYZE + 1));
+    expect(r.creados).toBe(UMBRAL_ANALYZE + 1);
+    expect(r.error).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith('importar_viajes.analyze_fallo', expect.objectContaining({ tenantId: 't1' }));
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('si la RPC LANZA (red, SDK), tampoco tumba el acuse', async () => {
+    rpc.mockRejectedValueOnce(new Error('fetch failed'));
+    const r = await importarViajes('t1', archivo(UMBRAL_ANALYZE + 1));
+    expect(r.creados).toBe(UMBRAL_ANALYZE + 1);
+    expect(r.error).toBeUndefined();
   });
 });
