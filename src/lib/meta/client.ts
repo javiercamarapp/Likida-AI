@@ -85,8 +85,13 @@ export function destinatarioWhatsApp(telefono: string): string {
  * para que quien SÍ tiene la base cruce contra los teléfonos de sus operadores.
  * El prefijo `***` es a propósito: el resultado no tiene forma de teléfono, así
  * que el redactor del logger no lo toca.
+ *
+ * EXPORTADA desde la auditoría prod (22-ago-2026, SEG-7) para que `conv.ts`
+ * use ESTA y no una copia: el repo ya aprendió —con la lista de palabras de
+ * `_comun.ts`— que dos versiones de una regla de redacción divergen en el
+ * primer cambio y la que se queda atrás filtra sin que nadie lo note.
  */
-function destinatarioEnmascarado(telefono: string): string {
+export function destinatarioEnmascarado(telefono: string): string {
   const d = telefono.replace(/[^\d]/g, '');
   return d.length >= 4 ? `***${d.slice(-4)}` : '***';
 }
@@ -486,8 +491,19 @@ export async function enviarRespuestaArco(telefono: string, respuesta: string): 
 
   // 1. Texto libre: funciona DENTRO de la ventana de 24h desde el PRIVACIDAD
   //    del titular (Meta permite responder en ese canal sin plantilla).
+  // ── LOS LOGS DE ESTA FUNCIÓN VAN ENMASCARADOS (auditoría prod, SEG-7) ────
+  //
+  // Iban como `{ telefono }` crudo confiando en el redactor del logger, y el
+  // redactor NO alcanzaba: su regex de teléfono pide los dígitos pegados
+  // (`\b\+?521?\d{10}\b`), y aquí `telefono` llega tal como lo escribió el
+  // titular en su solicitud ARCO — con espacios, guiones o paréntesis. Un
+  // "999 370 0779" salía ENTERO al log. Y es justo la peor fila para
+  // filtrarlo: la de alguien ejerciendo sus derechos ARCO, cuyo teléfono es
+  // el dato personal que la solicitud venía a proteger (LFPDPPP art. 21:
+  // el responsable debe guardar confidencialidad del dato tratado).
+  const para = destinatarioEnmascarado(telefono);
   const res = await envia({ type: 'text', text: { body: respuesta } });
-  if (res.ok) { logger.info('arco.envio_ok', { telefono }); return { ok: true }; }
+  if (res.ok) { logger.info('arco.envio_ok', { para }); return { ok: true }; }
   const crudo = await res.text().catch(() => '');
 
   // 2. Fuera de la ventana, Meta exige plantilla. La plantilla `respuesta_arco_v2`
@@ -505,13 +521,13 @@ export async function enviarRespuestaArco(telefono: string, respuesta: string): 
             components: [{ type: 'body', parameters: [{ type: 'text', text: 'la flota' }, { type: 'text', text: respuesta }] }],
           },
         });
-        if (tpl.ok) { logger.info('arco.envio_plantilla_ok', { telefono }); return { ok: true }; }
+        if (tpl.ok) { logger.info('arco.envio_plantilla_ok', { para }); return { ok: true }; }
         const tplCrudo = await tpl.text().catch(() => '');
-        logger.warn('arco.envio_plantilla_fallido', { telefono, status: tpl.status, body: tplCrudo.slice(0, 200) });
+        logger.warn('arco.envio_plantilla_fallido', { para, status: tpl.status, body: tplCrudo.slice(0, 200) });
         return { ok: false, error: 'fuera de la ventana de 24h y la plantilla no está aprobada todavía' };
       }
     } catch { /* el crudo no era JSON — se reporta abajo */ }
   }
-  logger.warn('arco.envio_fallido', { telefono, status: res.status, body: crudo.slice(0, 300) });
+  logger.warn('arco.envio_fallido', { para, status: res.status, body: crudo.slice(0, 300) });
   return { ok: false, error: `HTTP ${res.status}` };
 }
