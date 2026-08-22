@@ -2,9 +2,9 @@ import { redirect } from 'next/navigation';
 import { read as leerLibro, utils as xlsxUtils } from 'xlsx';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
-import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
-import { getViajes, getLiquidaciones, contarViajes, contarEscalados } from '@/lib/likida/analytics';
+import { getViajesRegistro, getLiquidacionesDeViajes, contarViajes, contarEscalados } from '@/lib/likida/analytics';
 import { interpretarFilasViajes, importarViajes } from '@/lib/likida/importar_viajes';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../sufijo';
@@ -18,29 +18,36 @@ export const dynamic = 'force-dynamic';
 
 const FILTROS: FiltroViajes[] = ['todos', 'abiertos', 'en_cuadre', 'liquidados', 'escalados'];
 
+/** Filas por página del registro: el tope de render que pidió el rediseño. */
+const POR_PAGINA = 100;
+
 /**
  * Registro de Viajes (F2 del plan) — la fuente de verdad NAVEGABLE, no una
  * página de acción: crear/asignar/avisar viven en Despacho. Área
- * `operacion` y por eso CERO pesos: el anticipo existe en `ViajeRow` y esta
- * página lo deja en el servidor a propósito (el 4-ago una página de viajes
- * ya filtró anticipos al encargado; `dinero_por_area.test.ts` vigila).
+ * `operacion`, así que los pesos (anticipo, comprobado, diferencia) SOLO
+ * salen del servidor cuando el rol ve dinero — `puedeVerArea(rol, 'dinero')`
+ * abajo; para el jefe de tráfico las tres columnas ni existen (el 4-ago una
+ * página de viajes ya filtró anticipos al encargado; `dinero_por_area.test.ts`
+ * vigila).
  */
 export default async function PaginaViajes({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; f?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; f?: string; q?: string; p?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/viajes', sp);
   if (!puedeVerRuta(rol, '/dashboard/viajes')) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
+  const verDinero = puedeVerArea(rol, 'dinero');
 
   const filtro: FiltroViajes = (FILTROS as string[]).includes(sp.f ?? '') ? (sp.f as FiltroViajes) : 'todos';
+  const q = (sp.q ?? '').trim().slice(0, 80);
+  const pagina = Math.max(1, Math.min(1000, Number.parseInt(sp.p ?? '1', 10) || 1));
 
   // Primarios sin catch (fail closed); los conteos degradan a null solos.
-  const [viajes, liquidaciones, total, abiertos, enCuadre, liquidados, escalados] = await Promise.all([
-    getViajes(tenantId),
-    getLiquidaciones(tenantId).catch(() => null),
+  const [{ filas: viajes, hayMas }, total, abiertos, enCuadre, liquidados, escalados] = await Promise.all([
+    getViajesRegistro(tenantId, { q, pagina, porPagina: POR_PAGINA, filtro }),
     contarViajes(tenantId),
     contarViajes(tenantId, ['abierto']),
     contarViajes(tenantId, ['en_cuadre']),
@@ -48,27 +55,28 @@ export default async function PaginaViajes({
     contarEscalados(tenantId),
   ]);
 
-  // `/dashboard/[id]` abre por id de LIQUIDACIÓN — se cruza por folio, y un
-  // folio sin cruce se queda sin link (nunca un link a un 404).
-  const liqPorFolio = new Map((liquidaciones ?? []).map((l) => [l.folio, l.id]));
+  // `/dashboard/[id]` abre por id de LIQUIDACIÓN — se cruza por `viaje_id`
+  // (antes por folio, que es texto libre del TMS), y un viaje sin cruce se
+  // queda sin link (nunca un link a un 404).
+  const liquidaciones = await getLiquidacionesDeViajes(tenantId, viajes.map((v) => v.id));
+  const liqPorViaje = new Map(liquidaciones.map((l) => [l.viajeId, l]));
 
-  // SIN anticipo a propósito — ver encabezado.
-  const filas: FilaRegistroViaje[] = viajes
-    .filter((v) => {
-      if (filtro === 'abiertos') return v.estatus === 'abierto';
-      if (filtro === 'en_cuadre') return v.estatus === 'en_cuadre';
-      if (filtro === 'liquidados') return v.estatus === 'liquidado';
-      if (filtro === 'escalados') return v.escaladoEn !== null && v.aceptadoEn === null && v.estatus !== 'liquidado';
-      return true;
-    })
-    .map((v) => ({
+  const filas: FilaRegistroViaje[] = viajes.map((v) => {
+    const liq = liqPorViaje.get(v.id) ?? null;
+    return {
       id: v.id, folio: v.folio, origen: v.origen, destino: v.destino,
-      estatus: v.estatus, operadorNombre: v.operadorNombre, fechaInicio: v.fechaInicio,
+      estatus: v.estatus, operadorNombre: v.operadorNombre, unidadEco: v.unidadEco, fechaInicio: v.fechaInicio,
       intakePendientes: v.intakePendientes,
       avisadoEn: v.avisadoEn, aceptadoEn: v.aceptadoEn, escaladoEn: v.escaladoEn,
       avisosEnviados: v.avisosEnviados,
-      liqId: v.estatus === 'liquidado' ? liqPorFolio.get(v.folio) ?? null : null,
-    }));
+      // Los pesos se quedan en el servidor si el rol no ve dinero.
+      anticipo: verDinero ? v.anticipo : null,
+      comprobado: verDinero && liq ? liq.comprobado : null,
+      diferencia: verDinero && liq ? liq.diferencia : null,
+      liqId: liq?.id ?? null,
+      liqEstatus: liq?.estatus ?? null,
+    };
+  });
 
   async function importar(_prev: ResultadoImportarUI | null, fd: FormData): Promise<ResultadoImportarUI | null> {
     'use server';
@@ -118,9 +126,14 @@ export default async function PaginaViajes({
       filas={filas}
       filtro={filtro}
       conteos={{ total, abiertos, enCuadre, liquidados, escalados }}
-      cargados={viajes.length}
       sufijo={sufijo}
       importar={importar}
+      puedeImportar={puedeAsignar(rol)}
+      verDinero={verDinero}
+      q={q}
+      pagina={pagina}
+      hayMas={hayMas}
+      porPagina={POR_PAGINA}
     />
   );
 }
