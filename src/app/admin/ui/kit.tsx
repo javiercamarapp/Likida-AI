@@ -60,7 +60,12 @@ export function KpiTile({
         </div>
         <div className="min-w-0">
           {/* No medible → guion, nunca un 0/0% con cara de medición (auditoría 1). */}
-          <div className="text-xl font-semibold tracking-tight tabular leading-tight"
+          {/* ESCALA 50k (22-ago-2026): una cifra de 12+ dígitos ($999,999,999.00
+              y más) ya no se desborda del tile — se recorta con "…" y el
+              `title` lleva la cifra COMPLETA (hover / lector de pantalla). El
+              recorte es de ANCHO, no de valor: el número real sigue ahí. */}
+          <div className="text-xl font-semibold tracking-tight tabular leading-tight min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
+            title={noMedible ? undefined : fmt(valor ?? 0)}
             style={noMedible ? { color: 'var(--faint)' } : undefined}>{noMedible ? '—' : fmt(mostrado)}</div>
           {/* AUDITORÍA 10, MEDIO — `truncate` (una sola línea + "…") cortaba
               la palabra que carga el significado fiscal: "IVA acreditable
@@ -144,7 +149,10 @@ export function StatCard({
           {flechas}
         </div>
         {/* No medible → un guion en gris, NUNCA un 0 con cara de medición. */}
-        <div className="font-display text-[20px] leading-tight font-semibold tabular mt-0.5"
+        {/* Misma regla de ancho que KpiTile (escala 50k): recorte con "…" y
+            la cifra completa en `title`; nunca se desborda de la tarjeta. */}
+        <div className="font-display text-[20px] leading-tight font-semibold tabular mt-0.5 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
+          title={noMedible ? undefined : fmt(valor ?? 0)}
           style={noMedible ? { color: 'var(--faint)' } : undefined}>
           {noMedible ? '—' : fmt(mostrado)}
         </div>
@@ -214,7 +222,9 @@ export function WidgetUso({ etiqueta, valor, detalle, tope, href, hrefTexto = 'V
         <p className="text-[11.5px] mt-1" style={{ color: 'var(--muted)' }}>No se pudo leer ahora mismo.</p>
       ) : (
         <>
-          <div className="font-display text-[17px] font-semibold tabular leading-tight mt-0.5">{valor}</div>
+          {/* El sidebar mide ~200 px: un USD de 7 cifras cabe, uno de 10 no.
+              Recorte de ancho con la cifra completa en `title` (escala 50k). */}
+          <div className="font-display text-[17px] font-semibold tabular leading-tight mt-0.5 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={valor}>{valor}</div>
           {pct !== null && (
             <div className="mt-1.5 h-1 rounded-full overflow-hidden" style={{ background: 'var(--line2)' }}>
               <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--marca)' }} />
@@ -388,7 +398,12 @@ export function BannerInsight({ etiqueta, deltaPct, href, hrefTexto = 'Ver estad
     <div className="card p-3 flex items-center gap-2.5">
       <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--ok)' }} />
       <span className="etiqueta-mono shrink-0" style={{ color: 'var(--muted)' }}>{etiqueta}</span>
-      <span className="text-[13px] min-w-0 truncate">{children}</span>
+      {/* ESCALA 50k (22-ago-2026): aquí había `truncate`, y la frase trae un
+          MONTO ("Tu flota liquidó $12,345,678.90…"): a un ancho justo se
+          mutilaba justo la cifra. Ahora envuelve a una segunda línea; lo que
+          no se parte es el monto en sí, que el llamador manda en un <b> y
+          aquí se protege con `[&_b]:whitespace-nowrap`. */}
+      <span className="text-[13px] min-w-0 flex-1 break-words [&_b]:whitespace-nowrap">{children}</span>
       {deltaPct !== null && (
         <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 tabular"
           style={deltaPct >= 0
