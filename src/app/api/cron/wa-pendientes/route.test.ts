@@ -13,7 +13,12 @@ const processInbound = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {})
 vi.mock('@/lib/likida/processor', () => ({ processInbound: (...a: unknown[]) => processInbound(...a) }));
 
 const estaApagado = vi.fn(async () => false);
-vi.mock('@/lib/likida/interruptores', () => ({ estaApagado }));
+/** AUDITORÍA 18 (A17): el cron lee `leerInterruptor`, que distingue apagado
+ *  de ILEGIBLE. `estaApagado` sigue siendo la palanca de las pruebas viejas. */
+let ilegible = false;
+vi.mock('@/lib/likida/interruptores', () => ({
+  leerInterruptor: async () => (ilegible ? 'ilegible' : (await estaApagado()) ? 'apagado' : 'encendido'),
+}));
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
@@ -48,6 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   urgentesVencidas.mockResolvedValue(0);
   estaApagado.mockResolvedValue(false);
+  ilegible = false;
   pendientesPorDrenar.mockResolvedValue([]);
   cartasMuertas.mockResolvedValue(0);
   processInbound.mockImplementation(async () => {});
@@ -67,6 +73,16 @@ describe('la puerta y la pausa', () => {
     const r = await GET(peticion('Bearer secreto-de-prueba'));
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ saltado: 'interruptor global' });
+    expect(pendientesPorDrenar).not.toHaveBeenCalled();
+  });
+
+  it('ILEGIBLE: la bandeja tampoco se drena, pero la corrida sale 500 con `codigo` (A17)', async () => {
+    // Cada 5 minutos en 200 `saltado` con un `logger.info` que ni llega a
+    // Sentry era la receta para una bandeja sin drenar y un panel en verde.
+    ilegible = true;
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(500);
+    expect(await r.json()).toMatchObject({ corrio: false, codigo: 'interruptor_ilegible', interruptor: 'global' });
     expect(pendientesPorDrenar).not.toHaveBeenCalled();
   });
 });
