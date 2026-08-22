@@ -88,22 +88,135 @@ export async function getOperador(operadorId: string, tenantId: string): Promise
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS CATÁLOGOS DEL PANEL, BUSCADOS EN EL SERVIDOR (FE-2, 22-ago-2026)
+//
+// `listOperadores` no tenía `.limit()`: a 7,500 choferes PostgREST recortaba a
+// 1,000 EN SILENCIO y el chofer 1,001 simplemente no existía para el despacho
+// — sin error, sin rótulo, sin manera de notarlo desde la pantalla. Los
+// catálogos de cliente y unidad de `/dashboard/despacho` tenían el mismo
+// hueco.
+//
+// Y el recorte era la MITAD del problema. La otra mitad es que ese catálogo
+// entero se pintaba UNA VEZ POR FILA: un `<select>` de operadores por cada
+// viaje por asignar y uno de unidades por cada viaje en curso. Doce filas ×
+// 7,500 `<option>` = ~1.5-2 MB de HTML por carga, todo para que se elija UNO.
+//
+// El arreglo es el mismo para los tres: NUNCA se manda el catálogo al
+// navegador. Se manda un buscador (`buscarCatalogo`, tope de 20) que la UI
+// llama al escribir — `ComboCatalogo` en `app/dashboard/combo-catalogo.tsx` —,
+// y el conteo real (`contarCatalogo`) para poder decir en pantalla cuántos
+// hay sin traerlos. El índice de trigramas de la 0160 es lo que hace que ese
+// `%q%` no sea un barrido del tenant.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Qué catálogo se busca. Los tres que el despacho necesita para crear y
+ *  amarrar un viaje; ninguno lleva dinero, así que el área `operacion` los
+ *  puede ver completa. */
+export type TipoCatalogo = 'operador' | 'cliente' | 'unidad';
+
+/** Cuántas opciones ve el usuario de una vez. 20 es lo que cabe en un
+ *  `<datalist>` sin volverse una lista para leer: si lo que busca no está
+ *  entre las 20, la respuesta es teclear una letra más, no bajar. Muy por
+ *  debajo del recorte de 1,000 de PostgREST — el tope aquí es una decisión de
+ *  pantalla, no un accidente del transporte. */
+export const TOPE_CATALOGO = 20;
+
+export interface OpcionCatalogo { id: string; etiqueta: string }
+
+/** La tabla, la columna que se enseña y por cuál se ordena/busca. Una sola
+ *  tabla de verdad para las tres consultas: tres copias del mismo `.eq(
+ *  'activo', true)` es la forma en que un catálogo se olvida de filtrar. */
+const CATALOGOS: Record<TipoCatalogo, { tabla: string; columna: string }> = {
+  operador: { tabla: 'operador', columna: 'nombre' },
+  cliente: { tabla: 'cliente', columna: 'nombre' },
+  unidad: { tabla: 'unidad', columna: 'numero_economico' },
+};
+
+/** Fuera los comodines de LIKE y las comas: `%` solo convertiría la búsqueda
+ *  en "todo", y `,`/`(`/`)` rompen el filtro de PostgREST. Mismo saneo que
+ *  `sanearBusqueda` del registro de viajes (viajes_registro.ts). */
+export function sanearCatalogo(q: string | undefined | null): string {
+  return (q ?? '').trim().replace(/[%_,()]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+}
+
+/**
+ * Hasta `limite` (≤ `TOPE_CATALOGO`) opciones ACTIVAS del catálogo, filtradas
+ * por `q` en la base. Sin `q` son las primeras por orden alfabético — el
+ * arranque del combo, no "todas".
+ *
+ * LANZA ante error, igual que `listOperadores` siempre hizo: una lista vacía
+ * se pinta "no hay choferes dados de alta", que con la base caída es falso y
+ * manda al usuario a dar de alta un operador que ya existe.
+ */
+export async function buscarCatalogo(
+  tenantId: string,
+  tipo: TipoCatalogo,
+  q?: string,
+  limite: number = TOPE_CATALOGO,
+): Promise<OpcionCatalogo[]> {
+  const cat = CATALOGOS[tipo];
+  if (!cat) throw new Error(`buscarCatalogo: tipo desconocido ${tipo}`);
+  const texto = sanearCatalogo(q);
+  const tope = Math.max(1, Math.min(TOPE_CATALOGO, limite));
+
+  let consulta = supabaseAdmin()
+    .from(cat.tabla)
+    .select(`id, ${cat.columna}`)
+    .eq('tenant_id', tenantId)
+    .eq('activo', true);
+  if (texto) consulta = consulta.ilike(cat.columna, `%${texto}%`);
+
+  const { data, error } = await acotada(consulta.order(cat.columna).limit(tope), `buscarCatalogo:${tipo}`);
+  if (error) throw new Error(`buscarCatalogo:${tipo}: ${error.message}`);
+  // `as unknown as` y no un cast directo: el `.select()` se arma con la
+  // columna en runtime, así que el tipo derivado de postgrest-js es un
+  // `ParserError`, no una fila. La FORMA se comprueba abajo, que es lo que
+  // importa.
+  return ((data ?? []) as unknown as Array<Record<string, unknown>>).map((f) => ({
+    id: f.id as string,
+    etiqueta: (f[cat.columna] as string) ?? '',
+  }));
+}
+
+/**
+ * Cuántos hay DE VERDAD en el catálogo (`count exact, head`), sin traer una
+ * sola fila. Es lo que permite que la pantalla diga "20 de 7,500" en vez de
+ * insinuar que 20 son todos — y distinguir "todavía no das de alta a nadie"
+ * (0, que sí es medición) de "no se pudo contar" (`null`).
+ */
+export async function contarCatalogo(tenantId: string, tipo: TipoCatalogo): Promise<number | null> {
+  const cat = CATALOGOS[tipo];
+  if (!cat) throw new Error(`contarCatalogo: tipo desconocido ${tipo}`);
+  const { count, error } = await acotada(supabaseAdmin()
+    .from(cat.tabla)
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .eq('activo', true), `contarCatalogo:${tipo}`);
+  if (error) {
+    logger.warn('contarCatalogo', { tenantId, tipo, err: error.message });
+    return null;
+  }
+  return count ?? null;
+}
+
 /**
  * Choferes activos del tenant, para el selector de "Reasignar chofer" del
  * panel (docs/superpowers/plans/2026-08-02-roles-flota.md, Task 3). Solo
  * `nombre` — la vista de asignación no necesita el teléfono.
+ *
+ * ACOTADO desde FE-2: devuelve a lo más `TOPE_CATALOGO`. Es el ARRANQUE del
+ * combo de búsqueda, no el catálogo — quien tenga más choferes que eso los
+ * encuentra escribiendo, y la pantalla dice cuántos hay en total
+ * (`contarCatalogo`). Antes no llevaba tope y PostgREST recortaba a 1,000 sin
+ * decirlo.
  */
-export async function listOperadores(tenantId: string): Promise<Array<{ id: string; nombre: string }>> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('operador')
-    .select('id, nombre')
-    .eq('tenant_id', tenantId)
-    .eq('activo', true)
-    .order('nombre'), 'listOperadores');
-  // Un error leído como lista vacía se pinta "no hay choferes" — falso, y
-  // esconde justo la sección que decide si "Reasignar" tiene sentido mostrarse.
-  if (error) throw new Error(`listOperadores: ${error.message}`);
-  return (data ?? []) as Array<{ id: string; nombre: string }>;
+export async function listOperadores(
+  tenantId: string,
+  opciones: { q?: string; limite?: number } = {},
+): Promise<Array<{ id: string; nombre: string }>> {
+  const opts = await buscarCatalogo(tenantId, 'operador', opciones.q, opciones.limite ?? TOPE_CATALOGO);
+  return opts.map((o) => ({ id: o.id, nombre: o.etiqueta }));
 }
 
 /**
