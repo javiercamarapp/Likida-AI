@@ -161,3 +161,31 @@ export async function alertarOperador(evento: string, detalle: Record<string, un
     logger.warn('alerta.fallo', { evento, error: e instanceof Error ? e.message : String(e) });
   }
 }
+
+/**
+ * Un contador de fallos CONSECUTIVOS (auditoría prod 22-ago-2026, RES-3 /
+ * RES-16).
+ *
+ * Para lo que falla "a veces" y se tolera —un OCR, una subida a Storage— y que
+ * sin esto se degradaba en silencio: cada fallo era un `warn` que nadie lee y
+ * el mismo issue viejo de Sentry. N seguidos ya no es "a veces": es el
+ * proveedor caído, la llave vencida o el bucket ausente.
+ *
+ * ES PURO A PROPÓSITO: cuenta y contesta si toca gritar; QUIÉN grita lo decide
+ * el llamador con su propio `alertarOperador`. Así el aviso se ve desde las
+ * pruebas del módulo que falla, y este archivo no queda como un canal indirecto
+ * que hay que adivinar. El contador vive por instancia (mejor esfuerzo); el
+ * piso de una hora ya es global, en Redis.
+ */
+export function contadorDeFallos(umbral: number) {
+  let seguidos = 0;
+  return {
+    get seguidos() { return seguidos; },
+    /** Suma uno y dice si ya toca avisar. */
+    fallo(): boolean {
+      seguidos += 1;
+      return seguidos >= umbral;
+    },
+    exito(): void { seguidos = 0; },
+  };
+}
