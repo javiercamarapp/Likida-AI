@@ -597,7 +597,11 @@ export class PartialExecutionError extends Error {
 // así que si el modelo la llamaba dos veces en un turno ("cómo voy, y ciérralo
 // si está bien") repetía las tres lecturas del cuadre MÁS el acumulado del
 // ejercicio, que barre el año entero del tenant.
-const READ_PREFIXES = ['get_', 'check_', 'list_', 'find_', 'consultar_', 'validar_', 'cuadrar_'];
+// B17 (auditoría 18): `estado_` también — `estado_viaje`, `estado_agentes` y
+// `estado_runner` son lectura pura y caían en el mismo hueco que `cuadrar_`.
+// Las tools nombradas por SUSTANTIVO (`kpis_flota`, `bandeja`, `guardia`…) no
+// se pueden adivinar por prefijo: el llamador las declara en `readOnlyTools`.
+const READ_PREFIXES = ['get_', 'check_', 'list_', 'find_', 'consultar_', 'validar_', 'cuadrar_', 'estado_'];
 const isReadOnly = (n: string) => READ_PREFIXES.some((p) => n.startsWith(p));
 
 /**
@@ -652,6 +656,23 @@ export async function generateWithTools(opts: {
    *  real, `fin` al terminar; un acierto de caché emite solo `fin` — fue
    *  instantáneo de verdad, no se le inventa un "pensando". */
   onTool?: (ev: { fase: 'inicio' | 'fin'; tool: string }) => void;
+  /**
+   * Tools TERMINALES (A30, auditoría 18): su resultado NO lo lee el modelo en
+   * la ronda siguiente, lo lee el orquestador por un canal lateral
+   * (`entregar_respuesta` → `CAPTURAS`). Con ellas el supuesto del loop-guard
+   * ("no hay ronda siguiente que consuma el resultado") es falso, así que:
+   *  (a) en la última ronda permitida SÍ se ejecutan —solo ellas— en vez de
+   *      tirar `LoopGuardError` con la respuesta ya redactada y pagada;
+   *  (b) en cuanto una corre con éxito, el ciclo termina ahí: no se paga otra
+   *      completion para que el modelo diga "listo".
+   */
+  terminalTools?: string[];
+  /**
+   * Tools de SOLO LECTURA por nombre (B17): las que no siguen la convención
+   * de prefijo (`kpis_flota`, `metrica_negocio`, `bandeja`…) y aun así deben
+   * entrar a la caché entre rondas del turno.
+   */
+  readOnlyTools?: string[];
 }): Promise<{
   finalText: string;
   toolCalls: ToolCallRecord[];
@@ -735,6 +756,9 @@ export async function generateWithTools(opts: {
   // `ToolCallRecord`: de qué llamada real salió cada resultado.
   const crossRound = new Map<string, ToolExecResult & { args: Record<string, unknown> }>();
   const llave = llaveDeCache(opts.tools);
+  const terminales = new Set(opts.terminalTools ?? []);
+  const lecturas = new Set(opts.readOnlyTools ?? []);
+  const esLectura = (n: string) => isReadOnly(n) || lecturas.has(n);
 
   // CR-5: completado con fallback cross-provider. Reintentar SÓLO la llamada de
   // completado (las tools se ejecutan DESPUÉS, en nuestro código) es seguro: una
@@ -785,22 +809,29 @@ export async function generateWithTools(opts: {
       const choice = res.choices[0];
       const calls = choice?.message?.tool_calls;
 
+      // SE CORTÓ ≠ TERMINÓ. Sin esta comprobación una respuesta a medias se
+      // enviaba como completa, y —peor— una respuesta VACÍA por truncamiento
+      // llegaba a `processor.ts` como finalText '' y se convertía en
+      // "Listo. 👍": una confirmación afirmativa de un turno en el que no se
+      // cuadró nada ni se cerró nada. El chofer deja de mandar comprobantes y
+      // el viaje se queda abierto sin que nadie vea un error.
+      //
+      // B16 (auditoría 18): va ANTES de mirar si hay tool_calls. Vivía dentro
+      // de la rama "cerró con texto", así que un `length` a media escritura de
+      // `arguments` caía al JSON.parse, fallaba, y al modelo se le reportaba
+      // "argumentos JSON inválidos" — el diagnóstico falso que `generateStructured`
+      // ya había corregido en el camino hermano: truncamiento disfrazado de ilegible.
+      if (choice?.finish_reason === 'length') {
+        throw new TruncatedError(
+          `Respuesta truncada en el ciclo de tools: se agotaron los ${opts.maxTokens ?? DEFAULT_MAX_TOKENS} tokens de salida (usó ${tokOut})`,
+          tokOut,
+          opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+          choice?.message?.content ?? undefined,
+          { model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo },
+        );
+      }
+
       if (!calls || calls.length === 0) {
-        // SE CORTÓ ≠ TERMINÓ. Sin esta comprobación una respuesta a medias se
-        // enviaba como completa, y —peor— una respuesta VACÍA por truncamiento
-        // llegaba a `processor.ts` como finalText '' y se convertía en
-        // "Listo. 👍": una confirmación afirmativa de un turno en el que no se
-        // cuadró nada ni se cerró nada. El chofer deja de mandar comprobantes y
-        // el viaje se queda abierto sin que nadie vea un error.
-        if (choice?.finish_reason === 'length') {
-          throw new TruncatedError(
-            `Respuesta truncada en el ciclo de tools: se agotaron los ${opts.maxTokens ?? DEFAULT_MAX_TOKENS} tokens de salida (usó ${tokOut})`,
-            tokOut,
-            opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-            choice?.message?.content ?? undefined,
-            { model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo },
-          );
-        }
         // El costo ya viene sumado ronda a ronda, cada una al precio del modelo
         // que la respondió. (Antes se precificaba aquí, de una vez, con el
         // modelo activo al final: correcto solo si el ciclo entero corrió en el
@@ -818,15 +849,25 @@ export async function generateWithTools(opts: {
       // y si el modelo pide `guardar_liquidacion`, una MUTACIÓN) por un
       // resultado que nadie va a consumir. Se corta AQUÍ, antes del
       // `Promise.all` que las dispara, no después de pagarlas.
+      //
+      // EXCEPCIÓN (A30): la tool TERMINAL. Su resultado no lo lee el modelo, lo
+      // lee el orquestador (`CAPTURAS`); cortarla aquí tiraba una respuesta ya
+      // redactada y pagada, y el route contestaba "no pude responder". En la
+      // última ronda se ejecutan SOLO las terminales: las lecturas que nadie
+      // va a consumir siguen sin correr.
+      const esTerminal = (c: (typeof calls)[number]) => c.type === 'function' && terminales.has(c.function.name);
+      let llamadas = calls;
       if (round === maxRounds - 1) {
-        throw new LoopGuardError(maxRounds);
+        llamadas = calls.filter(esTerminal);
+        if (llamadas.length === 0) throw new LoopGuardError(maxRounds);
       }
 
-      convo.push({ role: 'assistant', content: choice.message.content ?? null, tool_calls: calls });
+      convo.push({ role: 'assistant', content: choice.message.content ?? null, tool_calls: llamadas });
       const inRound = new Map<string, { args: Record<string, unknown>; promise: Promise<ToolExecResult> }>();
+      let entregada = false;
 
       const results = await Promise.all(
-        calls.map(async (call) => {
+        llamadas.map(async (call) => {
           if (call.type !== 'function') {
             return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify({ error: 'tipo de tool no soportado' }) };
           }
@@ -838,7 +879,7 @@ export async function generateWithTools(opts: {
             return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify({ error: 'argumentos JSON inválidos' }) };
           }
           const key = llave(call.function.name, args);
-          if (isReadOnly(call.function.name) && crossRound.has(key)) {
+          if (esLectura(call.function.name) && crossRound.has(key)) {
             const c = crossRound.get(key)!;
             // `c.args`, NO `args`: lo que produjo `c.result` fue la llamada que
             // llenó la caché, y esa pudo traer args distintos a los de ESTA
@@ -870,12 +911,20 @@ export async function generateWithTools(opts: {
           // segundo en un fallo permanente del turno: el modelo reintenta, se le
           // sirve el mismo error desde memoria, y nadie vuelve a preguntarle a
           // una base que ya se curó sola.
-          if (isReadOnly(call.function.name) && exec.success) crossRound.set(key, { ...exec, args: entry.args });
+          if (esLectura(call.function.name) && exec.success) crossRound.set(key, { ...exec, args: entry.args });
+          if (exec.success && terminales.has(call.function.name)) entregada = true;
           executed.push({ toolName: call.function.name, args: entry.args, result: exec.result, durationMs: exec.durationMs, error: exec.error });
           return { role: 'tool' as const, tool_call_id: call.id, content: JSON.stringify(exec.success ? exec.result : { error: exec.error }) };
         }),
       );
       convo.push(...results);
+      // A30 (b): la entrega ya está en manos del orquestador. La ronda
+      // siguiente solo serviría para que el modelo dijera "listo" — una
+      // completion entera (con toda la conversación de entrada) por una
+      // palabra que nadie lee.
+      if (entregada) {
+        return { finalText: choice.message.content ?? '', toolCalls: executed, model: used, tokensIn: tokIn, tokensOut: tokOut, cost: costo, costoPorModelo };
+      }
     }
     throw new LoopGuardError(maxRounds);
   } catch (err) {
