@@ -78,7 +78,11 @@ const { executeTool } = await import('@/lib/llm/tool-executor');
 const CTX = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779' };
 const cerrar = () => executeTool('guardar_liquidacion', {}, CTX);
 
-beforeEach(() => {
+beforeEach(async () => {
+  // RES-19: `leerInterruptor` cachea 5 s por instancia y este archivo usa el
+  // módulo REAL con una respuesta distinta por prueba — sin tirar la caché, la
+  // lectura de una contestaría por la siguiente.
+  (await import('@/lib/likida/interruptores')).olvidarInterruptores();
   interruptor = { data: null, error: null }; // sin fila = ENCENDIDO
   corridas.length = 0;
   corridaError = null;

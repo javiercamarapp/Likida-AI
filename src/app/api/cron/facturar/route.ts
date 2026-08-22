@@ -291,6 +291,9 @@ export async function GET(req: Request) {
   }
   if (apagadoPor) {
     logger.warn('cron.facturar.saltado', { interruptor: apagadoPor });
+    // El latido (RES-7): saltarse una corrida A PROPÓSITO no es estar muerto,
+    // y `/api/health` tiene que poder distinguir las dos cosas.
+    await registrarLatido('facturar', 'saltado', { interruptor: apagadoPor });
     return NextResponse.json({ corrio: false, saltado: `interruptor ${apagadoPor}` });
   }
 
@@ -305,6 +308,11 @@ export async function GET(req: Request) {
       pendientes: null,
     });
   }
+
+  // La corrida llegó a trabajar: eso es el latido (RES-7). Va aquí y no en
+  // cada `return` de abajo porque lo que mide es "este cron sigue vivo", no
+  // cuántos tickets salieron — eso ya lo cuenta la bitácora de corridas.
+  await registrarLatido('facturar', 'ok', {});
 
   const hoy = new Date().toISOString().slice(0, 10);
   // Arranca AQUÍ, no dentro del `try`: es el reloj contra el que se mide
@@ -384,6 +392,7 @@ export async function GET(req: Request) {
     const codigo = codigoDeError(e);
     logger.error('cron.facturar.falló', { error, codigo });
     await alertarOperador('cron.facturar', { error, codigo });
+    await registrarLatido('facturar', 'fallo', { codigo });
     return NextResponse.json({ error }, { status: 500 });
   }
 }
@@ -703,6 +712,7 @@ export async function procesarLoteEnCola(
     const codigo = codigoDeError(e);
     logger.error('cron.facturar.falló', { error, codigo });
     await alertarOperador('cron.facturar', { error, codigo });
+    await registrarLatido('facturar', 'fallo', { codigo });
     return NextResponse.json({ error }, { status: 500 });
   } finally {
     // ── EN `finally`, Y ÉSA ES LA CORRECCIÓN ────────────────────────────────

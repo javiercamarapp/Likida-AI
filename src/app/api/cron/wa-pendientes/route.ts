@@ -9,6 +9,7 @@ import {
 import { conPool } from '@/lib/likida/lotes';
 import { urgentesVencidas } from '@/lib/likida/agentes/cola';
 import { logger } from '@/lib/logger';
+import { appUrl } from '@/lib/env';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
@@ -244,7 +245,9 @@ async function encolarOtraVuelta(req: Request, vuelta: number): Promise<string |
   if (!token) return undefined;
   try {
     const q = new QstashClient({ token, baseUrl: process.env.QSTASH_URL ?? undefined });
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? `https://${req.headers.get('host')}`;
+    // `appUrl()` es el ÚNICO accesor de la URL base (env.ts, guardia A2); el
+    // host de la petición queda de red de seguridad para un preview sin env.
+    const base = appUrl() || `https://${req.headers.get('host')}`;
     const { messageId } = await q.publishJSON({
       url: `${base}/api/cron/wa-pendientes/cola`,
       body: { vuelta },

@@ -21,7 +21,11 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 const { avisoAgentePeajesApagado } = await import('./apagado');
 
-beforeEach(() => {
+beforeEach(async () => {
+  // RES-19: `leerInterruptor` cachea 5 s por instancia y este archivo usa el
+  // módulo REAL con una respuesta distinta por prueba — sin tirar la caché, la
+  // lectura de una contestaría por la siguiente.
+  (await import('@/lib/likida/interruptores')).olvidarInterruptores();
   interruptor = { data: null, error: null }; // sin fila = ENCENDIDO
   logs.error.mockClear();
 });
