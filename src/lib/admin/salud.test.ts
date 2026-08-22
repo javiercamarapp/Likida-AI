@@ -75,11 +75,16 @@ describe('CADENCIA_MS espeja vercel.json', () => {
   it('cada cron de vercel.json tiene su cadencia aquí y coincide', () => {
     const cfg = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: Array<{ path: string; schedule: string }> };
     const esperada: Record<string, number> = {
-      '* * * * *': 60_000, '*/5 * * * *': 300_000, '0 * * * *': 3_600_000, '30 * * * *': 3_600_000,
+      '* * * * *': 60_000, '*/5 * * * *': 300_000, '*/15 * * * *': 900_000,
+      '0 * * * *': 3_600_000, '30 * * * *': 3_600_000,
       '0 */4 * * *': 4 * 3_600_000, '15 4 * * *': 86_400_000,
     };
     for (const c of cfg.crons) {
       const id = c.path.replace('/api/cron/', '') as keyof typeof CADENCIA_MS;
+      // Si esto truena por `undefined`, no falta la cadencia en CADENCIA_MS:
+      // falta la CADENA de cron en esta tabla. Añádela aquí antes de tocar
+      // salud.ts, o el latido juzgará con la cadencia equivocada.
+      expect(esperada[c.schedule], `cadencia "${c.schedule}" (${id}) no está en esta tabla`).toBeTypeOf('number');
       expect(CADENCIA_MS[id], `${id} falta en CADENCIA_MS`).toBe(esperada[c.schedule]);
     }
     expect(TOLERANCIA_LATIDO_MS).toBe(20 * 60_000);

@@ -33,7 +33,11 @@ export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 export const CADENCIA_MS: Record<CronId, number> = {
   'wa-pendientes': 60_000,
   escalar: 3_600_000,
-  facturar: 3_600_000,
+  // ESC-5: la cola de facturación pasó de un lote global por hora a encolar
+  // por flota cada 15 minutos. Esta tabla espeja vercel.json y su prueba lo
+  // exige: si alguien cambia la cadencia allá y no aquí, el latido llamaría
+  // muerto a un cron vivo (o al revés, callaría uno muerto tres cuartos de hora).
+  facturar: 15 * 60_000,
   purgar: 86_400_000,
   runner: 4 * 3_600_000,
 };
