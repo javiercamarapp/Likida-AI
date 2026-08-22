@@ -142,7 +142,12 @@ export async function InicioContenido({
   // AUDITORÍA 10, ALTO: el estado se decide con VIAJES reales filtrados a
   // `liquidado` (un arreglo que sí puede quedar vacío), no con `porDia`
   // (siempre traía 7/30 elementos y la rama 'vacio' era inalcanzable).
-  const estado = estadoPanel({ acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias });
+  const estado = estadoPanel({
+    acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias,
+    // A13: las consultas del selector y las fiscales también cuentan — una
+    // caída aquí enseña el banner de "pantalla incompleta", no un vacío.
+    secundarias: { seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries, viajesPorMes, cfgFiscal, gastosFiscales },
+  });
 
   // Las alertas accionables (F2): cada una lleva a LA pantalla donde se
   // resuelve, con el sufijo del superadmin a cuestas. Se apagaron cuando

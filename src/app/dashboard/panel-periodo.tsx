@@ -71,7 +71,11 @@ export function PanelPeriodo({
         <div className="card p-3 h-full flex flex-col">
           <TituloSeccion>Viajes</TituloSeccion>
           <div className="mt-2.5 flex-1 flex flex-col">
-            {kpiModo && kpiModo.totalViajes > 0 ? (
+            {/* A13: `null` es consulta CAÍDA, no flota sin viajes — se dice,
+                como ya hacían "Liquidado" y "Top rutas" en esta misma fila. */}
+            {kpiModo === null ? (
+              <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>No se pudo cargar esta gráfica.</p></div>
+            ) : kpiModo.totalViajes > 0 ? (
               <Dona segmentos={[
                 { etiqueta: 'Liquidados', valor: kpiModo.viajesLiquidados },
                 { etiqueta: 'Pendientes', valor: Math.max(0, kpiModo.totalViajes - kpiModo.viajesLiquidados) },
@@ -94,7 +98,9 @@ export function PanelPeriodo({
         <div className="card p-3 h-full flex flex-col">
           <TituloSeccion>Gasto por categoría</TituloSeccion>
           <div className="mt-3 flex-1 flex flex-col">
-            {gastoModo && gastoModo.series.some((s) => s.valores.some((v) => v > 0)) ? (
+            {gastoModo === null ? (
+              <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>No se pudo cargar esta gráfica.</p></div>
+            ) : gastoModo.series.some((s) => s.valores.some((v) => v > 0)) ? (
               <GastoSemanalChart categorias={gastoModo.categorias} series={gastoModo.series} />
             ) : (
               <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>Aún no hay gastos capturados.</p></div>
