@@ -13,6 +13,21 @@ function sbCon(totp: Array<{ id: string; status: string }>, aal: string | null) 
   } as unknown as SupabaseClient;
 }
 
+/** Supabase Auth con hipo: la lista de factores NO se pudo leer. */
+function sbRoto(modo: 'error' | 'lanza') {
+  return {
+    auth: {
+      mfa: {
+        listFactors: async () => {
+          if (modo === 'lanza') throw new Error('fetch failed');
+          return { data: null, error: { message: '500 from /auth/v1/factors' } };
+        },
+        getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal1' }, error: null }),
+      },
+    },
+  } as unknown as SupabaseClient;
+}
+
 describe('estadoMfa', () => {
   it('con factor verificado: inscrito, con su id', async () => {
     const e = await estadoMfa(sbCon([{ id: 'f1', status: 'verified' }], 'aal1'));
@@ -36,5 +51,23 @@ describe('exigirAal2SiHayFactor — la política incremental', () => {
   it('con factor y sesión AAL2: pasa', async () => {
     expect(await exigirAal2SiHayFactor(sbCon([{ id: 'f1', status: 'verified' }], 'aal2')))
       .toEqual({ ok: true });
+  });
+
+  // AUDITORÍA 18, B14: el comentario decía "fallar cerrado" y el código
+  // convertía un listFactors() con error en "no tiene factores" → pasaba.
+  it('si NO se pudo leer la lista de factores: se RECHAZA (fallar cerrado), no "sin inscribir"', async () => {
+    expect(await exigirAal2SiHayFactor(sbRoto('error'))).toEqual({ ok: false, motivo: 'no_verificable' });
+    expect(await exigirAal2SiHayFactor(sbRoto('lanza'))).toEqual({ ok: false, motivo: 'no_verificable' });
+  });
+
+  it('estadoMfa lo dice con `legible:false`, y no afirma inscrito ni AAL', async () => {
+    const e = await estadoMfa(sbRoto('error'));
+    expect(e.legible).toBe(false);
+    expect(e.inscrito).toBe(false);
+    expect(e.factorId).toBeNull();
+  });
+
+  it('una lectura sana es legible', async () => {
+    expect((await estadoMfa(sbCon([], 'aal1'))).legible).toBe(true);
   });
 });
