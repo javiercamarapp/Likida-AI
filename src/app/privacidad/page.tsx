@@ -50,6 +50,10 @@ const SECCIONES: SeccionLegal[] = [
       `**Likida** es responsable de los datos personales de quien **contrata y usa el servicio**: la persona que administra la flota, el contralor, quien entra al panel.`,
       `**Los datos de los operadores son otra cosa.** Cuando un chofer manda sus comprobantes por WhatsApp, la responsable de esos datos es **su empresa**, no Likida: Likida los trata por cuenta de ella y siguiendo sus instrucciones, como persona encargada (art. 2 fr. XII). El aviso que le corresponde a cada operador lo publica su propia flota, y Likida lo aloja por encargo.`,
       `Si eres operador y llegaste aquí buscando tus datos, el aviso que te toca es el de tu empresa: escribe **PRIVACIDAD** por el mismo chat y te llega la liga.`,
+      // AUDITORÍA 18 (C2): el tercer grupo de titulares. Likida también es
+      // responsable de los datos de las personas a las que contacta para
+      // VENDER, que no son clientes ni operadores; su aviso es otro.
+      `**Y si Likida te contactó para ofrecerte el servicio y no eres cliente**, el aviso que te corresponde es el de contactos comerciales, en **/aviso/prospectos**: ahí dice de dónde salieron tus datos y cómo pedir que se borren.`,
     ],
   },
   {
