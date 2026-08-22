@@ -37,7 +37,11 @@
 import { logger } from '@/lib/logger';
 import { faltantes, envPuesta } from '@/lib/env';
 
-const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
+/** Exportada para que `runbook.test.ts` itere sobre ESTA lista y no sobre un
+ *  literal propio: así, cada variable que entre aquí tiene que entrar también
+ *  a la tabla de DEPLOY.md o la suite lo dice (AUDITORÍA 18, A18 — las dos
+ *  últimas entraron sin que el runbook se enterara). */
+export const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   { nombre: 'DEMO_TENANT_ID', consecuencia: 'el panel consulta el tenant del seed y pinta cero liquidaciones' },
   { nombre: 'LIKIDA_WHATSAPP_MSG_USD', consecuencia: 'el costo por liquidación usa el default 0.008' },
   {
@@ -50,20 +54,31 @@ const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   // esta lista: un cron puede fallar nueve días y el único rastro es un issue
   // viejo de Sentry que ya no notifica.
   { nombre: 'ALERTA_EMAIL', consecuencia: 'los fallos de cron no le llegan a nadie por correo' },
+  // La llave que firma la cookie de flota activa del superadmin (B13). Ya no
+  // cae a la service role key: sin ella el selector de flota no firma ni lee,
+  // y el sistema arranca igual.
+  { nombre: 'LIKIDA_FLOTA_COOKIE_LLAVE', consecuencia: 'el superadmin no puede fijar una flota activa en /admin (la cookie no se firma ni se lee)' },
 ];
 
 /**
  * Emite una línea en el arranque con el estado de esas variables.
  *
- * Solo en despliegues reales: en local estas ausencias son normales y el aviso
- * diario acabaría siendo ruido que se ignora, que es como muere un aviso.
+ * Las SILENCIOSAS solo en despliegues reales: en local esas ausencias son
+ * normales y el aviso diario acabaría siendo ruido que se ignora, que es como
+ * muere un aviso. Los GRUPOS DUROS (abajo) se avisan también en local cuando
+ * falta algo (AUDITORÍA 18, M17): es justo en `npm run dev`, con el
+ * `.env.example` recién copiado y vacío, donde nadie tiene un panel de logs y
+ * el único síntoma era el error críptico del SDK al abrir /dashboard.
  *
  * Nunca se emite el VALOR, solo el nombre y la consecuencia: el aviso existe
  * para vigilar la configuración, no para filtrarla por el log.
  */
 export function avisarConfiguracionSilenciosa(): void {
   const desplegado = !!process.env.VERCEL_ENV || process.env.NODE_ENV === 'production';
-  if (!desplegado) return;
+  if (!desplegado) {
+    avisarGruposDeConfiguracion(false);
+    return;
+  }
 
   const faltan = SILENCIOSAS.filter((v) => !envPuesta(v.nombre));
   if (faltan.length === 0) {
@@ -75,7 +90,7 @@ export function avisarConfiguracionSilenciosa(): void {
     });
   }
 
-  avisarGruposDeConfiguracion();
+  avisarGruposDeConfiguracion(true);
 }
 
 /**
@@ -91,11 +106,13 @@ export function avisarConfiguracionSilenciosa(): void {
  * críptico del SDK. Aquí salen antes de servir la primera petición, con el
  * nombre exacto de lo que falta.
  */
-function avisarGruposDeConfiguracion(): void {
+function avisarGruposDeConfiguracion(desplegado: boolean): void {
   const falta = faltantes();
   const grupos = Object.keys(falta);
   if (grupos.length === 0) {
-    logger.info('startup.entorno_grupos', { ok: true });
+    // El "todo bien" solo en despliegues: en local sería la línea diaria que
+    // nadie lee; lo que SÍ se dice en local es lo que falta.
+    if (desplegado) logger.info('startup.entorno_grupos', { ok: true });
     return;
   }
   logger.error('startup.entorno_grupos', { ok: false, faltan: falta });

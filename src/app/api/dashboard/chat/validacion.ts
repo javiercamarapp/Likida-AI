@@ -1,11 +1,11 @@
 // Helpers puros del endpoint del chat — viven FUERA de route.ts porque Next
 // valida los exports de una ruta (la misma trampa que cobró con
 // InicioContenido en page.tsx, 12-ago-2026) y porque así se prueban solos.
-import { TZ_MX } from '@/lib/formato';
+import { hoyMx } from '@/lib/formato';
 
 /** Medianoche de HOY en México, como ISO — el día del contralor, no el UTC. */
 export function inicioDiaMxIso(ms: number): string {
-  const fecha = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ms));
+  const fecha = hoyMx(new Date(ms));
   // CDMX es UTC-6 fijo (sin horario de verano desde 2022).
   return new Date(`${fecha}T00:00:00-06:00`).toISOString();
 }

@@ -11,11 +11,23 @@
 // ahí aplica igual aquí — el matcher del proxy excluye /api, esta línea es
 // la única puerta). Además esto GASTA dinero por llamada de visión: sin rol
 // correcto no se toca el modelo.
+//
+// ANTI-QUEMADURA (AUDITORÍA 18, A6/A25): la ruta se copió del hermano por su
+// autorización y no por su contabilidad — no tenía rateLimit, ni tope, ni
+// escribía en `llm_costo`. Tres capas, como /api/dashboard/chat:
+//  1. rateLimit por usuario (SONDAS_POR_MINUTO).
+//  2. Tope diario por tenant contra `llm_costo` (fase ocr, sin viaje) —
+//     fallando CERRADO si no se pudo leer.
+//  3. Cada llamada deja su fila de costo: el tablero de /admin y el costo
+//     por flota la cuentan.
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSessionTenant } from '@/lib/auth/session';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { extraerComprobante } from '@/lib/likida/intake/ocr';
+import { registrarCosto } from '@/lib/likida/costos';
+import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
+import { gastoSondaHoyUsd, topeSondaDiaUsd, SONDAS_POR_MINUTO } from './tope';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -31,6 +43,9 @@ export async function POST(req: NextRequest) {
   if (!puedeVerArea(sesion.rol, 'dinero')) {
     return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
   }
+  if (!(await rateLimit(`ingesta:${sesion.userId}`, SONDAS_POR_MINUTO, 60_000))) {
+    return NextResponse.json({ error: 'demasiadas lecturas seguidas; espera un minuto' }, { status: 429 });
+  }
 
   let imagen: unknown;
   try {
@@ -45,11 +60,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'imagen demasiado grande (máx ~6 MB)' }, { status: 413 });
   }
 
+  // ── Tope diario ── se lee ANTES de gastar; fallar cerrado si no se pudo.
+  const tenantId = sesion.tenantId;
+  if (!tenantId) return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
+  let gastadoHoy: number;
+  try {
+    gastadoHoy = await gastoSondaHoyUsd(tenantId);
+  } catch (e) {
+    logger.error('ingesta.tope_dia.error', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return NextResponse.json({ error: 'no pude verificar el presupuesto del día; inténtalo en un momento' }, { status: 503 });
+  }
+  if (gastadoHoy >= topeSondaDiaUsd()) {
+    return NextResponse.json({ error: 'la lectura de prueba llegó a su tope diario (existe para cuidar tu costo); mañana se renueva', agotado: true }, { status: 429 });
+  }
+
   try {
     // 45s de tope: por debajo del maxDuration para alcanzar a responder.
     const r = await extraerComprobante(imagen, AbortSignal.timeout(45_000));
+    // La fila de costo: sin viaje (es una sonda) y con la fase del OCR — es
+    // lo que el tope de arriba lee y lo que el tablero de costo de IA suma.
+    await registrarCosto({
+      tenantId, viajeId: null, fase: 'ocr', modelo: r.costo.modelo,
+      tokensIn: r.costo.tokensIn, tokensOut: r.costo.tokensOut, costoUsd: r.costo.costoUsd,
+    });
     logger.info('ingesta.sonda', {
-      tenantId: sesion.tenantId, rol: sesion.rol, legible: r.legible,
+      tenantId, rol: sesion.rol, legible: r.legible,
       motivo: r.motivo ?? null, costoUsd: r.costo.costoUsd,
     });
     // Solo lo que el panel va a ENSEÑAR — nunca el objeto Gasto entero

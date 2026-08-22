@@ -14,9 +14,9 @@
 // decirlo.
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '@/lib/likida/presupuesto';
 import { DatoInvalido } from '@/lib/likida/errores';
-import { logger } from '@/lib/logger';
 
 export interface Campana {
   id: string;
@@ -101,11 +101,11 @@ export async function pausarCampana(id: string, actorId: string): Promise<Result
     throw new DatoInvalido('Alguien más la resolvió antes — recarga.');
   }
 
-  const { error: errBit } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: null, actor_id: actorId, accion: 'campana.pausada',
-    entidad: 'campana', entidad_id: id, detalle: { remota_confirmada: remotaConfirmada, canal: c.canal },
-  });
-  if (errBit) logger.warn('campanas.bitacora_no_escribio', { campana: id, err: errBit.message });
+  await anotarBitacora(
+    { tenantId: null, actor: { id: actorId }, accion: 'campana.pausada', entidad: 'campana', entidadId: id,
+      detalle: { remota_confirmada: remotaConfirmada, canal: c.canal } },
+    { evento: 'campanas.bitacora_no_escribio', contexto: { campana: id } },
+  );
 
   return {
     ok: true,

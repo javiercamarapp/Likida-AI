@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -39,14 +39,20 @@ export const COOKIE_FLOTA_ACTIVA = 'likida_flota_activa';
 export const TTL_SELECCION_MS = 12 * 60 * 60 * 1000;
 
 /**
- * La llave del HMAC. `LIKIDA_FLOTA_COOKIE_LLAVE` si existe; si no, la service
- * role key de Supabase — server-only garantizada en este repo (supabaseAdmin
- * truena sin ella), así que la firma nunca se queda sin llave en un ambiente
- * que funcione. Sin NINGUNA: no se puede firmar ni validar — fallar cerrado
- * (ninguna selección se lee), jamás una cookie sin firma.
+ * La llave del HMAC: `LIKIDA_FLOTA_COOKIE_LLAVE`, y SOLO ella. Sin ella no se
+ * firma ni se valida — fallar cerrado (ninguna selección se lee), jamás una
+ * cookie sin firma; el arranque la grita como SILENCIOSA (arranque.ts).
+ *
+ * AUDITORÍA 18, B13: hasta hoy caía a `SUPABASE_SERVICE_ROLE_KEY` «para que la
+ * firma nunca se quede sin llave». Eso era un mismo material de llave
+ * sirviendo para dos propósitos (acceso total a la base y firma de una cookie
+ * de sesión), y rotar la service role key —lo primero que se hace cuando se
+ * filtra— tiraba todas las cookies vivas. La ausencia de la llave es ahora un
+ * estado declarado, no uno que otro secreto tapa.
  */
 function llaveFirma(): string | null {
-  return process.env.LIKIDA_FLOTA_COOKIE_LLAVE ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? null;
+  const llave = process.env.LIKIDA_FLOTA_COOKIE_LLAVE;
+  return llave && llave.trim() ? llave : null;
 }
 
 function igualEnTiempoConstante(a: string, b: string): boolean {
@@ -140,15 +146,11 @@ export async function anotarSeleccionEnBitacora(
   esDemo: boolean,
 ): Promise<void> {
   try {
-    const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-      tenant_id: tenantId,
-      actor_id: actorId,
-      accion: 'flota.seleccionada',
-      entidad: 'tenant',
-      entidad_id: tenantId,
-      detalle: { desde: 'elegir-flota', demo: esDemo },
-    });
-    if (error) logger.warn('seleccion_flota.bitacora_no_escribio', { tenant: tenantId, err: error.message });
+    await anotarBitacora(
+      { tenantId, actor: { id: actorId }, accion: 'flota.seleccionada', entidad: 'tenant', entidadId: tenantId,
+        detalle: { desde: 'elegir-flota', demo: esDemo } },
+      { evento: 'seleccion_flota.bitacora_no_escribio', contexto: { tenant: tenantId } },
+    );
   } catch (e) {
     logger.warn('seleccion_flota.bitacora_no_escribio', {
       tenant: tenantId, err: e instanceof Error ? e.message : String(e),

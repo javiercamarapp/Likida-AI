@@ -43,15 +43,19 @@ Un regex no se cree hasta compararlo. Tres chequeos:
 - Rango sano: entre $0 y ~$8/L. Fuera de ahí agarraste otra cifra del documento.
 - Contra la anterior: salto >2x se marca DESTACADO en el PR, no se bloquea (el salto de
   junio a julio fue real), pero alguien tiene que mirarlo.
-- Vigencia empalmada: `vigencia_desde` = día siguiente del `vigencia_hasta` anterior.
+- Vigencia empalmada: el sábado de la `vigencia` nueva = día siguiente del viernes de la anterior.
   Un hueco significa un viernes perdido, y hay que decirlo.
 
 ## 5. Escribe
 
-`normas/cuota-ieps-diesel.yaml`, AGREGANDO una entrada — nunca sobrescribiendo. El
-histórico es lo que permite liquidar un viaje de hace tres semanas con la cuota que
-estaba vigente ese día. Campos: cuota, vigencia_desde, vigencia_hasta (sábado a viernes),
-cod_nota, fecha_publicacion, url, extraido_el.
+`normas/datos/cuota-ieps-diesel.yaml` (en `datos/`), AGREGANDO una fila al final de
+`semanas:` — nunca sobrescribiendo. El histórico es lo que permite liquidar un viaje de
+hace tres semanas con la cuota que estaba vigente ese día. Esquema (cópialo de las filas
+existentes): `vigencia: <sábado> a <viernes>`, `porcentaje_estimulo`,
+`reduccion_shcp_por_litro` (el recorte de la SHCP), `cuota_disminuida_por_litro` (ÉSTA es
+el estímulo por litro de la flota) y `fuente: { dof, edicion, codNota }`. La suma
+reducción + disminuida DEBE dar `cuota_completa_lif_2026` (7.3634). Antes del PR:
+`npx vitest run src/lib/likida/cuadre/cuota_diesel.test.ts` (lee el archivo real).
 
 ## 6. Entrega
 

@@ -25,7 +25,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { estaApagado, INTERRUPTORES, type NombreInterruptor } from '../interruptores';
-import { TZ_MX } from '@/lib/formato';
+import { hoyMx } from '@/lib/formato';
 import { redactarCorreoFrio } from './redactor';
 import { logger } from '@/lib/logger';
 
@@ -60,7 +60,7 @@ export interface ResultadoRunner {
 /** El gasto MEDIDO del agente hoy (día de México), USD. LANZA si la base no
  *  responde — el techo no se verifica a ciegas. */
 export async function gastoDelDiaUsd(agente: string): Promise<number> {
-  const diaMx = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date());
+  const diaMx = hoyMx();
   const inicioDia = new Date(`${diaMx}T00:00:00-06:00`).toISOString();
   const { data, error } = await acotada(supabaseAdmin()
     .from('agente_corrida')
@@ -114,7 +114,14 @@ async function loteRedactor(restanteUsd: number): Promise<{ piezas: number; salt
  * candados. Cada agente falla POR SU LADO — un agente roto no tumba a los
  * demás, y el motivo de cada salto queda dicho.
  */
-export async function correrRunner(): Promise<ResultadoRunner> {
+export async function correrRunner(
+  /**
+   * M30 (auditoría 18): acotar la vuelta a UN agente. El copiloto enseñaba
+   * "Voy a ejecutar `redactor`" y despachaba a todos los habilitados. Sin
+   * argumento sigue siendo la vuelta completa del cron.
+   */
+  soloAgente?: string,
+): Promise<ResultadoRunner> {
   if (await estaApagado('global')) {
     return { apagadoGlobal: true, agentes: [] };
   }
@@ -127,7 +134,8 @@ export async function correrRunner(): Promise<ResultadoRunner> {
     .eq('disparador', 'cron')
     .order('id'), 'runner.agentes');
   if (error) throw new Error(`correrRunner: ${error.message}`);
-  const habilitados = (data ?? []) as Array<{ id: string; presupuesto_dia_usd: number | null }>;
+  const habilitados = ((data ?? []) as Array<{ id: string; presupuesto_dia_usd: number | null }>)
+    .filter((a) => !soloAgente || a.id === soloAgente);
 
   const agentes: AgenteDelRunner[] = [];
   for (const a of habilitados) {

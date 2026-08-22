@@ -4437,16 +4437,16 @@ begin
     negativo_rechazado := true;
   end;
 
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus, diferencias,
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, diferencias,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (ta, va1, 1500, 'con_diferencias',
+    values (ta, va1, 1500, 1500, 'con_diferencias',
       '[{"tipo":"sobre_politica","monto":120},{"tipo":"duplicado","monto":80},{"tipo":"folio_verificar","monto":0}]'::jsonb,
       50, 240, 30, 400.5);
   -- La SEGUNDA liquidación va sobre va2, no sobre va1: `liquidacion_viaje_uidx`
   -- admite UNA liquidación por viaje (trampa que atrapó la primera corrida).
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus,
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (ta, va2, 700, 'cuadrada', 10, 60, 5, 90);
+    values (ta, va2, 700, 700, 'cuadrada', 10, 60, 5, 90);
 
   -- ── FLOTA B: solo para probar que NO contamina a A ─────────────────────
   insert into tenant (nombre) values ('ZZZ VERIF 0112 B') returning id into tb;
@@ -4455,9 +4455,9 @@ begin
     values (tb, ob, 'ZZZ-0112-B1', 'liquidado', current_date - 2, 200) returning id into vb1;
   insert into gasto (tenant_id, viaje_id, concepto, monto, forma_pago, fecha)
     values (tb, vb1, 'diesel', 9999, '01', current_date - 2);
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus, diferencias,
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, diferencias,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (tb, vb1, 8888, 'revisar', '[{"tipo":"duplicado","monto":50}]'::jsonb, 999, 999, 999, 999);
+    values (tb, vb1, 8888, 8888, 'revisar', '[{"tipo":"duplicado","monto":50}]'::jsonb, 999, 999, 999, 999);
 
   -- ── 1. Catálogo: existencia, INVOKER, permisos ─────────────────────────
   select count(*),
@@ -4586,15 +4586,15 @@ begin
   insert into operador (tenant_id, nombre, telefono) values (ta,'ZZZ 0114 A','5215559990114') returning id into oa;
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
     values (ta, oa, 'ZZZ-0114-A', 'liquidado', current_date, 1000) returning id into va;
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus)
-    values (ta, va, 900, 'cuadrada') returning id into la;
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus)
+    values (ta, va, 900, 900, 'cuadrada') returning id into la;
 
   insert into tenant (nombre) values ('ZZZ VERIF 0114 B') returning id into tb;
   insert into operador (tenant_id, nombre, telefono) values (tb,'ZZZ 0114 B','5215559990115') returning id into ob;
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
     values (tb, ob, 'ZZZ-0114-B', 'liquidado', current_date, 500) returning id into vb;
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus)
-    values (tb, vb, 400, 'cuadrada') returning id into lb;
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus)
+    values (tb, vb, 400, 400, 'cuadrada') returning id into lb;
 
   perform registrar_descarga_liquidacion(la, ta, 'contador');
   select descargas, primera_descarga_rol, primera_descarga_en is not null as tiene_fecha
@@ -5429,4 +5429,383 @@ begin
      and conname in ('factura_proveedor_total_positivo', 'factura_proveedor_conceptos_positivo');
   raise exception E'RLS_LIQUIDACION_0144  gatea_finanzas=%  check_factura_proveedor=%   (esperado t / t)',
     coalesce(gatea, false), coalesce(tiene_check, false);
+end $$;
+
+-- ── 112. TODA FK entre tablas con tenant_id lleva su compuesta (mig. 0145) ──
+-- La 0028 escribió la regla y la aplicó a cuatro relaciones; la 0073 arregló
+-- una más y dejó escrito que el resto seguía abierto. Este bloque es la regla
+-- hecha catálogo: barre pg_constraint y LISTA cada FK simple entre dos tablas
+-- con tenant_id NOT NULL (destino ≠ tenant) que no tenga una hermana
+-- compuesta (col, tenant_id). Esperado: lista vacía. Una tabla nueva que se
+-- salte el patrón aparece aquí con nombre, y CI se pone rojo.
+-- Quedan fuera por diseño los destinos con tenant_id NULLABLE (app_user —el
+-- superadmin no tiene flota—, prospecto, campania): una compuesta contra
+-- ellos rechazaría filas legítimas.
+-- Y lo funcional, sobre la cadena de cobranza que era el escenario C3:
+-- (b) factura de A con cliente de B rebota; (c) pago de B sobre factura de A
+-- rebota; (d) factura_viaje {factura A, viaje B} rebota; (e) la liga propia
+-- entra y HEREDA el tenant de la factura sin que el INSERT lo mande.
+do $$
+declare
+  sin_tenant text;
+  ta uuid; tb uuid; oa uuid; ob uuid; ca uuid; cb uuid; fa uuid; va uuid; vb uuid;
+  factura_cliente_ajeno_rebota boolean := false;
+  pago_factura_ajena_rebota boolean := false;
+  liga_viaje_ajeno_rebota boolean := false;
+  liga_propia_hereda boolean := false;
+begin
+  with t as (
+    select c.oid, c.relname
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'r'
+       and exists (select 1 from pg_attribute a
+                    where a.attrelid = c.oid and a.attname = 'tenant_id'
+                      and a.attnotnull and not a.attisdropped)
+  )
+  select coalesce(string_agg(h.relname || '.' || a.attname || '->' || d.relname, ', ' order by h.relname, a.attname), '—')
+    into sin_tenant
+    from pg_constraint con
+    join t h on h.oid = con.conrelid
+    join t d on d.oid = con.confrelid
+    join pg_attribute a on a.attrelid = con.conrelid and a.attnum = con.conkey[1]
+   where con.contype = 'f' and array_length(con.conkey, 1) = 1 and d.relname <> 'tenant'
+     and not exists (
+       select 1 from pg_constraint c2
+        where c2.contype = 'f' and c2.conrelid = con.conrelid and c2.confrelid = con.confrelid
+          and con.conkey[1] = any (c2.conkey)
+          and exists (select 1 from pg_attribute a2
+                       where a2.attrelid = c2.conrelid and a2.attnum = any (c2.conkey)
+                         and a2.attname = 'tenant_id'));
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0145 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0145 B') returning id into tb;
+  insert into cliente (tenant_id, nombre, rfc) values (ta, 'ZZZ cli A', 'XAXX010101000') returning id into ca;
+  insert into cliente (tenant_id, nombre, rfc) values (tb, 'ZZZ cli B', 'XAXX010101000') returning id into cb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0145 A', '5215559990145') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ 0145 B', '5215559990146') returning id into ob;
+  insert into viaje (tenant_id, operador_id) values (ta, oa) returning id into va;
+  insert into viaje (tenant_id, operador_id) values (tb, ob) returning id into vb;
+
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+      values (ta, cb, 100, 16, 116, 'emitida');
+  exception when foreign_key_violation then factura_cliente_ajeno_rebota := true;
+  end;
+
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, ca, 100, 16, 116, 'emitida') returning id into fa;
+
+  begin
+    insert into pago_recibido (tenant_id, factura_id, monto) values (tb, fa, 116);
+  exception when foreign_key_violation then pago_factura_ajena_rebota := true;
+  end;
+
+  begin
+    insert into factura_viaje (factura_id, viaje_id) values (fa, vb);
+  exception when foreign_key_violation then liga_viaje_ajeno_rebota := true;
+  end;
+
+  insert into factura_viaje (factura_id, viaje_id) values (fa, va);
+  select tenant_id = ta into liga_propia_hereda
+    from factura_viaje where factura_id = fa and viaje_id = va;
+
+  raise exception E'FKS_CON_TENANT_0145  fks-sin-tenant=%  factura-cliente-ajeno-rebota=%  pago-factura-ajena-rebota=%  liga-viaje-ajeno-rebota=%  liga-propia-hereda-tenant=%   (esperado — / t / t / t / t)',
+    sin_tenant, factura_cliente_ajeno_rebota, pago_factura_ajena_rebota, liga_viaje_ajeno_rebota, coalesce(liga_propia_hereda, false);
+end $$;
+
+-- ── 113. wa_conversacion ya no admite filas sin flota (mig. 0145, B9) ───────
+-- Con tenant_id NULL el índice único (tenant_id, telefono) no cubría la fila
+-- y `tenant_id = any(...)` daba NULL en toda policy: historial de WhatsApp
+-- (dato personal) sin dueño y sin pantalla desde la cual borrarlo.
+-- (a) la columna es NOT NULL; (b) el INSERT sin tenant rebota; (c) ahora que
+-- entra al barrido, una conversación de A con el operador de B rebota.
+do $$
+declare
+  not_null boolean; sin_tenant_rebota boolean := false; operador_ajeno_rebota boolean := false;
+  ta uuid; tb uuid; ob uuid;
+begin
+  select attnotnull into not_null from pg_attribute
+   where attrelid = 'public.wa_conversacion'::regclass and attname = 'tenant_id';
+
+  insert into tenant (nombre) values ('ZZZ VERIF B9 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF B9 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ B9 B', '5215559990147') returning id into ob;
+
+  begin
+    insert into wa_conversacion (telefono, estado) values ('5215500001001', '{"turns":[]}'::jsonb);
+  exception when not_null_violation then sin_tenant_rebota := true;
+  end;
+
+  begin
+    insert into wa_conversacion (tenant_id, operador_id, telefono, estado)
+      values (ta, ob, '5215500001002', '{"turns":[]}'::jsonb);
+  exception when foreign_key_violation then operador_ajeno_rebota := true;
+  end;
+
+  raise exception E'WA_TENANT_0145  tenant-not-null=%  sin-tenant-rebota=%  operador-ajeno-rebota=%   (esperado t / t / t)',
+    coalesce(not_null, false), sin_tenant_rebota, operador_ajeno_rebota;
+end $$;
+
+-- ── 114. El encargado NO lee ni escribe `gasto` por PostgREST (mig. 0146, A15) ──
+-- Misma forma que el bloque 29 (0048) y el 111 (0144), sobre la tabla que
+-- faltaba: se impersona a un ENCARGADO de la flota y (a) cuenta 0 gastos de
+-- su propia flota, (b) su INSERT de $40,000 de diésel rebota con 42501 —el
+-- escenario literal de A15—; y a un CONTADOR de la misma flota, que sí los
+-- ve. El intake de WhatsApp escribe con service role y no pasa por aquí.
+do $$
+declare
+  ta uuid; oa uuid; va uuid;
+  u_enc uuid := gen_random_uuid(); u_con uuid := gen_random_uuid();
+  gatea boolean; n_enc int; inserta_enc boolean := true; n_con int;
+begin
+  select bool_or(qual::text ilike '%ve_finanzas%') into gatea
+    from pg_policies where schemaname = 'public' and tablename = 'gasto';
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0146 GASTO') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0146', '5215559990148') returning id into oa;
+  insert into viaje (tenant_id, operador_id) values (ta, oa) returning id into va;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (ta, va, 'diesel', 500);
+  insert into app_user (id, tenant_id, email, rol) values (u_enc, ta, 'zzz-verif-0146-enc@likida.test', 'encargado');
+  insert into app_user (id, tenant_id, email, rol) values (u_con, ta, 'zzz-verif-0146-con@likida.test', 'contador');
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', u_enc)::text, true);
+  select count(*) into n_enc from gasto where tenant_id = ta;
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, forma_pago)
+      values (ta, va, 'diesel', 40000, '01');
+  exception when insufficient_privilege then inserta_enc := false;
+  end;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', u_con)::text, true);
+  select count(*) into n_con from gasto where tenant_id = ta;
+  reset role;
+
+  raise exception E'GASTO_FINANZAS_0146  policy-gatea=%  encargado-lee=%  encargado-inserta=%  contador-lee=%   (esperado t / 0 / f / 1)',
+    coalesce(gatea, false), n_enc, inserta_enc, n_con;
+end $$;
+
+-- ── 115. Los totales de liquidacion y ocr_confianza tienen dominio (mig. 0146, M11 + M12) ──
+-- (a) un total negativo rebota; (b) una diferencia que no es anticipo −
+-- comprobado rebota; (c) la fila coherente del motor entra (diferencia
+-- negativa incluida: se comprobó más que el anticipo); (d) ocr_confianza
+-- 9.999 rebota; (e) 0.85 entra.
+do $$
+declare
+  ta uuid; oa uuid; ob uuid; v1 uuid; v2 uuid; g uuid;
+  negativo_rebota boolean := false; descuadre_rebota boolean := false; coherente_entra boolean := false;
+  ocr_fuera_rebota boolean := false; ocr_dentro_entra boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0146 DOM') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0146 D', '5215559990149') returning id into oa;
+  insert into viaje (tenant_id, operador_id) values (ta, oa) returning id into v1;
+  -- Segundo operador: uq_viaje_abierto_por_operador admite UN viaje abierto por chofer.
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0146 E', '5215559990150') returning id into ob;
+  insert into viaje (tenant_id, operador_id) values (ta, ob) returning id into v2;
+
+  begin
+    insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia)
+      values (ta, v1, -5000, 6000, 11000);
+  exception when check_violation then negativo_rebota := true;
+  end;
+  begin
+    insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia)
+      values (ta, v1, 5000, 6000, 0);
+  exception when check_violation then descuadre_rebota := true;
+  end;
+  begin
+    insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia)
+      values (ta, v1, 7150.25, 6000, -1150.25);
+    coherente_entra := true;
+  exception when check_violation then coherente_entra := false;
+  end;
+
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, ocr_confianza)
+      values (ta, v2, 'diesel', 100, 9.999);
+  exception when check_violation then ocr_fuera_rebota := true;
+  end;
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, ocr_confianza)
+      values (ta, v2, 'diesel', 100, 0.85) returning id into g;
+    ocr_dentro_entra := g is not null;
+  exception when check_violation then ocr_dentro_entra := false;
+  end;
+
+  raise exception E'DOMINIOS_0146  total-negativo-rebota=%  descuadre-rebota=%  coherente-entra=%  ocr-fuera-rebota=%  ocr-dentro-entra=%   (esperado t / t / t / t / t)',
+    negativo_rebota, descuadre_rebota, coherente_entra, ocr_fuera_rebota, ocr_dentro_entra;
+end $$;
+
+-- ── 116. Un duplicado solo apunta a una fila VISIBLE (mig. 0147, M13) ───────
+-- El bloque 110 nombraba el ciclo A→B→A y no lo probaba. Aquí: A→B entra;
+-- (a) B→A rebota (B apuntaría a una copia); (b) B→C colapsa la cadena: A pasa
+-- a apuntar a C, no a la B escondida; (c) D→A rebota porque A ya es copia.
+do $$
+declare
+  a uuid; b uuid; c uuid; d uuid;
+  ciclo_rebota boolean := false; cadena_colapsa boolean := false; copia_de_copia_rebota boolean := false;
+begin
+  insert into public.prospecto (empresa) values ('zzz-verif-dup-A') returning id into a;
+  insert into public.prospecto (empresa) values ('zzz-verif-dup-B') returning id into b;
+  insert into public.prospecto (empresa) values ('zzz-verif-dup-C') returning id into c;
+  insert into public.prospecto (empresa) values ('zzz-verif-dup-D') returning id into d;
+
+  update public.prospecto set duplicado_de = b where id = a;
+
+  begin
+    update public.prospecto set duplicado_de = a where id = b;
+  exception when check_violation then ciclo_rebota := true;
+  end;
+
+  update public.prospecto set duplicado_de = c where id = b;
+  select duplicado_de = c into cadena_colapsa from public.prospecto where id = a;
+
+  begin
+    update public.prospecto set duplicado_de = a where id = d;
+  exception when check_violation then copia_de_copia_rebota := true;
+  end;
+
+  raise exception E'DUPLICADO_VISIBLE_0147  ciclo-rebota=%  cadena-colapsa=%  copia-de-copia-rebota=%   (esperado t / t / t)',
+    ciclo_rebota, coalesce(cadena_colapsa, false), copia_de_copia_rebota;
+end $$;
+
+-- ── 117. El bucket `avatares` hace cumplir tipo y peso (mig. 0147, M25) ─────
+-- Los candados vivían solo en los server actions de mi-perfil; una subida
+-- directa al Storage con el access token los saltaba. Supabase Storage sí
+-- hace cumplir estos dos campos del bucket. Esperado: 2 MB, las 3 imágenes
+-- de `TIPOS`, y sigue público (la foto de perfil no es un comprobante).
+do $$
+declare limite bigint; mimes int; es_publico boolean;
+begin
+  select file_size_limit, cardinality(allowed_mime_types), public
+    into limite, mimes, es_publico
+    from storage.buckets where id = 'avatares';
+  raise exception E'AVATARES_LIMITES_0147  limite-bytes=%  mimes=%  publico=%   (esperado 2097152 / 3 / t)',
+    coalesce(limite, 0), coalesce(mimes, 0), coalesce(es_publico, false);
+end $$;
+
+-- ── 118. worker_llave.capacidades tiene dominio y no está vacío (mig. 0147, B10) ──
+-- '{}' y '{bus.piezas}' (plural) rebotan; las cuatro reales entran.
+do $$
+declare vacia_rebota boolean := false; inventada_rebota boolean := false; las_cuatro_entran boolean := false;
+begin
+  begin
+    insert into public.worker_llave (nombre, hash, capacidades) values ('zzz-verif-vacia', 'zzz-hash-1', '{}');
+  exception when check_violation then vacia_rebota := true;
+  end;
+  begin
+    insert into public.worker_llave (nombre, hash, capacidades) values ('zzz-verif-plural', 'zzz-hash-2', '{bus.latido,bus.piezas}');
+  exception when check_violation then inventada_rebota := true;
+  end;
+  insert into public.worker_llave (nombre, hash, capacidades)
+    values ('zzz-verif-cuatro', 'zzz-hash-3', '{bus.latido,bus.pieza,bus.catalogo,bus.ordenes}');
+  las_cuatro_entran := true;
+
+  raise exception E'CAPACIDADES_0147  vacia-rebota=%  inventada-rebota=%  las-cuatro-entran=%   (esperado t / t / t)',
+    vacia_rebota, inventada_rebota, las_cuatro_entran;
+end $$;
+
+-- ── 119. reservar_envio_prospecto no es ejecutable desde internet (mig. 0147, B15) ──
+-- Postgres da EXECUTE a PUBLIC en toda función nueva (lección de la 0054).
+-- `proacl` NULL = privilegios por defecto = abierta. Esperado: cerrada a
+-- public/anon/authenticated, abierta solo a service_role (cola.ts la llama
+-- con supabaseAdmin()).
+do $$
+declare publico boolean; anon_si boolean; auth_si boolean; svc_si boolean;
+begin
+  select coalesce((select bool_or(grantee = 0) from aclexplode(p.proacl)), true),
+         has_function_privilege('anon', p.oid, 'execute'),
+         has_function_privilege('authenticated', p.oid, 'execute'),
+         has_function_privilege('service_role', p.oid, 'execute')
+    into publico, anon_si, auth_si, svc_si
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'reservar_envio_prospecto';
+  raise exception E'RPC_CADENCIA_0147  public=%  anon=%  authenticated=%  service_role=%   (esperado f / f / f / t)',
+    coalesce(publico, true), coalesce(anon_si, true), coalesce(auth_si, true), coalesce(svc_si, false);
+end $$;
+
+-- ── 120. Las personas de prospectos fríos se purgan; las de tratos vivos y las frenadas no (mig. 0148) ──
+--
+-- /aviso/prospectos promete "a los 12 meses sin ningún contacto se borran".
+-- Aquí se comprueba que algo lo ejecuta y que NO borra de más: un prospecto
+-- con toque reciente conserva a su gente, uno en `negociacion` también, y
+-- `conservar_hasta` en el futuro frena la purga aunque el prospecto esté
+-- frío. `contacto_nombre` del prospecto frío se anula. La llave
+-- `prospectoPersonasPurgadas` sale en el jsonb del mantenimiento, y `anon`
+-- no puede ejecutar la purga. Todo revierte con el RAISE final.
+--
+-- PENDIENTE DE CORRER CONTRA PRODUCCIÓN (auditoría 18, C2). Esperado:
+--   RETENCION_0148  purgadas=1  quedan=3  frio_sin_contacto=t  reciente_con_contacto=t  llave=t  anon=f
+do $$
+declare
+  frio uuid; reciente uuid; trato uuid; res jsonb; purgadas bigint; quedan bigint;
+  frio_sin_contacto boolean; reciente_con_contacto boolean; tiene_llave boolean; anon_ok boolean;
+begin
+  insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
+    values ('__verif_0148_frio__', 'contactado', 'Ing. Prueba Frío', now() - interval '400 days') returning id into frio;
+  insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
+    values ('__verif_0148_reciente__', 'contactado', 'Lic. Prueba Reciente', now() - interval '400 days') returning id into reciente;
+  insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
+    values ('__verif_0148_trato__', 'negociacion', 'Prueba Trato', now() - interval '400 days') returning id into trato;
+  -- El reciente tuvo un toque hace 10 días; el frío, ninguno.
+  insert into public.prospecto_contacto (prospecto_id, canal, direccion, resumen, ocurrio_en)
+    values (reciente, 'correo', 'salida', '__verif_0148__', now() - interval '10 days');
+  insert into public.prospecto_persona (prospecto_id, nombre, origen, created_at) values
+    (frio,     '__V148 frío sin freno__',  'directorio', now() - interval '400 days'),
+    (frio,     '__V148 frío con freno__',  'directorio', now() - interval '400 days'),
+    (reciente, '__V148 reciente__',        'directorio', now() - interval '400 days'),
+    (trato,    '__V148 en trato__',        'directorio', now() - interval '400 days');
+  update public.prospecto_persona set conservar_hasta = now() + interval '30 days'
+   where prospecto_id = frio and nombre = '__V148 frío con freno__';
+
+  res := public.mantenimiento_de_datos(30);
+  purgadas := (res->>'prospectoPersonasPurgadas')::bigint;
+  select count(*) into quedan from public.prospecto_persona where nombre like '__V148%';
+  select contacto_nombre is null into frio_sin_contacto from public.prospecto where id = frio;
+  select contacto_nombre is not null into reciente_con_contacto from public.prospecto where id = reciente;
+  tiene_llave := res ? 'prospectoPersonasPurgadas';
+  select has_function_privilege('anon', 'public.purgar_prospecto_persona(integer, timestamptz)', 'EXECUTE') into anon_ok;
+  raise exception E'RETENCION_0148  purgadas=%  quedan=%  frio_sin_contacto=%  reciente_con_contacto=%  llave=%  anon=%   (esperado 1/3/t/t/t/f)',
+    purgadas, quedan, frio_sin_contacto, reciente_con_contacto, tiene_llave, anon_ok;
+end $$;
+
+-- ── 121. El claim huérfano se retoma; el completado no (mig. 0149) ──────────
+-- `claimMessage` (conv.ts) decide ante un 23505 con el MISMO update anclado
+-- de aquí: `where completado_en is null and created_at < now() - lease`. Si
+-- alguien quita la columna o cambia la semántica, este bloque lo grita. El
+-- lease real es 150 s; aquí se usan 1 h / 1 min para que el caso sea nítido.
+do $$
+declare
+  retomado int; completado_no_retomado int; fresco_no_retomado int; columna boolean;
+begin
+  select exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'wa_mensaje_procesado' and column_name = 'completado_en'
+  ) into columna;
+
+  -- Huérfano: reclamado hace 1 h, nunca completado → SE RETOMA (1 fila).
+  insert into public.wa_mensaje_procesado (wa_message_id, created_at)
+    values ('zzz-verif-0149-huerfano', now() - interval '1 hour');
+  update public.wa_mensaje_procesado set created_at = now()
+   where wa_message_id = 'zzz-verif-0149-huerfano'
+     and completado_en is null and created_at < now() - interval '1 minute';
+  get diagnostics retomado = row_count;
+
+  -- Completado hace 1 h → NO se retoma (0 filas): es un duplicado de verdad.
+  insert into public.wa_mensaje_procesado (wa_message_id, created_at, completado_en)
+    values ('zzz-verif-0149-completo', now() - interval '1 hour', now() - interval '59 minutes');
+  update public.wa_mensaje_procesado set created_at = now()
+   where wa_message_id = 'zzz-verif-0149-completo'
+     and completado_en is null and created_at < now() - interval '1 minute';
+  get diagnostics completado_no_retomado = row_count;
+
+  -- Fresco (en curso en otra invocación) → NO se retoma (0 filas).
+  insert into public.wa_mensaje_procesado (wa_message_id) values ('zzz-verif-0149-fresco');
+  update public.wa_mensaje_procesado set created_at = now()
+   where wa_message_id = 'zzz-verif-0149-fresco'
+     and completado_en is null and created_at < now() - interval '1 minute';
+  get diagnostics fresco_no_retomado = row_count;
+
+  raise exception E'CLAIM_0149  columna=%  huerfano_retomado=%  completado_retomado=%  fresco_retomado=%   (esperado t / 1 / 0 / 0)',
+    columna, retomado, completado_no_retomado, fresco_no_retomado;
 end $$;

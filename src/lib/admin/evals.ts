@@ -1,3 +1,4 @@
+import { TZ_MX } from '@/lib/formato';
 import { createHash } from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getSystemPrompt } from '@/lib/agents/prompts';
@@ -17,7 +18,7 @@ export function promptHashActual(agente: 'analista'): string {
   const key = agente === 'analista' ? 'analista_flota' : agente;
   const texto = getSystemPrompt(key, {
     tenantId: '00000000-0000-0000-0000-000000000000',
-    nombreFlota: 'HASH', agentName: 'HASH', timezone: 'America/Mexico_City',
+    nombreFlota: 'HASH', agentName: 'HASH', timezone: TZ_MX,
   });
   return createHash('sha256').update(texto, 'utf8').digest('hex');
 }

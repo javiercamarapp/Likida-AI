@@ -68,6 +68,16 @@ describe('firmar y validar la selección', () => {
     expect(validarSeleccion(v, T0 + 1000)).toBeNull();
   });
 
+  it('la service role key YA NO es llave de respaldo (B13): sin la propia, nada se firma', () => {
+    // Un mismo secreto para dos propósitos: rotar la service role key tiraba
+    // todas las cookies vivas, y mientras no se rotara, la llave de la base
+    // firmaba sesiones. La ausencia es un estado declarado, no uno tapado.
+    vi.stubEnv('LIKIDA_FLOTA_COOKIE_LLAVE', '');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-de-prueba');
+    expect(firmarSeleccion(TENANT, T0)).toBeNull();
+    expect(validarSeleccion(`v1.${TENANT}.${T0 + 1000}.abc`, T0)).toBeNull();
+  });
+
   it('basura, vacío y formatos truncos son null, no una excepción', () => {
     for (const raro of [undefined, '', 'v1', 'v1.solo-tenant', `v2.${TENANT}.123.abc`, 'a.b.c.d.e']) {
       expect(validarSeleccion(raro as string | undefined, T0)).toBeNull();

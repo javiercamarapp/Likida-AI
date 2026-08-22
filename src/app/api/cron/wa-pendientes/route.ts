@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { processInbound } from '@/lib/likida/processor';
-import { estaApagado } from '@/lib/likida/interruptores';
+import { processInbound, type ResultadoInbound } from '@/lib/likida/processor';
+import { leerInterruptor } from '@/lib/likida/interruptores';
 import {
   pendientesPorDrenar, reclamarPendiente, marcarPendienteProcesado,
   anotarFalloPendiente, cartasMuertas,
@@ -36,7 +36,15 @@ export const maxDuration = 120;
 
 const LOTE = 10;
 
+/** Los resultados de `processInbound` que dejan la fila SIN sellar. Local a
+ *  propósito: la prueba de esta ruta mockea el processor entero, y `undefined`
+ *  (el contrato viejo de `void`) cuenta como hecho. */
+function quedoPendiente(r: ResultadoInbound | undefined): boolean {
+  return r === 'sin_tiempo' || r === 'en_curso' || r === 'reintentable';
+}
+
 export async function GET(req: Request) {
+  const inicioInvocacion = Date.now();
   const secreto = process.env.CRON_SECRET;
   if (!secreto) {
     logger.error('cron.wa_pendientes.sin_secreto', {});
@@ -63,13 +71,28 @@ export async function GET(req: Request) {
 
   // Apagado = la pausa SIGUE: la bandeja espera, y eso es exactamente el
   // contrato nuevo. 200 con `saltado` — apagado a propósito no es fallo.
-  if (await estaApagado('global')) {
-    logger.info('cron.wa_pendientes.saltado', { interruptor: 'global' });
+  // AUDITORÍA 18, ALTO (A17): NO haber podido leerlo SÍ lo es — este cron
+  // corre cada 5 min y, saltándose en 200 con `logger.info` (nivel que ni
+  // llega a Sentry), la bandeja durable se quedaba sin drenar con el panel
+  // en verde. Ilegible = 500 con `codigo`; el grito y el correo ya salieron
+  // de `leerInterruptor`.
+  const global = await leerInterruptor('global');
+  if (global === 'ilegible') {
+    return NextResponse.json({
+      corrio: false,
+      error: 'No se pudo leer el interruptor global: la bandeja no se drena sin saber si está apagado.',
+      codigo: 'interruptor_ilegible',
+      interruptor: 'global',
+    }, { status: 500 });
+  }
+  if (global === 'apagado') {
+    logger.warn('cron.wa_pendientes.saltado', { interruptor: 'global' });
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 
   let procesados = 0;
   let fallidos = 0;
+  let pospuestos = 0;
   let huboFalloDeCron = false;
   try {
     const lote = await pendientesPorDrenar(LOTE);
@@ -79,7 +102,20 @@ export async function GET(req: Request) {
       const claim = await reclamarPendiente(p.id, p.intentos);
       if (!claim) continue; // otra corrida lo tomó — resultado esperado
       try {
-        await processInbound(claim.evento);
+        // El reloj es el de ESTA invocación, compartido por los 10 del lote
+        // (auditoría 18, C4): el mensaje 7 pide lo que queda, no 120s nuevos.
+        const resultado = await processInbound(claim.evento, { inicioInvocacionMs: inicioInvocacion });
+        if (quedoPendiente(resultado)) {
+          // NO SE SELLA (A3/A27): el motor no lo terminó — sin presupuesto,
+          // en vuelo en otra invocación, o abandonado por un fallo nuestro.
+          // La fila sigue pendiente con su intento contado; la siguiente
+          // corrida lo vuelve a tomar. No es fallo del cron: es la bandeja
+          // haciendo su trabajo, así que no tumba el 200.
+          pospuestos++;
+          logger.warn('cron.wa_pendientes.pospuesto', { id: claim.id, intento: claim.intentos, resultado });
+          await anotarFalloPendiente(claim.id, `pospuesto: ${resultado}`);
+          continue;
+        }
         await marcarPendienteProcesado(claim.id);
         procesados++;
       } catch (e) {
@@ -98,17 +134,17 @@ export async function GET(req: Request) {
       logger.error('cron.wa_pendientes.cartas_muertas', { muertas });
       await alertarOperador('cron.wa_pendientes', { error: `${muertas} mensaje(s) de WhatsApp agotaron sus reintentos en la bandeja del apagado`, codigo: 'cartas_muertas' });
     }
-    return NextResponse.json({ corrio: true, procesados, fallidos, cartasMuertas: muertas }, { status: fallidos > 0 ? 500 : 200 });
+    return NextResponse.json({ corrio: true, procesados, fallidos, pospuestos, cartasMuertas: muertas }, { status: fallidos > 0 ? 500 : 200 });
   } catch (e) {
     huboFalloDeCron = true;
     const error = e instanceof Error ? e.message : String(e);
     const codigo = codigoDeError(e);
     logger.error('cron.wa_pendientes.falló', { error, codigo });
     await alertarOperador('cron.wa_pendientes', { error, codigo });
-    return NextResponse.json({ error, procesados, fallidos }, { status: 500 });
+    return NextResponse.json({ error, procesados, fallidos, pospuestos }, { status: 500 });
   } finally {
-    if (!huboFalloDeCron && (procesados > 0 || fallidos > 0)) {
-      logger.info('cron.wa_pendientes.ok', { procesados, fallidos });
+    if (!huboFalloDeCron && (procesados > 0 || fallidos > 0 || pospuestos > 0)) {
+      logger.info('cron.wa_pendientes.ok', { procesados, fallidos, pospuestos });
     }
   }
 }

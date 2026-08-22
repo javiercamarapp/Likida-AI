@@ -16,7 +16,7 @@ import { avisar, avisarCorridasPorFlota, FalloDePlataforma } from '@/lib/likida/
 import { avisoColaAtorada } from '@/lib/correo/avisos';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { modoEfectivo } from '@/lib/likida/facturacion/modo';
-import { estaApagado } from '@/lib/likida/interruptores';
+import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -272,12 +272,25 @@ export async function GET(req: Request) {
   // un incidente. El interruptor es GLOBAL por agente (v1), no por tenant:
   // el barrido por flota de `procesarLoteEnCola` se corta ENTERO — apagar
   // facturas para una sola flota sería config de esa flota, no esta palanca.
-  // Fail-closed: si el interruptor no se puede LEER se lee como apagado, con
-  // grito en el log (interruptores.ts) — emitir CFDIs con la palanca ilegible
-  // es el error caro; saltar una corrida que reintenta en una hora, el barato.
-  const apagadoPor = (await estaApagado('global'))
-    ? 'global'
-    : (await estaApagado('agente:facturas')) ? 'agente:facturas' : null;
+  // Fail-closed: si el interruptor no se puede LEER no se corre — emitir CFDIs
+  // con la palanca ilegible es el error caro; saltar una corrida que reintenta
+  // en una hora, el barato. AUDITORÍA 18, ALTO (A17): pero ese salto es un
+  // FALLO y contesta 500 con `codigo`, no el 200 `saltado` del apagado a
+  // propósito — si no, nueve días de base con hipo se ven como nueve días de
+  // cron verde. El grito y el correo ya salieron de `leerInterruptor`.
+  let apagadoPor: NombreInterruptor | null = null;
+  for (const nombre of ['global', 'agente:facturas'] as const) {
+    const lectura = await leerInterruptor(nombre);
+    if (lectura === 'ilegible') {
+      return NextResponse.json({
+        corrio: false,
+        error: `No se pudo leer el interruptor ${nombre}: no se factura sin saber si está apagado.`,
+        codigo: 'interruptor_ilegible',
+        interruptor: nombre,
+      }, { status: 500 });
+    }
+    if (lectura === 'apagado') { apagadoPor = nombre; break; }
+  }
   if (apagadoPor) {
     logger.warn('cron.facturar.saltado', { interruptor: apagadoPor });
     return NextResponse.json({ corrio: false, saltado: `interruptor ${apagadoPor}` });

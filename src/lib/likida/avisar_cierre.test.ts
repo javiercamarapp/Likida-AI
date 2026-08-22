@@ -17,14 +17,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // exactamente ese caso.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const { sendText, sendDocument, telefonoJefeDe } = vi.hoisted(() => ({
+const { sendText, sendDocument, telefonoParaDineroDe } = vi.hoisted(() => ({
   sendText: vi.fn(),
   sendDocument: vi.fn(),
-  telefonoJefeDe: vi.fn(),
+  telefonoParaDineroDe: vi.fn(),
 }));
 
 vi.mock('@/lib/meta/client', () => ({ sendText, sendDocument }));
-vi.mock('./contactos', () => ({ telefonoJefeDe }));
+vi.mock('./contactos', () => ({ telefonoParaDineroDe }));
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
@@ -61,8 +61,8 @@ beforeEach(() => {
   // bug del texto que también se manda.
   liq = { data: { total_comprobado: 1000, total_anticipo: 1000, diferencia: 0, diferencias: [] }, error: null };
   viaje = { data: { folio: 'F-1', operador: { nombre: 'Juan' } }, error: null };
-  telefonoJefeDe.mockReset();
-  telefonoJefeDe.mockResolvedValue(TEL);
+  telefonoParaDineroDe.mockReset();
+  telefonoParaDineroDe.mockResolvedValue(TEL);
   sendText.mockReset();
   sendText.mockResolvedValue('wamid.texto');
   sendDocument.mockReset();
@@ -107,7 +107,7 @@ describe('avisarCierreAlJefe · el PDF, tras el cambio de contrato de `sendDocum
 
 describe('avisarCierreAlJefe · lo básico', () => {
   it('sin teléfono de jefe no manda nada y lo dice', async () => {
-    telefonoJefeDe.mockResolvedValue(null);
+    telefonoParaDineroDe.mockResolvedValue(null);
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
     expect(r).toEqual({ enviado: false, motivo: 'Esa flota no tiene un teléfono de oficina registrado.' });
     expect(sendText).not.toHaveBeenCalled();
@@ -139,5 +139,26 @@ describe('avisarCierreAlJefe · lo básico', () => {
     const r = await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
     expect(r).toEqual({ enviado: false, motivo: 'WhatsApp no aceptó el mensaje al jefe.' });
     expect(sendDocument).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18, ALTO (A28): el cierre salía al ENCARGADO, el rol que no ve
+// dinero. `ORDEN_AVISO` (despacho) ponía al encargado primero y el cierre lo
+// reusaba. El destinatario del cierre tiene que ver `dinero` en la matriz
+// real de `visibilidad.ts` — se comprueba contra ella, no contra una copia.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('avisarCierreAlJefe · a quién le llega el dinero', () => {
+  it('todo rol de ORDEN_AVISO_DINERO ve dinero en visibilidad.ts, y el encargado NO está', async () => {
+    const { ORDEN_AVISO_DINERO } = await vi.importActual<typeof import('./contactos')>('./contactos');
+    const { puedeVerArea } = await import('@/lib/auth/visibilidad');
+    expect(ORDEN_AVISO_DINERO.length).toBeGreaterThan(0);
+    for (const rol of ORDEN_AVISO_DINERO) expect(puedeVerArea(rol, 'dinero'), `${rol} no ve dinero`).toBe(true);
+    expect(ORDEN_AVISO_DINERO).not.toContain('encargado');
+  });
+
+  it('el cierre resuelve el teléfono por telefonoParaDineroDe, no por el orden de despacho', async () => {
+    await avisarCierreAlJefe({ tenantId: 't-1', viajeId: 'v-1', urlPdf: URL_PDF });
+    expect(telefonoParaDineroDe).toHaveBeenCalledWith('t-1');
   });
 });

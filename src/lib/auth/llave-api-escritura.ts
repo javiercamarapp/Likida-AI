@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { logger } from '@/lib/logger';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '@/lib/likida/presupuesto';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { esUuidValido } from '@/lib/likida/intake/cfdi';
@@ -68,16 +68,10 @@ async function anotar(
   detalle: Record<string, unknown>,
   actorId?: string,
 ): Promise<void> {
-  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: tenantId,
-    actor_id: actorId ?? null,
-    actor_email: null,
-    accion,
-    entidad: 'tenant_api_key',
-    entidad_id: entidadId,
-    detalle,
-  });
-  if (error) logger.warn('llave_api.bitacora_no_escribio', { accion, err: error.message });
+  await anotarBitacora(
+    { tenantId, actor: { id: actorId }, accion, entidad: 'tenant_api_key', entidadId, detalle },
+    { evento: 'llave_api.bitacora_no_escribio' },
+  );
 }
 
 export interface LlaveEmitida {

@@ -1,3 +1,5 @@
+import { appUrl } from '@/lib/env';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // AVISO DE PRIVACIDAD EN EL CANAL — modalidad simplificada.
 //
@@ -500,7 +502,10 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
       fundamento: 'LFPDPPP art. 15 fr. I',
       parrafos: [
         `**${razonSocial}**, con domicilio en ${domicilio}, es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos.`,
-        `Likida opera la herramienta con la que se procesan: es **persona encargada** (art. 2 fr. XX), trata los datos por cuenta de la empresa y siguiendo sus instrucciones, y no decide sobre ellos. Este aviso está alojado en el sitio de Likida por encargo de la empresa; eso no cambia quién responde.`,
+        // AUDITORÍA 18 (B6): decía "fr. XX", que es la definición de TRANSFERENCIA.
+        // "Persona encargada" es la fr. XII (normas/lfpdppp-2-XII-XX.yaml); la
+        // XX se cita bien más abajo, en la sección del art. 35, donde sí toca.
+        `Likida opera la herramienta con la que se procesan: es **persona encargada** (art. 2 fr. XII), trata los datos por cuenta de la empresa y siguiendo sus instrucciones, y no decide sobre ellos. Este aviso está alojado en el sitio de Likida por encargo de la empresa; eso no cambia quién responde.`,
       ],
     },
     {
@@ -587,9 +592,16 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
       // no un contrato de Zero Data Retention firmado. El texto ahora describe
       // lo que el código hace (pedirlo), no lo que no se ha confirmado (que se
       // cumpla del lado del proveedor).
+      //
+      // AUDITORÍA 18 (M7): decía "los modelos de lenguaje que leen las fotos",
+      // y el camino real (processor.ts → runAgent → generateWithTools) manda el
+      // HISTORIAL DE TEXTO del chat, verbatim, al mismo proveedor. El dato ya
+      // estaba enumerado en la fr. II ("el contenido de tus mensajes"); lo mal
+      // dicho era HACIA DÓNDE sale. El art. 35 y la fr. II del 15 exigen
+      // describir el flujo real, no la versión más cómoda de él.
       parrafos: [
         `**Tus datos no se venden, ni se comparten con nadie para que los use por su cuenta.**`,
-        `Sí pasan por proveedores que trabajan por instrucción de la empresa y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia** (art. 2 fr. XX)—: el proveedor de mensajería de WhatsApp, el de alojamiento de la base de datos, y los modelos de lenguaje que leen las fotos, a los que en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
+        `Sí pasan por proveedores que trabajan por instrucción de la empresa y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia** (art. 2 fr. XX)—: el proveedor de mensajería de WhatsApp, el de alojamiento de la base de datos, y los modelos de lenguaje: les llegan **las fotos de tus comprobantes** para leerlas y **el texto de tus mensajes** —la conversación completa— para poder contestarte. A esos modelos en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
         `Transferencias que sí lo son y no necesitan tu consentimiento: a la autoridad fiscal cuando la ley lo exige, y al contador de la empresa para cumplir sus obligaciones.`,
         `**Si algún día se quisiera transferir tus datos para algo distinto, se te pedirá permiso antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
       ],
@@ -654,4 +666,130 @@ export function venceArco(desde: Date, diasHabiles = DIAS_HABILES_ARCO): string 
     if (dia !== 0 && dia !== 6) faltan--;
   }
   return d.toISOString().slice(0, 10);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL AVISO DE PROSPECTOS — Likida como RESPONSABLE. Auditoría 18 (C2).
+//
+// El segundo sombrero del producto. Todo lo de arriba es "Likida encargada de
+// la flota"; pero la maquinaria de adquisición (censo, DENUE, bolsas de
+// trabajo, LinkedIn → `prospecto.contacto_nombre` y `prospecto_persona`, migs.
+// 0105-0141) levanta nombres, puestos y correos de personas físicas que no
+// contrataron nada y no saben que Likida existe. Sobre esos datos Likida
+// DECIDE: es responsable (art. 14), y el art. 16 fr. II obliga a poner a
+// disposición el aviso simplificado cuando el dato se obtiene por medio
+// electrónico — raspar un directorio lo es.
+//
+// Que el dato figure en una fuente de acceso público exime del CONSENTIMIENTO,
+// no del aviso: arts. 14 y 16 son obligaciones autónomas, y el plazo de
+// conservación y el camino ARCO tampoco se eximen. (La excepción por fuente
+// pública se cita como art. 9 siguiendo HALLAZGOS-18 C2; no hay ficha
+// verificada en `normas/` para ese artículo — verificar antes de citarlo ante
+// un tercero.) Y `origen: 'inferido'` de la 0138 confiesa que parte de los
+// correos ni siquiera vienen de una fuente pública: se dedujeron.
+//
+// Lo que aquí se promete lo EJECUTA código: el nombre no viaja al modelo
+// (mapa-prospectos/mensaje/seudonimo.ts), la purga por inactividad es la
+// mig. 0148 (`purgar_prospecto_persona`, 365 días sin toque) y el camino ARCO
+// es el correo de contacto. Mismo criterio que el resto del aviso: nada que
+// no haga el producto.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const RUTA_AVISO_PROSPECTOS = '/aviso/prospectos';
+
+/** Días sin toque tras los cuales la mig. 0148 borra a la persona. El aviso
+ *  enseña esta cifra; si la purga cambia, cambia aquí. */
+export const DIAS_RETENCION_PROSPECTO_PERSONA = 365;
+
+/** La liga absoluta del aviso de prospectos — la que va en cada primer toque. */
+export function urlAvisoProspectos(): string {
+  const base = appUrl();
+  return `${base}${RUTA_AVISO_PROSPECTOS}`;
+}
+
+/** La línea que cierra cada primer toque (correo y WhatsApp): art. 16 fr. II,
+ *  "señalar el sitio donde se podrá consultar el aviso de privacidad integral". */
+export function pieAvisoProspectos(): string {
+  return `Aviso de privacidad para contactos comerciales: ${urlAvisoProspectos()}`;
+}
+
+export interface DatosAvisoProspectos {
+  razonSocial: string | null;
+  domicilio: string | null;
+  /** Correo donde se ejercen los ARCO y la baja. */
+  contacto: string;
+}
+
+/**
+ * El aviso de prospectos, sección por sección. Integral (las seis fracciones
+ * del art. 15) y, por construcción, también el simplificado: las fracciones
+ * I a IV están en las cuatro primeras secciones.
+ */
+export function avisoProspectos(d: DatosAvisoProspectos): SeccionAviso[] {
+  const razonSocial = d.razonSocial?.trim() || '🔴 razón social pendiente 🔴';
+  const domicilio = d.domicilio?.trim() || '🔴 domicilio pendiente 🔴';
+  const meses = Math.round(DIAS_RETENCION_PROSPECTO_PERSONA / 30.4);
+  return [
+    {
+      titulo: 'Quién es responsable, y por qué tienes este aviso',
+      fundamento: 'LFPDPPP art. 15 fr. I · art. 14',
+      pendiente: !d.razonSocial || !d.domicilio,
+      parrafos: [
+        `**${razonSocial}** (Likida), con domicilio en ${domicilio}, es la responsable de tus datos personales.`,
+        `Este aviso es para ti si **trabajas en una empresa de transporte o con flota propia** y Likida te contactó —o piensa hacerlo— para ofrecerle su servicio a tu empresa. No eres cliente de Likida ni nos diste tus datos: por eso te decimos aquí de dónde salieron y qué hacemos con ellos.`,
+        `Si ya usas Likida como cliente, tu aviso es la **política de privacidad**; si eres operador de una flota, el aviso que te toca lo publica tu empresa.`,
+      ],
+    },
+    {
+      titulo: 'Qué datos tenemos y de dónde salieron',
+      fundamento: 'LFPDPPP art. 15 fr. II · art. 16 fr. II',
+      parrafos: [
+        `Tu **nombre**, tu **puesto**, tu **correo y teléfono de trabajo** y, si lo tienes público, tu **perfil profesional**; junto con el nombre, el giro y la plaza de tu empresa y la vacante que publicó.`,
+        `Salieron de **fuentes de acceso público**: el directorio de empresas del INEGI (DENUE), bolsas de trabajo donde tu empresa publicó una vacante, el sitio web de tu empresa y directorios o perfiles profesionales públicos. Algunos correos **no se leyeron en ninguna parte: se dedujeron** del patrón de correos de la empresa, y así quedan marcados —como no verificados— hasta que alguien los confirma.`,
+        `**No se tratan datos sensibles** ni datos de tu vida privada: solo los de tu papel en la empresa.`,
+      ],
+    },
+    {
+      titulo: 'Para qué se usan',
+      fundamento: 'LFPDPPP art. 15 fr. III · art. 11',
+      parrafos: [
+        `**Una sola finalidad comercial:** contactarte, por correo, WhatsApp o teléfono, para ofrecerle a tu empresa el servicio de liquidación de viajes de Likida y, si te interesa, agendar una demostración.`,
+        `Para decidir a quién escribirle primero, un programa **ordena la lista de empresas** con un puntaje que cuenta si hay forma de contactarlas y qué tan parecida es la empresa al cliente que Likida busca. Ese puntaje ordena una cola de llamadas; **no decide nada sobre ti** ni produce efectos jurídicos en tu persona.`,
+        `Cuando un programa redacta el primer mensaje, **tu nombre no sale de Likida**: la ficha que recibe el modelo de lenguaje lleva un marcador en lugar de tu nombre, y sin tus datos de contacto; tu nombre de pila se pone después, dentro de Likida.`,
+        `Cualquier uso que no esté escrito aquí requiere pedirte permiso. La ley vigente ya no admite ampararse en fines "compatibles o análogos".`,
+      ],
+    },
+    {
+      titulo: 'Cómo pedir que dejemos de contactarte',
+      fundamento: 'LFPDPPP art. 15 fr. IV',
+      parrafos: [
+        `Contesta **BAJA** al mismo mensaje que recibiste, o escribe a **${d.contacto}**. Se deja de contactarte y se borran tus datos de persona; se te confirma por escrito.`,
+        `**Si no contestas nunca, también se borran solos:** a los ${meses} meses sin ningún contacto, tu nombre, puesto, correo y teléfono se eliminan automáticamente. Lo único que queda es el registro de la empresa (nombre, giro, plaza), que no es un dato tuyo.`,
+      ],
+    },
+    {
+      titulo: 'Cómo ejercer tus derechos ARCO',
+      fundamento: 'LFPDPPP art. 15 fr. V',
+      parrafos: [
+        `Tienes derecho a **Acceder** a tus datos, **Rectificarlos**, **Cancelarlos** y **Oponerte** a su uso.`,
+        `**Cómo:** escribe a **${d.contacto}** con tu nombre, un medio para contestarte, copia de una identificación oficial, y qué datos son y qué pides que se haga con ellos.`,
+        `**Plazos de la ley:** 20 días hábiles para contestarte y 15 días hábiles más para hacerlo efectivo si procede. Es gratuito; solo puede haber costo de envío o copia.`,
+        `Si no te contestamos o la respuesta no te satisface, puedes acudir a la autoridad garante en materia de protección de datos personales.`,
+      ],
+    },
+    {
+      titulo: 'Con quién se comparten',
+      fundamento: 'LFPDPPP art. 35 · art. 2 fr. XX',
+      parrafos: [
+        `**No se venden ni se comparten con nadie para que los use por su cuenta.** Pasan por proveedores que trabajan por instrucción de Likida —alojamiento de la base de datos, envío de correo y mensajería—, que la ley llama personas encargadas (art. 2 fr. XII) y cuyo uso **no es una transferencia** (art. 2 fr. XX).`,
+      ],
+    },
+    {
+      titulo: 'Cómo se avisan los cambios',
+      fundamento: 'LFPDPPP art. 15 fr. VI',
+      parrafos: [
+        `Los cambios se publican en esta misma página, que es la liga que va en cada mensaje. Aquí siempre está la versión vigente.`,
+      ],
+    },
+  ];
 }

@@ -19,7 +19,7 @@
 import { INTERRUPTORES, apagar, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { correrRunner } from '@/lib/likida/agentes/runner';
 import { DatoInvalido } from '@/lib/likida/errores';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 
 export type Gateo = 'confirma' | 'doble';
@@ -89,6 +89,17 @@ export const CATALOGO_ACCIONES: readonly AccionCatalogo[] = [
   },
 ] as const;
 
+/**
+ * Qué agente nombra el `objetivo` de `correr_runner`, o `undefined` para la
+ * vuelta completa. Acepta `redactor` y `agente:redactor` (la forma que usa el
+ * catálogo de interruptores); `runner`, `todos`, `cron` o vacío = todos.
+ */
+export function objetivoDelRunner(objetivo: string | undefined): string | undefined {
+  const o = (objetivo ?? '').trim().toLowerCase().replace(/^agente:/, '');
+  if (!o || o === 'runner' || o === 'todos' || o === 'cron' || o === 'all') return undefined;
+  return o;
+}
+
 export function accionDelCatalogo(id: string): AccionCatalogo | null {
   return CATALOGO_ACCIONES.find((a) => a.id === id) ?? null;
 }
@@ -132,15 +143,26 @@ export async function ejecutarAccionCopiloto(
     // anotarlo era un contrato declarado que no se cumplía).
     const motivo = (params.motivo ?? '').trim();
     if (!motivo) throw new DatoInvalido('El motivo es obligatorio: por qué se adelanta la vuelta del runner.');
-    const r = await correrRunner();
+    // M30 (auditoría 18): el objetivo que la tarjeta ENSEÑÓ es el que corre.
+    // La previsualización decía "Voy a ejecutar `redactor`" y esta rama
+    // ignoraba `params.id` y despachaba a TODOS los habilitados: Javier
+    // autorizaba una corrida y obtenía N. Un objetivo que nombra un agente
+    // acota la vuelta a ese agente; "runner"/"todos" (o vacío) es la vuelta
+    // completa, que es lo que describe `efecto`.
+    const soloAgente = objetivoDelRunner(params.id);
+    const r = await correrRunner(soloAgente);
     // Se firma TAMBIÉN la vuelta que el kill switch dejó en nada: la acción
     // confirmada fue "correr el runner", y eso es lo que la bitácora audita.
     await anotarCorridaEnBitacora(userId, motivo, {
       apagado_global: r.apagadoGlobal === true,
+      objetivo: soloAgente ?? 'todos',
       agentes: r.agentes.map((a) => ({ agente: a.agente, resultado: a.resultado })),
     });
     if (r.apagadoGlobal) {
       return { ok: true, mensaje: 'El runner no corrió: el kill switch GLOBAL está abajo. Se enciende desde Observabilidad.' };
+    }
+    if (soloAgente && r.agentes.length === 0) {
+      return { ok: true, mensaje: `Vuelta del runner: "${soloAgente}" no está habilitado para el runner (estado vivo + runner_habilitado + disparador cron), así que no se despachó nada.` };
     }
     const partes = r.agentes.map((a) => a.resultado === 'corrio'
       ? `${a.agente}: ${a.piezas ?? 0} pieza${(a.piezas ?? 0) === 1 ? '' : 's'} a la bandeja (${a.saltados ?? 0} saltados, $${(a.costoUsd ?? 0).toFixed(4)} USD)`
@@ -167,15 +189,12 @@ async function anotarCorridaEnBitacora(
   detalle: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-      tenant_id: null, // el runner barre TODAS las flotas: acción de plataforma
-      actor_id: userId,
-      accion: 'runner.corrida_manual',
-      entidad: 'runner',
-      entidad_id: 'nivel2',
-      detalle: { motivo, ...detalle },
-    });
-    if (error) logger.warn('copiloto.bitacora_no_escribio', { accion: 'runner.corrida_manual', err: error.message });
+    await anotarBitacora(
+      { tenantId: null, // el runner barre TODAS las flotas: acción de plataforma
+        actor: { id: userId }, accion: 'runner.corrida_manual', entidad: 'runner', entidadId: 'nivel2',
+        detalle: { motivo, ...detalle } },
+      { evento: 'copiloto.bitacora_no_escribio' },
+    );
   } catch (e) {
     logger.warn('copiloto.bitacora_no_escribio', {
       accion: 'runner.corrida_manual',

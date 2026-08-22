@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { acotada } from '@/lib/likida/presupuesto';
 import { generarToken, direccionDe } from './buzon';
@@ -67,16 +68,10 @@ async function anotar(
   accion: string,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: tenantId,
-    actor_id: actor?.id ?? null,
-    actor_email: actor?.email ?? null,
-    accion,
-    entidad: 'tenant',
-    entidad_id: tenantId,
-    detalle: {},
-  });
-  if (error) logger.warn('buzon.bitacora_no_escribio', { accion, err: error.message });
+  await anotarBitacora(
+    { tenantId, actor: actor ?? {}, accion, entidad: 'tenant', entidadId: tenantId, detalle: {} },
+    { evento: 'buzon.bitacora_no_escribio' },
+  );
 }
 
 async function escribirToken(

@@ -34,6 +34,18 @@ condiciones_de_aplicacion:
   - "Tributar en Título II Cap. VII (coordinados) o Título IV Cap. II Secc. I (PF act. empresarial)"
   - "El efectivo no puede exceder el 15% del total pagado por combustible en el ejercicio"
   - "El CFDI debe consignar el permiso vigente y no suspendido"
+lectura_aplicada_por_el_motor: >
+  El "siempre que estos no excedan el 15 por ciento" admite dos lecturas y
+  esta ficha NO las resuelve (la condición de aplicación de arriba tampoco).
+  (a) TOPE prorrateable: solo el excedente sobre el 15% pierde la deducción
+  — la lectura más usada en la práctica. (b) CONDICIÓN de procedencia:
+  rebasado el 15%, la facilidad no se tiene por cumplida y todo el efectivo
+  del ejercicio cae bajo LISR 27-III. El motor aplica (a), y desde la
+  auditoría 18 (B4) LO DICE en la nota de `efectivo_sobre_15`
+  (`LECTURA_RFA_29_PRORRATEO` en cuadre/engine.ts): sobre $1,000,000 de
+  combustible con $200,000 en efectivo la diferencia entre lecturas son
+  $150,000 de deducción, y una interpretación callada no se puede discutir.
+  Pendiente para el fiscalista: confirmar (a) o cambiar el motor a (b).
 limite_importante: >
   Conserva la DEDUCCIÓN para ISR. NO habilita el acreditamiento del IEPS: son dos
   beneficios distintos y el efectivo solo salva uno.

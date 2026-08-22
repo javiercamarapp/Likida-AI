@@ -32,25 +32,39 @@
 # (barrido histórico pendiente); el motor todavía NO consume este archivo
 # (cablearlo es el siguiente paso declarado — hoy la cifra en pesos seguiría
 # sin pintarse, que es el comportamiento honesto actual).
-cuota_completa_lif_2026: 7.3634   # $/litro, diésel (LIF 2026)
+#
+# AUDITORÍA 18 (B5) — QUIÉN LEE ESTO Y QUÉ SIGNIFICA CADA CAMPO:
+#   · Lector: `src/lib/likida/cuadre/cuota_diesel.ts` (parser parcial + validador
+#     + `cuotaDieselVigente`, que devuelve null fuera de rango: NUNCA cae al
+#     último valor). `cuota_diesel.test.ts` lee ESTE archivo y falla si una
+#     semana no empalma, la aritmética no cierra o un campo falta.
+#   · El motor (engine.ts) SIGUE sin multiplicar: entrega litros (decisión D2 y
+#     la tensión de arriba). Cablearlo es una línea cuando un fiscalista firme.
+#   · `cuota_disminuida_por_litro` ES el estímulo por litro del transportista
+#     (criterio 1/LIF/PI): 500 L × 2.2760 = $1,138.00.
+#   · `reduccion_shcp_por_litro` (antes `estimulo_por_litro`, nombre que
+#     invitaba a multiplicarlo por los litros: 500 × 5.0874 = $2,543.70, 2.2× de
+#     más) es el recorte que la SHCP le aplica a la cuota completa. Se conserva
+#     solo para el chequeo aritmético: reducción + disminuida = cuota completa.
+cuota_completa_lif_2026: 7.3634   # $/litro, diésel (LIEPS 2o-I-D-1-c vía Acuerdo 179/2025)
 semanas:
   - vigencia: 2026-07-25 a 2026-07-31
     porcentaje_estimulo: 71.58
-    estimulo_por_litro: 5.2709
+    reduccion_shcp_por_litro: 5.2709
     cuota_disminuida_por_litro: 2.0925
     fuente: { dof: 2026-07-24, edicion: vespertina, codNota: 5794737 }
   - vigencia: 2026-08-01 a 2026-08-07
     porcentaje_estimulo: 75.90
-    estimulo_por_litro: 5.5887
+    reduccion_shcp_por_litro: 5.5887
     cuota_disminuida_por_litro: 1.7747
     fuente: { dof: 2026-07-31, edicion: vespertina, codNota: 5795217 }
   - vigencia: 2026-08-08 a 2026-08-14
     porcentaje_estimulo: 64.96
-    estimulo_por_litro: 4.7833
+    reduccion_shcp_por_litro: 4.7833
     cuota_disminuida_por_litro: 2.5801
     fuente: { dof: 2026-08-07, edicion: vespertina, codNota: 5795798 }
   - vigencia: 2026-08-15 a 2026-08-21
     porcentaje_estimulo: 69.09
-    estimulo_por_litro: 5.0874
+    reduccion_shcp_por_litro: 5.0874
     cuota_disminuida_por_litro: 2.2760
     fuente: { dof: 2026-08-14, edicion: vespertina, codNota: 5796377 }

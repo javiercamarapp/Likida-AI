@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 import { logger } from '@/lib/logger';
 import { getPorFacturar, type TicketPorFacturar } from './pendientes';
@@ -172,14 +172,17 @@ export async function avisarPorFacturar(args: {
   // Queda constancia de a quién se le avisó, de cuántos, y POR CUÁL camino: un
   // aviso por plantilla no llevó el detalle, y mañana eso explica por qué el
   // encargado preguntó "¿cuáles?" en vez de facturar.
-  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: args.tenantId,
-    accion: 'facturacion.aviso_enviado',
-    entidad: 'gasto',
-    entidad_id: args.tenantId,
-    detalle: { tickets: cuantos, wamid, via },
-  });
-  if (error) logger.warn('facturacion.bitacora', { err: error.message });
+  //
+  // La entidad es la FLOTA (el aviso es un lote por tenant, no un gasto: hasta
+  // la auditoría 18 decía `gasto` con el id del tenant, y quien copiaba ese id
+  // para buscar el gasto no lo encontraba). El actor es `'sistema'` a
+  // propósito: lo manda el cron, sin persona detrás; el encargado es el
+  // DESTINATARIO, no quien actuó, y su teléfono no va a la bitácora.
+  await anotarBitacora(
+    { tenantId: args.tenantId, actor: 'sistema', accion: 'facturacion.aviso_enviado', entidad: 'tenant', entidadId: args.tenantId,
+      detalle: { tickets: cuantos, wamid, via } },
+    { evento: 'facturacion.bitacora' },
+  );
 
   return { enviado: true, tickets: cuantos, texto, via };
 }

@@ -24,8 +24,9 @@ import { requireSessionTenant } from './guard';
 import { tenantDemo } from './tenant-demo';
 import { puedeVerRuta, inicioDe, rolEfectivo } from './visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
-import { TZ_MX } from '@/lib/formato';
+import { hoyMx } from '@/lib/formato';
 import type { SessionTenant } from './session';
 
 export interface TenantEfectivo extends SessionTenant {
@@ -84,9 +85,7 @@ function sufijoPrevisualizacion(
  *  mañana en UTC y el dedup partiría una sesión de revisión en dos firmas. */
 function diaMx(): string {
   // `en-CA` porque su formato de fecha ES `AAAA-MM-DD` — no hay que rearmar.
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ_MX, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date());
+  return hoyMx();
 }
 
 /**
@@ -128,17 +127,10 @@ async function firmarImpersonacion(actorId: string, tenantId: string): Promise<v
     // Sin fila devuelta = ya estaba firmado hoy. No se re-escribe la bitácora.
     if (!data || data.length === 0) return;
 
-    const { error: errBitacora } = await supabaseAdmin().from('bitacora_auditoria').insert({
-      tenant_id: tenantId,
-      actor_id: actorId,
-      accion: 'impersonacion.dashboard',
-      entidad: 'tenant',
-      entidad_id: tenantId,
-      detalle: { dia },
-    });
-    if (errBitacora) {
-      logger.warn('impersonacion.bitacora_no_escribio', { tenant: tenantId, err: errBitacora.message });
-    }
+    await anotarBitacora(
+      { tenantId, actor: { id: actorId }, accion: 'impersonacion.dashboard', entidad: 'tenant', entidadId: tenantId, detalle: { dia } },
+      { evento: 'impersonacion.bitacora_no_escribio', contexto: { tenant: tenantId } },
+    );
   } catch (e) {
     logger.warn('impersonacion.no_firmada', {
       tenant: tenantId, err: e instanceof Error ? e.message : String(e),

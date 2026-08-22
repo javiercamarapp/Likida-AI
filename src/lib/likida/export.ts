@@ -1,3 +1,5 @@
+import { hoyMx } from '@/lib/formato';
+
 // Export a ERP/Excel. CSV es universalmente importable (Excel lo abre directo,
 // y todo ERP acepta CSV). También expone JSON estructurado para conectores API.
 
@@ -30,10 +32,7 @@ export function fechaIsoMx(iso?: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  // 'en-CA' produce YYYY-MM-DD; es la forma corta de pedir ISO con zona.
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(d);
+  return hoyMx(d);
 }
 
 function csvCell(v: unknown): string {

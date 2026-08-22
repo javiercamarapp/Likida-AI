@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mxn } from '@/lib/formato';
+import { acotada } from './presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE EL CHOFER PREGUNTA A MEDIO VIAJE.
@@ -151,10 +152,15 @@ export interface EstadoViaje {
 
 export async function estadoDelViaje(tenantId: string, viajeId: string): Promise<EstadoViaje | null> {
   const admin = supabaseAdmin();
+  // AUDITORÍA 18, ALTO (A23): con techo — esto contesta una pregunta del
+  // chofer dentro del presupuesto del webhook; sin `acotada` un socket colgado
+  // gastaba los 300 s de undici contra los 120 de la función.
   const [rViaje, rGastos] = await Promise.all([
-    admin.from('viaje').select('anticipo').eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(),
-    admin.from('gasto').select('concepto, monto, ocr_confianza, created_at')
+    acotada(admin.from('viaje').select('anticipo').eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(),
+      'estadoDelViaje.viaje'),
+    acotada(admin.from('gasto').select('concepto, monto, ocr_confianza, created_at')
       .eq('viaje_id', viajeId).eq('tenant_id', tenantId).order('created_at', { ascending: false }),
+    'estadoDelViaje.gastos'),
   ]);
 
   // FALLAR CERRADO. supabase-js reporta el error POR VALOR, así que sin

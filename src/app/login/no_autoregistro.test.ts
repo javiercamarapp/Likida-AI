@@ -32,10 +32,14 @@ describe('/login no se autoregistra ni se queda sin límite', () => {
     expect(PAGINA).toMatch(/dentroDelLimite\('login:email'\)/);
   });
 
-  it('el correo sin cuenta no se distingue del enviado: ambos caen en enviado=1', () => {
+  it('la decisión enviado/error pasa por respuestaOtp y el piso de tiempo (M24)', () => {
     // Si esto se rompe, /login vuelve a ser un oráculo para enumerar qué
-    // correos son contralores reales.
-    expect(PAGINA).toMatch(/esCorreoSinCuenta/);
-    expect(PAGINA).toMatch(/otp_disabled/);
+    // correos son contralores reales. La regla vive en `respuesta_otp.ts`
+    // (con sus pruebas); aquí solo se fija que la página la USE, y que no
+    // vuelva a decidir enumerando códigos a mano.
+    expect(PAGINA).toMatch(/respuestaOtp\(error\) === 'error'/);
+    expect(PAGINA).toMatch(/conPisoDeTiempo\(\(\) => sb\.auth\.signInWithOtp/);
+    expect(PAGINA).not.toMatch(/esCorreoSinCuenta/);
+    expect(PAGINA).not.toMatch(/otp_disabled/);
   });
 });

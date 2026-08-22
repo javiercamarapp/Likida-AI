@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { variantesTelefono } from './conv';
+import { acotada } from './presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // QUIÉN ES EL NÚMERO QUE ESCRIBE — Y A QUÉ NÚMERO SE LE ESCRIBE.
@@ -52,11 +53,13 @@ export class TelefonoAmbiguo extends Error {}
  * a un jefe que su cuenta no existe por un fallo transitorio de red.
  */
 export async function resolverCuentaOficina(telefono: string): Promise<CuentaOficina | null> {
-  const { data, error } = await supabaseAdmin()
+  // AUDITORÍA 18, ALTO (A23): con techo — corre en el camino caliente del
+  // webhook, y sin `acotada` un socket colgado gastaba los 300 s de undici.
+  const { data, error } = await acotada(supabaseAdmin()
     .from('app_user')
     .select('id, tenant_id, rol, nombre, email, telefono')
     .in('telefono', variantesTelefono(telefono))
-    .limit(2); // dos, para poder DETECTAR la ambigüedad en vez de recortarla
+    .limit(2), 'resolverCuentaOficina'); // dos, para poder DETECTAR la ambigüedad en vez de recortarla
 
   if (error) throw new Error(`cuenta de oficina por teléfono: ${error.message}`);
 
@@ -100,6 +103,38 @@ export async function telefonoJefeDe(tenantId: string): Promise<string | null> {
 }
 
 /**
+ * Los roles que reciben los avisos de DINERO (el cierre de una liquidación:
+ * anticipo, comprobado, diferencia y el PDF completo), en orden.
+ *
+ * AUDITORÍA 18, ALTO (A28): `ORDEN_AVISO` es para la ESCALACIÓN de despacho,
+ * donde el encargado es el destinatario correcto. El cierre la reusaba tal
+ * cual, y el encargado —`visibilidad.ts`: `['operacion']`, sin `dinero`—
+ * recibía por WhatsApp las cifras que el panel le esconde a propósito. El
+ * canal no puede ser la puerta trasera de la matriz de visibilidad
+ * (`oficina_wa.ts`). Todo rol de esta lista ve `dinero` en `visibilidad.ts`;
+ * `avisar_cierre.test.ts` lo comprueba contra la matriz real.
+ */
+export const ORDEN_AVISO_DINERO: RolOficina[] = ['flota_admin', 'contador'];
+
+/** A quién se le mandan las CIFRAS de un cierre. `null` si nadie que vea
+ *  dinero tiene teléfono capturado — y entonces no se manda a nadie, nunca
+ *  al encargado "por lo menos". */
+export async function telefonoParaDineroDe(tenantId: string): Promise<string | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('app_user')
+    .select('rol, telefono')
+    .eq('tenant_id', tenantId)
+    .in('rol', ORDEN_AVISO_DINERO)
+    .not('telefono', 'is', null), 'telefonoParaDineroDe');
+  if (error) throw new Error(`telefonoParaDineroDe: ${error.message}`);
+  for (const rol of ORDEN_AVISO_DINERO) {
+    const u = (data ?? []).find((f) => f.rol === rol && f.telefono);
+    if (u) return u.telefono as string;
+  }
+  return null;
+}
+
+/**
  * El mapa que consume la escalación: flota → teléfono de quien decide.
  *
  * UNA sola consulta para todas las flotas. La alternativa —un viaje a la base
@@ -115,12 +150,13 @@ export async function telefonosJefe(tenantIds: string[]): Promise<Record<string,
   const ids = [...new Set(tenantIds)].filter(Boolean);
   if (ids.length === 0) return {};
 
-  const { data, error } = await supabaseAdmin()
+  // AUDITORÍA 18, ALTO (A23): con techo — `telefonoJefeDe` corre en el cierre.
+  const { data, error } = await acotada(supabaseAdmin()
     .from('app_user')
     .select('tenant_id, rol, telefono')
     .in('tenant_id', ids)
     .in('rol', ORDEN_AVISO)
-    .not('telefono', 'is', null);
+    .not('telefono', 'is', null), 'telefonosJefe');
 
   if (error) throw new Error(`telefonosJefe: ${error.message}`);
 
