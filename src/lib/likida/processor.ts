@@ -15,7 +15,7 @@ import { fechaDudosa } from '@/lib/likida/cuadre/fecha_dudosa';
 import { etiquetaConcepto, copiasDeComprobante } from '@/lib/likida/cuadre/engine';
 import { mensajePideFechaOtraVez } from '@/lib/likida/intake/pedir_fecha';
 import { resumenCuadre } from '@/lib/likida/cuadre/resumen';
-import { PartialExecutionError, type ToolCallRecord } from '@/lib/llm/openrouter';
+import { PartialExecutionError, isTransientError, type ToolCallRecord } from '@/lib/llm/openrouter';
 import type { Gasto } from '@/types/likida';
 import { extraerComprobante } from '@/lib/likida/intake/ocr';
 import { hashImagen } from '@/lib/likida/intake/hash';
@@ -2502,8 +2502,37 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       } else {
         // Con tenant y viaje: sin ellos, a las 3am el log dice que algo falló
         // pero no qué liquidación, y hay que cruzarlo a mano con la hora.
-        logger.error('agent.fail', { tenant: op.tenantId, viaje: viajeId, operador: op.operadorId, err: e instanceof Error ? e.message : String(e) });
+        const transitorio = isTransientError(e);
+        logger.error('agent.fail', { tenant: op.tenantId, viaje: viajeId, operador: op.operadorId, transitorio, err: e instanceof Error ? e.message : String(e) });
         reply = 'Perdón, se me trabó el sistema tantito. ¿Me reenvías tu último mensaje?';
+
+        // ── EL MOTOR NO NECESITA AL LLM PARA CUADRAR (RES-15) ─────────────
+        //
+        // Auditoría prod 22-ago-2026: con OpenRouter caído —429, 5xx, un
+        // provider que no contesta— el operador recibía "¿me reenvías tu
+        // último mensaje?", reenviaba, y volvía a fallar igual. Le pedimos
+        // que repita un trabajo que no era suyo y que no arregla nada,
+        // mientras sus comprobantes YA están en la base.
+        //
+        // El cuadre es determinístico: `cuadrarDesdeDB` + `resumenCuadre` dan
+        // los MISMOS números en milisegundos y sin modelo — es el mismo
+        // camino que ya se usa cuando el presupuesto no alcanza para el
+        // agente (arriba, `agente.sin_presupuesto`). Solo para fallos
+        // TRANSITORIOS: un error de programación no se disfraza de cuadre.
+        //
+        // Lo que NO hace: cerrar la liquidación. Cerrar es una escritura y
+        // decidirlo sin el agente sería inventar la decisión; esto informa
+        // con cifras reales y deja el cierre para el turno siguiente. Por eso
+        // `cerrado: false` en el resumen.
+        if (transitorio) {
+          try {
+            reply = resumenCuadre(await cuadrarDesdeDB(op.tenantId, viajeId), false, 'operador');
+            logger.warn('agent.degradado_a_cuadre', { tenant: op.tenantId, viaje: viajeId });
+          } catch (eDeg) {
+            // Si NI ESO se puede, se queda el mensaje de arriba: es la verdad.
+            logger.error('agent.degradado_fallo', { viaje: viajeId, err: eDeg instanceof Error ? eDeg.message : String(eDeg) });
+          }
+        }
       }
     }
 
