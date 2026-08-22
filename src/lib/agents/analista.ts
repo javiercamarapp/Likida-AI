@@ -19,7 +19,7 @@
 
 import { randomUUID } from 'crypto';
 import type OpenAI from 'openai';
-import { generateWithTools } from '@/lib/llm/openrouter';
+import { generateWithTools, PartialExecutionError } from '@/lib/llm/openrouter';
 import { toolSchemas, makeExecutor, registerTool, type ToolContext } from '@/lib/llm/tool-executor';
 import { getSystemPrompt } from './prompts';
 import { logger } from '@/lib/logger';
@@ -358,6 +358,12 @@ export async function ejecutarAnalista(opts: {
     if (!bloques || !cifrasRespaldadas(bloques, respaldo)) {
       reintento = true;
       logger.warn('chat.reintento_correctivo', { tenantId: opts.tenantId });
+      // M28 (auditoría 18): si ESTE segundo ciclo truena (loop-guard, abort),
+      // el error que sube al route solo traía lo gastado por el segundo ciclo;
+      // la primera vuelta —que ya resolvió y ya se pagó— desaparecía de
+      // `llm_costo` y el tope diario del tenant subcontaba más de la mitad
+      // justo en el modo de falla que más consume. Se SUMA lo de la primera
+      // al error antes de soltarlo.
       const res2 = await generateWithTools({
         role: 'chat',
         system,
@@ -376,6 +382,14 @@ export async function ejecutarAnalista(opts: {
         onTool: opts.onPaso,
         terminalTools: ['entregar_respuesta'],
         readOnlyTools: TOOLS_LECTURA,
+      }).catch((e: unknown) => {
+        if (e instanceof PartialExecutionError) {
+          e.tokensIn += res.tokensIn;
+          e.tokensOut += res.tokensOut;
+          e.cost += res.cost;
+          e.partialToolCalls.unshift(...res.toolCalls);
+        }
+        throw e;
       });
       for (const t of res2.toolCalls) extraerNumeros(t.result, respaldo);
       res.toolCalls.push(...res2.toolCalls);
