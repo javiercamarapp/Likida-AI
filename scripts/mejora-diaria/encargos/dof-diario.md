@@ -15,9 +15,10 @@ LFPDPPP. Lo demás se ignora sin culpa.
 
 - Lee el documento completo (el SIDOF da el detalle por codNota).
 - VIERNES: busca específicamente el acuerdo semanal de cuotas IEPS diésel —
-  el patrón vive en `normas/datos/cuota-ieps-diesel.yaml`: extrae cuota,
-  estímulo y disminuida, y la aritmética DEBE cerrar (estímulo + disminuida =
-  cuota vigente, hoy 7.3634). Si no cierra: repórtalo con las cifras crudas,
+  el patrón vive en `normas/datos/cuota-ieps-diesel.yaml`: extrae la reducción
+  de la SHCP (`reduccion_shcp_por_litro`) y la cuota disminuida (la que es el
+  estímulo de la flota), y la aritmética DEBE cerrar (reducción + disminuida =
+  cuota completa, hoy 7.3634). Si no cierra: repórtalo con las cifras crudas,
   NO escribas el dato.
 - Cualquier otra pieza: ¿toca una ficha existente de `normas/*.yaml`?
   Actualízala siguiendo SU formato (lee `normas/README.md` PRIMERO: estados
