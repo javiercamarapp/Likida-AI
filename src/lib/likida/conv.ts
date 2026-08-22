@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import type { TenantContext } from '@/lib/agents/types';
 import { acotada, PRESUPUESTO_WEBHOOK_MS } from './presupuesto';
 import { violaIndice } from './pg_errores';
+import { destinatarioEnmascarado } from '@/lib/meta/client';
 
 export interface ResolvedOperador {
   tenantId: string;
@@ -129,7 +130,12 @@ export async function resolveOperador(telefono: string): Promise<ResolvedOperado
     // dato. No se elige uno "por si acaso" — adivinar aquí escribe dinero en la
     // flota equivocada y nadie lo nota hasta la conciliación.
     logger.error('operador.ambiguo', {
-      telefono,
+      // Enmascarado (SEG-7): el redactor del logger solo cacha los dígitos
+      // pegados, y este teléfono viene de la base tal como se capturó. Los
+      // cuatro últimos alcanzan para encontrar las filas que hay que arreglar
+      // —los ids de operador van completos aquí al lado—, y ninguna alerta
+      // vale filtrar el número entero de un chofer.
+      para: destinatarioEnmascarado(telefono),
       tenants: [...new Set(filas.map((f) => f.tenant_id as string))],
       operadores: filas.map((f) => f.id as string),
     });
@@ -282,7 +288,11 @@ export async function loadConversation(tenantId: string, telefono: string, viaje
   // devolver `id: ''` es exactamente lo que hacía perderse el historial en
   // silencio. Se lanza para que el llamador sepa que no hay dónde guardar.
   if (!ganadora) throw new ConsultaFallida('loadConversation: la conversación chocó con el índice único y no apareció al releerla');
-  logger.info('conv.carrera_insert', { telefono, viaje: viajeId });
+  // `para` y no `telefono` crudo (auditoría prod, SEG-7): el redactor del
+  // logger pide los dígitos pegados y aquí el número puede venir como lo
+  // guardó la base o como lo mandó Meta. Los últimos 4 alcanzan para cruzar
+  // con `operador` y no reconstruyen a nadie desde el log.
+  logger.info('conv.carrera_insert', { para: destinatarioEnmascarado(telefono), viaje: viajeId });
   return desdeFila(ganadora, viajeId, telefono);
 }
 
@@ -300,7 +310,7 @@ function desdeFila(
   const estado = (fila.estado as { turns?: ConvTurn[] } & MarcasConversacion) || {};
   const mismoViaje = viajeId !== null && fila.viaje_id === viajeId;
   if (!mismoViaje && (estado.turns?.length ?? 0) > 0) {
-    logger.info('conv.historial_descartado', { telefono, de: (fila.viaje_id as string | null) ?? null, a: viajeId });
+    logger.info('conv.historial_descartado', { para: destinatarioEnmascarado(telefono), de: (fila.viaje_id as string | null) ?? null, a: viajeId });
   }
   return {
     id: fila.id as string,

@@ -270,3 +270,89 @@ describe('nunca rompe el flujo del visitante', () => {
     expect((await postear('{roto')).status).toBe(400);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA PROD (22-ago-2026) · SEG-2 — un formulario público no reescribe
+// un prospecto.
+//
+// Este endpoint no tiene sesión: bastaba acertarle al correo de un prospecto
+// (o al nombre de su empresa) para cambiarle `telefono`, `empresa`,
+// `contacto_nombre`, `unidades`, `urgencia` y `atribucion`. El daño no es
+// "spam en el CRM": el teléfono es AL QUE LLAMA EL VENDEDOR, y cambiárselo a
+// un prospecto en negociación es desviar la llamada.
+//
+// La regla: un lead entrante solo AGREGA. Sobre un hueco, rellena; sobre un
+// dato distinto que ya existía, NO se aplica — se anota en `notas`, fechado y
+// marcado como sin verificar, y una persona decide.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('SEG-2 — el lead público solo rellena huecos', () => {
+  /** Un prospecto que YA tiene todo, como el que viene del censo o el que un
+   *  vendedor ya trabajó. */
+  const YA_TIENE = {
+    id: 'p-1', estado: 'negociacion', empresa: 'Transportes GAL',
+    contacto_nombre: 'Alejandro Vargas', correo: 'a@gal.mx',
+    telefono: '9991112233', unidades: '11-50', urgencia: 'explorando',
+    atribucion: { utm_source: 'censo' }, notas: 'Habló Javier el martes: pide propuesta.',
+  };
+
+  it('NO le cambia el teléfono al prospecto en negociación', async () => {
+    respuestas.push({ data: [YA_TIENE], error: null }, { data: null, error: null });
+    await postear({ ...LEAD, whatsapp: '5500000000' });
+
+    expect(llamadas[0].op).toBe('update');
+    expect(llamadas[0].payload).not.toHaveProperty('telefono');
+  });
+
+  it('tampoco la empresa, el contacto, las unidades ni la urgencia', async () => {
+    respuestas.push({ data: [YA_TIENE], error: null }, { data: null, error: null });
+    await postear({ ...LEAD, empresa: 'Otra Cosa SA', nombre: 'Quien', apellido: 'Sea', unidades: '500+', urgencia: 'inmediata' });
+
+    const p = llamadas[0].payload;
+    for (const campo of ['empresa', 'contacto_nombre', 'unidades', 'urgencia']) {
+      expect(p, `pisó ${campo}`).not.toHaveProperty(campo);
+    }
+  });
+
+  it('lo que llegó distinto queda ANOTADO, con fecha y marcado sin verificar', async () => {
+    respuestas.push({ data: [YA_TIENE], error: null }, { data: null, error: null });
+    await postear({ ...LEAD, whatsapp: '5500000000', empresa: 'Otra Cosa SA' });
+
+    const notas = String(llamadas[0].payload.notas);
+    expect(notas).toContain('sin verificar');
+    expect(notas).toContain('telefono=5500000000');
+    expect(notas).toContain('empresa=Otra Cosa SA');
+    // Y la nota del vendedor sigue completa, debajo.
+    expect(notas).toContain('Habló Javier el martes');
+  });
+
+  it('un HUECO sí se rellena: el lead agrega información, ese es su trabajo', async () => {
+    respuestas.push(
+      // Con el resto IGUAL a lo que manda el formulario: lo único que cambia
+      // aquí son los dos huecos.
+      { data: [{ ...YA_TIENE, telefono: null, unidades: '', urgencia: 'inmediata' }], error: null },
+      { data: null, error: null },
+    );
+    await postear(LEAD);
+
+    expect(llamadas[0].payload).toMatchObject({ telefono: '8112345678', unidades: '101-250' });
+    // Nada distinto que anotar: la nota del vendedor no se toca.
+    expect(llamadas[0].payload).not.toHaveProperty('notas');
+  });
+
+  it('el mismo dato repetido no ensucia las notas (volver a mandar el formulario)', async () => {
+    respuestas.push(
+      { data: [{ ...YA_TIENE, telefono: '8112345678', unidades: '101-250', urgencia: 'inmediata', empresa: 'Transportes GAL', contacto_nombre: 'Alejandro Vargas' }], error: null },
+      { data: null, error: null },
+    );
+    await postear(LEAD);
+    expect(llamadas[0].payload).not.toHaveProperty('notas');
+  });
+
+  it('`notas` tiene techo: un endpoint público no hace crecer una fila sin fin', async () => {
+    const { notaConLoNoAplicado } = await import('./route');
+    const larga = notaConLoNoAplicado('x'.repeat(50_000), ['telefono=5500000000']);
+    expect(larga.length).toBeLessThanOrEqual(4_000);
+    // Lo NUEVO es lo que se conserva: la línea de hoy va arriba.
+    expect(larga.startsWith('[')).toBe(true);
+  });
+});

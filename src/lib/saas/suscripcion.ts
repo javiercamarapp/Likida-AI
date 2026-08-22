@@ -419,8 +419,38 @@ export async function aplicarSuscripcion(datos: {
   planClave: string;
   estado: Suscripcion['estado'];
   periodoFin: string | null;
+  /**
+   * `evt.created` del evento que trae este estado (segundos Unix). Es lo único
+   * que ordena dos eventos de la MISMA suscripción; ver `ordenAplicado`.
+   * Opcional para no romper a los llamadores que no lo tengan: sin él se
+   * aplica como siempre (el comportamiento de antes de RES-11).
+   */
+  eventoCreadoUnix?: number;
 }): Promise<void> {
   const admin = supabaseAdmin();
+
+  // ── STRIPE NO PROMETE ORDEN (auditoría prod 22-ago-2026, RES-11) ────────
+  //
+  // La documentación lo dice sin rodeos: los eventos pueden llegar
+  // desordenados. Y el reintento lo agrava — un `customer.subscription.deleted`
+  // entregado bien, seguido del reintento de un `.updated` de hace dos días,
+  // dejaba a una flota CANCELADA de vuelta en 'activa'. Esta función fija
+  // estado (no acumula), así que el último en escribir gana, y el último en
+  // llegar no es el último en pasar.
+  //
+  // El orden se guarda por suscripción y se compara aquí. Un evento más viejo
+  // que el ya aplicado se descarta CON LOG: no es un fallo (no se lanza, el
+  // webhook lo sella y contesta 200 — reintentarlo daría el mismo resultado).
+  if (datos.eventoCreadoUnix !== undefined) {
+    const ultimo = await ordenAplicado(datos.stripeSubscriptionId);
+    if (ultimo !== null && datos.eventoCreadoUnix < ultimo) {
+      logger.warn('stripe.evento_fuera_de_orden', {
+        sub: datos.stripeSubscriptionId, creado: datos.eventoCreadoUnix, ultimoAplicado: ultimo,
+        estadoQueTraia: datos.estado,
+      });
+      return;
+    }
+  }
 
   const existente = await admin
     .from('suscripcion')
@@ -473,6 +503,57 @@ export async function aplicarSuscripcion(datos: {
   // morosa siguiera viéndose como del plan que ya no paga.
   const t = await admin.from('tenant').update({ plan: datos.planClave }).eq('id', datos.tenantId);
   if (t.error) logger.warn('stripe.tenant_plan', { err: t.error.message });
+
+  // El sello del orden va AL FINAL: si algo de arriba falló, la función lanzó
+  // y el reintento de Stripe tiene que poder volver a aplicar este mismo
+  // evento — con el sello puesto antes, el reintento se vería a sí mismo como
+  // "ya hay uno igual de nuevo" solo si fuera estrictamente menor, pero
+  // sellar lo que no se aplicó es exactamente la clase de mentira que la
+  // marca huérfana de la 0132 vino a matar.
+  if (datos.eventoCreadoUnix !== undefined) {
+    await sellarOrden(datos.stripeSubscriptionId, datos.eventoCreadoUnix);
+  }
+}
+
+// ── EL LEDGER DE ORDEN, DENTRO DE `evento_stripe` ──────────────────────────
+//
+// SIN MIGRACIÓN Y SIN TABLA NUEVA, y sin ensuciar ninguna medición: la marca
+// vive en una fila de `evento_stripe` con un id que NINGÚN evento de Stripe
+// puede tener (los suyos empiezan con `evt_`) y con `aplicado_en` SIEMPRE
+// puesto — el SLO de /admin cuenta las filas con `aplicado_en is null`
+// (`admin/slo.ts`), así que estas no lo mueven ni un dígito.
+//
+// Se lee por llave primaria y se escribe por upsert: nada de consultas por
+// camino jsonb, que es donde un filtro mal escrito se lee como "no hay nada"
+// y apagaría la protección en silencio.
+
+const llaveOrden = (subId: string) => `orden:${subId}`;
+
+/** `created` (Unix) del último evento APLICADO de esa suscripción, o `null`
+ *  si no hay marca todavía o si no se pudo leer (en la duda, se aplica: dejar
+ *  de aplicar un evento real es peor que aplicar uno viejo). */
+async function ordenAplicado(subId: string): Promise<number | null> {
+  const { data, error } = await supabaseAdmin()
+    .from('evento_stripe').select('payload').eq('id', llaveOrden(subId)).maybeSingle();
+  if (error) {
+    logger.warn('stripe.orden_ilegible', { sub: subId, err: error.message });
+    return null;
+  }
+  const created = (data?.payload as { created?: unknown } | null)?.created;
+  return typeof created === 'number' ? created : null;
+}
+
+/** Deja la marca del evento recién aplicado. Nunca lanza: perder la marca
+ *  degrada la protección de orden, no el cobro. */
+async function sellarOrden(subId: string, creadoUnix: number): Promise<void> {
+  const { error } = await supabaseAdmin().from('evento_stripe').upsert({
+    id: llaveOrden(subId),
+    tipo: 'orden_suscripcion',
+    payload: { created: creadoUnix, sub: subId },
+    // SIEMPRE sellada: esta fila no es un evento pendiente de aplicar.
+    aplicado_en: new Date().toISOString(),
+  });
+  if (error) logger.warn('stripe.orden_no_sellada', { sub: subId, err: error.message });
 }
 
 /**

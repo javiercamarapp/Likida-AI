@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { logger } from '@/lib/logger';
 import { generateStructured, StructuredError, TruncatedError, resumenCausa } from '@/lib/llm/openrouter';
+import { alertarOperador, contadorDeFallos } from '@/lib/observability/alerta';
 import { decodeCodigosFromImage, bufferFromDataUrl, esRfcValido, esUuidValido, rfcChecksumOk } from './cfdi';
 import { normalizarFecha } from './fecha';
 import { sanitizarFolio, sanitizarTexto, sanitizarProducto } from './sanitizar';
@@ -204,7 +205,45 @@ export interface ExtraerResultado {
   /** Ausente cuando `legible` es true. */
   motivo?: MotivoFallo;
   // Costo de la llamada de visión (para el contador por liquidación).
-  costo: { modelo: string; tokensIn: number; tokensOut: number; costoUsd: number };
+  costo: {
+    modelo: string; tokensIn: number; tokensOut: number; costoUsd: number;
+    /** La llamada se ABORTÓ (presupuesto agotado) y el proveedor no devolvió
+     *  `usage`: el costo NO se midió. `costoUsd: 0` aquí no es "gratis" — es
+     *  "no se sabe" (auditoría prod, RES-4). */
+    noMedido?: true;
+  };
+}
+
+/** Fallos técnicos SEGUIDOS del OCR antes de escribirle al operador del
+ *  sistema. Cinco: una ráfaga de 20 fotos con el proveedor caído lo cruza en
+ *  la misma invocación; un 5xx suelto, no. */
+export const UMBRAL_OCR_CAIDO = 5;
+const vigilante = contadorDeFallos(UMBRAL_OCR_CAIDO);
+
+/**
+ * El `status` HTTP y el `code` del fallo, cavando en `.cause` como hace
+ * `resumenCausa` — pero como CAMPOS, no como texto: Sentry agrupa por mensaje
+ * y con todo en `err` los 25 fallos del 20-ago eran UN issue sin decir por qué.
+ */
+export function codigoYStatus(err: unknown, profundidad = 3): { status?: number; codigo?: string } {
+  let status: number | undefined;
+  let codigo: string | undefined;
+  let cur: unknown = err;
+  for (let i = 0; i < profundidad && cur && typeof cur === 'object'; i++) {
+    const o = cur as { status?: unknown; code?: unknown; cause?: unknown };
+    if (status === undefined && typeof o.status === 'number') status = o.status;
+    if (status === undefined && typeof o.status === 'string' && /^\d{3}$/.test(o.status)) status = Number(o.status);
+    if (codigo === undefined && typeof o.code === 'string') codigo = o.code;
+    cur = o.cause;
+  }
+  return { status, codigo };
+}
+
+/** ¿La llamada se cortó por NUESTRO presupuesto (señal abortada)? */
+function abortado(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  const e = err as { name?: unknown; cause?: { name?: unknown } } | null;
+  return e?.name === 'AbortError' || e?.cause?.name === 'AbortError';
 }
 
 /**
@@ -267,6 +306,8 @@ export async function extraerComprobante(
     // contabiliza (la llamada se cobró aunque no sirviera).
     const err = e as StructuredError;
     const truncado = e instanceof TruncatedError;
+    const { status, codigo } = codigoYStatus(e);
+    const fueAbortado = abortado(e, signal);
     logger.error('ocr.fallo_tecnico', {
       err: e instanceof Error ? e.message : String(e),
       // AUDITORÍA 1, CRÍTICO (Operabilidad): la causa real —401 por llave rota,
@@ -274,22 +315,44 @@ export async function extraerComprobante(
       // repetir el mensaje fijo. Es lo que faltó el 20-ago con las env en
       // "[SENSITIVE]": 25 fallos idénticos sin decir por qué.
       causa: resumenCausa(e),
+      // Y como CAMPOS (auditoría prod, RES-3): un 402 de saldo agotado y un
+      // 503 del proveedor son dos issues, no uno.
+      status, codigo, abortado: fueAbortado,
       truncado,
       ...(truncado ? { tope: (e as TruncatedError).tope, usados: (e as TruncatedError).tokensUsados } : {}),
     });
+    // 401/402/403 no son transitorios: llave rota, saldo agotado o llave sin
+    // permiso. Ningún fallback de proveedor lo arregla y cada foto que llegue
+    // va a fallar igual. Se avisa DE INMEDIATO, sin esperar al contador.
+    if (status === 401 || status === 402 || status === 403) {
+      await alertarOperador('ocr.credencial', { status, causa: resumenCausa(e) });
+    } else if (!fueAbortado && vigilante.fallo()) {
+      // Un abort es nuestro presupuesto, no el proveedor: no cuenta.
+      await alertarOperador('ocr.caido', {
+        fallosSeguidos: vigilante.seguidos, umbral: UMBRAL_OCR_CAIDO,
+        status: status ?? null, codigo: codigo ?? null, causa: resumenCausa(e),
+      });
+    }
     const u = err?.usage;
+    // Un abort sin `usage` no midió nada: el proveedor pudo haber cobrado la
+    // llamada (el corte es nuestro) y aquí no se sabe cuánto. Se dice, y la
+    // fila lleva la marca, en vez de un 0 que el tablero lee como "gratis".
+    const noMedido = fueAbortado && !u;
+    if (noMedido) logger.warn('ocr.costo_no_medido', { causa: resumenCausa(e) });
     return {
       gasto: { id: randomUUID(), concepto: 'otro', monto: 0, ocrConfianza: 0 },
       legible: false,
       motivo: 'fallo_tecnico',
       costo: {
-        modelo: u?.model ?? 'ocr',
+        modelo: u?.model ?? (noMedido ? 'ocr:no_medido' : 'ocr'),
         tokensIn: u?.tokensIn ?? 0,
         tokensOut: u?.tokensOut ?? 0,
         costoUsd: u?.cost ?? 0,
+        ...(noMedido ? { noMedido: true as const } : {}),
       },
     };
   }
+  vigilante.exito();
   const { data } = res;
 
   // Cruce con el QR del CFDI (gana sobre el OCR para campos fiscales).

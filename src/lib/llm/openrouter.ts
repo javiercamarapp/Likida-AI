@@ -16,6 +16,12 @@ import { modelFor, type ModelRole } from './models';
 
 let _client: OpenAI | null = null;
 
+/**
+ * Tope por petición al proveedor. Ajustable por env sin deploy porque es el
+ * número que hay que mover si un modelo de razonamiento entra al ruteo.
+ */
+export const TIMEOUT_LLM_MS = Number(process.env.LIKIDA_TIMEOUT_LLM_MS) || 30_000;
+
 export function getClient(): OpenAI {
   if (_client) return _client;
   const key = process.env.OPENROUTER_API_KEY;
@@ -23,6 +29,22 @@ export function getClient(): OpenAI {
   _client = new OpenAI({
     baseURL: 'https://openrouter.ai/api/v1',
     apiKey: key,
+    // ── EL SDK NO PUEDE REINTENTAR POR SU CUENTA (auditoría prod, RES-4) ───
+    //
+    // Por default el SDK de OpenAI reintenta DOS veces cada llamada y, ante un
+    // 429, respeta el `Retry-After` del proveedor — que OpenRouter manda en
+    // 60 s. Encima de eso, este archivo ya tiene su PROPIA escalera: intento,
+    // reintento con nota, y fallback cross-provider. Multiplicado da hasta
+    // NUEVE peticiones y minutos de espera dentro de una invocación que tiene
+    // 120 s en total y que va a morir con el webhook a medio camino: Meta ya
+    // recibió su 200 y no reintenta, así que la ráfaga entera se pierde.
+    //
+    // Los reintentos se quedan en UNA sola capa —la de aquí, que además sabe
+    // cambiar de proveedor, cosa que el SDK no— y el timeout es explícito.
+    // 30 s: el OCR de un comprobante contesta en 2-6 s; 30 ya es "algo está
+    // mal", y deja aire para que el fallback alcance a correr.
+    maxRetries: 0,
+    timeout: TIMEOUT_LLM_MS,
     defaultHeaders: {
       // El fallback era `cuadra.mx`, que es un dominio PARKEADO de un tercero.
       // Aquí solo viaja en una cabecera hacia OpenRouter, así que el daño era

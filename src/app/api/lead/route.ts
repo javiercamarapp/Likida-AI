@@ -186,24 +186,26 @@ export async function POST(req: Request) {
     // Un visitante que manda el formulario dos veces —o que vuelve otro día—
     // no es dos prospectos. Se busca por correo, que es lo único estable que
     // deja; sin correo se cae a la empresa.
+    // `select('*')`, no una lista: en una base donde la 0137 aún no corriera,
+    // pedir `unidades` por nombre haría fallar la LECTURA y —con el catch de
+    // abajo— el lead se perdería en silencio, que es justo lo que esta ruta
+    // existe para impedir. Con `*` viene lo que haya.
     const filtro = campos.correo
-      ? db.from('prospecto').select('id, estado').eq('correo', campos.correo as string)
-      : db.from('prospecto').select('id, estado').eq('empresa', empresa);
+      ? db.from('prospecto').select('*').eq('correo', campos.correo as string)
+      : db.from('prospecto').select('*').eq('empresa', empresa);
     const { data: previos, error: eLeer } = await filtro.limit(1);
     if (eLeer) throw new Error(eLeer.message);
 
     if (previos && previos.length > 0) {
-      // NO se toca `estado` ni `fuente`: si este prospecto ya venía del censo y
-      // ya estaba en 'negociacion', regresarlo a 'nuevo' borraría el avance del
-      // vendedor, y repintarle la fuente borraría de dónde salió de verdad.
-      //
-      // Y SOLO SE PISA LO QUE TRAE VALOR. El censo del DENUE ya venía con
-      // teléfono para muchos; si este formulario llega sin WhatsApp, mandar
-      // `null` BORRARÍA ese teléfono. Un lead entrante solo puede agregar
-      // información sobre un prospecto, nunca quitársela.
-      const parche = Object.fromEntries(Object.entries(campos).filter(([, v]) => v !== null));
-      await escribir(db, 'update', parche, previos[0].id);
-      logger.info('lead.actualizado', { empresa, tenia: previos[0].estado, canal: canal(atr) });
+      const previo = previos[0] as Record<string, unknown>;
+      const { parche, pisados } = mezclaQueSoloRellena(previo, campos);
+      if (pisados.length) {
+        // Se anota QUÉ dijo el formulario y no se aplica. El vendedor decide.
+        parche.notas = notaConLoNoAplicado(previo.notas, pisados);
+        logger.warn('lead.no_pisa_datos', { empresa, campos: pisados.map((p) => p.split('=')[0]), canal: canal(atr) });
+      }
+      await escribir(db, 'update', parche, previo.id as string);
+      logger.info('lead.actualizado', { empresa, tenia: previo.estado, canal: canal(atr) });
       return ok();
     }
 
@@ -215,6 +217,74 @@ export async function POST(req: Request) {
     logger.error('lead.fallo', { err: String(err) });
     return ok();
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LO QUE UN FORMULARIO PÚBLICO PUEDE Y NO PUEDE HACERLE A UN PROSPECTO.
+//
+// AUDITORÍA PROD (22-ago-2026) · SEG-2. Este endpoint no tiene sesión: basta
+// con acertarle al correo de un prospecto —o a su nombre de empresa— para
+// reescribirle `empresa`, `contacto_nombre`, `telefono`, `unidades`,
+// `urgencia` y `atribucion`. El daño no es "spam en el CRM": el teléfono es
+// AL QUE LLAMA EL VENDEDOR y la atribución es la que decide cuánto se cree
+// que rinde cada canal. Cambiar el teléfono de un prospecto en negociación es
+// desviar la llamada.
+//
+// La regla nueva, que es la que ya tenía el resto del archivo llevada hasta
+// el final: **un lead entrante solo puede AGREGAR información, nunca
+// sustituirla**. Lo que llega sobre un hueco lo rellena; lo que llega sobre
+// un dato que ya existe y es distinto NO se aplica: se anota en `notas`, con
+// fecha y marcado como "sin verificar", y una persona decide.
+//
+// `estado` y `fuente` siguen intocables por lo de siempre (regresar a 'nuevo'
+// borra el avance del vendedor; repintar la fuente borra de dónde salió).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Vacío = no hay dato: nulo, ausente o cadena en blanco. */
+function sinDato(v: unknown): boolean {
+  return v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+}
+
+/**
+ * El parche que SÍ se puede aplicar, y la lista de lo que llegó distinto.
+ *
+ * Exportada para que la prueba mida esta decisión sola, sin base de por medio.
+ */
+export function mezclaQueSoloRellena(
+  previo: Record<string, unknown>,
+  campos: Record<string, unknown>,
+): { parche: Record<string, unknown>; pisados: string[] } {
+  const parche: Record<string, unknown> = {};
+  const pisados: string[] = [];
+  for (const [k, v] of Object.entries(campos)) {
+    // `updated_at` es del sistema, no del visitante.
+    if (k === 'updated_at') { parche[k] = v; continue; }
+    // El formulario no lo trae: nunca se manda `null` (borraría el teléfono
+    // que el censo del DENUE sí traía).
+    if (v === null || v === undefined) continue;
+    // La columna no existe en esta base todavía (0137): que decida `escribir`.
+    if (!(k in previo)) { parche[k] = v; continue; }
+    if (sinDato(previo[k])) { parche[k] = v; continue; }      // hueco → se rellena
+    if (String(previo[k]) === String(v)) continue;            // igual → nada que hacer
+    pisados.push(`${k}=${String(v)}`);                        // distinto → a notas
+  }
+  return { parche, pisados };
+}
+
+/** Cuánto puede crecer `notas` por esta vía. Un endpoint público no puede
+ *  hacer crecer una fila sin techo: se conserva lo más NUEVO. */
+const TOPE_NOTAS = 4_000;
+
+/**
+ * La nota con lo que el formulario dijo y no se aplicó. Va ARRIBA (es lo
+ * último que pasó) y la nota del vendedor se conserva completa debajo, que es
+ * la razón por la que este archivo nunca escribía `notas` en un update.
+ */
+export function notaConLoNoAplicado(notasPrevias: unknown, pisados: string[]): string {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const linea = `[${hoy}] /getdemo mandó datos DISTINTOS a los que ya había (sin verificar, no se aplicaron): ${pisados.join('; ')}`;
+  const antes = typeof notasPrevias === 'string' && notasPrevias.trim() ? `\n${notasPrevias}` : '';
+  return `${linea}${antes}`.slice(0, TOPE_NOTAS);
 }
 
 /** Las columnas que la 0137 agrega y que pueden no existir todavía. */

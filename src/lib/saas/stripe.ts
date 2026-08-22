@@ -17,6 +17,10 @@ import { logger } from '@/lib/logger';
 
 const API = 'https://api.stripe.com/v1';
 
+/** Tope por llamada a la API de Stripe (RES-12). Env por si un día hace falta
+ *  moverlo sin desplegar. */
+export const TIMEOUT_STRIPE_MS = Number(process.env.LIKIDA_TIMEOUT_STRIPE_MS) || 15_000;
+
 /** Tolerancia del timestamp del webhook. La de Stripe por defecto. */
 const TOLERANCIA_S = 300;
 
@@ -94,6 +98,15 @@ async function pedir<T>(
     method: metodo,
     headers,
     body: metodo === 'POST' ? cuerpoStr : undefined,
+    // ── TECHO (auditoría prod 22-ago-2026, RES-12) ────────────────────────
+    //
+    // Sin señal, este `fetch` heredaba el default de undici —300 s— dentro de
+    // rutas que tienen 60. Un Stripe lento se llevaba la invocación entera y
+    // el usuario veía un timeout de la plataforma sin un solo log nuestro.
+    // 15 s: la API de Stripe contesta en cientos de ms; 15 ya es "está mal".
+    // El `Idempotency-Key` de arriba es lo que hace seguro rendirse pronto —
+    // un reintento sobre la misma llave no crea una segunda suscripción.
+    signal: AbortSignal.timeout(TIMEOUT_STRIPE_MS),
   });
 
   const texto = await r.text();

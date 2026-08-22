@@ -22,6 +22,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
+import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
 export const CRONS = ['wa-pendientes', 'escalar', 'facturar', 'purgar', 'runner'] as const;
@@ -56,7 +57,9 @@ export async function puertaCron(cron: CronId, req: Request, sinSecreto: string)
     await alertarOperador(`cron.${cron}`, { error: 'CRON_SECRET no está configurado: el cron no corre.', codigo: 'cron_sin_secreto' });
     return NextResponse.json({ error: `CRON_SECRET no está configurado. ${sinSecreto}` }, { status: 500 });
   }
-  if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
+  // SEG-5: comparación de tiempo constante (`lib/auth/cron.ts`). Un `!==`
+  // sobre un secreto es medible en teoría; el costo de no hacerlo es cero.
+  if (!autorizaCron(req.headers.get('authorization'), secreto)) {
     // Sin cuerpo: a quien no está autorizado no se le dice qué hay detrás.
     // Pero SÍ se loguea (antes no): un secreto desfasado entre Vercel y el
     // proyecto se veía como un cron que nunca corre.

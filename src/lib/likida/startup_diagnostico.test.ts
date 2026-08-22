@@ -66,8 +66,8 @@ describe('diagnóstico de migraciones', () => {
 
     expect(warn).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledWith('startup.migraciones', expect.objectContaining({ code: 'PGRST202' }));
-    const [, meta] = error.mock.calls[0] as [string, { msg: string }];
-    expect(meta.msg).toContain('FALTA la migración 0005');
+    const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
+    expect(mensajes).toContain('FALTA la migración 0005');
   });
 
   it('con todo aplicado, dice que está bien y no grita', async () => {
@@ -116,10 +116,11 @@ describe('diagnóstico de migraciones', () => {
 
   // La red se puede caer en cualquiera de los cuatro probes, no solo en el primero.
   it('el mismo criterio aplica al probe de la barrera de intake', async () => {
-    rpc.mockResolvedValueOnce({ error: null })                                        // 0005 ok
-       .mockResolvedValueOnce({ error: null })                                        // unlock
-       .mockResolvedValueOnce({ error: { code: '', message: 'fetch failed' } })       // 0011 sin red
-       .mockResolvedValue({ error: null });                                           // el resto ok
+    // POR NOMBRE: desde RES-2 los sondeos corren en paralelo y el orden de
+    // llegada de las RPC ya no es el del archivo.
+    rpc.mockImplementation(async (nombre: string) => (nombre === 'intake_delta'
+      ? { error: { code: '', message: 'fetch failed' } }
+      : { error: null }));
     await verificarMigracionesCriticas();
 
     expect(error).not.toHaveBeenCalled();
@@ -177,9 +178,10 @@ describe('el arranque dice TODO lo que falta, no lo primero', () => {
   it('con dos migraciones ausentes, reporta las dos', async () => {
     // Sin slot para `unlock`: desde la auditoría 18 el sondeo solo libera el
     // lease si `try_lock_viaje` devolvió `true`, y aquí devuelve error.
-    rpc.mockResolvedValueOnce({ error: { code: 'PGRST202', message: 'no try_lock_viaje' } })  // 0005
-       .mockResolvedValueOnce({ error: { code: 'PGRST202', message: 'no intake_delta' } })     // 0011
-       .mockResolvedValue({ error: null });
+    rpc.mockImplementation(async (nombre: string) => (
+      nombre === 'try_lock_viaje' ? { error: { code: 'PGRST202', message: 'no try_lock_viaje' } }
+      : nombre === 'intake_delta' ? { error: { code: 'PGRST202', message: 'no intake_delta' } }
+      : { error: null }));
     await verificarMigracionesCriticas();
 
     const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
@@ -330,3 +332,48 @@ describe('el TTL del contador de la barrera (0031)', () => {
     expect(info).toHaveBeenCalledWith('startup.migraciones', { ok: true });
   });
 });
+
+// AUDITORÍA PROD (22-ago-2026), RES-2 + RES-9: los sondeos corren EN PARALELO
+// y acotados, y la lista alcanza a las migraciones de las que depende el
+// código vivo (0119 bandeja durable, 0132 ciclo del evento de Stripe, 0149
+// claim completado), que hasta hoy nadie sondeaba.
+describe('los sondeos corren en paralelo y cubren las migraciones recientes', () => {
+  it('una RPC que no contesta no retiene a las demás: todas se disparan de una vez', async () => {
+    let resolverColgada: (() => void) | undefined;
+    rpc.mockImplementation((nombre: string) => (nombre === 'intake_delta'
+      ? new Promise((r) => { resolverColgada = () => r({ error: null }); })
+      : Promise.resolve({ error: null })));
+    const corrida = verificarMigracionesCriticas();
+    // Sin esperar a que la colgada conteste, las otras RPC ya se llamaron.
+    await new Promise((r) => setTimeout(r, 0));
+    const nombres = rpc.mock.calls.map((c) => c[0] as string);
+    expect(nombres).toContain('indices_faltantes');
+    expect(nombres).toContain('confirmar_aviso_privacidad');
+    expect(nombres).toContain('guardar_liquidacion_tx');
+    resolverColgada!();
+    await corrida;
+    expect(info).toHaveBeenCalledWith('startup.migraciones', { ok: true });
+  });
+
+  it('sonda las columnas que nacen en 0119, 0132 y 0149', async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    const { COLUMNAS_RECIENTES } = await import('./startup');
+    expect(Object.keys(COLUMNAS_RECIENTES)).toEqual(expect.arrayContaining(['0119', '0132', '0149']));
+    await verificarMigracionesCriticas();
+    const tablas = from.mock.calls.map((c) => c[0] as string);
+    expect(tablas).toEqual(expect.arrayContaining(['wa_evento_pendiente', 'evento_stripe', 'wa_mensaje_procesado']));
+  });
+
+  it('si falta la columna de la 0149, lo dice con la migración y la consecuencia', async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    from.mockImplementation((tabla: string) => (tabla === 'wa_mensaje_procesado'
+      ? tabla_({ error: { code: '42703', message: 'column wa_mensaje_procesado.completado_en does not exist' } })
+      : okTabla));
+    await verificarMigracionesCriticas();
+    const mensajes = error.mock.calls.map((c) => (c[1] as { msg: string }).msg).join(' | ');
+    expect(mensajes).toContain('0149');
+    expect(mensajes).toContain('completado_en');
+    expect(info).not.toHaveBeenCalledWith('startup.migraciones', { ok: true });
+  });
+});
+const tabla_ = tabla;

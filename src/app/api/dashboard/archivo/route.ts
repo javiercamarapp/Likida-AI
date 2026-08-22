@@ -17,9 +17,19 @@ import { logger } from '@/lib/logger';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-/** ~12 MB ya en base64. Excel/PDF de oficina caben sobrados; un video no —
- *  y un video tampoco tendría lectura honesta aquí. */
-const MAX_BASE64 = 16_000_000;
+/**
+ * El tope del archivo, ya en base64 (auditoría prod 22-ago-2026, ESC-14).
+ *
+ * ESTABA EN 16 MB CONTRA UN LÍMITE REAL DE 4.5. El cuerpo de una función
+ * serverless de Vercel se corta en 4.5 MB en la plataforma, antes de que esta
+ * ruta exista: todo lo que pasara de ahí moría con un 413 ajeno, sin nuestro
+ * texto y sin log, mientras el número de aquí prometía doce megas.
+ *
+ * 4 MB de base64 ≈ 3 MB de archivo. Un Excel o un PDF de oficina caben
+ * sobrados; lo que no cabe se dice con nuestras palabras y con la salida a
+ * mano (partir el archivo), en vez de con una pantalla de la plataforma.
+ */
+export const MAX_BASE64 = 4_000_000;
 
 export async function POST(req: NextRequest) {
   const sesion = await getSessionTenant();
@@ -39,7 +49,9 @@ export async function POST(req: NextRequest) {
   }
   const base64 = contenido.includes('base64,') ? contenido.slice(contenido.indexOf('base64,') + 7) : contenido;
   if (base64.length > MAX_BASE64) {
-    return NextResponse.json({ error: 'archivo demasiado grande (máx ~12 MB)' }, { status: 413 });
+    return NextResponse.json({
+      error: 'El archivo pesa demasiado (máx ~3 MB). Mándame la parte que importa —una hoja, un rango de fechas— y la leo completa.',
+    }, { status: 413 });
   }
 
   try {
