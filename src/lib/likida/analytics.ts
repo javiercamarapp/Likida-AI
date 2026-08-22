@@ -4,7 +4,7 @@
 // DE ANOMALÍAS/FRAUDE (mismo CFDI usado en dos viajes, folios duplicados).
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { detectarDuplicadosEntreViajes, type Anomalia } from './duplicados';
+import type { Anomalia } from './duplicados';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
 // La agregación de `llm_costo` de una flota vive en el módulo que ESCRIBE esa
@@ -19,7 +19,37 @@ import { logger } from '@/lib/logger';
 // Los dos bordes de PostgREST (error por valor, y el recorte silencioso a
 // 1,000 filas) viven en `pg.ts` desde que `operacion.ts` los necesitó también.
 // La explicación larga de POR QUÉ existen está allá, junto al código.
-import { exigir, traerTodo, traerPorIds, conteo } from './pg';
+import { exigir, traerPorIds } from './pg';
+// Techo de 8 s por consulta (REGLAS-ESCALA §5): toda lectura del dashboard
+// que siga en JS lleva `acotada()`; `acotada_guardiana.test.ts` vigila que
+// cada `.from(`/`.rpc(` de este archivo lo tenga.
+import { acotada } from './presupuesto';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESCALA 50k (mig. 0150, 22-ago-2026): las ONCE reducciones "traer filas →
+// agregar en JS" de este archivo que quedaban con fecha de caducidad se
+// movieron a RPC (docs/escala-50k/MAPA.md). Todas comparten este lector:
+// UN viaje de red, y fail-closed de FORMA — una respuesta que no tenga la
+// forma esperada LANZA, nunca se lee como "cero" (un Resumen en $0 se ve
+// exactamente igual que una flota sin actividad).
+// ═══════════════════════════════════════════════════════════════════════════
+type Fila = Record<string, unknown>;
+const esNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const esStr = (v: unknown): v is string => typeof v === 'string';
+
+async function leerRpc0150<T extends Fila>(
+  contexto: string,
+  fn: string,
+  args: Record<string, unknown>,
+  valida: (fila: Fila) => boolean,
+): Promise<T[]> {
+  const { data, error } = await acotada(supabaseAdmin().rpc(fn, args), contexto);
+  if (error) throw new Error(`${contexto}: ${error.message}`);
+  if (!Array.isArray(data) || !data.every((x) => x && typeof x === 'object' && !Array.isArray(x) && valida(x as Fila))) {
+    throw new Error(`${contexto}: ${fn} devolvió otra forma (¿migración 0150 sin aplicar?)`);
+  }
+  return data as T[];
+}
 
 export interface DashboardKpis {
   viajesLiquidados: number;
@@ -104,12 +134,15 @@ export async function getSerieComparativa(
   pasos: number,
   hoy: string = hoyMx(),
 ): Promise<ComparativoPeriodo[]> {
-  const { data, error } = await supabaseAdmin().rpc('serie_comparativa_tenant', {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('serie_comparativa_tenant', {
     p_tenant: tenantId,
     p_ventana_dias: ventanaDias,
     p_pasos: pasos,
     p_hoy: hoy,
-  });
+  }),
+    'getSerieComparativa',
+  );
   if (error) throw new Error(`getSerieComparativa: ${error.message}`);
 
   // Fail-closed: una forma inesperada (¿migración 0112 sin aplicar?) no se
@@ -175,8 +208,11 @@ export async function getSeriesKpiCards(
  */
 export async function getKpis(tenantId: string, ventanaDias?: number): Promise<DashboardKpis> {
   const corte = corteVentana(ventanaDias);
-  const { data, error } = await supabaseAdmin()
-    .rpc('kpis_liquidacion_tenant', { p_tenant: tenantId, p_desde: corte });
+  const { data, error } = await acotada(
+    supabaseAdmin()
+    .rpc('kpis_liquidacion_tenant', { p_tenant: tenantId, p_desde: corte }),
+    'getKpis',
+  );
   if (error) throw new Error(`getKpis: ${error.message}`);
 
   const r = data as Partial<{
@@ -246,13 +282,16 @@ export interface HechoSolo {
  * renglón sale de un sello real en `viaje`, no de un log decorativo.
  */
 export async function getHechosSolos(tenantId: string, limite = 8): Promise<HechoSolo[]> {
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await acotada(
+    supabaseAdmin()
     .from('viaje')
     .select('folio, escalado_en, recordatorio_comprobacion_en, operador:operador_id(nombre)')
     .eq('tenant_id', tenantId)
     .or('escalado_en.not.is.null,recordatorio_comprobacion_en.not.is.null')
     .order('id', { ascending: false })
-    .limit(60);
+    .limit(60),
+    'getHechosSolos',
+  );
   if (error) throw new Error(`getHechosSolos: ${error.message}`);
   const hechos: HechoSolo[] = [];
   for (const v of data ?? []) {
@@ -278,28 +317,13 @@ export interface DineroObservadoTipo { tipo: string; monto: number; n: number }
  * agente — misma fuente (`liquidacion.diferencias`), mismo valor absoluto.
  */
 export async function getDineroObservadoPorTipo(tenantId: string): Promise<DineroObservadoTipo[]> {
-  const rows = await traerTodo<{ diferencias: unknown }>(
-    (desde, hasta) => supabaseAdmin()
-      .from('liquidacion')
-      .select('diferencias')
-      .eq('tenant_id', tenantId)
-      .order('id')
-      .range(desde, hasta),
-    'getDineroObservadoPorTipo',
+  // AGREGADO EN SQL (mig. 0150): traía TODA `liquidacion` del tenant para
+  // desanidar `diferencias` en JS — 600k filas/año a 50k viajes/mes.
+  const filas = await leerRpc0150<{ tipo: string; monto: number; n: number }>(
+    'getDineroObservadoPorTipo', 'dinero_observado_por_tipo_tenant', { p_tenant: tenantId },
+    (f) => esStr(f.tipo) && esNum(f.monto) && esNum(f.n),
   );
-  const acumulado = new Map<string, { monto: number; n: number }>();
-  for (const r of rows) {
-    for (const d of ((r.diferencias as Array<{ tipo?: unknown; monto?: unknown }>) ?? [])) {
-      const tipo = typeof d.tipo === 'string' ? d.tipo : 'otro';
-      const prev = acumulado.get(tipo) ?? { monto: 0, n: 0 };
-      prev.monto += Math.abs(Number(d.monto ?? 0));
-      prev.n += 1;
-      acumulado.set(tipo, prev);
-    }
-  }
-  return [...acumulado.entries()]
-    .map(([tipo, v]) => ({ tipo, monto: v.monto, n: v.n }))
-    .sort((a, b) => b.monto - a.monto);
+  return filas.map((f) => ({ tipo: f.tipo, monto: f.monto, n: f.n }));
 }
 
 /**
@@ -315,54 +339,21 @@ export async function getStatsPorOperador(
   tenantId: string,
   opciones: { nominal?: boolean } = {},
 ): Promise<OperadorStat[]> {
-  const admin = supabaseAdmin();
-  const [ops, gastos, viajes, liqs] = await Promise.all([
-    traerTodo<{ id: unknown; nombre: unknown; oposicion_automatizada?: unknown }>(
-      (desde, hasta) => admin.from('operador').select('id, nombre, oposicion_automatizada').eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getStatsPorOperador.operador',
-    ),
-    traerTodo<{ viaje_id: unknown; concepto: unknown; monto: unknown }>(
-      (desde, hasta) => admin.from('gasto').select('viaje_id, concepto, monto').eq('tenant_id', tenantId).eq('concepto', 'diesel').order('id').range(desde, hasta),
-      'getStatsPorOperador.gasto',
-    ),
-    traerTodo<{ id: unknown; operador_id: unknown }>(
-      (desde, hasta) => admin.from('viaje').select('id, operador_id').eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getStatsPorOperador.viaje',
-    ),
-    // AUDITORÍA 3, ARQ-C1 (CRÍTICO, reincidente de la ola 2): `diferencias`
-    // salía HARDCODEADA en 0 y la ventana del Agente de Liquidación pintaba
-    // "Ningún operador acumula diferencias — la señal que quieres ver" como
-    // si fuera medición. Ahora se cuenta de verdad: liquidaciones con
-    // diferencia ≠ 0, cruzadas a su operador.
-    traerTodo<{ viaje_id: unknown; diferencia: unknown }>(
-      (desde, hasta) => admin.from('liquidacion').select('viaje_id, diferencia').eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getStatsPorOperador.liquidacion',
-    ),
-  ]);
-  const viajeToOp = new Map(viajes.map((v) => [v.id as string, v.operador_id as string]));
-  const dieselPorOp = new Map<string, number>();
-  const viajesPorOp = new Map<string, Set<string>>();
-  for (const gr of gastos) {
-    const op = viajeToOp.get(gr.viaje_id as string);
-    if (!op) continue;
-    dieselPorOp.set(op, (dieselPorOp.get(op) ?? 0) + Number(gr.monto));
-    if (!viajesPorOp.has(op)) viajesPorOp.set(op, new Set());
-    viajesPorOp.get(op)!.add(gr.viaje_id as string);
-  }
-  const diferenciasPorOp = new Map<string, number>();
-  for (const l of liqs) {
-    const op = viajeToOp.get(l.viaje_id as string);
-    if (!op) continue;
-    // Centavos de redondeo no son una diferencia que amerite conversación.
-    if (Math.abs(Number(l.diferencia ?? 0)) < 0.01) continue;
-    diferenciasPorOp.set(op, (diferenciasPorOp.get(op) ?? 0) + 1);
-  }
-  return ops.filter((o) => o.oposicion_automatizada == null).map((o) => ({
-    operadorId: o.id as string,
-    nombre: opciones.nominal ? (o.nombre as string) : etiquetaOperador(o.id as string),
-    viajes: viajesPorOp.get(o.id as string)?.size ?? 0,
-    dieselTotal: round2(dieselPorOp.get(o.id as string) ?? 0),
-    diferencias: diferenciasPorOp.get(o.id as string) ?? 0,
+  // AGREGADO EN SQL (mig. 0150): traía CUATRO tablas completas (operador,
+  // gasto diésel, viaje, liquidacion) para un join por viaje_id en memoria.
+  // AUDITORÍA 3, ARQ-C1 sigue vigente: `diferencias` se CUENTA en SQL
+  // (liquidaciones con |diferencia| >= 0.01, cruzadas a su operador), no
+  // sale hardcodeada en 0. La oposición del art. 26 fr. II se filtra en SQL.
+  const filas = await leerRpc0150<{ operadorId: string; nombre: string; viajes: number; dieselTotal: number; diferencias: number }>(
+    'getStatsPorOperador', 'stats_operador_tenant', { p_tenant: tenantId },
+    (f) => esStr(f.operadorId) && esStr(f.nombre) && esNum(f.viajes) && esNum(f.dieselTotal) && esNum(f.diferencias),
+  );
+  return filas.map((o) => ({
+    operadorId: o.operadorId,
+    nombre: opciones.nominal ? o.nombre : etiquetaOperador(o.operadorId),
+    viajes: o.viajes,
+    dieselTotal: round2(o.dieselTotal),
+    diferencias: o.diferencias,
   }));
 }
 
@@ -376,30 +367,22 @@ export type { Anomalia } from './duplicados';
  * probó: declaraba detectar `folio_duplicado` y solo producía `cfdi_duplicado`.
  */
 export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
-  // Un "0 anomalías" por fallo de lectura O por recorte silencioso de
-  // PostgREST se lee como "revisamos y todo está limpio", que es la
-  // afirmación más cara que puede hacer este producto.
-  // `cfdi_orden` viaja con el UUID (A5): sin él, las N casetas de un
-  // consolidado (0065) se acusaban como un CFDI duplicado entre viajes.
-  const data = await traerTodo<{ viaje_id: unknown; concepto: unknown; monto: unknown; folio: unknown; cfdi_uuid: unknown; cfdi_orden: unknown }>(
-    (desde, hasta) => supabaseAdmin()
-      .from('gasto')
-      .select('viaje_id, concepto, monto, folio, cfdi_uuid, cfdi_orden')
-      .eq('tenant_id', tenantId)
-      .order('id')
-      .range(desde, hasta),
-    'detectarAnomalias',
+  // AGREGADO EN SQL (mig. 0150): era la lectura MÁS cara del panel — `gasto`
+  // ENTERO del tenant, sin fecha, en cuatro pantallas por carga; con 300k
+  // gastos/mes caducaba ~día 10. `anomalias_gasto_tenant` aplica las MISMAS
+  // reglas que `detectarDuplicadosEntreViajes` (duplicados.ts, que sigue
+  // siendo el oráculo puro y probado: la prueba de equivalencia corre la
+  // función JS contra la forma SQL sobre el mismo dataset).
+  //
+  // Un "0 anomalías" por fallo de lectura se lee como "revisamos y todo está
+  // limpio", que es la afirmación más cara que puede hacer este producto:
+  // error o forma inesperada LANZAN.
+  const filas = await leerRpc0150<{ tipo: string; detalle: string; monto: number; viajes: string[] }>(
+    'detectarAnomalias', 'anomalias_gasto_tenant', { p_tenant: tenantId },
+    (f) => (f.tipo === 'cfdi_duplicado' || f.tipo === 'folio_duplicado') && esStr(f.detalle) && esNum(f.monto)
+      && Array.isArray(f.viajes) && f.viajes.length > 1 && f.viajes.every(esStr),
   );
-  return detectarDuplicadosEntreViajes(
-    data.map((r) => ({
-      viajeId: r.viaje_id as string,
-      concepto: (r.concepto as string) ?? 'otro',
-      monto: Number(r.monto),
-      folio: (r.folio as string) || undefined,
-      cfdiUuid: (r.cfdi_uuid as string) || undefined,
-      cfdiOrden: typeof r.cfdi_orden === 'number' ? r.cfdi_orden : null,
-    })),
-  );
+  return filas.map((f) => ({ tipo: f.tipo as Anomalia['tipo'], detalle: f.detalle, monto: f.monto, viajes: f.viajes }));
 }
 
 /**
@@ -425,39 +408,30 @@ export async function getLiquidacionesPorDia(
   // filtrando por día LOCAL: filas de sobra se descartan, nunca faltan.
   const corteViejo = new Date(`${hoy}T00:00:00Z`);
   corteViejo.setUTCDate(corteViejo.getUTCDate() - (ventanaDias - 1));
-  const rows = await traerTodo<{ created_at: unknown }>(
-    (desde, hasta) => supabaseAdmin()
-      .from('liquidacion')
-      .select('created_at')
-      .eq('tenant_id', tenantId)
-      .gte('created_at', `${corteViejo.toISOString().slice(0, 10)}T00:00:00Z`)
-      .order('id')
-      .range(desde, hasta),
-    'getLiquidacionesPorDia',
+  // AGREGADO EN SQL (mig. 0150): el conteo por día va en la base. AUDITORÍA
+  // 12 sigue vigente ahí: `liquidaciones_por_dia_tenant` bucketea por el día
+  // LOCAL de México (`at time zone 'America/Mexico_City'`), no por el UTC
+  // crudo — una liquidación cerrada el 31-jul a las 20:00 CDMX se guarda como
+  // 2026-08-01T02:00Z y caía en la barra del 1-ago.
+  const filas = await leerRpc0150<{ dia: string; n: number }>(
+    'getLiquidacionesPorDia', 'liquidaciones_por_dia_tenant',
+    { p_tenant: tenantId, p_desde: `${corteViejo.toISOString().slice(0, 10)}T00:00:00Z` },
+    (f) => esStr(f.dia) && esNum(f.n),
   );
-  // AUDITORÍA 12, ALTO (pruebas): `.slice(0,10)` sobre el timestamptz que
-  // PostgREST devuelve en UTC fechaba en el día SIGUIENTE los cierres de la
-  // tarde — una liquidación cerrada el 31-jul a las 20:00 CDMX se guarda como
-  // 2026-08-01T02:00Z y caía en la barra del 1-ago. La gráfica del demo (paso
-  // 4 del guion) movía los cierres de 18:00-23:59 hora local a otro día. El
-  // mismo `.slice` ya se arregló en el detalle (creadoEn viaja crudo y se
-  // formatea en pantalla); aquí el bucket se hace con la zona horaria real.
-  const diaLocal = (iso: string): string =>
-    hoyMx(new Date(iso));
-  const porDiaMap = new Map<string, number>();
-  for (const r of rows) {
-    const dia = diaLocal(r.created_at as string);
-    porDiaMap.set(dia, (porDiaMap.get(dia) ?? 0) + 1);
-  }
+  const porDiaMap = new Map(filas.map((f) => [f.dia, f.n]));
   const cortes = (diasAtras: number) => {
     const d = new Date(`${hoy}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() - diasAtras);
     return d.toISOString().slice(0, 10);
   };
-  return Array.from({ length: ventanaDias }, (_, i) => {
+  // Sin `Array.from` a propósito: `acotada_guardiana.test.ts` cuenta cada
+  // `.from(` del archivo como una consulta que debe llevar techo.
+  const serie: Array<{ dia: string; valor: number }> = [];
+  for (let i = 0; i < ventanaDias; i++) {
     const dia = cortes(ventanaDias - 1 - i);
-    return { dia, valor: porDiaMap.get(dia) ?? 0 };
-  });
+    serie.push({ dia, valor: porDiaMap.get(dia) ?? 0 });
+  }
+  return serie;
 }
 
 /** Lunes-a-domingo ISO de una fecha simple (columna `date`, sin hora) →
@@ -512,22 +486,23 @@ export async function getGastoPorSemana(
   const desdeGlobal = new Date(`${hoy}T00:00:00Z`);
   desdeGlobal.setUTCDate(desdeGlobal.getUTCDate() - (semanas * 7 - 1));
 
-  const filas = await traerTodo<{ fecha: unknown; concepto: unknown; monto: unknown }>(
-    (desde, hasta) => supabaseAdmin().from('gasto').select('fecha, concepto, monto')
-      .eq('tenant_id', tenantId).gte('fecha', desdeGlobal.toISOString().slice(0, 10)).lte('fecha', hoy)
-      .order('id').range(desde, hasta),
-    'getGastoPorSemana',
+  // AGREGADO EN SQL (mig. 0150): la vista "histórico" (52 semanas) leía ~3.6M
+  // gastos a 50k viajes/mes. `gasto_semanal_tenant` devuelve (semana ISO ×
+  // concepto) ya sumado — decenas de filas —; el top-3 y el relleno de
+  // semanas en cero siguen aquí. La etiqueta `IYYY-"S"IW` de SQL es la misma
+  // semana ISO que `ultimasSemanas` arma para el eje X.
+  const filas = await leerRpc0150<{ semana: string; concepto: string; total: number }>(
+    'getGastoPorSemana', 'gasto_semanal_tenant',
+    { p_tenant: tenantId, p_desde: desdeGlobal.toISOString().slice(0, 10), p_hasta: hoy },
+    (f) => esStr(f.semana) && esStr(f.concepto) && esNum(f.total),
   );
 
   const totalPorConcepto = new Map<string, number>();
-  const porSemanaConcepto = new Map<string, number>(); // clave: `${anio}-${semana}-${concepto}`
+  const porSemanaConcepto = new Map<string, number>(); // clave: `${etiqueta}|${concepto}`
   for (const f of filas) {
-    const { anio, semana } = semanaIso(f.fecha as string);
-    const concepto = (f.concepto as string) ?? 'otro';
-    const monto = Number(f.monto ?? 0);
-    totalPorConcepto.set(concepto, (totalPorConcepto.get(concepto) ?? 0) + monto);
-    const k = `${anio}-${semana}-${concepto}`;
-    porSemanaConcepto.set(k, (porSemanaConcepto.get(k) ?? 0) + monto);
+    totalPorConcepto.set(f.concepto, (totalPorConcepto.get(f.concepto) ?? 0) + f.total);
+    const k = `${f.semana}|${f.concepto}`;
+    porSemanaConcepto.set(k, (porSemanaConcepto.get(k) ?? 0) + f.total);
   }
 
   const top3 = [...totalPorConcepto.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
@@ -536,7 +511,7 @@ export async function getGastoPorSemana(
     categorias: bloques.map((b) => b.etiqueta),
     series: top3.map((concepto) => ({
       nombre: concepto,
-      valores: bloques.map((b) => round2(porSemanaConcepto.get(`${b.anio}-${b.semana}-${concepto}`) ?? 0)),
+      valores: bloques.map((b) => round2(porSemanaConcepto.get(`${b.etiqueta}|${concepto}`) ?? 0)),
     })),
   };
 }
@@ -549,8 +524,49 @@ export async function getGastoPorSemana(
 const SEMANAS_POR_MODO = { semanal: 5, mensual: 13, historico: 52 } as const;
 export type ModoPeriodo = keyof typeof SEMANAS_POR_MODO;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FE-4: UN MODO QUE FALLA YA NO TUMBA LOS OTROS DOS.
+//
+// Las tres funciones `*Series` pedían sus tres vistas con `Promise.all`, que
+// RECHAZA con el primer rechazo. Y la página envuelve la llamada entera en
+// `safe()` (inicio-contenido.tsx), que convierte el rechazo en `null`: si el
+// modo "histórico" —el más caro, 52 semanas— tropezaba con el tope de
+// consulta (8 s, `acotada`), la gráfica desaparecía COMPLETA, incluida la
+// vista semanal que sí había respondido en 200 ms. El usuario no perdía la
+// vista lenta; perdía las tres.
+//
+// `allSettled` pide las tres igual (en paralelo, un solo round-trip por modo)
+// y entrega cada una por separado: la que falla vale `null` —el modo se
+// enseña vacío y la pantalla puede decir que no se pudo cargar— y las que
+// respondieron se pintan. `null` NO es "cero": ninguna de estas funciones
+// devuelve `null` por falta de datos (una flota sin gasto da series en cero,
+// medidas), así que el consumidor puede leer `null` como "no se pudo" sin
+// ambigüedad. Y el fallo se loguea: sin eso, un modo apagado en silencio es
+// exactamente el fallo silencioso que este archivo existe para no tener.
+// ═══════════════════════════════════════════════════════════════════════════
+async function porModo<T>(
+  contexto: string,
+  cargar: (modo: ModoPeriodo) => Promise<T>,
+): Promise<{ semanal: T | null; mensual: T | null; historico: T | null }> {
+  const modos: ModoPeriodo[] = ['semanal', 'mensual', 'historico'];
+  const res = await Promise.allSettled(modos.map((m) => cargar(m)));
+  const out = { semanal: null, mensual: null, historico: null } as
+    { semanal: T | null; mensual: T | null; historico: T | null };
+  res.forEach((r, i) => {
+    if (r.status === 'fulfilled') { out[modos[i]] = r.value; return; }
+    logger.error('analytics.modo_caido', {
+      consulta: contexto, modo: modos[i],
+      err: r.reason instanceof Error ? r.reason.message : String(r.reason),
+    });
+  });
+  return out;
+}
+
 export interface GastoSemanalSeries {
-  semanal: GastoSemanalPorCategoria; mensual: GastoSemanalPorCategoria; historico: GastoSemanalPorCategoria;
+  /** `null` = ESE modo no se pudo cargar (ver `porModo`), no "cero gasto". */
+  semanal: GastoSemanalPorCategoria | null;
+  mensual: GastoSemanalPorCategoria | null;
+  historico: GastoSemanalPorCategoria | null;
 }
 
 /** Las 3 vistas de "Gasto por categoría" para el selector Semanal/Mensual/
@@ -561,12 +577,7 @@ export async function getGastoPorSemanaSeries(
   tenantId: string,
   hoy: string = hoyMx(),
 ): Promise<GastoSemanalSeries> {
-  const [semanal, mensual, historico] = await Promise.all([
-    getGastoPorSemana(tenantId, SEMANAS_POR_MODO.semanal, hoy),
-    getGastoPorSemana(tenantId, SEMANAS_POR_MODO.mensual, hoy),
-    getGastoPorSemana(tenantId, SEMANAS_POR_MODO.historico, hoy),
-  ]);
-  return { semanal, mensual, historico };
+  return porModo('getGastoPorSemanaSeries', (m) => getGastoPorSemana(tenantId, SEMANAS_POR_MODO[m], hoy));
 }
 
 /**
@@ -588,28 +599,24 @@ export async function getLiquidadoPorSemana(
   const desdeGlobal = new Date(`${hoy}T00:00:00Z`);
   desdeGlobal.setUTCDate(desdeGlobal.getUTCDate() - (semanas * 7 - 1));
 
-  const filas = await traerTodo<{ created_at: unknown; total_comprobado: unknown }>(
-    (desde, hasta) => supabaseAdmin().from('liquidacion').select('created_at, total_comprobado')
-      .eq('tenant_id', tenantId).gte('created_at', `${desdeGlobal.toISOString().slice(0, 10)}T00:00:00Z`)
-      .order('id').range(desde, hasta),
-    'getLiquidadoPorSemana',
+  // AGREGADO EN SQL (mig. 0150): `liquidado_semanal_tenant` suma por semana
+  // ISO del DÍA LOCAL de México (mismo criterio que `diaLocalMx` tenía aquí).
+  const filas = await leerRpc0150<{ semana: string; total: number }>(
+    'getLiquidadoPorSemana', 'liquidado_semanal_tenant',
+    { p_tenant: tenantId, p_desde: `${desdeGlobal.toISOString().slice(0, 10)}T00:00:00Z` },
+    (f) => esStr(f.semana) && esNum(f.total),
   );
-
-  const diaLocalMx = (iso: string): string => hoyMx(new Date(iso));
   const porSemana = new Map<string, number>();
-  for (const f of filas) {
-    const { anio, semana } = semanaIso(diaLocalMx(f.created_at as string));
-    const k = `${anio}-${semana}`;
-    porSemana.set(k, (porSemana.get(k) ?? 0) + Number(f.total_comprobado ?? 0));
-  }
+  for (const f of filas) porSemana.set(f.semana, (porSemana.get(f.semana) ?? 0) + f.total);
 
-  return bloques.map((b) => ({ dia: b.etiqueta, valor: round2(porSemana.get(`${b.anio}-${b.semana}`) ?? 0) }));
+  return bloques.map((b) => ({ dia: b.etiqueta, valor: round2(porSemana.get(b.etiqueta) ?? 0) }));
 }
 
 export interface LiquidadoSemanalSeries {
-  semanal: Array<{ dia: string; valor: number }>;
-  mensual: Array<{ dia: string; valor: number }>;
-  historico: Array<{ dia: string; valor: number }>;
+  /** `null` = ESE modo no se pudo cargar (ver `porModo`), no "cero pesos". */
+  semanal: Array<{ dia: string; valor: number }> | null;
+  mensual: Array<{ dia: string; valor: number }> | null;
+  historico: Array<{ dia: string; valor: number }> | null;
 }
 
 /** Las 3 vistas de "Liquidado por semana" — mismo criterio y mismo mapeo
@@ -618,12 +625,7 @@ export async function getLiquidadoPorSemanaSeries(
   tenantId: string,
   hoy: string = hoyMx(),
 ): Promise<LiquidadoSemanalSeries> {
-  const [semanal, mensual, historico] = await Promise.all([
-    getLiquidadoPorSemana(tenantId, SEMANAS_POR_MODO.semanal, hoy),
-    getLiquidadoPorSemana(tenantId, SEMANAS_POR_MODO.mensual, hoy),
-    getLiquidadoPorSemana(tenantId, SEMANAS_POR_MODO.historico, hoy),
-  ]);
-  return { semanal, mensual, historico };
+  return porModo('getLiquidadoPorSemanaSeries', (m) => getLiquidadoPorSemana(tenantId, SEMANAS_POR_MODO[m], hoy));
 }
 
 /** Viajes iniciados por MES, histórico completo — a diferencia de `viajes`
@@ -635,24 +637,15 @@ export async function getLiquidadoPorSemanaSeries(
  *  el tope de 1,000 filas de PostgREST; `fecha_inicio` es columna `date`
  *  (sin hora/zona horaria que resolver, a diferencia de `created_at`). */
 export async function getViajesPorMes(tenantId: string): Promise<Array<{ dia: string; valor: number }>> {
-  const rows = await traerTodo<{ fecha_inicio: unknown }>(
-    (desde, hasta) => supabaseAdmin()
-      .from('viaje')
-      .select('fecha_inicio')
-      .eq('tenant_id', tenantId)
-      .not('fecha_inicio', 'is', null)
-      .order('id')
-      .range(desde, hasta),
-    'getViajesPorMes',
+  // AGREGADO EN SQL (mig. 0150): traía las 600k fechas del año para contar
+  // 12 meses. `viajes_por_mes_tenant` ya viene ordenado por mes.
+  const filas = await leerRpc0150<{ mes: string; n: number }>(
+    'getViajesPorMes', 'viajes_por_mes_tenant', { p_tenant: tenantId },
+    (f) => esStr(f.mes) && esNum(f.n),
   );
-  const porMes = new Map<string, number>();
-  for (const r of rows) {
-    const mes = (r.fecha_inicio as string).slice(0, 7); // YYYY-MM
-    porMes.set(mes, (porMes.get(mes) ?? 0) + 1);
-  }
-  return Array.from(porMes.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([dia, valor]) => ({ dia, valor }));
+  return filas
+    .map((f) => ({ dia: f.mes, valor: f.n }))
+    .sort((a, b) => a.dia.localeCompare(b.dia));
 }
 
 export interface Acreditables {
@@ -672,8 +665,11 @@ export interface Acreditables {
  */
 export async function getAcreditables(tenantId: string, ventanaDias?: number): Promise<Acreditables> {
   const corte = corteVentana(ventanaDias);
-  const { data, error } = await supabaseAdmin()
-    .rpc('acreditables_liquidacion_tenant', { p_tenant: tenantId, p_desde: corte });
+  const { data, error } = await acotada(
+    supabaseAdmin()
+    .rpc('acreditables_liquidacion_tenant', { p_tenant: tenantId, p_desde: corte }),
+    'getAcreditables',
+  );
   if (error) throw new Error(`getAcreditables: ${error.message}`);
 
   const r = data as Partial<{ litrosDiesel: unknown; ieps: unknown; iva: unknown; peaje: unknown }> | null;
@@ -765,7 +761,10 @@ interface ResumenDocumentos {
 async function contarFilas(tabla: string, tenantId: string, noNula?: string): Promise<number> {
   let q = supabaseAdmin().from(tabla).select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId);
   if (noNula) q = q.not(noNula, 'is', null);
-  const { count, error } = await q;
+  const { count, error } = await acotada(
+    q,
+    'getValorAhorro/contarFilas',
+  );
   if (error) throw new Error(`getValorAhorro/${tabla}: ${error.message}`);
   // `count` nulo NO es cero: PostgREST solo lo manda si pudo contar. Devolver 0
   // aquí sería inventar una medición, que es la regla que define este producto.
@@ -841,7 +840,10 @@ export async function getValorAhorro(tenantId: string): Promise<ValorAhorro> {
  *  forma que su hermana en `costos.ts`: una respuesta inesperada LANZA en vez de
  *  dejar que `?? 0` pinte "0 documentos procesados" sobre una tabla llena. */
 async function traerResumenDocumentos(tenantId: string): Promise<ResumenDocumentos> {
-  const { data, error } = await supabaseAdmin().rpc('resumen_documentos_tenant', { p_tenant: tenantId });
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('resumen_documentos_tenant', { p_tenant: tenantId }),
+    'getValorAhorro.gasto',
+  );
   if (error) throw new Error(`getValorAhorro.gasto: ${error.message}`);
   const r = data as Partial<ResumenDocumentos> | null;
   if (!r || typeof r.procesados !== 'number' || !Array.isArray(r.porMes)) {
@@ -902,7 +904,10 @@ export async function contarViajes(
   // El índice `idx_viaje_tenant` es (tenant_id, estatus), así que este filtro
   // sale del mismo índice que ya sirve al conteo total.
   if (estatus?.length) q = q.in('estatus', estatus);
-  const { count, error } = await q;
+  const { count, error } = await acotada(
+    q,
+    'contarViajes',
+  );
 
   // `null` ≠ 0, y la diferencia importa: un cero se lee como "esta flota no ha
   // hecho viajes" y sería una afirmación falsa. Quien llame enseña "—" y dice
@@ -914,33 +919,8 @@ export async function contarViajes(
   return count ?? null;
 }
 
-/**
- * Los viajes SIN LIQUIDAR, todos, sin ventana.
- *
- * `getViajes` trae los 100 más recientes, y de ahí se sacaban el conteo de
- * abiertos y —peor— la SUMA DEL ANTICIPO ABIERTO. A 30 viajes diarios, cien
- * viajes son tres días y medio: un viaje que lleve cinco abiertos cae fuera de
- * la ventana y su anticipo desaparece de una cifra de dinero, sin que nada lo
- * indique. Ese es el recorte silencioso que `traerTodo` existe para impedir.
- *
- * No hay riesgo de traer demasiado: lo abierto está acotado por la operación
- * —una flota tiene decenas de viajes vivos, no miles— y hay un índice único
- * que impide dos abiertos por operador (mig. 0029). Lo que crece sin techo es
- * el histórico liquidado, y eso no entra aquí.
- */
-export async function getViajesSinLiquidar(tenantId: string): Promise<Array<{ id: string; anticipo: number }>> {
-  const filas = await traerTodo<{ id: unknown; anticipo: unknown }>(
-    (desde, hasta) => supabaseAdmin()
-      .from('viaje')
-      .select('id, anticipo')
-      .eq('tenant_id', tenantId)
-      .in('estatus', ['abierto', 'en_cuadre'])
-      .order('id')
-      .range(desde, hasta),
-    'getViajesSinLiquidar',
-  );
-  return filas.map((v) => ({ id: v.id as string, anticipo: Number(v.anticipo ?? 0) }));
-}
+// `getViajesSinLiquidar` se borró el 22-ago-2026 (ESCALA 50k): cero
+// llamadores en src/app y src/lib (grep) — solo lo ejercitaba una prueba.
 
 /** Un renglón de la bitácora del Agente de Conductores (F4): cada sello real
  *  del ciclo de comunicación con el chofer, del más reciente al más viejo. */
@@ -960,12 +940,15 @@ const SELLOS_CONDUCTOR: ReadonlyArray<[EventoConductor['tipo'], string]> = [
  *  60 viajes: es la bitácora de actividad, no un histórico exhaustivo — la
  *  vista lo rotula así. */
 export async function getEventosConductores(tenantId: string, limite = 15): Promise<EventoConductor[]> {
-  const res = await supabaseAdmin()
+  const res = await acotada(
+    supabaseAdmin()
     .from('viaje')
     .select('folio, id, avisado_en, aceptado_en, escalado_en, llegada_en, descarga_en, regreso_en, operador:operador_id(nombre)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
-    .limit(60);
+    .limit(60),
+    'getEventosConductores',
+  );
   const filas = exigir(res, 'getEventosConductores') ?? [];
   const eventos: EventoConductor[] = [];
   for (const v of filas) {
@@ -984,13 +967,16 @@ export async function getEventosConductores(tenantId: string, limite = 15): Prom
  *  escalado puede ser justamente el viejo que ya salió de esa ventana.
  *  `null` ≠ 0, como en `contarViajes`. */
 export async function contarEscalados(tenantId: string): Promise<number | null> {
-  const { count, error } = await supabaseAdmin()
+  const { count, error } = await acotada(
+    supabaseAdmin()
     .from('viaje')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', tenantId)
     .in('estatus', ['abierto', 'en_cuadre'])
     .not('escalado_en', 'is', null)
-    .is('aceptado_en', null);
+    .is('aceptado_en', null),
+    'contarEscalados',
+  );
   if (error) {
     logger.warn('contarEscalados', { tenantId, err: error.message });
     return null;
@@ -999,12 +985,15 @@ export async function contarEscalados(tenantId: string): Promise<number | null> 
 }
 
 export async function getViajes(tenantId: string, limite = 100): Promise<ViajeRow[]> {
-  const res = await supabaseAdmin()
+  const res = await acotada(
+    supabaseAdmin()
     .from('viaje')
     .select('id, folio, origen, destino, estatus, anticipo, fecha_inicio, intake_pendientes, avisado_en, aceptado_en, escalado_en, avisos_enviados, unidad_id, operador:operador_id(nombre), unidad:unidad_id(numero_economico)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
-    .limit(limite);
+    .limit(limite),
+    'getViajes',
+  );
   const filas = exigir(res, 'getViajes') ?? [];
   return filas.map((v) => ({
     id: v.id as string,
@@ -1064,10 +1053,13 @@ export async function getViajesRegistro(
     const patron = `%${q}%`;
     consulta = consulta.or(`folio.ilike.${patron},origen.ilike.${patron},destino.ilike.${patron}`);
   }
-  const res = await consulta
+  const res = await acotada(
+    consulta
     .order('fecha_inicio', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
-    .range(desde, desde + porPagina);
+    .range(desde, desde + porPagina),
+    'getViajesRegistro',
+  );
   const crudas = exigir(res, 'getViajesRegistro') ?? [];
   const hayMas = crudas.length > porPagina;
   const filas = crudas.slice(0, porPagina).map((v) => ({
@@ -1100,11 +1092,14 @@ export interface LiquidacionDeViaje {
  *  tiene liquidación todavía y la tabla lo dice con un guion. */
 export async function getLiquidacionesDeViajes(tenantId: string, viajeIds: string[]): Promise<LiquidacionDeViaje[]> {
   if (viajeIds.length === 0) return [];
-  const res = await supabaseAdmin()
+  const res = await acotada(
+    supabaseAdmin()
     .from('liquidacion')
     .select('id, viaje_id, estatus, total_comprobado, diferencia')
     .eq('tenant_id', tenantId)
-    .in('viaje_id', viajeIds);
+    .in('viaje_id', viajeIds),
+    'getLiquidacionesDeViajes',
+  );
   const filas = exigir(res, 'getLiquidacionesDeViajes') ?? [];
   return filas.map((l) => ({
     id: l.id as string,
@@ -1125,12 +1120,15 @@ export interface DocumentoRow {
 /** La bandeja del Agente OCR — cada fila de `gasto` es un comprobante que
  *  entró por WhatsApp y pasó por el agente. */
 export async function getDocumentos(tenantId: string, limite = 100): Promise<DocumentoRow[]> {
-  const res = await supabaseAdmin()
+  const res = await acotada(
+    supabaseAdmin()
     .from('gasto')
     .select('id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, estado_sat, ocr_confianza, efos, xml_verificado, imagen_url')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
-    .limit(limite);
+    .limit(limite),
+    'getDocumentos',
+  );
   const filas = exigir(res, 'getDocumentos') ?? [];
   return filas.map((g) => ({
     id: g.id as string,
@@ -1153,55 +1151,21 @@ export interface GastoPorConcepto { concepto: string; n: number; total: number }
 /** Gasto agrupado por concepto (diésel, caseta, alimentación…) — la base de
  *  la página de Combustible & Casetas. */
 export async function getGastoPorConcepto(tenantId: string): Promise<GastoPorConcepto[]> {
-  const filas = await traerTodo<{ concepto: unknown; monto: unknown }>(
-    (desde, hasta) => supabaseAdmin().from('gasto').select('concepto, monto')
-      .eq('tenant_id', tenantId).order('id').range(desde, hasta),
-    'getGastoPorConcepto',
+  // AGREGADO EN SQL (mig. 0150): leía `gasto` ENTERO sin fecha (~día 10 a
+  // 50k viajes/mes). `idx_gasto_acumulado` (tenant, concepto, fecha) sirve el
+  // group by por prefijo; viene ordenado por total desc.
+  const filas = await leerRpc0150<{ concepto: string; n: number; total: number }>(
+    'getGastoPorConcepto', 'gasto_por_concepto_tenant', { p_tenant: tenantId },
+    (f) => esStr(f.concepto) && esNum(f.n) && esNum(f.total),
   );
-  const mapa = new Map<string, { n: number; total: number }>();
-  for (const f of filas) {
-    const k = (f.concepto as string) ?? 'otro';
-    const v = mapa.get(k) ?? { n: 0, total: 0 };
-    v.n += 1; v.total += Number(f.monto ?? 0);
-    mapa.set(k, v);
-  }
-  return [...mapa.entries()]
-    .map(([concepto, v]) => ({ concepto, n: v.n, total: round2(v.total) }))
+  return filas
+    .map((f) => ({ concepto: f.concepto, n: f.n, total: round2(f.total) }))
     .sort((a, b) => b.total - a.total);
 }
 
-export interface GastoPorRuta { ruta: string; total: number }
-
-/** Gasto agrupado por ruta (origen → destino) — mismo patrón de join en
- *  memoria que `getStatsPorOperador`: `gasto` no tiene columna de ruta, así
- *  que se cruza con `viaje` por `viaje_id`. Top 5 por gasto, no la lista
- *  entera — es para "¿qué ruta me está costando más?", no un reporte. */
-export async function getGastoPorRuta(tenantId: string): Promise<GastoPorRuta[]> {
-  const admin = supabaseAdmin();
-  const [gastos, viajes] = await Promise.all([
-    traerTodo<{ viaje_id: unknown; monto: unknown }>(
-      (desde, hasta) => admin.from('gasto').select('viaje_id, monto').eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getGastoPorRuta.gasto',
-    ),
-    traerTodo<{ id: unknown; origen: unknown; destino: unknown }>(
-      (desde, hasta) => admin.from('viaje').select('id, origen, destino').eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getGastoPorRuta.viaje',
-    ),
-  ]);
-  const rutaPorViaje = new Map(
-    viajes.map((v) => [v.id as string, `${(v.origen as string) || '—'} → ${(v.destino as string) || '—'}`]),
-  );
-  const mapa = new Map<string, number>();
-  for (const g of gastos) {
-    const ruta = rutaPorViaje.get(g.viaje_id as string);
-    if (!ruta) continue;
-    mapa.set(ruta, (mapa.get(ruta) ?? 0) + Number(g.monto ?? 0));
-  }
-  return [...mapa.entries()]
-    .map(([ruta, total]) => ({ ruta, total: round2(total) }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 5);
-}
+// `getGastoPorRuta` (top 5 rutas como string "origen → destino") se borró el
+// 22-ago-2026: cero llamadores en src/app y src/lib (grep), y
+// `getTopRutasPorGasto` cubre la misma pregunta con región y %.
 
 /**
  * Ciudad → región de logística en México — hecho geográfico real (INEGI/
@@ -1265,34 +1229,15 @@ export interface RutaConRegion {
 export async function getTopRutasPorGasto(
   tenantId: string, top: number = 5, ventana?: { desde: string; hasta: string },
 ): Promise<RutaConRegion[]> {
-  const admin = supabaseAdmin();
-  const [gastos, viajes] = await Promise.all([
-    traerTodo<{ viaje_id: unknown; monto: unknown }>(
-      (desde, hasta) => {
-        let q = admin.from('gasto').select('viaje_id, monto').eq('tenant_id', tenantId);
-        if (ventana) q = q.gte('fecha', ventana.desde).lte('fecha', ventana.hasta);
-        return q.order('id').range(desde, hasta);
-      },
-      'getTopRutasPorGasto.gasto',
-    ),
-    traerTodo<{ id: unknown; origen: unknown; destino: unknown }>(
-      (desde, hasta) => admin.from('viaje').select('id, origen, destino').eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getTopRutasPorGasto.viaje',
-    ),
-  ]);
-  const viajePorId = new Map(viajes.map((v) => [v.id as string, v]));
-  const mapa = new Map<string, { origen: string; destino: string; total: number }>();
-  for (const g of gastos) {
-    const v = viajePorId.get(g.viaje_id as string);
-    if (!v) continue;
-    const origen = (v.origen as string) || '—';
-    const destino = (v.destino as string) || '—';
-    const clave = `${origen}→${destino}`;
-    const prev = mapa.get(clave) ?? { origen, destino, total: 0 };
-    prev.total += Number(g.monto ?? 0);
-    mapa.set(clave, prev);
-  }
-  const ordenado = [...mapa.values()].sort((a, b) => b.total - a.total).slice(0, top);
+  // AGREGADO EN SQL (mig. 0150): traía `gasto` (sin ventana en "histórico")
+  // más `viaje` ENTERO, tres veces por carga del Resumen, para un join en
+  // memoria. `top_rutas_gasto_tenant` hace el join y devuelve solo `top`
+  // filas; el % y la región siguen aquí.
+  const ordenado = await leerRpc0150<{ origen: string; destino: string; total: number }>(
+    'getTopRutasPorGasto', 'top_rutas_gasto_tenant',
+    { p_tenant: tenantId, p_top: top, p_desde: ventana?.desde ?? null, p_hasta: ventana?.hasta ?? null },
+    (f) => esStr(f.origen) && esStr(f.destino) && esNum(f.total),
+  );
   const sumaTop = ordenado.reduce((s, r) => s + r.total, 0) || 1;
   return ordenado.map((r) => ({
     origen: r.origen, destino: r.destino, total: round2(r.total),
@@ -1304,7 +1249,10 @@ export async function getTopRutasPorGasto(
 }
 
 export interface TopRutasSeries {
-  semanal: RutaConRegion[]; mensual: RutaConRegion[]; historico: RutaConRegion[];
+  /** `null` = ESE modo no se pudo cargar (ver `porModo`), no "sin rutas". */
+  semanal: RutaConRegion[] | null;
+  mensual: RutaConRegion[] | null;
+  historico: RutaConRegion[] | null;
 }
 
 /** Las 3 vistas de "Top rutas por gasto" — mismo mapeo de semanas que
@@ -1321,12 +1269,12 @@ export async function getTopRutasPorGastoSeries(
     desdeD.setUTCDate(desdeD.getUTCDate() - (semanas * 7 - 1));
     return { desde: desdeD.toISOString().slice(0, 10), hasta: hoy };
   };
-  const [semanal, mensual, historico] = await Promise.all([
-    getTopRutasPorGasto(tenantId, top, ventanaDe(SEMANAS_POR_MODO.semanal)),
-    getTopRutasPorGasto(tenantId, top, ventanaDe(SEMANAS_POR_MODO.mensual)),
-    getTopRutasPorGasto(tenantId, top),
-  ]);
-  return { semanal, mensual, historico };
+  // "histórico" va SIN ventana (sin cota), no con una de 52 semanas
+  // disfrazada de "todo" — por eso este no usa `SEMANAS_POR_MODO[m]` a secas.
+  return porModo('getTopRutasPorGastoSeries', (m) =>
+    m === 'historico'
+      ? getTopRutasPorGasto(tenantId, top)
+      : getTopRutasPorGasto(tenantId, top, ventanaDe(SEMANAS_POR_MODO[m])));
 }
 
 export interface OperadorDetalle {
@@ -1350,63 +1298,33 @@ export interface OperadorDetalle {
  *  el dueño usa para la conversación difícil. No existía: `getStatsPorOperador`
  *  solo suma diésel. */
 export async function getOperadoresDetalle(tenantId: string): Promise<OperadorDetalle[]> {
-  const admin = supabaseAdmin();
-  const [ops, viajes, liqs] = await Promise.all([
-    traerTodo<{
-      id: unknown; nombre: unknown; telefono: unknown; numero_empleado: unknown; activo: unknown;
-      licencia: unknown; licencia_tipo: unknown; licencia_vence: unknown; rfc: unknown;
-    }>(
-      (desde, hasta) => admin.from('operador')
-        .select('id, nombre, telefono, numero_empleado, activo, licencia, licencia_tipo, licencia_vence, rfc')
-        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getOperadoresDetalle.operador',
-    ),
-    traerTodo<{ id: unknown; operador_id: unknown; anticipo: unknown }>(
-      (desde, hasta) => admin.from('viaje').select('id, operador_id, anticipo')
-        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getOperadoresDetalle.viaje',
-    ),
-    traerTodo<{ viaje_id: unknown; total_comprobado: unknown }>(
-      (desde, hasta) => admin.from('liquidacion').select('viaje_id, total_comprobado')
-        .eq('tenant_id', tenantId).order('id').range(desde, hasta),
-      'getOperadoresDetalle.liquidacion',
-    ),
-  ]);
+  // AGREGADO EN SQL (mig. 0150): traía operador + viaje ENTERO + liquidacion
+  // ENTERA (600k + 600k filas/año) para dos sumas por operador. Las sumas
+  // vienen exactas (`numeric`); `round2` y `pctComprobado` siguen aquí.
+  const filas = await leerRpc0150<{
+    operadorId: string; nombre: string; telefono: unknown; numeroEmpleado: unknown; rfc: unknown; activo: unknown;
+    viajes: number; anticipoTotal: number; comprobadoTotal: number;
+    licencia: unknown; licenciaTipo: unknown; licenciaVence: unknown;
+  }>(
+    'getOperadoresDetalle', 'operadores_detalle_tenant', { p_tenant: tenantId },
+    (f) => esStr(f.operadorId) && esStr(f.nombre) && esNum(f.viajes) && esNum(f.anticipoTotal) && esNum(f.comprobadoTotal),
+  );
 
-  const comprobadoPorViaje = new Map<string, number>();
-  for (const l of liqs) {
-    const k = l.viaje_id as string;
-    comprobadoPorViaje.set(k, (comprobadoPorViaje.get(k) ?? 0) + Number(l.total_comprobado ?? 0));
-  }
-  const acum = new Map<string, { viajes: number; anticipo: number; comprobado: number }>();
-  for (const v of viajes) {
-    const op = v.operador_id as string;
-    if (!op) continue;
-    const a = acum.get(op) ?? { viajes: 0, anticipo: 0, comprobado: 0 };
-    a.viajes += 1;
-    a.anticipo += Number(v.anticipo ?? 0);
-    a.comprobado += comprobadoPorViaje.get(v.id as string) ?? 0;
-    acum.set(op, a);
-  }
-
-  return ops.map((o) => {
-    const a = acum.get(o.id as string) ?? { viajes: 0, anticipo: 0, comprobado: 0 };
-    return {
-      operadorId: o.id as string,
-      nombre: o.nombre as string,
-      telefono: (o.telefono as string) || null,
-      numeroEmpleado: (o.numero_empleado as string) || null,
-      rfc: (o.rfc as string | null) ?? null,
-      activo: Boolean(o.activo),
-      viajes: a.viajes,
-      anticipoTotal: round2(a.anticipo),
-      comprobadoTotal: round2(a.comprobado),
-      pctComprobado: a.anticipo > 0 ? Math.round((a.comprobado / a.anticipo) * 100) : null,
-      licencia: (o.licencia as string) || null,
-      licenciaTipo: (o.licencia_tipo as string) || null,
-      licenciaVence: (o.licencia_vence as string) || null,
-    };
-  }).sort((x, y) => y.viajes - x.viajes);
+  return filas.map((o) => ({
+    operadorId: o.operadorId,
+    nombre: o.nombre,
+    telefono: (o.telefono as string) || null,
+    numeroEmpleado: (o.numeroEmpleado as string) || null,
+    rfc: (o.rfc as string | null) ?? null,
+    activo: Boolean(o.activo),
+    viajes: o.viajes,
+    anticipoTotal: round2(o.anticipoTotal),
+    comprobadoTotal: round2(o.comprobadoTotal),
+    pctComprobado: o.anticipoTotal > 0 ? Math.round((o.comprobadoTotal / o.anticipoTotal) * 100) : null,
+    licencia: (o.licencia as string) || null,
+    licenciaTipo: (o.licenciaTipo as string) || null,
+    licenciaVence: (o.licenciaVence as string) || null,
+  })).sort((x, y) => y.viajes - x.viajes);
 }
 
 export interface LiquidacionDetalle {
@@ -1466,12 +1384,15 @@ export interface LiquidacionDetalle {
 /** Detalle de una liquidación (read-only) — para la vista de proyector. */
 export async function getLiquidacionDetalle(id: string, tenantId: string): Promise<LiquidacionDetalle | null> {
   const admin = supabaseAdmin();
-  const res = await admin
+  const res = await acotada(
+    admin
     .from('liquidacion')
     .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, pdf_url, viaje:viaje_id(folio, origen, destino, fecha_inicio, created_at, avisado_en, aceptado_en, llegada_en, descarga_en, regreso_en, operador_id, operador:operador_id(nombre, telefono), unidad:unidad_id(numero_economico, placas), cliente:cliente_id(nombre))')
     .eq('id', id)
     .eq('tenant_id', tenantId)
-    .maybeSingle();
+    .maybeSingle(),
+    'getLiquidacionDetalle',
+  );
   // `null` significa AHORA una sola cosa: la liquidación no existe (y la página
   // responde notFound()). Antes también significaba "no se pudo leer", y el
   // contralor que hacía clic en una liquidación real leía "Esta página no
@@ -1549,13 +1470,16 @@ async function leerGastos(
   tenantId: string,
   viajeId: string,
 ): Promise<LiquidacionDetalle['gastos']> {
-  const res = await admin
+  const res = await acotada(
+    admin
     .from('gasto')
     .select('id, concepto, monto, folio, fecha, forma_pago, cfdi_uuid, estado_sat, cfdi_valido, ocr_extra, imagen_url')
     .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId)
     .order('fecha', { ascending: true, nullsFirst: false })
-    .order('id', { ascending: true });
+    .order('id', { ascending: true }),
+    'getLiquidacionDetalle/gastos',
+  );
   const filas = exigir(res, 'getLiquidacionDetalle/gastos') ?? [];
   return filas.map((g) => ({
     id: (g.id as string) || undefined,
@@ -1585,12 +1509,15 @@ async function ventanaComprobantes(
   tenantId: string,
   viajeId: string,
 ): Promise<LiquidacionDetalle['comprobantesEntre']> {
-  const res = await admin
+  const res = await acotada(
+    admin
     .from('gasto')
     .select('created_at')
     .eq('tenant_id', tenantId)
     .eq('viaje_id', viajeId)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true }),
+    'getLiquidacionDetalle/ventana',
+  );
   const filas = (exigir(res, 'getLiquidacionDetalle/ventana') ?? []) as Array<{ created_at?: unknown }>;
   const sellos = filas.map((f) => f.created_at).filter((c): c is string => typeof c === 'string');
   return { primero: sellos[0] ?? null, ultimo: sellos[sellos.length - 1] ?? null, n: filas.length };
@@ -1799,13 +1726,16 @@ export interface DesgloseRecibido {
  *  y callarse los recién recibidos. El límite se declara como lo que es y el
  *  orden garantiza que lo que entra a la ventana es lo último. */
 export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promise<DesgloseRecibido[]> {
-  const res = await supabaseAdmin()
+  const res = await acotada(
+    supabaseAdmin()
     .from('cfdi_consolidado_linea')
     .select('cfdi_xml_id, estatus, monto, cfdi:cfdi_xml_id(cfdi_uuid, created_at)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
-    .limit(1000);
+    .limit(1000),
+    'getDesglosesRecibidos',
+  );
   const filas = exigir(res, 'getDesglosesRecibidos') ?? [];
   const porCfdi = new Map<string, DesgloseRecibido>();
   for (const f of filas) {
@@ -1856,16 +1786,19 @@ export interface ConciliacionConsolidado {
  * "todavía no existe esta integración para este tenant".
  */
 export async function getConciliacionConsolidado(tenantId: string): Promise<ConciliacionConsolidado | null> {
-  const filas = await traerTodo<{ estatus: unknown; cfdi_xml_id: unknown }>(
-    (desde, hasta) => supabaseAdmin().from('cfdi_consolidado_linea').select('estatus, cfdi_xml_id', conteo(desde))
-      .eq('tenant_id', tenantId).order('id').range(desde, hasta),
+  // AGREGADO EN SQL (mig. 0150): tres conteos y un count(distinct) en la
+  // base, en vez de traer cada línea de cada consolidado del tenant.
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('conciliacion_consolidado_tenant', { p_tenant: tenantId }),
     'getConciliacionConsolidado',
   );
-  if (filas.length === 0) return null;
-  const conciliadas = filas.filter((f) => f.estatus === 'conciliada').length;
-  const sinMatch = filas.filter((f) => f.estatus === 'sin_match').length;
-  const cfdis = new Set(filas.map((f) => f.cfdi_xml_id as string)).size;
-  return { conciliadas, porConciliar: filas.length - conciliadas - sinMatch, sinMatch, cfdis };
+  if (error) throw new Error(`getConciliacionConsolidado: ${error.message}`);
+  const r = data as Partial<{ total: unknown; conciliadas: unknown; sinMatch: unknown; cfdis: unknown }> | null;
+  if (!r || !esNum(r.total) || !esNum(r.conciliadas) || !esNum(r.sinMatch) || !esNum(r.cfdis)) {
+    throw new Error('getConciliacionConsolidado: conciliacion_consolidado_tenant devolvió otra forma (¿migración 0150 sin aplicar?)');
+  }
+  if (r.total === 0) return null;
+  return { conciliadas: r.conciliadas, porConciliar: r.total - r.conciliadas - r.sinMatch, sinMatch: r.sinMatch, cfdis: r.cfdis };
 }
 
 export interface CandidatoLineaConsolidado {
@@ -1905,19 +1838,51 @@ export interface LineaPorConciliar {
  * `resolverLineaAMano` (`intake/consolidado.ts`) es quien cierra cada línea
  * que esta función lista.
  */
-export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorConciliar[]> {
-  const filas = await traerTodo<{
+/** Cuántas líneas de la cola viajan a la pantalla (ESCALA 50k, MAPA #22).
+ *  Las más recientes; el resto se declara en `total`. */
+export const LINEAS_POR_CONCILIAR_TOPE = 200;
+
+/** La cola acotada: las `LINEAS_POR_CONCILIAR_TOPE` líneas más recientes, y
+ *  en `total` cuántas hay EN REALIDAD pendientes — para que la pantalla diga
+ *  "200 de 1,340" y no enseñe 200 como si fueran todas (el rótulo tiene que
+ *  ser verdad). Es un arreglo con una propiedad extra: las páginas que ya
+ *  lo leen como `LineaPorConciliar[]` siguen compilando sin cambios. */
+export type ColaPorConciliar = LineaPorConciliar[] & { total: number };
+
+export async function getLineasPorConciliar(tenantId: string): Promise<ColaPorConciliar> {
+  // ESCALA 50k (22-ago-2026): antes `traerTodo` de TODA la cola — con un
+  // consolidado mensual de 40 casetas × 12 viajes que no concilien solos, la
+  // cola crece sin techo y cada carga la paginaba entera. Ahora se acota a
+  // las más recientes y se cuenta el total con `head: true` (sin traer filas).
+  const [res, cuenta] = await Promise.all([
+    acotada(
+      supabaseAdmin().from('cfdi_consolidado_linea')
+        .select('id, cfdi_xml_id, indice, fuente, fecha, monto, descripcion, estacion_rfc, folio_operacion, candidatos')
+        .eq('tenant_id', tenantId).eq('estatus', 'por_conciliar')
+        .order('created_at', { ascending: false }).order('id', { ascending: false })
+        .limit(LINEAS_POR_CONCILIAR_TOPE),
+      'getLineasPorConciliar',
+    ),
+    acotada(
+      supabaseAdmin().from('cfdi_consolidado_linea')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId).eq('estatus', 'por_conciliar'),
+      'getLineasPorConciliar.total',
+    ),
+  ]);
+  const filas = (exigir(res, 'getLineasPorConciliar') ?? []) as Array<{
     id: unknown; cfdi_xml_id: unknown; indice: unknown; fuente: unknown; fecha: unknown;
     monto: unknown; descripcion: unknown; estacion_rfc: unknown; folio_operacion: unknown;
     candidatos: unknown;
-  }>(
-    (desde, hasta) => supabaseAdmin().from('cfdi_consolidado_linea')
-      .select('id, cfdi_xml_id, indice, fuente, fecha, monto, descripcion, estacion_rfc, folio_operacion, candidatos', conteo(desde))
-      .eq('tenant_id', tenantId).eq('estatus', 'por_conciliar')
-      .order('created_at').order('id').range(desde, hasta),
-    'getLineasPorConciliar',
-  );
-  if (filas.length === 0) return [];
+  }>;
+  if (cuenta.error) throw new Error(`getLineasPorConciliar.total: ${cuenta.error.message}`);
+  // `count` nulo NO es cero (mismo criterio que `contarFilas`): no se inventa
+  // un total que haga parecer completa una cola recortada.
+  if (typeof cuenta.count !== 'number') {
+    throw new Error('getLineasPorConciliar.total: la base no devolvió el conteo; no se inventa un 0');
+  }
+  const total = cuenta.count;
+  if (filas.length === 0) return Object.assign([] as LineaPorConciliar[], { total });
 
   type CandidatoCrudo = { gastoId: string; monto: number; fecha: string | null };
   const candidatosPorFila = filas.map((f) => (f.candidatos as CandidatoCrudo[] | null) ?? []);
@@ -1930,8 +1895,8 @@ export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorC
   // humano decide sin saber de qué CFDI o viaje viene cada candidato.
   const filasXml = await traerPorIds(
     cfdiXmlIds,
-    (tanda) => supabaseAdmin().from('cfdi_xml').select('id, cfdi_uuid')
-      .eq('tenant_id', tenantId).in('id', tanda),
+    (tanda) => acotada(supabaseAdmin().from('cfdi_xml').select('id, cfdi_uuid')
+      .eq('tenant_id', tenantId).in('id', tanda), 'getLineasPorConciliar.cfdi_xml'),
     'getLineasPorConciliar.cfdi_xml',
   );
   const uuidPorXmlId = new Map(filasXml.map((r) => [r.id as string, (r.cfdi_uuid as string) || null]));
@@ -1944,8 +1909,8 @@ export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorC
   if (gastoIds.length > 0) {
     const filasGasto = await traerPorIds(
       gastoIds,
-      (tanda) => supabaseAdmin().from('gasto').select('id, viaje_id')
-        .eq('tenant_id', tenantId).in('id', tanda),
+      (tanda) => acotada(supabaseAdmin().from('gasto').select('id, viaje_id')
+        .eq('tenant_id', tenantId).in('id', tanda), 'getLineasPorConciliar.gasto'),
       'getLineasPorConciliar.gasto',
     );
     const viajeIdPorGasto = new Map(filasGasto.map((g) => [g.id as string, (g.viaje_id as string) || null]));
@@ -1955,8 +1920,8 @@ export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorC
     if (viajeIds.length > 0) {
       const filasViaje = await traerPorIds(
         viajeIds,
-        (tanda) => supabaseAdmin().from('viaje').select('id, folio')
-          .eq('tenant_id', tenantId).in('id', tanda),
+        (tanda) => acotada(supabaseAdmin().from('viaje').select('id, folio')
+          .eq('tenant_id', tenantId).in('id', tanda), 'getLineasPorConciliar.viaje'),
         'getLineasPorConciliar.viaje',
       );
       folioPorViajeId = new Map(filasViaje.map((v) => [v.id as string, (v.folio as string) || null]));
@@ -1967,7 +1932,7 @@ export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorC
     }));
   }
 
-  return filas.map((f, i) => ({
+  const lineas: LineaPorConciliar[] = filas.map((f, i) => ({
     id: f.id as string,
     cfdiUuid: uuidPorXmlId.get(f.cfdi_xml_id as string) ?? null,
     indice: Number(f.indice),
@@ -1984,6 +1949,7 @@ export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorC
       viajeFolio: folioPorGastoId.get(c.gastoId) ?? null,
     })),
   }));
+  return Object.assign(lineas, { total });
 }
 
 // ── Detalle de liquidaciones (tabla de Cuadre) ──────────────────────────────
@@ -1998,12 +1964,15 @@ export async function getLineasPorConciliar(tenantId: string): Promise<LineaPorC
 export interface LiqRow { id: string; folio: string; creadoEn: string; comprobado: number; diferencia: number; estatus: string }
 
 export async function getLiquidaciones(tenantId: string): Promise<LiqRow[]> {
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await acotada(
+    supabaseAdmin()
     .from('liquidacion')
     .select('id, estatus, total_comprobado, diferencia, created_at, viaje:viaje_id(folio)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
-    .limit(50);
+    .limit(50),
+    'getLiquidaciones',
+  );
   // supabase-js reporta el fallo POR VALOR: sin este throw, una lectura caída
   // devolvía `[]` y la tabla salía con encabezados y cero filas bajo unos KPIs
   // que decían "12 viajes liquidados" (auditoría 5, frontend, CRÍTICO).
