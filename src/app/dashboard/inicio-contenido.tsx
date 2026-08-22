@@ -3,8 +3,8 @@ import { Wallet, Calculator, Fuel, PiggyBank, LayoutGrid, CalendarDays, Plus } f
 import {
   getKpis, getAcreditables, detectarAnomalias, getViajes, getViajesPorMes,
   getGastoPorSemanaSeries, getLiquidadoPorSemanaSeries, getTopRutasPorGastoSeries,
-  getSeriesKpiCards, getLiquidaciones,
-  type ViajeRow, type LiqRow,
+  getSeriesKpiCards, getLiquidacionesDeViajes,
+  type ViajeRow, type LiquidacionDeViaje,
   type DashboardKpis, type Acreditables, type Anomalia,
   type GastoSemanalSeries, type LiquidadoSemanalSeries, type TopRutasSeries, type SeriesKpiCards,
 } from '@/lib/likida/analytics';
@@ -87,7 +87,7 @@ export async function InicioContenido({
     acred, kpis, anomalias, viajes,
     gastoSemanalSeries, liquidadoSemanalSeries, seriesKpis,
     cfgFiscal, gastosFiscales, gastosFiscalesSeries, viajesPorMes, topRutasSeries,
-    liquidaciones, escalados, huerfanosPendientes, pasos,
+    escalados, huerfanosPendientes, pasos,
   ] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId, diasEjercicio)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
@@ -113,9 +113,6 @@ export async function InicioContenido({
     // 100 filas de `viajes` (ver nota en `getViajesPorMes`).
     safe<Array<{ dia: string; valor: number }>>(() => getViajesPorMes(tenantId)),
     safe<TopRutasSeries>(() => getTopRutasPorGastoSeries(tenantId, 5, hoy)),
-    // Para el "Ver" de la tabla: `/dashboard/[id]` abre por id de
-    // LIQUIDACIÓN, no de viaje — se cruza por folio.
-    safe<LiqRow[]>(() => getLiquidaciones(tenantId)),
     // Las alertas de F2. Devuelven `null` ante error (≠ 0) y la alerta
     // simplemente no se pinta — una alerta no puede afirmar en falso.
     safe<number | null>(() => contarEscalados(tenantId)),
@@ -179,16 +176,37 @@ export async function InicioContenido({
     });
   }
 
+  // ── FE-6: EL LINK "Ver" SE CRUZA POR viaje_id, NO POR FOLIO ─────────────
+  //
+  // Aquí se pedían las 50 liquidaciones más recientes (`getLiquidaciones`) y
+  // se cruzaban contra los 100 viajes POR FOLIO. Dos fallas a la vez:
+  //   1. 50 < 100. El viaje liquidado número 51 hacia atrás nunca encontraba
+  //      su liquidación y perdía el "Ver" — sin que nada lo dijera. A 50k
+  //      viajes/mes eso son casi todas las filas de la tabla.
+  //   2. El folio es TEXTO LIBRE del TMS y puede repetirse (por eso
+  //      `getLiquidacionesDeViajes` existe y cruza por `viaje_id`): dos
+  //      viajes con el mismo folio se llevaban el link del otro, que es peor
+  //      que no tener link.
+  //
+  // Se pide DESPUÉS del Promise.all a propósito: depende de los ids que ese
+  // bloque acaba de traer, y son a lo más 100 — un `.in()` de una tanda.
+  const liquidaciones = viajes && viajes.length > 0
+    ? await safe<LiquidacionDeViaje[]>(() => getLiquidacionesDeViajes(tenantId, viajes.map((v) => v.id)))
+    : [];
+  const liqPorViaje = new Map((liquidaciones ?? []).map((l) => [l.viajeId, l.id]));
+
   // TODAS las filas cargadas (tope 100 de getViajes): la tarjeta enseña 6 y
   // su botón "Ver los N" despliega el resto (pedido del 12-ago). El link
-  // "Ver" solo cuando la liquidación existe Y se pudo cruzar — un folio sin
-  // cruce se queda sin link, nunca con un link a un 404.
-  const liqPorFolio = new Map((liquidaciones ?? []).map((l) => [l.folio, l.id]));
+  // "Ver" solo cuando la liquidación existe Y se pudo cruzar — un viaje sin
+  // cruce se queda sin link, nunca con un link a un 404. Ya no se pregunta
+  // por `estatus === 'liquidado'`: la existencia de la FILA es la condición
+  // real (un viaje en cuadre con liquidación tiene detalle que abrir), y
+  // preguntar por el estatus dejaba sin link a filas cuyo destino sí existe.
   const filasViajes: FilaViaje[] = (viajes ?? []).map((v) => ({
     id: v.id, folio: v.folio, origen: v.origen, destino: v.destino,
     estatus: v.estatus, anticipo: v.anticipo, operadorNombre: v.operadorNombre,
     fechaInicio: v.fechaInicio,
-    liqId: v.estatus === 'liquidado' ? liqPorFolio.get(v.folio) ?? null : null,
+    liqId: liqPorViaje.get(v.id) ?? null,
   }));
 
   const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--muted)' } } as const;
@@ -197,7 +215,7 @@ export async function InicioContenido({
   // filas visibles — encontrar un folio y saber su estado también es una
   // respuesta, aunque todavía no tenga liquidación a la cual navegar.
   const itemsBusqueda: ItemBusqueda[] = (viajes ?? []).map((v) => {
-    const liqId = v.estatus === 'liquidado' ? liqPorFolio.get(v.folio) ?? null : null;
+    const liqId = liqPorViaje.get(v.id) ?? null;
     const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? 'sin ruta capturada';
     return {
       etiqueta: v.folio,
