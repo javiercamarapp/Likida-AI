@@ -44,7 +44,19 @@ export async function resolverLlaveWorker(
   if (!data || data.revocada_en || !(data.capacidades as string[]).includes(capacidad)) {
     void registrarEventoSeguridad({
       origen: 'auth', tipo: 'acceso_denegado',
-      actor: `lkw…${llave.slice(-6)}`,
+      // ── NO SE GUARDA UN PEDAZO DE LA LLAVE (auditoría prod, SEG-6) ────
+      //
+      // Esto era `lkw…${llave.slice(-6)}`: seis caracteres REALES del secreto,
+      // escritos en `evento_seguridad` —una tabla que se conserva y que lee el
+      // panel—. Sobre una llave rechazada suena inofensivo, pero el rechazo
+      // más común de todos es la llave BUENA con la capacidad equivocada: ahí
+      // la fila guarda el sufijo de una credencial viva. Y quien sondea con
+      // llaves inventadas puede leer en la bitácora qué le llegó completo.
+      //
+      // El hash ya existe en este archivo y es lo que la tabla `worker_llave`
+      // indexa, así que un prefijo suyo IDENTIFICA la llave (se puede cruzar
+      // con la fila) sin contener un solo carácter del secreto.
+      actor: `lkw#${hashLlaveWorker(llave).slice(0, 8)}`,
       detalle: { canal: 'worker', causa: !data ? 'desconocida' : data.revocada_en ? 'revocada' : 'sin_capacidad', capacidad },
     });
     return { ok: false, error: RECHAZO };
