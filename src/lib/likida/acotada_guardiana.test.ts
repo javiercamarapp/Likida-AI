@@ -21,6 +21,9 @@ const GUARDADOS = [
   'src/lib/likida/interruptores.ts',
   'src/lib/likida/contactos.ts',
   'src/lib/likida/consulta_chofer.ts',
+  // Escala 50k (mig. 0151): el panel fiscal lee UNA RPC de celdas agregadas;
+  // cualquier lectura que quede en el archivo lleva techo.
+  'src/lib/likida/fiscal.ts',
 ];
 
 describe('toda consulta de los módulos del camino caliente lleva techo', () => {
