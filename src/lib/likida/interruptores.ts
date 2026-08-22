@@ -23,6 +23,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -235,13 +236,9 @@ async function anotarEnBitacora(
   userId: string,
   detalle: Record<string, unknown>,
 ): Promise<void> {
-  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: null, // la palanca es de PLATAFORMA, no de una flota
-    actor_id: userId,
-    accion,
-    entidad: 'interruptor',
-    entidad_id: nombre,
-    detalle,
-  });
-  if (error) logger.warn('interruptores.bitacora_no_escribio', { accion, interruptor: nombre, err: error.message });
+  await anotarBitacora(
+    { tenantId: null, // la palanca es de PLATAFORMA, no de una flota
+      actor: { id: userId }, accion, entidad: 'interruptor', entidadId: nombre, detalle },
+    { evento: 'interruptores.bitacora_no_escribio', contexto: { interruptor: nombre } },
+  );
 }

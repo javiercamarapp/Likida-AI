@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
 import { logger } from '@/lib/logger';
 import { getPorFacturar, type TicketPorFacturar } from './pendientes';
@@ -172,14 +172,11 @@ export async function avisarPorFacturar(args: {
   // Queda constancia de a quién se le avisó, de cuántos, y POR CUÁL camino: un
   // aviso por plantilla no llevó el detalle, y mañana eso explica por qué el
   // encargado preguntó "¿cuáles?" en vez de facturar.
-  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: args.tenantId,
-    accion: 'facturacion.aviso_enviado',
-    entidad: 'gasto',
-    entidad_id: args.tenantId,
-    detalle: { tickets: cuantos, wamid, via },
-  });
-  if (error) logger.warn('facturacion.bitacora', { err: error.message });
+  await anotarBitacora(
+    { tenantId: args.tenantId, actor: {}, accion: 'facturacion.aviso_enviado', entidad: 'gasto', entidadId: args.tenantId,
+      detalle: { tickets: cuantos, wamid, via } },
+    { evento: 'facturacion.bitacora' },
+  );
 
   return { enviado: true, tickets: cuantos, texto, via };
 }

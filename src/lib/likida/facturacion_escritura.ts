@@ -33,6 +33,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora, type EntidadBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { mxn } from '@/lib/formato';
 import { DatoInvalido } from './errores';
@@ -209,14 +210,13 @@ export function evaluarAbono(
 /** Constancia best-effort, igual que `clientes.ts`: si la bitácora falla, la
  *  escritura YA ocurrió y tirarla dejaría el sistema peor que sin registro. */
 async function anotar(
-  tenantId: string, accion: string, entidad: string, entidadId: string,
+  tenantId: string, accion: string, entidad: EntidadBitacora, entidadId: string,
   detalle: Record<string, unknown>, actor?: { id?: string; email?: string },
 ): Promise<void> {
-  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: tenantId, actor_id: actor?.id ?? null, actor_email: actor?.email ?? null,
-    accion, entidad, entidad_id: entidadId, detalle,
-  });
-  if (error) logger.warn('facturacion.bitacora_no_escribio', { accion, err: error.message });
+  await anotarBitacora(
+    { tenantId, actor: actor ?? {}, accion, entidad, entidadId, detalle },
+    { evento: 'facturacion.bitacora_no_escribio' },
+  );
 }
 
 /** Los índices únicos de la 0049, dichos en palabras de quien capturó. */

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -146,15 +146,11 @@ export async function anotarSeleccionEnBitacora(
   esDemo: boolean,
 ): Promise<void> {
   try {
-    const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-      tenant_id: tenantId,
-      actor_id: actorId,
-      accion: 'flota.seleccionada',
-      entidad: 'tenant',
-      entidad_id: tenantId,
-      detalle: { desde: 'elegir-flota', demo: esDemo },
-    });
-    if (error) logger.warn('seleccion_flota.bitacora_no_escribio', { tenant: tenantId, err: error.message });
+    await anotarBitacora(
+      { tenantId, actor: { id: actorId }, accion: 'flota.seleccionada', entidad: 'tenant', entidadId: tenantId,
+        detalle: { desde: 'elegir-flota', demo: esDemo } },
+      { evento: 'seleccion_flota.bitacora_no_escribio', contexto: { tenant: tenantId } },
+    );
   } catch (e) {
     logger.warn('seleccion_flota.bitacora_no_escribio', {
       tenant: tenantId, err: e instanceof Error ? e.message : String(e),
