@@ -31,6 +31,9 @@ export const maxDuration = 60;
 interface EventoStripe {
   id: string;
   type: string;
+  /** Segundos Unix. Es lo ÚNICO que ordena dos eventos de la misma
+   *  suscripción cuando Stripe los entrega al revés (RES-11). */
+  created?: number;
   data: { object: Record<string, unknown> };
 }
 
@@ -154,6 +157,11 @@ async function aplicar(evt: EventoStripe): Promise<void> {
           ? 'cancelada'
           : estadoDesdeStripe(obj.status as string),
         periodoFin: finUnix ? new Date(finUnix * 1000).toISOString().slice(0, 10) : null,
+        // Stripe NO promete orden de entrega (RES-11): `aplicarSuscripcion`
+        // descarta un evento más viejo que el ya aplicado para esta misma
+        // suscripción. Sin esto, el reintento de un `.updated` de anteayer
+        // resucitaba una suscripción cancelada.
+        eventoCreadoUnix: typeof evt.created === 'number' ? evt.created : undefined,
       });
       return;
     }
