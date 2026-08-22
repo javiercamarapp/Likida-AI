@@ -3,6 +3,7 @@ import { correrRunner } from '@/lib/likida/agentes/runner';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { autorizaCron } from '@/lib/auth/cron';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,8 @@ export async function GET(req: Request) {
     logger.error('cron.runner.sin_secreto', {});
     return NextResponse.json({ error: 'CRON_SECRET no está configurado.' }, { status: 500 });
   }
-  if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
+  // SEG-5: comparación de tiempo constante (ver `lib/auth/cron.ts`).
+  if (!autorizaCron(req.headers.get('authorization'), secreto)) {
     return new NextResponse(null, { status: 401 });
   }
 
