@@ -31,8 +31,13 @@ vi.mock('@/lib/observability/alerta', () => ({
 // El kill switch (0110). Default: sin fila = encendido (false) — así TODAS
 // las pruebas existentes prueban de paso que sin interruptor el cron corre.
 const estaApagado = vi.fn(async (nombre: string) => nombre === '__ninguno_apagado__');
+/** AUDITORÍA 18 (A17): los crons leen `leerInterruptor`, que distingue
+ *  apagado de ILEGIBLE. `estaApagado` sigue siendo la palanca de las pruebas
+ *  viejas (true = apagado); `ilegibles` marca qué lecturas fallan. */
+const ilegibles = new Set<string>();
 vi.mock('@/lib/likida/interruptores', () => ({
-  estaApagado: (...a: unknown[]) => estaApagado(...(a as [string])),
+  leerInterruptor: async (nombre: string) =>
+    ilegibles.has(nombre) ? 'ilegible' : (await estaApagado(nombre)) ? 'apagado' : 'encendido',
 }));
 
 process.env.CRON_SECRET = 'secreto-de-prueba';
@@ -94,6 +99,31 @@ describe('el kill switch (0110)', () => {
     ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });
     logger.warn.mockClear();
     estaApagado.mockReset().mockResolvedValue(false);
+    ilegibles.clear();
+  });
+
+  it("con 'global' ILEGIBLE: 500 con `codigo`, y NINGÚN motor corre (A17)", async () => {
+    // No es el 200 `saltado` del apagado a propósito: no haber podido leer
+    // la palanca es un fallo, y el cron tiene que salir ROJO en Vercel.
+    ilegibles.add('global');
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ corrio: false, codigo: 'interruptor_ilegible', interruptor: 'global' });
+    expect(escalarViajesSinAceptar).not.toHaveBeenCalled();
+    expect(ejecutarCobranzaGlobal).not.toHaveBeenCalled();
+  });
+
+  it("con 'agente:conductores' ILEGIBLE: la cobranza CORRE, pero la corrida sale 500 (A17)", async () => {
+    ilegibles.add('agente:conductores');
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    const cuerpo = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(cuerpo.aceptacion).toMatchObject({ codigo: 'interruptor_ilegible', interruptor: 'agente:conductores' });
+    expect(escalarViajesSinAceptar).not.toHaveBeenCalled();
+    expect(ejecutarCobranzaGlobal).toHaveBeenCalledTimes(1);
+    expect(cuerpo.comprobacion).toEqual({ tenants: 0, contactados: 0, fallos: [] });
   });
 
   it("con 'global' apagado: 200 con {saltado}, y NINGÚN motor corre", async () => {
@@ -129,9 +159,8 @@ describe('el kill switch (0110)', () => {
     // Conductores no apagaba nada. Ahora sí, y con la misma forma que el de
     // cobranza: 200, `saltado` en el cuerpo, y el otro motor sigue.
     //
-    // El fail-closed viene incluido: `estaApagado` real devuelve este mismo
-    // `true` cuando la LECTURA falla (probado en interruptores.test.ts), así
-    // que "apagado" y "no se pudo leer" detienen el motor por el mismo cable.
+    // "No se pudo leer" también detiene el motor, pero por OTRO cable: es
+    // la prueba ILEGIBLE de arriba (A17), que sale 500.
     estaApagado.mockImplementation(async (n: string) => n === 'agente:conductores');
     const res = await GET(peticion('Bearer secreto-de-prueba'));
     const cuerpo = await res.json();
