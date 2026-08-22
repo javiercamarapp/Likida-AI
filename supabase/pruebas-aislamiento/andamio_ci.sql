@@ -155,7 +155,11 @@ grant usage on schema storage to anon, authenticated, service_role;
 create table if not exists storage.buckets (
   id text primary key,
   name text not null,
-  public boolean not null default false
+  public boolean not null default false,
+  -- Los dos campos que Supabase Storage hace cumplir en cada subida y que la
+  -- 0147 fija para `avatares` (tipo y peso). Sin ellos la migración no aplica.
+  file_size_limit bigint,
+  allowed_mime_types text[]
 );
 
 create table if not exists storage.objects (
