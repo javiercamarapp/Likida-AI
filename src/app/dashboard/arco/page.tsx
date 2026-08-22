@@ -21,7 +21,7 @@ const RUTA = '/dashboard/arco';
 
 /**
  * Solicitudes ARCO de ESTA flota — la responsable obligada a contestar en 20
- * días hábiles (LFPDPPP art. 32). AUDITORÍA 16: antes vivía solo en /admin
+ * días hábiles (LFPDPPP 2025 art. 31). AUDITORÍA 16: antes vivía solo en /admin
  * (superadmin), y la flota no tenía dónde ver sus solicitudes ni responderlas.
  */
 export default async function ArcoPage({ searchParams }: { searchParams: Promise<Params> }) {
@@ -81,7 +81,7 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
         <div>
           <span className="text-sm font-medium block">Privacidad (ARCO)</span>
           <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            Solicitudes de tus operadores y cómo responderlas a tiempo (LFPDPPP art. 32: 20 días hábiles)
+            Solicitudes de tus operadores y cómo responderlas a tiempo (LFPDPPP art. 31: 20 días hábiles)
           </span>
         </div>
       </header>
