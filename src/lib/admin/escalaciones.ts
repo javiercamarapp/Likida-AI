@@ -20,7 +20,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, traerTodo } from '@/lib/likida/pg';
 import { mxn } from '@/lib/formato';
 import { AGENTES_NOTIFICABLES } from '@/lib/likida/agentes/notificaciones';
-import { getCorridasFallidas, getLiquidacionesEnRevisar } from './negocio';
+import { getCorridasFallidas, getLiquidacionesEnRevisar, contarLiquidacionesEnRevisar } from './negocio';
 import { getTicketsCruzados, ESTADOS_TICKET_CERRADO } from './soporte';
 
 // ── Las lecturas propias (las que no existían en ningún lib) ────────────────
@@ -231,7 +231,15 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
     porValor(() => getTalachasPendientes()),
     porValor(() => getFacturasProveedorPendientes()),
     porValor(() => getTicketsCruzados(ahoraMs)),
-    porValor(() => getLiquidacionesEnRevisar()),
+    // Las N más recientes para la cola + el TOTAL contado aparte (head):
+    // desde el 22-ago-2026 (escala 50k) `getLiquidacionesEnRevisar` trae las
+    // últimas `LIMITE_LIQUIDACIONES_REVISAR`, no toda la cola humana, así que
+    // `items.length` ya no es el conteo de la campana. Si cualquiera de las
+    // dos lecturas falla, la fuente entera cae por valor (conteo null ≠ 0).
+    porValor(async () => {
+      const [items, total] = await Promise.all([getLiquidacionesEnRevisar(), contarLiquidacionesEnRevisar()]);
+      return { items, total };
+    }),
   ]);
 
   const fuente = (r: { error: string }): FuenteLeida => ({ items: null, error: r.error });
@@ -300,7 +308,7 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
           href: '/admin/soporte',
         })),
     ),
-    liquidaciones: 'error' in liquidaciones ? fuente(liquidaciones) : leida(liquidaciones.ok.map((l) => ({
+    liquidaciones: 'error' in liquidaciones ? fuente(liquidaciones) : leida(liquidaciones.ok.items.map((l) => ({
       fuente: 'liquidaciones',
       titulo: l.folio ? `Liquidación en revisión — viaje ${l.folio}` : 'Liquidación en revisión',
       detalle: 'El motor no pudo cerrarla solo: espera ojos humanos en la bandeja de esa flota.',
@@ -330,7 +338,8 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
     ticketsVencidos: ticketsAbiertos === null
       ? null
       : ticketsAbiertos.filter((t) => t.horasRestantes !== null && t.horasRestantes < 0).length,
-    liquidacionesRevisar: fuentes.liquidaciones.items?.length ?? null,
+    // CONTADO en la base, no `items.length`: la lista viene acotada.
+    liquidacionesRevisar: 'error' in liquidaciones ? null : liquidaciones.ok.total,
   };
 
   return { fuentes, cola, conteos };

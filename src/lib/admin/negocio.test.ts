@@ -84,12 +84,50 @@ const RESUMEN_VACIO = {
   porFase: [], porModelo: [], porFaseModelo: [], porDia: [], porTenant: [],
 };
 
+// ── La 0153, simulada sobre las fixtures ───────────────────────────────────
+// `viaje` y `gasto` TAMPOCO se traen desde el 22-ago-2026 (mig. 0153,
+// `resumen_negocio()`): se cuentan en la base. El mock hace aquí lo que hace
+// la RPC —count(*) por flota; count(*) por DÍA LOCAL DE MÉXICO de las filas
+// con `created_at >= p_desde`; totales sin fecha— sobre las MISMAS fixtures
+// de `respuestas`, para que cada caso de abajo siga describiendo filas reales
+// y no un jsonb armado a mano. Un error sembrado en cualquiera de las dos
+// tablas sale como error de la RPC (por valor, como PostgREST).
+const diaMxDe = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+function resumenNegocioSql(args: { p_desde: string | null }): Resp {
+  const v = respuestas.get('viaje') ?? { data: [], error: null };
+  const g = respuestas.get('gasto') ?? { data: [], error: null };
+  if (v.error) return { data: null, error: v.error };
+  if (g.error) return { data: null, error: g.error };
+  const viajes = (v.data ?? []) as Array<{ tenant_id: string }>;
+  const gastos = (g.data ?? []) as Array<{ created_at: string }>;
+  const porTenant = new Map<string, number>();
+  for (const x of viajes) porTenant.set(x.tenant_id, (porTenant.get(x.tenant_id) ?? 0) + 1);
+  const desdeMs = args.p_desde === null ? -Infinity : Date.parse(args.p_desde);
+  const porDia = new Map<string, number>();
+  for (const x of gastos) {
+    if (Date.parse(x.created_at) < desdeMs) continue;
+    const dia = diaMxDe(x.created_at);
+    porDia.set(dia, (porDia.get(dia) ?? 0) + 1);
+  }
+  return {
+    data: {
+      viajesTotal: viajes.length,
+      viajesPorTenant: [...porTenant].sort(([a], [b]) => a.localeCompare(b)).map(([tenantId, n]) => ({ tenantId, n })),
+      facturasTotal: gastos.length,
+      facturasPorDia: [...porDia].sort(([a], [b]) => a.localeCompare(b)).map(([dia, n]) => ({ dia, n })),
+    },
+    error: null,
+  };
+}
+
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (t: string) => crearBuilder(t),
     rpc: (fn: string, args: unknown) => {
       llamadasRpc.push({ fn, args });
-      return Promise.resolve(rpcs.get(fn) ?? { data: RESUMEN_VACIO, error: null });
+      if (rpcs.has(fn)) return Promise.resolve(rpcs.get(fn));
+      if (fn === 'resumen_negocio') return Promise.resolve(resumenNegocioSql(args as { p_desde: string | null }));
+      return Promise.resolve({ data: RESUMEN_VACIO, error: null });
     },
   }),
 }));
@@ -97,7 +135,8 @@ vi.mock('@/lib/supabase/admin', () => ({
 const {
   getResumenNegocio, getCostoPorFaseModelo, getConversacionesActivas,
   getConteosPlataforma, getCorridasRecientes, getUltimaCorridaPorAgente, AGENTES_BITACORA,
-  getCorridasFallidas, getLiquidacionesEnRevisar, costoIaMesActual, costoIaDeTenant,
+  getCorridasFallidas, getLiquidacionesEnRevisar, contarLiquidacionesEnRevisar, LIMITE_LIQUIDACIONES_REVISAR,
+  costoIaMesActual, costoIaDeTenant,
 } = await import('./negocio');
 
 describe('getResumenNegocio', () => {
@@ -245,12 +284,72 @@ describe('getResumenNegocio', () => {
   // al pasar de 100,000 filas — o sea, a los ~50 días de operación real, con
   // ~2,000 llamadas al modelo diarias. Ahora la tabla no se recorre por
   // PostgREST ni una vez: la suma la hace la base.
-  it('no pide NI UNA fila de `llm_costo`: la agrega en SQL', async () => {
+  it('no pide NI UNA fila de `llm_costo`, `viaje` ni `gasto`: las agrega en SQL', async () => {
+    respuestas.set('viaje', { data: [{ id: 'v1', tenant_id: 't1' }], error: null });
+    respuestas.set('gasto', { data: [{ created_at: '2026-08-01T08:00:00Z' }], error: null });
     await getResumenNegocio('2026-08-02');
     expect(rangos.get('llm_costo')).toBeUndefined();
+    // La 0153: ni `viaje` ni `gasto` cruzan PostgREST por páginas.
+    expect(rangos.get('viaje')).toBeUndefined();
+    expect(rangos.get('gasto')).toBeUndefined();
     expect(llamadasRpc).toEqual([
       { fn: 'resumen_costo_ia', args: { p_desde: null, p_hasta: null } },
+      // `p_desde` = medianoche DE MÉXICO del primer día de la ventana de 7
+      // (27-jul con hoy=2-ago): 06:00Z, porque México no tiene horario de
+      // verano desde 2022. La RPC bucketea por día local MX desde ahí.
+      { fn: 'resumen_negocio', args: { p_desde: '2026-07-27T06:00:00.000Z' } },
     ]);
+  });
+
+  it('la ventana de 30 días mueve `p_desde` 30 días atrás (hoy incluido)', async () => {
+    await getResumenNegocio('2026-08-02', 30);
+    expect(llamadasRpc.find((l) => l.fn === 'resumen_negocio')?.args).toEqual({ p_desde: '2026-07-04T06:00:00.000Z' });
+  });
+
+  // ── Lo que la 0153 vino a garantizar ──────────────────────────────────────
+  //
+  // Con un cliente de 50,000 viajes/mes, `gasto` (300,000 filas/mes) rebasaba
+  // las 100,000 filas de `traerTodo` al día ~10 y las 17 páginas de /admin que
+  // leen esto dejaban de cargar. Ahora el payload depende del número de
+  // FLOTAS y de DÍAS de la ventana, no del de viajes ni comprobantes.
+  it('3.6 millones de facturas y 600 mil viajes cuestan lo mismo que tres: UNA respuesta', async () => {
+    rpcs.set('resumen_negocio', {
+      data: {
+        viajesTotal: 600_000,
+        viajesPorTenant: [{ tenantId: 't1', n: 600_000 }],
+        facturasTotal: 3_600_000,
+        facturasPorDia: [{ dia: '2026-08-01', n: 9_800 }, { dia: '2026-08-02', n: 10_200 }],
+      },
+      error: null,
+    });
+    respuestas.set('tenant', { data: [{ id: 't1', nombre: 'Grande', plan: 'pro' }], error: null });
+    const r = await getResumenNegocio('2026-08-02');
+    expect(r.viajesProcesados).toBe(600_000);
+    expect(r.facturasTotal).toBe(3_600_000);
+    expect(r.flotas[0].viajes).toBe(600_000);
+    expect(r.facturasPorDia.slice(-2)).toEqual([{ dia: '2026-08-01', n: 9_800 }, { dia: '2026-08-02', n: 10_200 }]);
+    expect(rangos.get('viaje')).toBeUndefined();
+    expect(rangos.get('gasto')).toBeUndefined();
+  });
+
+  it('un fallo de la RPC de negocio LANZA, no se lee como "cero viajes"', async () => {
+    rpcs.set('resumen_negocio', { data: null, error: { message: 'fetch failed' } });
+    await expect(getResumenNegocio('2026-08-02')).rejects.toThrow('resumen_negocio: fetch failed');
+  });
+
+  // Fail-closed de FORMA: una rama sin la 0153, o una función que cambie de
+  // forma, no puede leerse como "0 viajes procesados, 0 facturas".
+  it.each([
+    ['null', null],
+    ['un objeto vacío', {}],
+    ['viajesTotal que no es entero', { viajesTotal: 1.5, viajesPorTenant: [], facturasTotal: 0, facturasPorDia: [] }],
+    ['viajesTotal negativo', { viajesTotal: -1, viajesPorTenant: [], facturasTotal: 0, facturasPorDia: [] }],
+    ['sin facturasPorDia', { viajesTotal: 0, viajesPorTenant: [], facturasTotal: 0 }],
+    ['una flota sin tenantId', { viajesTotal: 1, viajesPorTenant: [{ n: 1 }], facturasTotal: 0, facturasPorDia: [] }],
+    ['un día con n que no es número', { viajesTotal: 0, viajesPorTenant: [], facturasTotal: 1, facturasPorDia: [{ dia: '2026-08-01', n: '1' }] }],
+  ])('una respuesta de negocio con otra forma (%s) LANZA en vez de pintar ceros', async (_caso, data) => {
+    rpcs.set('resumen_negocio', { data, error: null });
+    await expect(getResumenNegocio('2026-08-02')).rejects.toThrow(/0153/);
   });
 
   it('790 mil llamadas al modelo cuestan lo mismo que tres: UNA respuesta', async () => {
@@ -270,16 +369,17 @@ describe('getResumenNegocio', () => {
     const r = await getResumenNegocio('2026-08-02');
     expect(r.costoIaUsd).toBe(7_900.12);
     expect(r.porFase).toEqual([{ fase: 'ocr', n: 790_000, costoUsd: 7_900.12 }]);
-    // Una sola llamada, y el `tokensIn` no desborda el int32 que ya no cabe en
-    // `tokens_in` sumado (3.95e6 aquí, ~4e9 en la base: `sum()` da bigint).
-    expect(llamadasRpc).toHaveLength(1);
+    // Una sola llamada a la de costo (la otra es la 0153, de viaje/gasto), y
+    // el `tokensIn` no desborda el int32 que ya no cabe en `tokens_in` sumado
+    // (3.95e6 aquí, ~4e9 en la base: `sum()` da bigint).
+    expect(llamadasRpc.filter((l) => l.fn === 'resumen_costo_ia')).toHaveLength(1);
     expect(r.tokensIn).toBe(3_950_000);
   });
 
-  it('pide el total en la primera página, así que una tabla chica cuesta UNA consulta', async () => {
-    respuestas.set('gasto', { data: [{ created_at: '2026-08-01T08:00:00Z' }], error: null });
+  it('`tenant` (la única tabla que sigue viniendo) pide el total en la primera página: UNA consulta', async () => {
+    respuestas.set('tenant', { data: [{ id: 't1', nombre: 'Flota', plan: 'demo' }], error: null });
     await getResumenNegocio('2026-08-02');
-    expect(rangos.get('gasto')).toEqual([[0, 999]]);
+    expect(rangos.get('tenant')).toEqual([[0, 999]]);
   });
 
   // ── El bug UTC de facturasPorDia (hallazgo 13-ago-2026) ──────────────────
@@ -620,6 +720,28 @@ describe('getLiquidacionesEnRevisar', () => {
   it('un fallo de lectura LANZA — una bandeja vacía sobre una base caída diría "nadie espera revisión"', async () => {
     respuestas.set('liquidacion', { data: null, error: { message: 'fetch failed' } });
     await expect(getLiquidacionesEnRevisar()).rejects.toThrow('fetch failed');
+  });
+
+  // ── Escala 50k (22-ago-2026): la lista viene ACOTADA y el total CONTADO ───
+  it('trae a lo más `limite` filas (las más recientes) y NO pagina la cola entera', async () => {
+    const muchas = Array.from({ length: 500 }, (_, i) => ({
+      id: `l${i}`, estatus: 'revisar', created_at: `2026-08-${String(1 + (i % 20)).padStart(2, '0')}T00:00:00Z`,
+      tenant_id: 't1', tenant: { nombre: 'F' }, viaje: null,
+    }));
+    respuestas.set('liquidacion', { data: muchas, error: null });
+    expect(await getLiquidacionesEnRevisar()).toHaveLength(LIMITE_LIQUIDACIONES_REVISAR);
+    expect(await getLiquidacionesEnRevisar(5)).toHaveLength(5);
+    expect(rangos.get('liquidacion')).toBeUndefined();
+  });
+
+  it('contarLiquidacionesEnRevisar cuenta por head (cero filas cruzan) y solo las `revisar`', async () => {
+    respuestas.set('liquidacion', { data: LIQUIDACIONES, error: null });
+    expect(await contarLiquidacionesEnRevisar()).toBe(2);
+  });
+
+  it('un conteo que no llega como número LANZA — NULL no es 0', async () => {
+    respuestas.set('liquidacion', { data: [], error: null, count: null });
+    await expect(contarLiquidacionesEnRevisar()).rejects.toThrow(/no devolvió el conteo/);
   });
 });
 
