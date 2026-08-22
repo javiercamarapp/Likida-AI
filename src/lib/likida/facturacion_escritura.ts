@@ -353,19 +353,35 @@ export async function crearFactura(
   const facturaId = String(id);
 
   // ── Las ligas a los viajes ───────────────────────────────────────────────
-  // PostgREST no da transacciones: si las ligas fallan, se intenta deshacer el
-  // alta y se reporta el fallo COMPLETO. Una factura sin sus ligas contaría el
+  // PostgREST no da transacciones: si las ligas fallan, se compensa el alta y
+  // se reporta el fallo COMPLETO. Una factura sin sus ligas contaría el
   // ingreso sin decir de qué viajes salió — peor que pedir que se recapture.
+  //
+  // LA COMPENSACIÓN CANCELA, NO BORRA (auditoría 18, DAT-27). Era un
+  // `.delete()`, y un DELETE sobre `factura_emitida` es exactamente lo que la
+  // 0158 dejó de permitir a la ligera: la FK de `pago_recibido` pasó a NO
+  // ACTION para que borrar una factura no se lleve por delante los abonos
+  // registrados. Esta factura acaba de nacer y no tiene abonos —el borrado
+  // habría funcionado— pero la asimetría es la que enseña: un folio que
+  // existió y se fue no deja rastro de haber existido, y en un consecutivo
+  // fiscal eso es justo lo que no se hace. `cancelada` es un estatus del
+  // dominio (0049) y la fila queda contando la verdad: se intentó, no se
+  // completó.
+  //
+  // CONSECUENCIA VISIBLE: recapturar la MISMA factura con el mismo folio
+  // choca ahora contra `factura_folio_unico` (la fila cancelada sigue ahí) y
+  // `traducirChoque` lo dice con su mensaje de folio repetido. Antes se podía
+  // reintentar a ciegas; ahora hay que mirar la cancelada y decidir.
   if (f.viajeIds.length > 0) {
     const { error: errLigas } = await supabaseAdmin().from('factura_viaje')
       .insert(f.viajeIds.map((v) => ({ factura_id: facturaId, viaje_id: v })));
     if (errLigas) {
       const { error: errDeshacer } = await supabaseAdmin().from('factura_emitida')
-        .delete().eq('id', facturaId).eq('tenant_id', tenantId);
+        .update({ estatus: 'cancelada' }).eq('id', facturaId).eq('tenant_id', tenantId);
       if (errDeshacer) {
         logger.error('facturacion.alta_a_medias', {
           tenantId, facturaId,
-          msg: `La factura quedó creada SIN sus ligas a viajes y no se pudo deshacer: ${errDeshacer.message}. Revisar a mano.`,
+          msg: `La factura quedó creada SIN sus ligas a viajes y no se pudo cancelar: ${errDeshacer.message}. Revisar a mano.`,
         });
       }
       throw new Error(`crearFactura: no se pudieron ligar los viajes: ${errLigas.message}`);

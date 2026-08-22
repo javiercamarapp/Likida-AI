@@ -153,11 +153,11 @@ begin
   insert into gasto (tenant_id, viaje_id, concepto, monto, ocr_extra)
     values (v_t, v_v, 'diesel', 487.50, '{"montoDiscrepante":true}'::jsonb) returning id into v_g;
 
-  r1 := enriquecer_gasto_codigo(v_g, v_t, '{"folioPortal":"PRIMERO"}'::jsonb, 'uuid-A');
-  r2 := enriquecer_gasto_codigo(v_g, v_t, '{"folioPortal":"SEGUNDO"}'::jsonb, 'uuid-B');
+  r1 := enriquecer_gasto_codigo(v_g, v_t, '{"folioPortal":"PRIMERO"}'::jsonb, 'uuid-a');
+  r2 := enriquecer_gasto_codigo(v_g, v_t, '{"folioPortal":"SEGUNDO"}'::jsonb, 'uuid-b');
   select ocr_extra, cfdi_uuid into extra, uu from gasto where id = v_g;
 
-  raise exception E'CLAIM  1er/2do=%/%  folio=%  montoDiscrepante-sobrevive=%  uuid=%   (esperado t/f / PRIMERO / true / uuid-A)',
+  raise exception E'CLAIM  1er/2do=%/%  folio=%  montoDiscrepante-sobrevive=%  uuid=%   (esperado t/f / PRIMERO / true / uuid-a)',
     r1, r2, extra->>'folioPortal', extra->>'montoDiscrepante', uu;
 end $$;
 
@@ -165,6 +165,11 @@ end $$;
 -- ── 4. Un CFDI, un gasto (mig. 0019) ────────────────────────────────────────
 -- El mismo UUID no entra dos veces, pero los tickets SIN timbrar (cfdi_uuid
 -- NULL) tienen que poder entrar todos: son la mayoría.
+--
+-- El fixture va en MINÚSCULAS desde la 0158 (DAT-26): `cfdi_uuid` tiene ahora
+-- CHECK de minúsculas en las cuatro tablas donde vive, porque el SAT lo
+-- imprime en mayúsculas y el OCR lo lee en minúsculas — y este índice único
+-- dejaba entrar el mismo comprobante dos veces por esa sola diferencia.
 do $$
 declare v_t uuid; v_o uuid; v_v uuid; choco boolean := false; msg text := ''; sin_uuid int;
 begin
@@ -172,9 +177,9 @@ begin
   insert into operador (tenant_id, nombre, telefono) values (v_t,'P','+520000009004') returning id into v_o;
   insert into viaje (tenant_id, operador_id) values (v_t, v_o) returning id into v_v;
 
-  insert into gasto (tenant_id, viaje_id, concepto, monto, cfdi_uuid) values (v_t, v_v, 'diesel', 100, 'UUID-REPETIDO');
+  insert into gasto (tenant_id, viaje_id, concepto, monto, cfdi_uuid) values (v_t, v_v, 'diesel', 100, 'uuid-repetido');
   begin
-    insert into gasto (tenant_id, viaje_id, concepto, monto, cfdi_uuid) values (v_t, v_v, 'diesel', 100, 'UUID-REPETIDO');
+    insert into gasto (tenant_id, viaje_id, concepto, monto, cfdi_uuid) values (v_t, v_v, 'diesel', 100, 'uuid-repetido');
   exception when unique_violation then choco := true; msg := SQLERRM;
   end;
 
@@ -213,7 +218,10 @@ begin
   join pg_namespace ns on ns.oid = p.pronamespace
   where ns.nspname = 'public' and p.proname = 'guardar_liquidacion_tx';
 
-  raise exception E'RPC ÚNICA  firmas=%  con-n-argumentos=%   (esperado 1 / 12)', n, nargs;
+  -- 13 desde la 0158 (DAT-02): `p_n_gastos` se sumó al final con `default
+  -- null`, y la firma de 12 se DROPEÓ en la misma migración — que es lo que
+  -- este bloque vigila desde la 0022.
+  raise exception E'RPC ÚNICA  firmas=%  con-n-argumentos=%   (esperado 1 / 13)', n, nargs;
 end $$;
 
 
@@ -836,10 +844,14 @@ begin
   exception when others then monto_bloqueado := true; msg := SQLSTATE;
   end;
 
-  -- Control: un campo no financiero (aquí, clave_prod_serv) sigue pudiendo
-  -- corregirse después de liquidar — el trigger no bloquea de más.
+  -- Control: un campo REALMENTE cosmético sigue pudiendo corregirse después
+  -- de liquidar — el trigger no bloquea de más. Era `clave_prod_serv` hasta
+  -- la 0158 (DAT-07): esa clave decide si un litro es diésel acreditable, o
+  -- sea que NO era un campo no financiero — reeditarla tras liquidar movía el
+  -- estímulo del LIF 20-A sin tocar el papel ya emitido. La ruta de la imagen
+  -- en el Storage sí es cosmética: no entra a ningún cálculo.
   begin
-    update gasto set clave_prod_serv = '15101505' where id = v_g;
+    update gasto set imagen_url = 'liquidaciones/re-subida.jpg' where id = v_g;
     no_financiero_pasa := true;
   exception when others then no_financiero_pasa := false;
   end;
@@ -967,9 +979,12 @@ begin
   exception when others then fecha_bloqueada := true; msg := SQLSTATE;
   end;
 
-  -- Control: una columna que nunca debe bloquearse sigue pasando.
+  -- Control: una columna que nunca debe bloquearse sigue pasando. Era
+  -- `clave_prod_serv` hasta la 0158 (DAT-07), que la metió al `when` por ser
+  -- la que decide si el litro es diésel acreditable; la ruta de la imagen sí
+  -- es cosmética.
   begin
-    update gasto set clave_prod_serv = '15101505' where id = v_g;
+    update gasto set imagen_url = 'liquidaciones/re-subida.jpg' where id = v_g;
     no_financiero_pasa := true;
   exception when others then no_financiero_pasa := false;
   end;
@@ -2204,15 +2219,15 @@ begin
 
   -- 1. UNA factura de 8 casetas: 8 gastos, un uuid, orden 1..8.
   insert into gasto (tenant_id, viaje_id, concepto, monto) select t, v, 'caseta', 50 from generate_series(1,8);
-  update gasto g set cfdi_uuid = 'UUID-CAPUFE-LOTE', cfdi_orden = x.n
+  update gasto g set cfdi_uuid = 'uuid-capufe-lote', cfdi_orden = x.n
     from (select id, row_number() over (order by id) n from gasto where tenant_id = t) x
    where g.id = x.id;
-  select count(*) into n_lote from gasto where tenant_id = t and cfdi_uuid = 'UUID-CAPUFE-LOTE';
+  select count(*) into n_lote from gasto where tenant_id = t and cfdi_uuid = 'uuid-capufe-lote';
 
   -- 2. El mismo (uuid, orden) NO entra dos veces.
   begin
     insert into gasto (tenant_id, viaje_id, concepto, monto, cfdi_uuid, cfdi_orden)
-      values (t, v, 'caseta', 50, 'UUID-CAPUFE-LOTE', 3);
+      values (t, v, 'caseta', 50, 'uuid-capufe-lote', 3);
   exception when unique_violation then choco_orden := true;
   end;
 
@@ -2221,7 +2236,7 @@ begin
   --    `processor.ts` discrimina.
   begin
     insert into gasto (tenant_id, viaje_id, concepto, monto, cfdi_uuid)
-      values (t, v, 'caseta', 400, 'UUID-CAPUFE-LOTE');
+      values (t, v, 'caseta', 400, 'uuid-capufe-lote');
   exception when unique_violation then choco_ingesta := true; msg := SQLERRM;
   end;
 
@@ -2836,7 +2851,7 @@ declare
 begin
   insert into tenant (nombre) values ('ZZZ VERIF B52 '||gen_random_uuid()) returning id into t;
   insert into cfdi_xml (tenant_id, cfdi_uuid, xml, tiene_multiples_conceptos, total_conceptos)
-    values (t, 'UUID-VERIF-0076', '<cfdi/>', true, 2) returning id into x;
+    values (t, 'uuid-verif-0076', '<cfdi/>', true, 2) returning id into x;
 
   insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, estatus)
     values (t, x, 1, 'ecc12', 100, 'conciliada');
@@ -2894,7 +2909,7 @@ declare
 begin
   insert into tenant (nombre) values ('ZZZ VERIF B53 '||gen_random_uuid()) returning id into t;
   insert into cfdi_xml (tenant_id, cfdi_uuid, xml, tiene_multiples_conceptos, total_conceptos)
-    values (t, 'UUID-VERIF-0077', '<cfdi/>', true, 1) returning id into x;
+    values (t, 'uuid-verif-0077', '<cfdi/>', true, 1) returning id into x;
 
   -- 1. 'sin_match' SÍ entra — la garantía que trae esta migración.
   begin
@@ -3117,10 +3132,10 @@ begin
   insert into tenant (nombre) values ('ZZZ VERIF 0091') returning id into v_t;
 
   insert into factura_proveedor (tenant_id, cfdi_uuid, total, xml_crudo)
-    values (v_t, 'UUID-VERIF-1', 100, '<x/>');
+    values (v_t, 'uuid-verif-1', 100, '<x/>');
   begin
     insert into factura_proveedor (tenant_id, cfdi_uuid, total, xml_crudo)
-      values (v_t, 'UUID-VERIF-1', 200, '<y/>');
+      values (v_t, 'uuid-verif-1', 200, '<y/>');
   exception when unique_violation then doble_rebota := true;
   end;
 
@@ -4150,46 +4165,46 @@ begin
 
   -- (a) XML con las columnas nuevas, y el dedup contra una FOTO del mismo UUID
   insert into factura_proveedor (tenant_id, cfdi_uuid, total, xml_crudo, origen, estado_sat)
-    values (v_t, 'UUID-VERIF-0108', 100, '<x/>', 'correo', 'vigente');
+    values (v_t, 'uuid-verif-0108', 100, '<x/>', 'correo', 'vigente');
   begin
     insert into factura_proveedor (tenant_id, cfdi_uuid, total, ocr_confianza, origen)
-      values (v_t, 'UUID-VERIF-0108', 100, 0.62, 'subida');
+      values (v_t, 'uuid-verif-0108', 100, 0.62, 'subida');
   exception when unique_violation then dedup_vivo := true;
   end;
 
   -- (b) la foto cabe sin XML porque declara su OCR; sin ninguno de los dos, no
   insert into factura_proveedor (tenant_id, cfdi_uuid, total, ocr_confianza, origen, estado_sat)
-    values (v_t, 'UUID-VERIF-0108-F', 250, 0.62, 'subida', 'pendiente');
+    values (v_t, 'uuid-verif-0108-f', 250, 0.62, 'subida', 'pendiente');
   select count(*) into n_foto from factura_proveedor
     where tenant_id = v_t and xml_crudo is null and ocr_confianza = 0.62;
   begin
     insert into factura_proveedor (tenant_id, cfdi_uuid, total)
-      values (v_t, 'UUID-VERIF-0108-N', 300);
+      values (v_t, 'uuid-verif-0108-n', 300);
   exception when check_violation then sin_respaldo_rebota := true;
   end;
 
   -- (c) los dominios nuevos
   begin
     insert into factura_proveedor (tenant_id, cfdi_uuid, total, xml_crudo, origen)
-      values (v_t, 'UUID-VERIF-0108-O', 10, '<x/>', 'fax');
+      values (v_t, 'uuid-verif-0108-o', 10, '<x/>', 'fax');
   exception when check_violation then origen_malo := true;
   end;
   begin
     insert into factura_proveedor (tenant_id, cfdi_uuid, total, xml_crudo, estado_sat)
-      values (v_t, 'UUID-VERIF-0108-S', 10, '<x/>', 'valido');
+      values (v_t, 'uuid-verif-0108-s', 10, '<x/>', 'valido');
   exception when check_violation then sat_malo := true;
   end;
 
   -- (d) exportada_en: rebota sobre pendiente, cabe sobre aprobada
   begin
     update factura_proveedor set exportada_en = now()
-      where tenant_id = v_t and cfdi_uuid = 'UUID-VERIF-0108';
+      where tenant_id = v_t and cfdi_uuid = 'uuid-verif-0108';
   exception when check_violation then export_pendiente_rebota := true;
   end;
   update factura_proveedor set estado = 'aprobada', decidido_por = 'verif', decidido_en = now()
-    where tenant_id = v_t and cfdi_uuid = 'UUID-VERIF-0108';
+    where tenant_id = v_t and cfdi_uuid = 'uuid-verif-0108';
   update factura_proveedor set exportada_en = now()
-    where tenant_id = v_t and cfdi_uuid = 'UUID-VERIF-0108';
+    where tenant_id = v_t and cfdi_uuid = 'uuid-verif-0108';
   select count(*) into n_export from factura_proveedor
     where tenant_id = v_t and exportada_en is not null;
 
@@ -6713,4 +6728,161 @@ begin
     liq_borrada, viaje_abierto, id_derivado,
     merge_hermanos, merge_profundo,
     llave_inventada_rebota, borrado_explicito, anon_ok;
+-- ── 130. La integridad fiscal de la 0158, atacada de once formas ────────────
+--
+-- Un solo bloque para los once hallazgos del rubro DATOS de la auditoría 18
+-- porque todos comparten el mismo montaje —una flota, un viaje, un gasto, una
+-- liquidación— y montarlo once veces sería once veces más lento sin decir
+-- nada nuevo. Cada clave del mensaje es un hallazgo:
+--
+--   descuadre_rebota      DAT-02 · el cierre cuenta los comprobantes DENTRO
+--                         del candado del viaje: si entró una foto entre el
+--                         cuadre y el cierre, CU003 y no hay liquidación.
+--   tenant_ajeno_rebota   DAT-14 · el viaje tiene que ser de la flota que
+--                         cierra (antes: insert de liquidación + update de
+--                         cero filas, sin un solo error).
+--   sin_delete            DAT-03 · CERO policies de DELETE (o `for all`) en
+--                         gasto/viaje/liquidacion. Leído del catálogo: se
+--                         pone rojo con cualquier `for all` que renazca.
+--   borrado_rebota        DAT-03 · y si renaciera, el trigger frena igual.
+--                         Se FALSIFICA aquí: se crea la `for all` que la
+--                         0086 recreó sin mirar, y el DELETE del autenticado
+--                         choca contra el trigger (CU004).
+--   concepto_rebota       DAT-07 · `concepto` decide política y tope; con la
+--                         liquidación emitida ya no se reedita.
+--   anticipo_rebota       DAT-07 · el anticipo es el minuendo de la
+--                         diferencia que el operador lee en WhatsApp.
+--   uuid_mayus_rebota     DAT-26 · el mismo CFDI en mayúsculas ya no entra
+--                         como si fuera otro comprobante.
+--   pago_huerfano_rebota  DAT-27 · borrar una factura con abonos rebota
+--                         (23503) en vez de llevarse el dinero cobrado.
+--   fecha_imposible_rebota DAT-28 · un ticket fechado dentro de dos años no
+--                         existe (lo meramente sospechoso lo sigue marcando
+--                         fecha_dudosa.ts, que pide otra foto).
+--   diferencias_rebota    DAT-30 · `diferencias` es arreglo o no es nada:
+--                         un objeto ahí revienta el panel entero.
+--   folio_mayus_rebota    DAT-36 · «VJ-1» y «vj-1» son el MISMO folio.
+--
+-- Todo revierte con el RAISE final. PENDIENTE DE CORRER CONTRA PRODUCCIÓN
+-- (auditoría 18, rubro datos). Esperado:
+--   INTEGRIDAD_0158  descuadre_rebota=t  tenant_ajeno_rebota=t  sin_delete=0
+--   borrado_rebota=t  concepto_rebota=t  anticipo_rebota=t  uuid_mayus_rebota=t
+--   pago_huerfano_rebota=t  fecha_imposible_rebota=t  diferencias_rebota=t
+--   folio_mayus_rebota=t
+do $$
+declare
+  v_t uuid; v_t2 uuid; v_o uuid; v_o2 uuid; v_v uuid; v_v2 uuid; v_g uuid; v_c uuid; v_f uuid;
+  descuadre_rebota boolean := false; tenant_ajeno_rebota boolean := false;
+  sin_delete int; borrado_rebota boolean := false;
+  concepto_rebota boolean := false; anticipo_rebota boolean := false;
+  uuid_mayus_rebota boolean := false; pago_huerfano_rebota boolean := false;
+  fecha_imposible_rebota boolean := false; diferencias_rebota boolean := false;
+  folio_mayus_rebota boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0158 A') returning id into v_t;
+  insert into tenant (nombre) values ('ZZZ VERIF 0158 B') returning id into v_t2;
+  insert into operador (tenant_id, nombre, telefono) values (v_t,'P','5215500000158') returning id into v_o;
+  insert into viaje (tenant_id, operador_id, anticipo, folio) values (v_t, v_o, 5000, 'VJ-0158') returning id into v_v;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'diesel', 4850) returning id into v_g;
+
+  -- ═══ DAT-02 · el cierre cuenta ═══════════════════════════════════════════
+  -- El cuadre vio UN comprobante; entre el PDF y el cierre entró otro. Con
+  -- p_n_gastos = 1 y dos gastos en la base, el cierre entero se cae.
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'caseta', 800);
+  begin
+    perform guardar_liquidacion_tx(v_t, v_v, 4850, 5000, 150, 'cuadrada', '[]'::jsonb, 0,0,0, 'https://x/liq.pdf', 0, 1);
+  exception when others then descuadre_rebota := (SQLSTATE = 'CU003');
+  end;
+
+  -- ═══ DAT-14 · el viaje es de quien cierra ════════════════════════════════
+  begin
+    perform guardar_liquidacion_tx(v_t2, v_v, 4850, 5000, 150, 'cuadrada', '[]'::jsonb, 0,0,0, null, 0, null);
+  exception when others then tenant_ajeno_rebota := (SQLSTATE = 'CU002');
+  end;
+
+  -- Con el conteo correcto, el cierre SÍ pasa: el resto del bloque necesita
+  -- una liquidación emitida de verdad.
+  perform guardar_liquidacion_tx(v_t, v_v, 5650, 5000, -650, 'cuadrada', '[]'::jsonb, 0,0,0, 'https://x/liq.pdf', 0, 2);
+
+  -- ═══ DAT-03 · ninguna policy deja borrar dinero ══════════════════════════
+  select count(*) into sin_delete from pg_policies
+   where schemaname = 'public' and tablename in ('gasto','viaje','liquidacion')
+     and cmd in ('ALL', 'DELETE');
+
+  -- Y si mañana renaciera una `for all` —lo que hizo la 0086 con las policies
+  -- finas de la 0045—, el trigger sigue de pie.
+  create policy zzz_verif_0158_falsificada on gasto for all using (true) with check (true);
+  begin
+    set local role authenticated;
+    begin
+      delete from gasto where id = v_g;
+    exception when others then borrado_rebota := (SQLSTATE = 'CU004');
+    end;
+    reset role;
+  exception when others then reset role; raise;
+  end;
+  drop policy zzz_verif_0158_falsificada on gasto;
+
+  -- ═══ DAT-07 · lo que ya no se reedita ════════════════════════════════════
+  begin
+    update gasto set concepto = 'caseta' where id = v_g;
+  exception when others then concepto_rebota := (SQLSTATE = 'CU001');
+  end;
+  begin
+    update viaje set anticipo = 9999 where id = v_v;
+  exception when others then anticipo_rebota := (SQLSTATE = 'CU004');
+  end;
+
+  -- Los dos ataques que siguen entran por un viaje ABIERTO a propósito: en el
+  -- ya liquidado los frenaría antes el trigger de la 0036 (BEFORE INSERT corre
+  -- antes que los CHECK) y este bloque diría «rebotó» sin haber probado nada
+  -- de lo que dice probar. El operador es el mismo porque el primer viaje ya
+  -- quedó `liquidado` y la 0029 solo prohíbe DOS ABIERTOS a la vez.
+  insert into viaje (tenant_id, operador_id) values (v_t, v_o) returning id into v_v2;
+
+  -- ═══ DAT-26 · el UUID vive en minúsculas ═════════════════════════════════
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, cfdi_uuid)
+      values (v_t, v_v2, 'caseta', 10, 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE');
+  exception when check_violation then uuid_mayus_rebota := true;
+    when others then uuid_mayus_rebota := false;
+  end;
+
+  -- ═══ DAT-28 · una fecha imposible no entra ═══════════════════════════════
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, fecha)
+      values (v_t, v_v2, 'caseta', 10, (current_date + 800));
+  exception when others then fecha_imposible_rebota := (SQLSTATE = 'CU005');
+  end;
+
+  -- ═══ DAT-30 · `diferencias` es un arreglo ════════════════════════════════
+  begin
+    update liquidacion set diferencias = '{"tipo":"efectivo"}'::jsonb where viaje_id = v_v;
+  exception when check_violation then diferencias_rebota := true;
+  end;
+
+  -- ═══ DAT-27 · el abono no se va con la factura ═══════════════════════════
+  insert into cliente (tenant_id, nombre) values (v_t, 'ZZZ Cliente 0158') returning id into v_c;
+  insert into factura_emitida (tenant_id, cliente_id, folio, subtotal, iva, total, estatus)
+    values (v_t, v_c, 'F-0158', 1000, 160, 1160, 'emitida') returning id into v_f;
+  insert into pago_recibido (tenant_id, factura_id, monto) values (v_t, v_f, 500);
+  begin
+    delete from factura_emitida where id = v_f;
+  exception when foreign_key_violation then pago_huerfano_rebota := true;
+  end;
+
+  -- ═══ DAT-36 · el folio no tiene dos ortografías ══════════════════════════
+  -- Con OTRO operador: con el mismo, el choque sería el de la 0029 («un solo
+  -- viaje abierto por operador») y este bloque cantaría victoria sin haber
+  -- tocado el índice del folio.
+  insert into operador (tenant_id, nombre, telefono) values (v_t,'Q','5215500000159') returning id into v_o2;
+  begin
+    insert into viaje (tenant_id, operador_id, folio) values (v_t, v_o2, 'vj-0158');
+  exception when unique_violation then folio_mayus_rebota := true;
+  end;
+
+  raise exception E'INTEGRIDAD_0158  descuadre_rebota=%  tenant_ajeno_rebota=%  sin_delete=%  borrado_rebota=%  concepto_rebota=%  anticipo_rebota=%  uuid_mayus_rebota=%  pago_huerfano_rebota=%  fecha_imposible_rebota=%  diferencias_rebota=%  folio_mayus_rebota=%   (esperado t / t / 0 / t / t / t / t / t / t / t / t)',
+    descuadre_rebota, tenant_ajeno_rebota, sin_delete, borrado_rebota,
+    concepto_rebota, anticipo_rebota, uuid_mayus_rebota, pago_huerfano_rebota,
+    fecha_imposible_rebota, diferencias_rebota, folio_mayus_rebota;
 end $$;

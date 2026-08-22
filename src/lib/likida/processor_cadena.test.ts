@@ -332,6 +332,9 @@ describe('la cadena entera: "listo" → tools → PDF → WhatsApp (solo el I/O 
       TENANT,
       expect.objectContaining({ totalComprobado: 5500, totalDeducible: 4300, totalNoDeducible: 1200 }),
       `${TENANT}/v1.pdf`,
+      // El conteo de comprobantes que la 0158 compara dentro del candado del
+      // viaje (DAT-02): el papel archivado y la base cuentan lo mismo.
+      expect.any(Number),
     );
   });
 });

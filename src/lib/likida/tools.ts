@@ -6,12 +6,13 @@
 // LLM ve los gastos ya extraídos como contexto y decide cuándo cuadrar/cerrar.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { idLiquidacionDeViaje } from './liquidacion/id';
+import { randomUUID } from 'crypto';
+import { idLiquidacionDeViaje } from '@/lib/likida/liquidacion/id';
 import { registerTool, type ToolContext } from '@/lib/llm/tool-executor';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
 import { estaApagado } from './interruptores';
 import { registrarCorrida } from './agentes/corridas';
-import { getViaje, getOperador, saveLiquidacion } from './repo';
+import { getViaje, getOperador, saveLiquidacion, conteoDeGastosCambio } from './repo';
 import { getConfig } from './config';
 import { generarLiquidacionPDF } from './liquidacion/pdf';
 import { getDatosFiscales } from '@/lib/saas/fiscal';
@@ -252,11 +253,17 @@ registerTool('guardar_liquidacion', {
  *  el fallo sin duplicar el camino feliz. El handler ya validó `viajeId`. */
 async function cerrarLiquidacion(ctx: ToolContext, inicioCorrida: Date) {
   {
-    const [liq, viaje, operador] = await Promise.all([
+    // `liq` NO es const: si entre esta fotografía y el guardado entra un
+    // comprobante, la base rechaza el cierre (CU003, 0158) y aquí se vuelve a
+    // fotografiar UNA vez. Lo que se devuelve —y lo que la guardia del
+    // processor narra por WhatsApp— tiene que ser la fotografía que de verdad
+    // se archivó, nunca la primera.
+    const [primerCuadre, viaje, operador] = await Promise.all([
       computeCuadre(ctx.tenantId, ctx.viajeId!),
       getViaje(ctx.viajeId!, ctx.tenantId),
       ctx.operadorId ? getOperador(ctx.operadorId, ctx.tenantId) : Promise.resolve(null),
     ]);
+    let liq = primerCuadre;
     // ── EL CANDADO DEL CIERRE EN CEROS (QA 16-ago-2026, hallazgo crítico) ──
     // "Ya subí todo" sin una sola foto: `pareceCierre` no reconocía la frase,
     // el freno del processor nunca corría, y el LLM cerraba solo con
@@ -288,39 +295,72 @@ async function cerrarLiquidacion(ctx: ToolContext, inicioCorrida: Date) {
     // veredictos por el adjunto, en un documento que además puede reenviar.
     let pdfPath: string | undefined;
     let pdfOperadorPath: string | undefined;
-    try {
-      // DAT-41: el id del papel es el que la fila va a tener (0159), no uno
-      // inventado que nadie podrá buscar.
-      const full: Liquidacion = { ...liq, id: idLiquidacionDeViaje(ctx.viajeId!), creadaEn: new Date().toISOString() };
-      const v = viaje ?? { id: ctx.viajeId!, anticipo: liq.totalAnticipo };
-      const o = operador ?? { id: ctx.operadorId ?? '', nombre: 'Operador', telefono: ctx.telefono ?? '' };
-      const subir = async (bytes: Uint8Array, path: string) => {
-        const up = await supabaseAdmin().storage.from('liquidaciones').upload(path, Buffer.from(bytes), {
-          contentType: 'application/pdf',
-          upsert: true,
-        });
-        if (up.error) { logger.warn('pdf.upload', { path, err: up.error.message }); return undefined; }
-        return path;
-      };
-      // La razón social de la flota: encabeza el documento (el papel es suyo,
-      // no nuestro) y nombra el descargo del pie. Se lee con catch → undefined
-      // a propósito: si la consulta falla, el PDF sale con el encabezado
-      // genérico en vez de NO SALIR. Perder la liquidación entera por no poder
-      // leer un nombre sería el peor intercambio posible — y el fallback ya
-      // está definido para no inventar ninguno.
-      let razonSocial: string | undefined;
+    // Los dos ejemplares se generan a partir de la fotografía QUE SE VA A
+    // ARCHIVAR. Está en una función porque puede correr dos veces: si la base
+    // rechaza el cierre por haber contado otros comprobantes (CU003, 0158),
+    // reimprimir con la fotografía vieja archivaría el PDF que causó el
+    // hallazgo. Se vuelve a fotografiar Y se vuelve a imprimir, o no se cierra.
+    const generarPdfs = async (cuadre: Omit<Liquidacion, 'id' | 'creadaEn'>) => {
       try {
-        const d = await getDatosFiscales(ctx.tenantId);
-        razonSocial = d?.razonSocial ?? undefined;
+        // DAT-41: el id del papel es el que la fila va a tener (trigger de la
+        // 0159), no uno inventado que nadie podría buscar después.
+        const full: Liquidacion = { ...cuadre, id: idLiquidacionDeViaje(ctx.viajeId!), creadaEn: new Date().toISOString() };
+        const v = viaje ?? { id: ctx.viajeId!, anticipo: cuadre.totalAnticipo };
+        const o = operador ?? { id: ctx.operadorId ?? '', nombre: 'Operador', telefono: ctx.telefono ?? '' };
+        const subir = async (bytes: Uint8Array, path: string) => {
+          const up = await supabaseAdmin().storage.from('liquidaciones').upload(path, Buffer.from(bytes), {
+            contentType: 'application/pdf',
+            upsert: true,
+          });
+          if (up.error) { logger.warn('pdf.upload', { path, err: up.error.message }); return undefined; }
+          return path;
+        };
+        // La razón social de la flota: encabeza el documento (el papel es suyo,
+        // no nuestro) y nombra el descargo del pie. Se lee con catch → undefined
+        // a propósito: si la consulta falla, el PDF sale con el encabezado
+        // genérico en vez de NO SALIR. Perder la liquidación entera por no poder
+        // leer un nombre sería el peor intercambio posible — y el fallback ya
+        // está definido para no inventar ninguno.
+        let razonSocial: string | undefined;
+        try {
+          const d = await getDatosFiscales(ctx.tenantId);
+          razonSocial = d?.razonSocial ?? undefined;
+        } catch (e) {
+          logger.warn('pdf.razon_social', { err: e instanceof Error ? e.message : String(e) });
+        }
+        pdfPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'contralor'), `${ctx.tenantId}/${ctx.viajeId}.pdf`);
+        pdfOperadorPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'operador'), `${ctx.tenantId}/${ctx.viajeId}-operador.pdf`);
       } catch (e) {
-        logger.warn('pdf.razon_social', { err: e instanceof Error ? e.message : String(e) });
+        logger.error('pdf.gen', { err: e instanceof Error ? e.message : String(e) });
       }
-      pdfPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'contralor'), `${ctx.tenantId}/${ctx.viajeId}.pdf`);
-      pdfOperadorPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'operador'), `${ctx.tenantId}/${ctx.viajeId}-operador.pdf`);
+    };
+    await generarPdfs(liq);
+
+    // ── EL CIERRE, CON EL CONTEO QUE LA BASE TIENE QUE CONFIRMAR (DAT-02) ──
+    //
+    // `liq.gastos.length` es el número de comprobantes de la fotografía que
+    // acaba de imprimirse. La 0158 toma el candado del viaje, cuenta los que
+    // hay de verdad y se cae con CU003 si no coinciden: el papel y la base
+    // nunca vuelven a contar distinto.
+    //
+    // El reintento es UNO y no un bucle a propósito. Una foto que entra justo
+    // en esa ventana es un accidente; dos seguidas son un operador mandando
+    // fajo mientras el agente cierra, y ahí lo correcto es NO cerrar y que el
+    // processor se lo diga —volver a intentar sin fin le daría un cuadre
+    // distinto cada vez, y el último no sería más verdadero que el primero.
+    let liquidacionId: string;
+    try {
+      liquidacionId = await saveLiquidacion(ctx.tenantId, liq, pdfPath, liq.gastos.length);
     } catch (e) {
-      logger.error('pdf.gen', { err: e instanceof Error ? e.message : String(e) });
+      if (!conteoDeGastosCambio(e)) throw e;
+      logger.warn('cierre.gasto_en_la_ventana', {
+        tenantId: ctx.tenantId, viajeId: ctx.viajeId, gastosDelPrimerCuadre: liq.gastos.length,
+      });
+      // Segunda y última fotografía: cuadre nuevo, PDF nuevos, cierre nuevo.
+      liq = await computeCuadre(ctx.tenantId, ctx.viajeId!);
+      await generarPdfs(liq);
+      liquidacionId = await saveLiquidacion(ctx.tenantId, liq, pdfPath, liq.gastos.length);
     }
-    const liquidacionId = await saveLiquidacion(ctx.tenantId, liq, pdfPath);
     // ── LA CORRIDA SE ANOTA (0102 + 0115) ───────────────────────────────────
     // Después de persistir — la liquidación YA está cerrada — y con el
     // estándar §7: `registrarCorrida` jamás lanza, perder la anotación es mil

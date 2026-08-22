@@ -16,13 +16,32 @@ import type { CodigoPendiente } from './intake/emparejar';
 // llamaban a `supabaseAdmin()` en crudo — once de los trece pasos del cierre.
 
 /**
+ * EL UUID DEL CFDI, EN UNA SOLA ORTOGRAFÍA (auditoría 18, DAT-26).
+ *
+ * El SAT imprime el folio fiscal en MAYÚSCULAS —en el PDF y en el atributo
+ * `UUID` del timbre— y el OCR y los portales de facturación lo devuelven en
+ * minúsculas. `uq_gasto_cfdi_uuid` y `factura_cfdi_unico` son índices sobre
+ * `text`: con las dos ortografías vivas, el MISMO comprobante entraba dos
+ * veces y su IVA se acreditaba dos veces.
+ *
+ * Se normaliza en la ESCRITURA y no al comparar porque un índice no puede
+ * comparar «con criterio»: o el dato tiene una forma, o el índice no dice lo
+ * que cree decir. La migración 0158 lo hace cumplir con un CHECK en las cuatro
+ * tablas, así que esto no es la defensa —es no chocar contra ella.
+ */
+function uuidCfdi(u: string | null | undefined): string | null {
+  const t = (u ?? '').trim();
+  return t === '' ? null : t.toLowerCase();
+}
+
+/**
  * Conserva el XML CRUDO del CFDI (CFF art. 30). Best-effort: un fallo aquí NO
  * tumba la liquidación (el gasto ya está capturado). 1.8.
  */
 export async function saveCfdiXmlRaw(tenantId: string, cfdiUuid: string, gastoId: string | null, xml: string): Promise<void> {
   const { error } = await acotada(supabaseAdmin()
     .from('cfdi_xml')
-    .upsert({ tenant_id: tenantId, cfdi_uuid: cfdiUuid, gasto_id: gastoId, xml }, { onConflict: 'tenant_id,cfdi_uuid' }), 'saveCfdiXmlRaw');
+    .upsert({ tenant_id: tenantId, cfdi_uuid: uuidCfdi(cfdiUuid), gasto_id: gastoId, xml }, { onConflict: 'tenant_id,cfdi_uuid' }), 'saveCfdiXmlRaw');
   if (error) logger.warn('cfdi_xml.save', { err: error.message });
 }
 
@@ -150,7 +169,7 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     folio: g.folio ?? null,
     rfc_emisor: g.rfcEmisor ?? null,
     rfc_receptor: g.rfcReceptor ?? null,
-    cfdi_uuid: g.cfdiUuid ?? null,
+    cfdi_uuid: uuidCfdi(g.cfdiUuid),
     imagen_url: g.imagenUrl ?? null,
     ocr_confianza: g.ocrConfianza ?? null,
     cfdi_valido: g.cfdiValido ?? null,
@@ -509,7 +528,7 @@ export async function updateGastoCfdiXml(
        cantidad?: number },
 ): Promise<void> {
   const extra: Record<string, unknown> = {};
-  if (x.uuid) extra.cfdi_uuid = x.uuid;
+  if (x.uuid) extra.cfdi_uuid = uuidCfdi(x.uuid);
   if (x.rfcEmisor) extra.rfc_emisor = x.rfcEmisor;
   if (x.rfcReceptor) extra.rfc_receptor = x.rfcReceptor;
   // El monto del CFDI gana sobre el que leyó la visión: no pasó por OCR.
@@ -595,7 +614,7 @@ export async function enriquecerGastoConCodigo(
     p_gasto: gasto.id,
     p_tenant: tenantId,
     p_extra: extra,
-    p_cfdi_uuid: datos.cfdiUuid ?? null,
+    p_cfdi_uuid: uuidCfdi(datos.cfdiUuid),
   }), 'enriquecerGastoConCodigo');
   if (error) throw new Error(`enriquecerGastoConCodigo: ${error.message}`);
   return data === true;
@@ -618,7 +637,7 @@ export async function guardarCodigoPendiente(
     folio_portal: c.folioPortal ?? null,
     codigo_barras: c.codigoBarras ?? null,
     url_facturacion: c.urlFacturacion ?? null,
-    cfdi_uuid: c.cfdiUuid ?? null,
+    cfdi_uuid: uuidCfdi(c.cfdiUuid),
   }), 'guardarCodigoPendiente');
   if (error) throw new Error(`guardarCodigoPendiente: ${error.message}`);
 }
@@ -698,10 +717,35 @@ export async function getGastos(viajeId: string, tenantId: string): Promise<Gast
   }));
 }
 
+/**
+ * SQLSTATE de la 0158: al cerrar, la base contó MÁS (o menos) comprobantes de
+ * los que el cuadre había fotografiado.
+ *
+ * No es un error de escritura: es la carrera de DAT-02 atrapada. Entre
+ * `computeCuadre` y este cierre pasan segundos —los dos PDF— y las fotos
+ * entrantes no toman el mutex del viaje: un ticket que entra en esa ventana
+ * queda fuera del papel que se archiva y huérfano para siempre (el viaje ya
+ * está liquidado y la 0036 no lo deja entrar después). La base se niega a
+ * emitir esa liquidación, y quien la llamó tiene que volver a fotografiar.
+ */
+export const CIERRE_CONTEO_CAMBIO = 'CU003';
+
+/** ¿El cierre rebotó porque entró un gasto entre el cuadre y el guardado? */
+export function conteoDeGastosCambio(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as { code?: string }).code === CIERRE_CONTEO_CAMBIO;
+}
+
 export async function saveLiquidacion(
   tenantId: string,
   liq: Omit<Liquidacion, 'id' | 'creadaEn'>,
   pdfUrl?: string,
+  /**
+   * Cuántos comprobantes traía el cuadre que se está persistiendo. La base
+   * compara contra los que ve DENTRO del candado del viaje y se cae con
+   * CU003 si no coinciden (0158, DAT-02). `undefined` = no comprobar, que es
+   * lo que necesitan los llamadores que no fotografiaron gastos.
+   */
+  nGastos?: number,
 ): Promise<string> {
   const admin = supabaseAdmin();
   // CR-1 / AUDIT_V3 money-path CRÍTICO: cierre ATÓMICO e idempotente. Antes eran
@@ -723,8 +767,17 @@ export async function saveLiquidacion(
     p_iva: liq.ivaAcreditable,
     p_peaje: liq.peajeAcreditable,
     p_pdf_url: pdfUrl ?? null,
+    p_n_gastos: nGastos ?? null,
   }), 'saveLiquidacion');
-  if (error) throw new Error(`saveLiquidacion: ${error.message}`);
+  if (error) {
+    // SE PRESERVA `code`, como en `addGasto` y `updateGastoCfdiXml`: sin él,
+    // `cerrarLiquidacion` no puede distinguir el CU003 —que se resuelve
+    // volviendo a fotografiar— de un fallo cualquiera, y se rendiría en el
+    // único caso en el que reintentar es lo correcto.
+    const e = new Error(`saveLiquidacion: ${error.message}`) as Error & { code?: string };
+    e.code = (error as { code?: string }).code;
+    throw e;
+  }
   return data as string;
 }
 

@@ -223,7 +223,8 @@ describe('E2E de canal: POST firmado de Meta → cierre → PDF → sobre de vue
     // Los DOS ejemplares del PDF son bytes reales en storage:
     expect([...subidos.keys()].sort()).toEqual([`${TENANT}/v1-operador.pdf`, `${TENANT}/v1.pdf`]);
     // La liquidación se persistió con el ejemplar del contralor:
-    expect(saveLiquidacion).toHaveBeenCalledWith(TENANT, expect.anything(), `${TENANT}/v1.pdf`);
+    // El 4º argumento es el conteo de comprobantes de la 0158 (DAT-02).
+    expect(saveLiquidacion).toHaveBeenCalledWith(TENANT, expect.anything(), `${TENANT}/v1.pdf`, expect.any(Number));
     // Y el sobre del documento salió a Meta, al número que Meta acepta:
     const documentos = salientes.filter((s) => s.body.type === 'document');
     expect(documentos).toHaveLength(1);

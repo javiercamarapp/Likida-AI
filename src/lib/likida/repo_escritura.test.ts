@@ -22,7 +22,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { addGasto, saveLiquidacion } = await import('./repo');
+const { addGasto, saveLiquidacion, conteoDeGastosCambio } = await import('./repo');
 
 describe('addGasto — el mapeo a columnas', () => {
   beforeEach(() => { insert.mockReset(); insert.mockResolvedValue({ error: null }); from.mockClear(); });
@@ -58,6 +58,23 @@ describe('addGasto — el mapeo a columnas', () => {
     expect(fila.ieps_traslado).toBe(0);
     expect(fila.iva_traslado).toBe(0);
     expect(fila.sub_total).toBe(0);
+  });
+
+  // AUDITORÍA 18 · DAT-26. El SAT imprime el folio fiscal en MAYÚSCULAS y el
+  // OCR lo lee en minúsculas: `uq_gasto_cfdi_uuid` es un índice sobre `text`,
+  // así que el MISMO comprobante entraba dos veces y su IVA se acreditaba dos
+  // veces. Esta prueba era ROJA antes de `uuidCfdi()` — el UUID llegaba tal
+  // cual venía — y hoy la 0158 lo hace cumplir con un CHECK en la base.
+  it('el UUID del CFDI se guarda SIEMPRE en minúsculas', async () => {
+    await addGasto('t1', 'v1', { ...gasto, cfdiUuid: 'AD662D33-6934-459C-A128-BDF0393F0F44' });
+    expect(insert.mock.calls[0][0].cfdi_uuid).toBe('ad662d33-6934-459c-a128-bdf0393f0f44');
+  });
+
+  it('un UUID de puros espacios es NULL, no una cadena vacía', async () => {
+    // Cadena vacía en esa columna la haría participar del índice único: dos
+    // tickets sin timbrar chocarían entre sí.
+    await addGasto('t1', 'v1', { ...gasto, cfdiUuid: '   ' });
+    expect(insert.mock.calls[0][0].cfdi_uuid).toBeNull();
   });
 
   it('un false NO se guarda como NULL', async () => {
@@ -132,6 +149,32 @@ describe('saveLiquidacion — el cierre', () => {
       p_diferencias: [{ tipo: 'efectivo_sobre_tope', nota: 'pago en efectivo de $2,400', monto: 2400 }],
       p_pdf_url: 'tenant-1/v1.pdf',
     });
+  });
+
+  // AUDITORÍA 18 · DAT-02 + DAT-14. Entre el cuadre (que imprime los PDF) y
+  // este guardado pasan segundos, y las fotos entrantes NO toman el mutex del
+  // viaje: un ticket que entra ahí queda fuera del papel archivado y huérfano
+  // para siempre. La 0158 toma el candado del viaje y compara el conteo; si
+  // este parámetro no viaja, la base no puede comparar nada y el hallazgo
+  // sigue abierto con la migración aplicada.
+  it('manda CUÁNTOS comprobantes traía el cuadre que se está archivando', async () => {
+    await saveLiquidacion('t1', liq, 'tenant-1/v1.pdf', 6);
+    expect(rpc.mock.calls[0][1]).toMatchObject({ p_n_gastos: 6 });
+  });
+
+  it('sin conteo, la RPC recibe null explícito: «no compruebes»', async () => {
+    await saveLiquidacion('t1', liq);
+    expect(rpc.mock.calls[0][1]).toMatchObject({ p_n_gastos: null });
+  });
+
+  it('el CU003 de la base llega arriba CON su código, no como un error liso', async () => {
+    // Sin preservar `code`, `cerrarLiquidacion` no puede distinguir «entró una
+    // foto, vuelve a fotografiar» de un fallo cualquiera — y se rendiría en el
+    // único caso donde reintentar es lo correcto.
+    rpc.mockResolvedValue({ data: null, error: { code: 'CU003', message: 'el viaje tenía 1 y ahora tiene 2' } });
+    const e = await saveLiquidacion('t1', liq, undefined, 1).catch((x) => x);
+    expect(conteoDeGastosCambio(e)).toBe(true);
+    expect(conteoDeGastosCambio(new Error('cualquier otra cosa'))).toBe(false);
   });
 
   it('sin PDF, la liga va null explícito y no undefined', async () => {
