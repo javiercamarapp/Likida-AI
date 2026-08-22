@@ -58,6 +58,23 @@ export const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   // cae a la service role key: sin ella el selector de flota no firma ni lee,
   // y el sistema arranca igual.
   { nombre: 'LIKIDA_FLOTA_COOKIE_LLAVE', consecuencia: 'el superadmin no puede fijar una flota activa en /admin (la cookie no se firma ni se lee)' },
+  // ── EL LÍMITE DE TASA SIN REDIS (auditoría prod 22-ago-2026, SEG-1) ─────
+  //
+  // `ratelimit.ts` cae a un Map POR INSTANCIA sin estas dos, y ahí el techo
+  // deja de ser un techo: 10 intentos de login por 5 minutos se vuelven 10 ×
+  // (instancias que el atacante consiga abrir en paralelo) — y lo mismo el
+  // límite del webhook de WhatsApp, el de /v1, el del formulario de leads y
+  // el de los exports. El sistema arranca y atiende igual, que es justo lo
+  // que califica para esta lista.
+  //
+  // `ratelimit.ts` ya lo grita en el PRIMER uso de cada instancia
+  // (`startup.ratelimit_backend`). Aquí se dice en el arranque, junto a las
+  // demás, para que una revisión de configuración las vea todas en un renglón
+  // y no dependa de que alguien pegue una petición primero. Van las dos por
+  // separado a propósito: media credencial es tan inútil como ninguna, y el
+  // aviso tiene que nombrar la que falta.
+  { nombre: 'UPSTASH_REDIS_REST_URL', consecuencia: 'el límite de tasa (login, webhook de WhatsApp, /v1, leads, exports) cuenta en la memoria de CADA instancia: no hay techo global' },
+  { nombre: 'UPSTASH_REDIS_REST_TOKEN', consecuencia: 'idem UPSTASH_REDIS_REST_URL: sin las dos, el límite de tasa no es global' },
 ];
 
 /**

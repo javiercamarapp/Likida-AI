@@ -114,6 +114,7 @@ falla si entra una ahí y no aquí):
 | `NEXT_PUBLIC_APP_URL` | El login arma sus redirects contra `https://app.likida.ai` (el fallback) y no contra el despliegue que los emitió: el magic link y el retorno de Google aterrizan en otro sitio, sin error. |
 | `LIKIDA_WHATSAPP_MSG_USD` | El costo por liquidación usa el default 0.008 — y esa cifra decide el precio del producto. |
 | `LIKIDA_FLOTA_COOKIE_LLAVE` | El superadmin no puede fijar una flota activa en `/admin` (la cookie no se firma ni se lee: fallar cerrado). Desde la auditoría 18 ya NO cae a la service role key. |
+| `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | El límite de tasa cae al Map **por instancia**: 10 intentos de login por 5 min se vuelven 10 × (instancias abiertas en paralelo), y lo mismo el del webhook de WhatsApp, `/v1`, el formulario de leads y los exports. También es el piso de una hora de `alertarOperador`, que sin Redis se cuenta por instancia. **Verificado presente en producción el 22-ago-2026.** El estado vivo se lee en `GET /api/health` → `ratelimit: "redis" \| "memoria"`, y el arranque lo dice en `startup.ratelimit_backend`. |
 
 El gate de `/dashboard` no depende de ninguna variable de entorno: es la
 sesión de Supabase Auth, verificada en `proxy.ts` (`RUTAS_CON_SESION`). El

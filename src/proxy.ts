@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { COOKIES_DE_SESION } from '@/lib/supabase/cookies';
 
 // Cabeceras de seguridad + gate de sesión del dashboard. El matcher EXCLUYE
 // /api (webhook, demo, export manejan lo suyo y no deben pasar por el gate ni
@@ -120,12 +121,20 @@ export async function proxy(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
+        // El token de sesión no lo lee ningún JavaScript de esta app —no hay
+        // `createBrowserClient` ni un solo `document.cookie`—, así que no
+        // tiene por qué ser legible desde el navegador (SEG-3). Ver
+        // `lib/supabase/cookies.ts`.
+        cookieOptions: COOKIES_DE_SESION,
         cookies: {
           getAll: () => req.cookies.getAll(),
           setAll: (list) => {
             list.forEach(({ name, value }) => req.cookies.set(name, value));
             res = NextResponse.next({ request: req });
-            list.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
+            // El `httpOnly` se repite sobre `options` a propósito: es la
+            // cookie que sale de verdad hacia el navegador, y no puede
+            // depender de que el SDK propague la opción global.
+            list.forEach(({ name, value, options }) => res.cookies.set(name, value, { ...options, ...COOKIES_DE_SESION }));
           },
         },
       },

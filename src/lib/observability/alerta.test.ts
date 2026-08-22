@@ -49,6 +49,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -157,5 +158,73 @@ describe('alertarOperador — el detalle viaja redactado', () => {
     const datos = JSON.stringify(correo.datos);
     expect(datos).not.toContain('9993700779');
     expect(datos).toContain('[TEL]');
+  });
+});
+
+// AUDITORÍA PROD (22-ago-2026), RES-17: el piso de una hora vivía en un Map
+// por instancia. Con N instancias calientes, N correos iguales por hora. Ahora
+// la reserva es un `SET NX PX` en Upstash —atómico y compartido— y el Map es
+// el respaldo cuando Redis no contesta.
+describe('alertarOperador — el piso vive en Redis, compartido entre instancias', () => {
+  function redisFalso() {
+    const llaves = new Map<string, number>();
+    const cuerpos: unknown[] = [];
+    const fn = vi.fn(async (_url: string, init: RequestInit) => {
+      const cmd = JSON.parse(String(init.body)) as [string, string, string, string, number, string];
+      cuerpos.push(cmd);
+      const [verbo, llave, , px, ms, nx] = cmd;
+      expect(verbo).toBe('SET'); expect(px).toBe('PX'); expect(nx).toBe('NX');
+      const viva = (llaves.get(llave) ?? 0) > Date.now();
+      if (viva) return new Response(JSON.stringify({ result: null }), { status: 200 });
+      llaves.set(llave, Date.now() + ms);
+      return new Response(JSON.stringify({ result: 'OK' }), { status: 200 });
+    });
+    return { fn, cuerpos };
+  }
+
+  it('dos "instancias" (módulos frescos) con el mismo evento: sale UN correo', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://fake.upstash.io');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'tok');
+    const { fn } = redisFalso();
+    vi.stubGlobal('fetch', fn);
+
+    const a = await cargar();
+    await a.alertarOperador('cron.purgar', { error: 'x' });
+    const b = await cargar(); // otra instancia: Map vacío
+    await b.alertarOperador('cron.purgar', { error: 'x' });
+
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledTimes(2);
+    // La llave lleva el evento y el TTL es el piso.
+    const cmd = JSON.parse(String((fn.mock.calls[0] as [string, RequestInit])[1].body)) as unknown[];
+    expect(cmd[1]).toBe('likida:alerta:cron.purgar');
+    expect(cmd[4]).toBe(a.PISO_ALERTA_MS);
+  });
+
+  it('si Redis no contesta, cae al Map local y el correo sale igual (nunca silencio, nunca lanza)', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://fake.upstash.io');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'tok');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('fetch failed'); }));
+    const { alertarOperador } = await cargar();
+
+    await alertarOperador('cron.purgar', { error: 'x' });
+    await alertarOperador('cron.purgar', { error: 'x' });
+
+    expect(enviarCorreo).toHaveBeenCalledTimes(1); // el Map sigue poniendo el piso
+    expect(logger.warn).toHaveBeenCalledWith('alerta.piso_redis_fallo', expect.objectContaining({ evento: 'cron.purgar' }));
+  });
+
+  it('sin credenciales no toca la red: el piso es el Map de siempre', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
+    const fn = vi.fn();
+    vi.stubGlobal('fetch', fn);
+    const { alertarOperador } = await cargar();
+    await alertarOperador('cron.purgar', { error: 'x' });
+    expect(fn).not.toHaveBeenCalled();
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
   });
 });
