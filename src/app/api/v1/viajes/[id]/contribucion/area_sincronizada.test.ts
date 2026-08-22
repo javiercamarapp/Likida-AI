@@ -40,38 +40,66 @@ function areasDelCodigo(): Record<string, Record<string, string>> {
   return out;
 }
 
-async function spec(): Promise<Record<string, Record<string, { description?: string; tags?: string[] }>>> {
+type Operacion = { description?: string; tags?: string[]; 'x-likida-area'?: string };
+
+async function spec(): Promise<Record<string, Record<string, Operacion>>> {
   const r = await getSpec(new Request('https://app.likida.ai/api/v1/openapi'));
-  return ((await r.json()) as { paths: Record<string, Record<string, { description?: string; tags?: string[] }>> }).paths;
+  return ((await r.json()) as { paths: Record<string, Record<string, Operacion>> }).paths;
 }
 
 describe('el área que declara el OpenAPI es la que el código pasa a abrir()', () => {
   it('CONTROL: el extractor encuentra las rutas de datos con su abrir()', () => {
     const areas = areasDelCodigo();
     expect(areas['/v1/viajes/{id}/contribucion']?.get).toBe('dinero');
+    expect(areas['/v1/viajes']?.post).toBe('administracion');
     expect(Object.keys(areas).length).toBeGreaterThanOrEqual(5);
   });
 
-  it('toda ruta de DINERO en el código lo declara en el spec, y toda área declarada coincide con el código', async () => {
+  it('TODA ruta que llama abrir(req, área) la declara en `x-likida-area`, en la prosa y —si es dinero— en el tag', async () => {
+    // Generalizado (M19): antes solo `dinero` estaba obligado a declararse y
+    // `POST /v1/viajes` y `POST /v1/unidades` (área `administracion`) no
+    // decían nada legible por máquina. Ahora cada operación con `abrir()`
+    // lleva `x-likida-area` igual al argumento del código.
     const areas = areasDelCodigo();
     const paths = await spec();
     const faltan: string[] = [];
     for (const [ruta, metodos] of Object.entries(areas)) {
       for (const [metodo, areaCodigo] of Object.entries(metodos)) {
         const op = paths[ruta]?.[metodo];
-        if (!op) { faltan.push(`${metodo.toUpperCase()} ${ruta}: sin bloque en el spec`); continue; }
-        const declarada = /Área `([a-z]+)`/.exec(op.description ?? '')?.[1];
-        if (declarada && declarada !== areaCodigo) {
-          faltan.push(`${metodo.toUpperCase()} ${ruta}: el spec dice "${declarada}" y abrir() pide "${areaCodigo}"`);
+        const id = `${metodo.toUpperCase()} ${ruta}`;
+        if (!op) { faltan.push(`${id}: sin bloque en el spec`); continue; }
+        if (op['x-likida-area'] !== areaCodigo) {
+          faltan.push(`${id}: x-likida-area dice "${op['x-likida-area'] ?? '(nada)'}" y abrir() pide "${areaCodigo}"`);
         }
-        if (areaCodigo === 'dinero' && declarada !== 'dinero') {
-          faltan.push(`${metodo.toUpperCase()} ${ruta}: abrir() pide dinero y el spec no lo declara`);
+        // La prosa también tiene que decirlo, y decir lo mismo: es lo que lee
+        // el integrador (y su abogado) al decidir qué llave entregar.
+        const declarada = /[Áá]rea `([a-z]+)`/.exec(op.description ?? '')?.[1];
+        if (declarada !== areaCodigo) {
+          faltan.push(`${id}: la descripción dice "${declarada ?? '(nada)'}" y abrir() pide "${areaCodigo}"`);
         }
         if (areaCodigo === 'dinero' && !(op.tags ?? []).includes('dinero')) {
-          faltan.push(`${metodo.toUpperCase()} ${ruta}: falta el tag "dinero"`);
+          faltan.push(`${id}: falta el tag "dinero"`);
         }
       }
     }
     expect(faltan, faltan.join('\n')).toEqual([]);
+  }, 30_000);
+
+  it('y al revés: toda `x-likida-area` del spec corresponde a una ruta del código con ese abrir()', async () => {
+    // Un área declarada sobre una operación sin `abrir()` (o con otra) sería
+    // una promesa del contrato que ningún código respalda.
+    const areas = areasDelCodigo();
+    const paths = await spec();
+    const sobran: string[] = [];
+    for (const [ruta, metodos] of Object.entries(paths)) {
+      for (const [metodo, op] of Object.entries(metodos)) {
+        const declarada = op['x-likida-area'];
+        if (declarada === undefined) continue;
+        if (areas[ruta]?.[metodo] !== declarada) {
+          sobran.push(`${metodo.toUpperCase()} ${ruta}: x-likida-area "${declarada}" sin abrir() que lo respalde`);
+        }
+      }
+    }
+    expect(sobran, sobran.join('\n')).toEqual([]);
   }, 30_000);
 });

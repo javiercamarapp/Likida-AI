@@ -304,6 +304,9 @@ function documento(servidor: string) {
         '   vez y solo se guarda su hash: si se pierde, se revoca y se emite otra. Cada llave trae su propia',
         '   área (`operacion`, `dinero` o `administracion`), más angosta que la de una persona — una llave de',
         '   operación no puede leer el margen de la flota. Cuando mandas una llave, la cookie se ignora.',
+        '   El área que exige cada operación va en su extensión `x-likida-area` (legible por máquina) y en su',
+        '   descripción (legible por persona); una prueba las ata al `abrir()` del código de cada ruta para que',
+        '   el contrato no diverja del código en silencio.',
         '',
         '2. **Cookie de sesión** (Supabase Auth) — la del propio panel. Sirve para un agente que ya opere con',
         '   una sesión abierta; no sirve para un proceso sin navegador.',
@@ -487,6 +490,7 @@ function documento(servidor: string) {
       '/v1/viajes': {
         post: {
           operationId: 'crearViaje',
+          'x-likida-area': 'administracion',
           summary: 'Da de alta un viaje.',
           description:
             'Requiere el área `administracion`. El viaje nace `abierto`.\n\n'
@@ -528,6 +532,7 @@ function documento(servidor: string) {
         },
         get: {
           operationId: 'listarViajes',
+          'x-likida-area': 'operacion',
           summary: 'Los viajes de la flota, el más reciente primero.',
           description: 'Área `operacion`: no devuelve un peso. El anticipo por viaje se queda fuera a propósito — es dinero, y el jefe de tráfico ve esta ruta.',
           tags: ['viajes'],
@@ -555,6 +560,7 @@ function documento(servidor: string) {
       '/v1/viajes/{id}': {
         get: {
           operationId: 'obtenerViaje',
+          'x-likida-area': 'operacion',
           summary: 'Un viaje por su uuid.',
           description: 'Área `operacion`: identidad y estado operativo, sin dinero. El dinero del viaje está en `/v1/viajes/{id}/contribucion`.',
           tags: ['viajes'],
@@ -580,6 +586,7 @@ function documento(servidor: string) {
       '/v1/viajes/{id}/contribucion': {
         get: {
           operationId: 'obtenerContribucionDeViaje',
+          'x-likida-area': 'dinero',
           summary: 'Cuánto dejó el viaje, y qué falta para poder decirlo.',
           description: 'Área `dinero`. Casi todas sus cifras pueden venir `null`: lee la regla del `null` en la descripción de la API antes de graficar esto.',
           tags: ['viajes', 'dinero'],
@@ -605,6 +612,7 @@ function documento(servidor: string) {
       '/v1/unidades': {
         post: {
           operationId: 'crearUnidad',
+          'x-likida-area': 'administracion',
           summary: 'Da de alta una unidad del parque vehicular.',
           description:
             'Requiere el área `administracion`. Es la ruta con la que se carga el parque desde un TMS o un CSV sin teclearlo a mano.\n\n'
@@ -646,6 +654,7 @@ function documento(servidor: string) {
         },
         get: {
           operationId: 'listarUnidades',
+          'x-likida-area': 'operacion',
           summary: 'El parque vehicular con sus vigencias de ley.',
           description: `Área \`operacion\`. \`resumen\` cuenta la FLOTA ENTERA, no la página: un semáforo calculado sobre 50 de 300 unidades diría que no hay nada vencido porque los vencidos cayeron en la página 3. \`diasAviso\` (${DIAS_AVISO}) es la anticipación con la que una vigencia pasa a \`por_vencer\`.`,
           tags: ['unidades'],
@@ -684,6 +693,7 @@ function documento(servidor: string) {
       '/v1/clientes': {
         get: {
           operationId: 'listarClientes',
+          'x-likida-area': 'dinero',
           summary: 'A quién le factura la flota, cuánto le debe y cuánto está vencido.',
           description: 'Área `dinero`. `resumen` es de la CARTERA ENTERA, no de la página: la concentración de una página no significa nada, y es la cifra con la que se decide si la flota depende de un solo cliente.',
           tags: ['clientes', 'dinero'],
