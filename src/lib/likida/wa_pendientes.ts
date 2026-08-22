@@ -74,17 +74,27 @@ export interface PendienteReclamado {
 /**
  * Los pendientes listos para drenar, en orden de llegada. LANZA ante error
  * de lectura: el cron debe reportar 500, no "no había nada".
+ *
+ * Trae `remitente` (el `from` del evento) porque el drenado paraleliza POR
+ * CHOFER (ESC-1): los mensajes de una misma persona se procesan en serie —una
+ * caption completa la foto anterior— y los de personas distintas, a la vez.
  */
-export async function pendientesPorDrenar(limite = 10): Promise<Array<{ id: string; intentos: number }>> {
+export async function pendientesPorDrenar(limite = 10): Promise<Array<{ id: string; intentos: number; remitente: string }>> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('wa_evento_pendiente')
-    .select('id, intentos')
+    .select('id, intentos, evento')
     .is('procesado_en', null)
     .lt('intentos', MAX_INTENTOS_PENDIENTE)
     .order('recibido_en', { ascending: true })
     .limit(limite), 'pendientesPorDrenar');
   if (error) throw new Error(`pendientesPorDrenar: ${error.message}`);
-  return ((data ?? []) as Array<{ id: string; intentos: number }>).map((f) => ({ id: String(f.id), intentos: Number(f.intentos) }));
+  return ((data ?? []) as Array<{ id: string; intentos: number; evento?: { from?: string } }>).map((f) => ({
+    id: String(f.id),
+    intentos: Number(f.intentos),
+    // Sin `from` legible, el evento va a su propia cadena (su id): peor que
+    // agrupar, nunca peor que mezclarlo con el de otro chofer.
+    remitente: typeof f.evento?.from === 'string' ? f.evento.from : String(f.id),
+  }));
 }
 
 /**
@@ -115,6 +125,26 @@ export async function marcarPendienteProcesado(id: string): Promise<void> {
     .update({ procesado_en: new Date().toISOString(), ultimo_error: null })
     .eq('id', id), 'marcarPendienteProcesado');
   if (error) logger.error('wa.pendiente_sin_sellar', { id, err: error.message });
+}
+
+/**
+ * DEVUELVE el intento que este claim consumió (ESC-1).
+ *
+ * `sin_tiempo` significa que la invocación se quedó sin presupuesto ANTES de
+ * empezar: el mensaje no se intentó, no falló. Contarlo como intento hacía que
+ * cinco corridas cargadas convirtieran en CARTA MUERTA —visible, con su
+ * `ultimo_error`, y jamás procesada— la foto de un chofer que nadie llegó a
+ * mirar. El intento se devuelve anclado (`eq('intentos', …)`): si otra corrida
+ * ya lo reclamó de nuevo, esta no le resta nada.
+ */
+export async function devolverIntentoPendiente(id: string, intentosDelClaim: number): Promise<void> {
+  const { error } = await acotada(supabaseAdmin()
+    .from('wa_evento_pendiente')
+    .update({ intentos: intentosDelClaim - 1 })
+    .eq('id', id)
+    .eq('intentos', intentosDelClaim)
+    .is('procesado_en', null), 'devolverIntentoPendiente');
+  if (error) logger.warn('wa.pendiente_intento_no_devuelto', { id, err: error.message });
 }
 
 /** Anota el fallo del intento (la fila sigue pendiente hasta el tope). */

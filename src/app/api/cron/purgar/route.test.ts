@@ -77,8 +77,28 @@ describe('la corrida', () => {
     const cuerpo = await res.json();
 
     expect(res.status).toBe(200);
-    expect(cuerpo).toEqual({ corrio: true, waPurgados: 3, llmCostoPurgado: false });
+    expect(cuerpo).toEqual({ corrio: true, waPurgados: 3, llmCostoPurgado: false, vueltas: 1 });
     expect(rpc).toHaveBeenCalledWith('mantenimiento_de_datos', { p_dias_wa: 30 });
+  });
+
+  // ESC-16: la purga borra en tandas y devuelve `parcial` cuando no alcanzó.
+  // Antes era UN delete sin tandas bajo maxDuration=120: la primera corrida
+  // sobre una tabla grande moría a la mitad, con el lock puesto.
+  it('si la RPC vuelve `parcial`, el cron REPITE hasta agotar sus vueltas', async () => {
+    rpcRespuesta = { data: { waPurgados: 50000, parcial: true }, error: null };
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    const cuerpo = await res.json();
+
+    expect(res.status).toBe(200);
+    // Tres vueltas es el techo duro: lo que no cupo lo levanta mañana.
+    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(cuerpo).toMatchObject({ corrio: true, parcial: true, vueltas: 3 });
+  });
+
+  it('una corrida completa NO repite: `parcial` false corta en la primera vuelta', async () => {
+    rpcRespuesta = { data: { waPurgados: 12, parcial: false }, error: null };
+    await GET(peticion('Bearer secreto-de-prueba'));
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 
   it('un error POR VALOR de la RPC es 500 con alerta — no una purga verde que "no encontró nada"', async () => {

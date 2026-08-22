@@ -12,6 +12,7 @@ import { conNavegador } from '@/lib/likida/facturacion/adaptadores/pagina_playwr
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 import { avisar, avisarCorridasPorFlota, FalloDePlataforma } from '@/lib/likida/agentes/notificaciones';
 import { avisoColaAtorada } from '@/lib/correo/avisos';
 import { registrarCorrida, ultimasCorridas } from '@/lib/likida/agentes/corridas';
@@ -306,14 +307,11 @@ function sinCapturas(renglones: Renglon[], req: Request): unknown[] {
 }
 
 export async function GET(req: Request) {
-  const secreto = process.env.CRON_SECRET;
-  if (!secreto) {
-    logger.error('cron.facturar.sin_secreto', {});
-    return NextResponse.json({ error: 'CRON_SECRET no está configurado.' }, { status: 500 });
-  }
-  if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
-    return new NextResponse(null, { status: 401 });
-  }
+  // La puerta común (RES-7): el secreto ausente ALERTA (antes solo se
+  // logueaba) y el 401 deja log con `codigo: 'cron_401'` — un secreto
+  // desfasado entre Vercel y el proyecto se veía como un cron que nunca corre.
+  const puerta = await puertaCron('facturar', req, 'La facturación no corre sin él.');
+  if (puerta) return puerta;
 
   // ── EL KILL SWITCH (0110), DESPUÉS de la puerta y ANTES de tocar la cola ─
   //
@@ -345,6 +343,9 @@ export async function GET(req: Request) {
   }
   if (apagadoPor) {
     logger.warn('cron.facturar.saltado', { interruptor: apagadoPor });
+    // El latido (RES-7): saltarse una corrida A PROPÓSITO no es estar muerto,
+    // y `/api/health` tiene que poder distinguir las dos cosas.
+    await registrarLatido('facturar', 'saltado', { interruptor: apagadoPor });
     return NextResponse.json({ corrio: false, saltado: `interruptor ${apagadoPor}` });
   }
 
@@ -360,7 +361,12 @@ export async function GET(req: Request) {
     });
   }
 
-  // RES-13 (auditoría prod): era `toISOString().slice(0, 10)` — el día UTC. De
+  // La corrida llegó a trabajar: eso es el latido (RES-7). Va aquí y no en
+  // cada `return` de abajo porque lo que mide es "este cron sigue vivo", no
+  // cuántos tickets salieron — eso ya lo cuenta la bitácora de corridas.
+  await registrarLatido('facturar', 'ok', {});
+
+    // RES-13 (auditoría prod): era `toISOString().slice(0, 10)` — el día UTC. De
   // las 18:00 a medianoche hora de México el cron ya vivía en "mañana": el
   // plazo de caducidad de cada ticket (`armar` → `calcularCaducidad`) se
   // calculaba con un día de más y un ticket vigente hasta hoy se trataba
@@ -519,6 +525,7 @@ export async function GET(req: Request) {
     const codigo = codigoDeError(e);
     logger.error('cron.facturar.falló', { error, codigo });
     await alertarOperador('cron.facturar', { error, codigo });
+    await registrarLatido('facturar', 'fallo', { codigo });
     return NextResponse.json({ error }, { status: 500 });
   }
 }
@@ -864,6 +871,7 @@ export async function procesarLoteEnCola(
     const codigo = codigoDeError(e);
     logger.error('cron.facturar.falló', { error, codigo });
     await alertarOperador('cron.facturar', { error, codigo });
+    await registrarLatido('facturar', 'fallo', { codigo });
     return NextResponse.json({ error }, { status: 500 });
   } finally {
     // ── EN `finally`, Y ÉSA ES LA CORRECCIÓN ────────────────────────────────

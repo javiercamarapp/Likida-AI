@@ -29,28 +29,45 @@ vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]
 const urgentesVencidas = vi.fn(async (..._a: unknown[]) => 0);
 vi.mock('@/lib/likida/agentes/cola', () => ({ urgentesVencidas: (...a: unknown[]) => urgentesVencidas(...a) }));
 
-const pendientesPorDrenar = vi.fn(async (): Promise<Array<{ id: string; intentos: number }>> => []);
+const pendientesPorDrenar = vi.fn(async (): Promise<Array<{ id: string; intentos: number; remitente: string }>> => []);
 const reclamarPendiente = vi.fn(async (id: string, intentos: number): Promise<{ id: string; evento: object; intentos: number } | null> =>
   ({ id, evento: { from: '521999', type: 'text', waMessageId: id }, intentos: intentos + 1 }));
 const marcarPendienteProcesado = vi.fn(async () => {});
 const anotarFalloPendiente = vi.fn(async () => {});
+const devolverIntentoPendiente = vi.fn(async () => {});
 const cartasMuertas = vi.fn(async () => 0);
 vi.mock('@/lib/likida/wa_pendientes', () => ({
   pendientesPorDrenar: (...a: unknown[]) => pendientesPorDrenar(...(a as [])),
   reclamarPendiente: (...a: unknown[]) => reclamarPendiente(...(a as [string, number])),
   marcarPendienteProcesado: (...a: unknown[]) => marcarPendienteProcesado(...(a as [])),
   anotarFalloPendiente: (...a: unknown[]) => anotarFalloPendiente(...(a as [])),
+  devolverIntentoPendiente: (...a: unknown[]) => devolverIntentoPendiente(...(a as [])),
   cartasMuertas: (...a: unknown[]) => cartasMuertas(...(a as [])),
 }));
 
+// QStash (ESC-1): se mira la PUBLICACIÓN, no la red de Upstash.
+const publishJSON = vi.fn(async () => ({ messageId: 'msg-1' }));
+vi.mock('@upstash/qstash', () => ({
+  Client: class { publishJSON = (...a: unknown[]) => publishJSON(...(a as [])); },
+}));
+// El latido (RES-7) vive en su propio archivo de pruebas.
+vi.mock('@/lib/admin/salud', () => ({
+  registrarLatido: vi.fn(async () => {}),
+  puertaCron: async (_c: string, req: Request) =>
+    req.headers.get('authorization') === 'Bearer secreto-de-prueba'
+      ? null
+      : new Response(null, { status: 401 }),
+}));
+
 process.env.CRON_SECRET = 'secreto-de-prueba';
-const { GET } = await import('./route');
+const { GET, LOTE } = await import('./route');
 const peticion = (auth?: string) => new Request('http://likida.test/api/cron/wa-pendientes', {
   headers: auth ? { authorization: auth } : {},
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  publishJSON.mockResolvedValue({ messageId: 'msg-1' });
   urgentesVencidas.mockResolvedValue(0);
   estaApagado.mockResolvedValue(false);
   ilegible = false;
@@ -89,7 +106,7 @@ describe('la puerta y la pausa', () => {
 
 describe('el drenado', () => {
   it('encendido: reclama, procesa por el motor y sella cada evento', async () => {
-    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.1', intentos: 0 }, { id: 'wamid.2', intentos: 0 }]);
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.1', intentos: 0, remitente: '521999' }, { id: 'wamid.2', intentos: 0, remitente: '521999' }]);
     const r = await GET(peticion('Bearer secreto-de-prueba'));
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ corrio: true, procesados: 2, fallidos: 0 });
@@ -98,7 +115,7 @@ describe('el drenado', () => {
   });
 
   it('un evento que falla anota su error, NO se sella, y el cron sale 500 — nunca verde con fallos', async () => {
-    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.mal', intentos: 2 }]);
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.mal', intentos: 2, remitente: '521999' }]);
     processInbound.mockRejectedValue(new Error('OCR reventó'));
     const r = await GET(peticion('Bearer secreto-de-prueba'));
     expect(r.status).toBe(500);
@@ -109,15 +126,15 @@ describe('el drenado', () => {
   // AUDITORÍA 18 (A3/A27): el cron sellaba ante CUALQUIER retorno sin
   // excepción — incluido el 'duplicado' de un claim huérfano y los abandonos.
   it('"duplicado" (ya completado antes) SÍ se sella: el trabajo está hecho', async () => {
-    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.dup', intentos: 1 }]);
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.dup', intentos: 1, remitente: '521999' }]);
     processInbound.mockResolvedValue('duplicado' as never);
     const r = await GET(peticion('Bearer secreto-de-prueba'));
     expect(r.status).toBe(200);
     expect(marcarPendienteProcesado).toHaveBeenCalledWith('wamid.dup');
   });
 
-  it.each(['reintentable', 'sin_tiempo', 'en_curso'])('"%s" NO se sella: queda pendiente con su motivo, y el cron sigue en 200', async (resultado) => {
-    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.pos', intentos: 1 }]);
+  it.each(['reintentable', 'en_curso'])('"%s" NO se sella: queda pendiente con su motivo, y el cron sigue en 200', async (resultado) => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.pos', intentos: 1, remitente: '521999' }]);
     processInbound.mockResolvedValue(resultado as never);
     const r = await GET(peticion('Bearer secreto-de-prueba'));
     expect(r.status).toBe(200);
@@ -126,8 +143,76 @@ describe('el drenado', () => {
     expect(await r.json()).toMatchObject({ procesados: 0, fallidos: 0, pospuestos: 1 });
   });
 
+  // ESC-1: quedarse sin presupuesto no es un intento fallido — el mensaje ni
+  // se miró. Contarlo convertía en carta muerta, a las cinco corridas
+  // cargadas, la foto de un chofer que nadie llegó a procesar.
+  it('"sin_tiempo" DEVUELVE el intento: no se sella, no se anota fallo, y el cron sigue en 200', async () => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.pos', intentos: 1, remitente: '521999' }]);
+    processInbound.mockResolvedValue('sin_tiempo' as never);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(marcarPendienteProcesado).not.toHaveBeenCalled();
+    expect(anotarFalloPendiente).not.toHaveBeenCalled();
+    // El claim reclamó con intentos+1; se devuelve ANCLADO a ese valor.
+    expect(devolverIntentoPendiente).toHaveBeenCalledWith('wamid.pos', 2);
+    expect(await r.json()).toMatchObject({ procesados: 0, fallidos: 0, pospuestos: 1 });
+  });
+
+  // ESC-1: cada chofer es una cadena en serie; choferes distintos, en paralelo.
+  it('paraleliza POR CHOFER y conserva el orden dentro de cada conversación', async () => {
+    pendientesPorDrenar.mockResolvedValue([
+      { id: 'a1', intentos: 0, remitente: '521111' },
+      { id: 'b1', intentos: 0, remitente: '522222' },
+      { id: 'a2', intentos: 0, remitente: '521111' },
+    ]);
+    const orden: string[] = [];
+    processInbound.mockImplementation(async (evento: unknown) => {
+      const id = (evento as { waMessageId: string }).waMessageId;
+      orden.push(`inicia:${id}`);
+      await new Promise((r) => setTimeout(r, id === 'a1' ? 20 : 1));
+      orden.push(`termina:${id}`);
+    });
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    // a2 espera a que a1 termine (misma persona)…
+    expect(orden.indexOf('inicia:a2')).toBeGreaterThan(orden.indexOf('termina:a1'));
+    // …y b1 no espera a a1 (persona distinta).
+    expect(orden.indexOf('inicia:b1')).toBeLessThan(orden.indexOf('termina:a1'));
+  });
+
+  it('con el lote LLENO encola otra vuelta en QStash; con lote corto, no', async () => {
+    process.env.UPSTASH_QSTASH_TOKEN = 'qstash-de-prueba';
+    pendientesPorDrenar.mockResolvedValue(
+      Array.from({ length: LOTE }, (_, i) => ({ id: `w${i}`, intentos: 0, remitente: `52${i}` })),
+    );
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(await r.json()).toMatchObject({ encolado: 'msg-1' });
+    expect(publishJSON).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringContaining('/api/cron/wa-pendientes/cola'),
+      body: { vuelta: 1 },
+    }));
+
+    publishJSON.mockClear();
+    pendientesPorDrenar.mockResolvedValue([{ id: 'w0', intentos: 0, remitente: '521' }]);
+    await GET(peticion('Bearer secreto-de-prueba'));
+    expect(publishJSON).not.toHaveBeenCalled();
+    delete process.env.UPSTASH_QSTASH_TOKEN;
+  });
+
+  it('un QStash caído NO tumba el drenado: el cron del minuto siguiente es el reintento', async () => {
+    process.env.UPSTASH_QSTASH_TOKEN = 'qstash-de-prueba';
+    publishJSON.mockRejectedValueOnce(new Error('QStash 503'));
+    pendientesPorDrenar.mockResolvedValue(
+      Array.from({ length: LOTE }, (_, i) => ({ id: `w${i}`, intentos: 0, remitente: `52${i}` })),
+    );
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(await r.json()).not.toHaveProperty('encolado');
+    delete process.env.UPSTASH_QSTASH_TOKEN;
+  });
+
   it('le pasa al motor el inicio de ESTA invocación, para que los 10 del lote compartan reloj (C4)', async () => {
-    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.1', intentos: 0 }]);
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.1', intentos: 0, remitente: '521999' }]);
     const antes = Date.now();
     await GET(peticion('Bearer secreto-de-prueba'));
     const opts = processInbound.mock.calls[0][1] as { inicioInvocacionMs: number };
@@ -136,7 +221,7 @@ describe('el drenado', () => {
   });
 
   it('el claim perdido (otra corrida lo tomó) no procesa ni cuenta como fallo', async () => {
-    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.ajeno', intentos: 0 }]);
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.ajeno', intentos: 0, remitente: '521999' }]);
     reclamarPendiente.mockResolvedValue(null);
     const r = await GET(peticion('Bearer secreto-de-prueba'));
     expect(r.status).toBe(200);
@@ -153,7 +238,7 @@ describe('el drenado', () => {
 
   it('el monitor de SLA caído NO tumba el drenado — se grita y se sigue', async () => {
     urgentesVencidas.mockRejectedValue(new Error('db down'));
-    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.1', intentos: 0 }]);
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.1', intentos: 0, remitente: '521999' }]);
     const r = await GET(peticion('Bearer secreto-de-prueba'));
     expect(r.status).toBe(200);
     expect(processInbound).toHaveBeenCalledTimes(1);
