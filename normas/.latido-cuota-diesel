@@ -1,17 +1,35 @@
-fecha_corrida: 2026-08-16
-viernes_objetivo: 2026-08-14
-estado: "OK — cuota capturada (primera vez en la historia del archivo)"
+INFRA egress bloqueado a sidofqa.segob.gob.mx
+
+fecha_corrida: 2026-08-22
+viernes_objetivo: 2026-08-21
+estado: "INFRA — egress bloqueado, no se pudo consultar el DOF para el viernes 21-ago"
 detalle: >
-  Corrida desde la sesion local (egress SI alcanza SIDOF). Capturadas las 4
-  semanas del backlog en normas/datos/cuota-ieps-diesel.yaml: 25-31 jul (2.0925),
-  01-07 ago (1.7747), 08-14 ago (2.5801), 15-21 ago (2.2760) — cuota
-  disminuida $/litro, con codNota y verificacion aritmetica contra la cuota
-  completa LIF 2026 (7.3634) exacta en las 4.
-cuota_vigente_en_repo: 2.2760 $/litro (vigencia 15-21 ago-2026, DOF 14-ago vespertina, codNota 5796377)
+  Corrida desde la sesion en la nube (routine automatica). curl y WebFetch a
+  https://sidofqa.segob.gob.mx/dof/sidof/notas/21-08-2026 fallan los dos:
+  curl -> CONNECT tunnel failed, response 403 (proxy status endpoint registra
+  "connect_rejected: gateway answered 403 to CONNECT (policy denial or
+  upstream failure)" para sidofqa.segob.gob.mx:443); WebFetch -> EGRESS_BLOCKED
+  domain sidofqa.segob.gob.mx. No es el fallo "200 con arrays vacios" que el
+  procedimiento distingue como caso normal de "sin publicacion" — aqui la
+  solicitud nunca llega al SIDOF, la bloquea el proxy de salida de ESTE
+  entorno antes de tocar la red. Por eso se reporta INFRA y no SIN CAMBIOS ni
+  FALTA CUOTA: no hay evidencia de si el acuerdo del 21-ago existe o no.
+  Es exactamente el riesgo que ya habia quedado escrito en la corrida anterior
+  (16-ago): "la routine de la nube sigue sin egress".
+cuota_vigente_en_repo: >
+  2.2760 $/litro (vigencia 2026-08-15 a 2026-08-21, DOF 14-ago vespertina,
+  codNota 5796377) — VENCIDA a partir de hoy, sabado 22-ago-2026. No se agrego
+  ninguna fila nueva a normas/datos/cuota-ieps-diesel.yaml en esta corrida.
 riesgo: >
-  El motor AUN no consume el archivo (siguiente paso declarado). La routine
-  de la nube sigue sin egress: si la proxima captura semanal (viernes 21-ago)
-  no puede correr desde un entorno con salida, el archivo vuelve a atrasarse.
+  Desde hoy sabado 22-ago-2026 no hay cuota disminuida vigente en el repo para
+  ningun viaje que se liquide con fecha 22-ago en adelante. El motor no puede
+  calcular el estimulo de IEPS diesel en pesos para esas liquidaciones hasta
+  que se capture el acuerdo de la semana 22-28 ago (que deberia haber salido
+  el viernes 21-ago, edicion vespertina, y no se pudo verificar en esta
+  corrida por el bloqueo de egress, no porque se confirmara su ausencia).
 accion_requerida: >
-  Viernes 21-ago: capturar el acuerdo nuevo (vespertina). Mover la cadencia a
-  launchd local o destapar el egress de la routine.
+  No se abre PR: no hay dato verificado que registrar. Repetir la captura
+  desde un entorno con salida real a sidofqa.segob.gob.mx (sesion local, o
+  destapar/ajustar la politica de egress de esta routine en la nube para
+  permitir ese host) para el viernes 21-ago-2026, y de paso el 28-ago cuando
+  llegue, para no acumular otro hueco en el historico.
