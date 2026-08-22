@@ -92,7 +92,7 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
   const cuerpoCorreo = datos.correoCuerpoIa ?? correoProspecto(datos).cuerpo;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-16">
+    <div className="w-full px-6 space-y-8 pb-16">
       <Link href="/admin/mapa-prospectos"
         className="inline-flex items-center gap-1.5 text-[12px] hover:underline" style={{ color: TENUE }}>
         ← Volver al Cerebro de ventas

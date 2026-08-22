@@ -4,7 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   plazaDe, giroDe, scoreUrgencia, scoreCierre, tamanoDe, completitudDe, COLOR_EMBUDO, CRITERIO_SCORES,
+  traerTodoEnParalelo,
 } from './prospectos-mapa';
+import { PAGINA, LecturaIncompleta } from '@/lib/likida/pg';
 
 describe('plazaDe — la plaza sin adivinar', () => {
   it('ciudad, entidad → separa y normaliza la entidad al nombre del geo', () => {
@@ -187,5 +189,48 @@ describe('tener un sitio no es tener el sitio correcto', () => {
 
   it('verificado sí los da', () => {
     expect(completitudDe({ ...base, sitioVerificado: true })).toBe(10);
+  });
+});
+
+describe('traerTodoEnParalelo — el Cerebro no espera 33 vueltas de red en fila', () => {
+  it('cabe en la primera página: no pide una segunda', async () => {
+    const universo = Array.from({ length: 3 }, (_, i) => ({ id: i }));
+    let llamadas = 0;
+    const filas = await traerTodoEnParalelo(async (d, h) => {
+      llamadas++;
+      return { data: universo.slice(d, h + 1), error: null, count: d === 0 ? universo.length : undefined };
+    }, 'prueba');
+    expect(filas).toEqual(universo);
+    expect(llamadas).toBe(1);
+  });
+
+  it('varias páginas: las junta en orden aunque la red conteste fuera de orden', async () => {
+    const total = PAGINA * 3 + 7; // 4 páginas
+    const universo = Array.from({ length: total }, (_, i) => ({ id: i }));
+    const filas = await traerTodoEnParalelo(async (d, h) => {
+      // Las páginas de índice ALTO contestan primero — el resultado no se
+      // debe desordenar por eso (se ensambla por posición, no por llegada).
+      const pagina = Math.floor(d / PAGINA);
+      await new Promise((r) => setTimeout(r, pagina === 0 ? 0 : (4 - pagina) * 5));
+      return { data: universo.slice(d, h + 1), error: null, count: d === 0 ? total : undefined };
+    }, 'prueba');
+    expect(filas).toEqual(universo);
+  });
+
+  it('si al final falta una fila, LANZA — nunca enseña una cartera recortada', async () => {
+    const total = PAGINA + 5;
+    const universo = Array.from({ length: total }, (_, i) => ({ id: i }));
+    await expect(traerTodoEnParalelo(async (d, h) => {
+      // La segunda página pierde una fila (simula un fallo a medias).
+      const pag = d === 0 ? universo.slice(0, PAGINA) : universo.slice(d, h + 1).slice(0, -1);
+      return { data: pag, error: null, count: d === 0 ? total : undefined };
+    }, 'prueba')).rejects.toThrow(LecturaIncompleta);
+  });
+
+  it('sin conteo exacto (Supabase no lo mandó), cae al camino secuencial y aun así trae todo', async () => {
+    const universo = Array.from({ length: PAGINA + 3 }, (_, i) => ({ id: i }));
+    const filas = await traerTodoEnParalelo(async (d, h) =>
+      ({ data: universo.slice(d, h + 1), error: null }), 'prueba');
+    expect(filas).toEqual(universo);
   });
 });
