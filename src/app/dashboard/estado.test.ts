@@ -184,3 +184,41 @@ describe('dashboard/inicio-contenido.tsx: las secciones filtradas dicen su perio
     expect(PAGINA).toMatch(/Tu motor fiscal — \{periodoFiscal\.etiqueta\}/);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18, ALTO (A13) — `estadoPanel` vigilaba cuatro secciones y el
+// Resumen ya cargaba once. `getGastoPorSemanaSeries` lanza ante un error de
+// PostgREST, `safe()` lo vuelve `null`, y la tarjeta decía "Aún no hay gastos
+// capturados" sin que el banner de "pantalla incompleta" apareciera.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('estadoPanel — las consultas del selector y las fiscales también cuentan (A13)', () => {
+  const TODO_BIEN = {
+    seriesKpis: {}, gastoSemanalSeries: {}, liquidadoSemanalSeries: {}, topRutasSeries: {},
+    viajesPorMes: [], cfgFiscal: {}, gastosFiscales: [],
+  };
+
+  it('solo se cayó la serie de gasto por categoría → parcial, no datos', () => {
+    expect(estadoPanel({
+      acreditables: {}, kpis: KPIS_CON_DATOS, liquidaciones: [{}], anomalias: [],
+      secundarias: { ...TODO_BIEN, gastoSemanalSeries: null },
+    })).toBe('parcial');
+  });
+
+  it('se cayó solo la lectura fiscal (gastosFiscales) en un tenant vacío → parcial, no vacio', () => {
+    // "Ahorro generado — $0.00" con la lectura fiscal caída es la misma mentira
+    // que "aún no hay liquidaciones" con la base ciega.
+    expect(estadoPanel({
+      acreditables: {}, kpis: KPIS_VACIOS, liquidaciones: [], anomalias: [],
+      secundarias: { ...TODO_BIEN, gastosFiscales: null },
+    })).toBe('parcial');
+  });
+
+  it('todas las secundarias cargaron → mismo veredicto que antes (datos / vacio)', () => {
+    expect(estadoPanel({ acreditables: {}, kpis: KPIS_CON_DATOS, liquidaciones: [{}], anomalias: [], secundarias: TODO_BIEN })).toBe('datos');
+    expect(estadoPanel({ acreditables: {}, kpis: KPIS_VACIOS, liquidaciones: [], anomalias: [], secundarias: TODO_BIEN })).toBe('vacio');
+  });
+
+  it('las cuatro principales caídas siguen siendo error aunque una secundaria cargue', () => {
+    expect(estadoPanel({ acreditables: null, kpis: null, liquidaciones: null, anomalias: null, secundarias: { viajesPorMes: [] } })).toBe('error');
+  });
+});
