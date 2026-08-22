@@ -155,6 +155,31 @@ describe('avisarPorFacturar', () => {
     expect(sendTemplate).toHaveBeenCalledOnce();
   });
 
+  // AUDITORÍA 18 · A1 — la constancia decía entidad `gasto` con el id del
+  // TENANT, y no firmaba actor: quien copiaba ese id para buscar el gasto no
+  // lo encontraba. El aviso es un lote por flota que manda el cron.
+  it('la constancia en bitácora es de la FLOTA, con el id de la flota, y la firma el sistema', async () => {
+    sendText.mockResolvedValue('wamid-texto');
+    await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(insert).toHaveBeenCalledOnce();
+    expect((insert.mock.calls[0] as unknown[])[0]).toEqual({
+      tenant_id: 't1',
+      actor_id: null,
+      actor_email: null,
+      accion: 'facturacion.aviso_enviado',
+      entidad: 'tenant',
+      entidad_id: 't1',
+      detalle: { tickets: 1, wamid: 'wamid-texto', via: 'texto' },
+    });
+  });
+
+  it('si NO salió, no se anota nada: la bitácora dice lo que pasó, no lo que se intentó', async () => {
+    sendText.mockResolvedValue(null);
+    sendTemplate.mockResolvedValue({ ok: false, error: 'x', codigo: 132001 });
+    await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
   it('los DOS caminos caídos: se dice el motivo, no se afirma enviado', async () => {
     sendText.mockResolvedValue(null);
     sendTemplate.mockResolvedValue({ ok: false, error: 'x', codigo: 132001 });

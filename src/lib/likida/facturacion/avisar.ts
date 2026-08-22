@@ -172,8 +172,14 @@ export async function avisarPorFacturar(args: {
   // Queda constancia de a quién se le avisó, de cuántos, y POR CUÁL camino: un
   // aviso por plantilla no llevó el detalle, y mañana eso explica por qué el
   // encargado preguntó "¿cuáles?" en vez de facturar.
+  //
+  // La entidad es la FLOTA (el aviso es un lote por tenant, no un gasto: hasta
+  // la auditoría 18 decía `gasto` con el id del tenant, y quien copiaba ese id
+  // para buscar el gasto no lo encontraba). El actor es `'sistema'` a
+  // propósito: lo manda el cron, sin persona detrás; el encargado es el
+  // DESTINATARIO, no quien actuó, y su teléfono no va a la bitácora.
   await anotarBitacora(
-    { tenantId: args.tenantId, actor: {}, accion: 'facturacion.aviso_enviado', entidad: 'gasto', entidadId: args.tenantId,
+    { tenantId: args.tenantId, actor: 'sistema', accion: 'facturacion.aviso_enviado', entidad: 'tenant', entidadId: args.tenantId,
       detalle: { tickets: cuantos, wamid, via } },
     { evento: 'facturacion.bitacora' },
   );
