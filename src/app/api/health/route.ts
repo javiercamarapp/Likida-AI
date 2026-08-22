@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { sentryActivo } from '@/lib/observability/sentry';
+import { redisConfigurado } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,15 @@ export const dynamic = 'force-dynamic';
 //  · qué versión corre (el sha del deploy — es lo que confirma que el último
 //    push con [deploy] de verdad llegó, contra el modo de falla silencioso
 //    del ignoreCommand);
-//  · si Sentry está configurado.
+//  · si Sentry está configurado;
+//  · con qué backend corre el LÍMITE DE TASA (auditoría prod, SEG-1). Sin
+//    Redis, `ratelimit.ts` cuenta en la memoria de cada instancia y el techo
+//    del login se multiplica por cuantas lambdas abra quien insiste. Eso se
+//    sabía SOLO leyendo la línea de arranque de una instancia que ya hubiera
+//    atendido algo; aquí se pregunta desde fuera y en cualquier momento.
+//    Decir `redis|memoria` no es filtrar nada: no revela host, credencial ni
+//    umbral — dice si una defensa conocida está encendida, igual que
+//    `sentry: sin_dsn` ya lo hacía.
 //  · NO mide la ausencia de corridas de cron: con la base en cero flotas,
 //    "no hubo corridas con trabajo" es lo normal y alarmaría siempre. Ese
 //    monitor llega cuando `agente_corrida` tenga tráfico real que fechar.
@@ -48,6 +57,10 @@ export async function GET() {
     ok: db === 'ok',
     db,
     sentry: sentryActivo() ? 'configurado' : 'sin_dsn',
+    // Mide lo MISMO que decide `ratelimit.ts` (su propia función exportada),
+    // no una segunda lectura de las env: dos mediciones del mismo hecho se
+    // desincronizan al primer cambio.
+    ratelimit: redisConfigurado() ? 'redis' : 'memoria',
     // Vercel la inyecta en build; en local es "local" y eso también es verdad.
     version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local',
     hora: new Date().toISOString(),
