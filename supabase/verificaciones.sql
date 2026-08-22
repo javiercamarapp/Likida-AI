@@ -5809,3 +5809,60 @@ begin
   raise exception E'CLAIM_0149  columna=%  huerfano_retomado=%  completado_retomado=%  fresco_retomado=%   (esperado t / 1 / 0 / 0)',
     columna, retomado, completado_no_retomado, fresco_no_retomado;
 end $$;
+
+-- ── 125. resumen_negocio() cuenta por flota y por día LOCAL MX, y no es ejecutable desde internet (mig. 0153) ──
+--
+-- La RPC es CROSS-TENANT A PROPÓSITO (solo la consola de superadmin, vía
+-- service_role). Corre contra el catálogo REAL, así que los totales incluyen
+-- lo que ya haya: por eso se comprueban (a) las entradas de las DOS flotas
+-- sembradas en `viajesPorTenant` —aislamiento: 2 y 1, no 3 y 3— y (b) un día
+-- en el AÑO 2000 (Likida nació en 2026: no hay filas reales ahí), con el caso
+-- UTC: '2001-01-01T01:00Z' es el 31-dic-2000 a las 19:00 en CDMX y tiene que
+-- caer en la barra del 31, junto con la de mediodía; la barra del 1-ene NO
+-- existe. Equivalencia numérica: la suma de `viajesPorTenant` es `viajesTotal`
+-- y `facturasTotal` creció exactamente en 2 con respecto a antes de sembrar.
+-- Todo revierte con el RAISE final.
+--
+-- PENDIENTE DE CORRER CONTRA PRODUCCIÓN (escala 50k, 22-ago-2026). Esperado:
+--   RESUMEN_NEGOCIO_0153  a=2  b=1  suma=t  facturas+2=t  dia31=2  dia01=f  anon=f  auth=f  svc=t  idx=2
+do $$
+declare
+  t_a uuid; t_b uuid; o_a uuid; o_b uuid; v uuid;
+  antes jsonb; r jsonb; n_a int; n_b int; suma_ok boolean; facturas_ok boolean;
+  dia31 int; dia01 boolean; anon_si boolean; auth_si boolean; svc_si boolean; idx int;
+begin
+  antes := public.resumen_negocio(null);
+
+  insert into public.tenant (nombre) values ('ZZZ VERIF 0153 A') returning id into t_a;
+  insert into public.tenant (nombre) values ('ZZZ VERIF 0153 B') returning id into t_b;
+  insert into public.operador (tenant_id, nombre, telefono) values (t_a, 'P', '+520000015301') returning id into o_a;
+  insert into public.operador (tenant_id, nombre, telefono) values (t_b, 'P', '+520000015302') returning id into o_b;
+  insert into public.viaje (tenant_id, operador_id) values (t_a, o_a) returning id into v;
+  insert into public.viaje (tenant_id, operador_id) values (t_a, o_a);
+  insert into public.viaje (tenant_id, operador_id) values (t_b, o_b);
+  -- Dos comprobantes de la flota A en el año 2000: 19:00 CDMX del 31-dic
+  -- (ya 1-ene en UTC) y mediodía del 31-dic.
+  insert into public.gasto (tenant_id, viaje_id, concepto, monto, created_at)
+    values (t_a, v, 'diesel', 100, '2001-01-01T01:00:00Z'),
+           (t_a, v, 'diesel', 100, '2000-12-31T18:00:00Z');
+
+  r := public.resumen_negocio('2000-12-31T06:00:00Z'::timestamptz);
+
+  select (e->>'n')::int into n_a from jsonb_array_elements(r->'viajesPorTenant') e where e->>'tenantId' = t_a::text;
+  select (e->>'n')::int into n_b from jsonb_array_elements(r->'viajesPorTenant') e where e->>'tenantId' = t_b::text;
+  select coalesce(sum((e->>'n')::bigint), 0) = (r->>'viajesTotal')::bigint into suma_ok
+    from jsonb_array_elements(r->'viajesPorTenant') e;
+  facturas_ok := (r->>'facturasTotal')::bigint = (antes->>'facturasTotal')::bigint + 2;
+  select (e->>'n')::int into dia31 from jsonb_array_elements(r->'facturasPorDia') e where e->>'dia' = '2000-12-31';
+  select exists (select 1 from jsonb_array_elements(r->'facturasPorDia') e where e->>'dia' = '2001-01-01') into dia01;
+
+  select has_function_privilege('anon', 'public.resumen_negocio(timestamptz)', 'execute'),
+         has_function_privilege('authenticated', 'public.resumen_negocio(timestamptz)', 'execute'),
+         has_function_privilege('service_role', 'public.resumen_negocio(timestamptz)', 'execute')
+    into anon_si, auth_si, svc_si;
+  select count(*) into idx from pg_indexes
+   where schemaname = 'public' and indexname in ('gasto_created_at_idx', 'liquidacion_revisar_created_idx');
+
+  raise exception E'RESUMEN_NEGOCIO_0153  a=%  b=%  suma=%  facturas+2=%  dia31=%  dia01=%  anon=%  auth=%  svc=%  idx=%   (esperado 2 / 1 / t / t / 2 / f / f / f / t / 2)',
+    coalesce(n_a, -1), coalesce(n_b, -1), suma_ok, facturas_ok, coalesce(dia31, -1), dia01, anon_si, auth_si, svc_si, idx;
+end $$;
