@@ -8,6 +8,7 @@ import { listarSolicitudesArco, resolverSolicitudArco } from '@/lib/likida/repo'
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { fechaMx } from '@/lib/formato';
+import { venceDentroDe, yaVencio, DIAS_VENCE_PRONTO } from './vencimiento';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,8 +68,11 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
     errorCarga = e instanceof Error ? e.message : String(e);
   }
   const pendientes = solicitudes.filter((s) => s.estado === 'recibida' || s.estado === 'en_proceso');
-  const venceEn = (iso: string) => iso.slice(0, 10);
-  const vencenPronto = solicitudes.filter((s) => (s.estado === 'recibida' || s.estado === 'en_proceso') && venceEn(s.venceEn) <= hoy);
+  // AUDITORÍA 18, ALTO (A14): antes era `venceEn <= hoy` — "ya venció", no
+  // "faltan ≤ 5 días". Lo vencido se cuenta APARTE: es incumplimiento del
+  // art. 31, no algo que esté por pasar.
+  const vencenPronto = pendientes.filter((s) => venceDentroDe(s.venceEn, hoy, DIAS_VENCE_PRONTO));
+  const vencidas = pendientes.filter((s) => yaVencio(s.venceEn, hoy));
 
   return (
     <div className="flex flex-col gap-4">
@@ -82,9 +86,10 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
         </div>
       </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiTile icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Por responder" valor={pendientes.length} />
-        <KpiTile icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencen pronto (≤ 5 días)" valor={vencenPronto.length} />
+        <KpiTile icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta={`Vencen pronto (≤ ${DIAS_VENCE_PRONTO} días)`} valor={vencenPronto.length} />
+        <KpiTile icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencidas sin responder" valor={vencidas.length} />
       </div>
 
       <div className="glass-panel overflow-hidden">
