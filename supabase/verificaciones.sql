@@ -5975,4 +5975,97 @@ begin
 
   raise exception E'CURSOR_ANALYZE_0157  indice=%  anon=%  authenticated=%  service_role=%  corrio=%   (esperado "(tenant_id, created_at DESC, id DESC)" / f / f / t / t)',
     coalesce(substring(idx_def from '\(.*\)'), 'FALTA'), anon_ok, auth_ok, svc_ok, corrio;
+-- ── 123. El agregado fiscal no juzga, no mezcla flotas y cuadra (mig. 0151) ──
+-- Dos flotas sembradas a mano. A trae un comprobante por cada dimensión que
+-- la ley en TS consulta (EFOS, cancelado, efectivo sobre/bajo tope, diésel
+-- en efectivo, caseta con y sin base, alimentación timbrada sobre el tope en
+-- un mismo día, tickets sin CFDI viejos y recientes, uno sin fecha). B tiene
+-- un gasto de 9999 que NO debe aparecer en ninguna celda de A. Equivalencia
+-- numérica: las sumas y conteos de las celdas de A son EXACTAMENTE los de
+-- `gasto` filtrado igual — el agregado no inventa ni pierde un peso.
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va1 uuid; va2 uuid; vb1 uuid;
+  j jsonb; celdas int; n_total int; monto_total numeric; monto_directo numeric; n_directo int;
+  con_cfdi int; con_cfdi_directo int;
+  sobre_tope int; dia_partido numeric; bandas text; contamina boolean;
+  sin_cota_n int; sin_fecha int;
+  es_invoker boolean; anon_ok boolean; auth_ok boolean; svc_ok boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0151 A') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0151 A', '5215559990151') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
+    values (ta, oa, 'ZZZ-0151-A1', 'abierto', current_date - 10, 1000) returning id into va1;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
+    values (ta, oa, 'ZZZ-0151-A2', 'abierto', current_date - 5, 1000) returning id into va2;
+
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, cfdi_uuid, estado_sat, efos, forma_pago, iva_traslado, clave_prod_serv, sub_total, ocr_extra) values
+    -- diésel con CFDI vigente, tarjeta — limpio
+    (ta, va1, 'diesel', 1000, current_date - 3, 'zzz-0151-u1', 'vigente', false, '04', 137.93, '15101505', 862.07, null),
+    -- diésel en efectivo con CFDI — combustible_efectivo
+    (ta, va1, 'diesel',  500, current_date - 3, 'zzz-0151-u2', 'vigente', false, '01',  68.97, '15101505', 431.03, null),
+    -- EFOS
+    (ta, va1, 'otro',    300, current_date - 3, 'zzz-0151-u3', 'vigente', true,  '04',  41.38, null, null, null),
+    -- cancelado
+    (ta, va1, 'otro',    200, current_date - 3, 'zzz-0151-u4', 'cancelado', false, '04', 27.59, null, null, null),
+    -- efectivo SOBRE el tope (2000) y BAJO el tope: misma dimensión salvo sobre_tope
+    (ta, va1, 'otro',   2500, current_date - 3, 'zzz-0151-u5', 'vigente', false, '01', 344.83, null, null, null),
+    (ta, va1, 'otro',   1500, current_date - 3, 'zzz-0151-u6', 'vigente', false, '01', 206.90, null, null, null),
+    -- casetas: una con base, una sin
+    (ta, va1, 'caseta',  348, current_date - 2, 'zzz-0151-u7', 'vigente', false, '04', 48, null, 300, null),
+    (ta, va1, 'caseta',  232, current_date - 2, 'zzz-0151-u8', 'vigente', false, '04', null, null, null, null),
+    -- alimentación TIMBRADA, mismo viaje y día, 500 + 400 = 900 > 750
+    (ta, va2, 'alimentacion', 500, current_date - 4, 'zzz-0151-u9',  'vigente', false, '04', 68.97, null, null, null),
+    (ta, va2, 'alimentacion', 400, current_date - 4, 'zzz-0151-u10', 'vigente', false, '04', 55.17, null, null, null),
+    -- sin CFDI: reciente (banda 0 con los cortes de abajo) y vieja (banda 2)
+    (ta, va2, 'diesel', 800, current_date - 1, null, null, null, null, null, null, null, '{"urlFacturacion":"https://facturacion.oxxogas.com/?folio=ZZZ1","emisor":"OXXO GAS"}'::jsonb),
+    (ta, va2, 'diesel', 700, current_date - 120, null, null, null, null, null, null, null, '{"urlFacturacion":"https://facturacion.oxxogas.com/?folio=ZZZ2","emisor":"OXXO GAS"}'::jsonb),
+    -- sin fecha: fuera de cualquier corte, cuenta solo sin cota
+    (ta, va2, 'otro', 50, null, null, null, null, null, null, null, null, null);
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0151 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ 0151 B', '5215559990152') returning id into ob;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
+    values (tb, ob, 'ZZZ-0151-B1', 'abierto', current_date - 3, 100) returning id into vb1;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, forma_pago)
+    values (tb, vb1, 'diesel', 9999, current_date - 3, '01');
+
+  -- Catálogo: INVOKER y permisos
+  select p.prosecdef = false,
+         has_function_privilege('anon', p.oid, 'execute'),
+         has_function_privilege('authenticated', p.oid, 'execute'),
+         has_function_privilege('service_role', p.oid, 'execute')
+    into es_invoker, anon_ok, auth_ok, svc_ok
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'gastos_fiscales_agregados_tenant';
+
+  -- Ejercicio (últimos 30 días aquí), tope efectivo 2000, tope alimentación 750,
+  -- cortes: hace 60 y hace 30 días (mes_siguiente / mes_natural simulados).
+  j := gastos_fiscales_agregados_tenant(ta, current_date - 30, current_date, 2000, 750,
+         array['alimentacion','viaticos'], array[(current_date - 60)::date, (current_date - 30)::date]);
+
+  select count(*), sum((c->>'n')::int), sum((c->>'monto')::numeric),
+         sum((c->>'n')::int) filter (where (c->>'tieneCfdi')::boolean),
+         sum((c->>'n')::int) filter (where (c->>'sobreTopeEfectivo')::boolean),
+         max((c->>'totalTimbradoDia')::numeric),
+         string_agg(c->>'banda', ',' order by c->>'banda') filter (where c->>'banda' is not null),
+         bool_or((c->>'monto')::numeric >= 9999)
+    into celdas, n_total, monto_total, con_cfdi, sobre_tope, dia_partido, bandas, contamina
+    from jsonb_array_elements(j) c;
+
+  select count(*), sum(monto), count(*) filter (where cfdi_uuid is not null)
+    into n_directo, monto_directo, con_cfdi_directo
+    from gasto where tenant_id = ta and fecha >= current_date - 30 and fecha <= current_date;
+
+  -- Sin cota: entran la vieja (banda 2) y la sin fecha
+  j := gastos_fiscales_agregados_tenant(ta, null, null, 2000, 750,
+         array['alimentacion','viaticos'], array[(current_date - 60)::date, (current_date - 30)::date]);
+  select sum((c->>'n')::int), sum((c->>'n')::int) filter (where (c->>'sinFecha')::boolean),
+         string_agg(c->>'banda', ',' order by c->>'banda') filter (where c->>'banda' is not null)
+    into sin_cota_n, sin_fecha, bandas
+    from jsonb_array_elements(j) c;
+
+  raise exception E'FISCAL_AGREGADO_0151  invoker=%  anon=%  auth=%  svc=%  | periodo: celdas=%  n=%/%  monto=%/%  con_cfdi=%/%  sobre_tope=%  dia_partido=%  B_contamina=%  | sin_cota: n=%  sin_fecha=%  bandas=%   (esperado t/f/f/t | 11 celdas, 11/11, 7680.00/7680.00, 10/10, 1, 900, f | 13, 1, bandas 0,2)',
+    es_invoker, anon_ok, auth_ok, svc_ok, celdas, n_total, n_directo, monto_total, monto_directo,
+    con_cfdi, con_cfdi_directo, sobre_tope, dia_partido, contamina, sin_cota_n, sin_fecha, bandas;
 end $$;
