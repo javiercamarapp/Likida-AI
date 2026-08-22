@@ -5809,3 +5809,193 @@ begin
   raise exception E'CLAIM_0149  columna=%  huerfano_retomado=%  completado_retomado=%  fresco_retomado=%   (esperado t / 1 / 0 / 0)',
     columna, retomado, completado_no_retomado, fresco_no_retomado;
 end $$;
+
+-- ── 122. Los 11 agregados de la 0150: existen, INVOKER, aislados, cuadran ───
+--
+-- La 0150 (ESCALA 50k, docs/escala-50k/MAPA.md) movió ONCE caminos de
+-- analytics.ts de "traerTodo → agregar en JS" a RPC: anomalias_gasto_tenant,
+-- gasto_semanal_tenant, top_rutas_gasto_tenant, gasto_por_concepto_tenant,
+-- stats_operador_tenant, liquidado_semanal_tenant, viajes_por_mes_tenant,
+-- operadores_detalle_tenant, dinero_observado_por_tipo_tenant,
+-- liquidaciones_por_dia_tenant y conciliacion_consolidado_tenant.
+--
+-- Mismo molde que el bloque 89 (0112): (1) catálogo — las 11 existen, son
+-- SECURITY INVOKER, anon/authenticated ciegos, service_role puede; (2)
+-- AISLAMIENTO — dos flotas sembradas a mano con cifras distintas, y las de A
+-- no contienen ni un centavo de B; (3) EQUIVALENCIA numérica contra el
+-- cálculo a mano sobre la siembra (las mismas reglas que la prueba JS de
+-- `analytics_agregados_0150.test.ts` comprueba contra el Postgres falso,
+-- aquí contra Postgres de verdad).
+--
+-- Siembra de A (trampas conocidas: viaje.operador_id NOT NULL; UN 'abierto'
+-- por operador —0029—; UNA liquidación por viaje; gasto.monto >= 0;
+-- uq_gasto_cfdi_uuid (tenant, uuid, orden)):
+--   · operadores oa1 (normal) y oa2 (con oposición → fuera de stats)
+--   · viajes va1 (oa1, liquidado, anticipo 1000), va2 (oa1, abierto, 500),
+--     va3 (oa2, liquidado, 300, fecha_inicio NULL → fuera de viajes_por_mes)
+--   · gastos: diésel 1500 (va1) + 800 (va2) = 2300; caseta 200 (va1);
+--     el MISMO CFDI 'ZZZ-UUID-0150-A' orden 1 en va1 y va2 → 1 anomalía
+--     cfdi_duplicado; folio 'A-991' caseta 200 sin uuid en va1 y va3 → 1
+--     anomalía folio_duplicado; concepto NULL 50 (va1) → 'otro'.
+--   · liquidaciones: va1 (1500, diferencia -150, diferencias sobre_politica
+--     120 + duplicado 80), va2 (700, diferencia 0.005 → NO cuenta), todas
+--     creadas HOY a las 20:00 MX (que en UTC puede ser mañana: el bucket por
+--     día local las tiene que fechar HOY).
+--   · consolidado: 1 cfdi_xml con 3 líneas (conciliada, por_conciliar, sin_match).
+-- Flota B: un operador, un viaje, un diésel de 9999, una liquidación de 8888
+-- con diferencia 50: cualquier cifra de A que la toque se nota.
+--
+-- Todo se revierte con el `raise` final.
+--
+-- SALIDA ESPERADA:
+--   AGREGADOS_0150  funcs=11  invoker=t  ninguna_anon=t  ninguna_auth=t
+--   todas_svc=t  anomalias_ok=t  semanal_ok=t  rutas_ok=t  concepto_ok=t
+--   stats_ok=t  liquidado_ok=t  meses_ok=t  detalle_ok=t  dinero_ok=t
+--   dias_ok=t  consolidado_ok=t
+--   (esperado 11/t/t/t/t y once `t`)
+do $$
+declare
+  ta uuid; tb uuid; oa1 uuid; oa2 uuid; ob uuid; va1 uuid; va2 uuid; va3 uuid; vb1 uuid; xa uuid;
+  hoy_mx date := (now() at time zone 'America/Mexico_City')::date;
+  ts_20 timestamptz := (hoy_mx::text || ' 20:00')::timestamp at time zone 'America/Mexico_City';
+  n_funcs int; todas_invoker boolean; ninguna_anon boolean; ninguna_auth boolean; todas_svc boolean;
+  j jsonb; j1 jsonb; j2 jsonb;
+  ok_anom boolean; ok_sem boolean; ok_rutas boolean; ok_conc boolean; ok_stats boolean; ok_liq boolean;
+  ok_meses boolean; ok_det boolean; ok_dinero boolean; ok_dias boolean; ok_cons boolean;
+begin
+  -- ── FLOTA A ───────────────────────────────────────────────────────────
+  insert into tenant (nombre) values ('ZZZ VERIF 0150 A') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0150 A1', '5215559990150') returning id into oa1;
+  insert into operador (tenant_id, nombre, telefono, oposicion_automatizada) values (ta, 'ZZZ 0150 A2', '5215559990151', now()) returning id into oa2;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, origen, destino)
+    values (ta, oa1, 'ZZZ-0150-A1', 'liquidado', hoy_mx - 3, 1000, 'CDMX', 'Guadalajara') returning id into va1;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, origen, destino)
+    values (ta, oa1, 'ZZZ-0150-A2', 'abierto', hoy_mx - 1, 500, 'CDMX', 'Guadalajara') returning id into va2;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, origen, destino)
+    values (ta, oa2, 'ZZZ-0150-A3', 'liquidado', null, 300, 'Monterrey', null) returning id into va3;
+
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio, cfdi_uuid, cfdi_orden) values
+    (ta, va1, 'diesel', 1500, hoy_mx - 3, 'D1', 'ZZZ-UUID-0150-A', 1),
+    (ta, va2, 'diesel',  800, hoy_mx - 1, 'D2', 'zzz-uuid-0150-a', 1),   -- mismo CFDI (minúsculas) en otro viaje
+    (ta, va1, 'caseta',  200, hoy_mx - 2, 'A-991', null, 1),
+    (ta, va3, 'caseta',  200, hoy_mx - 2, 'A-991', null, 1),            -- mismo folio+concepto+monto, otro viaje
+    (ta, va1, null,       50, hoy_mx - 2, null, null, 1);              -- concepto NULL → 'otro'
+
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus, diferencias, created_at)
+    values (ta, va1, 1500, 1500, -150, 'con_diferencias',
+      '[{"tipo":"sobre_politica","monto":120},{"tipo":"duplicado","monto":-80},{"monto":0}]'::jsonb, ts_20);
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus, created_at)
+    values (ta, va2, 700, 700, 0.005, 'cuadrada', ts_20);
+
+  insert into cfdi_xml (tenant_id, cfdi_uuid, xml) values (ta, 'ZZZ-CONS-0150-A', '<x/>') returning id into xa;
+  insert into cfdi_consolidado_linea (tenant_id, cfdi_xml_id, indice, fuente, monto, estatus) values
+    (ta, xa, 1, 'ecc12', 10, 'conciliada'), (ta, xa, 2, 'ecc12', 20, 'por_conciliar'), (ta, xa, 3, 'ecc12', 30, 'sin_match');
+
+  -- ── FLOTA B: solo para probar que NO contamina a A ───────────────────
+  insert into tenant (nombre) values ('ZZZ VERIF 0150 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ 0150 B', '5215559990152') returning id into ob;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, origen, destino)
+    values (tb, ob, 'ZZZ-0150-B1', 'liquidado', hoy_mx - 2, 200, 'CDMX', 'Guadalajara') returning id into vb1;
+  insert into gasto (tenant_id, viaje_id, concepto, monto, fecha, folio, cfdi_uuid, cfdi_orden)
+    values (tb, vb1, 'diesel', 9999, hoy_mx - 2, 'A-991', 'ZZZ-UUID-0150-A', 1);  -- mismo uuid/folio, OTRA flota
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus, diferencias, created_at)
+    values (tb, vb1, 8888, 8888, 50, 'revisar', '[{"tipo":"duplicado","monto":50}]'::jsonb, ts_20);
+
+  -- ── 1. Catálogo ──────────────────────────────────────────────────────
+  select count(*),
+         count(*) filter (where p.prosecdef = false) = 11,
+         count(*) filter (where has_function_privilege('anon', p.oid, 'execute')) = 0,
+         count(*) filter (where has_function_privilege('authenticated', p.oid, 'execute')) = 0,
+         count(*) filter (where has_function_privilege('service_role', p.oid, 'execute')) = 11
+    into n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname in ('anomalias_gasto_tenant', 'gasto_semanal_tenant', 'top_rutas_gasto_tenant',
+                       'gasto_por_concepto_tenant', 'stats_operador_tenant', 'liquidado_semanal_tenant',
+                       'viajes_por_mes_tenant', 'operadores_detalle_tenant', 'dinero_observado_por_tipo_tenant',
+                       'liquidaciones_por_dia_tenant', 'conciliacion_consolidado_tenant');
+
+  -- ── 2+3. Anomalías: 1 cfdi (va1, va2) + 1 folio (va1, va3); B no entra ─
+  j := anomalias_gasto_tenant(ta);
+  ok_anom := jsonb_array_length(j) = 2
+    and j->0->>'tipo' = 'cfdi_duplicado' and (j->0->>'monto')::numeric = 1500
+    and j->0->>'detalle' = 'CFDI zzz-uuid… liquidado en 2 viajes'
+    and jsonb_array_length(j->0->'viajes') = 2
+    and j->1->>'tipo' = 'folio_duplicado' and (j->1->>'monto')::numeric = 200
+    and j->1->>'detalle' = 'Folio A-991 (caseta) liquidado en 2 viajes'
+    and jsonb_array_length(anomalias_gasto_tenant(tb)) = 0;
+
+  -- ── Gasto semanal (ventana de 7 días): suma por concepto = 2300/400/50 ─
+  j := gasto_semanal_tenant(ta, hoy_mx - 6, hoy_mx);
+  select coalesce(sum((e->>'total')::numeric) filter (where e->>'concepto' = 'diesel'), 0),
+         coalesce(sum((e->>'total')::numeric) filter (where e->>'concepto' = 'caseta'), 0)
+    into j1, j2 from jsonb_array_elements(j) e;
+  ok_sem := j1::numeric = 2300 and j2::numeric = 400
+    and (select count(*) from jsonb_array_elements(j) e where e->>'concepto' = 'otro' and (e->>'total')::numeric = 50) = 1
+    and (select bool_and(e->>'semana' ~ '^\d{4}-S\d{2}$') from jsonb_array_elements(j) e);
+
+  -- ── Top rutas: CDMX→Guadalajara 2550 primero; Monterrey→'—' 200; B fuera ─
+  j := top_rutas_gasto_tenant(ta, 5, null, null);
+  ok_rutas := jsonb_array_length(j) = 2
+    and j->0->>'origen' = 'CDMX' and j->0->>'destino' = 'Guadalajara' and (j->0->>'total')::numeric = 2550
+    and j->1->>'destino' = '—' and (j->1->>'total')::numeric = 200
+    and jsonb_array_length(top_rutas_gasto_tenant(ta, 1, null, null)) = 1
+    and jsonb_array_length(top_rutas_gasto_tenant(ta, 5, hoy_mx - 1, hoy_mx)) = 1;  -- solo el diésel de va2
+
+  -- ── Gasto por concepto: diesel 2300 (2), caseta 400 (2), otro 50 (1) ──
+  j := gasto_por_concepto_tenant(ta);
+  ok_conc := jsonb_array_length(j) = 3
+    and j->0->>'concepto' = 'diesel' and (j->0->>'total')::numeric = 2300 and (j->0->>'n')::int = 2
+    and j->1->>'concepto' = 'caseta' and (j->1->>'total')::numeric = 400
+    and j->2->>'concepto' = 'otro' and (j->2->>'total')::numeric = 50;
+
+  -- ── Stats por operador: solo oa1 (oa2 se opuso); 2 viajes con diésel, 2300, 1 diferencia ─
+  j := stats_operador_tenant(ta);
+  ok_stats := jsonb_array_length(j) = 1
+    and j->0->>'operadorId' = oa1::text
+    and (j->0->>'viajes')::int = 2 and (j->0->>'dieselTotal')::numeric = 2300
+    and (j->0->>'diferencias')::int = 1;  -- va2 (0.005) es redondeo, no cuenta
+
+  -- ── Liquidado semanal: 2200 en la semana ISO de HOY (día local) ──────
+  j := liquidado_semanal_tenant(ta, (hoy_mx - 6)::timestamp at time zone 'UTC');
+  ok_liq := jsonb_array_length(j) = 1
+    and j->0->>'semana' = to_char(hoy_mx, 'IYYY-"S"IW')
+    and (j->0->>'total')::numeric = 2200;
+
+  -- ── Viajes por mes: va3 sin fecha no entra; va1/va2 sí ───────────────
+  j := viajes_por_mes_tenant(ta);
+  select coalesce(sum((e->>'n')::int), 0) into j1 from jsonb_array_elements(j) e;
+  ok_meses := j1::int = 2 and (select bool_and(e->>'mes' ~ '^\d{4}-\d{2}$') from jsonb_array_elements(j) e);
+
+  -- ── Operadores detalle: oa1 2 viajes/1500 anticipo/2200 comprobado; oa2 1/300/0 ─
+  j := operadores_detalle_tenant(ta);
+  ok_det := jsonb_array_length(j) = 2
+    and j->0->>'operadorId' = oa1::text and (j->0->>'viajes')::int = 2
+    and (j->0->>'anticipoTotal')::numeric = 1500 and (j->0->>'comprobadoTotal')::numeric = 2200
+    and j->1->>'operadorId' = oa2::text and (j->1->>'viajes')::int = 1
+    and (j->1->>'anticipoTotal')::numeric = 300 and (j->1->>'comprobadoTotal')::numeric = 0;
+
+  -- ── Dinero observado: sobre_politica 120 (1), duplicado |−80| (1), otro 0 (1); B (50) fuera ─
+  j := dinero_observado_por_tipo_tenant(ta);
+  ok_dinero := jsonb_array_length(j) = 3
+    and j->0->>'tipo' = 'sobre_politica' and (j->0->>'monto')::numeric = 120
+    and j->1->>'tipo' = 'duplicado' and (j->1->>'monto')::numeric = 80
+    and j->2->>'tipo' = 'otro' and (j->2->>'monto')::numeric = 0 and (j->2->>'n')::int = 1;
+
+  -- ── Cierres por día LOCAL: los dos de las 20:00 MX caen HOY, no mañana ─
+  j := liquidaciones_por_dia_tenant(ta, (hoy_mx - 6)::timestamp at time zone 'UTC');
+  ok_dias := jsonb_array_length(j) = 1
+    and j->0->>'dia' = to_char(hoy_mx, 'YYYY-MM-DD') and (j->0->>'n')::int = 2;
+
+  -- ── Consolidado: 3 líneas, 1 conciliada, 1 sin_match, 1 cfdi; B = 0 ──
+  j := conciliacion_consolidado_tenant(ta);
+  ok_cons := (j->>'total')::int = 3 and (j->>'conciliadas')::int = 1 and (j->>'sinMatch')::int = 1
+    and (j->>'cfdis')::int = 1
+    and (conciliacion_consolidado_tenant(tb)->>'total')::int = 0;
+
+  delete from tenant where id in (ta, tb);
+
+  raise exception E'AGREGADOS_0150  funcs=%  invoker=%  ninguna_anon=%  ninguna_auth=%  todas_svc=%  anomalias_ok=%  semanal_ok=%  rutas_ok=%  concepto_ok=%  stats_ok=%  liquidado_ok=%  meses_ok=%  detalle_ok=%  dinero_ok=%  dias_ok=%  consolidado_ok=%   (esperado 11/t/t/t/t y once t)',
+    n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc,
+    ok_anom, ok_sem, ok_rutas, ok_conc, ok_stats, ok_liq, ok_meses, ok_det, ok_dinero, ok_dias, ok_cons;
+end $$;
