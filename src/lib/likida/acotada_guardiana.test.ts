@@ -39,6 +39,16 @@ const GUARDADOS = [
   // que siga en JS lleva techo. Ojo: `Array.from(` también cuenta como
   // `.from(` aquí — analytics.ts lo evita a propósito.
   'src/lib/likida/analytics.ts',
+  // ── ESCALA 50k (mig. 0152) ────────────────────────────────────────────
+  // Los cuatro módulos del lado del ingreso y del encargado. No están en el
+  // camino caliente del webhook, pero sí en el de las PANTALLAS: una consulta
+  // sin techo cuelga la carga del panel hasta el timeout de la plataforma, y
+  // el usuario ve una página en blanco en vez de una sección caída. Cada
+  // `.from(`/`.rpc(` de aquí va envuelto en `acotada(`.
+  'src/lib/likida/comercial.ts',
+  'src/lib/likida/clientes.ts',
+  'src/lib/likida/facturacion_clientes.ts',
+  'src/lib/likida/operacion.ts',
 ];
 
 describe('toda consulta de los módulos del camino caliente lleva techo', () => {
