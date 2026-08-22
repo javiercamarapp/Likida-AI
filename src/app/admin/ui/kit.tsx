@@ -173,11 +173,14 @@ export function StatCard({
       ) : nota ? (
         <p className="text-xs mx-1.5 mt-1.5 pt-1.5 pb-0" style={{ borderTop: '1px dashed var(--line2)', color: 'var(--faint)' }}>{nota}</p>
       ) : delta === null ? (
-        // Se intentó comparar y no hay contra qué: el pie no se queda vacío
-        // (pedido del 12-ago), pero en gris y sin inventar dirección. Con
-        // `delta` OMITIDO (undefined) no se pinta nada — métricas sin
-        // concepto de comparativo (Diésel) van limpias, pedido del mismo día.
-        <p className="text-xs mx-1.5 mt-1.5 pt-1.5 pb-0 tabular" style={{ borderTop: '1px dashed var(--line2)', color: 'var(--faint)' }}>0% · sin movimiento</p>
+        // Se intentó comparar y no hay contra qué (`pctCambio` con base 0, o
+        // el bucket único de "histórico"): el pie no se queda vacío (pedido
+        // del 12-ago), pero DICE que no hubo comparación. AUDITORÍA 18 (A12):
+        // aquí se imprimía "0% · sin movimiento", que afirma "medí y no
+        // cambió" — justo lo que el contrato de arriba prohíbe. Con `delta`
+        // OMITIDO (undefined) no se pinta nada — métricas sin concepto de
+        // comparativo (Diésel) van limpias, pedido del mismo día.
+        <p className="text-xs mx-1.5 mt-1.5 pt-1.5 pb-0" style={{ borderTop: '1px dashed var(--line2)', color: 'var(--faint)' }}>sin periodo comparable</p>
       ) : null}
     </div>
   );

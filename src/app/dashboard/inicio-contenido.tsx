@@ -360,7 +360,9 @@ export async function InicioContenido({
                         // en vez de afirmar "$0.00 de ahorro" que suena a medición.
                         valor={resumenPerdidas ? resumenPerdidas.montoRecuperable : null}
                         sinDato="no se pudo leer el dato fiscal"
-                        formato="mxn" delta={null} />
+                        // Sin `delta`: esta cifra va fija al ejercicio completo,
+                        // no hay "periodo anterior" contra el que compararla (A12).
+                        formato="mxn" />
                     </div>
                   ) : (
                     <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el comparativo de KPIs.</p>
@@ -388,7 +390,7 @@ export async function InicioContenido({
                   {acred && (
                     <div className="flex-1 min-w-[200px]">
                       <StatCard icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
-                        etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" delta={null} />
+                        etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" />
                     </div>
                   )}
                 </div>
