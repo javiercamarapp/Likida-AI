@@ -1,5 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { armar, resumen, validarUuidCfdi } from './pendientes';
+import { vi } from 'vitest';
+import { armar, resumen, validarUuidCfdi, desdeVentana, DIAS_VENTANA_POR_FACTURAR } from './pendientes';
+
+/** La consulta de `getPorFacturar`, capturada filtro por filtro (ESC-12). */
+const filtros: Array<[string, unknown[]]> = [];
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({
+    from: () => {
+      const nodo: Record<string, unknown> = {};
+      for (const m of ['select', 'eq', 'is', 'gte', 'neq', 'order', 'range']) {
+        nodo[m] = (...a: unknown[]) => { filtros.push([m, a]); return nodo; };
+      }
+      nodo.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null, count: 0 }).then(r);
+      return nodo;
+    },
+  }),
+}));
+vi.mock('@/lib/logger', () => ({ logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+const { getPorFacturar } = await import('./pendientes');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE FALTA POR FACTURAR — el puente que faltaba.
@@ -92,5 +110,23 @@ describe('validarUuidCfdi', () => {
     expect(validarUuidCfdi('no-es-un-uuid')).toBeNull();
     expect(validarUuidCfdi('a3bb189e8bf938889912ace4e6543002')).toBeNull(); // sin guiones
     expect(validarUuidCfdi(42)).toBeNull();
+  });
+});
+
+describe('getPorFacturar está acotado en periodo y concepto (ESC-12)', () => {
+  it('pide solo los últimos 45 días de tickets y excluye lo que ya es una factura', async () => {
+    // `traerTodo` sin fecha paginaba TODO gasto sin CFDI de la flota, para
+    // siempre — y lo llama el cron por cada flota con bloqueados.
+    filtros.length = 0;
+    await getPorFacturar('t-1', '2026-08-22');
+    expect(filtros).toContainEqual(['gte', ['fecha', '2026-07-08']]);
+    expect(filtros).toContainEqual(['neq', ['concepto', 'factura']]);
+    expect(filtros).toContainEqual(['eq', ['tenant_id', 't-1']]);
+  });
+
+  it('la ventana cubre el plazo más largo de un portal (mes natural) con margen', () => {
+    expect(DIAS_VENTANA_POR_FACTURAR).toBeGreaterThanOrEqual(35);
+    expect(desdeVentana('2026-03-01', 45)).toBe('2026-01-15');
+    expect(desdeVentana('2026-01-10', 45)).toBe('2025-11-26');
   });
 });

@@ -225,7 +225,41 @@ function traducirChoque(mensaje: string): DatoInvalido | null {
     return new DatoInvalido('Ese folio fiscal (UUID) ya está registrado en otra factura tuya. El mismo CFDI no se registra dos veces: el saldo del cliente saldría al doble.');
   }
   if (mensaje.includes('factura_folio_unico')) {
-    return new DatoInvalido('Ya registraste una factura con ese folio. Búscala en la lista en vez de capturarla otra vez.');
+    // ── RES-22 (auditoría prod): ESTE ÍNDICE ES MÁS ESTRECHO QUE EL SAT ────
+    //
+    // `factura_folio_unico` (mig. 0049:69) es `(tenant_id, folio) where folio
+    // is not null`: SIN serie y SIN ejercicio. Pero un CFDI se identifica por
+    // SERIE + FOLIO, y el folio se reinicia — por serie, y muy comúnmente cada
+    // año. O sea que hoy, para una misma flota:
+    //
+    //   · la factura A-1 de 2025 y la B-1 de 2026 chocan;
+    //   · el folio 1 de enero de 2026 choca con el 1 de enero de 2025.
+    //
+    // En los dos casos son facturas DISTINTAS y legítimas, y la base rechaza
+    // la segunda. A una flota al año le pasa una vez; a 50k tickets/mes y con
+    // varias flotas capturando su cobranza, deja de ser anecdótico.
+    //
+    // NO SE ARREGLA AQUÍ, y por eso esto es un comentario y no un cambio de
+    // esquema: `factura_emitida` no tiene columna `serie` en ninguna migración
+    // (verificado), así que arreglarlo de verdad es esquema + captura + UI, no
+    // un índice. LA MIGRACIÓN PROPUESTA, para cuando se decida:
+    //
+    //   alter table public.factura_emitida add column if not exists serie text;
+    //   drop index if exists factura_folio_unico;
+    //   create unique index if not exists factura_folio_unico
+    //     on public.factura_emitida
+    //        (tenant_id, coalesce(serie, ''), folio, extract(year from fecha))
+    //     where folio is not null;
+    //
+    // Se puede aplicar SIN limpiar nada: el índice nuevo AFLOJA el viejo (le
+    // agrega dimensiones), así que toda fila que hoy convive lo sigue
+    // cumpliendo. Lo que NO se puede hacer sin producto es capturar la serie:
+    // mientras `serie` viaje en NULL, `coalesce(serie,'')` deja el
+    // comportamiento de hoy salvo por el año, que es la mitad del problema.
+    //
+    // Mientras tanto, el mensaje dice la verdad sobre el alcance del choque en
+    // vez de mandar a buscar una factura que puede no ser la misma.
+    return new DatoInvalido('Ya tienes registrada una factura con ese folio. El folio se compara sin serie ni año, así que si ésta es de otra serie o de otro ejercicio, repórtalo: hoy la base no las distingue.');
   }
   return null;
 }
