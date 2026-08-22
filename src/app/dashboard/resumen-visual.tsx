@@ -38,7 +38,7 @@ export function TituloSeccion({ children }: { children: ReactNode }) {
  *  separada del contenido por un hairline. SIN buscador ni campana: no hay
  *  búsqueda ni notificaciones reales en /dashboard, y un control que no
  *  hace nada es un rótulo que miente. Se agregan cuando existan. */
-export function BarraPagina({ icono, titulo, derecha }: { icono?: ReactNode; titulo: string; derecha?: ReactNode }) {
+export function BarraPagina({ icono, titulo, derecha }: { icono?: ReactNode; titulo: ReactNode; derecha?: ReactNode }) {
   return (
     <div className="px-5 h-11 flex items-center justify-between gap-3 border-b shrink-0" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
       <div className="flex items-center gap-2 text-[13px] font-medium min-w-0">
