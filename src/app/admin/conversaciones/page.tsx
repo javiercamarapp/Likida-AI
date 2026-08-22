@@ -1,4 +1,4 @@
-import { getConversacionesActivas } from '@/lib/admin/negocio';
+import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
 import { MessageCircle, MessagesSquare, ChevronDown } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { HBars } from '../ui/graficas';
@@ -19,8 +19,15 @@ export const dynamic = 'force-dynamic';
  * la tarjeta, el mismo material que usa la sección gemela de consola.tsx.
  */
 export default async function ConversacionesPage() {
-  const conversaciones = await getConversacionesActivas();
+  // FE-9: `getConversacionesActivas` devuelve 20 — un TOPE. El KPI de arriba
+  // lo pintaba como "Conversaciones activas: 20" y con 4,000 vivas seguía
+  // diciendo 20. El total sale de un `count exact` aparte; `null` = no se
+  // pudo contar, y entonces no se afirma ninguna cifra.
+  const [conversaciones, total] = await Promise.all([
+    getConversacionesActivas(), contarConversacionesActivas(),
+  ]);
   const totalMensajes = conversaciones.reduce((s, c) => s + c.turns.length, 0);
+  const recortado = total !== null && total > conversaciones.length;
 
   return (
     <main className="h-full">
@@ -34,11 +41,12 @@ export default async function ConversacionesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <KpiTile
               icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-              etiqueta="Conversaciones activas" valor={conversaciones.length} formato="entero"
+              etiqueta="Conversaciones activas" valor={total} formato="entero"
+              vacio={total === null ? 'No se pudo contar — esto no significa que no haya ninguna.' : undefined}
             />
             <KpiTile
               icono={<MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-              etiqueta="Mensajes totales en estas conversaciones" valor={totalMensajes} formato="entero"
+              etiqueta={`Mensajes en las ${conversaciones.length} que se listan`} valor={totalMensajes} formato="entero"
             />
           </div>
 
@@ -54,7 +62,9 @@ export default async function ConversacionesPage() {
           )}
 
           <div className="card p-3">
-            <TituloSeccion>Todas las conversaciones</TituloSeccion>
+            <TituloSeccion>
+              {recortado ? `Las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Todas las conversaciones'}
+            </TituloSeccion>
             {conversaciones.length === 0 ? (
               <div className="mt-2">
                 <EstadoVacio icono={<MessageCircle width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
@@ -64,7 +74,7 @@ export default async function ConversacionesPage() {
             ) : (
               <div className="space-y-1.5 mt-2">
                 {conversaciones.map((c) => (
-                  <details key={c.telefono} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
+                  <details key={`${c.tenantId ?? "sin-flota"}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
                     <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
                       <div>
                         <div className="text-sm font-medium">{c.telefono}</div>

@@ -43,6 +43,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { conteo, traerTodo } from '@/lib/likida/pg';
 import { acotada } from '@/lib/likida/presupuesto';
 import { round2, TZ_MX, hoyMx } from '@/lib/formato';
@@ -402,10 +403,19 @@ export interface TurnoConversacion { role: 'user' | 'assistant'; content: string
 
 export interface ConversacionActiva {
   telefono: string;
+  /** FE-23: `wa_conversacion` está anclada por (tenant, teléfono) — el mismo
+   *  número puede aparecer en dos flotas (un chofer que cambia de patrón, un
+   *  número de oficina compartido). Sin el tenant, la llave de React de la
+   *  lista se repetía y las dos filas se pisaban al renderizar. */
+  tenantId: string | null;
   tenantNombre: string;
   turns: TurnoConversacion[];
   actualizadaEn: string;
 }
+
+/** Cuántas conversaciones se listan. Es un TOPE, no un total: `contar
+ *  ConversacionesActivas` da el de verdad y la pantalla dice "20 de N". */
+export const TOPE_CONVERSACIONES = 20;
 
 /**
  * CORRECCIÓN (2-ago-2026, tras verla mal renderizada): `wa_conversacion.
@@ -419,19 +429,44 @@ export async function getConversacionesActivas(): Promise<ConversacionActiva[]> 
   const admin = supabaseAdmin();
   const { data, error } = await acotada(admin
     .from('wa_conversacion')
-    .select('telefono, estado, updated_at, tenant:tenant_id(nombre)')
+    .select('telefono, tenant_id, estado, updated_at, tenant:tenant_id(nombre)')
     .order('updated_at', { ascending: false })
-    .limit(20), 'getConversacionesActivas');
+    .limit(TOPE_CONVERSACIONES), 'getConversacionesActivas');
   if (error) throw new Error(`getConversacionesActivas: ${error.message}`);
   return (data ?? []).map((c) => {
     const estado = (c.estado as { turns?: TurnoConversacion[] }) ?? {};
     return {
       telefono: c.telefono as string,
+      tenantId: (c.tenant_id as string | null) ?? null,
       tenantNombre: ((c.tenant as { nombre?: string } | null)?.nombre) ?? '—',
       turns: Array.isArray(estado.turns) ? estado.turns : [],
       actualizadaEn: c.updated_at as string,
     };
   });
+}
+
+/**
+ * Cuántas conversaciones hay DE VERDAD (`count exact, head`: cero filas de
+ * vuelta) — FE-9.
+ *
+ * `getConversacionesActivas` devuelve 20 y ese 20 se pintaba como KPI
+ * ("Conversaciones activas: 20"), como alerta de la campana ("20
+ * conversación(es) con actividad reciente") y como el total de la sección.
+ * Con 21 conversaciones vivas los tres decían 20; con 4,000, también. Es un
+ * tope disfrazado de medición.
+ *
+ * `null` = no se pudo contar. Nunca 0: un cero aquí se leería como "el bot no
+ * está hablando con nadie", que es la pregunta que esta pantalla contesta.
+ */
+export async function contarConversacionesActivas(): Promise<number | null> {
+  const { count, error } = await acotada(supabaseAdmin()
+    .from('wa_conversacion')
+    .select('telefono', { count: 'exact', head: true }), 'contarConversacionesActivas');
+  if (error) {
+    logger.warn('contarConversacionesActivas', { err: error.message });
+    return null;
+  }
+  return count ?? null;
 }
 
 export interface MiembroEquipo {
@@ -668,7 +703,30 @@ export async function getUltimaCorridaPorAgente(): Promise<UltimaCorridaAgente[]
  * pantallas); solo cambia el filtro. LANZA ante error de lectura — "0
  * fallos" sobre una base caída afirmaría que todo corrió bien.
  */
-export async function getCorridasFallidas(limite = 20): Promise<CorridaReciente[]> {
+export const TOPE_CORRIDAS_FALLIDAS = 20;
+
+/**
+ * Cuántas corridas en `fallo` hay DE VERDAD (`count exact, head`) — FE-9.
+ *
+ * `getCorridasFallidas(20)` devuelve 20 y ese 20 se pintaba como el conteo
+ * de la campana y de la bandeja de escalaciones: con 500 agentes caídos
+ * seguía diciendo 20, que es la cifra que decide si alguien va a mirar.
+ *
+ * `null` = no se pudo contar. Nunca 0: un cero afirmaría que todo corrió bien.
+ */
+export async function contarCorridasFallidas(): Promise<number | null> {
+  const { count, error } = await acotada(supabaseAdmin()
+    .from('agente_corrida')
+    .select('id', { count: 'exact', head: true })
+    .eq('estado', 'fallo'), 'contarCorridasFallidas');
+  if (error) {
+    logger.warn('contarCorridasFallidas', { err: error.message });
+    return null;
+  }
+  return count ?? null;
+}
+
+export async function getCorridasFallidas(limite = TOPE_CORRIDAS_FALLIDAS): Promise<CorridaReciente[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('agente_corrida')
     .select(COLUMNAS_CORRIDA)
