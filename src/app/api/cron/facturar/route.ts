@@ -14,7 +14,7 @@ import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { avisar, avisarCorridasPorFlota, FalloDePlataforma } from '@/lib/likida/agentes/notificaciones';
 import { avisoColaAtorada } from '@/lib/correo/avisos';
-import { registrarCorrida } from '@/lib/likida/agentes/corridas';
+import { registrarCorrida, ultimasCorridas } from '@/lib/likida/agentes/corridas';
 import { modoEfectivo } from '@/lib/likida/facturacion/modo';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { hoyMx } from '@/lib/formato';
@@ -526,6 +526,25 @@ export async function GET(req: Request) {
 // ── El procesamiento del lote (compartido: cron síncrono y callback QStash) ──
 // Extraído del GET (ronda 16). La MISMA lógica; el callback de QStash corre con
 // su propio presupuesto (10 min) sin el techo de 300s de una invocación directa.
+/**
+ * Cuántos tickets intentó y cuántos facturó CADA flota, con el desglose de
+ * por qué no procedieron (RES-21).
+ *
+ * El desglose es de motivos, no de tickets: "requiere_cuenta ×7" dice qué
+ * hacer; siete líneas de `info` iguales, no.
+ */
+function medirPorFlota(renglones: Renglon[]): Map<string, { intentados: number; facturados: number; motivos: Record<string, number> }> {
+  const m = new Map<string, { intentados: number; facturados: number; motivos: Record<string, number> }>();
+  for (const r of renglones) {
+    const f = m.get(r.tenantId) ?? { intentados: 0, facturados: 0, motivos: {} };
+    if (r.intentado) f.intentados += 1;
+    if (r.facturado) f.facturados += 1;
+    if (r.motivo) f.motivos[r.motivo] = (f.motivos[r.motivo] ?? 0) + 1;
+    m.set(r.tenantId, f);
+  }
+  return m;
+}
+
 export async function procesarLoteEnCola(
   lote: FilaCola[],
   req: Request,
@@ -556,6 +575,10 @@ export async function procesarLoteEnCola(
    *  bloqueado tickets — esos siguen esperando a una persona aunque la corrida
    *  muera. Cada entrada nace con al menos un gasto (`anotarBloqueo`). */
   const bloqueadosPorFlota = new Map<string, Array<{ gastoId: string; motivo: string }>>();
+  /** RES-21: cómo le fue a cada ticket. FUERA del `try` por lo mismo que
+   *  `corridas`: la medición por flota se cierra desde el `finally`, y una
+   *  corrida que revienta a la mitad ya intentó tickets que hay que contar. */
+  const resultados: Renglon[] = [];
 
   try {
     // ── Agrupar: flota → portal → tickets. El portal sale de `armar()`, que es
@@ -582,7 +605,6 @@ export async function procesarLoteEnCola(
       porFlota.set(g.tenant_id, porPortal);
     }
 
-    const resultados: Renglon[] = [];
     const flotas: Array<{
       tenantId: string;
       tickets: number;
@@ -805,7 +827,11 @@ export async function procesarLoteEnCola(
     // canal por el que también llegan los tickets que vencen.
     const avisos = await avisarALasPersonas(bloqueadosPorFlota, hoy);
 
-    logger.info('cron.facturar.ok', { modo, intentados: resultados.length, facturados, quedaron, sinTiempo, flotas: flotas.length });
+    // RES-21: el desglose de motivos va en el log de cierre. Sin él, la única
+    // huella de por qué no se facturó nada eran N líneas de `info` sueltas.
+    const motivos: Record<string, number> = {};
+    for (const r of resultados) if (r.motivo) motivos[r.motivo] = (motivos[r.motivo] ?? 0) + 1;
+    logger.info('cron.facturar.ok', { modo, intentados: resultados.length, facturados, quedaron, sinTiempo, flotas: flotas.length, motivos });
 
     return NextResponse.json({
       corrio: true,
@@ -858,6 +884,41 @@ export async function procesarLoteEnCola(
     // no puede convertir una corrida buena en un 500 — que es la única razón
     // por la que un `finally` daría miedo aquí.
     await avisarCorridasPorFlota('facturas', corridas);
+
+    // ── RES-21: LA SEÑAL DE "INTENTA Y NO FACTURA NADA" ────────────────────
+    //
+    // `autofactura.no_procede` se queda en `info` a propósito: es de alto
+    // volumen y por ticket, y subirlo a warn convertiría el canal de alertas
+    // en el log de una cosa normal. Lo que faltaba era la señal AGREGADA — el
+    // hecho de que una flota lleve corridas enteras intentando sin timbrar
+    // una sola factura, que es como se ve desde fuera un adaptador roto.
+    //
+    // TRES CORRIDAS SEGUIDAS, no una: una corrida sin facturar es rutina
+    // (tickets que no proceden, un portal caído un rato). Tres seguidas ya no.
+    //
+    // SOLO EN `emitir`: en `ensayo` —el modo por defecto— facturados=0 con
+    // intentados>0 es EXACTAMENTE lo que tiene que pasar, y avisarlo sería
+    // gritar por el funcionamiento correcto.
+    const medido = medirPorFlota(resultados);
+    for (const [tenantId, m] of medido) {
+      if (modo !== 'emitir' || m.facturados > 0 || m.intentados === 0) continue;
+      try {
+        // Las DOS anteriores; la tercera es ésta, que todavía no se registra.
+        const previas = await ultimasCorridas(tenantId, 'facturas', 2);
+        const secas = previas.filter((c) => {
+          const r = (c.resumen ?? {}) as { intentados?: number; facturados?: number };
+          return typeof r.intentados === 'number' && r.intentados > 0 && r.facturados === 0;
+        });
+        if (previas.length >= 2 && secas.length === 2) {
+          logger.warn('cron.facturar.sin_facturar_3_corridas', {
+            tenant: tenantId, intentados: m.intentados, motivos: m.motivos,
+          });
+        }
+      } catch (e) {
+        // Una lectura del historial no puede tumbar el cierre de la corrida.
+        logger.warn('cron.facturar.historial_ilegible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+      }
+    }
     // La bitácora de corridas (B3), en el MISMO finally y por la misma razón:
     // el fallo duro es exactamente la corrida que más merece quedar anotada.
     // Sin conteo de tareas por flota aquí (los renglones son por portal, no
@@ -868,6 +929,11 @@ export async function procesarLoteEnCola(
         fin: new Date(),
         estado: err ? 'fallo' : 'ok',
         disparo: 'cron',
+        // RES-21: el resumen deja de ir vacío. Intentados/facturados y el
+        // desglose de motivos son lo que hace legible un `no_procede` que
+        // vive en `info`, y lo que la corrida siguiente lee para saber si
+        // ésta es la tercera seca seguida.
+        resumen: medido.get(tenant) as Record<string, unknown> | undefined,
         // La ficha también distingue el origen (B8): un fallo de plataforma no
         // manda a nadie a revisar la información de la flota.
         error: err
