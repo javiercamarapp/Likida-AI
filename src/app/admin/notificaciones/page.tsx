@@ -1,4 +1,4 @@
-import { getResumenNegocio, getConversacionesActivas } from '@/lib/admin/negocio';
+import { getResumenNegocio, getConversacionesActivas, contarConversacionesActivas } from '@/lib/admin/negocio';
 import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
 import { ahoraMs } from '@/lib/saludo';
 import { calcularAlertas } from '../calcular-alertas';
@@ -20,10 +20,12 @@ export default async function NotificacionesPage() {
   // La bandeja de escalaciones alimenta la campana con los MISMOS conteos
   // que pinta /admin/escalaciones (nunca lanza: una fuente ilegible llega
   // como null y calcularAlertas la reporta como fuente ciega).
-  const [r, conversaciones, bandeja] = await Promise.all([
+  const [r, conversaciones, bandeja, conversacionesTotal] = await Promise.all([
     getResumenNegocio(), getConversacionesActivas(), getBandejaEscalaciones(ahoraMs()),
+    // FE-9: el total real, no el tamaño de la página de 20.
+    contarConversacionesActivas(),
   ]);
-  const alertas = calcularAlertas(r, conversaciones, bandeja.conteos);
+  const alertas = calcularAlertas(r, conversaciones, bandeja.conteos, conversacionesTotal);
 
   return (
     <div className="flex flex-col gap-4">

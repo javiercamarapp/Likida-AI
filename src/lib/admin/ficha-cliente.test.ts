@@ -32,11 +32,20 @@ vi.mock('@/lib/saas/suscripcion', () => ({
   getSuscripcion: async () => suscripcion,
   getFacturasSaas: async () => [],
 }));
+// FE-11: el filtro por tenant vive en la CONSULTA (`{ tenantId }` → `.eq()`),
+// no en un `.filter()` posterior — la ficha pedía TODOS los tickets de TODAS
+// las flotas para quedarse con los de una. El mock respeta la opción: si el
+// código volviera a pedir sin filtro, la ficha traería el ticket ajeno y esta
+// prueba lo atrapa.
+const ticketsPedidos: Array<string | undefined> = [];
 vi.mock('./soporte', () => ({
-  getTicketsCruzados: async () => ([
-    { id: 'tk-1', tenantId: 't-1', asunto: 'mío', estado: 'abierto', horasRestantes: null },
-    { id: 'tk-2', tenantId: 't-OTRO', asunto: 'ajeno', estado: 'abierto', horasRestantes: null },
-  ]),
+  getTicketsCruzados: async (_ahora: number, o: { tenantId?: string } = {}) => {
+    ticketsPedidos.push(o.tenantId);
+    return [
+      { id: 'tk-1', tenantId: 't-1', asunto: 'mío', estado: 'abierto', horasRestantes: null },
+      { id: 'tk-2', tenantId: 't-OTRO', asunto: 'ajeno', estado: 'abierto', horasRestantes: null },
+    ].filter((t) => !o.tenantId || t.tenantId === o.tenantId);
+  },
 }));
 vi.mock('./negocio', () => ({ costoIaDeTenant: async () => ({ historicoUsd: 0.04, d30Usd: 0.04 }) }));
 
@@ -58,13 +67,15 @@ describe('getFichaCliente', () => {
     await expect(getFichaCliente('t-1')).rejects.toThrow();
   });
 
-  it('arma la ficha con los tickets FILTRADOS al tenant y el origen legible', async () => {
+  it('arma la ficha con los tickets FILTRADOS al tenant EN LA CONSULTA y el origen legible', async () => {
     respuestas.set('tenant', [{ data: TENANT, error: null }]);
     respuestas.set('prospecto', [{ data: null, error: null }]);
     respuestas.set('agente_corrida', [{ data: [], error: null }]);
+    ticketsPedidos.length = 0;
     const f = (await getFichaCliente('t-1'))!;
     expect(f.tenant.nombre).toBe('Flota X');
     expect(f.tickets?.map((t) => t.id)).toEqual(['tk-1']);
+    expect(ticketsPedidos).toEqual(['t-1']);
     // maybeSingle sin fila = NO vino del pipeline, y es afirmable (legible).
     expect(f.origen).toBeNull();
     expect(f.origenLegible).toBe(true);
