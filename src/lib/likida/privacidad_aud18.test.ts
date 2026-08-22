@@ -51,3 +51,15 @@ describe('M7 · los modelos de lenguaje reciben las fotos Y el texto del chat', 
     expect(t, 'no acotar el flujo a las fotos').not.toMatch(/modelos de lenguaje que leen las fotos,/);
   });
 });
+
+describe('B7 · el código no afirma un ZDR que nadie contrató', () => {
+  // `data_collection: 'deny'` es una preferencia de ruteo por llamada. La
+  // auditoría 8 lo sacó del aviso; la justificación interna decía lo contrario
+  // y es lo que un ingeniero repetiría en una due diligence.
+  it('models.ts ya no dice que el gateway "fuerza ZDR"', () => {
+    const m = readFileSync('src/lib/llm/models.ts', 'utf8');
+    expect(m).not.toMatch(/fuerza ZDR/);
+    expect(m).toMatch(/PREFERENCIA DE RUTEO/);
+    expect(m).toMatch(/NO es Zero Data Retention/);
+  });
+});
