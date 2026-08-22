@@ -58,19 +58,41 @@ vi.mock('@/lib/likida/interruptores', () => ({
 
 /** Lo que devuelve la consulta de la cola. */
 let cola: { data: Array<Record<string, unknown>> | null; error: { message: string } | null };
+/** ESC-5: lo que devuelve el CONTEO del backlog (`select(id,{count,head})`).
+ *  `null` = el default honesto: tantos como filas tenga la cola. */
+let backlog: { count: number | null; error: { message: string } | null } | null;
 const consulta: Array<[string, unknown[]]> = [];
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => {
       const nodo: Record<string, unknown> = {};
-      for (const m of ['select', 'eq', 'is', 'not', 'order', 'limit']) {
-        nodo[m] = (...a: unknown[]) => { consulta.push([`${tabla}.${m}`, a]); return nodo; };
+      /** El conteo del backlog no trae filas: `head: true` y devuelve `count`. */
+      let esConteo = false;
+      for (const m of ['select', 'eq', 'is', 'not', 'gte', 'order', 'limit']) {
+        nodo[m] = (...a: unknown[]) => {
+          consulta.push([`${tabla}.${m}`, a]);
+          if (m === 'select' && (a[1] as { head?: boolean } | undefined)?.head) esConteo = true;
+          return nodo;
+        };
       }
-      nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(cola).then(r);
+      nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(
+        esConteo
+          ? (backlog ?? { count: cola.data?.length ?? 0, error: cola.error })
+          : cola,
+      ).then(r);
       return nodo;
     },
   }),
+}));
+
+/** ESC-5: QStash. Sin `UPSTASH_QSTASH_TOKEN` el cron va por el camino
+ *  síncrono —el que ejercitan casi todas las pruebas de este archivo—; con
+ *  token, encola UN mensaje por flota y este doble los captura. */
+const publishJSON = vi.fn(async (_m: Record<string, unknown>) => ({ messageId: `msg-${publishJSON.mock.calls.length}` }));
+vi.mock('@upstash/qstash', () => ({
+  Client: class { publishJSON = (...a: unknown[]) => publishJSON(...(a as [Record<string, unknown>])); },
+  Receiver: class { verify = async () => true; },
 }));
 
 const facturarAlVuelo = vi.fn(async (a: { gastoId: string }) => ({
@@ -182,6 +204,10 @@ const pedir = (auth = `Bearer ${SECRETO}`) =>
 
 beforeEach(() => {
   cola = { data: [fila()], error: null };
+  backlog = null;
+  delete process.env.UPSTASH_QSTASH_TOKEN;
+  publishJSON.mockClear();
+  publishJSON.mockImplementation(async () => ({ messageId: `msg-${publishJSON.mock.calls.length}` }));
   consulta.length = 0;
   navegadorRoto = null;
   navegadoresAbiertos.length = 0;
@@ -303,7 +329,10 @@ describe('el día del cron es el de México (RES-13)', () => {
     ]) {
       const fuente = readFileSync(ruta, 'utf8');
       expect(fuente, ruta).toContain("import { hoyMx } from '@/lib/formato'");
-      expect(fuente.replace(/\/\/.*$/gm, ''), ruta).not.toMatch(/toISOString\(\)\.slice\(0, 10\)/);
+      // El patrón prohibido es EL DÍA DE HOY en UTC (`new Date()`), no toda
+      // aritmética de fechas: `desdeVentana` sí resta días sobre una
+      // fecha-solo en UTC, donde no hay zona que cruzar.
+      expect(fuente.replace(/\/\/.*$/gm, ''), ruta).not.toMatch(/new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/);
     }
   });
 });
@@ -645,6 +674,134 @@ describe('el presupuesto de tiempo del lote', () => {
     expect(conNavegador).toHaveBeenCalledTimes(2);
     expect(cuerpo.sinTiempo).toBe(0);
     expect(cuerpo.intentados).toBe(2);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESC-5 — UN MENSAJE DE QSTASH POR FLOTA, Y EL BACKLOG MEDIDO
+//
+// Con lote de 8 cada hora el techo eran 192 tickets/día contra ~170-340
+// sueltos/día: la cola crecía y `limit(9)` solo sabía si "sobró uno".
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('el despacho por flota con QStash (ESC-5)', () => {
+  beforeEach(() => { process.env.UPSTASH_QSTASH_TOKEN = 'tok'; });
+
+  it('encola UN mensaje POR FLOTA — no un solo lote con las flotas mezcladas', async () => {
+    // Un mensaje = un navegador = una sesión por portal, en su propia
+    // invocación. Mezclar flotas en un mensaje era volver a meter ocho
+    // sesiones en los 300 s de una sola función.
+    cola = { data: [fila({ id: 'a', tenant_id: 't-1' }), fila({ id: 'b', tenant_id: 't-2' }), fila({ id: 'c', tenant_id: 't-1' })], error: null };
+
+    const cuerpo = await (await pedir()).json();
+
+    expect(publishJSON).toHaveBeenCalledTimes(2);
+    const porMensaje = publishJSON.mock.calls.map(([m]) => (m.body as { lote: Array<{ id: string; tenant_id: string }> }).lote);
+    expect(porMensaje.map((l) => l.map((g) => g.id))).toEqual([['a', 'c'], ['b']]);
+    // Cada mensaje lleva UNA sola flota.
+    for (const l of porMensaje) expect(new Set(l.map((g) => g.tenant_id)).size).toBe(1);
+    expect(cuerpo).toMatchObject({ corrio: true, encolado: true, flotas: 2, tickets: 3 });
+  });
+
+  it('el lote por flota se topa en 20 tickets, no en 8', async () => {
+    cola = { data: Array.from({ length: 25 }, (_, i) => fila({ id: `g-${i}` })), error: null };
+
+    await pedir();
+
+    const lote = (publishJSON.mock.calls[0][0].body as { lote: unknown[] }).lote;
+    expect(lote).toHaveLength(20);
+  });
+
+  it('EL BACKLOG ES UN CONTEO REAL (count head), no "sobró uno"', async () => {
+    // Es el número que dice si la cola crece. Antes se derivaba de `limit+1`,
+    // así que 9 pendientes y 9,000 se veían exactamente igual.
+    cola = { data: [fila({ id: 'a' })], error: null };
+    backlog = { count: 4321, error: null };
+
+    const cuerpo = await (await pedir()).json();
+
+    expect(consulta).toContainEqual(['gasto.select', ['id', { count: 'exact', head: true }]]);
+    expect(cuerpo.backlog).toBe(4321);
+    expect(cuerpo.quedaron).toBe(4320);
+  });
+
+  it('si el conteo falla, `backlog` es null y se DICE — no un cero inventado', async () => {
+    backlog = { count: null, error: { message: 'timeout' } };
+
+    const cuerpo = await (await pedir()).json();
+
+    expect(cuerpo.backlog).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith('cron.facturar.backlog_sin_contar', { err: 'timeout' });
+  });
+
+  it('la cola va acotada en periodo: nada de barrer la tabla entera', async () => {
+    await pedir();
+    const gte = consulta.filter(([m]) => m === 'gasto.gte').map(([, a]) => a[0]);
+    expect(gte).toContain('created_at');
+    // Y el conteo mide LO MISMO que la lectura: dos filtros distintos harían
+    // que `quedaron` mintiera.
+    expect(gte).toHaveLength(2);
+  });
+
+  it('el mismo cuarto de hora no encola dos veces la misma flota (Vercel Cron es at-least-once)', async () => {
+    await pedir();
+    const dedup = publishJSON.mock.calls[0][0].deduplicationId as string;
+    expect(dedup).toMatch(/^facturar-t-1-\d+$/);
+    // Un segundo disparo del MISMO cuarto de hora reusa la ranura.
+    publishJSON.mockClear();
+    await pedir();
+    expect(publishJSON.mock.calls[0][0].deduplicationId).toBe(dedup);
+  });
+
+  it('si QStash no acepta NINGÚN lote, se procesa aquí mismo en vez de perder la corrida', async () => {
+    publishJSON.mockRejectedValue(new Error('qstash caído'));
+
+    const cuerpo = await (await pedir()).json();
+
+    expect(cuerpo.encolado).toBeUndefined();
+    expect(cuerpo.corrio).toBe(true);
+    expect(facturarLoteAlVuelo).toHaveBeenCalled();
+  });
+
+  it('si QStash acepta unas flotas y otras no, las que fallaron quedan SIN marcar y se avisa al operador', async () => {
+    cola = { data: [fila({ id: 'a', tenant_id: 't-1' }), fila({ id: 'b', tenant_id: 't-2' })], error: null };
+    publishJSON.mockImplementation(async (m: Record<string, unknown>) => {
+      const lote = m.body as { lote: Array<{ tenant_id: string }> };
+      if (lote.lote[0].tenant_id === 't-2') throw new Error('rechazado');
+      return { messageId: 'msg-1' };
+    });
+
+    const cuerpo = await (await pedir()).json();
+
+    expect(cuerpo.flotas).toBe(1);
+    expect(cuerpo.sinEncolar).toEqual([{ tenantId: 't-2', tickets: 1, error: 'rechazado' }]);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.facturar', expect.objectContaining({ codigo: 'encolado_parcial' }));
+  });
+
+  it('RES-23: un QStash colgado NO se come la invocación — el publish tiene su propio tope', async () => {
+    // `publishJSON` no trae tope propio: sin esto, una publicación colgada se
+    // comía los 300 s del cron y la corrida moría sin encolar nada.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    publishJSON.mockImplementation(() => new Promise(() => {})); // nunca resuelve
+    try {
+      const enVuelo = pedir();
+      await vi.advanceTimersByTimeAsync(11_000);
+      const cuerpo = await (await enVuelo).json();
+      // Cayó al camino síncrono (falla-cerrado), no colgó.
+      expect(cuerpo.corrio).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(logger.error).toHaveBeenCalledWith('cron.facturar.encolado_fallo', expect.objectContaining({
+      err: expect.stringContaining('sin respuesta'),
+    }));
+  });
+
+  it('el cron corre cada 15 minutos: el techo de 192 tickets/día era el hallazgo', async () => {
+    const { readFileSync } = await import('node:fs');
+    const crons = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: Array<{ path: string; schedule: string }> };
+    const facturar = crons.crons.find((c) => c.path === '/api/cron/facturar');
+    expect(facturar?.schedule).toBe('*/15 * * * *');
   });
 });
 
