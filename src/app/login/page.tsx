@@ -227,7 +227,14 @@ export default async function Login({
                 El panel de liquidación de tu flota.
               </p>
 
-              {sp?.enviado ? (
+              {/* AUDITORÍA 18, BAJO (B8): el aviso de "enviado" va ENCIMA del
+                  formulario, no en su lugar. Antes reemplazaba Google, el
+                  campo y el botón: con un dedazo en el correo, la pantalla
+                  decía "te mandamos un enlace" y no ofrecía ninguna salida
+                  más que el botón Atrás del navegador. Y como el correo sin
+                  cuenta se responde igual que el enviado (M24), el dedazo es
+                  el modo de falla más común del magic link. */}
+              {sp?.enviado && (
                 <div
                   role="status"
                   className="login-entra mt-9 rounded-[18px] p-5"
@@ -243,9 +250,12 @@ export default async function Login({
                       ? 'Abre el correo más reciente, desde este mismo dispositivo.'
                       : 'Ábrelo desde este mismo dispositivo.'}
                   </p>
+                  <p className="mt-1.5 text-[13px] leading-relaxed" style={{ color: 'var(--faint)' }}>
+                    ¿No llega o te equivocaste de correo? Vuelve a escribirlo abajo.
+                  </p>
                 </div>
-              ) : (
-                <>
+              )}
+              <>
                   {/* El hairline que separa el encabezado de las acciones. Es la
                       línea de 1px de la landing, no un margen más: marca dónde
                       deja de leerse y empieza a hacerse algo. */}
@@ -316,8 +326,7 @@ export default async function Login({
                       Pídele a tu flota que te dé de alta.
                     </span>
                   </p>
-                </>
-              )}
+              </>
 
               {/* `role="alert"` — antes era un <p> mudo: quien usa lector de
                   pantalla enviaba el formulario, volvía a la misma página y nada
