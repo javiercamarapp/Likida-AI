@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { acotada } from './presupuesto';
 import { sendText, sendDocument } from '@/lib/meta/client';
 import { armarAvisoJefe, type ResumenLiquidacion, type DiferenciaResumen } from './cierre_aviso';
 import { telefonoParaDineroDe } from './contactos';
@@ -49,15 +50,18 @@ export interface ResultadoAvisoCierre {
  * lado.
  */
 export async function resumenDeCierre(tenantId: string, viajeId: string): Promise<ResumenLiquidacion | null> {
+  // Con techo (auditoría 18, A23): esto corre en el cierre, con la
+  // liquidación YA escrita; un socket que Supabase acepta y no contesta se
+  // quedaba aquí 300s y mataba la invocación antes de `saveConversation`.
   const admin = supabaseAdmin();
   const [rLiq, rViaje] = await Promise.all([
-    admin.from('liquidacion')
+    acotada(admin.from('liquidacion')
       .select('total_comprobado, total_anticipo, diferencia, diferencias')
       .eq('viaje_id', viajeId).eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false }).limit(1).maybeSingle(),
-    admin.from('viaje')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle(), 'resumenDeCierre.liquidacion'),
+    acotada(admin.from('viaje')
       .select('folio, operador:operador_id(nombre)')
-      .eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(),
+      .eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(), 'resumenDeCierre.viaje'),
   ]);
 
   // Fallar cerrado: sin esto, un error de lectura se leería como "no hay
