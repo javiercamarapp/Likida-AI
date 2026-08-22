@@ -5809,3 +5809,92 @@ begin
   raise exception E'CLAIM_0149  columna=%  huerfano_retomado=%  completado_retomado=%  fresco_retomado=%   (esperado t / 1 / 0 / 0)',
     columna, retomado, completado_no_retomado, fresco_no_retomado;
 end $$;
+
+-- ── 126. El Registro de Viajes pagina por cursor y cuenta de un golpe, sin mezclar flotas (mig. 0154) ──
+-- Dos flotas sembradas a mano. La A tiene 7 viajes (dos sin fecha, dos con la
+-- MISMA fecha para forzar el desempate por created_at/id, uno escalado sin
+-- aceptar); la B tiene 2. Se recorre el registro de A con páginas de 2 por
+-- cursor (la forma nueva) y se compara, viaje a viaje, contra el ORDER BY +
+-- OFFSET de siempre (la forma vieja) — EQUIVALENCIA. Ningún id de B aparece.
+-- `conteos_viajes_tenant` tiene que dar lo mismo que los cinco count(*) de
+-- contarViajes/contarEscalados. Las dos RPC cerradas a anon. Todo revierte.
+--
+-- CORRIDO el 22-ago-2026 contra producción DENTRO de una transacción revertida
+-- (la 0154 aún no está aplicada: se creó y se deshizo en el mismo `begin …
+-- rollback`, así que la base quedó como estaba). Salida real:
+--   REGISTRO_0154  paginas=4  equivalente=t  filtrado_B=t  escalados_filtro=1  busca_monte=1  conteos_ok=t  tope_100=t  anon=f/f
+-- Esperado: exactamente eso. Al aplicar la 0154 hay que volver a correrlo.
+do $$
+declare
+  ta uuid; tb uuid; ops uuid[] := '{}'; o uuid;
+  viejo uuid[]; nuevo uuid[] := '{}'; ids_b uuid[];
+  pag jsonb; ultima jsonb; paginas int := 0; n int;
+  esc int; busca int; conteos jsonb; conteos_ok boolean; tope_ok boolean;
+  anon_reg boolean; anon_con boolean;
+  v_fecha date; v_created timestamptz; v_id uuid;
+begin
+  insert into public.tenant (nombre) values ('__verif_0154_A__') returning id into ta;
+  insert into public.tenant (nombre) values ('__verif_0154_B__') returning id into tb;
+  -- Un operador por viaje: uq_viaje_abierto_por_operador no deja dos viajes
+  -- sin liquidar al mismo chofer.
+  for i in 1..9 loop
+    insert into public.operador (tenant_id, nombre, telefono)
+      values (case when i <= 7 then ta else tb end, '__V154_' || i, '52100000154' || i) returning id into o;
+    ops := ops || o;
+  end loop;
+
+  -- avisado_en va con los escalados/aceptados: viaje_aceptado_requiere_aviso (0058).
+  insert into public.viaje (tenant_id, operador_id, folio, origen, destino, estatus, fecha_inicio, created_at, avisado_en, escalado_en, aceptado_en) values
+    (ta, ops[1], 'A1', 'Monterrey', 'CDMX',     'abierto',    '2026-08-20', now() - interval '7 min', null,  null,  null),
+    (ta, ops[2], 'A2', 'Saltillo',  'Torreón',  'en_cuadre',  '2026-08-20', now() - interval '6 min', now(), now(), null),
+    (ta, ops[3], 'A3', 'León',      'Puebla',   'liquidado',  '2026-08-18', now() - interval '5 min', null,  null,  null),
+    (ta, ops[4], 'A4', 'Querétaro', 'Veracruz', 'abierto',    '2026-08-01', now() - interval '4 min', now(), now(), now()),
+    (ta, ops[5], 'A5', 'Tampico',   'Tuxpan',   'liquidado',  null,         now() - interval '3 min', null,  null,  null),
+    (ta, ops[6], 'A6', 'Colima',    'Manzanillo','abierto',   null,         now() - interval '2 min', null,  null,  null),
+    (ta, ops[7], 'A7', 'Mérida',    'Cancún',   'abierto',    '2026-08-21', now() - interval '1 min', null,  null,  null);
+  insert into public.viaje (tenant_id, operador_id, folio, origen, destino, estatus, fecha_inicio) values
+    (tb, ops[8], 'B1', 'Monterrey', 'CDMX', 'abierto', '2026-08-21'),
+    (tb, ops[9], 'B2', 'Monterrey', 'CDMX', 'liquidado', null);
+
+  -- Forma VIEJA: el orden del registro con OFFSET (lo que hacía .range()).
+  select array_agg(id order by fecha_inicio desc nulls last, created_at desc, id desc)
+    into viejo from public.viaje where tenant_id = ta;
+  select array_agg(id) into ids_b from public.viaje where tenant_id = tb;
+
+  -- Forma NUEVA: páginas de 2 por cursor hasta agotar (limite+1 = 3 filas
+  -- cuando hay más; la tercera solo dice "hay otra página").
+  v_fecha := null; v_created := null; v_id := null;
+  loop
+    pag := public.viajes_registro_tenant(ta, 'todos', null, v_fecha, v_created, v_id, 2);
+    paginas := paginas + 1;
+    n := jsonb_array_length(pag);
+    for i in 0 .. least(n, 2) - 1 loop
+      nuevo := nuevo || (pag -> i ->> 'id')::uuid;
+    end loop;
+    exit when n <= 2 or paginas > 10;
+    ultima := pag -> 1;
+    v_fecha := (ultima ->> 'fecha_inicio')::date;
+    v_created := (ultima ->> 'created_at')::timestamptz;
+    v_id := (ultima ->> 'id')::uuid;
+  end loop;
+
+  -- Filtro "escalados": A2 (escalado sin aceptar) sí; A4 (ya aceptado) no.
+  select jsonb_array_length(public.viajes_registro_tenant(ta, 'escalados', null, null, null, null, 100)) into esc;
+
+  -- Búsqueda: "monte" pega en Monterrey (A1) — y NO en los B1 de la otra flota.
+  select jsonb_array_length(public.viajes_registro_tenant(ta, 'todos', 'monte', null, null, null, 100)) into busca;
+
+  -- Tope 100 aunque pidan 10,000 (devuelve a lo sumo 101).
+  select jsonb_array_length(public.viajes_registro_tenant(ta, 'todos', null, null, null, null, 10000)) <= 101 into tope_ok;
+
+  conteos := public.conteos_viajes_tenant(ta);
+  conteos_ok := (conteos ->> 'total')::int = 7 and (conteos ->> 'abiertos')::int = 4
+    and (conteos ->> 'enCuadre')::int = 1 and (conteos ->> 'liquidados')::int = 2
+    and (conteos ->> 'escalados')::int = 1;
+
+  select has_function_privilege('anon', 'public.viajes_registro_tenant(uuid, text, text, date, timestamptz, uuid, int)', 'execute') into anon_reg;
+  select has_function_privilege('anon', 'public.conteos_viajes_tenant(uuid)', 'execute') into anon_con;
+
+  raise exception E'REGISTRO_0154  paginas=%  equivalente=%  filtrado_B=%  escalados_filtro=%  busca_monte=%  conteos_ok=%  tope_100=%  anon=%/%   (esperado 4 / t / t / 1 / 1 / t / t / f/f)',
+    paginas, (nuevo = viejo), not (nuevo && ids_b), esc, busca, conteos_ok, tope_ok, anon_reg, anon_con;
+end $$;
