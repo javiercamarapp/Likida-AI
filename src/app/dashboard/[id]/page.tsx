@@ -1,22 +1,19 @@
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerArea, inicioDe, rolEfectivo } from '@/lib/auth/visibilidad';
-import Link from 'next/link';
-import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { notFound, redirect } from 'next/navigation';
 import { getLiquidacionDetalle } from '@/lib/likida/analytics';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
-import { filasDeducibilidad } from '@/lib/likida/liquidacion/deducibilidad';
-import { mxn } from '@/lib/utils';
-import { litros, fechaMx } from '../formato';
-import { etiquetaEstatus } from '../estatus';
 import { puedeExportar, puedeAsignar, puedeAdministrar } from '@/lib/auth/permisos';
 import { listOperadores, reasignarOperador } from '@/lib/likida/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { revalidatePath } from 'next/cache';
-import { RotateCcw } from 'lucide-react';
 import { reabrirViaje, mensajeParaPantalla } from '@/lib/likida/administracion';
-import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
+import type { ResultadoAccion } from '../../admin/ui/forma';
+import { sufijoTenant } from '../sufijo';
+import { estadoDeColor } from './vista';
+import { DetalleLiquidacion } from './detalle';
+import { etiquetaEstatus } from '../estatus';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,20 +28,40 @@ const CONCEPTO: Record<string, string> = {
   viaticos: 'Viáticos', otro: 'Otro',
 };
 
+/** `https://wa.me/52…` con el teléfono del operador tal como está en su
+ *  ficha: solo dígitos, y la lada de México una sola vez. Sin teléfono no
+ *  hay botón — nunca un link a un número inventado. */
+function hrefWhatsApp(telefono: string | null): string | null {
+  if (!telefono) return null;
+  const digitos = telefono.replace(/\D/g, '');
+  if (digitos.length < 10) return null;
+  return `https://wa.me/52${digitos.replace(/^52/, '')}`;
+}
+
 export default async function Detalle({
   params, searchParams,
 }: { params: Promise<{ id: string }>; searchParams: Promise<{ tenant?: string; vista?: string; rol?: string }> }) {
+  const { id } = await params;
+  const sp = await searchParams;
+
   // Segunda capa (ver dashboard/page.tsx). El id va en la ruta de vuelta para
   // que tras el passcode aterrice en la liquidación que pidió.
-  const { id: idParaVolver } = await params;
-  const { tenantId: tenantIdDemo, rol: rolReal } = await requireSessionTenant(`/dashboard/${idParaVolver}`);
+  //
+  // `sp` VIAJA A LA PUERTA, como en `resolverTenantEfectivo`: sin él, un
+  // superadmin en `?vista=demo` caía al tenant de su selección explícita
+  // (admin/elegir-flota) y esta página respondía 404 — la liquidación del
+  // demo no existe bajo la flota elegida. Esta página no puede usar
+  // `resolverTenantEfectivo` directo porque su ruta es dinámica
+  // (`/dashboard/<uuid>`) y `puedeVerRuta` no la conoce; el área se gatea a
+  // mano abajo.
+  const { tenantId: tenantIdDemo, rol: rolReal } = await requireSessionTenant(`/dashboard/${id}`, sp);
   // AUDITORÍA 13, MEDIO (arquitectura): esta página era la única de datos que
   // no pasaba por rolEfectivo — la previsualización 'ver como' (?rol=contador)
   // gateaba con el rol REAL (superadmin) y el formulario 'Reasignar'/'Reabrir'
   // (acciones destructivas) se pintaban y se EJECUTABAN como superadmin. El rol
   // efectivo solo QUITA visibilidad; las escrituras re-chequean abajo con el
   // rol real.
-  const rol = rolEfectivo(rolReal, (await searchParams).rol);
+  const rol = rolEfectivo(rolReal, sp.rol);
 
   // ESTA PANTALLA ES DINERO, no la ficha operativa del viaje: enseña
   // comprobado contra anticipo, la deducibilidad y el desglose de IVA/IEPS.
@@ -52,44 +69,31 @@ export default async function Detalle({
   // dinámica (`/dashboard/<uuid>`) y no puede estar en el mapa de rutas.
   if (!puedeVerArea(rol, 'dinero')) redirect(inicioDe(rol));
 
-  const { id } = await params;
-  const sp = await searchParams;
-
   // Mismo criterio de dashboard/page.tsx: un superadmin viendo la flota X
   // desde "Ver dashboard" (admin/flotas) necesita que ESTA página de detalle
   // también resuelva a X, no al tenant demo — si no, el link de la tabla
   // llevaría a un 404 (la liquidación no existe bajo el tenant equivocado).
   let tenantId = tenantIdDemo;
-  let volverQS = '';
   if (rolReal === 'superadmin' && sp?.tenant) {
     tenantId = await resolverTenantPedido(supabaseAdmin(), tenantId, sp.tenant);
-    volverQS = `?tenant=${tenantId}`;
   }
 
-  // `vista` y `rol` TIENEN QUE VIAJAR EN LA VUELTA, y esta página era la única
-  // que no los leía. La cadena rota: el sidebar de /admin ofrece "Ver panel de
-  // flota (demo)" → `/dashboard?vista=demo`; el cuadre sí arrastra el sufijo
-  // hasta el detalle; el detalle lo perdía; y entonces "← Panel" caía en
-  // `/dashboard` pelón, donde `resolverTenantEfectivo` ve a un superadmin sin
-  // vista ni tenant y REDIRIGE A /admin.
-  //
-  // O sea: un clic en "← Panel" durante el demo proyecta la consola interna
-  // —"MRR meta $1,000,000" marcando $0, "Likida todavía no tiene clientes"—
-  // delante del director de operaciones de la flota.
-  if (!volverQS) {
-    const partes: string[] = [];
-    if (sp?.vista) partes.push(`vista=${encodeURIComponent(sp.vista)}`);
-    if (sp?.rol) partes.push(`rol=${encodeURIComponent(sp.rol)}`);
-    if (partes.length) volverQS = `?${partes.join('&')}`;
-  }
+  // `vista`, `rol` y `tenant` TIENEN QUE VIAJAR EN LA VUELTA: el mismo
+  // contrato de sufijo que el sidebar y el resto de las páginas
+  // (`sufijoTenant`). Sin él, "Viajes" durante el demo caía en `/dashboard`
+  // pelón, donde un superadmin sin vista ni tenant rebota a /admin — y la
+  // consola interna se proyectaba delante del director de la flota.
+  const sufijo = sufijoTenant(sp);
 
   const d = await getLiquidacionDetalle(id, tenantId);
   if (!d) notFound();
   const e = etiquetaEstatus(d.estatus);
   const puedeReasignar = puedeAsignar(rol);
-  const operadores = puedeReasignar ? await listOperadores(tenantId) : [];
   // Reabrir es del dueño, no del encargado ni del contador: borra la
   // liquidación y el PDF que quizá ya se entregó.
+  // (Se conserva la condición original: `d.estatus` es el de la LIQUIDACIÓN
+  // —cuadrada / con_diferencias / revisar—, así que hoy esto no se pinta
+  // nunca; queda anotado en el resumen de la rama para decidirlo aparte.)
   const puedeReabrir = puedeAdministrar(rol) && d.estatus === 'liquidado';
 
   /**
@@ -100,7 +104,7 @@ export default async function Detalle({
    */
   async function reabrir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await requireSessionTenant(`/dashboard/${id}`);
+    const s = await requireSessionTenant(`/dashboard/${id}`, sp);
     if (!puedeAdministrar(s.rol)) {
       return { error: 'Tu rol no puede reabrir un viaje liquidado. Pídeselo al dueño de la flota.' };
     }
@@ -127,252 +131,33 @@ export default async function Detalle({
     // un contador que arme la petición a mano (misma sesión válida, sin el
     // botón) podría reasignar igual — el mismo criterio que ya usa
     // `requireSessionTenant` para no confiar solo en lo que el proxy filtra.
-    const { tenantId: tDemo, rol: r } = await requireSessionTenant(`/dashboard/${id}`);
-    if (!puedeAsignar(r)) redirect(`/dashboard/${id}${volverQS}`);
+    const { tenantId: tDemo, rol: r } = await requireSessionTenant(`/dashboard/${id}`, sp);
+    if (!puedeAsignar(r)) redirect(`/dashboard/${id}${sufijo}`);
     let t = tDemo;
     if (r === 'superadmin' && sp?.tenant) {
       t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
     }
     const operadorId = String(formData.get('operadorId') ?? '');
-    if (!operadorId) redirect(`/dashboard/${id}${volverQS}`);
+    if (!operadorId) redirect(`/dashboard/${id}${sufijo}`);
     await reasignarOperador(t, d!.viajeId, operadorId);
-    redirect(`/dashboard/${id}${volverQS}`);
+    redirect(`/dashboard/${id}${sufijo}`);
   }
-  // LA FOTO DEL TICKET SE GUARDA (CFF art. 30, conservación 5 años) PERO NO SE
-  // ENSEÑA AQUÍ. El aviso de privacidad (privacidad.ts:498) le promete al
-  // operador que un dato sensible que aparezca por accidente en su ticket "no
-  // se usa para nada" — pero ni `subirComprobante` ni nada en este flujo filtra
-  // contenido sensible de la IMAGEN (solo del texto que el OCR extrae de ella,
-  // ver sanitizar.ts). Enseñarla en un clic desde el panel del contralor sí es
-  // "usarla": convertía la promesa en falsa. AUDITORÍA 9, CRÍTICO legal.
-  const hayAcred = d.litrosDiesel > 0 || d.ieps > 0 || d.iva > 0 || d.peaje > 0;
-  // Las tres cubetas SIEMPRE suman totalComprobado (types/likida.ts). Se le
-  // pasa el total PERSISTIDO junto a las cubetas RECONSTRUIDAS a propósito: si
-  // los dos no cuadran, `filasDeducibilidad` devuelve null y no se pinta nada.
-  // Un desglose que contradice al total que tiene tres centímetros arriba es
-  // peor que no tener desglose.
-  const deducibilidad = d.deducibilidad
-    ? filasDeducibilidad({ ...d.deducibilidad, totalComprobado: d.totalComprobado, diferencias: d.diferencias })
-    : null;
+
+  const operadores = puedeAsignar(rol) ? await listOperadores(tenantId) : [];
 
   return (
-    <div className="min-h-screen">
-      <header className="glass sticky top-0 z-10 border-b" style={{ borderColor: 'var(--line)' }}>
-        <div className="max-w-4xl mx-auto px-8 h-16 flex items-center justify-between">
-          <Link href={`/dashboard${volverQS}`} className="text-base hover:opacity-70" style={{ color: 'var(--muted)' }}>← Panel</Link>
-          {volverQS ? (
-            <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>viendo como superadmin</span>
-          ) : (
-            <span className="text-xs px-2.5 py-1 rounded-full" style={{ color: 'var(--muted)', background: 'color-mix(in srgb, var(--muted) 10%, transparent)' }}>datos de demostración</span>
-          )}
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-8 py-10 space-y-9">
-        <div className="flex items-end justify-between flex-wrap gap-3">
-          <div>
-            {/* Hora de México, no UTC: `.slice(0,10)` fechaba en agosto una
-                liquidación cerrada el 31 de julio a las 20:00 (ver formato.ts). */}
-            <div className="text-sm" style={{ color: 'var(--muted)' }}>Liquidación · {fechaMx(d.creadoEn)}</div>
-            <h1 className="text-3xl font-semibold tracking-tight mt-1">{d.folio}</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* El PDF existía, estaba autenticado y no había forma de llegar a
-                él: `pdf_url` ni se seleccionaba (auditoría 5, frontend, MEDIO 5).
-                En el demo, "¿me da el PDF?" se contestaba tecleando una URL. */}
-            {d.pdfPath && puedeExportar(rol) && (
-              <a href={`/api/export/pdf/${d.id}`} className="text-sm px-3.5 py-2 rounded-lg hairline hover:opacity-70">
-                Descargar PDF
-              </a>
-            )}
-            <span className="text-base flex items-center gap-2">
-              <span className="inline-block w-3 h-3 rounded-full" style={{ background: e.color }} />{e.label}
-            </span>
-          </div>
-        </div>
-
-        {/* ── Chofer asignado / reasignar ──
-            Solo dueño/encargado (permisos.ts: puedeAsignar) — un contador o un
-            superadmin de paso por el tenant demo no mueve viajes de chofer.
-            docs/superpowers/plans/2026-08-02-roles-flota.md, Task 3. */}
-        <div className="flex items-center justify-between flex-wrap gap-3 -mt-4">
-          <div className="text-sm" style={{ color: 'var(--muted)' }}>
-            Chofer: <span style={{ color: 'var(--ink)' }} className="font-medium">{d.operadorNombre}</span>
-          </div>
-          {puedeReasignar && operadores.length > 0 && (
-            <form action={reasignar} className="flex items-center gap-2">
-              <select name="operadorId" defaultValue={d.operadorId}
-                className="text-sm px-3 py-1.5 rounded-lg hairline" style={{ background: 'var(--surface)' }}>
-                {operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-              </select>
-              <button type="submit" className="text-sm px-3 py-1.5 rounded-lg hairline hover:opacity-70">
-                Reasignar chofer
-              </button>
-            </form>
-          )}
-        </div>
-
-        {/* Totales grandes */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <Tot label="Comprobado" value={mxn(d.totalComprobado)} />
-          <Tot label="Anticipo" value={mxn(d.totalAnticipo)} />
-          <Tot
-            label={d.diferencia > 0 ? 'A favor de la empresa' : d.diferencia < 0 ? 'A favor del operador' : 'Diferencia'}
-            value={d.diferencia === 0 ? 'Cuadra exacto' : mxn(Math.abs(d.diferencia))}
-            accent={d.diferencia !== 0}
-          />
-        </div>
-
-        {/* ── De lo comprobado, cuánto sobrevive al SAT ──
-            Este reparto es la razón por la que el contralor compra, y hasta hoy
-            solo existía en el PDF: quien revisaba desde el navegador veía
-            "Comprobado $47,300" y ahí terminaba (auditoría 5, frontend, ALTO 2).
-            Los montos van en tinta normal salvo lo no deducible: `--color-ok`
-            mide 2.22:1 sobre blanco y es la cifra que se proyecta en una sala
-            iluminada. */}
-        {deducibilidad && (
-          <section>
-            <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>
-              De lo comprobado, cuánto es deducible
-            </h2>
-            <div className="card divide-y" style={{ borderColor: 'var(--line)' }}>
-              {deducibilidad.map((f) => (
-                <div key={f.label} className="px-6 py-4 flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-base font-medium">{f.label}</div>
-                    {f.pie && <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{f.pie}</div>}
-                  </div>
-                  <span className="tabular font-semibold whitespace-nowrap"
-                    style={{ color: f.tono === 'malo' ? 'var(--color-bad)' : 'var(--ink)' }}>{mxn(f.monto)}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-              Estimación con la información capturada; la determinación final es de su contador.
-            </p>
-          </section>
-        )}
-
-        {/* Acreditables */}
-        {hayAcred && (
-          <section>
-            <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>Acreditable / recuperable</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF
-                  × litros y esa cuota no la tenemos. `ieps` solo puede venir de filas
-                  viejas escritas antes del cambio; se conserva para no ocultarlas. */}
-              {d.litrosDiesel > 0 && <Tot label="Diésel elegible para el estímulo" value={litros(d.litrosDiesel)} ok />}
-              {d.ieps > 0 && <Tot label="IEPS de diésel (vs ISR)" value={mxn(d.ieps)} ok />}
-              {d.iva > 0 && <Tot label="IVA acreditable" value={mxn(d.iva)} ok />}
-              {d.peaje > 0 && <Tot label="Peaje 50%" value={mxn(d.peaje)} ok nota="Sujeto a elegibilidad" />}
-            </div>
-          </section>
-        )}
-
-        {/* Diferencias en lenguaje humano */}
-        {d.diferencias.length > 0 && (
-          <section>
-            <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>Diferencias detectadas</h2>
-            <div className="card divide-y" style={{ borderColor: 'var(--line)' }}>
-              {d.diferencias.map((df, i) => (
-                <div key={i} className="px-6 py-4 flex items-start justify-between gap-4" style={{ borderColor: 'var(--line)' }}>
-                  <span className="text-base">{df.nota}</span>
-                  {df.monto > 0 && <span className="tabular font-medium whitespace-nowrap">{mxn(df.monto)}</span>}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── Comprobantes ──
-            La tabla arrancaba directo en <tbody>: tres celdas sueltas por fila
-            para un lector de pantalla, y la columna del folio —que a veces es
-            "—"— no se anunciaba como nada (auditoría 5, frontend, BAJO 2).
-            Y sumaba $10,800 debajo de una tarjeta que decía $9,400: pintaba los
-            duplicados que el motor excluye del total. Ahora los renglones son
-            los mismos que imprime el PDF y el total va al pie, para que el
-            contralor no tenga que sumar la columna con el dedo. */}
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--muted)' }}>Comprobantes</h2>
-          {d.gastos.length === 0 ? (
-            // Pasa de verdad: en el tenant del demo hay liquidaciones con total
-            // guardado y cero filas en `gasto`. Una tabla con encabezados y nada
-            // debajo se lee como "se perdieron los comprobantes"; esto dice qué
-            // se sabe y qué no, sin afirmar ninguna de las dos cosas.
-            <div className="card p-8 text-base" style={{ color: 'var(--muted)' }}>
-              No hay comprobantes capturados en este viaje. El total de arriba es el que quedó
-              guardado al cerrar la liquidación.
-            </div>
-          ) : (
-          <div className="card overflow-x-auto">
-            <table className="w-full text-base">
-              <thead>
-                <tr style={{ color: 'var(--muted)' }} className="text-left text-sm">
-                  <th scope="col" className="px-6 py-3 font-medium">Concepto</th>
-                  <th scope="col" className="px-6 py-3 font-medium">Folio</th>
-                  <th scope="col" className="px-6 py-3 font-medium text-right">Monto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.gastos.map((g, i) => (
-                  <tr key={i} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                    <td className="px-6 py-3.5 font-medium">{etiquetaGasto(g)}</td>
-                    <td className="px-6 py-3.5" style={{ color: 'var(--muted)' }}>{g.folio ?? '—'}</td>
-                    <td className="px-6 py-3.5 text-right tabular">{mxn(g.monto)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              {d.comprobantesCuadran && (
-                <tfoot>
-                  <tr className="border-t" style={{ borderColor: 'var(--line)' }}>
-                    <th scope="row" colSpan={2} className="px-6 py-3.5 text-left font-semibold">Total comprobado</th>
-                    <td className="px-6 py-3.5 text-right tabular font-semibold">{mxn(d.totalComprobado)}</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-          )}
-          {d.comprobantesExcluidos > 0 && (
-            <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-              {d.comprobantesExcluidos === 1
-                ? 'Se excluyó 1 comprobante del total (duplicado o monto inválido); está explicado arriba, en las diferencias detectadas.'
-                : `Se excluyeron ${d.comprobantesExcluidos} comprobantes del total (duplicados o montos inválidos); están explicados arriba, en las diferencias detectadas.`}
-            </p>
-          )}
-          {!d.comprobantesCuadran && d.gastos.length > 0 && (
-            <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-              Renglones tal como se capturaron: no se pudo reconstruir la liquidación, así que
-              esta columna puede no sumar el total de arriba.
-            </p>
-          )}
-        </section>
-
-        {puedeReabrir && (
-          <section className="card p-6">
-            <div className="flex items-center gap-2 mb-1">
-              <RotateCcw width={15} height={15} strokeWidth={1.75} />
-              <h2 className="text-sm font-medium m-0">Reabrir este viaje</h2>
-            </div>
-            <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
-              Vuelve a aceptar comprobantes por WhatsApp. <strong>Borra la liquidación actual y su PDF</strong> — si
-              ya se lo entregaste al operador o a tu contador, ese papel dejará de cuadrar con lo que el sistema diga
-              después. Se genera una nueva al cerrar otra vez.
-            </p>
-            <FormaConAviso accion={reabrir} boton="Reabrir viaje" columnas="md:grid-cols-1">
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" name="confirmar" className="w-4 h-4 mt-0.5" />
-                <span>Entiendo que se borra la liquidación {d.folio} y su PDF.</span>
-              </label>
-            </FormaConAviso>
-          </section>
-        )}
-
-        <p className="text-xs mt-10 pt-6 border-t" style={{ color: 'var(--muted)', borderColor: 'var(--line)' }}>
-          {LEYENDA_CORTA}
-        </p>
-      </main>
-    </div>
+    <DetalleLiquidacion
+      d={d}
+      sufijo={sufijo}
+      estatus={{ label: e.label, estado: estadoDeColor(e.color) }}
+      etiqueta={etiquetaGasto}
+      pdfHref={d.pdfPath && puedeExportar(rol) ? `/api/export/pdf/${d.id}` : null}
+      wa={hrefWhatsApp(d.viaje.operadorTelefono)}
+      reasignar={puedeReasignar && operadores.length > 0
+        ? { operadores: operadores.map((o) => ({ id: o.id, nombre: o.nombre })), actual: d.operadorId, accion: reasignar }
+        : null}
+      reabrir={puedeReabrir ? reabrir : null}
+    />
   );
 }
 
@@ -392,18 +177,4 @@ export default async function Detalle({
 function etiquetaGasto(g: { concepto: string; ocrExtra?: Record<string, unknown> }): string {
   const delMotor = etiquetaConcepto(g.concepto, g.ocrExtra);
   return delMotor === g.concepto ? (CONCEPTO[g.concepto] ?? g.concepto) : delMotor;
-}
-
-function Tot({ label, value, accent, ok, nota }: { label: string; value: string; accent?: boolean; ok?: boolean; nota?: string }) {
-  const color = ok ? 'var(--color-ok)' : accent ? 'var(--accent)' : 'var(--ink)';
-  return (
-    <div className="card p-6">
-      <div className="text-3xl font-semibold tracking-tight tabular" style={{ color }}>{value}</div>
-      <div className="text-sm mt-1.5" style={{ color: 'var(--muted)' }}>{label}</div>
-      {/* AUDITORÍA 12, ALTO (fiscal): el peaje acreditable no es automático —
-          el motor no verifica ninguna de las condiciones de la ficha (ingresos
-          < $300M, autopistas de cuota). El PDF ya lo decía; el panel no. */}
-      {nota && <div className="text-xs mt-1" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
 }
