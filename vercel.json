@@ -4,7 +4,7 @@
   "crons": [
     {
       "path": "/api/cron/wa-pendientes",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/cron/runner",

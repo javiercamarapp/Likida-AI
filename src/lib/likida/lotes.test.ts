@@ -29,3 +29,39 @@ describe('enLotes — concurrencia acotada (REND-C1)', () => {
     await expect(enLotes([1], 0, async (x) => x)).rejects.toThrow('≥ 1');
   });
 });
+
+// ── conPool (ESC-1) ────────────────────────────────────────────────────────
+describe('conPool', () => {
+  it('mantiene el ancho ocupado: N en vuelo, no tandas que esperan al más lento', async () => {
+    const { conPool } = await import('./lotes');
+    let enVuelo = 0;
+    let pico = 0;
+    const duraciones = [30, 1, 1, 1, 1, 1];
+    const r = await conPool(duraciones, 2, async (ms, i) => {
+      enVuelo++;
+      pico = Math.max(pico, enVuelo);
+      await new Promise((res) => setTimeout(res, ms));
+      enVuelo--;
+      return i;
+    });
+    expect(pico).toBe(2);
+    // Resultados EN ORDEN de entrada, aunque hayan terminado desordenados.
+    expect(r).toEqual([0, 1, 2, 3, 4, 5].map((ok) => ({ ok })));
+  });
+
+  it('un elemento que lanza no tumba a los demás', async () => {
+    const { conPool } = await import('./lotes');
+    const r = await conPool([1, 2, 3], 3, async (n) => {
+      if (n === 2) throw new Error('boom');
+      return n;
+    });
+    expect(r[0]).toEqual({ ok: 1 });
+    expect(r[1]).toHaveProperty('error');
+    expect(r[2]).toEqual({ ok: 3 });
+  });
+
+  it('ancho 0 no se acepta: sería un pool que no avanza', async () => {
+    const { conPool } = await import('./lotes');
+    await expect(conPool([1], 0, async (n) => n)).rejects.toThrow(/ancho/);
+  });
+});

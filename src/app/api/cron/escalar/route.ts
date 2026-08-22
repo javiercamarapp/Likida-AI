@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { escalarViajesSinAceptar } from '@/lib/likida/escalar_viaje';
+import { escalarViajesSinAceptar, PLAZO_ESCALACION_MS } from '@/lib/likida/escalar_viaje';
 import { ejecutarCobranzaGlobal } from '@/lib/likida/agentes/cobranza';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { puertaCron, registrarLatido, leerLatido } from '@/lib/admin/salud';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -63,18 +64,11 @@ function ilegible(interruptor: NombreInterruptor) {
 }
 
 export async function GET(req: Request) {
-  const secreto = process.env.CRON_SECRET;
-  if (!secreto) {
-    logger.error('cron.escalar.sin_secreto', {});
-    return NextResponse.json(
-      { error: 'CRON_SECRET no está configurado. La escalación no corre sin él.' },
-      { status: 500 },
-    );
-  }
-  if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
-    // Sin cuerpo: a quien no está autorizado no se le dice qué hay detrás.
-    return new NextResponse(null, { status: 401 });
-  }
+  // La puerta común (RES-7). Sin cuerpo en el 401 —a quien no está autorizado
+  // no se le dice qué hay detrás— pero CON log y `codigo: 'cron_401'`, y con
+  // alerta al operador cuando el secreto no está configurado.
+  const puerta = await puertaCron('escalar', req, 'La escalación no corre sin él.');
+  if (puerta) return puerta;
 
   // ── EL KILL SWITCH (0110), DESPUÉS de la puerta y ANTES de trabajar ──────
   //
@@ -96,6 +90,17 @@ export async function GET(req: Request) {
     logger.warn('cron.escalar.saltado', { interruptor: 'global' });
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
+
+  // ── EL REPARTO DEL RELOJ (ESC-3 / ESC-4) ────────────────────────────────
+  // Los dos motores comparten UNA invocación de 120 s y hasta hoy ninguno
+  // sabía del otro: la escalación podía comerse el presupuesto entero —cuatro
+  // llamadas a Meta por viaje, hasta 100 viajes— y la cobranza no llegaba ni a
+  // leer su cola, cada hora, sin una sola línea que lo dijera. Ahora la
+  // escalación tiene 40 s y la cobranza se queda con lo que sobre, menos un
+  // margen de 15 s para los avisos y la bitácora del cierre.
+  const inicioCorrida = Date.now();
+  const venceEscalacion = inicioCorrida + PLAZO_ESCALACION_MS;
+  const venceCobranza = inicioCorrida + (maxDuration - 15) * 1000;
 
   const resultado: Record<string, unknown> = {};
   // AUDITORÍA 3, OP-C1 (CRÍTICO): este cron respondía 200 con un motor
@@ -123,7 +128,7 @@ export async function GET(req: Request) {
     resultado.aceptacion = { saltado: 'interruptor agente:conductores' };
   } else {
     try {
-      const r = await escalarViajesSinAceptar();
+      const r = await escalarViajesSinAceptar({ venceEn: venceEscalacion });
       logger.info('cron.escalar.ok', { ...r });
       resultado.aceptacion = r;
     } catch (e) {
@@ -152,7 +157,7 @@ export async function GET(req: Request) {
     resultado.comprobacion = { saltado: 'interruptor agente:cobranza' };
   } else {
     try {
-      const r = await ejecutarCobranzaGlobal();
+      const r = await ejecutarCobranzaGlobal(new Date(), { venceEn: venceCobranza });
       logger.info('cron.cobranza.ok', { ...r });
       resultado.comprobacion = r;
     } catch (e) {
@@ -171,5 +176,35 @@ export async function GET(req: Request) {
   // teléfono de jefe registrado" es un problema de configuración que se
   // arregla en un minuto — si solo vive en el log, nadie lo ve hasta que
   // alguien pregunta por qué no le avisaron.
+  // ── EL CORTE QUE SE REPITE (RES-6) ──────────────────────────────────────
+  // Que una corrida deje flotas sin turno es normal en una hora cargada; que
+  // TRES SEGUIDAS lo hagan significa que el trabajo ya no cabe en la cadencia
+  // y hay que mover la palanca (más lotes, otra cadencia, QStash). La racha se
+  // lleva en el latido, que es el único estado que este cron ya persiste.
+  const cortados = Number((resultado.comprobacion as { cortadosPorReloj?: number } | undefined)?.cortadosPorReloj ?? 0)
+    + Number((resultado.aceptacion as { cortadosPorReloj?: number } | undefined)?.cortadosPorReloj ?? 0);
+  let cortesSeguidos = 0;
+  if (cortados > 0) {
+    try {
+      const previo = await leerLatido('escalar');
+      cortesSeguidos = Number((previo?.detalle as { cortesSeguidos?: number } | undefined)?.cortesSeguidos ?? 0) + 1;
+    } catch {
+      cortesSeguidos = 1;   // sin historia legible, esta corrida es la primera
+    }
+    if (cortesSeguidos >= 3) {
+      logger.error('cron.escalar.corte_repetido', { cortesSeguidos, cortados });
+      await alertarOperador('cron.escalar', {
+        error: `Tres corridas seguidas dejaron trabajo sin hacer por falta de reloj (${cortados} en esta). El trabajo ya no cabe en la cadencia actual.`,
+        codigo: 'corte_por_reloj_repetido',
+      });
+    }
+  }
+  resultado.cortadosPorReloj = cortados;
+
+  // El latido (RES-7): esta corrida existió y así le fue. Un cron que deja de
+  // correr —401, secreto ausente, cron borrado del panel— se ve en /api/health
+  // como `vencido` a los 20 minutos de su cadencia.
+  await registrarLatido('escalar', huboFallo ? 'fallo' : cortados > 0 ? 'parcial' : 'ok', { cortesSeguidos, cortados });
+
   return NextResponse.json(resultado, { status: huboFallo ? 500 : 200 });
 }

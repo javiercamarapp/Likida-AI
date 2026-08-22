@@ -3,6 +3,7 @@ import { correrRunner } from '@/lib/likida/agentes/runner';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,14 +21,10 @@ export const maxDuration = 120;
 // modelo y fabrica piezas hacia la bandeja de Javier.
 // ═══════════════════════════════════════════════════════════════════════════
 export async function GET(req: Request) {
-  const secreto = process.env.CRON_SECRET;
-  if (!secreto) {
-    logger.error('cron.runner.sin_secreto', {});
-    return NextResponse.json({ error: 'CRON_SECRET no está configurado.' }, { status: 500 });
-  }
-  if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
-    return new NextResponse(null, { status: 401 });
-  }
+  // La puerta común (RES-7): sin secreto, 500 CON alerta; 401 con log y
+  // código estable. Antes ninguna de las dos dejaba huella accionable.
+  const puerta = await puertaCron('runner', req, 'El runner no corre sin él.');
+  if (puerta) return puerta;
 
   try {
     const r = await correrRunner();
@@ -35,6 +32,7 @@ export async function GET(req: Request) {
       apagadoGlobal: r.apagadoGlobal,
       agentes: r.agentes.map((a) => ({ agente: a.agente, resultado: a.resultado, piezas: a.piezas, motivo: a.motivo?.slice(0, 120) })),
     });
+    await registrarLatido('runner', 'ok', { agentes: r.agentes.length });
     return NextResponse.json(r);
   } catch (e) {
     // El runner entero no pudo ni arrancar (p. ej. la lista de agentes no se
@@ -49,6 +47,7 @@ export async function GET(req: Request) {
     const codigo = codigoDeError(e);
     logger.error('cron.runner.fallo', { error, codigo });
     await alertarOperador('cron.runner', { error, codigo });
+    await registrarLatido('runner', 'fallo', { codigo });
     return NextResponse.json({ error: 'El runner no pudo correr — el detalle quedó en los registros.' }, { status: 500 });
   }
 }

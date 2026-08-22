@@ -107,6 +107,94 @@ function errorDeMeta(crudo: string): { codigo?: number; mensaje?: string } {
 }
 
 /**
+ * El resultado de un envío, igual para las cuatro funciones de este archivo.
+ * `codigo` es el de la Graph API — lo que distingue "el número no existe" de
+ * "vas demasiado rápido" (ver `esReintentableMeta`).
+ */
+export type EnvioWhatsApp =
+  | { ok: true; id: string | null }
+  | { ok: false; error: string; codigo?: number; status?: number };
+
+// ── QUÉ ERRORES DE META SON DEL MENSAJE Y CUÁLES SON NUESTROS (RES-1) ───────
+//
+// La diferencia decide si un tier de cobranza o una escalación se CONSUMEN.
+// Antes no se distinguía: cualquier `null` de `sendText` consumía el claim, así
+// que un bloqueo de Meta de diez minutos —429 en todos los envíos— quemaba el
+// tier 3 de cientos de viajes de un golpe, sin que ningún chofer recibiera
+// nada y sin forma de recuperarlo (el unique(viaje, tier) no se reintenta).
+//
+// Los códigos, de la documentación de Cloud API (error codes, consultada el
+// 22-ago-2026):
+//   · 130429 — rate limit de la cuenta (mensajes por segundo).
+//   · 131056 — pair rate limit: demasiados mensajes a ESE par en poco tiempo.
+//   · 131048 — límite por spam: la calidad del número frenó los envíos.
+//   · 131049 — "healthy ecosystem": Meta decidió no entregar este marketing hoy.
+//   · 132015 / 132016 — plantilla pausada / deshabilitada por calidad.
+//   · 133016 — cuenta temporalmente bloqueada.
+//   · 368 / 80007 — bloqueo temporal por políticas / límite de la API.
+// Todos son "vuelve más tarde", no "este destinatario no sirve": el trabajo se
+// deja PENDIENTE y la siguiente corrida lo levanta.
+export const CODIGOS_META_REINTENTABLES: readonly number[] = [
+  130429, 131056, 131048, 131049, 132015, 132016, 133016, 368, 80007,
+];
+
+/** ¿El rechazo fue "vuelve más tarde"? Un 429/5xx sin código también lo es:
+ *  la respuesta ni siquiera llegó a ser un veredicto sobre el mensaje. */
+export function esReintentableMeta(codigo?: number, status?: number): boolean {
+  if (codigo !== undefined && CODIGOS_META_REINTENTABLES.includes(codigo)) return true;
+  if (status !== undefined && (status === 429 || status >= 500)) return true;
+  return false;
+}
+
+/**
+ * Manda texto libre con el MISMO contrato que `sendTemplate` y `sendDocument`
+ * (auditoría prod, RES-18): `{ok:false, error, codigo}` y NUNCA lanza.
+ *
+ * `sendText` lanzaba ante un fallo de red o un timeout —era la única de las
+ * cuatro que lo hacía—, y `say()` del cierre de liquidación la llama sin
+ * try/catch: un `AbortSignal.timeout` en el acuse tiraba la invocación ANTES
+ * del bloque que manda el PDF. La liquidación quedaba cerrada, el PDF en
+ * Storage, y el operador sin nada. Aquí las dos mitades del mismo fallo se
+ * comportan igual, y quien necesita el código de Meta —la cobranza y la
+ * escalación, para no consumir un tier por un 429— lo tiene.
+ */
+export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsApp> {
+  let res: Response;
+  try {
+    res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } }),
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    logger.error('wa.sendText.red', { para: destinatarioEnmascarado(to), error });
+    // Un timeout o un socket caído NO es un veredicto sobre el destinatario:
+    // se marca como reintentable con el status que lo dice.
+    return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}`, status: 503 };
+  }
+  if (!res.ok) {
+    // AUD3 OP-A2: esta función no recibe tenant ni viaje — y no debe: media
+    // docena de llamadores dependen de esta firma. El contexto de negocio
+    // (tenant, viaje, folio) viaja en el log del LLAMADOR; esta línea aporta lo
+    // que la función SÍ sabe: a quién iba (enmascarado) y por qué lo rechazó
+    // Meta. Con las dos líneas juntas se reconstruye el quién y el qué.
+    const crudo = await res.text().catch(() => '');
+    const { codigo, mensaje } = errorDeMeta(crudo);
+    logger.error('wa.sendText', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
+    return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
+  }
+  // El ÉXITO también deja rastro. Sin esta línea, "se envió" y "nunca se llamó"
+  // se ven igual en los logs —los dos, en blanco— y distinguirlos costó veinte
+  // minutos de la primera prueba real. El id del mensaje es lo que permite
+  // rastrearlo después en Meta.
+  const id = await idDeRespuesta(res);
+  logger.info('wa.sendText.ok', { id });
+  return { ok: true, id: id ?? null };
+}
+
+/**
  * Devuelve el wamid si Meta ACEPTÓ el mensaje, o `null` si lo rechazó.
  *
  * Devolvía `void`, y eso hacía imposible que un llamador supiera si su mensaje
@@ -118,32 +206,14 @@ function errorDeMeta(crudo: string): { codigo?: number; mensaje?: string } {
  *
  * Ojo con lo que este valor NO promete: un wamid significa aceptado, no
  * entregado. La entrega se confirma —o se desmiente— por el webhook de acuses.
+ *
+ * ES UNA CORTESÍA SOBRE `enviarTexto` (RES-18): mismo envío, sin el código de
+ * Meta y sin lanzar. Quien necesite saber POR QUÉ rechazó —para no consumir un
+ * tier ante un 429— llama a `enviarTexto`.
  */
 export async function sendText(to: string, body: string): Promise<string | null> {
-  const res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } }),
-    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    // AUD3 OP-A2: esta función no recibe tenant ni viaje — y no debe: media
-    // docena de llamadores dependen de esta firma. El contexto de negocio
-    // (tenant, viaje, folio) viaja en el log del LLAMADOR; esta línea aporta lo
-    // que la función SÍ sabe: a quién iba (enmascarado) y por qué lo rechazó
-    // Meta. Con las dos líneas juntas se reconstruye el quién y el qué.
-    const crudo = await res.text().catch(() => '');
-    const { codigo } = errorDeMeta(crudo);
-    logger.error('wa.sendText', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-    return null;
-  }
-  // El ÉXITO también deja rastro. Sin esta línea, "se envió" y "nunca se llamó"
-  // se ven igual en los logs —los dos, en blanco— y distinguirlos costó veinte
-  // minutos de la primera prueba real. El id del mensaje es lo que permite
-  // rastrearlo después en Meta.
-  const id = await idDeRespuesta(res);
-  logger.info('wa.sendText.ok', { id });
-  return id ?? null;
+  const r = await enviarTexto(to, body);
+  return r.ok ? r.id : null;
 }
 
 // ── BOTONES INTERACTIVOS ────────────────────────────────────────────────────
