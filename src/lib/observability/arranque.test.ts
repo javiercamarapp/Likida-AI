@@ -23,6 +23,7 @@ function ponerTodo() {
   vi.stubEnv('LIKIDA_WHATSAPP_MSG_USD', '0.008');
   vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://likidaai.vercel.app');
   vi.stubEnv('ALERTA_EMAIL', 'operador@likida.ai');
+  vi.stubEnv('LIKIDA_FLOTA_COOKIE_LLAVE', 'llave-de-prueba');
 }
 
 describe('avisarConfiguracionSilenciosa', () => {
