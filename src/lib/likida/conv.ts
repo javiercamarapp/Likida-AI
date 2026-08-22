@@ -4,7 +4,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { TenantContext } from '@/lib/agents/types';
-import { acotada } from './presupuesto';
+import { acotada, PRESUPUESTO_WEBHOOK_MS } from './presupuesto';
 import { violaIndice } from './pg_errores';
 
 export interface ResolvedOperador {
@@ -320,11 +320,30 @@ export interface Conversacion extends MarcasConversacion {
 }
 
 /**
- * Resultado de reclamar un mensaje. Son TRES estados, no dos: la diferencia entre
- * "ya lo procesamos" y "no pude averiguarlo" decide si el operador recibe
- * respuesta o se queda sin nada.
+ * Resultado de reclamar un mensaje. Son CUATRO estados, no dos: la diferencia
+ * entre "ya lo procesamos", "lo está procesando otro" y "no pude averiguarlo"
+ * decide si el operador recibe respuesta, si la bandeja durable lo reintenta,
+ * o si se queda sin nada.
  */
-export type Claim = 'nuevo' | 'duplicado' | 'indeterminado';
+export type Claim = 'nuevo' | 'duplicado' | 'en_curso' | 'indeterminado';
+
+/**
+ * CUÁNTO VIVE UN CLAIM SIN COMPLETARSE antes de considerarlo huérfano.
+ *
+ * AUDITORÍA 18, CRÍTICO (C5): el claim se toma en la primera línea de
+ * `processInbound` y solo se soltaba en el `catch` o en cuatro `return`
+ * tempranos. Una muerte por `maxDuration` no ejecuta ninguno: la fila quedaba
+ * tomada 30 días (la purga de la 0072), y el reintento de la bandeja durable
+ * recibía 'duplicado' —que significaba "ya hecho"— sobre un mensaje que NUNCA
+ * se procesó. Con la mig. 0149 la fila distingue reclamado de completado
+ * (`completado_en`), y un claim sin completar más viejo que este lease es de
+ * un proceso muerto: se retoma.
+ *
+ * Mayor que el `maxDuration` de la invocación a propósito: un claim más joven
+ * puede pertenecer a una invocación que sigue viva. 30s de holgura sobre 120s.
+ * El cron drena cada 5 min, así que el huérfano se retoma a la primera vuelta.
+ */
+export const LEASE_CLAIM_MS = PRESUPUESTO_WEBHOOK_MS + 30_000;
 
 /**
  * Reclama un mensaje de WhatsApp de forma atómica (idempotencia).
@@ -339,6 +358,14 @@ export type Claim = 'nuevo' | 'duplicado' | 'indeterminado';
  *
  * Ahora el caso indeterminado se distingue y lo decide el llamador, que es quien
  * sabe si lo que está en juego es dinero o una respuesta.
+ *
+ * Y cuando la fila YA EXISTE se mira qué es (auditoría 18, C5/A3/A27):
+ *   · `completado_en` puesto → 'duplicado' de verdad (ya se procesó).
+ *   · sin completar y más vieja que `LEASE_CLAIM_MS` → claim huérfano de un
+ *     proceso muerto: se RETOMA con un UPDATE anclado (atómico entre dos
+ *     corridas) y se devuelve 'nuevo'.
+ *   · sin completar y fresca → 'en_curso': otra invocación lo está procesando;
+ *     el llamador no lo procesa ni lo da por hecho, lo deja para después.
  */
 export async function claimMessage(waMessageId: string): Promise<Claim> {
   if (!waMessageId) return 'nuevo';
@@ -346,10 +373,61 @@ export async function claimMessage(waMessageId: string): Promise<Claim> {
     .from('wa_mensaje_procesado')
     .insert({ wa_message_id: waMessageId }), 'claimMessage');
   if (!error) return 'nuevo';
-  // 23505 = unique_violation → ya existía → duplicado de verdad (no reprocesar).
-  if (error.code === '23505') return 'duplicado';
+  // 23505 = unique_violation → ya existía. Falta saber si completado o huérfano.
+  if (error.code === '23505') return retomarClaimHuerfano(waMessageId);
   logger.error('wa.claim_error', { code: error.code, msg: error.message });
   return 'indeterminado';
+}
+
+async function retomarClaimHuerfano(waMessageId: string): Promise<Claim> {
+  const ahora = Date.now();
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('wa_mensaje_procesado')
+    .update({ created_at: new Date(ahora).toISOString() })
+    .eq('wa_message_id', waMessageId)
+    .is('completado_en', null)
+    .lt('created_at', new Date(ahora - LEASE_CLAIM_MS).toISOString())
+    .select('wa_message_id'), 'claimMessage.retomar');
+  if (error) {
+    // No se pudo saber. NI se procesa (podría ser un duplicado real y
+    // duplicar un gasto) NI se da por hecho (podría ser el huérfano): se deja
+    // para la siguiente vuelta de la bandeja durable, que es lo único seguro.
+    logger.error('wa.claim_relectura_fallo', { id: waMessageId, code: error.code, msg: error.message });
+    return 'en_curso';
+  }
+  if ((data ?? []).length === 1) {
+    logger.warn('wa.claim_retomado', { id: waMessageId, leaseMs: LEASE_CLAIM_MS });
+    return 'nuevo';
+  }
+  const { data: fila, error: errFila } = await acotada(supabaseAdmin()
+    .from('wa_mensaje_procesado')
+    .select('completado_en')
+    .eq('wa_message_id', waMessageId)
+    .maybeSingle(), 'claimMessage.relectura');
+  if (errFila || !fila) {
+    logger.warn('wa.claim_relectura_vacia', { id: waMessageId, err: errFila?.message ?? 'sin fila' });
+    return 'en_curso';
+  }
+  return fila.completado_en ? 'duplicado' : 'en_curso';
+}
+
+/**
+ * Sella el claim como COMPLETADO: a partir de aquí 'duplicado' vuelve a
+ * significar "ya hecho". Best-effort con aviso — para cuando esto corre la
+ * respuesta ya salió; fallar aquí solo hace que un reintento futuro espere el
+ * lease en vez de rebotar de inmediato.
+ */
+export async function completarMessageClaim(waMessageId: string): Promise<void> {
+  if (!waMessageId) return;
+  try {
+    const { error } = await acotada(supabaseAdmin()
+      .from('wa_mensaje_procesado')
+      .update({ completado_en: new Date().toISOString() })
+      .eq('wa_message_id', waMessageId), 'completarMessageClaim');
+    if (error) logger.warn('wa.claim_sin_completar', { id: waMessageId, err: error.message });
+  } catch (e) {
+    logger.warn('wa.claim_sin_completar', { id: waMessageId, err: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 // AUDITORÍA 8, ALTO: no lanza a propósito — para cuando esto corre, la

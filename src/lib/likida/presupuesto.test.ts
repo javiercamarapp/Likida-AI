@@ -34,6 +34,18 @@ describe('crearPresupuesto', () => {
     expect(p.restante()).toBe(40_000 - MARGEN_CIERRE_MS);
   });
 
+  // AUDITORÍA 18, CRÍTICO (C4): el presupuesto era por mensaje y el
+  // `maxDuration` es por invocación. El reloj tiene que poder arrancar en el
+  // inicio de la INVOCACIÓN, aunque este mensaje empiece 62s después.
+  it('arranca en el inicio de la INVOCACIÓN cuando se le pasa, no en "ahora"', () => {
+    const ahora = 1000 + 62_300;
+    const p = crearPresupuesto(120_000, () => ahora, 1000);
+    expect(p.gastado()).toBe(62_300);
+    expect(p.restante()).toBe(120_000 - MARGEN_CIERRE_MS - 62_300);
+    // Contraste: sin inicio, cree que los 120s son suyos.
+    expect(crearPresupuesto(120_000, () => ahora).restante()).toBe(120_000 - MARGEN_CIERRE_MS);
+  });
+
   it('reserva un margen para poder RESPONDER antes de que maten la función', () => {
     // Sin margen, se gasta hasta el último milisegundo y no queda tiempo ni de
     // mandar el mensaje: el operador se queda sin nada, que es el fallo que

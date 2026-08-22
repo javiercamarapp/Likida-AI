@@ -18,7 +18,10 @@ const SECRETO = 'app-secret-de-prueba';
 process.env.WHATSAPP_APP_SECRET = SECRETO;
 
 const processInbound = vi.fn(async (_m: unknown) => {});
-vi.mock('@/lib/likida/processor', () => ({ processInbound }));
+// Solo el mensaje: el segundo argumento de `processInbound` es el reloj de la
+// invocación (auditoría 18, C4) y lo prueba `route_pospuesto.test.ts`; aquí se
+// afirma QUÉ mensaje llega, no cuándo arrancó la invocación.
+vi.mock('@/lib/likida/processor', () => ({ processInbound: (m: unknown) => (processInbound as (m: unknown) => Promise<void>)(m) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/observability/sentry', () => ({ flushObservabilidad: vi.fn(async () => {}) }));
 

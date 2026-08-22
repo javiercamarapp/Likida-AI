@@ -209,9 +209,20 @@ export interface Presupuesto {
 /**
  * @param totalMs  presupuesto de la invocación (el `maxDuration` de la ruta).
  * @param reloj    inyectable para poder probarlo sin esperar de verdad.
+ * @param inicio   cuándo ARRANCÓ LA INVOCACIÓN (no este mensaje). Por default
+ *                 es "ahora", que solo es verdad cuando un webhook = un mensaje.
+ *
+ * AUDITORÍA 18, CRÍTICO (C4): el presupuesto era por MENSAJE y el
+ * `maxDuration` es por INVOCACIÓN. El webhook procesa N mensajes con un pool
+ * de 5 y el cron drena 10 en serie, y cada `processInbound` arrancaba su reloj
+ * en su propio `Date.now()`: la foto 6 de un fajo de 8 se creía dueña de 120s
+ * cuando la invocación ya llevaba 62 gastados, pedía sus 25s de visión
+ * completos y Vercel mataba la función con las fotos 6-8 en vuelo. Los
+ * llamadores pasan ahora el inicio de SU invocación y cada mensaje pide lo que
+ * de verdad queda — o no arranca (`processInbound` devuelve `sin_tiempo` y la
+ * bandeja durable lo recupera).
  */
-export function crearPresupuesto(totalMs: number, reloj: () => number = Date.now): Presupuesto {
-  const inicio = reloj();
+export function crearPresupuesto(totalMs: number, reloj: () => number = Date.now, inicio: number = reloj()): Presupuesto {
   const restante = () => Math.max(0, totalMs - MARGEN_CIERRE_MS - (reloj() - inicio));
   return {
     restante,

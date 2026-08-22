@@ -33,8 +33,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const runAgent = vi.fn();
 const acquireViajeLock = vi.fn();
 const getOpenViaje = vi.fn();
-const claimMessage = vi.fn<(id: string) => Promise<'nuevo' | 'duplicado' | 'indeterminado'>>(async () => 'nuevo');
+const claimMessage = vi.fn<(id: string) => Promise<'nuevo' | 'duplicado' | 'en_curso' | 'indeterminado'>>(async () => 'nuevo');
 const releaseMessageClaim = vi.fn();
+const completarMessageClaim = vi.fn(async () => {});
 
 /** Todo lo que salió hacia la Graph API. */
 const salientes: { url: string; body: Record<string, unknown> }[] = [];
@@ -57,6 +58,7 @@ vi.mock('@/lib/likida/conv', async (original) => ({
   saveConversation: vi.fn(), claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
   acquireViajeLock: (...a: unknown[]) => acquireViajeLock(...a),
   releaseViajeLock: vi.fn(), releaseMessageClaim: (...a: unknown[]) => releaseMessageClaim(...a),
+  completarMessageClaim: (...a: unknown[]) => completarMessageClaim(...(a as [])),
   intakeDelta: vi.fn(async () => 0), esperarIntake: vi.fn(async () => true),
 }));
 vi.mock('@/lib/likida/repo', () => ({
@@ -149,5 +151,60 @@ describe('processInbound — mutex del viaje', () => {
     acquireViajeLock.mockResolvedValue(false);
     await processInbound(listo);
     expect(runAgent, 'el mensaje que pierde el mutex no corre el agente igual').not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18 (C4/C5/A3/A27): LO QUE `processInbound` LE DICE A LA BANDEJA.
+//
+// Devolvía `void`, y el cron y el webhook sellaban la fila durable ante
+// cualquier retorno sin excepción: el 'duplicado' de un claim huérfano y los
+// `return` de abandono (este mutex ocupado, entre ellos) quedaban "procesados".
+// ═══════════════════════════════════════════════════════════════════════════
+describe('processInbound — el resultado que decide la fila durable', () => {
+  beforeEach(() => {
+    salientes.length = 0;
+    runAgent.mockReset(); acquireViajeLock.mockReset(); getOpenViaje.mockReset();
+    claimMessage.mockReset(); claimMessage.mockResolvedValue('nuevo');
+    completarMessageClaim.mockClear(); releaseMessageClaim.mockClear();
+    vi.stubGlobal('fetch', fetchSpy);
+    process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
+    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
+    getOpenViaje.mockResolvedValue('v1');
+    runAgent.mockResolvedValue({ finalText: 'Listo', toolCalls: [], model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0 });
+  });
+
+  it('un turno que llega al final es "procesado" y SELLA el claim como completado', async () => {
+    acquireViajeLock.mockResolvedValue(true);
+    expect(await processInbound(listo)).toBe('procesado');
+    expect(completarMessageClaim).toHaveBeenCalledWith('wa1');
+  });
+
+  it('con el lock OCUPADO es "reintentable": el claim se soltó y NO se completa', async () => {
+    acquireViajeLock.mockResolvedValue(false);
+    expect(await processInbound(listo)).toBe('reintentable');
+    expect(releaseMessageClaim).toHaveBeenCalledWith('wa1');
+    expect(completarMessageClaim).not.toHaveBeenCalled();
+  });
+
+  it('un claim completado por otro es "duplicado": no corre nada', async () => {
+    claimMessage.mockResolvedValue('duplicado');
+    expect(await processInbound(listo)).toBe('duplicado');
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(completarMessageClaim).not.toHaveBeenCalled();
+  });
+
+  it('un claim en vuelo en OTRA invocación es "en_curso": ni corre ni se da por hecho', async () => {
+    claimMessage.mockResolvedValue('en_curso');
+    expect(await processInbound(listo)).toBe('en_curso');
+    expect(runAgent).not.toHaveBeenCalled();
+  });
+
+  it('sin presupuesto de invocación es "sin_tiempo" y NI SIQUIERA reclama (C4)', async () => {
+    // La invocación arrancó hace 118s: quedan 2s de 120. Arrancar un turno
+    // aquí es regalárselo a Vercel; se deja entero para el cron.
+    expect(await processInbound(listo, { inicioInvocacionMs: Date.now() - 118_000 })).toBe('sin_tiempo');
+    expect(claimMessage).not.toHaveBeenCalled();
+    expect(runAgent).not.toHaveBeenCalled();
   });
 });
