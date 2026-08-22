@@ -53,11 +53,13 @@ export class TelefonoAmbiguo extends Error {}
  * a un jefe que su cuenta no existe por un fallo transitorio de red.
  */
 export async function resolverCuentaOficina(telefono: string): Promise<CuentaOficina | null> {
-  const { data, error } = await supabaseAdmin()
+  // AUDITORÍA 18, ALTO (A23): con techo — corre en el camino caliente del
+  // webhook, y sin `acotada` un socket colgado gastaba los 300 s de undici.
+  const { data, error } = await acotada(supabaseAdmin()
     .from('app_user')
     .select('id, tenant_id, rol, nombre, email, telefono')
     .in('telefono', variantesTelefono(telefono))
-    .limit(2); // dos, para poder DETECTAR la ambigüedad en vez de recortarla
+    .limit(2), 'resolverCuentaOficina'); // dos, para poder DETECTAR la ambigüedad en vez de recortarla
 
   if (error) throw new Error(`cuenta de oficina por teléfono: ${error.message}`);
 
@@ -148,12 +150,13 @@ export async function telefonosJefe(tenantIds: string[]): Promise<Record<string,
   const ids = [...new Set(tenantIds)].filter(Boolean);
   if (ids.length === 0) return {};
 
-  const { data, error } = await supabaseAdmin()
+  // AUDITORÍA 18, ALTO (A23): con techo — `telefonoJefeDe` corre en el cierre.
+  const { data, error } = await acotada(supabaseAdmin()
     .from('app_user')
     .select('tenant_id, rol, telefono')
     .in('tenant_id', ids)
     .in('rol', ORDEN_AVISO)
-    .not('telefono', 'is', null);
+    .not('telefono', 'is', null), 'telefonosJefe');
 
   if (error) throw new Error(`telefonosJefe: ${error.message}`);
 

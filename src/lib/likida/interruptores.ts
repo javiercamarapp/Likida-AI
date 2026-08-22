@@ -57,6 +57,10 @@ function esNombreValido(nombre: string): nombre is NombreInterruptor {
   return (INTERRUPTORES as readonly string[]).includes(nombre);
 }
 
+// AUDITORÍA 18, ALTO (A23): TODA consulta de este archivo lleva `acotada`,
+// no solo la lectura del camino caliente — `acotada_guardiana.test.ts` cuenta
+// los `.from(` contra los `acotada(` y falla si uno nuevo nace sin techo.
+
 /** Lo que una lectura puede decir. `ilegible` es el tercer estado que
  *  `estaApagado` colapsa en "apagado" (fail-closed) y que los crons
  *  necesitan DISTINGUIR: apagado a propósito no es un fallo; no haber
@@ -134,12 +138,12 @@ export async function apagar(nombre: string, motivo: string, userId: string): Pr
   if (!m) {
     throw new DatoInvalido('Apagar exige un motivo: sin nota, en tres semanas nadie sabe si ya se puede encender.');
   }
-  const { error } = await supabaseAdmin()
+  const { error } = await acotada(supabaseAdmin()
     .from('interruptor')
     .upsert(
       { id: nombre, apagado: true, motivo: m, cambiado_por: userId, cambiado_en: new Date().toISOString() },
       { onConflict: 'id' },
-    );
+    ), 'apagar');
   if (error) throw new Error(`apagar(${nombre}): ${error.message}`);
   await anotarEnBitacora('interruptor.apagado', nombre, userId, { motivo: m });
 }
@@ -153,12 +157,12 @@ export async function encender(nombre: string, userId: string): Promise<void> {
   if (!esNombreValido(nombre)) {
     throw new DatoInvalido(`"${nombre}" no es un interruptor del catálogo.`);
   }
-  const { error } = await supabaseAdmin()
+  const { error } = await acotada(supabaseAdmin()
     .from('interruptor')
     .upsert(
       { id: nombre, apagado: false, motivo: null, cambiado_por: userId, cambiado_en: new Date().toISOString() },
       { onConflict: 'id' },
-    );
+    ), 'encender');
   if (error) throw new Error(`encender(${nombre}): ${error.message}`);
   await anotarEnBitacora('interruptor.encendido', nombre, userId, {});
 }
@@ -173,9 +177,9 @@ export async function encender(nombre: string, userId: string): Promise<void> {
  * dominio lo garantiza).
  */
 export async function listarInterruptores(): Promise<EstadoInterruptor[]> {
-  const { data, error } = await supabaseAdmin()
+  const { data, error } = await acotada(supabaseAdmin()
     .from('interruptor')
-    .select('id, apagado, motivo, cambiado_por, cambiado_en');
+    .select('id, apagado, motivo, cambiado_por, cambiado_en'), 'listarInterruptores');
   if (error) throw new Error(`listarInterruptores: ${error.message}`);
 
   const filas = new Map<string, Record<string, unknown>>();
@@ -191,10 +195,10 @@ export async function listarInterruptores(): Promise<EstadoInterruptor[]> {
   )];
   const nombrePorId = new Map<string, string>();
   if (actores.length > 0) {
-    const { data: usuarios, error: errUsuarios } = await supabaseAdmin()
+    const { data: usuarios, error: errUsuarios } = await acotada(supabaseAdmin()
       .from('app_user')
       .select('id, nombre, email')
-      .in('id', actores);
+      .in('id', actores), 'listarInterruptores.actores');
     if (errUsuarios) {
       logger.warn('interruptores.actores_sin_nombre', { err: errUsuarios.message });
     } else {
@@ -235,13 +239,13 @@ async function anotarEnBitacora(
   userId: string,
   detalle: Record<string, unknown>,
 ): Promise<void> {
-  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
+  const { error } = await acotada(supabaseAdmin().from('bitacora_auditoria').insert({
     tenant_id: null, // la palanca es de PLATAFORMA, no de una flota
     actor_id: userId,
     accion,
     entidad: 'interruptor',
     entidad_id: nombre,
     detalle,
-  });
+  }), 'interruptores.bitacora');
   if (error) logger.warn('interruptores.bitacora_no_escribio', { accion, interruptor: nombre, err: error.message });
 }
