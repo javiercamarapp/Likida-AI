@@ -4437,16 +4437,16 @@ begin
     negativo_rechazado := true;
   end;
 
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus, diferencias,
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, diferencias,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (ta, va1, 1500, 'con_diferencias',
+    values (ta, va1, 1500, 1500, 'con_diferencias',
       '[{"tipo":"sobre_politica","monto":120},{"tipo":"duplicado","monto":80},{"tipo":"folio_verificar","monto":0}]'::jsonb,
       50, 240, 30, 400.5);
   -- La SEGUNDA liquidación va sobre va2, no sobre va1: `liquidacion_viaje_uidx`
   -- admite UNA liquidación por viaje (trampa que atrapó la primera corrida).
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus,
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (ta, va2, 700, 'cuadrada', 10, 60, 5, 90);
+    values (ta, va2, 700, 700, 'cuadrada', 10, 60, 5, 90);
 
   -- ── FLOTA B: solo para probar que NO contamina a A ─────────────────────
   insert into tenant (nombre) values ('ZZZ VERIF 0112 B') returning id into tb;
@@ -4455,9 +4455,9 @@ begin
     values (tb, ob, 'ZZZ-0112-B1', 'liquidado', current_date - 2, 200) returning id into vb1;
   insert into gasto (tenant_id, viaje_id, concepto, monto, forma_pago, fecha)
     values (tb, vb1, 'diesel', 9999, '01', current_date - 2);
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus, diferencias,
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus, diferencias,
       ieps_acreditable, iva_acreditable, peaje_acreditable, litros_diesel_acreditables)
-    values (tb, vb1, 8888, 'revisar', '[{"tipo":"duplicado","monto":50}]'::jsonb, 999, 999, 999, 999);
+    values (tb, vb1, 8888, 8888, 'revisar', '[{"tipo":"duplicado","monto":50}]'::jsonb, 999, 999, 999, 999);
 
   -- ── 1. Catálogo: existencia, INVOKER, permisos ─────────────────────────
   select count(*),
@@ -4586,15 +4586,15 @@ begin
   insert into operador (tenant_id, nombre, telefono) values (ta,'ZZZ 0114 A','5215559990114') returning id into oa;
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
     values (ta, oa, 'ZZZ-0114-A', 'liquidado', current_date, 1000) returning id into va;
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus)
-    values (ta, va, 900, 'cuadrada') returning id into la;
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus)
+    values (ta, va, 900, 900, 'cuadrada') returning id into la;
 
   insert into tenant (nombre) values ('ZZZ VERIF 0114 B') returning id into tb;
   insert into operador (tenant_id, nombre, telefono) values (tb,'ZZZ 0114 B','5215559990115') returning id into ob;
   insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
     values (tb, ob, 'ZZZ-0114-B', 'liquidado', current_date, 500) returning id into vb;
-  insert into liquidacion (tenant_id, viaje_id, total_comprobado, estatus)
-    values (tb, vb, 400, 'cuadrada') returning id into lb;
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, estatus)
+    values (tb, vb, 400, 400, 'cuadrada') returning id into lb;
 
   perform registrar_descarga_liquidacion(la, ta, 'contador');
   select descargas, primera_descarga_rol, primera_descarga_en is not null as tiene_fecha
@@ -5544,4 +5544,94 @@ begin
 
   raise exception E'WA_TENANT_0145  tenant-not-null=%  sin-tenant-rebota=%  operador-ajeno-rebota=%   (esperado t / t / t)',
     coalesce(not_null, false), sin_tenant_rebota, operador_ajeno_rebota;
+end $$;
+
+-- ── 114. El encargado NO lee ni escribe `gasto` por PostgREST (mig. 0146, A15) ──
+-- Misma forma que el bloque 29 (0048) y el 111 (0144), sobre la tabla que
+-- faltaba: se impersona a un ENCARGADO de la flota y (a) cuenta 0 gastos de
+-- su propia flota, (b) su INSERT de $40,000 de diésel rebota con 42501 —el
+-- escenario literal de A15—; y a un CONTADOR de la misma flota, que sí los
+-- ve. El intake de WhatsApp escribe con service role y no pasa por aquí.
+do $$
+declare
+  ta uuid; oa uuid; va uuid;
+  u_enc uuid := gen_random_uuid(); u_con uuid := gen_random_uuid();
+  gatea boolean; n_enc int; inserta_enc boolean := true; n_con int;
+begin
+  select bool_or(qual::text ilike '%ve_finanzas%') into gatea
+    from pg_policies where schemaname = 'public' and tablename = 'gasto';
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0146 GASTO') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0146', '5215559990148') returning id into oa;
+  insert into viaje (tenant_id, operador_id) values (ta, oa) returning id into va;
+  insert into gasto (tenant_id, viaje_id, concepto, monto) values (ta, va, 'diesel', 500);
+  insert into app_user (id, tenant_id, email, rol) values (u_enc, ta, 'zzz-verif-0146-enc@likida.test', 'encargado');
+  insert into app_user (id, tenant_id, email, rol) values (u_con, ta, 'zzz-verif-0146-con@likida.test', 'contador');
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', u_enc)::text, true);
+  select count(*) into n_enc from gasto where tenant_id = ta;
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, forma_pago)
+      values (ta, va, 'diesel', 40000, '01');
+  exception when insufficient_privilege then inserta_enc := false;
+  end;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', u_con)::text, true);
+  select count(*) into n_con from gasto where tenant_id = ta;
+  reset role;
+
+  raise exception E'GASTO_FINANZAS_0146  policy-gatea=%  encargado-lee=%  encargado-inserta=%  contador-lee=%   (esperado t / 0 / f / 1)',
+    coalesce(gatea, false), n_enc, inserta_enc, n_con;
+end $$;
+
+-- ── 115. Los totales de liquidacion y ocr_confianza tienen dominio (mig. 0146, M11 + M12) ──
+-- (a) un total negativo rebota; (b) una diferencia que no es anticipo −
+-- comprobado rebota; (c) la fila coherente del motor entra (diferencia
+-- negativa incluida: se comprobó más que el anticipo); (d) ocr_confianza
+-- 9.999 rebota; (e) 0.85 entra.
+do $$
+declare
+  ta uuid; oa uuid; ob uuid; v1 uuid; v2 uuid; g uuid;
+  negativo_rebota boolean := false; descuadre_rebota boolean := false; coherente_entra boolean := false;
+  ocr_fuera_rebota boolean := false; ocr_dentro_entra boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0146 DOM') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0146 D', '5215559990149') returning id into oa;
+  insert into viaje (tenant_id, operador_id) values (ta, oa) returning id into v1;
+  -- Segundo operador: uq_viaje_abierto_por_operador admite UN viaje abierto por chofer.
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0146 E', '5215559990150') returning id into ob;
+  insert into viaje (tenant_id, operador_id) values (ta, ob) returning id into v2;
+
+  begin
+    insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia)
+      values (ta, v1, -5000, 6000, 11000);
+  exception when check_violation then negativo_rebota := true;
+  end;
+  begin
+    insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia)
+      values (ta, v1, 5000, 6000, 0);
+  exception when check_violation then descuadre_rebota := true;
+  end;
+  begin
+    insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia)
+      values (ta, v1, 7150.25, 6000, -1150.25);
+    coherente_entra := true;
+  exception when check_violation then coherente_entra := false;
+  end;
+
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, ocr_confianza)
+      values (ta, v2, 'diesel', 100, 9.999);
+  exception when check_violation then ocr_fuera_rebota := true;
+  end;
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, ocr_confianza)
+      values (ta, v2, 'diesel', 100, 0.85) returning id into g;
+    ocr_dentro_entra := g is not null;
+  exception when check_violation then ocr_dentro_entra := false;
+  end;
+
+  raise exception E'DOMINIOS_0146  total-negativo-rebota=%  descuadre-rebota=%  coherente-entra=%  ocr-fuera-rebota=%  ocr-dentro-entra=%   (esperado t / t / t / t / t)',
+    negativo_rebota, descuadre_rebota, coherente_entra, ocr_fuera_rebota, ocr_dentro_entra;
 end $$;
