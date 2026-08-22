@@ -136,8 +136,12 @@ const paginaSobre = {
     total: anulable('integer', 'Cuántas hay en total del otro lado del filtro. `null` = no se pudo contar; jamás 0.'),
     hayMas: {
       type: 'boolean',
-      description: 'Si vale la pena pedir la siguiente página. Con `total` conocido es exacto; sin él es conservador (dice que quizá falta antes que esconder el resto).',
+      description: 'Si vale la pena pedir la siguiente página. En `/v1/viajes` es EXACTO siempre (se lee una fila de más); en las demás, con `total` conocido es exacto y sin él es conservador (dice que quizá falta antes que esconder el resto).',
     },
+    siguiente: anulable(
+      'string',
+      'El cursor de la página siguiente: mándalo tal cual en `?despues=`. `null` = no hay más. Sólo lo emiten las rutas que paginan por cursor (`/v1/viajes`); es OPACO — no lo armes ni lo interpretes, su forma puede cambiar.',
+    ),
   },
   required: ['limite', 'desplazamiento', 'devueltos', 'total', 'hayMas'],
 } as const;
@@ -179,8 +183,35 @@ const parametrosPagina = [
     name: 'desplazamiento',
     in: 'query',
     required: false,
-    description: `Desde qué fila. \`desplazamiento\` + \`limite\` no puede pasar de ${VENTANA_MAXIMA} en una petición: es el \`max_rows\` del servidor de datos, o sea lo máximo que puede entregar demostrando que no recortó.`,
+    description: `Desde qué fila. \`desplazamiento\` + \`limite\` no puede pasar de ${VENTANA_MAXIMA} en una petición: es el \`max_rows\` del servidor de datos, o sea lo máximo que puede entregar demostrando que no recortó. Para recorrer un histórico más largo, en \`/v1/viajes\` usa \`despues\` (cursor).`,
     schema: { type: 'integer', minimum: 0, default: 0 },
+  },
+] as const;
+
+// ── El cursor de /v1/viajes ────────────────────────────────────────────────
+//
+// `desplazamiento` sigue existiendo y sigue funcionando igual para quien ya lo
+// use: lo que agrega el cursor es poder pasar de la ventana de 1,000 sin que
+// una fila nueva desalinee las páginas. A 50k viajes/mes, 1,000 es menos de un
+// día de operación.
+const parametrosCursor = [
+  {
+    name: 'despues',
+    in: 'query',
+    required: false,
+    description:
+      'Cursor de la página siguiente: el `pagina.siguiente` de la respuesta anterior, tal cual. Es la forma de recorrer TODO el histórico — `desplazamiento` se topa en la ventana de '
+      + `${VENTANA_MAXIMA} filas. Es OPACO: no lo armes a mano (uno inválido es 400). No se combina con \`desplazamiento\` > 0: el cursor ya dice desde dónde seguir. `
+      + 'A diferencia del desplazamiento, no se desalinea cuando entran viajes nuevos mientras recorres.',
+    schema: { type: 'string' },
+  },
+  {
+    name: 'conteo',
+    in: 'query',
+    required: false,
+    description:
+      'Pide el total de la flota (`pagina.total`). Sin él, `total` viene `null` y `hayMas` sigue siendo exacto. Cuesta un `count(*)` sobre todos los viajes de la flota EN CADA petición: pídelo en la primera vuelta de la sincronización, no en las 500 siguientes.',
+    schema: { type: 'integer', enum: [0, 1], default: 0 },
   },
 ] as const;
 
@@ -534,9 +565,13 @@ function documento(servidor: string) {
           operationId: 'listarViajes',
           'x-likida-area': 'operacion',
           summary: 'Los viajes de la flota, el más reciente primero.',
-          description: 'Área `operacion`: no devuelve un peso. El anticipo por viaje se queda fuera a propósito — es dinero, y el jefe de tráfico ve esta ruta.',
+          description:
+            'Área `operacion`: no devuelve un peso. El anticipo por viaje se queda fuera a propósito — es dinero, y el jefe de tráfico ve esta ruta.\n\n'
+            + 'PARA RECORRER EL HISTÓRICO, USA EL CURSOR. Pide la primera página (con `?conteo=1` si quieres el total una vez) y después repite con '
+            + '`?despues=` + el `pagina.siguiente` que venga en la respuesta, hasta que `siguiente` sea `null`. `desplazamiento` sigue funcionando para '
+            + `quien ya lo usa, pero se topa en ${VENTANA_MAXIMA} filas y se desalinea si entran viajes mientras recorres.`,
           tags: ['viajes'],
-          parameters: [...parametrosPagina],
+          parameters: [...parametrosPagina, ...parametrosCursor],
           responses: {
             '200': {
               description: 'Página de viajes.',

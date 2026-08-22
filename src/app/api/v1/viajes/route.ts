@@ -21,10 +21,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { getViajes, contarViajes, type ViajeRow } from '@/lib/likida/analytics';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { exigir } from '@/lib/likida/pg';
+import { acotada } from '@/lib/likida/presupuesto';
 import { crearViaje, type NuevoViaje } from '@/lib/likida/operacion';
 import { validarIngreso } from '@/lib/likida/ingreso_viaje';
-import { abrir, leerPagina, rebanar, sobre, fallo, errorApi } from '../_comun';
+import { abrir, leerPagina, leerCursor, codificarCursor, sobre, fallo, errorApi, type Cursor, type Pagina } from '../_comun';
 import {
   leerCuerpo, leerLlaveIdempotencia, validar, escribir, huella,
   texto, uuid, fecha, monto, crudoNumerico, CampoInvalido,
@@ -58,21 +60,79 @@ export interface ViajeApi {
   avisosEnviados: number;
 }
 
-function aViajeApi(v: ViajeRow): ViajeApi {
+/** Las columnas EXACTAS que proyecta `ViajeApi`, más las dos del cursor.
+ *  `anticipo` no está y no es un olvido: ver la cabecera del archivo. */
+const COLUMNAS_VIAJE =
+  'id, folio, origen, destino, estatus, fecha_inicio, intake_pendientes, avisado_en, aceptado_en, escalado_en, avisos_enviados, created_at, operador:operador_id(nombre)';
+
+type FilaViaje = Record<string, unknown>;
+
+function aViajeApi(v: FilaViaje): ViajeApi {
   return {
-    id: v.id,
-    folio: v.folio,
-    origen: v.origen,
-    destino: v.destino,
-    estatus: v.estatus,
-    fechaInicio: v.fechaInicio,
-    operador: v.operadorNombre,
-    intakePendientes: v.intakePendientes,
-    avisadoEn: v.avisadoEn,
-    aceptadoEn: v.aceptadoEn,
-    escaladoEn: v.escaladoEn,
-    avisosEnviados: v.avisosEnviados,
+    id: v.id as string,
+    folio: (v.folio as string) || (v.id as string).slice(0, 8),
+    origen: (v.origen as string) || null,
+    destino: (v.destino as string) || null,
+    estatus: v.estatus as string,
+    fechaInicio: (v.fecha_inicio as string) || null,
+    operador: ((v.operador as { nombre?: string } | null)?.nombre) ?? null,
+    intakePendientes: Number(v.intake_pendientes ?? 0),
+    avisadoEn: (v.avisado_en as string) || null,
+    aceptadoEn: (v.aceptado_en as string) || null,
+    escaladoEn: (v.escalado_en as string) || null,
+    avisosEnviados: Number(v.avisos_enviados ?? 0),
   };
+}
+
+/**
+ * UNA página del registro, leída con `range` REAL en la base.
+ *
+ * ── ESC-15 (escala 50k) ─────────────────────────────────────────────────
+ *
+ * Antes: `getViajes(tenant, desplazamiento + limite)` traía la ventana
+ * ENTERA —hasta 1,000 filas— y `rebanar` cortaba en memoria la página de 50.
+ * Dos costos: el servidor ordena y manda 1,000 filas para entregar 50, y la
+ * ventana se topa en `VENTANA_MAXIMA` = 1,000, que a 50k viajes/mes es menos
+ * de UN DÍA de operación: el TMS que quiera el histórico no tiene por dónde.
+ *
+ * Ahora la base entrega exactamente la página. El desempate por `id` —que es
+ * lo que faltaba para poder usar `range` sin repetir/saltar filas entre
+ * páginas (la advertencia de `pg.ts`)— va en el propio `order`, y el índice
+ * de la 0157 es `(tenant_id, created_at desc, id desc)`, o sea el ORDER BY
+ * completo.
+ *
+ * Se pide UNA FILA DE MÁS: así `hayMas` es un hecho medido y no una
+ * derivación de `total`, y el `count: exact` —que a 50k viajes es un
+ * `count(*)` por petición— deja de ser obligatorio (`?conteo=1`).
+ */
+async function leerViajes(
+  tenantId: string,
+  pagina: Pagina,
+  despues: Cursor | null,
+  conConteo: boolean,
+): Promise<{ filas: FilaViaje[]; total: number | null }> {
+  let q = supabaseAdmin()
+    .from('viaje')
+    .select(COLUMNAS_VIAJE, conConteo ? { count: 'exact' } : {})
+    .eq('tenant_id', tenantId);
+
+  // `(created_at, id) < (c, i)` en el dialecto de PostgREST: o es más viejo,
+  // o es del mismo instante y su id va después en el orden. Sin la segunda
+  // rama, dos viajes creados en el mismo microsegundo se pierden o se
+  // repiten — que es exactamente el fallo contra el que advierte `pg.ts`.
+  if (despues) {
+    q = q.or(`created_at.lt.${despues.creadoEn},and(created_at.eq.${despues.creadoEn},id.lt.${despues.id})`);
+  }
+
+  q = q.order('created_at', { ascending: false }).order('id', { ascending: false });
+
+  // Una fila de más para saber si hay página siguiente sin contar la tabla.
+  const desde = despues ? 0 : pagina.desplazamiento;
+  q = q.range(desde, desde + pagina.limite);
+
+  const res = await acotada(q, 'v1.viajes');
+  const filas = (exigir(res, 'v1.viajes') ?? []) as FilaViaje[];
+  return { filas, total: typeof res.count === 'number' ? res.count : null };
 }
 
 export async function GET(req: Request) {
@@ -81,40 +141,37 @@ export async function GET(req: Request) {
 
   const pag = leerPagina(req.url);
   if (!pag.ok) return pag.respuesta;
-  const { limite, desplazamiento } = pag.pagina;
+  const cur = leerCursor(req.url, pag.pagina);
+  if (!cur.ok) return cur.respuesta;
 
   try {
-    // `getViajes` no acepta desplazamiento: pide los N MÁS RECIENTES y ya. Se
-    // le pide la ventana completa y se rebana. Es más caro que un `range`, y
-    // aun así es lo correcto hoy: `getViajes` ordena por `created_at` SIN
-    // desempate único, y `pg.ts` advierte que un `range` sobre un orden que
-    // empata puede repetir una fila y saltarse otra entre dos páginas. Una
-    // sola foto rebanada no tiene ese problema.
-    //
-    // ANOTADO (no se toca en esta entrega): para paginar de verdad,
-    // `getViajes` necesita `.order('id')` de desempate y un parámetro de
-    // `range`. Con eso, `VENTANA_MAXIMA` deja de hacer falta.
-    const [todos, total] = await Promise.all([
-      getViajes(acceso.tenantId, desplazamiento + limite),
-      contarViajes(acceso.tenantId),
-    ]);
+    const { filas, total } = await leerViajes(acceso.tenantId, pag.pagina, cur.despues, cur.conteo);
 
     // ── EL RECORTE SILENCIOSO DE PostgREST, ATRAPADO ────────────────────────
-    // `getViajes` usa `.limit(n)` y PostgREST recorta a `max_rows` SIN avisar:
-    // no lanza, no loguea, devuelve menos filas. Si pedimos N, vinieron menos
-    // de N, y el conteo dice que hay más de las que vinieron, entonces lo que
-    // tenemos es el techo del servidor y NO el final de la tabla. Servir eso
-    // como una página normal sería decirle al TMS "ya no hay más viajes"
-    // cuando sí los hay — la clase de mentira que define este producto.
-    const pedidas = desplazamiento + limite;
-    if (todos.length < pedidas && total !== null && total > todos.length) {
+    // PostgREST recorta a `max_rows` SIN avisar: no lanza, no loguea, devuelve
+    // menos filas. Con `limite ≤ 200` la página pedida (limite + 1) cabe de
+    // sobra bajo el techo por default (1,000, ver `pg.ts`), pero `max_rows` es
+    // un ajuste de proyecto que se puede bajar. Cuando el integrador pidió el
+    // total, se comprueba: página corta + total que dice que hay más = techo
+    // del servidor, NO el final de la tabla. Servir eso sería decirle al TMS
+    // "ya no hay más viajes" cuando sí los hay.
+    const pedidas = pag.pagina.limite + 1;
+    const leidas = (cur.despues ? 0 : pag.pagina.desplazamiento) + filas.length;
+    if (filas.length < pedidas && total !== null && total > leidas) {
       return errorApi(
         'lectura_incompleta',
-        'El servidor de datos recortó la lectura antes de llegar a la página pedida. No devolvemos una página corta como si fuera la última: pide un `desplazamiento` menor o avísanos para paginar del lado del servidor.',
+        'El servidor de datos recortó la lectura antes de llegar al final de la página pedida. No devolvemos una página corta como si fuera la última: pide un `limite` menor o avísanos.',
       );
     }
 
-    return NextResponse.json(sobre(rebanar(todos, pag.pagina).map(aViajeApi), pag.pagina, total));
+    const hayMas = filas.length > pag.pagina.limite;
+    const pagina = filas.slice(0, pag.pagina.limite);
+    const ultima = pagina.at(-1);
+    const siguiente = hayMas && ultima
+      ? codificarCursor({ creadoEn: String(ultima.created_at), id: String(ultima.id) })
+      : null;
+
+    return NextResponse.json(sobre(pagina.map(aViajeApi), pag.pagina, total, { hayMas, siguiente }));
   } catch (e) {
     return fallo('v1.viajes', e, { tenant: acceso.tenantId });
   }

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
+import { traerTodo, conteo } from './pg';
 import type { CfdiXmlData } from './intake/cfdi_xml';
 import { consultarCFDI, type EstadoSat } from './intake/sat';
 import type { Gasto } from '@/types/likida';
@@ -247,25 +248,12 @@ export async function ingresarFacturaDesdeFoto(
   return { ok: true, facturaId: (data as { id: string }).id, receptorEsFlota, ocrConfianza };
 }
 
-/** La bandeja, lo más nuevo arriba. `estado` opcional: el export solo quiere
- *  las aprobadas y filtrarlas en la BASE es más honesto que traer todo y
- *  recortar en memoria contra el tope de `limite`. */
-export async function listarFacturasProveedor(
-  tenantId: string,
-  limite = 100,
-  estado?: FacturaProveedor['estado'],
-): Promise<FacturaProveedor[]> {
-  let consulta = supabaseAdmin()
-    .from('factura_proveedor')
-    .select('id, cfdi_uuid, emisor_rfc, emisor_nombre, receptor_rfc, receptor_es_flota, fecha, sub_total, iva, total, descripcion, conceptos, estado, decidido_por, decidido_en, created_at, origen, ocr_confianza, estado_sat, exportada_en')
-    .eq('tenant_id', tenantId);
-  if (estado) consulta = consulta.eq('estado', estado);
-  const { data, error } = await acotada(
-    consulta.order('created_at', { ascending: false }).limit(limite),
-    'proveedores.listar',
-  );
-  if (error) throw new Error(`listarFacturasProveedor: ${error.message}`);
-  return (data ?? []).map((f) => ({
+/** Las columnas que leen la bandeja y el export — UNA lista para que no se
+ *  separen. */
+const COLUMNAS_FACTURA = 'id, cfdi_uuid, emisor_rfc, emisor_nombre, receptor_rfc, receptor_es_flota, fecha, sub_total, iva, total, descripcion, conceptos, estado, decidido_por, decidido_en, created_at, origen, ocr_confianza, estado_sat, exportada_en';
+
+function aFactura(f: Record<string, unknown>): FacturaProveedor {
+  return {
     id: f.id as string,
     cfdiUuid: f.cfdi_uuid as string,
     emisorRfc: (f.emisor_rfc as string) ?? null,
@@ -286,7 +274,28 @@ export async function listarFacturasProveedor(
     ocrConfianza: f.ocr_confianza === null || f.ocr_confianza === undefined ? null : Number(f.ocr_confianza),
     estadoSat: (f.estado_sat as EstadoSat) ?? null,
     exportadaEn: (f.exportada_en as string) ?? null,
-  }));
+  };
+}
+
+/** La bandeja, lo más nuevo arriba. `estado` opcional: el export solo quiere
+ *  las aprobadas y filtrarlas en la BASE es más honesto que traer todo y
+ *  recortar en memoria contra el tope de `limite`. */
+export async function listarFacturasProveedor(
+  tenantId: string,
+  limite = 100,
+  estado?: FacturaProveedor['estado'],
+): Promise<FacturaProveedor[]> {
+  let consulta = supabaseAdmin()
+    .from('factura_proveedor')
+    .select(COLUMNAS_FACTURA)
+    .eq('tenant_id', tenantId);
+  if (estado) consulta = consulta.eq('estado', estado);
+  const { data, error } = await acotada(
+    consulta.order('created_at', { ascending: false }).limit(limite),
+    'proveedores.listar',
+  );
+  if (error) throw new Error(`listarFacturasProveedor: ${error.message}`);
+  return (data ?? []).map(aFactura);
 }
 
 /**
@@ -422,23 +431,52 @@ function fechaDdMmAaaa(iso: string | null): string {
 }
 
 /**
+ * TODAS las facturas aprobadas de la flota, demostrado.
+ *
+ * ESC-8 (escala 50k): el export pedía `listarFacturasProveedor(t, 5000)`, y
+ * `.limit(5000)` NO trae 5,000 — PostgREST recorta a `max_rows` (1,000) sin
+ * avisar, así que `recortado` (`length === 5000`) no se cumplía jamás y una
+ * flota con 1,001+ aprobadas mandaba al ERP un archivo corto con cara de
+ * completo. `traerTodo` pagina por `range` (cada página cabe bajo el techo)
+ * con `count` exacto en la primera, y si no puede demostrar que trajo todo
+ * LANZA `LecturaIncompleta` — el caller la convierte en un error que se dice.
+ * Orden `created_at desc, id desc`: el desempate único que el cursor de
+ * `range` exige (pg.ts).
+ */
+export async function listarAprobadasCompletas(tenantId: string): Promise<FacturaProveedor[]> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('factura_proveedor')
+      .select(COLUMNAS_FACTURA, conteo(d))
+      .eq('tenant_id', tenantId)
+      .eq('estado', 'aprobada')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(d, h), 'proveedores.aprobadas'),
+    'proveedores.aprobadas',
+  );
+  return filas.map(aFactura);
+}
+
+/**
  * Las filas del export en el layout pedido, con los ids para poder marcarlas
  * después. Trae TODAS las aprobadas — también las ya exportadas, porque el
  * archivo se pierde, el contador lo vuelve a pedir, y negárselo lo mandaría
  * a recapturar a mano. El anti-doble-import no es ocultarlas: es la marca
  * `exportada_en` visible en la bandeja.
+ *
+ * Lanza `LecturaIncompleta` (pg.ts) si no puede demostrar que trajo todas:
+ * no existe la salida "archivo corto".
  */
 export async function exportarAprobadas(
   tenantId: string,
   formato: FormatoExport,
-  limite = 5000,
-): Promise<{ filas: Record<string, string | number>[]; ids: string[]; recortado: boolean }> {
-  const aprobadas = await listarFacturasProveedor(tenantId, limite, 'aprobada');
+): Promise<{ filas: Record<string, string | number>[]; ids: string[] }> {
+  const aprobadas = await listarAprobadasCompletas(tenantId);
   const mapa = formato === 'sap_b1' ? aFilaSapB1 : formato === 'contpaqi' ? aFilaContpaqi : aFilaExportProveedor;
   return {
     filas: aprobadas.map(mapa),
     ids: aprobadas.map((f) => f.id),
-    recortado: aprobadas.length === limite,
   };
 }
 
