@@ -1,3 +1,4 @@
+import { appUrl } from '@/lib/env';
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { verificarFirma } from '@/lib/correo/firma_entrante';
@@ -158,7 +159,7 @@ export async function POST(req: Request) {
     return fallo(500, 'NEXT_PUBLIC_SUPABASE_URL no está configurado.');
   }
   // El mismo suelo que `/login`: el dominio del SOFTWARE, no el de la landing.
-  const base = process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
+  const base = appUrl();
 
   const liga = accion === 'reauthentication'
     ? ''

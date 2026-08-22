@@ -6,7 +6,7 @@ import { puedeAdministrar } from '@/lib/auth/permisos';
 import { getOperadoresDetalle } from '@/lib/likida/analytics';
 import { actualizarOperador, mensajeParaPantalla } from '@/lib/likida/administracion';
 import { ahoraMs } from '@/lib/saludo';
-import { TZ_MX } from '@/lib/formato';
+import { hoyMx } from '@/lib/formato';
 import { VistaOperadores, type FilaOperador } from './vista';
 import type { ResultadoForma } from './forma';
 
@@ -67,7 +67,7 @@ export default async function PaginaOperadores({
 
   // El día del CHOFER (México), no el UTC del servidor — a las 6pm de CDMX
   // una licencia que vence "hoy" ya se marcaba vencida con el día UTC.
-  const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahoraMs()));
+  const hoy = hoyMx(new Date(ahoraMs()));
 
   async function guardarOperador(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';

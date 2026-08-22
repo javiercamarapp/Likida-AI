@@ -26,7 +26,7 @@ import { puedeVerRuta, inicioDe, rolEfectivo } from './visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
-import { TZ_MX } from '@/lib/formato';
+import { hoyMx } from '@/lib/formato';
 import type { SessionTenant } from './session';
 
 export interface TenantEfectivo extends SessionTenant {
@@ -85,9 +85,7 @@ function sufijoPrevisualizacion(
  *  mañana en UTC y el dedup partiría una sesión de revisión en dos firmas. */
 function diaMx(): string {
   // `en-CA` porque su formato de fecha ES `AAAA-MM-DD` — no hay que rearmar.
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ_MX, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date());
+  return hoyMx();
 }
 
 /**

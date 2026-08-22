@@ -1,3 +1,4 @@
+import { appUrl } from '@/lib/env';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { Fraunces, Instrument_Sans } from 'next/font/google';
@@ -61,7 +62,7 @@ const instrument = Instrument_Sans({
  * el dominio del SOFTWARE (ver CLAUDE.md: la variable debe valer esto mismo).
  */
 function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
+  return appUrl();
 }
 
 /**

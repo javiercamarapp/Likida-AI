@@ -12,7 +12,7 @@ import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { usd, numero } from '@/lib/utils';
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, fechaHoraMx, TZ_MX } from '@/lib/formato';
+import { fechaMx, fechaHoraMx, hoyMx } from '@/lib/formato';
 import { AGENTES_NOTIFICABLES } from '@/lib/likida/agentes/notificaciones';
 import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from '../dashboard/resumen-visual';
 import { Dona, BarChartSimple } from './charts';
@@ -119,7 +119,7 @@ export async function ConsolaAdmin({
   // (`tenants_reales.test.ts` evalúa la expresión de la etiqueta con 0.)
   const esSoloDemo = r.tenants === 1 && r.flotas[0]?.id === tenantDemo();
 
-  const fechaHoyMx = fechaMx(new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahoraMs())));
+  const fechaHoyMx = fechaMx(hoyMx(new Date(ahoraMs())));
   const porFase = new Map(r.porFase.map((f) => [f.fase, f]));
   // La llave se abre a `string` a propósito: la bitácora ya admite un agente
   // que NO está en el catálogo de notificaciones (`ventas`, 0105 — corre para

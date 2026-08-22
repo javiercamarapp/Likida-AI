@@ -4,6 +4,7 @@
 // + manda el PDF si se cerró la liquidación.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { appUrl } from '@/lib/env';
 import { randomUUID } from 'crypto';
 import type OpenAI from 'openai';
 import '@/lib/likida/tools'; // side-effect: registra las tools en el registry
@@ -797,7 +798,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           (puedeInforme
             ? `Pregúntame «¿cómo van?» y te doy el resumen de la operación. `
             : '') +
-          `Para el detalle completo, entra a ${process.env.NEXT_PUBLIC_APP_URL ?? 'tu panel'}.`);
+          `Para el detalle completo, entra a ${appUrl()}.`);
         return;
       }
 

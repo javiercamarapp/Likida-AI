@@ -34,6 +34,20 @@
 export const TZ_MX = 'America/Mexico_City';
 
 /**
+ * HOY en México como `AAAA-MM-DD` (o el día de México de la fecha que se pase).
+ * `en-CA` es el locale cuyo formato corto YA es ISO: no hay que rearmar.
+ *
+ * Antes esto se escribía a mano en ~38 sitios con dos ortografías
+ * (`toLocaleDateString('en-CA', { timeZone: TZ_MX })` e
+ * `Intl.DateTimeFormat('en-CA', …)`) y dos de ellos ni usaban la constante:
+ * hardcodeaban 'America/Mexico_City'. El guardia de formato.test.ts ahora lo
+ * impide. Si pasa una fecha inválida lanza (RangeError), igual que antes.
+ */
+export function hoyMx(fecha: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX, year: 'numeric', month: '2-digit', day: '2-digit' }).format(fecha);
+}
+
+/**
  * Redondea a dos decimales (centavos) sin creerle a la coma flotante.
  *
  * AUDITORÍA 9, ALTO REINCIDENTE (arquitectura) — reimplementado a mano en

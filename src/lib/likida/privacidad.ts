@@ -1,3 +1,5 @@
+import { appUrl } from '@/lib/env';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // AVISO DE PRIVACIDAD EN EL CANAL — modalidad simplificada.
 //
@@ -701,7 +703,7 @@ export const DIAS_RETENCION_PROSPECTO_PERSONA = 365;
 
 /** La liga absoluta del aviso de prospectos — la que va en cada primer toque. */
 export function urlAvisoProspectos(): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai').replace(/\/$/, '');
+  const base = appUrl();
   return `${base}${RUTA_AVISO_PROSPECTOS}`;
 }
 
