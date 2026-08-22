@@ -212,10 +212,16 @@ export async function InicioContador({
                   sacar sus datos. Un `<a download>` a esa ruta, con el `?tenant=`
                   del sufijo del superadmin (vacío para roles reales, que usan su
                   sesión). Es la puerta que faltaba, no un endpoint nuevo. */}
-              <a href={`/api/export/liquidaciones${sufijo}`} download
+              {/* ESCALA 50k (22-ago-2026, ESC-8): la ruta ahora EXIGE ventana
+                  (máx. 3 meses) porque el CSV completo de un cliente grande no
+                  cabe en la respuesta de la plataforma. La puerta del contador
+                  se lleva el MES EN CURSO, que es su unidad de trabajo, y lo
+                  dice en el rótulo: un botón que promete "todo" y entrega un
+                  mes sería el recorte silencioso de siempre. */}
+              <a href={`/api/export/liquidaciones${sufijo}${sufijo ? '&' : '?'}desde=${hoy.slice(0, 8)}01&hasta=${hoy}`} download
                 className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85 border"
                 style={{ borderColor: 'var(--line)', color: 'var(--ink)' }}>
-                <Download width={15} height={15} strokeWidth={2} /> Exportar CSV
+                <Download width={15} height={15} strokeWidth={2} /> Exportar CSV del mes
               </a>
               <Link href={`/dashboard/facturacion${sufijo}`}
                 className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85"
