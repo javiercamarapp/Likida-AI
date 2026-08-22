@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { hoyMx } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import { llegoTarde, violaIndice } from '@/lib/likida/pg_errores';
 import { armar, type TicketPorFacturar } from './pendientes';
@@ -225,7 +226,7 @@ export async function facturarAlVuelo(args: {
     return { intentado: false, facturado: false, motivo: 'ya_en_proceso' };
   }
 
-  const hoy = args.hoy ?? new Date().toISOString().slice(0, 10);
+  const hoy = args.hoy ?? hoyMx();
   const t = armar(data as Parameters<typeof armar>[0], hoy);
   // El cofre SOLO se consulta cuando el portal pide cuenta: es una lectura de
   // base por gasto, y para los sin cuenta —la mayoría— no cambia nada.
@@ -346,7 +347,7 @@ export async function facturarLoteAlVuelo(args: {
   ahora?: string;
 }): Promise<ResultadoLoteAutofactura> {
   const admin = supabaseAdmin();
-  const hoy = args.hoy ?? new Date().toISOString().slice(0, 10);
+  const hoy = args.hoy ?? hoyMx();
   const porGasto: Array<ResultadoAutofactura & { gastoId: string }> = [];
   const bloqueados: Array<{ gastoId: string; motivo: string }> = [];
 

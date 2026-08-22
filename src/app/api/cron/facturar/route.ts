@@ -17,6 +17,7 @@ import { avisoColaAtorada } from '@/lib/correo/avisos';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { modoEfectivo } from '@/lib/likida/facturacion/modo';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
+import { hoyMx } from '@/lib/formato';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -308,7 +309,13 @@ export async function GET(req: Request) {
     });
   }
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  // RES-13 (auditoría prod): era `toISOString().slice(0, 10)` — el día UTC. De
+  // las 18:00 a medianoche hora de México el cron ya vivía en "mañana": el
+  // plazo de caducidad de cada ticket (`armar` → `calcularCaducidad`) se
+  // calculaba con un día de más y un ticket vigente hasta hoy se trataba
+  // como vencido seis horas antes de tiempo. El SAT, la flota y el portal
+  // están todos en México: `hoyMx()`.
+  const hoy = hoyMx();
   // Arranca AQUÍ, no dentro del `try`: es el reloj contra el que se mide
   // MARGEN_LOTE_MS, y tiene que cubrir la consulta de la cola también.
   const inicioLote = Date.now();

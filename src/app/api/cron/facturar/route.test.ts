@@ -277,6 +277,37 @@ describe('el kill switch (0110)', () => {
   });
 });
 
+describe('el día del cron es el de México (RES-13)', () => {
+  it('a las 20:00 de México, `hoy` sigue siendo ese día, aunque en UTC ya sea mañana', async () => {
+    // Antes: `toISOString().slice(0, 10)` — el día UTC. De las 18:00 a
+    // medianoche hora de México el cron calculaba la caducidad con un día de
+    // más y daba por vencido lo que vencía HOY.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-23T02:00:00Z')); // 22-ago 20:00 en CDMX
+    try {
+      await pedir();
+    } finally {
+      vi.useRealTimers();
+    }
+    const llamada = facturarLoteAlVuelo.mock.calls[0]?.[0] as { hoy?: string } | undefined;
+    expect(llamada?.hoy).toBe('2026-08-22');
+  });
+
+  it('ningún archivo del agente de facturas vuelve a calcular el día en UTC', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const ruta of [
+      'src/app/api/cron/facturar/route.ts',
+      'src/app/api/cron/facturar/cola/route.ts',
+      'src/lib/likida/facturacion/al_vuelo.ts',
+      'src/lib/likida/facturacion/pendientes.ts',
+    ]) {
+      const fuente = readFileSync(ruta, 'utf8');
+      expect(fuente, ruta).toContain("import { hoyMx } from '@/lib/formato'");
+      expect(fuente.replace(/\/\/.*$/gm, ''), ruta).not.toMatch(/toISOString\(\)\.slice\(0, 10\)/);
+    }
+  });
+});
+
 describe('la cola', () => {
   it('se pide en el orden de la 0063: los nunca intentados primero', async () => {
     // Sin este orden, los ocho tickets más viejos que NO proceden salen elegidos
