@@ -201,10 +201,32 @@ export async function getKpis(tenantId: string, ventanaDias?: number): Promise<D
 
 export interface OperadorStat {
   operadorId: string;
+  /**
+   * La ETIQUETA que se pinta, no necesariamente el nombre de la persona.
+   *
+   * AUDITORÍA 18 (A9): "Diferencias por operador" ordenaba a los choferes de
+   * mayor a menor por liquidaciones con diferencia, con su nombre, en la
+   * pantalla del patrón — una lista de sospecha nominal. El aviso integral que
+   * el operador recibió promete, entre las finalidades no necesarias (art. 15
+   * fr. III): "estadísticas de uso, SIN IDENTIFICARTE en los reportes"
+   * (privacidad.ts), y el art. 11 vigente ya no admite finalidades
+   * "compatibles o análogas": una finalidad no escrita exige consentimiento
+   * nuevo. Por defecto, entonces, aquí viene un seudónimo estable por operador
+   * ("Operador ·A3F9C1"), y el nombre real solo se entrega si quien llama pasa
+   * `{ nominal: true }` — y eso solo puede hacerlo una pantalla que haya
+   * resuelto el aviso (finalidad enunciada + rol financiero). Hoy ninguna.
+   */
   nombre: string;
   viajes: number;
   dieselTotal: number;
   diferencias: number;
+}
+
+/** Seudónimo estable por operador: el mismo id da la misma etiqueta entre
+ *  cargas, y sin la base no se vuelve al nombre. */
+export function etiquetaOperador(operadorId: string): string {
+  const hex = operadorId.replace(/-/g, '').slice(-6).toUpperCase() || '??????';
+  return `Operador ·${hex}`;
 }
 
 // ── La página del Agente de Liquidación (v2, 13-ago-2026) ──────────────────
@@ -280,12 +302,23 @@ export async function getDineroObservadoPorTipo(tenantId: string): Promise<Diner
     .sort((a, b) => b.monto - a.monto);
 }
 
-/** Rendimiento por operador (diésel total, # de diferencias) — señal operativa. */
-export async function getStatsPorOperador(tenantId: string): Promise<OperadorStat[]> {
+/**
+ * Rendimiento por operador (diésel total, # de diferencias) — señal operativa.
+ *
+ * Ver `OperadorStat.nombre`: seudonimizado salvo `{ nominal: true }`. Y el
+ * operador que ya ejerció la oposición del art. 26 fr. II
+ * (`operador.oposicion_automatizada`, mig. 0100) —a quien el motor sí honra en
+ * el cierre— NO entra en esta lista: el conteo de sus diferencias es justo la
+ * clase de señal automatizada sobre su persona a la que se opuso.
+ */
+export async function getStatsPorOperador(
+  tenantId: string,
+  opciones: { nominal?: boolean } = {},
+): Promise<OperadorStat[]> {
   const admin = supabaseAdmin();
   const [ops, gastos, viajes, liqs] = await Promise.all([
-    traerTodo<{ id: unknown; nombre: unknown }>(
-      (desde, hasta) => admin.from('operador').select('id, nombre').eq('tenant_id', tenantId).order('id').range(desde, hasta),
+    traerTodo<{ id: unknown; nombre: unknown; oposicion_automatizada?: unknown }>(
+      (desde, hasta) => admin.from('operador').select('id, nombre, oposicion_automatizada').eq('tenant_id', tenantId).order('id').range(desde, hasta),
       'getStatsPorOperador.operador',
     ),
     traerTodo<{ viaje_id: unknown; concepto: unknown; monto: unknown }>(
@@ -324,9 +357,9 @@ export async function getStatsPorOperador(tenantId: string): Promise<OperadorSta
     if (Math.abs(Number(l.diferencia ?? 0)) < 0.01) continue;
     diferenciasPorOp.set(op, (diferenciasPorOp.get(op) ?? 0) + 1);
   }
-  return ops.map((o) => ({
+  return ops.filter((o) => o.oposicion_automatizada == null).map((o) => ({
     operadorId: o.id as string,
-    nombre: o.nombre as string,
+    nombre: opciones.nominal ? (o.nombre as string) : etiquetaOperador(o.id as string),
     viajes: viajesPorOp.get(o.id as string)?.size ?? 0,
     dieselTotal: round2(dieselPorOp.get(o.id as string) ?? 0),
     diferencias: diferenciasPorOp.get(o.id as string) ?? 0,
