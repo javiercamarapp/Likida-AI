@@ -7,7 +7,7 @@ import { PaginaLegal, FaltaDato, type SeccionLegal } from '../legal/marco';
 //
 //   /aviso/[tenant]  → el aviso de la FLOTA sobre los datos de SUS operadores.
 //                      Ahí la responsable es la flota (LFPDPPP art. 14) y Likida
-//                      es persona encargada (art. 2 fr. XX).
+//                      es persona encargada (art. 2 fr. XII).
 //   /privacidad      → esta página. Los datos de quien CONTRATA Likida —el
 //                      contralor, el administrador de la flota— tratados por
 //                      Likida por su propia cuenta. Aquí la responsable es
@@ -48,8 +48,12 @@ const SECCIONES: SeccionLegal[] = [
     fundamento: 'LFPDPPP art. 15 fr. I · art. 14',
     parrafos: [
       `**Likida** es responsable de los datos personales de quien **contrata y usa el servicio**: la persona que administra la flota, el contralor, quien entra al panel.`,
-      `**Los datos de los operadores son otra cosa.** Cuando un chofer manda sus comprobantes por WhatsApp, la responsable de esos datos es **su empresa**, no Likida: Likida los trata por cuenta de ella y siguiendo sus instrucciones, como persona encargada (art. 2 fr. XX). El aviso que le corresponde a cada operador lo publica su propia flota, y Likida lo aloja por encargo.`,
+      `**Los datos de los operadores son otra cosa.** Cuando un chofer manda sus comprobantes por WhatsApp, la responsable de esos datos es **su empresa**, no Likida: Likida los trata por cuenta de ella y siguiendo sus instrucciones, como persona encargada (art. 2 fr. XII). El aviso que le corresponde a cada operador lo publica su propia flota, y Likida lo aloja por encargo.`,
       `Si eres operador y llegaste aquí buscando tus datos, el aviso que te toca es el de tu empresa: escribe **PRIVACIDAD** por el mismo chat y te llega la liga.`,
+      // AUDITORÍA 18 (C2): el tercer grupo de titulares. Likida también es
+      // responsable de los datos de las personas a las que contacta para
+      // VENDER, que no son clientes ni operadores; su aviso es otro.
+      `**Y si Likida te contactó para ofrecerte el servicio y no eres cliente**, el aviso que te corresponde es el de contactos comerciales, en **/aviso/prospectos**: ahí dice de dónde salieron tus datos y cómo pedir que se borren.`,
     ],
   },
   {
@@ -58,6 +62,9 @@ const SECCIONES: SeccionLegal[] = [
     parrafos: [
       `Tu **nombre**, tu **correo** y tu **teléfono**.`,
       `Los **datos fiscales de tu empresa** que captures para que el sistema pueda validar facturas a su nombre: RFC, razón social, domicilio fiscal, régimen.`,
+      // AUDITORÍA 18 (M8): el enlace de acceso es un dato que se trata —y que
+      // sale por el proveedor de correo—; la fr. II obliga a enumerarlo.
+      `El **enlace de acceso de un solo uso** que te llega por correo cada vez que entras: se genera para tu dirección, caduca en minutos y se invalida al usarlo.`,
       `**Registros técnicos de uso**: cuándo entras al panel, qué liquidaciones consultas y los errores que produce el sistema mientras lo usas.`,
       `**No se tratan datos sensibles**, ni se piden datos bancarios o de tarjeta.`,
     ],
@@ -76,7 +83,7 @@ const SECCIONES: SeccionLegal[] = [
     fundamento: 'LFPDPPP art. 35 · art. 2 fr. XX',
     parrafos: [
       `**No se venden, y no se comparten con nadie para que los use por su cuenta.**`,
-      `Pasan por proveedores que trabajan por instrucción de Likida y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia**—: alojamiento de aplicación y base de datos, mensajería de WhatsApp, **envío de correo para los avisos del panel**, monitoreo de errores, y los modelos de lenguaje que leen los comprobantes, a los que en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
+      `Pasan por proveedores que trabajan por instrucción de Likida y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia**—: alojamiento de aplicación y base de datos, mensajería de WhatsApp, **envío de correo** —tanto los avisos del panel como **el correo con el que entras**: por ese proveedor pasa tu dirección y el enlace de un solo uso que abre tu sesión—, monitoreo de errores, y los modelos de lenguaje que leen los comprobantes, a los que en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
       `El detalle de esos subencargados está en la documentación del producto y se actualiza cuando cambia.`,
       `**Si algún día quisiéramos transferir tus datos para algo distinto, te lo pediríamos antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
     ],

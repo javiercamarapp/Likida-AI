@@ -24,6 +24,7 @@ vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({}) }));
 vi.mock('@/lib/auth/mfa', () => ({
   exigirAal2SiHayFactor: () => stepUp(),
   MSG_STEP_UP: 'Esta acción exige tu segundo factor',
+  MSG_MFA_NO_VERIFICABLE: 'No pude comprobar tu segundo factor',
 }));
 
 const ejecutarAccionCopiloto = vi.fn(async (..._a: unknown[]) => ({ ok: true, mensaje: 'hecho' }));
@@ -331,5 +332,61 @@ describe('el freno de gasto (16-ago) — el único camino LLM que no tenía tech
     const llaves = rateLimit.mock.calls.map((c) => c[0]);
     expect(llaves).toContain('copiloto:min:u-javier');
     expect(llaves).toContain('copiloto:dia:u-javier');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18 · M29 y M23 — el gasto del turno que truena se anota, y el
+// borde del POST tiene reloj: ni un historial colgado ni un intent lento
+// dejan el stream sin 'fin'.
+// ═══════════════════════════════════════════════════════════════════════════
+const { logger: logMock } = await import('@/lib/logger');
+const { PartialExecutionError } = await import('@/lib/llm/openrouter');
+
+describe('M29 — el turno que truena también se contabiliza', () => {
+  it('PartialExecutionError con tokens → copiloto.costo modelo "parcial" con lo pagado, y el stream termina en error', async () => {
+    (logMock.info as ReturnType<typeof vi.fn>).mockClear();
+    ejecutarCopiloto.mockRejectedValueOnce(new PartialExecutionError('Ciclo de tools excedió 5 rondas', null, [
+      { toolName: 'metrica_negocio', args: {}, result: {}, durationMs: 1 },
+    ], 38_000, 700, 0.0123));
+    const r = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: '¿cómo va el negocio?' }] }));
+    const eventos = (await r.text()).trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(eventos[eventos.length - 1]).toMatchObject({ t: 'error' });
+    expect(logMock.info).toHaveBeenCalledWith('copiloto.costo', expect.objectContaining({
+      costoUsd: 0.0123, tokensIn: 38_000, tokensOut: 700, modelo: 'parcial', tools: 1, fallo: true,
+    }));
+  });
+
+  it('un error SIN consumo (abort antes de la primera completion) no inventa una línea de costo', async () => {
+    (logMock.info as ReturnType<typeof vi.fn>).mockClear();
+    ejecutarCopiloto.mockRejectedValueOnce(new PartialExecutionError('abort', null, [], 0, 0, 0));
+    const r = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
+    await r.text();
+    expect(logMock.info).not.toHaveBeenCalledWith('copiloto.costo', expect.anything());
+  });
+});
+
+describe('M23 — el borde del POST tiene reloj propio', () => {
+  it('un historial que se CUELGA no detiene el fin: sale con conversacionId null dentro del plazo', async () => {
+    vi.stubEnv('LIKIDA_COPILOTO_PLAZO_HISTORIAL_MS', '30');
+    guardarIntercambioCopiloto.mockImplementationOnce(() => new Promise(() => { /* nunca resuelve */ }));
+    const inicio = Date.now();
+    const r = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
+    const eventos = (await r.text()).trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+    vi.unstubAllEnvs();
+    expect(Date.now() - inicio).toBeLessThan(2_000);
+    const fin = eventos[eventos.length - 1];
+    expect(fin.t).toBe('fin');
+    expect(fin.conversacionId).toBeNull();
+    expect(fin.bloques).toEqual([{ tipo: 'texto', texto: 'hola' }]);
+    expect(logMock.error).toHaveBeenCalledWith('copiloto.guardar_fallo', expect.objectContaining({ err: expect.stringContaining('plazo') }));
+  });
+
+  it('el costo se anota ANTES del historial: aunque guardar reviente, copiloto.costo ya quedó', async () => {
+    (logMock.info as ReturnType<typeof vi.fn>).mockClear();
+    guardarIntercambioCopiloto.mockRejectedValueOnce(new Error('base caída'));
+    const r = await POST(pedir({ mensajes: [{ rol: 'usuario', texto: 'hola' }] }));
+    await r.text();
+    expect(logMock.info).toHaveBeenCalledWith('copiloto.costo', expect.objectContaining({ modelo: 'prueba' }));
   });
 });

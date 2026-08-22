@@ -125,6 +125,13 @@ describe('el magic link, de punta a punta', () => {
     expect(u.searchParams.get('redirect_to')).toBe('https://app.likida.ai/auth/callback');
   });
 
+  it('el OTP de 6 dígitos NO viaja en el correo de acceso: solo la liga (AUD-18 M8)', async () => {
+    // Por Resend → SES ya pasa la dirección más la llave de un solo uso; no se
+    // le suma una segunda credencial que el correo ni siquiera puede usar.
+    await postear(MAGIC);
+    expect(JSON.stringify(enviados[0].correo)).not.toContain('123456');
+  });
+
   it('ni la dirección ni el token acaban en el log', async () => {
     await postear(MAGIC);
     const texto = JSON.stringify(logs);

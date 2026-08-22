@@ -1,3 +1,4 @@
+import { appUrl } from '@/lib/env';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { CreditCard, ExternalLink, TriangleAlert, FileText, Landmark } from 'lucide-react';
@@ -206,7 +207,7 @@ export default async function SuscripcionPage({
     try {
       const s = await getSuscripcion(t);
       if (!s?.stripeCustomerId) return { error: 'Esta flota todavía no tiene un cliente en Stripe: no hay nada que administrar.' };
-      destino = await crearPortal(s.stripeCustomerId, `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/dashboard/suscripcion`);
+      destino = await crearPortal(s.stripeCustomerId, `${appUrl()}/dashboard/suscripcion`);
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'abrir el portal de cobro') };
     }

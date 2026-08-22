@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { mxn, usd, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio } from './formato';
+import { mxn, usd, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, hoyMx } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -227,6 +227,33 @@ describe('NO puede volver a haber una copia a mano', () => {
     ).toEqual([]);
   });
 
+  // B2 (auditoría 18): el guardia cubría las CIFRAS y no las FECHAS. "Hoy en
+  // México" se escribía de dos maneras en ~38 sitios y dos hardcodeaban la
+  // zona. Ahora `hoyMx()` vive aquí y nadie más deletrea 'en-CA' ni la zona.
+  const archivosFecha = execSync(
+    `grep -rlE "'en-CA'|'America/Mexico_City'" src/ --include='*.ts' --include='*.tsx' || true`,
+    { encoding: 'utf8' },
+  ).split('\n').filter(Boolean)
+    .filter((f) => !f.includes('lib/formato.ts') && !f.includes('.test.'));
+
+  it('solo `formato.ts` deletrea la zona horaria de México', () => {
+    const fuera = archivosFecha
+      .filter((f) => /'America\/Mexico_City'/.test(sinComentarios(readFileSync(f, 'utf8'))));
+    expect(
+      fuera,
+      `estos archivos hardcodean la zona en vez de usar TZ_MX:\n${fuera.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('solo `formato.ts` calcula el día de México con `en-CA` (usa hoyMx)', () => {
+    const fuera = archivosFecha
+      .filter((f) => /'en-CA'/.test(sinComentarios(readFileSync(f, 'utf8'))));
+    expect(
+      fuera,
+      `estos archivos calculan el día de México a mano en vez de usar hoyMx():\n${fuera.join('\n')}`,
+    ).toEqual([]);
+  });
+
   it('y `formato.ts` no importa NADA, para que el motor pueda usarlo', () => {
     // `engine.ts` es puro y sin I/O, y `pdf.ts` viaja en el bundle del webhook.
     // Si el formato viviera en `utils.ts` —que importa clsx y tailwind-merge
@@ -234,5 +261,16 @@ describe('NO puede volver a haber una copia a mano', () => {
     // tree-shaking lo salva; un archivo sin imports no depende de la suerte.
     const fuente = readFileSync('src/lib/formato.ts', 'utf8');
     expect(fuente).not.toMatch(/^\s*import\s/m);
+  });
+});
+
+describe('hoyMx', () => {
+  it('da AAAA-MM-DD del día de México, no del UTC', () => {
+    // 2026-08-22T03:30Z son las 21:30 del 21 en CDMX (UTC-6 fijo).
+    expect(hoyMx(new Date('2026-08-22T03:30:00Z'))).toBe('2026-08-21');
+    expect(hoyMx(new Date('2026-08-22T06:00:00Z'))).toBe('2026-08-22');
+  });
+  it('sin argumento usa ahora y tiene forma ISO', () => {
+    expect(hoyMx()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

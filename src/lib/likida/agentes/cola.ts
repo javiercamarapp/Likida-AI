@@ -15,12 +15,13 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '../presupuesto';
 import { traerTodo, conteo } from '../pg';
 import { DatoInvalido } from '../errores';
 import { logger } from '@/lib/logger';
 import { enviarCorreo } from '@/lib/correo/enviar';
-import { TZ_MX } from '@/lib/formato';
+import { hoyMx } from '@/lib/formato';
 
 /** El tope de correos FRÍOS aprobados por día (Fase 2: "20–40, máximo" —
  *  reputación del dominio + lo que el embudo humano digiere). Vive en
@@ -267,11 +268,10 @@ export async function marcarEnviada(id: string, actorId: string | null, canal: '
 
 /** Bitácora best-effort (criterio interruptores.ts): la acción ya quedó. */
 async function anotar(accion: 'cola.aprobado' | 'cola.rechazado', piezaId: string, actorId: string, detalle: Record<string, unknown>): Promise<void> {
-  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: null, actor_id: actorId, accion,
-    entidad: 'cola_aprobacion', entidad_id: piezaId, detalle,
-  });
-  if (error) logger.warn('cola.bitacora_no_escribio', { accion, pieza: piezaId, err: error.message });
+  await anotarBitacora(
+    { tenantId: null, actor: { id: actorId }, accion, entidad: 'cola_aprobacion', entidadId: piezaId, detalle },
+    { evento: 'cola.bitacora_no_escribio', contexto: { pieza: piezaId } },
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -337,7 +337,7 @@ export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise
   // conteo, no se manda — el día es el DE MÉXICO, no el UTC.
   if ((fila.prioridad as string) === 'normal') {
     const tope = topeCorreoFrioDia();
-    const diaMx = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date());
+    const diaMx = hoyMx();
     const inicioDia = new Date(`${diaMx}T00:00:00-06:00`).toISOString();
     const { count, error: errTope } = await supabaseAdmin()
       .from('cola_aprobacion')

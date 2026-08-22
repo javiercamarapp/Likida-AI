@@ -4,11 +4,11 @@ import { after } from 'next/server';
 // el aviso de rate limit, y ese aviso desapareció con el 429 (los mensajes
 // vuelven solos). Esta ruta solo recibe; quien contesta es el processor.
 import { verifyWebhookChallenge, verifySignature } from '@/lib/meta/client';
-import { processInbound, type InboundMessage } from '@/lib/likida/processor';
+import { processInbound, type InboundMessage, type ResultadoInbound } from '@/lib/likida/processor';
 import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
-import { flushObservabilidad } from '@/lib/observability/sentry';
+import { flushObservabilidad, codigoDeError } from '@/lib/observability/sentry';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { guardarEventosPendientes, reclamarPendiente, marcarPendienteProcesado, anotarFalloPendiente } from '@/lib/likida/wa_pendientes';
 
@@ -49,6 +49,13 @@ const MAX_EN_PARALELO = 5;
  * media evaluación: cada obrero se lleva un índice distinto. Nunca lanza —
  * `fn` trae su propio catch— para que un fallo no cancele a los demás obreros.
  */
+/** Los resultados de `processInbound` que dejan la fila durable SIN sellar.
+ *  Local a propósito (no se importa del processor): las pruebas de esta ruta
+ *  mockean el módulo entero, y `undefined` —el mock viejo— cuenta como hecho. */
+function quedoPendiente(r: ResultadoInbound | undefined): boolean {
+  return r === 'sin_tiempo' || r === 'en_curso' || r === 'reintentable';
+}
+
 async function conPool<T>(items: T[], limite: number, fn: (item: T) => Promise<void>): Promise<void> {
   let siguiente = 0;
   const obrero = async () => {
@@ -90,6 +97,10 @@ export async function GET(req: NextRequest) {
 
 // POST — mensajes entrantes. Verifica HMAC, responde 200 rápido y procesa en after().
 export async function POST(req: NextRequest) {
+  // El reloj de la INVOCACIÓN: `maxDuration` corre desde aquí, no desde cada
+  // mensaje. Se le pasa a cada `processInbound` del pool para que la foto 6
+  // pida lo que queda y no los 120s enteros (auditoría 18, C4).
+  const inicioInvocacion = Date.now();
   // CAP DE BODY antes de leer/HMAC: evita DoS por cuerpo enorme sin firma.
   if (bodyExcede(req, MAX_BODY)) return new NextResponse('Payload too large', { status: 413 });
 
@@ -246,16 +257,33 @@ export async function POST(req: NextRequest) {
       // no-op). Éxito sella `procesado_en`; fallo anota el error y la fila
       // queda para el reintento del cron. Si la invocación muere a media
       // corrida, nada se pierde: lo no sellado lo recupera el cron.
+      //
+      // Y SOLO SE SELLA LO QUE DE VERDAD TERMINÓ (auditoría 18, A3/A27):
+      // `processInbound` ya no devuelve `void`. 'sin_tiempo' (la invocación
+      // no tiene presupuesto para empezarlo), 'en_curso' (otra invocación lo
+      // tiene) y 'reintentable' (se abandonó por un fallo nuestro) NO se
+      // sellan: se anota el motivo y el cron lo reintenta. Antes cualquier
+      // retorno sin excepción sellaba `procesado_en`, incluido el 'duplicado'
+      // de un claim huérfano de una invocación muerta — el mensaje quedaba
+      // "procesado" sin haber corrido el OCR.
       await conPool(filasDurables, MAX_EN_PARALELO, async (f) => {
         try {
           const claim = await reclamarPendiente(f.id, 0);
           if (!claim) return; // el cron (u otra entrega) ya lo tiene.
           try {
-            await processInbound(claim.evento);
-            await marcarPendienteProcesado(f.id);
+            const resultado = await processInbound(claim.evento, { inicioInvocacionMs: inicioInvocacion });
+            if (quedoPendiente(resultado)) {
+              logger.warn('wa.pendiente_pospuesto', { id: f.id, resultado });
+              await anotarFalloPendiente(f.id, `pospuesto: ${resultado}`);
+            } else {
+              await marcarPendienteProcesado(f.id);
+            }
           } catch (e) {
             await anotarFalloPendiente(f.id, e instanceof Error ? e.message : String(e));
-            logger.error('processInbound', { id: f.id, err: e instanceof Error ? e.message : String(e) });
+            // `codigo` (AUDITORÍA 18, M14): sin él este catch era UN solo issue
+            // de Sentry para todos los fallos de procesamiento de todas las
+            // flotas, para siempre — la causa nueva no notificaba.
+            logger.error('processInbound', { id: f.id, err: e instanceof Error ? e.message : String(e), codigo: codigoDeError(e) });
           }
         } catch (e) {
           // Ni el claim se pudo leer: la fila sigue pendiente y el cron la

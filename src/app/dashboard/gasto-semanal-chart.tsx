@@ -6,10 +6,14 @@ import { mxn } from '@/lib/formato';
  *  degradado, para que esta gráfica se sienta de la misma familia visual. */
 const COLOR_SERIE = ['var(--g3)', 'var(--g4)', 'var(--marca)'];
 
+// Copia VIGILADA del mapa del motor (`label()` en cuadre/engine.ts):
+// `etiquetas_sincronizadas.test.ts` barre src/ y la compara clave por clave.
+// Divergió tres veces ('Casetas'/'Facturas'/'Otros') sin que nadie lo viera
+// (auditoría 18, M1): la leyenda del Resumen decía una palabra y el PDF otra.
 const CONCEPTO_LABEL: Record<string, string> = {
-  diesel: 'Diésel', caseta: 'Casetas', viaticos: 'Viáticos',
-  factura: 'Facturas', alimentacion: 'Alimentación', hospedaje: 'Hospedaje',
-  transporte: 'Transporte', flete: 'Flete', otro: 'Otros',
+  diesel: 'Diésel', caseta: 'Caseta', viaticos: 'Viáticos',
+  factura: 'Factura', alimentacion: 'Alimentación', hospedaje: 'Hospedaje',
+  transporte: 'Transporte', flete: 'Flete', otro: 'Otro',
 };
 
 /** 4 marcas redondas de eje Y (0/25/50/75/100% de `max`) — mismo criterio

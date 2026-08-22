@@ -10,7 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { logger } from '@/lib/logger';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { DatoInvalido } from '../errores';
 import { fusionarConfig } from '../config';
 import { acotada } from '../presupuesto';
@@ -87,14 +87,9 @@ export async function guardarEstrategiaAgente(
     throw new DatoInvalido('No se pudo guardar la estrategia. Recarga la pantalla e intenta de nuevo.');
   }
 
-  const { error: errBitacora } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: tenantId,
-    actor_id: actor?.id ?? null,
-    actor_email: actor?.email ?? null,
-    accion: 'agente.estrategia',
-    entidad: 'tenant',
-    entidad_id: tenantId,
-    detalle: parcial as Record<string, unknown>,
-  });
-  if (errBitacora) logger.warn('estrategia.bitacora_no_escribio', { err: errBitacora.message });
+  await anotarBitacora(
+    { tenantId, actor: actor ?? {}, accion: 'agente.estrategia', entidad: 'tenant', entidadId: tenantId,
+      detalle: parcial as Record<string, unknown> },
+    { evento: 'estrategia.bitacora_no_escribio' },
+  );
 }

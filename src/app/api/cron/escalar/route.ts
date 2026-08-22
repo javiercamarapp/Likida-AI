@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { escalarViajesSinAceptar } from '@/lib/likida/escalar_viaje';
 import { ejecutarCobranzaGlobal } from '@/lib/likida/agentes/cobranza';
-import { estaApagado } from '@/lib/likida/interruptores';
+import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -51,6 +51,17 @@ export const maxDuration = 120;
 // entre eso y un teléfono sonando de madrugada.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Cuerpo de respuesta cuando el interruptor no se pudo leer. `codigo`
+ *  estable para que el fingerprint y el tablero lo separen de un motor caído. */
+function ilegible(interruptor: NombreInterruptor) {
+  return {
+    corrio: false,
+    error: `No se pudo leer el interruptor ${interruptor}: no se corre sin saber si está apagado.`,
+    codigo: 'interruptor_ilegible',
+    interruptor,
+  };
+}
+
 export async function GET(req: Request) {
   const secreto = process.env.CRON_SECRET;
   if (!secreto) {
@@ -73,10 +84,15 @@ export async function GET(req: Request) {
   // `saltado` en el cuerpo es lo que distingue esta corrida de una sana.
   // El interruptor es GLOBAL por agente (v1), no por tenant: este cron barre
   // todas las flotas en una corrida y la palanca corta el barrido entero.
-  // Fail-closed: si el interruptor no se puede LEER, `estaApagado` devuelve
-  // apagado con grito en el log (ver interruptores.ts) — este cron manda
-  // WhatsApp a personas reales, y "no sé si está apagado" no es permiso.
-  if (await estaApagado('global')) {
+  // Fail-closed: si el interruptor no se puede LEER no se corre — este cron
+  // manda WhatsApp a personas reales, y "no sé si está apagado" no es permiso.
+  // AUDITORÍA 18, ALTO (A17): pero ese salto NO comparte código de salida con
+  // el apagado a propósito. `ilegible` es un FALLO y contesta 500 con
+  // `codigo`, para que Vercel pinte el cron rojo: cinco crons saltándose
+  // corridas sobre una base con hipo se veían como cinco crons verdes.
+  const global = await leerInterruptor('global');
+  if (global === 'ilegible') return NextResponse.json(ilegible('global'), { status: 500 });
+  if (global === 'apagado') {
     logger.warn('cron.escalar.saltado', { interruptor: 'global' });
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
@@ -96,7 +112,13 @@ export async function GET(req: Request) {
   // preguntaba — era decorativo). Un comentario aquí decía que la escalación
   // "no es un agente del catálogo y no hay nombre honesto que darle": quedó
   // viejo en cuanto la B3 le dio bitácora con nombre propio.
-  if (await estaApagado('agente:conductores')) {
+  const conductores = await leerInterruptor('agente:conductores');
+  if (conductores === 'ilegible') {
+    // El grito y el correo ya salieron de `leerInterruptor`; aquí solo se
+    // cuenta como fallo para que la corrida NO salga en verde (A17).
+    resultado.aceptacion = ilegible('agente:conductores');
+    huboFallo = true;
+  } else if (conductores === 'apagado') {
     logger.warn('cron.conductores.saltado', { interruptor: 'agente:conductores' });
     resultado.aceptacion = { saltado: 'interruptor agente:conductores' };
   } else {
@@ -121,7 +143,11 @@ export async function GET(req: Request) {
 
   // El segundo motor ES el Agente de Cobranza, con su propia palanca por la
   // misma razón que el primero.
-  if (await estaApagado('agente:cobranza')) {
+  const cobranza = await leerInterruptor('agente:cobranza');
+  if (cobranza === 'ilegible') {
+    resultado.comprobacion = ilegible('agente:cobranza');
+    huboFallo = true;
+  } else if (cobranza === 'apagado') {
     logger.warn('cron.cobranza.saltado', { interruptor: 'agente:cobranza' });
     resultado.comprobacion = { saltado: 'interruptor agente:cobranza' };
   } else {

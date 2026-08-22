@@ -52,7 +52,7 @@ import { exigir, traerTodo, conteo } from './pg';
 // que falla ante una segunda copia. Dos redondeos distintos hacen que la misma
 // cifra fiscal se lea diferente en dos pantallas, y eso se lee como dos
 // cálculos distintos.
-import { round2, TZ_MX } from '@/lib/formato';
+import { round2, hoyMx } from '@/lib/formato';
 
 /**
  * Un centavo. Es LA MISMA tolerancia que usa la base: `factura_total_cuadra`
@@ -554,7 +554,7 @@ export function armarRenglon(e: EntradaLibro): RenglonLibro {
 export async function getLibroViaje(
   tenantId: string,
   viajeId: string,
-  hoy: string = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date()),
+  hoy: string = hoyMx(),
 ): Promise<RenglonLibro | null> {
   const admin = supabaseAdmin();
 

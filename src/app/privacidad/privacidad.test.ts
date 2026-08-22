@@ -58,3 +58,16 @@ describe('la política de Likida', () => {
     expect(P).toMatch(/No hacer nada al leer esto no cuenta/);
   });
 });
+
+describe('AUDITORÍA 18 (M8) · el correo de acceso está dicho', () => {
+  // Por el proveedor de correo pasa la dirección de una persona identificada
+  // más el enlace de un solo uso que abre su sesión. "Envío de correo para los
+  // avisos del panel" no alcanzaba a esa clase de dato.
+  it('la cláusula de encargados (art. 35) nombra el correo con el que se entra', () => {
+    expect(P).toMatch(/el correo con el que entras/);
+    expect(P).toMatch(/enlace de un solo uso que abre tu sesión/);
+  });
+  it('y el enlace de acceso aparece entre los datos tratados (art. 15 fr. II)', () => {
+    expect(P).toMatch(/enlace de acceso de un solo uso/);
+  });
+});

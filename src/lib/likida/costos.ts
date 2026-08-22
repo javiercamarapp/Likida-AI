@@ -98,9 +98,15 @@ export interface CostoLLM {
   costoUsd: number;
 }
 
-/** Deriva la fase a partir del slug del modelo (opus = escalación). */
+/**
+ * Deriva la fase a partir del slug del modelo: un cuadre que corrió en Opus es
+ * `escalacion`. SOLO desde `cuadre` (B18, auditoría 18): el freno diario del
+ * chat lee `.eq('fase','chat')`, y con `LIKIDA_MODEL_CHAT` apuntando a un
+ * Opus cada turno se archivaba como `escalacion` — el tope de $1/día por
+ * tenant dejaba de existir en silencio justo con el modelo más caro.
+ */
 export function faseDeModelo(modelo: string, base: FaseCosto): FaseCosto {
-  if (modelo.includes('opus')) return 'escalacion';
+  if (base === 'cuadre' && modelo.includes('opus')) return 'escalacion';
   return base;
 }
 

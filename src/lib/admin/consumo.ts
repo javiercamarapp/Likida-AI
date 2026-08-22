@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { round2 } from '@/lib/formato';
+import { round2, hoyMx } from '@/lib/formato';
 import { modelosAisladosDeFallback } from '@/lib/llm/openrouter';
 
 export interface ConsumoAgente {
@@ -46,8 +46,8 @@ export interface ConsumoPorAgente {
  *  afirmaría "la IA salió gratis". */
 export async function getConsumoPorAgente(ahoraMs: number): Promise<ConsumoPorAgente> {
   const hace30d = new Date(ahoraMs - 30 * 86_400_000).toISOString();
-  const hoyMx = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date(ahoraMs));
-  const inicioHoy = new Date(`${hoyMx}T00:00:00-06:00`).toISOString();
+  const diaHoy = hoyMx(new Date(ahoraMs));
+  const inicioHoy = new Date(`${diaHoy}T00:00:00-06:00`).toISOString();
 
   const [{ data: defs, error: e1 }, { data: corridas, error: e2 }] = await Promise.all([
     acotada(supabaseAdmin().from('agente_definicion')

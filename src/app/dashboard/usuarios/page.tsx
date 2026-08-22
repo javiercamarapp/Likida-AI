@@ -1,3 +1,4 @@
+import { appUrl } from '@/lib/env';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -95,7 +96,7 @@ export default async function UsuariosPage({
       // La verdad del flujo: `avisoInvitacion` (correo/avisos.ts) existe como
       // plantilla pero NADIE la emite todavía, así que prometer "le llegó una
       // invitación" sería mentira. Entra tecleando su correo en el login.
-      const liga = process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
+      const liga = appUrl();
       return {
         ok: true,
         mensaje: `${v.email} ya puede entrar con su correo (enlace mágico). No le llega invitación ` +

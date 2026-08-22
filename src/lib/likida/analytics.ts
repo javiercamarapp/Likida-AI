@@ -13,7 +13,7 @@ import { cuadrarDesdeDB } from './cuadre/desde_db';
 // copias son dos oportunidades de que una se quede atrás.
 import { traerResumenCostoIaTenant } from './costos';
 import { filasImprimibles } from './liquidacion/omitidos';
-import { round2, TZ_MX } from '@/lib/formato';
+import { round2, hoyMx } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 
 // Los dos bordes de PostgREST (error por valor, y el recorte silencioso a
@@ -102,7 +102,7 @@ export async function getSerieComparativa(
   tenantId: string,
   ventanaDias: number,
   pasos: number,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<ComparativoPeriodo[]> {
   const { data, error } = await supabaseAdmin().rpc('serie_comparativa_tenant', {
     p_tenant: tenantId,
@@ -152,7 +152,7 @@ export interface SeriesKpiCards {
  */
 export async function getSeriesKpiCards(
   tenantId: string,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<SeriesKpiCards> {
   const [semanal, mensual, historico] = await Promise.all([
     getSerieComparativa(tenantId, 7, 2, hoy),
@@ -201,10 +201,32 @@ export async function getKpis(tenantId: string, ventanaDias?: number): Promise<D
 
 export interface OperadorStat {
   operadorId: string;
+  /**
+   * La ETIQUETA que se pinta, no necesariamente el nombre de la persona.
+   *
+   * AUDITORÍA 18 (A9): "Diferencias por operador" ordenaba a los choferes de
+   * mayor a menor por liquidaciones con diferencia, con su nombre, en la
+   * pantalla del patrón — una lista de sospecha nominal. El aviso integral que
+   * el operador recibió promete, entre las finalidades no necesarias (art. 15
+   * fr. III): "estadísticas de uso, SIN IDENTIFICARTE en los reportes"
+   * (privacidad.ts), y el art. 11 vigente ya no admite finalidades
+   * "compatibles o análogas": una finalidad no escrita exige consentimiento
+   * nuevo. Por defecto, entonces, aquí viene un seudónimo estable por operador
+   * ("Operador ·A3F9C1"), y el nombre real solo se entrega si quien llama pasa
+   * `{ nominal: true }` — y eso solo puede hacerlo una pantalla que haya
+   * resuelto el aviso (finalidad enunciada + rol financiero). Hoy ninguna.
+   */
   nombre: string;
   viajes: number;
   dieselTotal: number;
   diferencias: number;
+}
+
+/** Seudónimo estable por operador: el mismo id da la misma etiqueta entre
+ *  cargas, y sin la base no se vuelve al nombre. */
+export function etiquetaOperador(operadorId: string): string {
+  const hex = operadorId.replace(/-/g, '').slice(-6).toUpperCase() || '??????';
+  return `Operador ·${hex}`;
 }
 
 // ── La página del Agente de Liquidación (v2, 13-ago-2026) ──────────────────
@@ -280,12 +302,23 @@ export async function getDineroObservadoPorTipo(tenantId: string): Promise<Diner
     .sort((a, b) => b.monto - a.monto);
 }
 
-/** Rendimiento por operador (diésel total, # de diferencias) — señal operativa. */
-export async function getStatsPorOperador(tenantId: string): Promise<OperadorStat[]> {
+/**
+ * Rendimiento por operador (diésel total, # de diferencias) — señal operativa.
+ *
+ * Ver `OperadorStat.nombre`: seudonimizado salvo `{ nominal: true }`. Y el
+ * operador que ya ejerció la oposición del art. 26 fr. II
+ * (`operador.oposicion_automatizada`, mig. 0100) —a quien el motor sí honra en
+ * el cierre— NO entra en esta lista: el conteo de sus diferencias es justo la
+ * clase de señal automatizada sobre su persona a la que se opuso.
+ */
+export async function getStatsPorOperador(
+  tenantId: string,
+  opciones: { nominal?: boolean } = {},
+): Promise<OperadorStat[]> {
   const admin = supabaseAdmin();
   const [ops, gastos, viajes, liqs] = await Promise.all([
-    traerTodo<{ id: unknown; nombre: unknown }>(
-      (desde, hasta) => admin.from('operador').select('id, nombre').eq('tenant_id', tenantId).order('id').range(desde, hasta),
+    traerTodo<{ id: unknown; nombre: unknown; oposicion_automatizada?: unknown }>(
+      (desde, hasta) => admin.from('operador').select('id, nombre, oposicion_automatizada').eq('tenant_id', tenantId).order('id').range(desde, hasta),
       'getStatsPorOperador.operador',
     ),
     traerTodo<{ viaje_id: unknown; concepto: unknown; monto: unknown }>(
@@ -324,9 +357,9 @@ export async function getStatsPorOperador(tenantId: string): Promise<OperadorSta
     if (Math.abs(Number(l.diferencia ?? 0)) < 0.01) continue;
     diferenciasPorOp.set(op, (diferenciasPorOp.get(op) ?? 0) + 1);
   }
-  return ops.map((o) => ({
+  return ops.filter((o) => o.oposicion_automatizada == null).map((o) => ({
     operadorId: o.id as string,
-    nombre: o.nombre as string,
+    nombre: opciones.nominal ? (o.nombre as string) : etiquetaOperador(o.id as string),
     viajes: viajesPorOp.get(o.id as string)?.size ?? 0,
     dieselTotal: round2(dieselPorOp.get(o.id as string) ?? 0),
     diferencias: diferenciasPorOp.get(o.id as string) ?? 0,
@@ -346,10 +379,12 @@ export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
   // Un "0 anomalías" por fallo de lectura O por recorte silencioso de
   // PostgREST se lee como "revisamos y todo está limpio", que es la
   // afirmación más cara que puede hacer este producto.
-  const data = await traerTodo<{ viaje_id: unknown; concepto: unknown; monto: unknown; folio: unknown; cfdi_uuid: unknown }>(
+  // `cfdi_orden` viaja con el UUID (A5): sin él, las N casetas de un
+  // consolidado (0065) se acusaban como un CFDI duplicado entre viajes.
+  const data = await traerTodo<{ viaje_id: unknown; concepto: unknown; monto: unknown; folio: unknown; cfdi_uuid: unknown; cfdi_orden: unknown }>(
     (desde, hasta) => supabaseAdmin()
       .from('gasto')
-      .select('viaje_id, concepto, monto, folio, cfdi_uuid')
+      .select('viaje_id, concepto, monto, folio, cfdi_uuid, cfdi_orden')
       .eq('tenant_id', tenantId)
       .order('id')
       .range(desde, hasta),
@@ -362,6 +397,7 @@ export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
       monto: Number(r.monto),
       folio: (r.folio as string) || undefined,
       cfdiUuid: (r.cfdi_uuid as string) || undefined,
+      cfdiOrden: typeof r.cfdi_orden === 'number' ? r.cfdi_orden : null,
     })),
   );
 }
@@ -377,7 +413,7 @@ export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
 export async function getLiquidacionesPorDia(
   tenantId: string,
   ventanaDias: number = 7,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<Array<{ dia: string; valor: number }>> {
   // Cota inferior GENEROSA (auditoría de escala 15k): esto traía TODO el
   // histórico de `liquidacion` para bucketear una ventana de 7/30 días — con
@@ -407,7 +443,7 @@ export async function getLiquidacionesPorDia(
   // mismo `.slice` ya se arregló en el detalle (creadoEn viaja crudo y se
   // formatea en pantalla); aquí el bucket se hace con la zona horaria real.
   const diaLocal = (iso: string): string =>
-    new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ_MX });
+    hoyMx(new Date(iso));
   const porDiaMap = new Map<string, number>();
   for (const r of rows) {
     const dia = diaLocal(r.created_at as string);
@@ -470,7 +506,7 @@ export interface GastoSemanalPorCategoria {
 export async function getGastoPorSemana(
   tenantId: string,
   semanas: number = 5,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<GastoSemanalPorCategoria> {
   const bloques = ultimasSemanas(semanas, hoy);
   const desdeGlobal = new Date(`${hoy}T00:00:00Z`);
@@ -523,7 +559,7 @@ export interface GastoSemanalSeries {
  *  selector único de la página ahora la mueve igual que a Actividad. */
 export async function getGastoPorSemanaSeries(
   tenantId: string,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<GastoSemanalSeries> {
   const [semanal, mensual, historico] = await Promise.all([
     getGastoPorSemana(tenantId, SEMANAS_POR_MODO.semanal, hoy),
@@ -546,7 +582,7 @@ export async function getGastoPorSemanaSeries(
 export async function getLiquidadoPorSemana(
   tenantId: string,
   semanas: number = 5,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<Array<{ dia: string; valor: number }>> {
   const bloques = ultimasSemanas(semanas, hoy);
   const desdeGlobal = new Date(`${hoy}T00:00:00Z`);
@@ -559,7 +595,7 @@ export async function getLiquidadoPorSemana(
     'getLiquidadoPorSemana',
   );
 
-  const diaLocalMx = (iso: string): string => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ_MX });
+  const diaLocalMx = (iso: string): string => hoyMx(new Date(iso));
   const porSemana = new Map<string, number>();
   for (const f of filas) {
     const { anio, semana } = semanaIso(diaLocalMx(f.created_at as string));
@@ -580,7 +616,7 @@ export interface LiquidadoSemanalSeries {
  *  de semanas que `getGastoPorSemanaSeries` (`SEMANAS_POR_MODO`). */
 export async function getLiquidadoPorSemanaSeries(
   tenantId: string,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<LiquidadoSemanalSeries> {
   const [semanal, mensual, historico] = await Promise.all([
     getLiquidadoPorSemana(tenantId, SEMANAS_POR_MODO.semanal, hoy),
@@ -1277,7 +1313,7 @@ export interface TopRutasSeries {
  *  "todo". */
 export async function getTopRutasPorGastoSeries(
   tenantId: string, top: number = 5,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<TopRutasSeries> {
   const ventanaDe = (semanas: number) => {
     const hastaD = new Date(`${hoy}T00:00:00Z`);

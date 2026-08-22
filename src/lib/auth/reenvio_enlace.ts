@@ -33,6 +33,7 @@
 // cuenta, Supabase lo rechaza, aquí se degrada a "no se reenvió" y la pantalla
 // no distingue el caso — el oráculo de enumeración sigue cerrado.
 // ═══════════════════════════════════════════════════════════════════════════
+import { appUrl } from '@/lib/env';
 import { cookies, headers } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/ratelimit';
@@ -95,7 +96,7 @@ export async function reenviarEnlaceCaducado(dest: string): Promise<ResultadoRee
   // cada visita al enlace muerto.
   jar.set(COOKIE_ESPERA, '1', { ...OPCIONES_COOKIE, maxAge: ESPERA_SEGUNDOS });
 
-  const base = process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
+  const base = appUrl();
   const sb = await supabaseServer();
   const { error } = await sb.auth.signInWithOtp({
     email,

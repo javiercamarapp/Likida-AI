@@ -10,7 +10,7 @@ import {
 import { crearViaje } from './operacion';
 import { violaIndice } from './pg_errores';
 import { puedeAsignar } from '@/lib/auth/permisos';
-import { TZ_MX } from '@/lib/formato';
+import { hoyMx } from '@/lib/formato';
 import type { RolOficina } from './contactos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -197,11 +197,6 @@ async function reclamarPendiente(tenantId: string, telefono: string): Promise<'r
     return 'fallo';
   }
   return (data?.length ?? 0) > 0 ? 'reclamado' : 'ya_reclamado';
-}
-
-/** El día de México — `fecha_inicio` del viaje despachado por WhatsApp. */
-function hoyMx(ahora: Date): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(ahora);
 }
 
 function resumenDePendiente(p: PendienteViaje): string {

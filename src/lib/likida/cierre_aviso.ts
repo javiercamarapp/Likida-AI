@@ -142,7 +142,8 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   cfdi_efos_indeterminado: 'panel',
   permiso_cre_no_verificable: 'panel',
   ocr_baja_confianza: 'panel',         // bandeja de revisión, no decisión de negocio
-  viatico_rfc_operador: 'panel',       // hay que confirmar que el nombre es el del operador: se ve, no se decide
+  viatico_rfc_operador: 'panel',
+  consumo_bar: 'panel',                // ¿restaurante o bar? se confirma mirando el ticket, no se decide solo       // hay que confirmar que el nombre es el del operador: se ve, no se decide
   combustible_efectivo: 'panel',       // cuenta contra el 15% del ejercicio (RFA 2026 2.9); no se pierde por viaje
   combustible_efectivo_dentro15: 'panel', // dentro del 15% y elegible: informativo, el contador vive en el panel
   efectivo_sobre_15: 'decision',        // el excedente del 15% del ejercicio NO es deducible

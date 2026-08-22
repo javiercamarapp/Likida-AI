@@ -6,13 +6,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // `route.test.ts` mockea `estaApagado` directo, así que prueba el contrato de
 // la RUTA (apagado=true ⇒ saltado) pero no la cadena completa: de los 5
 // interruptores de la fase, `conductores` era el único sin una prueba donde
-// el módulo `interruptores` REAL convierte un error de lectura en APAGADO
+// el módulo `interruptores` REAL convierte un error de lectura en ILEGIBLE
 // (las de liquidacion/peajes/proveedores/ventas ya la tienen, con esa misma
 // leyenda: "se prueba la cadena completa, no un mock del mock").
 //
 // Aquí el error entra POR VALOR desde el builder de Supabase, cruza
-// `estaApagado` sin mock, y el motor de conductores NO corre. Si alguien
-// "normaliza" el fail-closed (error = encendido), esto cae.
+// `leerInterruptor` sin mock, y el motor de conductores NO corre. Si alguien
+// "normaliza" el fail-closed (error = encendido), esto cae. Y desde la
+// AUDITORÍA 18 (A17) la corrida sale 500: ilegible no es apagado.
 // ═══════════════════════════════════════════════════════════════════════════
 
 type RespuestaInterruptor = { data: { apagado: boolean } | null; error: { message: string } | null };
@@ -74,11 +75,11 @@ describe('fail-closed con el módulo interruptores REAL (cron escalar)', () => {
     const res = await GET(peticion());
     const cuerpo = await res.json();
 
-    // 200 y no 500: para la ruta es indistinguible de un apagado a propósito
-    // (así lo decide `estaApagado`), y un cron rojo mandaría a investigar
-    // exactamente lo que el fail-closed acaba de proteger.
-    expect(res.status).toBe(200);
-    expect(cuerpo.aceptacion).toEqual({ saltado: 'interruptor agente:conductores' });
+    // AUDITORÍA 18 (A17): 500 y no 200 — "no pude leer la palanca" NO es un
+    // apagado a propósito; el motor no corre (fail-closed) pero la corrida
+    // sale ROJA con `codigo`, no verde con `saltado`.
+    expect(res.status).toBe(500);
+    expect(cuerpo.aceptacion).toMatchObject({ codigo: 'interruptor_ilegible', interruptor: 'agente:conductores' });
     expect(escalarViajesSinAceptar).not.toHaveBeenCalled();
     expect(ejecutarCobranzaGlobal).toHaveBeenCalledTimes(1);
     // El salto por fail-closed se GRITA (interruptores.ts): un cron saltándose
@@ -93,8 +94,8 @@ describe('fail-closed con el módulo interruptores REAL (cron escalar)', () => {
     const res = await GET(peticion());
     const cuerpo = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(cuerpo).toEqual({ corrio: false, saltado: 'interruptor global' });
+    expect(res.status).toBe(500);
+    expect(cuerpo).toMatchObject({ corrio: false, codigo: 'interruptor_ilegible', interruptor: 'global' });
     expect(escalarViajesSinAceptar).not.toHaveBeenCalled();
     expect(ejecutarCobranzaGlobal).not.toHaveBeenCalled();
     expect(logs.error).toHaveBeenCalledWith('interruptores.lectura_fallo',

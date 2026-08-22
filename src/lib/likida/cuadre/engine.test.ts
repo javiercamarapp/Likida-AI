@@ -92,6 +92,38 @@ describe('cuadrarViaje', () => {
     expect(r.diferencias.some((d) => d.tipo === 'duplicado')).toBe(true);
   });
 
+  // AUDITORÍA 18, CRÍTICO: la migración 0065 separó por escrito dos hechos que
+  // no son el mismo —"este gasto NACIÓ de ese CFDI" (1:1, lo que hay que
+  // impedir) y "este gasto está AMPARADO por ese CFDI" (N:1, la factura de
+  // CAPUFE)— y movió el índice único a `(tenant_id, cfdi_uuid, cfdi_orden)`.
+  // El motor nunca se enteró: deduplicaba SOLO por uuid, así que las ocho
+  // casetas de una factura consolidada entraban como una y siete "duplicados".
+  it('una factura que AMPARA N casetas (CAPUFE) suma las N — no es un duplicado', () => {
+    const uuid = 'ffffffff-1111-2222-3333-444444444444';
+    const r = cuadrarViaje({
+      viajeId: 'v-capufe', anticipo: 2000, politica,
+      gastos: Array.from({ length: 8 }, (_, i) =>
+        g({ concepto: 'caseta', monto: 250, cfdiUuid: uuid, cfdiOrden: i + 1, folio: `CAP-${i + 1}` })),
+    });
+    expect(r.totalComprobado).toBe(2000); // NO 250
+    expect(r.diferencias.some((d) => d.tipo === 'duplicado')).toBe(false);
+  });
+
+  // El otro lado de la misma moneda: el `cfdi_orden` repetido SÍ es el mismo
+  // comprobante dos veces, y la base tampoco lo admite.
+  it('mismo uuid y MISMO orden sigue siendo duplicado', () => {
+    const uuid = 'ffffffff-5555-6666-7777-888888888888';
+    const r = cuadrarViaje({
+      viajeId: 'v-dup-orden', anticipo: 500, politica,
+      gastos: [
+        g({ concepto: 'caseta', monto: 250, cfdiUuid: uuid, cfdiOrden: 2, folio: 'D1' }),
+        g({ concepto: 'caseta', monto: 250, cfdiUuid: uuid, cfdiOrden: 2, folio: 'D2' }),
+      ],
+    });
+    expect(r.totalComprobado).toBe(250);
+    expect(r.diferencias.some((d) => d.tipo === 'duplicado')).toBe(true);
+  });
+
   it('detecta RFC receptor distinto al de la empresa', () => {
     const r = cuadrarViaje({
       viajeId: 'v6', anticipo: 1000, politica, empresaRfc: 'EMP010101AA2',

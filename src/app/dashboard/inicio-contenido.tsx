@@ -16,7 +16,7 @@ import {
   type GastoFiscal, type ResumenPerdidas, type GastosFiscalesSeries,
 } from '@/lib/likida/fiscal';
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, mxn, pctCambio, TZ_MX } from '@/lib/formato';
+import { fechaMx, mxn, pctCambio, hoyMx } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
 import {
@@ -142,7 +142,12 @@ export async function InicioContenido({
   // AUDITORÍA 10, ALTO: el estado se decide con VIAJES reales filtrados a
   // `liquidado` (un arreglo que sí puede quedar vacío), no con `porDia`
   // (siempre traía 7/30 elementos y la rama 'vacio' era inalcanzable).
-  const estado = estadoPanel({ acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias });
+  const estado = estadoPanel({
+    acreditables: acred, kpis, liquidaciones: liquidacionesDeViajes(viajes), anomalias,
+    // A13: las consultas del selector y las fiscales también cuentan — una
+    // caída aquí enseña el banner de "pantalla incompleta", no un vacío.
+    secundarias: { seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries, viajesPorMes, cfgFiscal, gastosFiscales },
+  });
 
   // Las alertas accionables (F2): cada una lleva a LA pantalla donde se
   // resuelve, con el sufijo del superadmin a cuestas. Se apagaron cuando
@@ -253,7 +258,7 @@ export async function InicioContenido({
               <div className="flex items-center gap-2.5 shrink-0 pt-1">
                 {/* El DÍA DE MÉXICO, no el UTC: a las 6pm de CDMX el chip
                     decía mañana (capturado el 12-ago). */}
-                <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahoraMs())))}</ChipFecha>
+                <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(hoyMx(new Date(ahoraMs())))}</ChipFecha>
                 {/* A DESPACHO (13-ago): ahí vive la forma de crear — junto
                     con asignar, avisar y el alta de operadores. La página
                     suelta /viajes/nuevo se retiró: era la misma forma con
@@ -360,7 +365,9 @@ export async function InicioContenido({
                         // en vez de afirmar "$0.00 de ahorro" que suena a medición.
                         valor={resumenPerdidas ? resumenPerdidas.montoRecuperable : null}
                         sinDato="no se pudo leer el dato fiscal"
-                        formato="mxn" delta={null} />
+                        // Sin `delta`: esta cifra va fija al ejercicio completo,
+                        // no hay "periodo anterior" contra el que compararla (A12).
+                        formato="mxn" />
                     </div>
                   ) : (
                     <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el comparativo de KPIs.</p>
@@ -388,7 +395,7 @@ export async function InicioContenido({
                   {acred && (
                     <div className="flex-1 min-w-[200px]">
                       <StatCard icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
-                        etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" delta={null} />
+                        etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" />
                     </div>
                   )}
                 </div>

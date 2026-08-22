@@ -3,7 +3,8 @@ import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { getFacturacionClientes, hoyMx, type FacturacionClientes } from '@/lib/likida/facturacion_clientes';
+import { getFacturacionClientes, type FacturacionClientes } from '@/lib/likida/facturacion_clientes';
+import { hoyMx } from '@/lib/formato';
 import {
   validarFactura, crearFactura, validarPago, registrarPago, marcarEmitida, cancelarFactura,
 } from '@/lib/likida/facturacion_escritura';

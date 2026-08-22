@@ -13,7 +13,12 @@ const processInbound = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {})
 vi.mock('@/lib/likida/processor', () => ({ processInbound: (...a: unknown[]) => processInbound(...a) }));
 
 const estaApagado = vi.fn(async () => false);
-vi.mock('@/lib/likida/interruptores', () => ({ estaApagado }));
+/** AUDITORÍA 18 (A17): el cron lee `leerInterruptor`, que distingue apagado
+ *  de ILEGIBLE. `estaApagado` sigue siendo la palanca de las pruebas viejas. */
+let ilegible = false;
+vi.mock('@/lib/likida/interruptores', () => ({
+  leerInterruptor: async () => (ilegible ? 'ilegible' : (await estaApagado()) ? 'apagado' : 'encendido'),
+}));
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
@@ -48,6 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   urgentesVencidas.mockResolvedValue(0);
   estaApagado.mockResolvedValue(false);
+  ilegible = false;
   pendientesPorDrenar.mockResolvedValue([]);
   cartasMuertas.mockResolvedValue(0);
   processInbound.mockImplementation(async () => {});
@@ -69,6 +75,16 @@ describe('la puerta y la pausa', () => {
     expect(await r.json()).toMatchObject({ saltado: 'interruptor global' });
     expect(pendientesPorDrenar).not.toHaveBeenCalled();
   });
+
+  it('ILEGIBLE: la bandeja tampoco se drena, pero la corrida sale 500 con `codigo` (A17)', async () => {
+    // Cada 5 minutos en 200 `saltado` con un `logger.info` que ni llega a
+    // Sentry era la receta para una bandeja sin drenar y un panel en verde.
+    ilegible = true;
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(500);
+    expect(await r.json()).toMatchObject({ corrio: false, codigo: 'interruptor_ilegible', interruptor: 'global' });
+    expect(pendientesPorDrenar).not.toHaveBeenCalled();
+  });
 });
 
 describe('el drenado', () => {
@@ -88,6 +104,35 @@ describe('el drenado', () => {
     expect(r.status).toBe(500);
     expect(marcarPendienteProcesado).not.toHaveBeenCalled();
     expect(anotarFalloPendiente).toHaveBeenCalledWith('wamid.mal', 'OCR reventó');
+  });
+
+  // AUDITORÍA 18 (A3/A27): el cron sellaba ante CUALQUIER retorno sin
+  // excepción — incluido el 'duplicado' de un claim huérfano y los abandonos.
+  it('"duplicado" (ya completado antes) SÍ se sella: el trabajo está hecho', async () => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.dup', intentos: 1 }]);
+    processInbound.mockResolvedValue('duplicado' as never);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(marcarPendienteProcesado).toHaveBeenCalledWith('wamid.dup');
+  });
+
+  it.each(['reintentable', 'sin_tiempo', 'en_curso'])('"%s" NO se sella: queda pendiente con su motivo, y el cron sigue en 200', async (resultado) => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.pos', intentos: 1 }]);
+    processInbound.mockResolvedValue(resultado as never);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(marcarPendienteProcesado).not.toHaveBeenCalled();
+    expect(anotarFalloPendiente).toHaveBeenCalledWith('wamid.pos', `pospuesto: ${resultado}`);
+    expect(await r.json()).toMatchObject({ procesados: 0, fallidos: 0, pospuestos: 1 });
+  });
+
+  it('le pasa al motor el inicio de ESTA invocación, para que los 10 del lote compartan reloj (C4)', async () => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.1', intentos: 0 }]);
+    const antes = Date.now();
+    await GET(peticion('Bearer secreto-de-prueba'));
+    const opts = processInbound.mock.calls[0][1] as { inicioInvocacionMs: number };
+    expect(opts.inicioInvocacionMs).toBeGreaterThanOrEqual(antes);
+    expect(opts.inicioInvocacionMs).toBeLessThanOrEqual(Date.now());
   });
 
   it('el claim perdido (otra corrida lo tomó) no procesa ni cuenta como fallo', async () => {

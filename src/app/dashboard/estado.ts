@@ -18,6 +18,21 @@ export interface SeccionesPanel {
   kpis: { viajesLiquidados: number } | null;
   liquidaciones: unknown[] | null;
   anomalias: unknown[] | null;
+  /** AUDITORÍA 18, ALTO (A13): las consultas que el Resumen agregó después de
+   *  que esta lista se escribió (las `*Series` del selector Semanal/Mensual/
+   *  Histórico del 8-ago, la config y los gastos fiscales). Sin vigilarlas, una
+   *  caída de `gasto` se pintaba "Aún no hay gastos capturados" y el banner de
+   *  "pantalla incompleta" no salía. Opcional para no romper a los llamadores
+   *  que solo tienen las cuatro de arriba; cada `null` cuenta como caída. */
+  secundarias?: Partial<{
+    seriesKpis: unknown | null;
+    gastoSemanalSeries: unknown | null;
+    liquidadoSemanalSeries: unknown | null;
+    topRutasSeries: unknown | null;
+    viajesPorMes: unknown | null;
+    cfgFiscal: unknown | null;
+    gastosFiscales: unknown | null;
+  }>;
 }
 
 export type EstadoPanel =
@@ -27,9 +42,12 @@ export type EstadoPanel =
   | 'datos';
 
 export function estadoPanel(s: SeccionesPanel): EstadoPanel {
-  const secciones = [s.acreditables, s.kpis, s.liquidaciones, s.anomalias];
-  const caidas = secciones.filter((x) => x === null).length;
-  if (caidas === secciones.length) return 'error';
+  const principales = [s.acreditables, s.kpis, s.liquidaciones, s.anomalias];
+  const secundarias = Object.values(s.secundarias ?? {});
+  const caidas = [...principales, ...secundarias].filter((x) => x === null).length;
+  // 'error' sigue midiéndose contra las CUATRO principales: sin ellas no hay
+  // nada honesto que enseñar, aunque alguna serie secundaria haya cargado.
+  if (principales.every((x) => x === null)) return 'error';
   // Un fallo PARCIAL es peor que uno total si se calla: los KPIs dicen "12
   // viajes · $340,000 comprobados" y la tabla de abajo sale con encabezados y
   // cero filas. Dos cifras que se contradicen en la misma pantalla.

@@ -208,6 +208,9 @@ export async function ejecutarCopiloto(opts: {
       temperature: 0.2,
       signal: controller.signal,
       onTool: opts.onPaso,
+      // A30/B17 (auditoría 18), mismo criterio que el analista.
+      terminalTools: ['entregar_respuesta_admin'],
+      readOnlyTools: TOOLS_COPILOTO_LECTURA,
     });
 
     const respaldo = new Set<number>();
@@ -238,6 +241,8 @@ export async function ejecutarCopiloto(opts: {
         temperature: 0,
         signal: controller.signal,
         onTool: opts.onPaso,
+        terminalTools: ['entregar_respuesta_admin'],
+        readOnlyTools: TOOLS_COPILOTO_LECTURA,
       });
       for (const t of res2.toolCalls) extraerNumeros(t.result, respaldo);
       res.toolCalls.push(...res2.toolCalls);

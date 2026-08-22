@@ -87,6 +87,33 @@ describe('diagnóstico de migraciones', () => {
     expect(llamadaLock![1].p_viaje).toBe('viaje-real-1');
   });
 
+  // AUDITORÍA 18, ALTO (lo levantaron agéntico y operabilidad por separado): el
+  // sondeo llamaba `unlock_viaje` INCONDICIONALMENTE, sin mirar si
+  // `try_lock_viaje` había devuelto true. Y `unlock_viaje` (0005:48) es un
+  // `delete ... where viaje_id = p_viaje` sin noción de dueño.
+  //
+  // Entra: un arranque en frío mientras otro proceso tiene tomado el lease del
+  // viaje que `select id from viaje limit 1` devuelve.
+  // Salía: el probe le borra el lease a ese proceso. El mutex que existe para
+  // impedir la doble liquidación queda abierto a media liquidación, sin un solo
+  // log. El TTL de 1 ms del propio probe ya lo hacía innecesario.
+  it('si el lease es de OTRO proceso, el sondeo NO lo libera', async () => {
+    rpc.mockImplementation((fn: string) =>
+      Promise.resolve(fn === 'try_lock_viaje' ? { data: false, error: null } : { data: null, error: null }));
+    await verificarMigracionesCriticas();
+
+    expect(rpc.mock.calls.some((c) => c[0] === 'try_lock_viaje')).toBe(true);
+    expect(rpc.mock.calls.some((c) => c[0] === 'unlock_viaje')).toBe(false);
+  });
+
+  it('si el lease lo tomó el sondeo, sí lo libera', async () => {
+    rpc.mockImplementation((fn: string) =>
+      Promise.resolve(fn === 'try_lock_viaje' ? { data: true, error: null } : { data: null, error: null }));
+    await verificarMigracionesCriticas();
+
+    expect(rpc.mock.calls.some((c) => c[0] === 'unlock_viaje')).toBe(true);
+  });
+
   // La red se puede caer en cualquiera de los cuatro probes, no solo en el primero.
   it('el mismo criterio aplica al probe de la barrera de intake', async () => {
     rpc.mockResolvedValueOnce({ error: null })                                        // 0005 ok
@@ -148,8 +175,9 @@ describe('la sobrecarga ambigua de guardar_liquidacion_tx', () => {
 // cuenta doble en el comprobado y su IVA se acredita por duplicado.
 describe('el arranque dice TODO lo que falta, no lo primero', () => {
   it('con dos migraciones ausentes, reporta las dos', async () => {
+    // Sin slot para `unlock`: desde la auditoría 18 el sondeo solo libera el
+    // lease si `try_lock_viaje` devolvió `true`, y aquí devuelve error.
     rpc.mockResolvedValueOnce({ error: { code: 'PGRST202', message: 'no try_lock_viaje' } })  // 0005
-       .mockResolvedValueOnce({ error: null })                                                // unlock
        .mockResolvedValueOnce({ error: { code: 'PGRST202', message: 'no intake_delta' } })     // 0011
        .mockResolvedValue({ error: null });
     await verificarMigracionesCriticas();

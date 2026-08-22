@@ -42,3 +42,28 @@ describe('Estímulo de peaje exige pago electrónico', () => {
     expect(peajeDe(caseta('03'))).toBe(500); // 1000 * 0.5
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18, A7 — "electrónico" es la lista cerrada de la RMF 2026 9.1.8
+// fr. III ("tarjeta de identificación automática vehicular o cualquier otro
+// sistema electrónico de pago con que cuente la autopista"), no "todo lo que no
+// sea efectivo". La puerta anterior (`!== '01' && !== '99'`) dejaba pasar el
+// cheque, la dación en pago, la compensación y la novación.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A7: solo los medios electrónicos de la RMF 9.1.8 fr. III acreditan peaje', () => {
+  it.each([
+    ['02', 'cheque nominativo: no es un sistema electrónico de la autopista'],
+    ['12', 'dación en pago'],
+    ['17', 'compensación'],
+    ['23', 'novación'],
+    ['08', 'vales de despensa'],
+  ])('forma de pago %s (%s) → 0', (forma) => {
+    expect(peajeDe(caseta(forma))).toBe(0);
+  });
+
+  it.each([['04', 'tarjeta de crédito'], ['05', 'monedero electrónico'], ['06', 'dinero electrónico'], ['28', 'tarjeta de débito'], ['29', 'tarjeta de servicios']])(
+    'forma de pago %s (%s) → 50% del SubTotal', (forma) => {
+      expect(peajeDe(caseta(forma))).toBe(500);
+    },
+  );
+});

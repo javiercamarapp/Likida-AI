@@ -30,7 +30,15 @@ export async function register() {
   // dominio bien escrito de uno sin registrar, y hasta la auditoría 6 la función
   // que lo comprueba no la llamaba nadie más que sus pruebas. Va al final porque
   // hace una petición de red: no puede retrasar el diagnóstico de lo demás.
-  await verificarAvisoDePrivacidad();
+  //
+  // Y NO SE ESPERA (auditoría 18, B11): `register()` tiene que terminar antes
+  // de que el servidor atienda la primera petición, y esto son hasta 10s de
+  // red hacia un tercero (HEAD + GET con 5s cada uno) que no tiene nada que
+  // ver con liquidar. Una instancia fría del webhook pagaba ese sondeo ANTES
+  // del primer 200 a Meta. Se dispara y se deja correr: el diagnóstico sale
+  // por el log igual, solo que ya no bloquea el arranque. Nunca lanza, pero
+  // el catch está para que un rechazo tampoco sea un unhandledRejection.
+  void verificarAvisoDePrivacidad().catch(() => { /* ya se reportó dentro */ });
 }
 
 type PeticionConError = { path?: string; method?: string; headers?: Record<string, string> } | undefined;

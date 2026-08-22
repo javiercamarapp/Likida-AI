@@ -38,6 +38,11 @@ export interface Gasto {
   rfcEmisor?: string;
   rfcReceptor?: string;    // debe ser el RFC de la empresa (no el chofer)
   cfdiUuid?: string;
+  // Qué renglón de ESE CFDI ampara este gasto (migración 0065). 1 = el gasto
+  // nació del comprobante, o es el primero; >1 solo lo escribe el reparto de
+  // una factura que ampara varios cargos (la consolidada de CAPUFE). Sin él,
+  // el dedup por uuid confunde "amparado por" (N:1) con "copia" (1:1).
+  cfdiOrden?: number;
   imagenUrl?: string;
   imgHash?: string;        // SHA-256 del contenido de la foto (dedup de reenvíos)
   ocrConfianza?: number;   // 0–1
@@ -95,6 +100,7 @@ export type TipoDiferencia =
   | 'combustible_efectivo_dentro15' // efectivo DENTRO del 15% del ejercicio y flota elegible → deducible, con el contador a la vista
   | 'efectivo_sobre_15'      // efectivo que EXCEDE el 15% del ejercicio → el excedente no deducible
   | 'efectivo_no_elegible'   // flota declaró que NO califica (dedicación o régimen) → el efectivo no se deduce (LISR 27-III)
+  | 'consumo_bar'           // la razón social o el producto del ticket de alimentación parece un BAR → LISR 28-XX lo hace 0% deducible — a confirmar, no se afirma
   | 'oposicion_titular';     // el operador ejerció su oposición a la decisión automatizada (LFPDPPP 26-II) → una persona DEBE cerrar esta liquidación
 
 /** Una diferencia detectada por el Módulo 2 (Cuadre). */
