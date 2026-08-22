@@ -21,6 +21,14 @@ const GUARDADOS = [
   'src/lib/likida/interruptores.ts',
   'src/lib/likida/contactos.ts',
   'src/lib/likida/consulta_chofer.ts',
+  // ESCALA 50k (22-ago-2026, regla 5 de docs/escala-50k/REGLAS-ESCALA.md):
+  // lo que queda en JS de la consola de superadmin también lleva techo. Un
+  // `Promise.all` de dieciséis lecturas sin techo colgado en una es toda la
+  // página en blanco. OJO: `Array.from(` cuenta como `.from(` para esta
+  // regex — en estos archivos se usa `[...x].map` a propósito.
+  'src/lib/admin/negocio.ts',
+  'src/lib/admin/capacidad.ts',
+  'src/lib/admin/corridas-cruzadas.ts',
 ];
 
 describe('toda consulta de los módulos del camino caliente lleva techo', () => {
