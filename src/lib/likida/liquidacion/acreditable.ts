@@ -57,22 +57,35 @@ export const BASE_ESTIMULO_PEAJE =
   'total con IVA como base.';
 
 /**
- * Las cuatro condiciones de elegibilidad del estímulo de peaje, transcritas de
- * `estimulo_peaje.condiciones` en `normas/lif-2026-20-A.yaml`
- * (`verificado_fuente_primaria`).
+ * Las condiciones del estímulo de peaje que el papel tiene que nombrar.
  *
- * El motor no conoce NINGUNA: no sabe los ingresos de la flota, ni si es parte
- * relacionada, ni si la caseta pertenece a la Red Nacional de Autopistas de
- * Cuota — dispara con `concepto === 'caseta'` a secas (hallazgos H5 y H6 de la
- * ficha). Imprimir la cifra en verde y en negritas sin decirlo le entrega el
- * estímulo, con el artículo citado al lado, a una flota con ingresos ≥ $300M o
- * que sea parte relacionada. Y el criterio 1/LIF/PI del Anexo 3 alcanza a
- * "quien preste servicios": esa práctica sería de Likida, no del cliente.
+ * Las CUATRO de fondo vienen de `estimulo_peaje.condiciones` en
+ * `normas/lif-2026-20-A.yaml` (`verificado_fuente_primaria`). El motor no
+ * conoce NINGUNA: no sabe los ingresos de la flota, ni si es parte relacionada,
+ * ni si la caseta pertenece a la Red Nacional de Autopistas de Cuota — dispara
+ * con `concepto === 'caseta'` a secas (hallazgos H5 y H6 de la ficha). Imprimir
+ * la cifra en verde y en negritas sin decirlo le entrega el estímulo, con el
+ * artículo citado al lado, a una flota con ingresos ≥ $300M o que sea parte
+ * relacionada. Y el criterio 1/LIF/PI del Anexo 3 alcanza a "quien preste
+ * servicios": esa práctica sería de Likida, no del cliente.
+ *
+ * AUDITORÍA 18, A7: la frase decía "El estímulo exige las cuatro" y era
+ * exhaustiva — omitía las TRES de forma de `normas/rmf-2026-9.1.8.yaml`
+ * (`verificado_fuente_primaria`): el aviso de marzo con inventario de
+ * vehículos (fr. I), la bitácora de viaje conciliada con el estado de cuenta
+ * del TAG (fr. II) y el pago electrónico de cada caseta (fr. III). El contralor
+ * que verificaba las cuatro concluía que el estímulo procedía. De las tres, el
+ * motor solo cierra la del pago: las casetas en efectivo ya no entran a la
+ * cifra (`MEDIOS_ELECTRONICOS_PEAJE`); las otras dos corren por cuenta de la
+ * flota y el papel lo dice.
  */
 export const CONDICIONES_ESTIMULO_PEAJE =
-  'Likida NO verifica la elegibilidad. El estímulo exige las cuatro: dedicarse EXCLUSIVAMENTE al transporte terrestre ' +
-  'de carga, pasaje o turismo; que las casetas sean de la Red Nacional de Autopistas de Cuota; ingresos anuales ' +
-  'menores a $300 millones; y no ser parte relacionada (LISR art. 179). Confírmelas con su contador.';
+  'Likida NO verifica la elegibilidad. El estímulo exige las cuatro condiciones de la LIF: dedicarse EXCLUSIVAMENTE al ' +
+  'transporte terrestre de carga, pasaje o turismo; que las casetas sean de la Red Nacional de Autopistas de Cuota; ' +
+  'ingresos anuales menores a $300 millones; y no ser parte relacionada (LISR art. 179). Y los tres requisitos de la ' +
+  'RMF 2026 regla 9.1.8: presentar en marzo el aviso con el inventario de vehículos (fr. I), llevar la bitácora de ' +
+  'viaje conciliada con el estado de cuenta del TAG (fr. II) y pagar cada caseta por medio electrónico (fr. III). ' +
+  'La cifra de arriba solo incluye casetas cuyo CFDI declara pago electrónico; lo demás, confírmelo con su contador.';
 
 /** El estímulo del art. 20 ap. A es ingreso acumulable: el neto es menor. */
 export const NOTA_INGRESO_ACUMULABLE =

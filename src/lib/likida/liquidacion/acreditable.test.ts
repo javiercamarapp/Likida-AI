@@ -72,6 +72,20 @@ describe('filasAcreditables — el peaje deja de afirmarse solo', () => {
     expect(CONDICIONES_ESTIMULO_PEAJE).toContain('Likida NO verifica');
   });
 
+  it('A7: el pie también nombra los tres requisitos de forma de la RMF 2026 9.1.8', () => {
+    // "El estímulo exige las cuatro" era exhaustivo y omitía la regla que lo
+    // instrumenta: el contralor que verificaba las cuatro daba por procedente
+    // un estímulo que la fr. III mata en cada caseta pagada en ventanilla.
+    expect(CONDICIONES_ESTIMULO_PEAJE).toContain('9.1.8');
+    for (const requisito of ['aviso', 'bitácora', 'medio electrónico']) {
+      expect(CONDICIONES_ESTIMULO_PEAJE).toContain(requisito);
+    }
+    // Y dice cuál de las tres SÍ cerró el motor, para que la cifra no se lea
+    // como si incluyera casetas en efectivo.
+    expect(CONDICIONES_ESTIMULO_PEAJE).toContain('solo incluye casetas cuyo CFDI declara pago electrónico');
+    expect(CONDICIONES_ESTIMULO_PEAJE).not.toMatch(/exige las cuatro\./);
+  });
+
   it('el peaje NO se pinta como cifra sostenida entera', () => {
     const r = filasAcreditables(liq({ peajeAcreditable: 500 }))!;
     const peaje = r.filas.find((f) => f.label.includes('peaje'))!;

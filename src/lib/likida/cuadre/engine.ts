@@ -113,6 +113,24 @@ export type Cubeta = 'deducible' | 'no_deducible' | 'por_confirmar';
 export const MEDIOS_LISR_27_III = ['02', '03', '04', '05', '28', '29'] as const;
 /** '99 Por definir' = la contraprestación no se ha pagado (RMF 2.7.1.29 fr. II). */
 export const FORMA_PAGO_SIN_PAGAR = '99';
+/**
+ * Medios que cuentan como "sistema electrónico de pago" para el estímulo de
+ * PEAJE. `normas/rmf-2026-9.1.8.yaml` fr. III (verificado_fuente_primaria):
+ * "Efectuar los pagos de autopistas mediante la tarjeta de identificación
+ * automática vehicular o de cualquier otro sistema electrónico de pago con que
+ * cuente la autopista". Es una condición de FORMA sobre cada pago, no una
+ * declaración de la flota, y el motor la puede cerrar solo porque `formaPago`
+ * ya viene en la fila.
+ *
+ * AUDITORÍA 18, A7: la puerta era `!== '01' && !== '99'`, o sea "cualquier
+ * cosa que no sea efectivo ni no-pagado". Por ahí entraban el cheque (02), la
+ * dación en pago (12), la compensación (17) o la novación (23), que no son un
+ * sistema electrónico de la autopista. Lista CERRADA: transferencia (03),
+ * tarjeta de crédito (04), monedero electrónico (05), dinero electrónico (06),
+ * tarjeta de débito (28) y de servicios (29). El TAG (IAVE/PASE/TeleVía) se
+ * liquida con alguno de éstos y su CFDI lo declara así.
+ */
+export const MEDIOS_ELECTRONICOS_PEAJE = ['03', '04', '05', '06', '28', '29'] as const;
 
 const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
 const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente'];
@@ -1036,7 +1054,9 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // electrónico. AUDITORÍA 2 (fiscal): sin forma de pago o con '99' (Por
     // definir = no pagado) no se afirma el estímulo — es el tercer estado, "no se
     // pudo verificar" nunca es "sí". Mismo criterio que diésel e IVA.
-    const peajePagadoElectronicamente = !!g.formaPago && g.formaPago !== '01' && g.formaPago !== FORMA_PAGO_SIN_PAGAR;
+    // AUDITORÍA 18, A7: y "electrónico" es la lista cerrada de la RMF 9.1.8
+    // fr. III (`MEDIOS_ELECTRONICOS_PEAJE`), no "todo lo que no sea efectivo".
+    const peajePagadoElectronicamente = !!g.formaPago && (MEDIOS_ELECTRONICOS_PEAJE as readonly string[]).includes(g.formaPago);
     if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0 && peajePagadoElectronicamente) peajeAcreditable += (g.subTotal as number) * peajeFactor;
     // IEPS de DIÉSEL (7): el estímulo (LIF 2026 art. 20, ap. A) es SOLO diésel — NO
     // gasolina. Se identifica por la clave de producto del SAT (15101505).
