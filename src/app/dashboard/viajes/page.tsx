@@ -4,7 +4,8 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
-import { getViajesRegistro, getLiquidacionesDeViajes, contarViajes, contarEscalados } from '@/lib/likida/analytics';
+import { getLiquidacionesDeViajes } from '@/lib/likida/analytics';
+import { getViajesRegistro, getConteosViajes, TOPE_PAGINA } from '@/lib/likida/viajes_registro';
 import { interpretarFilasViajes, importarViajes } from '@/lib/likida/importar_viajes';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../sufijo';
@@ -18,8 +19,9 @@ export const dynamic = 'force-dynamic';
 
 const FILTROS: FiltroViajes[] = ['todos', 'abiertos', 'en_cuadre', 'liquidados', 'escalados'];
 
-/** Filas por página del registro: el tope de render que pidió el rediseño. */
-const POR_PAGINA = 100;
+/** Filas por página del registro: el tope de render que pidió el rediseño,
+ *  y el mismo que la RPC impone del lado de la base (0154). */
+const POR_PAGINA = TOPE_PAGINA;
 
 /**
  * Registro de Viajes (F2 del plan) — la fuente de verdad NAVEGABLE, no una
@@ -33,7 +35,7 @@ const POR_PAGINA = 100;
 export default async function PaginaViajes({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; f?: string; q?: string; p?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; f?: string; q?: string; c?: string; p?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/viajes', sp);
@@ -43,16 +45,19 @@ export default async function PaginaViajes({
 
   const filtro: FiltroViajes = (FILTROS as string[]).includes(sp.f ?? '') ? (sp.f as FiltroViajes) : 'todos';
   const q = (sp.q ?? '').trim().slice(0, 80);
-  const pagina = Math.max(1, Math.min(1000, Number.parseInt(sp.p ?? '1', 10) || 1));
+  // ESCALA 50k (22-ago-2026): la página se navega por CURSOR (`?c=`), no por
+  // número (`?p=`). El `?p=N` viejo —links guardados, marcadores— cae a la
+  // primera página: no hay OFFSET al que mapearlo, y a 600k viajes ese
+  // OFFSET era justo lo que se quitó. Un cursor corrupto también cae a la
+  // primera (decodificarCursor nunca lanza).
+  const cursor = (sp.c ?? '').trim().slice(0, 200) || null;
 
-  // Primarios sin catch (fail closed); los conteos degradan a null solos.
-  const [{ filas: viajes, hayMas }, total, abiertos, enCuadre, liquidados, escalados] = await Promise.all([
-    getViajesRegistro(tenantId, { q, pagina, porPagina: POR_PAGINA, filtro }),
-    contarViajes(tenantId),
-    contarViajes(tenantId, ['abierto']),
-    contarViajes(tenantId, ['en_cuadre']),
-    contarViajes(tenantId, ['liquidado']),
-    contarEscalados(tenantId),
+  // Primarios sin catch (fail closed); los conteos degradan a null solos —
+  // los cinco salen de UNA lectura (`conteos_viajes_tenant`, 0154), no de
+  // cinco `count exact` sobre la tabla entera.
+  const [{ filas: viajes, hayMas, siguiente }, conteos] = await Promise.all([
+    getViajesRegistro(tenantId, { q, cursor, porPagina: POR_PAGINA, filtro }),
+    getConteosViajes(tenantId),
   ]);
 
   // `/dashboard/[id]` abre por id de LIQUIDACIÓN — se cruza por `viaje_id`
@@ -125,13 +130,14 @@ export default async function PaginaViajes({
     <VistaViajes
       filas={filas}
       filtro={filtro}
-      conteos={{ total, abiertos, enCuadre, liquidados, escalados }}
+      conteos={conteos ?? { total: null, abiertos: null, enCuadre: null, liquidados: null, escalados: null }}
       sufijo={sufijo}
       importar={importar}
       puedeImportar={puedeAsignar(rol)}
       verDinero={verDinero}
       q={q}
-      pagina={pagina}
+      cursor={cursor}
+      siguiente={siguiente}
       hayMas={hayMas}
       porPagina={POR_PAGINA}
     />
