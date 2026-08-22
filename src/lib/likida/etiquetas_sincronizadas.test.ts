@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS MISMOS CONCEPTOS, ESCRITOS EN TRES SITIOS, YA SE DESINCRONIZARON DOS VECES.
@@ -28,6 +29,64 @@ function etiquetas(ruta: string, ancla: string): Record<string, string> {
   for (const m of bloque.matchAll(/(\w+):\s*'([^']*)'/g)) out[m[1]] = m[2];
   return out;
 }
+
+// ── EL BARRIDO (auditoría 18, M1 — reincidencia) ───────────────────────────
+//
+// Este test anclaba por RUTAS LITERALES, así que un archivo nuevo entraba al
+// repo por fuera de su radar: `gasto-semanal-chart.tsx` nació el 16-ago con un
+// `CONCEPTO_LABEL` propio —el nombre que este test prohíbe en el PDF— y ya
+// divergía en tres valores contra el motor con la suite en verde. El mecanismo
+// que sí escala es el de formato.ts: buscar el PATRÓN en TODO `src/`. Cada
+// mapa de conceptos que aparezca se compara contra el motor; el que no quiera
+// compararse no puede existir.
+const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
+const PATRON_MAPA = /const (CONCEPTO(?:_LABEL)?)\s*(?::\s*Record<string,\s*string>)?\s*=\s*\{/;
+
+function fuentes(dir: string, acc: string[] = []): string[] {
+  for (const e of readdirSync(dir)) {
+    const p = join(dir, e);
+    if (statSync(p).isDirectory()) fuentes(p, acc);
+    else if (/\.(ts|tsx)$/.test(e) && !/\.test\.tsx?$/.test(e)) acc.push(p);
+  }
+  return acc;
+}
+
+/** Todos los mapas de etiquetas de concepto del árbol, con su ruta. */
+function mapasDeConcepto(): Array<{ ruta: string; mapa: Record<string, string> }> {
+  const out: Array<{ ruta: string; mapa: Record<string, string> }> = [];
+  for (const f of fuentes(RAIZ_SRC)) {
+    const src = readFileSync(f, 'utf8');
+    const m = PATRON_MAPA.exec(src);
+    if (!m) continue;
+    const bloque = src.slice(m.index, src.indexOf('}', m.index));
+    const mapa: Record<string, string> = {};
+    for (const k of bloque.matchAll(/(\w+):\s*'([^']*)'/g)) mapa[k[1]] = k[2];
+    out.push({ ruta: relative(RAIZ_SRC, f), mapa });
+  }
+  return out;
+}
+
+describe('etiquetas de concepto — TODAS las copias del árbol dicen lo mismo que el motor', () => {
+  const motor = etiquetas('./cuadre/engine.ts', 'const m: Record<string, string> = {');
+  const copias = mapasDeConcepto();
+
+  it('el barrido encuentra las copias conocidas (si esto falla, el patrón se quedó ciego)', () => {
+    const rutas = copias.map((c) => c.ruta);
+    expect(rutas).toContain('app/dashboard/[id]/page.tsx');
+    expect(rutas).toContain('app/dashboard/gasto-semanal-chart.tsx');
+  });
+
+  it('cada copia cubre los mismos conceptos que el motor, con la MISMA etiqueta', () => {
+    expect(copias.length).toBeGreaterThan(0);
+    for (const { ruta, mapa } of copias) {
+      expect(Object.keys(mapa).sort(), `${ruta} no cubre los mismos conceptos que el motor`).toEqual(Object.keys(motor).sort());
+      for (const k of Object.keys(motor)) {
+        // Aquí se cazó 'Casetas'/'Facturas'/'Otros' en la gráfica del Resumen.
+        expect(mapa[k], `"${k}" difiere entre el motor y ${ruta}`).toBe(motor[k]);
+      }
+    }
+  });
+});
 
 describe('etiquetas de concepto — las tres fuentes dicen lo mismo', () => {
   // El PDF ya NO tiene mapa propio: importa `etiquetaConcepto` del motor. Una
