@@ -1,3 +1,4 @@
+import { appUrl } from '@/lib/env';
 import type { Correo } from './plantilla';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -25,7 +26,7 @@ import type { Correo } from './plantilla';
 // humano decide).
 // ═══════════════════════════════════════════════════════════════════════════
 
-const APP = process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
+const APP = appUrl();
 
 /** El pie de "por qué te llegó", parametrizado por flota. Todos lo usan. */
 function porQue(flota: string | null, que: string): string {

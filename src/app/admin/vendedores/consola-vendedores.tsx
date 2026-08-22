@@ -1,3 +1,4 @@
+import { appUrl } from '@/lib/env';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import {
@@ -155,7 +156,7 @@ export async function ConsolaVendedores({
       revalidatePath(RUTA);
       // La verdad del flujo, igual que en /dashboard/usuarios: no se emite
       // correo de invitación todavía — prometer "le llegó" sería mentira.
-      const liga = process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
+      const liga = appUrl();
       return {
         ok: true,
         mensaje: `${email} ya puede entrar con su correo (enlace mágico) y aterriza en /vendedor. ` +

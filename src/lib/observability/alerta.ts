@@ -26,6 +26,7 @@
 //      arranque lo grita aparte (`SILENCIOSAS` en arranque.ts).
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { appUrl } from '@/lib/env';
 import { logger, redactarTexto } from '@/lib/logger';
 import { enviarCorreo, correoConfigurado } from '@/lib/correo/enviar';
 import { fechaHoraMx } from '@/lib/formato';
@@ -46,7 +47,7 @@ const ultimaAlerta = new Map<string, number>();
 /** Para decir "sin configurar" UNA vez por instancia, no en cada corrida. */
 let avisadoSinConfigurar = false;
 
-const APP = process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
+const APP = appUrl();
 
 /**
  * Manda UN correo a `ALERTA_EMAIL` diciendo que `evento` falló, con el
