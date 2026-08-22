@@ -1,3 +1,4 @@
+import { TZ_MX } from '@/lib/formato';
 import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -1035,7 +1036,7 @@ export class SesionNavegador {
         viewport: op.viewport ?? { width: 1366, height: 1400 },
         userAgent: op.userAgent,
         locale: 'es-MX',
-        timezoneId: 'America/Mexico_City',
+        timezoneId: TZ_MX,
         // Un portal de facturación no necesita nada de esto y cada permiso es
         // una razón más para que el navegador pida algo y se quede esperando.
         permissions: [],

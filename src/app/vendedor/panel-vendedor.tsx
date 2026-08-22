@@ -9,7 +9,7 @@ import {
 } from '@/lib/likida/vendedores';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, TZ_MX } from '@/lib/formato';
+import { fechaMx, hoyMx } from '@/lib/formato';
 import { StatCard, EstadoVacio } from '../admin/ui/kit';
 import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from '../dashboard/resumen-visual';
 import { TableroProspectos, type ColumnaTablero, type ResultadoAccion } from '../admin/vendedores/tablero';
@@ -134,7 +134,7 @@ export async function PanelVendedor({
           derecha={
             <div className="shrink-0 pt-1">
               <ChipFecha icono={<CalendarDays {...ICONO} style={{ color: 'var(--muted)' }} />}>
-                {fechaMx(new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahoraMs())))}
+                {fechaMx(hoyMx(new Date(ahoraMs())))}
               </ChipFecha>
             </div>
           }

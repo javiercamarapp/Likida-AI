@@ -1,6 +1,7 @@
 // Resolución de operador por teléfono + estado de conversación WhatsApp.
 // El estado (últimos turnos + viaje activo) vive en wa_conversacion.estado jsonb.
 
+import { TZ_MX } from '@/lib/formato';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import type { TenantContext } from '@/lib/agents/types';
@@ -207,7 +208,7 @@ export async function getTenantContext(tenantId: string): Promise<TenantContext>
     // Misma familia que `cuadra.mx` impreso en el pie del PDF. `marca.test.ts`
     // vigila que no vuelvan a separarse.
     agentName: 'Likida',
-    timezone: 'America/Mexico_City',
+    timezone: TZ_MX,
   };
 }
 

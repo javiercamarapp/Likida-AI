@@ -25,7 +25,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { estaApagado, INTERRUPTORES, type NombreInterruptor } from '../interruptores';
-import { TZ_MX } from '@/lib/formato';
+import { hoyMx } from '@/lib/formato';
 import { redactarCorreoFrio } from './redactor';
 import { logger } from '@/lib/logger';
 
@@ -60,7 +60,7 @@ export interface ResultadoRunner {
 /** El gasto MEDIDO del agente hoy (día de México), USD. LANZA si la base no
  *  responde — el techo no se verifica a ciegas. */
 export async function gastoDelDiaUsd(agente: string): Promise<number> {
-  const diaMx = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date());
+  const diaMx = hoyMx();
   const inicioDia = new Date(`${diaMx}T00:00:00-06:00`).toISOString();
   const { data, error } = await acotada(supabaseAdmin()
     .from('agente_corrida')

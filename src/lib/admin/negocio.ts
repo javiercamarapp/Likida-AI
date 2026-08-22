@@ -30,7 +30,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, traerTodo } from '@/lib/likida/pg';
-import { round2, TZ_MX } from '@/lib/formato';
+import { round2, TZ_MX, hoyMx } from '@/lib/formato';
 // Solo TIPOS: `import type` se borra al compilar, así que esto no arrastra el
 // módulo de corridas (que carga supabaseAdmin/logger al importarse) — aquí
 // nada más se quiere el dominio del CHECK de la 0102 escrito una vez.
@@ -108,7 +108,7 @@ async function traerResumenCostoIa(
 export async function costoIaMesActual(): Promise<{ mesUsd: number; llamadas: number; etiquetaMes: string }> {
   const ahora = new Date();
   // El MES de México, no el UTC — misma trampa que ya cobró en facturasPorDia.
-  const mesMx = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX, year: 'numeric', month: '2-digit' }).format(ahora);
+  const mesMx = hoyMx(ahora).slice(0, 7);
   const desde = new Date(`${mesMx}-01T00:00:00-06:00`).toISOString();
   const r = await traerResumenCostoIa(desde, null);
   const etiquetaMes = new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, month: 'long' }).format(ahora);
@@ -186,13 +186,13 @@ export interface ResumenNegocio {
 /** El DÍA DE MÉXICO de un timestamptz — el mismo patrón que `getSeriesKpiCards`
  *  (analytics.ts) y el chip de fecha de consola.tsx. `en-CA` da `YYYY-MM-DD`. */
 const diaMx = (iso: string): string =>
-  new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ_MX });
+  hoyMx(new Date(iso));
 
 export async function getResumenNegocio(
   // El día de MÉXICO, no `toISOString().slice(0, 10)` (que es el día UTC): a
   // las 6pm de CDMX ya es mañana en UTC, y la ventana de `facturasPorDia`
   // terminaba en una fecha que el usuario todavía no vive (hallazgo 13-ago).
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
   ventanaDias: number = 7,
 ): Promise<ResumenNegocio> {
   const admin = supabaseAdmin();

@@ -41,6 +41,7 @@
 // de uno que los filtros tratan como marketing.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { appUrl } from '@/lib/env';
 import { LOGO_CID } from './logo';
 
 /**
@@ -55,7 +56,7 @@ import { LOGO_CID } from './logo';
  * no.
  */
 function base(): string {
-  return process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai';
+  return appUrl();
 }
 
 /**
