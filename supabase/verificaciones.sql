@@ -5723,3 +5723,48 @@ begin
   raise exception E'RPC_CADENCIA_0147  public=%  anon=%  authenticated=%  service_role=%   (esperado f / f / f / t)',
     coalesce(publico, true), coalesce(anon_si, true), coalesce(auth_si, true), coalesce(svc_si, false);
 end $$;
+
+-- ── 120. Las personas de prospectos fríos se purgan; las de tratos vivos y las frenadas no (mig. 0148) ──
+--
+-- /aviso/prospectos promete "a los 12 meses sin ningún contacto se borran".
+-- Aquí se comprueba que algo lo ejecuta y que NO borra de más: un prospecto
+-- con toque reciente conserva a su gente, uno en `negociacion` también, y
+-- `conservar_hasta` en el futuro frena la purga aunque el prospecto esté
+-- frío. `contacto_nombre` del prospecto frío se anula. La llave
+-- `prospectoPersonasPurgadas` sale en el jsonb del mantenimiento, y `anon`
+-- no puede ejecutar la purga. Todo revierte con el RAISE final.
+--
+-- PENDIENTE DE CORRER CONTRA PRODUCCIÓN (auditoría 18, C2). Esperado:
+--   RETENCION_0148  purgadas=1  quedan=3  frio_sin_contacto=t  reciente_con_contacto=t  llave=t  anon=f
+do $$
+declare
+  frio uuid; reciente uuid; trato uuid; res jsonb; purgadas bigint; quedan bigint;
+  frio_sin_contacto boolean; reciente_con_contacto boolean; tiene_llave boolean; anon_ok boolean;
+begin
+  insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
+    values ('__verif_0148_frio__', 'contactado', 'Ing. Prueba Frío', now() - interval '400 days') returning id into frio;
+  insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
+    values ('__verif_0148_reciente__', 'contactado', 'Lic. Prueba Reciente', now() - interval '400 days') returning id into reciente;
+  insert into public.prospecto (empresa, estado, contacto_nombre, created_at)
+    values ('__verif_0148_trato__', 'negociacion', 'Prueba Trato', now() - interval '400 days') returning id into trato;
+  -- El reciente tuvo un toque hace 10 días; el frío, ninguno.
+  insert into public.prospecto_contacto (prospecto_id, canal, direccion, resumen, ocurrio_en)
+    values (reciente, 'correo', 'salida', '__verif_0148__', now() - interval '10 days');
+  insert into public.prospecto_persona (prospecto_id, nombre, origen, created_at) values
+    (frio,     '__V148 frío sin freno__',  'directorio', now() - interval '400 days'),
+    (frio,     '__V148 frío con freno__',  'directorio', now() - interval '400 days'),
+    (reciente, '__V148 reciente__',        'directorio', now() - interval '400 days'),
+    (trato,    '__V148 en trato__',        'directorio', now() - interval '400 days');
+  update public.prospecto_persona set conservar_hasta = now() + interval '30 days'
+   where prospecto_id = frio and nombre = '__V148 frío con freno__';
+
+  res := public.mantenimiento_de_datos(30);
+  purgadas := (res->>'prospectoPersonasPurgadas')::bigint;
+  select count(*) into quedan from public.prospecto_persona where nombre like '__V148%';
+  select contacto_nombre is null into frio_sin_contacto from public.prospecto where id = frio;
+  select contacto_nombre is not null into reciente_con_contacto from public.prospecto where id = reciente;
+  tiene_llave := res ? 'prospectoPersonasPurgadas';
+  select has_function_privilege('anon', 'public.purgar_prospecto_persona(integer, timestamptz)', 'EXECUTE') into anon_ok;
+  raise exception E'RETENCION_0148  purgadas=%  quedan=%  frio_sin_contacto=%  reciente_con_contacto=%  llave=%  anon=%   (esperado 1/3/t/t/t/f)',
+    purgadas, quedan, frio_sin_contacto, reciente_con_contacto, tiene_llave, anon_ok;
+end $$;

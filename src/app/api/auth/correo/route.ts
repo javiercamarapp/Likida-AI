@@ -170,10 +170,19 @@ export async function POST(req: Request) {
         base,
       });
 
+  // AUDITORÍA 18 (M8): lo que sale por Resend → SES es la dirección de una
+  // persona identificada MÁS la credencial de un solo uso que abre su sesión.
+  // El enlace no se puede quitar —ES el mecanismo del magic link—, así que lo
+  // que sí se hace es no mandar ni un byte de credencial de más: el OTP de 6
+  // dígitos (`token`) solo viaja en la reautenticación, donde es el mecanismo;
+  // en todas las demás acciones se queda aquí y nunca entra al objeto que se
+  // entrega al proveedor. Y la clase de dato queda DICHA donde toca: en
+  // `/privacidad` (art. 15 fr. II y art. 35) y en el anexo de subencargados
+  // (docs/conocimiento/52-anexo-subencargados.md, renglón 6).
   const correo = correoDeAuth({
     accion,
     liga,
-    codigo,
+    codigo: accion === 'reauthentication' ? codigo : '',
     minutos: minutosDeCaducidad(),
     correoNuevo: payload.user?.new_email,
   });
