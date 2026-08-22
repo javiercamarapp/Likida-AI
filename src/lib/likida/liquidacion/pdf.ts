@@ -16,7 +16,7 @@ import { fechaMx, mxn } from '@/lib/formato';
 import { SOLO_CONTRALOR, type Destinatario } from '../cuadre/resumen';
 
 import { leyendaPdf } from '../cuadre/leyendas';
-import { LOGO_PNG_BASE64 } from '@/lib/correo/logo';
+import { LOGO_PNG_BASE64 } from '@/lib/marca/logo';
 import type { Liquidacion, Viaje, Operador } from '@/types/likida';
 
 // Paleta (Apple) en 0–1 para pdf-lib
