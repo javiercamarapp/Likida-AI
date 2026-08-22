@@ -4,6 +4,7 @@ import type { ViajeRow } from '@/lib/likida/analytics';
 import { numero, fechaCorta } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
 import { FormaViaje, type AccionCrearViaje } from '../forma-viaje';
+import type { BuscarCatalogo } from '../combo-catalogo';
 import { AsignarFila, AsignarUnidadFila, BotonReenviar, AltaOperador, type AccionDespacho } from './acciones';
 
 /** Tope de las listas — declarado en pantalla cuando recorta. */
@@ -21,17 +22,20 @@ const MAX_FILAS = 12;
  * columna — el estándar de siempre del despacho.
  */
 export function VistaDespacho({
-  tablero, sinAsignar, activos, operadores, clientes, unidades, carga, crear,
-  asignarYAvisar, asignarUnidadViaje, reenviarAviso, altaOperador,
+  tablero, sinAsignar, activos, buscarCatalogo, totalOperadores, totalClientes, totalUnidades,
+  carga, crear, asignarYAvisar, asignarUnidadViaje, reenviarAviso, altaOperador,
 }: {
   tablero: TableroOperacion | null;
   sinAsignar: ViajeSinAsignar[];
   activos: ViajeRow[];
-  operadores: Array<{ id: string; nombre: string }>;
-  /** Los clientes de la flota, para atar el viaje a quien paga el flete. */
-  clientes: Array<{ id: string; nombre: string }>;
-  /** Las unidades activas — para el select del formulario y el amarre en "En curso". */
-  unidades: Array<{ id: string; numeroEconomico: string }>;
+  /** FE-2: los catálogos ya NO viajan como listas — viaja el buscador. */
+  buscarCatalogo: BuscarCatalogo;
+  /** Cuántos operadores/clientes/unidades ACTIVOS hay (count exact, head).
+   *  `null` = no se pudo contar; entonces la pantalla no afirma ninguna
+   *  cifra ni concluye que el catálogo esté vacío. */
+  totalOperadores: number | null;
+  totalClientes: number | null;
+  totalUnidades: number | null;
   carga: CargaOperador[] | null;
   crear: AccionCrearViaje;
   asignarYAvisar: AccionDespacho;
@@ -87,12 +91,13 @@ export function VistaDespacho({
                         </span>
                         <span className="shrink-0" style={{ color: 'var(--faint)' }}>{fechaCorta(v.fechaInicio)}</span>
                       </div>
-                      {operadores.length === 0 ? (
+                      {totalOperadores === 0 ? (
                         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                           No hay operadores dados de alta — usa el alta rápida de la derecha.
                         </p>
                       ) : (
-                        <AsignarFila viajeId={v.id} operadores={operadores} asignarYAvisar={asignarYAvisar} />
+                        <AsignarFila viajeId={v.id} buscarCatalogo={buscarCatalogo}
+                          totalOperadores={totalOperadores} asignarYAvisar={asignarYAvisar} />
                       )}
                     </div>
                   ))}
@@ -111,7 +116,8 @@ export function VistaDespacho({
               <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
                 Nace abierto: desde ese momento el operador puede mandar comprobantes por WhatsApp
               </p>
-              <FormaViaje action={crear} operadores={operadores} clientes={clientes} unidades={unidades} />
+              <FormaViaje action={crear} buscarCatalogo={buscarCatalogo}
+                totalOperadores={totalOperadores} totalClientes={totalClientes} totalUnidades={totalUnidades} />
             </section>
           </div>
 
@@ -153,11 +159,12 @@ export function VistaDespacho({
                                 asignar operador, sobre los viajes en curso. Sin
                                 catálogo no se pinta un select hueco — se enseña
                                 lo que hay (la unidad actual o el guion). */}
-                            {unidades.length === 0 ? (
+                            {totalUnidades === 0 ? (
                               <span className="cifra-mono" style={{ color: 'var(--faint)' }}>{v.unidadEco ?? '—'}</span>
                             ) : (
-                              <AsignarUnidadFila viajeId={v.id} unidadId={v.unidadId}
-                                unidades={unidades} asignarUnidadViaje={asignarUnidadViaje} />
+                              <AsignarUnidadFila viajeId={v.id} unidadId={v.unidadId} unidadEco={v.unidadEco}
+                                buscarCatalogo={buscarCatalogo} totalUnidades={totalUnidades}
+                                asignarUnidadViaje={asignarUnidadViaje} />
                             )}
                           </td>
                           <td className="py-2" style={{ color: 'var(--muted)' }}>{fechaCorta(v.fechaInicio)}</td>

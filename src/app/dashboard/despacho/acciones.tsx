@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Send, UserPlus, RefreshCw } from 'lucide-react';
+import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
 
 export type AccionDespacho = (
   prev: { error?: string } | null,
@@ -23,23 +24,34 @@ function BotonEnviar({ texto, pendienteTexto, Icono }: { texto: string; pendient
 
 /** Una fila de "Por asignar": elegir operador y asignar+avisar en un paso.
  *  La acción vive en el servidor (re-verifica sesión/rol/tenant); aquí solo
- *  se pinta el par select+botón con su error inline. */
-export function AsignarFila({ viajeId, operadores, asignarYAvisar }: {
+ *  se pinta el par buscador+botón con su error inline.
+ *
+ *  FE-2 (22-ago-2026): era un `<select>` con el catálogo COMPLETO de choferes
+ *  POR FILA — doce filas × 7,500 `<option>` ≈ 1.5-2 MB de HTML en cada carga
+ *  del despacho, y recortado a 1,000 en silencio por PostgREST encima. Ahora
+ *  cada fila trae un buscador que pide 20 al servidor cuando se usa: la
+ *  página arranca con cero opciones en el HTML. */
+export function AsignarFila({ viajeId, buscarCatalogo, totalOperadores, asignarYAvisar }: {
   viajeId: string;
-  operadores: Array<{ id: string; nombre: string }>;
+  buscarCatalogo: BuscarCatalogo;
+  /** Cuántos choferes activos hay — solo para la pista "20 de N"; `null` si
+   *  no se pudo contar, y entonces no se enseña ninguna cifra. */
+  totalOperadores: number | null;
   asignarYAvisar: AccionDespacho;
 }) {
   const [estado, accion] = useActionState(asignarYAvisar, null);
   return (
     <div>
-      <form action={accion} className="flex items-center gap-2">
+      <form action={accion} className="flex items-start gap-2">
         <input type="hidden" name="viajeId" value={viajeId} />
-        <select name="operadorId" required aria-label="Operador" defaultValue=""
-          className="flex-1 min-w-0 text-[12.5px] px-2.5 py-1.5 rounded-lg hairline"
-          style={{ background: 'var(--surface)' }}>
-          <option value="" disabled>Elegir operador…</option>
-          {operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-        </select>
+        <div className="flex-1 min-w-0">
+          <ComboCatalogo tipo="operador" name="operadorId" buscar={buscarCatalogo} requerido
+            aria-label="Operador" etiquetaVacia="Escribe el nombre del chofer…"
+            total={totalOperadores}
+            className="w-full min-w-0 text-[12.5px] px-2.5 py-1.5 rounded-lg hairline"
+            estilo={{ background: 'var(--surface)' }}
+          />
+        </div>
         <BotonEnviar texto="Asignar y avisar" pendienteTexto="Asignando…" Icono={Send} />
       </form>
       {estado?.error && <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
@@ -53,24 +65,30 @@ export function AsignarFila({ viajeId, operadores, asignarYAvisar }: {
  *  sobre un viaje que sí la trae sería un rótulo falso. La opción vacía
  *  desasigna: `viaje.unidad_id` es nullable y quitar una unidad mal puesta
  *  es una corrección legítima. */
-export function AsignarUnidadFila({ viajeId, unidadId, unidades, asignarUnidadViaje }: {
+export function AsignarUnidadFila({ viajeId, unidadId, unidadEco, buscarCatalogo, totalUnidades, asignarUnidadViaje }: {
   viajeId: string;
   /** La unidad que el viaje trae HOY, o `null`. */
   unidadId: string | null;
-  unidades: Array<{ id: string; numeroEconomico: string }>;
+  /** Su número económico — viene con el viaje (`ViajeRow.unidadEco`), así que
+   *  el control arranca diciendo la verdad sin pedirle nada al catálogo. */
+  unidadEco: string | null;
+  buscarCatalogo: BuscarCatalogo;
+  totalUnidades: number | null;
   asignarUnidadViaje: AccionDespacho;
 }) {
   const [estado, accion] = useActionState(asignarUnidadViaje, null);
   return (
     <div>
-      <form action={accion} className="flex items-center gap-1.5">
+      <form action={accion} className="flex items-start gap-1.5">
         <input type="hidden" name="viajeId" value={viajeId} />
-        <select name="unidadId" aria-label="Unidad" defaultValue={unidadId ?? ''}
-          className="min-w-0 text-[11.5px] px-2 py-1 rounded-lg hairline cifra-mono"
-          style={{ background: 'var(--surface)' }}>
-          <option value="">Sin unidad</option>
-          {unidades.map((u) => <option key={u.id} value={u.id}>{u.numeroEconomico}</option>)}
-        </select>
+        <div className="min-w-0">
+          <ComboCatalogo tipo="unidad" name="unidadId" buscar={buscarCatalogo}
+            aria-label="Unidad" etiquetaVacia="Sin unidad"
+            valorInicial={unidadId} textoInicial={unidadEco ?? ''} total={totalUnidades}
+            className="w-full min-w-0 text-[11.5px] px-2 py-1 rounded-lg hairline cifra-mono"
+            estilo={{ background: 'var(--surface)' }}
+          />
+        </div>
         <BotonAsignarUnidad texto={unidadId ? 'Cambiar' : 'Asignar'} />
       </form>
       {estado?.error && <p className="text-[11px] mt-0.5" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
@@ -82,6 +100,7 @@ function BotonAsignarUnidad({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending} title="Amarrar la unidad al viaje"
+      aria-label={`${texto} la unidad del viaje`}
       className="hairline inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50 shrink-0"
       style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
       {pending ? 'Asignando…' : texto}
@@ -114,6 +133,7 @@ function BotonInsistir({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending} title="Mandar el aviso por WhatsApp"
+      aria-label={`${texto} al chofer por WhatsApp`}
       className="hairline inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-1 rounded-lg transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
       style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
       <RefreshCw width={11} height={11} strokeWidth={2} className={pending ? 'animate-spin' : ''} />

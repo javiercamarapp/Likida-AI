@@ -6550,3 +6550,51 @@ begin
     3 - quedan_eventos, viva, bit_antes - bit_despues, (res->>'parcial')::boolean, tiene_llaves,
     coalesce(limite, 0), coalesce(mimes, 0), resumen_n, latido_rebota, anon_ok;
 end $$;
+
+-- ── 132. Los catálogos del panel se buscan por índice y el `%q%` no barre (mig. 0160) ──
+-- FE-2 (CRÍTICO). `listOperadores` y los catálogos de cliente/unidad de
+-- /dashboard/despacho no llevaban `.limit()`: PostgREST recortaba a 1,000 EN
+-- SILENCIO y el chofer 1,001 no existía para el despacho. El tope ya vive en
+-- el código (`buscarCatalogo`, tope 20); lo que sólo la base puede demostrar
+-- es lo otro: que el `ilike '%q%'` que el combo dispara en cada tecla tiene
+-- índice de trigramas y no es un barrido de la flota. Se comprueba que los
+-- seis índices de la 0160 existan (tres parciales de arranque + tres GIN) y
+-- que pg_trgm esté en `extensions`, que es de donde la opclass se nombra.
+--
+-- Un índice ausente NO revienta: la pantalla sigue correcta y sólo se pone
+-- lenta — exactamente la clase de falla muda que este hallazgo vino a cerrar,
+-- y por eso lleva bloque aunque sean "sólo" índices de velocidad.
+--
+-- Esperado:
+--   CATALOGOS_0160  trgm_en_extensions=t  arranque=3  gin=3  op_parcial=t  uni_col=t
+do $$
+declare
+  trgm_ext text; n_arranque int; n_gin int; op_parcial boolean; uni_col boolean;
+begin
+  select n.nspname into trgm_ext
+    from pg_extension e join pg_namespace n on n.oid = e.extnamespace
+   where e.extname = 'pg_trgm';
+
+  select count(*) into n_arranque from pg_indexes
+   where schemaname = 'public'
+     and indexname in ('operador_catalogo_idx', 'cliente_catalogo_idx', 'unidad_catalogo_idx');
+
+  select count(*) into n_gin from pg_indexes
+   where schemaname = 'public'
+     and indexname in ('operador_nombre_trgm_idx', 'cliente_nombre_trgm_idx', 'unidad_numero_economico_trgm_idx')
+     and indexdef ilike '%gin%';
+
+  -- El parcial `where activo` es la mitad del ahorro: sin él, ordenar por
+  -- nombre vuelve a tocar a los choferes dados de baja.
+  select coalesce(bool_or(indexdef ilike '%where activo%'), false) into op_parcial
+    from pg_indexes where schemaname = 'public' and indexname = 'operador_catalogo_idx';
+
+  -- La unidad se ordena y se busca por numero_economico, que es lo que la
+  -- pantalla enseña — indexar `nombre` (que no existe) o cualquier otra
+  -- columna dejaría el combo sin índice sin que nadie lo note.
+  select coalesce(bool_or(indexdef ilike '%numero_economico%'), false) into uni_col
+    from pg_indexes where schemaname = 'public' and indexname = 'unidad_numero_economico_trgm_idx';
+
+  raise exception E'CATALOGOS_0160  trgm_en_extensions=%  arranque=%  gin=%  op_parcial=%  uni_col=%   (esperado t/3/3/t/t)',
+    (coalesce(trgm_ext, 'FALTA') = 'extensions'), n_arranque, n_gin, op_parcial, uni_col;
+end $$;
