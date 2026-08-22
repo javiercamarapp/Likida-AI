@@ -248,11 +248,18 @@ export async function facturarAlVuelo(args: {
     return { intentado: false, facturado: false, motivo: decision.motivo, detalle: decision.detalle };
   }
 
+  const modo = modoEfectivo(args.modo ?? 'ensayo');
+  // RES-10: LA MARCA DE "EMISIÓN EN CURSO" VA ANTES DE ABRIR LA SESIÓN.
+  // Solo en `emitir`: un ensayo no timbra nada y no hay qué proteger.
+  if (modo === 'emitir' && !(await marcarEmisionEnCurso(admin, [args.gastoId], args.tenantId, args.ahora))) {
+    return { intentado: true, facturado: false, detalle: SIN_MARCA_NO_SE_EMITE };
+  }
+
   const r = await facturarConAgente({
     tenantId: args.tenantId,
     comercio: t.comercio!.clave,
     campos: t.campos,
-    modo: modoEfectivo(args.modo ?? 'ensayo'),
+    modo,
   });
 
   // Un CAPTCHA, o un emitir que no se pudo confirmar, NO se reintentan: salen de
@@ -272,6 +279,10 @@ export async function facturarAlVuelo(args: {
 
   if (!r.ok) {
     logger.warn('autofactura.fallo', { gastoId: args.gastoId, error: r.error });
+    // Un fallo LIMPIO (el portal no cargó, sin apretar emitir): la marca se
+    // levanta y el ticket vuelve a la cola. Si fue ambiguo, `motivoDeBloqueo`
+    // ya lo atrapó arriba y aquí no se llega.
+    if (modo === 'emitir') await levantarEmisionEnCurso(admin, args.gastoId, args.tenantId);
     return { intentado: true, facturado: false, detalle: r.error, capturado: r.capturado, captura: r.captura };
   }
   // UN ENSAYO EXITOSO NO ES UN FALLO — y por eso este `return` va DESPUÉS del de
@@ -282,6 +293,7 @@ export async function facturarAlVuelo(args: {
   // encontraba fallos que no ocurrieron.
   if (!r.cfdiUuid) {
     logger.info('autofactura.ensayo', { gastoId: args.gastoId, capturado: Object.keys(r.capturado).length });
+    if (modo === 'emitir') await levantarEmisionEnCurso(admin, args.gastoId, args.tenantId);
     return {
       intentado: true, facturado: false,
       detalle: 'ensayo: se llenó el portal y no se emitió',
@@ -293,6 +305,9 @@ export async function facturarAlVuelo(args: {
   // devuelve como facturado igual: perder el UUID en nuestra base es un
   // problema de registro; volver a facturar es un problema fiscal del cliente.
   const guardado = await escribirUuid(admin, args.tenantId, args.gastoId, r.cfdiUuid, 1, args.ahora);
+  // La marca se levanta SOLO con el UUID ya escrito. Si guardarlo falló,
+  // `escribirUuid` ya la reemplazó por el bloqueo de verdad ("YA SE EMITIÓ…").
+  if (guardado === null && modo === 'emitir') await levantarEmisionEnCurso(admin, args.gastoId, args.tenantId);
 
   logger.info('autofactura.ok', { gastoId: args.gastoId, uuid: r.cfdiUuid });
   return {
@@ -436,11 +451,19 @@ export async function facturarLoteAlVuelo(args: {
 
   if (tickets.length === 0) return { porGasto, facturados: 0, bloqueados };
 
+  const modo = modoEfectivo(args.modo ?? 'ensayo');
+  // RES-10: la marca de "emisión en curso" para TODO el lote, en un UPDATE,
+  // antes de abrir la sesión. Sin marca confirmada no se toca el portal.
+  if (modo === 'emitir' && !(await marcarEmisionEnCurso(admin, tickets.map((x) => x.gastoId), args.tenantId, args.ahora))) {
+    for (const x of tickets) porGasto.push({ gastoId: x.gastoId, intentado: true, facturado: false, detalle: SIN_MARCA_NO_SE_EMITE });
+    return { porGasto, facturados: 0, bloqueados, error: SIN_MARCA_NO_SE_EMITE };
+  }
+
   const r = await facturarLoteConAgente({
     tenantId: args.tenantId,
     comercio: args.comercio,
     tickets,
-    modo: modoEfectivo(args.modo ?? 'ensayo'),
+    modo,
   });
 
   // ── El reparto del UUID. `cfdi_orden` va 1..N EN EL ORDEN EN QUE ENTRARON al
@@ -449,7 +472,7 @@ export async function facturarLoteAlVuelo(args: {
   const bloqueoDelLote = motivoDeBloqueo(r);
 
   for (const p of r.porGasto) {
-    const propio = await guardarUno(admin, args, p, r.error, ordenPorUuid, bloqueoDelLote);
+    const propio = await guardarUno(admin, args, p, r.error, ordenPorUuid, bloqueoDelLote, modo === 'emitir');
     porGasto.push({ gastoId: p.gastoId, ...propio });
     if (propio.bloqueado) bloqueados.push({ gastoId: p.gastoId, motivo: propio.bloqueado });
   }
@@ -480,6 +503,8 @@ async function guardarUno(
   errorDelLote: string | undefined,
   ordenPorUuid: Map<string, number>,
   bloqueoDelLote: string | null,
+  /** RES-10: el gasto lleva la marca de "emisión en curso" que hay que levantar. */
+  enCurso = false,
 ): Promise<ResultadoAutofactura> {
   // El bloqueo es DEL LOTE: un CAPTCHA no le pasó a un código, le pasó a la
   // sesión, y una emisión sin confirmar deja en duda a todos los que iban en esa
@@ -491,6 +516,7 @@ async function guardarUno(
   }
 
   if (!p.incluido || !p.cfdiUuid) {
+    if (enCurso) await levantarEmisionEnCurso(admin, p.gastoId, args.tenantId);
     return {
       intentado: true, facturado: false,
       detalle: p.motivo ?? errorDelLote ?? (p.incluido ? 'ensayo: entró al portal y no se emitió' : 'no entró a la factura'),
@@ -500,6 +526,7 @@ async function guardarUno(
   const orden = (ordenPorUuid.get(p.cfdiUuid) ?? 0) + 1;
   ordenPorUuid.set(p.cfdiUuid, orden);
   const guardado = await escribirUuid(admin, args.tenantId, p.gastoId, p.cfdiUuid, orden, args.ahora);
+  if (guardado === null && enCurso) await levantarEmisionEnCurso(admin, p.gastoId, args.tenantId);
 
   return {
     intentado: true, facturado: true, cfdiUuid: p.cfdiUuid,
@@ -552,6 +579,79 @@ async function escribirUuid(
 
   const guardado = await bloquear(admin, gastoId, tenantId, porQue, ahora);
   return guardado;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RES-10 (auditoría prod) — LA MARCA DE "EMISIÓN EN CURSO".
+//
+// El agujero: en modo `emitir`, si la función muere A MEDIA SESIÓN (Vercel la
+// mata, QStash reintenta el 5xx, la Mac se duerme), el CFDI pudo quedar
+// timbrado en el SAT sin que `cfdi_uuid` se escribiera. El claim
+// (`autofactura_intentada_en`) vence a los CLAIM_MINUTOS y el cron —ahora
+// cada 15 min— vuelve a elegir el ticket: SEGUNDO CFDI por el mismo consumo.
+//
+// El arreglo: ANTES de abrir la sesión se pone `autofactura_bloqueada_en` con
+// el motivo "emisión en curso". Eso lo saca de la cola (`gasto_por_facturar_idx`
+// y `decidirAutofactura` lo excluyen) y lo deja visible en "por facturar" con
+// la razón. Se levanta SOLO después de escribir el UUID —o tras un fallo
+// limpio donde consta que no se apretó emitir—. Si el proceso muere en medio,
+// la marca se queda, y una persona mira el portal antes de reintentar: que es
+// exactamente la semántica del bloqueo que ya existía para "emisión sin
+// confirmar", puesta un paso antes.
+//
+// Solo en `emitir` efectivo: el ensayo no timbra nada y una marca ahí solo
+// ensuciaría la pantalla del contralor.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** El motivo literal de la marca. Exportado para que las pruebas y la pantalla
+ *  lo reconozcan; `levantarEmisionEnCurso` solo levanta ESTE motivo. */
+export const BLOQUEO_EMISION_EN_CURSO =
+  'emisión en curso: el agente abrió el portal para timbrar y todavía no confirmó el folio. ' +
+  'Si esto lleva más de unos minutos, el proceso murió a media sesión: revisar en el portal si el CFDI ya existe ANTES de reintentar.';
+
+const SIN_MARCA_NO_SE_EMITE =
+  'no se pudo poner la marca de "emisión en curso" en la base, así que no se abrió el portal: sin ella un proceso que muera a media sesión duplicaría el CFDI';
+
+/** Pone la marca a todos los gastos del lote en UN update. `false` = no se
+ *  pudo confirmar, y entonces NO se emite (falla cerrado, como el claim). */
+async function marcarEmisionEnCurso(
+  admin: ReturnType<typeof supabaseAdmin>,
+  gastoIds: string[],
+  tenantId: string,
+  ahora?: string,
+): Promise<boolean> {
+  if (gastoIds.length === 0) return true;
+  const { error } = await admin
+    .from('gasto')
+    .update({
+      autofactura_bloqueada_en: ahora ?? new Date().toISOString(),
+      autofactura_bloqueo: BLOQUEO_EMISION_EN_CURSO,
+    })
+    .in('id', gastoIds)
+    .eq('tenant_id', tenantId);
+  if (error) {
+    logger.error('autofactura.marca_en_curso_sin_guardar', { gastoIds: gastoIds.join(','), err: error.message });
+    return false;
+  }
+  return true;
+}
+
+/** Levanta la marca — y SOLO esa marca: un bloqueo de verdad ("YA SE EMITIÓ",
+ *  CAPTCHA) puesto mientras tanto no se toca. Nunca lanza. */
+async function levantarEmisionEnCurso(
+  admin: ReturnType<typeof supabaseAdmin>,
+  gastoId: string,
+  tenantId: string,
+): Promise<void> {
+  const { error } = await admin
+    .from('gasto')
+    .update({ autofactura_bloqueada_en: null, autofactura_bloqueo: null })
+    .eq('id', gastoId)
+    .eq('tenant_id', tenantId)
+    .eq('autofactura_bloqueo', BLOQUEO_EMISION_EN_CURSO);
+  // Si no se pudo levantar, el ticket queda fuera de la cola con un motivo
+  // que dice "revisar el portal": el lado seguro. Se grita para que se vea.
+  if (error) logger.error('autofactura.marca_en_curso_sin_levantar', { gastoId, err: error.message });
 }
 
 /**
