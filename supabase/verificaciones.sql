@@ -6549,4 +6549,168 @@ begin
   raise exception E'PURGAS_0155  eventos_borrados=%  viva_queda=%  bitacora_borrada=%  parcial=%  llaves=%  bucket=%/%  resumen_n=%  latido_rebota=%  anon=%   (esperado 2/t/1/f/t/8388608/2/t/t/f)',
     3 - quedan_eventos, viva, bit_antes - bit_despues, (res->>'parcial')::boolean, tiene_llaves,
     coalesce(limite, 0), coalesce(mimes, 0), resumen_n, latido_rebota, anon_ok;
+-- ── 131. Las tres escrituras de dinero ya son atómicas (mig. 0159) ──────────
+-- Los tres hallazgos de la auditoría 18 que compartían forma —leer, decidir en
+-- TypeScript, escribir— y por eso el mismo modo de fallo. Aquí se reproducen
+-- los tres escenarios contra Postgres, que es el único que puede demostrarlo:
+--
+--   A · DAT-05  dos abonos sobre la misma factura: el segundo ve el saldo que
+--               dejó el primero (con la factura trabada) y REBOTA. Antes los
+--               dos veían $0 pagados y `factura_saldo` quedaba en negativo.
+--   B · DAT-06  reabrir un viaje cuyo operador YA tiene otro abierto: el
+--               UPDATE choca con uq_viaje_abierto_por_operador (0029) y toda
+--               la transacción revierte CON SU LIQUIDACIÓN INTACTA. Antes la
+--               liquidación se borraba primero y el rebote la dejaba perdida.
+--               En el camino bueno, la liquidación se ARCHIVA antes de irse.
+--   C · DAT-20  la mezcla de `tenant.config` ocurre dentro del UPDATE, es
+--               PROFUNDA (el `||` de jsonb borraría el subárbol hermano) y el
+--               CHECK sigue vivo. Incluye la llave `agentes`, que hasta la
+--               0159 el CHECK rechazaba: la estrategia por agente no podía
+--               guardarse en absoluto.
+--   D · DAT-41  el id de la liquidación se deriva del viaje, así que el folio
+--               que imprime el PDF es el que de verdad queda en la base.
+--
+-- PENDIENTE DE CORRER CONTRA PRODUCCIÓN (auditoría 18). Corrido el 22-ago-2026
+-- contra Postgres 17.11 con las 159 migraciones aplicadas. Salida REAL:
+--   RPCS_0159  parcial-entra=t  sobrepago-rebota=t  saldo-nunca-negativo=t
+--              salda-y-marca-pagada=t  factura-ajena-rebota=t
+--              reabrir-rebota-con-liq-viva=t  reabrir-archiva=t  pdf-devuelto=t
+--              liq-borrada=t  viaje-abierto=t  id-derivado-del-viaje=t
+--              merge-conserva-hermanos=t  merge-profundo-agentes=t
+--              llave-inventada-rebota=t  borrado-explicito=t  anon=f
+do $$
+declare
+  ta uuid; tb uuid; cli uuid; fac uuid; facb uuid;
+  op uuid; v1 uuid; v2 uuid; liq uuid;
+  res jsonb; cfg jsonb;
+  parcial_entra boolean := false;
+  sobrepago_rebota boolean := false;
+  saldo_no_negativo boolean := false;
+  salda_y_marca boolean := false;
+  factura_ajena_rebota boolean := false;
+  reabrir_rebota_liq_viva boolean := false;
+  reabrir_archiva boolean := false;
+  pdf_devuelto boolean := false;
+  liq_borrada boolean := false;
+  viaje_abierto boolean := false;
+  id_derivado boolean := false;
+  merge_hermanos boolean := false;
+  merge_profundo boolean := false;
+  llave_inventada_rebota boolean := false;
+  borrado_explicito boolean := false;
+  anon_ok boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0159 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0159 B') returning id into tb;
+
+  -- ── A · DAT-05: el saldo se lee con la factura trabada ────────────────────
+  insert into cliente (tenant_id, nombre, rfc) values (ta, 'ZZZ cli 0159', 'XAXX010101000') returning id into cli;
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, cli, 10000, 1600, 11600, 'emitida') returning id into fac;
+
+  -- Primer abono: parcial, entra y NO marca pagada.
+  res := registrar_pago_tx(ta, fac, current_date, 10000, 'transferencia', null);
+  parcial_entra := (res ->> 'saldada')::boolean = false
+                   and (select estatus from factura_emitida where id = fac) = 'emitida';
+
+  -- Segundo abono de $2,000 sobre un saldo de $1,600: ESTE es el que antes
+  -- pasaba (veía $0 pagados) y dejaba la factura sobrepagada.
+  begin
+    res := registrar_pago_tx(ta, fac, current_date, 2000, 'transferencia', null);
+  exception when sqlstate 'CU011' then
+    sobrepago_rebota := position('motivo=sobrepago' in sqlerrm) > 0;
+  end;
+
+  select saldo >= 0 into saldo_no_negativo from factura_saldo where factura_id = fac;
+
+  -- El que SÍ cabe salda y marca `pagada` en la misma transacción.
+  res := registrar_pago_tx(ta, fac, current_date, 1600, 'efectivo', 'REF-1');
+  salda_y_marca := (res ->> 'saldada')::boolean
+                   and (select estatus from factura_emitida where id = fac) = 'pagada'
+                   and (select saldo from factura_saldo where factura_id = fac) = 0;
+
+  -- La factura de OTRA flota ni se traba.
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, cli, 100, 16, 116, 'emitida') returning id into facb;
+  begin
+    res := registrar_pago_tx(tb, facb, current_date, 10, 'efectivo', null);
+  exception when sqlstate 'CU010' then factura_ajena_rebota := true;
+  end;
+
+  -- ── B · DAT-06: el orden que salva la liquidación ─────────────────────────
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ op 0159', '5215559990159') returning id into op;
+  insert into viaje (tenant_id, operador_id, estatus) values (ta, op, 'liquidado') returning id into v1;
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus, pdf_url)
+    values (ta, v1, 10000, 10000, 0, 'cuadrada', 'ta/v1.pdf') returning id into liq;
+
+  -- D · el id NO es aleatorio: sale del viaje, que es lo que el PDF puede
+  -- calcular antes de que la fila exista.
+  id_derivado := liq = md5(v1::text || ':liquidacion')::uuid;
+
+  -- El MISMO operador con otro viaje abierto: `uq_viaje_abierto_por_operador`
+  -- va a rechazar el UPDATE de estatus.
+  insert into viaje (tenant_id, operador_id, estatus) values (ta, op, 'abierto') returning id into v2;
+
+  begin
+    res := reabrir_viaje_tx(ta, v1);
+  exception when unique_violation then
+    -- LO QUE IMPORTA: la liquidación sigue ahí. Antes se borraba PRIMERO y
+    -- este rebote la dejaba perdida, con el viaje liquidado sin papel.
+    reabrir_rebota_liq_viva := exists (select 1 from liquidacion where viaje_id = v1)
+                               and (select estatus from viaje where id = v1) = 'liquidado';
+  end;
+
+  -- Se cierra el estorbo y ahora el reabrir procede.
+  update viaje set estatus = 'liquidado' where id = v2;
+  res := reabrir_viaje_tx(ta, v1);
+  pdf_devuelto    := res ->> 'pdf_perdido' = 'ta/v1.pdf' and (res ->> 'hubo_liquidacion')::boolean;
+  liq_borrada     := not exists (select 1 from liquidacion where viaje_id = v1);
+  viaje_abierto   := (select estatus from viaje where id = v1) = 'abierto';
+  reabrir_archiva := exists (
+    select 1 from liquidacion_historico
+     where viaje_id = v1 and liquidacion_id = liq and pdf_url = 'ta/v1.pdf'
+       and total_comprobado = 10000 and motivo = 'reabrir');
+
+  -- ── C · DAT-20: la mezcla, dentro del UPDATE y PROFUNDA ───────────────────
+  update tenant set config = jsonb_build_object(
+    'estimulos', jsonb_build_object('viaticosTopeFiscalDiarioMxn', 750),
+    'politica',  '[{"concepto":"diesel","topeMonto":4000}]'::jsonb,
+    'facilidadCombustibleEfectivo', '{"dedicacionExclusivaCarga":true,"regimenElegible":true}'::jsonb,
+    'agentes',   '{"conductores":{"horasEscalacion":5}}'::jsonb
+  ) where id = ta;
+
+  -- Guardar la política NO se lleva a los hermanos (el bug de config.ts, en SQL).
+  cfg := tenant_config_merge(ta, '{"politica":[{"concepto":"caseta","topeMonto":1500}]}'::jsonb);
+  merge_hermanos := cfg -> 'estimulos' ->> 'viaticosTopeFiscalDiarioMxn' = '750'
+                    and cfg -> 'politica' -> 0 ->> 'concepto' = 'caseta'
+                    and jsonb_array_length(cfg -> 'politica') = 1;   -- los arrays REEMPLAZAN
+
+  -- Y la mezcla del subárbol es PROFUNDA: `||` habría borrado `conductores`.
+  cfg := tenant_config_merge(ta, '{"agentes":{"liquidacion":{"umbralConfianza":0.85}}}'::jsonb);
+  merge_profundo := cfg -> 'agentes' -> 'conductores' ->> 'horasEscalacion' = '5'
+                    and cfg -> 'agentes' -> 'liquidacion' ->> 'umbralConfianza' = '0.85';
+
+  -- El CHECK sigue vivo a través del RPC: una llave que el tipo no conoce rebota.
+  begin
+    cfg := tenant_config_merge(ta, '{"politicas":[{"concepto":"diesel"}]}'::jsonb);
+  exception when others then llave_inventada_rebota := true;
+  end;
+
+  -- Y el borrado explícito de una llave (la facilidad del 15% sin declarar).
+  cfg := tenant_config_merge(ta, '{}'::jsonb, array['facilidadCombustibleEfectivo']);
+  borrado_explicito := not (cfg ? 'facilidadCombustibleEfectivo') and cfg ? 'estimulos';
+
+  -- ── Permisos: nada de esto se ejecuta desde internet ──────────────────────
+  select has_function_privilege('anon', 'public.registrar_pago_tx(uuid, uuid, date, numeric, text, text)', 'EXECUTE')
+      or has_function_privilege('anon', 'public.reabrir_viaje_tx(uuid, uuid)', 'EXECUTE')
+      or has_function_privilege('anon', 'public.tenant_config_merge(uuid, jsonb, text[])', 'EXECUTE')
+    into anon_ok;
+
+  raise exception E'RPCS_0159  parcial-entra=%  sobrepago-rebota=%  saldo-nunca-negativo=%\n           salda-y-marca-pagada=%  factura-ajena-rebota=%\n           reabrir-rebota-con-liq-viva=%  reabrir-archiva=%  pdf-devuelto=%\n           liq-borrada=%  viaje-abierto=%  id-derivado-del-viaje=%\n           merge-conserva-hermanos=%  merge-profundo-agentes=%\n           llave-inventada-rebota=%  borrado-explicito=%  anon=%   (esperado todo t salvo anon=f)',
+    parcial_entra, sobrepago_rebota, saldo_no_negativo,
+    salda_y_marca, factura_ajena_rebota,
+    reabrir_rebota_liq_viva, reabrir_archiva, pdf_devuelto,
+    liq_borrada, viaje_abierto, id_derivado,
+    merge_hermanos, merge_profundo,
+    llave_inventada_rebota, borrado_explicito, anon_ok;
 end $$;
