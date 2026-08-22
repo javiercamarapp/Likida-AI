@@ -27,6 +27,7 @@ import type { PoliticaGasto } from './cuadre/engine';
 import { logger } from '@/lib/logger';
 import { DatoInvalido } from './errores';
 import type { AjustesValidos } from './ajustes_operativos';
+import { acotada } from './presupuesto';
 
 // `DatoInvalido` y `mensajeParaPantalla` viven en `errores.ts` desde que
 // `saas/suscripcion.ts` los necesitó: importarlos de aquí metía todo este módulo
@@ -597,6 +598,14 @@ export function armarPolitica(
  * convivan para el mismo viaje; no impide el intercalado borrar→re-crear.
  * `acquireViajeLock` cierra la ventana por completo: mientras se reabre, ningún
  * cierre puede estar corriendo sobre el mismo viaje, y viceversa.
+ *
+ * AUDITORÍA 18 (DAT-06): los dos statements sueltos son ahora UNA transacción
+ * (`reabrir_viaje_tx`, 0159) y van en el orden contrario —el estatus del viaje
+ * PRIMERO, que es el paso que puede rebotar contra
+ * `uq_viaje_abierto_por_operador`—, así que un rebote ya no deja un viaje
+ * liquidado sin liquidación. Y la liquidación no se pierde: se archiva en
+ * `liquidacion_historico` antes de retirarse, porque era la única constancia de
+ * un papel que el operador ya tiene en la mano.
  */
 export async function reabrirViaje(
   tenantId: string,
@@ -605,7 +614,7 @@ export async function reabrirViaje(
   actor?: { id?: string; email?: string },
 ): Promise<{ pdfPerdido: string | null }> {
   if (!confirmar) {
-    throw new DatoInvalido('Reabrir borra la liquidación anterior y su PDF. Hay que confirmarlo explícitamente.');
+    throw new DatoInvalido('Reabrir retira la liquidación anterior y su PDF (queda archivada, pero deja de valer). Hay que confirmarlo explícitamente.');
   }
 
   const admin = supabaseAdmin();
@@ -633,47 +642,46 @@ export async function reabrirViaje(
   }
 
   try {
-    // EL `error` DE ESTA LECTURA ERA EL PEOR DEL ARCHIVO. Sin comprobarlo, un
-    // fallo de red dejaba `liq` en `null` y a partir de ahí todo se leía al revés:
-    // el `if (liq)` se saltaba el borrado, el viaje SÍ se ponía en `abierto`, y se
-    // reportaba `pdfPerdido: null` —que en pantalla significa "no perdiste nada"—
-    // cuando lo que pasó fue que no se pudo mirar. El resultado es un viaje
-    // abierto con su liquidación viva: la 0036 no deja entrar ni un gasto, y con
-    // `liquidacion_viaje_uidx` (0005) el siguiente cierre choca contra la fila que
-    // nadie sabe que sigue ahí. "Ya lo reabrí" sobre algo que no se reabrió es
-    // exactamente el fallo que esta función existe para cerrar.
+    // ── DAT-06 · EL ORDEN, Y EN UNA SOLA TRANSACCIÓN ──────────────────────
     //
-    // El `tenant_id` va en el where aunque `viajeId` ya se resolvió acotado: es
-    // defensa en profundidad, y hace que la consulta se lea sola sin tener que
-    // rastrear de dónde vino el id (auditoría de aislamiento entre flotas).
-    const { data: liq, error: errLiq } = await admin
-      .from('liquidacion')
-      .select('id, pdf_url')
-      .eq('tenant_id', tenantId)
-      .eq('viaje_id', viajeId)
-      .maybeSingle();
-    if (errLiq) throw new Error(`reabrirViaje: no se pudo leer la liquidación de ${folio} — ${errLiq.message}`);
-
-    const pdfPerdido = (liq?.pdf_url as string | null) ?? null;
-
-    // 1) La fila de liquidación PRIMERO. Es la que el trigger mira.
-    if (liq) {
-      const { error } = await admin.from('liquidacion').delete()
-        .eq('tenant_id', tenantId).eq('viaje_id', viajeId);
-      if (error) throw new Error(`reabrirViaje: no se pudo borrar la liquidación — ${error.message}`);
+    // Aquí se borraba la liquidación y DESPUÉS se abría el viaje. El segundo
+    // paso puede rebotar: si el operador ya tiene otro viaje abierto,
+    // `uq_viaje_abierto_por_operador` (0029) lanza 23505 — y la liquidación ya
+    // no existe. Queda un viaje `liquidado` SIN liquidación: no se consulta, no
+    // se re-cierra, y el PDF que el operador ya recibió no lo respalda nada.
+    //
+    // `reabrir_viaje_tx` (0159) lo hace al revés y en UNA transacción: traba el
+    // viaje, lo pone `abierto` primero —el paso que puede fallar— y sólo
+    // entonces ARCHIVA la liquidación en `liquidacion_historico` y la retira.
+    // Si el estatus rebota, revierte todo con la liquidación intacta. Y el
+    // papel emitido deja de desaparecer sin rastro: hasta hoy, reabrir borraba
+    // la única constancia de lo que se le liquidó al operador.
+    //
+    // El mutex de arriba SIGUE: la transacción protege estas escrituras entre
+    // sí, pero no contra el cierre, que calcula y genera el PDF FUERA de ella.
+    const { data, error } = await acotada(
+      admin.rpc('reabrir_viaje_tx', { p_tenant: tenantId, p_viaje: viajeId }),
+      'reabrirViaje',
+    );
+    if (error) {
+      if ((error as { code?: string }).code === '23505') {
+        throw new DatoInvalido(
+          `No se puede reabrir ${folio}: su operador ya tiene otro viaje abierto. ` +
+          'Cierra o cancela ese viaje primero — un operador solo puede tener uno abierto a la vez. ' +
+          'La liquidación de este viaje NO se tocó.',
+        );
+      }
+      if ((error as { code?: string }).code === 'CU012') {
+        throw new DatoInvalido(`No existe el viaje ${folio} en esta flota.`);
+      }
+      throw new Error(`reabrirViaje: ${error.message}`);
     }
 
-    // 2) El estatus después: si el paso 1 falla, el viaje se queda liquidado y
-    //    coherente, en vez de abierto pero incapaz de recibir un gasto.
-    const { error: errEstatus } = await admin
-      .from('viaje')
-      .update({ estatus: 'abierto' })
-      .eq('tenant_id', tenantId)
-      .eq('id', viajeId);
-    if (errEstatus) throw new Error(`reabrirViaje: no se pudo abrir el viaje — ${errEstatus.message}`);
+    const pdfPerdido = ((data as { pdf_perdido?: string | null } | null)?.pdf_perdido ?? null) as string | null;
 
-    // 3) La conversación de WhatsApp, para que el operador no siga hablando con
-    //    el hilo de un viaje que ya se cerró.
+    // La conversación de WhatsApp queda fuera de la transacción a propósito:
+    // que no se pueda desligar el hilo NO es razón para no reabrir el viaje
+    // (por eso es un warn y no un throw), y meterla dentro la volvería fatal.
     const { error: errConv } = await admin
       .from('wa_conversacion')
       .update({ viaje_id: null })
