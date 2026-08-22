@@ -1,6 +1,7 @@
 import { traerTodo, conteo } from '../pg';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { hoyMx } from '@/lib/formato';
 import { identificarComercio } from './identificar';
 import { calcularCaducidad, type Caducidad } from './caducidad';
 import type { Comercio, ClaveCampo } from './comercios';
@@ -116,7 +117,9 @@ interface FilaGasto {
  */
 export async function getPorFacturar(
   tenantId: string,
-  hoy: string = new Date().toISOString().slice(0, 10),
+  // RES-13: el día de México. Con el día UTC, de las 18:00 a medianoche la
+  // pantalla y el aviso de WhatsApp daban por vencido lo que vencía HOY.
+  hoy: string = hoyMx(),
 ): Promise<TicketPorFacturar[]> {
   // AUDITORÍA 13, MEDIO: `.limit(500)` recortaba en silencio la pantalla "por
   // facturar" y el aviso de WhatsApp (506 tickets → "Tienes 500 comprobantes
