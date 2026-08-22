@@ -6,10 +6,17 @@ import { estaApagado } from '@/lib/likida/interruptores';
 import { procesarLoteEnCola, type FilaCola } from '../route';
 
 export const runtime = 'nodejs';
-// QStash permite hasta 10 min de timeout para el worker; el lote de 8 tickets
-// con varias flotas lo necesita (el techo de 300s de una invocación directa es
-// justo lo que esta cola existe para romper).
-export const maxDuration = 600;
+// AUDITORÍA 18 (M2, B12): decía 600 "porque QStash permite 10 min de timeout".
+// QStash es el CLIENTE: espera más, no deja correr más. El plan del equipo
+// está verificado como pro, tope 300s (`presupuesto.ts`, `webhook/whatsapp/
+// route.ts`), y el corte real del lote es `PRESUPUESTO_LOTE_MS - MARGEN_LOTE_MS`
+// de `../route.ts`, derivado de SU maxDuration = 300 — o sea 150s de trabajo
+// útil. Con 600 aquí, el número escrito no era el que la ruta respetaba ni el
+// que la plataforma concede, y quien subiera MARGEN_LOTE_MS "porque tengo
+// 600s" dimensionaría contra un presupuesto que no existe. Lo que esta cola
+// sí rompe es el ACOPLE con el cron (que tiene que contestar rápido), no el
+// techo de la plataforma. `cola/route.test.ts` los mantiene iguales.
+export const maxDuration = 300;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CALLBACK DE QSTASH — el cron encola aquí el lote (ronda 16) y este

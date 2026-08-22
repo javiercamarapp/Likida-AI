@@ -263,3 +263,22 @@ describe('la oficina — identidad y orden de los atajos', () => {
     expect(atenderInformeOficina).not.toHaveBeenCalled();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18, ALTO (A10): una solicitud ARCO se perdía sin registro cuando
+// a la flota le faltaba la razón social — el insert vivía dentro del `if`
+// que decide el TEXTO de la respuesta.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('ARCO sin datos del responsable', () => {
+  it('la solicitud queda REGISTRADA aunque la flota no tenga razón social', async () => {
+    const repo = await import('@/lib/likida/repo');
+    const conv = await import('@/lib/likida/conv');
+    vi.spyOn(conv, 'buscarTenantPorTelefono').mockResolvedValue('t1');
+    vi.mocked(repo.getDatosResponsable).mockResolvedValueOnce(null);
+    vi.mocked(repo.registrarSolicitudArco).mockClear();
+    await processInbound({ from: '5219993700779', type: 'text', text: 'quiero ejercer mis derechos ARCO y que borren mis datos', waMessageId: 'wa-arco' });
+    expect(repo.registrarSolicitudArco).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', titularRef: '5219993700779', canal: 'whatsapp' }));
+    // Y se le dice que quedó registrada, no solo "déjame checarlo".
+    expect(sendText.mock.calls.some((c) => String(c[1]).includes('quedó registrada'))).toBe(true);
+  });
+});

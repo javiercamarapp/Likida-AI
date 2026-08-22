@@ -60,12 +60,19 @@ describe('la ruta del PDF del operador es la MISMA donde se sube y donde se lee'
     }
   });
 
-  it('y es el ejemplar del OPERADOR, no el completo del contralor', () => {
-    // Si `processor.ts` pasara a leer `{}/{}.pdf`, el chofer recibiría por
-    // WhatsApp el ejemplar con los veredictos que `resumen.ts` le oculta — el
-    // hallazgo ALTO de la ronda 4 por otra puerta.
+  it('y al chofer le llega el ejemplar del OPERADOR; el completo solo se firma para el jefe', () => {
+    // Si el chofer recibiera `{}/{}.pdf`, le llegarían por WhatsApp los
+    // veredictos que `resumen.ts` le oculta — el hallazgo ALTO de la ronda 4
+    // por otra puerta. Desde la auditoría 18 (M26) `processor.ts` SÍ firma el
+    // completo, pero en UNA sola línea, etiquetada para el contralor, y esa
+    // línea no es la que manda el documento al chofer.
     expect(rutasDePdf(PROCESSOR)).toContain('{}/{}-operador.pdf');
-    expect(rutasDePdf(PROCESSOR)).not.toContain('{}/{}.pdf');
+    const firmasDelCompleto = PROCESSOR.split('\n')
+      .filter((l) => !l.trim().startsWith('//'))
+      .filter((l) => /`\$\{[^}]*\}\/\$\{[^}]*\}\.pdf`/.test(l));
+    expect(firmasDelCompleto, 'el ejemplar completo se firma en un solo sitio').toHaveLength(1);
+    expect(firmasDelCompleto[0]).toContain("'createSignedUrl.contralor'");
+    expect(firmasDelCompleto[0]).not.toContain('sendDocument');
   });
 
   it('`tools.ts` sube los DOS ejemplares en rutas distintas', () => {
