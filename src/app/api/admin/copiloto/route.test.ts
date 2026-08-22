@@ -24,6 +24,7 @@ vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({}) }));
 vi.mock('@/lib/auth/mfa', () => ({
   exigirAal2SiHayFactor: () => stepUp(),
   MSG_STEP_UP: 'Esta acción exige tu segundo factor',
+  MSG_MFA_NO_VERIFICABLE: 'No pude comprobar tu segundo factor',
 }));
 
 const ejecutarAccionCopiloto = vi.fn(async (..._a: unknown[]) => ({ ok: true, mensaje: 'hecho' }));

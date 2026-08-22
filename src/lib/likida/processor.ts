@@ -73,6 +73,7 @@ import { atenderConfirmacion, aceptarPorActividad } from './confirmar_viaje';
 import { avisarCierreAlJefe } from './avisar_cierre';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { codigoDeError } from '@/lib/observability/sentry';
 
 export interface InboundMessage {
   from: string;               // teléfono E.164
@@ -2716,9 +2717,14 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       } catch (e) {
         // Ruidoso a propósito: la liquidación SÍ quedó cerrada en la base, así que
         // esto no es recuperable por reintento y nadie lo va a notar salvo por el log.
+        // `codigo` (AUDITORÍA 18, M14): sin él, el fingerprint de este catch
+        // era el mismo para «storage no devolvió URL firmada» hoy y un TypeError
+        // de pdf-lib mañana — la segunda causa caía en el issue viejo y no
+        // notificaba. Mismo discriminador que los cron.
         logger.error('pdf.no_entregado', {
           tenant: op.tenantId, viaje: viajeId, pdfGenerado,
           err: e instanceof Error ? e.message : String(e),
+          codigo: codigoDeError(e),
         });
         // Y se le dice al operador, en vez de dejarlo esperando: el cierre es
         // real, lo que falta es el papel.

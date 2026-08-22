@@ -60,8 +60,12 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: logs }));
+const alertarOperador = vi.fn(async (_e: string, _d: Record<string, unknown>) => { void _e; void _d; });
+vi.mock('@/lib/observability/alerta', () => ({
+  alertarOperador: (e: string, d: Record<string, unknown>) => alertarOperador(e, d),
+}));
 
-const { estaApagado, apagar, encender, listarInterruptores, INTERRUPTORES } = await import('./interruptores');
+const { estaApagado, leerInterruptor, apagar, encender, listarInterruptores, INTERRUPTORES } = await import('./interruptores');
 const { DatoInvalido } = await import('./errores');
 
 const de = (tabla: string, op?: string) =>
@@ -74,6 +78,7 @@ beforeEach(() => {
   logs.info.mockClear();
   logs.warn.mockClear();
   logs.error.mockClear();
+  alertarOperador.mockClear();
 });
 
 describe('estaApagado — sin fila = encendido, error = apagado', () => {
@@ -109,6 +114,36 @@ describe('estaApagado — sin fila = encendido, error = apagado', () => {
     expect(await estaApagado('global')).toBe(true);
     expect(logs.error).toHaveBeenCalledWith('interruptores.lectura_fallo',
       expect.objectContaining({ err: 'Supabase service-role no configurado' }));
+  });
+
+  // AUDITORÍA 18, A17: el fail-closed dejaba cinco crons en verde y sin correo.
+  it('la lectura ilegible GRITA con código estable de la causa Y alerta al operador', async () => {
+    colas.set('interruptor', [{ data: null, error: { message: 'fetch failed', code: 'ECONNRESET' } }]);
+    expect(await estaApagado('global')).toBe(true);
+    expect(logs.error).toHaveBeenCalledWith('interruptores.lectura_fallo',
+      expect.objectContaining({ interruptor: 'global', codigo: 'ECONNRESET' }));
+    expect(alertarOperador).toHaveBeenCalledWith('interruptores.lectura_fallo',
+      expect.objectContaining({ interruptor: 'global', codigo: 'ECONNRESET' }));
+  });
+
+  it('una lectura sana NO alerta ni grita', async () => {
+    colas.set('interruptor', [{ data: { apagado: true }, error: null }]);
+    await estaApagado('global');
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect(logs.error).not.toHaveBeenCalled();
+  });
+});
+
+describe('leerInterruptor — los tres estados que los crons tienen que distinguir', () => {
+  it('sin fila: encendido; fila apagada: apagado; error: ilegible (nunca lanza)', async () => {
+    colas.set('interruptor', [{ data: null, error: null }]);
+    expect(await leerInterruptor('global')).toBe('encendido');
+    colas.set('interruptor', [{ data: { apagado: true }, error: null }]);
+    expect(await leerInterruptor('global')).toBe('apagado');
+    colas.set('interruptor', [{ data: null, error: { message: 'fetch failed' } }]);
+    expect(await leerInterruptor('global')).toBe('ilegible');
+    fromRevienta = 'sin cliente';
+    expect(await leerInterruptor('global')).toBe('ilegible');
   });
 });
 

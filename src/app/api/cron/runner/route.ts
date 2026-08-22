@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { correrRunner } from '@/lib/likida/agentes/runner';
 import { logger } from '@/lib/logger';
+import { codigoDeError } from '@/lib/observability/sentry';
+import { alertarOperador } from '@/lib/observability/alerta';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +40,15 @@ export async function GET(req: Request) {
     // El runner entero no pudo ni arrancar (p. ej. la lista de agentes no se
     // leyó): 500 para que el panel de crons de Vercel lo pinte rojo — un 200
     // aquí escondería al orquestador muerto.
-    logger.error('cron.runner.fallo', { err: e instanceof Error ? e.message : String(e) });
+    //
+    // AUDITORÍA 18, M15: era el único cron sin `codigo` ni correo. Sin código,
+    // seis fallos al día durante una semana eran 42 eventos en UN issue de
+    // Sentry que notificó una vez; sin `alertarOperador`, cero correos. Mismo
+    // par que los otros cuatro crons.
+    const error = e instanceof Error ? e.message : String(e);
+    const codigo = codigoDeError(e);
+    logger.error('cron.runner.fallo', { error, codigo });
+    await alertarOperador('cron.runner', { error, codigo });
     return NextResponse.json({ error: 'El runner no pudo correr — el detalle quedó en los registros.' }, { status: 500 });
   }
 }

@@ -1,0 +1,64 @@
+# El consumidor de /api/health (auditoría 18, M18).
+#
+# La ruta nació en la auditoría 4 prometiendo que «un monitor pegándole a
+# esto cada minuto convierte ese modo de falla en una alerta de minutos», y
+# dos rondas después nadie la consumía: ni vercel.json, ni un workflow, ni
+# DEPLOY.md. Y el campo `version` —el único detector de la deriva silenciosa
+# del `ignoreCommand` (push sin [deploy] en el asunto = producción se queda
+# atrás sin avisar)— no se comparaba contra nada.
+#
+# Dos disparadores, un solo job:
+#   · schedule cada 30 min: producción contesta 200 con ok:true, o rojo.
+#   · push a master: si el asunto del commit lleva [deploy], se espera hasta
+#     10 minutos a que `version` sea el sha pusheado. Si no llega, rojo — con
+#     el sha esperado y el que de verdad corre en el log.
+# GitHub manda correo al dueño del repo cuando un workflow programado falla,
+# así que esto es una alerta sin infraestructura nueva y sin secretos.
+name: Salud de producción
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pulso:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: /api/health contesta 200 con ok:true
+        run: |
+          set -u
+          cuerpo=$(curl -sS --max-time 20 -w '\n%{http_code}' https://app.likida.ai/api/health) || { echo "::error::/api/health no contestó"; exit 1; }
+          status=$(echo "$cuerpo" | tail -n1)
+          json=$(echo "$cuerpo" | sed '$d')
+          echo "status=$status cuerpo=$json"
+          [ "$status" = "200" ] || { echo "::error::/api/health devolvió $status: $json"; exit 1; }
+          echo "$json" | grep -q '"ok":true' || { echo "::error::/api/health sin ok:true: $json"; exit 1; }
+
+      - name: El sha desplegado es el que se pusheó (solo push con [deploy] en el asunto)
+        if: github.event_name == 'push'
+        env:
+          ASUNTO: ${{ github.event.head_commit.message }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -u
+          asunto=$(printf '%s' "$ASUNTO" | head -n1)
+          if ! printf '%s' "$asunto" | grep -qi '\[deploy\]'; then
+            echo "El asunto no lleva [deploy]: este push NO construye a propósito (vercel.json ignoreCommand). Nada que cotejar."
+            exit 0
+          fi
+          esperado=$(printf '%s' "$SHA" | cut -c1-7)
+          for i in $(seq 1 20); do
+            version=$(curl -sS --max-time 20 https://app.likida.ai/api/health | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+            echo "intento $i: esperado=$esperado desplegado=${version:-?}"
+            [ "$version" = "$esperado" ] && exit 0
+            sleep 30
+          done
+          echo "::error::Producción sigue en '${version:-?}' y el push con [deploy] fue $esperado — el build no llegó (mira el panel de Vercel o haz Redeploy)."
+          exit 1

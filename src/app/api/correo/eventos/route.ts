@@ -78,12 +78,25 @@ export async function POST(req: Request) {
   // Un rebote/queja PISA a un "entregado" anterior, nunca al revés: el orden
   // de los webhooks no está garantizado y la mala noticia es la que opera
   // (un rebotado detiene reintentos; el estado final malo no debe taparse).
-  const { data, error } = await supabaseAdmin()
+  //
+  // AUDITORÍA 18, A4: esto se expresaba con `.neq('entrega_estado', 'rebotado')`
+  // y, para la mala noticia, `.neq('entrega_estado', '~nunca~')`. La columna
+  // NACE NULL (0124: «aceptado sin noticia de entrega todavía») y en SQL
+  // `NULL <> 'x'` es NULL, no true: el UPDATE afectaba 0 filas y el webhook
+  // contestaba `sinPieza` para TODA pieza que nunca había recibido un evento —
+  // o sea para todas. El circuito entero de la 0124 era código muerto.
+  //
+  // Ahora se dice en positivo: un "entregado" solo escribe si la columna está
+  // vacía o ya dice entregado (`IS NULL OR = 'entregado'`); la mala noticia
+  // escribe siempre. Sin `<>` sobre una columna anulable.
+  let consulta = supabaseAdmin()
     .from('cola_aprobacion')
     .update({ entrega_estado: estado, entrega_evento_en: new Date().toISOString() })
-    .eq('provider_message_id', emailId)
-    .neq('entrega_estado', estado === 'entregado' ? 'rebotado' : '~nunca~')
-    .select('id');
+    .eq('provider_message_id', emailId);
+  if (estado === 'entregado') {
+    consulta = consulta.or('entrega_estado.is.null,entrega_estado.eq.entregado');
+  }
+  const { data, error } = await consulta.select('id');
   if (error) {
     logger.error('correo.eventos.sin_escribir', { emailId, estado, err: error.message });
     // 500 para que Resend reintente: el evento es la única fuente de este dato.

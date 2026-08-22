@@ -20,6 +20,40 @@ describe('detectarDuplicadosEntreViajes', () => {
     expect(r[0].viajes.sort()).toEqual(['v1', 'v2']);
   });
 
+  it('un CFDI CONSOLIDADO (N partidas, 0065) repartido en varios viajes NO es una anomalía', () => {
+    // AUDITORÍA 18, A5: el estado de cuenta del TAG sella 40 casetas de 12
+    // viajes con el mismo UUID y orden 1..40. Eso es conciliar bien, no
+    // duplicar — acusar al chofer aquí era una acusación falsa en cuatro
+    // pantallas a la vez.
+    const filas: FilaGasto[] = [];
+    for (let i = 1; i <= 40; i++) filas.push(f(`v${i % 12}`, { concepto: 'caseta', monto: 87, cfdiUuid: 'uuid-tag', cfdiOrden: i }));
+    expect(detectarDuplicadosEntreViajes(filas)).toEqual([]);
+  });
+
+  it('la MISMA partida de un consolidado en dos viajes SÍ es una anomalía, y lo dice', () => {
+    const r = detectarDuplicadosEntreViajes([
+      f('v1', { concepto: 'caseta', monto: 87, cfdiUuid: 'uuid-tag', cfdiOrden: 3 }),
+      f('v2', { concepto: 'caseta', monto: 87, cfdiUuid: 'uuid-tag', cfdiOrden: 3 }),
+      f('v3', { concepto: 'caseta', monto: 120, cfdiUuid: 'uuid-tag', cfdiOrden: 4 }),
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].tipo).toBe('cfdi_duplicado');
+    expect(r[0].viajes.sort()).toEqual(['v1', 'v2']);
+    expect(r[0].detalle).toContain('partida 3');
+    expect(r[0].monto).toBe(87);
+  });
+
+  it('sin orden y con orden 1 son la misma partida (el default del motor)', () => {
+    const r = detectarDuplicadosEntreViajes([
+      f('v1', { cfdiUuid: 'uuid-a' }),
+      f('v2', { cfdiUuid: 'uuid-a', cfdiOrden: 1 }),
+      f('v3', { cfdiUuid: 'uuid-a', cfdiOrden: null }),
+    ]);
+    expect(r).toHaveLength(1);
+    expect(r[0].viajes).toHaveLength(3);
+    expect(r[0].detalle).not.toContain('partida');
+  });
+
   it('el mismo CFDI dos veces en EL MISMO viaje no es cosa de aquí', () => {
     // Eso ya lo atrapa el motor de cuadre y lo excluye del total. Reportarlo
     // aquí otra vez sería ruido en la bandeja del contralor.

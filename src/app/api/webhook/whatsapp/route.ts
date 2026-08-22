@@ -8,7 +8,7 @@ import { processInbound, type InboundMessage, type ResultadoInbound } from '@/li
 import { rateLimit, bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
-import { flushObservabilidad } from '@/lib/observability/sentry';
+import { flushObservabilidad, codigoDeError } from '@/lib/observability/sentry';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { guardarEventosPendientes, reclamarPendiente, marcarPendienteProcesado, anotarFalloPendiente } from '@/lib/likida/wa_pendientes';
 
@@ -280,7 +280,10 @@ export async function POST(req: NextRequest) {
             }
           } catch (e) {
             await anotarFalloPendiente(f.id, e instanceof Error ? e.message : String(e));
-            logger.error('processInbound', { id: f.id, err: e instanceof Error ? e.message : String(e) });
+            // `codigo` (AUDITORÍA 18, M14): sin él este catch era UN solo issue
+            // de Sentry para todos los fallos de procesamiento de todas las
+            // flotas, para siempre — la causa nueva no notificaba.
+            logger.error('processInbound', { id: f.id, err: e instanceof Error ? e.message : String(e), codigo: codigoDeError(e) });
           }
         } catch (e) {
           // Ni el claim se pudo leer: la fila sigue pendiente y el cron la
