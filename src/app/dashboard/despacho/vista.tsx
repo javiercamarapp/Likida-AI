@@ -181,10 +181,22 @@ export function VistaDespacho({
                       ))}
                     </tbody>
                   </table>
-                  {activos.length > MAX_FILAS && (
-                    <p className="text-[12px] mt-3" style={{ color: 'var(--faint)' }}>
-                      Se muestran {MAX_FILAS} — hay {numero(activos.length - MAX_FILAS)} más en curso.
-                    </p>
+                  {/* FE-5: decía "hay {activos.length - 12} más en curso",
+                      calculado sobre las 100 filas que la página traía — a 50k
+                      viajes/mes, ~90 minutos de operación, así que el número
+                      se topaba en 88 pasara lo que pasara. `tablero.viajesActivos`
+                      es el conteo REAL (RPC `tablero_operacion_tenant`); sin él
+                      no se inventa una diferencia, solo se dice que hay más. */}
+                  {(tablero !== null || activos.length > MAX_FILAS) && (
+                    tablero !== null && tablero.viajesActivos > MAX_FILAS ? (
+                      <p className="text-[12px] mt-3" style={{ color: 'var(--faint)' }}>
+                        Se muestran {MAX_FILAS} de {numero(tablero.viajesActivos)} viajes en curso — el resto está en el registro.
+                      </p>
+                    ) : activos.length > MAX_FILAS ? (
+                      <p className="text-[12px] mt-3" style={{ color: 'var(--faint)' }}>
+                        Se muestran {MAX_FILAS} — hay más en curso de los que caben aquí.
+                      </p>
+                    ) : null
                   )}
                 </div>
               )}

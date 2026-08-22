@@ -2,7 +2,10 @@ import Link from 'next/link';
 import { Send, UserCog, CircleSlash, CalendarDays, Plus, Users, History } from 'lucide-react';
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, hoyMx } from '@/lib/formato';
-import { getViajes, getOperadoresDetalle, type ViajeRow, type OperadorDetalle } from '@/lib/likida/analytics';
+import {
+  getViajes, getOperadoresDetalle, getSerieComparativa,
+  type ViajeRow, type OperadorDetalle, type ComparativoPeriodo,
+} from '@/lib/likida/analytics';
 import {
   getTableroOperacion, getViajesSinAsignar, getCargaOperadores, getIncidencias, getUnidades,
   type TableroOperacion, type ViajeSinAsignar, type CargaOperador, type IncidenciaRow, type UnidadRow,
@@ -12,6 +15,7 @@ import { EstadoVacio } from '../admin/ui/kit';
 import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from './resumen-visual';
 import { TableroCifras, TablaCarga, TablaViajesOperacion, type FilaViajeOperacion } from './tablero-operacion';
 import AvanceCierre from './avance-cierre';
+import { getViajesPorDia, type DiaViajes } from './serie-diaria';
 import { AvisoSinFlota } from './sin-flota';
 import { getPrimerosPasos } from '@/lib/likida/primeros-pasos';
 import { PrimeraLiquidacion } from './primera-liquidacion';
@@ -74,7 +78,10 @@ export async function InicioOperacion({
   // vencida. Mismo cálculo que `operadores/page.tsx`.
   const diaMx = hoyMx(new Date(ahora));
 
-  const [tablero, sinAsignar, carga, incidencias, viajes, unidades, operadores, pasos] = await Promise.all([
+  const [
+    tablero, sinAsignar, carga, incidencias, viajes, unidades, operadores, pasos,
+    viajesPorDia, historico,
+  ] = await Promise.all([
     safe<TableroOperacion>(() => getTableroOperacion(tenantId)),
     safe<ViajeSinAsignar[]>(() => getViajesSinAsignar(tenantId)),
     safe<CargaOperador[]>(() => getCargaOperadores(tenantId)),
@@ -90,6 +97,12 @@ export async function InicioOperacion({
     // `operadores/page.tsx` (la fuga del 4-ago fue exactamente eso).
     safe<OperadorDetalle[]>(() => getOperadoresDetalle(tenantId)),
     safe(() => getPrimerosPasos(tenantId)),
+    // FE-5: el "Avance de cierre" contaba en memoria sobre las 100 filas de
+    // `viajes` — a 50k viajes/mes eso son ~90 minutos, y los tres botones
+    // (7d/30d/Todo) medían exactamente la misma hora y media. Ahora la base
+    // cuenta por día y el histórico va por su propia ventana.
+    safe<DiaViajes[]>(() => getViajesPorDia(tenantId, diaMx)),
+    safe<ComparativoPeriodo[]>(() => getSerieComparativa(tenantId, 3650, 1, diaMx)),
   ]);
 
   // ── Alertas accionables — SOLO si hay fuego real ─────────────────────────
@@ -159,8 +172,10 @@ export async function InicioOperacion({
   if (unidades === null) ciegas.push('los papeles de las unidades');
   if (operadores === null) ciegas.push('las licencias');
 
-  // TODAS las filas cargadas (tope 100 de getViajes), SIN el anticipo: el
+  // Las 100 filas MÁS RECIENTES (tope de `getViajes`), SIN el anticipo: el
   // tipo de la tabla no tiene campo donde ponerlo — ver `FilaViajeOperacion`.
+  // "recientes" es literal y el encabezado lo dice: no son todas, y el
+  // registro completo vive en /dashboard/viajes.
   const filasViajes: FilaViajeOperacion[] = (viajes ?? []).map((v) => ({
     id: v.id, folio: v.folio, origen: v.origen, destino: v.destino,
     estatus: v.estatus, operadorNombre: v.operadorNombre, fechaInicio: v.fechaInicio,
@@ -264,12 +279,17 @@ export async function InicioOperacion({
               pudo leer" nunca se disfraza de cero. */}
           <div className="card p-4 mt-3 flex flex-wrap items-start gap-x-8 gap-y-3">
             <div className="flex-1 min-w-[260px]">
-              {viajes === null ? (
+              {viajesPorDia === null ? (
                 <p className="text-sm m-0" style={{ color: 'var(--muted)' }}>
                   No se pudo leer el avance de cierre — no significa que no haya viajes.
                 </p>
               ) : (
-                <AvanceCierre viajes={viajes} ahoraMs={ahora} />
+                <AvanceCierre
+                  porDia={viajesPorDia}
+                  historico={historico && historico[0]
+                    ? { viajes: historico[0].totalViajes, liquidados: historico[0].viajesLiquidados }
+                    : null}
+                />
               )}
             </div>
             <div className="text-right shrink-0 ml-auto">
@@ -347,6 +367,11 @@ export async function InicioOperacion({
             <div className="px-5 pt-4 pb-2 flex items-center gap-2">
               <History {...ICONO_SECCION} />
               <TituloSeccion>Viajes recientes</TituloSeccion>
+              {viajes !== null && viajes.length >= 100 && (
+                <Link href={`/dashboard/viajes${sufijo}`} className="ml-auto text-[11px] shrink-0 hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>
+                  Los 100 más recientes · ver el registro completo →
+                </Link>
+              )}
             </div>
             {viajes === null ? (
               <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer los viajes.</div>

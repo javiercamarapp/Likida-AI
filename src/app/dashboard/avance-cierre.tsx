@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { ViajeRow } from '@/lib/likida/analytics';
+import { sumarUltimos, type DiaViajes } from './serie-diaria';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AVANCE DE CIERRE — cuánto de lo que se abrió ya cerró, por periodo.
@@ -13,9 +13,19 @@ import type { ViajeRow } from '@/lib/likida/analytics';
 // periodo, que además es la pregunta que el operador se hace en la mañana
 // ("¿voy al corriente o se me está acumulando?").
 //
-// Se calcula en el cliente sobre los viajes que la página ya trajo, no con
-// una consulta por pestaña: cambiar de semana a mes es instantáneo y no
-// cuesta un viaje al servidor por clic.
+// ── FE-5 (22-ago-2026): LA CUENTA VIENE DE SQL, NO DE 100 FILAS ────────────
+//
+// Esto contaba EN MEMORIA sobre `getViajes(tenantId, 100)`: las 100 filas más
+// recientes. A 50,000 viajes/mes eso son ~90 minutos de operación, así que
+// "7d" medía hora y media, "30d" medía la misma hora y media, y "Todo" medía
+// otra vez la misma hora y media — tres botones, un solo dato, y el
+// porcentaje se veía perfectamente creíble en los tres.
+//
+// Ahora llega `porDia` (un bucket por día, contado por `serie_comparativa_
+// tenant` con ventana de 1 día — ver `serie-diaria.ts`) e `historico` (la
+// ventana de ~10 años que ya usa `getSeriesKpiCards`). Cambiar de 7d a 30d
+// sigue siendo instantáneo y sin viaje al servidor: los 7 días son la cola de
+// los mismos 30 buckets.
 // ═══════════════════════════════════════════════════════════════════════════
 
 type Periodo = 'semana' | 'mes' | 'todo';
@@ -36,11 +46,12 @@ const PERIODOS: Array<{ id: Periodo; label: string; dias: number | null }> = [
 ];
 
 /**
- * `ahoraMs` lo manda el SERVIDOR (`ahoraMs()` de lib/saludo). Leer el reloj
- * aquí sería impuro —el componente puede re-renderizar y clasificar distinto—
- * y además el reloj del navegador no coincide con el del servidor, así que el
- * HTML servido y el primer render del cliente podrían meter un viaje en
- * periodos distintos y React reportaría desajuste de hidratación.
+ * `porDia` e `historico` los cuenta la BASE y llegan por props: este
+ * componente no lee el reloj ni parsea fechas. Leer el reloj aquí sería
+ * impuro —el componente puede re-renderizar y clasificar distinto— y además
+ * el reloj del navegador no coincide con el del servidor, así que el HTML
+ * servido y el primer render del cliente podrían meter un viaje en periodos
+ * distintos y React reportaría desajuste de hidratación.
  */
 /** Ya no tiene su propio toggle — Javier pidió UN solo botón de periodo para
  *  toda la pantalla, no tres controles que pueden mostrar estados distintos.
@@ -49,29 +60,33 @@ const PERIODOS: Array<{ id: Periodo; label: string; dias: number | null }> = [
  *  se resuelve UNA vez en el Server Component (`page.tsx`, vía
  *  `resolverRango`) y este componente se queda puro — se puede seguir
  *  probando con `renderToStaticMarkup` sin envolverlo en un router de
- *  Next, que es justo como ya estaban escritas sus pruebas. El cálculo
- *  sigue siendo local sobre `viajes` (cero viajes de más al servidor). */
-export default function AvanceCierre({ viajes, ahoraMs, rango }: { viajes: ViajeRow[]; ahoraMs: number; rango?: string }) {
+ *  Next, que es justo como ya estaban escritas sus pruebas. */
+export default function AvanceCierre({ porDia, historico, rango }: {
+  /** Un bucket por día (del más viejo al más reciente), ya contado en SQL. */
+  porDia: DiaViajes[];
+  /** Todo el histórico: viajes iniciados y de ésos cuántos cerraron. `null`
+   *  = no se pudo leer, y el botón "Todo" lo dice en vez de enseñar un 0%. */
+  historico: { viajes: number; liquidados: number } | null;
+  rango?: string;
+}) {
   const periodo: Periodo = rango === '30' ? 'mes' : rango === 'todo' ? 'todo' : 'semana';
 
   const datos = useMemo(() => {
     const cfg = PERIODOS.find((p) => p.id === periodo)!;
-    const corte = cfg.dias === null ? null : ahoraMs - cfg.dias * 86_400_000;
-
-    // Un viaje SIN fecha de inicio no se puede ubicar en un periodo. No se
-    // cuenta ni como dentro ni como fuera: se reporta aparte, porque meterlo
-    // en el total movería el porcentaje sin que nadie sepa por qué.
-    let dentro = 0, cerrados = 0, sinFecha = 0;
-    for (const v of viajes) {
-      if (!v.fechaInicio) { sinFecha += 1; continue; }
-      const t = Date.parse(v.fechaInicio);
-      if (Number.isNaN(t)) { sinFecha += 1; continue; }
-      if (corte !== null && t < corte) continue;
-      dentro += 1;
-      if (v.estatus === 'liquidado') cerrados += 1;
-    }
-    return { dentro, cerrados, sinFecha, pct: dentro === 0 ? null : Math.round((cerrados / dentro) * 100) };
-  }, [viajes, periodo, ahoraMs]);
+    // "Todo" NO es la suma de los 30 buckets: son ventanas distintas y
+    // sumarlas diría "todo el histórico" sobre un mes. Viene de su propia
+    // lectura (la ventana de ~10 años de getSeriesKpiCards).
+    const suma = cfg.dias === null
+      ? (historico === null ? null : { viajes: historico.viajes, liquidados: historico.liquidados })
+      : sumarUltimos(porDia, cfg.dias);
+    if (suma === null) return { dentro: 0, cerrados: 0, ilegible: true, pct: null as number | null };
+    return {
+      dentro: suma.viajes,
+      cerrados: suma.liquidados,
+      ilegible: false,
+      pct: suma.viajes === 0 ? null : Math.round((suma.liquidados / suma.viajes) * 100),
+    };
+  }, [porDia, historico, periodo]);
 
   return (
     <div>
@@ -107,11 +122,18 @@ export default function AvanceCierre({ viajes, ahoraMs, rango }: { viajes: Viaje
         </div>
       )}
 
+      {/* Ya no se reporta "N sin fecha de inicio, fuera del cálculo": ese
+          renglón existía porque la cuenta se hacía en memoria sobre 100 filas
+          y había que confesar qué se estaba tirando. Ahora la base cuenta por
+          `fecha_inicio` dentro del periodo, así que un viaje sin fecha no
+          está "fuera del cálculo" — está fuera de la pregunta, que dice
+          "iniciados" en su propio texto. */}
       <p className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
-        {datos.dentro === 0
-          ? 'No hay viajes iniciados en este periodo.'
-          : `${datos.cerrados} de ${datos.dentro} viaje${datos.dentro === 1 ? '' : 's'} iniciado${datos.dentro === 1 ? '' : 's'} ya está${datos.cerrados === 1 ? '' : 'n'} liquidado${datos.cerrados === 1 ? '' : 's'}.`}
-        {datos.sinFecha > 0 && ` ${datos.sinFecha} sin fecha de inicio, fuera del cálculo.`}
+        {datos.ilegible
+          ? 'No se pudo leer el histórico — esto no significa que no haya viajes.'
+          : datos.dentro === 0
+            ? 'No hay viajes iniciados en este periodo.'
+            : `${datos.cerrados} de ${datos.dentro} viaje${datos.dentro === 1 ? '' : 's'} iniciado${datos.dentro === 1 ? '' : 's'} ya está${datos.cerrados === 1 ? '' : 'n'} liquidado${datos.cerrados === 1 ? '' : 's'}.`}
       </p>
     </div>
   );

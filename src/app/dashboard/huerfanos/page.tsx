@@ -6,11 +6,46 @@ import {
   getHuerfanosDeFlota, traerHuerfanoPendiente, resolverHuerfanoDesdeOficina, addGasto,
 } from '@/lib/likida/repo';
 import { getViajes } from '@/lib/likida/analytics';
+import { acotada } from '@/lib/likida/presupuesto';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { contarHuerfanosPendientes } from '@/lib/likida/repo';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../sufijo';
 import { VistaHuerfanos } from './vista';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * ¿ESTE viaje sigue vivo, y es de ESTA flota? (FE-5, 22-ago-2026)
+ *
+ * Antes esto se contestaba con `(await getViajes(tenantId)).some(...)`: las
+ * 100 filas MÁS RECIENTES. A 50,000 viajes/mes eso son ~90 minutos, así que
+ * adjuntar un comprobante a un viaje abierto de ayer contestaba "Ese viaje ya
+ * no está abierto. Recarga la página." — una afirmación FALSA sobre el estado
+ * del viaje, dicha con toda seguridad, sobre la que el usuario no podía hacer
+ * nada (recargar no cambiaba nada). Peor todavía: la comprobación existe como
+ * candado de seguridad, y un candado que depende de una ventana de tiempo no
+ * es un candado.
+ *
+ * Ahora se pregunta por el viaje EXACTO, anclado al tenant, y se lee su
+ * estatus. `null` (no se pudo leer) NO se toma por "no está vivo": se
+ * distingue arriba para no acusar al viaje de algo que no se comprobó.
+ */
+async function viajeSigueVivo(tenantId: string, viajeId: string): Promise<boolean | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('viaje')
+    .select('estatus')
+    .eq('id', viajeId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle(), 'huerfanos.viajeSigueVivo');
+  if (error) {
+    logger.error('huerfano.destino_no_verificado', { viajeId, err: error.message });
+    return null;
+  }
+  if (!data) return false;
+  const e = data.estatus as string;
+  return e === 'abierto' || e === 'en_cuadre';
+}
 
 /** El gateo que ambas actions repiten adentro. Helper de módulo y no
  *  closure: una action solo captura VALORES serializables (tenantId). */
@@ -47,9 +82,12 @@ export default async function PaginaHuerfanos({
   const sufijo = sufijoTenant(sp);
 
   // Primarios sin catch: bandeja ciega = página caída, no "no hay sueltos".
-  const [pendientes, viajes] = await Promise.all([
+  // El CONTEO va aparte y sí degrada (`null`): sirve para rotular "200 de N",
+  // y no poder contar no puede tumbar la bandeja (FE-13).
+  const [pendientes, viajes, totalPendientes] = await Promise.all([
     getHuerfanosDeFlota(tenantId),
     getViajes(tenantId),
+    contarHuerfanosPendientes(tenantId),
   ]);
 
   // A dónde se puede adjuntar: solo viajes VIVOS. Un gasto a un viaje
@@ -84,10 +122,12 @@ export default async function PaginaHuerfanos({
     }
 
     // El viaje destino se re-verifica ADENTRO (un viajeId ajeno o liquidado
-    // no pasa), no se confía en que venía del <select>.
-    const destinoOk = (await getViajes(tenantId)).some(
-      (v) => v.id === viajeId && (v.estatus === 'abierto' || v.estatus === 'en_cuadre'),
-    );
+    // no pasa), no se confía en que venía del <select>. Se pregunta POR ESE
+    // VIAJE, no por los 100 más recientes — ver `viajeSigueVivo`.
+    const destinoOk = await viajeSigueVivo(tenantId, viajeId);
+    if (destinoOk === null) {
+      return { error: 'No se pudo comprobar el viaje destino ahora mismo — inténtalo de nuevo.' };
+    }
     if (!destinoOk) return { error: 'Ese viaje ya no está abierto. Recarga la página.' };
 
     try {
@@ -128,6 +168,7 @@ export default async function PaginaHuerfanos({
       pendientes={pendientes}
       viajesVivos={viajesVivos}
       cargados={viajes.length}
+      totalPendientes={totalPendientes}
       acciones={{ adjuntar, descartar }}
     />
   );
