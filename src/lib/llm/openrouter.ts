@@ -666,13 +666,13 @@ export async function generateWithTools(opts: {
    *  (b) en cuanto una corre con éxito, el ciclo termina ahí: no se paga otra
    *      completion para que el modelo diga "listo".
    */
-  terminalTools?: string[];
+  terminalTools?: readonly string[];
   /**
    * Tools de SOLO LECTURA por nombre (B17): las que no siguen la convención
    * de prefijo (`kpis_flota`, `metrica_negocio`, `bandeja`…) y aun así deben
    * entrar a la caché entre rondas del turno.
    */
-  readOnlyTools?: string[];
+  readOnlyTools?: readonly string[];
 }): Promise<{
   finalText: string;
   toolCalls: ToolCallRecord[];
