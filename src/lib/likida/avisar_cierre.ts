@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { sendText, sendDocument } from '@/lib/meta/client';
 import { armarAvisoJefe, type ResumenLiquidacion, type DiferenciaResumen } from './cierre_aviso';
-import { telefonoJefeDe } from './contactos';
+import { telefonoParaDineroDe } from './contactos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE LA OFICINA SE ENTERA CUANDO UN CHOFER CIERRA.
@@ -85,14 +85,21 @@ export async function resumenDeCierre(tenantId: string, viajeId: string): Promis
  *
  * `urlPdf` viene firmada y de vida corta — se pasa desde el cierre en vez de
  * volver a firmarla aquí para no duplicar el criterio del TTL, que ya está
- * decidido en un solo lugar.
+ * decidido en un solo lugar. Tiene que ser el ejemplar COMPLETO (el del
+ * contralor, `${tenant}/${viaje}.pdf`), no el del operador: el jefe lo archiva
+ * y se lo pasa a su contador, y el del operador trae recortados justo los
+ * veredictos que el contador resuelve (auditoría 18, M26). Sin URL se manda
+ * el texto igual: el aviso de decisión no depende del papel (M27).
  */
 export async function avisarCierreAlJefe(args: {
   tenantId: string;
   viajeId: string;
   urlPdf?: string | null;
 }): Promise<ResultadoAvisoCierre> {
-  const tel = await telefonoJefeDe(args.tenantId);
+  // A QUIEN VE DINERO, no al primer teléfono de oficina (auditoría 18, A28):
+  // este aviso lleva anticipo, comprobado, diferencia y el PDF completo. El
+  // encargado no ve nada de eso en el panel, y no lo va a ver por aquí.
+  const tel = await telefonoParaDineroDe(args.tenantId);
   if (!tel) {
     // ERROR y no WARN: esta flota no se va a enterar de NINGÚN cierre hasta que
     // alguien capture el teléfono, y no hay otro lugar donde se note.

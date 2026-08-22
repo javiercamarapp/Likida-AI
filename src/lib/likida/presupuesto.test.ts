@@ -70,8 +70,9 @@ describe('crearPresupuesto', () => {
     // presupuesto y se lleva por delante al agente.
     let ahora = 0;
     const p = crearPresupuesto(60_000, () => ahora);
-    ahora = 47_000;
-    const quedan = 60_000 - MARGEN_CIERRE_MS - 47_000;
+    ahora = 40_000;
+    const quedan = 60_000 - MARGEN_CIERRE_MS - 40_000;
+    expect(quedan, 'control: con este margen tiene que quedar algo').toBeGreaterThan(1_000);
     expect(p.acotar(20_000)).toBe(quedan);       // pide 20s, se le dan los que hay
     expect(p.acotar(quedan - 1_000)).toBe(quedan - 1_000);  // si pide menos, se respeta
   });
@@ -120,11 +121,25 @@ describe('la contabilidad del cierre', () => {
     expect(MARGEN_CIERRE_MS).toBeGreaterThanOrEqual(COSTO_CIERRE_MS);
   });
 
-  it('la tabla trae los trece pasos, con dónde vive cada uno', () => {
+  // AUDITORÍA 18, ALTO (A24): la tabla tenía 13 pasos y el cierre real 17 —
+  // `avisarCierreAlJefe` se añadió sin su renglón, y esta prueba comparaba la
+  // tabla consigo misma. Ahora se cuentan los envíos en el FUENTE de
+  // `avisar_cierre.ts`: un `sendText`/`sendDocument` nuevo ahí sin renglón
+  // aquí es una prueba en rojo.
+  it('cada envío de avisar_cierre.ts tiene su renglón en la tabla', () => {
+    const fuente = readFileSync('src/lib/likida/avisar_cierre.ts', 'utf8')
+      .split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
+    const envios = (fuente.match(/\b(sendText|sendDocument)\(/g) ?? []).length;
+    expect(envios, 'control: avisar_cierre.ts manda al menos texto y PDF').toBeGreaterThanOrEqual(2);
+    const renglones = PASOS_CIERRE.filter((p) => p.donde.includes('avisar_cierre.ts') && /send(Text|Document)/.test(p.paso));
+    expect(renglones.length, 'envíos en avisar_cierre.ts sin renglón en PASOS_CIERRE').toBeGreaterThanOrEqual(envios);
+  });
+
+  it('la tabla trae los dieciocho pasos, con dónde vive cada uno', () => {
     // El `donde` no es adorno: sin él, revisar si la lista sigue completa exige
     // releer `processor.ts` entero, que es exactamente lo que nadie hizo en tres
     // rondas. Si añades un paso de red al cierre, añádelo aquí o sube el margen.
-    expect(PASOS_CIERRE).toHaveLength(13);
+    expect(PASOS_CIERRE).toHaveLength(18);
     for (const p of PASOS_CIERRE) {
       expect(p.ms, `${p.paso} sin costo`).toBeGreaterThan(0);
       expect(p.donde, `${p.paso} sin ubicación`).toMatch(/\.ts/);

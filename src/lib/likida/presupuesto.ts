@@ -29,7 +29,9 @@ import { logger } from '@/lib/logger';
  * Ahora es una tabla, y `presupuesto.test.ts` compara su suma contra
  * `MARGEN_CIERRE_MS`. Meter un paso más al cierre sin ampliar el margen deja de
  * ser un descuido silencioso y pasa a ser una prueba en rojo — el mismo
- * mecanismo que ya protege la sincronía con `maxDuration`.
+ * mecanismo que ya protege la sincronía con `maxDuration`. Y desde la
+ * auditoría 18 la prueba también LEE `avisar_cierre.ts`: cada `sendText` /
+ * `sendDocument` de ese archivo tiene que tener su renglón aquí.
  *
  * Los costos unitarios son los que este archivo ya usaba: 0.3s una consulta,
  * 1.5s un `sendText`, 2.5s un `sendDocument`, 0.5s una URL firmada.
@@ -46,11 +48,20 @@ export const PASOS_CIERRE: ReadonlyArray<{ paso: string; donde: string; ms: numb
   { paso: 'createSignedUrl del PDF',               donde: 'processor.ts:755',  ms: 500 },
   { paso: 'sendDocument del PDF',                  donde: 'processor.ts:757',  ms: 2_500 },
   { paso: 'registrarCostoWhatsApp del PDF',        donde: 'processor.ts:758',  ms: 300 },
+  // AUDITORÍA 18, ALTO (A24): `avisarCierreAlJefe` añadió CINCO viajes de red
+  // al cierre y la tabla no los tenía — la prueba comparaba la tabla consigo
+  // misma. 13.5s de cierre real contra 12s de reserva. Ahora están, y
+  // `presupuesto.test.ts` cuenta los envíos de `avisar_cierre.ts` en el fuente.
+  { paso: 'createSignedUrl del PDF completo (jefe)', donde: 'processor.ts',     ms: 500 },
+  { paso: 'telefonoParaDineroDe',                  donde: 'contactos.ts',      ms: 300 },
+  { paso: 'resumenDeCierre (2 consultas en paralelo)', donde: 'avisar_cierre.ts', ms: 300 },
+  { paso: 'sendText del aviso al jefe',            donde: 'avisar_cierre.ts',  ms: 1_500 },
+  { paso: 'sendDocument del PDF al jefe',          donde: 'avisar_cierre.ts',  ms: 2_500 },
   { paso: 'saveConversation',                      donde: 'processor.ts:774',  ms: 500 },
   { paso: 'releaseViajeLock',                      donde: 'processor.ts:814',  ms: 300 },
 ];
 
-/** Suma de la tabla de arriba. 8.9s con los costos unitarios de este archivo. */
+/** Suma de la tabla de arriba. 14.0s con los costos unitarios de este archivo. */
 export const COSTO_CIERRE_MS = PASOS_CIERRE.reduce((s, p) => s + p.ms, 0);
 
 /**
@@ -58,8 +69,9 @@ export const COSTO_CIERRE_MS = PASOS_CIERRE.reduce((s, p) => s + p.ms, 0);
  * agente. Sin este margen se gasta hasta el último milisegundo y no queda
  * tiempo ni de responder — que es el fallo que esto viene a evitar.
  *
- * 12s contra los 8.9s de `COSTO_CIERRE_MS`: 3.1s de holgura. El coste es que el
- * agente pasa de 52s a 48s de techo, y el turno típico usa ~20s.
+ * 17s contra los 14.0s de `COSTO_CIERRE_MS`: 3.0s de holgura (auditoría 18,
+ * A24: eran 12s contra 13.5s reales). El coste es que el agente pierde 5s de
+ * techo, y el turno típico usa ~20s.
  *
  * OJO CON LO QUE ESTE NÚMERO **NO** ES: no es un tope. Es una RESERVA, y una
  * reserva solo vale lo que valga el techo de cada paso que la consume. De los
@@ -69,7 +81,7 @@ export const COSTO_CIERRE_MS = PASOS_CIERRE.reduce((s, p) => s + p.ms, 0);
  * contra un `maxDuration` de 120. Un solo envío colgado se lleva la invocación
  * entera sin dejar rastro, tenga esta reserva el valor que tenga.
  */
-export const MARGEN_CIERRE_MS = 12_000;
+export const MARGEN_CIERRE_MS = 17_000;
 
 /**
  * TECHO DURO DE UNA CONSULTA A SUPABASE. Lo impone `repo.ts` en cada llamada.
