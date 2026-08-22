@@ -5809,3 +5809,51 @@ begin
   raise exception E'CLAIM_0149  columna=%  huerfano_retomado=%  completado_retomado=%  fresco_retomado=%   (esperado t / 1 / 0 / 0)',
     columna, retomado, completado_no_retomado, fresco_no_retomado;
 end $$;
+
+-- ── 127. Purgas en tandas, retención de la bandeja y bucket comprobantes (mig. 0155) ──
+-- ESC-2/RES-14/ESC-16/ESC-17/ESC-13/ESC-10/RES-7. Se siembran tres filas en
+-- `wa_evento_pendiente` (procesada hace 40 d, carta muerta de 100 d, pendiente
+-- VIVA de 100 d con intentos=1) y una de `bitacora_auditoria` de 400 d; la
+-- purga tiene que borrar exactamente dos eventos y la bitácora, y dejar la
+-- viva. Además: `mantenimiento_de_datos` trae `parcial` y las llaves nuevas
+-- conservando `prospectoPersonasPurgadas`; el bucket tiene 8 MB y 2 mimes;
+-- `resumen_costo_ia(null,null)` devuelve `totales.n`; `cron_latido` rebota un
+-- id fuera del dominio; y ninguna purga es ejecutable por `anon`. Esperado:
+--   PURGAS_0155  eventos_borrados=2  viva_queda=t  bitacora_borrada=1  parcial=f
+--                llaves=t  bucket=8388608/2  resumen_n=t  latido_rebota=t  anon=f
+do $$
+declare
+  res jsonb; viva boolean; quedan_eventos int; bit_antes int; bit_despues int;
+  tiene_llaves boolean; limite bigint; mimes int; resumen_n boolean;
+  latido_rebota boolean := false; anon_ok boolean;
+begin
+  insert into public.wa_evento_pendiente (id, evento, recibido_en, intentos, procesado_en) values
+    ('zzz-verif-0155-procesada', '{"from":"x"}', now() - interval '41 days', 1, now() - interval '40 days'),
+    ('zzz-verif-0155-muerta',    '{"from":"x"}', now() - interval '100 days', 5, null),
+    ('zzz-verif-0155-viva',      '{"from":"x"}', now() - interval '100 days', 1, null);
+  insert into public.bitacora_auditoria (accion, ocurrio_en) values ('zzz.verif.0155', now() - interval '400 days');
+  select count(*) into bit_antes from public.bitacora_auditoria where accion = 'zzz.verif.0155';
+
+  res := public.mantenimiento_de_datos(30);
+
+  select count(*) into quedan_eventos from public.wa_evento_pendiente where id like 'zzz-verif-0155-%';
+  select exists (select 1 from public.wa_evento_pendiente where id = 'zzz-verif-0155-viva') into viva;
+  select count(*) into bit_despues from public.bitacora_auditoria where accion = 'zzz.verif.0155';
+  tiene_llaves := (res ? 'parcial') and (res ? 'waEventosPurgados') and (res ? 'posicionesPurgadas')
+    and (res ? 'llmCostoPurgado') and (res ? 'bitacoraPurgada') and (res ? 'cobranzaContactosPurgados')
+    and (res ? 'prospectoPersonasPurgadas') and jsonb_typeof(res->'llmCostoPurgado') = 'number';
+  select file_size_limit, cardinality(allowed_mime_types) into limite, mimes from storage.buckets where id = 'comprobantes';
+  resumen_n := jsonb_typeof(public.resumen_costo_ia(null, null)->'totales'->'n') = 'number';
+  begin
+    insert into public.cron_latido (id) values ('zzz-inventado');
+  exception when check_violation then latido_rebota := true;
+  end;
+  select has_function_privilege('anon', 'public.purgar_wa_evento_pendiente(integer, integer, timestamptz, timestamptz)', 'EXECUTE')
+      or has_function_privilege('anon', 'public.purgar_en_tandas(regclass, text, timestamptz, integer)', 'EXECUTE')
+      or has_function_privilege('anon', 'public.purgar_llm_costo(integer, timestamptz, timestamptz)', 'EXECUTE')
+    into anon_ok;
+
+  raise exception E'PURGAS_0155  eventos_borrados=%  viva_queda=%  bitacora_borrada=%  parcial=%  llaves=%  bucket=%/%  resumen_n=%  latido_rebota=%  anon=%   (esperado 2/t/1/f/t/8388608/2/t/t/f)',
+    3 - quedan_eventos, viva, bit_antes - bit_despues, (res->>'parcial')::boolean, tiene_llaves,
+    coalesce(limite, 0), coalesce(mimes, 0), resumen_n, latido_rebota, anon_ok;
+end $$;

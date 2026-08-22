@@ -4,6 +4,7 @@ import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { registrarLatido, puertaCron } from '@/lib/admin/salud';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,16 +30,17 @@ export const maxDuration = 120;
 // flota y no responde ninguna pregunta de negocio. 30 días es más de un orden
 // de magnitud por encima de la ventana de reintentos de Meta.
 //
-// NO BORRA `llm_costo`. Es la fuente del costo por viaje, y además
-// `resumen_costo_ia_tenant()` (0062/0064) suma sus filas CRUDAS: si se
-// purgaran, esa función contestaría —sin avisar— una cifra MENOR para cualquier
-// periodo purgado, y el panel enseñaría un número distinto del mismo mes según
-// cuándo se mire. Eso choca con la regla que define al producto ("nunca
-// inventar una cifra"). En su lugar se CONSOLIDA a mensual, que es la
-// granularidad que el panel de verdad lee. Ver la 0072 para el detalle.
+// `llm_costo` se CONSOLIDA a mensual (0072) y, desde la 0155 (ESC-10), el
+// detalle de más de 13 meses se borra: el mes ya está cerrado en
+// `llm_costo_mensual`, que es la granularidad que el panel lee. La respuesta
+// lleva `llmCostoPurgado` con la cifra real.
 //
-// La respuesta lleva `llmCostoPurgado: false` explícito para que nadie lea una
-// corrida verde como "ya se limpió todo".
+// EN TANDAS Y CON REPETICIÓN (0155, ESC-16): cada purga borra de 50k en 50k
+// con un vencimiento de 60 s compartido dentro de la RPC, y devuelve
+// `parcial: true` si no alcanzó. Este cron repite la llamada mientras sea
+// parcial y le queden más de 60 s de reloj; lo que no cupo lo levanta la
+// corrida de mañana. Antes era UN delete sin tandas bajo maxDuration=120: la
+// primera corrida grande moría a la mitad con el lock puesto.
 //
 // ── POR QUÉ FALLA CERRADO SIN SECRETO ────────────────────────────────────
 //
@@ -52,20 +54,18 @@ export const maxDuration = 120;
 
 /** Días que sobrevive una fila de idempotencia. El piso lo impone la 0072. */
 const DIAS_WA = 30;
+/** Cada llamada a la RPC se corta sola a los 60 s; solo se repite si queda
+ *  margen para otra entera. */
+const PLAZO_VUELTA_MS = 60_000;
+/** Techo duro de vueltas por corrida, por si `parcial` nunca baja. */
+const MAX_VUELTAS = 3;
 
 export async function GET(req: Request) {
-  const secreto = process.env.CRON_SECRET;
-  if (!secreto) {
-    logger.error('cron.purgar.sin_secreto', {});
-    return NextResponse.json(
-      { error: 'CRON_SECRET no está configurado. La purga no corre sin él.' },
-      { status: 500 },
-    );
-  }
-  if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
-    // Sin cuerpo: a quien no está autorizado no se le dice qué hay detrás.
-    return new NextResponse(null, { status: 401 });
-  }
+  // La puerta (RES-7): sin secreto 500 + alerta; 401 con log y código
+  // estable — antes ni el 401 ni el secreto ausente dejaban huella y el cron
+  // podía llevar semanas muerto con el panel en verde.
+  const puerta = await puertaCron('purgar', req, 'La purga no corre sin él.');
+  if (puerta) return puerta;
 
   // ── EL KILL SWITCH (0110): solo 'global' — la purga no es un agente ──────
   //
@@ -92,33 +92,46 @@ export async function GET(req: Request) {
   }
 
   try {
-    const { data, error } = await supabaseAdmin().rpc('mantenimiento_de_datos', {
-      p_dias_wa: DIAS_WA,
-    });
+    const inicio = Date.now();
+    let vueltas = 0;
+    let data: Record<string, unknown> = {};
+    let parcial = false;
+    do {
+      vueltas++;
+      const r = await supabaseAdmin().rpc('mantenimiento_de_datos', {
+        p_dias_wa: DIAS_WA,
+      });
 
-    // supabase-js reporta POR VALOR: sin comprobar `error` explícitamente, una
-    // base caída se leería como una purga que no encontró nada que borrar y la
-    // corrida saldría verde. Ver `exigir()` en analytics.ts.
-    if (error) {
-      // El `codigo` discrimina la causa en el fingerprint de Sentry: un error
-      // de PostgREST trae `code` ('42P01', 'PGRST202'…) y ese viaja tal cual —
-      // una causa nueva es un issue nuevo, o sea una notificación que sí llega.
-      // La alerta va directo al operador del sistema: los avisos por tenant no
-      // cubren un cron global, y este no tiene tenant que emitir.
-      const codigo = codigoDeError(error);
-      logger.error('cron.purgar.falló', { error: error.message, codigo });
-      await alertarOperador('cron.purgar', { error: error.message, codigo });
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+      // supabase-js reporta POR VALOR: sin comprobar `error` explícitamente, una
+      // base caída se leería como una purga que no encontró nada que borrar y la
+      // corrida saldría verde. Ver `exigir()` en analytics.ts.
+      if (r.error) {
+        // El `codigo` discrimina la causa en el fingerprint de Sentry: un error
+        // de PostgREST trae `code` ('42P01', 'PGRST202'…) y ese viaja tal cual —
+        // una causa nueva es un issue nuevo, o sea una notificación que sí llega.
+        // La alerta va directo al operador del sistema: los avisos por tenant no
+        // cubren un cron global, y este no tiene tenant que emitir.
+        const codigo = codigoDeError(r.error);
+        logger.error('cron.purgar.falló', { error: r.error.message, codigo, vuelta: vueltas });
+        await alertarOperador('cron.purgar', { error: r.error.message, codigo });
+        await registrarLatido('purgar', 'fallo', { codigo, vuelta: vueltas });
+        return NextResponse.json({ error: r.error.message, vueltas }, { status: 500 });
+      }
+      data = (r.data ?? {}) as Record<string, unknown>;
+      parcial = data.parcial === true;
+      if (parcial) logger.warn('cron.purgar.parcial', { vuelta: vueltas, transcurridoMs: Date.now() - inicio });
+    } while (parcial && vueltas < MAX_VUELTAS && Date.now() - inicio + PLAZO_VUELTA_MS < (maxDuration - 5) * 1000);
 
-    logger.info('cron.purgar.ok', { ...(data as Record<string, unknown>) });
-    return NextResponse.json({ corrio: true, ...(data as Record<string, unknown>) });
+    logger.info('cron.purgar.ok', { ...data, vueltas });
+    await registrarLatido('purgar', parcial ? 'parcial' : 'ok', { vueltas });
+    return NextResponse.json({ corrio: true, ...data, vueltas });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     // Mismo criterio que el `if (error)` de arriba, para el camino que lanza.
     const codigo = codigoDeError(e);
     logger.error('cron.purgar.falló', { error, codigo });
     await alertarOperador('cron.purgar', { error, codigo });
+    await registrarLatido('purgar', 'fallo', { codigo });
     return NextResponse.json({ error }, { status: 500 });
   }
 }
