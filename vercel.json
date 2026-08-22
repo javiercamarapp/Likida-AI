@@ -16,7 +16,7 @@
     },
     {
       "path": "/api/cron/facturar",
-      "schedule": "30 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/purgar",

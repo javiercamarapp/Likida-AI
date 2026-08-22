@@ -18,6 +18,7 @@ import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { modoEfectivo } from '@/lib/likida/facturacion/modo';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { hoyMx } from '@/lib/formato';
+import { acotada } from '@/lib/likida/presupuesto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -133,6 +134,56 @@ export const maxDuration = 300;
  * posible.
  */
 const TOPE_POR_CORRIDA = 8;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ESC-5 (auditoría prod): UN MENSAJE DE QSTASH POR FLOTA, NO UN LOTE DE 8.
+//
+// Con TOPE_POR_CORRIDA=8 y el cron cada hora, el techo era 192 tickets/día
+// contra ~170-340 sueltos/día a 50k tickets/mes: la cola crecía sin que nada
+// lo dijera, porque `limit(9)` solo sabía si "sobró uno". Ahora:
+//
+//   · El cron corre cada 15 min (`vercel.json`) y NO procesa: cuenta el
+//     backlog real (`count` head) y encola UN mensaje por flota con hasta
+//     LOTE_POR_FLOTA tickets. Cada mensaje = un navegador = una sesión por
+//     portal, en su propia invocación de 300 s. Veinte tickets de CAPUFE en
+//     una sesión son ~2 min; el reloj de `procesarLoteEnCola` sigue cortando.
+//   · El backlog se MIDE (count exact, head) y viaja en la respuesta como
+//     `backlog` y `quedaron`. Un tope que no se anuncia se lee como "ya se
+//     facturó todo".
+//   · Sin UPSTASH_QSTASH_TOKEN (la Mac, los tests) queda el camino síncrono
+//     de siempre con TOPE_POR_CORRIDA.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Tickets por mensaje de QStash — o sea por navegador. */
+const LOTE_POR_FLOTA = 20;
+/** Flotas por corrida del cron (cada 15 min): 25 × 20 = 500 tickets/corrida,
+ *  2,000/hora, contra ~340/día en el peor caso medido. */
+const FLOTAS_POR_CORRIDA = 25;
+/** Filas que se leen para armar los lotes. < 1,000: PostgREST recorta ahí. */
+const TOPE_CANDIDATOS = LOTE_POR_FLOTA * FLOTAS_POR_CORRIDA;
+/** Periodo de la cola: un ticket con más de 45 días no se factura en ningún
+ *  portal (el plazo más largo es el mes natural). Mismo criterio que
+ *  `DIAS_VENTANA_POR_FACTURAR` en pendientes.ts (ESC-12). */
+const DIAS_VENTANA_COLA = 45;
+/** RES-23: `publishJSON` no tiene tope propio; un QStash colgado se comería
+ *  los 300 s del cron sin encolar nada. */
+const TOPE_PUBLICACION_MS = 10_000;
+/** Ranura del `deduplicationId`: Vercel Cron entrega at-least-once, y dos
+ *  disparos del mismo cuarto de hora deben encolar UNA vez por flota. */
+const RANURA_DEDUP_MS = 15 * 60_000;
+
+/** Un tope de reloj sobre una promesa que no sabe abortarse. */
+async function conTope<T>(p: Promise<T>, ms: number, etiqueta: string): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      p,
+      new Promise<never>((_, rechazar) => { t = setTimeout(() => rechazar(new Error(`${etiqueta}: sin respuesta en ${ms} ms`)), ms); }),
+    ]);
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 /** `maxDuration` de arriba, en milisegundos — la MISMA constante, no una copia. */
 const PRESUPUESTO_LOTE_MS = maxDuration * 1000;
@@ -321,66 +372,141 @@ export async function GET(req: Request) {
   const inicioLote = Date.now();
 
   try {
-    const { data, error } = await supabaseAdmin()
-      .from('gasto')
-      .select('id, tenant_id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra')
-      .is('cfdi_uuid', null)
-      .not('ocr_extra', 'is', null)
-      // LOS BLOQUEADOS NO ENTRAN (mig. 0065). Un portal que pidió CAPTCHA, o una
-      // emisión que no se pudo confirmar, no se arreglan reintentando: el
-      // primero daría lo mismo cada hora, y el segundo emitiría un SEGUNDO CFDI
-      // por el mismo consumo. Salen por el otro camino —el aviso al encargado,
-      // más abajo— y siguen visibles en la pantalla de "por facturar".
-      .is('autofactura_bloqueada_en', null)
-      // EL ORDEN DE LA 0063. Los nunca intentados primero y después los más
-      // antiguos: sin esto, ocho tickets que no proceden se llevan el lote en
-      // cada corrida y los nuevos no entran nunca.
-      .order('autofactura_intentada_en', { ascending: true, nullsFirst: true })
-      .order('created_at', { ascending: true })
-      .limit(TOPE_POR_CORRIDA + 1); // uno de más, solo para saber si sobró
+    const conQstash = Boolean(process.env.UPSTASH_QSTASH_TOKEN);
+    const desde = new Date(inicioLote - DIAS_VENTANA_COLA * 86_400_000).toISOString();
+    /**
+     * LOS FILTROS DE LA COLA, ESCRITOS UNA VEZ.
+     *
+     * El conteo del backlog y la lectura de candidatos tienen que medir
+     * EXACTAMENTE lo mismo: si se separan, `quedaron` miente y el número que
+     * existe para decir "la cola crece" es el primero en dejar de ser cierto.
+     *
+     * El periodo va sobre `created_at` y no sobre `fecha`: `fecha` es la del
+     * ticket y viene NULL cuando el OCR no la pudo leer — filtrar por ella
+     * dejaría esos tickets fuera de la cola PARA SIEMPRE, en silencio.
+     */
+    const enCola = <Q extends {
+      is(columna: string, valor: null): Q;
+      not(columna: string, operador: string, valor: null): Q;
+      gte(columna: string, valor: string): Q;
+    }>(q: Q): Q =>
+      q
+        .is('cfdi_uuid', null)
+        .not('ocr_extra', 'is', null)
+        // LOS BLOQUEADOS NO ENTRAN (mig. 0065). Un portal que pidió CAPTCHA, o
+        // una emisión que no se pudo confirmar, no se arreglan reintentando: el
+        // primero daría lo mismo cada corrida, y el segundo emitiría un SEGUNDO
+        // CFDI por el mismo consumo. Salen por el otro camino —el aviso al
+        // encargado— y siguen visibles en la pantalla de "por facturar".
+        .is('autofactura_bloqueada_en', null)
+        // ESC-5: el periodo. Un ticket de hace más de 45 días ya no lo factura
+        // ningún portal (el plazo más largo es el mes natural), así que
+        // arrastrarlo en cada corrida solo infla la cola con lo que nadie puede
+        // bajar. Mismo criterio que DIAS_VENTANA_POR_FACTURAR (ESC-12).
+        .gte('created_at', desde);
+
+    // ── 1. EL BACKLOG REAL: cuántos esperan, no "si sobró uno".
+    const conteo = await acotada(
+      enCola(supabaseAdmin().from('gasto').select('id', { count: 'exact', head: true })),
+      'cron.facturar.backlog',
+    );
+    const backlog = conteo.error || typeof conteo.count !== 'number' ? null : conteo.count;
+    if (conteo.error) logger.warn('cron.facturar.backlog_sin_contar', { err: conteo.error.message });
+
+    // ── 2. Los candidatos, en el orden de la cola.
+    const { data, error } = await acotada(
+      enCola(supabaseAdmin()
+        .from('gasto')
+        .select('id, tenant_id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra'))
+        // EL ORDEN DE LA 0063. Los nunca intentados primero y después los más
+        // antiguos: sin esto, ocho tickets que no proceden se llevan el lote en
+        // cada corrida y los nuevos no entran nunca.
+        .order('autofactura_intentada_en', { ascending: true, nullsFirst: true })
+        .order('created_at', { ascending: true })
+        // Con QStash se leen hasta TOPE_CANDIDATOS para repartir por flota;
+        // sin él, el lote síncrono de siempre (+1, solo para saber si sobró).
+        .limit(conQstash ? TOPE_CANDIDATOS : TOPE_POR_CORRIDA + 1),
+      'cron.facturar.cola',
+    );
 
     if (error) throw new Error(error.message);
 
     const todos = (data ?? []) as FilaCola[];
-    const lote = todos.slice(0, TOPE_POR_CORRIDA);
-    const quedaron = Math.max(0, todos.length - lote.length);
 
-    // ── Despacho: QStash (si está configurado) o síncrono ────────────────────
-    // Ronda 16: con UPSTASH_QSTASH_TOKEN el lote se encola y el callback
-    // (POST /cola) lo procesa con su propio presupuesto (10 min) — la
-    // invocación del cron responde en segundos y no corre el riesgo de ser
-    // matada a media sesión de portal. Sin token, el camino síncrono de
-    // siempre (el que los tests ejercitan).
-    if (process.env.UPSTASH_QSTASH_TOKEN && lote.length > 0) {
-      try {
-        // La región del token (QSTASH_URL, p. ej. https://qstash-us-east-1.upstash.io):
-        // sin ella el cliente global rutearía a otra región y el publish fallaría.
-        const q = new QstashClient({
-          token: process.env.UPSTASH_QSTASH_TOKEN,
-          baseUrl: process.env.QSTASH_URL ?? undefined,
-        });
-        const base = process.env.NEXT_PUBLIC_APP_URL ?? `https://${req.headers.get('host')}`;
-        const publicacion = await q.publishJSON({
-          url: `${base}/api/cron/facturar/cola`,
-          body: { lote, quedaron },
-          retries: 2,
-          timeout: 600,
-        });
-        logger.info('cron.facturar.encolado', { messageId: publicacion.messageId, tickets: lote.length });
-        return NextResponse.json({
-          corrio: true,
-          encolado: true,
-          messageId: publicacion.messageId,
-          tickets: lote.length,
-          quedaron,
-        });
-      } catch (e) {
-        logger.error('cron.facturar.encolado_fallo', { err: e instanceof Error ? e.message : String(e) });
-        // Falla-cerrado: si no se pudo encolar, se procesa aquí mismo en vez de
-        // perder el lote.
-        return procesarLoteEnCola(lote, req, hoy, inicioLote, quedaron);
+    // ── 3. Despacho: un mensaje de QStash POR FLOTA, o síncrono.
+    // El callback (POST /cola) procesa cada lote con su propio presupuesto;
+    // esta invocación contesta en segundos. Sin token, el camino síncrono.
+    if (conQstash && todos.length > 0) {
+      const porFlota = new Map<string, FilaCola[]>();
+      for (const g of todos) {
+        const lote = porFlota.get(g.tenant_id) ?? [];
+        if (lote.length < LOTE_POR_FLOTA) lote.push(g);
+        porFlota.set(g.tenant_id, lote);
       }
+      const flotas = [...porFlota.entries()].slice(0, FLOTAS_POR_CORRIDA);
+      // La región del token (QSTASH_URL, p. ej. https://qstash-us-east-1.upstash.io):
+      // sin ella el cliente global rutearía a otra región y el publish fallaría.
+      const q = new QstashClient({
+        token: process.env.UPSTASH_QSTASH_TOKEN,
+        baseUrl: process.env.QSTASH_URL ?? undefined,
+      });
+      const base = process.env.NEXT_PUBLIC_APP_URL ?? `https://${req.headers.get('host')}`;
+      const ranura = Math.floor(inicioLote / RANURA_DEDUP_MS);
+      const encolados: Array<{ tenantId: string; messageId: string; tickets: number }> = [];
+      const sinEncolar: Array<{ tenantId: string; tickets: number; error: string }> = [];
+      const candidatos = flotas.reduce((n, [, l]) => n + l.length, 0);
+      // Lo que NO viaja en esta corrida, medido contra el backlog real.
+      const quedaron = backlog === null ? null : Math.max(0, backlog - candidatos);
+
+      for (const [tenantId, lote] of flotas) {
+        try {
+          const publicacion = await conTope(q.publishJSON({
+            url: `${base}/api/cron/facturar/cola`,
+            body: { lote, quedaron: quedaron ?? 0 },
+            retries: 2,
+            // El MISMO presupuesto que la función que lo procesa (`cola/route.ts`).
+            timeout: maxDuration,
+            deduplicationId: `facturar-${tenantId}-${ranura}`,
+          }), TOPE_PUBLICACION_MS, 'qstash.publish');
+          encolados.push({ tenantId, messageId: publicacion.messageId, tickets: lote.length });
+        } catch (e) {
+          const err = e instanceof Error ? e.message : String(e);
+          logger.error('cron.facturar.encolado_fallo', { tenant: tenantId, tickets: lote.length, err });
+          sinEncolar.push({ tenantId, tickets: lote.length, error: err });
+        }
+      }
+
+      if (encolados.length === 0) {
+        // QStash no contestó para NADIE: falla-cerrado al camino síncrono con
+        // el lote de siempre, en vez de perder la corrida entera.
+        const lote = todos.slice(0, TOPE_POR_CORRIDA);
+        return procesarLoteEnCola(lote, req, hoy, inicioLote, backlog === null ? Math.max(0, todos.length - lote.length) : Math.max(0, backlog - lote.length));
+      }
+
+      const tickets = encolados.reduce((n, m) => n + m.tickets, 0);
+      logger.info('cron.facturar.encolado', { flotas: encolados.length, tickets, backlog, quedaron, sinEncolar: sinEncolar.length });
+      if (sinEncolar.length > 0) {
+        await alertarOperador('cron.facturar', { error: `QStash no aceptó ${sinEncolar.length} de ${flotas.length} lotes`, codigo: 'encolado_parcial' });
+      }
+      return NextResponse.json({
+        corrio: true,
+        encolado: true,
+        flotas: encolados.length,
+        mensajes: encolados,
+        // Las que no se pudieron encolar quedan SIN marcar: el siguiente cuarto
+        // de hora las vuelve a leer enteras.
+        sinEncolar,
+        tickets,
+        // El backlog MEDIDO al arrancar (null = no se pudo contar, y se dice).
+        backlog,
+        quedaron,
+      });
     }
+
+    const lote = todos.slice(0, TOPE_POR_CORRIDA);
+    const quedaron = backlog === null
+      ? Math.max(0, todos.length - lote.length)
+      : Math.max(0, backlog - lote.length);
     return procesarLoteEnCola(lote, req, hoy, inicioLote, quedaron);
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
