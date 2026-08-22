@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { estaApagado } from '@/lib/likida/interruptores';
+import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -72,9 +72,21 @@ export async function GET(req: Request) {
   // Esta ruta BORRA FILAS: en un incidente donde Javier apaga todo, lo último
   // que quiere es un cron borrando datos mientras investiga. 200 y no error:
   // apagado a propósito no es fallo, y el `saltado` del cuerpo distingue esta
-  // corrida de una sana. Fail-closed: interruptor ilegible = apagado con
-  // grito en el log (interruptores.ts) — no se borra sin permiso legible.
-  if (await estaApagado('global')) {
+  // corrida de una sana. Fail-closed: interruptor ilegible = no se borra sin
+  // permiso legible. AUDITORÍA 18, ALTO (A17): ilegible NO es "apagado" —
+  // es un fallo y contesta 500 con `codigo`, para que el cron no salga verde
+  // sobre una base que no se pudo leer (el grito y el correo ya salieron de
+  // `leerInterruptor`).
+  const global = await leerInterruptor('global');
+  if (global === 'ilegible') {
+    return NextResponse.json({
+      corrio: false,
+      error: 'No se pudo leer el interruptor global: no se purga sin saber si está apagado.',
+      codigo: 'interruptor_ilegible',
+      interruptor: 'global',
+    }, { status: 500 });
+  }
+  if (global === 'apagado') {
     logger.warn('cron.purgar.saltado', { interruptor: 'global' });
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }

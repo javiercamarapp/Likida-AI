@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { processInbound, type ResultadoInbound } from '@/lib/likida/processor';
-import { estaApagado } from '@/lib/likida/interruptores';
+import { leerInterruptor } from '@/lib/likida/interruptores';
 import {
   pendientesPorDrenar, reclamarPendiente, marcarPendienteProcesado,
   anotarFalloPendiente, cartasMuertas,
@@ -71,8 +71,22 @@ export async function GET(req: Request) {
 
   // Apagado = la pausa SIGUE: la bandeja espera, y eso es exactamente el
   // contrato nuevo. 200 con `saltado` — apagado a propósito no es fallo.
-  if (await estaApagado('global')) {
-    logger.info('cron.wa_pendientes.saltado', { interruptor: 'global' });
+  // AUDITORÍA 18, ALTO (A17): NO haber podido leerlo SÍ lo es — este cron
+  // corre cada 5 min y, saltándose en 200 con `logger.info` (nivel que ni
+  // llega a Sentry), la bandeja durable se quedaba sin drenar con el panel
+  // en verde. Ilegible = 500 con `codigo`; el grito y el correo ya salieron
+  // de `leerInterruptor`.
+  const global = await leerInterruptor('global');
+  if (global === 'ilegible') {
+    return NextResponse.json({
+      corrio: false,
+      error: 'No se pudo leer el interruptor global: la bandeja no se drena sin saber si está apagado.',
+      codigo: 'interruptor_ilegible',
+      interruptor: 'global',
+    }, { status: 500 });
+  }
+  if (global === 'apagado') {
+    logger.warn('cron.wa_pendientes.saltado', { interruptor: 'global' });
     return NextResponse.json({ corrio: false, saltado: 'interruptor global' });
   }
 
