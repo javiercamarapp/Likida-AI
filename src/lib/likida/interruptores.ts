@@ -24,6 +24,8 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { codigoDeError } from '@/lib/observability/sentry';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { DatoInvalido } from './errores';
 import { acotada } from './presupuesto';
 
@@ -55,15 +57,23 @@ function esNombreValido(nombre: string): nombre is NombreInterruptor {
   return (INTERRUPTORES as readonly string[]).includes(nombre);
 }
 
+/** Lo que una lectura puede decir. `ilegible` es el tercer estado que
+ *  `estaApagado` colapsa en "apagado" (fail-closed) y que los crons
+ *  necesitan DISTINGUIR: apagado a propósito no es un fallo; no haber
+ *  podido saberlo SÍ lo es (AUDITORÍA 18, A17). */
+export type LecturaInterruptor = 'encendido' | 'apagado' | 'ilegible';
+
 /**
- * ¿Está apagado este interruptor? SIN FILA = ENCENDIDO (false).
+ * Lee el interruptor y dice una de tres cosas. NUNCA lanza.
  *
- * FAIL-CLOSED: un error de lectura devuelve `true` (apagado) con log — si no
- * se puede saber si está apagado, no se corre. El porqué completo está en la
- * cabecera del archivo: ejecutar lo que alguien acaba de apagar es el error
- * caro; saltar una corrida que la misma base caída iba a matar es el barato.
+ * El camino `ilegible` GRITA con un `codigo` estable de la causa —sin él el
+ * fingerprint de Sentry era `['interruptores.lectura_fallo','error']` para
+ * todas las causas y, nacido una vez, no volvía a notificar— y manda la
+ * alerta al operador por el único canal push del sistema: cinco crons
+ * saltándose corridas sobre una base con hipo se ven, en Vercel, como cinco
+ * crons verdes sin trabajo.
  */
-export async function estaApagado(nombre: NombreInterruptor): Promise<boolean> {
+export async function leerInterruptor(nombre: NombreInterruptor): Promise<LecturaInterruptor> {
   try {
     // AUDITORÍA 2 (backend): el kill switch es la red de seguridad manual — no
     // puede colgarse. Con `acotada` un socket que Supabase acepta y no contesta
@@ -76,20 +86,38 @@ export async function estaApagado(nombre: NombreInterruptor): Promise<boolean> {
       .eq('id', nombre)
       .maybeSingle(), 'estaApagado');
     if (error) {
-      // Se GRITA: el salto por fail-closed no puede pasar desapercibido — un
-      // cron saltándose corridas por una base con hipo se parece demasiado a
-      // un cron sano sin trabajo.
-      logger.error('interruptores.lectura_fallo', { interruptor: nombre, err: error.message });
-      return true;
+      await gritarIlegible(nombre, error.message, codigoDeError(error));
+      return 'ilegible';
     }
-    return data?.apagado === true;
+    return data?.apagado === true ? 'apagado' : 'encendido';
   } catch (e) {
-    logger.error('interruptores.lectura_fallo', {
-      interruptor: nombre,
-      err: e instanceof Error ? e.message : String(e),
-    });
-    return true;
+    await gritarIlegible(nombre, e instanceof Error ? e.message : String(e), codigoDeError(e));
+    return 'ilegible';
   }
+}
+
+/** Se GRITA: el salto por fail-closed no puede pasar desapercibido — un cron
+ *  saltándose corridas por una base con hipo se parece demasiado a un cron
+ *  sano sin trabajo. Log con código (Sentry notifica por causa nueva) Y correo
+ *  al operador (`alertarOperador` nunca lanza y ya trae su piso de una hora). */
+async function gritarIlegible(nombre: NombreInterruptor, err: string, codigo: string): Promise<void> {
+  logger.error('interruptores.lectura_fallo', { interruptor: nombre, err, codigo });
+  await alertarOperador('interruptores.lectura_fallo', { interruptor: nombre, error: err, codigo });
+}
+
+/**
+ * ¿Está apagado este interruptor? SIN FILA = ENCENDIDO (false).
+ *
+ * FAIL-CLOSED: un error de lectura devuelve `true` (apagado) con log — si no
+ * se puede saber si está apagado, no se corre. El porqué completo está en la
+ * cabecera del archivo: ejecutar lo que alguien acaba de apagar es el error
+ * caro; saltar una corrida que la misma base caída iba a matar es el barato.
+ *
+ * Quien necesite distinguir "apagado" de "no pude leer" (los crons, para no
+ * contestar 200 sobre un fallo) usa `leerInterruptor`.
+ */
+export async function estaApagado(nombre: NombreInterruptor): Promise<boolean> {
+  return (await leerInterruptor(nombre)) !== 'encendido';
 }
 
 /**
