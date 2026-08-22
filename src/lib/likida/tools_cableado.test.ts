@@ -148,7 +148,9 @@ describe('guardar_liquidacion — el cierre genera DOS ejemplares y cada uno es 
 
   it('en `liquidacion.pdf_path` se guarda el ejemplar del CONTRALOR, que es el registro', async () => {
     await cerrar();
-    expect(saveLiquidacion).toHaveBeenCalledWith('t1', LIQ, 't1/v1.pdf');
+    // El 4º argumento es el conteo de comprobantes que la 0158 compara dentro
+    // del candado del viaje (DAT-02): el papel y la base cuentan lo mismo.
+    expect(saveLiquidacion).toHaveBeenCalledWith('t1', LIQ, 't1/v1.pdf', LIQ.gastos.length);
   });
 
   it('el resultado declara que el PDF del operador se generó (de eso depende el envío)', async () => {

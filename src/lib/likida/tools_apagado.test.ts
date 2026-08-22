@@ -115,7 +115,8 @@ describe('el kill switch de agente:liquidacion (0110) — antes decorativo, ahor
   it('ENCENDIDO (sin fila, el default del catálogo): el cierre corre completo', async () => {
     const r = await cerrar();
     expect(r.success, r.error).toBe(true);
-    expect(saveLiquidacion).toHaveBeenCalledWith('t1', LIQ, 't1/v1.pdf');
+    // El 4º argumento es el conteo de comprobantes de la 0158 (DAT-02).
+    expect(saveLiquidacion).toHaveBeenCalledWith('t1', LIQ, 't1/v1.pdf', LIQ.gastos.length);
   });
 });
 
