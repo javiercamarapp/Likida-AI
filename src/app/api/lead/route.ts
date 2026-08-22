@@ -153,6 +153,22 @@ export async function POST(req: Request) {
   if (!empresa) return ok();
 
   const atr = atribucion(body.atribucion);
+
+  // ── DOBLE CLIC (AUDITORÍA 18, B3) ──────────────────────────────────────
+  // `prospecto` no tiene unique por correo ni por empresa (la 0139 explica por
+  // qué: 1,227 grupos duplicados vivos), así que el "leer y luego escribir"
+  // de abajo tiene una carrera: dos POST con 150 ms de diferencia leen `[]`
+  // los dos e insertan dos filas — dos primeros toques generados, dos
+  // mensajes al mismo decisor. Sin llave natural en la base, la llave vive
+  // aquí: UNA escritura por (correo | empresa) cada 10 s. El segundo clic
+  // contesta 200 igual (el visitante sigue a su calendario) y no escribe: el
+  // primero ya lleva los mismos datos.
+  const llaveNatural = texto(body.correo, 160) ?? empresa;
+  if (!(await rateLimit(`lead:llave:${llaveNatural.toLowerCase()}`, 1, 10_000))) {
+    logger.info('lead.duplicado_en_vuelo', { empresa, canal: canal(atr) });
+    return ok();
+  }
+
   const campos: Record<string, unknown> = {
     empresa,
     contacto_nombre: [texto(body.nombre, 80), texto(body.apellido, 80)].filter(Boolean).join(' ') || null,
