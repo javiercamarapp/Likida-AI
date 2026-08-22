@@ -90,6 +90,35 @@ describe('el drenado', () => {
     expect(anotarFalloPendiente).toHaveBeenCalledWith('wamid.mal', 'OCR reventó');
   });
 
+  // AUDITORÍA 18 (A3/A27): el cron sellaba ante CUALQUIER retorno sin
+  // excepción — incluido el 'duplicado' de un claim huérfano y los abandonos.
+  it('"duplicado" (ya completado antes) SÍ se sella: el trabajo está hecho', async () => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.dup', intentos: 1 }]);
+    processInbound.mockResolvedValue('duplicado' as never);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(marcarPendienteProcesado).toHaveBeenCalledWith('wamid.dup');
+  });
+
+  it.each(['reintentable', 'sin_tiempo', 'en_curso'])('"%s" NO se sella: queda pendiente con su motivo, y el cron sigue en 200', async (resultado) => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.pos', intentos: 1 }]);
+    processInbound.mockResolvedValue(resultado as never);
+    const r = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(r.status).toBe(200);
+    expect(marcarPendienteProcesado).not.toHaveBeenCalled();
+    expect(anotarFalloPendiente).toHaveBeenCalledWith('wamid.pos', `pospuesto: ${resultado}`);
+    expect(await r.json()).toMatchObject({ procesados: 0, fallidos: 0, pospuestos: 1 });
+  });
+
+  it('le pasa al motor el inicio de ESTA invocación, para que los 10 del lote compartan reloj (C4)', async () => {
+    pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.1', intentos: 0 }]);
+    const antes = Date.now();
+    await GET(peticion('Bearer secreto-de-prueba'));
+    const opts = processInbound.mock.calls[0][1] as { inicioInvocacionMs: number };
+    expect(opts.inicioInvocacionMs).toBeGreaterThanOrEqual(antes);
+    expect(opts.inicioInvocacionMs).toBeLessThanOrEqual(Date.now());
+  });
+
   it('el claim perdido (otra corrida lo tomó) no procesa ni cuenta como fallo', async () => {
     pendientesPorDrenar.mockResolvedValue([{ id: 'wamid.ajeno', intentos: 0 }]);
     reclamarPendiente.mockResolvedValue(null);

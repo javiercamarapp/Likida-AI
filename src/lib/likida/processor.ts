@@ -40,7 +40,7 @@ import { violaIndice, llegoTarde } from '@/lib/likida/pg_errores';
 import { mxn, fechaMx } from '@/lib/formato';
 import { guardiaFundamento, normasDeToolCalls } from '@/lib/likida/normas/fundamento';
 import { guardiaEstado } from '@/lib/likida/cuadre/estado_afirmado';
-import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, acotada } from '@/lib/likida/presupuesto';
+import { crearPresupuesto, PRESUPUESTO_WEBHOOK_MS, acotada, type Presupuesto } from '@/lib/likida/presupuesto';
 import { conceptoDesdeClave } from '@/lib/likida/intake/concepto';
 import { getConfig } from '@/lib/likida/config';
 import { emparejarPendiente, emparejarXmlConTicket } from '@/lib/likida/intake/emparejar';
@@ -56,7 +56,7 @@ import {
 import {
   resolveOperador, getOpenViaje, getTenantContext, type ResolvedOperador,
   loadConversation, saveConversation, claimMessage,
-  acquireViajeLock, releaseViajeLock, releaseMessageClaim,
+  acquireViajeLock, releaseViajeLock, releaseMessageClaim, completarMessageClaim,
   intakeDelta, esperarIntake, ConsultaFallida, OperadorAmbiguo, type ConvTurn,
   buscarTenantPorTelefono,
 } from '@/lib/likida/conv';
@@ -569,12 +569,71 @@ async function atenderTextoOficina(
   return false;
 }
 
-export async function processInbound(msg: InboundMessage): Promise<void> {
+/**
+ * Lo que el llamador necesita saber para decidir qué hacer con la fila durable
+ * (`wa_evento_pendiente`, 0119) de este mensaje:
+ *
+ *   · 'procesado'   — el turno corrió hasta el final: sellar.
+ *   · 'duplicado'   — YA se había procesado (claim completado): sellar.
+ *   · 'en_curso'    — otra invocación lo tiene en vuelo: ni sellar ni contar
+ *                     como fallo; la siguiente vuelta del cron decide.
+ *   · 'sin_tiempo'  — la invocación ya no tiene presupuesto para empezarlo:
+ *                     no se tocó nada, que lo recupere el cron.
+ *   · 'reintentable'— se abandonó a medias por un fallo NUESTRO y transitorio
+ *                     (mutex ocupado, +1 de la barrera, aviso caído, crash):
+ *                     el claim se soltó, la fila durable debe reintentar.
+ *
+ * AUDITORÍA 18 (C5/A3/A27): antes devolvía `void`, y el cron y el webhook
+ * sellaban `procesado_en` ante cualquier retorno sin excepción — incluido el
+ * 'duplicado' de un claim huérfano y los `return` de abandono. Un mensaje
+ * matado a media corrida quedaba sellado como procesado con un `info` como
+ * único rastro.
+ */
+export type ResultadoInbound = 'procesado' | 'duplicado' | 'en_curso' | 'sin_tiempo' | 'reintentable';
+
+export interface OpcionesInbound {
+  /** `Date.now()` de cuando ARRANCÓ LA INVOCACIÓN que procesa este mensaje
+   *  (no este mensaje). Sin esto el presupuesto cree que los 120s son suyos
+   *  aunque la invocación lleve 60 gastados en los mensajes anteriores (C4). */
+  inicioInvocacionMs?: number;
+}
+
+/**
+ * Lo mínimo que cuesta un turno útil: un texto corre el agente (15s de piso,
+ * `COSTO_AGENTE_MS`) y una foto descarga + visión. Por debajo de esto no se
+ * empieza: se devuelve 'sin_tiempo' sin tomar el claim, y la bandeja durable
+ * lo recupera entero en vez de arrancarlo para que lo mate Vercel a medias.
+ */
+const COSTO_MINIMO_TURNO_MS = 15_000;
+
+export async function processInbound(msg: InboundMessage, opts: OpcionesInbound = {}): Promise<ResultadoInbound> {
+  // ── RELOJ COMPARTIDO, desde la primera línea ─────────────────────────────
+  // Las etapas de abajo pedían su tope fijo sin saber que comparten UNA
+  // invocación: 20s de barrera + 12s de mutex + 40s de agente = 72s contra un
+  // presupuesto de 60. Y como el webhook ya respondió 200, Meta no reintenta:
+  // cuando Vercel mata la función, el operador se queda sin nada y sin rastro.
+  //
+  // Arranca AQUÍ y no más abajo: resolver al operador, buscar el viaje abierto y
+  // mandar el aviso de privacidad también gastan, y son llamadas de red. Un
+  // reloj que arranca a media función cree tener 60s cuando ya se fueron varios.
+  //
+  // Y arranca en el inicio de LA INVOCACIÓN, no de este mensaje (C4): el
+  // llamador que procesa N mensajes en una sola invocación pasa el suyo.
+  const reloj = crearPresupuesto(PRESUPUESTO_WEBHOOK_MS, Date.now, opts.inicioInvocacionMs ?? Date.now());
+  if (!reloj.alcanza(COSTO_MINIMO_TURNO_MS)) {
+    logger.warn('wa.sin_tiempo', { id: msg.waMessageId, gastadoMs: reloj.gastado(), restanteMs: reloj.restante() });
+    return 'sin_tiempo';
+  }
+
   // Idempotencia: si Meta reintenta el webhook, no re-procesar (no duplicar gasto).
   const claim = msg.waMessageId ? await claimMessage(msg.waMessageId) : 'nuevo';
   if (claim === 'duplicado') {
     logger.info('wa.duplicate', { id: msg.waMessageId });
-    return;
+    return 'duplicado';
+  }
+  if (claim === 'en_curso') {
+    logger.warn('wa.en_curso', { id: msg.waMessageId });
+    return 'en_curso';
   }
   if (claim === 'indeterminado') {
     // NO se abandona el turno. Meta ya recibió su 200 en `route.ts` y no
@@ -586,17 +645,24 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     logger.warn('wa.claim_indeterminado', { id: msg.waMessageId });
   }
 
-  // ── RELOJ COMPARTIDO, desde la primera línea ─────────────────────────────
-  // Las etapas de abajo pedían su tope fijo sin saber que comparten UNA
-  // invocación: 20s de barrera + 12s de mutex + 40s de agente = 72s contra un
-  // presupuesto de 60. Y como el webhook ya respondió 200, Meta no reintenta:
-  // cuando Vercel mata la función, el operador se queda sin nada y sin rastro.
-  //
-  // Arranca AQUÍ y no más abajo: resolver al operador, buscar el viaje abierto y
-  // mandar el aviso de privacidad también gastan, y son llamadas de red. Un
-  // reloj que arranca a media función cree tener 60s cuando ya se fueron varios.
-  const reloj = crearPresupuesto(PRESUPUESTO_WEBHOOK_MS);
+  // El claim se suelta SOLO por aquí, para saber al salir si el turno se
+  // abandonó (→ 'reintentable') o llegó al final (→ se sella como completado).
+  let claimLiberado = false;
+  const soltarClaim = async (): Promise<void> => {
+    claimLiberado = true;
+    if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
+  };
 
+  await procesarTurno(msg, reloj, soltarClaim);
+
+  if (claimLiberado) return 'reintentable';
+  if (msg.waMessageId) await completarMessageClaim(msg.waMessageId);
+  return 'procesado';
+}
+
+/** El turno propiamente: todo lo que había en `processInbound` menos el
+ *  claim y el reloj. Nunca lanza (el `catch` general vive aquí). */
+async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClaim: () => Promise<void>): Promise<void> {
   let lockedViaje: string | null = null;
   // Contexto para el `catch` general. Vive FUERA del `try` a propósito: sin esto
   // el log de un fallo salía como `{ id, de, err }` — sin tenant, sin viaje y sin
@@ -813,7 +879,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       // mensaje NO se procesó, así que no puede quedar contado como
       // procesado. Con `sin_datos` no se libera a propósito — reintentar no
       // da de alta a la flota, y el aviso se vuelve a intentar al siguiente.
-      if (avisoPuesto !== 'sin_datos' && msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
+      if (avisoPuesto !== 'sin_datos') await soltarClaim();
       return;
     }
 
@@ -1051,7 +1117,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // manual trae otro `waMessageId`— pero la asimetría es real: el catch
         // general y el mutex sí lo liberan. Un mensaje que no se procesó no puede
         // quedar contado como procesado.
-        if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
+        await soltarClaim();
         return;
       }
       // La foto YA cuenta para la barrera, así que también cuenta para el
@@ -1757,7 +1823,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       if (incrementado == null) {
         logger.error('intake.incremento_fallido', { viaje: viajeId, tenant: op.tenantId });
         await say('No pude registrar tu XML en el orden correcto 😕. Reenvíalo en un momento y, si ya escribiste *listo*, vuelve a escribirlo cuando te confirme que lo recibí.');
-        if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
+        await soltarClaim();
         return;
       }
       try {
@@ -2217,7 +2283,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       try {
         await say('Un momento, todavía estoy procesando tu mensaje anterior 🙏. En cuanto termine, vuelve a escribirme esto si sigue pendiente.');
       } catch { /* best-effort: el aviso es una cortesía, no puede tumbar la liberación del claim */ }
-      if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
+      await soltarClaim();
       return;
     }
 
@@ -2709,7 +2775,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         err: e instanceof Error ? e.message : String(e),
       },
     );
-    if (msg.waMessageId) await releaseMessageClaim(msg.waMessageId);
+    await soltarClaim();
     // Al operador se le dice lo que es cierto en cada caso. Reintentar sirve
     // cuando falló la red; NO sirve cuando su número está duplicado en la base,
     // y decirle "inténtalo de nuevo" ahí lo deja en un bucle.
