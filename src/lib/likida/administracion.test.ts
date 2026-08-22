@@ -43,7 +43,7 @@ vi.mock('./conv', async (original) => ({
   releaseViajeLock: (...a: unknown[]) => releaseViajeLock(...a),
 }));
 
-const { crearFlota, crearOperador, actualizarOperador, guardarPolitica, reabrirViaje, DatoInvalido, armarPolitica, mensajeParaPantalla } =
+const { crearFlota, crearOperador, actualizarOperador, guardarPolitica, guardarAjustesOperativos, reabrirViaje, DatoInvalido, armarPolitica, mensajeParaPantalla } =
   await import('./administracion');
 
 /** Nodo encadenable: `.select().eq().in().limit().maybeSingle()` → `resultado`. */
@@ -323,42 +323,85 @@ describe('actualizarOperador', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18 · DAT-20 — la mezcla de `tenant.config` se mudó DENTRO del
+// UPDATE (`tenant_config_merge`, 0159).
+//
+// El bug viejo —escribir `{config: {politica}}` de golpe y llevarse por delante
+// estímulos e hidrocarburos— ya estaba cerrado leyendo-mezclando-escribiendo.
+// Lo que quedaba abierto es que esa mezcla se hacía contra el `config` que se
+// LEYÓ, no contra el que hay al escribir: dos ediciones a la vez y la de en
+// medio desaparece. Y ahí viven los topes fiscales.
+//
+// Por eso estas pruebas ya no miran el objeto que se escribe: miran que este
+// módulo NO arme la config, que mande su PARCIAL y deje la mezcla a la base.
+// Que la mezcla conserve a los hermanos y sea profunda se prueba contra
+// Postgres (bloque 131 de verificaciones.sql), que es quien la hace.
+// ═══════════════════════════════════════════════════════════════════════════
 describe('guardarPolitica', () => {
-  it('NO borra los hermanos de `config` — lee, modifica y escribe', async () => {
-    // El bug que esto fija: `update({config: {politica}})` se lleva por delante
-    // estimulos e hidrocarburos, y el motor los lee con `if (x != null)`. No
-    // truena: se salta el tope de $750/día de LISR 28-V y la liquidación sale
-    // declarando todo deducible.
-    const configPrevia = {
-      estimulos: { topeAlimentacionDiaMxn: 750, peajeFactor: 0.5 },
-      hidrocarburos: { claves: ['15101505'] },
-      politica: [{ concepto: 'diesel', topeMonto: 4000 }],
-    };
-    let escrito: Record<string, unknown> | undefined;
-
-    from.mockImplementation(() => ({
-      select: () => cadena({ data: { config: configPrevia }, error: null }),
-      update: (fila: Record<string, unknown>) => { escrito = fila; return cadena({ error: null }); },
-      insert: () => Promise.resolve({ error: null }),
-    }));
+  it('NO arma la config: manda el parcial y la base mezcla', async () => {
+    from.mockImplementation(() => ({ insert: () => Promise.resolve({ error: null }) }));
 
     await guardarPolitica('t-1', [{ concepto: 'caseta', topeMonto: 1500 }]);
 
-    const cfg = escrito?.config as Record<string, unknown>;
-    expect(cfg.politica).toEqual([{ concepto: 'caseta', topeMonto: 1500 }]);
-    // Lo que importa: los otros dos SIGUEN AHÍ.
-    expect(cfg.estimulos).toEqual(configPrevia.estimulos);
-    expect(cfg.hidrocarburos).toEqual(configPrevia.hidrocarburos);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls[0][0]).toBe('tenant_config_merge');
+    expect(rpc.mock.calls[0][1]).toEqual({
+      p_tenant: 't-1',
+      p_parcial: { politica: [{ concepto: 'caseta', topeMonto: 1500 }] },
+      p_borrar: [],
+    });
+    // Y NADIE lee `config` para armarla: esa lectura era la mitad de la carrera.
+    expect(from).not.toHaveBeenCalledWith('tenant');
   });
 
   it('rechaza un tope negativo', async () => {
     await expect(guardarPolitica('t-1', [{ concepto: 'diesel', topeMonto: -1 }]))
       .rejects.toThrow(DatoInvalido);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('rechaza un renglón sin concepto', async () => {
     await expect(guardarPolitica('t-1', [{ concepto: '  ' }]))
       .rejects.toThrow(DatoInvalido);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('una flota que no existe (CU013) es dato de entrada, no una caída', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: 'CU013', message: 'flota inexistente' } });
+    await expect(guardarPolitica('t-fantasma', [{ concepto: 'caseta' }]))
+      .rejects.toThrow(DatoInvalido);
+  });
+
+  it('la base caída NO se traga: lanza Error y no anota la bitácora', async () => {
+    const anotadas: unknown[] = [];
+    from.mockImplementation(() => ({ insert: (f: unknown) => { anotadas.push(f); return Promise.resolve({ error: null }); } }));
+    rpc.mockResolvedValue({ data: null, error: { message: 'timeout' } });
+
+    const err = await guardarPolitica('t-1', [{ concepto: 'caseta' }]).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(DatoInvalido);
+    expect(anotadas, 'una política que no se guardó no se anota como editada').toEqual([]);
+  });
+});
+
+describe('guardarAjustesOperativos', () => {
+  it('manda las TRES llaves de negocio como parcial, y ninguna más', async () => {
+    // El corte entre "parámetros del negocio" y "parámetros de la ley" es
+    // legal, no de interfaz: si aquí se colara una cuarta llave, la pantalla
+    // estaría editando topes fiscales.
+    from.mockImplementation(() => ({ insert: () => Promise.resolve({ error: null }) }));
+    const ajustes = {
+      tabulador: { rendimientoPorDefecto: 2.4 },
+      catalogoCuentas: { diesel: '601-01' },
+      salida: { formato: 'csv' },
+    };
+
+    await guardarAjustesOperativos('t-1', ajustes as never);
+
+    expect(rpc.mock.calls[0][0]).toBe('tenant_config_merge');
+    expect(Object.keys((rpc.mock.calls[0][1] as { p_parcial: object }).p_parcial).sort())
+      .toEqual(['catalogoCuentas', 'salida', 'tabulador']);
   });
 });
 

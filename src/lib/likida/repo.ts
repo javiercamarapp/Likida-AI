@@ -1007,19 +1007,24 @@ export async function actualizarRfcOperador(tenantId: string, operadorId: string
  * la declaración del alta no se podía ver ni corregir.
  */
 export async function actualizarFacilidad15(tenantId: string, ded: boolean | undefined, reg: boolean | undefined): Promise<void> {
-  const admin = supabaseAdmin();
   // AUDITORÍA 15, MEDIO: sin comprobar el error, un bache de red se leía como
   // "la flota no tiene config" y se REEMPLAZABA la config entera por una sola
   // llave — perdiendo política, topes y estímulos en silencio.
-  const { data: fila, error: errLee } = await acotada(admin.from('tenant').select('config').eq('id', tenantId).maybeSingle(), 'actualizarFacilidad15.leer');
-  if (errLee) throw new Error(`actualizarFacilidad15.leer: ${errLee.message}`);
-  const actual = { ...((fila?.config as Record<string, unknown> | null) ?? {}) } as Record<string, unknown>;
-  if (ded !== undefined && reg !== undefined) {
-    actual.facilidadCombustibleEfectivo = { dedicacionExclusivaCarga: ded, regimenElegible: reg };
-  } else {
-    delete actual.facilidadCombustibleEfectivo;
-  }
-  const { error } = await acotada(admin.from('tenant').update({ config: actual }).eq('id', tenantId), 'actualizarFacilidad15');
+  //
+  // AUDITORÍA 18, DAT-20: aun comprobándolo, entre la lectura y la escritura
+  // cabía otra edición de `tenant.config` y se perdía sin ruido. La mezcla la
+  // hace ahora la base en UN solo UPDATE (`tenant_config_merge`, 0159), y
+  // "sin declarar" viaja como un BORRADO EXPLÍCITO de la llave: mandar `null`
+  // no serviría — `fusionarConfig` lo ignora y la declaración vieja seguiría
+  // en pie, que es justo lo contrario de lo que la flota pidió.
+  const declara = ded !== undefined && reg !== undefined;
+  const { error } = await acotada(supabaseAdmin().rpc('tenant_config_merge', {
+    p_tenant: tenantId,
+    p_parcial: declara
+      ? { facilidadCombustibleEfectivo: { dedicacionExclusivaCarga: ded, regimenElegible: reg } }
+      : {},
+    p_borrar: declara ? [] : ['facilidadCombustibleEfectivo'],
+  }), 'actualizarFacilidad15');
   if (error) throw new Error(`actualizarFacilidad15: ${error.message}`);
 }
 
