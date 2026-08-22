@@ -20,7 +20,7 @@ let interruptor: 'encendido' | 'apagado' | 'ilegible' = 'encendido';
 vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async () => interruptor }));
 
 const drenarBandeja = vi.fn(async () => ({ procesados: 3, fallidos: 0, pospuestos: 0, cartasMuertas: 0, encolado: 'msg-2' }));
-vi.mock('../route', () => ({ drenarBandeja: (...a: unknown[]) => drenarBandeja(...(a as [])) }));
+vi.mock('../drenado', () => ({ drenarBandeja: (...a: unknown[]) => drenarBandeja(...(a as [])) }));
 
 process.env.QSTASH_CURRENT_SIGNING_KEY = 'k1';
 process.env.QSTASH_NEXT_SIGNING_KEY = 'k2';

@@ -60,7 +60,8 @@ vi.mock('@/lib/admin/salud', () => ({
 }));
 
 process.env.CRON_SECRET = 'secreto-de-prueba';
-const { GET, LOTE } = await import('./route');
+const { GET } = await import('./route');
+const { LOTE } = await import('./drenado');
 const peticion = (auth?: string) => new Request('http://likida.test/api/cron/wa-pendientes', {
   headers: auth ? { authorization: auth } : {},
 });

@@ -56,7 +56,13 @@ describe('las CINCO rutas de cron usan esta puerta', () => {
       if (!texto.includes('CRON_SECRET')) continue;
       // La comparación directa contra el secreto, en cualquiera de sus formas.
       if (/[!=]==\s*`Bearer \$\{secreto\}`/.test(texto)) culpables.push(r);
-      if (!texto.includes('autorizaCron')) culpables.push(`${r} (no usa autorizaCron)`);
+      // La comparación vive en `puertaCron` (lib/admin/salud.ts), que además
+      // deja el latido y el código de causa: una ruta que la usa hereda el
+      // `timingSafeEqual` de aquí. Vale cualquiera de las dos puertas, nunca
+      // una comparación a mano.
+      if (!texto.includes('autorizaCron') && !texto.includes('puertaCron')) {
+        culpables.push(`${r} (no usa autorizaCron ni puertaCron)`);
+      }
     }
     expect(culpables).toEqual([]);
   });
