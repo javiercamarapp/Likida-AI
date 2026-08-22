@@ -5,6 +5,7 @@ import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interrupto
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -63,18 +64,11 @@ function ilegible(interruptor: NombreInterruptor) {
 }
 
 export async function GET(req: Request) {
-  const secreto = process.env.CRON_SECRET;
-  if (!secreto) {
-    logger.error('cron.escalar.sin_secreto', {});
-    return NextResponse.json(
-      { error: 'CRON_SECRET no está configurado. La escalación no corre sin él.' },
-      { status: 500 },
-    );
-  }
-  if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
-    // Sin cuerpo: a quien no está autorizado no se le dice qué hay detrás.
-    return new NextResponse(null, { status: 401 });
-  }
+  // La puerta común (RES-7). Sin cuerpo en el 401 —a quien no está autorizado
+  // no se le dice qué hay detrás— pero CON log y `codigo: 'cron_401'`, y con
+  // alerta al operador cuando el secreto no está configurado.
+  const puerta = await puertaCron('escalar', req, 'La escalación no corre sin él.');
+  if (puerta) return puerta;
 
   // ── EL KILL SWITCH (0110), DESPUÉS de la puerta y ANTES de trabajar ──────
   //
@@ -171,5 +165,10 @@ export async function GET(req: Request) {
   // teléfono de jefe registrado" es un problema de configuración que se
   // arregla en un minuto — si solo vive en el log, nadie lo ve hasta que
   // alguien pregunta por qué no le avisaron.
+  // El latido (RES-7): esta corrida existió y así le fue. Un cron que deja de
+  // correr —401, secreto ausente, cron borrado del panel— se ve en /api/health
+  // como `vencido` a los 20 minutos de su cadencia.
+  await registrarLatido('escalar', huboFallo ? 'fallo' : 'ok', {});
+
   return NextResponse.json(resultado, { status: huboFallo ? 500 : 200 });
 }

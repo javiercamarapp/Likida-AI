@@ -55,12 +55,18 @@ vi.mock('@/lib/observability/alerta', () => ({
 
 process.env.CRON_SECRET = 'secreto-de-prueba';
 const { GET } = await import('./route');
+// Después de los mocks, como todo lo demás en este archivo (RES-19).
+const { olvidarInterruptores } = await import('@/lib/likida/interruptores');
 
 const peticion = () => new Request('http://likida.test/api/cron/escalar', {
   headers: { authorization: 'Bearer secreto-de-prueba' },
 }) as never;
 
 beforeEach(() => {
+  // RES-19: `leerInterruptor` cachea 5 s por instancia y estas pruebas usan el
+  // módulo REAL — sin tirar la caché, la lectura sana de una prueba contestaría
+  // por la lectura rota de la siguiente y el fail-closed se vería como verde.
+  olvidarInterruptores();
   interruptores = {};
   escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0 });
   ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });

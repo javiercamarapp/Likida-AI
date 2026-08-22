@@ -9,6 +9,7 @@ import { urgentesVencidas } from '@/lib/likida/agentes/cola';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,14 +46,9 @@ function quedoPendiente(r: ResultadoInbound | undefined): boolean {
 
 export async function GET(req: Request) {
   const inicioInvocacion = Date.now();
-  const secreto = process.env.CRON_SECRET;
-  if (!secreto) {
-    logger.error('cron.wa_pendientes.sin_secreto', {});
-    return NextResponse.json({ error: 'CRON_SECRET no está configurado.' }, { status: 500 });
-  }
-  if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
-    return new NextResponse(null, { status: 401 });
-  }
+  // La puerta común (RES-7): 500 + alerta sin secreto, 401 con log y código.
+  const puerta = await puertaCron('wa-pendientes', req, 'La bandeja no se drena sin él.');
+  if (puerta) return puerta;
 
   // ── EL MONITOR DE SLA DE URGENTES viaja en este heartbeat ───────────────
   // (auditoría externa P2: la bandeja urgente se mide en minutos y nadie la
@@ -134,6 +130,7 @@ export async function GET(req: Request) {
       logger.error('cron.wa_pendientes.cartas_muertas', { muertas });
       await alertarOperador('cron.wa_pendientes', { error: `${muertas} mensaje(s) de WhatsApp agotaron sus reintentos en la bandeja del apagado`, codigo: 'cartas_muertas' });
     }
+    await registrarLatido('wa-pendientes', fallidos > 0 ? 'fallo' : 'ok', { procesados, fallidos, pospuestos });
     return NextResponse.json({ corrio: true, procesados, fallidos, pospuestos, cartasMuertas: muertas }, { status: fallidos > 0 ? 500 : 200 });
   } catch (e) {
     huboFalloDeCron = true;
@@ -141,6 +138,7 @@ export async function GET(req: Request) {
     const codigo = codigoDeError(e);
     logger.error('cron.wa_pendientes.falló', { error, codigo });
     await alertarOperador('cron.wa_pendientes', { error, codigo });
+    await registrarLatido('wa-pendientes', 'fallo', { codigo });
     return NextResponse.json({ error, procesados, fallidos, pospuestos }, { status: 500 });
   } finally {
     if (!huboFalloDeCron && (procesados > 0 || fallidos > 0 || pospuestos > 0)) {

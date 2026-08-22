@@ -12,6 +12,7 @@ import { conNavegador } from '@/lib/likida/facturacion/adaptadores/pagina_playwr
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 import { avisar, avisarCorridasPorFlota, FalloDePlataforma } from '@/lib/likida/agentes/notificaciones';
 import { avisoColaAtorada } from '@/lib/correo/avisos';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
@@ -254,14 +255,11 @@ function sinCapturas(renglones: Renglon[], req: Request): unknown[] {
 }
 
 export async function GET(req: Request) {
-  const secreto = process.env.CRON_SECRET;
-  if (!secreto) {
-    logger.error('cron.facturar.sin_secreto', {});
-    return NextResponse.json({ error: 'CRON_SECRET no está configurado.' }, { status: 500 });
-  }
-  if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
-    return new NextResponse(null, { status: 401 });
-  }
+  // La puerta común (RES-7): el secreto ausente ALERTA (antes solo se
+  // logueaba) y el 401 deja log con `codigo: 'cron_401'` — un secreto
+  // desfasado entre Vercel y el proyecto se veía como un cron que nunca corre.
+  const puerta = await puertaCron('facturar', req, 'La facturación no corre sin él.');
+  if (puerta) return puerta;
 
   // ── EL KILL SWITCH (0110), DESPUÉS de la puerta y ANTES de tocar la cola ─
   //
