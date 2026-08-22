@@ -18,6 +18,10 @@ export interface FilaGasto {
   monto: number;
   folio?: string;
   cfdiUuid?: string;
+  /** Partida dentro del CFDI (0065): N gastos amparados por UNA factura
+   *  consolidada llevan el mismo `cfdiUuid` y `cfdiOrden` 1..N. Sin orden
+   *  (o 1) es el caso clásico: un gasto, un CFDI. */
+  cfdiOrden?: number | null;
 }
 
 export interface Anomalia {
@@ -79,14 +83,33 @@ function buscadorDeUuidEnLlave(conUuid: Set<string>): (k: string) => boolean {
   };
 }
 
+/** `uuid#orden`; el orden ausente cae en 1 (mismo default que el motor). */
+function llaveCfdi(f: FilaGasto): string | null {
+  if (!f.cfdiUuid) return null;
+  const orden = Number.isFinite(f.cfdiOrden) && (f.cfdiOrden as number) > 0 ? Math.trunc(f.cfdiOrden as number) : 1;
+  return `${f.cfdiUuid.toLowerCase()}#${orden}`;
+}
+
 export function detectarDuplicadosEntreViajes(filas: FilaGasto[]): Anomalia[] {
   const out: Anomalia[] = [];
 
-  // 1) Por UUID: regla dura, el CFDI es único por definición.
-  for (const [uuid, g] of entreViajes(filas, (f) => f.cfdiUuid?.toLowerCase() ?? null)) {
+  // 1) Por (UUID, ORDEN), no por el UUID solo — misma distinción que el dedup
+  //    del motor (cuadre/engine.ts, C1) y que el índice único de la 0065
+  //    `(tenant_id, cfdi_uuid, cfdi_orden)`.
+  //
+  // AUDITORÍA 18, A5: agrupar por UUID a secas acusaba a la flota del fraude
+  // número uno del sector por haber CONCILIADO un consolidado: el estado de
+  // cuenta mensual del TAG sella 40 casetas de 12 viajes con el mismo UUID y
+  // orden 1..40 —legal desde la 0065— y esto lo pintaba como «CFDI liquidado
+  // en 12 viajes». La MISMA partida (uuid + orden) en dos viajes sigue siendo
+  // el duplicado real: dos fotos del mismo comprobante no traen orden, caen
+  // ambas en 1 y siguen siendo copias.
+  for (const [k, g] of entreViajes(filas, llaveCfdi)) {
+    const [uuid, orden] = k.split('#');
+    const partida = orden === '1' ? '' : ` (partida ${orden})`;
     out.push({
       tipo: 'cfdi_duplicado',
-      detalle: `CFDI ${uuid.slice(0, 8)}… liquidado en ${g.viajes.size} viajes`,
+      detalle: `CFDI ${uuid.slice(0, 8)}…${partida} liquidado en ${g.viajes.size} viajes`,
       monto: g.monto,
       viajes: [...g.viajes],
     });

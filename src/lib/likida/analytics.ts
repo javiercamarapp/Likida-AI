@@ -346,10 +346,12 @@ export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
   // Un "0 anomalías" por fallo de lectura O por recorte silencioso de
   // PostgREST se lee como "revisamos y todo está limpio", que es la
   // afirmación más cara que puede hacer este producto.
-  const data = await traerTodo<{ viaje_id: unknown; concepto: unknown; monto: unknown; folio: unknown; cfdi_uuid: unknown }>(
+  // `cfdi_orden` viaja con el UUID (A5): sin él, las N casetas de un
+  // consolidado (0065) se acusaban como un CFDI duplicado entre viajes.
+  const data = await traerTodo<{ viaje_id: unknown; concepto: unknown; monto: unknown; folio: unknown; cfdi_uuid: unknown; cfdi_orden: unknown }>(
     (desde, hasta) => supabaseAdmin()
       .from('gasto')
-      .select('viaje_id, concepto, monto, folio, cfdi_uuid')
+      .select('viaje_id, concepto, monto, folio, cfdi_uuid, cfdi_orden')
       .eq('tenant_id', tenantId)
       .order('id')
       .range(desde, hasta),
@@ -362,6 +364,7 @@ export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
       monto: Number(r.monto),
       folio: (r.folio as string) || undefined,
       cfdiUuid: (r.cfdi_uuid as string) || undefined,
+      cfdiOrden: typeof r.cfdi_orden === 'number' ? r.cfdi_orden : null,
     })),
   );
 }
