@@ -415,6 +415,9 @@ describe('el cursor de /v1/viajes', () => {
     // Y sin extra, el sobre de las otras rutas no inventa la llave.
     expect('siguiente' in sobre(['a'], { limite: 2, desplazamiento: 0 }, 1).pagina).toBe(false);
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA PROD (22-ago-2026) · SEG-9 — CSRF sobre la rama de COOKIE.
 //
 // /v1 no es solo lectura: `_escritura.ts` da de alta viajes y unidades, y

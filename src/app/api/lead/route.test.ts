@@ -349,7 +349,7 @@ describe('SEG-2 — el lead público solo rellena huecos', () => {
   });
 
   it('`notas` tiene techo: un endpoint público no hace crecer una fila sin fin', async () => {
-    const { notaConLoNoAplicado } = await import('./route');
+    const { notaConLoNoAplicado } = await import('./mezcla');
     const larga = notaConLoNoAplicado('x'.repeat(50_000), ['telefono=5500000000']);
     expect(larga.length).toBeLessThanOrEqual(4_000);
     // Lo NUEVO es lo que se conserva: la línea de hoy va arriba.

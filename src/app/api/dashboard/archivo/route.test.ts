@@ -25,7 +25,8 @@ vi.mock('@/lib/likida/intake/archivo', async (orig) => {
 });
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { POST, MAX_BASE64 } = await import('./route');
+const { POST } = await import('./route');
+  const { MAX_BASE64 } = await import('./limites');
 
 function postear(cuerpo: unknown) {
   return POST(new Request('https://app.likida.ai/api/dashboard/archivo', {

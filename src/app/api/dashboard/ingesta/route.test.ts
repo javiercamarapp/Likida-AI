@@ -116,14 +116,14 @@ describe('el tope de la imagen cabe DENTRO del límite real de Vercel', () => {
   const LIMITE_VERCEL = 4.5 * 1024 * 1024;
 
   it('lo que esta ruta acepta siempre llega a esta ruta', async () => {
-    const { MAX_DATAURL } = await import('./route');
+    const { MAX_DATAURL } = await import('./limites');
     expect(MAX_DATAURL).toBeLessThan(LIMITE_VERCEL);
     // Con aire para el resto del sobre JSON y las cabeceras.
     expect(MAX_DATAURL).toBeLessThanOrEqual(LIMITE_VERCEL - 400_000);
   });
 
   it('una imagen por encima del tope se rechaza con 413 y con nuestras palabras', async () => {
-    const { MAX_DATAURL } = await import('./route');
+    const { MAX_DATAURL } = await import('./limites');
     const gorda = `data:image/png;base64,${'A'.repeat(MAX_DATAURL)}`;
     const r = await postear({ imagen: gorda });
     expect(r.status).toBe(413);

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { Receiver } from '@upstash/qstash';
 import { logger } from '@/lib/logger';
 import { leerInterruptor } from '@/lib/likida/interruptores';
-import { drenarBandeja } from '../route';
+import { drenarBandeja } from '../drenado';
 
 export const runtime = 'nodejs';
 // Su propio presupuesto, como el callback de facturar: la vuelta encolada no
