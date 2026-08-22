@@ -14,11 +14,13 @@ import { cuadrarViaje } from '../cuadre/engine';
 // con dos huecos que el papel no confesaba:
 //
 //  1. LA BASE. `normas/lif-2026-20-A.yaml` dice "50% del GASTO TOTAL EROGADO";
-//     el motor usa el SubTotal SIN IVA. Sobre $1,160 la ley admite leerse como
-//     $580, no $500. Es el hallazgo H4 de la ficha, `estado: SIN RESOLVER`, y
-//     resolverlo hacia el total podría duplicar el beneficio del IVA que ya se
-//     acredita aparte — pregunta para un contador. Lo exigible al papel es
-//     decir cuál de las dos usó.
+//     el motor usa el importe SIN IVA. Sobre $1,160 la ley SOLA admitía leerse
+//     como $580, no $500 (hallazgo H4 de la ficha). La RMF 2026 regla 9.1.8
+//     fr. IV lo cerró: "sin incluir el IVA, el factor de 0.5" — H4 RESUELTO el
+//     14-ago-2026. Lo exigible al papel es decir cuál base usó y POR QUÉ no se
+//     toma la otra. AUDITORÍA 18, A8: el pie invitaba a subir la base 13.8%
+//     "si su contador toma el total con IVA" — contra la regla y con el
+//     porcentaje invertido (es 16%). Eso ya no se imprime.
 //  2. LA ELEGIBILIDAD. El motor dispara con `concepto === 'caseta'` a secas: no
 //     conoce los ingresos de la flota, ni su relación de partes, ni si la
 //     caseta es de la Red Nacional de Autopistas de Cuota (H5 y H6). Una flota
@@ -40,9 +42,22 @@ describe('filasAcreditables — el peaje deja de afirmarse solo', () => {
     const peaje = r.filas.find((f) => f.label.includes('peaje'))!;
     expect(peaje.valor).toBe('$500.00');
     expect(peaje.pies).toContain(BASE_ESTIMULO_PEAJE);
-    expect(BASE_ESTIMULO_PEAJE).toContain('subtotal SIN IVA');
-    // Y que la otra lectura existe, con su magnitud: $1,160 × 50% = $580.
+    expect(BASE_ESTIMULO_PEAJE).toContain('SIN IVA');
+    // Con la norma que la fija, citada en el papel (RMF 2026 9.1.8 fr. IV).
+    expect(BASE_ESTIMULO_PEAJE).toContain('9.1.8');
+    expect(BASE_ESTIMULO_PEAJE).toContain('sin incluir el IVA');
+    // Y dice que la frase de la LEY no autoriza la otra base, en vez de
+    // invitar a usarla.
     expect(BASE_ESTIMULO_PEAJE).toContain('gasto total erogado');
+    expect(BASE_ESTIMULO_PEAJE).toContain('no autoriza');
+  });
+
+  it('A8: el pie NO invita a sobreacreditar con el total con IVA ni trae el 13.8% invertido', () => {
+    // Sobre $10,000 de casetas la invitación valía $800 de acreditamiento
+    // inexistente, y el porcentaje impreso era la relación inversa.
+    expect(BASE_ESTIMULO_PEAJE).not.toContain('13.8');
+    expect(BASE_ESTIMULO_PEAJE).not.toMatch(/sube/i);
+    expect(BASE_ESTIMULO_PEAJE).not.toMatch(/si su contador toma/i);
   });
 
   it('el renglón de peaje enumera las CUATRO condiciones de elegibilidad', () => {
