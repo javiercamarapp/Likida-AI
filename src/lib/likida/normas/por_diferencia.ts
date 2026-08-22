@@ -130,7 +130,9 @@ export function normasDe(tipos: TipoDiferencia[]): string[] {
  */
 const NORMA_POR_CONCEPTO: Record<string, string[]> = {
   diesel: ['lisr-27-fr-III', 'rfa-2026-2.9', 'lif-2026-art-20-A'],
-  caseta: ['lif-2026-art-20-A'],
+  // AUDITORÍA 18, A7: la regla que instrumenta el estímulo (aviso, bitácora,
+  // pago electrónico, base sin IVA) no se podía citar al explicar una caseta.
+  caseta: ['lif-2026-art-20-A', 'rmf-2026-9.1.8'],
   alimentacion: ['lisr-28-fr-V'],
   hospedaje: ['lisr-28-fr-V'],
   transporte: ['lisr-28-fr-V'],
