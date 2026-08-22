@@ -108,8 +108,15 @@ describe('la base caída LANZA, no devuelve ceros', () => {
   it('detectarAnomalias lanza en vez de devolver "ninguna anomalía"', async () => {
     // Esta es la peor de las tres: "0 anomalías" por fallo de lectura se lee
     // como "revisamos y todo está limpio".
-    respuestas.set('gasto', { data: null, error: ERROR_RED });
+    // ESCALA 50k (mig. 0150): ya no recorre `gasto`; llama a la RPC.
+    rpcs.set('anomalias_gasto_tenant', { data: null, error: ERROR_RED });
     await expect(detectarAnomalias(TENANT)).rejects.toThrow(/fetch failed/);
+    expect(tablasLeidas).not.toContain('gasto');
+  });
+
+  it('detectarAnomalias con una forma inesperada LANZA, no pinta "0 anomalías"', async () => {
+    rpcs.set('anomalias_gasto_tenant', { data: [{ tipo: 'cfdi_duplicado' }], error: null });
+    await expect(detectarAnomalias(TENANT)).rejects.toThrow(/otra forma/);
   });
 
   it('getLiquidacionDetalle lanza en vez de responder notFound()', async () => {
@@ -536,9 +543,32 @@ describe('getLineasPorConciliar — la cola, con el folio del viaje de cada cand
     expect(r[0].fecha).toBeNull();
   });
 
-  it('la cola vacía devuelve un arreglo vacío', async () => {
-    respuestas.set('cfdi_consolidado_linea', { data: [], error: null });
-    expect(await getLineasPorConciliar(TENANT)).toEqual([]);
+  it('la cola vacía devuelve un arreglo vacío, con total 0', async () => {
+    respuestas.set('cfdi_consolidado_linea', { data: [], error: null, count: 0 });
+    const r = await getLineasPorConciliar(TENANT);
+    expect([...r]).toEqual([]);
+    expect(r.total).toBe(0);
+  });
+
+  // ESCALA 50k (MAPA #22): la cola viaja acotada a las más recientes y
+  // `total` dice cuántas hay de verdad — el rótulo no puede decir "3" si son 1,340.
+  it('`total` es el conteo real de la base, no el largo del recorte', async () => {
+    respuestas.set('cfdi_consolidado_linea', {
+      data: [{
+        id: 'linea-1', cfdi_xml_id: 'xml-1', indice: 1, fuente: 'concepto_base', fecha: null,
+        monto: 310, descripcion: null, estacion_rfc: null, folio_operacion: null, candidatos: null,
+      }],
+      error: null, count: 1_340,
+    });
+    respuestas.set('cfdi_xml', { data: [{ id: 'xml-1', cfdi_uuid: 'uuid-real' }], error: null });
+    const r = await getLineasPorConciliar(TENANT);
+    expect(r).toHaveLength(1);
+    expect(r.total).toBe(1_340);
+  });
+
+  it('sin conteo de la base, LANZA: no se inventa un total que haga parecer completa la cola', async () => {
+    respuestas.set('cfdi_consolidado_linea', { data: [], error: null, count: null });
+    await expect(getLineasPorConciliar(TENANT)).rejects.toThrow(/no devolvió el conteo/);
   });
 });
 
