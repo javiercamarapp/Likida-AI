@@ -40,6 +40,37 @@ export { DatoInvalido, mensajeParaPantalla } from './errores';
  * ocurrió y tirarla dejaría el sistema peor —una flota a medio crear— que sin
  * el registro. El fallo se loguea para que no se pierda en silencio.
  */
+/**
+ * Mezcla un parcial sobre `tenant.config` en UN solo UPDATE (RPC
+ * `tenant_config_merge`, 0159).
+ *
+ * La mezcla es PROFUNDA, igual que `fusionarConfig` (config.ts): los objetos se
+ * recorren y los arrays reemplazan. Y el CHECK `tenant_config_valida` sigue
+ * corriendo en ese UPDATE, así que una llave que `CuadraConfig` no conozca
+ * rebota aquí en vez de guardarse para que nadie la lea.
+ */
+async function mezclarConfig(
+  tenantId: string,
+  parcial: Record<string, unknown>,
+  etiqueta: string,
+  borrar: string[] = [],
+): Promise<{ error: Error | null }> {
+  const { error } = await acotada(
+    supabaseAdmin().rpc('tenant_config_merge', {
+      p_tenant: tenantId,
+      p_parcial: parcial,
+      p_borrar: borrar,
+    }),
+    etiqueta,
+  );
+  if (!error) return { error: null };
+  // CU013: la flota no existe. Es dato de entrada, no una caída.
+  if ((error as { code?: string }).code === 'CU013') {
+    return { error: new DatoInvalido('No se encontró tu flota. Recarga la pantalla.') };
+  }
+  return { error: new Error(`${etiqueta}: ${error.message}`) };
+}
+
 async function anotar(
   tenantId: string | null,
   accion: string,
@@ -440,15 +471,14 @@ export async function guardarPolitica(
     }
   }
 
-  const admin = supabaseAdmin();
-  const { data, error: errLee } = await admin.from('tenant').select('config').eq('id', tenantId).maybeSingle();
-  if (errLee) throw new Error(`guardarPolitica: no se pudo leer la config — ${errLee.message}`);
-
-  const actual = (data?.config as Record<string, unknown> | null) ?? {};
-  const nueva = { ...actual, politica };
-
-  const { error } = await admin.from('tenant').update({ config: nueva }).eq('id', tenantId);
-  if (error) throw new Error(`guardarPolitica: ${error.message}`);
+  // La mezcla ocurre DENTRO del UPDATE (`tenant_config_merge`, 0159). El
+  // lee-modifica-escribe de antes conservaba los hermanos de `config` —eso ya
+  // estaba arreglado— pero contra el `config` que se leyó, no contra el que hay
+  // al escribir: dos ediciones simultáneas y la de en medio desaparece sin
+  // ruido. En `tenant.config` viven los topes fiscales, así que perder una
+  // mezcla no es perder una preferencia (DAT-20).
+  const { error } = await mezclarConfig(tenantId, { politica }, 'guardarPolitica');
+  if (error) throw error;
 
   await anotar(tenantId, 'politica.editada', 'tenant', tenantId, { conceptos: politica.length }, actor);
 }
@@ -478,20 +508,14 @@ export async function guardarAjustesOperativos(
   ajustes: AjustesValidos,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  const admin = supabaseAdmin();
-  const { data, error: errLee } = await admin.from('tenant').select('config').eq('id', tenantId).maybeSingle();
-  if (errLee) throw new Error(`guardarAjustesOperativos: no se pudo leer la config — ${errLee.message}`);
-
-  const actual = (data?.config as Record<string, unknown> | null) ?? {};
-  const nueva = {
-    ...actual,
+  // Mismo motivo que en `guardarPolitica`: la mezcla la hace la base en un solo
+  // UPDATE, así que dos pantallas guardando a la vez ya no se pisan (DAT-20).
+  const { error } = await mezclarConfig(tenantId, {
     tabulador: ajustes.tabulador,
     catalogoCuentas: ajustes.catalogoCuentas,
     salida: ajustes.salida,
-  };
-
-  const { error } = await admin.from('tenant').update({ config: nueva }).eq('id', tenantId);
-  if (error) throw new Error(`guardarAjustesOperativos: ${error.message}`);
+  }, 'guardarAjustesOperativos');
+  if (error) throw error;
 
   // El detalle guarda los VALORES, no solo "se editó": el para qué de la
   // bitácora aquí es poder contestar "¿con qué rendimiento se cuadró el viaje
