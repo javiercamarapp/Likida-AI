@@ -21,6 +21,10 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 // storage que firma. `filaPdf` es lo que devuelve `.maybeSingle()`.
 let filaPdf: { pdf_url: string | null } | null = { pdf_url: 't-1/v-1.pdf' };
 const filtros: Array<[string, unknown]> = [];
+/** Los `range(d, h)` que pidió el export de liquidaciones, en orden. */
+const rangos: Array<[number, number]> = [];
+/** La "base" recorta a max_rows como PostgREST: nunca más de 1,000 por página. */
+const MAX_ROWS = 1_000;
 const createSignedUrl = vi.fn(async () => ({ data: { signedUrl: 'https://storage/firmada' }, error: null }));
 const rpc = vi.fn(async () => ({ error: null }));
 function builderLiquidacion() {
@@ -28,15 +32,24 @@ function builderLiquidacion() {
   Object.assign(b, {
     select: () => b,
     eq: (c: string, v: unknown) => { filtros.push([c, v]); return b; },
+    gte: (c: string, v: unknown) => { filtros.push([`${c}>=`, v]); return b; },
+    lt: (c: string, v: unknown) => { filtros.push([`${c}<`, v]); return b; },
     order: () => b,
-    range: () => b,
+    range: (d: number, h: number) => { rangos.push([d, h]); return b; },
     maybeSingle: async () => ({ data: filaPdf, error: null }),
-    then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
-      Promise.resolve({ data: liquidaciones, error: null, count: liquidaciones.length }).then(res, rej),
+    then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) => {
+      if (errorLiquidacion) return Promise.resolve({ data: null, error: errorLiquidacion, count: null }).then(res, rej);
+      const [d, h] = rangos.at(-1) ?? [0, MAX_ROWS - 1];
+      const data = rangos.length > seCallaDesde ? [] : liquidaciones.slice(d, Math.min(h + 1, d + MAX_ROWS));
+      return Promise.resolve({ data, error: null, count: d === 0 ? liquidaciones.length : null }).then(res, rej);
+    },
   });
   return b;
 }
 let liquidaciones: Array<Record<string, unknown>> = [];
+let errorLiquidacion: { message: string } | null = null;
+/** A partir de esta página la base contesta vacío aunque el count diga más. */
+let seCallaDesde = Infinity;
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => builderLiquidacion(),
@@ -69,13 +82,14 @@ const bit = await import('./bitacora-peaje/route');
 const req = (url: string) => new Request(url);
 const LIQ = '11111111-2222-3333-4444-555555555555';
 const GET_PDF = () => pdf.GET(req(`https://app.likida.ai/api/export/pdf/${LIQ}`), { params: Promise.resolve({ id: LIQ }) });
-const GET_LIQ = () => liq.GET(req('https://app.likida.ai/api/export/liquidaciones'));
+const PERIODO = '?desde=2026-06-01&hasta=2026-08-31';
+const GET_LIQ = (q = PERIODO) => liq.GET(req(`https://app.likida.ai/api/export/liquidaciones${q}`));
 const GET_PROV = (f = '') => prov.GET(req(`https://app.likida.ai/api/export/facturas-proveedor${f ? `?formato=${f}` : ''}`));
 const GET_BIT = (d = 'd-1') => bit.GET(req(`https://app.likida.ai/api/export/bitacora-peaje${d ? `?desglose=${d}` : ''}`));
 
 const RUTAS = [
   ['pdf/[id]', GET_PDF],
-  ['liquidaciones', GET_LIQ],
+  ['liquidaciones', () => GET_LIQ()],
   ['facturas-proveedor', GET_PROV],
   ['bitacora-peaje', GET_BIT],
 ] as const;
@@ -84,7 +98,10 @@ beforeEach(() => {
   tenant = { ok: true, tenantId: 't-1', rol: 'flota_admin' };
   filaPdf = { pdf_url: 't-1/v-1.pdf' };
   filtros.length = 0;
+  rangos.length = 0;
   liquidaciones = [];
+  errorLiquidacion = null;
+  seCallaDesde = Infinity;
   createSignedUrl.mockClear(); rpc.mockClear();
   exportarAprobadas.mockClear(); bitacoraRmf918.mockClear();
 });
@@ -163,13 +180,85 @@ describe('export/pdf/[id] — el tenant es el de la SESIÓN, no el de la URL', (
 });
 
 describe('export/liquidaciones — CSV acotado al tenant', () => {
+  const fila = (i: number) => ({
+    created_at: `2026-08-${String(1 + (i % 28)).padStart(2, '0')}T12:00:00Z`, total_comprobado: 100 + i, total_anticipo: 120, diferencia: 20 - i,
+    estatus: 'cerrada', diferencias: i % 2 ? [{}] : [], viaje: { folio: `V-${i}`, operador: { nombre: 'Juan' } },
+  });
+
   it('consulta con tenant_id de la sesión y sale como CSV adjunto', async () => {
-    liquidaciones = [{ created_at: '2026-08-01', total_comprobado: 100, total_anticipo: 120, diferencia: 20, estatus: 'cerrada', diferencias: [], viaje: { folio: 'V-1', operador: { nombre: 'Juan' } } }];
+    liquidaciones = [fila(1)];
     const r = await GET_LIQ();
     expect(r.status).toBe(200);
     expect(r.headers.get('content-disposition')).toContain('liquidaciones_likida.csv');
     expect(filtros).toEqual(expect.arrayContaining([['tenant_id', 't-1']]));
     expect(await r.text()).toContain('V-1');
+  });
+
+  // ── ESC-8 (escala 50k): periodo obligatorio ≤ 3 meses + archivo en stream ──
+  it('sin ?desde=&hasta= es 400 con la forma del parámetro, y NO se toca la base', async () => {
+    const r = await GET_LIQ('');
+    expect(r.status).toBe(400);
+    expect(await r.text()).toContain('desde=YYYY-MM-DD');
+    expect(rangos).toEqual([]);
+  });
+
+  it.each([
+    ['solo desde', '?desde=2026-06-01'],
+    ['fecha que no existe', '?desde=2026-02-30&hasta=2026-03-01'],
+    ['formato raro', '?desde=01/06/2026&hasta=2026-06-30'],
+    ['hasta antes de desde', '?desde=2026-06-10&hasta=2026-06-01'],
+    ['3 meses y un día', '?desde=2026-06-01&hasta=2026-09-01'],
+  ])('periodo inválido (%s) es 400', async (_n, q) => {
+    expect((await GET_LIQ(q)).status).toBe(400);
+    expect(rangos).toEqual([]);
+  });
+
+  it('3 meses justos (1-jun..31-ago) pasan; el rango va a la base como [desde, hasta+1) en hora de México', async () => {
+    const r = await GET_LIQ('?desde=2026-06-01&hasta=2026-08-31');
+    expect(r.status).toBe(200);
+    await r.text();
+    expect(filtros).toEqual(expect.arrayContaining([
+      ['created_at>=', '2026-06-01T00:00:00-06:00'],
+      ['created_at<', '2026-09-01T00:00:00-06:00'],
+    ]));
+  });
+
+  it('REPRO: 2,345 liquidaciones salen las 2,345, página por página, y el CSV es BYTE POR BYTE el de toCsv de la lista entera', async () => {
+    liquidaciones = Array.from({ length: 2_345 }, (_, i) => fila(i));
+    const r = await GET_LIQ();
+    expect(r.status).toBe(200);
+    const texto = await r.text();
+    const { toCsv, toLiquidacionRows } = await import('@/lib/likida/export');
+    expect(texto).toBe(toCsv(toLiquidacionRows(liquidaciones as never)));
+    expect(texto.split('\n').length).toBe(2_345 + 2); // encabezado + filas + salto final
+    expect(rangos).toEqual([[0, 999], [1000, 1999], [2000, 2999]]);
+  });
+
+  it('una página exacta (1,000) no paga un viaje extra: el count dice que ya está', async () => {
+    liquidaciones = Array.from({ length: 1_000 }, (_, i) => fila(i));
+    await (await GET_LIQ()).text();
+    expect(rangos).toEqual([[0, 999]]);
+  });
+
+  it('sin liquidaciones en el periodo el archivo sale vacío (como antes), no un encabezado suelto', async () => {
+    const r = await GET_LIQ();
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe('');
+  });
+
+  it('si la base falla en la PRIMERA página es un 500 con texto, no un archivo a medias', async () => {
+    errorLiquidacion = { message: 'relation liquidacion does not exist' };
+    const r = await GET_LIQ();
+    expect(r.status).toBe(500);
+    expect(await r.text()).not.toContain('relation');
+  });
+
+  it('si la base deja de entregar A MEDIO archivo, la descarga se ABORTA — jamás un CSV corto cerrado limpio', async () => {
+    liquidaciones = Array.from({ length: 1_500 }, (_, i) => fila(i));
+    seCallaDesde = 1;
+    const r = await GET_LIQ();
+    expect(r.status).toBe(200);
+    await expect(r.text()).rejects.toThrow(/incompleta/);
   });
 });
 
