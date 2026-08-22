@@ -439,8 +439,9 @@ export default async function FlotasPage() {
                     ))}
                   </select>
                   <span>
-                    — la facilidad del 15% (RFA 2.9) exige 601 o 612; cualquier otro
-                    no califica y el efectivo en combustible no se deduce.
+                    — la facilidad del 15% (RFA 2.9) exige 624 Coordinados o 612 persona física;
+                    cualquier otro, 601 incluido, no califica y el efectivo en combustible no se
+                    deduce. La 624 todavía no está en esta lista: pídesela a Javier.
                   </span>
                 </label>
               </FormaConAviso>

@@ -114,6 +114,47 @@ describe('crearFlota', () => {
     }));
   });
 
+  // ── FISC-C2-1 (auditoría 18-c2, CRÍTICO) ──────────────────────────────────
+  // La RFA 2026 regla 2.9 —ficha `normas/rfa-2026-2.9.yaml`, verificada contra
+  // fuente primaria— reserva la facilidad del 15% a quien tribute en «Título II,
+  // Capítulo VII o Título IV, Capítulo II, Sección I». Título II Capítulo VII es
+  // COORDINADOS (LISR 72-73), que en `c_RegimenFiscal` es la clave **624**; la
+  // 601 es Título II en general, la S.A. de C.V. ordinaria. Se habían tomado por
+  // la misma cosa, y el motor le concedía a una 601 el diésel pagado en efectivo
+  // que la LISR 27-III le niega: $150,000 al tope del ejercicio ≈ $45,000 de ISR
+  // declarados de menos, con la cita del artículo impresa al lado.
+  it('un régimen 601 NO es elegible para la facilidad del 15%: no es el Capítulo VII', async () => {
+    const insert = vi.fn((_fila: Record<string, unknown>) => cadena({ data: { id: 't-1' }, error: null }));
+    from.mockImplementation((tabla: string) =>
+      tabla === 'tenant' ? { insert } : { insert: () => Promise.resolve({ error: null }) });
+
+    await crearFlota({
+      nombre: 'Transportes del Bajío', rfc: 'GMX0902279I1', razonSocial: 'FLOTA SA DE CV',
+      regimenFiscal: '601', codigoPostalFiscal: '36100', usoCfdi: 'G03',
+      dedicacionExclusivaCarga: true,
+    });
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      config: { facilidadCombustibleEfectivo: { dedicacionExclusivaCarga: true, regimenElegible: false } },
+    }));
+  });
+
+  it('una persona física 612 (Título IV Cap. II Secc. I) SÍ es elegible', async () => {
+    const insert = vi.fn((_fila: Record<string, unknown>) => cadena({ data: { id: 't-1' }, error: null }));
+    from.mockImplementation((tabla: string) =>
+      tabla === 'tenant' ? { insert } : { insert: () => Promise.resolve({ error: null }) });
+
+    await crearFlota({
+      nombre: 'Fletes Doña Chuy', rfc: 'GMX0902279I1', razonSocial: 'FLOTA SA DE CV',
+      regimenFiscal: '612', codigoPostalFiscal: '36100', usoCfdi: 'G03',
+      dedicacionExclusivaCarga: true,
+    });
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      config: { facilidadCombustibleEfectivo: { dedicacionExclusivaCarga: true, regimenElegible: true } },
+    }));
+  });
+
   it('un CP de cuatro dígitos se rechaza ANTES de insertar, no deja la flota a medias', async () => {
     // Si la comprobación viviera dentro del update de la pantalla fiscal, este
     // clic ya habría creado el tenant y el error llegaría después del cambio.

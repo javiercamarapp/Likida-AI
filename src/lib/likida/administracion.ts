@@ -151,11 +151,27 @@ export async function crearFlota(
   const admin = supabaseAdmin();
   // RFA 2026 regla 2.9: el régimen se captura como el código SAT REAL
   // (tenant.regimen_fiscal — la columna que la facturación ya lee) y la
-  // elegibilidad se DERIVA de él: los códigos 601 (General de Ley PM —
-  // coordinados) y 612 (PF con actividades empresariales) son los dos títulos
-  // que la regla admite. El booleano `dedicacionExclusivaCarga` se guarda en
-  // la config (el otro requisito, que el alta ya pregunta).
-  const REGIMENES_ELEGIBLES = ['601', '612'];
+  // elegibilidad se DERIVA de él. El booleano `dedicacionExclusivaCarga` se
+  // guarda en la config (el otro requisito, que el alta ya pregunta).
+  //
+  // FISC-C2-1 (auditoría 18-c2, CRÍTICO): aquí decía `['601', '612']` con el
+  // comentario «601 (General de Ley PM — coordinados)», y son dos cosas
+  // distintas del catálogo `c_RegimenFiscal`. La regla admite «Título II,
+  // Capítulo VII o Título IV, Capítulo II, Sección I» (ficha
+  // `normas/rfa-2026-2.9.yaml`, verificada contra fuente primaria):
+  //   · Título II Cap. VII = COORDINADOS (LISR 72-73)  → clave **624**
+  //   · Título II a secas  = la S.A. de C.V. ordinaria → clave 601, que NO
+  //     entra: para ella sigue aplicando la LISR 27-III sin excepción.
+  //   · Título IV Cap. II Secc. I = PF con act. empresarial → clave 612. ✔
+  // Se falla cerrado a propósito: conceder de más imprime en el PDF, citando el
+  // artículo, una deducción que la norma niega.
+  //
+  // PENDIENTE que esto deja abierto (FISC-C2-4, ALTO): la 624 todavía no existe
+  // en `REGIMENES` (`saas/fiscal.ts`) ni en el CHECK `tenant_regimen_fiscal_dominio`
+  // de la migración 0056, así que un coordinado real —el contribuyente para el
+  // que la regla se escribió— no puede declararse como tal. Cerrarlo pide una
+  // migración; hoy la facilidad solo la alcanza una persona física 612.
+  const REGIMENES_ELEGIBLES = ['624', '612'];
   const regimenElegible = f.regimenFiscal ? REGIMENES_ELEGIBLES.includes(f.regimenFiscal) : undefined;
   const facilidad15 = (typeof f.dedicacionExclusivaCarga === 'boolean' && regimenElegible !== undefined)
     ? {
