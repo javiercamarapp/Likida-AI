@@ -716,9 +716,17 @@ const COLUMNAS =
  * CUÁNTO DURA UN CLAIM antes de que se pueda volver a tomar el ticket.
  *
  * Tiene que ser MUY mayor que la sesión de portal más lenta (10-60 s) para que
- * dos corridas simultáneas no se pisen, y MUY menor que el periodo del cron
- * (una hora, `vercel.json`) para que un proceso que muere a media sesión no deje
- * el ticket congelado más de una vuelta. Diez minutos cumple las dos con margen.
+ * dos corridas simultáneas no se pisen, y no tanto como para dejar un ticket
+ * congelado si el proceso muere: diez minutos cumple las dos.
+ *
+ * ESC-5 bajó el cron de una hora a 15 minutos (`vercel.json`), así que el claim
+ * ya NO es «mucho menor» que el periodo: un proceso muerto libera su ticket a
+ * los 10 min y la corrida siguiente lo puede tomar 5 min después. Eso ya no es
+ * el riesgo que era, y la razón es RES-10: en modo `emitir` el ticket queda
+ * marcado `autofactura_bloqueada_en` ANTES de abrir el portal, así que un
+ * proceso que muere a media sesión lo deja FUERA de la cola —esperando a una
+ * persona— aunque el claim haya expirado. El claim ordena la cola; lo que
+ * impide el segundo CFDI es la marca.
  */
 const CLAIM_MINUTOS = 10;
 
