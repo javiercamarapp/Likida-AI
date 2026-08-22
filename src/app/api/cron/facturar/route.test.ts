@@ -47,8 +47,13 @@ vi.mock('@/lib/observability/alerta', () => ({
 // El kill switch (0110). Default: sin fila = encendido (false) — así TODAS
 // las pruebas existentes prueban de paso que sin interruptor el cron corre.
 const estaApagado = vi.fn(async (nombre: string) => nombre === '__ninguno_apagado__');
+/** AUDITORÍA 18 (A17): los crons leen `leerInterruptor`, que distingue
+ *  apagado de ILEGIBLE. `estaApagado` sigue siendo la palanca de las pruebas
+ *  viejas (true = apagado); `ilegibles` marca qué lecturas fallan. */
+const ilegibles = new Set<string>();
 vi.mock('@/lib/likida/interruptores', () => ({
-  estaApagado: (...a: unknown[]) => estaApagado(...(a as [string])),
+  leerInterruptor: async (nombre: string) =>
+    ilegibles.has(nombre) ? 'ilegible' : (await estaApagado(nombre)) ? 'apagado' : 'encendido',
 }));
 
 /** Lo que devuelve la consulta de la cola. */
@@ -192,6 +197,7 @@ beforeEach(() => {
   avisar.mockReset();
   avisar.mockResolvedValue({ avisado: true, porque: 'ok', destinatarios: 1, magnitud: 1 });
   estaApagado.mockReset().mockResolvedValue(false);
+  ilegibles.clear();
   for (const f of Object.values(logger)) f.mockReset();
 });
 
@@ -234,6 +240,26 @@ describe('el kill switch (0110)', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ corrio: false, saltado: 'interruptor agente:facturas' });
+    expect(facturarLoteAlVuelo).not.toHaveBeenCalled();
+  });
+
+  it("con 'global' ILEGIBLE: 500 con `codigo`, sin tocar la cola ni abrir navegador (A17)", async () => {
+    ilegibles.add('global');
+    const res = await pedir();
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ corrio: false, codigo: 'interruptor_ilegible', interruptor: 'global' });
+    expect(consulta).toHaveLength(0);
+    expect(conNavegador).not.toHaveBeenCalled();
+    expect(facturarLoteAlVuelo).not.toHaveBeenCalled();
+  });
+
+  it("con 'agente:facturas' ILEGIBLE (y global encendido): 500 y dice CUÁL palanca no se pudo leer", async () => {
+    ilegibles.add('agente:facturas');
+    const res = await pedir();
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ codigo: 'interruptor_ilegible', interruptor: 'agente:facturas' });
     expect(facturarLoteAlVuelo).not.toHaveBeenCalled();
   });
 

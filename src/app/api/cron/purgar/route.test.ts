@@ -26,8 +26,13 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 // El kill switch (0110). Default: sin fila = encendido (false).
 const estaApagado = vi.fn(async (nombre: string) => nombre === '__ninguno_apagado__');
+/** AUDITORÍA 18 (A17): los crons leen `leerInterruptor`, que distingue
+ *  apagado de ILEGIBLE. `estaApagado` sigue siendo la palanca de las pruebas
+ *  viejas (true = apagado); `ilegibles` marca qué lecturas fallan. */
+const ilegibles = new Set<string>();
 vi.mock('@/lib/likida/interruptores', () => ({
-  estaApagado: (...a: unknown[]) => estaApagado(...(a as [string])),
+  leerInterruptor: async (nombre: string) =>
+    ilegibles.has(nombre) ? 'ilegible' : (await estaApagado(nombre)) ? 'apagado' : 'encendido',
 }));
 
 process.env.CRON_SECRET = 'secreto-de-prueba';
@@ -42,6 +47,7 @@ beforeEach(() => {
   rpc.mockClear();
   alertarOperador.mockClear();
   estaApagado.mockReset().mockResolvedValue(false);
+  ilegibles.clear();
   for (const f of Object.values(logger)) f.mockReset();
 });
 
@@ -94,6 +100,17 @@ describe('el kill switch (0110)', () => {
     expect(await res.json()).toEqual({ corrio: false, saltado: 'interruptor global' });
     expect(rpc).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith('cron.purgar.saltado', { interruptor: 'global' });
+  });
+
+  it("con 'global' ILEGIBLE: 500 con `codigo` y la RPC de borrado NI SE LLAMA (A17)", async () => {
+    // Fail-closed sigue (no se borra), pero ya no en verde: no saber si está
+    // apagado es un fallo de la corrida, no una decisión de Javier.
+    ilegibles.add('global');
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ corrio: false, codigo: 'interruptor_ilegible', interruptor: 'global' });
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('sin fila (el default) la purga corre — solo se consulta la palanca global', async () => {

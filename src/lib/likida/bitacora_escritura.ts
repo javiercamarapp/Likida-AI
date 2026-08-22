@@ -22,6 +22,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { acotada } from '@/lib/likida/presupuesto';
 
 /** Lo que `entidad` puede decir. Ampliar AQUÍ, no en el llamador. */
 export type EntidadBitacora =
@@ -105,7 +106,7 @@ export async function anotarBitacora(
   const evento = opciones.evento ?? 'bitacora.no_escribio';
   const contexto = { ...(opciones.contexto ?? {}), accion: entrada.accion };
   try {
-    const { error } = await supabaseAdmin().from('bitacora_auditoria').insert(filaBitacora(entrada));
+    const { error } = await acotada(supabaseAdmin().from('bitacora_auditoria').insert(filaBitacora(entrada)), 'bitacora.insert');
     if (error) {
       logger.warn(evento, { ...contexto, err: error.message });
       return false;

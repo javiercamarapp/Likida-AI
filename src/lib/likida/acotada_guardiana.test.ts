@@ -15,6 +15,12 @@ const GUARDADOS = [
   'src/lib/likida/wa_pendientes.ts',
   'src/lib/likida/avisar_cierre.ts',
   'src/lib/likida/conv.ts',
+  // Los tres que A23 señaló y el primer arreglo dejó fuera: la lectura del
+  // kill switch (primera línea del `after()`), el teléfono del jefe (en el
+  // cierre) y la respuesta al chofer (dentro del presupuesto del webhook).
+  'src/lib/likida/interruptores.ts',
+  'src/lib/likida/contactos.ts',
+  'src/lib/likida/consulta_chofer.ts',
 ];
 
 describe('toda consulta de los módulos del camino caliente lleva techo', () => {
