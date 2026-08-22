@@ -7,6 +7,7 @@ import { TopRutas } from './top-rutas';
 import { TituloSeccion } from './resumen-visual';
 import { Actividad, type ModoPeriodo } from './actividad';
 import { mxn } from '@/lib/formato';
+import { rotuloVentana, type BloquePeriodo } from './ventana-periodo';
 import type {
   SeriesKpiCards, GastoSemanalSeries, LiquidadoSemanalSeries, TopRutasSeries,
 } from '@/lib/likida/analytics';
@@ -49,6 +50,12 @@ export function PanelPeriodo({
   const liquidadoModo = liquidadoSemanalSeries?.[modo] ?? null;
   const rutasModo = topRutasSeries?.[modo] ?? null;
   const totalLiquidado = liquidadoModo?.reduce((s, d) => s + d.valor, 0) ?? 0;
+  // A11: el pill rotula CINCO ventanas distintas (7 días, 35 días, 52 semanas,
+  // sin cota…). Cada tarjeta imprime la suya, junto al título, para que
+  // "Histórico" sobre "Liquidado" no prometa lo que no suma.
+  const ventana = (b: BloquePeriodo) => (
+    <span className="normal-case font-normal ml-1.5" style={{ color: 'var(--faint)' }}>· {rotuloVentana(b, modo)}</span>
+  );
 
   return (
     // Cada bloque es una TARJETA blanca sobre el lienzo tenue
@@ -69,7 +76,7 @@ export function PanelPeriodo({
       {/* ── Viajes / Actividad ── */}
       <div className="pt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
         <div className="card p-3 h-full flex flex-col">
-          <TituloSeccion>Viajes</TituloSeccion>
+          <TituloSeccion>Viajes{ventana('viajes')}</TituloSeccion>
           <div className="mt-2.5 flex-1 flex flex-col">
             {/* A13: `null` es consulta CAÍDA, no flota sin viajes — se dice,
                 como ya hacían "Liquidado" y "Top rutas" en esta misma fila. */}
@@ -86,7 +93,7 @@ export function PanelPeriodo({
           </div>
         </div>
         <div className="card p-3 md:col-span-2 h-full flex flex-col">
-          <TituloSeccion>Actividad</TituloSeccion>
+          <TituloSeccion>Actividad{ventana('actividad')}</TituloSeccion>
           <div className="mt-3 flex-1 flex flex-col">
             <Actividad viajes={viajes} porMes={porMes} modo={modo} />
           </div>
@@ -96,7 +103,7 @@ export function PanelPeriodo({
       {/* ── Gasto por categoría / Liquidado — mitad y mitad (12-ago) ── */}
       <div className="pt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
         <div className="card p-3 h-full flex flex-col">
-          <TituloSeccion>Gasto por categoría</TituloSeccion>
+          <TituloSeccion>Gasto por categoría{ventana('gasto')}</TituloSeccion>
           <div className="mt-3 flex-1 flex flex-col">
             {gastoModo === null ? (
               <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>No se pudo cargar esta gráfica.</p></div>
@@ -108,7 +115,7 @@ export function PanelPeriodo({
           </div>
         </div>
         <div className="card p-3 h-full flex flex-col">
-          <TituloSeccion>Liquidado</TituloSeccion>
+          <TituloSeccion>Liquidado{ventana('liquidado')}</TituloSeccion>
           {totalLiquidado > 0 && (
             <div className="text-2xl font-semibold tracking-tight tabular mt-1">{mxn(totalLiquidado)}</div>
           )}
@@ -131,7 +138,7 @@ export function PanelPeriodo({
       {/* ── Top rutas por gasto — hasta abajo, a TODO lo ancho (12-ago) ── */}
       <div className="pt-2">
         <div className="card p-3 flex flex-col">
-          <TituloSeccion>Top rutas por gasto</TituloSeccion>
+          <TituloSeccion>Top rutas por gasto{ventana('rutas')}</TituloSeccion>
           <div className="mt-2 flex-1 flex flex-col">
             {rutasModo && rutasModo.length > 0 ? (
               <div className="overflow-x-auto"><TopRutas rutas={rutasModo} /></div>
