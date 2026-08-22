@@ -590,9 +590,16 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
       // no un contrato de Zero Data Retention firmado. El texto ahora describe
       // lo que el código hace (pedirlo), no lo que no se ha confirmado (que se
       // cumpla del lado del proveedor).
+      //
+      // AUDITORÍA 18 (M7): decía "los modelos de lenguaje que leen las fotos",
+      // y el camino real (processor.ts → runAgent → generateWithTools) manda el
+      // HISTORIAL DE TEXTO del chat, verbatim, al mismo proveedor. El dato ya
+      // estaba enumerado en la fr. II ("el contenido de tus mensajes"); lo mal
+      // dicho era HACIA DÓNDE sale. El art. 35 y la fr. II del 15 exigen
+      // describir el flujo real, no la versión más cómoda de él.
       parrafos: [
         `**Tus datos no se venden, ni se comparten con nadie para que los use por su cuenta.**`,
-        `Sí pasan por proveedores que trabajan por instrucción de la empresa y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia** (art. 2 fr. XX)—: el proveedor de mensajería de WhatsApp, el de alojamiento de la base de datos, y los modelos de lenguaje que leen las fotos, a los que en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
+        `Sí pasan por proveedores que trabajan por instrucción de la empresa y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia** (art. 2 fr. XX)—: el proveedor de mensajería de WhatsApp, el de alojamiento de la base de datos, y los modelos de lenguaje: les llegan **las fotos de tus comprobantes** para leerlas y **el texto de tus mensajes** —la conversación completa— para poder contestarte. A esos modelos en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
         `Transferencias que sí lo son y no necesitan tu consentimiento: a la autoridad fiscal cuando la ley lo exige, y al contador de la empresa para cumplir sus obligaciones.`,
         `**Si algún día se quisiera transferir tus datos para algo distinto, se te pedirá permiso antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
       ],

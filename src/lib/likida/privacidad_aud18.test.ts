@@ -37,3 +37,17 @@ describe('B6 · "persona encargada" se cita con su fracción, la XII', () => {
     expect(s.parrafos.join(' ')).toMatch(/no es una transferencia\*\* \(art\. 2 fr\. XX\)/);
   });
 });
+
+describe('M7 · los modelos de lenguaje reciben las fotos Y el texto del chat', () => {
+  // processor.ts arma `turns = [...conv.turns, { role: 'user', content: msg.text }]`
+  // y runAgent lo manda verbatim a OpenRouter. "Los modelos que leen las fotos"
+  // le decía al operador que lo que escribe se queda dentro.
+  it('la cláusula del art. 35 nombra las dos clases de dato que salen', () => {
+    const s = avisoIntegral(FLOTA).find((x) => x.fundamento === 'LFPDPPP art. 35')!;
+    const t = s.parrafos.join(' ');
+    expect(t).toMatch(/modelos de lenguaje/);
+    expect(t).toMatch(/fotos de tus comprobantes/);
+    expect(t).toMatch(/texto de tus mensajes/);
+    expect(t, 'no acotar el flujo a las fotos').not.toMatch(/modelos de lenguaje que leen las fotos,/);
+  });
+});
