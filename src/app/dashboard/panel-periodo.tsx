@@ -6,6 +6,7 @@ import { GastoSemanalChart } from './gasto-semanal-chart';
 import { TopRutas } from './top-rutas';
 import { TituloSeccion } from './resumen-visual';
 import { Actividad, type ModoPeriodo } from './actividad';
+import type { DiaViajes } from './serie-diaria';
 import { mxn } from '@/lib/formato';
 import { rotuloVentana, type BloquePeriodo } from './ventana-periodo';
 import type {
@@ -26,16 +27,17 @@ const OPCIONES: Array<{ id: ModoPeriodo; etiqueta: string }> = [
  * ninguno: "Gasto por categoría"/"Liquidado" vivían fijas a 5 semanas,
  * "Viajes" a todo el histórico siempre).
  *
- * Todos los datos ya llegan PRE-CALCULADOS por el servidor para las 3
- * vistas (`*Series` en `analytics.ts`) — este componente solo decide cuál
- * mostrar. `viajes`/`porMes` son la excepción: `Actividad` los bucketea en
- * el cliente porque ya se cargaban así desde antes (ver su propio
- * comentario).
+ * Todos los datos llegan PRE-CALCULADOS por el servidor para las 3 vistas
+ * (`*Series` en `analytics.ts`; `porDia` en `serie-diaria.ts` desde FE-5) —
+ * este componente solo decide cuál mostrar. Ya no queda ningún bucketeo en
+ * el cliente: `Actividad` recibía las 100 filas crudas de `getViajes` y las
+ * contaba por día, que a 50k viajes/mes eran 90 minutos rotulados "7 días".
  */
 export function PanelPeriodo({
-  viajes, porMes, seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries,
+  porDia, porMes, seriesKpis, gastoSemanalSeries, liquidadoSemanalSeries, topRutasSeries,
 }: {
-  viajes: Array<{ fechaInicio: string | null }>;
+  /** Viajes iniciados por día, contados en SQL. `null` = no se pudo leer. */
+  porDia: DiaViajes[] | null;
   porMes: Array<{ dia: string; valor: number }>;
   seriesKpis: SeriesKpiCards | null;
   gastoSemanalSeries: GastoSemanalSeries | null;
@@ -95,7 +97,7 @@ export function PanelPeriodo({
         <div className="card p-3 md:col-span-2 h-full flex flex-col">
           <TituloSeccion>Actividad{ventana('actividad')}</TituloSeccion>
           <div className="mt-3 flex-1 flex flex-col">
-            <Actividad viajes={viajes} porMes={porMes} modo={modo} />
+            <Actividad porDia={porDia} porMes={porMes} modo={modo} />
           </div>
         </div>
       </div>

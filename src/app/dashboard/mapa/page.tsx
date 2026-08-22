@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { getViajes } from '@/lib/likida/analytics';
+import { acotada } from '@/lib/likida/presupuesto';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { resolverCiudad, type Ciudad } from '@/lib/likida/geo/ciudades';
 import { ahoraMs } from '@/lib/saludo';
 import { proyectar } from './mexico-geo';
@@ -17,6 +19,69 @@ function kmEntre(a: Ciudad, b: Ciudad): number {
   const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
   const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
   return Math.round(2 * R * Math.asin(Math.sqrt(s)));
+}
+
+/** Los dos estatus que cuentan como "en curso" (`viaje_estatus_dominio`). */
+const VIVOS = ['abierto', 'en_cuadre'];
+
+/** Cuántos viajes vivos se DIBUJAN. El mapa es un dibujo: pasado cierto
+ *  número de trayectos deja de decir nada aunque los datos estén bien, y
+ *  cargar 50,000 sería una pantalla que no abre. Se declara en el pie. */
+const TOPE_MAPA = 200;
+
+interface FilaViva {
+  id: string; folio: string; origen: string | null; destino: string | null;
+  operadorNombre: string | null; fechaInicio: string | null;
+  intakePendientes: number; escaladoEn: string | null; aceptadoEn: string | null;
+}
+
+/**
+ * Los viajes VIVOS de la flota — filtrados en la BASE, no en memoria (FE-5).
+ *
+ * El mapa hacía `getViajes(tenantId)` (las 100 filas más recientes, sin
+ * importar su estatus) y filtraba los vivos en JS. Dos problemas de golpe: a
+ * 50,000 viajes/mes esas 100 filas son ~90 minutos, así que un viaje en
+ * curso desde ayer NO SALÍA EN EL MAPA de la operación; y de esas 100, las
+ * liquidadas se traían para tirarlas. Ahora el filtro va en el `.in()` y el
+ * tope es explícito.
+ */
+async function viajesVivos(tenantId: string): Promise<FilaViva[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('viaje')
+    .select('id, folio, origen, destino, fecha_inicio, intake_pendientes, escalado_en, aceptado_en, operador:operador_id(nombre)')
+    .eq('tenant_id', tenantId)
+    .in('estatus', VIVOS)
+    .order('created_at', { ascending: false })
+    .limit(TOPE_MAPA), 'mapa.viajesVivos');
+  // Sin catch: un mapa vacío afirma "no hay nada en la carretera", que con la
+  // base caída es exactamente lo contrario de lo que el jefe necesita saber.
+  if (error) throw new Error(`mapa.viajesVivos: ${error.message}`);
+  return (data ?? []).map((v) => ({
+    id: v.id as string,
+    folio: (v.folio as string) || (v.id as string).slice(0, 8),
+    origen: (v.origen as string) || null,
+    destino: (v.destino as string) || null,
+    operadorNombre: ((v.operador as { nombre?: string } | null)?.nombre) ?? null,
+    fechaInicio: (v.fecha_inicio as string) || null,
+    intakePendientes: Number(v.intake_pendientes ?? 0),
+    escaladoEn: (v.escalado_en as string) || null,
+    aceptadoEn: (v.aceptado_en as string) || null,
+  }));
+}
+
+/** Cuántos viajes vivos hay DE VERDAD (`count exact, head`). `null` = no se
+ *  pudo contar, y entonces la pantalla no afirma ningún total. */
+async function contarVivos(tenantId: string): Promise<number | null> {
+  const { count, error } = await acotada(supabaseAdmin()
+    .from('viaje')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .in('estatus', VIVOS), 'mapa.contarVivos');
+  if (error) {
+    logger.warn('mapa.contarVivos', { tenantId, err: error.message });
+    return null;
+  }
+  return count ?? null;
 }
 
 /**
@@ -40,8 +105,7 @@ export default async function PaginaMapa({
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/mapa', sp);
   if (!puedeVerRuta(rol, '/dashboard/mapa')) redirect('/dashboard');
 
-  const viajes = await getViajes(tenantId);
-  const vivos = viajes.filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre');
+  const [vivos, totalVivos] = await Promise.all([viajesVivos(tenantId), contarVivos(tenantId)]);
 
   const ahora = ahoraMs();
   const ubicados: ViajeEnMapa[] = [];
@@ -79,5 +143,5 @@ export default async function PaginaMapa({
   // Lo más atorado primero — mismo criterio que la cola de cobranza.
   ubicados.sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
 
-  return <VistaMapa ubicados={ubicados} sinUbicar={sinUbicar} cargados={viajes.length} />;
+  return <VistaMapa ubicados={ubicados} sinUbicar={sinUbicar} totalVivos={totalVivos} tope={TOPE_MAPA} />;
 }

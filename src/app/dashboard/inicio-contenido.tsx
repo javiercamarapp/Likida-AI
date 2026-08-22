@@ -19,6 +19,7 @@ import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, mxn, pctCambio, hoyMx } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
+import { getViajesPorDia, type DiaViajes } from './serie-diaria';
 import {
   BarraPagina, ChipFecha, HeroSaludo, MotorFiscal, TituloSeccion,
   type FilaViaje,
@@ -26,6 +27,8 @@ import {
 import { ViajesRecientes } from './viajes-recientes';
 import { StatCard, BannerInsight, VerMas } from '../admin/ui/kit';
 import { BarraAcciones, type ItemBusqueda } from './barra-acciones';
+import { getViajesRegistro } from '@/lib/likida/viajes_registro';
+import { requireSessionTenant } from '@/lib/auth/guard';
 import { KpiPeriodo } from './kpi-periodo';
 import { MotorFiscalPeriodo } from './motor-fiscal-periodo';
 import { PanelPeriodo } from './panel-periodo';
@@ -87,7 +90,7 @@ export async function InicioContenido({
     acred, kpis, anomalias, viajes,
     gastoSemanalSeries, liquidadoSemanalSeries, seriesKpis,
     cfgFiscal, gastosFiscales, gastosFiscalesSeries, viajesPorMes, topRutasSeries,
-    escalados, huerfanosPendientes, pasos,
+    viajesPorDia, escalados, huerfanosPendientes, pasos,
   ] = await Promise.all([
     safe<Acreditables>(() => getAcreditables(tenantId, diasEjercicio)),
     safe<DashboardKpis>(() => getKpis(tenantId)),
@@ -113,6 +116,11 @@ export async function InicioContenido({
     // 100 filas de `viajes` (ver nota en `getViajesPorMes`).
     safe<Array<{ dia: string; valor: number }>>(() => getViajesPorMes(tenantId)),
     safe<TopRutasSeries>(() => getTopRutasPorGastoSeries(tenantId, 5, hoy)),
+    // FE-5: "Actividad — últimos 7/30 días" se bucketeaba EN EL CLIENTE sobre
+    // las 100 filas de `viajes` (≈90 min de operación a 50k viajes/mes: seis
+    // barras en cero bajo un rótulo que decía "7 días"). Ahora la base cuenta
+    // por día, en una sola lectura para las dos ventanas.
+    safe<DiaViajes[]>(() => getViajesPorDia(tenantId, hoy)),
     // Las alertas de F2. Devuelven `null` ante error (≠ 0) y la alerta
     // simplemente no se pinta — una alerta no puede afirmar en falso.
     safe<number | null>(() => contarEscalados(tenantId)),
@@ -211,18 +219,45 @@ export async function InicioContenido({
 
   const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--muted)' } } as const;
 
-  // La búsqueda de la barra cubre los 100 viajes cargados, no solo las 6
-  // filas visibles — encontrar un folio y saber su estado también es una
-  // respuesta, aunque todavía no tenga liquidación a la cual navegar.
-  const itemsBusqueda: ItemBusqueda[] = (viajes ?? []).map((v) => {
-    const liqId = liqPorViaje.get(v.id) ?? null;
-    const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? 'sin ruta capturada';
-    return {
-      etiqueta: v.folio,
-      detalle: `${ruta}${v.operadorNombre ? ` · ${v.operadorNombre}` : ''}`,
-      href: liqId ? `/dashboard/${liqId}${sufijo}` : null,
-    };
-  });
+  /**
+   * FE-5 — LA BÚSQUEDA VA A LA BASE, NO A LAS 100 FILAS CARGADAS.
+   *
+   * La barra filtraba en memoria sobre `viajes` (las 100 más recientes). A
+   * 50,000 viajes/mes eso son ~90 minutos de operación: teclear el folio de
+   * ayer devolvía "Ningún viaje coincide con «F-0148»" — una afirmación sobre
+   * toda la flota respaldada por hora y media de datos. `getViajesRegistro`
+   * ya busca por folio/origen/destino contra el tenant COMPLETO, con los
+   * índices de trigramas de la 0154.
+   *
+   * Server action: el tenant viaja por closure del render, nunca del cliente,
+   * y la sesión se re-verifica adentro (alcanzable por POST directo). Lanza
+   * ante rechazo o fallo — la barra lo pinta como "no se pudo buscar", que no
+   * es lo mismo que "no existe".
+   */
+  async function buscarViajes(q: string): Promise<ItemBusqueda[]> {
+    'use server';
+    const sesion = await requireSessionTenant('/dashboard');
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) {
+      throw new Error('Esa flota no es la tuya.');
+    }
+    const texto = typeof q === 'string' ? q.trim().slice(0, 80) : '';
+    if (!texto) return [];
+
+    const { filas } = await getViajesRegistro(tenantId, { q: texto, porPagina: 8 });
+    // El link "Ver" se cruza por `viaje_id` — el folio es texto libre del TMS
+    // y puede repetirse (el mismo motivo por el que existe esta función).
+    const liqs = await getLiquidacionesDeViajes(tenantId, filas.map((v) => v.id));
+    const porViaje = new Map(liqs.map((l) => [l.viajeId, l.id]));
+    return filas.map((v) => {
+      const liqId = porViaje.get(v.id) ?? null;
+      const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? 'sin ruta capturada';
+      return {
+        etiqueta: v.folio,
+        detalle: `${ruta}${v.operadorNombre ? ` · ${v.operadorNombre}` : ''}`,
+        href: liqId ? `/dashboard/${liqId}${sufijo}` : null,
+      };
+    });
+  }
 
   // ── El insight de la semana (BannerInsight, 16-ago-2026) ────────────────
   // La noticia POSITIVA del periodo, con la regla de siempre: solo se monta
@@ -262,7 +297,7 @@ export async function InicioContenido({
                   viendo como superadmin · {tenantNombre}
                 </span>
               )}
-              <BarraAcciones items={itemsBusqueda} pendientes={pendientes} hrefAsistente={`/dashboard/chat${sufijo}`} />
+              <BarraAcciones buscar={buscarViajes} pendientes={pendientes} hrefAsistente={`/dashboard/chat${sufijo}`} />
             </div>
           }
         />
@@ -432,7 +467,7 @@ export async function InicioContenido({
                   es el ancla del BannerInsight de arriba. */}
               <div className="mt-2.5" id="estadisticas">
                 <PanelPeriodo
-                  viajes={viajes ?? []}
+                  porDia={viajesPorDia}
                   porMes={viajesPorMes ?? []}
                   seriesKpis={seriesKpis}
                   gastoSemanalSeries={gastoSemanalSeries}
