@@ -5809,3 +5809,28 @@ begin
   raise exception E'CLAIM_0149  columna=%  huerfano_retomado=%  completado_retomado=%  fresco_retomado=%   (esperado t / 1 / 0 / 0)',
     columna, retomado, completado_no_retomado, fresco_no_retomado;
 end $$;
+
+-- ── 129. El cursor de /v1/viajes tiene índice y el ANALYZE es sólo del servidor (mig. 0157) ──
+-- ESC-15: sin `viaje_tenant_created_id_idx` cada página del cursor barre la
+-- flota entera. ESC-18: `analizar_tablas_operacion()` corre ANALYZE como
+-- dueño — si la anon key pudiera llamarla, cualquiera con la URL del
+-- proyecto le pegaría a la base un ANALYZE en bucle. Las tres cosas las
+-- demuestra sólo la base: el índice existe con ese orden, la función corre,
+-- y anon/authenticated NO pueden ejecutarla mientras service_role sí.
+do $$
+declare
+  idx_def text; anon_ok boolean; auth_ok boolean; svc_ok boolean; corrio boolean := false;
+begin
+  select indexdef into idx_def from pg_indexes
+   where schemaname = 'public' and tablename = 'viaje' and indexname = 'viaje_tenant_created_id_idx';
+
+  anon_ok := has_function_privilege('anon', 'public.analizar_tablas_operacion()', 'execute');
+  auth_ok := has_function_privilege('authenticated', 'public.analizar_tablas_operacion()', 'execute');
+  svc_ok  := has_function_privilege('service_role', 'public.analizar_tablas_operacion()', 'execute');
+
+  perform public.analizar_tablas_operacion();
+  corrio := true;
+
+  raise exception E'CURSOR_ANALYZE_0157  indice=%  anon=%  authenticated=%  service_role=%  corrio=%   (esperado "(tenant_id, created_at DESC, id DESC)" / f / f / t / t)',
+    coalesce(substring(idx_def from '\(.*\)'), 'FALTA'), anon_ok, auth_ok, svc_ok, corrio;
+end $$;

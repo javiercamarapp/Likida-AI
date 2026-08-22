@@ -271,6 +271,19 @@ async function cargarCatalogo(
   return porLlave;
 }
 
+/** Filas creadas en UN import a partir de las cuales se pide ANALYZE (ESC-18). */
+export const UMBRAL_ANALYZE = 1_000;
+
+async function analizarTrasImport(tenantId: string, creados: number): Promise<void> {
+  try {
+    const { error } = await acotada(supabaseAdmin().rpc('analizar_tablas_operacion'), 'importarViajes.analyze');
+    if (error) logger.warn('importar_viajes.analyze_fallo', { tenantId, creados, err: error.message });
+    else logger.info('importar_viajes.analyze', { tenantId, creados });
+  } catch (e) {
+    logger.warn('importar_viajes.analyze_fallo', { tenantId, creados, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 /** Inserta los viajes SIN avisar a nadie (ver encabezado). Anclado al tenant. */
 export async function importarViajes(tenantId: string, filas: FilaViajeImportada[]): Promise<ResultadoImportacion> {
   if (!tenantId) throw new Error('importarViajes: falta tenantId');
@@ -456,6 +469,15 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     sinOperador: sinOperador.length, operadorOcupado: operadorOcupado.length,
     sinUnidad: sinUnidad.length, sinCliente: sinCliente.length,
   });
+
+  // ESC-18 (escala 50k): un archivo mete hasta 2,000 viajes de golpe y
+  // autovacuum no analiza hasta que cambia el 10 % de la tabla — a 50k viajes
+  // son 5,000 filas, o sea varias importaciones planificando con estadísticas
+  // de cuando la flota tenía 300 viajes. Pasado el umbral se pide ANALYZE por
+  // la RPC de la 0157 (solo service_role). Best-effort y DESPUÉS del acuse:
+  // los viajes ya están; un ANALYZE que no corre se loguea, no tumba el import.
+  if (creados > UMBRAL_ANALYZE) await analizarTrasImport(tenantId, creados);
+
   return {
     creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar], sinOperador, operadorOcupado,
     unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
