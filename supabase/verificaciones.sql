@@ -5430,3 +5430,118 @@ begin
   raise exception E'RLS_LIQUIDACION_0144  gatea_finanzas=%  check_factura_proveedor=%   (esperado t / t)',
     coalesce(gatea, false), coalesce(tiene_check, false);
 end $$;
+
+-- ── 112. TODA FK entre tablas con tenant_id lleva su compuesta (mig. 0145) ──
+-- La 0028 escribió la regla y la aplicó a cuatro relaciones; la 0073 arregló
+-- una más y dejó escrito que el resto seguía abierto. Este bloque es la regla
+-- hecha catálogo: barre pg_constraint y LISTA cada FK simple entre dos tablas
+-- con tenant_id NOT NULL (destino ≠ tenant) que no tenga una hermana
+-- compuesta (col, tenant_id). Esperado: lista vacía. Una tabla nueva que se
+-- salte el patrón aparece aquí con nombre, y CI se pone rojo.
+-- Quedan fuera por diseño los destinos con tenant_id NULLABLE (app_user —el
+-- superadmin no tiene flota—, prospecto, campania): una compuesta contra
+-- ellos rechazaría filas legítimas.
+-- Y lo funcional, sobre la cadena de cobranza que era el escenario C3:
+-- (b) factura de A con cliente de B rebota; (c) pago de B sobre factura de A
+-- rebota; (d) factura_viaje {factura A, viaje B} rebota; (e) la liga propia
+-- entra y HEREDA el tenant de la factura sin que el INSERT lo mande.
+do $$
+declare
+  sin_tenant text;
+  ta uuid; tb uuid; oa uuid; ob uuid; ca uuid; cb uuid; fa uuid; va uuid; vb uuid;
+  factura_cliente_ajeno_rebota boolean := false;
+  pago_factura_ajena_rebota boolean := false;
+  liga_viaje_ajeno_rebota boolean := false;
+  liga_propia_hereda boolean := false;
+begin
+  with t as (
+    select c.oid, c.relname
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'r'
+       and exists (select 1 from pg_attribute a
+                    where a.attrelid = c.oid and a.attname = 'tenant_id'
+                      and a.attnotnull and not a.attisdropped)
+  )
+  select coalesce(string_agg(h.relname || '.' || a.attname || '->' || d.relname, ', ' order by h.relname, a.attname), '—')
+    into sin_tenant
+    from pg_constraint con
+    join t h on h.oid = con.conrelid
+    join t d on d.oid = con.confrelid
+    join pg_attribute a on a.attrelid = con.conrelid and a.attnum = con.conkey[1]
+   where con.contype = 'f' and array_length(con.conkey, 1) = 1 and d.relname <> 'tenant'
+     and not exists (
+       select 1 from pg_constraint c2
+        where c2.contype = 'f' and c2.conrelid = con.conrelid and c2.confrelid = con.confrelid
+          and con.conkey[1] = any (c2.conkey)
+          and exists (select 1 from pg_attribute a2
+                       where a2.attrelid = c2.conrelid and a2.attnum = any (c2.conkey)
+                         and a2.attname = 'tenant_id'));
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0145 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0145 B') returning id into tb;
+  insert into cliente (tenant_id, nombre, rfc) values (ta, 'ZZZ cli A', 'XAXX010101000') returning id into ca;
+  insert into cliente (tenant_id, nombre, rfc) values (tb, 'ZZZ cli B', 'XAXX010101000') returning id into cb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0145 A', '5215559990145') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ 0145 B', '5215559990146') returning id into ob;
+  insert into viaje (tenant_id, operador_id) values (ta, oa) returning id into va;
+  insert into viaje (tenant_id, operador_id) values (tb, ob) returning id into vb;
+
+  begin
+    insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+      values (ta, cb, 100, 16, 116, 'emitida');
+  exception when foreign_key_violation then factura_cliente_ajeno_rebota := true;
+  end;
+
+  insert into factura_emitida (tenant_id, cliente_id, subtotal, iva, total, estatus)
+    values (ta, ca, 100, 16, 116, 'emitida') returning id into fa;
+
+  begin
+    insert into pago_recibido (tenant_id, factura_id, monto) values (tb, fa, 116);
+  exception when foreign_key_violation then pago_factura_ajena_rebota := true;
+  end;
+
+  begin
+    insert into factura_viaje (factura_id, viaje_id) values (fa, vb);
+  exception when foreign_key_violation then liga_viaje_ajeno_rebota := true;
+  end;
+
+  insert into factura_viaje (factura_id, viaje_id) values (fa, va);
+  select tenant_id = ta into liga_propia_hereda
+    from factura_viaje where factura_id = fa and viaje_id = va;
+
+  raise exception E'FKS_CON_TENANT_0145  fks-sin-tenant=%  factura-cliente-ajeno-rebota=%  pago-factura-ajena-rebota=%  liga-viaje-ajeno-rebota=%  liga-propia-hereda-tenant=%   (esperado — / t / t / t / t)',
+    sin_tenant, factura_cliente_ajeno_rebota, pago_factura_ajena_rebota, liga_viaje_ajeno_rebota, coalesce(liga_propia_hereda, false);
+end $$;
+
+-- ── 113. wa_conversacion ya no admite filas sin flota (mig. 0145, B9) ───────
+-- Con tenant_id NULL el índice único (tenant_id, telefono) no cubría la fila
+-- y `tenant_id = any(...)` daba NULL en toda policy: historial de WhatsApp
+-- (dato personal) sin dueño y sin pantalla desde la cual borrarlo.
+-- (a) la columna es NOT NULL; (b) el INSERT sin tenant rebota; (c) ahora que
+-- entra al barrido, una conversación de A con el operador de B rebota.
+do $$
+declare
+  not_null boolean; sin_tenant_rebota boolean := false; operador_ajeno_rebota boolean := false;
+  ta uuid; tb uuid; ob uuid;
+begin
+  select attnotnull into not_null from pg_attribute
+   where attrelid = 'public.wa_conversacion'::regclass and attname = 'tenant_id';
+
+  insert into tenant (nombre) values ('ZZZ VERIF B9 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF B9 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ B9 B', '5215559990147') returning id into ob;
+
+  begin
+    insert into wa_conversacion (telefono, estado) values ('5215500001001', '{"turns":[]}'::jsonb);
+  exception when not_null_violation then sin_tenant_rebota := true;
+  end;
+
+  begin
+    insert into wa_conversacion (tenant_id, operador_id, telefono, estado)
+      values (ta, ob, '5215500001002', '{"turns":[]}'::jsonb);
+  exception when foreign_key_violation then operador_ajeno_rebota := true;
+  end;
+
+  raise exception E'WA_TENANT_0145  tenant-not-null=%  sin-tenant-rebota=%  operador-ajeno-rebota=%   (esperado t / t / t)',
+    coalesce(not_null, false), sin_tenant_rebota, operador_ajeno_rebota;
+end $$;
