@@ -41,6 +41,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora, type EntidadBitacora } from '@/lib/likida/bitacora_escritura';
 import { conteo, traerTodo } from './pg';
 import { acotada } from './presupuesto';
 // `getCartera` ya resuelve viajes e ingreso por cliente, con su regla de
@@ -50,7 +51,6 @@ import { getCartera, type ClienteRow } from './comercial';
 import { DatoInvalido } from './errores';
 import { esRfcValido, esUuidValido, rfcChecksumOk } from './intake/cfdi';
 import { round2, TZ_MX } from '@/lib/formato';
-import { logger } from '@/lib/logger';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PARTE PURA — sin una sola consulta. Es la que se prueba y la que corre
@@ -771,21 +771,15 @@ async function contarViajesConIngreso(tenantId: string): Promise<number> {
 async function anotar(
   tenantId: string,
   accion: string,
-  entidad: string,
+  entidad: EntidadBitacora,
   entidadId: string,
   detalle: Record<string, unknown>,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: tenantId,
-    actor_id: actor?.id ?? null,
-    actor_email: actor?.email ?? null,
-    accion,
-    entidad,
-    entidad_id: entidadId,
-    detalle,
-  });
-  if (error) logger.warn('clientes.bitacora_no_escribio', { accion, err: error.message });
+  await anotarBitacora(
+    { tenantId, actor: actor ?? {}, accion, entidad, entidadId, detalle },
+    { evento: 'clientes.bitacora_no_escribio' },
+  );
 }
 
 /** Los índices únicos de la 0048, dichos en palabras de quien capturó. */

@@ -15,6 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '../presupuesto';
 import { traerTodo, conteo } from '../pg';
 import { DatoInvalido } from '../errores';
@@ -156,13 +157,9 @@ export async function darDeAltaAgente(v: DefinicionValida, actorId: string): Pro
   }
   // La bitácora (0053), best-effort con el criterio de interruptores.ts: el
   // alta YA quedó; perder la anotación es mejor que deshacerla.
-  const { error: errBitacora } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: null, actor_id: actorId, accion: 'agente.alta',
-    entidad: 'agente_definicion', entidad_id: v.id,
-    detalle: { departamento: v.departamento, disparador: v.disparador },
-  });
-  if (errBitacora) {
-    const { logger } = await import('@/lib/logger');
-    logger.warn('agentes.bitacora_no_escribio', { agente: v.id, err: errBitacora.message });
-  }
+  await anotarBitacora(
+    { tenantId: null, actor: { id: actorId }, accion: 'agente.alta', entidad: 'agente_definicion', entidadId: v.id,
+      detalle: { departamento: v.departamento, disparador: v.disparador } },
+    { evento: 'agentes.bitacora_no_escribio', contexto: { agente: v.id } },
+  );
 }

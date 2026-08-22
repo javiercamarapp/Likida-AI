@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { logger } from '@/lib/logger';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { DatoInvalido } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { acotada } from './presupuesto';
@@ -189,14 +189,9 @@ export async function declararCcp(
     throw new DatoInvalido('Ese viaje no está en tu flota, o alguien lo borró. Recarga la pantalla.');
   }
 
-  const { error: errBitacora } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: tenantId,
-    actor_id: actor?.id ?? null,
-    actor_email: actor?.email ?? null,
-    accion: 'ccp.declarado',
-    entidad: 'viaje',
-    entidad_id: viajeId,
-    detalle: { pisaFederal: d.pisaFederal, radioKm: d.radioKm },
-  });
-  if (errBitacora) logger.warn('carta_porte.bitacora_no_escribio', { err: errBitacora.message });
+  await anotarBitacora(
+    { tenantId, actor: actor ?? {}, accion: 'ccp.declarado', entidad: 'viaje', entidadId: viajeId,
+      detalle: { pisaFederal: d.pisaFederal, radioKm: d.radioKm } },
+    { evento: 'carta_porte.bitacora_no_escribio' },
+  );
 }

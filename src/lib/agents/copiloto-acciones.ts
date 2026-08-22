@@ -19,7 +19,7 @@
 import { INTERRUPTORES, apagar, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { correrRunner } from '@/lib/likida/agentes/runner';
 import { DatoInvalido } from '@/lib/likida/errores';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 
 export type Gateo = 'confirma' | 'doble';
@@ -189,15 +189,12 @@ async function anotarCorridaEnBitacora(
   detalle: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-      tenant_id: null, // el runner barre TODAS las flotas: acción de plataforma
-      actor_id: userId,
-      accion: 'runner.corrida_manual',
-      entidad: 'runner',
-      entidad_id: 'nivel2',
-      detalle: { motivo, ...detalle },
-    });
-    if (error) logger.warn('copiloto.bitacora_no_escribio', { accion: 'runner.corrida_manual', err: error.message });
+    await anotarBitacora(
+      { tenantId: null, // el runner barre TODAS las flotas: acción de plataforma
+        actor: { id: userId }, accion: 'runner.corrida_manual', entidad: 'runner', entidadId: 'nivel2',
+        detalle: { motivo, ...detalle } },
+      { evento: 'copiloto.bitacora_no_escribio' },
+    );
   } catch (e) {
     logger.warn('copiloto.bitacora_no_escribio', {
       accion: 'runner.corrida_manual',

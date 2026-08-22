@@ -17,6 +17,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { anotarBitacora, type EntidadBitacora } from '@/lib/likida/bitacora_escritura';
 import { esRfcValido, rfcChecksumOk, esUuidValido } from './intake/cfdi';
 import { validarDatosFiscales } from '@/lib/saas/fiscal';
 import { variantesTelefono, acquireViajeLock, releaseViajeLock } from './conv';
@@ -41,21 +42,12 @@ export { DatoInvalido, mensajeParaPantalla } from './errores';
 async function anotar(
   tenantId: string | null,
   accion: string,
-  entidad: string,
+  entidad: EntidadBitacora,
   entidadId: string,
   detalle?: Record<string, unknown>,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  const { error } = await supabaseAdmin().from('bitacora_auditoria').insert({
-    tenant_id: tenantId,
-    actor_id: actor?.id ?? null,
-    actor_email: actor?.email ?? null,
-    accion,
-    entidad,
-    entidad_id: entidadId,
-    detalle: detalle ?? null,
-  });
-  if (error) logger.warn('bitacora.no_escribio', { accion, err: error.message });
+  await anotarBitacora({ tenantId, actor: actor ?? {}, accion, entidad, entidadId, detalle: detalle ?? null });
 }
 
 // ── 1. Dar de alta una flota ───────────────────────────────────────────────
