@@ -41,6 +41,7 @@ import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { supabaseServer } from '@/lib/supabase/server';
 import { exigirAal2SiHayFactor, MSG_STEP_UP } from '@/lib/auth/mfa';
 import { CATALOGO_ACCIONES } from '@/lib/agents/copiloto-acciones';
+import { PartialExecutionError } from '@/lib/llm/openrouter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -74,6 +75,31 @@ function topeTurnosDia(): number {
   return Number.isFinite(v) && v > 0 ? v : 300;
 }
 const DIA_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * M23 (auditoría 18): el único reloj del POST vivía DENTRO del motor (40 s) y
+ * no cubría nada de lo que va después — crear los intents y las tres
+ * escrituras en serie del historial. Sumados, los techos daban 81 s contra
+ * `maxDuration = 60`: con el modelo a 38 s y una escritura lenta, Vercel
+ * cortaba el stream ANTES de `manda({t:'fin'})` y la interfaz se quedaba
+ * pintando el último "paso" para siempre, con el turno ya cobrado.
+ *
+ * Presupuesto del borde: 40 s modelo + 5 s intents + 8 s historial = 53 s,
+ * con margen para la puerta y el rate limit. Lo que no cabe se DICE y se
+ * salta: el historial es comodidad, la respuesta ya costó dinero.
+ */
+const PLAZO_INTENTS_MS = 5_000;
+function plazoHistorialMs(): number {
+  const v = Number(process.env.LIKIDA_COPILOTO_PLAZO_HISTORIAL_MS);
+  return Number.isFinite(v) && v > 0 ? v : 8_000;
+}
+function conPlazo<T>(p: Promise<T>, ms: number, etiqueta: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const reloj = new Promise<never>((_, rej) => {
+    timer = setTimeout(() => rej(new Error(`${etiqueta}: se agotó el plazo de ${ms} ms`)), ms);
+  });
+  return Promise.race([p, reloj]).finally(() => clearTimeout(timer));
+}
 
 export async function POST(req: Request) {
   const { error: puerta, sesion } = await sesionSuperadmin();
@@ -184,20 +210,36 @@ export async function POST(req: Request) {
         // de crear para ESTA sesión — la única llave que después ejecuta. Las
         // no implementadas no llevan intent: no hay nada que autorizar.
         type BloqueConIntent = BloqueCopiloto | (BloqueAccion & { intentId: string });
-        const bloques: BloqueConIntent[] = await Promise.all(r.bloques.map(async (b) => (
-          b.tipo === 'accion' && b.implementada
-            ? { ...b, intentId: (await crearIntent({ actorId: sesion.userId, accion: b.accion, objetivo: b.objetivo, gateo: b.gateo })).id }
-            : b
-        )));
+        // El costo se anota ANTES de los intents y el historial: lo que sigue
+        // puede fallar o agotar su plazo, y el turno ya se pagó.
         logger.info('copiloto.costo', {
           costoUsd: r.costoUsd, tokensIn: r.tokensIn, tokensOut: r.tokensOut,
           modelo: r.modelo, tools: r.toolsUsadas.length,
         });
-        // Persistir el intercambio (0121). Si falla, la respuesta IGUAL sale —
-        // el historial es una comodidad; la respuesta ya costó dinero.
+        let bloques: BloqueConIntent[];
+        try {
+          bloques = await conPlazo(Promise.all(r.bloques.map(async (b) => (
+            b.tipo === 'accion' && b.implementada
+              ? { ...b, intentId: (await crearIntent({ actorId: sesion.userId, accion: b.accion, objetivo: b.objetivo, gateo: b.gateo })).id }
+              : b
+          ))), PLAZO_INTENTS_MS, 'copiloto.intents');
+        } catch (err) {
+          // Sin intent no hay acción ejecutable: se ENTREGA la respuesta sin
+          // la tarjeta y se dice por qué, en vez de colgar el stream o pintar
+          // un botón que va a rebotar con 409.
+          logger.error('copiloto.intent_fallo', { err: err instanceof Error ? err.message : String(err) });
+          bloques = [
+            ...r.bloques.filter((b) => b.tipo !== 'accion'),
+            { tipo: 'texto', texto: 'No alcancé a preparar la acción propuesta — pídemela de nuevo y la armo.' },
+          ];
+        }
+        // Persistir el intercambio (0121). Si falla O SE TARDA, la respuesta
+        // IGUAL sale — el historial es una comodidad; la respuesta ya costó
+        // dinero. El plazo es el que hace verdadera esa frase también para
+        // un cuelgue, no solo para un throw.
         let conversacionId: string | null = null;
         try {
-          conversacionId = await guardarIntercambioCopiloto({
+          conversacionId = await conPlazo(guardarIntercambioCopiloto({
             userId: sesion.userId,
             conversacionId: conversacionPedida,
             pregunta: mensajes[mensajes.length - 1].texto,
@@ -207,12 +249,23 @@ export async function POST(req: Request) {
             // Con intentId incluido — inofensivo en el historial: las
             // reaperturas se pintan ARCHIVADAS y el intent expira en 2 min.
             bloques: bloques as unknown as Array<Record<string, unknown>>,
-          });
+          }), plazoHistorialMs(), 'copiloto.historial');
         } catch (err) {
           logger.error('copiloto.guardar_fallo', { err: err instanceof Error ? err.message : String(err) });
         }
         manda({ t: 'fin', bloques, toolsUsadas: r.toolsUsadas, conversacionId });
       } catch (err) {
+        // M29 (auditoría 18): el turno que truena (loop-guard, abort de 40 s,
+        // truncamiento) YA PAGÓ sus completions y el consumo viaja en
+        // PartialExecutionError. Sin esta línea el único medidor del gasto
+        // propio de Likida en IA de dirección quedaba ciego justo en los
+        // turnos caros. Mismo criterio que /api/dashboard/chat (TC-A1).
+        if (err instanceof PartialExecutionError && (err.tokensIn > 0 || err.tokensOut > 0)) {
+          logger.info('copiloto.costo', {
+            costoUsd: err.cost, tokensIn: err.tokensIn, tokensOut: err.tokensOut,
+            modelo: 'parcial', tools: err.partialToolCalls.length, fallo: true,
+          });
+        }
         logger.error('copiloto.fallo', { err: err instanceof Error ? err.message : String(err) });
         manda({ t: 'error', error: 'el copiloto no pudo responder en este momento' });
       } finally {
