@@ -13,6 +13,38 @@
 -- Idempotente: se puede correr varias veces (ON CONFLICT DO NOTHING).
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 🛑 GUARD — ESTE ARCHIVO PISA EL TENANT 11111111-…-111111111111
+--
+-- AUDITORÍA 18, DAT-16. El `on conflict (id) do update` de abajo NO es un
+-- "do nothing": sobrescribe razón social, domicilio fiscal, liga del aviso de
+-- privacidad y RFC de la flota que tenga ese id — y en producción ese id es una
+-- flota REAL. Correr el seed contra la base equivocada le cambia a un cliente
+-- el RFC con el que se validan sus CFDI y la dirección de su aviso de
+-- privacidad, sin preguntar y sin dejar rastro más que en la bitácora que este
+-- archivo no escribe.
+--
+-- El guard es POR NOMBRE porque el id es lo único que el seed da por hecho: si
+-- la fila existe y NO se llama "Flota Demo", esta base no es una base de demo.
+-- Se aborta ANTES de tocar nada — el DO corre en la misma transacción implícita
+-- que su statement, y `psql -v ON_ERROR_STOP=1` (como lo invoca seed.sh) para
+-- todo el archivo aquí mismo.
+--
+-- Para sembrar de verdad sobre una flota que ya se llama de otra forma: cámbiale
+-- el nombre a "Flota Demo" a mano, a sabiendas, o usa otro id.
+-- ═══════════════════════════════════════════════════════════════════════════
+do $$
+declare nombre_actual text;
+begin
+  select nombre into nombre_actual
+    from tenant where id = '11111111-1111-1111-1111-111111111111';
+
+  if nombre_actual is not null and nombre_actual <> 'Flota Demo' then
+    raise exception E'SEED ABORTADO: el tenant 11111111-1111-1111-1111-111111111111 de esta base se llama "%", no "Flota Demo".\n\nEste seed SOBRESCRIBE razón social, domicilio fiscal, liga del aviso de privacidad y RFC de esa fila. En una flota real eso apaga o desvía la validación de receptor de CFDI y manda el aviso de privacidad a una dirección que no es suya.\n\nSi de verdad querías sembrar aquí, renombra esa flota a "Flota Demo" a mano — a sabiendas — o siembra con otro id.',
+      nombre_actual;
+  end if;
+end $$;
+
 -- ── Tenant (la flota) ───────────────────────────────────────────────────────
 --
 -- Los tres campos de RESPONSABLE (razón social, domicilio, liga del aviso) no
