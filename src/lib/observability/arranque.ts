@@ -54,6 +54,10 @@ export const SILENCIOSAS: Array<{ nombre: string; consecuencia: string }> = [
   // esta lista: un cron puede fallar nueve días y el único rastro es un issue
   // viejo de Sentry que ya no notifica.
   { nombre: 'ALERTA_EMAIL', consecuencia: 'los fallos de cron no le llegan a nadie por correo' },
+  // La llave que firma la cookie de flota activa del superadmin (B13). Ya no
+  // cae a la service role key: sin ella el selector de flota no firma ni lee,
+  // y el sistema arranca igual.
+  { nombre: 'LIKIDA_FLOTA_COOKIE_LLAVE', consecuencia: 'el superadmin no puede fijar una flota activa en /admin (la cookie no se firma ni se lee)' },
 ];
 
 /**
