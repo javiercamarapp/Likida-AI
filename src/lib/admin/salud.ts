@@ -31,7 +31,7 @@ export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 /** La cadencia de cada cron en vercel.json. Si cambia allá, cambia aquí:
  *  `salud.test.ts` compara las dos. */
 export const CADENCIA_MS: Record<CronId, number> = {
-  'wa-pendientes': 300_000,
+  'wa-pendientes': 60_000,
   escalar: 3_600_000,
   facturar: 3_600_000,
   purgar: 86_400_000,
