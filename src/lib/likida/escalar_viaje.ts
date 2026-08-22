@@ -6,7 +6,8 @@ import { registrarCorrida } from './agentes/corridas';
 import { avisoEscalados } from '@/lib/correo/avisos';
 import { avisarAlChofer } from './operacion';
 import { telefonosJefe } from './contactos';
-import { sendText, sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
+import { enviarTexto, sendText, sendTemplate, motivoDeFalloWhatsApp, esReintentableMeta } from '@/lib/meta/client';
+import { alertarOperador } from '@/lib/observability/alerta';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL VIAJE QUE NADIE ACEPTÓ.
@@ -172,7 +173,22 @@ export interface ResultadoEscalacion {
   reintentados: number;
   escalados: number;
   fallos: string[];
+  /** Viajes que el reloj de la corrida dejó SIN intentar (ESC-3). No se
+   *  pierden: nada se les marcó, y la corrida siguiente los encabeza. */
+  cortadosPorReloj: number;
+  /** Escalaciones que Meta rechazó por un motivo REINTENTABLE (RES-1) y cuyo
+   *  sello se liberó: el viaje vuelve a la cola intacto. */
+  rechazosReintentables: number;
 }
+
+/** Cuántos rechazos reintentables seguidos bastan para parar la corrida
+ *  (RES-1). Cinco no es un teléfono malo: es Meta diciendo "hoy no". Seguir
+ *  sería quemar sellos de viaje en viaje contra una pared. */
+export const TOPE_RECHAZOS_META = 5;
+
+/** El margen que la escalación deja libre del `maxDuration` del cron para que
+ *  la cobranza —que corre después, en la misma invocación— alcance turno. */
+export const PLAZO_ESCALACION_MS = 40_000;
 
 /**
  * Corre la escalación sobre todos los viajes vencidos.
@@ -203,6 +219,9 @@ export async function escalarViajesSinAceptar(args: {
    */
   telefonoJefePorTenant?: Record<string, string>;
   ahora?: Date;
+  /** `Date.now()` a partir del cual la corrida deja de tomar viajes nuevos
+   *  (ESC-3). El corte es ANTES del claim, nunca después. */
+  venceEn?: number;
 } = {}): Promise<ResultadoEscalacion> {
   // ── B4: el corte de horas es ESTRATEGIA de cada flota ────────────────────
   // La consulta global trae candidatos desde el PISO configurable (1 h) y el
@@ -233,11 +252,14 @@ export async function escalarViajesSinAceptar(args: {
 
   const telefonos = args.telefonoJefePorTenant
     ?? await telefonosJefe(viajes.map((v) => v.tenantId));
-  const r: ResultadoEscalacion = { revisados: viajes.length, reintentados: 0, escalados: 0, fallos: [] };
+  const r: ResultadoEscalacion = { revisados: viajes.length, reintentados: 0, escalados: 0, fallos: [], cortadosPorReloj: 0, rechazosReintentables: 0 };
   // Para la bitácora de corridas (B3): la hora a la que ESTA corrida arrancó.
   const inicioCorrida = new Date();
   const admin = supabaseAdmin();
-  const ahoraIso = args.ahora?.toISOString();
+  // El instante del sello se FIJA aquí (antes era `new Date()` dentro del
+  // claim, distinto para cada viaje): `liberarEscalacion` ancla el UPDATE a
+  // este valor para no soltar el sello de otra corrida (RES-1).
+  const ahoraIso = (args.ahora ?? new Date()).toISOString();
 
   // ── CÓMO LE FUE A CADA FLOTA, PARA EL CIERRE DE CORRIDA ─────────────────
   //
@@ -258,7 +280,26 @@ export async function escalarViajesSinAceptar(args: {
     porFlota.set(tenantId, c);
   };
 
+  let intentados = 0;
+  let rechazosSeguidos = 0;
   for (const v of viajes) {
+    // ── EL RELOJ CORTA ANTES DEL CLAIM (auditoría prod, ESC-3) ─────────────
+    //
+    // Cada viaje cuesta hasta cuatro llamadas a Meta de 10 s de techo, en
+    // serie: con 100 viajes vencidos la corrida no cabía en el maxDuration de
+    // 120 s y la invocación moría A MEDIAS — después de sellar `escalado_en`
+    // y antes de avisarle al jefe. Ese viaje quedaba escalado para siempre sin
+    // que nadie se enterara, y encima se llevaba por delante la cobranza, que
+    // corre después en la misma invocación. Cortar ANTES del claim deja
+    // intacto lo que no alcanzó: el sello es lo único que saca al viaje de la
+    // consulta, y no se puso.
+    if (args.venceEn !== undefined && Date.now() >= args.venceEn) {
+      r.cortadosPorReloj = viajes.length - intentados;
+      logger.warn('escalacion.corte_por_reloj', { pendientes: r.cortadosPorReloj });
+      break;
+    }
+    intentados++;
+
     // 0) RECLAMAR, ANTES DE MANDAR CUALQUIER MENSAJE. Si el UPDATE condicional
     //    no devuelve esta fila, otra corrida la ganó entre la lectura de arriba
     //    y este punto — no se reintenta ningún mensaje y no cuenta como
@@ -331,21 +372,54 @@ export async function escalarViajesSinAceptar(args: {
         // La plantilla se conserva como plan B porque fuera de la ventana de
         // 24 h es lo único que WhatsApp entrega — y el jefe puede llevar días
         // sin escribirle al número.
-        const enviado = await sendText(tel, armarAvisoJefe(v, horasDe(v.tenantId)));
-        if (enviado) {
+        const envio = await enviarTexto(tel, armarAvisoJefe(v, horasDe(v.tenantId)));
+        if (envio.ok) {
+          rechazosSeguidos = 0;
           anota(v.tenantId, null, folioAviso);
         } else {
           const env = await sendTemplate(tel, PLANTILLA_JEFE, {
             parametros: [v.operadorNombre ?? 'Tu chofer', v.folio ?? 'sin folio'],
           });
           if (env.ok) {
+            rechazosSeguidos = 0;
             anota(v.tenantId, null, folioAviso);
+          // ── RES-1: UN 429 NO ES UN VIAJE ESCALADO ────────────────────────
+          // Si los dos caminos rebotaron por un motivo REINTENTABLE (rate
+          // limit, bloqueo temporal, plantilla pausada), el jefe no se enteró
+          // y el problema no es este viaje: es Meta. Sellar `escalado_en` de
+          // todas formas lo saca de la consulta PARA SIEMPRE —el sello no
+          // expira— y ese viaje no se escala nunca. Se libera el claim y la
+          // corrida siguiente lo vuelve a tomar entero.
+          } else if (esReintentableMeta(env.codigo) || esReintentableMeta(undefined, envio.status)) {
+            const motivo = motivoDeFalloWhatsApp(env.error, env.codigo);
+            const liberado = await liberarEscalacion(admin, v, ahoraIso);
+            r.rechazosReintentables++;
+            r.escalados--;
+            rechazosSeguidos++;
+            logger.warn('escalacion.rechazo_reintentable', { viaje: v.id, codigo: env.codigo, liberado });
+            r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivo} (se reintenta en la siguiente corrida)`);
           } else {
             const motivo = motivoDeFalloWhatsApp(env.error, env.codigo);
             r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivo}`);
             // Los DOS caminos fallaron: el jefe no se enteró de este viaje.
             anota(v.tenantId, new Error(motivo), folioAviso);
           }
+        }
+
+        // ── EL CORTE POR RECHAZO MASIVO (RES-1) ──────────────────────────
+        // Cinco rechazos reintentables SEGUIDOS no son cinco teléfonos malos:
+        // es la cuenta de WhatsApp bloqueada o limitada, y un solo número
+        // atiende a TODAS las flotas. Seguir sería quemar sellos contra una
+        // pared. Se para, se grita, y la corrida siguiente encuentra todo
+        // intacto.
+        if (rechazosSeguidos >= TOPE_RECHAZOS_META) {
+          r.cortadosPorReloj = viajes.length - intentados;
+          logger.error('escalacion.rechazo_masivo', { rechazosSeguidos, pendientes: r.cortadosPorReloj });
+          await alertarOperador('wa.rechazo_masivo', {
+            error: `WhatsApp rechazó ${rechazosSeguidos} escalaciones seguidas por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo; los viajes quedaron sin marcar.`,
+            codigo: 'wa_rechazo_masivo',
+          });
+          break;
         }
       } catch (e) {
         const motivo = e instanceof Error ? e.message : 'error inesperado al enviar';
@@ -461,14 +535,41 @@ export async function escalarViajesSinAceptar(args: {
  * saber si el sello quedó puesto es exactamente el riesgo que esto existe
  * para cerrar.
  */
+/**
+ * Suelta el sello que ESTA corrida puso, cuando el rechazo de Meta fue
+ * "vuelve más tarde" (RES-1). Anclado al valor exacto que escribimos: si otra
+ * corrida ya lo movió, esta no le quita nada. Devuelve si lo soltó.
+ *
+ * Best-effort CON GRITO: no soltarlo significa un viaje que nunca se escala, y
+ * eso tiene que quedar en el log aunque no haya nada que hacer al respecto.
+ */
+async function liberarEscalacion(
+  admin: ReturnType<typeof supabaseAdmin>,
+  v: ViajeSinAceptar,
+  ahora: string,
+): Promise<boolean> {
+  const { data, error } = await acotada(admin
+    .from('viaje')
+    .update({ escalado_en: null, avisos_enviados: v.avisosEnviados })
+    .eq('id', v.id)
+    .eq('tenant_id', v.tenantId)
+    .eq('escalado_en', ahora)
+    .select('id'), 'liberarEscalacion');
+  if (error) {
+    logger.error('escalacion.claim_no_liberado', { viaje: v.id, err: error.message });
+    return false;
+  }
+  return (data ?? []).length > 0;
+}
+
 async function reclamarEscalacion(
   admin: ReturnType<typeof supabaseAdmin>,
   v: ViajeSinAceptar,
-  ahora?: string,
+  ahora: string,
 ): Promise<{ ganado: boolean; error?: string }> {
   const { data, error } = await acotada(admin
     .from('viaje')
-    .update({ escalado_en: ahora ?? new Date().toISOString(), avisos_enviados: v.avisosEnviados + 1 })
+    .update({ escalado_en: ahora, avisos_enviados: v.avisosEnviados + 1 })
     .eq('id', v.id)
     // Acotado por tenant además de por id, aunque `id` sea la PK: es la
     // disciplina del repo (`acotada`) — un update sin acotar que hoy es

@@ -47,6 +47,13 @@ vi.mock('@/lib/meta/client', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   sendText,
   sendTemplate,
+  // RES-1: la escalación pide el CÓDIGO de Meta para decidir si el sello se
+  // libera. `enviarTexto` es `sendText` con el contrato completo, así que el
+  // mock delega en el de siempre y las pruebas viejas siguen midiendo lo mismo.
+  enviarTexto: async (to: string, body: string) => {
+    const id = await sendText(to, body);
+    return id ? { ok: true, id } : { ok: false, error: 'rechazado por Meta' };
+  },
 }));
 vi.mock('./operacion', () => ({ avisarAlChofer }));
 vi.mock('./contactos', () => ({ telefonosJefe }));
@@ -312,7 +319,7 @@ describe('escalarViajesSinAceptar', () => {
     expect(updates[0].por).toEqual([['id', 'v-1'], ['tenant_id', 't-1']]);
     expect(typeof updates[0].fila.escalado_en).toBe('string');
     expect(updates[0].fila.avisos_enviados).toBe(2);   // el que ya llevaba + este
-    expect(r).toEqual({ revisados: 1, reintentados: 1, escalados: 1, fallos: [] });
+    expect(r).toEqual({ revisados: 1, reintentados: 1, escalados: 1, fallos: [], cortadosPorReloj: 0, rechazosReintentables: 0 });
   });
 
   it('SE MARCA AUNQUE EL AVISO AL JEFE FALLE — y el fallo queda dicho', async () => {
@@ -507,7 +514,7 @@ describe('escalarViajesSinAceptar', () => {
   it('sin viajes vencidos no manda nada ni escribe nada', async () => {
     lectura = { data: [], error: null };
     const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
-    expect(r).toEqual({ revisados: 0, reintentados: 0, escalados: 0, fallos: [] });
+    expect(r).toEqual({ revisados: 0, reintentados: 0, escalados: 0, fallos: [], cortadosPorReloj: 0, rechazosReintentables: 0 });
     expect(sendTemplate).not.toHaveBeenCalled();
     expect(updates).toEqual([]);
   });
