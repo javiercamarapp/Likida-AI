@@ -50,9 +50,22 @@ export default async function PaginaOperadores({
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
-  const detalle = await getOperadoresDetalle(tenantId);
+  // ── UNA LECTURA CAÍDA NO TUMBA LA PANTALLA (auditoría de frontend, FE-3) ─
+  // `getOperadoresDetalle` lee tablas del tenant y LANZA cuando no puede
+  // leerlas completas (`LecturaIncompleta`, pg.ts) — a escala eso deja de ser
+  // hipotético. Sin este catch, la excepción sube al render y el usuario ve la
+  // pantalla de error de Next en lugar del registro: pierde también el alta y
+  // la edición, que no dependen de esa lectura. Con él, la vista pinta la
+  // sección caída DICIÉNDOLO, que no es lo mismo que una lista vacía
+  // ("aún no hay operadores dados de alta" sería mentira, y la peor).
+  let detalle: Awaited<ReturnType<typeof getOperadoresDetalle>> | null;
+  try {
+    detalle = await getOperadoresDetalle(tenantId);
+  } catch {
+    detalle = null;
+  }
 
-  const filas: FilaOperador[] = detalle.map((o) => ({
+  const filas: FilaOperador[] = (detalle ?? []).map((o) => ({
     operadorId: o.operadorId,
     nombre: o.nombre,
     telefono: o.telefono,
@@ -105,6 +118,7 @@ export default async function PaginaOperadores({
   return (
     <VistaOperadores
       filas={filas}
+      ilegible={detalle === null}
       hoy={hoy}
       puedeEditar={puedeAdministrar(rol)}
       guardarOperador={guardarOperador}
