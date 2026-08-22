@@ -115,12 +115,35 @@ interface FilaGasto {
  * `hoy` se inyecta para que la prueba no dependa del reloj de la máquina — el
  * mismo criterio que `calcularCaducidad`.
  */
+/**
+ * ESC-12 (auditoría prod): cuántos días atrás mira `getPorFacturar`.
+ *
+ * `traerTodo` sin fecha paginaba TODO gasto sin CFDI de la flota, para siempre
+ * —y lo llama el cron por cada flota con bloqueados (`avisarPorFacturar`) y la
+ * pantalla de "por facturar"—. A 50k tickets/mes eso es una lectura que crece
+ * sin techo. El plazo más largo de un portal es el mes natural (casetas);
+ * 45 días cubre el ticket del día 1 facturado a principios del mes siguiente.
+ * Lo más viejo ya no se puede facturar en ningún portal: mostrarlo solo
+ * infla el "Tienes N comprobantes sin factura" con N que nadie puede bajar.
+ */
+export const DIAS_VENTANA_POR_FACTURAR = 45;
+
+/** `hoy - dias` como AAAA-MM-DD (aritmética en UTC sobre una fecha-solo: no hay zona que cruzar). */
+export function desdeVentana(hoy: string, dias = DIAS_VENTANA_POR_FACTURAR): string {
+  const d = new Date(`${hoy}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - dias);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function getPorFacturar(
   tenantId: string,
   // RES-13: el día de México. Con el día UTC, de las 18:00 a medianoche la
   // pantalla y el aviso de WhatsApp daban por vencido lo que vencía HOY.
   hoy: string = hoyMx(),
 ): Promise<TicketPorFacturar[]> {
+  // OJO: no se llama `desde` — ese nombre es el OFFSET de paginación del
+  // callback de `traerTodo` de abajo y lo sombrearía (`.gte('fecha', 0)`).
+  const fechaMinima = desdeVentana(hoy);
   // AUDITORÍA 13, MEDIO: `.limit(500)` recortaba en silencio la pantalla "por
   // facturar" y el aviso de WhatsApp (506 tickets → "Tienes 500 comprobantes
   // sin factura"). `traerTodo` pagina hasta probar que trajo TODO y lanza
@@ -132,6 +155,10 @@ export async function getPorFacturar(
       .select('id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra, autofactura_bloqueada_en, autofactura_bloqueo', conteo(desde))
       .eq('tenant_id', tenantId)
       .is('cfdi_uuid', null)
+      // ESC-12: acotado en PERIODO y en concepto. `fecha` es la del ticket
+      // (la que manda en el portal); `factura` ya ES un CFDI, no hay qué pedir.
+      .gte('fecha', fechaMinima)
+      .neq('concepto', 'factura')
       .order('fecha', { ascending: true, nullsFirst: false })
       .order('id', { ascending: true })
       .range(desde, hasta),
