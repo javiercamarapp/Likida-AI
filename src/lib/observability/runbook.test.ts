@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { SILENCIOSAS } from './arranque';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Auditoría 5 · `.env.example` y `DEPLOY.md` como parte del sistema, no como
@@ -101,11 +102,40 @@ describe('.env.example no se queda atrás del código', () => {
 describe('DEPLOY.md pide lo que hace falta para que el sistema no arranque ciego', () => {
   const deploy = () => readFileSync(join(RAIZ, 'docs/conocimiento/DEPLOY.md'), 'utf8');
 
-  it('nombra las variables cuya ausencia es silenciosa', () => {
+  it('nombra TODAS las variables cuya ausencia es silenciosa — las de la lista viva, no un literal', () => {
+    // AUDITORÍA 18, A18: esto iteraba sobre `['SENTRY_DSN','DEMO_TENANT_ID']`, y
+    // las dos que entraron después a `SILENCIOSAS` (`NEXT_PUBLIC_APP_URL`,
+    // `ALERTA_EMAIL`) llegaron al código sin que el runbook las conociera: el
+    // único canal push del sistema quedó construido, probado y desconectado, y
+    // el documento de las 3 a.m. decía que no existía ningún canal.
     const texto = deploy();
-    for (const v of ['SENTRY_DSN', 'DEMO_TENANT_ID']) {
+    expect(SILENCIOSAS.length).toBeGreaterThanOrEqual(4);
+    for (const v of ['SENTRY_DSN', ...SILENCIOSAS.map((s) => s.nombre)]) {
       expect(texto, `DEPLOY.md no menciona ${v}`).toContain(v);
     }
+  });
+
+  it('manda buscar los `msg` de arranque que el código de verdad emite', () => {
+    // Mandaba buscar `startup.entorno`, que no existe: un grep a las 3 a.m.
+    // contra el nombre del runbook devolvía cero sobre un sistema que sí
+    // estaba gritando. Se verifica contra el fuente, no contra la memoria.
+    const fuente = readFileSync(join(RAIZ, 'src/lib/observability/arranque.ts'), 'utf8');
+    const texto = deploy();
+    for (const msg of ['startup.config_silenciosa', 'startup.entorno_grupos']) {
+      expect(fuente, `arranque.ts ya no emite ${msg}`).toContain(`'${msg}'`);
+      expect(texto, `DEPLOY.md no menciona ${msg}`).toContain(msg);
+    }
+    expect(texto).not.toMatch(/startup\.entorno[^_]/);
+  });
+
+  it('sabe que existe /api/health y el monitor que lo consume (M18)', () => {
+    // La ruta nació declarando «un monitor pegándole a esto cada minuto
+    // convierte ese modo de falla en una alerta de minutos» y dos rondas
+    // después nadie la consumía ni el runbook la nombraba.
+    expect(deploy()).toContain('/api/health');
+    const flujo = join(RAIZ, '.github/workflows/salud-produccion.yml');
+    expect(statSync(flujo).isFile(), 'falta el monitor de /api/health').toBe(true);
+    expect(readFileSync(flujo, 'utf8')).toContain('/api/health');
   });
 
   it('dice dónde se miran los logs cuando algo falla', () => {
