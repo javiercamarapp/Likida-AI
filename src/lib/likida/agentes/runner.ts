@@ -114,7 +114,14 @@ async function loteRedactor(restanteUsd: number): Promise<{ piezas: number; salt
  * candados. Cada agente falla POR SU LADO — un agente roto no tumba a los
  * demás, y el motivo de cada salto queda dicho.
  */
-export async function correrRunner(): Promise<ResultadoRunner> {
+export async function correrRunner(
+  /**
+   * M30 (auditoría 18): acotar la vuelta a UN agente. El copiloto enseñaba
+   * "Voy a ejecutar `redactor`" y despachaba a todos los habilitados. Sin
+   * argumento sigue siendo la vuelta completa del cron.
+   */
+  soloAgente?: string,
+): Promise<ResultadoRunner> {
   if (await estaApagado('global')) {
     return { apagadoGlobal: true, agentes: [] };
   }
@@ -127,7 +134,8 @@ export async function correrRunner(): Promise<ResultadoRunner> {
     .eq('disparador', 'cron')
     .order('id'), 'runner.agentes');
   if (error) throw new Error(`correrRunner: ${error.message}`);
-  const habilitados = (data ?? []) as Array<{ id: string; presupuesto_dia_usd: number | null }>;
+  const habilitados = ((data ?? []) as Array<{ id: string; presupuesto_dia_usd: number | null }>)
+    .filter((a) => !soloAgente || a.id === soloAgente);
 
   const agentes: AgenteDelRunner[] = [];
   for (const a of habilitados) {

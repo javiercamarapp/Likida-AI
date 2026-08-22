@@ -135,3 +135,77 @@ describe('requireSuperadmin', () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18 · A19 — `requireVendedor` es la ÚNICA puerta de /vendedor y no
+// tenía una sola prueba: con la condición de rol rota, un flota_admin de una
+// flota cliente entraba a la versión ANCHA del panel (panel-vendedor calcula
+// esVendedor = rol === 'vendedor' → false → listarProspectos({}) sin filtro:
+// el pipeline comercial completo de Likida, competidores incluidos) y la suite
+// seguía verde. `requireSuperadmin`, la puerta hermana, sí tenía tres.
+// ═══════════════════════════════════════════════════════════════════════════
+const { requireVendedor, exigirVerRuta } = await import('./guard');
+const { inicioDe } = await import('./visibilidad');
+
+describe('requireVendedor — la puerta de /vendedor', () => {
+  beforeEach(() => { redirect.mockClear(); getSessionTenant.mockReset(); });
+
+  it('sin sesión, manda a /login con next=/vendedor', async () => {
+    getSessionTenant.mockResolvedValue(null);
+    await expect(requireVendedor()).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/vendedor')}`);
+  });
+
+  it('vendedor entra y recibe SU sesión tal cual (la página filtra por su userId)', async () => {
+    const s = { userId: 'u-v', tenantId: null, rol: 'vendedor', nombre: 'Vendedor' };
+    getSessionTenant.mockResolvedValue(s);
+    await expect(requireVendedor()).resolves.toEqual(s);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it('superadmin entra (soporte: es la consola de SU equipo de ventas)', async () => {
+    const s = { userId: 'u-2', tenantId: null, rol: 'superadmin', nombre: 'Javier' };
+    getSessionTenant.mockResolvedValue(s);
+    await expect(requireVendedor()).resolves.toEqual(s);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it.each(['flota_admin', 'contador', 'encargado', 'operador'])(
+    'un %s de una flota cliente NO entra: rebota a SU casa (inicioDe), jamás al pipeline comercial',
+    async (rol) => {
+      getSessionTenant.mockResolvedValue({ userId: 'u-c', tenantId: 't-cliente', rol, nombre: 'Cliente' });
+      await expect(requireVendedor()).rejects.toThrow('NEXT_REDIRECT');
+      expect(redirect).toHaveBeenCalledWith(inicioDe(rol));
+      expect(inicioDe(rol)).not.toBe('/vendedor');
+    },
+  );
+
+  it('una sesión sin rol legible (SIN_ROL) rebota a /sin-acceso — fail closed', async () => {
+    getSessionTenant.mockResolvedValue({ userId: 'u-9', tenantId: null, rol: 'sin_rol', nombre: null });
+    await expect(requireVendedor()).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/sin-acceso');
+  });
+});
+
+describe('exigirVerRuta — el gate de pantalla por rol para los stubs', () => {
+  beforeEach(() => { redirect.mockClear(); getSessionTenant.mockReset(); });
+
+  it('un encargado (solo operación) NO ve /dashboard/rentabilidad: rebota a su inicio', async () => {
+    getSessionTenant.mockResolvedValue({ userId: 'u-e', tenantId: 't-1', rol: 'encargado', nombre: 'Jefe' });
+    await expect(exigirVerRuta('/dashboard/rentabilidad')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(inicioDe('encargado'));
+  });
+
+  it('un contador (dinero) sí la ve y recibe la sesión', async () => {
+    const s = { userId: 'u-c', tenantId: 't-1', rol: 'contador', nombre: 'Conta' };
+    getSessionTenant.mockResolvedValue(s);
+    await expect(exigirVerRuta('/dashboard/rentabilidad')).resolves.toEqual(s);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it('sin sesión pasa por requireSessionTenant: /login con el destino', async () => {
+    getSessionTenant.mockResolvedValue(null);
+    await expect(exigirVerRuta('/dashboard/cobranza')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/dashboard/cobranza')}`);
+  });
+});
