@@ -21,6 +21,10 @@ const GUARDADOS = [
   'src/lib/likida/interruptores.ts',
   'src/lib/likida/contactos.ts',
   'src/lib/likida/consulta_chofer.ts',
+  // ESCALA 50k (REGLAS-ESCALA §5, 22-ago-2026): toda lectura del dashboard
+  // que siga en JS lleva techo. Ojo: `Array.from(` también cuenta como
+  // `.from(` aquí — analytics.ts lo evita a propósito.
+  'src/lib/likida/analytics.ts',
 ];
 
 describe('toda consulta de los módulos del camino caliente lleva techo', () => {
