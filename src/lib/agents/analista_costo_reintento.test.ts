@@ -15,7 +15,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error(
 const { PartialExecutionError } = await import('@/lib/llm/openrouter');
 
 let llamada = 0;
-const generateWithTools = vi.fn(async () => {
+const generateWithTools = vi.fn(async (_o: unknown) => {
   llamada++;
   if (llamada === 1) {
     // Resuelve con una cifra que ninguna tool respalda → reintento.
