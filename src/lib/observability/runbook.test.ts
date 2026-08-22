@@ -99,6 +99,29 @@ describe('.env.example no se queda atrás del código', () => {
   });
 });
 
+describe('npm install no depende de un host fuera del registry (M16)', () => {
+  // `xlsx` apuntaba a cdn.sheetjs.com (403 en la corrida de la auditoría 18):
+  // un tercero ajeno al registry tenía voto sobre si Likida podía desplegar un
+  // hotfix. Va vendorizado en vendor/ y el lockfile lo resuelve por `file:`.
+  it('ninguna dependencia se resuelve por http(s) en package.json ni en el lockfile', () => {
+    const pkg = JSON.parse(readFileSync(join(RAIZ, 'package.json'), 'utf8')) as { dependencies: Record<string, string>; devDependencies: Record<string, string> };
+    const porUrl = Object.entries({ ...pkg.dependencies, ...pkg.devDependencies }).filter(([, v]) => /^(https?|git)/.test(v));
+    expect(porUrl).toEqual([]);
+    const lock = JSON.parse(readFileSync(join(RAIZ, 'package-lock.json'), 'utf8')) as { packages: Record<string, { resolved?: string }> };
+    const fuera = Object.entries(lock.packages)
+      .filter(([, p]) => p.resolved && /^https?:/.test(p.resolved) && !p.resolved.startsWith('https://registry.npmjs.org/'))
+      .map(([k, p]) => `${k} → ${p.resolved}`);
+    expect(fuera).toEqual([]);
+  });
+
+  it('el tarball vendorizado existe y es el que el lockfile fija', () => {
+    const lock = JSON.parse(readFileSync(join(RAIZ, 'package-lock.json'), 'utf8')) as { packages: Record<string, { resolved?: string }> };
+    const ruta = lock.packages['node_modules/xlsx']?.resolved ?? '';
+    expect(ruta).toMatch(/^file:vendor\//);
+    expect(statSync(join(RAIZ, ruta.replace(/^file:/, ''))).size).toBeGreaterThan(1_000_000);
+  });
+});
+
 describe('DEPLOY.md pide lo que hace falta para que el sistema no arranque ciego', () => {
   const deploy = () => readFileSync(join(RAIZ, 'docs/conocimiento/DEPLOY.md'), 'utf8');
 
