@@ -131,6 +131,26 @@ export const FORMA_PAGO_SIN_PAGAR = '99';
  * liquida con alguno de éstos y su CFDI lo declara así.
  */
 export const MEDIOS_ELECTRONICOS_PEAJE = ['03', '04', '05', '06', '28', '29'] as const;
+/**
+ * La LECTURA que el motor aplica al 15% de la RFA 2026 regla 2.9, dicha en el
+ * papel. La regla tiene por cumplida la obligación de LISR 27-III "siempre que
+ * [los pagos en efectivo] no excedan el 15 por ciento del total de los pagos
+ * efectuados por consumo de combustible". Dos lecturas se sostienen del mismo
+ * texto: (a) un TOPE prorrateable —solo el excedente pierde la deducción—, la
+ * más usada en la práctica y la que aplica el motor; (b) una CONDICIÓN de
+ * procedencia —rebasado el 15%, la facilidad no se tiene por cumplida y TODO el
+ * efectivo del ejercicio cae bajo LISR 27-III—. Sobre $1,000,000 de combustible
+ * con $200,000 en efectivo la diferencia entre ambas son $150,000 de deducción.
+ *
+ * AUDITORÍA 18, B4: el motor elegía (a) y no lo decía, cuando la regla de este
+ * producto es declarar la lectura que usó (`BASE_ESTIMULO_PEAJE` lo hace para el
+ * peaje). La ficha `normas/rfa-2026-2.9.yaml` tampoco resuelve la ambigüedad,
+ * así que no es un error demostrable: es una interpretación, y va escrita.
+ */
+export const LECTURA_RFA_29_PRORRATEO =
+  'Lectura aplicada: el 15% se trata como tope prorrateable (solo el excedente pierde la deducción); ' +
+  'la lectura literal del "siempre que" de la regla 2.9 negaría la facilidad a TODO el combustible en efectivo ' +
+  'del ejercicio — confírmela con su contador.';
 
 const NO_DEDUCIBLE_ISR: TipoDiferencia[] = ['rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'efectivo_sobre_tope', 'efectivo_no_elegible'];
 const POR_CONFIRMAR: TipoDiferencia[] = ['combustible_efectivo', 'rfc_receptor_no_verificable', 'cfdi_pendiente'];
@@ -411,7 +431,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
         } else {
           diferencias.push({
             tipo: 'efectivo_sobre_15', concepto: g.concepto, monto: excedenteDeEste,
-            nota: `${etiqueta} pagado en EFECTIVO — el ejercicio lleva ${mxn(acumulado)} de combustible en efectivo contra un tope de ${mxn(tope)} (15% de ${mxn(total)}); el excedente de ${mxn(excedenteDeEste)} de ESTE comprobante NO se deduce (RFA 2026 regla 2.9). No acredita IEPS.`,
+            nota: `${etiqueta} pagado en EFECTIVO — el ejercicio lleva ${mxn(acumulado)} de combustible en efectivo contra un tope de ${mxn(tope)} (15% de ${mxn(total)}); el excedente de ${mxn(excedenteDeEste)} de ESTE comprobante NO se deduce (RFA 2026 regla 2.9). No acredita IEPS. ${LECTURA_RFA_29_PRORRATEO}`,
             gastoId: g.id,
           });
         }
