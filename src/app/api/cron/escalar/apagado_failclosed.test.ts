@@ -58,7 +58,7 @@ vi.mock('@/lib/observability/alerta', () => ({
 // El latido (RES-7) se prueba en src/lib/admin/salud.test.ts; aquí se mockea
 // para que la racha de cortes (RES-6) sea observable sin tocar la base.
 const registrarLatido = vi.fn(async () => {});
-let latidoPrevio: { ultimoLatido: string; estado: string; detalle: Record<string, unknown> } | null = null;
+const latidoPrevio: { ultimoLatido: string; estado: string; detalle: Record<string, unknown> } | null = null;
 vi.mock('@/lib/admin/salud', () => ({
   registrarLatido: (...a: unknown[]) => registrarLatido(...(a as [])),
   leerLatido: async () => latidoPrevio,
