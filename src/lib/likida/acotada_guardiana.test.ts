@@ -29,6 +29,9 @@ const GUARDADOS = [
   'src/lib/admin/negocio.ts',
   'src/lib/admin/capacidad.ts',
   'src/lib/admin/corridas-cruzadas.ts',
+  // ESCALA 50k (regla 5, 22-ago-2026): lo que queda del dashboard en JS va
+  // envuelto en `acotada()`. El registro de viajes (RPC keyset + conteos).
+  'src/lib/likida/viajes_registro.ts',
 ];
 
 describe('toda consulta de los módulos del camino caliente lleva techo', () => {

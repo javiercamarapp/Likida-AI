@@ -41,15 +41,19 @@ const ROTULO_FILTRO: Record<FiltroViajes, string> = {
 
 /** Arma un href a esta misma página conservando el sufijo de
  *  previsualización (`?tenant=`/`?vista=`/`?rol=`) y los controles (filtro,
- *  búsqueda, página). Un `null` quita el parámetro. */
+ *  búsqueda, cursor de página). Un `null` quita el parámetro. El `p` de la
+ *  paginación por número (hasta el 22-ago-2026) se BORRA siempre: cambiar de
+ *  filtro o de búsqueda vuelve a la primera página, y un `p` heredado ya no
+ *  significa nada (ver page.tsx). */
 export function hrefRegistro(
   sufijo: string,
-  controles: { f?: FiltroViajes | null; q?: string | null; p?: number | null },
+  controles: { f?: FiltroViajes | null; q?: string | null; c?: string | null },
 ): string {
   const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
   if (controles.f && controles.f !== 'todos') params.set('f', controles.f); else params.delete('f');
   if (controles.q) params.set('q', controles.q); else params.delete('q');
-  if (controles.p && controles.p > 1) params.set('p', String(controles.p)); else params.delete('p');
+  if (controles.c) params.set('c', controles.c); else params.delete('c');
+  params.delete('p');
   const qs = params.toString();
   return `/dashboard/viajes${qs ? `?${qs}` : ''}`;
 }
@@ -64,7 +68,7 @@ const BTN_SEC = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5
  * tres columnas no existen, ni vacías.
  */
 export function VistaViajes({
-  filas, filtro, conteos, sufijo, importar, puedeImportar, verDinero, q, pagina, hayMas, porPagina,
+  filas, filtro, conteos, sufijo, importar, puedeImportar, verDinero, q, cursor, siguiente, hayMas, porPagina,
 }: {
   filas: FilaRegistroViaje[];
   filtro: FiltroViajes;
@@ -79,7 +83,11 @@ export function VistaViajes({
   /** `puedeVerArea(rol, 'dinero')`, decidido en la página. */
   verDinero: boolean;
   q: string;
-  pagina: number;
+  /** Cursor de ESTA página (`null` = la primera). Solo decide si se ofrece
+   *  "Volver al inicio": el contenido ya vino paginado del servidor. */
+  cursor: string | null;
+  /** Cursor de la página siguiente; `null` si no la hay. */
+  siguiente: string | null;
   hayMas: boolean;
   porPagina: number;
 }) {
@@ -252,22 +260,25 @@ export function VistaViajes({
               </div>
             )}
 
-            {/* Paginación: nunca más de `porPagina` filas por render. No se
-                dice "página 1 de N" porque no se cuenta el total de la
-                consulta filtrada — solo se sabe si hay otra página. */}
-            {(pagina > 1 || hayMas) && (
+            {/* Paginación por CURSOR (escala 50k, 22-ago-2026): nunca más de
+                `porPagina` filas por render. No se dice "página N de M":
+                ni se cuenta el total de la consulta filtrada ni se numera —
+                el cursor es la posición del último viaje visto, y "Siguientes"
+                continúa desde ahí sin que la base relea lo anterior. Hacia
+                atrás sirve el botón del navegador o "Volver al inicio". */}
+            {(cursor || hayMas) && (
               <div className="flex items-center justify-between gap-3 mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
                 <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
-                  Página {numero(pagina)} · {numero(porPagina)} viajes por página, del más reciente al más antiguo.
+                  Hasta {numero(porPagina)} viajes por página, del más reciente al más antiguo.
                 </span>
                 <div className="flex items-center gap-1.5">
-                  {pagina > 1 ? (
-                    <Link href={hrefRegistro(sufijo, { f: filtro, q, p: pagina - 1 })} className={BTN_SEC} style={{ background: 'var(--surface)' }}>
-                      <ChevronLeft width={13} height={13} strokeWidth={1.75} aria-hidden /> Anteriores
+                  {cursor ? (
+                    <Link href={hrefRegistro(sufijo, { f: filtro, q })} className={BTN_SEC} style={{ background: 'var(--surface)' }}>
+                      <ChevronLeft width={13} height={13} strokeWidth={1.75} aria-hidden /> Volver al inicio
                     </Link>
                   ) : null}
-                  {hayMas ? (
-                    <Link href={hrefRegistro(sufijo, { f: filtro, q, p: pagina + 1 })} className={BTN_SEC} style={{ background: 'var(--surface)' }}>
+                  {hayMas && siguiente ? (
+                    <Link href={hrefRegistro(sufijo, { f: filtro, q, c: siguiente })} className={BTN_SEC} style={{ background: 'var(--surface)' }}>
                       Siguientes <ChevronRight width={13} height={13} strokeWidth={1.75} aria-hidden />
                     </Link>
                   ) : null}
