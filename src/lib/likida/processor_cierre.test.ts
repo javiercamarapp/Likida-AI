@@ -524,10 +524,12 @@ describe('el aviso al jefe: con el PDF completo y aunque el del operador falle',
     const { urlPdf } = avisarCierreAlJefe.mock.calls[0][0] as { urlPdf: string };
     expect(urlPdf).toMatch(/\/v1\.pdf$/);
     expect(urlPdf).not.toContain('-operador');
-    // Y el chofer sigue recibiendo el suyo: dos firmas, una por ejemplar.
+    // Y el chofer sigue recibiendo el suyo: dos firmas, una por ejemplar, y
+    // el documento que sale hacia su número es el `-operador`.
     const rutas = createSignedUrl.mock.calls.map((c) => c[0] as string);
     expect(rutas).toContain('t1/v1-operador.pdf');
     expect(rutas).toContain('t1/v1.pdf');
+    expect(JSON.stringify(documentos()[0].body)).toContain('v1-operador.pdf');
   });
 
   it('M27: con pdf_generado=false el jefe RECIBE el aviso igual (sin adjunto si tampoco hay ejemplar completo)', async () => {
