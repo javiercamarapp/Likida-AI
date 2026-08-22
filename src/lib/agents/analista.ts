@@ -327,6 +327,11 @@ export async function ejecutarAnalista(opts: {
       temperature: 0.2,
       signal: controller.signal,
       onTool: opts.onPaso,
+      // A30: la entrega por canal lateral NO la corta el loop-guard, y en
+      // cuanto corre el ciclo termina. B17: las lecturas por sustantivo
+      // entran a la caché entre rondas.
+      terminalTools: ['entregar_respuesta'],
+      readOnlyTools: TOOLS_LECTURA,
     });
 
     // El respaldo de la guardia: todo lo que las tools devolvieron en este
@@ -369,6 +374,8 @@ export async function ejecutarAnalista(opts: {
         temperature: 0,
         signal: controller.signal,
         onTool: opts.onPaso,
+        terminalTools: ['entregar_respuesta'],
+        readOnlyTools: TOOLS_LECTURA,
       });
       for (const t of res2.toolCalls) extraerNumeros(t.result, respaldo);
       res.toolCalls.push(...res2.toolCalls);
