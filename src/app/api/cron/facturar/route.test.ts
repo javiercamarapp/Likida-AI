@@ -105,12 +105,19 @@ const facturarAlVuelo = vi.fn(async (a: { gastoId: string }) => ({
  * ticket de CAPUFE, así que hasta las pruebas de un solo ticket pasan por el
  * lote.
  */
-const facturarLoteAlVuelo = vi.fn(async (a: { gastoIds: string[] }) => ({
+/** El renglón por gasto que devuelve el lote: `motivo` es opcional y es lo
+ *  que RES-21 cuenta, así que el tipo tiene que admitirlo. */
+type RenglonLote = { gastoId: string; intentado: boolean; facturado: boolean; detalle?: string; motivo?: string };
+const facturarLoteAlVuelo = vi.fn(async (a: { gastoIds: string[] }): Promise<{
+  porGasto: RenglonLote[];
+  facturados: number;
+  bloqueados: Array<{ gastoId: string; motivo: string }>;
+}> => ({
   porGasto: a.gastoIds.map((gastoId) => ({
     intentado: true, facturado: false, detalle: `ensayo de ${gastoId}`, gastoId,
   })),
   facturados: 0,
-  bloqueados: [] as Array<{ gastoId: string; motivo: string }>,
+  bloqueados: [],
 }));
 vi.mock('@/lib/likida/facturacion/al_vuelo', () => ({ facturarAlVuelo, facturarLoteAlVuelo }));
 
@@ -163,6 +170,14 @@ vi.mock('@/lib/likida/facturacion/adaptadores/registro', () => ({
  * `FalloDePlataforma`, que la ruta usa para marcar— porque mockear la clase
  * rompería el `instanceof` que se está probando.
  */
+/** RES-21: el historial que decide si ÉSTA es la tercera corrida seca. */
+const ultimasCorridas = vi.fn(async (): Promise<Array<{ resumen: Record<string, unknown> | null }>> => []);
+const registrarCorrida = vi.fn(async () => {});
+vi.mock('@/lib/likida/agentes/corridas', () => ({
+  registrarCorrida: (...a: unknown[]) => registrarCorrida(...(a as [])),
+  ultimasCorridas: (...a: unknown[]) => ultimasCorridas(...(a as [])),
+}));
+
 const avisarCorridasPorFlota = vi.fn(async () => {});
 const avisar = vi.fn(async (..._a: unknown[]) => ({ avisado: true, porque: 'ok', destinatarios: 1, magnitud: 1 }));
 vi.mock('@/lib/likida/agentes/notificaciones', async (importOriginal) => ({
@@ -219,6 +234,10 @@ beforeEach(() => {
   conNavegador.mockClear();
   conPortales.mockClear();
   avisarCorridasPorFlota.mockClear();
+  registrarCorrida.mockClear();
+  ultimasCorridas.mockReset();
+  ultimasCorridas.mockResolvedValue([]);
+  delete process.env.FACTURACION_MANDATO_ACEPTADO;
   telefonoJefeDe.mockClear();
   avisar.mockReset();
   avisar.mockResolvedValue({ avisado: true, porque: 'ok', destinatarios: 1, magnitud: 1 });
@@ -802,6 +821,106 @@ describe('el despacho por flota con QStash (ESC-5)', () => {
     const crons = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: Array<{ path: string; schedule: string }> };
     const facturar = crons.crons.find((c) => c.path === '/api/cron/facturar');
     expect(facturar?.schedule).toBe('*/15 * * * *');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RES-21 — "INTENTA Y NO FACTURA NADA" TIENE QUE DEJAR SEÑAL
+//
+// `autofactura.no_procede` vive en `info` (alto volumen, por ticket). Lo que
+// faltaba era la señal agregada: tres corridas seguidas intentando sin timbrar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('la señal de corridas secas (RES-21)', () => {
+  /** Una corrida que intentó y no facturó, como la guarda `registrarCorrida`. */
+  const seca = { resumen: { intentados: 3, facturados: 0 } };
+
+  const conEmitir = () => {
+    process.env.FACTURACION_MODO = 'emitir';
+    process.env.FACTURACION_MANDATO_ACEPTADO = 'si';
+  };
+  afterEach(() => { delete process.env.FACTURACION_MODO; });
+
+  it('la corrida guarda su medición: intentados, facturados y los motivos', async () => {
+    // El resumen iba en `null`, así que la ficha del agente no podía decir si
+    // la corrida hizo algo — ni la siguiente corrida saber si ésta fue seca.
+    facturarLoteAlVuelo.mockResolvedValueOnce({
+      porGasto: [{ gastoId: 'g-1', intentado: true, facturado: false, motivo: 'requiere_cuenta' }],
+      facturados: 0, bloqueados: [],
+    });
+
+    await pedir();
+
+    const [, , corrida] = registrarCorrida.mock.calls[0] as unknown as [string, string, { resumen?: Record<string, unknown> }];
+    expect(corrida.resumen).toEqual({ intentados: 1, facturados: 0, motivos: { requiere_cuenta: 1 } });
+  });
+
+  it('en EMITIR, dos corridas secas previas + ésta = warn accionable', async () => {
+    conEmitir();
+    ultimasCorridas.mockResolvedValue([seca, seca]);
+    facturarLoteAlVuelo.mockResolvedValueOnce({
+      porGasto: [{ gastoId: 'g-1', intentado: true, facturado: false, motivo: 'sin_adaptador' }],
+      facturados: 0, bloqueados: [],
+    });
+
+    await pedir();
+
+    expect(logger.warn).toHaveBeenCalledWith('cron.facturar.sin_facturar_3_corridas', {
+      tenant: 't-1', intentados: 1, motivos: { sin_adaptador: 1 },
+    });
+  });
+
+  it('con UNA sola corrida seca previa NO avisa: una corrida sin facturar es rutina', async () => {
+    conEmitir();
+    ultimasCorridas.mockResolvedValue([seca]);
+    facturarLoteAlVuelo.mockResolvedValueOnce({
+      porGasto: [{ gastoId: 'g-1', intentado: true, facturado: false, motivo: 'sin_adaptador' }],
+      facturados: 0, bloqueados: [],
+    });
+
+    await pedir();
+
+    expect(logger.warn).not.toHaveBeenCalledWith('cron.facturar.sin_facturar_3_corridas', expect.anything());
+  });
+
+  it('en ENSAYO —el modo por defecto— NO avisa: facturados=0 es lo que TIENE que pasar', async () => {
+    // Sin esto, el modo normal de hoy gritaría cada tres corridas para cada
+    // flota: la forma más rápida de enseñar a ignorar el canal.
+    ultimasCorridas.mockResolvedValue([seca, seca]);
+
+    await pedir();
+
+    expect(logger.warn).not.toHaveBeenCalledWith('cron.facturar.sin_facturar_3_corridas', expect.anything());
+  });
+
+  it('si el historial no se puede leer, la corrida cierra igual', async () => {
+    conEmitir();
+    ultimasCorridas.mockRejectedValue(new Error('base caída'));
+    facturarLoteAlVuelo.mockResolvedValueOnce({
+      porGasto: [{ gastoId: 'g-1', intentado: true, facturado: false, motivo: 'sin_adaptador' }],
+      facturados: 0, bloqueados: [],
+    });
+
+    const r = await pedir();
+
+    expect(r.status).toBe(200);
+    expect(logger.warn).toHaveBeenCalledWith('cron.facturar.historial_ilegible', expect.objectContaining({ tenant: 't-1' }));
+  });
+
+  it('el desglose de motivos va en el log de cierre, no solo en N líneas de info', async () => {
+    facturarLoteAlVuelo.mockResolvedValueOnce({
+      porGasto: [
+        { gastoId: 'g-1', intentado: true, facturado: false, motivo: 'requiere_cuenta' },
+        { gastoId: 'g-2', intentado: true, facturado: false, motivo: 'requiere_cuenta' },
+      ],
+      facturados: 0, bloqueados: [],
+    });
+
+    await pedir();
+
+    expect(logger.info).toHaveBeenCalledWith('cron.facturar.ok', expect.objectContaining({
+      motivos: { requiere_cuenta: 2 },
+    }));
   });
 });
 
