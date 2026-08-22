@@ -20,7 +20,7 @@ import { traerTodo, conteo } from '../pg';
 import { DatoInvalido } from '../errores';
 import { logger } from '@/lib/logger';
 import { enviarCorreo } from '@/lib/correo/enviar';
-import { TZ_MX } from '@/lib/formato';
+import { hoyMx } from '@/lib/formato';
 
 /** El tope de correos FRÍOS aprobados por día (Fase 2: "20–40, máximo" —
  *  reputación del dominio + lo que el embudo humano digiere). Vive en
@@ -337,7 +337,7 @@ export async function enviarPiezaPorCorreo(id: string, actorId: string): Promise
   // conteo, no se manda — el día es el DE MÉXICO, no el UTC.
   if ((fila.prioridad as string) === 'normal') {
     const tope = topeCorreoFrioDia();
-    const diaMx = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date());
+    const diaMx = hoyMx();
     const inicioDia = new Date(`${diaMx}T00:00:00-06:00`).toISOString();
     const { count, error: errTope } = await supabaseAdmin()
       .from('cola_aprobacion')

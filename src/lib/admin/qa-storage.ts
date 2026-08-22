@@ -20,6 +20,7 @@
 // read-modify-write con carrera; el historial se arma LISTANDO la carpeta.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { hoyMx } from '@/lib/formato';
 import { createHash, randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CorridaQA, FotoBanco } from './qa-tipos';
@@ -241,9 +242,8 @@ export async function listarCorridas(db: SupabaseClient, limite = 60): Promise<R
 /** ¿Dos instantes caen el mismo día calendario de México? — el tope diario se
  *  mide con el día de la operación (America/Mexico_City), no UTC. Puro. */
 export function mismoDiaMx(aIso: string, bIso: string): boolean {
-  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' });
   try {
-    return fmt.format(new Date(aIso)) === fmt.format(new Date(bIso));
+    return hoyMx(new Date(aIso)) === hoyMx(new Date(bIso));
   } catch {
     return false;
   }

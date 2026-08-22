@@ -49,7 +49,7 @@ import { acotada } from './presupuesto';
 import { getCartera, type ClienteRow } from './comercial';
 import { DatoInvalido } from './errores';
 import { esRfcValido, esUuidValido, rfcChecksumOk } from './intake/cfdi';
-import { round2, TZ_MX } from '@/lib/formato';
+import { round2, hoyMx } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -598,7 +598,7 @@ export interface PanelClientes {
  */
 export async function getPanelClientes(
   tenantId: string,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<PanelClientes> {
   const admin = supabaseAdmin();
 

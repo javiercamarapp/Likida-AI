@@ -68,7 +68,7 @@ import { aNumero, diasEntre, TOLERANCIA_CENTAVO } from './libro_viaje';
 // `round2` se IMPORTA: hay una prueba en `formato.test.ts` que falla ante una
 // segunda copia. Dos redondeos distintos hacen que la misma cifra fiscal se lea
 // diferente en dos pantallas, y eso se lee como dos cálculos distintos.
-import { round2, TZ_MX } from '@/lib/formato';
+import { round2, hoyMx } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PARTE PURA — sin una sola consulta, sin reloj. Es la que se prueba.
@@ -105,12 +105,7 @@ export function diaMx(valor: unknown): string | null {
   if (Number.isNaN(d.getTime())) return null;
   // `en-CA` es el locale que imprime AAAA-MM-DD, que es el formato con el que
   // `diasEntre` sabe trabajar y el único que se compara bien como string.
-  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(d);
-}
-
-/** Hoy, en hora de México. El default de todo lo que fecha en este archivo. */
-export function hoyMx(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date());
+  return hoyMx(d);
 }
 
 // ── Antigüedad de saldos ───────────────────────────────────────────────────
