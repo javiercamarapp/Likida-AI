@@ -65,13 +65,16 @@ vi.mock('@/lib/observability/alerta', () => ({
   alertarOperador: (e: string, d: Record<string, unknown>) => alertarOperador(e, d),
 }));
 
-const { estaApagado, leerInterruptor, apagar, encender, listarInterruptores, INTERRUPTORES } = await import('./interruptores');
+const { estaApagado, leerInterruptor, apagar, encender, listarInterruptores, INTERRUPTORES, olvidarInterruptores } = await import('./interruptores');
 const { DatoInvalido } = await import('./errores');
 
 const de = (tabla: string, op?: string) =>
   llamadas.filter((l) => l.tabla === tabla && (op === undefined || l.op === op));
 
 beforeEach(() => {
+  // RES-19: la lectura se cachea 5 s por instancia. Cada prueba arranca con la
+  // caché vacía; la que mide la caché la ejercita a propósito.
+  olvidarInterruptores();
   llamadas.length = 0;
   colas.clear();
   fromRevienta = null;
@@ -134,12 +137,47 @@ describe('estaApagado — sin fila = encendido, error = apagado', () => {
   });
 });
 
+// ── RES-19: la caché de 5 s ────────────────────────────────────────────────
+describe('la caché de lectura (RES-19)', () => {
+  it('dos lecturas seguidas del mismo interruptor tocan la base UNA vez', async () => {
+    colas.set('interruptor', [{ data: { apagado: true }, error: null }]);
+    expect(await estaApagado('global')).toBe(true);
+    expect(await estaApagado('global')).toBe(true);
+    expect(de('interruptor')).toHaveLength(1);
+  });
+
+  it('cachea POR NOMBRE: el global cacheado no contesta por el de cobranza', async () => {
+    colas.set('interruptor', [{ data: { apagado: true }, error: null }]);
+    await estaApagado('global');
+    await estaApagado('agente:cobranza');
+    expect(de('interruptor')).toHaveLength(2);
+  });
+
+  it('lo ILEGIBLE no se cachea: la siguiente lectura vuelve a preguntar y a gritar', async () => {
+    colas.set('interruptor', [{ data: null, error: { message: 'fetch failed' } }]);
+    expect(await leerInterruptor('global')).toBe('ilegible');
+    expect(await leerInterruptor('global')).toBe('ilegible');
+    expect(de('interruptor')).toHaveLength(2);
+    expect(logs.error).toHaveBeenCalledTimes(2);
+  });
+
+  it('apagar INVALIDA: quien mueve la palanca la ve aplicada al instante', async () => {
+    colas.set('interruptor', [{ data: { apagado: false }, error: null }]);
+    expect(await estaApagado('global')).toBe(false);
+    colas.set('interruptor', [{ data: { apagado: true }, error: null }]);
+    await apagar('global', 'incidente', 'u1');
+    expect(await estaApagado('global')).toBe(true);
+  });
+});
+
 describe('leerInterruptor — los tres estados que los crons tienen que distinguir', () => {
   it('sin fila: encendido; fila apagada: apagado; error: ilegible (nunca lanza)', async () => {
     colas.set('interruptor', [{ data: null, error: null }]);
     expect(await leerInterruptor('global')).toBe('encendido');
+    olvidarInterruptores();
     colas.set('interruptor', [{ data: { apagado: true }, error: null }]);
     expect(await leerInterruptor('global')).toBe('apagado');
+    olvidarInterruptores();
     colas.set('interruptor', [{ data: null, error: { message: 'fetch failed' } }]);
     expect(await leerInterruptor('global')).toBe('ilegible');
     fromRevienta = 'sin cliente';
