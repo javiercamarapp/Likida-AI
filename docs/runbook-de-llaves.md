@@ -21,7 +21,7 @@ función SÍ, y se dice cuál.
 | Var | Qué apaga | De dónde sale |
 |---|---|---|
 | `GITHUB_TOKEN` | `/admin/actividad-codigo` (el heatmap de puntitos) muere en prod | github.com → Settings → Developer settings → Fine-grained token, READ-only del repo likida.ai |
-| `UPSTASH_REDIS_REST_URL` + `_TOKEN` | El rate limit corre en modo LOCAL POR INSTANCIA (cada lambda cuenta por su lado — un atacante reparte y multiplica el techo) | upstash.com → Redis → Create database (free) → REST API |
+| ~~`UPSTASH_REDIS_REST_URL` + `_TOKEN`~~ | **YA ESTÁ EN PRODUCCIÓN** (verificado 22-ago-2026, auditoría prod SEG-1). Se deja el renglón tachado, no borrado, porque el estado se puede perder al recrear el proyecto: sin ellas el rate limit vuelve al modo LOCAL POR INSTANCIA (cada lambda cuenta por su lado — quien insiste reparte y multiplica el techo) y el piso de una hora de `alertarOperador` también. Cómo comprobarlo sin entrar a Vercel: `curl -s https://app.likida.ai/api/health` → `"ratelimit":"redis"`. | upstash.com → Redis → Create database (free) → REST API |
 
 Además, **no es env pero es config pendiente**: el webhook de entrega de
 Resend debe apuntar a `https://app.likida.ai/api/correo/eventos` (panel de
