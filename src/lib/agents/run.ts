@@ -26,6 +26,18 @@ export interface RunAgentResult {
   costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>;
 }
 
+/** Techo de salida POR RONDA del ciclo de cuadre (tokens). Default 4,000. */
+export function maxTokensCuadre(): number {
+  const v = Number(process.env.LIKIDA_CUADRE_MAX_TOKENS);
+  return Number.isFinite(v) && v > 0 ? Math.round(v) : 4000;
+}
+
+/** Rondas de tools por turno del cuadre. Default 6. */
+export function maxRondasCuadre(): number {
+  const v = Number(process.env.LIKIDA_CUADRE_MAX_RONDAS);
+  return Number.isFinite(v) && v > 0 ? Math.round(v) : 6;
+}
+
 export async function runAgent(opts: {
   agent: AgentName;
   tenant: TenantContext;
@@ -54,6 +66,15 @@ export async function runAgent(opts: {
       temperature: params.temperature,
       reasoning: params.reasoning,
       signal: controller.signal,
+      // M21 (auditoría 18): el techo del cuadre era el default mudo de
+      // openrouter.ts (4,000 × 6 rondas) y ningún lugar lo declaraba — el rol
+      // más caro del repo era el único ciclo sin techo propio. Se declara
+      // aquí, con override por env para que cambiarlo cueste una variable y
+      // no un despliegue (misma regla que los modelos). NO se baja a 900 como
+      // en los chats: con `reasoning: 'high'` el razonamiento y la respuesta
+      // comparten este presupuesto (ver DEFAULT_MAX_TOKENS).
+      maxTokens: maxTokensCuadre(),
+      maxToolRounds: maxRondasCuadre(),
     });
     return {
       finalText: res.finalText,

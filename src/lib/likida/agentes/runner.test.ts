@@ -145,3 +145,21 @@ describe('el lote', () => {
     expect(r.agentes[0].piezas).toBe(2);
   });
 });
+
+describe('M30 — correrRunner(soloAgente) acota la vuelta a UN agente', () => {
+  it('con dos habilitados y soloAgente="redactor", el otro ni se evalúa', async () => {
+    respuestas.set('agente_definicion', [{ data: [REDACTOR, { id: 'cobranza', presupuesto_dia_usd: 1 }], error: null }]);
+    respuestas.set('agente_corrida', [{ data: [], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: null, error: null, count: 0 }]);
+    respuestas.set('prospecto', [{ data: [{ id: 'p1', vendedor: null }], error: null }]);
+    const r = await correrRunner('redactor');
+    expect(r.agentes.map((a) => a.agente)).toEqual(['redactor']);
+  });
+
+  it('soloAgente que no está habilitado → vuelta vacía, sin despachar nada', async () => {
+    respuestas.set('agente_definicion', [{ data: [REDACTOR], error: null }]);
+    const r = await correrRunner('cobranza');
+    expect(r).toEqual({ apagadoGlobal: false, agentes: [] });
+    expect(redactar).not.toHaveBeenCalled();
+  });
+});

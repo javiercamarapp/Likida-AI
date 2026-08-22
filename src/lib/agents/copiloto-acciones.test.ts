@@ -125,3 +125,45 @@ describe('correr_runner y su bitácora — el contrato que el comentario declara
     expect(r.mensaje).toContain('runner');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18 · M30 — la previsualización enseñaba "Voy a ejecutar
+// `redactor`" y el ejecutor tiraba el objetivo: `correrRunner()` sin
+// argumentos despachaba a TODOS los habilitados. Ahora el objetivo que la
+// tarjeta enseñó es el que corre.
+// ═══════════════════════════════════════════════════════════════════════════
+const { objetivoDelRunner } = await import('./copiloto-acciones');
+
+describe('M30 — correr_runner respeta el objetivo que Javier confirmó', () => {
+  it('objetivo "redactor" → correrRunner("redactor"), y la bitácora lo anota', async () => {
+    await ejecutarAccionCopiloto('correr_runner', { id: 'redactor', motivo: 'adelantar la demo' }, 'u-javier');
+    expect(correrRunner).toHaveBeenCalledWith('redactor');
+    const detalle = insertBitacora.mock.calls[0][0].detalle as Record<string, unknown>;
+    expect(detalle.objetivo).toBe('redactor');
+  });
+
+  it('"agente:redactor" (la forma del catálogo de interruptores) también acota', async () => {
+    await ejecutarAccionCopiloto('correr_runner', { id: 'agente:redactor', motivo: 'x' }, 'u-1');
+    expect(correrRunner).toHaveBeenCalledWith('redactor');
+  });
+
+  it('"runner" / vacío = la vuelta completa (lo que describe `efecto`)', async () => {
+    await ejecutarAccionCopiloto('correr_runner', { id: 'runner', motivo: 'x' }, 'u-1');
+    expect(correrRunner).toHaveBeenCalledWith(undefined);
+    await ejecutarAccionCopiloto('correr_runner', { motivo: 'x' }, 'u-1');
+    expect(correrRunner).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it('un agente que no está habilitado para el runner se DICE, no se finge una vuelta', async () => {
+    correrRunner.mockResolvedValueOnce({ apagadoGlobal: false, agentes: [] });
+    const r = await ejecutarAccionCopiloto('correr_runner', { id: 'cobranza', motivo: 'x' }, 'u-1');
+    expect(r.ok).toBe(true);
+    expect(r.mensaje).toContain('"cobranza" no está habilitado');
+  });
+
+  it('objetivoDelRunner normaliza', () => {
+    expect(objetivoDelRunner(undefined)).toBeUndefined();
+    expect(objetivoDelRunner('  Todos ')).toBeUndefined();
+    expect(objetivoDelRunner('AGENTE:Redactor')).toBe('redactor');
+  });
+});
