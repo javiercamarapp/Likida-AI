@@ -5635,3 +5635,91 @@ begin
   raise exception E'DOMINIOS_0146  total-negativo-rebota=%  descuadre-rebota=%  coherente-entra=%  ocr-fuera-rebota=%  ocr-dentro-entra=%   (esperado t / t / t / t / t)',
     negativo_rebota, descuadre_rebota, coherente_entra, ocr_fuera_rebota, ocr_dentro_entra;
 end $$;
+
+-- ── 116. Un duplicado solo apunta a una fila VISIBLE (mig. 0147, M13) ───────
+-- El bloque 110 nombraba el ciclo A→B→A y no lo probaba. Aquí: A→B entra;
+-- (a) B→A rebota (B apuntaría a una copia); (b) B→C colapsa la cadena: A pasa
+-- a apuntar a C, no a la B escondida; (c) D→A rebota porque A ya es copia.
+do $$
+declare
+  a uuid; b uuid; c uuid; d uuid;
+  ciclo_rebota boolean := false; cadena_colapsa boolean := false; copia_de_copia_rebota boolean := false;
+begin
+  insert into public.prospecto (empresa) values ('zzz-verif-dup-A') returning id into a;
+  insert into public.prospecto (empresa) values ('zzz-verif-dup-B') returning id into b;
+  insert into public.prospecto (empresa) values ('zzz-verif-dup-C') returning id into c;
+  insert into public.prospecto (empresa) values ('zzz-verif-dup-D') returning id into d;
+
+  update public.prospecto set duplicado_de = b where id = a;
+
+  begin
+    update public.prospecto set duplicado_de = a where id = b;
+  exception when check_violation then ciclo_rebota := true;
+  end;
+
+  update public.prospecto set duplicado_de = c where id = b;
+  select duplicado_de = c into cadena_colapsa from public.prospecto where id = a;
+
+  begin
+    update public.prospecto set duplicado_de = a where id = d;
+  exception when check_violation then copia_de_copia_rebota := true;
+  end;
+
+  raise exception E'DUPLICADO_VISIBLE_0147  ciclo-rebota=%  cadena-colapsa=%  copia-de-copia-rebota=%   (esperado t / t / t)',
+    ciclo_rebota, coalesce(cadena_colapsa, false), copia_de_copia_rebota;
+end $$;
+
+-- ── 117. El bucket `avatares` hace cumplir tipo y peso (mig. 0147, M25) ─────
+-- Los candados vivían solo en los server actions de mi-perfil; una subida
+-- directa al Storage con el access token los saltaba. Supabase Storage sí
+-- hace cumplir estos dos campos del bucket. Esperado: 2 MB, las 3 imágenes
+-- de `TIPOS`, y sigue público (la foto de perfil no es un comprobante).
+do $$
+declare limite bigint; mimes int; es_publico boolean;
+begin
+  select file_size_limit, cardinality(allowed_mime_types), public
+    into limite, mimes, es_publico
+    from storage.buckets where id = 'avatares';
+  raise exception E'AVATARES_LIMITES_0147  limite-bytes=%  mimes=%  publico=%   (esperado 2097152 / 3 / t)',
+    coalesce(limite, 0), coalesce(mimes, 0), coalesce(es_publico, false);
+end $$;
+
+-- ── 118. worker_llave.capacidades tiene dominio y no está vacío (mig. 0147, B10) ──
+-- '{}' y '{bus.piezas}' (plural) rebotan; las cuatro reales entran.
+do $$
+declare vacia_rebota boolean := false; inventada_rebota boolean := false; las_cuatro_entran boolean := false;
+begin
+  begin
+    insert into public.worker_llave (nombre, hash, capacidades) values ('zzz-verif-vacia', 'zzz-hash-1', '{}');
+  exception when check_violation then vacia_rebota := true;
+  end;
+  begin
+    insert into public.worker_llave (nombre, hash, capacidades) values ('zzz-verif-plural', 'zzz-hash-2', '{bus.latido,bus.piezas}');
+  exception when check_violation then inventada_rebota := true;
+  end;
+  insert into public.worker_llave (nombre, hash, capacidades)
+    values ('zzz-verif-cuatro', 'zzz-hash-3', '{bus.latido,bus.pieza,bus.catalogo,bus.ordenes}');
+  las_cuatro_entran := true;
+
+  raise exception E'CAPACIDADES_0147  vacia-rebota=%  inventada-rebota=%  las-cuatro-entran=%   (esperado t / t / t)',
+    vacia_rebota, inventada_rebota, las_cuatro_entran;
+end $$;
+
+-- ── 119. reservar_envio_prospecto no es ejecutable desde internet (mig. 0147, B15) ──
+-- Postgres da EXECUTE a PUBLIC en toda función nueva (lección de la 0054).
+-- `proacl` NULL = privilegios por defecto = abierta. Esperado: cerrada a
+-- public/anon/authenticated, abierta solo a service_role (cola.ts la llama
+-- con supabaseAdmin()).
+do $$
+declare publico boolean; anon_si boolean; auth_si boolean; svc_si boolean;
+begin
+  select coalesce((select bool_or(grantee = 0) from aclexplode(p.proacl)), true),
+         has_function_privilege('anon', p.oid, 'execute'),
+         has_function_privilege('authenticated', p.oid, 'execute'),
+         has_function_privilege('service_role', p.oid, 'execute')
+    into publico, anon_si, auth_si, svc_si
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'reservar_envio_prospecto';
+  raise exception E'RPC_CADENCIA_0147  public=%  anon=%  authenticated=%  service_role=%   (esperado f / f / f / t)',
+    coalesce(publico, true), coalesce(anon_si, true), coalesce(auth_si, true), coalesce(svc_si, false);
+end $$;
