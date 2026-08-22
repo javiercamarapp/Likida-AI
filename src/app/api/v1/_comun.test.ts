@@ -342,3 +342,58 @@ describe('areaDeLlaveAlcanza — una llave no puede leer de más', () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA PROD (22-ago-2026) · SEG-9 — CSRF sobre la rama de COOKIE.
+//
+// /v1 no es solo lectura: `_escritura.ts` da de alta viajes y unidades, y
+// `abrir()` acepta la cookie del panel además de la llave. Una página ajena
+// abierta en el mismo navegador podía pedirle al navegador que escribiera en
+// la flota del contralor con su sesión.
+//
+// La rama de `Authorization: Bearer` NO lleva esta puerta a propósito: esa
+// cabecera el navegador no la pone solo, así que no hay CSRF que valga — y
+// exigirla ahí rompería a los TMS, que ni Origin ni Sec-Fetch-* mandan.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('SEG-9 — una escritura por cookie tiene que venir de nuestro sitio', () => {
+  const escribir = (cabeceras: Record<string, string>) =>
+    new Request('https://app.likida.ai/api/v1/viajes', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': `10.9.0.${++n}`, host: 'app.likida.ai', ...cabeceras },
+    });
+
+  it('POST cross-site con la cookie: 403 y no se resuelve ni el tenant', async () => {
+    const r = await abrir(escribir({ 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' }), 'operacion');
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.respuesta.status).toBe(403);
+      expect((await r.respuesta.json()).error.codigo).toBe('sin_permiso');
+    }
+    expect(resolverTenantApi).not.toHaveBeenCalled();
+  });
+
+  it('POST desde el panel (same-origin): pasa', async () => {
+    const r = await abrir(escribir({ 'sec-fetch-site': 'same-origin' }), 'operacion');
+    expect(r.ok).toBe(true);
+  });
+
+  it('un GET cross-site NO se bloquea: no hay efecto que robar y rompería un enlace pegado', async () => {
+    const r = await abrir(
+      new Request('https://app.likida.ai/api/v1/viajes', {
+        headers: { 'x-forwarded-for': `10.9.1.${++n}`, 'sec-fetch-site': 'cross-site' },
+      }),
+      'operacion',
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it('con LLAVE de API la puerta no aplica: un TMS no manda Origin ni Sec-Fetch-*', async () => {
+    // (La llave se resuelve en otro doble; lo que se fija aquí es que la
+    // petición NO muere en la puerta de origen antes de llegar allá.)
+    const r = await abrir(escribir({ authorization: 'Bearer lk_una_llave', 'sec-fetch-site': 'cross-site' }), 'operacion');
+    if (!r.ok) {
+      const cuerpo = await r.respuesta.json();
+      expect(cuerpo.error.mensaje).not.toContain('no viene del sitio de Likida');
+    }
+  });
+});
