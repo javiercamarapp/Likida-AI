@@ -206,16 +206,25 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
  */
 async function atenderPrivacidad(tenantId: string, operadorId: string | null, telefono: string, texto: string): Promise<void> {
   try {
-    const datos = await getDatosResponsable(tenantId);
-    if (datos) {
-      await sendText(telefono, respuestaPrivacidad(datos));
-      // AUDITORÍA 12, ALTO (legal): el aviso promete "queda registrada tu
-      // solicitud" y antes NO se registraba nada — `solicitud_arco` (0053)
-      // existía sin un solo insert y la flota (la responsable, 15 días hábiles
-      // para contestar, LFPDPPP art. 32) no tenía constancia que atender. El
-      // tipo se clasifica del texto; la flota decide la calificación exacta.
-      const { tipoDeSolicitudArco } = await import('@/lib/likida/privacidad');
-      const tipo = tipoDeSolicitudArco(texto);
+    // ── LA CONSTANCIA SE DEJA SIEMPRE, antes de decidir qué contestar ──────
+    // AUDITORÍA 12, ALTO (legal): el aviso promete "queda registrada tu
+    // solicitud" y antes NO se registraba nada — `solicitud_arco` (0053)
+    // existía sin un solo insert y la flota (la responsable, 15 días hábiles
+    // para contestar, LFPDPPP art. 32) no tenía constancia que atender. El
+    // tipo se clasifica del texto; la flota decide la calificación exacta.
+    //
+    // AUDITORÍA 18, ALTO (A10): el registro vivía DENTRO del `if (datos)`
+    // que existía para decidir el TEXTO de la respuesta. Sin razón social o
+    // domicilio de la flota, el titular recibía "déjame checarlo" y no se
+    // insertaba nada: el plazo del art. 31 nunca empezaba a correr y la
+    // solicitud no aparecía en /dashboard/arco ni en la guardia.
+    // `registrarSolicitudArco` no necesita los datos del responsable — el
+    // acoplamiento era accidental. En su propio try: un fallo al registrar
+    // no puede dejar al titular sin respuesta, pero sí queda gritado.
+    const { tipoDeSolicitudArco } = await import('@/lib/likida/privacidad');
+    const tipo = tipoDeSolicitudArco(texto);
+    let registrada = false;
+    try {
       await registrarSolicitudArco({
         tenantId,
         operadorId,
@@ -223,6 +232,14 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
         tipo,
         canal: 'whatsapp',
       });
+      registrada = true;
+    } catch (e) {
+      logger.error('arco.solicitud_no_registrada', { tenantId, tipo, err: e instanceof Error ? e.message : String(e) });
+    }
+
+    const datos = await getDatosResponsable(tenantId);
+    if (datos) {
+      await sendText(telefono, respuestaPrivacidad(datos));
       // ── E1 (auditoría 4): la oposición ENCIENDE algo, no solo se archiva ──
       // Hasta hoy, oponerse insertaba la fila de arriba y no ocurría nada más:
       // el aviso prometía "que la revise alguien" y el pipeline seguía
@@ -246,9 +263,12 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
       return;
     }
     // Sin datos del responsable no se puede decir a quién reclamarle. Se le dice
-    // la verdad en vez de dejarlo sin respuesta.
-    logger.error('privacidad.solicitud_sin_datos_responsable', { tenantId });
-    await sendText(telefono, 'Déjame checarlo con la empresa y te confirmo por aquí. 🙏');
+    // la verdad en vez de dejarlo sin respuesta — y la solicitud YA quedó
+    // registrada arriba (A10), así que "te confirmo" tiene algo que lo sostenga.
+    logger.error('privacidad.solicitud_sin_datos_responsable', { tenantId, tipo, registrada });
+    await sendText(telefono, registrada
+      ? 'Tu solicitud quedó registrada. Déjame checar con la empresa los datos del responsable y te confirmo por aquí. 🙏'
+      : 'Déjame checarlo con la empresa y te confirmo por aquí. 🙏');
   } catch (e) {
     logger.error('privacidad.solicitud_error', { tenantId, err: e instanceof Error ? e.message : String(e) });
   }
