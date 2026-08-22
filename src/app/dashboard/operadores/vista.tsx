@@ -1,7 +1,7 @@
 import { Users, Phone, PhoneOff, IdCard } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
-import { EstadoVacio } from '@/app/admin/ui/kit';
+import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
 import { FormaOperador, Plegable, type AccionForma } from './forma';
 
@@ -43,9 +43,13 @@ function diasParaVencer(vence: string, hoy: string): number {
  * "Sin registrar" se dice tal cual: inventar una fecha marcaría de vencido
  * (o de vigente) a quien no lo está.
  */
-export function VistaOperadores({ filas, hoy, puedeEditar, guardarOperador }: {
+export function VistaOperadores({ filas, hoy, puedeEditar, guardarOperador, ilegible = false }: {
   filas: FilaOperador[];
   hoy: string;
+  /** La lectura del registro falló (FE-3). NO es lo mismo que una flota sin
+   *  operadores: se dice, en vez de pintar el vacío que invita a dar de alta
+   *  gente que quizá ya está dada de alta. */
+  ilegible?: boolean;
   /** `puedeAdministrar(rol)` — solo quien administra la flota corrige datos
    *  de un operador (auditoría 2, A2). Sin esto la fila de edición ni se
    *  pinta: la pantalla no ofrece un botón que el rol no puede usar. */
@@ -79,7 +83,9 @@ export function VistaOperadores({ filas, hoy, puedeEditar, guardarOperador }: {
 
           <section className="card p-4">
             <h2 className="font-display text-[15px] font-semibold mb-3">El registro</h2>
-            {filas.length === 0 ? (
+            {ilegible ? (
+              <EstadoError mensaje="No pude leer el registro de operadores. No se enseña media lista: media lista se ve igual que la lista entera, solo que más corta." />
+            ) : filas.length === 0 ? (
               <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Aún no hay operadores dados de alta — el alta rápida vive en Despacho.
               </EstadoVacio>
