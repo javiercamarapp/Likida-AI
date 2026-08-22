@@ -2693,27 +2693,6 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           await registrarCostoWhatsApp(op.tenantId, viajeId);
         }
 
-        // ── Y LA OFICINA SE ENTERA, CON EL PDF ───────────────────────────────
-        //
-        // Cierra el circuito: el trabajo entró por WhatsApp y el resultado sale
-        // por WhatsApp. Si para tener el PDF hubiera que entrar a una pantalla,
-        // la mitad de las veces nadie entra — y la liquidación existe pero no la
-        // mira quien tiene que firmarla.
-        //
-        // BEST-EFFORT DURO: la liquidación YA está cerrada y el chofer YA tiene
-        // su PDF. Un jefe sin teléfono registrado o un WhatsApp caído no pueden
-        // costar una liquidación, así que esto no puede lanzar hacia arriba.
-        // SE ESPERA, no se deja flotando. En serverless una promesa suelta puede
-        // quedarse a medias cuando la invocación termina: el aviso al jefe
-        // saldría "a veces", que es peor que no salir nunca porque nadie lo
-        // reproduce. El try/catch es lo que impide que este await cueste el
-        // cierre; son dos lecturas y un envío, no un presupuesto.
-        try {
-          const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId, urlPdf: data.signedUrl });
-          if (!rj.enviado) logger.warn('cierre.jefe_no_avisado', { viaje: viajeId, motivo: rj.motivo });
-        } catch (e) {
-          logger.error('cierre.aviso_jefe_falló', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
-        }
       } catch (e) {
         // Ruidoso a propósito: la liquidación SÍ quedó cerrada en la base, así que
         // esto no es recuperable por reintento y nadie lo va a notar salvo por el log.
@@ -2726,6 +2705,49 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         try {
           await say('Tu liquidación ya quedó cerrada ✅, pero no pude generarte el PDF. Tu contralor ya la tiene en el panel; si necesitas el documento, pídeselo. 🙏');
         } catch { /* best-effort */ }
+      }
+
+      // ── Y LA OFICINA SE ENTERA, CON EL PDF COMPLETO ──────────────────────
+      //
+      // Cierra el circuito: el trabajo entró por WhatsApp y el resultado sale
+      // por WhatsApp. Si para tener el PDF hubiera que entrar a una pantalla,
+      // la mitad de las veces nadie entra — y la liquidación existe pero no la
+      // mira quien tiene que firmarla.
+      //
+      // FUERA del try del PDF del operador (auditoría 18, M27): el aviso de
+      // TEXTO al jefe no depende del papel del chofer. Antes vivía anidado
+      // bajo `if (!pdfGenerado) throw`, así que un upload caído del ejemplar
+      // del operador dejaba al único humano que decide sin texto y sin PDF.
+      //
+      // Y CON EL EJEMPLAR DEL CONTRALOR (M26): la URL que se le pasaba era la
+      // del operador, el ejemplar con los veredictos `SOLO_CONTRALOR`
+      // recortados — justo los que el contador, a quien el jefe le pasa este
+      // PDF, tiene que resolver. Se firma el completo (`${tenant}/${viaje}.pdf`,
+      // `tools.ts`), con el mismo TTL de 60s y el mismo criterio.
+      //
+      // BEST-EFFORT DURO: la liquidación YA está cerrada y el chofer YA tiene
+      // su PDF. Un jefe sin teléfono registrado o un WhatsApp caído no pueden
+      // costar una liquidación, así que esto no puede lanzar hacia arriba.
+      // SE ESPERA, no se deja flotando. En serverless una promesa suelta puede
+      // quedarse a medias cuando la invocación termina: el aviso al jefe
+      // saldría "a veces", que es peor que no salir nunca porque nadie lo
+      // reproduce. El try/catch es lo que impide que este await cueste el
+      // cierre; son dos lecturas y un envío, no un presupuesto — y están
+      // contados en `PASOS_CIERRE` (A24).
+      try {
+        let urlPdfJefe: string | null = null;
+        if (pdfContralorGenerado) {
+          const firma = await acotada(supabaseAdmin().storage.from('liquidaciones').createSignedUrl(`${op.tenantId}/${viajeId}.pdf`, 60), 'createSignedUrl.contralor');
+          if (firma.error || !firma.data?.signedUrl) {
+            logger.warn('cierre.pdf_jefe_sin_url', { viaje: viajeId, err: firma.error?.message ?? 'storage no devolvió URL firmada' });
+          } else {
+            urlPdfJefe = firma.data.signedUrl;
+          }
+        }
+        const rj = await avisarCierreAlJefe({ tenantId: op.tenantId, viajeId, urlPdf: urlPdfJefe });
+        if (!rj.enviado) logger.warn('cierre.jefe_no_avisado', { viaje: viajeId, motivo: rj.motivo });
+      } catch (e) {
+        logger.error('cierre.aviso_jefe_falló', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
       }
     }
 
