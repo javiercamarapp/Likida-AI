@@ -6,7 +6,8 @@ import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
-import { traerTodo, conteo, LecturaIncompleta } from '@/lib/likida/pg';
+import { conteo, exigir, PAGINA, MAX_PAGINAS, LecturaIncompleta } from '@/lib/likida/pg';
+import { acotada } from '@/lib/likida/presupuesto';
 
 export const runtime = 'nodejs';
 
@@ -61,37 +62,132 @@ export async function GET(req: Request) {
     return new NextResponse('Tu rol no puede descargar este documento.', { status: 403 });
   }
 
-  // AUDITORÍA 12, MEDIO (backend): `.limit(5000)` a secas — un contralor con
-  // 5,001+ liquidaciones bajaba un CSV corto sin que nadie se lo dijera, el
-  // peor tipo de dato que falta: el histórico viejo que cruza contra su ERP.
-  // `traerTodo` pagina hasta probar que trajo TODO (conteo exacto en la primera
-  // página) y lanza `LecturaIncompleta` si no puede demostrarlo — la doctrina
-  // de `pg.ts` que este archivo reintroducía con un techo más alto.
-  let filas: unknown[] = [];
+  // ── ESC-8 (escala 50k): PERIODO OBLIGATORIO Y ARCHIVO EN STREAM ─────────
+  //
+  // Antes: TODA la tabla de liquidaciones de la flota, sin periodo, armada
+  // entera en memoria (`traerTodo` + `toCsv`) antes de mandar el primer byte.
+  // A 50k viajes/mes son >4.5 MB de CSV en RAM por descarga al primer mes y
+  // sin techo después; con 10 descargas/min por flota (la cuota de arriba),
+  // una función de Vercel se queda sin memoria antes que sin cuota.
+  //
+  // Ahora: `?desde=&hasta=` (YYYY-MM-DD, día de México) obligatorios y a lo
+  // más 3 meses, y el archivo sale página por página (`ReadableStream`): cada
+  // página se lee, se vuelve CSV y se escribe; en memoria nunca hay más de
+  // 1,000 filas. Las columnas y el formato son EXACTAMENTE los de antes (el
+  // ERP del contador ya los lee): `toCsv` de `lib/likida/export` sigue
+  // escribiendo cada página, y solo la primera lleva el encabezado.
+  const periodo = leerPeriodo(new URL(req.url).searchParams);
+  if (!periodo.ok) return new NextResponse(periodo.motivo, { status: 400 });
+  const { desde, hastaExclusivo, etiqueta } = periodo;
+
+  const pagina = (d: number) => acotada(
+    supabaseAdmin().from('liquidacion')
+      .select('created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, viaje:viaje_id(folio, operador:operador_id(nombre))', conteo(d))
+      .eq('tenant_id', tenantId)
+      .gte('created_at', desde)
+      .lt('created_at', hastaExclusivo)
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(d, d + PAGINA - 1),
+    'export.liquidaciones',
+  );
+
+  // La PRIMERA página se lee antes de contestar: así un error de base sigue
+  // siendo un 500 con texto, no un archivo a medias con 200. Trae el `count`
+  // exacto, que es lo que permite saber cuándo se acabó sin un viaje extra.
+  let primera: Awaited<ReturnType<typeof pagina>>;
   try {
-    filas = await traerTodo(
-      (d, h) => supabaseAdmin().from('liquidacion')
-        .select('created_at, total_comprobado, total_anticipo, diferencia, estatus, diferencias, viaje:viaje_id(folio, operador:operador_id(nombre))', conteo(d))
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false }).order('id', { ascending: false })
-        .range(d, h),
-      'export.liquidaciones',
-    );
+    primera = await pagina(0);
+    exigir(primera, 'export.liquidaciones');
   } catch (e) {
-    if (e instanceof LecturaIncompleta) {
-      logger.error('export.liquidaciones_incompleto', { tenant: tenantId, leidas: e.leidas });
-      return new NextResponse('La flota tiene más liquidaciones de las que el export puede traer en una pasada. Si esto persiste, avísanos: necesitamos paginar el archivo.', { status: 500 });
-    }
     logger.error('export.liquidaciones', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     return new NextResponse('No se pudo generar el export. Intenta de nuevo en un momento.', { status: 500 });
   }
 
-  const rows = toLiquidacionRows(filas as never);
-  const csv = toCsv(rows);
-  return new NextResponse(csv, {
+  const codificador = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controlador) {
+      try {
+        const esperadas = typeof primera.count === 'number' ? primera.count : null;
+        let leidas = 0;
+        let res = primera;
+        for (let n = 0; n < MAX_PAGINAS; n++) {
+          const filas = (exigir(res, 'export.liquidaciones') ?? []) as Parameters<typeof toLiquidacionRows>[0];
+          const csv = toCsv(toLiquidacionRows(filas));
+          // Solo la primera página lleva encabezado; de las demás se quita la
+          // primera línea. Pegadas, dan byte por byte lo que daba `toCsv` de
+          // la lista entera.
+          controlador.enqueue(codificador.encode(n === 0 ? csv : csv.slice(csv.indexOf('\n') + 1)));
+          leidas += filas.length;
+          if (esperadas !== null && leidas >= esperadas) break;
+          if (filas.length === 0) {
+            if (esperadas === null) break;
+            // Con count conocido y filas faltantes, la base dejó de entregar:
+            // un archivo corto con cara de completo es justo lo que no sale.
+            throw new LecturaIncompleta('export.liquidaciones', leidas, esperadas);
+          }
+          res = await pagina(leidas);
+        }
+        controlador.close();
+      } catch (e) {
+        // Un fallo A MEDIO ARCHIVO no puede cambiar el 200 ya enviado; lo que
+        // sí puede es ABORTAR la descarga para que el navegador la marque como
+        // fallida, en vez de cerrar limpio un CSV al que le faltan filas.
+        logger.error('export.liquidaciones_stream', { tenant: tenantId, periodo: etiqueta, err: e instanceof Error ? e.message : String(e) });
+        controlador.error(e instanceof Error ? e : new Error(String(e)));
+      }
+    },
+  });
+
+  return new NextResponse(stream, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="liquidaciones_likida.csv"`,
+      'Cache-Control': 'no-store',
     },
   });
+}
+
+/** Tope del periodo de un export: 3 meses. A 50k viajes/mes son ~150k
+ *  liquidaciones como máximo por archivo — lo que un ERP importa de una
+ *  sentada; más que eso se pide en dos archivos. */
+export const MESES_MAXIMO = 3;
+
+/** `YYYY-MM-DD` de calendario real (el `Date` de JS acepta 2026-02-31). */
+function diaValido(v: string | null): v is string {
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+/**
+ * Lee `?desde=&hasta=` (ambos obligatorios, días de México, inclusivos) y los
+ * vuelve el rango `[desde 00:00, hasta+1 00:00)` en horario de México.
+ *
+ * El offset va fijo en -06:00: México no tiene horario de verano desde 2022
+ * (`TZ_MX` en lib/formato.ts es America/Mexico_City por el mismo motivo).
+ */
+export function leerPeriodo(q: URLSearchParams):
+  | { ok: true; desde: string; hastaExclusivo: string; etiqueta: string }
+  | { ok: false; motivo: string } {
+  const desde = q.get('desde');
+  const hasta = q.get('hasta');
+  if (!diaValido(desde) || !diaValido(hasta)) {
+    return { ok: false, motivo: `Indica el periodo: ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD (ambos obligatorios, máximo ${MESES_MAXIMO} meses).` };
+  }
+  if (hasta < desde) return { ok: false, motivo: '`hasta` no puede ser anterior a `desde`.' };
+
+  const tope = new Date(`${desde}T00:00:00Z`);
+  tope.setUTCMonth(tope.getUTCMonth() + MESES_MAXIMO);
+  const diaSiguiente = new Date(`${hasta}T00:00:00Z`);
+  diaSiguiente.setUTCDate(diaSiguiente.getUTCDate() + 1);
+  if (diaSiguiente.getTime() > tope.getTime()) {
+    return { ok: false, motivo: `El periodo no puede pasar de ${MESES_MAXIMO} meses. Pide el histórico en varios archivos.` };
+  }
+
+  return {
+    ok: true,
+    desde: `${desde}T00:00:00-06:00`,
+    hastaExclusivo: `${diaSiguiente.toISOString().slice(0, 10)}T00:00:00-06:00`,
+    etiqueta: `${desde}..${hasta}`,
+  };
 }
