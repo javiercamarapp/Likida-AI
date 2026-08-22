@@ -39,7 +39,7 @@ import { logger } from '@/lib/logger';
 import { sesionSuperadmin } from './puerta';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { supabaseServer } from '@/lib/supabase/server';
-import { exigirAal2SiHayFactor, MSG_STEP_UP } from '@/lib/auth/mfa';
+import { exigirAal2SiHayFactor, MSG_STEP_UP, MSG_MFA_NO_VERIFICABLE } from '@/lib/auth/mfa';
 import { CATALOGO_ACCIONES } from '@/lib/agents/copiloto-acciones';
 
 export const runtime = 'nodejs';
@@ -117,8 +117,11 @@ export async function POST(req: Request) {
     if (defAccion?.gateo === 'doble') {
       const paso = await exigirAal2SiHayFactor(await supabaseServer());
       if (!paso.ok) {
-        void registrarEventoSeguridad({ origen: 'copiloto', tipo: 'step_up_rechazado', severidad: 'info', actor: sesion.userId, detalle: { accion: accionId } });
-        return NextResponse.json({ error: MSG_STEP_UP }, { status: 403 });
+        void registrarEventoSeguridad({ origen: 'copiloto', tipo: 'step_up_rechazado', severidad: 'info', actor: sesion.userId, detalle: { accion: accionId, motivo: paso.motivo } });
+        // `no_verificable` (B14): Supabase Auth no contestó — se rechaza igual
+        // (fallar cerrado), pero se le dice al usuario que reintente, no que
+        // verifique un código que quizá no tiene.
+        return NextResponse.json({ error: paso.motivo === 'verificar' ? MSG_STEP_UP : MSG_MFA_NO_VERIFICABLE }, { status: 403 });
       }
     }
     const reclamo = await reclamarIntent({
