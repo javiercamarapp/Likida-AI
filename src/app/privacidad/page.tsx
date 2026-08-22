@@ -7,7 +7,7 @@ import { PaginaLegal, FaltaDato, type SeccionLegal } from '../legal/marco';
 //
 //   /aviso/[tenant]  → el aviso de la FLOTA sobre los datos de SUS operadores.
 //                      Ahí la responsable es la flota (LFPDPPP art. 14) y Likida
-//                      es persona encargada (art. 2 fr. XX).
+//                      es persona encargada (art. 2 fr. XII).
 //   /privacidad      → esta página. Los datos de quien CONTRATA Likida —el
 //                      contralor, el administrador de la flota— tratados por
 //                      Likida por su propia cuenta. Aquí la responsable es
@@ -48,7 +48,7 @@ const SECCIONES: SeccionLegal[] = [
     fundamento: 'LFPDPPP art. 15 fr. I · art. 14',
     parrafos: [
       `**Likida** es responsable de los datos personales de quien **contrata y usa el servicio**: la persona que administra la flota, el contralor, quien entra al panel.`,
-      `**Los datos de los operadores son otra cosa.** Cuando un chofer manda sus comprobantes por WhatsApp, la responsable de esos datos es **su empresa**, no Likida: Likida los trata por cuenta de ella y siguiendo sus instrucciones, como persona encargada (art. 2 fr. XX). El aviso que le corresponde a cada operador lo publica su propia flota, y Likida lo aloja por encargo.`,
+      `**Los datos de los operadores son otra cosa.** Cuando un chofer manda sus comprobantes por WhatsApp, la responsable de esos datos es **su empresa**, no Likida: Likida los trata por cuenta de ella y siguiendo sus instrucciones, como persona encargada (art. 2 fr. XII). El aviso que le corresponde a cada operador lo publica su propia flota, y Likida lo aloja por encargo.`,
       `Si eres operador y llegaste aquí buscando tus datos, el aviso que te toca es el de tu empresa: escribe **PRIVACIDAD** por el mismo chat y te llega la liga.`,
     ],
   },

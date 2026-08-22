@@ -500,7 +500,10 @@ export function avisoIntegral(r: DatosIntegral): SeccionAviso[] {
       fundamento: 'LFPDPPP art. 15 fr. I',
       parrafos: [
         `**${razonSocial}**, con domicilio en ${domicilio}, es la responsable de tus datos personales. A ella le reclamas y ante ella ejerces tus derechos.`,
-        `Likida opera la herramienta con la que se procesan: es **persona encargada** (art. 2 fr. XX), trata los datos por cuenta de la empresa y siguiendo sus instrucciones, y no decide sobre ellos. Este aviso está alojado en el sitio de Likida por encargo de la empresa; eso no cambia quién responde.`,
+        // AUDITORÍA 18 (B6): decía "fr. XX", que es la definición de TRANSFERENCIA.
+        // "Persona encargada" es la fr. XII (normas/lfpdppp-2-XII-XX.yaml); la
+        // XX se cita bien más abajo, en la sección del art. 35, donde sí toca.
+        `Likida opera la herramienta con la que se procesan: es **persona encargada** (art. 2 fr. XII), trata los datos por cuenta de la empresa y siguiendo sus instrucciones, y no decide sobre ellos. Este aviso está alojado en el sitio de Likida por encargo de la empresa; eso no cambia quién responde.`,
       ],
     },
     {
