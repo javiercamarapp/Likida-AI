@@ -6,6 +6,7 @@ import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { mensajeDeError } from '@/lib/auth/motivo_login';
 import { guardarCorreoParaReenvio } from '@/lib/auth/reenvio_enlace';
+import { respuestaOtp, conPisoDeTiempo } from './respuesta_otp';
 import { Logo, GlifoAdorno } from '../logo';
 import './login.css';
 
@@ -79,22 +80,9 @@ async function dentroDelLimite(llave: string): Promise<boolean> {
   return await rateLimit(`${llave}:${ip}`, 10, 5 * 60_000);
 }
 
-/**
- * Correo que NO tiene cuenta, con `shouldCreateUser:false`.
- *
- * Supabase lo marca con el código `otp_disabled` (422, «Signups not allowed for
- * otp»); `signup_disabled` es el mismo caso con los registros apagados a nivel
- * proyecto. Se mira también el mensaje porque el `code` solo existe en las
- * versiones nuevas del SDK, y fallar a "error" aquí reabriría el oráculo de
- * enumeración que este manejo existe para cerrar.
- */
-function esCorreoSinCuenta(error: { code?: string; message?: string }): boolean {
-  return (
-    error.code === 'otp_disabled' ||
-    error.code === 'signup_disabled' ||
-    /signups not allowed/i.test(error.message ?? '')
-  );
-}
+// El anti-oráculo de la auditoría 10 vivía aquí y enumeraba el caso "la cuenta
+// no existe"; AUDITORÍA 18 (M24) invirtió la regla en `respuesta_otp.ts`: solo
+// un conjunto cerrado de fallos que NO dependen de la cuenta sale como error.
 
 export default async function Login({
   searchParams,
@@ -136,7 +124,10 @@ export default async function Login({
     // para los que existen reabriría el oráculo de enumeración por cookie.
     await guardarCorreoParaReenvio(email);
     const sb = await supabaseServer();
-    const { error } = await sb.auth.signInWithOtp({
+    // AUDITORÍA 18 (M24): la respuesta tiene que ser idéntica en TEXTO y en
+    // TIEMPO para un correo con cuenta y uno sin ella. Mandar el correo tarda
+    // más que rechazar una cuenta inexistente; el piso iguala la duración mínima.
+    const { error } = await conPisoDeTiempo(() => sb.auth.signInWithOtp({
       email,
       options: {
         emailRedirectTo: `${siteUrl()}/auth/callback?next=${encodeURIComponent(dest)}`,
@@ -145,17 +136,19 @@ export default async function Login({
         // `auth.users` de CUALQUIER correo que alguien teclee aquí.
         shouldCreateUser: false,
       },
-    });
-    // Un correo sin cuenta se responde EXACTAMENTE igual que uno con cuenta: si
-    // "no existe" se viera distinto de "te mandamos el link", esta pantalla
-    // sería un oráculo para enumerar qué correos son contralores reales. Solo un
-    // fallo de otra naturaleza (cuota de correo, correo malformado, config rota)
-    // sale como error.
+    }));
+    // Un correo sin cuenta, uno con cuota de envío agotada (`over_email_send_
+    // rate_limit`, que SOLO ocurre si la cuenta existe) y un SMTP caído se
+    // responden EXACTAMENTE igual que "te mandamos el link": si cualquiera se
+    // viera distinto, esta pantalla sería un oráculo para enumerar qué correos
+    // son contralores reales. Solo el correo malformado —que GoTrue rechaza
+    // antes de buscar la cuenta— sale como error (`respuesta_otp.ts`).
+    if (respuestaOtp(error) === 'error') redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
     if (error) {
-      if (!esCorreoSinCuenta(error)) redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
       // El usuario ve "enviado"; el motivo real solo queda aquí. Sin correo en el
-      // log: el código y el status bastan para distinguirlo de una cuota agotada.
-      logger.warn('login.otp_sin_cuenta', { code: error.code, status: error.status });
+      // log: el código y el status bastan para distinguir cuenta inexistente
+      // de cuota agotada o infraestructura.
+      logger.warn('login.otp_no_enviado', { code: error.code, status: error.status });
     }
     redirect(`/login?next=${encodeURIComponent(dest)}&enviado=1`);
   }
