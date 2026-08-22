@@ -16,7 +16,7 @@ import {
 } from '@/lib/likida/fiscal';
 import { getFacturacionClientes, type FacturacionClientes } from '@/lib/likida/facturacion_clientes';
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, mxn, TZ_MX } from '@/lib/formato';
+import { fechaMx, mxn, hoyMx } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { areaDeRuta } from '@/lib/auth/visibilidad';
 import { AUTOMATIZACIONES, DINERO_FISCAL, SISTEMA, type Item } from '../rutas';
@@ -201,7 +201,7 @@ export async function InicioContador({
             <div className="flex items-center gap-2.5 shrink-0 pt-1">
               {/* El DÍA DE MÉXICO, no el UTC — mismo arreglo que el Resumen
                   del dueño (capturado el 12-ago). */}
-              <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahoraMs())))}</ChipFecha>
+              <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(hoyMx(new Date(ahoraMs())))}</ChipFecha>
               {/* La acción primaria del contador no es despachar: es meter el
                   papel. Facturación es lectura Y captura desde la auditoría
                   4 (A1), y este botón es su puerta. */}

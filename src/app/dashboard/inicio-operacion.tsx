@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Send, UserCog, CircleSlash, CalendarDays, Plus, Users, History } from 'lucide-react';
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, TZ_MX } from '@/lib/formato';
+import { fechaMx, hoyMx } from '@/lib/formato';
 import { getViajes, getOperadoresDetalle, type ViajeRow, type OperadorDetalle } from '@/lib/likida/analytics';
 import {
   getTableroOperacion, getViajesSinAsignar, getCargaOperadores, getIncidencias, getUnidades,
@@ -72,7 +72,7 @@ export async function InicioOperacion({
   // El DÍA DE MÉXICO, no el UTC: a las 6pm de CDMX el chip de fecha decía
   // mañana (capturado el 12-ago), y una licencia que vence "hoy" salía
   // vencida. Mismo cálculo que `operadores/page.tsx`.
-  const diaMx = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahora));
+  const diaMx = hoyMx(new Date(ahora));
 
   const [tablero, sinAsignar, carga, incidencias, viajes, unidades, operadores, pasos] = await Promise.all([
     safe<TableroOperacion>(() => getTableroOperacion(tenantId)),

@@ -19,7 +19,7 @@ import { redactarCorreoFrio } from '@/lib/likida/agentes/redactor';
 import { descifrarErrorProvision } from '@/lib/auth/invitar';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, fechaHoraMx, TZ_MX } from '@/lib/formato';
+import { fechaMx, fechaHoraMx, hoyMx } from '@/lib/formato';
 import { resolverFormato } from '../ui/formato-preset';
 import { StatCard, StatusPill, EstadoVacio, type Estado } from '../ui/kit';
 import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -252,7 +252,7 @@ export async function ConsolaVendedores({
           derecha={
             <div className="shrink-0 pt-1">
               <ChipFecha icono={<CalendarDays {...ICONO} style={{ color: 'var(--muted)' }} />}>
-                {fechaMx(new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(new Date(ahoraMs())))}
+                {fechaMx(hoyMx(new Date(ahoraMs())))}
               </ChipFecha>
             </div>
           }

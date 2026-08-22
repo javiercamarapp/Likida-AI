@@ -1,5 +1,6 @@
 'use client';
 
+import { TZ_MX } from '@/lib/formato';
 import { useState } from 'react';
 
 /**
@@ -14,7 +15,7 @@ export function MapaActividad({ semanas, total }: {
   const [dia, setDia] = useState<{ fecha: string; n: number } | null>(null);
   const tope = Math.max(1, ...semanas.flatMap((s) => s.dias));
   const fechaDe = (ms: number) => new Intl.DateTimeFormat('es-MX', {
-    timeZone: 'America/Mexico_City', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    timeZone: TZ_MX, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   }).format(new Date(ms));
   return (
     <div>

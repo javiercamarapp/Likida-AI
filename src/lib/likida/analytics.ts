@@ -13,7 +13,7 @@ import { cuadrarDesdeDB } from './cuadre/desde_db';
 // copias son dos oportunidades de que una se quede atrás.
 import { traerResumenCostoIaTenant } from './costos';
 import { filasImprimibles } from './liquidacion/omitidos';
-import { round2, TZ_MX } from '@/lib/formato';
+import { round2, hoyMx } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 
 // Los dos bordes de PostgREST (error por valor, y el recorte silencioso a
@@ -102,7 +102,7 @@ export async function getSerieComparativa(
   tenantId: string,
   ventanaDias: number,
   pasos: number,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<ComparativoPeriodo[]> {
   const { data, error } = await supabaseAdmin().rpc('serie_comparativa_tenant', {
     p_tenant: tenantId,
@@ -152,7 +152,7 @@ export interface SeriesKpiCards {
  */
 export async function getSeriesKpiCards(
   tenantId: string,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<SeriesKpiCards> {
   const [semanal, mensual, historico] = await Promise.all([
     getSerieComparativa(tenantId, 7, 2, hoy),
@@ -413,7 +413,7 @@ export async function detectarAnomalias(tenantId: string): Promise<Anomalia[]> {
 export async function getLiquidacionesPorDia(
   tenantId: string,
   ventanaDias: number = 7,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<Array<{ dia: string; valor: number }>> {
   // Cota inferior GENEROSA (auditoría de escala 15k): esto traía TODO el
   // histórico de `liquidacion` para bucketear una ventana de 7/30 días — con
@@ -443,7 +443,7 @@ export async function getLiquidacionesPorDia(
   // mismo `.slice` ya se arregló en el detalle (creadoEn viaja crudo y se
   // formatea en pantalla); aquí el bucket se hace con la zona horaria real.
   const diaLocal = (iso: string): string =>
-    new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ_MX });
+    hoyMx(new Date(iso));
   const porDiaMap = new Map<string, number>();
   for (const r of rows) {
     const dia = diaLocal(r.created_at as string);
@@ -506,7 +506,7 @@ export interface GastoSemanalPorCategoria {
 export async function getGastoPorSemana(
   tenantId: string,
   semanas: number = 5,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<GastoSemanalPorCategoria> {
   const bloques = ultimasSemanas(semanas, hoy);
   const desdeGlobal = new Date(`${hoy}T00:00:00Z`);
@@ -559,7 +559,7 @@ export interface GastoSemanalSeries {
  *  selector único de la página ahora la mueve igual que a Actividad. */
 export async function getGastoPorSemanaSeries(
   tenantId: string,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<GastoSemanalSeries> {
   const [semanal, mensual, historico] = await Promise.all([
     getGastoPorSemana(tenantId, SEMANAS_POR_MODO.semanal, hoy),
@@ -582,7 +582,7 @@ export async function getGastoPorSemanaSeries(
 export async function getLiquidadoPorSemana(
   tenantId: string,
   semanas: number = 5,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<Array<{ dia: string; valor: number }>> {
   const bloques = ultimasSemanas(semanas, hoy);
   const desdeGlobal = new Date(`${hoy}T00:00:00Z`);
@@ -595,7 +595,7 @@ export async function getLiquidadoPorSemana(
     'getLiquidadoPorSemana',
   );
 
-  const diaLocalMx = (iso: string): string => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ_MX });
+  const diaLocalMx = (iso: string): string => hoyMx(new Date(iso));
   const porSemana = new Map<string, number>();
   for (const f of filas) {
     const { anio, semana } = semanaIso(diaLocalMx(f.created_at as string));
@@ -616,7 +616,7 @@ export interface LiquidadoSemanalSeries {
  *  de semanas que `getGastoPorSemanaSeries` (`SEMANAS_POR_MODO`). */
 export async function getLiquidadoPorSemanaSeries(
   tenantId: string,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<LiquidadoSemanalSeries> {
   const [semanal, mensual, historico] = await Promise.all([
     getLiquidadoPorSemana(tenantId, SEMANAS_POR_MODO.semanal, hoy),
@@ -1223,7 +1223,7 @@ export interface TopRutasSeries {
  *  "todo". */
 export async function getTopRutasPorGastoSeries(
   tenantId: string, top: number = 5,
-  hoy: string = new Date().toLocaleDateString('en-CA', { timeZone: TZ_MX }),
+  hoy: string = hoyMx(),
 ): Promise<TopRutasSeries> {
   const ventanaDe = (semanas: number) => {
     const hastaD = new Date(`${hoy}T00:00:00Z`);
