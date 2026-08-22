@@ -43,6 +43,7 @@ import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { llaveDelHeader, resolverLlave } from '@/lib/auth/llave-api';
 import { puedeVerArea, type Area } from '@/lib/auth/visibilidad';
 import { LecturaIncompleta } from '@/lib/likida/pg';
+import { vieneDeNuestroSitio, escribe } from '@/lib/auth/csrf';
 
 // ── El formato de error ────────────────────────────────────────────────────
 
@@ -225,6 +226,27 @@ export async function abrir(req: Request, area: Area): Promise<Acceso> {
       return { ok: false, respuesta: errorApi('sin_permiso', 'Esta llave no tiene acceso a esa parte de la flota.') };
     }
     return { ok: true, tenantId: l.tenantId, rol: `llave:${l.area}` };
+  }
+
+  // ── LA COOKIE ESCRIBE SOLO DESDE NUESTRO SITIO (auditoría prod, SEG-9) ──
+  //
+  // Debajo de esta línea la credencial es la COOKIE de sesión del panel, y
+  // /v1 no es solo lectura: `_escritura.ts` da de alta viajes y unidades. Una
+  // página ajena abierta en el mismo navegador podía pedirle al navegador que
+  // escribiera en la flota del contralor con su sesión. La rama de arriba —la
+  // de `Authorization: Bearer`— no necesita esto: esa cabecera no la pone el
+  // navegador por su cuenta, así que no hay CSRF posible con una llave.
+  //
+  // Solo sobre métodos que cambian algo: una lectura no tiene efecto que
+  // robar, y exigirlo en GET rompería a quien pega la URL en el navegador.
+  if (escribe(req.method) && !vieneDeNuestroSitio(req)) {
+    logger.warn('v1.origen_ajeno', {
+      metodo: req.method, origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site'),
+    });
+    return {
+      ok: false,
+      respuesta: errorApi('sin_permiso', 'Esta escritura no viene del sitio de Likida. Si integras un sistema, usa una llave de API (Authorization: Bearer) en vez de la sesión del panel.'),
+    };
   }
 
   let t: Awaited<ReturnType<typeof resolverTenantApi>>;
