@@ -226,6 +226,10 @@ describe('cierre sin PDF: ni se manda un documento que no existe, ni se calla', 
     await processInbound(listo);
     expect(documentos()).toHaveLength(0);
     expect(logger.error).toHaveBeenCalledWith('pdf.no_entregado', expect.objectContaining({ err: 'Object not found' }));
+    // Y con `codigo` estable (AUDITORÍA 18, M14): es lo que separa esta causa
+    // de la siguiente en el fingerprint de Sentry — sin él, la segunda cae en
+    // el issue viejo y no notifica.
+    expect(logger.error).toHaveBeenCalledWith('pdf.no_entregado', expect.objectContaining({ codigo: expect.stringMatching(/^err:[0-9a-f]{12}$/) }));
   });
 });
 

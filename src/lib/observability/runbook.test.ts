@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { SILENCIOSAS } from './arranque';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Auditoría 5 · `.env.example` y `DEPLOY.md` como parte del sistema, no como
@@ -98,14 +99,66 @@ describe('.env.example no se queda atrás del código', () => {
   });
 });
 
+describe('npm install no depende de un host fuera del registry (M16)', () => {
+  // `xlsx` apuntaba a cdn.sheetjs.com (403 en la corrida de la auditoría 18):
+  // un tercero ajeno al registry tenía voto sobre si Likida podía desplegar un
+  // hotfix. Va vendorizado en vendor/ y el lockfile lo resuelve por `file:`.
+  it('ninguna dependencia se resuelve por http(s) en package.json ni en el lockfile', () => {
+    const pkg = JSON.parse(readFileSync(join(RAIZ, 'package.json'), 'utf8')) as { dependencies: Record<string, string>; devDependencies: Record<string, string> };
+    const porUrl = Object.entries({ ...pkg.dependencies, ...pkg.devDependencies }).filter(([, v]) => /^(https?|git)/.test(v));
+    expect(porUrl).toEqual([]);
+    const lock = JSON.parse(readFileSync(join(RAIZ, 'package-lock.json'), 'utf8')) as { packages: Record<string, { resolved?: string }> };
+    const fuera = Object.entries(lock.packages)
+      .filter(([, p]) => p.resolved && /^https?:/.test(p.resolved) && !p.resolved.startsWith('https://registry.npmjs.org/'))
+      .map(([k, p]) => `${k} → ${p.resolved}`);
+    expect(fuera).toEqual([]);
+  });
+
+  it('el tarball vendorizado existe y es el que el lockfile fija', () => {
+    const lock = JSON.parse(readFileSync(join(RAIZ, 'package-lock.json'), 'utf8')) as { packages: Record<string, { resolved?: string }> };
+    const ruta = lock.packages['node_modules/xlsx']?.resolved ?? '';
+    expect(ruta).toMatch(/^file:vendor\//);
+    expect(statSync(join(RAIZ, ruta.replace(/^file:/, ''))).size).toBeGreaterThan(1_000_000);
+  });
+});
+
 describe('DEPLOY.md pide lo que hace falta para que el sistema no arranque ciego', () => {
   const deploy = () => readFileSync(join(RAIZ, 'docs/conocimiento/DEPLOY.md'), 'utf8');
 
-  it('nombra las variables cuya ausencia es silenciosa', () => {
+  it('nombra TODAS las variables cuya ausencia es silenciosa — las de la lista viva, no un literal', () => {
+    // AUDITORÍA 18, A18: esto iteraba sobre `['SENTRY_DSN','DEMO_TENANT_ID']`, y
+    // las dos que entraron después a `SILENCIOSAS` (`NEXT_PUBLIC_APP_URL`,
+    // `ALERTA_EMAIL`) llegaron al código sin que el runbook las conociera: el
+    // único canal push del sistema quedó construido, probado y desconectado, y
+    // el documento de las 3 a.m. decía que no existía ningún canal.
     const texto = deploy();
-    for (const v of ['SENTRY_DSN', 'DEMO_TENANT_ID']) {
+    expect(SILENCIOSAS.length).toBeGreaterThanOrEqual(4);
+    for (const v of ['SENTRY_DSN', ...SILENCIOSAS.map((s) => s.nombre)]) {
       expect(texto, `DEPLOY.md no menciona ${v}`).toContain(v);
     }
+  });
+
+  it('manda buscar los `msg` de arranque que el código de verdad emite', () => {
+    // Mandaba buscar `startup.entorno`, que no existe: un grep a las 3 a.m.
+    // contra el nombre del runbook devolvía cero sobre un sistema que sí
+    // estaba gritando. Se verifica contra el fuente, no contra la memoria.
+    const fuente = readFileSync(join(RAIZ, 'src/lib/observability/arranque.ts'), 'utf8');
+    const texto = deploy();
+    for (const msg of ['startup.config_silenciosa', 'startup.entorno_grupos']) {
+      expect(fuente, `arranque.ts ya no emite ${msg}`).toContain(`'${msg}'`);
+      expect(texto, `DEPLOY.md no menciona ${msg}`).toContain(msg);
+    }
+    expect(texto).not.toMatch(/startup\.entorno[^_]/);
+  });
+
+  it('sabe que existe /api/health y el monitor que lo consume (M18)', () => {
+    // La ruta nació declarando «un monitor pegándole a esto cada minuto
+    // convierte ese modo de falla en una alerta de minutos» y dos rondas
+    // después nadie la consumía ni el runbook la nombraba.
+    expect(deploy()).toContain('/api/health');
+    const flujo = join(RAIZ, '.github/workflows/salud-produccion.yml');
+    expect(statSync(flujo).isFile(), 'falta el monitor de /api/health').toBe(true);
+    expect(readFileSync(flujo, 'utf8')).toContain('/api/health');
   });
 
   it('dice dónde se miran los logs cuando algo falla', () => {

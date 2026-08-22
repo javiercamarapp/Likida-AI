@@ -44,7 +44,11 @@ verificar cosas (Meta, Supabase Site URL) contra el sitio que no es.
      **nadie va a recibir el siguiente fallo**. Es lo primero que hay que
      arreglar si aparece.
    - `startup.migraciones` — el esquema del camino del dinero.
-   - `startup.entorno` — falta configuración crítica.
+   - `startup.entorno_grupos` — falta configuración DURA (la que rompe:
+     Supabase, OpenRouter, WhatsApp…), agrupada por lo que apaga.
+   - `startup.config_silenciosa` — falta una de las variables con las que el
+     sistema arranca igual y contesta mal (la tabla de abajo). `ok:false` en
+     `error` trae el nombre y la consecuencia de cada una.
 
 4. **Si el panel falló para el contralor.** Pídele el `Digest: <número>` que
    Next enseña en pantalla y busca ese número en los logs: `onRequestError`
@@ -98,12 +102,18 @@ fallar — reenviar no arregla un token vencido, así que el bucle no termina so
 
 Están todas en `.env.example`, que es el inventario completo y está verificado
 contra el código por la suite (`src/lib/observability/runbook.test.ts`). Las
-dos que hay que revisar a mano porque **si faltan el sistema arranca igual**:
+que hay que revisar a mano porque **si faltan el sistema arranca igual** (la
+lista viva es `SILENCIOSAS` en `src/lib/observability/arranque.ts`; la suite
+falla si entra una ahí y no aquí):
 
 | Variable | Qué pasa si falta |
 |---|---|
 | `SENTRY_DSN` | No hay alerta de nada. Los errores mueren en el runtime log. |
 | `DEMO_TENANT_ID` | El panel consulta el tenant del seed y pinta **cero liquidaciones**, sin log. |
+| `ALERTA_EMAIL` | **El único canal push del sistema.** Un cron que falla (`escalar`, `facturar`, `purgar`, `wa-pendientes`, `runner`) y una lectura ilegible del kill switch mandan un correo aquí (`src/lib/observability/alerta.ts`, un correo por evento por hora). Sin ella, el fallo solo existe en Sentry — que notifica una vez por issue y después solo engorda un contador. |
+| `NEXT_PUBLIC_APP_URL` | El login arma sus redirects contra `https://app.likida.ai` (el fallback) y no contra el despliegue que los emitió: el magic link y el retorno de Google aterrizan en otro sitio, sin error. |
+| `LIKIDA_WHATSAPP_MSG_USD` | El costo por liquidación usa el default 0.008 — y esa cifra decide el precio del producto. |
+| `LIKIDA_FLOTA_COOKIE_LLAVE` | El superadmin no puede fijar una flota activa en `/admin` (la cookie no se firma ni se lee: fallar cerrado). Desde la auditoría 18 ya NO cae a la service role key. |
 
 El gate de `/dashboard` no depende de ninguna variable de entorno: es la
 sesión de Supabase Auth, verificada en `proxy.ts` (`RUTAS_CON_SESION`). El
@@ -144,9 +154,11 @@ el que dejó fuera el tenant del demo. El inventario de arriba es el que manda.
 
 ## Lo que este runbook NO cubre
 
-- **Quién recibe qué cuando algo falla.** Hoy no hay nadie asignado ni ningún
-  canal: sin `SENTRY_DSN` no hay a dónde mandarlo, y con él habría que decidir
-  destinatario.
+- **Quién recibe qué cuando algo falla, más allá de un correo.** El canal
+  existe: `ALERTA_EMAIL` recibe un correo por cada cron que falla y por cada
+  lectura ilegible del kill switch (tabla de arriba), y el monitor de
+  `/api/health` (abajo) pinta rojo el workflow si producción no contesta. Lo que
+  no hay es guardia ni escalación: si el correo no se lee, nadie más se entera.
 - **Qué se hace con una liquidación cerrada cuyo PDF no salió** (`pdf.no_entregado`).
   El operador recibe aviso; el procedimiento de reenvío no está escrito.
 - **La retención exacta de los runtime logs** en este plan, ni si hace falta un
@@ -181,6 +193,21 @@ vercel inspect likida.ai --scope likida | head   # qué está publicado
 
 Si no coinciden, la salida rápida es **Redeploy** en el panel sobre el último
 deployment, que no requiere commit nuevo.
+
+**El mismo cotejo, sin ojos:** `/api/health` devuelve `version` (los 7
+primeros caracteres del sha desplegado), `db` y `sentry`, sin auth y sin un
+solo dato de negocio. El workflow `.github/workflows/salud-produccion.yml` lo
+consume de dos formas:
+
+- cada 30 minutos pega a `https://app.likida.ai/api/health` y falla (correo
+  de GitHub Actions al dueño del repo) si no responde 200 con `ok:true`;
+- tras cada push a `master` cuyo asunto lleve `[deploy]`, espera hasta 10
+  minutos a que `version` coincida con el sha pusheado y falla si no — que es
+  exactamente el modo de falla silencioso del `ignoreCommand`.
+
+```bash
+curl -s https://app.likida.ai/api/health   # {"ok":true,"db":"ok","sentry":"configurado","version":"553bee7",...}
+```
 
 Lee solo el asunto a propósito: con el mensaje completo, cualquier commit que
 *mencionara* la palabra en el cuerpo disparaba un build. Pasó el mismo día que

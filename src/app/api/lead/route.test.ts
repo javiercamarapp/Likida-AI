@@ -35,8 +35,15 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+// rateLimit REAL en miniatura (contador por llave), no un "sí" fijo: la
+// llave natural del doble clic (B3) se prueba contra él.
+const contadores = new Map<string, number>();
 vi.mock('@/lib/ratelimit', () => ({
-  rateLimit: async () => true,
+  rateLimit: async (key: string, limit: number) => {
+    const n = (contadores.get(key) ?? 0) + 1;
+    contadores.set(key, n);
+    return n <= limit;
+  },
   bodyExcede: () => false,
   clientIp: () => '1.2.3.4',
 }));
@@ -62,7 +69,7 @@ const LEAD = {
 /** Cola: primero la lectura de duplicados, luego la escritura. */
 function nuevoLead() { respuestas.push({ data: [], error: null }, { data: null, error: null }); }
 
-beforeEach(() => { llamadas.length = 0; respuestas.length = 0; });
+beforeEach(() => { llamadas.length = 0; respuestas.length = 0; contadores.clear(); });
 
 describe('CORS: la lista de orígenes es cerrada', () => {
   it('likida.ai sí recibe la cabecera', async () => {
@@ -157,6 +164,23 @@ describe('de dónde vino: el canal se deduce, el detalle se guarda', () => {
 });
 
 describe('deduplicar sin destruir', () => {
+  it('un DOBLE CLIC (dos POST seguidos, ambos leen vacío) escribe UNA fila, y los dos reciben 200 (B3)', async () => {
+    // Sin unique en `prospecto`, la lectura previa no protege de la carrera:
+    // los dos leen `[]`. La llave natural en el rateLimit sí.
+    nuevoLead(); nuevoLead();
+    const [a, b] = await Promise.all([postear(LEAD), postear(LEAD)]);
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    expect(llamadas.filter((l) => l.op === 'insert')).toHaveLength(1);
+  });
+
+  it('la llave del doble clic es el correo (o la empresa, sin correo): otra empresa no se bloquea', async () => {
+    nuevoLead(); nuevoLead();
+    await postear(LEAD);
+    await postear({ ...LEAD, empresa: 'Fletes del Norte', correo: 'x@norte.mx' });
+    expect(llamadas.filter((l) => l.op === 'insert')).toHaveLength(2);
+  });
+
   it('un correo conocido ACTUALIZA, no inserta un segundo prospecto', async () => {
     respuestas.push({ data: [{ id: 'p-1', estado: 'negociacion' }], error: null }, { data: null, error: null });
     await postear(LEAD);

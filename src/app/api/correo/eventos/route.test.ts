@@ -10,20 +10,50 @@ import crypto from 'node:crypto';
 //  · Si la base no responde: 500 — el evento es la única fuente del dato.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── UNA TABLA EN MEMORIA CON LA SEMÁNTICA DE SQL, no un doble que dice "sí" ──
+//
+// AUDITORÍA 18, A4: el doble anterior devolvía `[{id:'pz-1'}]` pasara lo que
+// pasara y solo afirmaba que `.neq(...)` FUE LLAMADO. Con eso, un filtro que en
+// Postgres no casaba ninguna fila (`NULL <> 'rebotado'` es NULL) pasaba verde.
+// Aquí los filtros se APLICAN sobre filas con `entrega_estado: null` con las
+// tres reglas de SQL que importan: `eq`/`neq` contra NULL no casan; `is.null`
+// sí; `or(...)` une ramas. Si alguien vuelve a poner un `<>` sobre la columna
+// anulable, la pieza recién aceptada deja de escribirse y esto lo caza.
+type Fila = { id: string; provider_message_id: string; entrega_estado: string | null };
+const tabla: Fila[] = [];
 const respuestas: Array<{ data: unknown; error: { message: string } | null }> = [];
-const filtros: Array<{ eq: Array<[string, unknown]>; neq: Array<[string, unknown]>; payload: unknown }> = [];
+type Cond = (f: Fila) => boolean;
+function condDe(col: string, op: string, v: string): Cond {
+  const k = col as keyof Fila;
+  if (op === 'is' && v === 'null') return (f) => f[k] === null;
+  if (op === 'eq') return (f) => f[k] !== null && f[k] === v;
+  if (op === 'neq') return (f) => f[k] !== null && f[k] !== v; // NULL <> x → NULL → no casa
+  throw new Error(`op no soportado en el doble: ${op}`);
+}
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => {
-      const f = { eq: [] as Array<[string, unknown]>, neq: [] as Array<[string, unknown]>, payload: null as unknown };
+      const conds: Cond[] = [];
+      let parche: Partial<Fila> = {};
       const b: Record<string, unknown> = {};
       Object.assign(b, {
-        update: (p: unknown) => { f.payload = p; filtros.push(f); return b; },
-        eq: (c: string, v: unknown) => { f.eq.push([c, v]); return b; },
-        neq: (c: string, v: unknown) => { f.neq.push([c, v]); return b; },
+        update: (p: Partial<Fila>) => { parche = p; return b; },
+        eq: (c: string, v: string) => { conds.push(condDe(c, 'eq', v)); return b; },
+        neq: (c: string, v: string) => { conds.push(condDe(c, 'neq', v)); return b; },
+        or: (expr: string) => {
+          const ramas = expr.split(',').map((r) => { const [c, op, v] = r.split('.'); return condDe(c, op, v); });
+          conds.push((f) => ramas.some((r) => r(f)));
+          return b;
+        },
         select: () => b,
         then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
-          Promise.resolve().then(() => respuestas.shift() ?? { data: [{ id: 'pz-1' }], error: null }).then(res, rej),
+          Promise.resolve().then(() => {
+            const forzada = respuestas.shift();
+            if (forzada) return forzada;
+            const tocadas = tabla.filter((f) => conds.every((c) => c(f)));
+            for (const f of tocadas) Object.assign(f, parche);
+            return { data: tocadas.map((f) => ({ id: f.id })), error: null };
+          }).then(res, rej),
       });
       return b;
     },
@@ -54,9 +84,13 @@ const EVENTO = JSON.stringify({ type: 'email.bounced', data: { email_id: 're_123
 
 beforeEach(() => {
   respuestas.length = 0;
-  filtros.length = 0;
+  tabla.length = 0;
+  // La pieza recién aceptada por Resend: `entrega_estado` NACE NULL (0124).
+  tabla.push({ id: 'pz-1', provider_message_id: 're_123', entrega_estado: null });
   process.env.RESEND_EVENTOS_WEBHOOK_SECRET = SECRETO;
 });
+
+const entregado = JSON.stringify({ type: 'email.delivered', data: { email_id: 're_123' } });
 
 describe('la puerta', () => {
   it('sin secreto configurado: 500 — Resend reintenta, nadie procesa sin firma', async () => {
@@ -71,23 +105,46 @@ describe('la puerta', () => {
 });
 
 describe('el circuito', () => {
-  it('un rebote escribe el estado sobre la pieza, por provider_message_id', async () => {
+  it('un rebote escribe el estado sobre la pieza recién aceptada (columna NULL), por provider_message_id', async () => {
     const r = await postear(EVENTO);
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ pieza: 'pz-1', estado: 'rebotado' });
-    expect(filtros[0].eq).toContainEqual(['provider_message_id', 're_123']);
-    expect(filtros[0].payload).toMatchObject({ entrega_estado: 'rebotado' });
+    expect(tabla[0].entrega_estado).toBe('rebotado');
   });
 
-  it('un "entregado" tardío NO pisa a un rebote — la mala noticia es la que opera', async () => {
-    await postear(JSON.stringify({ type: 'email.delivered', data: { email_id: 're_123' } }));
-    expect(filtros[0].neq).toContainEqual(['entrega_estado', 'rebotado']);
+  it('un "entregado" sobre la pieza recién aceptada (columna NULL) SÍ se escribe — era el bug A4', async () => {
+    // Con `.neq('entrega_estado','rebotado')` esto contestaba `sinPieza` y la
+    // columna se quedaba NULL para siempre.
+    const r = await postear(entregado);
+    expect(await r.json()).toMatchObject({ pieza: 'pz-1', estado: 'entregado' });
+    expect(tabla[0].entrega_estado).toBe('entregado');
+  });
+
+  it('un "entregado" tardío NO pisa a un rebote ni a una queja — la mala noticia es la que opera', async () => {
+    tabla[0].entrega_estado = 'rebotado';
+    expect(await (await postear(entregado)).json()).toMatchObject({ sinPieza: true });
+    expect(tabla[0].entrega_estado).toBe('rebotado');
+    tabla[0].entrega_estado = 'queja';
+    expect(await (await postear(entregado)).json()).toMatchObject({ sinPieza: true });
+    expect(tabla[0].entrega_estado).toBe('queja');
+  });
+
+  it('un rebote SÍ pisa a un "entregado" anterior', async () => {
+    tabla[0].entrega_estado = 'entregado';
+    expect(await (await postear(EVENTO)).json()).toMatchObject({ pieza: 'pz-1', estado: 'rebotado' });
+    expect(tabla[0].entrega_estado).toBe('rebotado');
+  });
+
+  it('un provider_message_id desconocido: 200 con sinPieza, sin tocar nada', async () => {
+    const r = await postear(JSON.stringify({ type: 'email.bounced', data: { email_id: 're_otro' } }));
+    expect(await r.json()).toMatchObject({ sinPieza: true });
+    expect(tabla[0].entrega_estado).toBeNull();
   });
 
   it('un tipo que no rastrea entrega se acusa sin efecto', async () => {
     const r = await postear(JSON.stringify({ type: 'email.opened', data: { email_id: 're_123' } }));
     expect(await r.json()).toMatchObject({ ignorado: 'email.opened' });
-    expect(filtros).toHaveLength(0);
+    expect(tabla[0].entrega_estado).toBeNull();
   });
 
   it('base caída: 500 para que Resend reintente — el evento es la única fuente', async () => {

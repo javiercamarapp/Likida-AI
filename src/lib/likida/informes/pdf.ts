@@ -13,7 +13,7 @@
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
 import { fechaMx } from '@/lib/formato';
-import { LOGO_PNG_BASE64 } from '@/lib/correo/logo';
+import { LOGO_PNG_BASE64 } from '@/lib/marca/logo';
 
 const INK = rgb(0.06, 0.06, 0.09);
 const MUTED = rgb(0.45, 0.47, 0.52);

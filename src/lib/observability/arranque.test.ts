@@ -23,6 +23,7 @@ function ponerTodo() {
   vi.stubEnv('LIKIDA_WHATSAPP_MSG_USD', '0.008');
   vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://likidaai.vercel.app');
   vi.stubEnv('ALERTA_EMAIL', 'operador@likida.ai');
+  vi.stubEnv('LIKIDA_FLOTA_COOKIE_LLAVE', 'llave-de-prueba');
 }
 
 describe('avisarConfiguracionSilenciosa', () => {
@@ -138,6 +139,28 @@ describe('avisarConfiguracionSilenciosa', () => {
 
     avisarConfiguracionSilenciosa();
 
+    const todo = [...err.mock.calls, ...log.mock.calls].map((c) => String(c[0])).join('\n');
+    expect(todo).not.toContain('startup.config_silenciosa');
+  });
+
+  it('en local SÍ dice qué variable DURA falta — es donde nadie tiene panel de logs (M17)', async () => {
+    // Día 1 de alguien nuevo: `cp .env.example .env.local` deja todo vacío y el
+    // servidor levantaba sin decir una palabra; el primer síntoma era el error
+    // del SDK de Supabase al abrir /dashboard. La lista exacta de lo que falta
+    // existía (`faltantes()`) y se callaba precisamente en local.
+    vi.stubEnv('VERCEL_ENV', '');
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const { avisarConfiguracionSilenciosa } = await import('./arranque');
+
+    avisarConfiguracionSilenciosa();
+
+    const errores = err.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(errores).toContain('startup.entorno_grupos');
+    expect(errores).toContain('OPENROUTER_API_KEY');
+    // Y sigue sin el ruido de las silenciosas ni del "todo bien".
     const todo = [...err.mock.calls, ...log.mock.calls].map((c) => String(c[0])).join('\n');
     expect(todo).not.toContain('startup.config_silenciosa');
   });
