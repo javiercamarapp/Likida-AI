@@ -6,7 +6,7 @@
 // LLM ve los gastos ya extraídos como contexto y decide cuándo cuadrar/cerrar.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { randomUUID } from 'crypto';
+import { idLiquidacionDeViaje } from './liquidacion/id';
 import { registerTool, type ToolContext } from '@/lib/llm/tool-executor';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
 import { estaApagado } from './interruptores';
@@ -289,7 +289,9 @@ async function cerrarLiquidacion(ctx: ToolContext, inicioCorrida: Date) {
     let pdfPath: string | undefined;
     let pdfOperadorPath: string | undefined;
     try {
-      const full: Liquidacion = { ...liq, id: randomUUID(), creadaEn: new Date().toISOString() };
+      // DAT-41: el id del papel es el que la fila va a tener (0159), no uno
+      // inventado que nadie podrá buscar.
+      const full: Liquidacion = { ...liq, id: idLiquidacionDeViaje(ctx.viajeId!), creadaEn: new Date().toISOString() };
       const v = viaje ?? { id: ctx.viajeId!, anticipo: liq.totalAnticipo };
       const o = operador ?? { id: ctx.operadorId ?? '', nombre: 'Operador', telefono: ctx.telefono ?? '' };
       const subir = async (bytes: Uint8Array, path: string) => {
