@@ -8,14 +8,9 @@ import { CalendarHeatmap, HBars } from '@/app/admin/ui/graficas';
 import { Dona } from '@/app/admin/charts';
 import { BarraPagina } from '../../resumen-visual';
 
-/** Cómo se lee cada tipo de diferencia del motor en la dona. Un tipo nuevo
- *  cae al reemplazo genérico, nunca a texto vacío. */
-const TIPO_DIFERENCIA: Record<string, string> = {
-  sobre_politica: 'Sobre política',
-  duplicado: 'Duplicado',
-  sin_comprobar: 'Sin comprobar',
-};
-const rotuloTipo = (t: string) => TIPO_DIFERENCIA[t] ?? t.replaceAll('_', ' ');
+// El rótulo de cada tipo de diferencia vive en `rotulo-diferencia.ts`, tipado
+// contra `TipoDiferencia` completo (M10) — aquí había 3 renglones para ~35 tipos.
+import { rotuloDiferencia as rotuloTipo } from './rotulo-diferencia';
 
 export interface ExtraAgenteLiquidacion {
   /** ¿El rol puede abrir /dashboard/configuracion? (El contador no —

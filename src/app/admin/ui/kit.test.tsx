@@ -132,3 +132,38 @@ describe('StatCard — no medible (valor null) NO es "$0.00"', () => {
     expect(html).not.toContain('sin viajes en el periodo');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18, ALTO (A12) — `delta === null` es "se intentó comparar y no hay
+// contra qué" (`pctCambio(84300, 0)` → null; o el bucket único de "histórico").
+// La tarjeta imprimía "0% · sin movimiento": el contralor que NO gastó la
+// semana pasada y gastó $84,300 esta leía que su gasto no se movió.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('StatCard — delta null (sin comparable) no afirma "0%"', () => {
+  it('con cifra real y delta null: ni "0%" ni "sin movimiento"; dice que no hubo comparación', () => {
+    const html = renderToStaticMarkup(
+      <StatCard icono={ICONO} etiqueta="Gasto total — últimos 7 días" valor={84300} formato="mxn" delta={null} />,
+    );
+    expect(html).toContain('$84,300.00');
+    expect(html).not.toContain('0%');
+    expect(html).not.toContain('sin movimiento');
+    expect(html).toContain('sin periodo comparable');
+  });
+
+  it('un 0% REAL (comparó y no cambió) sigue diciéndolo — no es el mismo bug al revés', () => {
+    const html = renderToStaticMarkup(
+      <StatCard icono={ICONO} etiqueta="Gasto total" valor={500} formato="mxn" delta={{ pct: 0, bueno: true }} />,
+    );
+    expect(html).toContain('0%');
+    expect(html).toContain('sin cambio vs periodo anterior');
+    expect(html).not.toContain('sin periodo comparable');
+  });
+
+  it('con delta OMITIDO no se pinta ningún pie (Diésel va limpio)', () => {
+    const html = renderToStaticMarkup(
+      <StatCard icono={ICONO} etiqueta="Diésel elegible" valor={1200} formato="litros" />,
+    );
+    expect(html).not.toContain('sin periodo comparable');
+    expect(html).not.toContain('sin movimiento');
+  });
+});
