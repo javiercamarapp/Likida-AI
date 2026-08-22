@@ -62,6 +62,8 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   // verifica—, pero la norma que respalda ESE aviso sí existe y el agente debe
   // poder citarla al explicarlo.
   permiso_cre_no_verificable: ['lisr-27-fr-III', 'rfa-2026-2.9'],
+  // AUDITORÍA 18, M5: "en ningún caso los consumos en bares serán deducibles".
+  consumo_bar: ['lisr-28-fr-XX'],
 };
 
 /**
@@ -130,7 +132,9 @@ export function normasDe(tipos: TipoDiferencia[]): string[] {
  */
 const NORMA_POR_CONCEPTO: Record<string, string[]> = {
   diesel: ['lisr-27-fr-III', 'rfa-2026-2.9', 'lif-2026-art-20-A'],
-  caseta: ['lif-2026-art-20-A'],
+  // AUDITORÍA 18, A7: la regla que instrumenta el estímulo (aviso, bitácora,
+  // pago electrónico, base sin IVA) no se podía citar al explicar una caseta.
+  caseta: ['lif-2026-art-20-A', 'rmf-2026-9.1.8'],
   alimentacion: ['lisr-28-fr-V'],
   hospedaje: ['lisr-28-fr-V'],
   transporte: ['lisr-28-fr-V'],

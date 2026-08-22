@@ -58,3 +58,6 @@ usado_en_codigo:
   - "src/app/api/export/bitacora-peaje/route.ts — el CSV descargable de la bitácora, con la leyenda de qué fracciones cumple y cuáles corren por cuenta del contribuyente"
   - "src/app/dashboard/agentes/peajes/vista.tsx — la card del estímulo: cada renglón dice qué fracción produce esta pantalla y cuáles van por cuenta de la flota"
   - "cuadre/engine.ts — peajeAcreditable: factor 0.5 sobre el SubTotal sin IVA, la base que la fr. IV fija"
+  - "cuadre/engine.ts — MEDIOS_ELECTRONICOS_PEAJE (auditoría 18, A7): la fr. III como lista cerrada de c_FormaPago (03, 04, 05, 06, 28, 29); una caseta en efectivo, cheque, dación o compensación no entra a peajeAcreditable"
+  - "liquidacion/acreditable.ts — BASE_ESTIMULO_PEAJE cita la fr. IV (A8) y CONDICIONES_ESTIMULO_PEAJE nombra las fr. I-III y dice cuál cerró el motor (A7)"
+  - "normas/por_diferencia.ts — citable al explicar una caseta (NORMA_POR_CONCEPTO.caseta)"

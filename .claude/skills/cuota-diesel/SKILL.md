@@ -27,7 +27,21 @@ GET https://sidofqa.segob.gob.mx/dof/sidof/notas/nota/{codNota}
 ```
 El HTML íntegro viene en `cadenaContenido`. La cifra sale con `Di[ée]sel\s+\$([\d.]+)` — probado limpio en los 10 acuerdos verificados.
 
-Escribir en `normas/cuota-ieps-diesel.yaml` una entrada con `cuota`, `vigencia_desde`, `vigencia_hasta` (sábado a viernes), `cod_nota`, `fecha_publicacion` y `url`. **Se agrega, no se sobrescribe**: el histórico es lo que permite liquidar un viaje de hace tres semanas con la cuota que estaba vigente ese día.
+Escribir en **`normas/datos/cuota-ieps-diesel.yaml`** (en `datos/`, no en la raíz de `normas/`) una fila nueva AL FINAL de `semanas:`, con el esquema que ya tienen las filas existentes — cópialo, no lo reinventes:
+
+```yaml
+  - vigencia: 2026-08-22 a 2026-08-28          # sábado a viernes
+    porcentaje_estimulo: 70.00
+    reduccion_shcp_por_litro: 5.1544           # el recorte de la SHCP a la cuota completa
+    cuota_disminuida_por_litro: 2.2090         # ← ÉSTA es el estímulo por litro de la flota
+    fuente: { dof: 2026-08-21, edicion: vespertina, codNota: 5796xxx }
+```
+
+**Aritmética obligatoria:** `reduccion_shcp_por_litro + cuota_disminuida_por_litro = cuota_completa_lif_2026` (7.3634), al diezmilésimo. Si no cierra, no se escribe: se reporta con las cifras crudas.
+
+**Se agrega, no se sobrescribe**: el histórico es lo que permite liquidar un viaje de hace tres semanas con la cuota que estaba vigente ese día.
+
+**Quién lo lee:** `src/lib/likida/cuadre/cuota_diesel.ts` y su prueba `cuota_diesel.test.ts`, que corre sobre el archivo real: una fila con hueco, traslape, aritmética que no cierra o el nombre viejo `estimulo_por_litro` rompe `npm test`. Corre `npx vitest run src/lib/likida/cuadre/cuota_diesel.test.ts` antes de abrir el PR.
 
 ## Cuando no encuentra el acuerdo
 
@@ -41,7 +55,7 @@ Un número extraído por regex no se cree hasta compararlo. Tres chequeos, los t
 
 1. **Rango sano.** La cuota histórica vive entre $0 y ~$8/L. Fuera de eso, el regex agarró otra cifra del documento.
 2. **Contra la anterior.** Un salto de más de 2x se reporta en el PR de forma destacada — no se bloquea, porque el salto de junio a julio fue real, pero merece que alguien lo mire.
-3. **La vigencia empalma.** El `vigencia_desde` de la nueva es el día siguiente del `vigencia_hasta` de la anterior. Un hueco significa un viernes perdido.
+3. **La vigencia empalma.** El sábado con que abre la `vigencia` nueva es el día siguiente del viernes con que cierra la anterior. Un hueco significa un viernes perdido (`validarCuotasDiesel` lo reporta como «no empalma»).
 
 ## Entrega
 

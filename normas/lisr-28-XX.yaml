@@ -47,7 +47,19 @@ relacion_con_fraccion_V: >
 norma_relacionada: lisr-28-fr-V
 hallazgos_que_el_codigo_NO_implementa:
   - id: H4
-    estado: NO_IMPLEMENTADO
+    estado: PARCIAL_CONSERVADOR
+    avance_auditoria_18_M5: >
+      El motor todavía NO afirma 0% ni 8.5% (la clasificación
+      bar/restaurante/viático sigue sin existir en el intake). Lo que sí hace
+      desde la auditoría 18: si la razón social o el producto leídos del
+      ticket de `alimentacion` parecen un BAR (`pareceBar` en
+      cuadre/engine.ts, por palabra completa: bar, cantina, cervecería,
+      pulquería, antro, cabaret, table dance, vinos y licores), emite
+      `consumo_bar`: el gasto cae a POR CONFIRMAR (no a deducible), no
+      acredita IVA (LIVA 5-I) y la liquidación baja a revisión. Tercer
+      estado, no negación automática: "Snack Bar" sería un falso positivo y
+      el contralor lo reclasifica. Lo que falta sigue siendo (a) y (b) de
+      `para_cerrarlo`.
     severidad: media
     que_dice_la_ley: >
       Los consumos en BARES nunca son deducibles (0%), y los consumos en
@@ -76,10 +88,13 @@ hallazgos_que_el_codigo_NO_implementa:
       la faja de 50km (H3, ya pendiente). Sin ambos, el motor no puede
       afirmar el 8.5%/0% con la misma disciplina fail-closed que ya usa para
       combustible en efectivo (RFA 2.9): mejor no afirmarlo que afirmarlo mal.
-usado_en_codigo: []
+usado_en_codigo:
+  - "cuadre/engine.ts — SENAL_BAR / pareceBar y la diferencia consumo_bar (POR_CONFIRMAR, SIN_ACREDITAMIENTO, REVISAR): la lectura conservadora de 'en ningún caso los consumos en bares serán deducibles'"
+  - "normas/por_diferencia.ts — consumo_bar cita esta ficha"
 pendiente_en_producto: >
-  Esta ficha documenta una regla que el producto TODAVÍA NO implementa. No
-  hay `usado_en_codigo` porque no hay código que la use. El hallazgo H4 es
-  para el pipeline de mejora diaria, no para esta ficha resolverlo.
+  La regla se implementa solo en su lectura conservadora (ver H4): el motor
+  deja de afirmar deducible lo que parece bar, pero no afirma 0% ni 8.5%
+  porque el intake no distingue bar/restaurante/viático. Cerrarla de verdad
+  sigue siendo tarea del pipeline de mejora diaria (campo nuevo en el OCR).
 verificado_por: "experto fiscal semanal, área 3 (viáticos/efectivo), 16-ago-2026"
 verificado_el: 2026-08-16
