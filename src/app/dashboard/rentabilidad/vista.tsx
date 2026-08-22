@@ -1,10 +1,24 @@
+import Link from 'next/link';
 import {
   ChartNoAxesCombined, Banknote, ReceiptText, TrendingUp, Wallet, CalendarClock,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import type { Rentabilidad, Cobranza } from '@/lib/likida/comercial';
 import { StatCard, EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
-import { mxn, fechaCorta } from '@/lib/formato';
+import { mxn, fechaCorta, numero } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
+
+const BTN_PAGINA = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
+
+/** El href de otra página de la cartera, conservando el sufijo de
+ *  previsualización (`?tenant=`/`?vista=`/`?rol=`): si un link lo pierde, el
+ *  siguiente clic devuelve al superadmin a otra flota sin avisar. */
+export function hrefPagina(sufijo: string, pagina: number): string {
+  const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
+  if (pagina > 1) params.set('p', String(pagina)); else params.delete('p');
+  const qs = params.toString();
+  return `/dashboard/rentabilidad${qs ? `?${qs}` : ''}`;
+}
 
 /**
  * La vista de Rentabilidad y cobranza — pura props para poder verificarla
@@ -13,13 +27,23 @@ import { BarraPagina } from '../resumen-visual';
  * una tabla ilegible).
  */
 export function VistaRentabilidad({
-  rentabilidad, cobranza,
+  rentabilidad, cobranza, sufijo = '',
 }: {
   rentabilidad: Rentabilidad | null;
   cobranza: Cobranza | null;
+  /** El `?tenant=`/`?vista=`/`?rol=` que hay que conservar al pasar de página. */
+  sufijo?: string;
 }) {
   const sinNada = rentabilidad !== null && cobranza !== null
-    && rentabilidad.viajesConIngreso === 0 && cobranza.facturas.length === 0;
+    && rentabilidad.viajesConIngreso === 0 && cobranza.total === 0;
+
+  // El rango de la página, para decirlo en palabras. `desde` es 0 cuando la
+  // página quedó vacía (alguien tecleó `?p=99`): entonces el renglón dice
+  // "0–0 de N", que es la verdad, en vez de un rango inventado.
+  const desde = cobranza && cobranza.facturas.length
+    ? (cobranza.pagina - 1) * cobranza.porPagina + 1 : 0;
+  const hasta = cobranza ? (cobranza.pagina - 1) * cobranza.porPagina + cobranza.facturas.length : 0;
+  const hayMas = cobranza ? hasta < cobranza.total : false;
 
   return (
     <main className="h-full">
@@ -143,6 +167,32 @@ export function VistaRentabilidad({
                         ))}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* ── La cartera viene PAGINADA (mig. 0152) ──────────────
+                      Se dice el rango Y el total: recortar la lista está
+                      bien, recortar la cifra sin decirlo no. Las tarjetas de
+                      arriba (por cobrar, vencido) son de TODAS las facturas,
+                      no de esta página — por eso el renglón lo aclara. */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+                      {`Facturas ${numero(desde)}–${numero(hasta)} de ${numero(cobranza.total)}, `}
+                      {'las vencidas primero. Por cobrar y vencido de arriba son de la cartera completa.'}
+                    </span>
+                    {(cobranza.pagina > 1 || hayMas) && (
+                      <div className="flex items-center gap-1.5">
+                        {cobranza.pagina > 1 && (
+                          <Link href={hrefPagina(sufijo, cobranza.pagina - 1)} className={BTN_PAGINA} style={{ background: 'var(--surface)' }}>
+                            <ChevronLeft width={13} height={13} strokeWidth={1.75} aria-hidden /> Anteriores
+                          </Link>
+                        )}
+                        {hayMas && (
+                          <Link href={hrefPagina(sufijo, cobranza.pagina + 1)} className={BTN_PAGINA} style={{ background: 'var(--surface)' }}>
+                            Siguientes <ChevronRight width={13} height={13} strokeWidth={1.75} aria-hidden />
+                          </Link>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </section>
               )}

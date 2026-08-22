@@ -181,6 +181,19 @@ function BloqueCartera({ datos, captura }: { datos: FacturacionClientes; captura
           <TablaClientes clientes={c.clientes} />
           <TablaFacturas facturas={c.facturas} captura={captura} />
 
+          {/* RECORTAR LA LISTA ESTÁ BIEN; RECORTAR LA CIFRA SIN DECIRLO, NO.
+              Desde la 0152 la tabla trae a lo más 100 renglones —las más
+              vencidas primero—, mientras que las cubetas, el por cobrar y el
+              corte por cliente son de TODAS. Sin este renglón, quien cuente
+              las filas y las sume no cuadraría contra las tarjetas de arriba
+              y descartaría la tabla entera. */}
+          {c.facturasTotal > c.facturas.length && (
+            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+              Se listan las {numero(c.facturas.length)} más atrasadas de {numero(c.facturasTotal)} facturas.
+              Las cubetas, el total por cobrar y el corte por cliente son de todas, no de esta lista.
+            </p>
+          )}
+
           {(c.borradores > 0 || c.canceladas > 0) && (
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
               {c.borradores > 0 && `${plural(c.borradores, 'factura está en borrador', 'facturas están en borrador')} y no suma al por cobrar: Likida no timbra, así que mientras no llegue su UUID del CFDI no le cobra a nadie. `}

@@ -6256,4 +6256,251 @@ begin
   raise exception E'AGREGADOS_0150  funcs=%  invoker=%  ninguna_anon=%  ninguna_auth=%  todas_svc=%  anomalias_ok=%  semanal_ok=%  rutas_ok=%  concepto_ok=%  stats_ok=%  liquidado_ok=%  meses_ok=%  detalle_ok=%  dinero_ok=%  dias_ok=%  consolidado_ok=%   (esperado 11/t/t/t/t y once t)',
     n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc,
     ok_anom, ok_sem, ok_rutas, ok_conc, ok_stats, ok_liq, ok_meses, ok_det, ok_dinero, ok_dias, ok_cons;
+-- ── 124. Los 7 agregados de la 0152: existen, INVOKER, aislados y cuadran ───
+--
+-- La 0152 movió OCHO lecturas del lado del ingreso y del encargado de "traer
+-- la tabla a JS" a `sum()`/`count()` en SQL (docs/escala-50k/MAPA.md #12-#19).
+-- Mismo criterio que el bloque 89 (0112), y las mismas cuatro comprobaciones:
+--
+--  1. **Las 7 existen, son SECURITY INVOKER y los permisos son los correctos**
+--     (anon/authenticated ciegos, service_role puede), leído del catálogo.
+--
+--  2. **AISLAMIENTO entre flotas.** Las llama `service_role`, que salta RLS:
+--     el `where tenant_id = p_tenant` es lo ÚNICO que separa una flota de
+--     otra. Se siembran DOS flotas con cifras distintas y se exige que las de
+--     A no contengan ni un peso de B — con una sola flota esto pasaría
+--     siempre sin probar nada. La flota B trae 99,999 de ingreso, 88,888 de
+--     comprobado y una factura de 70,000 vencida: cualquier fuga se ve.
+--
+--  3. **QUE CUADRAN** contra el cálculo hecho a mano sobre la siembra — el
+--     mismo dataset que usan las pruebas de equivalencia JS-vs-RPC en TS
+--     (comercial_equivalencia.test.ts, operacion_equivalencia.test.ts), aquí
+--     contra Postgres de verdad y no contra un espejo en JS.
+--
+--  4. **QUE LA CARTERA CUADRA CONTRA SÍ MISMA**: la suma de las cinco cubetas
+--     ES el `porCobrar`, al centavo. Es la única comprobación que un contralor
+--     le puede hacer a esa tabla de un vistazo, y una tabla que no cuadra por
+--     un centavo se descarta entera.
+--
+-- LA SIEMBRA (flota A), y por qué cada fila:
+--   · va1 liquidado, ingreso 10,000, cliente ca, unidad ua, POD ninguno.
+--   · va2 liquidado SIN ingreso (null ≠ 0), cliente ca, con factura BORRADOR
+--     (F3, vía factura_viaje) y factura CANCELADA (F4, vía viaje_id): sigue
+--     "en la mesa" y marcado `soloBorrador` — el caso de refacturación que la
+--     0049 previó.
+--   · va3 abierto, cliente ca2, ingreso 5,000, unidad ua, POD subido.
+--   · va4 en_cuadre, SIN cliente y SIN unidad, del operador oa2, con una
+--     incidencia abierta con SLA: alimenta `sinUnidad`, `podPendientes` e
+--     `incidenciasAbiertas`.
+--   · F1 emitida 11,600 con 5,000 pagados y vencida hace 45 días → saldo 6,600
+--     en la cubeta 31-60. F2 emitida 2,320 SIN vence_en → cubeta sin_fecha (no
+--     es corriente ni vencida: no se pactó cuándo).
+--   · Una incidencia RESUELTA hace 200 días: no la lista `incidencias_tenant`
+--     con `p_desde` de 90 días, y sí cuando `p_desde` es null.
+--
+-- TRAMPAS DE SIEMBRA (las que atraparon las primeras corridas):
+--   `viaje.operador_id` es NOT NULL; `liquidacion_diferencia_cuadra` exige
+--   `diferencia = total_anticipo - total_comprobado`; `liquidacion_viaje_uidx`
+--   admite UNA liquidación por viaje; `factura_total_cuadra` exige
+--   `total = subtotal + iva`; `factura_borrador_sin_uuid`; y
+--   `uq_viaje_abierto_por_operador` (0029) deja UN solo 'abierto' por operador.
+--
+-- SALIDA REAL (22-ago-2026, primera corrida en verde):
+--   AGREGADOS_0152  funcs=7  invoker=t  ninguna_anon=t  ninguna_auth=t
+--   todas_svc=t  rent_ok=t  cart_ok=t  cob_ok=t  cob_pag=2  fact_ok=t
+--   cubetas_cuadran=t  mesa_ok=t  tab_ok=t  carga_ok=t  inc_ok=t  inc_90=1
+--   inc_todas=2   (esperado 7/t/t/t/t/t/t/t/2/t/t/t/t/t/t/1/2)
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; oa2 uuid; ob uuid; ca uuid; ca2 uuid; cb uuid;
+  va1 uuid; va2 uuid; va3 uuid; va4 uuid; vb1 uuid; ua uuid; ub uuid;
+  fa1 uuid; fa2 uuid; fa3 uuid; fa4 uuid;
+  n_funcs int; todas_invoker boolean; ninguna_anon boolean; ninguna_auth boolean; todas_svc boolean;
+  j jsonb; jc jsonb; jm jsonb;
+  ok_rent boolean; ok_cart boolean; ok_cob boolean; n_cob_pag int; ok_fact boolean;
+  cubetas_cuadran boolean; ok_mesa boolean; ok_tab boolean; ok_carga boolean; ok_inc boolean;
+  n_inc_90 int; n_inc_todas int;
+begin
+  -- ── FLOTA A: la que se mide ────────────────────────────────────────────
+  insert into tenant (nombre) values ('ZZZ VERIF 0152 A') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ Ana 0152', '5215559990152') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono, activo) values (ta, 'ZZZ Beto 0152', '5215559990153', false) returning id into oa2;
+  insert into cliente (tenant_id, nombre, rfc, dias_credito, contacto)
+    values (ta, 'ZZZ Cementos 0152', 'CEM010101AAA', 30, 'Lic. Paz') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ Acero 0152') returning id into ca2;
+  insert into unidad (tenant_id, numero_economico, estado) values (ta, 'ZZZ-0152-T01', 'disponible') returning id into ua;
+  insert into unidad (tenant_id, numero_economico, estado) values (ta, 'ZZZ-0152-T02', 'taller');
+  -- Inactiva: NO cuenta como disponible (el tablero mira `activo`).
+  insert into unidad (tenant_id, numero_economico, estado, activo) values (ta, 'ZZZ-0152-T03', 'disponible', false);
+
+  -- `created_at` EXPLÍCITO en los dos liquidados: es la columna por la que
+  -- `carga_operadores_tenant` acota (FE-3) y `rentabilidad_tenant` corta por
+  -- periodo. Con el default (`now()`) una ventana de un día los seguiría
+  -- contando y la prueba del filtro pasaría sin probar nada.
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, fecha_fin, anticipo, cliente_id, ingreso_flete, unidad_id, created_at)
+    values (ta, oa, 'ZZZ-0152-A1', 'liquidado', current_date - 40, current_date - 38, 1000, ca, 10000, ua, now() - interval '40 days') returning id into va1;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, fecha_fin, anticipo, cliente_id, ingreso_flete, created_at)
+    values (ta, oa, 'ZZZ-0152-A2', 'liquidado', current_date - 10, current_date - 9, 800, ca, null, now() - interval '10 days') returning id into va2;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, cliente_id, ingreso_flete, unidad_id)
+    values (ta, oa, 'ZZZ-0152-A3', 'abierto', current_date - 1, 500, ca2, 5000, ua) returning id into va3;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo)
+    values (ta, oa2, 'ZZZ-0152-A4', 'en_cuadre', current_date - 2, 500) returning id into va4;
+
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus, created_at)
+    values (ta, va1, 1500, 1000, -500, 'cuadrada',
+            (current_date - 38)::timestamp at time zone 'America/Mexico_City' + interval '20 hours');
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus, created_at)
+    values (ta, va2, 700, 800, 100, 'cuadrada',
+            (current_date - 9)::timestamp at time zone 'America/Mexico_City' + interval '3 hours');
+
+  insert into factura_emitida (tenant_id, cliente_id, viaje_id, folio, fecha, subtotal, iva, total, estatus, vence_en)
+    values (ta, ca, va1, 'ZZZ-0152-F1', current_date - 75, 10000, 1600, 11600, 'emitida', current_date - 45) returning id into fa1;
+  insert into factura_emitida (tenant_id, cliente_id, folio, fecha, subtotal, iva, total, estatus, vence_en)
+    values (ta, ca2, 'ZZZ-0152-F2', current_date - 3, 2000, 320, 2320, 'emitida', null) returning id into fa2;
+  insert into factura_emitida (tenant_id, cliente_id, folio, fecha, subtotal, iva, total, estatus, vence_en)
+    values (ta, ca, 'ZZZ-0152-F3', current_date - 2, 1000, 0, 1000, 'borrador', current_date + 28) returning id into fa3;
+  insert into factura_emitida (tenant_id, cliente_id, viaje_id, folio, fecha, subtotal, iva, total, estatus, vence_en)
+    values (ta, ca, va2, 'ZZZ-0152-F4', current_date - 1, 500, 0, 500, 'cancelada', current_date + 29) returning id into fa4;
+  insert into factura_viaje (factura_id, viaje_id) values (fa3, va2);
+  insert into pago_recibido (tenant_id, factura_id, fecha, monto) values (ta, fa1, current_date - 30, 5000);
+
+  insert into pod (tenant_id, viaje_id, estado, storage_path) values (ta, va3, 'subido', 'zzz/0152.jpg');
+  insert into incidencia (tenant_id, viaje_id, unidad_id, tipo, prioridad, estado, sla_horas, abierta_en)
+    values (ta, va4, ua, 'retraso', 'alta', 'abierta', 4, now() - interval '12 hours');
+  insert into incidencia (tenant_id, viaje_id, tipo, estado, abierta_en, resuelta_en)
+    values (ta, va1, 'averia', 'resuelta', now() - interval '200 days', now() - interval '199 days');
+
+  -- ── FLOTA B: solo para probar que NO contamina a A ─────────────────────
+  insert into tenant (nombre) values ('ZZZ VERIF 0152 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ Otro 0152', '5215559990154') returning id into ob;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ Ajeno 0152') returning id into cb;
+  insert into unidad (tenant_id, numero_economico, estado) values (tb, 'ZZZ-0152-B01', 'disponible') returning id into ub;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo, cliente_id, ingreso_flete, unidad_id)
+    values (tb, ob, 'ZZZ-0152-B1', 'abierto', current_date - 5, 200, cb, 99999, ub) returning id into vb1;
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia, estatus)
+    values (tb, vb1, 88888, 200, -88688, 'cuadrada');
+  insert into factura_emitida (tenant_id, cliente_id, viaje_id, folio, fecha, subtotal, iva, total, estatus, vence_en)
+    values (tb, cb, vb1, 'ZZZ-0152-FB', current_date - 90, 70000, 0, 70000, 'emitida', current_date - 60);
+  insert into incidencia (tenant_id, viaje_id, unidad_id, tipo, estado)
+    values (tb, vb1, ub, 'averia', 'abierta');
+
+  -- ── 1. Catálogo: existencia, INVOKER, permisos ─────────────────────────
+  select count(*),
+         count(*) filter (where p.prosecdef = false) = 7,
+         count(*) filter (where has_function_privilege('anon', p.oid, 'execute')) = 0,
+         count(*) filter (where has_function_privilege('authenticated', p.oid, 'execute')) = 0,
+         count(*) filter (where has_function_privilege('service_role', p.oid, 'execute')) = 7
+    into n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname in ('rentabilidad_tenant', 'cartera_tenant', 'cobranza_tenant',
+                       'facturacion_clientes_tenant', 'tablero_operacion_tenant',
+                       'carga_operadores_tenant', 'incidencias_tenant');
+
+  -- ── 2+3. Rentabilidad: 15,000 de ingreso (el null NO suma), 2 sin ingreso ─
+  j := rentabilidad_tenant(ta, null);
+  ok_rent := (j->>'ingreso')::numeric = 15000        -- si B contamina: +99,999
+         and (j->>'costoComprobado')::numeric = 2200 -- si B contamina: +88,888
+         and (j->>'viajesConIngreso')::int = 2
+         and (j->>'viajesSinIngreso')::int = 2;
+
+  -- ── 2+3. Cartera: reparto por cliente, saldo del más grande, sin cliente ─
+  j := cartera_tenant(ta);
+  ok_cart := (j->'clientes'->0->>'nombre') = 'ZZZ Cementos 0152'
+         and (j->'clientes'->0->>'ingreso')::numeric = 10000
+         and (j->'clientes'->0->>'viajesSinIngreso')::int = 1
+         and (j->'clientes'->0->>'saldoPorCobrar')::numeric = 6600
+         and (j->'clientes'->0->>'vencido')::numeric = 6600
+         and (j->'clientes'->1->>'saldoPorCobrar')::numeric = 2320
+         and (j->'clientes'->1->>'vencido')::numeric = 0
+         and (j->>'viajesSinCliente')::int = 1
+         and (j->>'conIngreso')::int = 2
+         and jsonb_array_length(j->'clientes') = 2;   -- el de B no está
+
+  -- ── 2+3. Cobranza: agregados sobre TODO, lista PAGINADA ────────────────
+  j := cobranza_tenant(ta, null, null, 100, 0);
+  ok_cob := (j->>'porCobrar')::numeric = 8920         -- 6,600 + 2,320 (ni borrador ni cancelada)
+        and (j->>'vencido')::numeric = 6600
+        and (j->>'sinCondiciones')::int = 1
+        and (j->'facturas'->0->>'folio') = 'ZZZ-0152-F1'   -- la vencida primero
+        and (j->'facturas'->0->>'cliente') = 'ZZZ Cementos 0152'
+        and jsonb_array_length(j->'facturas') = 4;
+  -- La página de 2 con desplazamiento 2 devuelve 2 renglones y los MISMOS
+  -- agregados: recortar la lista nunca recorta la cifra.
+  j := cobranza_tenant(ta, null, null, 2, 2);
+  n_cob_pag := jsonb_array_length(j->'facturas');
+  ok_cob := ok_cob and (j->>'porCobrar')::numeric = 8920;
+
+  -- ── 2+3+4. Facturación a clientes: cartera por antigüedad + la mesa ────
+  j := facturacion_clientes_tenant(ta, current_date, null, null, 100);
+  jc := j->'cartera';
+  jm := j->'enLaMesa';
+  ok_fact := (jc->>'vivas')::int = 2
+         and (jc->>'borradores')::int = 1
+         and (jc->>'canceladas')::int = 1
+         and (jc->>'facturado')::numeric = 13920
+         and (jc->>'cobrado')::numeric = 5000
+         and (jc->>'porCobrar')::numeric = 8920
+         and (jc->>'vencido')::numeric = 6600
+         and (jc->>'sinCondiciones')::int = 1
+         and (jc->'cubetas'->2->>'clave') = 'v31_60'
+         and (jc->'cubetas'->2->>'saldo')::numeric = 6600     -- vencida hace 45 días
+         and (jc->'cubetas'->4->>'saldo')::numeric = 2320     -- sin_fecha, NO corriente
+         and (jc->'clientes'->0->>'diasMasVencido')::int = 45;
+  -- La suma de las CINCO cubetas es EXACTAMENTE el por cobrar.
+  select coalesce(sum((c->>'saldo')::numeric), 0) = (jc->>'porCobrar')::numeric
+    into cubetas_cuadran
+    from jsonb_array_elements(jc->'cubetas') c;
+  -- La mesa: va2 (liquidado, con borrador y con cancelada) sigue sin facturar;
+  -- va1 (con factura viva) NO está. Su ingreso es null → no suma, se cuenta.
+  ok_mesa := (jm->>'total')::int = 1
+         and (jm->'viajes'->0->>'folio') = 'ZZZ-0152-A2'
+         and (jm->'viajes'->0->>'soloBorrador')::boolean
+         and (jm->>'sinIngreso')::int = 1
+         and (jm->>'ingresoCapturado')::numeric = 0
+         and (jm->>'diasMasViejo')::int = 9      -- cierre en día LOCAL MX, no UTC
+         and (j->>'viajesLiquidados')::int = 2;
+
+  -- ── 2+3. Tablero del encargado: seis conteos, ninguno es dinero ────────
+  j := tablero_operacion_tenant(ta);
+  ok_tab := (j->>'viajesActivos')::int = 2        -- va3 + va4 (el de B no)
+        and (j->>'sinUnidad')::int = 1            -- va4
+        and (j->>'unidadesDisponibles')::int = 1  -- la inactiva NO cuenta
+        and (j->>'unidadesEnTaller')::int = 1
+        and (j->>'incidenciasAbiertas')::int = 1  -- la resuelta no; la de B tampoco
+        and (j->>'podPendientes')::int = 1;       -- va4: nadie creó el registro
+
+  -- ── 2+3. Carga por operador: vivos siempre, liquidados en ventana (FE-3) ─
+  j := carga_operadores_tenant(ta, now() - interval '90 days');
+  ok_carga := jsonb_array_length(j) = 2
+          and (j->0->>'nombre') = 'ZZZ Ana 0152'
+          and (j->0->>'enCurso')::int = 1
+          and (j->0->>'liquidados')::int = 2
+          and (j->0->>'sinPod')::int = 0          -- va3 tiene POD subido
+          and (j->1->>'nombre') = 'ZZZ Beto 0152'
+          and (j->1->>'sinPod')::int = 1          -- va4 sin POD
+          and (j->1->>'incidenciasAbiertas')::int = 1
+          and (j->1->>'activo')::boolean = false;
+  -- Con ventana de 1 día, los dos liquidados (hace 38 y 9) quedan fuera y el
+  -- operador sigue apareciendo con sus vivos: filtrar no borra operadores.
+  ok_carga := ok_carga
+          and (carga_operadores_tenant(ta, now() - interval '1 day')->0->>'liquidados')::int = 0;
+
+  -- ── 2+3. Incidencias: join en SQL, resueltas acotadas por ventana ──────
+  n_inc_90 := jsonb_array_length(incidencias_tenant(ta, now() - interval '90 days', 500));
+  n_inc_todas := jsonb_array_length(incidencias_tenant(ta, null, 500));
+  -- El JOIN: folio del viaje y número económico de la unidad, resueltos en
+  -- SQL y anclados por tenant. Antes esto costaba traer los 600k viajes.
+  j := incidencias_tenant(ta, now() - interval '90 days', 500);
+  ok_inc := (j->0->>'folio') = 'ZZZ-0152-A4'
+        and (j->0->>'numeroEconomico') = 'ZZZ-0152-T01'
+        and (j->0->>'slaHoras')::int = 4
+        and (j->0->>'estado') = 'abierta';
+
+  delete from tenant where id in (ta, tb);
+
+  raise exception E'AGREGADOS_0152  funcs=%  invoker=%  ninguna_anon=%  ninguna_auth=%  todas_svc=%  rent_ok=%  cart_ok=%  cob_ok=%  cob_pag=%  fact_ok=%  cubetas_cuadran=%  mesa_ok=%  tab_ok=%  carga_ok=%  inc_ok=%  inc_90=%  inc_todas=%   (esperado 7/t/t/t/t/t/t/t/2/t/t/t/t/t/t/1/2)',
+    n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc,
+    ok_rent, ok_cart, ok_cob, n_cob_pag, ok_fact, cubetas_cuadran, ok_mesa,
+    ok_tab, ok_carga, ok_inc, n_inc_90, n_inc_todas;
 end $$;
