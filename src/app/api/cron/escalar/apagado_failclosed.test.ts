@@ -44,6 +44,8 @@ const escalarViajesSinAceptar = vi.fn();
 const ejecutarCobranzaGlobal = vi.fn();
 vi.mock('@/lib/likida/escalar_viaje', () => ({
   escalarViajesSinAceptar: (...a: unknown[]) => escalarViajesSinAceptar(...a),
+  // ESC-3: el cron reparte su reloj entre los dos motores con esta constante.
+  PLAZO_ESCALACION_MS: 40_000,
 }));
 vi.mock('@/lib/likida/agentes/cobranza', () => ({
   ejecutarCobranzaGlobal: (...a: unknown[]) => ejecutarCobranzaGlobal(...a),
@@ -51,6 +53,17 @@ vi.mock('@/lib/likida/agentes/cobranza', () => ({
 const alertarOperador = vi.fn(async () => {});
 vi.mock('@/lib/observability/alerta', () => ({
   alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])),
+}));
+
+// El latido (RES-7) se prueba en src/lib/admin/salud.test.ts; aquí se mockea
+// para que la racha de cortes (RES-6) sea observable sin tocar la base.
+const registrarLatido = vi.fn(async () => {});
+let latidoPrevio: { ultimoLatido: string; estado: string; detalle: Record<string, unknown> } | null = null;
+vi.mock('@/lib/admin/salud', () => ({
+  registrarLatido: (...a: unknown[]) => registrarLatido(...(a as [])),
+  leerLatido: async () => latidoPrevio,
+  puertaCron: async (_c: string, req: Request) =>
+    req.headers.get('authorization') === 'Bearer secreto-de-prueba' ? null : new Response(null, { status: 401 }),
 }));
 
 process.env.CRON_SECRET = 'secreto-de-prueba';
