@@ -58,6 +58,9 @@ const SECCIONES: SeccionLegal[] = [
     parrafos: [
       `Tu **nombre**, tu **correo** y tu **teléfono**.`,
       `Los **datos fiscales de tu empresa** que captures para que el sistema pueda validar facturas a su nombre: RFC, razón social, domicilio fiscal, régimen.`,
+      // AUDITORÍA 18 (M8): el enlace de acceso es un dato que se trata —y que
+      // sale por el proveedor de correo—; la fr. II obliga a enumerarlo.
+      `El **enlace de acceso de un solo uso** que te llega por correo cada vez que entras: se genera para tu dirección, caduca en minutos y se invalida al usarlo.`,
       `**Registros técnicos de uso**: cuándo entras al panel, qué liquidaciones consultas y los errores que produce el sistema mientras lo usas.`,
       `**No se tratan datos sensibles**, ni se piden datos bancarios o de tarjeta.`,
     ],
@@ -76,7 +79,7 @@ const SECCIONES: SeccionLegal[] = [
     fundamento: 'LFPDPPP art. 35 · art. 2 fr. XX',
     parrafos: [
       `**No se venden, y no se comparten con nadie para que los use por su cuenta.**`,
-      `Pasan por proveedores que trabajan por instrucción de Likida y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia**—: alojamiento de aplicación y base de datos, mensajería de WhatsApp, **envío de correo para los avisos del panel**, monitoreo de errores, y los modelos de lenguaje que leen los comprobantes, a los que en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
+      `Pasan por proveedores que trabajan por instrucción de Likida y no pueden usarlos para otra cosa —lo que la ley llama personas encargadas, y que **no es una transferencia**—: alojamiento de aplicación y base de datos, mensajería de WhatsApp, **envío de correo** —tanto los avisos del panel como **el correo con el que entras**: por ese proveedor pasa tu dirección y el enlace de un solo uso que abre tu sesión—, monitoreo de errores, y los modelos de lenguaje que leen los comprobantes, a los que en cada llamada se les pide explícitamente que no retengan lo que procesan.`,
       `El detalle de esos subencargados está en la documentación del producto y se actualiza cuando cambia.`,
       `**Si algún día quisiéramos transferir tus datos para algo distinto, te lo pediríamos antes.** No hacer nada al leer esto no cuenta como haber aceptado.`,
     ],
