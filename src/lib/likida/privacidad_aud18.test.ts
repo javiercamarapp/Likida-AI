@@ -10,7 +10,7 @@ import { avisoIntegral } from './privacidad';
 const FLOTA = {
   razonSocial: 'Transportes Prueba SA de CV',
   domicilio: 'Av. Siempre Viva 1, Escobedo, NL',
-  urlAvisoIntegral: null,
+  urlAvisoIntegral: 'https://app.likida.ai/aviso/11111111-1111-1111-1111-111111111111',
   contactoPrivacidad: null,
 };
 
