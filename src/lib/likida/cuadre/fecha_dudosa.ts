@@ -17,6 +17,8 @@
 // que se le pide al operador.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { hoyMx } from '@/lib/formato';
+
 export type MotivoFechaDudosa =
   /**
    * Ejercicio anterior al corriente. Se detecta CON O SIN rango del viaje.
@@ -55,8 +57,20 @@ export function ventanaDelViaje(
   toleranciaDiasAntes: number,
   ahora: Date,
 ): { fechaMin: string; fechaMax: string; hoy: string } {
-  const hoy = ahora.toISOString().slice(0, 10);
-  const inicio = fechaInicio ? new Date(`${fechaInicio.slice(0, 10)}T00:00:00Z`) : ahora;
+  // EL DÍA DE MÉXICO, NO EL DE UTC (auditoría 18, DAT-28). `toISOString()` da
+  // el día UTC: a las 18:01 de Mérida ya es «mañana» para esta función, así
+  // que el ticket que el operador acaba de recoger —fechado HOY— caía dentro
+  // de la ventana por accidente, y el de mañana también. Seis horas al día en
+  // que la comprobación de «un comprobante del futuro no existe» no existía.
+  //
+  // Al revés duele igual: el 1 de enero a las 00:30 de México, UTC ya dice 1
+  // de enero, pero un ticket del 31 de diciembre pertenece al ejercicio
+  // anterior y `fechaDudosa` lo juzga contra el año equivocado.
+  const hoy = hoyMx(ahora);
+  // El ancla del inicio se arma a mediodía UTC del día de México y no con la
+  // hora real: restar días a un `Date` con hora hace que el corte caiga a
+  // media tarde y que `fechaMin` se corra un día según el huso.
+  const inicio = new Date(`${(fechaInicio ?? hoy).slice(0, 10)}T00:00:00Z`);
   const fechaMin = new Date(inicio.getTime() - toleranciaDiasAntes * 86_400_000)
     .toISOString().slice(0, 10);
   return { fechaMin, fechaMax: hoy, hoy };
