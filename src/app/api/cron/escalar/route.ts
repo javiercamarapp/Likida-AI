@@ -5,6 +5,7 @@ import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interrupto
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { autorizaCron } from '@/lib/auth/cron';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -71,7 +72,8 @@ export async function GET(req: Request) {
       { status: 500 },
     );
   }
-  if (req.headers.get('authorization') !== `Bearer ${secreto}`) {
+  // SEG-5: comparación de tiempo constante (ver `lib/auth/cron.ts`).
+  if (!autorizaCron(req.headers.get('authorization'), secreto)) {
     // Sin cuerpo: a quien no está autorizado no se le dice qué hay detrás.
     return new NextResponse(null, { status: 401 });
   }
