@@ -92,6 +92,22 @@ describe('register — el arranque llama a todo lo que dice que llama', () => {
     expect(verificarAvisoDePrivacidad).toHaveBeenCalled();
   });
 
+  // AUDITORÍA 18, BAJO (B11): el sondeo del aviso hace red externa (hasta 10s)
+  // y `register()` lo esperaba — la primera petición de una instancia fría
+  // pagaba ese tiempo antes del primer 200 a Meta.
+  it('el sondeo del aviso de privacidad NO bloquea el arranque', async () => {
+    const verificarAvisoDePrivacidad = vi.fn(() => new Promise<void>(() => { /* nunca contesta: el host caído */ }));
+    vi.doMock('@/lib/likida/startup', () => ({ verificarMigracionesCriticas: vi.fn(async () => {}), verificarAvisoDePrivacidad }));
+    vi.doMock('@/lib/observability/sentry', () => ({ avisarObservabilidad: vi.fn(), precargar: vi.fn(async () => {}) }));
+    vi.doMock('@/lib/observability/arranque', () => ({ avisarConfiguracionSilenciosa: vi.fn() }));
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+
+    const { register } = await import('./instrumentation');
+    const carrera = await Promise.race([register().then(() => 'arrancó'), new Promise((r) => setTimeout(() => r('colgado'), 200))]);
+    expect(carrera).toBe('arrancó');
+    expect(verificarAvisoDePrivacidad).toHaveBeenCalled(); // y sí se dispara
+  });
+
   it('fuera del runtime de Node no arranca nada', async () => {
     const verificarAvisoDePrivacidad = vi.fn(async () => {});
     vi.doMock('@/lib/likida/startup', () => ({

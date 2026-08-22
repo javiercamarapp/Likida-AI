@@ -139,6 +139,9 @@ vi.mock('@/lib/likida/intake/cfdi_xml', () => ({
   esConsolidado: (xml: { lineas: unknown[] }) => xml.lineas.length > 1,
 }));
 
+const avisarCierreAlJefe = vi.fn(async (_a: unknown) => ({ enviado: true }));
+vi.mock('./avisar_cierre', () => ({ avisarCierreAlJefe: (a: unknown) => avisarCierreAlJefe(a) }));
+
 const { processInbound } = await import('./processor');
 const { PartialExecutionError } = await import('@/lib/llm/openrouter');
 
@@ -501,4 +504,44 @@ describe('AUD3 AG-A1: "ya" pelón y "ya voy" NO son cierre; las formas fuertes s
       expect(runAgent).not.toHaveBeenCalled();
     },
   );
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18, MEDIO (M26 + M27): el jefe recibía el ejemplar del OPERADOR
+// (los veredictos SOLO_CONTRALOR recortados) y, si el PDF del operador no se
+// generaba, no recibía NADA — el aviso vivía dentro del try del papel del chofer.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el aviso al jefe: con el PDF completo y aunque el del operador falle', () => {
+  beforeEach(() => {
+    avisarCierreAlJefe.mockClear();
+    createSignedUrl.mockImplementation(async (path: string) => ({ data: { signedUrl: `https://x/${path}` }, error: null }));
+  });
+
+  it('M26: el PDF que se le manda al jefe es el COMPLETO (`viaje.pdf`), no el `-operador.pdf`', async () => {
+    runAgent.mockResolvedValue(cierre(true));
+    await processInbound(listo);
+    expect(avisarCierreAlJefe).toHaveBeenCalledTimes(1);
+    const { urlPdf } = avisarCierreAlJefe.mock.calls[0][0] as { urlPdf: string };
+    expect(urlPdf).toMatch(/\/v1\.pdf$/);
+    expect(urlPdf).not.toContain('-operador');
+    // Y el chofer sigue recibiendo el suyo: dos firmas, una por ejemplar, y
+    // el documento que sale hacia su número es el `-operador`.
+    const rutas = createSignedUrl.mock.calls.map((c) => c[0] as string);
+    expect(rutas).toContain('t1/v1-operador.pdf');
+    expect(rutas).toContain('t1/v1.pdf');
+    expect(JSON.stringify(documentos()[0].body)).toContain('v1-operador.pdf');
+  });
+
+  it('M27: con pdf_generado=false el jefe RECIBE el aviso igual (sin adjunto si tampoco hay ejemplar completo)', async () => {
+    runAgent.mockResolvedValue(cierre(false));
+    await processInbound(listo);
+    expect(avisarCierreAlJefe).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', viajeId: 'v1', urlPdf: null }));
+  });
+
+  it('M27: el del operador falló pero el completo existe → el jefe recibe aviso Y su PDF', async () => {
+    runAgent.mockResolvedValue(cierre(false, true));
+    await processInbound(listo);
+    const { urlPdf } = avisarCierreAlJefe.mock.calls[0][0] as { urlPdf: string | null };
+    expect(urlPdf).toMatch(/\/v1\.pdf$/);
+  });
 });

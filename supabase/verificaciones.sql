@@ -5768,3 +5768,44 @@ begin
   raise exception E'RETENCION_0148  purgadas=%  quedan=%  frio_sin_contacto=%  reciente_con_contacto=%  llave=%  anon=%   (esperado 1/3/t/t/t/f)',
     purgadas, quedan, frio_sin_contacto, reciente_con_contacto, tiene_llave, anon_ok;
 end $$;
+
+-- ── 121. El claim huérfano se retoma; el completado no (mig. 0149) ──────────
+-- `claimMessage` (conv.ts) decide ante un 23505 con el MISMO update anclado
+-- de aquí: `where completado_en is null and created_at < now() - lease`. Si
+-- alguien quita la columna o cambia la semántica, este bloque lo grita. El
+-- lease real es 150 s; aquí se usan 1 h / 1 min para que el caso sea nítido.
+do $$
+declare
+  retomado int; completado_no_retomado int; fresco_no_retomado int; columna boolean;
+begin
+  select exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'wa_mensaje_procesado' and column_name = 'completado_en'
+  ) into columna;
+
+  -- Huérfano: reclamado hace 1 h, nunca completado → SE RETOMA (1 fila).
+  insert into public.wa_mensaje_procesado (wa_message_id, created_at)
+    values ('zzz-verif-0149-huerfano', now() - interval '1 hour');
+  update public.wa_mensaje_procesado set created_at = now()
+   where wa_message_id = 'zzz-verif-0149-huerfano'
+     and completado_en is null and created_at < now() - interval '1 minute';
+  get diagnostics retomado = row_count;
+
+  -- Completado hace 1 h → NO se retoma (0 filas): es un duplicado de verdad.
+  insert into public.wa_mensaje_procesado (wa_message_id, created_at, completado_en)
+    values ('zzz-verif-0149-completo', now() - interval '1 hour', now() - interval '59 minutes');
+  update public.wa_mensaje_procesado set created_at = now()
+   where wa_message_id = 'zzz-verif-0149-completo'
+     and completado_en is null and created_at < now() - interval '1 minute';
+  get diagnostics completado_no_retomado = row_count;
+
+  -- Fresco (en curso en otra invocación) → NO se retoma (0 filas).
+  insert into public.wa_mensaje_procesado (wa_message_id) values ('zzz-verif-0149-fresco');
+  update public.wa_mensaje_procesado set created_at = now()
+   where wa_message_id = 'zzz-verif-0149-fresco'
+     and completado_en is null and created_at < now() - interval '1 minute';
+  get diagnostics fresco_no_retomado = row_count;
+
+  raise exception E'CLAIM_0149  columna=%  huerfano_retomado=%  completado_retomado=%  fresco_retomado=%   (esperado t / 1 / 0 / 0)',
+    columna, retomado, completado_no_retomado, fresco_no_retomado;
+end $$;

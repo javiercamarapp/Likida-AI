@@ -1,8 +1,9 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { acotada } from './presupuesto';
 import { sendText, sendDocument } from '@/lib/meta/client';
 import { armarAvisoJefe, type ResumenLiquidacion, type DiferenciaResumen } from './cierre_aviso';
-import { telefonoJefeDe } from './contactos';
+import { telefonoParaDineroDe } from './contactos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE LA OFICINA SE ENTERA CUANDO UN CHOFER CIERRA.
@@ -49,15 +50,18 @@ export interface ResultadoAvisoCierre {
  * lado.
  */
 export async function resumenDeCierre(tenantId: string, viajeId: string): Promise<ResumenLiquidacion | null> {
+  // Con techo (auditoría 18, A23): esto corre en el cierre, con la
+  // liquidación YA escrita; un socket que Supabase acepta y no contesta se
+  // quedaba aquí 300s y mataba la invocación antes de `saveConversation`.
   const admin = supabaseAdmin();
   const [rLiq, rViaje] = await Promise.all([
-    admin.from('liquidacion')
+    acotada(admin.from('liquidacion')
       .select('total_comprobado, total_anticipo, diferencia, diferencias')
       .eq('viaje_id', viajeId).eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false }).limit(1).maybeSingle(),
-    admin.from('viaje')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle(), 'resumenDeCierre.liquidacion'),
+    acotada(admin.from('viaje')
       .select('folio, operador:operador_id(nombre)')
-      .eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(),
+      .eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(), 'resumenDeCierre.viaje'),
   ]);
 
   // Fallar cerrado: sin esto, un error de lectura se leería como "no hay
@@ -85,14 +89,21 @@ export async function resumenDeCierre(tenantId: string, viajeId: string): Promis
  *
  * `urlPdf` viene firmada y de vida corta — se pasa desde el cierre en vez de
  * volver a firmarla aquí para no duplicar el criterio del TTL, que ya está
- * decidido en un solo lugar.
+ * decidido en un solo lugar. Tiene que ser el ejemplar COMPLETO (el del
+ * contralor, `${tenant}/${viaje}.pdf`), no el del operador: el jefe lo archiva
+ * y se lo pasa a su contador, y el del operador trae recortados justo los
+ * veredictos que el contador resuelve (auditoría 18, M26). Sin URL se manda
+ * el texto igual: el aviso de decisión no depende del papel (M27).
  */
 export async function avisarCierreAlJefe(args: {
   tenantId: string;
   viajeId: string;
   urlPdf?: string | null;
 }): Promise<ResultadoAvisoCierre> {
-  const tel = await telefonoJefeDe(args.tenantId);
+  // A QUIEN VE DINERO, no al primer teléfono de oficina (auditoría 18, A28):
+  // este aviso lleva anticipo, comprobado, diferencia y el PDF completo. El
+  // encargado no ve nada de eso en el panel, y no lo va a ver por aquí.
+  const tel = await telefonoParaDineroDe(args.tenantId);
   if (!tel) {
     // ERROR y no WARN: esta flota no se va a enterar de NINGÚN cierre hasta que
     // alguien capture el teléfono, y no hay otro lugar donde se note.
