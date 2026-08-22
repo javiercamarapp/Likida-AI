@@ -31,3 +31,18 @@ describe('PanelPeriodo — consulta caída no se pinta como vacío (A13)', () =>
     expect(html).not.toContain('No se pudo cargar esta gráfica');
   });
 });
+
+// AUDITORÍA 18, ALTO (A11) — bajo el pill en "Semanal", la tarjeta de viajes
+// cuenta 7 días y la de dinero 35; en el HTML cada una tiene que decirlo.
+describe('PanelPeriodo — cada tarjeta rotula su ventana real (A11)', () => {
+  it('en el render inicial (Semanal) Viajes dice 7 días y Liquidado 5 semanas', () => {
+    const html = renderToStaticMarkup(
+      <PanelPeriodo viajes={[]} porMes={[]} seriesKpis={null} gastoSemanalSeries={null}
+        liquidadoSemanalSeries={null} topRutasSeries={null} />,
+    );
+    expect(html).toMatch(/Viajes[^<]*<span[^>]*>· últimos 7 días/);
+    expect(html).toMatch(/Liquidado[^<]*<span[^>]*>· últimas 5 semanas/);
+    expect(html).toMatch(/Gasto por categoría[^<]*<span[^>]*>· últimas 5 semanas/);
+    expect(html).toMatch(/Top rutas por gasto[^<]*<span[^>]*>· últimas 5 semanas/);
+  });
+});
