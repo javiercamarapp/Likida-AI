@@ -42,7 +42,11 @@ describe('los números del rótulo son los del origen de cada serie (guardia de 
     const src = leer('../../lib/likida/analytics.ts');
     expect(src).toMatch(new RegExp(`getSerieComparativa\\(tenantId, ${DIAS_POR_MODO.semanal}, 2, hoy\\)`));
     expect(src).toMatch(new RegExp(`getSerieComparativa\\(tenantId, ${DIAS_POR_MODO.mensual}, 2, hoy\\)`));
-    expect(src).toMatch(/getTopRutasPorGasto\(tenantId, top\),/);
+    // FE-4 (22-ago-2026): las `*Series` piden sus modos con `porModo` +
+    // `allSettled`, así que el histórico ya no es un renglón de un
+    // `Promise.all`; sigue siendo la ÚNICA llamada SIN ventana, que es lo
+    // que este guardia existe para vigilar.
+    expect(src).toMatch(/getTopRutasPorGasto\(tenantId, top\)\s*$/m);
   });
 
   it('Actividad bucketea 7 y 30 días', () => {

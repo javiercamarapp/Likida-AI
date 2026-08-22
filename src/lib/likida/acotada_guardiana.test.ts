@@ -35,6 +35,10 @@ const GUARDADOS = [
   // Escala 50k (mig. 0151): el panel fiscal lee UNA RPC de celdas agregadas;
   // cualquier lectura que quede en el archivo lleva techo.
   'src/lib/likida/fiscal.ts',
+  // ESCALA 50k (REGLAS-ESCALA §5, 22-ago-2026): toda lectura del dashboard
+  // que siga en JS lleva techo. Ojo: `Array.from(` también cuenta como
+  // `.from(` aquí — analytics.ts lo evita a propósito.
+  'src/lib/likida/analytics.ts',
 ];
 
 describe('toda consulta de los módulos del camino caliente lleva techo', () => {
