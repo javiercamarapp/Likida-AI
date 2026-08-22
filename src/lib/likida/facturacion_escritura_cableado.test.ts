@@ -37,7 +37,10 @@ function builder(tabla: string) {
   });
   return b;
 }
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
+const rpc = vi.fn();
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({ from: (t: string) => builder(t), rpc: (...a: unknown[]) => rpc(...a) }),
+}));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('./presupuesto', () => ({ acotada: (q: unknown) => q }));
 
@@ -49,68 +52,94 @@ const FACTURA = 'ad662d33-6934-459c-a128-bdf0393f0f44';
 const pago = (monto: number) => ({ facturaId: FACTURA, fecha: '2026-08-20', monto, metodo: 'transferencia', referencia: null });
 const escribioEn = (tabla: string) => escrituras.filter((e) => e.tabla === tabla);
 
-beforeEach(() => { respuestas.clear(); escrituras.length = 0; });
+beforeEach(() => { respuestas.clear(); escrituras.length = 0; rpc.mockReset(); });
 
-describe('registrarPago — consulta el veredicto de evaluarAbono antes de escribir', () => {
-  it('$11,600 emitida con $10,000 pagados RECHAZA un abono de $2,000: ni pago ni estatus se escriben', async () => {
-    respuestas.set('factura_emitida', [{ data: { id: FACTURA, total: 11600, estatus: 'emitida' }, error: null }]);
-    respuestas.set('pago_recibido', [{ data: [{ monto: 10000 }], error: null }]);
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 18 · DAT-05 — el veredicto se mudó a la base, y por eso este
+// bloque cambió de forma.
+//
+// Antes se comprobaba que `registrarPago` consultara `evaluarAbono` y no
+// escribiera cuando el veredicto decía que no. Eso ya no se puede probar aquí
+// —ni tiene sentido—: la decisión ocurre DENTRO de `registrar_pago_tx`, con la
+// factura tomada `for update`, que es lo único que impide que dos abonos
+// simultáneos vean los dos el mismo saldo. Las cuatro reglas viven ahora en
+// SQL y se prueban contra Postgres (bloque 131 de verificaciones.sql).
+//
+// Lo que SÍ es de este lado, y es lo que se prueba: que el rechazo de la base
+// llegue traducido a las palabras del contralor con la cifra correcta, que una
+// CAÍDA no se lea como un rechazo de negocio, y que ninguna escritura suelta
+// haya sobrevivido a la mudanza.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('registrarPago — la decisión la toma la base; aquí se traduce', () => {
+  it('el pago que entra: un solo RPC con los seis parámetros, y la bitácora con el id que devolvió la base', async () => {
+    rpc.mockResolvedValue({ data: { pago_id: 'pago-1', saldada: true, saldo_previo: 1600 }, error: null });
 
-    await expect(registrarPago(T, pago(2000))).rejects.toThrow(DatoInvalido);
-    expect(escribioEn('pago_recibido')).toEqual([]);
-    expect(escribioEn('factura_emitida')).toEqual([]);
-    expect(escribioEn('bitacora_auditoria')).toEqual([]);
-  });
-
-  it('el rechazo le dice al contador el saldo exacto que sí cabe ($1,600)', async () => {
-    respuestas.set('factura_emitida', [{ data: { id: FACTURA, total: 11600, estatus: 'emitida' }, error: null }]);
-    respuestas.set('pago_recibido', [{ data: [{ monto: 10000 }], error: null }]);
-    await expect(registrarPago(T, pago(2000))).rejects.toThrow(/1,600/);
-  });
-
-  it('el abono que SALDA ($1,600 exactos) inserta el pago y pasa la factura a `pagada` acotado a tenant y estatus emitida', async () => {
-    respuestas.set('factura_emitida', [
-      { data: { id: FACTURA, total: 11600, estatus: 'emitida' }, error: null },
-      { data: [{ id: FACTURA }], error: null }, // el update
-    ]);
-    respuestas.set('pago_recibido', [
-      { data: [{ monto: 10000 }], error: null },
-      { data: { id: 'pago-1' }, error: null }, // el insert
-    ]);
     await registrarPago(T, pago(1600), { id: 'u-conta' });
 
-    const ins = escribioEn('pago_recibido');
-    expect(ins).toHaveLength(1);
-    expect(ins[0].fila).toMatchObject({ tenant_id: T, factura_id: FACTURA, monto: 1600 });
-
-    const upd = escribioEn('factura_emitida');
-    expect(upd).toHaveLength(1);
-    expect(upd[0].fila).toEqual({ estatus: 'pagada' });
-    expect(upd[0].filtros).toEqual(expect.arrayContaining([['tenant_id', T], ['estatus', 'emitida'], ['id', FACTURA]]));
-
-    expect(escribioEn('bitacora_auditoria')[0].fila).toMatchObject({ accion: 'pago.registrado', actor_id: 'u-conta' });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls[0][0]).toBe('registrar_pago_tx');
+    expect(rpc.mock.calls[0][1]).toEqual({
+      p_tenant: T, p_factura: FACTURA, p_fecha: '2026-08-20',
+      p_monto: 1600, p_metodo: 'transferencia', p_referencia: null,
+    });
+    expect(escribioEn('bitacora_auditoria')[0].fila).toMatchObject({
+      accion: 'pago.registrado', actor_id: 'u-conta', entidad_id: 'pago-1',
+    });
   });
 
-  it('un abono parcial ($5,000 sobre $11,600) inserta el pago y NO toca el estatus', async () => {
-    respuestas.set('factura_emitida', [{ data: { id: FACTURA, total: 11600, estatus: 'emitida' }, error: null }]);
-    respuestas.set('pago_recibido', [{ data: [], error: null }, { data: { id: 'pago-2' }, error: null }]);
-    await registrarPago(T, pago(5000));
-    expect(escribioEn('pago_recibido')).toHaveLength(1);
+  it('NINGUNA escritura suelta sobrevivió: ni el insert del pago ni el update del estatus salen de aquí', async () => {
+    // El estatus `pagada` se escribía aquí, en un segundo statement cuyo fallo
+    // solo se podía loguear ("el pago quedó pero la factura no pasó a pagada").
+    // Ese estado ya no existe: entra en la misma transacción que el pago.
+    rpc.mockResolvedValue({ data: { pago_id: 'pago-1', saldada: true }, error: null });
+    await registrarPago(T, pago(1600));
+    expect(escribioEn('pago_recibido')).toEqual([]);
     expect(escribioEn('factura_emitida')).toEqual([]);
   });
 
-  it('una factura de OTRA flota (la lectura acotada a tenant no la encuentra) se rechaza sin escribir', async () => {
-    respuestas.set('factura_emitida', [{ data: null, error: null }]);
+  it('el sobrepago (CU011) le dice al contralor el saldo exacto que sí cabe ($1,600), y no anota nada', async () => {
+    // El caso de la auditoría: $11,600 con $10,000 pagados NO acepta $2,000.
+    rpc.mockResolvedValue({ data: null, error: { code: 'CU011', message: 'motivo=sobrepago saldo=1600.00' } });
+
+    const err = await registrarPago(T, pago(2000)).catch((e) => e);
+    expect(err).toBeInstanceOf(DatoInvalido);
+    expect(err.message).toMatch(/1,600/);
+    expect(err.message).toMatch(/nota de crédito/);
+    expect(escrituras).toEqual([]);
+  });
+
+  it('los otros tres motivos llegan con SU texto, no con uno genérico', async () => {
+    for (const [motivo, esperado] of [
+      ['cancelada', /cancelada/],
+      ['borrador', /borrador/],
+      ['pagada', /ya está saldada/],
+    ] as const) {
+      rpc.mockResolvedValue({ data: null, error: { code: 'CU011', message: `motivo=${motivo} saldo=0` } });
+      await expect(registrarPago(T, pago(100))).rejects.toThrow(esperado);
+    }
+  });
+
+  it('una factura de OTRA flota (CU010) se rechaza sin escribir', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: 'CU010', message: 'factura fuera de la flota' } });
     await expect(registrarPago(T, pago(100))).rejects.toThrow(/no está en tu flota/);
     expect(escrituras).toEqual([]);
   });
 
-  it('la base caída al leer la factura NO se lee como "no existe": lanza Error, no DatoInvalido', async () => {
-    respuestas.set('factura_emitida', [{ data: null, error: { message: 'timeout' } }]);
+  it('la base caída NO se lee como rechazo de negocio: Error, no DatoInvalido', async () => {
+    // Es la misma regla de siempre en este archivo, ahora sobre el error del
+    // RPC: un timeout de `acotada` llega SIN code, y tratarlo como "la factura
+    // no admite el pago" le mentiría al contralor sobre su propia cartera.
+    rpc.mockResolvedValue({ data: null, error: { message: 'sin respuesta en 8000 ms (tope de consulta)' } });
     const err = await registrarPago(T, pago(100)).catch((e) => e);
     expect(err).toBeInstanceOf(Error);
     expect(err).not.toBeInstanceOf(DatoInvalido);
     expect(escrituras).toEqual([]);
+  });
+
+  it('un RPC que dice "ok" sin id de pago es un error, no un pago que se da por bueno', async () => {
+    rpc.mockResolvedValue({ data: {}, error: null });
+    await expect(registrarPago(T, pago(100))).rejects.toThrow(/no devolvió el id/);
+    expect(escribioEn('bitacora_auditoria')).toEqual([]);
   });
 });
 
