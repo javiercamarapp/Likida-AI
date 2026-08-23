@@ -91,6 +91,7 @@ export default async function PaginaFacturacion({
         fecha: String(fd.get('fecha') ?? ''),
         subtotal: String(fd.get('subtotal') ?? ''),
         iva: String(fd.get('iva') ?? ''),
+        serie: String(fd.get('serie') ?? ''),
         folio: String(fd.get('folio') ?? ''),
         cfdiUuid: String(fd.get('cfdiUuid') ?? ''),
         viajeIds: fd.getAll('viajeIds').map(String),
@@ -133,6 +134,12 @@ export default async function PaginaFacturacion({
     const s = await resolverTenantEfectivo(RUTA, sp);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede marcar facturas como emitidas.' };
     try {
+      // La SERIE no se manda aquí a propósito (RES-22, 0166). `marcarEmitida`
+      // la acepta, pero sellar sin poder MOSTRAR la serie que la factura ya
+      // trae borraría en silencio un dato que quien captura no tiene delante:
+      // el listado lo arma `facturacion_clientes.ts`, que todavía no la lee.
+      // Omitir el campo deja la serie del borrador intacta, que es lo correcto
+      // mientras la pantalla no pueda enseñarla.
       await marcarEmitida(s.tenantId, String(fd.get('facturaId') ?? ''), {
         folio: String(fd.get('folio') ?? ''),
         cfdiUuid: String(fd.get('cfdiUuid') ?? ''),
