@@ -35,15 +35,22 @@ interface CampoPerfil<T> {
 
 interface Perfil {
   ingresosAnualesMxn?: CampoPerfil<number>;
+  /** La pregunta del plan es binaria ("¿bajo o sobre $300M?"), no un peso
+   *  exacto. Capturar un número inventado para representar el umbral sería
+   *  una cifra fabricada. El monto exacto (`ingresosAnualesMxn`) gana si
+   *  alguien lo declara después. */
+  ingresosMenoresA300M?: CampoPerfil<boolean>;
   parteRelacionada?: CampoPerfil<boolean>;
 }
 
-/** El candado: NUNCA decide sobre un campo inferido. Ausente o inferido dan
- *  lo mismo hacia afuera — `undefined` — porque una decisión no puede
- *  distinguir "no sé" de "no confío en la inferencia": las dos exigen la
- *  misma conducta, que es no afirmar. */
+/** El candado: NUNCA decide sobre un campo inferido NI sobre un default de
+ *  Likida. `getConfig()` fusiona relleno de la demo; el perfil existe justo
+ *  para no tratar ese relleno como hecho del cliente. Ausente, inferido y
+ *  default dan lo mismo hacia afuera — `undefined`. */
 function decidir<T>(campo: CampoPerfil<T> | undefined): T | undefined {
-  if (!campo || campo.procedencia === 'inferido' || campo.procedencia === 'ausente') return undefined;
+  if (!campo || campo.procedencia === 'inferido' || campo.procedencia === 'ausente' || campo.procedencia === 'default') {
+    return undefined;
+  }
   return campo.valor;
 }
 
@@ -66,7 +73,7 @@ function leerPerfil(perfilCrudo: unknown): Perfil {
 }
 
 export const PREGUNTA_ESTIMULO_PEAJE =
-  '¿Cuáles fueron los ingresos totales anuales de la flota en el último ejercicio, y es parte relacionada de otra empresa (LISR art. 179)? De eso depende si aplica el estímulo de peaje del 50% (LIF 2026 art. 20-A).';
+  '¿Los ingresos totales anuales de la flota en el último ejercicio fueron menores a $300 millones, y es parte relacionada de otra empresa (LISR art. 179)? De eso depende el estímulo de peaje del 50% (LIF 2026 art. 20-A). Likida no verifica la dedicación exclusiva ni que las casetas sean de la Red Nacional.';
 
 export interface ElegibilidadEstimuloPeaje {
   /** `null` = el perfil todavía no lo declara — NO se le quita el estímulo
@@ -86,9 +93,10 @@ export interface ElegibilidadEstimuloPeaje {
 export function calificaEstimuloPeaje(perfilCrudo: unknown): ElegibilidadEstimuloPeaje {
   const perfil = leerPerfil(perfilCrudo);
   const ingresos = decidir(perfil.ingresosAnualesMxn);
+  const menoresA300M = ingresos !== undefined ? ingresos < 300_000_000 : decidir(perfil.ingresosMenoresA300M);
   const parteRelacionada = decidir(perfil.parteRelacionada);
-  if (ingresos === undefined || parteRelacionada === undefined) return { elegible: null };
-  return { elegible: ingresos < 300_000_000 && !parteRelacionada };
+  if (menoresA300M === undefined || parteRelacionada === undefined) return { elegible: null };
+  return { elegible: menoresA300M && !parteRelacionada };
 }
 
 /** Para una futura UI de cuestionario: la pregunta pendiente, o `null` si ya
@@ -99,9 +107,14 @@ export function calificaEstimuloPeaje(perfilCrudo: unknown): ElegibilidadEstimul
  *  detectó con evidencia razonable. */
 export function preguntaPendienteEstimuloPeaje(perfilCrudo: unknown): string | null {
   const perfil = leerPerfil(perfilCrudo);
-  const ingresos = sugerir(perfil.ingresosAnualesMxn, PREGUNTA_ESTIMULO_PEAJE);
+  const umbralCampo = perfil.ingresosMenoresA300M ?? (
+    perfil.ingresosAnualesMxn
+      ? { valor: perfil.ingresosAnualesMxn.valor < 300_000_000, procedencia: perfil.ingresosAnualesMxn.procedencia }
+      : undefined
+  );
+  const umbral = sugerir(umbralCampo, PREGUNTA_ESTIMULO_PEAJE);
   const parteRelacionada = sugerir(perfil.parteRelacionada, PREGUNTA_ESTIMULO_PEAJE);
-  return ingresos.pregunta ?? parteRelacionada.pregunta ?? null;
+  return umbral.pregunta ?? parteRelacionada.pregunta ?? null;
 }
 
 /**
@@ -115,6 +128,33 @@ export function declararIngresosYParteRelacionada(ingresosAnualesMxn: number, pa
   const campo = <T,>(valor: T): CampoPerfil<T> => ({ valor, procedencia: 'declarado' });
   return {
     ingresosAnualesMxn: campo(ingresosAnualesMxn),
+    parteRelacionada: campo(parteRelacionada),
+  };
+}
+
+/**
+ * La pregunta que el plan pide (binaria). No inventa un monto en pesos para
+ * representar el umbral: guarda el sí/no que el cliente declaró.
+ */
+/** Lo ya decidido, para prellenar el formulario. `null` = todavía no se
+ *  puede afirmar (ausente, inferido o default). Nunca expone el campo crudo. */
+export function umbralPeajeDeclarado(perfilCrudo: unknown): {
+  ingresosMenoresA300M: boolean | null;
+  parteRelacionada: boolean | null;
+} {
+  const perfil = leerPerfil(perfilCrudo);
+  const ingresos = decidir(perfil.ingresosAnualesMxn);
+  const menores = ingresos !== undefined ? ingresos < 300_000_000 : decidir(perfil.ingresosMenoresA300M);
+  return {
+    ingresosMenoresA300M: menores ?? null,
+    parteRelacionada: decidir(perfil.parteRelacionada) ?? null,
+  };
+}
+
+export function declararUmbralPeaje(ingresosMenoresA300M: boolean, parteRelacionada: boolean): Record<string, unknown> {
+  const campo = <T,>(valor: T): CampoPerfil<T> => ({ valor, procedencia: 'declarado' });
+  return {
+    ingresosMenoresA300M: campo(ingresosMenoresA300M),
     parteRelacionada: campo(parteRelacionada),
   };
 }

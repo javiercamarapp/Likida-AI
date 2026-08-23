@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calificaEstimuloPeaje, preguntaPendienteEstimuloPeaje, declararIngresosYParteRelacionada, PREGUNTA_ESTIMULO_PEAJE } from './preguntas';
+import { calificaEstimuloPeaje, preguntaPendienteEstimuloPeaje, declararIngresosYParteRelacionada, declararUmbralPeaje, umbralPeajeDeclarado, PREGUNTA_ESTIMULO_PEAJE } from './preguntas';
 
 const declarado = (ingresosAnualesMxn: number, parteRelacionada: boolean) => ({
   ingresosAnualesMxn: { valor: ingresosAnualesMxn, procedencia: 'declarado' },
@@ -49,6 +49,20 @@ describe('calificaEstimuloPeaje — FASE 3', () => {
     };
     expect(calificaEstimuloPeaje(perfil)).toEqual({ elegible: null });
   });
+
+  it('procedencia "default" (relleno de Likida) NUNCA decide — es el bug de getConfig()', () => {
+    const perfil = {
+      ingresosAnualesMxn: { valor: 1, procedencia: 'default' },
+      parteRelacionada: { valor: false, procedencia: 'default' },
+    };
+    expect(calificaEstimuloPeaje(perfil)).toEqual({ elegible: null });
+  });
+
+  it('umbral binario declarado (la pregunta del plan, sin inventar un monto) → decide', () => {
+    expect(calificaEstimuloPeaje(declararUmbralPeaje(true, false))).toEqual({ elegible: true });
+    expect(calificaEstimuloPeaje(declararUmbralPeaje(false, false))).toEqual({ elegible: false });
+    expect(calificaEstimuloPeaje(declararUmbralPeaje(true, true))).toEqual({ elegible: false });
+  });
 });
 
 describe('preguntaPendienteEstimuloPeaje', () => {
@@ -64,6 +78,10 @@ describe('preguntaPendienteEstimuloPeaje', () => {
     const perfil = { ingresosAnualesMxn: { valor: 50_000_000, procedencia: 'inferido' } };
     expect(preguntaPendienteEstimuloPeaje(perfil)).toBe(PREGUNTA_ESTIMULO_PEAJE);
   });
+
+  it('umbral binario declarado → ya no hay pregunta', () => {
+    expect(preguntaPendienteEstimuloPeaje(declararUmbralPeaje(true, false))).toBeNull();
+  });
 });
 
 describe('declararIngresosYParteRelacionada', () => {
@@ -78,5 +96,29 @@ describe('declararIngresosYParteRelacionada', () => {
   it('el patch, aplicado, hace que calificaEstimuloPeaje ya pueda decidir', () => {
     const patch = declararIngresosYParteRelacionada(120_000_000, false);
     expect(calificaEstimuloPeaje(patch)).toEqual({ elegible: true });
+  });
+});
+
+describe('umbralPeajeDeclarado', () => {
+  it('vacío → null/null, no se afirma', () => {
+    expect(umbralPeajeDeclarado({})).toEqual({ ingresosMenoresA300M: null, parteRelacionada: null });
+  });
+
+  it('un default no se enseña como respuesta del cliente', () => {
+    expect(umbralPeajeDeclarado({
+      ingresosMenoresA300M: { valor: true, procedencia: 'default' },
+      parteRelacionada: { valor: false, procedencia: 'default' },
+    })).toEqual({ ingresosMenoresA300M: null, parteRelacionada: null });
+  });
+});
+
+describe('declararUmbralPeaje', () => {
+  it('arma el patch binario con procedencia "declarado", sin un peso inventado', () => {
+    const patch = declararUmbralPeaje(true, false);
+    expect(patch).toEqual({
+      ingresosMenoresA300M: { valor: true, procedencia: 'declarado' },
+      parteRelacionada: { valor: false, procedencia: 'declarado' },
+    });
+    expect(patch).not.toHaveProperty('ingresosAnualesMxn');
   });
 });

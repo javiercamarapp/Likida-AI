@@ -12,9 +12,10 @@ export const dynamic = 'force-dynamic';
  * (combustible-casetas, facturación): `resolverTenantEfectivo` recibe la ruta
  * y adentro gatea con `puedeVerRuta` — `/dashboard/contador` está declarada
  * como `dinero` en AREA_POR_RUTA, así que el encargado rebota a su propio
- * inicio y el contador, el dueño y el superadmin pasan. No hay una segunda
- * comprobación aquí porque esta página no tiene server actions: es solo
- * lectura, y la única puerta que necesita es la que ya cruzó.
+ * inicio y el contador, el dueño y el superadmin pasan. La lectura no tiene
+ * una segunda puerta: cruza `puedeVerRuta`. La declaración del estímulo de
+ * peaje (Fase 3) SÍ es una server action — vive en `estimulo-peaje.tsx` y
+ * re-gatea adentro, porque el rol del render no es el de la acción.
  *
  * El contenido vive en `inicio-contador.tsx` exportado — mismas dos razones
  * que documenta `InicioContenido`: Next valida los exports de una Page (un
@@ -41,6 +42,7 @@ export default async function PanelContadorPage({
       nombre={nombre}
       tenantExiste={tenantExiste}
       sufijo={sufijo}
+      searchParams={sp}
     />
   );
 }
