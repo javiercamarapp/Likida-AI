@@ -17,6 +17,8 @@
 // que se le pide al operador.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { hoyMx } from '@/lib/formato';
+
 export type MotivoFechaDudosa =
   /**
    * Ejercicio anterior al corriente. Se detecta CON O SIN rango del viaje.
@@ -55,8 +57,19 @@ export function ventanaDelViaje(
   toleranciaDiasAntes: number,
   ahora: Date,
 ): { fechaMin: string; fechaMax: string; hoy: string } {
-  const hoy = ahora.toISOString().slice(0, 10);
-  const inicio = fechaInicio ? new Date(`${fechaInicio.slice(0, 10)}T00:00:00Z`) : ahora;
+  // DAT-28 (auditoría prod): `hoy` era `ahora.toISOString()`, el día UTC. De
+  // las 18:00 a las 24:00 hora de México ese "hoy" es ya el de MAÑANA, así
+  // que `fechaMax` dejaba pasar como creíble un ticket fechado mañana —
+  // exactamente lo que esta ventana existe para rechazar ("un comprobante del
+  // futuro no existe")—. El chofer que manda su ticket a las 8 de la noche es
+  // el caso NORMAL de este producto, no el raro.
+  const hoy = hoyMx(ahora);
+  // Sin fecha de inicio la ventana se ancla en HOY (ya en días de México), no
+  // en el instante: restarle días a un timestamp y truncarlo en UTC volvía a
+  // meter el mismo corrimiento por la puerta de atrás.
+  const inicio = new Date(`${(fechaInicio ?? hoy).slice(0, 10)}T00:00:00Z`);
+  // Aritmética de calendario sobre un día ya resuelto: no es conversión de
+  // zona, y por eso puede ir en UTC sin correr nada.
   const fechaMin = new Date(inicio.getTime() - toleranciaDiasAntes * 86_400_000)
     .toISOString().slice(0, 10);
   return { fechaMin, fechaMax: hoy, hoy };
