@@ -754,16 +754,23 @@ async function otraSuscripcionViva(
 // camino jsonb, que es donde un filtro mal escrito se lee como "no hay nada"
 // y apagaría la protección en silencio.
 
-const llaveOrden = (subId: string) => `orden:${subId}`;
+// AUDITORÍA 18-c4, BACK-C4-1: el ledger se guarda por ENTIDAD, no solo por
+// suscripción. La clave es el id de Stripe de la cosa cuyo estado se fija —
+// `sub_…` para la suscripción, `in_…` para la factura— y las dos series no se
+// pisan porque los ids de Stripe ya vienen con prefijo propio.
+const llaveOrden = (entidadId: string) => `orden:${entidadId}`;
 
-/** `created` (Unix) del último evento APLICADO de esa suscripción, o `null`
+/** `created` (Unix) del último evento APLICADO de esa entidad, o `null`
  *  si no hay marca todavía o si no se pudo leer (en la duda, se aplica: dejar
- *  de aplicar un evento real es peor que aplicar uno viejo). */
-async function ordenAplicado(subId: string): Promise<number | null> {
+ *  de aplicar un evento real es peor que aplicar uno viejo).
+ *
+ *  `campo` solo nombra la entidad en el log (`sub` o `factura`), para que el
+ *  aviso diga de cuál de las dos series habla. */
+async function ordenAplicado(entidadId: string, campo: 'sub' | 'factura' = 'sub'): Promise<number | null> {
   const { data, error } = await supabaseAdmin()
-    .from('evento_stripe').select('payload').eq('id', llaveOrden(subId)).maybeSingle();
+    .from('evento_stripe').select('payload').eq('id', llaveOrden(entidadId)).maybeSingle();
   if (error) {
-    logger.warn('stripe.orden_ilegible', { sub: subId, err: error.message });
+    logger.warn('stripe.orden_ilegible', { [campo]: entidadId, err: error.message });
     return null;
   }
   const created = (data?.payload as { created?: unknown } | null)?.created;
@@ -772,15 +779,19 @@ async function ordenAplicado(subId: string): Promise<number | null> {
 
 /** Deja la marca del evento recién aplicado. Nunca lanza: perder la marca
  *  degrada la protección de orden, no el cobro. */
-async function sellarOrden(subId: string, creadoUnix: number): Promise<void> {
+async function sellarOrden(
+  entidadId: string,
+  creadoUnix: number,
+  tipo: 'orden_suscripcion' | 'orden_factura' = 'orden_suscripcion',
+): Promise<void> {
   const { error } = await supabaseAdmin().from('evento_stripe').upsert({
-    id: llaveOrden(subId),
-    tipo: 'orden_suscripcion',
-    payload: { created: creadoUnix, sub: subId },
+    id: llaveOrden(entidadId),
+    tipo,
+    payload: { created: creadoUnix, sub: entidadId },
     // SIEMPRE sellada: esta fila no es un evento pendiente de aplicar.
     aplicado_en: new Date().toISOString(),
   });
-  if (error) logger.warn('stripe.orden_no_sellada', { sub: subId, err: error.message });
+  if (error) logger.warn('stripe.orden_no_sellada', { entidad: entidadId, err: error.message });
 }
 
 /**
@@ -810,7 +821,34 @@ export async function aplicarFactura(datos: {
    *  cobro — y un reintento que cruza la medianoche mueve el cobro de mes. */
   pagadaEn?: string | null;
   urlPago?: string | null;
+  /** `created` (Unix) del evento de Stripe que trae este estado.
+   *
+   *  AUDITORÍA 18-c4, BACK-C4-1: Stripe NO promete orden de entrega, y este
+   *  upsert FIJA `estado` y `pagada_en` en vez de acumular. RES-11 puso la
+   *  guardia en `aplicarSuscripcion` y esta función se quedó sin ella: un
+   *  `invoice.payment_failed` reentregado horas después del `invoice.paid`
+   *  devolvía a 'fallida' una mensualidad ya cobrada, y las dos pantallas
+   *  —la del cliente y la de cobranza— volvían a pedir el dinero.
+   *
+   *  Opcional a propósito: sin él se aplica como siempre y no se sella nada,
+   *  para que un llamador que no tenga el evento a la mano (una carga manual)
+   *  siga funcionando. */
+  eventoCreadoUnix?: number;
 }): Promise<void> {
+  // Un evento más viejo que el ya aplicado a ESTA factura se descarta CON LOG:
+  // no es un fallo (no se lanza, el webhook lo sella y contesta 200 —
+  // reintentarlo daría el mismo resultado).
+  if (datos.eventoCreadoUnix !== undefined) {
+    const ultimo = await ordenAplicado(datos.stripeInvoiceId, 'factura');
+    if (ultimo !== null && datos.eventoCreadoUnix < ultimo) {
+      logger.warn('stripe.evento_fuera_de_orden', {
+        factura: datos.stripeInvoiceId, creado: datos.eventoCreadoUnix, ultimoAplicado: ultimo,
+        estadoQueTraia: datos.pagada ? 'pagada' : 'fallida',
+      });
+      return;
+    }
+  }
+
   // El CHECK `factura_saas_desglose_coherente` (0065) exige que los dos vayan
   // juntos: medio desglose se vería tan completo como uno entero.
   const hayDesglose = datos.subtotal !== null && datos.subtotal !== undefined
@@ -843,6 +881,13 @@ export async function aplicarFactura(datos: {
     { onConflict: 'stripe_invoice_id' },
   );
   if (error) throw new Error(`aplicarFactura: ${error.message}`);
+
+  // Se sella DESPUÉS del upsert: si la escritura falló, esto no corre y el
+  // reintento de Stripe vuelve a entrar. Sellar antes sería prometer que se
+  // aplicó algo que no se aplicó.
+  if (datos.eventoCreadoUnix !== undefined) {
+    await sellarOrden(datos.stripeInvoiceId, datos.eventoCreadoUnix, 'orden_factura');
+  }
 }
 
 /**
@@ -870,6 +915,12 @@ export async function cancelarFacturaDeStripe(
   /** Lo devuelto/acreditado, en la misma unidad que `monto` (pesos). Si es
    *  menor al total de la factura, NO se anula nada: solo se deja el aviso. */
   montoAnulado?: number,
+  /** `created` (Unix) del evento que anula. AUDITORÍA 18-c4, BACK-C4-1: sin
+   *  esto la cancelación no entra al ledger de orden, y un `invoice.paid`
+   *  reentregado DESPUÉS la resucitaba a 'pagada' — dejando la fila pagada con
+   *  `cfdi_cancelado_en` puesto: dinero devuelto y papel fiscal en pie, que es
+   *  justo lo que DAT-33 vino a cerrar. */
+  eventoCreadoUnix?: number,
 ): Promise<'sin_factura' | 'parcial' | 'cancelada' | 'ya_cancelada'> {
   const admin = supabaseAdmin();
   const { data: f, error } = await admin
@@ -901,6 +952,12 @@ export async function cancelarFacturaDeStripe(
     .eq('id', f.id as string);
   if (u.error) throw new Error(`cancelarFacturaDeStripe.marcar: ${u.error.message}`);
   logger.warn('stripe.factura_cancelada', { stripeInvoiceId, motivo, facturaId: f.id });
+
+  // La cancelación entra al MISMO ledger que `aplicarFactura` consulta: sin
+  // esto, un `invoice.paid` reentregado después del reembolso la resucita.
+  if (eventoCreadoUnix !== undefined) {
+    await sellarOrden(stripeInvoiceId, eventoCreadoUnix, 'orden_factura');
+  }
 
   const proveedorId = (f.cfdi_proveedor_id as string) || null;
   if (f.cfdi_uuid && !f.cfdi_cancelado_en && proveedorId && facturapiConfigurado()) {

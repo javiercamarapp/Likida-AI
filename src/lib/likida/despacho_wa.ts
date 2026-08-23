@@ -224,6 +224,18 @@ export async function atenderDespachoOficina(
   telefono: string,
   texto: string,
   ahora: Date = new Date(),
+  /**
+   * `reengancharPendiente: false` cuando quien escribe trae un VIAJE ABIERTO —
+   * o sea, cuando el dueño va manejando (auditoría 18-c2, AGEN-C2-1).
+   *
+   * El pendiente sigue vivo y su sí/no sigue valiendo; lo único que se apaga es
+   * la rama que se queda con CUALQUIER texto para re-enseñar el resumen. En
+   * ruta ese texto suele ser «listo» o «ya llegué», que son con los que se
+   * cierra un viaje, y `esAfirmacion` los excluye a propósito. Es el mismo
+   * desempate que `processor.ts` ya le aplicaba al analista y que a este módulo
+   * no le llegaba.
+   */
+  opciones: { reengancharPendiente?: boolean } = {},
 ): Promise<string | null> {
   if (!texto?.trim() || !cuenta.tenantId) return null;
 
@@ -344,8 +356,10 @@ export async function atenderDespachoOficina(
     }
 
     // Ni sí ni no: si es una petición NUEVA reemplaza a la pendiente (cae al
-    // flujo de abajo); cualquier otra cosa re-enseña lo que está en juego.
+    // flujo de abajo); cualquier otra cosa re-enseña lo que está en juego —
+    // salvo en ruta, donde ese texto es del viaje que el chofer va a cerrar.
     if (!interpretarPeticionViaje(texto)) {
+      if (opciones.reengancharPendiente === false) return null;
       return `Tengo este viaje esperando tu confirmación:\n\n${resumenDePendiente(pendiente)}`;
     }
   }

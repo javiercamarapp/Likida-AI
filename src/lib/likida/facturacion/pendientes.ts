@@ -169,12 +169,31 @@ export async function getPorFacturar(
 
 /** El folio fiscal (UUID) de un CFDI, como lo imprime el portal: 36
  *  caracteres hex con guiones. Cualquier otra cosa se rechaza — un UUID
- *  inventado aquí se vuelve una fila fiscal falsa allá. */
+ *  inventado aquí se vuelve una fila fiscal falsa allá.
+ *
+ *  El portal del SAT lo imprime en MAYÚSCULAS, así que la regex acepta las dos
+ *  ortografías (`/i`) — lo que se acepta y lo que se GUARDA son dos cosas. */
 const UUID_CFDI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * AUDITORÍA 18-c4, ARQ-C4-1 (CRÍTICO): esto normalizaba a MAYÚSCULAS y era el
+ * único de los normalizadores de folio del repo que iba al revés.
+ *
+ * La forma canónica la fija la base, no esta función: la migración 0158 puso
+ * `check (cfdi_uuid is null or cfdi_uuid = lower(cfdi_uuid))` sobre las cuatro
+ * tablas que guardan folios (`0158_integridad_fiscal.sql:429`), y el
+ * normalizador de escritura de `repo.ts:33` hace `.toLowerCase()`.
+ *
+ * Importa porque la captura manual (`dashboard/agentes/facturas/page.tsx:69`)
+ * escribe a `gasto.cfdi_uuid` con `supabaseAdmin()` DIRECTO, sin pasar por
+ * `repo.ts`: lo que devuelve esta función es literalmente lo que llega al
+ * CHECK. En mayúsculas el CHECK rechaza siempre, y como el manejador de la
+ * página solo distingue el 23505 del folio repetido, el contralor teclea bien
+ * su folio y recibe «No se pudo guardar. Inténtalo de nuevo.» — cada vez.
+ */
 export function validarUuidCfdi(crudo: unknown): string | null {
   if (typeof crudo !== 'string') return null;
-  const limpio = crudo.trim().toUpperCase();
+  const limpio = crudo.trim().toLowerCase();
   return UUID_CFDI.test(limpio) ? limpio : null;
 }
 

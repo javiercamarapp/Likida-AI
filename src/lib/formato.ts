@@ -182,12 +182,22 @@ const COMPACTO_DESDE = 1_000_000;
  *
  * `useGrouping` explícito: con `notation: 'compact'` el default de es-MX
  * imprime "$9000 M", sin la coma de los millares.
+ *
+ * `minimumFractionDigits: 0` explícito, y NO es redundante — AUDITORÍA 18-c4,
+ * FMT-C4-1: declarar `maximumFractionDigits` a secas saca a ICU de su
+ * "compact rounding" (el modo que suelta los ceros de cola) y lo pasa a
+ * dígitos fijos, que los conserva. Con solo el máximo, 9,000 millones salían
+ * `"$9,000.0 M"`: diez caracteres en la tarjeta de ocho — justo el desborde
+ * que FE-17 vino a cerrar. Declarando el mínimo vuelve a `"$9,000 M"`, y
+ * `$1.5 M` sigue enseñando su decimal.
  */
 export function mxnCompacto(n: number): string {
   if (Math.abs(n) < COMPACTO_DESDE) return mxn(n);
   return n.toLocaleString('es-MX', {
     style: 'currency', currency: 'MXN',
-    notation: 'compact', maximumFractionDigits: 1, useGrouping: true,
+    notation: 'compact',
+    minimumFractionDigits: 0, maximumFractionDigits: 1,
+    useGrouping: true,
   });
 }
 
