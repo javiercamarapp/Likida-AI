@@ -46,7 +46,10 @@ export function ControlCampanas({ campanas, integracion, leadsAds, pausar, refre
           base: sin aprobador no puede estar activa) — el agente de campañas solo PROPONE.
         </p>
       ) : (
-        <table className="w-full text-[12.5px] mt-2">
+        // FE-19: cinco columnas con nombre de campaña libre y cuatro cifras —
+        // scrollea dentro de su bloque, no estira la página.
+        <div className="overflow-x-auto mt-2">
+        <table className="w-full text-[12.5px]">
           <thead>
             <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
               <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Campaña</th>
@@ -97,6 +100,7 @@ export function ControlCampanas({ campanas, integracion, leadsAds, pausar, refre
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       <div className="flex items-center gap-2 mt-2">

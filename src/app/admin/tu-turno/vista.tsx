@@ -13,6 +13,11 @@ import { EstadoVacio, StatusPill } from '../ui/kit';
 
 const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
+/** El tope de piezas pendientes que trae `leerEstadoBus` (lib/admin/bus.ts).
+ *  Se declara aquí porque es la vista quien tiene que confesarlo: con la cola
+ *  llena, "(50)" se lee como el total del buzón (FE-13). */
+const TOPE_PIEZAS = 50;
+
 /** "hace 3 h" — mismo formato que la bandeja de escalaciones. */
 function edadDe(desdeIso: string, ahora: number): string {
   const horas = (ahora - new Date(desdeIso).getTime()) / 3_600_000;
@@ -76,7 +81,16 @@ export function VistaTuTurno({
 
       {/* ── 1 · Piezas de las rutinas — el tap de publicar ────────────────── */}
       <section>
-        <TituloSeccion>Piezas para tu tap ({bus.piezasPendientes.length})</TituloSeccion>
+        {/* FE-13: `leerEstadoBus` trae 50 piezas pendientes como tope. Con la
+            cola llena, "(50)" se lee como el total y son las 50 más recientes. */}
+        <TituloSeccion>
+          Piezas para tu tap ({bus.piezasPendientes.length}{bus.piezasPendientes.length >= TOPE_PIEZAS ? '+' : ''})
+        </TituloSeccion>
+        {bus.piezasPendientes.length >= TOPE_PIEZAS && (
+          <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+            Se listan las {TOPE_PIEZAS} más recientes — hay más esperando detrás.
+          </p>
+        )}
         {bus.piezasPendientes.length === 0 ? (
           <EstadoVacio icono={<ImageIcon {...ICONO} />}>
             No hay piezas esperando. Las rutinas de la Mac las suben aquí al terminar

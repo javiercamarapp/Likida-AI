@@ -186,7 +186,9 @@ function VisualRespuesta({ v }: { v: Visual }) {
     );
   }
   return (
-    <div className="card p-1.5 mt-2">
+    // FE-19: la tabla que devuelve el asistente es de ancho DESCONOCIDO (la
+    // arma una consulta): scrollea dentro de la tarjeta o estira la página.
+    <div className="card p-1.5 mt-2 overflow-x-auto">
       <table className="w-full border-collapse text-[13px]">
         <tbody>
           {v.filas.map(([k, val]) => (

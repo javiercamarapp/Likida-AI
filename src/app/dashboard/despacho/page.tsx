@@ -7,7 +7,7 @@ import {
   getTableroOperacion, getViajesSinAsignar, getCargaOperadores, crearViaje, avisarAlChofer,
   asignarUnidad,
 } from '@/lib/likida/operacion';
-import { listOperadores, reasignarOperador } from '@/lib/likida/repo';
+import { reasignarOperador, buscarCatalogo, contarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
 import { crearOperador } from '@/lib/likida/administracion';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { getViajes } from '@/lib/likida/analytics';
@@ -45,29 +45,27 @@ export default async function PaginaDespacho({
   const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
   const destino = `/dashboard/despacho${sufijo}`;
 
-  // Las COLAS son el corazón: sin catch — base caída = página caída, no una
-  // cola vacía que afirma "nada por asignar". El tablero y la carga degradan.
-  const [tablero, sinAsignar, viajes, operadores, carga, clientes, unidades] = await Promise.all([
+  // ── FE-2: LOS CATÁLOGOS YA NO SE CARGAN ─────────────────────────────────
+  // Aquí se traían los tres ENTEROS (operadores, clientes, unidades) para
+  // pintarlos como `<option>`; a 7,500/5,000 filas eran megabytes de HTML, y
+  // los tres los recortaba PostgREST a 1,000 EN SILENCIO — el chofer 1,001 no
+  // existía para el despacho. Ahora solo se CUENTAN (`count exact, head`: cero
+  // filas de vuelta) y la búsqueda vive en `buscarCatalogoAccion`, que la UI
+  // llama al escribir. El conteo es lo único que la pantalla necesita saber
+  // sin traer nada: distingue "todavía no das de alta a nadie" (0) de "no se
+  // pudo contar" (`null`), y alimenta la pista "20 de N" del combo.
+  //
+  // `contarCatalogo` no lanza (devuelve `null` y loguea): un conteo caído no
+  // puede tumbar el despacho, igual que antes un catálogo caído no lo hacía.
+  const [tablero, sinAsignar, viajes, carga, totalOperadores, totalClientes, totalUnidades] = await Promise.all([
     safe(() => getTableroOperacion(tenantId)),
     getViajesSinAsignar(tenantId),
     getViajes(tenantId, 100),
-    listOperadores(tenantId),
     safe(() => getCargaOperadores(tenantId)),
-      // Los clientes, para atar el viaje a quien paga el flete (14-ago-2026).
-    // `catch → []` a propósito: si esta lectura falla, el `<select>` sale
-    // vacío y el viaje se crea igual SIN cliente. Tirar el despacho entero
-    // porque no se pudo leer un catálogo cambiaría un problema de captura por
-    // uno de operación — y el cliente se puede asignar después.
-    supabaseAdmin().from('cliente').select('id, nombre')
-      .eq('tenant_id', tenantId).eq('activo', true).order('nombre')
-      .then(({ data, error }) => (error || !data ? [] : data as Array<{ id: string; nombre: string }>)),
-    // Las unidades activas, mismo trato que los clientes: catálogo degradable
-    // (`catch → []`), porque la unidad también se puede asignar después.
-    supabaseAdmin().from('unidad').select('id, numero_economico')
-      .eq('tenant_id', tenantId).eq('activo', true).order('numero_economico')
-      .then(({ data, error }) => (error || !data ? [] :
-        (data as Array<{ id: string; numero_economico: string }>).map((u) => ({ id: u.id, numeroEconomico: u.numero_economico })))),
-]);
+    contarCatalogo(tenantId, 'operador'),
+    contarCatalogo(tenantId, 'cliente'),
+    contarCatalogo(tenantId, 'unidad'),
+  ]);
 
   /** El chequeo que TODA action repite: sesión viva, rol que asigna, y que
    *  la flota de la sesión sea la del render (superadmin exento: su tenant
@@ -77,6 +75,35 @@ export default async function PaginaDespacho({
     if (!puedeAsignar(sesion.rol)) return 'Tu rol no puede despachar viajes.';
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Este despacho no es de tu flota.';
     return null;
+  }
+
+  /**
+   * La búsqueda de catálogo del panel, como server action: el `tenantId` va
+   * por CLOSURE del render — el cliente manda el texto y el tipo, nunca la
+   * flota. Devuelve a lo más 20 opciones (`TOPE_CATALOGO`).
+   *
+   * Repite la guardia completa igual que las mutaciones: es alcanzable por
+   * POST directo, y aunque solo devuelva nombres de choferes y unidades, ésos
+   * son datos de UNA flota.
+   *
+   * LANZA ante rechazo o fallo — no devuelve lista vacía. Una lista vacía es
+   * una AFIRMACIÓN ("no hay ningún chofer que se llame así") y sería falsa;
+   * `ComboCatalogo` atrapa el fallo y escribe "No se pudo buscar en el
+   * catálogo", que es lo que de verdad pasó.
+   */
+  async function buscarCatalogoAccion(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
+    'use server';
+    const rechazo = await guardia();
+    if (rechazo) throw new Error(rechazo);
+    if (tipo !== 'operador' && tipo !== 'cliente' && tipo !== 'unidad') {
+      throw new Error('Catálogo desconocido.');
+    }
+    try {
+      return await buscarCatalogo(tenantId, tipo, typeof q === 'string' ? q : '');
+    } catch (err) {
+      logger.error('despacho.catalogo.fallo', { tipo, err: err instanceof Error ? err.message : String(err) });
+      throw new Error('No se pudo buscar en el catálogo.');
+    }
   }
 
   async function crear(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
@@ -240,9 +267,10 @@ export default async function PaginaDespacho({
       tablero={tablero}
       sinAsignar={sinAsignar}
       activos={viajes.filter((v) => v.estatus === 'abierto' || v.estatus === 'en_cuadre')}
-      operadores={operadores}
-      clientes={clientes}
-      unidades={unidades}
+      buscarCatalogo={buscarCatalogoAccion}
+      totalOperadores={totalOperadores}
+      totalClientes={totalClientes}
+      totalUnidades={totalUnidades}
       carga={carga}
       crear={crear}
       asignarYAvisar={asignarYAvisar}

@@ -66,7 +66,10 @@ export async function getFichaCliente(tenantId: string): Promise<FichaCliente | 
     safe(() => costoIaDeTenant(tenantId)),
     safe(async () => ({ v: await getSuscripcion(tenantId) })),
     safe(() => getFacturasSaas(tenantId, 6)),
-    safe(() => getTicketsCruzados(Date.now())),
+    // FE-11: pedía TODOS los tickets de TODAS las flotas y se quedaba con
+    // los de ésta con un `.filter()` — la flota con 12 tickets pagaba la
+    // lectura de los 40,000 de todas. El filtro vive en la consulta.
+    safe(() => getTicketsCruzados(Date.now(), { tenantId })),
     safe(async () => {
       const { data, error: e } = await supabaseAdmin()
         .from('agente_corrida').select('agente, estado, disparo, fin')
@@ -88,7 +91,7 @@ export async function getFichaCliente(tenantId: string): Promise<FichaCliente | 
     suscripcion: suscripcionR?.v ?? null,
     suscripcionLegible: suscripcionR !== null,
     facturasSaas,
-    tickets: ticketsTodos === null ? null : ticketsTodos.filter((x) => x.tenantId === tenantId),
+    tickets: ticketsTodos,
     corridas: corridasR,
   };
 }

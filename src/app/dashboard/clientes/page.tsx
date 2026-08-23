@@ -8,6 +8,9 @@ import {
   getPanelClientes, validarCliente, validarTarifa, crearCliente, editarCliente,
   crearTarifa, editarTarifa, MODOS_TARIFA, type PanelClientes,
 } from '@/lib/likida/clientes';
+import { buscarCatalogo, contarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
+import { sufijoTenant } from '../sufijo';
+import { camposDeSufijo } from '../paginar-campos';
 import { VistaClientes } from './vista';
 import type { ResultadoForma } from './forma';
 
@@ -39,11 +42,39 @@ const RUTA = '/dashboard/clientes';
 export default async function PaginaClientes({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+  /** FE-12: dos registros en una pantalla, cada uno con sus parámetros —
+   *  `?q=`/`?p=`/`?editar=` para clientes y `?qt=`/`?pt=`/`?editarT=` para
+   *  tarifas. Buscar en uno no puede mover al otro. */
+  searchParams: Promise<{
+    vista?: string; tenant?: string; rol?: string;
+    q?: string; p?: string; editar?: string;
+    qt?: string; pt?: string; editarT?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
+  const sufijo = sufijoTenant(sp);
+  const camposOcultos = camposDeSufijo(sp);
+
+  // FE-12/FE-2: cuántos clientes activos hay, para la pista del buscador de
+  // la forma de tarifas. `null` = no se pudo contar, y no se afirma nada.
+  const totalClientes = await contarCatalogo(tenantId, 'cliente');
+
+  /**
+   * El buscador de clientes de la forma de tarifas — server action con el
+   * tenant por CLOSURE. Antes ese campo era un `<select>` con TODOS los
+   * clientes activos, repetido en cada una de las N formas de tarifa de la
+   * página. Lanza ante rechazo o fallo: una lista vacía afirmaría que no
+   * existe el cliente que se busca.
+   */
+  async function buscarClienteAccion(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) throw new Error('Tu rol no puede ver la cartera de clientes.');
+    if (tipo !== 'cliente') throw new Error('Catálogo desconocido.');
+    return buscarCatalogo(s.tenantId, 'cliente', typeof q === 'string' ? q : '');
+  }
 
   // El catch NO finge que no hay clientes: devuelve `null`, y la vista pinta
   // el error. Supabase reporta los fallos POR VALOR, así que una base caída se
@@ -145,6 +176,11 @@ export default async function PaginaClientes({
   return (
     <VistaClientes
       panel={panel}
+      sp={sp}
+      sufijo={sufijo}
+      camposOcultos={camposOcultos}
+      buscarCliente={buscarClienteAccion}
+      totalClientes={totalClientes}
       puedeEditar={puedeAdministrar(rol)}
       // El catálogo viaja como PROP y no como import del componente cliente:
       // `clientes.ts` importa `supabaseAdmin`, que no puede acabar en el bundle

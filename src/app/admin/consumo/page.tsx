@@ -106,7 +106,11 @@ export default async function ConsumoPage() {
                 es lo esperado — la columna del costo por corrida nace ahí.
               </p>
             ) : (
-            <table className="w-full text-[12.5px] mt-2">
+            // FE-19: la tabla scrollea DENTRO de su tarjeta. Sin esto, una
+            // fila ancha estira el layout y el scroll horizontal aparece en
+            // toda la página — la regla de "wide content" del repo.
+            <div className="overflow-x-auto mt-2">
+            <table className="w-full text-[12.5px]">
               <thead>
                 <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
                   <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Agente</th>
@@ -142,6 +146,7 @@ export default async function ConsumoPage() {
                 ))}
               </tbody>
             </table>
+            </div>
             )}
           </div>
 

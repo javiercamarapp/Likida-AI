@@ -16,8 +16,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { conteo, traerTodo } from '@/lib/likida/pg';
+import { logger } from '@/lib/logger';
 import { round2 } from '@/lib/formato';
+
+/** Cuántos tickets se LISTAN de una vez. Es un tope de pantalla, no un total:
+ *  los conteos salen de `contarTickets` y la cola dice "N de M". */
+export const TOPE_TICKETS = 200;
 
 /** Los dos estados TERMINALES del dominio de `ticket_soporte.estado` (0051).
  *  Vive aquí —junto a la lectura— y no en cada pantalla, para que "abierto"
@@ -43,25 +47,48 @@ export interface TicketCruzado {
 }
 
 /**
- * TODOS los tickets de TODAS las flotas, ordenados como una cola: lo más
- * urgente primero (menos horas de SLA restantes), los "sin SLA" al final.
+ * La cola de tickets, ordenada por urgencia: lo que vence antes primero, los
+ * "sin SLA" al final.
  *
- * `traerTodo` + `conteo` como todo lib/admin: el error de supabase-js llega
- * POR VALOR y una base caída sin comprobarlo se leería "0 tickets, nadie
- * necesita nada" — que es exactamente lo que una cola de soporte existe para
- * desmentir. Si la lectura no se puede completar, LANZA; el llamador enseña
- * su estado de error, no una cola vacía.
+ * ── FE-11 (22-ago-2026): ERA `traerTodo` DE LA TABLA ENTERA ────────────────
+ *
+ * Traía TODOS los tickets de TODAS las flotas —hasta 100,000 filas por el
+ * techo de `traerTodo`— para pintar una tabla y sumar cuatro KPIs. Tres
+ * pantallas la llamaban en cada carga (/admin/soporte, la bandeja de
+ * escalaciones y la ficha de cliente), y la ficha además la pedía SIN filtro
+ * de tenant para quedarse con los de uno solo: la flota con 12 tickets pagaba
+ * la lectura de los 40,000 de todas.
+ *
+ * Ahora: `.limit(TOPE_TICKETS)` y `tenantId` opcional que va al `.eq()`, no a
+ * un `.filter()` de JavaScript. El ORDEN se pide a la base (`vence_en` asc,
+ * nulls al final) — es el mismo criterio que el `.sort()` de antes, y tiene
+ * que serlo: con un tope, ordenar después de recortar enseñaría los 200
+ * tickets equivocados.
+ *
+ * LANZA si la lectura falla: el error de supabase-js llega POR VALOR y una
+ * cola vacía sobre una base caída afirmaría "nadie necesita nada", que es lo
+ * contrario de lo que una cola de soporte promete.
  */
-export async function getTicketsCruzados(ahoraMs: number): Promise<TicketCruzado[]> {
-  const admin = supabaseAdmin();
-  const filas = await traerTodo<Record<string, unknown>>(
-    (d, h) => admin.from('ticket_soporte')
-      .select('id, asunto, categoria, prioridad, estado, abierto_en, resuelto_en, vence_en, tenant_id, tenant:tenant_id(nombre)', conteo(d))
-      .order('id').range(d, h),
-    'getTicketsCruzados',
-  );
+export async function getTicketsCruzados(
+  ahoraMs: number,
+  opciones: { tenantId?: string; limite?: number } = {},
+): Promise<TicketCruzado[]> {
+  let consulta = supabaseAdmin()
+    .from('ticket_soporte')
+    .select('id, asunto, categoria, prioridad, estado, abierto_en, resuelto_en, vence_en, tenant_id, tenant:tenant_id(nombre)');
+  if (opciones.tenantId) consulta = consulta.eq('tenant_id', opciones.tenantId);
 
-  return filas.map((t): TicketCruzado => {
+  const { data, error } = await consulta
+    // `nullsFirst: false` = los sin SLA al final, igual que el sort viejo
+    // mandaba `Infinity` al fondo. `id` desempata para que dos cargas de la
+    // misma cola no barajen filas con el mismo vencimiento.
+    .order('vence_en', { ascending: true, nullsFirst: false })
+    .order('id')
+    .limit(Math.max(1, Math.min(TOPE_TICKETS, opciones.limite ?? TOPE_TICKETS)));
+  if (error) throw new Error(`getTicketsCruzados: ${error.message}`);
+
+  return (data ?? []).map((f): TicketCruzado => {
+    const t = f as Record<string, unknown>;
     const vence = (t.vence_en as string | null) ?? null;
     return {
       id: t.id as string,
@@ -80,5 +107,57 @@ export async function getTicketsCruzados(ahoraMs: number): Promise<TicketCruzado
       // criterio que `mapearCorrida` en negocio.ts).
       tenantNombre: ((t.tenant as { nombre?: string } | null)?.nombre) ?? '—',
     };
-  }).sort((a, b) => (a.horasRestantes ?? Infinity) - (b.horasRestantes ?? Infinity));
+  });
+}
+
+export interface ConteosTickets {
+  abiertos: number | null;
+  vencidos: number | null;
+  sinSla: number | null;
+  cerrados: number | null;
+}
+
+/** Los estados terminales, como los quiere el filtro de PostgREST. */
+const CERRADOS_PG = `(${[...ESTADOS_TICKET_CERRADO].join(',')})`;
+
+/**
+ * Los cuatro conteos de la cola, CONTADOS EN LA BASE (`count exact, head`:
+ * cero filas de vuelta) — FE-11.
+ *
+ * Salían de `.filter().length` sobre la tabla entera traída a memoria. Con el
+ * tope de 200 de arriba, ese mismo cálculo diría "200 tickets abiertos"
+ * pasara lo que pasara; contarlos es lo que permite acotar la lista sin
+ * mentir sobre el tamaño de la cola.
+ *
+ * `null` en cualquiera = esa cuenta no se pudo hacer, y la tarjeta pinta "—".
+ * Nunca 0: un cero aquí se lee como "nadie necesita nada".
+ */
+export async function contarTickets(
+  ahoraMs: number,
+  opciones: { tenantId?: string } = {},
+): Promise<ConteosTickets> {
+  const base = () => {
+    const q = supabaseAdmin().from('ticket_soporte').select('id', { count: 'exact', head: true });
+    return opciones.tenantId ? q.eq('tenant_id', opciones.tenantId) : q;
+  };
+  const contar = async (
+    afinar: (q: ReturnType<typeof base>) => ReturnType<typeof base>,
+    nombre: string,
+  ): Promise<number | null> => {
+    const { count, error } = await afinar(base());
+    if (error) {
+      logger.warn('contarTickets', { nombre, err: error.message });
+      return null;
+    }
+    return count ?? null;
+  };
+
+  const ahoraIso = new Date(ahoraMs).toISOString();
+  const [abiertos, vencidos, sinSla, cerrados] = await Promise.all([
+    contar((q) => q.not('estado', 'in', CERRADOS_PG), 'abiertos'),
+    contar((q) => q.not('estado', 'in', CERRADOS_PG).lt('vence_en', ahoraIso), 'vencidos'),
+    contar((q) => q.not('estado', 'in', CERRADOS_PG).is('vence_en', null), 'sinSla'),
+    contar((q) => q.in('estado', [...ESTADOS_TICKET_CERRADO]), 'cerrados'),
+  ]);
+  return { abiertos, vencidos, sinSla, cerrados };
 }

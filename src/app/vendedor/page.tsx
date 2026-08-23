@@ -15,7 +15,14 @@ export const dynamic = 'force-dynamic';
  * son los de la SESIÓN y solo deciden qué se LEE; toda escritura re-resuelve
  * la sesión adentro del panel.
  */
-export default async function VendedorPage() {
-  const s = await requireVendedor();
-  return <PanelVendedor userId={s.userId} nombre={s.nombre} rol={s.rol} />;
+export default async function VendedorPage({
+  searchParams,
+}: {
+  /** FE-10: `?col=<etapa>&pag=N` expande UNA columna del tablero. El panel
+   *  los sanea (etapa del dominio, página entera ≥ 1); un link viejo o
+   *  manipulado se lee como "ninguna columna expandida". */
+  searchParams: Promise<{ col?: string; pag?: string }>;
+}) {
+  const [s, sp] = await Promise.all([requireVendedor(), searchParams]);
+  return <PanelVendedor userId={s.userId} nombre={s.nombre} rol={s.rol} col={sp.col} pag={sp.pag} />;
 }

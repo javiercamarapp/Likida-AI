@@ -20,13 +20,21 @@ const MOTIVO: Record<MotivoHuerfano, string> = {
  * las dos salidas reales: adjuntar a un viaje VIVO o descartar. La foto no
  * se enseña (candado del 2-ago); el dato extraído sí.
  */
-export function VistaHuerfanos({ pendientes, viajesVivos, cargados, acciones }: {
+export function VistaHuerfanos({ pendientes, viajesVivos, cargados, totalPendientes, acciones }: {
   pendientes: HuerfanoDeFlota[];
   viajesVivos: ViajeVivo[];
   /** Cuántos viajes recientes cargó la page — el alcance real del selector. */
   cargados: number;
+  /** FE-13: cuántos comprobantes sueltos hay DE VERDAD (`count exact`), no
+   *  cuántos cupieron en la página. `getHuerfanosDeFlota` trae 200 como tope,
+   *  y enseñar "200" a secas se lee como el total de la bandeja. `null` = no
+   *  se pudo contar, y entonces no se enseña ninguna cifra total. */
+  totalPendientes: number | null;
   acciones: { adjuntar: AccionHuerfano; descartar: AccionHuerfano };
 }) {
+  // El tope real de `getHuerfanosDeFlota`. Si la página viene llena Y el
+  // conteo dice que hay más, se declara — "N de M", nunca "M" a secas.
+  const hayMas = totalPendientes !== null && totalPendientes > pendientes.length;
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
@@ -39,11 +47,16 @@ export function VistaHuerfanos({ pendientes, viajesVivos, cargados, acciones }: 
           <section className="card p-4">
             <div className="mb-3">
               <h2 className="font-display text-[15px] font-semibold">
-                Esperan que alguien los acomode{pendientes.length > 0 && <> · <span className="cifra-mono">{numero(pendientes.length)}</span></>}
+                Esperan que alguien los acomode{pendientes.length > 0 && (
+                  <> · <span className="cifra-mono">
+                    {hayMas ? `${numero(pendientes.length)} de ${numero(totalPendientes!)}` : numero(pendientes.length)}
+                  </span></>
+                )}
               </h2>
               <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
                 Una foto nunca se rechaza: lo que llega sin viaje se guarda aquí. Al chofer también
                 se le ofrece adjuntarlos por WhatsApp — quien llegue primero.
+                {hayMas && ' Se listan los más antiguos primero: resuélvelos y aparecen los siguientes.'}
               </p>
             </div>
 

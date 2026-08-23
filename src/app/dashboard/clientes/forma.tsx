@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
 import { useFormStatus } from 'react-dom';
 import { Save, TriangleAlert, CheckCircle2 } from 'lucide-react';
 // SOLO TIPOS DE `clientes.ts`, y es una restricción real, no un gusto: ese
@@ -173,12 +174,23 @@ export interface OpcionModo {
  * enviar —queda vacío y el error que ve es "falta el precio"—, cuando el
  * validador del servidor sí sabe leer la coma y el separador de millares.
  */
-export function FormaTarifa({ accion, id = '', inicial, idPrefijo, clientes, modos }: {
+export function FormaTarifa({
+  accion, id = '', inicial, clienteNombre = '', idPrefijo, buscarCliente, totalClientes, modos,
+}: {
   accion: AccionForma;
   id?: string;
   inicial: TarifaCruda;
+  /** El nombre del cliente que `inicial.clienteId` nombra — llega resuelto
+   *  desde la página para que el buscador arranque lleno sin catálogo. */
+  clienteNombre?: string;
   idPrefijo: string;
-  clientes: ReadonlyArray<{ id: string; nombre: string }>;
+  /** FE-12/FE-2: el catálogo de clientes YA NO viaja como `<option>`. Aquí
+   *  había un `<select>` con TODOS los clientes activos, dentro de una forma
+   *  que se pintaba POR CADA TARIFA — el catálogo entero repetido N veces.
+   *  Ahora es el buscador del servidor (20 a la vez). */
+  buscarCliente: BuscarCatalogo;
+  /** Cuántos clientes activos hay (count exact); `null` = no se pudo contar. */
+  totalClientes: number | null;
   modos: ReadonlyArray<OpcionModo>;
 }) {
   const [estado, despachar] = useActionState(accion, null);
@@ -192,15 +204,14 @@ export function FormaTarifa({ accion, id = '', inicial, idPrefijo, clientes, mod
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
           <label htmlFor={campo('cliente')} className={ETIQUETA}>Cliente</label>
-          <select id={campo('cliente')} name="clienteId" defaultValue={inicial.clienteId}
-            className={CAMPO} style={{ background: 'var(--surface)' }}>
-            <option value="">Tarifa de lista — aplica a cualquier cliente</option>
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>{c.nombre}</option>
-            ))}
-          </select>
+          <ComboCatalogo tipo="cliente" name="clienteId" campoId={campo('cliente')}
+            buscar={buscarCliente} aria-label="Cliente"
+            etiquetaVacia="Tarifa de lista — aplica a cualquier cliente"
+            valorInicial={inicial.clienteId || null} textoInicial={clienteNombre}
+            total={totalClientes} className={CAMPO} estilo={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Una tarifa con cliente es negociada, y le gana a la de lista.
+            Una tarifa con cliente es negociada, y le gana a la de lista. Déjalo vacío para una
+            tarifa de lista.
           </p>
         </div>
 

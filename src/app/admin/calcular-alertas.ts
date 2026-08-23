@@ -35,6 +35,12 @@ export function calcularAlertas(
   r: ResumenNegocio,
   conversaciones: ConversacionActiva[],
   escalaciones: ConteosEscalaciones,
+  /** FE-9: cuántas conversaciones hay DE VERDAD (`contarConversacionesActivas`).
+   *  `conversaciones` es la página de 20 más recientes, así que la alerta
+   *  decía "20 conversación(es) con actividad reciente" hubiera 21 o 4,000.
+   *  `null`/omitido = no se pudo contar, y la alerta cae al tamaño de la
+   *  página diciéndolo. */
+  conversacionesTotal: number | null = null,
 ): Alerta[] {
   const alertas: Alerta[] = [];
   const e = escalaciones;
@@ -111,10 +117,12 @@ export function calcularAlertas(
       href: '/admin/costos-facturacion',
     });
   }
-  if (conversaciones.length > 0) {
+  if (conversacionesTotal !== null ? conversacionesTotal > 0 : conversaciones.length > 0) {
     alertas.push({
       tipo: 'ok',
-      texto: `${conversaciones.length} conversación(es) de WhatsApp con actividad reciente.`,
+      texto: conversacionesTotal !== null
+        ? `${conversacionesTotal} conversación(es) de WhatsApp abiertas.`
+        : `Al menos ${conversaciones.length} conversación(es) de WhatsApp con actividad reciente (no se pudo contar el total).`,
       href: '/admin/conversaciones',
     });
   }
