@@ -96,6 +96,20 @@ export interface CfdiXmlData {
   rfcEmisor?: string;
   rfcReceptor?: string;
   total?: number;
+  /**
+   * DAT-19 · `@Moneda` del Comprobante (ISO 4217: MXN, USD, EUR…).
+   *
+   * Es un atributo OBLIGATORIO del CFDI 4.0 y este parser lo tiraba, así que
+   * `@Total` viajaba entero a la columna de pesos: una factura de USD 450 se
+   * comprobaba como $450.00 MXN contra el anticipo, con su IVA acreditado
+   * sobre esa misma cifra equivocada. `undefined` = el archivo no lo trae
+   * (CFDI viejo o roto) y se trata como el comportamiento de siempre.
+   */
+  moneda?: string;
+  /** `@TipoCambio` — obligatorio cuando la moneda no es MXN. NO se usa para
+   *  convertir (el motor no inventa cifras): se conserva para que la persona
+   *  que sí convierte tenga a la vista el dato que el emisor declaró. */
+  tipoCambio?: number;
   iepsTraslado: number;     // Σ Traslado[Impuesto=003] Importe → IEPS acreditable
   ivaTraslado: number;      // Σ Traslado[Impuesto=002] Importe → IVA acreditable
   uuid?: string;
@@ -286,6 +300,12 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       rfcEmisor: (emisor['@_Rfc'] as string)?.toUpperCase() || undefined,
       rfcReceptor: (receptor['@_Rfc'] as string)?.toUpperCase() || undefined,
       total: num(comp['@_Total']),
+      // DAT-19: en MAYÚSCULAS y sólo la forma ISO de tres letras — este valor
+      // se COMPARA contra 'MXN' para decidir si el importe está en pesos, y un
+      // "mxn" en minúsculas o un atributo con basura no puede mandar a revisión
+      // una liquidación sana.
+      moneda: monedaIso(comp['@_Moneda'] as string | undefined),
+      tipoCambio: num(comp['@_TipoCambio']),
       iepsTraslado,
       ivaTraslado,
       uuid: uuidRaw ? uuidRaw.toLowerCase() : undefined,
@@ -300,6 +320,12 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
   } catch {
     return null;
   }
+}
+
+/** DAT-19: `@Moneda` normalizada a ISO 4217, o `undefined` si no se puede leer. */
+function monedaIso(bruto: string | undefined): string | undefined {
+  const m = (bruto ?? '').toUpperCase().replace(/[^A-Z]/g, '');
+  return /^[A-Z]{3}$/.test(m) ? m : undefined;
 }
 
 /** ¿La clave de producto es de combustible según el catálogo (config)? */

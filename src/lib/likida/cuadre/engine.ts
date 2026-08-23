@@ -507,6 +507,34 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     if (extraOcr?.noEsComprobanteFiscal) {
       diferencias.push({ tipo: 'comprobante_no_fiscal', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} lleva impreso que NO es un comprobante fiscal: no ampara deducción (CFF 29-A). El gasto se le repone al operador, pero hay que pedirle la factura al establecimiento.`, gastoId: g.id });
     }
+    // ── DAT-18 · UN COMPROBANTE FUERA DE ESCALA ──────────────────────────
+    //
+    // El intake lo marcó (y le pidió confirmación al chofer si estaba en la
+    // ventana). Aquí llega el caso en que el chofer no contestó, o contestó que
+    // sí: la cifra sigue sin poder darse por buena sola, y el contralor es
+    // quien tiene el papel enfrente. `monto: 0` porque esto NO castiga —el
+    // dinero puede ser real— sino que pide que alguien lo mire.
+    if (extraOcr?.montoImplausible) {
+      diferencias.push({ tipo: 'monto_implausible', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} está fuera de escala para este viaje. Un punto decimal o un separador de miles mal leídos multiplican por mil con la misma confianza de OCR: verifica el papel antes de liquidarlo.`, gastoId: g.id });
+    }
+
+    // ── DAT-19 · EL COMPROBANTE NO ESTÁ EN PESOS ─────────────────────────
+    //
+    // Ni el OCR ni el parser del XML leían `Moneda`/`TipoCambio`, así que un
+    // CFDI de USD entraba con su `Total` tal cual en la columna de pesos: un
+    // diésel de USD 450 se comprobaba como $450.00 MXN contra el anticipo — y
+    // su IVA se acreditaba en la misma cifra equivocada.
+    //
+    // NO se convierte aquí. El motor no inventa cifras, y aplicar un tipo de
+    // cambio produciría un número que ni el contralor ni el SAT podrían
+    // reproducir sin saber qué fecha se usó. Se declara y se manda a revisar; y
+    // sobre todo NO se acredita como pesos (ver SIN_ACREDITAMIENTO).
+    const monedaGasto = typeof extraOcr?.moneda === 'string' ? extraOcr.moneda : undefined;
+    if (monedaGasto && monedaGasto !== 'MXN') {
+      const tc = typeof extraOcr?.tipoCambio === 'number' ? extraOcr.tipoCambio : undefined;
+      diferencias.push({ tipo: 'moneda_extranjera', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} viene en ${monedaGasto}${tc ? ` (tipo de cambio ${tc} declarado en el comprobante)` : ' y sin tipo de cambio declarado'}, no en pesos. La cifra ${mxn(g.monto)} NO está convertida: conviértela a mano con el tipo de cambio del día antes de liquidar. Su IVA no se acredita hasta entonces.`, gastoId: g.id });
+    }
+
     if (extraOcr?.textoSospechoso) {
       diferencias.push({ tipo: 'texto_sospechoso', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} traía texto dirigido al lector automático. Se capturó el total impreso, pero conviene ver el papel original.`, gastoId: g.id });
     }
@@ -1066,7 +1094,11 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // SÍ es deducible hasta el 15% (RFA 2026 regla 2.9), pero NO acredita IEPS —
   // la facilidad salva un beneficio, no los dos. Sacarlo de aquí acreditaría un
   // IEPS que la facilidad no concede.
-  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'combustible_efectivo_dentro15', 'efectivo_sobre_15', 'efectivo_no_elegible', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente', 'consumo_bar'];
+  // `moneda_extranjera` (DAT-19) entra aquí por la misma razón que
+  // `cfdi_pendiente`: el importe de la columna NO son pesos, así que acreditar
+  // su IVA sería acreditar una cifra que nadie convirtió. Es el tercer estado
+  // de siempre —«no se pudo verificar»— y nunca se resuelve en verde solo.
+  const SIN_ACREDITAMIENTO: TipoDiferencia[] = ['rfc_receptor', 'rfc_receptor_no_verificable', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_no_encontrado', 'complemento_hidrocarburos', 'combustible_efectivo', 'combustible_efectivo_dentro15', 'efectivo_sobre_15', 'efectivo_no_elegible', 'efectivo_sobre_tope', 'monto_invalido', 'cfdi_pendiente', 'consumo_bar', 'moneda_extranjera'];
   // AUDITORÍA 12, ALTO (fiscal, reincidente de la 11): `cfdi_pendiente` entra
   // aquí y en POR_CONFIRMAR — con el SAT caído o en timeout, "no se pudo
   // verificar" es el MISMO tercer estado que el motor ya aplica a EFOS, al RFC
@@ -1250,7 +1282,7 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
   // central del demo. El requisito sigue avisado —ahora con tono `condicionado`
   // en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
   // no puede bajar un estatus que nunca podría volver a subir.
-  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'oposicion_titular'];
+  const REVISAR: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'rfc_receptor', 'cfdi_cancelado', 'cfdi_efos', 'cfdi_efos_indeterminado', 'cfdi_no_encontrado', 'cfdi_pendiente', 'monto_invalido', 'complemento_hidrocarburos', 'complemento_no_verificable', 'combustible_efectivo', 'efectivo_sobre_tope', 'efectivo_sobre_15', 'efectivo_no_elegible', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'consumo_bar', 'oposicion_titular'];
   const hayRevisar = diferencias.some((d) => REVISAR.includes(d.tipo));
   const hayDif = diferencias.some((d) => d.tipo === 'sobre_politica' || d.tipo === 'duplicado' || d.tipo === 'diesel_desviacion') || Math.abs(diferencia) >= 0.5;
   const estatus: EstatusLiquidacion = hayRevisar ? 'revisar' : hayDif ? 'con_diferencias' : 'cuadrada';

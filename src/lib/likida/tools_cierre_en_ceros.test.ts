@@ -51,7 +51,12 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 await import('./tools');
 const { executeTool } = await import('@/lib/llm/tool-executor');
-const BASE = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779' };
+// DAT-22: el cierre exige que el operador lo haya pedido EN ESTE TURNO
+// (`cierrePedidoPorTexto`, que el processor calcula con `pidioCerrar`). Estos
+// archivos prueban otras cosas del cierre, así que dan por hecho el escenario
+// normal —el chofer escribió "listo"— y el candado propio se prueba en
+// `tools_cierre_pedido.test.ts`.
+const BASE = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779', cierrePedidoPorTexto: true };
 
 beforeEach(() => {
   saveLiquidacion.mockClear();

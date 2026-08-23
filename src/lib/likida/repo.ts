@@ -9,6 +9,7 @@ import { acotada } from './presupuesto';
 import { traerTodo, conteo } from './pg';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/likida';
 import type { CodigoPendiente } from './intake/emparejar';
+import { violaIndice } from './pg_errores';
 
 // El tope de consulta vive en `presupuesto.ts`, con `TOPE_CONSULTA_MS` y el
 // resto del presupuesto de la invocación. Estuvo aquí hasta la auditoría 8, y
@@ -302,6 +303,10 @@ export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Pro
     folio_norm: g.folioNorm ?? null,
     ocr_extra: g.ocrExtra ?? null,
     img_hash: g.imgHash ?? null,
+    // DAT-01: la llave del reproceso. Va aquí, en el MISMO insert, para que la
+    // unicidad y el alta sean el mismo acto: un `update` posterior dejaría
+    // abierta justo la ventana que este campo existe para cerrar.
+    wa_message_id: g.waMessageId ?? null,
   }), 'addGasto');
   if (error) {
     // Se preserva el código de Postgres para que el caller distinga un duplicado
@@ -422,7 +427,16 @@ export interface Huerfano {
   ofrecidoEn?: string;
 }
 
-/** Best-effort: si esto falla, se le dice al operador que no se pudo guardar. */
+/**
+ * Best-effort: si esto falla, se le dice al operador que no se pudo guardar.
+ *
+ * DAT-01 — EL DUPLICADO CUENTA COMO GUARDADO. `uq_huerfano_img_hash` (0164)
+ * impide que el MISMO papel ocupe dos filas en la sala de espera; ese 23505 no
+ * es un fallo: significa que el comprobante ya está esperando, que es
+ * exactamente lo que el llamador necesita saber para decirle al operador que no
+ * se perdió. Tratarlo como error le pediría reenviar una foto que ya está
+ * guardada — y cada reenvío que entra es otra oportunidad de duplicar el gasto.
+ */
 export async function guardarHuerfano(
   tenantId: string, operadorId: string,
   h: { gasto: Gasto; motivo: MotivoHuerfano; rutaImagen?: string },
@@ -431,6 +445,10 @@ export async function guardarHuerfano(
     tenant_id: tenantId, operador_id: operadorId,
     gasto: h.gasto, motivo: h.motivo, ruta_imagen: h.rutaImagen ?? null,
   }), 'guardarHuerfano');
+  if (violaIndice(error, 'uq_huerfano_img_hash')) {
+    logger.info('huerfano.ya_estaba', { tenant: tenantId, operador: operadorId });
+    return true;
+  }
   if (error) logger.error('huerfano.guardar_error', { err: error.message });
   return !error;
 }
@@ -638,7 +656,13 @@ export async function updateGastoCfdiXml(
        // Auditoría 12 (fiscal, ALTO): @Cantidad del concepto representativo,
        // litros cuando ClaveUnidad = LTR. El XML es la verdad de referencia del
        // ticket; si el OCR no leyó litros (o los leyó mal), este los llena.
-       cantidad?: number },
+       cantidad?: number;
+       // DAT-19: la moneda del CFDI y su tipo de cambio. Se MERGEAN en
+       // `ocr_extra` igual que los litros — el motor levanta
+       // `moneda_extranjera` desde ahí, y sin este paso un XML en USD pegado a
+       // un ticket dejaba el gasto con el importe extranjero en la columna de
+       // pesos y sin una sola señal de que no eran pesos.
+       moneda?: string; tipoCambio?: number },
 ): Promise<void> {
   const extra: Record<string, unknown> = {};
   if (x.uuid) extra.cfdi_uuid = uuidCfdi(x.uuid);
@@ -650,11 +674,17 @@ export async function updateGastoCfdiXml(
   // Litros del XML: se MERGEAN sobre ocr_extra (no se reemplaza el jsonb —
   // ahí viven producto, estacion, fechaImpresa… que una escritura a ciegas
   // borraría). Lectura + fusión + escritura, el patrón del resto del repo.
-  if (x.claveUnidad === 'LTR' && x.cantidad != null && x.cantidad > 0) {
+  const litrosDelXml = x.claveUnidad === 'LTR' && x.cantidad != null && x.cantidad > 0;
+  const monedaDelXml = !!x.moneda || x.tipoCambio != null;
+  if (litrosDelXml || monedaDelXml) {
     const { data: actual } = await acotada(supabaseAdmin().from('gasto')
       .select('ocr_extra').eq('id', gastoId).eq('tenant_id', tenantId).maybeSingle(), 'updateGastoCfdiXml.leerOcrExtra');
     const ocrExtra = { ...((actual?.ocr_extra as Record<string, unknown> | null) ?? {}) };
-    ocrExtra.litros = x.cantidad;
+    if (litrosDelXml) ocrExtra.litros = x.cantidad;
+    // El XML manda sobre lo que leyó la visión: el emisor declaró la moneda en
+    // un comprobante timbrado, el OCR la dedujo de un papel.
+    if (x.moneda) ocrExtra.moneda = x.moneda;
+    if (x.tipoCambio != null) ocrExtra.tipoCambio = x.tipoCambio;
     extra.ocr_extra = ocrExtra;
   }
   const { error } = await acotada(supabaseAdmin().from('gasto').update({
@@ -752,6 +782,17 @@ export async function guardarCodigoPendiente(
     url_facturacion: c.urlFacturacion ?? null,
     cfdi_uuid: uuidCfdi(c.cfdiUuid),
   }), 'guardarCodigoPendiente');
+  // DAT-37: el MISMO acercamiento apuntado dos veces (el operador que lo manda
+  // de nuevo, o nuestro reproceso de la bandeja durable) chocaba contra nada —
+  // la 0016 no tenía ninguna unicidad— y dejaba una segunda fila que jamás se
+  // empareja: `pegarCodigoEnEspera` consume una sola. Con los índices de la
+  // 0164 el choque es benigno y significa "ese código ya está esperando", que
+  // es exactamente lo que el llamador quería conseguir. Lanzar aquí lo mandaría
+  // al catch de ERROR del processor por un camino que salió bien.
+  if (violaIndice(error, 'uq_codigo_pendiente_folio') || violaIndice(error, 'uq_codigo_pendiente_barras')) {
+    logger.info('codigo_pendiente.ya_estaba', { tenant: tenantId, viaje: viajeId });
+    return;
+  }
   if (error) throw new Error(`guardarCodigoPendiente: ${error.message}`);
 }
 

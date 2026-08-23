@@ -42,6 +42,9 @@ const guardarEventosPendientes = vi.fn(async (ms: Array<Record<string, unknown>>
   };
 });
 vi.mock('@/lib/likida/wa_pendientes', () => ({
+  // DAT-34: la deduplicación previa al rate limit. Vacío = ninguno de estos
+  // wamids estaba ya en la bandeja, que es el caso de una entrega normal.
+  pendientesYaConocidos: async () => new Set<string>(),
   guardarEventosPendientes: (...a: unknown[]) => guardarEventosPendientes(...(a as [never])),
   // El inbox general: el flujo normal reclama la fila para procesarla.
   reclamarPendiente: async (id: string) => {

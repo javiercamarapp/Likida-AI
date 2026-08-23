@@ -55,9 +55,10 @@ import {
   registrarSolicitudArco,
 } from '@/lib/likida/repo';
 import {
-  resolveOperador, getOpenViaje, getTenantContext, type ResolvedOperador,
+  resolveOperador, getOpenViaje, viajeAbiertoDesdeMs, getTenantContext, type ResolvedOperador,
   loadConversation, saveConversation, claimMessage,
-  acquireViajeLock, releaseViajeLock, releaseMessageClaim, completarMessageClaim,
+  acquireViajeLock, intentarLockViaje, TTL_LOCK_CIERRE_MS,
+  releaseViajeLock, releaseMessageClaim, completarMessageClaim,
   intakeDelta, esperarIntake, ConsultaFallida, OperadorAmbiguo, type ConvTurn,
   buscarTenantPorTelefono,
 } from '@/lib/likida/conv';
@@ -66,7 +67,8 @@ import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMe
 import {
   decidirAcuse, mensajeConfirmar, mensajeRefoto, esPeticionDeFoto,
   mensajeCorregir, mensajeConfirmado, leerBoton, mensajeDemasiadasDudas,
-  MAX_CONFIRMACIONES_SEGUIDAS, type LecturaTicket,
+  MAX_CONFIRMACIONES_SEGUIDAS, esMontoImplausible, umbralMontoImplausible,
+  type LecturaTicket,
 } from './acuse_ticket';
 import { estadoDelViaje, responderConsulta } from './consulta_chofer';
 import { resolverCuentaOficina, telefonoJefeDe, type CuentaOficina } from './contactos';
@@ -88,6 +90,20 @@ export interface InboundMessage {
   lat?: number;
   lng?: number;
   waMessageId?: string;       // id de Meta, para idempotencia
+  /**
+   * Cuándo lo recibió META (epoch en ms), no cuándo lo procesamos (DAT-38).
+   *
+   * Entre las dos horas caben los reintentos de Meta, el aplazamiento del rate
+   * limit y hasta cinco minutos de la bandeja durable. Todo lo que se le
+   * ASIENTA AL VIAJE con hora —los hitos «llegué»/«descargando»/«de regreso»—
+   * tiene que usar ésta: la otra es la hora de nuestro servidor, y la flota va
+   * a cruzar esos sellos contra la bitácora de su cliente.
+   *
+   * `undefined` cuando el mensaje no viene del webhook (QA, simulador) o
+   * cuando Meta mandó un timestamp que no se puede leer: ahí se cae al reloj
+   * local, que es el comportamiento de siempre.
+   */
+  timestampMs?: number;
   /** SOLO lo fija el motor de QA (scripts/qa-agentes/ y /api/admin/qa/*): un
    *  data-URL ya resuelto que SUSTITUYE la descarga real de Meta — el arnés
    *  no tiene un mediaId real de WhatsApp (es el número de prueba; un chofer
@@ -435,6 +451,38 @@ async function recordarPeticionDeFoto(
  */
 function pareceCierre(texto: string): boolean {
   return /^\s*(listo|ya est[aá]|ya qued[óo]|ya no tengo m[áa]s|(ya\s+)?termin[éeoó]|(ya\s+)?acab[éeoó]|cierra|cerrar|eso es todo|es todo)(?!\p{L})/iu.test(texto);
+}
+
+/**
+ * ¿EL OPERADOR PIDIÓ CERRAR EN ESTE TURNO? (DAT-22)
+ *
+ * `guardar_liquidacion` estaba disponible en TODOS los turnos del agente, y es
+ * la única acción irreversible del sistema: los triggers 0036/0037 bloquean
+ * después cualquier alta o corrección sobre ese viaje. El único freno era el
+ * del cierre EN CEROS, o sea que un viaje con comprobantes se podía cerrar en
+ * el turno de un "¿cuánto llevo?" —bastaba que el modelo se adelantara— y el
+ * operador se quedaba sin poder mandar el resto de su fajo.
+ *
+ * ── POR QUÉ ES MÁS ANCHO QUE `pareceCierre` ─────────────────────────────────
+ *
+ * `pareceCierre` es el freno del cierre en ceros y es ESTRECHO a propósito: se
+ * equivoca hacia no frenar. Éste decide si la tool existe, y equivocarse aquí
+ * hacia el "no" le impide cerrar a quien sí lo pidió con otras palabras
+ * ("mándame mi liquidación", "no traigo más tickets") — un chofer atrapado en
+ * un viaje que no puede cerrar. Por eso cubre las formas largas además de las
+ * del freno.
+ *
+ * Lo que SÍ deja fuera es todo lo demás: una consulta, un saludo, el caption de
+ * una foto, un hito. Que es exactamente el turno en el que el modelo no tiene
+ * ningún derecho a cerrar.
+ *
+ * El prompt del agente ya trabaja así ("CIERRA en ese turno... NO le pidas que
+ * vuelva a confirmar"), así que esto no parte ningún flujo de dos turnos.
+ */
+export function pidioCerrar(texto: string | undefined): boolean {
+  if (typeof texto !== 'string' || !texto.trim()) return false;
+  if (pareceCierre(texto)) return true;
+  return /liquidaci[óo]n|liquid[ae]|ci[ée]rr|cerrar|cerramos|cu[áa]dra|cuadrar|finaliz|termin[éeoó]|acab[éeoó]|ya estuvo|ya fue|(no|sin)\s+(traigo|tengo|me\s+falta|falta)\s*(m[áa]s|nada|otro|ninguno)?|[úu]ltimo\s+(ticket|comprobante|recibo)|es\s+todo/iu.test(texto);
 }
 
 /**
@@ -961,7 +1009,15 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // producción siempre trae el campo undefined y descarga de Meta.
           const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
           if (!dataUrl) { await sendText(msg.from, 'No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
-          const ruta = await subirComprobante(op.tenantId, 'sin-viaje', await hashImagen(dataUrl), dataUrl);
+          // DAT-01: el hash se calcula UNA vez y se conserva. Antes se usaba
+          // para nombrar el archivo del bucket y se tiraba, así que la fila de
+          // la sala de espera nacía sin él — y el reproceso del mismo mensaje
+          // dejaba DOS filas del mismo papel, que el «sí» del operador
+          // adjuntaba las dos. Ahora viaja dentro del `gasto` (el jsonb que
+          // `addGasto` lee al adjuntar) y `uq_huerfano_img_hash` (0164) impide
+          // la segunda.
+          const imgHash = await hashImagen(dataUrl);
+          const ruta = await subirComprobante(op.tenantId, 'sin-viaje', imgHash, dataUrl);
           const ex = await extraerComprobante(dataUrl, reloj.senal(25_000));
           await registrarCosto({ tenantId: op.tenantId, viajeId: null, fase: 'ocr', modelo: ex.costo.modelo, tokensIn: ex.costo.tokensIn, tokensOut: ex.costo.tokensOut, costoUsd: ex.costo.costoUsd });
           // ── FALLO NUESTRO: AQUÍ TAMPOCO SE PIERDE EL COMPROBANTE ────────────
@@ -994,7 +1050,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // la consulta, o subir el tope) y queda anotado.
           if (!ex.legible && ex.motivo === 'fallo_tecnico') {
             const guardado = await guardarHuerfano(op.tenantId, op.operadorId, {
-              gasto: ruta ? { ...ex.gasto, imagenUrl: ruta } : ex.gasto,
+              gasto: { ...ex.gasto, imgHash, ...(ruta ? { imagenUrl: ruta } : {}) },
               motivo: 'fallo_ocr', rutaImagen: ruta,
             });
             logger.warn('huerfano.fallo_tecnico', {
@@ -1020,7 +1076,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             return;
           }
           const guardado = await guardarHuerfano(op.tenantId, op.operadorId, {
-            gasto: ruta ? { ...ex.gasto, imagenUrl: ruta } : ex.gasto,
+            gasto: { ...ex.gasto, imgHash, ...(ruta ? { imagenUrl: ruta } : {}) },
             motivo: 'sin_viaje', rutaImagen: ruta,
           });
           logger.info('huerfano.guardado', { tenant: op.tenantId, operador: op.operadorId, monto: ex.gasto.monto, ok: guardado });
@@ -1168,43 +1224,53 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         const dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
         if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
 
-        // FASE 2 (FLAG default-off): dedup por contenido. La idempotencia por
-        // waMessageId cubre reintentos de Meta; esto cubre el reenvío MANUAL de la
-        // misma foto (otro waMessageId). Pre-check antes del OCR → ahorra ese costo.
-        // Camino actual intacto con LIKIDA_DEDUP_FOTOS sin setear (HARD RULE 3).
-        let imgHash: string | undefined;
-        if (process.env.LIKIDA_DEDUP_FOTOS === '1') {
-          imgHash = await hashImagen(dataUrl);
-          if (await gastoExistePorHash(viajeId, imgHash, op.tenantId)) {
-            logger.info('foto.dedup', { viaje: viajeId });
-            // EL SILENCIO ES CORRECTO… SALVO CUANDO ESA FOTO ES LA QUE SE PIDIÓ.
-            //
-            // Fallo del ensayo del 1-ago: se le pidió otra foto de un ticket con
-            // la fecha mal leída, reenvió EL MISMO archivo, y esto lo descartó
-            // antes del OCR sin decir nada. Hizo lo que se le pidió, no pasó
-            // nada, y no tenía forma de enterarse — el peor modo de falla que
-            // hay, porque desde su lado el sistema quedó mudo.
-            //
-            // Para un reenvío cualquiera (doble toque, reintento) el silencio
-            // sigue siendo lo correcto: avisarle de cada foto repetida sería
-            // ruido. Lo que cambia el caso es que el gasto que empata tenga la
-            // fecha en duda, porque entonces esa foto NO puede aportar nada:
-            // es la misma que ya se leyó mal.
-            try {
-              const [previo, v] = await Promise.all([
-                gastoPorHash(viajeId, imgHash, op.tenantId),
-                ventanaDesdeDB(op.tenantId, viajeId),
-              ]);
-              if (previo && v && fechaDudosa(previo.fecha, v)) {
-                await say(`Esa es la *misma foto* que ya me habías mandado 🔁, así que la fecha sigue igual. Necesito una foto *nueva* de ese ticket de ${mxn(previo.monto)} —tomada otra vez, no reenviada— enfocando la parte donde viene la fecha. 📸`);
-              }
-            } catch (e) {
-              // Best-effort: el dedup ya hizo su trabajo. Fallar aquí no puede
-              // costar un gasto, solo un aviso.
-              logger.warn('foto.dedup_aviso_falló', { err: e instanceof Error ? e.message : String(e) });
+        // ── EL HASH SE CALCULA SIEMPRE (DAT-01, CRÍTICO) ────────────────────
+        //
+        // Aquí vivía `if (process.env.LIKIDA_DEDUP_FOTOS === '1')`, y esa
+        // bandera NO está puesta en producción. O sea: ningún gasto de
+        // producción llevaba `img_hash`, y `uq_gasto_img_hash` (0027) —el único
+        // candado que impide cobrar el mismo ticket dos veces cuando el papel
+        // no trae CFDI, que es el caso de TODO ticket de gasolinera— llevaba
+        // meses indexando el vacío. La protección existía en el esquema, en el
+        // repo y en los comentarios; no existía en la base.
+        //
+        // La bandera se retira entera en vez de encenderse: una protección de
+        // dinero que se puede apagar con una variable de entorno es una
+        // protección que un despliegue puede apagar sin que nadie lo note, y
+        // así fue exactamente como se apagó ésta.
+        //
+        // Cuesta un SHA-256 sobre los bytes que ya están en memoria, al lado de
+        // una llamada de visión de ~$0.015. No es una decisión de costo.
+        const imgHash = await hashImagen(dataUrl);
+        if (await gastoExistePorHash(viajeId, imgHash, op.tenantId)) {
+          logger.info('foto.dedup', { viaje: viajeId });
+          // EL SILENCIO ES CORRECTO… SALVO CUANDO ESA FOTO ES LA QUE SE PIDIÓ.
+          //
+          // Fallo del ensayo del 1-ago: se le pidió otra foto de un ticket con
+          // la fecha mal leída, reenvió EL MISMO archivo, y esto lo descartó
+          // antes del OCR sin decir nada. Hizo lo que se le pidió, no pasó
+          // nada, y no tenía forma de enterarse — el peor modo de falla que
+          // hay, porque desde su lado el sistema quedó mudo.
+          //
+          // Para un reenvío cualquiera (doble toque, reintento) el silencio
+          // sigue siendo lo correcto: avisarle de cada foto repetida sería
+          // ruido. Lo que cambia el caso es que el gasto que empata tenga la
+          // fecha en duda, porque entonces esa foto NO puede aportar nada:
+          // es la misma que ya se leyó mal.
+          try {
+            const [previo, v] = await Promise.all([
+              gastoPorHash(viajeId, imgHash, op.tenantId),
+              ventanaDesdeDB(op.tenantId, viajeId),
+            ]);
+            if (previo && v && fechaDudosa(previo.fecha, v)) {
+              await say(`Esa es la *misma foto* que ya me habías mandado 🔁, así que la fecha sigue igual. Necesito una foto *nueva* de ese ticket de ${mxn(previo.monto)} —tomada otra vez, no reenviada— enfocando la parte donde viene la fecha. 📸`);
             }
-            return; // ya la teníamos: no re-OCR, no duplicar gasto
+          } catch (e) {
+            // Best-effort: el dedup ya hizo su trabajo. Fallar aquí no puede
+            // costar un gasto, solo un aviso.
+            logger.warn('foto.dedup_aviso_falló', { err: e instanceof Error ? e.message : String(e) });
           }
+          return; // ya la teníamos: no re-OCR, no duplicar gasto
         }
 
         // LA FOTO SE GUARDA, y se arranca AQUÍ para que corra en paralelo con
@@ -1263,7 +1329,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         //
         // En paralelo para que cueste un viaje a la base y no tres. Al lado de
         // la llamada de visión que acaba de correr, es ruido.
-        const [yaRegistrados, ventana] = await Promise.all([
+        const [yaRegistrados, ventana, viajeDelGasto] = await Promise.all([
           extraccion.legible || EMPAREJAN.includes(extraccion.motivo ?? '')
             ? getGastos(viajeId, op.tenantId) : Promise.resolve([]),
           // FAIL-OPEN a propósito: si esto falla, `ventana` queda `undefined` y
@@ -1276,7 +1342,33 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
                 return undefined;
               })
             : Promise.resolve(undefined),
+          // DAT-18: el ANTICIPO, que es la escala contra la que se mide si una
+          // cifra tiene sentido en este viaje. Va en el mismo `Promise.all` para
+          // que no cueste un viaje más a la base; fail-open por el mismo motivo
+          // que la ventana —sin anticipo el umbral cae al piso de $50,000 y el
+          // intake se comporta como antes, no se pierde la foto—.
+          extraccion.legible
+            ? getViaje(viajeId, op.tenantId).catch((e) => {
+                logger.warn('foto.anticipo_no_disponible', { err: e instanceof Error ? e.message : String(e) });
+                return null;
+              })
+            : Promise.resolve(null),
         ]);
+        // ── DAT-18 · ¿ESTA CIFRA CABE EN ESTE VIAJE? ────────────────────────
+        //
+        // La marca viaja en `ocrExtra` (no en una columna): es una observación
+        // sobre la LECTURA, igual que `montoDiscrepante` y `textoSospechoso`, y
+        // el motor la levanta como diferencia al cuadrar. Se calcula una sola
+        // vez y con la MISMA función que usa el motor (`esMontoImplausible`),
+        // para que el chofer y el contralor no vean dos umbrales distintos.
+        const montoImplausible = esMontoImplausible(extraccion.gasto.monto, viajeDelGasto?.anticipo);
+        if (montoImplausible) {
+          logger.warn('foto.monto_implausible', {
+            viaje: viajeId, tenant: op.tenantId,
+            monto: extraccion.gasto.monto, umbral: umbralMontoImplausible(viajeDelGasto?.anticipo),
+          });
+          extraccion.gasto.ocrExtra = { ...(extraccion.gasto.ocrExtra ?? {}), montoImplausible: true };
+        }
         const decision = decidirFoto(extraccion, yaRegistrados, ventana);
 
         // Pedir reenvío SOLO cuando reenviar arregla algo. Si el fallo fue
@@ -1387,13 +1479,29 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // cualquiera cuente— hace que se pierda el aviso, no que se duplique.
           // Igual que con el acuse: perder uno es molesto, mandar tres es un
           // producto que se ve roto.
-          try {
-            const pendientes = await getCodigosPendientes(viajeId, op.tenantId);
-            if (pendientes.length <= 1) await say(pideOtroPapel);
-          } catch {
-            // Si no se puede contar, se avisa igual: es peor dejar al operador
-            // sin instrucción que repetírsela.
-            await say(pideOtroPapel);
+          //
+          // DAT-37 — EL `say()` NO PUEDE VIVIR DENTRO DEL `catch`. Aquí había
+          // un `await say(...)` como fallback del conteo, y esa es la forma de
+          // la que trata el hallazgo entero: una llamada de red en el camino de
+          // recuperación, sin nada que la atrape. Si `say` lanzaba (Meta 500,
+          // el registro del costo contra una base caída), el turno completo se
+          // caía DESPUÉS de haber guardado el código pendiente, el catch
+          // general soltaba el claim, y la bandeja durable reprocesaba el mismo
+          // mensaje: segunda fila en la bandeja de códigos. El índice de la
+          // 0164 ya impide la fila; esto impide el bucle que la provocaba.
+          //
+          // El criterio de fondo no cambia: si no se puede contar, se avisa
+          // igual —es peor dejar al operador sin instrucción que repetírsela—.
+          const primeroDelViaje = await getCodigosPendientes(viajeId, op.tenantId)
+            .then((p) => p.length <= 1)
+            .catch((e) => {
+              logger.warn('foto.codigos_no_contados', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+              return true;
+            });
+          if (primeroDelViaje) {
+            try { await say(pideOtroPapel); } catch (e) {
+              logger.warn('foto.codigo_aviso_falló', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+            }
           }
           return;
         }
@@ -1454,13 +1562,33 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           const imagenUrl = await subida;
           await addGasto(op.tenantId, viajeId, {
             ...gasto,
-            ...(imgHash ? { imgHash } : {}),
+            imgHash,
+            // DAT-01: la llave del REPROCESO. El `say()` de abajo puede lanzar
+            // (Meta 500, red), el catch general suelta el claim y la bandeja
+            // durable vuelve a correr ESTE MISMO mensaje: otro `randomUUID()`,
+            // otro OCR, y hasta hoy nada que lo detuviera. Con el wamid en la
+            // fila, el segundo intento choca contra `uq_gasto_wa_message_id` y
+            // se trata abajo como lo que es: el gasto ya está registrado.
+            ...(msg.waMessageId ? { waMessageId: msg.waMessageId } : {}),
             ...(imagenUrl ? { imagenUrl } : {}),
           });
         } catch (e) {
           // R1: dos fotos IDÉNTICAS en el mismo lote pasan el pre-check antes de
           // que cualquiera inserte; el índice único (mig. 0015) atrapa la 2ª con
           // 23505 → es un duplicado benigno, no un error. Se ignora en silencio.
+          // ── EL MISMO MENSAJE, OTRA VEZ (DAT-01) ─────────────────────────
+          //
+          // No es una carrera ni un reenvío del operador: es NUESTRO reproceso.
+          // El gasto YA está en la base con este wamid, así que el comprobante
+          // no se pierde y no hay nada que decirle a nadie — el turno anterior
+          // ya habló (o murió intentándolo, que es justo lo que trajo el
+          // reintento). Se ignora en silencio, como los otros dos duplicados
+          // benignos, y sobre todo NO se relanza: dejarlo salir tumbaría el
+          // turno otra vez y la bandeja lo reintentaría en bucle.
+          if (violaIndice(e, 'uq_gasto_wa_message_id')) {
+            logger.info('foto.reproceso_mismo_wamid', { viaje: viajeId, id: msg.waMessageId });
+            return;
+          }
           if (imgHash && violaIndice(e, 'uq_gasto_img_hash')) {
             // OJO: EL ÍNDICE ES `unique(tenant_id, img_hash)` — TODA LA FLOTA.
             //
@@ -1522,7 +1650,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             // con el operador cargando un papel que nadie iba a capturar.
             const ruta = await subida;
             const ok = await guardarHuerfano(op.tenantId, op.operadorId, {
-              gasto: ruta ? { ...gasto, imagenUrl: ruta } : gasto,
+              // Con el hash (DAT-01): el mismo comprobante que llega tarde dos
+              // veces —el reproceso de la bandeja durable— es UNA fila en la
+              // sala de espera, no dos que se adjunten juntas al viaje siguiente.
+              gasto: { ...gasto, imgHash, ...(ruta ? { imagenUrl: ruta } : {}) },
               motivo: 'tras_liquidar', rutaImagen: ruta,
             });
             logger.warn('foto.llego_tarde', { viaje: viajeId, monto: gasto.monto, guardado: ok });
@@ -1634,6 +1765,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             confianza: gasto.ocrConfianza ?? null,
             deCfdi: Boolean(gasto.cfdiUuid),
             esRepeticion: false,
+            // DAT-18: un $850,000 leído nítido salía por `silencio` con
+            // confianza 0.95 — la confianza mide qué tan claro se vio el papel,
+            // no si la cifra cabe en el viaje.
+            montoImplausible,
           };
           let d = decidirAcuse(lectura);
 
@@ -1937,6 +2072,24 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             // `startsWith('15101') ? 'diesel' : 'factura'`, así que toda caseta
             // timbrada entraba como 'factura' y perdía el estímulo del 50% de peaje
             // (LIF 2026 Art. 20-A), que el motor sólo aplica a `concepto === 'caseta'`.
+            // ── DAT-37 · UN CFDI SIN TOTAL NO ES UN GASTO DE $0.00 ────────
+            //
+            // `monto: xml.total ?? 0` daba de alta un gasto de CERO PESOS con
+            // `xml_verificado: true`, que es la peor combinación posible: la
+            // marca de verificado es justo la que hace que el motor cuente sus
+            // litros y acredite su IVA/IEPS, y el renglón de $0.00 aparece en
+            // la liquidación del contralor como una cifra medida. `@Total` es
+            // obligatorio en CFDI 4.0, así que si no viene el archivo está
+            // roto o no es un CFDI — y de un papel roto no se afirma nada.
+            //
+            // El XML crudo SÍ se conserva (CFF 30, abajo): la evidencia no se
+            // tira; lo que no se hace es inventarle un importe.
+            if (xml.total == null || !(xml.total > 0)) {
+              logger.warn('xml.sin_total', { viaje: viajeId, uuid: xml.uuid });
+              await saveCfdiXmlRaw(op.tenantId, xml.uuid, null, xmlText!);
+              await sendText(msg.from, 'Recibí tu XML pero viene *sin el total* del comprobante 🤔, así que no lo puedo registrar como gasto — me saldría en $0.00. Guardé el archivo; mándame la foto del ticket para capturar el monto, o pídele a la gasolinera el XML completo. 📎');
+              return;
+            }
             gastoId = randomUUID();
             const cfg = await getConfig(op.tenantId);
             // AUDITORÍA 8, ALTO (agéntico): sin este try/catch, un XML sin foto
@@ -1947,7 +2100,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
               await addGasto(op.tenantId, viajeId, {
                 id: gastoId,
                 concepto: conceptoDesdeClave(xml.claveProdServ, cfg.hidrocarburos.claves, cfg.estimulos.clavesPeaje),
-                monto: xml.total ?? 0,
+                monto: xml.total,
                 fecha: xml.fecha,
                 rfcEmisor: xml.rfcEmisor,
                 rfcReceptor: xml.rfcReceptor,
@@ -1965,8 +2118,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
                 // Auditoría 12 (fiscal, ALTO): el XML 1:1 trae la cantidad
                 // (Cantidad="113.00" ClaveUnidad="LTR") y sin esto el gasto
                 // nacía con 0 litros — el estímulo no se acreditaba.
-                ocrExtra: xml.claveUnidad === 'LTR' && xml.cantidad != null
-                  ? { litros: xml.cantidad } : undefined,
+                //
+                // Y DAT-19: la moneda del comprobante viaja con él. Sin esto,
+                // el `@Total` de una factura en USD entraba entero en la
+                // columna de pesos y el motor no tenía cómo enterarse.
+                ocrExtra: (() => {
+                  const extra: Record<string, unknown> = {};
+                  if (xml.claveUnidad === 'LTR' && xml.cantidad != null) extra.litros = xml.cantidad;
+                  if (xml.moneda) extra.moneda = xml.moneda;
+                  if (xml.tipoCambio != null) extra.tipoCambio = xml.tipoCambio;
+                  return Object.keys(extra).length ? extra : undefined;
+                })(),
               });
             } catch (e) {
               if (llegoTarde(e)) {
@@ -2052,7 +2214,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // más contexto sigue su camino al agente.
     const hito = interpretarHito(msg.text);
     if (hito) {
-      const ahoraHito = new Date();
+      // DAT-38: la hora del MENSAJE, no la del procesamiento. El acuse dice
+      // «anotado: llegaste a las 14:32» y esa hora tiene que ser la que el
+      // chofer vivió, no la que este servidor tenía cuando le tocó el turno.
+      // Sin timestamp de Meta se cae al reloj local, como siempre.
+      const ahoraHito = msg.timestampMs ? new Date(msg.timestampMs) : new Date();
       const sello = await sellarHito(op.tenantId, viajeId, hito, ahoraHito);
       logger.info('hito.viaje', { viaje: viajeId, hito, sello });
       await say(mensajeHito(hito, sello, ahoraHito));
@@ -2262,6 +2428,43 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       }
     }
 
+    // ── DAT-21 · UN "LISTO" VIEJO NO CIERRA EL VIAJE DE HOY ─────────────────
+    //
+    // La bandeja durable puede rescatar un mensaje minutos —o dos vueltas de
+    // cron— después de que Meta lo recibió. En ese hueco caben las dos cosas
+    // que hacen falta para el accidente: que la oficina cierre el viaje al que
+    // ese "listo" pertenecía, y que le abra el SIGUIENTE. Cuando el mensaje por
+    // fin corre, `getOpenViaje` devuelve el viaje NUEVO y el "listo" del viaje
+    // anterior lo cierra: sin comprobantes, con el anticipo entero en contra
+    // del chofer, e irreversible por los triggers 0036/0037.
+    //
+    // La prueba de que el mensaje es de otro viaje es la hora de META
+    // (DAT-38): un operador sólo puede tener UN viaje abierto a la vez
+    // (`uq_viaje_abierto_por_operador`, 0029), así que un texto recibido ANTES
+    // de que ESTE viaje se abriera pertenece, por construcción, al anterior.
+    //
+    // SÓLO SE DESCARTA LO QUE PARECE UN CIERRE, y sólo eso. Un "¿cuánto llevo?"
+    // viejo contestado contra el viaje nuevo es una respuesta rara; un "listo"
+    // viejo es una liquidación en ceros. Y hace falta la hora de Meta: sin ella
+    // (QA, simulador, un timestamp ilegible) no se descarta nada — no se
+    // adivina, se sigue como siempre.
+    //
+    // La consulta corre SÓLO en este caso —texto que parece cierre y con hora
+    // de Meta—, no en cada mensaje, y es FAIL-OPEN (`null` = no se supo → no se
+    // descarta): tirar un "listo" bueno deja al chofer sin cerrar y sin
+    // entender por qué, que es peor que dejar pasar uno viejo.
+    if (msg.timestampMs && pareceCierre(msg.text)) {
+      const abiertoDesde = await viajeAbiertoDesdeMs(op.tenantId, viajeId);
+      if (abiertoDesde != null && msg.timestampMs < abiertoDesde) {
+        logger.warn('cierre.mensaje_de_viaje_anterior', {
+          viaje: viajeId, tenant: op.tenantId,
+          mensajeMs: msg.timestampMs, viajeDesdeMs: abiertoDesde,
+        });
+        await say('Ese *listo* era de tu viaje anterior, que ya quedó cerrado 👍. Éste es un viaje nuevo: mándame sus comprobantes y escribe *listo* cuando termines con él.');
+        return;
+      }
+    }
+
     // BARRERA DE RÁFAGA: espera a que terminen los OCR de fotos en vuelo antes de
     // cuadrar — así "listo" nunca cierra sobre datos parciales. NUNCA es infinito:
     // si vence, se cuadra con lo que haya y se avisa al operador.
@@ -2277,10 +2480,22 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // ejecuciones reportan éxito → el operador recibe el cierre y el PDF DOS
     // veces, y se paga el LLM dos veces.
     //
-    // Abandonar es seguro porque `false` significa una sola cosa: otro turno
-    // tiene el lease vigente y ESE va a responder. Los errores de la RPC no
-    // llegan aquí — `acquireViajeLock` es fail-open ante RPC ausente o fallo
-    // persistente, y devuelve `true`.
+    // Abandonar es seguro porque 'ocupado' significa una sola cosa: otro turno
+    // tiene el lease vigente y ESE va a responder.
+    //
+    // DAT-21 — Y AHORA HAY UN TERCER ESTADO. Antes un fallo persistente de la
+    // RPC (12 s de timeouts, pool agotado, 503) devolvía `true`: "el lock es
+    // tuyo", sobre una base que no contestó. Y con ese `true` este camino se
+    // ponía a cuadrar, imprimir los dos PDFs y CERRAR —irreversiblemente— sin
+    // exclusividad ninguna, justo cuando la infraestructura estaba peor. Hoy
+    // eso llega como 'indeterminado' y se falla CERRADO: se avisa, se suelta el
+    // claim y la bandeja durable lo reintenta. Cuesta un mensaje; abrirlo
+    // costaba una liquidación cerrada dos veces.
+    //
+    // El TTL también cambia: `TTL_LOCK_CIERRE_MS` (120 s) en vez del default de
+    // 60 s, porque el cierre no cabe en 60 s en el peor caso —cuadre + dos PDFs
+    // + subida + RPC + envío del documento— y un lease que vence a media faena
+    // deja de ser un mutex.
     //
     // AUDITORÍA 7, ALTO — SE ABANDONABA EN SILENCIO Y PARA SIEMPRE. El comentario
     // que justificaba el `return` tenía razón en que "otro turno va a
@@ -2298,12 +2513,27 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // se libera el claim para que el mensaje no quede atascado. No resuelve
     // "el segundo mensaje se contesta", pero sí "el operador sabe que no se
     // perdió, y puede volver a mandarlo".
-    if (await acquireViajeLock(viajeId, { maxWaitMs: reloj.acotar(12_000) })) {
+    const lock = await intentarLockViaje(viajeId, {
+      ttlMs: TTL_LOCK_CIERRE_MS, maxWaitMs: reloj.acotar(12_000),
+    });
+    if (lock === 'obtenido') {
       lockedViaje = viajeId;
     } else {
-      logger.warn('viaje.lock_ocupado_abandona', { viaje: viajeId, tenant: op.tenantId, restanteMs: reloj.restante() });
+      // Los dos motivos se cuentan por separado: 'ocupado' es el sistema
+      // funcionando (otro turno en vuelo) y 'indeterminado' es la base sin
+      // contestar. Un solo log para los dos haría invisible el segundo, que es
+      // el que hay que atender.
+      logger[lock === 'ocupado' ? 'warn' : 'error'](
+        lock === 'ocupado' ? 'viaje.lock_ocupado_abandona' : 'viaje.lock_indeterminado_abandona',
+        { viaje: viajeId, tenant: op.tenantId, restanteMs: reloj.restante() },
+      );
       try {
-        await say('Un momento, todavía estoy procesando tu mensaje anterior 🙏. En cuanto termine, vuelve a escribirme esto si sigue pendiente.');
+        // Al operador se le dice lo que es cierto en cada caso. «Estoy
+        // procesando tu mensaje anterior» sería falso cuando lo que pasa es que
+        // no pudimos consultar: el producto no afirma hechos que no le constan.
+        await say(lock === 'ocupado'
+          ? 'Un momento, todavía estoy procesando tu mensaje anterior 🙏. En cuanto termine, vuelve a escribirme esto si sigue pendiente.'
+          : 'No pude apartar tu viaje para cerrarlo ahorita 😕 — la conexión falló y prefiero no cerrarlo dos veces. Tus comprobantes están guardados; vuelve a escribirme *listo* en un minuto.');
       } catch { /* best-effort: el aviso es una cortesía, no puede tumbar la liberación del claim */ }
       await soltarClaim();
       return;
@@ -2406,6 +2636,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           // candado real vive en `guardar_liquidacion` (QA 16-ago: una frase
           // que `pareceCierre` no reconoce esquivaba el freno de arriba).
           cierreEnCerosConfirmado: conv.cierreSinComprobantes === true,
+          // DAT-22: el cierre lo pide el OPERADOR, no el modelo. Sin esta marca
+          // `guardar_liquidacion` se niega: es la única acción irreversible del
+          // sistema y estaba disponible en todos los turnos.
+          cierrePedidoPorTexto: pidioCerrar(msg.text),
         },
         history,
         timeoutMs: reloj.acotar(40_000),

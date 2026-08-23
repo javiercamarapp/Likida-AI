@@ -65,6 +65,44 @@ export async function guardarEventosPendientes(mensajes: InboundMessage[]): Prom
   }
 }
 
+/**
+ * ¿CUÁLES DE ESTOS WAMIDS YA ESTÁN EN LA BANDEJA? (DAT-34)
+ *
+ * El rate limit del webhook corría ANTES de cualquier deduplicación, y eso
+ * convertía el arreglo del 4-ago —aplazar en vez de descartar— en una trampa:
+ *
+ *   1. llega un POST con 45 mensajes; caben 40, se contesta 429 y los 5
+ *      restantes quedan para la reentrega;
+ *   2. Meta reentrega el POST COMPLETO (así funciona: el payload entero, no el
+ *      resto), y los 40 que ya están guardados vuelven a gastar los 40 cupos de
+ *      la ventana;
+ *   3. los 5 nuevos vuelven a diferirse. Y otra vez. Cada reentrega repite el
+ *      ciclo hasta que Meta se rinde, y ahí sí se pierden.
+ *
+ * Un mensaje que YA está en `wa_evento_pendiente` no cuesta trabajo nuevo: su
+ * fila existe, el cron la va a drenar, y el `claimMessage` del motor lo trata
+ * como duplicado. Cobrarle cupo a lo ya guardado es cobrarle dos veces por el
+ * mismo mensaje, y el que paga la cuenta es el comprobante nuevo.
+ *
+ * FAIL-OPEN: ante un error de lectura devuelve el conjunto VACÍO, o sea que el
+ * límite se aplica a todos, como antes. No poder deduplicar no puede convertir
+ * el techo en un permiso ilimitado — es la única dirección segura de fallar en
+ * un limitador.
+ */
+export async function pendientesYaConocidos(ids: string[]): Promise<Set<string>> {
+  const limpios = ids.filter(Boolean);
+  if (limpios.length === 0) return new Set();
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('wa_evento_pendiente')
+    .select('id')
+    .in('id', limpios), 'pendientesYaConocidos');
+  if (error) {
+    logger.warn('wa.dedup_previo_falló', { err: error.message, cuantos: limpios.length });
+    return new Set();
+  }
+  return new Set((data ?? []).map((f) => String((f as { id: unknown }).id)));
+}
+
 export interface PendienteReclamado {
   id: string;
   evento: InboundMessage;

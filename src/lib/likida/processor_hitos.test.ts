@@ -28,7 +28,7 @@ vi.mock('@/lib/likida/conv', async (original) => ({
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [] })),
   saveConversation: vi.fn(),
   claimMessage: vi.fn(async () => 'nuevo' as const),
-  acquireViajeLock: vi.fn(async () => true), releaseViajeLock: vi.fn(),
+  acquireViajeLock: vi.fn(async () => true), intentarLockViaje: vi.fn(async () => 'obtenido' as const), releaseViajeLock: vi.fn(),
   releaseMessageClaim: vi.fn(),
   intakeDelta: vi.fn(async () => 0), esperarIntake: vi.fn(async () => true),
 }));
@@ -71,8 +71,8 @@ const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => {
     { status: 200, headers: { 'content-type': 'application/json' } });
 });
 
-function msg(text: string) {
-  return { from: '5219993700779', type: 'text' as const, text, waMessageId: `wa-${text.slice(0, 8)}` };
+function msg(text: string, timestampMs?: number) {
+  return { from: '5219993700779', type: 'text' as const, text, waMessageId: `wa-${text.slice(0, 8)}`, timestampMs };
 }
 
 describe('processInbound — los hitos del chofer, cableados', () => {
@@ -120,5 +120,29 @@ describe('processInbound — los hitos del chofer, cableados', () => {
     sellarHito.mockResolvedValue('fallo');
     await processInbound(msg('ya llegamos'));
     expect(salientes[0]).toMatch(/No pude anotarlo/);
+  });
+
+  // ── DAT-38 · LA HORA ES LA DEL MENSAJE, NO LA DEL PROCESAMIENTO ──────────
+  //
+  // Entre que el chofer aprieta enviar y que este código corre caben los
+  // reintentos de Meta, el aplazamiento del rate limit y hasta cinco minutos de
+  // la bandeja durable. El sello se hacía con `new Date()`, así que el acuse le
+  // decía «anotado: llegaste a las 14:32» sobre una hora que él no vivió — y la
+  // flota va a cruzar ese sello contra la bitácora de su cliente.
+  it('sella con la hora de META, no con la del servidor', async () => {
+    const metaMs = Date.UTC(2026, 7, 1, 20, 32, 0); // 14:32 en México (UTC-6)
+    await processInbound(msg('ya llegué', metaMs));
+
+    const [, , , sellada] = sellarHito.mock.calls[0] as [string, string, string, Date];
+    expect(sellada.getTime()).toBe(metaMs);
+    // Y el acuse enseña ESA hora, no la de ahora.
+    expect(salientes[0]).toMatch(/llegaste a las 14:32/);
+  });
+
+  it('sin hora de Meta (QA, simulador) se cae al reloj local, como siempre', async () => {
+    const antes = Date.now();
+    await processInbound(msg('descargando'));
+    const [, , , sellada] = sellarHito.mock.calls[0] as [string, string, string, Date];
+    expect(sellada.getTime()).toBeGreaterThanOrEqual(antes);
   });
 });

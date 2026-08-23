@@ -213,6 +213,32 @@ registerTool('guardar_liquidacion', {
   },
   handler: async (_args, ctx) => {
     if (!ctx.viajeId) throw new Error('sin viaje activo');
+    // ── DAT-22 · EL CIERRE LO PIDE EL OPERADOR, NO EL MODELO ────────────────
+    //
+    // Esta tool estaba disponible en TODOS los turnos, y es la única acción
+    // irreversible del sistema: después de ella los triggers 0036/0037 bloquean
+    // cualquier alta o corrección sobre el viaje. El único freno era el del
+    // cierre EN CEROS (abajo), así que un viaje CON comprobantes se podía
+    // cerrar en el turno de un "¿cuánto llevo?" — bastaba que el modelo se
+    // adelantara— y el chofer se quedaba con el fajo en la mano y el viaje
+    // cerrado.
+    //
+    // El candado vive AQUÍ, en la tool, por la misma razón que el del cierre en
+    // ceros: el modelo es exactamente lo que hay que acotar, así que la
+    // condición no puede depender de que él la respete. La marca la calcula el
+    // processor sobre el texto del turno (`pidioCerrar`).
+    //
+    // Se lanza en vez de devolver un no-op: el error viaja al modelo como
+    // resultado de la tool y él se lo explica al operador; un no-op silencioso
+    // le haría creer al modelo que cerró y anunciarlo.
+    if (ctx.cierrePedidoPorTexto !== true) {
+      throw new Error(
+        'el operador no pidió cerrar en este mensaje. La liquidación solo se '
+        + 'cierra cuando él lo dice ("listo", "ya terminé", "ciérrala"). '
+        + 'Contéstale lo que preguntó y pídele que escriba *listo* cuando ya no '
+        + 'tenga más comprobantes.',
+      );
+    }
     // ── EL KILL SWITCH (0110), ANTES DE LA MUTACIÓN ─────────────────────────
     // Es el único punto por el que se CIERRA una liquidación, así que la
     // palanca `agente:liquidacion` vive aquí — no en `cuadrar_viaje`, que es
