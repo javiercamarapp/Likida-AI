@@ -7504,3 +7504,49 @@ begin
     wamid_rebota, wamid_otra_flota, wamid_null_entra, huerfano_rebota,
     huerfano_resuelto_ok, codigo_rebota, codigo_otro_monto_ok;
 end $$;
+
+-- ── 137. El mantenimiento nocturno no se cae entero, y el barrido de Storage MARCA en vez de borrar (mig. 0165) ──
+--
+-- El 22-ago-2026 `mantenimiento_de_datos()` dejó de correr COMPLETO en
+-- producción: la 0162 borraba con `delete from storage.objects` y Supabase lo
+-- prohíbe con un trigger (`42501 · Direct deletion from storage tables is not
+-- allowed`). Como las catorce purgas iban en fila, la que lanzó se llevó a las
+-- que faltaban — incluidas las de PRIVACIDAD, que un aviso público promete.
+--
+-- Este bloque fija las dos garantías: (a) una purga que lanza NO tumba a las
+-- demás y su nombre sale en `fallos`; (b) el barrido de Storage no borra, deja
+-- candidatos en `storage_huerfano_candidato` para que el servidor los borre
+-- por la Storage API. Todo revierte con el RAISE final.
+do $$
+declare
+  res jsonb;
+  sobrevive boolean;
+  nombra_fallo boolean;
+  candidatos_ok boolean;
+  no_borra boolean;
+  anon_ok boolean;
+begin
+  -- (a) una purga rota no se lleva a las demás: se rompe adrede la de posiciones
+  create or replace function public.purgar_posicion(integer, timestamptz, timestamptz)
+  returns jsonb language plpgsql as $roto$
+  begin raise exception 'roto a proposito' using errcode = 'PU999'; end $roto$;
+
+  res := public.mantenimiento_de_datos(30, now());
+  -- las que corren DESPUÉS de posicion en el orden de la función
+  sobrevive    := (res ? 'bitacoraPurgada') and (res ? 'cobranzaContactosPurgados')
+                  and (res ? 'prospectoPersonasPurgadas');
+  nombra_fallo := (res->'fallos')::text like '%posicion%';
+
+  -- (b) el barrido deja candidatos y NO toca storage.objects
+  candidatos_ok := res ? 'storageHuerfanoMarcado';
+  no_borra := not exists (
+    select 1 from pg_proc p
+     where p.proname = 'limpiar_storage_huerfano'
+       and pg_get_functiondef(p.oid) ~ 'delete\s+from\s+storage\.objects');
+
+  anon_ok := has_function_privilege('anon', 'public.mantenimiento_de_datos(integer, timestamptz)', 'EXECUTE')
+          or has_table_privilege('anon', 'public.storage_huerfano_candidato', 'SELECT');
+
+  raise exception E'MANTENIMIENTO_0165  sobrevive=%  nombra_fallo=%  candidatos=%  no_borra_storage=%  anon=%   (esperado t / t / t / t / f)',
+    sobrevive, nombra_fallo, candidatos_ok, no_borra, anon_ok;
+end $$;
