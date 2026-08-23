@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verificarFirmaStripe, webhookConfigurado } from '@/lib/saas/stripe';
+import { verificarFirmaStripe, webhookConfigurado, eventoEnModoDeLaLlave } from '@/lib/saas/stripe';
 import {
   marcarEvento, sellarEventoAplicado, aplicarSuscripcion, aplicarFactura, estadoDesdeStripe,
-  tenantDeCustomer, planDePrice,
+  tenantDeCustomer, planDePrice, cancelarFacturaDeStripe,
 } from '@/lib/saas/suscripcion';
 import { bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 
-const MAX_BODY = 256 * 1024;
+// ── EL TECHO DEL CUERPO (auditoría prod, DAT-40) ──────────────────────────
+//
+// Estaban 256 KB, y un evento de Stripe los pasa sin ser raro: un `invoice`
+// con muchas líneas, o cualquier objeto con `previous_attributes` grande. Y el
+// 413 no es inocuo aquí: Stripe reintenta con backoff, se rinde a los tres
+// días y ESE cobro no se registra nunca — el mismo modo de falla silencioso
+// que el resto del archivo existe para evitar. 1 MiB deja pasar lo que Stripe
+// manda de verdad y sigue frenando un cuerpo absurdo.
+const MAX_BODY = 1024 * 1024;
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -31,6 +39,9 @@ export const maxDuration = 60;
 interface EventoStripe {
   id: string;
   type: string;
+  /** `true` = evento de dinero real; `false` = sandbox. Es lo ÚNICO que
+   *  distingue un cobro de una prueba (DAT-32). */
+  livemode?: boolean;
   /** Segundos Unix. Es lo ÚNICO que ordena dos eventos de la misma
    *  suscripción cuando Stripe los entrega al revés (RES-11). */
   created?: number;
@@ -60,6 +71,26 @@ export async function POST(req: NextRequest) {
     evt = JSON.parse(crudo) as EventoStripe;
   } catch {
     return new NextResponse('JSON inválido', { status: 400 });
+  }
+
+  // ── EL MODO TIENE QUE COINCIDIR (DAT-32) ─────────────────────────────────
+  //
+  // La firma NO contesta esto: el secreto es del ENDPOINT, no del modo. Un
+  // endpoint de prueba apuntando al dominio de producción —o el mismo secreto
+  // pegado en los dos— entrega eventos de sandbox que la base no distingue de
+  // los reales: plan activado, factura "pagada", cero pesos cobrados.
+  //
+  // Se contesta 400 y NO se marca el evento: marcarlo lo daría por atendido
+  // para siempre, y lo que hace falta es que quede visible en el panel de
+  // Stripe como entrega fallida. Si la llave estaba mal, se arregla y se
+  // reenvía desde ahí.
+  if (!eventoEnModoDeLaLlave(evt.livemode)) {
+    logger.error('stripe.webhook.modo_no_coincide', { id: evt.id, tipo: evt.type, livemode: evt.livemode ?? null });
+    void registrarEventoSeguridad({
+      origen: 'stripe_webhook', tipo: 'otro', severidad: 'alta',
+      detalle: { que: 'modo_no_coincide', tipoEvento: evt.type, livemode: evt.livemode ?? null },
+    });
+    return new NextResponse('Modo (test/live) del evento distinto al de la llave configurada', { status: 400 });
   }
 
   try {
@@ -147,7 +178,16 @@ async function aplicar(evt: EventoStripe): Promise<void> {
         throw new Error(`price ${priceId ?? 'ausente'} sin plan que le corresponda — no se sabe qué plan activar; se lanza para que Stripe reintente cuando el price esté ligado`);
       }
 
-      const finUnix = obj.current_period_end as number | undefined;
+      // ── DÓNDE VIVE EL FIN DE PERIODO, SEGÚN LA VERSIÓN DE LA API (DAT-40) ──
+      //
+      // Stripe MOVIÓ `current_period_end` de la suscripción al ITEM en la
+      // versión 2025-03-31. Con una cuenta ya en esa versión, el campo de
+      // arriba llega `undefined` y `periodo_fin` se guardaba NULL: la pantalla
+      // dice "Sin fecha de corte" de una flota que sí tiene corte, y nadie
+      // sabe cuándo vuelve a cobrarse. Se leen los dos, empezando por el viejo
+      // para no cambiarle nada a las cuentas que siguen en la API anterior.
+      const itemPeriodo = (obj.items as { data?: Array<{ current_period_end?: number }> })?.data?.[0];
+      const finUnix = (obj.current_period_end as number | undefined) ?? itemPeriodo?.current_period_end;
       await aplicarSuscripcion({
         tenantId,
         stripeSubscriptionId: subId,
@@ -192,12 +232,54 @@ async function aplicar(evt: EventoStripe): Promise<void> {
         urlPago: (obj.hosted_invoice_url as string) ?? null,
         periodoInicio: ini ? new Date(ini * 1000).toISOString().slice(0, 10) : hoy,
         periodoFin: fin ? new Date(fin * 1000).toISOString().slice(0, 10) : hoy,
-        // `amount_paid`/`amount_due` vienen en centavos. Dividir mal es un error
-        // de dos órdenes de magnitud que se ve plausible.
-        monto: Number(obj.amount_paid ?? obj.amount_due ?? 0) / 100,
+        // ── EL MONTO SEGÚN EL EVENTO (auditoría prod, DAT-24) ─────────────
+        //
+        // `amount_paid ?? amount_due` estaba MAL en el cobro fallido: en un
+        // `invoice.payment_failed`, `amount_paid` no viene `undefined` — viene
+        // 0, porque justamente no se pagó. El `??` solo salta el `null`, así
+        // que la factura se registraba con monto CERO y la pantalla le decía
+        // al cliente "transfiere $0.00" de una mensualidad de miles de pesos.
+        // Lo que se debe cobrar es `amount_due` (o `amount_remaining`).
+        monto: evt.type === 'invoice.paid'
+          ? Number(obj.amount_paid ?? obj.amount_due ?? 0) / 100
+          : Number(obj.amount_remaining ?? obj.amount_due ?? obj.total ?? 0) / 100,
         moneda: String(obj.currency ?? 'mxn').toUpperCase(),
         pagada: evt.type === 'invoice.paid',
       });
+      return;
+    }
+
+    // ── LO QUE SE DEVUELVE O SE ANULA (auditoría prod, DAT-33 / DAT-12) ────
+    //
+    // Los tres caían en el `default` —"Stripe manda decenas de tipos"— y la
+    // factura se quedaba 'pagada' con su CFDI vivo: dinero devuelto, papel
+    // fiscal en pie y el cliente deduciendo un gasto que ya no existe.
+    case 'invoice.voided':
+    case 'invoice.marked_uncollectible': {
+      await cancelarFacturaDeStripe(String(obj.id), '02');
+      return;
+    }
+
+    case 'credit_note.created': {
+      const invoiceId = obj.invoice as string | null;
+      if (!invoiceId) {
+        logger.warn('stripe.nota_credito_sin_factura', { evt: evt.id });
+        return;
+      }
+      // Una nota de crédito PARCIAL no anula el comprobante: `cancelarFacturaDeStripe`
+      // compara contra el total de la factura y solo avisa.
+      await cancelarFacturaDeStripe(invoiceId, '02', Number(obj.total ?? 0) / 100);
+      return;
+    }
+
+    case 'charge.refunded': {
+      const invoiceId = obj.invoice as string | null;
+      if (!invoiceId) {
+        // Un cargo suelto (fuera de suscripción) no tiene factura nuestra.
+        logger.info('stripe.reembolso_sin_factura', { evt: evt.id });
+        return;
+      }
+      await cancelarFacturaDeStripe(invoiceId, '02', Number(obj.amount_refunded ?? 0) / 100);
       return;
     }
 
