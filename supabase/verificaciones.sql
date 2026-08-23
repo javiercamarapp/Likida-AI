@@ -5880,6 +5880,8 @@ begin
 
   raise exception E'RESUMEN_NEGOCIO_0153  a=%  b=%  suma=%  facturas+2=%  dia31=%  dia01=%  anon=%  auth=%  svc=%  idx=%   (esperado 2 / 1 / t / t / 2 / f / f / f / t / 2)',
     coalesce(n_a, -1), coalesce(n_b, -1), suma_ok, facturas_ok, coalesce(dia31, -1), dia01, anon_si, auth_si, svc_si, idx;
+end $$;
+
 -- ── 126. El Registro de Viajes pagina por cursor y cuenta de un golpe, sin mezclar flotas (mig. 0154) ──
 -- Dos flotas sembradas a mano. La A tiene 7 viajes (dos sin fecha, dos con la
 -- MISMA fecha para forzar el desempate por created_at/id, uno escalado sin
@@ -5967,6 +5969,8 @@ begin
 
   raise exception E'REGISTRO_0154  paginas=%  equivalente=%  filtrado_B=%  escalados_filtro=%  busca_monte=%  conteos_ok=%  tope_100=%  anon=%/%   (esperado 4 / t / t / 1 / 1 / t / t / f/f)',
     paginas, (nuevo = viejo), not (nuevo && ids_b), esc, busca, conteos_ok, tope_ok, anon_reg, anon_con;
+end $$;
+
 -- ── 129. El cursor de /v1/viajes tiene índice y el ANALYZE es sólo del servidor (mig. 0157) ──
 -- ESC-15: sin `viaje_tenant_created_id_idx` cada página del cursor barre la
 -- flota entera. ESC-18: `analizar_tablas_operacion()` corre ANALYZE como
@@ -5990,6 +5994,8 @@ begin
 
   raise exception E'CURSOR_ANALYZE_0157  indice=%  anon=%  authenticated=%  service_role=%  corrio=%   (esperado "(tenant_id, created_at DESC, id DESC)" / f / f / t / t)',
     coalesce(substring(idx_def from '\(.*\)'), 'FALTA'), anon_ok, auth_ok, svc_ok, corrio;
+end $$;
+
 -- ── 123. El agregado fiscal no juzga, no mezcla flotas y cuadra (mig. 0151) ──
 -- Dos flotas sembradas a mano. A trae un comprobante por cada dimensión que
 -- la ley en TS consulta (EFOS, cancelado, efectivo sobre/bajo tope, diésel
@@ -6083,6 +6089,8 @@ begin
   raise exception E'FISCAL_AGREGADO_0151  invoker=%  anon=%  auth=%  svc=%  | periodo: celdas=%  n=%/%  monto=%/%  con_cfdi=%/%  sobre_tope=%  dia_partido=%  B_contamina=%  | sin_cota: n=%  sin_fecha=%  bandas=%   (esperado t/f/f/t | 11 celdas, 11/11, 7680.00/7680.00, 10/10, 1, 900, f | 13, 1, bandas 0,2)',
     es_invoker, anon_ok, auth_ok, svc_ok, celdas, n_total, n_directo, monto_total, monto_directo,
     con_cfdi, con_cfdi_directo, sobre_tope, dia_partido, contamina, sin_cota_n, sin_fecha, bandas;
+end $$;
+
 -- ── 122. Los 11 agregados de la 0150: existen, INVOKER, aislados, cuadran ───
 --
 -- La 0150 (ESCALA 50k, docs/escala-50k/MAPA.md) movió ONCE caminos de
@@ -6271,6 +6279,8 @@ begin
   raise exception E'AGREGADOS_0150  funcs=%  invoker=%  ninguna_anon=%  ninguna_auth=%  todas_svc=%  anomalias_ok=%  semanal_ok=%  rutas_ok=%  concepto_ok=%  stats_ok=%  liquidado_ok=%  meses_ok=%  detalle_ok=%  dinero_ok=%  dias_ok=%  consolidado_ok=%   (esperado 11/t/t/t/t y once t)',
     n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc,
     ok_anom, ok_sem, ok_rutas, ok_conc, ok_stats, ok_liq, ok_meses, ok_det, ok_dinero, ok_dias, ok_cons;
+end $$;
+
 -- ── 124. Los 7 agregados de la 0152: existen, INVOKER, aislados y cuadran ───
 --
 -- La 0152 movió OCHO lecturas del lado del ingreso y del encargado de "traer
@@ -6518,6 +6528,8 @@ begin
     n_funcs, todas_invoker, ninguna_anon, ninguna_auth, todas_svc,
     ok_rent, ok_cart, ok_cob, n_cob_pag, ok_fact, cubetas_cuadran, ok_mesa,
     ok_tab, ok_carga, ok_inc, n_inc_90, n_inc_todas;
+end $$;
+
 -- ── 127. Purgas en tandas, retención de la bandeja y bucket comprobantes (mig. 0155) ──
 -- ESC-2/RES-14/ESC-16/ESC-17/ESC-13/ESC-10/RES-7. Se siembran tres filas en
 -- `wa_evento_pendiente` (procesada hace 40 d, carta muerta de 100 d, pendiente
@@ -6564,6 +6576,8 @@ begin
   raise exception E'PURGAS_0155  eventos_borrados=%  viva_queda=%  bitacora_borrada=%  parcial=%  llaves=%  bucket=%/%  resumen_n=%  latido_rebota=%  anon=%   (esperado 2/t/1/f/t/8388608/2/t/t/f)',
     3 - quedan_eventos, viva, bit_antes - bit_despues, (res->>'parcial')::boolean, tiene_llaves,
     coalesce(limite, 0), coalesce(mimes, 0), resumen_n, latido_rebota, anon_ok;
+end $$;
+
 -- ── 131. Las tres escrituras de dinero ya son atómicas (mig. 0159) ──────────
 -- Los tres hallazgos de la auditoría 18 que compartían forma —leer, decidir en
 -- TypeScript, escribir— y por eso el mismo modo de fallo. Aquí se reproducen
@@ -6728,6 +6742,8 @@ begin
     liq_borrada, viaje_abierto, id_derivado,
     merge_hermanos, merge_profundo,
     llave_inventada_rebota, borrado_explicito, anon_ok;
+end $$;
+
 -- ── 130. La integridad fiscal de la 0158, atacada de once formas ────────────
 --
 -- Un solo bloque para los once hallazgos del rubro DATOS de la auditoría 18
