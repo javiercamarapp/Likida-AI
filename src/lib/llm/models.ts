@@ -36,42 +36,48 @@
 
 import { envPuesta } from '../env';
 
-export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'chat_ligero' | 'router' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto';
+export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto';
 
 const DEFAULTS: Record<ModelRole, string> = {
-  // OCR de comprobantes (visión). Gemini 3.6 Flash (21-jul-2026): #1 OCR Arena
-  // en recibos ruidosos ES; visión + JSON en una sola llamada.
+  // OCR de comprobantes (visión + JSON en una sola llamada).
   //
-  // MEDIDO EL 4-AGO-2026 CONTRA 18 COMPROBANTES REALES, dos corridas: este
-  // default PIERDE contra `google/gemini-3.1-flash-lite` en las tres métricas
-  // —legibles 13-14 vs 14-15, montos 13-14 vs 14-15, folios 10-12 vs 13-14— y
-  // cuesta 12.5× más ($0.0188 vs $0.0015 por comprobante).
+  // MEDIDO EL 4-AGO-2026 CONTRA 18 COMPROBANTES REALES, dos corridas:
+  // `gemini-3.1-flash-lite` GANA a `gemini-3.6-flash` en las tres métricas
+  // —legibles 14-15 vs 13-14, montos 14-15 vs 13-14, folios 13-14 vs 10-12— y
+  // cuesta 12.5× MENOS ($0.0015 vs $0.0188 por comprobante).
   //
-  // De dónde sale la diferencia: 3.6 emite ~1,500 tokens de salida (razonamiento
-  // que se cobra) y el lite ~274. Y el sesgo del experimento FAVORECÍA al 3.6,
-  // porque los valores asentados los produjo él en producción; aun así perdió.
+  // De dónde sale la diferencia: el 3.6 emite ~1,500 tokens de salida
+  // (razonamiento que se cobra) y el lite ~274. Y el sesgo del experimento
+  // FAVORECÍA al 3.6, porque los valores asentados los produjo él en
+  // producción; aun así perdió. Son 18 comprobantes: pocos para cerrar el tema,
+  // suficientes para no dejar al perdedor de default.
   //
-  // El override vive en la variable `LIKIDA_MODEL_OCR` de Vercel, apuntando ya
-  // a 3.1-flash-lite. El default se deja aquí a propósito: 18 comprobantes son
-  // pocos para reescribir la elección de arquitectura, y revertir tiene que
-  // costar una variable de entorno, no un despliegue.
-  ocr: 'google/gemini-3.6-flash',
-  // Cerebro de conciliación. Sonnet 5 (30-jun-2026): mejor que 4.5 en todo, con
-  // precio intro $2/$10 hasta 31-ago — justo la ventana del demo.
+  // 23-AGO-2026: EL DEFAULT SE INVIERTE. Antes era 3.6-flash y el lite vivía
+  // solo en `LIKIDA_MODEL_OCR` de Vercel — es decir, el modelo que de verdad
+  // corría no estaba en el código. El argumento original (que revertir cueste
+  // una variable y no un despliegue) SE CONSERVA intacto: la variable sigue
+  // ahí, y apuntarla a 3.6-flash devuelve el comportamiento anterior sin tocar
+  // el repo. Lo único que cambia es hacia dónde se cae cuando la variable NO
+  // está puesta.
+  //
+  // Y esa caída es el problema: `envPuesta` es falso si la variable se borra,
+  // se vacía o queda con un marcador, y entonces NADA falla — el OCR sigue
+  // leyendo, nadie se entera, y cada comprobante pasa a costar 12.5× más. A
+  // 506,000 comprobantes/mes son $759 → $9,513: seis cifras al año que no
+  // disparan ninguna alerta. Fallar hacia lo caro y silencioso es peor que
+  // fallar hacia lo barato y medido.
+  ocr: 'google/gemini-3.1-flash-lite',
+  // Cerebro de conciliación. Sonnet 5 (30-jun-2026): mejor que 4.5 en todo.
+  // Precio $2/$10. El aumento a $3/$15 que estaba anunciado para el 1-sep-2026
+  // FUE CANCELADO (verificado en la documentación de Anthropic el 23-ago): ese
+  // precio es ahora el estándar. No hay reloj que vigilar aquí.
   cuadre: 'anthropic/claude-sonnet-5',
   // Escalación por baja confianza / monto alto / caso ambiguo. Opus 5 (24-jul):
   // #1 del Intelligence Index. Solo se dispara, no es el default de cada cuadre.
   cuadre_fallback: 'anthropic/claude-opus-5',
   // Chat de alto volumen con el operador (español MX, latencia baja).
   chat: 'google/gemini-3.5-flash-lite',
-  // El CONSERJE del chat del panel (12-ago-2026): recibe TODO mensaje,
-  // contesta charla y dudas del producto, y escala al analista (rol chat)
-  // cuando hay que tocar datos. gpt-5-nano verificado ese día contra el
-  // catálogo de OpenRouter: $0.05/$0.40 por M — 6× más barato que
-  // flash-lite, y proveedor US como todo el stack.
-  chat_ligero: 'openai/gpt-5-nano',
   // Clasificador de intención por mensaje entrante.
-  router: 'google/gemini-3.5-flash-lite',
   // BACK OFFICE / agentes internos de LIKIDA (Redactor C5, runner nivel 2).
   // REGLA FINAL DE JAVIER (16-ago-2026): TODO el stack que vive en este repo
   // es de proveedores USA (OpenAI —incluidos sus open-weight—, Google,
@@ -120,7 +126,7 @@ const DEFAULTS: Record<ModelRole, string> = {
   // SUSCRIPCIÓN en la Mac de Javier (scripts/mejora-diaria/, decisión del
   // 16-ago: costo marginal $0). Este default por API queda como respaldo y
   // para motores que algún día corran en el server.
-  codigo_escritura: 'anthropic/claude-sonnet-5', // $2/$10 (intro hasta 31-ago)
+  codigo_escritura: 'anthropic/claude-sonnet-5', // $2/$10
   // QA / TESTERS (vigilante de calidad, ejército QA de Fase 3): juicio
   // adversarial barato — razonamiento por centavos, mismo modelo que la
   // auditoría: cazan juntos.
@@ -131,7 +137,26 @@ const DEFAULTS: Record<ModelRole, string> = {
   // real, y el techo de daño lo pone el código (el piloto no emite nunca, ver
   // piloto_vision.ts), pero un selector mal elegido quema una corrida entera.
   // Se paga por PASO (~8-14 por portal), solo cuando FACTURACION_PILOTO=si.
-  piloto: 'anthropic/claude-sonnet-5',         // $2/$10 (intro hasta 31-ago)
+  piloto: 'anthropic/claude-sonnet-5',         // $2/$10
+
+  // ── QUÉ ROL CORRE HOY Y CUÁL NO (verificado el 23-ago-2026) ──────────────
+  // Tienen llamador en producción: ocr, cuadre, chat, analisis, marketing,
+  // back_office, piloto.
+  //
+  // RESERVADOS — declarados a propósito, todavía sin nadie que los pida:
+  //   · cuadre_fallback  la escalación por baja confianza / monto alto está
+  //                      decidida pero NO cableada: nada la dispara aún.
+  //   · extraccion, codigo, codigo_escritura, qa  son de los agentes del
+  //                      catálogo que siguen en 'disenado' (ver
+  //                      docs/conocimiento/stack-modelos-agentes.md).
+  // No se borran porque la decisión de qué modelo les toca ya está tomada y
+  // documentada; borrarlas obligaría a volver a tomarla.
+  //
+  // RETIRADOS el 23-ago-2026, no volver a añadirlos sin llamador:
+  //   · chat_ligero  el conserje del chat del panel se colapsó el 12-ago.
+  //   · router       la clasificación de mensajes es 100% regex; el agente
+  //                  `orchestrator` que lo pedía nunca llegó a ejecutarse
+  //                  (el único runAgent del repo pide `liquidacion`).
 };
 
 const ENV_KEY: Record<ModelRole, string> = {
@@ -139,8 +164,6 @@ const ENV_KEY: Record<ModelRole, string> = {
   cuadre: 'LIKIDA_MODEL_CUADRE',
   cuadre_fallback: 'LIKIDA_MODEL_CUADRE_FALLBACK',
   chat: 'LIKIDA_MODEL_CHAT',
-  chat_ligero: 'LIKIDA_MODEL_CHAT_LIGERO',
-  router: 'LIKIDA_MODEL_ROUTER',
   back_office: 'LIKIDA_MODEL_BACK_OFFICE',
   analisis: 'LIKIDA_MODEL_ANALISIS',
   extraccion: 'LIKIDA_MODEL_EXTRACCION',
@@ -168,8 +191,6 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   cuadre: { temperature: 0, reasoning: 'high' }, // razonamiento profundo donde importa
   cuadre_fallback: { temperature: 0, reasoning: 'high' },
   chat: { temperature: 0.4 },                 // tono natural
-  chat_ligero: { temperature: 0.6, reasoning: 'low' }, // conversación, sin cifras — nano razona; corto
-  router: { temperature: 0 },
   back_office: { temperature: 0.4 },          // redacción interna con guion fijo
   analisis: { temperature: 0.2 },             // dirección: cifras, poca prosa
   extraccion: { temperature: 0 },             // parseo determinístico
