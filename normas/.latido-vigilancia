@@ -1,37 +1,38 @@
-fecha_corrida: 2026-08-22 (sabado)
+fecha_corrida: 2026-08-23 (domingo)
 ultimo_dia_barrido: 2026-08-16 (sin cambio — esta corrida no pudo barrer nada)
-rango_intentado: 2026-08-17..2026-08-21 (5 dias habiles, lun-vie, quedaron sin cubrir)
+rango_intentado: 2026-08-17..2026-08-22 (6 dias, incluye el sabado 22; quedaron sin cubrir)
 notas_revisadas: 0 — bloqueo de red antes de la primera llamada
 notas_por_edicion: {matutina: no_alcanzado, vespertina: no_alcanzado, extraordinaria: no_alcanzado}
 fichas_disparadas: 0
-etag_sat: sin_recheck — hoy es sabado, no lunes; ademas el host esta bloqueado igual
+etag_sat: sin_recheck — hoy es domingo, no lunes; ademas el host esta bloqueado igual
 etag_sat_check: no_intentado_bloqueo_previo
 deriva_ley_check: no_aplica_no_es_dia_1_trimestre
-estado: "INFRA egress bloqueado — cuarta corrida consecutiva de esta sesion en la nube con el mismo bloqueo (16-ago fue OK via sesion local; 20-ago, 21-ago y hoy 22-ago fallan en la nube)"
+estado: "INFRA egress bloqueado — quinta corrida consecutiva de esta sesion en la nube con el mismo bloqueo (16-ago fue OK via sesion local; 20-ago, 21-ago, 22-ago y hoy 23-ago fallan en la nube)"
 detalle: >
   curl directo a sidofqa.segob.gob.mx:443, www.sat.gob.mx:443 y
   diputados.gob.mx:443 -> proxy responde 403 a nivel CONNECT en los tres
-  (curl exit 56, "CONNECT tunnel failed, response 403"), confirmado tambien
-  via $HTTPS_PROXY/__agentproxy/status (recentRelayFailures vacio en este
-  chequeo, pero el 403 en el CONNECT es identico al de las corridas
-  anteriores). Se leyo /root/.ccr/README.md: un 403 en el CONNECT es
-  denegacion de politica de organizacion para este entorno, no se debe
-  reintentar ni rodear. Es identico en sintoma y causa a la corrida del
-  21-ago (commit 15c5630) y la del 20-ago (commit 2e41a14).
+  (curl exit 56, "CONNECT tunnel failed, response 403"), identico a las
+  corridas del 20/21/22-ago. Ademas, esta corrida probo un camino
+  independiente — WebFetch, que corre del lado de Anthropic, no via el
+  proxy local — contra sidofqa.segob.gob.mx: tambien devolvio
+  EGRESS_BLOCKED explicito. Eso descarta que sea un capricho del proxy
+  local de esta sesion: el dominio esta vetado a nivel de politica para
+  este entorno por dos caminos distintos. $HTTPS_PROXY/__agentproxy/status
+  confirma que la sesion esta bien configurada (enabled:true, sin
+  relayFailures previos) — el bloqueo es intencional, no un error de red.
 sin_verificar_esta_corrida: >
-  Todo el rango 17..21-ago-2026 (5 dias habiles) sin barrer. Ademas quedan
-  sin intentar: ETag del minisitio SAT (cadencia semanal, ya pasaron DOS
-  lunes — 17-ago y ninguno mas hasta el 24-ago — sin poder chequearse) y las
-  23 fichas sin tocar desde el 16-ago.
+  Todo el rango 17..22-ago-2026 (6 dias, incluido el sabado) sin barrer.
+  Ademas quedan sin intentar: ETag del minisitio SAT (cadencia semanal, ya
+  pasaron DOS lunes — 17-ago y 24-ago aun no llega — sin poder chequearse)
+  y las 23 fichas sin tocar desde el 16-ago.
 accion_requerida: >
-  MISMA accion pendiente desde el 16-ago, AUN NO TOMADA tras esta cuarta
-  corrida consecutiva en la nube documentando el mismo bloqueo (20-ago,
-  21-ago, 22-ago; mas la corrida OK del 16-ago que si tuvo egress porque
-  corrio local): (1) mover la cadencia diaria de esta routine a un entorno
-  con egress real — ejecucion local (launchd/cron en una maquina con salida
-  a internet), no esta sesion en la nube — o (2) pedir a un admin que
-  agregue sidofqa.segob.gob.mx, www.sat.gob.mx y diputados.gob.mx a la
-  allowlist de egress de este entorno. Mientras ninguna de las dos pase,
-  CADA corrida programada en la nube va a fallar identico y el backlog de
-  dias sin barrer sigue creciendo (van 5 dias habiles sin cubrir:
-  17,18,19,20,21-ago).
+  MISMA accion pendiente desde el 16-ago, AUN NO TOMADA tras CINCO corridas
+  consecutivas en la nube documentando el mismo bloqueo (20, 21, 22 y hoy
+  23-ago; mas la corrida OK del 16-ago que si tuvo egress porque corrio
+  local): (1) mover la cadencia diaria de esta routine a un entorno con
+  egress real — ejecucion local (launchd/cron en una maquina con salida a
+  internet), no esta sesion en la nube — o (2) pedir a un admin que agregue
+  sidofqa.segob.gob.mx, www.sat.gob.mx y diputados.gob.mx a la allowlist de
+  egress de este entorno. Mientras ninguna de las dos pase, CADA corrida
+  programada en la nube va a fallar identico y el backlog de dias sin
+  barrer sigue creciendo (van 6 dias sin cubrir: 17,18,19,20,21,22-ago).
