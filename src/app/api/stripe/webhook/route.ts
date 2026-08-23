@@ -7,6 +7,7 @@ import {
 import { bodyExcede } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
+import { hoyMx } from '@/lib/formato';
 
 const MAX_BODY = 256 * 1024;
 
@@ -153,7 +154,11 @@ async function aplicar(evt: EventoStripe): Promise<void> {
         estado: evt.type === 'customer.subscription.deleted'
           ? 'cancelada'
           : estadoDesdeStripe(obj.status as string),
-        periodoFin: finUnix ? new Date(finUnix * 1000).toISOString().slice(0, 10) : null,
+        // DAT-23: el fin de periodo se guardaba como el día UTC del instante
+        // de Stripe. Un corte a las 19:00 del 31-dic (01:00Z del 1-ene) se
+        // registraba con fecha del 1 de enero: la flota veía su suscripción
+        // vigente un día de más y la mensualidad de enero se emitía duplicada.
+        periodoFin: finUnix ? hoyMx(new Date(finUnix * 1000)) : null,
       });
       return;
     }
@@ -174,7 +179,7 @@ async function aplicar(evt: EventoStripe): Promise<void> {
       const linea = (obj.lines as { data?: Array<{ period?: { start?: number; end?: number } }> })?.data?.[0];
       const ini = linea?.period?.start;
       const fin = linea?.period?.end;
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = hoyMx();
 
       await aplicarFactura({
         tenantId,
@@ -182,13 +187,24 @@ async function aplicar(evt: EventoStripe): Promise<void> {
         // Donde el cliente ve la CLABE y la referencia de su transferencia.
         // Se guarda también en el cobro fallido: es justo cuando la necesita.
         urlPago: (obj.hosted_invoice_url as string) ?? null,
-        periodoInicio: ini ? new Date(ini * 1000).toISOString().slice(0, 10) : hoy,
-        periodoFin: fin ? new Date(fin * 1000).toISOString().slice(0, 10) : hoy,
+        // Días DE MÉXICO (DAT-23): el índice `una_por_periodo` (0057) es por
+        // (tenant, periodo_inicio, periodo_fin) — un periodo corrido un día
+        // deja de chocar con el que ya existe y la flota recibe dos facturas
+        // del mismo mes.
+        periodoInicio: ini ? hoyMx(new Date(ini * 1000)) : hoy,
+        periodoFin: fin ? hoyMx(new Date(fin * 1000)) : hoy,
         // `amount_paid`/`amount_due` vienen en centavos. Dividir mal es un error
         // de dos órdenes de magnitud que se ve plausible.
         monto: Number(obj.amount_paid ?? obj.amount_due ?? 0) / 100,
         moneda: String(obj.currency ?? 'mxn').toUpperCase(),
         pagada: evt.type === 'invoice.paid',
+        // CUÁNDO se pagó lo sabe Stripe, no el reloj de este proceso (DAT-23).
+        // Un webhook reintentado horas después —o una carga de eventos vieja—
+        // sellaba `pagada_en` con la hora del reintento: el corte mensual de
+        // la cobranza movía el cobro de mes.
+        pagadaEn: (obj.status_transitions as { paid_at?: number } | null)?.paid_at
+          ? new Date((obj.status_transitions as { paid_at: number }).paid_at * 1000).toISOString()
+          : null,
       });
       return;
     }
