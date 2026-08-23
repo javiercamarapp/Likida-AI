@@ -45,6 +45,17 @@ export interface Gasto {
   cfdiOrden?: number;
   imagenUrl?: string;
   imgHash?: string;        // SHA-256 del contenido de la foto (dedup de reenvíos)
+  /**
+   * El wamid del mensaje de WhatsApp que dio de alta este gasto (DAT-01).
+   *
+   * NO es un dato del comprobante: es la llave de idempotencia del REPROCESO.
+   * `imgHash` cubre que el OPERADOR reenvíe la misma foto (otro wamid); esto
+   * cubre que el reintento seamos NOSOTROS —el `say()` posterior al alta lanza,
+   * el claim se suelta y la bandeja durable vuelve a correr el MISMO mensaje,
+   * con otro `randomUUID()` de gasto y otro OCR—. `uq_gasto_wa_message_id`
+   * (0164) lo hace atómico. `undefined` en toda alta que no venga de WhatsApp.
+   */
+  waMessageId?: string;
   ocrConfianza?: number;   // 0–1
   cfdiValido?: boolean;
   estadoSat?: EstadoSat;   // resultado de ConsultaCFDIService (o 'pendiente' si SAT no respondió)
@@ -88,6 +99,8 @@ export type TipoDiferencia =
   | 'fecha_sospechosa'     // fecha futura o muy anterior al viaje → periodo/plazo/complemento en riesgo
   | 'folio_verificar'      // folio leído con baja confianza en ticket con portal → verificar antes de facturar
   | 'monto_discrepante'    // el total del código y el del OCR no coinciden
+  | 'monto_implausible'    // un solo comprobante fuera de escala para el viaje (DAT-18) → revisar
+  | 'moneda_extranjera'    // el comprobante no está en MXN (DAT-19) → no se acredita como pesos
   | 'texto_sospechoso'     // el papel traía texto dirigido al extractor
   | 'alimentacion_sin_soporte' // comida sin hospedaje ni transporte que la ampare (LISR 28-V)
   | 'alimentacion_transporte_sin_tarjeta_credito' // comida amparada SOLO por transporte, pagada sin tarjeta de crédito (LISR 28-V 3er párrafo)

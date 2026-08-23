@@ -108,7 +108,12 @@ async function textoDelPdf(bytes: Uint8Array): Promise<string> {
     Buffer.from(hex, 'hex').toString('latin1'));
 }
 
-const CTX = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779' };
+// DAT-22: el cierre exige que el operador lo haya pedido EN ESTE TURNO
+// (`cierrePedidoPorTexto`, que el processor calcula con `pidioCerrar`). Estos
+// archivos prueban otras cosas del cierre, así que dan por hecho el escenario
+// normal —el chofer escribió "listo"— y el candado propio se prueba en
+// `tools_cierre_pedido.test.ts`.
+const CTX = { tenantId: 't1', viajeId: 'v1', operadorId: 'o1', telefono: '5219993700779', cierrePedidoPorTexto: true };
 const cerrar = () => executeTool('guardar_liquidacion', {}, CTX);
 
 beforeEach(() => { subidos.clear(); fallaEnRuta.clear(); saveLiquidacion.mockClear(); });

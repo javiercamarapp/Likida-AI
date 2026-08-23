@@ -32,6 +32,9 @@ vi.mock('next/server', async (orig) => {
 const marcarPendienteProcesado = vi.fn(async (_id: string) => {});
 const anotarFalloPendiente = vi.fn(async (_id: string, _err: string) => {});
 vi.mock('@/lib/likida/wa_pendientes', () => ({
+  // DAT-34: la deduplicación previa al rate limit. Vacío = ninguno de estos
+  // wamids estaba ya en la bandeja, que es el caso de una entrega normal.
+  pendientesYaConocidos: async () => new Set<string>(),
   guardarEventosPendientes: async (ms: Array<{ waMessageId?: string }>) => {
     const filas = ms.map((m, i) => ({ id: m.waMessageId ?? `f-${i}`, evento: m, guardado: true }));
     return { guardados: filas.length, fallidos: 0, filas };

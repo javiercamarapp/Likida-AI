@@ -7381,3 +7381,126 @@ begin
   raise exception E'CATALOGOS_0160  trgm_en_extensions=%  arranque=%  gin=%  op_parcial=%  uni_col=%   (esperado t/3/3/t/t)',
     (coalesce(trgm_ext, 'FALTA') = 'extensions'), n_arranque, n_gin, op_parcial, uni_col;
 end $$;
+
+-- ── 136. El mismo comprobante no entra dos veces, ni por reproceso (mig. 0164) ──
+--
+-- AUDITORÍA PROD 22-ago-2026, DAT-01 (CRÍTICO) y DAT-37. En producción NINGÚN
+-- gasto llevaba `img_hash`: el hash se calculaba tras `LIKIDA_DEDUP_FOTOS ===
+-- '1'`, bandera que producción no tiene puesta, así que `uq_gasto_img_hash`
+-- (0027) llevaba meses indexando el vacío. El código ya lo calcula siempre;
+-- este bloque comprueba la llave NUEVA, la que cubre el caso que el hash no
+-- puede cubrir: que el reintento seamos NOSOTROS.
+--
+-- Cada clave del mensaje es un hecho que sólo la base puede demostrar:
+--
+--   wamid_rebota          DAT-01 · dos gastos con el mismo wamid en la misma
+--                         flota = el mismo mensaje reprocesado. El say()
+--                         posterior al alta puede lanzar y el turno se
+--                         reintenta con el mismo wamid: sin este índice, el
+--                         diésel de $8,000 quedaba comprobado dos veces.
+--   wamid_otra_flota      El índice es POR FLOTA. Dos flotas distintas no
+--                         comparten espacio de wamid, y bloquear ahí sería
+--                         un falso positivo entre clientes.
+--   wamid_null_entra      Un gasto de alta manual (panel, importación,
+--                         huérfano adjuntado) no tiene wamid, y los NULL no
+--                         colisionan: el camino sin WhatsApp queda intacto.
+--   huerfano_rebota       DAT-01 · la sala de espera guardaba el mismo papel
+--                         N veces, y el «sí» del operador los adjuntaba
+--                         todos. Ahora la segunda fila EN ESPERA rebota.
+--   huerfano_resuelto_ok  El índice es parcial: un huérfano ya resuelto es
+--                         historia y no puede impedir que el mismo papel
+--                         vuelva a la sala de espera más adelante.
+--   codigo_rebota         DAT-37 · el mismo acercamiento apuntado dos veces
+--                         deja una fila que nunca empareja con nada.
+--   codigo_otro_monto_ok  La llave es el CÓDIGO, no el monto: dos casetas del
+--                         mismo importe son dos papeles distintos y las dos
+--                         tienen que caber.
+--
+-- Todo revierte con el RAISE final. Esperado:
+--   DEDUP_0164  wamid_rebota=t  wamid_otra_flota=t  wamid_null_entra=t
+--   huerfano_rebota=t  huerfano_resuelto_ok=t  codigo_rebota=t
+--   codigo_otro_monto_ok=t
+do $$
+declare
+  v_t uuid; v_t2 uuid; v_o uuid; v_o2 uuid; v_v uuid; v_v2 uuid; v_h uuid;
+  wamid_rebota boolean := false; wamid_otra_flota boolean := false;
+  wamid_null_entra boolean := false; huerfano_rebota boolean := false;
+  huerfano_resuelto_ok boolean := false; codigo_rebota boolean := false;
+  codigo_otro_monto_ok boolean := false;
+  k_wamid constant text := 'wamid.ZZZVERIF0164';
+  k_hash  constant text := 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0164';
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0164 A') returning id into v_t;
+  insert into tenant (nombre) values ('ZZZ VERIF 0164 B') returning id into v_t2;
+  insert into operador (tenant_id, nombre, telefono) values (v_t,'P','5215500000164') returning id into v_o;
+  insert into operador (tenant_id, nombre, telefono) values (v_t2,'Q','5215500001064') returning id into v_o2;
+  insert into viaje (tenant_id, operador_id, anticipo) values (v_t, v_o, 9000) returning id into v_v;
+  insert into viaje (tenant_id, operador_id, anticipo) values (v_t2, v_o2, 9000) returning id into v_v2;
+
+  -- ═══ DAT-01 · el mismo mensaje, reprocesado ══════════════════════════════
+  insert into gasto (tenant_id, viaje_id, concepto, monto, wa_message_id)
+    values (v_t, v_v, 'diesel', 8000, k_wamid);
+  begin
+    -- El reproceso trae OTRO id de gasto y OTRO OCR: sin este índice, entra.
+    insert into gasto (tenant_id, viaje_id, concepto, monto, wa_message_id)
+      values (v_t, v_v, 'diesel', 8000, k_wamid);
+  exception when unique_violation then wamid_rebota := true;
+  end;
+
+  -- ═══ Otra flota con el mismo wamid: NO es el mismo comprobante ═══════════
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto, wa_message_id)
+      values (v_t2, v_v2, 'diesel', 8000, k_wamid);
+    wamid_otra_flota := true;
+  exception when others then wamid_otra_flota := false;
+  end;
+
+  -- ═══ Sin wamid (alta manual): dos gastos, ningún choque ══════════════════
+  begin
+    insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'caseta', 100);
+    insert into gasto (tenant_id, viaje_id, concepto, monto) values (v_t, v_v, 'caseta', 100);
+    wamid_null_entra := true;
+  exception when others then wamid_null_entra := false;
+  end;
+
+  -- ═══ DAT-01 · la sala de espera no guarda el mismo papel dos veces ═══════
+  insert into comprobante_huerfano (tenant_id, operador_id, gasto, motivo)
+    values (v_t, v_o, jsonb_build_object('concepto','diesel','monto',8000,'imgHash',k_hash), 'sin_viaje')
+    returning id into v_h;
+  begin
+    insert into comprobante_huerfano (tenant_id, operador_id, gasto, motivo)
+      values (v_t, v_o, jsonb_build_object('concepto','diesel','monto',8000,'imgHash',k_hash), 'sin_viaje');
+  exception when unique_violation then huerfano_rebota := true;
+  end;
+
+  -- Resuelto el primero, el mismo papel PUEDE volver a esperar: el operador
+  -- que descartó por error y reenvía la foto no puede quedarse sin sala.
+  update comprobante_huerfano set resuelto_en = now(), resolucion = 'descartado' where id = v_h;
+  begin
+    insert into comprobante_huerfano (tenant_id, operador_id, gasto, motivo)
+      values (v_t, v_o, jsonb_build_object('concepto','diesel','monto',8000,'imgHash',k_hash), 'sin_viaje');
+    huerfano_resuelto_ok := true;
+  exception when others then huerfano_resuelto_ok := false;
+  end;
+
+  -- ═══ DAT-37 · un acercamiento = una fila en la bandeja de códigos ════════
+  insert into codigo_pendiente (tenant_id, viaje_id, monto, folio_portal)
+    values (v_t, v_v, 420, 'FOLIO-0164');
+  begin
+    insert into codigo_pendiente (tenant_id, viaje_id, monto, folio_portal)
+      values (v_t, v_v, 420, 'FOLIO-0164');
+  exception when unique_violation then codigo_rebota := true;
+  end;
+
+  -- Mismo monto, OTRO folio: son dos casetas iguales, y las dos tienen que caber.
+  begin
+    insert into codigo_pendiente (tenant_id, viaje_id, monto, folio_portal)
+      values (v_t, v_v, 420, 'FOLIO-0164-BIS');
+    codigo_otro_monto_ok := true;
+  exception when others then codigo_otro_monto_ok := false;
+  end;
+
+  raise exception E'DEDUP_0164  wamid_rebota=%  wamid_otra_flota=%  wamid_null_entra=%  huerfano_rebota=%  huerfano_resuelto_ok=%  codigo_rebota=%  codigo_otro_monto_ok=%   (esperado t / t / t / t / t / t / t)',
+    wamid_rebota, wamid_otra_flota, wamid_null_entra, huerfano_rebota,
+    huerfano_resuelto_ok, codigo_rebota, codigo_otro_monto_ok;
+end $$;

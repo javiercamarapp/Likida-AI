@@ -15,7 +15,7 @@ ahora corre **con los flags ON**.
 |-----|--------------|----------|
 | `LIKIDA_INTAKE_GRACE_MS` | `2000` | Gracia anti-carrera fotos+"listo" en el mismo lote. |
 | `LIKIDA_RECUPERAR_CIERRE_PARCIAL` | `1` | Recupera el "huérfano de cierre" (guarda OK pero el ciclo murió). |
-| `LIKIDA_DEDUP_FOTOS` | `1` | Dedup de fotos por SHA-256 (reenvíos manuales). |
+| ~~`LIKIDA_DEDUP_FOTOS`~~ | — | RETIRADA (DAT-01, 22-ago-2026): el hash se calcula siempre. La bandera describía una protección de dinero que producción tenía apagada. |
 | `LIKIDA_INTAKE_ESPERA_MS` | `20000` | Acota el peor caso de la barrera bajo el tope de Vercel. |
 
 **Pendiente cuando despliegues:** replicar estas 4 envs en el entorno de Vercel

@@ -88,6 +88,15 @@ export const SIN_NORMA: Partial<Record<TipoDiferencia, string>> = {
   rfc_receptor_no_verificable: 'Calidad del dato de la flota: sin RFC válido no se puede verificar el receptor.',
   monto_invalido: 'Calidad del dato.',
   monto_discrepante: 'Calidad del dato: el código y el OCR no coinciden.',
+  // DAT-18: no hay norma que diga cuánto puede valer un ticket. Es escala, no
+  // ley: un punto decimal perdido multiplica por diez con la misma confianza.
+  monto_implausible: 'Calidad de la lectura: la cifra está fuera de escala para el viaje.',
+  // DAT-19: la ley SÍ tiene qué decir sobre CFDI en moneda extranjera (el
+  // TipoCambio del art. 29-A y la conversión del art. 20 del CFF), pero la
+  // diferencia que este motor levanta NO es un veredicto legal: es «esta cifra
+  // no son pesos y nadie la convirtió». Citar una norma aquí fingiría un
+  // veredicto sobre lo que en realidad es un dato pendiente de capturar.
+  moneda_extranjera: 'Calidad del dato: el importe no está en pesos y la conversión la hace una persona.',
   fecha_sospechosa: 'Calidad del dato.',
   folio_verificar: 'Calidad del dato.',
   texto_sospechoso: 'Seguridad, no fiscalidad.',
