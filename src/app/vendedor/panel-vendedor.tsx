@@ -16,7 +16,15 @@ import { TableroProspectos, type ColumnaTablero, type ResultadoAccion } from '..
 
 const RUTA = '/vendedor';
 
-/** El mismo tope que el tablero del admin — el recorte siempre se dice. */
+/**
+ * El mismo tope que el tablero del admin — el recorte siempre se dice.
+ *
+ * FE-10 (22-ago-2026): el recorte se decía con "y N más — filtra para verlos"
+ * en una pantalla que NO TIENE filtro. Con una cartera de 200 prospectos, 170
+ * quedaban invisibles y el único consejo era usar un control inexistente.
+ * Ahora cada columna recortada lleva `?col=<estado>&pag=N`: se expande ESA
+ * columna, de `TOPE_COLUMNA` en `TOPE_COLUMNA`, con su link de vuelta.
+ */
 const TOPE_COLUMNA = 30;
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -62,11 +70,16 @@ async function ejecutarComoVendedor(
  * puede pintar, pero no escribir.
  */
 export async function PanelVendedor({
-  userId, nombre, rol,
+  userId, nombre, rol, col, pag,
 }: {
   userId: string;
   nombre: string | null;
   rol: string;
+  /** FE-10: qué columna está EXPANDIDA (`?col=<estado>`). Un valor fuera del
+   *  dominio se ignora — un link viejo o manipulado se lee como "ninguna". */
+  col?: string;
+  /** Qué página de esa columna (`?pag=1` es la primera). */
+  pag?: string;
 }) {
   const esVendedor = rol === 'vendedor';
 
@@ -94,17 +107,43 @@ export async function PanelVendedor({
     );
   }
 
+  // FE-10: la columna expandida y su página. Ambas se SANEAN: `col` tiene que
+  // ser un estado del dominio y `pag` un entero ≥ 1; cualquier otra cosa se
+  // lee como "ninguna columna expandida, primera página".
+  const expandida = ESTADOS_PROSPECTO.some((e) => e.valor === col) ? col : null;
+  const paginaCruda = Number(pag);
+  const pagina = Number.isInteger(paginaCruda) && paginaCruda >= 1 ? paginaCruda : 1;
+
   const totales = conteosVacios();
   let columnas: ColumnaTablero[] | null = null;
   if (prospectos !== null) {
     for (const p of prospectos) totales[p.estado]++;
     columnas = ESTADOS_PROSPECTO.map((e) => {
       const en = prospectos.filter((p) => p.estado === e.valor);
+      // Solo la columna expandida pagina; las demás enseñan su primer tramo.
+      const esta = e.valor === expandida;
+      const desde = esta ? (pagina - 1) * TOPE_COLUMNA : 0;
+      const hasta = desde + TOPE_COLUMNA;
+      const restantes = Math.max(0, en.length - hasta);
       return {
         estado: e.valor,
         rotulo: e.rotulo,
         total: en.length,
-        tarjetas: en.slice(0, TOPE_COLUMNA).map((p) => ({
+        // El link SIEMPRE dice cuántos faltan de verdad — nunca "ver más" a
+        // secas sobre una columna que ya no tiene más.
+        mas: restantes > 0
+          ? {
+            href: `${RUTA}?col=${e.valor}&pag=${esta ? pagina + 1 : 2}`,
+            etiqueta: `${restantes} más en esta etapa — ver ${Math.min(TOPE_COLUMNA, restantes)} más`,
+          }
+          : null,
+        menos: esta && pagina > 1
+          ? {
+            href: pagina === 2 ? RUTA : `${RUTA}?col=${e.valor}&pag=${pagina - 1}`,
+            etiqueta: 'Ver los anteriores',
+          }
+          : null,
+        tarjetas: en.slice(desde, hasta).map((p) => ({
           id: p.id,
           empresa: p.empresa,
           vacante: p.vacante,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { Inbox } from 'lucide-react';
 import { EstadoVacio, StatusPill, type Estado } from '../ui/kit';
 
@@ -41,6 +42,14 @@ export interface ColumnaTablero {
    *  se pinten `tarjetas.length` — el recorte se dice, nunca se esconde. */
   total: number;
   tarjetas: TarjetaProspecto[];
+  /** FE-10: a dónde lleva "ver los que faltan" cuando la columna está
+   *  recortada. El tablero decía "y N más — filtra para verlos" en una
+   *  pantalla que NO TIENE filtro (/vendedor): mandaba a usar algo que no
+   *  existe. Con `mas` se pinta un link real; sin él, el texto se limita a
+   *  declarar el recorte. */
+  mas?: { href: string; etiqueta: string } | null;
+  /** El link de vuelta cuando la columna está EXPANDIDA (misma razón). */
+  menos?: { href: string; etiqueta: string } | null;
 }
 
 export type ResultadoAccion = { ok: true; mensaje?: string } | { ok: false; error: string };
@@ -229,10 +238,24 @@ export function TableroProspectos({
                     redactar={redactar} conVendedor={conVendedor} />
                 ))
               )}
-              {col.total > col.tarjetas.length && (
+              {col.mas ? (
+                <Link href={col.mas.href} className="block text-[11px] px-1 underline hover:opacity-70 transition-opacity"
+                  style={{ color: 'var(--muted)' }}>
+                  {col.mas.etiqueta}
+                </Link>
+              ) : col.total > col.tarjetas.length ? (
                 <p className="text-[11px] px-1 m-0" style={{ color: 'var(--muted)' }}>
-                  y {col.total - col.tarjetas.length} más — filtra para verlos
+                  {/* Sin link, se DECLARA el recorte y nada más. Antes decía
+                      "filtra para verlos" también donde no hay filtro. */}
+                  y {col.total - col.tarjetas.length} más
+                  {hayFiltro ? ' — acota el filtro para verlos' : ''}
                 </p>
+              ) : null}
+              {col.menos && (
+                <Link href={col.menos.href} className="block text-[11px] px-1 underline hover:opacity-70 transition-opacity"
+                  style={{ color: 'var(--muted)' }}>
+                  {col.menos.etiqueta}
+                </Link>
               )}
             </div>
           </div>

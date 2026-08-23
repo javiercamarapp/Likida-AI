@@ -5,6 +5,8 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { getUnidades, validarUnidad, crearUnidad, editarUnidad } from '@/lib/likida/operacion';
+import { sufijoTenant } from '../sufijo';
+import { camposDeSufijo } from '../paginar-campos';
 import { VistaUnidades } from './vista';
 import type { ResultadoForma } from './forma';
 
@@ -37,11 +39,18 @@ const RUTA = '/dashboard/unidades';
 export default async function PaginaUnidades({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+  /** FE-12: `?q=` busca, `?p=` pagina y `?editar=<id>` abre UNA forma. Los
+   *  sanea `paginarRegistro`; un link viejo se lee como primera página. */
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string; p?: string; editar?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
+  const sufijo = sufijoTenant(sp);
+  // Un `<form method="get">` reemplaza el query string ENTERO, así que el
+  // sufijo del superadmin tiene que viajar como campo oculto o la búsqueda lo
+  // sacaría de la flota que estaba viendo.
+  const camposOcultos = camposDeSufijo(sp);
 
   const unidades = await getUnidades(tenantId);
 
@@ -97,6 +106,9 @@ export default async function PaginaUnidades({
   return (
     <VistaUnidades
       unidades={unidades}
+      sp={sp}
+      sufijo={sufijo}
+      camposOcultos={camposOcultos}
       // El gateo de la UI solo decide si la forma SE PINTA; la puerta real se
       // re-comprueba adentro del action (alcanzable por POST directo).
       puedeEditar={puedeAdministrar(rol)}
