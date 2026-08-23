@@ -415,3 +415,45 @@ describe('el kill switch de agente:proveedores (0110) — Fase 1 del blueprint',
     expect(await r.json()).toMatchObject({ ignorado: 'sin_adjuntos' });
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PRESUPUESTO DE TIEMPO DE LAS DESCARGAS (23-ago-2026)
+//
+// Los dos `fetch` a Resend no tenían timeout. Un proveedor que acepta la
+// conexión y CALLA dejaba la función esperando hasta que la mataba la
+// plataforma — y ahí está el daño real: al morir no corre el `delete` que
+// libera la fila de dedup, el correo queda marcado como procesado sin haberlo
+// sido, y el reintento de Resend sale por "ya_procesado". El CFDI se pierde
+// para siempre, en silencio.
+//
+// Con `AbortSignal.timeout` la descarga colgada se corta, cuenta como CAÍDA
+// (transitorio) y el correo sale por 503 con su fila liberada — o sea, vuelve
+// a la cola de Resend entero.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('una descarga que se cuelga no se lleva el CFDI por delante', () => {
+  it('el fetch lleva AbortSignal: un proveedor que calla no bloquea la función', async () => {
+    let señalRecibida: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/attachments/')) {
+        señalRecibida = init?.signal ?? undefined;
+        return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+      }
+      return new Response('<Comprobante/>', { status: 200 });
+    }));
+    await POST(pedir(evento()));
+    expect(señalRecibida).toBeInstanceOf(AbortSignal);
+  });
+
+  it('si la descarga se ABORTA, el correo NO queda consumido: 503', async () => {
+    // Se simula lo que hace `AbortSignal.timeout` al vencer.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/attachments/')) {
+        return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+      }
+      throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    }));
+    const r = await POST(pedir(evento()));
+    // 503 y no 200: Resend tiene que volver a entregarlo.
+    expect(r.status).toBe(503);
+  });
+});
