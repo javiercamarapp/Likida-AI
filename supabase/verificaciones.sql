@@ -7185,3 +7185,151 @@ begin
     queda_viva, queda_reciente, queda_sin_viaje, queda_espera, queda_historico, queda_informe_vivo,
     anon_ok;
 end $$;
+
+-- ── 135. El cobro de Stripe contra la base (mig. 0163) ──────────────────────
+--
+-- Los cuatro hallazgos de dinero de la auditoría 18 que la 0163 cierra, en un
+-- solo bloque porque comparten el montaje —una flota, un plan, una factura— y
+-- montarlo cuatro veces no diría nada nuevo. Cada clave del mensaje es un
+-- hallazgo:
+--
+--   stripe_convive       DAT-12 · la factura de STRIPE y la mensualidad
+--                        emitida A MANO del mismo mes conviven. Antes la de
+--                        Stripe nacía con `metodo_cobro` en 'transferencia'
+--                        (el default de la 0057), entraba al índice
+--                        `factura_saas_una_por_periodo` y chocaba: 23505 →
+--                        webhook 500 → Stripe reintenta hasta rendirse y el
+--                        COBRO REAL nunca queda registrado.
+--   metodo_incoherente_rebota
+--                        DAT-12 · y ya no se puede volver a escribir la
+--                        incoherencia: un `stripe_invoice_id` con método
+--                        'transferencia' rebota contra el CHECK.
+--   price_viejo_resuelve DAT-11 · subirle el precio a un plan NO huerfana a
+--                        quien ya paga: el price anterior sigue sabiendo de
+--                        qué plan era. Antes `planDePrice` devolvía null, el
+--                        webhook lanzaba y a esa flota no se le aplicaba un
+--                        solo evento más (ni el pago, ni la cancelación).
+--   reserva_gana_una     DAT-13 · el compare-and-set del timbrado: dos
+--                        intentos, UNA reserva. La segunda no llama al PAC,
+--                        así que no hay dos CFDI reales que cancelar.
+--   reserva_caducada_entra
+--                        DAT-13 · y una reserva de hace 20 minutos (un
+--                        intento que murió a media llamada) no deja la
+--                        factura sin timbrar para siempre.
+--   conciliar_gana_una   DAT-13 · el mismo candado en el pago: la segunda
+--                        conciliación no toca fila, y por eso no dispara un
+--                        segundo timbrado.
+--   cancelado_sin_uuid_rebota
+--                        DAT-33 · «CFDI cancelado» de un CFDI que nunca se
+--                        timbró no existe.
+--   anon_price           DAT-11 · `plan_price` decide de qué plan es un
+--                        price: escribirlo desde internet sería cambiarse el
+--                        propio precio.
+--
+-- Todo revierte con el RAISE final. PENDIENTE DE CORRER CONTRA PRODUCCIÓN
+-- (auditoría 18, rubro datos). Esperado:
+--   STRIPE_0163  stripe_convive=t  metodo_incoherente_rebota=t
+--   price_viejo_resuelve=t  reserva_gana_una=t  reserva_caducada_entra=t
+--   conciliar_gana_una=t  cancelado_sin_uuid_rebota=t  anon_price=f
+do $$
+declare
+  v_t uuid; v_f uuid; v_plan text := 'zzz_verif_0163';
+  stripe_convive boolean := false; metodo_incoherente_rebota boolean := false;
+  price_viejo_resuelve boolean := false;
+  reserva_gana_una boolean := false; reserva_caducada_entra boolean := false;
+  conciliar_gana_una boolean := false; cancelado_sin_uuid_rebota boolean := false;
+  anon_price boolean := false;
+  n1 int; n2 int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0163') returning id into v_t;
+  insert into plan (clave, nombre, stripe_price_id, precio_mensual, moneda, precio_iva_incluido, activo)
+    values (v_plan, 'ZZZ 0163', 'price_zzz_viejo', 10000, 'MXN', true, false);
+
+  -- ═══ DAT-12 · las dos formas de cobrar el mismo mes conviven ═════════════
+  -- La manual: la que /admin emite con su referencia para transferir.
+  insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro, referencia)
+    values (v_t, date '2026-08-01', date '2026-08-31', 11600, 'transferencia', 'LKZZZ202608')
+    returning id into v_f;
+  -- La de Stripe, MISMO periodo. Antes rebotaba contra `factura_saas_una_por_periodo`.
+  begin
+    insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro, stripe_invoice_id)
+      values (v_t, date '2026-08-01', date '2026-08-31', 11600, 'stripe', 'in_zzz_0163');
+    stripe_convive := true;
+  exception when others then stripe_convive := false;
+  end;
+
+  begin
+    insert into factura_saas (tenant_id, periodo_inicio, periodo_fin, monto, metodo_cobro, stripe_invoice_id)
+      values (v_t, date '2026-07-01', date '2026-07-31', 11600, 'transferencia', 'in_zzz_incoherente');
+  exception when check_violation then metodo_incoherente_rebota := true;
+  end;
+
+  -- ═══ DAT-11 · el price viejo no se queda huérfano ════════════════════════
+  insert into plan_price (stripe_price_id, plan_clave, precio_mensual, moneda, precio_iva_incluido)
+    values ('price_zzz_viejo', v_plan, 10000, 'MXN', true);
+  -- /admin liga un price NUEVO (subida de precio): el plan deja de apuntar al viejo.
+  insert into plan_price (stripe_price_id, plan_clave, precio_mensual, moneda, precio_iva_incluido)
+    values ('price_zzz_nuevo', v_plan, 12000, 'MXN', true);
+  update plan_price set reemplazado_en = now() where stripe_price_id = 'price_zzz_viejo';
+  update plan set stripe_price_id = 'price_zzz_nuevo', precio_mensual = 12000 where clave = v_plan;
+
+  price_viejo_resuelve :=
+    (select count(*) from plan where stripe_price_id = 'price_zzz_viejo') = 0
+    and (select plan_clave from plan_price where stripe_price_id = 'price_zzz_viejo') = v_plan;
+
+  -- ═══ DAT-13 · la reserva del timbrado ════════════════════════════════════
+  update factura_saas set estado = 'pagada', pagada_en = now() where id = v_f;
+
+  update factura_saas set timbrando_en = now()
+   where id = v_f and cfdi_uuid is null
+     and (timbrando_en is null or timbrando_en < now() - interval '10 minutes');
+  get diagnostics n1 = row_count;
+  update factura_saas set timbrando_en = now()
+   where id = v_f and cfdi_uuid is null
+     and (timbrando_en is null or timbrando_en < now() - interval '10 minutes');
+  get diagnostics n2 = row_count;
+  reserva_gana_una := (n1 = 1 and n2 = 0);
+
+  -- El intento que murió a media llamada al PAC no bloquea para siempre.
+  update factura_saas set timbrando_en = now() - interval '20 minutes' where id = v_f;
+  update factura_saas set timbrando_en = now()
+   where id = v_f and cfdi_uuid is null
+     and (timbrando_en is null or timbrando_en < now() - interval '10 minutes');
+  get diagnostics n1 = row_count;
+  reserva_caducada_entra := (n1 = 1);
+
+  -- ═══ DAT-13 · el mismo candado al conciliar ══════════════════════════════
+  update factura_saas set estado = 'pendiente', pagada_en = null, timbrando_en = null where id = v_f;
+  update factura_saas set estado = 'pagada', pagada_en = now(), referencia_banco = 'SPEI-1',
+         conciliada_por = null, conciliada_en = null
+   where id = v_f and estado <> 'pagada';
+  get diagnostics n1 = row_count;
+  update factura_saas set estado = 'pagada', pagada_en = now(), referencia_banco = 'SPEI-2'
+   where id = v_f and estado <> 'pagada';
+  get diagnostics n2 = row_count;
+  conciliar_gana_una := (n1 = 1 and n2 = 0
+    and (select referencia_banco from factura_saas where id = v_f) = 'SPEI-1');
+
+  -- ═══ DAT-33 · no se cancela un papel que no existe ═══════════════════════
+  begin
+    update factura_saas set cfdi_cancelado_en = now() where id = v_f;
+  exception when check_violation then cancelado_sin_uuid_rebota := true;
+  end;
+
+  -- ═══ DAT-11 · y el catálogo de precios no se escribe desde internet ══════
+  begin
+    set local role anon;
+    begin
+      insert into plan_price (stripe_price_id, plan_clave) values ('price_zzz_anon', v_plan);
+      anon_price := true;
+    exception when others then anon_price := false;
+    end;
+    reset role;
+  exception when others then reset role; raise;
+  end;
+
+  raise exception E'STRIPE_0163  stripe_convive=%  metodo_incoherente_rebota=%  price_viejo_resuelve=%\n           reserva_gana_una=%  reserva_caducada_entra=%  conciliar_gana_una=%\n           cancelado_sin_uuid_rebota=%  anon_price=%   (esperado todo t salvo anon_price=f)',
+    stripe_convive, metodo_incoherente_rebota, price_viejo_resuelve,
+    reserva_gana_una, reserva_caducada_entra, conciliar_gana_una,
+    cancelado_sin_uuid_rebota, anon_price;
+end $$;

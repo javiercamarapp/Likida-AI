@@ -13,7 +13,7 @@ function firmaPara(secreto: string, t: number, cuerpo: string): string {
   return `t=${t},v1=${h}`;
 }
 
-const { verificarFirmaStripe, modoStripe, stripeConfigurado, webhookConfigurado } = await import('./stripe');
+const { verificarFirmaStripe, modoStripe, stripeConfigurado, webhookConfigurado, exigirLlaveCoherente, eventoEnModoDeLaLlave } = await import('./stripe');
 
 afterEach(() => { process.env = { ...ORIGINAL }; });
 
@@ -77,5 +77,59 @@ describe('modoStripe — enseñar el modo de la llave importa', () => {
     expect(webhookConfigurado()).toBe(false);
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_x';
     expect(webhookConfigurado()).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA PROD (22-ago-2026) · DAT-32 — EL CANDADO test/live QUE NO EXISTÍA.
+//
+// `modoStripe()` ya sabía distinguir la llave de prueba de la real, y lo único
+// que hacía con eso era pintar un aviso amarillo en una pantalla. Un aviso se
+// lee una vez y se cierra. Con `sk_test` en producción NADA falla: se crean
+// customers, se crean suscripciones, se devuelven URLs de factura idénticas a
+// las reales — y no entra un peso. La flota cree que ya contrató.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('exigirLlaveCoherente — producción con llave de prueba no opera', () => {
+  it('lanza en producción con sk_test', () => {
+    process.env.VERCEL_ENV = 'production';
+    process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
+    expect(() => exigirLlaveCoherente()).toThrow(/PRUEBA/);
+  });
+
+  it('no lanza en producción con sk_live', () => {
+    process.env.VERCEL_ENV = 'production';
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    expect(() => exigirLlaveCoherente()).not.toThrow();
+  });
+
+  it('no lanza fuera de producción: ensayar con sk_test es justo lo correcto', () => {
+    process.env.VERCEL_ENV = 'preview';
+    process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
+    expect(() => exigirLlaveCoherente()).not.toThrow();
+  });
+});
+
+describe('eventoEnModoDeLaLlave — la firma no dice de qué modo viene el evento', () => {
+  it('acepta el evento live con llave live, y el de prueba con llave de prueba', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    expect(eventoEnModoDeLaLlave(true)).toBe(true);
+    process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
+    expect(eventoEnModoDeLaLlave(false)).toBe(true);
+  });
+
+  it('RECHAZA el cruzado: un evento de sandbox contra una llave real activaría un plan sin cobrar', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    expect(eventoEnModoDeLaLlave(false)).toBe(false);
+    process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
+    expect(eventoEnModoDeLaLlave(true)).toBe(false);
+  });
+
+  it('rechaza un evento SIN livemode (no es un evento de Stripe) y sin llave configurada', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    expect(eventoEnModoDeLaLlave(undefined)).toBe(false);
+    expect(eventoEnModoDeLaLlave('true')).toBe(false);
+    delete process.env.STRIPE_SECRET_KEY;
+    expect(eventoEnModoDeLaLlave(true)).toBe(false);
   });
 });

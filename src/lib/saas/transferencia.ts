@@ -130,12 +130,29 @@ export async function emitirMensualidad(
 
   const { data: sus, error: errSus } = await admin
     .from('suscripcion')
-    .select('id, plan_clave, plan(precio_mensual, moneda, nombre, precio_iva_incluido)')
+    .select('id, plan_clave, stripe_subscription_id, plan(precio_mensual, moneda, nombre, precio_iva_incluido)')
     .eq('tenant_id', tenantId)
     .in('estado', ['prueba', 'activa', 'morosa', 'pausada'])
     .maybeSingle();
   if (errSus) throw new Error(`emitirMensualidad.suscripcion: ${errSus.message}`);
   if (!sus) throw new DatoInvalido('Esa flota no tiene una suscripción activa. Primero asígnale un plan.');
+
+  // ── NO SE COBRA DOS VECES EL MISMO MES POR DOS CAMINOS (DAT-25) ──────────
+  //
+  // Esta pantalla emite la mensualidad MANUAL: le dice a la flota a qué CLABE
+  // transferir. Si esa flota ya tiene suscripción en Stripe, Stripe le está
+  // emitiendo su propia factura por el mismo periodo — y el cliente recibe dos
+  // cobros del mismo mes, cada uno con su referencia, sin nada en pantalla que
+  // diga que son el mismo. El índice `factura_saas_una_por_periodo` no lo
+  // atrapa: las de Stripe llevan `metodo_cobro = 'stripe'` (0163, DAT-12) y
+  // quedan fuera de ese índice a propósito.
+  if (sus.stripe_subscription_id) {
+    throw new DatoInvalido(
+      'Esa flota cobra por Stripe (suscripción ' + String(sus.stripe_subscription_id).slice(0, 14) + '…), así que '
+      + 'Stripe ya le emite su factura de este periodo. Emitirla también a mano le cobraría el mismo mes dos veces. '
+      + 'Si quieres cobrarle por transferencia directa, primero hay que cancelar su suscripción en Stripe.',
+    );
+  }
 
   type FilaPlan = {
     precio_mensual?: number | string | null;
@@ -223,17 +240,20 @@ export async function conciliar(
   }
 
   const admin = supabaseAdmin();
-  const { data: f, error: errLee } = await admin
-    .from('factura_saas')
-    .select('estado')
-    .eq('id', facturaId)
-    .maybeSingle();
-  if (errLee) throw new Error(`conciliar.leer: ${errLee.message}`);
-  if (!f) throw new DatoInvalido('Esa factura ya no existe.');
-  if (f.estado === 'pagada') throw new DatoInvalido('Esa factura ya estaba marcada como pagada.');
-
   const ahora = new Date().toISOString();
-  const { error } = await admin
+
+  // ── COMPARE-AND-SET, NO LEER-Y-DESPUÉS-ESCRIBIR (auditoría prod, DAT-13) ──
+  //
+  // Antes esto leía el estado, comprobaba en TypeScript que no fuera 'pagada' y
+  // luego escribía. Entre la lectura y la escritura cabe el segundo clic —o la
+  // segunda pestaña—, y los dos pasan la comprobación. Da igual para la fila
+  // (queda 'pagada' de todos modos), pero NO para lo que viene después: el
+  // llamador timbra el CFDI al conciliar, así que dos conciliaciones son dos
+  // timbrados de la misma mensualidad, y uno hay que cancelarlo ante el SAT.
+  //
+  // El `neq` viaja DENTRO del UPDATE: Postgres resuelve la carrera, no nosotros.
+  // La factura que ya estaba pagada no devuelve fila y este camino se para aquí.
+  const { data: tocadas, error } = await admin
     .from('factura_saas')
     .update({
       estado: 'pagada',
@@ -242,8 +262,20 @@ export async function conciliar(
       conciliada_en: ahora,
       referencia_banco: ref,
     })
-    .eq('id', facturaId);
+    .eq('id', facturaId)
+    .neq('estado', 'pagada')
+    .select('id');
   if (error) throw new Error(`conciliar: ${error.message}`);
+  if ((tocadas ?? []).length > 0) return;
+
+  // Cero filas: o ya estaba pagada, o ya no existe. Se distingue para que el
+  // mensaje sirva de algo.
+  const { data: f, error: errLee } = await admin
+    .from('factura_saas').select('estado').eq('id', facturaId).maybeSingle();
+  if (errLee) throw new Error(`conciliar.leer: ${errLee.message}`);
+  if (!f) throw new DatoInvalido('Esa factura ya no existe.');
+  if (f.estado === 'pagada') throw new DatoInvalido('Esa factura ya estaba marcada como pagada.');
+  throw new DatoInvalido(`Esa factura está "${String(f.estado)}" y no se pudo marcar como pagada.`);
 }
 
 /**
@@ -312,34 +344,95 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
     throw new DatoInvalido('Esa flota no tiene sus datos fiscales completos: sin RFC, razón social, régimen, código postal y uso de CFDI el SAT rechaza el timbrado.');
   }
 
-  const cfdi = await timbrarMensualidad({
-    receptor: {
-      rfc: fiscales!.rfc!, razonSocial: fiscales!.razonSocial!,
-      regimenFiscal: fiscales!.regimenFiscal!, codigoPostal: fiscales!.codigoPostal!,
-      usoCfdi: fiscales!.usoCfdi!,
-    },
-    // LA BASE, no el total: Facturapi timbra con `tax_included: false`.
-    subtotal,
-    // Para que, si el PAC devuelve otro total, quede en el log con nombre y
-    // apellido en vez de descubrirse cuando el contador del cliente concilie.
-    totalEsperado: total,
-    periodoInicio: f.periodo_inicio as string,
-    periodoFin: f.periodo_fin as string,
-    referencia: (f.referencia as string) ?? undefined,
-  });
+  // ── LA RESERVA, ANTES DE LLAMAR AL PAC (auditoría prod, DAT-13) ──────────
+  //
+  // Todo lo de arriba son comprobaciones en TypeScript sobre una fila que se
+  // leyó hace unos milisegundos. Dos clics —o el clic y el reintento de quien
+  // no vio la respuesta— pasan LOS DOS por `cfdi_uuid is null`, y cada uno
+  // llama al PAC: DOS CFDI REALES de la misma mensualidad. Uno hay que
+  // cancelarlo ante el SAT, y una cancelación fuera de plazo se le queda al
+  // cliente en su contabilidad.
+  //
+  // El candado es este UPDATE condicional: solo una petición se lleva la fila.
+  // La reserva CADUCA a los 10 minutos para que un intento que murió a media
+  // llamada (el techo del PAC son 30 s, más el peor caso de red) no deje la
+  // factura sin poder timbrarse nunca — el índice único de la 0056 sigue siendo
+  // la última red si dos reservas caducadas se cruzaran.
+  const hace10min = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { data: reservadas, error: errReserva } = await admin
+    .from('factura_saas')
+    .update({ timbrando_en: new Date().toISOString() })
+    .eq('id', facturaId)
+    .is('cfdi_uuid', null)
+    .or(`timbrando_en.is.null,timbrando_en.lt.${hace10min}`)
+    .select('id');
+  if (errReserva) throw new Error(`timbrarFactura.reservar: ${errReserva.message}`);
+  if ((reservadas ?? []).length === 0) {
+    throw new DatoInvalido(
+      'Esa factura se está timbrando en este momento (o acaba de timbrarse). No se manda un segundo timbrado: '
+      + 'serían dos CFDI reales de la misma mensualidad y uno habría que cancelarlo ante el SAT. Recarga en un '
+      + 'minuto para ver el UUID.',
+    );
+  }
+
+  let cfdi;
+  try {
+    cfdi = await timbrarMensualidad({
+      receptor: {
+        rfc: fiscales!.rfc!, razonSocial: fiscales!.razonSocial!,
+        regimenFiscal: fiscales!.regimenFiscal!, codigoPostal: fiscales!.codigoPostal!,
+        usoCfdi: fiscales!.usoCfdi!,
+        // EL CORREO DEL RECEPTOR (DAT-33). Sin él, Facturapi creaba el customer
+        // sin email y `enviarPorCorreo` se iba a ninguna parte: el CFDI existía
+        // y el cliente no lo veía nunca.
+        email: fiscales!.email ?? undefined,
+      },
+      // LA BASE, no el total: Facturapi timbra con `tax_included: false`.
+      subtotal,
+      // Para que, si el PAC devuelve otro total, quede en el log con nombre y
+      // apellido en vez de descubrirse cuando el contador del cliente concilie.
+      totalEsperado: total,
+      periodoInicio: f.periodo_inicio as string,
+      periodoFin: f.periodo_fin as string,
+      referencia: (f.referencia as string) ?? undefined,
+    });
+  } catch (e) {
+    // El PAC dijo que no: NO hay CFDI, así que la reserva se suelta para que el
+    // siguiente intento (con el dato corregido) pueda entrar sin esperar los 10
+    // minutos. Si soltarla falla, no se tapa el error del PAC —que es el que
+    // explica qué pasó—: la reserva caduca sola.
+    const s = await admin.from('factura_saas').update({ timbrando_en: null }).eq('id', facturaId);
+    if (s.error) logger.warn('facturapi.reserva_sin_soltar', { facturaId, err: s.error.message });
+    throw e;
+  }
 
   // El CFDI YA EXISTE ante el SAT en este punto. Si guardarlo falla, se loguea
   // fuerte y se devuelve igual: perder el UUID en nuestra base es un problema
   // de registro; volver a timbrar sería un problema fiscal del cliente.
   const { error: errGuardar } = await admin
     .from('factura_saas')
-    .update({ cfdi_uuid: cfdi.uuid, cfdi_xml_url: cfdi.urlXml, timbrada_en: new Date().toISOString() })
+    .update({
+      cfdi_uuid: cfdi.uuid,
+      cfdi_xml_url: cfdi.urlXml,
+      // El id del PAC y la liga de verificación (0163, DAT-33): sin el primero
+      // no se puede CANCELAR el papel si el cobro se reembolsa, y la segunda es
+      // lo que el contador del cliente pide para comprobarlo contra el SAT.
+      cfdi_proveedor_id: cfdi.id,
+      cfdi_verificacion_url: cfdi.urlVerificacion,
+      timbrada_en: new Date().toISOString(),
+      timbrando_en: null,
+    })
     .eq('id', facturaId);
   if (errGuardar) {
     logger.error('facturapi.uuid_sin_guardar', { facturaId, uuid: cfdi.uuid, err: errGuardar.message });
   }
 
-  await enviarPorCorreo(cfdi.id);
+  // Se manda al correo DE LA FLOTA, explícito. Antes iba sin destinatario y
+  // dependía de que el customer del PAC tuviera uno — que no lo tenía.
+  const enviado = await enviarPorCorreo(cfdi.id, fiscales!.email ?? undefined);
+  if (!enviado) {
+    logger.error('facturapi.cfdi_sin_entregar', { facturaId, uuid: cfdi.uuid, hayCorreo: Boolean(fiscales!.email) });
+  }
   return { uuid: cfdi.uuid };
 }
 
