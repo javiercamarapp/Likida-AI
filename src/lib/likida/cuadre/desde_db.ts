@@ -4,8 +4,9 @@
 
 import { cuadrarViaje } from './engine';
 import { ventanaDelViaje } from './fecha_dudosa';
-import { getViaje, getGastos, getOperador, getAcumuladoCombustible } from '../repo';
+import { getViaje, getGastos, getOperador, getAcumuladoCombustible, getPerfilCrudo } from '../repo';
 import { getConfig } from '../config';
+import { calificaEstimuloPeaje } from '../perfil/preguntas';
 import { logger } from '@/lib/logger';
 import type { Liquidacion } from '@/types/likida';
 
@@ -28,12 +29,25 @@ export async function ventanaDesdeDB(tenantId: string, viajeId: string) {
 }
 
 export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise<Omit<Liquidacion, 'id' | 'creadaEn'>> {
-  const [viaje, gastos, config] = await Promise.all([
+  const [viaje, gastos, config, perfilCrudo] = await Promise.all([
     getViaje(viajeId, tenantId),
     getGastos(viajeId, tenantId),
     getConfig(tenantId),
+    // Best-effort a propósito, mismo criterio que `totalesEjercicio` más abajo:
+    // el perfil es CONTEXTO (¿ya sabemos si el estímulo de peaje aplica?), no
+    // un requisito para cerrar el viaje. Un fallo aquí no puede tumbar la
+    // liquidación — sin perfil, `calificaEstimuloPeaje({})` da `elegible: null`
+    // y el motor preserva la conducta de siempre.
+    getPerfilCrudo(tenantId).catch((e) => {
+      logger.warn('desde_db.perfil_no_disponible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+      return {};
+    }),
   ]);
   if (!viaje) throw new Error('viaje no encontrado');
+  // FASE 3: `elegible: null` (perfil sin declarar) se traduce a `undefined`
+  // — el motor preserva la conducta de siempre (acredita con el aviso).
+  const { elegible: elegiblePeajeODeclarado } = calificaEstimuloPeaje(perfilCrudo);
+  const elegiblePeaje = elegiblePeajeODeclarado ?? undefined;
   // AUDITORÍA 12, MEDIO (fiscal): `operadorRfc` no tenía productor — la rama
   // buena de RLISR 57 (viático timbrado al RFC del operador, trabajador
   // subordinado) era inalcanzable y todo viático a su nombre caía en 'revisar'.
@@ -123,6 +137,7 @@ export async function cuadrarDesdeDB(tenantId: string, viajeId: string): Promise
     operadorRfc,
     oposicionTitular,
     facilidad15,
+    elegiblePeaje,
     totalCombustibleEjercicio,
     efectivoPrevEjercicio,
     anioEjercicio,

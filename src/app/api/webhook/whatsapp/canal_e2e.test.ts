@@ -66,6 +66,8 @@ vi.mock('@/lib/likida/repo', () => ({
   getGastos: vi.fn(async () => GASTOS),
   saveLiquidacion: (...a: unknown[]) => saveLiquidacion(...(a as [])),
   getAcumuladoCombustible: vi.fn(async () => { throw new Error('sin base en pruebas'); }),
+  // FASE 3: perfil vacío = sin declarar; desde_db.ts lo envuelve en catch.
+  getPerfilCrudo: vi.fn(async () => ({})),
   addGasto: vi.fn(), updateGastoCfdiXml: vi.fn(), saveCfdiXmlRaw: vi.fn(),
   gastoExistePorHash: vi.fn(async () => false), enriquecerGastoConCodigo: vi.fn(),
   guardarCodigoPendiente: vi.fn(), getCodigosPendientes: vi.fn(async () => []),

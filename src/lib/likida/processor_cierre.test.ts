@@ -111,6 +111,10 @@ vi.mock('@/lib/likida/repo', () => ({
   getOperador: vi.fn(async () => ({ id: 'o1', nombre: 'Operador', telefono: '5219993700779' })),
   saveLiquidacion: vi.fn(async () => 'L1'),
   getAcumuladoCombustible: vi.fn(async () => { throw new Error('sin base en pruebas'); }),
+  // FASE 3: perfil vacío = sin declarar → calificaEstimuloPeaje da null, el
+  // motor preserva la conducta de siempre. Mismo criterio best-effort que
+  // getAcumuladoCombustible: desde_db.ts ya lo envuelve en catch.
+  getPerfilCrudo: vi.fn(async () => ({})),
 }));
 vi.mock('@/lib/likida/costos', () => ({
   registrarCosto: vi.fn(), registrarCostoWhatsApp: vi.fn(),

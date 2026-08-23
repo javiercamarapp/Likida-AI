@@ -91,6 +91,7 @@ export const SISTEMA: Item[] = [
   // URL. `puedeVerRuta` sigue decidiendo quién las ve (usuarios/políticas
   // son administracion: solo el dueño; ARCO es operacion).
   { href: '/dashboard/usuarios', nombre: 'Usuarios del equipo', Icono: UsersRound },
+  { href: '/dashboard/onboarding', nombre: 'Perfil de la flota', Icono: ClipboardList },
   { href: '/dashboard/politicas', nombre: 'Políticas de gasto', Icono: Scale },
   { href: '/dashboard/arco', nombre: 'Solicitudes ARCO', Icono: ShieldCheck },
 ];

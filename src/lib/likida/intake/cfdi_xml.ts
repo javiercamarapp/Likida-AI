@@ -85,6 +85,16 @@ export interface CfdiLineaXml {
   /** ecc12 únicamente: folio de ESA operación individual (no del CFDI). */
   folioOperacion?: string;
   cantidad?: number;
+  /** concepto_base únicamente: `@ClaveProdServ` del Concepto — ese esquema SÍ
+   *  la trae por transacción. ecc12 NO tiene este campo (ver `tipoCombustible`
+   *  abajo): la ECC12 v1.2 no incluye ClaveProdServ por línea. */
+  claveProdServ?: string;
+  /** ecc12 únicamente: `@TipoCombustible` de `ConceptoEstadoDeCuentaCombustible`
+   *  — catálogo cerrado del SAT ("Diesel", "Gasolina Regular (Magna)",
+   *  "Gasolina Premium", "Gas Natural", "Gas L.P.", "Otros"). Es el único dato
+   *  que ECC12 da para identificar el combustible por línea; no hay
+   *  ClaveProdServ que leer aquí. */
+  tipoCombustible?: string;
 }
 
 export interface CfdiXmlData {
@@ -259,6 +269,7 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
       estacionClave: (c['@_ClaveEstacion'] as string) || undefined,
       folioOperacion: (c['@_FolioOperacion'] as string) || undefined,
       cantidad: num(c['@_Cantidad']),
+      tipoCombustible: (c['@_TipoCombustible'] as string) || undefined,
     }));
 
     // Sin ECC12: si hay VARIOS Concepto base, cada uno es su propia línea —
@@ -272,6 +283,7 @@ export function parseCfdiXml(xml: string): CfdiXmlData | null {
           monto: num(c['@_Importe']) ?? 0,
           descripcion: (c['@_Descripcion'] as string) || undefined,
           cantidad: num(c['@_Cantidad']),
+          claveProdServ: (c['@_ClaveProdServ'] as string) || undefined,
         }))
       : [];
 

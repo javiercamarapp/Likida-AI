@@ -10,6 +10,7 @@ import { traerTodo, conteo } from './pg';
 import type { Gasto, Liquidacion, Viaje, Operador } from '@/types/likida';
 import type { CodigoPendiente } from './intake/emparejar';
 import { violaIndice } from './pg_errores';
+import { declararUmbralPeaje } from './perfil/preguntas';
 
 // El tope de consulta vive en `presupuesto.ts`, con `TOPE_CONSULTA_MS` y el
 // resto del presupuesto de la invocación. Estuvo aquí hasta la auditoría 8, y
@@ -86,6 +87,70 @@ export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje
     fechaInicio: (data.fecha_inicio as string) || undefined,
     fechaFin: (data.fecha_fin as string) || undefined,
   };
+}
+
+/**
+ * `tenant.perfil` crudo (FASE 3, migración 0169) — a propósito, sin
+ * interpretar. Sólo `perfil/preguntas.ts` sabe qué forma tiene por dentro
+ * (`calificaEstimuloPeaje`, etc.); este repo se limita a traerlo. Separado
+ * de `getConfig()` (config.ts) a propósito, no por descuido: `getConfig`
+ * fusiona `config` con los defaults de la demo, y el perfil existe
+ * justamente para poder decir "esto lo declaró el cliente" sin que una
+ * fusión lo confunda con relleno (docs/perfil/PERFIL-OPERATIVO.md).
+ */
+export async function getPerfilCrudo(tenantId: string): Promise<unknown> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('tenant')
+    .select('perfil')
+    .eq('id', tenantId)
+    .maybeSingle(), 'getPerfilCrudo');
+  if (error) throw new Error(`perfil: ${error.message}`);
+  return data?.perfil ?? {};
+}
+
+/**
+ * Escribe la declaración del umbral de peaje (LIF 2026 art. 20-A) en
+ * `tenant.perfil` + `perfil_actualizado_por` en el MISMO UPDATE — el trigger
+ * de 0169 lee `NEW.perfil_actualizado_por`. Sin el actor en el mismo
+ * statement, el historial sella al updater anterior.
+ *
+ * Lee-mezcla-escribe: `perfil` es jsonb y un `||` ciego pisaría otras
+ * llaves futuras. Las escrituras son humanas (un formulario, no el camino
+ * caliente). Un fallo de lectura LANZA: no se da por guardado lo que no se
+ * pudo mezclar.
+ */
+export async function guardarPerfilPatch(
+  tenantId: string,
+  patch: Record<string, unknown>,
+  actualizadoPor: string | null,
+): Promise<void> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('tenant')
+    .select('perfil')
+    .eq('id', tenantId)
+    .maybeSingle(), 'guardarPerfilPatch.leer');
+  if (error) throw new Error(`perfil: ${error.message}`);
+  if (!data) throw new Error('perfil: tenant no encontrado');
+  const actual = (data.perfil && typeof data.perfil === 'object' && !Array.isArray(data.perfil))
+    ? data.perfil as Record<string, unknown>
+    : {};
+  const { error: errW } = await acotada(supabaseAdmin()
+    .from('tenant')
+    .update({
+      perfil: { ...actual, ...patch },
+      perfil_actualizado_por: actualizadoPor,
+    })
+    .eq('id', tenantId), 'guardarPerfilPatch.escribir');
+  if (errW) throw new Error(`perfil: ${errW.message}`);
+}
+
+export async function guardarDeclaracionEstimuloPeaje(
+  tenantId: string,
+  ingresosMenoresA300M: boolean,
+  parteRelacionada: boolean,
+  actualizadoPor: string | null,
+): Promise<void> {
+  await guardarPerfilPatch(tenantId, declararUmbralPeaje(ingresosMenoresA300M, parteRelacionada), actualizadoPor);
 }
 
 export async function getOperador(operadorId: string, tenantId: string): Promise<Operador | null> {

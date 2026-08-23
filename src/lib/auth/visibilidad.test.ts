@@ -50,6 +50,7 @@ describe('las rutas que el encargado NO puede abrir aunque teclee la URL', () =>
     // que este archivo existe para no enseñarle al jefe de tráfico.
     '/dashboard/rentabilidad',
     '/dashboard/usuarios', '/dashboard/configuracion', '/dashboard/politicas',
+    '/dashboard/onboarding',
   ];
   it.each(PROHIBIDAS)('%s le está negada al encargado', (href) => {
     expect(puedeVerRuta('encargado', href)).toBe(false);
@@ -109,6 +110,13 @@ describe('el contador — su panel volvió, y la operación le sigue cerrada', (
     expect(puedeVerRuta('contador', '/dashboard/contador')).toBe(true);
     expect(puedeVerRuta('flota_admin', '/dashboard/contador')).toBe(true);
     expect(puedeVerRuta('superadmin', '/dashboard/contador')).toBe(true);
+  });
+
+  it('/dashboard/onboarding es del dueño, no del encargado ni del contador', () => {
+    expect(areaDeRuta('/dashboard/onboarding')).toBe('administracion');
+    expect(puedeVerRuta('flota_admin', '/dashboard/onboarding')).toBe(true);
+    expect(puedeVerRuta('encargado', '/dashboard/onboarding')).toBe(false);
+    expect(puedeVerRuta('contador', '/dashboard/onboarding')).toBe(false);
   });
 
   it('/dashboard/contador le está negada al encargado aunque teclee la URL', () => {

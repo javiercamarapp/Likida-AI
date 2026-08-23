@@ -7738,3 +7738,56 @@ begin
   raise exception E'DELTA_PROSPECTO_0167  sella_update=%  ignora_valor_ajeno=%  toque_sella=%  indice=%   (esperado t / t / t / t)',
     sella_update, ignora_valor_ajeno, toque_sella, indice_ok;
 end $$;
+
+-- ── 140. `tenant.perfil` sella su historial con TRIGGER, no por convención (mig. 0169) ──
+--
+-- FASE 3 (docs/asistencia/PLAN-FASES.md, docs/perfil/PERFIL-OPERATIVO.md):
+-- consolidar el perfil del cliente exige poder decir CUÁNDO cambió y QUIÉN lo
+-- cambió — `actualizarFacilidad15` (código existente) ya escribe sin bitácora
+-- y nadie lo notó, y ese es el patrón de bug que este trigger existe para no
+-- repetir. Se prueba contra la base real, no contra un mock: un UPDATE de
+-- `perfil` sella una fila en `tenant_perfil_version` con quien lo hizo
+-- (`perfil_actualizado_por`, viaja en el MISMO statement — el trigger no
+-- tiene otra forma de saberlo); un segundo UPDATE con el MISMO valor NO
+-- ensucia el historial (`is distinct from`); y la fila ya sellada sobrevive
+-- al borrado de su `app_user` con la referencia en NULL (`on delete set
+-- null`, no se pierde el rastro de que ALGUIEN lo cambió aunque ya no
+-- sepamos quién).
+do $$
+declare
+  v_tenant uuid;
+  v_user uuid;
+  n_antes bigint;
+  n_tras_cambio bigint;
+  n_tras_no_cambio bigint;
+  quien_sello_bien boolean;
+  sobrevive_al_borrado boolean;
+begin
+  insert into tenant (nombre, plan) values ('VERIF-0169 SA de CV', 'demo') returning id into v_tenant;
+  insert into app_user (id, tenant_id, email, rol)
+    values (gen_random_uuid(), v_tenant, 'verif-0169@likida.test', 'flota_admin')
+    returning id into v_user;
+
+  select count(*) into n_antes from tenant_perfil_version where tenant_id = v_tenant;
+
+  update tenant
+    set perfil = '{"ingresosAnualesMxn":{"valor":1,"procedencia":"declarado"}}'::jsonb,
+        perfil_actualizado_por = v_user
+    where id = v_tenant;
+  select count(*) into n_tras_cambio from tenant_perfil_version where tenant_id = v_tenant;
+  select (actualizado_por = v_user) into quien_sello_bien
+    from tenant_perfil_version where tenant_id = v_tenant order by created_at desc limit 1;
+
+  -- MISMO valor: is distinct from tiene que verlo como "sin cambio".
+  update tenant
+    set perfil = '{"ingresosAnualesMxn":{"valor":1,"procedencia":"declarado"}}'::jsonb
+    where id = v_tenant;
+  select count(*) into n_tras_no_cambio from tenant_perfil_version where tenant_id = v_tenant;
+
+  delete from app_user where id = v_user;
+  select (actualizado_por is null) into sobrevive_al_borrado
+    from tenant_perfil_version where tenant_id = v_tenant order by created_at desc limit 1;
+
+  raise exception E'PERFIL_VERSION_0169  antes=%  tras_cambio=%  quien_sello_bien=%  tras_no_cambio=%  sobrevive_al_borrado=%   (esperado 0 / 1 / t / 1 / t)',
+    n_antes, n_tras_cambio, quien_sello_bien, n_tras_no_cambio, sobrevive_al_borrado;
+end $$;
