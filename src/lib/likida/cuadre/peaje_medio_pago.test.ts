@@ -90,3 +90,40 @@ describe('A7: solo los medios electrónicos de la RMF 9.1.8 fr. III acreditan pe
     },
   );
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 23-AGO-2026 — la base del estímulo es SubTotal MENOS Descuento.
+//
+// `@Descuento` es un atributo opcional del CFDI 4.0 que el parser tiraba y que
+// ninguna capa conocía. El motor acreditaba el 50% sobre el SubTotal íntegro,
+// así que una factura de casetas con descuento acreditaba de más — dinero
+// afirmado como estímulo que el SAT no reconocería.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('La base del estímulo de peaje descuenta el @Descuento del CFDI', () => {
+  const conDescuento = (subTotal: number, descuento?: number): Gasto => ({
+    id: 'gd', concepto: 'caseta', monto: 1160, subTotal, folio: 'CD', fecha: '2026-05-01',
+    ocrConfianza: 0.95, cfdiUuid: 'ud', xmlVerificado: true, rfcReceptor: 'REC010101AA1',
+    tipoComprobante: 'I', formaPago: '04',
+    ...(descuento === undefined ? {} : { descuento }),
+  });
+
+  it('sin descuento la base sigue siendo el SubTotal: $1,000 → $500', () => {
+    expect(peajeDe(conDescuento(1000))).toBe(500);
+  });
+
+  it('con descuento acredita sobre lo que quedó: $1,000 − $150 → $425, no $500', () => {
+    expect(peajeDe(conDescuento(1000, 150))).toBe(425);
+  });
+
+  it('el caso que motivó el arreglo: $120,000 con $18,000 de descuento → $51,000', () => {
+    expect(peajeDe(conDescuento(120_000, 18_000))).toBe(51_000);
+  });
+
+  it('descuento 0 declarado no cambia nada (no es lo mismo que ausente, pero da igual)', () => {
+    expect(peajeDe(conDescuento(1000, 0))).toBe(500);
+  });
+
+  it('un CFDI mal formado con descuento mayor al subtotal no produce base negativa', () => {
+    expect(peajeDe(conDescuento(1000, 4000))).toBe(0);
+  });
+});

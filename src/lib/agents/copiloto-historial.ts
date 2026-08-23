@@ -33,6 +33,9 @@ export interface MensajeCopilotoGuardado {
 }
 
 const MAX_LISTA = 100;
+/** Los ÚLTIMOS mensajes de una conversación — los que el copiloto necesita
+ *  recordar. Ver la nota de `traerConversacionCopiloto`. */
+const MAX_MENSAJES = 200;
 
 /** Las conversaciones del usuario, la más reciente primero. Lanza si la base
  *  no responde — una lista vacía por error afirmaría "no has chateado". */
@@ -66,19 +69,25 @@ export async function traerConversacionCopiloto(
   if (error) throw new Error(`traerConversacionCopiloto: ${error.message}`);
   if (!conv) return null;
 
+  // 23-AGO-2026: se pedía ascendente con `limit(200)`. En una conversación de
+  // más de 200 mensajes eso trae los 200 MÁS ANTIGUOS y descarta los recientes:
+  // el copiloto conservaba el principio de la charla y perdía justo lo que
+  // acababas de decirle. Se pide DESCENDENTE (los 200 últimos) y se invierte
+  // aquí, porque el orden que el modelo necesita leer sigue siendo cronológico.
   const { data: msjs, error: errMsjs } = await acotada(
     supabaseAdmin().from('copiloto_mensaje')
-      .select('rol, texto, bloques')
+      .select('rol, texto, bloques, created_at')
       .eq('conversacion_id', id)
-      .order('created_at', { ascending: true })
-      .limit(200),
+      .order('created_at', { ascending: false })
+      .limit(MAX_MENSAJES),
     'copiloto.traer_mensajes');
   if (errMsjs) throw new Error(`traerConversacionCopiloto.mensajes: ${errMsjs.message}`);
+  const enOrden = (msjs ?? []).slice().reverse();
 
   return {
     id: conv.id as string,
     titulo: conv.titulo as string,
-    mensajes: (msjs ?? []).map((m) => ({
+    mensajes: enOrden.map((m) => ({
       rol: m.rol as 'usuario' | 'asistente',
       texto: m.texto as string,
       bloques: Array.isArray(m.bloques) ? (m.bloques as Array<Record<string, unknown>>) : null,
