@@ -76,28 +76,20 @@ export default async function ObservabilidadPage({
   // Cada fuente falla POR SEPARADO y lo dice: los interruptores caídos no
   // pueden esconder la bitácora, ni al revés — en un incidente esta página
   // es la que tiene que seguir en pie aunque sea a pedazos.
-  let interruptores: InterruptorParaUi[] | null = null;
-  try {
-    interruptores = await listarInterruptores();
-  } catch {
-    interruptores = null;
-  }
-
-  let corridas: CorridaCruzada[] | null = null;
-  try {
-    corridas = await corridasRecientes(15);
-  } catch {
-    corridas = null;
-  }
-
-  let bitacora: EntradaBitacora[] | null = null;
-  try {
-    bitacora = await ultimasEntradasBitacora({ limite: 50, filtroAccion: filtroBitacora });
-  } catch {
-    bitacora = null;
-  }
-
-  const r = await getResumenNegocio();
+  //
+  // FE-14 (22-ago-2026): las cuatro se pedían EN SERIE, una tras otra —cuatro
+  // viajes a la base sumados en el reloj— y encima `getResumenNegocio` iba
+  // sin catch al final: en un incidente donde la métrica de negocio no
+  // responde, los INTERRUPTORES —lo único que esta página tiene que enseñar
+  // sí o sí— se caían con ella. Ahora salen las cuatro juntas y la de negocio
+  // degrada como las demás: su gráfica lo dice y los kill switches siguen.
+  const [interruptores, corridas, bitacora, resumen] = await Promise.all([
+    listarInterruptores().catch((): InterruptorParaUi[] | null => null),
+    corridasRecientes(15).catch((): CorridaCruzada[] | null => null),
+    ultimasEntradasBitacora({ limite: 50, filtroAccion: filtroBitacora })
+      .catch((): EntradaBitacora[] | null => null),
+    getResumenNegocio().catch(() => null),
+  ]);
   const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
   return (
@@ -289,8 +281,13 @@ export default async function ObservabilidadPage({
           <div className="card p-4">
             <TituloSeccion>Actividad de IA en el tiempo</TituloSeccion>
             <div className="mt-3">
-              {r.porDia.length > 1 ? (
-                <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} />
+              {resumen === null ? (
+                <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
+                  No se pudo leer la actividad de IA. La consulta falló — no es que no haya actividad,
+                  es que no se pudo mirar.
+                </div>
+              ) : resumen.porDia.length > 1 ? (
+                <AreaChartSimple datos={resumen.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} />
               ) : (
                 <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
                   Sin historial suficiente todavía.
