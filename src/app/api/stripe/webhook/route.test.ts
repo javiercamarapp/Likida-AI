@@ -320,7 +320,12 @@ describe('DAT-32 · un evento de otro modo (test/live) no toca la base', () => {
 
 describe('DAT-40 · el fin de periodo con la API nueva de Stripe', () => {
   it('lo lee del ITEM cuando la suscripción ya no lo trae (API ≥ 2025-03-31)', async () => {
-    const fin = Math.floor(Date.UTC(2026, 8, 30) / 1000);
+    // MEDIODÍA UTC a propósito: esta prueba mide de DÓNDE se lee el fin de
+    // periodo (del item, no de la suscripción), no en qué zona se convierte.
+    // Con medianoche UTC el instante cae el día anterior en México y el caso
+    // fallaba por el corrimiento de zona —que es lo que mide DAT-23— en vez
+    // de por lo que vino a fijar.
+    const fin = Math.floor(Date.UTC(2026, 8, 30, 12) / 1000);
     await POST(req({
       id: 'evt-cp', type: 'customer.subscription.updated',
       data: {
