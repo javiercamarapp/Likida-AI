@@ -7550,3 +7550,58 @@ begin
   raise exception E'MANTENIMIENTO_0165  sobrevive=%  nombra_fallo=%  candidatos=%  no_borra_storage=%  anon=%   (esperado t / t / t / t / f)',
     sobrevive, nombra_fallo, candidatos_ok, no_borra, anon_ok;
 end $$;
+
+-- ── 139. `updated_at` dice la verdad y un toque sella a su prospecto (mig. 0167) ──
+--
+-- El delta del Cerebro de ventas (FE-16) pregunta `updated_at > marca`. Esa
+-- pregunta solo sirve si la columna se mueve cuando la fila cambia, y hasta la
+-- 0167 NO se movía: `default now()` en el insert y nadie la tocaba después.
+-- Medido en producción el 22-ago-2026, antes de aplicar la migración:
+--
+--     select count(*) filter (where updated_at > created_at + interval '1 second')
+--     from prospecto;   →   0     (de 33,071 filas)
+--
+-- Un mapa que contesta "nada cambió" mientras el embudo avanza se ve
+-- EXACTAMENTE IGUAL que un mapa al día — por eso esto se comprueba contra la
+-- base y no con un mock. Tres garantías: (a) cualquier update sella la hora;
+-- (b) el valor que mande el llamador NO gana (un reloj de cliente adelantado
+-- escondería la fila de todas las lecturas siguientes); (c) insertar un toque
+-- —que vive en OTRA tabla— también sella al prospecto, o el filtro "sin
+-- contactar en N días" nunca llegaría a los demás Cerebros abiertos.
+-- Todo revierte con el RAISE final.
+do $$
+declare
+  v_p uuid;
+  t_alta timestamptz;
+  t_update timestamptz;
+  t_toque timestamptz;
+  sella_update boolean;
+  ignora_valor_ajeno boolean;
+  toque_sella boolean;
+  indice_ok boolean;
+begin
+  insert into prospecto (empresa, fuente, estado)
+    values ('VERIF-0167 SA de CV', 'manual', 'nuevo')
+    returning id, updated_at into v_p, t_alta;
+
+  -- (a) y (b) a la vez: se le manda a propósito una hora del año 2000 y el
+  -- trigger tiene que ignorarla y poner la de la base.
+  update prospecto set estado = 'contactado', updated_at = '2000-01-01T00:00:00Z' where id = v_p;
+  select updated_at into t_update from prospecto where id = v_p;
+  sella_update       := t_update > t_alta;
+  ignora_valor_ajeno := t_update > '2020-01-01T00:00:00Z'::timestamptz;
+
+  -- (c) el toque vive en prospecto_toque y aun así mueve la marca del padre.
+  insert into prospecto_toque (prospecto_id, canal, actor)
+    values (v_p, 'whatsapp', gen_random_uuid());
+  select updated_at into t_toque from prospecto where id = v_p;
+  toque_sella := t_toque > t_update;
+
+  indice_ok := exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'prospecto'
+       and indexname = 'idx_prospecto_updated_at');
+
+  raise exception E'DELTA_PROSPECTO_0167  sella_update=%  ignora_valor_ajeno=%  toque_sella=%  indice=%   (esperado t / t / t / t)',
+    sella_update, ignora_valor_ajeno, toque_sella, indice_ok;
+end $$;
