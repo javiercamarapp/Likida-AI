@@ -49,6 +49,13 @@ import { sinComentarios, fuentesDeProduccion } from '@/lib/pruebas/codigo';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const DIR_LIB = 'src/lib';
+// 23-AGO-2026 (P0 de la auditoría externa): esta prueba SOLO miraba `src/lib`,
+// y su propio encabezado lo admitía como límite conocido. Pero 74 archivos de
+// `src/app` importan `supabaseAdmin` —rutas de API y componentes de servidor
+// que arman consultas por su cuenta— y ninguno estaba vigilado. El aislamiento
+// entre flotas se decide en cada consulta que corre con `service_role`, no en
+// la carpeta donde vive el archivo.
+const DIR_APP = 'src/app';
 const DIR_MIGRACIONES = 'supabase/migrations';
 
 /**
@@ -246,11 +253,28 @@ const ALLOWLIST: Record<string, string> = {
   'src/lib/likida/interruptores.ts': '`listarInterruptores` resuelve NOMBRES de quién movió una palanca GLOBAL (`interruptor`, tabla sin tenant_id, deniega-todo a `authenticated`) leyendo `app_user` por los `id` que aparecen en esa bitácora — es auditoría superadmin, no un dato de flota. Su único llamador de interfaz es `/admin/observabilidad`, gateado por `requireSuperadmin()` en `admin/layout.tsx` (confirmado: ninguna ruta de `/dashboard` la importa).',
   'src/lib/likida/vendedores.ts': 'Es el pipeline de VENTAS de LIKIDA, no de una flota — lo dice el encabezado del propio archivo. `prospecto.tenant_id` es NULL hasta que el prospecto "cierra" (constraint `prospecto_tenant_solo_cerrado`, mig. 0105), y los `app_user` que toca son rol `vendedor` (tenant_id null, personal de Likida, no de una flota). El ancla real es `vendedor_id`, aplicado con `.eq(\'vendedor_id\', ...)` en cada escritura — es la regla #2 que el propio archivo documenta en su encabezado.',
   'src/lib/saas/suscripcion.ts': '`aplicarSuscripcion` (líneas 322-383): cada `.eq(\'id\', ...)` opera sobre una fila resuelta ANTES, en la MISMA función, por un identificador confiable — `stripe_subscription_id` (viene del webhook autenticado de Stripe, nunca de un usuario del panel) o `.eq(\'tenant_id\', datos.tenantId)` explícito (la búsqueda de `previa`, línea 361). Y el INSERT/UPDATE final escribe `tenant_id: datos.tenantId` de todas formas, así que aunque el id encontrado fuera de otra fila, la fila queda anclada al tenant correcto.',
+  // ── 23-AGO-2026 · lo que apareció al ampliar el escaneo a `src/app` ──────
+  // Trece consultas, ninguna una fuga entre flotas, pero cada una con su razón
+  // escrita: una exención sin motivo es la misma falsa confianza que esta
+  // prueba existe para quitar.
+  'src/app/admin/agentes/contenido.tsx': 'El panel de agentes de /admin agrega `agente_corrida` POR AGENTE a través de todos los tenants a propósito — es el gasto del back office de LIKIDA, no de una flota. Mismo dominio y misma puerta que `src/lib/admin/consumo.ts`: `requireSuperadmin()` en el layout de /admin.',
+  'src/app/admin/mi-perfil/page.tsx': '`app_user` se filtra por `.eq(\'id\', s.userId)` — el id de la PROPIA sesión, resuelto por `getSessionTenant()`, no por un parámetro del navegador. Un usuario editando su nombre y su avatar no puede alcanzar la fila de otro aunque `app_user` tenga `tenant_id`: el filtro por identidad es más estrecho que el filtro por flota.',
+  'src/app/dashboard/suscripcion/page.tsx': 'Lee el correo del usuario de la sesión para prellenar el portal de facturación. `.eq(\'id\', s.userId)`: la propia fila, no la de otro.',
+  'src/app/dashboard/mi-perfil/page.tsx': 'Mismo caso que su gemelo de /admin: `app_user` se filtra por el id de la PROPIA sesión (`getSessionTenant()`), no por un parámetro del navegador. El filtro por identidad es más estrecho que el filtro por flota.',
+  'src/app/dashboard/agentes/seccion-notificaciones.tsx': 'Lee el correo del usuario de la sesión —`.eq(\'id\', sesion.userId)`— para mostrar a dónde llegarían los avisos. Un solo campo, de la propia fila.',
+  'src/app/api/admin/mapa-prospectos/mensaje/route.ts': '`prospecto` es el pipeline comercial de LIKIDA (mig. 0105), no un dato de flota: cruza tenants por definición porque los prospectos todavía no son de nadie. La ruta está bajo /api/admin, re-gateada superadmin.',
+  'src/app/api/correo/eventos/route.ts': '`cola_aprobacion` es la cola del back office de LIKIDA, no de una flota. Y el UPDATE se ancla por `provider_message_id`, un identificador que emite el proveedor de correo y llega por webhook firmado — no lo elige un usuario.',
+  'src/app/api/cron/facturar/cola/route.ts': 'La re-validación `.in(\'id\', ids)` opera sobre el lote que el PROPIO cron encoló, y el cuerpo llega firmado por QStash (`verify()` al principio del handler, sin el cual —lo dice el encabezado— cualquiera podría encolar un lote). Los ids ya vienen de una consulta filtrada por flota; esto solo confirma que el gasto sigue sin CFDI. ⚠️ Su seguridad descansa en la firma, no en un filtro: si algún día se acepta un lote de otra fuente, esta exención deja de valer.',
+  'src/app/api/cron/facturar/route.ts': 'Es un CONTEO de backlog (`count: exact, head: true`) para decidir cuántos lotes encolar: mide la cola del producto entero, que es lo que el cron necesita saber. No devuelve una sola fila de datos de nadie, y la ruta exige CRON_SECRET.',
+  'src/app/api/lead/route.ts': '`prospecto` otra vez: un lead que llega de la landing no pertenece a ninguna flota todavía — buscarlo por correo o por empresa a través de todos los registros es exactamente lo que hace falta para no duplicarlo.',
   'src/lib/saas/transferencia.ts': '`conciliar`/`timbrarFactura` tocan `factura_saas` — la facturación de LIKIDA a sus clientes, no un dato de flota — y su ÚNICO llamador es `/admin/costos-facturacion` (confirmado por grep en todo `src/app`), gateado por `requireSuperadmin()` en `admin/layout.tsx`. `/dashboard` (cliente) no las importa.',
 };
 
 const tenantTablas = tablasConTenantId();
-const archivosLib = fuentesDeProduccion(DIR_LIB).filter((f) => f.endsWith('.ts'));
+const archivosLib = [
+  ...fuentesDeProduccion(DIR_LIB),
+  ...fuentesDeProduccion(DIR_APP),
+].filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'));
 
 type Hallazgo = { archivo: string; tabla: string; contexto: string };
 
