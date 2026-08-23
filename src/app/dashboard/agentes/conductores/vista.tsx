@@ -32,11 +32,20 @@ const EVENTO: Record<EventoConductor['tipo'], { Icono: typeof Send; texto: (e: E
  * WhatsApp — que es la verdad del código, no marketing. Sin pesos: es la
  * pantalla del jefe de tráfico.
  */
-export function VistaAgenteConductores({ kpis, esperan, sinAvisar, eventos, sufijo = '', notificaciones }: {
-  kpis: { vivos: number; aceptados: number; esperan: number; escalados: number | null };
+export function VistaAgenteConductores({
+  kpis, esperan, esperanListados, sinAvisar, eventos, sufijo = '', notificaciones,
+}: {
+  /** FE-5: los cuatro salen de `count` en la base, no de filtrar las 100
+   *  filas más recientes en memoria. `null` = no se pudo contar → "—". */
+  kpis: { vivos: number | null; aceptados: number | null; esperan: number | null; escalados: number | null };
   esperan: EsperaAceptar[];
-  /** Vivos con operador y SIN aviso — el fallo silencioso que se enseña. */
-  sinAvisar: number;
+  /** Cuántas filas de la cola se están LISTANDO (salen de los 100 viajes
+   *  recientes, porque "hace N horas" necesita la fila). Si `kpis.esperan`
+   *  dice más, se declara la diferencia. */
+  esperanListados: number;
+  /** Vivos SIN aviso — el fallo silencioso que se enseña. `null` = no se
+   *  pudo contar, y entonces no se pinta la frase. */
+  sinAvisar: number | null;
   eventos: EventoConductor[] | null;
   sufijo?: string;
   /** La sección de Notificaciones, ya renderizada en el servidor
@@ -55,20 +64,26 @@ export function VistaAgenteConductores({ kpis, esperan, sinAvisar, eventos, sufi
 
           <div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <Kpi titulo="Viajes en curso" valor={numero(kpis.vivos)} nota="abiertos o en cuadre" />
-              <Kpi titulo="Aceptados" valor={numero(kpis.aceptados)} nota="el chofer dijo que sí" />
-              <Kpi titulo="Esperan aceptar" valor={numero(kpis.esperan)}
-                tono={kpis.esperan > 0 ? 'warn' : undefined} />
+              <Kpi titulo="Viajes en curso" valor={kpis.vivos === null ? '—' : numero(kpis.vivos)}
+                nota={kpis.vivos === null ? 'no se pudo contar' : 'abiertos o en cuadre'} />
+              <Kpi titulo="Aceptados" valor={kpis.aceptados === null ? '—' : numero(kpis.aceptados)}
+                nota={kpis.aceptados === null ? 'no se pudo contar' : 'el chofer dijo que sí'} />
+              <Kpi titulo="Esperan aceptar" valor={kpis.esperan === null ? '—' : numero(kpis.esperan)}
+                nota={kpis.esperan === null ? 'no se pudo contar' : undefined}
+                tono={(kpis.esperan ?? 0) > 0 ? 'warn' : undefined} />
               <Kpi titulo="Escalados" valor={kpis.escalados === null ? '—' : numero(kpis.escalados)}
                 nota={kpis.escalados === null ? 'no se pudo contar' : 'esperan cambio de chofer'}
                 tono={(kpis.escalados ?? 0) > 0 ? 'bad' : undefined} />
             </div>
-            {/* La ventana se declara, como en Viajes: estos conteos NO son el
-                histórico. El 100 es el default de getViajes que usa esta page
-                (mismo estilo que el "60" declarado en la bitácora). */}
+            {/* FE-5: aquí decía "se calculan sobre los 100 viajes más
+                recientes" — un rótulo honesto sobre una cifra inútil (a 50k
+                viajes/mes, 100 filas son ~90 minutos). Los cuatro conteos
+                ahora salen de la base y cubren TODOS los viajes en curso de
+                la flota; lo único acotado es la LISTA de abajo, que lo dice
+                en su propio pie. */}
             <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-              Viajes en curso, aceptados y la cola se calculan sobre los 100 viajes más
-              recientes; Escalados sí cuenta todo el histórico.
+              Los cuatro conteos son de toda la flota: los tres primeros sobre los viajes en curso
+              (abiertos o en cuadre), Escalados sobre todo el histórico.
             </p>
           </div>
 
@@ -99,9 +114,19 @@ export function VistaAgenteConductores({ kpis, esperan, sinAvisar, eventos, sufi
                   ))}
                 </div>
               )}
-              {sinAvisar > 0 && (
+              {/* Cuántas filas se listan de cuántas hay. La lista sale de los
+                  100 viajes recientes (para decir "hace N horas" hace falta la
+                  fila); el conteo de arriba es el de la flota. Callar la
+                  diferencia haría que la lista pareciera la cola completa. */}
+              {kpis.esperan !== null && kpis.esperan > esperanListados && (
+                <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
+                  Se listan {numero(esperanListados)} de {numero(kpis.esperan)} — los demás son de viajes
+                  más antiguos; están en el <Link href={`/dashboard/viajes${sufijo}`} className="underline">registro</Link>.
+                </p>
+              )}
+              {sinAvisar !== null && sinAvisar > 0 && (
                 <p className="text-[12px] mt-3 pt-2.5 border-t" style={{ color: 'var(--warn)', borderColor: 'var(--line2)' }}>
-                  {numero(sinAvisar)} viaje{sinAvisar === 1 ? '' : 's'} con operador y SIN aviso —
+                  {numero(sinAvisar)} viaje{sinAvisar === 1 ? '' : 's'} en curso SIN aviso —
                   el botón Avisar vive en <Link href={`/dashboard/despacho${sufijo}`} className="underline">Despacho</Link>.
                 </p>
               )}

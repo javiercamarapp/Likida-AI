@@ -7,6 +7,7 @@ import { mxn, litros, fechaMx, fechaCorta } from '@/lib/formato';
 import { StatusPill, type Estado } from '@/app/admin/ui/kit';
 import { FormaConAviso, type ResultadoAccion } from '@/app/admin/ui/forma';
 import { BarraPagina } from '../resumen-visual';
+import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
 import {
   BTN_PRIMARIO, BTN_SECUNDARIO, ESTILO_PRIMARIO, ESTILO_SECUNDARIO,
   Kpi, Dato, Rotulo, LineaDeTiempo, Diferencia, PillRenglon, TH,
@@ -35,10 +36,17 @@ export interface PropsDetalle {
   pdfHref: string | null;
   /** `https://wa.me/…` del operador, o null si no hay teléfono. */
   wa: string | null;
-  /** El formulario de reasignar, solo si el rol puede asignar. */
+  /** El formulario de reasignar, solo si el rol puede asignar. FE-2: ya no
+   *  trae el catálogo de choferes (a 7,500, PostgREST lo recortaba a 1,000 en
+   *  silencio) sino el buscador del servidor y el conteo real. */
   reasignar: {
-    operadores: Array<{ id: string; nombre: string }>;
+    buscar: BuscarCatalogo;
+    /** Cuántos choferes activos hay; `null` = no se pudo contar. */
+    total: number | null;
     actual: string;
+    /** El nombre del chofer ACTUAL — viene con el detalle, así que el control
+     *  arranca lleno sin pedirle nada al catálogo. */
+    actualNombre: string;
     accion: (fd: FormData) => Promise<void>;
   } | null;
   /** La acción de reabrir, solo si el rol administra. */
@@ -157,13 +165,16 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, wa, 
               {/* ── Chofer asignado / reasignar ──
                   Solo dueño/encargado (permisos.ts: puedeAsignar) — un contador o un
                   superadmin de paso por el tenant demo no mueve viajes de chofer. */}
-              {reasignar && reasignar.operadores.length > 0 && (
-                <form action={reasignar.accion} className="flex items-center gap-2">
+              {reasignar && (
+                <form action={reasignar.accion} className="flex items-start gap-2">
                   <label htmlFor="operadorId" className="sr-only">Chofer</label>
-                  <select id="operadorId" name="operadorId" defaultValue={reasignar.actual}
-                    className="h-8 text-[12.5px] px-2.5 rounded-lg hairline min-w-0 max-w-[220px]" style={{ background: 'var(--surface)' }}>
-                    {reasignar.operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-                  </select>
+                  <ComboCatalogo tipo="operador" name="operadorId" campoId="operadorId"
+                    buscar={reasignar.buscar} aria-label="Chofer"
+                    etiquetaVacia="Escribe el nombre del chofer…"
+                    valorInicial={reasignar.actual} textoInicial={reasignar.actualNombre}
+                    total={reasignar.total}
+                    className="h-8 text-[12.5px] px-2.5 rounded-lg hairline min-w-0 max-w-[220px]"
+                    estilo={{ background: 'var(--surface)' }} />
                   <button type="submit" className={BTN_SECUNDARIO} style={ESTILO_SECUNDARIO}>
                     <UserCog width={13} height={13} strokeWidth={1.75} aria-hidden /> Reasignar chofer
                   </button>

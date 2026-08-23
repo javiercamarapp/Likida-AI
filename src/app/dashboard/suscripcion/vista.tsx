@@ -133,7 +133,8 @@ export function InstruccionesTransferencia({
     ['Referencia (ponla en el concepto)', referencia, true],
   ];
   return (
-    <div className="card p-4">
+    // FE-19: scrollea dentro de la tarjeta, no estira la página.
+    <div className="card p-4 overflow-x-auto">
       <table className="w-full text-sm">
         <tbody>
           {filas.map(([k, v, mono]) => (

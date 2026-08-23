@@ -184,7 +184,9 @@ export default async function CrecimientoPage() {
               )}
               <div className="card p-4">
                 <TituloSeccion>Costo por lead, por fuente</TituloSeccion>
-                <table className="w-full text-[12.5px] mt-2">
+                {/* FE-19: scrollea dentro de su tarjeta, no estira la página. */}
+                <div className="overflow-x-auto mt-2">
+                <table className="w-full text-[12.5px]">
                   <thead>
                     <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
                       <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Fuente</th>
@@ -207,6 +209,7 @@ export default async function CrecimientoPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
                 {adquisicion.sinFuenteDeDatos.length > 0 && (
                   <p className="text-[11px] mt-2 m-0" style={{ color: 'var(--faint)' }}>
                     Alertas del blueprint sin fuente de datos todavía: {adquisicion.sinFuenteDeDatos.map((s) => `${s.alerta} (${s.falta})`).join(' · ')}.

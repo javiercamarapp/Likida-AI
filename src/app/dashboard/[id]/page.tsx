@@ -4,7 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getLiquidacionDetalle } from '@/lib/likida/analytics';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { puedeExportar, puedeAsignar, puedeAdministrar } from '@/lib/auth/permisos';
-import { listOperadores, reasignarOperador } from '@/lib/likida/repo';
+import { reasignarOperador, buscarCatalogo, contarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { revalidatePath } from 'next/cache';
@@ -143,7 +143,35 @@ export default async function Detalle({
     redirect(`/dashboard/${id}${sufijo}`);
   }
 
-  const operadores = puedeAsignar(rol) ? await listOperadores(tenantId) : [];
+  /**
+   * FE-2: el `<select>` de "Reasignar chofer" traía el catálogo COMPLETO
+   * (`listOperadores` sin `.limit()`), que PostgREST recortaba a 1,000 en
+   * silencio — con 7,500 choferes, reasignar al 1,001 era imposible desde la
+   * pantalla y nada lo decía. Ahora se busca en el servidor, 20 a la vez; el
+   * chofer ACTUAL se pinta desde `d.operadorNombre`, que ya viene con el
+   * detalle, así que el control arranca diciendo la verdad sin catálogo.
+   *
+   * Guardia idéntica a `reasignar` (el server action de al lado): esto es
+   * alcanzable por POST directo y devuelve nombres de UNA flota. Lanza ante
+   * rechazo o fallo — una lista vacía afirmaría "ningún chofer se llama así".
+   */
+  async function buscarOperadores(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
+    'use server';
+    const s = await requireSessionTenant(`/dashboard/${id}`, sp);
+    if (!puedeAsignar(s.rol)) throw new Error('Tu rol no puede reasignar choferes.');
+    if (tipo !== 'operador') throw new Error('Catálogo desconocido.');
+    let t = s.tenantId;
+    if (s.rol === 'superadmin' && sp?.tenant) {
+      t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
+    }
+    return buscarCatalogo(t, 'operador', typeof q === 'string' ? q : '');
+  }
+
+  // Cuántos choferes activos hay — `count exact, head`, cero filas de vuelta.
+  // Solo para la pista "20 de N" y para no pintar el control cuando de verdad
+  // no hay ninguno. `null` (no se pudo contar) NO apaga el control: no saber
+  // cuántos hay no es saber que no hay.
+  const totalOperadores = puedeAsignar(rol) ? await contarCatalogo(tenantId, 'operador') : 0;
 
   return (
     <DetalleLiquidacion
@@ -153,8 +181,11 @@ export default async function Detalle({
       etiqueta={etiquetaGasto}
       pdfHref={d.pdfPath && puedeExportar(rol) ? `/api/export/pdf/${d.id}` : null}
       wa={hrefWhatsApp(d.viaje.operadorTelefono)}
-      reasignar={puedeReasignar && operadores.length > 0
-        ? { operadores: operadores.map((o) => ({ id: o.id, nombre: o.nombre })), actual: d.operadorId, accion: reasignar }
+      reasignar={puedeReasignar && totalOperadores !== 0
+        ? {
+          buscar: buscarOperadores, total: totalOperadores,
+          actual: d.operadorId, actualNombre: d.operadorNombre, accion: reasignar,
+        }
         : null}
       reabrir={puedeReabrir ? reabrir : null}
     />

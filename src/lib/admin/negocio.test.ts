@@ -134,6 +134,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 const {
   getResumenNegocio, getCostoPorFaseModelo, getConversacionesActivas,
+  contarConversacionesActivas, TOPE_CONVERSACIONES,
   getConteosPlataforma, getCorridasRecientes, getUltimaCorridaPorAgente, AGENTES_BITACORA,
   getCorridasFallidas, getLiquidacionesEnRevisar, contarLiquidacionesEnRevisar, LIMITE_LIQUIDACIONES_REVISAR,
   costoIaMesActual, costoIaDeTenant, SEGUNDOS_CACHE_CONSOLA,
@@ -478,7 +479,7 @@ describe('getConversacionesActivas', () => {
   it('trae los turnos reales, más reciente primero, con el nombre de la flota', async () => {
     respuestas.set('wa_conversacion', {
       data: [{
-        telefono: '529993700779', updated_at: '2026-08-02T20:00:00Z',
+        telefono: '529993700779', tenant_id: 't-1', updated_at: '2026-08-02T20:00:00Z',
         estado: { turns: [{ role: 'user', content: 'Listo' }, { role: 'assistant', content: 'Listo, cuadré tu viaje' }] },
         tenant: { nombre: 'Flota Demo SA de CV' },
       }],
@@ -487,6 +488,9 @@ describe('getConversacionesActivas', () => {
     const r = await getConversacionesActivas();
     expect(r).toEqual([{
       telefono: '529993700779',
+      // FE-23: el tenant viaja para que la llave de React sea (flota, número)
+      // — el mismo teléfono puede vivir en dos flotas y las filas se pisaban.
+      tenantId: 't-1',
       tenantNombre: 'Flota Demo SA de CV',
       turns: [{ role: 'user', content: 'Listo' }, { role: 'assistant', content: 'Listo, cuadré tu viaje' }],
       actualizadaEn: '2026-08-02T20:00:00Z',
@@ -495,17 +499,33 @@ describe('getConversacionesActivas', () => {
 
   it('sin turns (conversación recién creada) o estado ajeno, lista vacía en vez de reventar', async () => {
     respuestas.set('wa_conversacion', {
-      data: [{ telefono: '529990000000', updated_at: '2026-08-02T20:00:00Z', estado: {}, tenant: null }],
+      data: [{ telefono: '529990000000', tenant_id: null, updated_at: '2026-08-02T20:00:00Z', estado: {}, tenant: null }],
       error: null,
     });
     const r = await getConversacionesActivas();
     expect(r[0].tenantNombre).toBe('—');
+    expect(r[0].tenantId).toBeNull();
     expect(r[0].turns).toEqual([]);
   });
 
   it('un fallo de Supabase lanza', async () => {
     respuestas.set('wa_conversacion', { data: null, error: { message: 'fetch failed' } });
     await expect(getConversacionesActivas()).rejects.toThrow('fetch failed');
+  });
+
+  // FE-9: el `20` de esta lectura es un TOPE, y se pintaba como KPI
+  // ("Conversaciones activas: 20"), como alerta de la campana y como total de
+  // la sección. Con 21 vivas los tres decían 20; con 4,000, también.
+  it('el tope es explícito, y el total lo da un count aparte', async () => {
+    respuestas.set('wa_conversacion', { data: [], error: null, count: 4123 });
+    expect(TOPE_CONVERSACIONES).toBe(20);
+    expect(await contarConversacionesActivas()).toBe(4123);
+  });
+
+  // `null` ≠ 0: un cero aquí se leería como "el bot no le habla a nadie".
+  it('si el conteo falla devuelve null, nunca cero', async () => {
+    respuestas.set('wa_conversacion', { data: null, error: { message: 'caída' }, count: null });
+    expect(await contarConversacionesActivas()).toBeNull();
   });
 });
 

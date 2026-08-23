@@ -69,10 +69,15 @@ export function FilaAcciones({ huerfanoId, viajesVivos, sinMonto, cargados, adju
           ) : (
             <span className="text-[12px]" style={{ color: 'var(--faint)' }}>Sin viajes abiertos a los cuales adjuntar</span>
           )}
+          {/* FE-21: es un botón SOLO de ícono. Sin `aria-label`, un lector de
+              pantalla lo anuncia como "botón" a secas — y el que borra un
+              comprobante es el peor botón para no tener nombre. `title` no
+              basta: no todos los lectores lo leen si no hay nombre accesible. */}
           <button type="button" onClick={() => setConfirmando(true)} title="Descartar el comprobante"
+            aria-label="Descartar el comprobante"
             className="hairline w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
             style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-            <Trash2 width={13} height={13} strokeWidth={1.75} />
+            <Trash2 width={13} height={13} strokeWidth={1.75} aria-hidden />
           </button>
         </form>
       )}

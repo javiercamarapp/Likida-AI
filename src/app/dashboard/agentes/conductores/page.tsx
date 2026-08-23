@@ -2,6 +2,9 @@ import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getViajes, contarEscalados, getEventosConductores } from '@/lib/likida/analytics';
+import { acotada } from '@/lib/likida/presupuesto';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
 import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteConductores, type EsperaAceptar } from './vista';
@@ -22,6 +25,44 @@ function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   return fn().catch(() => null);
 }
 
+/** Los dos estatus que cuentan como "en curso" (`viaje_estatus_dominio`). */
+const VIVOS = ['abierto', 'en_cuadre'];
+
+/**
+ * Los KPIs de arriba, CONTADOS EN LA BASE (FE-5, 22-ago-2026).
+ *
+ * "Viajes en curso", "Aceptados" y "Esperan aceptar" se calculaban filtrando
+ * en memoria `getViajes(tenantId)` — las 100 filas más recientes. A 50,000
+ * viajes/mes eso son ~90 minutos de operación, así que "Viajes en curso: 43"
+ * era el conteo de la última hora y media, no el de la flota. El rótulo de
+ * abajo lo confesaba ("sobre los 100 viajes más recientes"), pero una cifra
+ * verdadera es mejor que una falsa bien rotulada: la pregunta del jefe de
+ * tráfico es cuántos trae HOY, y la respuesta cabía en tres `count`.
+ *
+ * `count exact, head`: cero filas de vuelta. `null` en cualquiera = no se
+ * pudo contar, y la tarjeta pinta "—" — nunca un 0 que se lea como medición.
+ */
+async function contarVivos(
+  tenantId: string,
+  afinar: (q: ReturnType<typeof consultaVivos>) => ReturnType<typeof consultaVivos>,
+  nombre: string,
+): Promise<number | null> {
+  const { count, error } = await acotada(afinar(consultaVivos(tenantId)), nombre);
+  if (error) {
+    logger.warn('conductores.conteo', { tenantId, nombre, err: error.message });
+    return null;
+  }
+  return count ?? null;
+}
+
+function consultaVivos(tenantId: string) {
+  return supabaseAdmin()
+    .from('viaje')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .in('estatus', VIVOS);
+}
+
 /**
  * Agente de Conductores (F4 del plan) — la ventana del agente que habla con
  * los choferes: avisa el viaje, persigue la aceptación (y escala a las 5 h),
@@ -40,7 +81,10 @@ export default async function PaginaAgenteConductores({
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/conductores')) redirect('/dashboard');
 
-  const [viajes, escalados, eventos, corridas, config] = await Promise.all([
+  const [
+    viajes, escalados, eventos, corridas, config,
+    nVivos, nAceptados, nEsperan, nSinAvisar,
+  ] = await Promise.all([
     getViajes(tenantId),
     contarEscalados(tenantId),
     safe(() => getEventosConductores(tenantId)),
@@ -49,6 +93,15 @@ export default async function PaginaAgenteConductores({
     // La estrategia (B4): sin config legible no se pinta la forma — editar
     // sobre un "valor actual" inventado guardaría a ciegas.
     safe(() => getConfig(tenantId)),
+    // Los cuatro conteos REALES de la flota (FE-5) — ver `contarVivos`.
+    contarVivos(tenantId, (q) => q, 'conductores.vivos'),
+    contarVivos(tenantId, (q) => q.not('aceptado_en', 'is', null), 'conductores.aceptados'),
+    contarVivos(
+      tenantId,
+      (q) => q.not('avisado_en', 'is', null).is('aceptado_en', null).is('escalado_en', null),
+      'conductores.esperan',
+    ),
+    contarVivos(tenantId, (q) => q.is('avisado_en', null), 'conductores.sin_avisar'),
   ]);
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
@@ -82,18 +135,17 @@ export default async function PaginaAgenteConductores({
     }))
     .sort((a, b) => b.horasDesdeAviso - a.horasDesdeAviso);
 
-  const sinAvisar = vivos.filter((v) => v.avisadoEn === null && v.operadorNombre !== null).length;
 
   return (
     <VistaAgenteConductores
-      kpis={{
-        vivos: vivos.length,
-        aceptados: vivos.filter((v) => v.aceptadoEn !== null).length,
-        esperan: esperan.length,
-        escalados,
-      }}
+      kpis={{ vivos: nVivos, aceptados: nAceptados, esperan: nEsperan, escalados }}
       esperan={esperan}
-      sinAvisar={sinAvisar}
+      // Cuántos se LISTAN de cuántos hay: la lista sale de los 100 viajes
+      // recientes (para poder decir "hace N horas" hay que traer la fila),
+      // pero la cifra de arriba es la de la flota entera. Si no cuadran, se
+      // dice — que es distinto de esconderlo.
+      esperanListados={esperan.length}
+      sinAvisar={nSinAvisar}
       eventos={eventos}
       sufijo={sufijoTenant(sp)}
       notificaciones={

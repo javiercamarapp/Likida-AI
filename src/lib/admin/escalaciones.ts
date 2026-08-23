@@ -20,8 +20,11 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, traerTodo } from '@/lib/likida/pg';
 import { mxn } from '@/lib/formato';
 import { AGENTES_NOTIFICABLES } from '@/lib/likida/agentes/notificaciones';
-import { getCorridasFallidas, getLiquidacionesEnRevisar, contarLiquidacionesEnRevisar } from './negocio';
-import { getTicketsCruzados, ESTADOS_TICKET_CERRADO } from './soporte';
+import {
+  getCorridasFallidas, contarCorridasFallidas, TOPE_CORRIDAS_FALLIDAS,
+  getLiquidacionesEnRevisar, contarLiquidacionesEnRevisar,
+} from './negocio';
+import { getTicketsCruzados, contarTickets, ESTADOS_TICKET_CERRADO } from './soporte';
 
 // ── Las lecturas propias (las que no existían en ningún lib) ────────────────
 
@@ -227,10 +230,27 @@ function claveUrgencia(i: ItemEscalacion): number {
 export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEscalaciones> {
   const [arco, corridas, talachas, facturas, tickets, liquidaciones] = await Promise.all([
     porValor(() => getSolicitudesArcoPendientes()),
-    porValor(() => getCorridasFallidas(20)),
+    // FE-9: las N más recientes para la cola + el TOTAL contado aparte. El
+    // `items.length` de una lista acotada a 20 se pintaba como "20 corridas
+    // en fallo" hubiera 20 o 500 — y ese número es el que decide si alguien
+    // va a mirar. Si cualquiera de las dos lecturas falla, la fuente entera
+    // cae por valor (conteo null ≠ 0), igual que las liquidaciones de abajo.
+    porValor(async () => {
+      const [items, total] = await Promise.all([
+        getCorridasFallidas(TOPE_CORRIDAS_FALLIDAS), contarCorridasFallidas(),
+      ]);
+      return { items, total };
+    }),
     porValor(() => getTalachasPendientes()),
     porValor(() => getFacturasProveedorPendientes()),
-    porValor(() => getTicketsCruzados(ahoraMs)),
+    // FE-11: la lista viene acotada (`TOPE_TICKETS`), así que los conteos de
+    // la campana ya no pueden salir de `items.length` — se cuentan en la base.
+    porValor(async () => {
+      const [items, conteos] = await Promise.all([
+        getTicketsCruzados(ahoraMs), contarTickets(ahoraMs),
+      ]);
+      return { items, conteos };
+    }),
     // Las N más recientes para la cola + el TOTAL contado aparte (head):
     // desde el 22-ago-2026 (escala 50k) `getLiquidacionesEnRevisar` trae las
     // últimas `LIMITE_LIQUIDACIONES_REVISAR`, no toda la cola humana, así que
@@ -255,7 +275,7 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
       vence: s.venceEn,
       href: '/admin/compliance',
     }))),
-    corridas: 'error' in corridas ? fuente(corridas) : leida(corridas.ok.map((c) => ({
+    corridas: 'error' in corridas ? fuente(corridas) : leida(corridas.ok.items.map((c) => ({
       fuente: 'corridas',
       titulo: `Corrida en fallo — agente ${c.agente}`,
       // Ambos o ninguno (0102): un numerador sin denominador no dice nada.
@@ -291,7 +311,7 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
       href: `/dashboard/agentes/proveedores?tenant=${f.tenantId}`,
     }))),
     tickets: 'error' in tickets ? fuente(tickets) : leida(
-      tickets.ok
+      tickets.ok.items
         .filter((t) => !ESTADOS_TICKET_CERRADO.has(t.estado))
         .map((t) => ({
           fuente: 'tickets',
@@ -326,18 +346,18 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
   // Los conteos de la campana salen de ESTAS lecturas — jamás de un fetch
   // aparte. Los de tickets se derivan ANTES de aplanar porque "vencido"
   // necesita `horasRestantes`, que el item ya no carga.
-  const ticketsAbiertos = 'error' in tickets
-    ? null
-    : tickets.ok.filter((t) => !ESTADOS_TICKET_CERRADO.has(t.estado));
+  // FE-11: los tickets ABIERTOS y los VENCIDOS ya no se derivan de la lista
+  // (que viene acotada a `TOPE_TICKETS`): se cuentan en la base. `items` sigue
+  // alimentando la cola, no las cifras.
+  const conteosTickets = 'error' in tickets ? null : tickets.ok.conteos;
   const conteos: ConteosEscalaciones = {
     arco: fuentes.arco.items?.length ?? null,
-    corridasFallo: fuentes.corridas.items?.length ?? null,
+    // CONTADO en la base, no `items.length`: la lista viene acotada (FE-9).
+    corridasFallo: 'error' in corridas ? null : corridas.ok.total,
     talachas: fuentes.talachas.items?.length ?? null,
     facturasProveedor: fuentes.facturas_proveedor.items?.length ?? null,
-    ticketsAbiertos: ticketsAbiertos === null ? null : ticketsAbiertos.length,
-    ticketsVencidos: ticketsAbiertos === null
-      ? null
-      : ticketsAbiertos.filter((t) => t.horasRestantes !== null && t.horasRestantes < 0).length,
+    ticketsAbiertos: conteosTickets?.abiertos ?? null,
+    ticketsVencidos: conteosTickets?.vencidos ?? null,
     // CONTADO en la base, no `items.length`: la lista viene acotada.
     liquidacionesRevisar: 'error' in liquidaciones ? null : liquidaciones.ok.total,
   };

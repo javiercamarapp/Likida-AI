@@ -2,6 +2,8 @@ import { getEquipo } from '@/lib/admin/negocio';
 import type { RolAppUser } from '@/lib/auth/provisionar';
 import { Users } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
+import { paginarRegistro } from '../../dashboard/paginar-registro';
+import { FiltroRegistro } from '../../dashboard/registro-filtro';
 import { EstadoVacio } from '../ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -41,13 +43,25 @@ function InsigniaRol({ rol }: { rol: string }) {
  * Anatomía de página (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
  * (--g1); el subtítulo que vivía en el header viejo ahora abre la tarjeta.
  */
-export default async function EquipoPage() {
-  const equipo = await getEquipo();
+export default async function EquipoPage({
+  searchParams,
+}: {
+  /** FE-12: `?q=` busca por nombre/correo/flota y `?p=` pagina. El roster
+   *  cruza TODOS los tenants: a 50 flotas con su dueño, su contador y su
+   *  encargado, la tabla se vuelve una lista por la que nadie puede navegar. */
+  searchParams: Promise<{ q?: string; p?: string }>;
+}) {
+  const [equipo, sp] = await Promise.all([getEquipo(), searchParams]);
   const ordenados = [...equipo].sort((a, b) => {
     const ia = ORDEN_ROL.indexOf(a.rol as RolAppUser);
     const ib = ORDEN_ROL.indexOf(b.rol as RolAppUser);
     return (ia === -1 ? ORDEN_ROL.length : ia) - (ib === -1 ? ORDEN_ROL.length : ib);
   });
+  const pag = paginarRegistro(
+    ordenados,
+    (u) => [u.nombre, u.email, u.rol, u.tenantNombre].filter(Boolean).join(' '),
+    sp,
+  );
 
   return (
     <main className="h-full">
@@ -64,6 +78,12 @@ export default async function EquipoPage() {
               <span className="text-xs shrink-0" style={{ color: 'var(--muted)' }}>Roster real de cuentas y roles (RBAC)</span>
             </div>
 
+            {ordenados.length > 0 && (
+              <div className="px-4 pt-1">
+                <FiltroRegistro ruta="/admin/equipo" sufijo="" pagina={pag} sustantivo="cuentas" />
+              </div>
+            )}
+
             {ordenados.length === 0 ? (
               <p className="px-4 pb-4 pt-2 text-sm" style={{ color: 'var(--muted)' }}>Sin usuarios dados de alta todavía.</p>
             ) : (
@@ -77,7 +97,7 @@ export default async function EquipoPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {ordenados.map((u) => (
+                    {pag.filas.map((u) => (
                       <tr key={u.id} className="border-t transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
                         <td className="px-4 py-2.5">
                           <div className="font-medium">{u.nombre ?? '(sin nombre)'}</div>
@@ -91,6 +111,11 @@ export default async function EquipoPage() {
                     ))}
                   </tbody>
                 </table>
+                {pag.filas.length === 0 && (
+                  <p className="px-4 py-3 text-sm" style={{ color: 'var(--muted)' }}>
+                    Ninguna cuenta coincide con «{pag.q}».
+                  </p>
+                )}
               </div>
             )}
 
