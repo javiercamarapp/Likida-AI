@@ -40,19 +40,23 @@ export default async function CorridaQaPage({ params }: { params: Promise<{ id: 
   const corrida = r.datos;
 
   // La evidencia firmada de la primera pintada (el polling la refresca).
+  //
+  // FE-14 (22-ago-2026): el `for` firmaba las rutas UNA POR UNA —cada
+  // `firmarRuta` es un viaje a Storage— así que una corrida de 20 fotos
+  // sumaba 20 viajes en serie antes del primer byte. Se firman en paralelo;
+  // el orden lo preserva `map`, que es el que la pantalla enseña.
   const manifiesto = await leerManifiesto(db);
-  const fotos: FotoFirmada[] = [];
-  if (manifiesto.ok) {
-    const porId = new Map(manifiesto.datos.map((f) => [f.id, f]));
-    for (const fotoId of corrida.parametros.fotoIds) {
+  const porId = manifiesto.ok ? new Map(manifiesto.datos.map((f) => [f.id, f])) : null;
+  const fotos: FotoFirmada[] = porId === null ? [] : await Promise.all(
+    corrida.parametros.fotoIds.map(async (fotoId) => {
       const f = porId.get(fotoId);
-      fotos.push({
+      return {
         id: fotoId,
         etiqueta: f?.etiqueta ?? '(ya no está en el banco)',
         url: f ? await firmarRuta(db, BUCKET_QA_FOTOS, f.path) : null,
-      });
-    }
-  }
+      };
+    }),
+  );
   const pdfs: PdfFirmado[] = await Promise.all((corrida.pdfs ?? []).map(async (path) => ({
     path,
     url: await firmarRuta(db, 'liquidaciones', path),
