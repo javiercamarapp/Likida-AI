@@ -18,9 +18,10 @@ import AvanceCierre from './avance-cierre';
 import type { DiaViajes } from './serie-diaria';
 import { getViajesPorDia } from './serie-diaria-servidor';
 import { AvisoSinFlota } from './sin-flota';
-import { getPrimerosPasos } from '@/lib/likida/primeros-pasos';
+import { getPrimerosPasos, type PrimerosPasos } from '@/lib/likida/primeros-pasos';
 import { PrimeraLiquidacion } from './primera-liquidacion';
 import { OperaWhatsApp } from './opera-whatsapp';
+import { Bloque, Barra, EsqTabla } from './bloque';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CASA DEL ENCARGADO.
@@ -38,6 +39,10 @@ import { OperaWhatsApp } from './opera-whatsapp';
 // estilo: `dinero_por_area.test.ts` escanea este archivo.
 //
 // Rehecha el 14-ago-2026 del glass-panel viejo a esta anatomía.
+//
+// FE-14 (22-ago-2026): las diez consultas se lanzan juntas y se esperan por
+// TARJETA, no en un Promise.all que retenía el HTML hasta la última. Ver la
+// nota larga en `bloque.tsx`.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
@@ -55,6 +60,9 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 function diasParaVencer(vence: string, hoy: string): number {
   return Math.round((Date.parse(`${vence}T00:00:00Z`) - Date.parse(`${hoy}T00:00:00Z`)) / 86_400_000);
 }
+
+const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--muted)' } } as const;
+const ICONO_SECCION = { width: 14, height: 14, strokeWidth: 1.75, style: { color: 'var(--marca)' } } as const;
 
 export async function InicioOperacion({
   tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '',
@@ -79,32 +87,171 @@ export async function InicioOperacion({
   // vencida. Mismo cálculo que `operadores/page.tsx`.
   const diaMx = hoyMx(new Date(ahora));
 
-  const [
-    tablero, sinAsignar, carga, incidencias, viajes, unidades, operadores, pasos,
-    viajesPorDia, historico,
-  ] = await Promise.all([
-    safe<TableroOperacion>(() => getTableroOperacion(tenantId)),
-    safe<ViajeSinAsignar[]>(() => getViajesSinAsignar(tenantId)),
-    safe<CargaOperador[]>(() => getCargaOperadores(tenantId)),
-    safe<IncidenciaRow[]>(() => getIncidencias(tenantId)),
-    safe<ViajeRow[]>(() => getViajes(tenantId)),
-    // Las vigencias que anclan (ver `vigencias.ts`): vivían
-    // solo en /unidades y /operadores, o sea que avisaban únicamente a quien
-    // ya había abierto la página — aquí suben al inicio, que es donde el
-    // aviso sirve de algo.
-    safe<UnidadRow[]>(() => getUnidades(tenantId)),
-    // Solo se usan nombre/activo/licencia — el dinero que este helper trae
-    // (anticipos, % comprobado) SE QUEDA EN EL SERVIDOR, igual que en
-    // `operadores/page.tsx` (la fuga del 4-ago fue exactamente eso).
-    safe<OperadorDetalle[]>(() => getOperadoresDetalle(tenantId)),
-    safe(() => getPrimerosPasos(tenantId)),
-    // FE-5: el "Avance de cierre" contaba en memoria sobre las 100 filas de
-    // `viajes` — a 50k viajes/mes eso son ~90 minutos, y los tres botones
-    // (7d/30d/Todo) medían exactamente la misma hora y media. Ahora la base
-    // cuenta por día y el histórico va por su propia ventana.
-    safe<DiaViajes[]>(() => getViajesPorDia(tenantId, diaMx)),
-    safe<ComparativoPeriodo[]>(() => getSerieComparativa(tenantId, 3650, 1, diaMx)),
-  ]);
+  // Lanzadas de una, esperadas por tarjeta. Todas pasan por `safe`: ninguna
+  // rechaza, resuelven a `null` y su bloque pinta la leyenda honesta.
+  const pTablero = safe<TableroOperacion>(() => getTableroOperacion(tenantId));
+  const pSinAsignar = safe<ViajeSinAsignar[]>(() => getViajesSinAsignar(tenantId));
+  const pCarga = safe<CargaOperador[]>(() => getCargaOperadores(tenantId));
+  const pIncidencias = safe<IncidenciaRow[]>(() => getIncidencias(tenantId));
+  const pViajes = safe<ViajeRow[]>(() => getViajes(tenantId));
+  // Las vigencias que anclan (ver `vigencias.ts`): vivían
+  // solo en /unidades y /operadores, o sea que avisaban únicamente a quien
+  // ya había abierto la página — aquí suben al inicio, que es donde el
+  // aviso sirve de algo.
+  const pUnidades = safe<UnidadRow[]>(() => getUnidades(tenantId));
+  // Solo se usan nombre/activo/licencia — el dinero que este helper trae
+  // (anticipos, % comprobado) SE QUEDA EN EL SERVIDOR, igual que en
+  // `operadores/page.tsx` (la fuga del 4-ago fue exactamente eso).
+  const pOperadores = safe<OperadorDetalle[]>(() => getOperadoresDetalle(tenantId));
+  const pPasos = safe(() => getPrimerosPasos(tenantId));
+  // FE-5: el "Avance de cierre" contaba en memoria sobre las 100 filas de
+  // `viajes` — a 50k viajes/mes eso son ~90 minutos, y los tres botones
+  // (7d/30d/Todo) medían exactamente la misma hora y media. Ahora la base
+  // cuenta por día y el histórico va por su propia ventana.
+  const pViajesPorDia = safe<DiaViajes[]>(() => getViajesPorDia(tenantId, diaMx));
+  const pHistorico = safe<ComparativoPeriodo[]>(() => getSerieComparativa(tenantId, 3650, 1, diaMx));
+
+  return (
+    // El scroll vive DENTRO del panel (patrón FASE 1.5). El lienzo del
+    // contenido es TENUE (`--g1`) y las piezas son tarjetas blancas encima —
+    // misma anatomía en toda la app; la barra y el saludo van sobre blanco.
+    <main className="h-full">
+      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
+        <BarraPagina
+          icono={<Send {...ICONO_BARRA} />}
+          titulo="Operación"
+          derecha={tenantNombre && (
+            <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
+              viendo como superadmin · {tenantNombre}
+            </span>
+          )}
+        />
+        <HeroSaludo
+          saludo={saludo()} nombre={nombre ?? 'jefe'}
+          tagline="Lo que hay que despachar y perseguir hoy"
+          derecha={
+            <div className="flex items-center gap-2.5 shrink-0 pt-1">
+              <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(diaMx)}</ChipFecha>
+              {/* Secundario a Operadores — "¿a quién le cargo el siguiente?"
+                  es la otra pregunta de la mañana. `hidden md:` para que en
+                  angosto nunca desplace al CTA primario. */}
+              <Link href={`/dashboard/operadores${sufijo}`}
+                className="hairline h-8 px-3 rounded-lg text-[13px] font-medium hidden md:inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-70"
+                style={{ background: 'var(--surface)' }}>
+                <Users width={15} height={15} strokeWidth={1.75} /> Operadores
+              </Link>
+              {/* A DESPACHO (13-ago): ahí vive la forma de crear — junto con
+                  asignar, avisar y el alta de operadores. La página suelta
+                  /viajes/nuevo se retiró: era la misma forma con menos
+                  contexto, y dos puertas se desincronizan. */}
+              <Link href={`/dashboard/despacho${sufijo}`}
+                className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85"
+                style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+                <Plus width={15} height={15} strokeWidth={2} /> Nuevo viaje
+              </Link>
+            </div>
+          }
+        />
+
+        <div className="px-5 pb-5 flex-1">
+          {/* ANTES QUE NINGUNA CIFRA. Lo de abajo son ceros de una flota que
+              no existe, y esa frase tiene que llegar antes que los ceros —
+              por eso no depende de ninguna consulta y sale con el primer
+              flush del stream. */}
+          {!tenantExiste && (
+            <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
+          )}
+
+          {/* La guía del arranque (auditoría 5) — misma pieza que el Resumen
+              del dueño; el encargado también puede llevar a la flota a su
+              primera liquidación. Condicional de verdad: sin esqueleto, para
+              no reservar un hueco que casi siempre queda vacío. */}
+          {tenantExiste && (
+            <Bloque mensaje="No se pudo leer el avance del arranque." esqueleto={null}>
+              <BloqueArranque pPasos={pPasos} sufijo={sufijo} />
+            </Bloque>
+          )}
+
+          <Bloque mensaje="No se pudieron leer las alertas de la mañana." esqueleto={null}>
+            <BloqueAlertas pSinAsignar={pSinAsignar} pIncidencias={pIncidencias} pTablero={pTablero}
+              pUnidades={pUnidades} pOperadores={pOperadores} diaMx={diaMx} sufijo={sufijo} />
+          </Bloque>
+
+          {/* ── Avance de cierre + la cifra que manda ──────────────────────
+              En vez del dinero del dueño, cuántos viajes están vivos ahora
+              mismo. Las dos piezas fallan por separado: un `—` con su "no se
+              pudo leer" nunca se disfraza de cero. */}
+          <div className="mt-3">
+            <Bloque mensaje="No se pudo leer el avance de cierre." esqueleto={<EsqAvance />}>
+              <BloqueAvance pViajesPorDia={pViajesPorDia} pHistorico={pHistorico} pTablero={pTablero} />
+            </Bloque>
+          </div>
+
+          {/* ── Los 6 números de operación (StatCard, caja interna) ──────── */}
+          <div className="mt-3">
+            <Bloque mensaje="No se pudo leer el estado de la operación." esqueleto={<EsqTablero />}>
+              <BloqueTablero pTablero={pTablero} />
+            </Bloque>
+          </div>
+
+          {/* ── Sin asignar + Carga por operador, como tarjetas blancas ────
+              `items-start`: sin él, la tarjeta corta se ESTIRA a la altura de
+              la larga y "Sin asignar" vacío queda con media pantalla en
+              blanco debajo del mensaje (visto en el render, 14-ago).
+              Cada columna es su propio boundary: la carga por operador es
+              una agregación pesada y no tiene por qué retener la lista de
+              viajes sin chofer, que es la urgencia real de la mañana. */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-3 items-start">
+            <Bloque mensaje="No se pudo leer la lista de viajes sin chofer." esqueleto={<EsqTabla filas={4} />}>
+              <BloqueSinAsignar pSinAsignar={pSinAsignar} />
+            </Bloque>
+            <Bloque mensaje="No se pudo leer la carga por operador." esqueleto={<EsqTabla filas={4} />}>
+              <BloqueCarga pCarga={pCarga} />
+            </Bloque>
+          </div>
+
+          {/* ── Viajes recientes, SIN pesos (ver TablaViajesOperacion) ───── */}
+          <div className="mt-3">
+            <Bloque mensaje="No se pudieron leer los viajes recientes." esqueleto={<EsqTabla filas={8} />}>
+              <BloqueViajes pViajes={pViajes} sufijo={sufijo} />
+            </Bloque>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS BLOQUES. Cada uno espera SOLO sus promesas — por eso el de al lado no
+// lo espera. Viven en este archivo porque `dinero_por_area.test.ts` lo
+// escanea por nombre: una sección mudada afuera se saldría del escaneo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function BloqueArranque({ pPasos, sufijo }: {
+  pPasos: Promise<PrimerosPasos | null>; sufijo: string;
+}) {
+  const pasos = await pPasos;
+  if (!pasos || pasos.completado) return null;
+  return (
+    <>
+      <div className="mt-3"><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
+      <div className="mt-3"><OperaWhatsApp rol="jefe" /></div>
+    </>
+  );
+}
+
+async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, pOperadores, diaMx, sufijo }: {
+  pSinAsignar: Promise<ViajeSinAsignar[] | null>;
+  pIncidencias: Promise<IncidenciaRow[] | null>;
+  pTablero: Promise<TableroOperacion | null>;
+  pUnidades: Promise<UnidadRow[] | null>;
+  pOperadores: Promise<OperadorDetalle[] | null>;
+  diaMx: string;
+  sufijo: string;
+}) {
+  const [sinAsignar, incidencias, tablero, unidades, operadores] =
+    await Promise.all([pSinAsignar, pIncidencias, pTablero, pUnidades, pOperadores]);
 
   // ── Alertas accionables — SOLO si hay fuego real ─────────────────────────
   // Una banda que siempre dice algo entrena a ignorarla. Cada alerta lleva a
@@ -173,6 +320,184 @@ export async function InicioOperacion({
   if (unidades === null) ciegas.push('los papeles de las unidades');
   if (operadores === null) ciegas.push('las licencias');
 
+  if (ciegas.length === 0 && alertas.length === 0) return null;
+
+  return (
+    <>
+      {ciegas.length > 0 && (
+        <div className="card p-3 flex items-start gap-2.5 mt-3" style={{ borderColor: 'var(--warn)' }}>
+          <span className="inline-block w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
+          <p className="text-[13px] m-0">
+            No se pudo leer: {ciegas.join(' · ')}. Las alertas de esa parte pueden faltar —
+            es un fallo de lectura, no un &quot;todo en orden&quot;.
+          </p>
+        </div>
+      )}
+
+      {alertas.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {alertas.map((a) => a.href ? (
+            <Link key={a.texto} href={a.href}
+              className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
+              style={{ borderColor: 'var(--warn)' }}>
+              <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
+              <span className="text-[13px]">{a.texto}</span>
+              <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
+            </Link>
+          ) : (
+            <div key={a.texto} className="card p-3 flex items-center gap-2.5" style={{ borderColor: 'var(--warn)' }}>
+              <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
+              <span className="text-[13px]">{a.texto}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** El mismo bulto que la tarjeta de avance: la barra de progreso a la
+ *  izquierda y la cifra grande a la derecha. */
+function EsqAvance() {
+  return (
+    <div className="card p-4 flex flex-wrap items-start gap-x-8 gap-y-3" role="status" aria-label="Cargando">
+      <div className="flex-1 min-w-[260px]">
+        <Barra alto={13} ancho="40%" />
+        <div className="mt-2"><Barra alto={10} /></div>
+        <div className="mt-3"><Barra alto={12} ancho="60%" /></div>
+      </div>
+      <div className="shrink-0 ml-auto w-[110px]">
+        <Barra alto={36} />
+        <div className="mt-1 ml-auto"><Barra alto={10} ancho="70%" /></div>
+      </div>
+    </div>
+  );
+}
+
+async function BloqueAvance({ pViajesPorDia, pHistorico, pTablero }: {
+  pViajesPorDia: Promise<DiaViajes[] | null>;
+  pHistorico: Promise<ComparativoPeriodo[] | null>;
+  pTablero: Promise<TableroOperacion | null>;
+}) {
+  const [viajesPorDia, historico, tablero] = await Promise.all([pViajesPorDia, pHistorico, pTablero]);
+  return (
+    <div className="card p-4 flex flex-wrap items-start gap-x-8 gap-y-3">
+      <div className="flex-1 min-w-[260px]">
+        {viajesPorDia === null ? (
+          <p className="text-sm m-0" style={{ color: 'var(--muted)' }}>
+            No se pudo leer el avance de cierre — no significa que no haya viajes.
+          </p>
+        ) : (
+          <AvanceCierre
+            porDia={viajesPorDia}
+            historico={historico && historico[0]
+              ? { viajes: historico[0].totalViajes, liquidados: historico[0].viajesLiquidados }
+              : null}
+          />
+        )}
+      </div>
+      <div className="text-right shrink-0 ml-auto">
+        <div className="font-display text-4xl tracking-tight tabular font-semibold">
+          {tablero?.viajesActivos ?? '—'}
+        </div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide mt-0.5" style={{ color: 'var(--muted)' }}>
+          Viajes activos
+        </div>
+        <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>
+          {tablero === null ? 'No se pudo leer' : 'Abiertos y en cuadre'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** El mismo bulto que `TableroCifras`: el rótulo, la fila flexible de tres y
+ *  la rejilla de seis (2 columnas, 3 desde `md`) — sus mismas clases, para
+ *  que el aterrizaje no mueva un pixel. */
+function EsqTablero() {
+  return (
+    <div role="status" aria-label="Cargando">
+      <Barra alto={13} ancho="30%" />
+      <div className="mt-2 flex flex-wrap gap-2.5 items-stretch">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex-1 min-w-[200px]"><Barra alto={100} className="rounded-xl" /></div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 mt-2.5">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Barra key={i} alto={100} className="rounded-xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+async function BloqueTablero({ pTablero }: { pTablero: Promise<TableroOperacion | null> }) {
+  const tablero = await pTablero;
+  if (tablero === null) {
+    return (
+      <div className="card p-6 text-sm" style={{ color: 'var(--muted)' }}>
+        No se pudo leer el estado de la operación.
+      </div>
+    );
+  }
+  return <TableroCifras t={tablero} />;
+}
+
+async function BloqueSinAsignar({ pSinAsignar }: { pSinAsignar: Promise<ViajeSinAsignar[] | null> }) {
+  const sinAsignar = await pSinAsignar;
+  return (
+    <section className="card overflow-hidden">
+      <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+        <CircleSlash {...ICONO_SECCION} />
+        <TituloSeccion>Sin asignar</TituloSeccion>
+      </div>
+      {sinAsignar === null ? (
+        <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la lista.</div>
+      ) : sinAsignar.length === 0 ? (
+        <div className="px-5 pb-4">
+          <EstadoVacio icono={<Send width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+            Todo lo que está en curso ya trae chofer.
+          </EstadoVacio>
+        </div>
+      ) : (
+        <ul className="pb-3">
+          {sinAsignar.map((v) => (
+            <li key={v.id} className="px-5 py-2 border-t flex items-center gap-3 text-sm" style={{ borderColor: 'var(--line2)' }}>
+              <span className="font-medium">{v.folio ?? '—'}</span>
+              <span className="truncate" style={{ color: 'var(--muted)' }}>
+                {v.origen && v.destino ? `${v.origen} → ${v.destino}` : (v.origen ?? v.destino ?? 'sin ruta')}
+              </span>
+              <span className="ml-auto shrink-0 text-[12px]" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+async function BloqueCarga({ pCarga }: { pCarga: Promise<CargaOperador[] | null> }) {
+  const carga = await pCarga;
+  return (
+    <section className="card overflow-hidden">
+      <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+        <UserCog {...ICONO_SECCION} />
+        <TituloSeccion>Carga por operador</TituloSeccion>
+      </div>
+      {carga === null ? (
+        <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la carga.</div>
+      ) : (
+        <TablaCarga carga={carga} />
+      )}
+    </section>
+  );
+}
+
+async function BloqueViajes({ pViajes, sufijo }: {
+  pViajes: Promise<ViajeRow[] | null>; sufijo: string;
+}) {
+  const viajes = await pViajes;
   // Las 100 filas MÁS RECIENTES (tope de `getViajes`), SIN el anticipo: el
   // tipo de la tabla no tiene campo donde ponerlo — ver `FilaViajeOperacion`.
   // "recientes" es literal y el encabezado lo dice: no son todas, y el
@@ -181,207 +506,22 @@ export async function InicioOperacion({
     id: v.id, folio: v.folio, origen: v.origen, destino: v.destino,
     estatus: v.estatus, operadorNombre: v.operadorNombre, fechaInicio: v.fechaInicio,
   }));
-
-  const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--muted)' } } as const;
-  const ICONO_SECCION = { width: 14, height: 14, strokeWidth: 1.75, style: { color: 'var(--marca)' } } as const;
-
   return (
-    // El scroll vive DENTRO del panel (patrón FASE 1.5). El lienzo del
-    // contenido es TENUE (`--g1`) y las piezas son tarjetas blancas encima —
-    // misma anatomía en toda la app; la barra y el saludo van sobre blanco.
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Send {...ICONO_BARRA} />}
-          titulo="Operación"
-          derecha={tenantNombre && (
-            <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
-              viendo como superadmin · {tenantNombre}
-            </span>
-          )}
-        />
-        <HeroSaludo
-          saludo={saludo()} nombre={nombre ?? 'jefe'}
-          tagline="Lo que hay que despachar y perseguir hoy"
-          derecha={
-            <div className="flex items-center gap-2.5 shrink-0 pt-1">
-              <ChipFecha icono={<CalendarDays {...ICONO_BARRA} />}>{fechaMx(diaMx)}</ChipFecha>
-              {/* Secundario a Operadores — "¿a quién le cargo el siguiente?"
-                  es la otra pregunta de la mañana. `hidden md:` para que en
-                  angosto nunca desplace al CTA primario. */}
-              <Link href={`/dashboard/operadores${sufijo}`}
-                className="hairline h-8 px-3 rounded-lg text-[13px] font-medium hidden md:inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-70"
-                style={{ background: 'var(--surface)' }}>
-                <Users width={15} height={15} strokeWidth={1.75} /> Operadores
-              </Link>
-              {/* A DESPACHO (13-ago): ahí vive la forma de crear — junto con
-                  asignar, avisar y el alta de operadores. La página suelta
-                  /viajes/nuevo se retiró: era la misma forma con menos
-                  contexto, y dos puertas se desincronizan. */}
-              <Link href={`/dashboard/despacho${sufijo}`}
-                className="h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 transition-opacity hover:opacity-85"
-                style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                <Plus width={15} height={15} strokeWidth={2} /> Nuevo viaje
-              </Link>
-            </div>
-          }
-        />
-
-        <div className="px-5 pb-5 flex-1">
-          {/* ANTES QUE NINGUNA CIFRA. Lo de abajo son ceros de una flota que
-              no existe, y esa frase tiene que llegar antes que los ceros. */}
-          {!tenantExiste && (
-            <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>
-          )}
-
-          {/* La guía del arranque (auditoría 5) — misma pieza que el Resumen
-              del dueño; el encargado también puede llevar a la flota a su
-              primera liquidación. */}
-          {tenantExiste && pasos && !pasos.completado && (
-            <div className="mt-3"><PrimeraLiquidacion datos={pasos} sufijo={sufijo} /></div>
-          )}
-
-          {tenantExiste && pasos && !pasos.completado && (
-            <div className="mt-3"><OperaWhatsApp rol="jefe" /></div>
-          )}
-
-          {ciegas.length > 0 && (
-            <div className="card p-3 flex items-start gap-2.5 mt-3" style={{ borderColor: 'var(--warn)' }}>
-              <span className="inline-block w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
-              <p className="text-[13px] m-0">
-                No se pudo leer: {ciegas.join(' · ')}. Las alertas de esa parte pueden faltar —
-                es un fallo de lectura, no un &quot;todo en orden&quot;.
-              </p>
-            </div>
-          )}
-
-          {alertas.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              {alertas.map((a) => a.href ? (
-                <Link key={a.texto} href={a.href}
-                  className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
-                  style={{ borderColor: 'var(--warn)' }}>
-                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
-                  <span className="text-[13px]">{a.texto}</span>
-                  <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
-                </Link>
-              ) : (
-                <div key={a.texto} className="card p-3 flex items-center gap-2.5" style={{ borderColor: 'var(--warn)' }}>
-                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
-                  <span className="text-[13px]">{a.texto}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── Avance de cierre + la cifra que manda ──────────────────────
-              En vez del dinero del dueño, cuántos viajes están vivos ahora
-              mismo. Las dos piezas fallan por separado: un `—` con su "no se
-              pudo leer" nunca se disfraza de cero. */}
-          <div className="card p-4 mt-3 flex flex-wrap items-start gap-x-8 gap-y-3">
-            <div className="flex-1 min-w-[260px]">
-              {viajesPorDia === null ? (
-                <p className="text-sm m-0" style={{ color: 'var(--muted)' }}>
-                  No se pudo leer el avance de cierre — no significa que no haya viajes.
-                </p>
-              ) : (
-                <AvanceCierre
-                  porDia={viajesPorDia}
-                  historico={historico && historico[0]
-                    ? { viajes: historico[0].totalViajes, liquidados: historico[0].viajesLiquidados }
-                    : null}
-                />
-              )}
-            </div>
-            <div className="text-right shrink-0 ml-auto">
-              <div className="font-display text-4xl tracking-tight tabular font-semibold">
-                {tablero?.viajesActivos ?? '—'}
-              </div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide mt-0.5" style={{ color: 'var(--muted)' }}>
-                Viajes activos
-              </div>
-              <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>
-                {tablero === null ? 'No se pudo leer' : 'Abiertos y en cuadre'}
-              </div>
-            </div>
-          </div>
-
-          {/* ── Los 6 números de operación (StatCard, caja interna) ──────── */}
-          <div className="mt-3">
-            {tablero === null ? (
-              <div className="card p-6 text-sm" style={{ color: 'var(--muted)' }}>
-                No se pudo leer el estado de la operación.
-              </div>
-            ) : (
-              <TableroCifras t={tablero} />
-            )}
-          </div>
-
-          {/* ── Sin asignar + Carga por operador, como tarjetas blancas ────
-              `items-start`: sin él, la tarjeta corta se ESTIRA a la altura de
-              la larga y "Sin asignar" vacío queda con media pantalla en
-              blanco debajo del mensaje (visto en el render, 14-ago). */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-3 items-start">
-            <section className="card overflow-hidden">
-              <div className="px-5 pt-4 pb-2 flex items-center gap-2">
-                <CircleSlash {...ICONO_SECCION} />
-                <TituloSeccion>Sin asignar</TituloSeccion>
-              </div>
-              {sinAsignar === null ? (
-                <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la lista.</div>
-              ) : sinAsignar.length === 0 ? (
-                <div className="px-5 pb-4">
-                  <EstadoVacio icono={<Send width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                    Todo lo que está en curso ya trae chofer.
-                  </EstadoVacio>
-                </div>
-              ) : (
-                <ul className="pb-3">
-                  {sinAsignar.map((v) => (
-                    <li key={v.id} className="px-5 py-2 border-t flex items-center gap-3 text-sm" style={{ borderColor: 'var(--line2)' }}>
-                      <span className="font-medium">{v.folio ?? '—'}</span>
-                      <span className="truncate" style={{ color: 'var(--muted)' }}>
-                        {v.origen && v.destino ? `${v.origen} → ${v.destino}` : (v.origen ?? v.destino ?? 'sin ruta')}
-                      </span>
-                      <span className="ml-auto shrink-0 text-[12px]" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="card overflow-hidden">
-              <div className="px-5 pt-4 pb-2 flex items-center gap-2">
-                <UserCog {...ICONO_SECCION} />
-                <TituloSeccion>Carga por operador</TituloSeccion>
-              </div>
-              {carga === null ? (
-                <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la carga.</div>
-              ) : (
-                <TablaCarga carga={carga} />
-              )}
-            </section>
-          </div>
-
-          {/* ── Viajes recientes, SIN pesos (ver TablaViajesOperacion) ───── */}
-          <section className="card overflow-hidden mt-3">
-            <div className="px-5 pt-4 pb-2 flex items-center gap-2">
-              <History {...ICONO_SECCION} />
-              <TituloSeccion>Viajes recientes</TituloSeccion>
-              {viajes !== null && viajes.length >= 100 && (
-                <Link href={`/dashboard/viajes${sufijo}`} className="ml-auto text-[11px] shrink-0 hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>
-                  Los 100 más recientes · ver el registro completo →
-                </Link>
-              )}
-            </div>
-            {viajes === null ? (
-              <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer los viajes.</div>
-            ) : (
-              <TablaViajesOperacion viajes={filasViajes} />
-            )}
-          </section>
-        </div>
+    <section className="card overflow-hidden">
+      <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+        <History {...ICONO_SECCION} />
+        <TituloSeccion>Viajes recientes</TituloSeccion>
+        {viajes !== null && viajes.length >= 100 && (
+          <Link href={`/dashboard/viajes${sufijo}`} className="ml-auto text-[11px] shrink-0 hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>
+            Los 100 más recientes · ver el registro completo →
+          </Link>
+        )}
       </div>
-    </main>
+      {viajes === null ? (
+        <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer los viajes.</div>
+      ) : (
+        <TablaViajesOperacion viajes={filasViajes} />
+      )}
+    </section>
   );
 }
