@@ -392,6 +392,9 @@ interface WaWebhook {
           id: string;
           from: string;
           type: string;
+          /** UNIX en SEGUNDOS, como string. Es la hora en que META recibió el
+           *  mensaje, no la nuestra (DAT-38). Ver `extractMessages`. */
+          timestamp?: string;
           text?: { body: string };
           // `caption` es el rótulo que el chofer escribe AL PIE de la foto —
           // la única señal determinística de qué papel es ("carta porte",
@@ -436,7 +439,23 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
   for (const entry of p.entry ?? []) {
     for (const change of entry.changes ?? []) {
       for (const m of change.value?.messages ?? []) {
-        const base = { from: m.from, waMessageId: m.id };
+        // ── DAT-38 · LA HORA DEL MENSAJE ES LA DE META, NO LA NUESTRA ──────
+        //
+        // Meta manda `timestamp` (UNIX en segundos) en cada mensaje y aquí se
+        // tiraba. La diferencia no es cosmética: entre que el chofer aprieta
+        // enviar y que este código corre pueden pasar los reintentos de Meta,
+        // el aplazamiento del rate limit y hasta cinco minutos de la bandeja
+        // durable. Los hitos del viaje («llegué», «descargando», «de regreso»)
+        // se sellaban con `new Date()` — la hora de PROCESAMIENTO— y el acuse
+        // le decía al chofer «anotado: llegaste a las 14:32» sobre una hora que
+        // él no vivió. Es un dato de operación que la flota va a cruzar contra
+        // la bitácora del cliente.
+        //
+        // Se valida antes de creerle: un `timestamp` que no es un número
+        // razonable no puede sustituir a un reloj que sí funciona.
+        const ts = Number(m.timestamp);
+        const timestampMs = Number.isFinite(ts) && ts > 0 ? ts * 1000 : undefined;
+        const base = { from: m.from, waMessageId: m.id, timestampMs };
         if (m.type === 'text' && m.text) out.push({ ...base, type: 'text', text: m.text.body });
         // El caption viaja como `text` del mensaje de imagen: `InboundMessage`
         // ya tiene el campo y el processor decide con él (POD/talacha, F4).

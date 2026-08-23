@@ -55,9 +55,10 @@ import {
   registrarSolicitudArco,
 } from '@/lib/likida/repo';
 import {
-  resolveOperador, getOpenViaje, getTenantContext, type ResolvedOperador,
+  resolveOperador, getOpenViaje, viajeAbiertoDesdeMs, getTenantContext, type ResolvedOperador,
   loadConversation, saveConversation, claimMessage,
-  acquireViajeLock, releaseViajeLock, releaseMessageClaim, completarMessageClaim,
+  acquireViajeLock, intentarLockViaje, TTL_LOCK_CIERRE_MS,
+  releaseViajeLock, releaseMessageClaim, completarMessageClaim,
   intakeDelta, esperarIntake, ConsultaFallida, OperadorAmbiguo, type ConvTurn,
   buscarTenantPorTelefono,
 } from '@/lib/likida/conv';
@@ -89,6 +90,20 @@ export interface InboundMessage {
   lat?: number;
   lng?: number;
   waMessageId?: string;       // id de Meta, para idempotencia
+  /**
+   * Cuándo lo recibió META (epoch en ms), no cuándo lo procesamos (DAT-38).
+   *
+   * Entre las dos horas caben los reintentos de Meta, el aplazamiento del rate
+   * limit y hasta cinco minutos de la bandeja durable. Todo lo que se le
+   * ASIENTA AL VIAJE con hora —los hitos «llegué»/«descargando»/«de regreso»—
+   * tiene que usar ésta: la otra es la hora de nuestro servidor, y la flota va
+   * a cruzar esos sellos contra la bitácora de su cliente.
+   *
+   * `undefined` cuando el mensaje no viene del webhook (QA, simulador) o
+   * cuando Meta mandó un timestamp que no se puede leer: ahí se cae al reloj
+   * local, que es el comportamiento de siempre.
+   */
+  timestampMs?: number;
   /** SOLO lo fija el motor de QA (scripts/qa-agentes/ y /api/admin/qa/*): un
    *  data-URL ya resuelto que SUSTITUYE la descarga real de Meta — el arnés
    *  no tiene un mediaId real de WhatsApp (es el número de prueba; un chofer
@@ -2167,7 +2182,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // más contexto sigue su camino al agente.
     const hito = interpretarHito(msg.text);
     if (hito) {
-      const ahoraHito = new Date();
+      // DAT-38: la hora del MENSAJE, no la del procesamiento. El acuse dice
+      // «anotado: llegaste a las 14:32» y esa hora tiene que ser la que el
+      // chofer vivió, no la que este servidor tenía cuando le tocó el turno.
+      // Sin timestamp de Meta se cae al reloj local, como siempre.
+      const ahoraHito = msg.timestampMs ? new Date(msg.timestampMs) : new Date();
       const sello = await sellarHito(op.tenantId, viajeId, hito, ahoraHito);
       logger.info('hito.viaje', { viaje: viajeId, hito, sello });
       await say(mensajeHito(hito, sello, ahoraHito));
@@ -2377,6 +2396,43 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       }
     }
 
+    // ── DAT-21 · UN "LISTO" VIEJO NO CIERRA EL VIAJE DE HOY ─────────────────
+    //
+    // La bandeja durable puede rescatar un mensaje minutos —o dos vueltas de
+    // cron— después de que Meta lo recibió. En ese hueco caben las dos cosas
+    // que hacen falta para el accidente: que la oficina cierre el viaje al que
+    // ese "listo" pertenecía, y que le abra el SIGUIENTE. Cuando el mensaje por
+    // fin corre, `getOpenViaje` devuelve el viaje NUEVO y el "listo" del viaje
+    // anterior lo cierra: sin comprobantes, con el anticipo entero en contra
+    // del chofer, e irreversible por los triggers 0036/0037.
+    //
+    // La prueba de que el mensaje es de otro viaje es la hora de META
+    // (DAT-38): un operador sólo puede tener UN viaje abierto a la vez
+    // (`uq_viaje_abierto_por_operador`, 0029), así que un texto recibido ANTES
+    // de que ESTE viaje se abriera pertenece, por construcción, al anterior.
+    //
+    // SÓLO SE DESCARTA LO QUE PARECE UN CIERRE, y sólo eso. Un "¿cuánto llevo?"
+    // viejo contestado contra el viaje nuevo es una respuesta rara; un "listo"
+    // viejo es una liquidación en ceros. Y hace falta la hora de Meta: sin ella
+    // (QA, simulador, un timestamp ilegible) no se descarta nada — no se
+    // adivina, se sigue como siempre.
+    //
+    // La consulta corre SÓLO en este caso —texto que parece cierre y con hora
+    // de Meta—, no en cada mensaje, y es FAIL-OPEN (`null` = no se supo → no se
+    // descarta): tirar un "listo" bueno deja al chofer sin cerrar y sin
+    // entender por qué, que es peor que dejar pasar uno viejo.
+    if (msg.timestampMs && pareceCierre(msg.text)) {
+      const abiertoDesde = await viajeAbiertoDesdeMs(op.tenantId, viajeId);
+      if (abiertoDesde != null && msg.timestampMs < abiertoDesde) {
+        logger.warn('cierre.mensaje_de_viaje_anterior', {
+          viaje: viajeId, tenant: op.tenantId,
+          mensajeMs: msg.timestampMs, viajeDesdeMs: abiertoDesde,
+        });
+        await say('Ese *listo* era de tu viaje anterior, que ya quedó cerrado 👍. Éste es un viaje nuevo: mándame sus comprobantes y escribe *listo* cuando termines con él.');
+        return;
+      }
+    }
+
     // BARRERA DE RÁFAGA: espera a que terminen los OCR de fotos en vuelo antes de
     // cuadrar — así "listo" nunca cierra sobre datos parciales. NUNCA es infinito:
     // si vence, se cuadra con lo que haya y se avisa al operador.
@@ -2392,10 +2448,22 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // ejecuciones reportan éxito → el operador recibe el cierre y el PDF DOS
     // veces, y se paga el LLM dos veces.
     //
-    // Abandonar es seguro porque `false` significa una sola cosa: otro turno
-    // tiene el lease vigente y ESE va a responder. Los errores de la RPC no
-    // llegan aquí — `acquireViajeLock` es fail-open ante RPC ausente o fallo
-    // persistente, y devuelve `true`.
+    // Abandonar es seguro porque 'ocupado' significa una sola cosa: otro turno
+    // tiene el lease vigente y ESE va a responder.
+    //
+    // DAT-21 — Y AHORA HAY UN TERCER ESTADO. Antes un fallo persistente de la
+    // RPC (12 s de timeouts, pool agotado, 503) devolvía `true`: "el lock es
+    // tuyo", sobre una base que no contestó. Y con ese `true` este camino se
+    // ponía a cuadrar, imprimir los dos PDFs y CERRAR —irreversiblemente— sin
+    // exclusividad ninguna, justo cuando la infraestructura estaba peor. Hoy
+    // eso llega como 'indeterminado' y se falla CERRADO: se avisa, se suelta el
+    // claim y la bandeja durable lo reintenta. Cuesta un mensaje; abrirlo
+    // costaba una liquidación cerrada dos veces.
+    //
+    // El TTL también cambia: `TTL_LOCK_CIERRE_MS` (120 s) en vez del default de
+    // 60 s, porque el cierre no cabe en 60 s en el peor caso —cuadre + dos PDFs
+    // + subida + RPC + envío del documento— y un lease que vence a media faena
+    // deja de ser un mutex.
     //
     // AUDITORÍA 7, ALTO — SE ABANDONABA EN SILENCIO Y PARA SIEMPRE. El comentario
     // que justificaba el `return` tenía razón en que "otro turno va a
@@ -2413,12 +2481,27 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // se libera el claim para que el mensaje no quede atascado. No resuelve
     // "el segundo mensaje se contesta", pero sí "el operador sabe que no se
     // perdió, y puede volver a mandarlo".
-    if (await acquireViajeLock(viajeId, { maxWaitMs: reloj.acotar(12_000) })) {
+    const lock = await intentarLockViaje(viajeId, {
+      ttlMs: TTL_LOCK_CIERRE_MS, maxWaitMs: reloj.acotar(12_000),
+    });
+    if (lock === 'obtenido') {
       lockedViaje = viajeId;
     } else {
-      logger.warn('viaje.lock_ocupado_abandona', { viaje: viajeId, tenant: op.tenantId, restanteMs: reloj.restante() });
+      // Los dos motivos se cuentan por separado: 'ocupado' es el sistema
+      // funcionando (otro turno en vuelo) y 'indeterminado' es la base sin
+      // contestar. Un solo log para los dos haría invisible el segundo, que es
+      // el que hay que atender.
+      logger[lock === 'ocupado' ? 'warn' : 'error'](
+        lock === 'ocupado' ? 'viaje.lock_ocupado_abandona' : 'viaje.lock_indeterminado_abandona',
+        { viaje: viajeId, tenant: op.tenantId, restanteMs: reloj.restante() },
+      );
       try {
-        await say('Un momento, todavía estoy procesando tu mensaje anterior 🙏. En cuanto termine, vuelve a escribirme esto si sigue pendiente.');
+        // Al operador se le dice lo que es cierto en cada caso. «Estoy
+        // procesando tu mensaje anterior» sería falso cuando lo que pasa es que
+        // no pudimos consultar: el producto no afirma hechos que no le constan.
+        await say(lock === 'ocupado'
+          ? 'Un momento, todavía estoy procesando tu mensaje anterior 🙏. En cuanto termine, vuelve a escribirme esto si sigue pendiente.'
+          : 'No pude apartar tu viaje para cerrarlo ahorita 😕 — la conexión falló y prefiero no cerrarlo dos veces. Tus comprobantes están guardados; vuelve a escribirme *listo* en un minuto.');
       } catch { /* best-effort: el aviso es una cortesía, no puede tumbar la liberación del claim */ }
       await soltarClaim();
       return;

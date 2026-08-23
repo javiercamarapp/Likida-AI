@@ -127,6 +127,9 @@ describe('un button_reply llega al procesador como texto con el id del botón', 
     expect(processInbound).toHaveBeenCalledWith({
       from: '5219990001001',
       waMessageId: 'wamid.BTN1',
+      // DAT-38: la hora de META, no la del procesamiento. Va en TODO mensaje —
+      // el `timestamp` del sobre real de arriba, en segundos, ×1000.
+      timestampMs: 1714510003000,
       type: 'text',
       text: 'cerrar_si',
     });
@@ -177,7 +180,7 @@ describe('un interactivo que NO es button_reply no se traga como si lo fuera', (
       list_reply: { id: 'fila_3', title: 'Diésel', description: 'Carga de combustible' },
     }));
     expect(processInbound).toHaveBeenCalledWith({
-      from: '5219990001010', waMessageId: 'wamid.LST1', type: 'other',
+      from: '5219990001010', waMessageId: 'wamid.LST1', timestampMs: 1714510003000, type: 'other',
     });
   });
 
@@ -207,14 +210,14 @@ describe('un interactivo que NO es button_reply no se traga como si lo fuera', (
       button_reply: { id: 'cerrar_si', title: 'Sí' },
     }));
     expect(processInbound).toHaveBeenCalledWith({
-      from: '5219990001014', waMessageId: 'wamid.MIX', type: 'other',
+      from: '5219990001014', waMessageId: 'wamid.MIX', timestampMs: 1714510003000, type: 'other',
     });
   });
 
   it('un interactivo sin button_reply no revienta el parseo', async () => {
     await postear(payloadInteractivo('5219990001012', 'wamid.INT1', { type: 'button_reply' }));
     expect(processInbound).toHaveBeenCalledWith({
-      from: '5219990001012', waMessageId: 'wamid.INT1', type: 'other',
+      from: '5219990001012', waMessageId: 'wamid.INT1', timestampMs: 1714510003000, type: 'other',
     });
   });
 
@@ -247,10 +250,10 @@ describe('el botón convive con lo que ya entraba', () => {
     const res = await postear(cuerpo);
     await expect(res.json()).resolves.toMatchObject({ received: 2 });
     expect(processInbound).toHaveBeenNthCalledWith(1, {
-      from: '5219990001020', waMessageId: 'w1', type: 'image', mediaId: 'MEDIA-1',
+      from: '5219990001020', waMessageId: 'w1', timestampMs: 1714510003000, type: 'image', mediaId: 'MEDIA-1',
     });
     expect(processInbound).toHaveBeenNthCalledWith(2, {
-      from: '5219990001020', waMessageId: 'w2', type: 'text', text: 'cerrar_si',
+      from: '5219990001020', waMessageId: 'w2', timestampMs: 1714510004000, type: 'text', text: 'cerrar_si',
     });
   });
 

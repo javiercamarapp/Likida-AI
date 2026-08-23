@@ -31,7 +31,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ───────────────────────────────────────────────────────────────────────────
 
 const runAgent = vi.fn();
-const acquireViajeLock = vi.fn();
+// DAT-21: el processor pide el mutex del CIERRE por `intentarLockViaje`, que
+// devuelve tres estados. `acquireViajeLock` (booleano) sigue existiendo para
+// los otros llamadores y se mockea aparte para que este archivo no dependa de
+// cuál de los dos usa cada camino.
+const intentarLockViaje = vi.fn<() => Promise<'obtenido' | 'ocupado' | 'indeterminado'>>();
+/** DAT-21: desde cuándo está abierto el viaje. `null` = no se supo → fail-open. */
+const viajeAbiertoDesdeMs = vi.fn<() => Promise<number | null>>(async () => null);
 const getOpenViaje = vi.fn();
 const claimMessage = vi.fn<(id: string) => Promise<'nuevo' | 'duplicado' | 'en_curso' | 'indeterminado'>>(async () => 'nuevo');
 const releaseMessageClaim = vi.fn();
@@ -50,13 +56,15 @@ vi.mock('@/lib/likida/conv', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   resolveOperador: vi.fn(async () => ({ tenantId: 't1', operadorId: 'o1' })),
   getOpenViaje: (...a: unknown[]) => getOpenViaje(...a),
+  viajeAbiertoDesdeMs: () => viajeAbiertoDesdeMs(),
   getTenantContext: vi.fn(async () => ({ nombre: 'Flota' })),
   // `cierreSinComprobantes: true` deja pasar el freno de "cierre sin
   // comprobantes" (processor.ts): este archivo prueba el mutex del viaje, no
   // ese freno, y con `false` el "listo" nunca llegaba a correr el agente.
   loadConversation: vi.fn(async () => ({ id: 'c1', turns: [], cierreSinComprobantes: true })),
   saveConversation: vi.fn(), claimMessage: (...a: unknown[]) => claimMessage(...(a as [string])),
-  acquireViajeLock: (...a: unknown[]) => acquireViajeLock(...a),
+  intentarLockViaje: (...a: unknown[]) => intentarLockViaje(...(a as [])),
+  acquireViajeLock: async (...a: unknown[]) => (await intentarLockViaje(...(a as []))) === 'obtenido',
   releaseViajeLock: vi.fn(), releaseMessageClaim: (...a: unknown[]) => releaseMessageClaim(...a),
   completarMessageClaim: (...a: unknown[]) => completarMessageClaim(...(a as [])),
   intakeDelta: vi.fn(async () => 0), esperarIntake: vi.fn(async () => true),
@@ -104,7 +112,8 @@ const listo = { from: '5219993700779', type: 'text' as const, text: 'listo', waM
 describe('processInbound — mutex del viaje', () => {
   beforeEach(() => {
     salientes.length = 0;
-    runAgent.mockReset(); acquireViajeLock.mockReset(); getOpenViaje.mockReset();
+    runAgent.mockReset(); intentarLockViaje.mockReset(); getOpenViaje.mockReset();
+    viajeAbiertoDesdeMs.mockReset(); viajeAbiertoDesdeMs.mockResolvedValue(null);
     vi.stubGlobal('fetch', fetchSpy);
     fetchSpy.mockClear();
     process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
@@ -116,7 +125,7 @@ describe('processInbound — mutex del viaje', () => {
   it('con el lock TOMADO, corre el agente', () => {
     // Control: sin esto, un test que solo mira el caso de abandono pasaría
     // igual si el processor nunca corriera el agente.
-    acquireViajeLock.mockResolvedValue(true);
+    intentarLockViaje.mockResolvedValue('obtenido');
     return processInbound(listo).then(() => {
       expect(runAgent).toHaveBeenCalledTimes(1);
       // Y el mensaje SÍ sale, por el camino real: sin este contraste, la prueba
@@ -127,7 +136,7 @@ describe('processInbound — mutex del viaje', () => {
   });
 
   it('con el lock OCUPADO, NO corre el agente', async () => {
-    acquireViajeLock.mockResolvedValue(false);
+    intentarLockViaje.mockResolvedValue('ocupado');
     await processInbound(listo);
     expect(runAgent, 'el segundo "listo" no puede correr el agente sin mutex').not.toHaveBeenCalled();
   });
@@ -140,7 +149,7 @@ describe('processInbound — mutex del viaje', () => {
   // cuando se pierde el lock, se AVISA que se está procesando el otro mensaje y
   // se libera el claim para no dejarlo atascado.
   it('con el lock OCUPADO, avisa que ya está ocupado (no se calla) y libera el claim', async () => {
-    acquireViajeLock.mockResolvedValue(false);
+    intentarLockViaje.mockResolvedValue('ocupado');
     await processInbound(listo);
     expect(salientes, 'antes se callaba del todo; ahora avisa').toHaveLength(1);
     expect(String((salientes[0].body.text as { body: string }).body)).toMatch(/un momento|espera|proces/i);
@@ -148,9 +157,111 @@ describe('processInbound — mutex del viaje', () => {
   });
 
   it('con el lock OCUPADO, sigue sin correr el agente (no hay doble cuadre)', async () => {
-    acquireViajeLock.mockResolvedValue(false);
+    intentarLockViaje.mockResolvedValue('ocupado');
     await processInbound(listo);
     expect(runAgent, 'el mensaje que pierde el mutex no corre el agente igual').not.toHaveBeenCalled();
+  });
+
+  // ── DAT-21 · EL TERCER ESTADO, QUE ANTES SE LEÍA COMO "ES TUYO" ──────────
+  //
+  // 12 s de timeouts de la RPC devolvían `true`, y con ese `true` este camino
+  // cuadraba, imprimía los dos PDFs y CERRABA sin exclusividad ninguna — justo
+  // cuando la base estaba peor, que es cuando el doble cierre es más probable.
+  it('con el lock INDETERMINADO, NO cierra: falla cerrado', async () => {
+    intentarLockViaje.mockResolvedValue('indeterminado');
+    await processInbound(listo);
+    expect(runAgent, 'no se cierra una liquidación sin saber si otro la está cerrando')
+      .not.toHaveBeenCalled();
+  });
+
+  it('y se lo dice al operador SIN afirmar lo que no le consta', async () => {
+    intentarLockViaje.mockResolvedValue('indeterminado');
+    await processInbound(listo);
+    const texto = String((salientes[0].body.text as { body: string }).body);
+    // «estoy procesando tu mensaje anterior» sería falso: lo que pasa es que
+    // no pudimos consultar. El producto no afirma hechos que no le constan.
+    expect(texto).toMatch(/conexión falló|no pude apartar/i);
+    expect(texto).not.toMatch(/mensaje anterior/i);
+    expect(texto, 'y sus comprobantes no se perdieron').toMatch(/guardad/i);
+    expect(releaseMessageClaim, 'el claim se suelta: la bandeja lo reintenta')
+      .toHaveBeenCalledWith('wa1');
+  });
+
+  it('el cierre pide el lease de 120 s, no el default de 60', async () => {
+    // El cierre en el peor caso —cuadre + dos PDFs + subida + RPC + envío— no
+    // cabe en 60 s, y un lease que vence a media faena deja de ser un mutex.
+    intentarLockViaje.mockResolvedValue('obtenido');
+    await processInbound(listo);
+    expect(intentarLockViaje).toHaveBeenCalledWith('v1', expect.objectContaining({ ttlMs: 120_000 }));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DAT-21 · UN "LISTO" VIEJO NO CIERRA EL VIAJE DE HOY.
+//
+// La bandeja durable puede rescatar un mensaje dos vueltas de cron después de
+// que Meta lo recibió. En ese hueco caben las dos cosas que hacen falta para el
+// accidente: que la oficina cierre el viaje al que ese "listo" pertenecía, y
+// que le abra el SIGUIENTE. Cuando el mensaje por fin corre, `getOpenViaje`
+// devuelve el viaje NUEVO y el "listo" del anterior lo cierra: sin
+// comprobantes, con el anticipo entero en contra del chofer, e irreversible por
+// los triggers 0036/0037.
+//
+// La prueba de que el mensaje es de otro viaje es la hora de META (DAT-38): un
+// operador sólo puede tener UN viaje abierto a la vez (0029), así que un texto
+// recibido ANTES de que ESTE viaje se abriera es, por construcción, del anterior.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('processInbound — el "listo" que llegó tarde', () => {
+  const ABIERTO_MS = Date.UTC(2026, 7, 22, 18, 0, 0);
+  const listoViejo = { ...listo, waMessageId: 'wa-viejo', timestampMs: ABIERTO_MS - 600_000 };
+  const listoDeHoy = { ...listo, waMessageId: 'wa-hoy', timestampMs: ABIERTO_MS + 600_000 };
+
+  beforeEach(() => {
+    salientes.length = 0;
+    runAgent.mockReset(); intentarLockViaje.mockReset(); getOpenViaje.mockReset();
+    viajeAbiertoDesdeMs.mockReset();
+    vi.stubGlobal('fetch', fetchSpy);
+    fetchSpy.mockClear();
+    process.env.WHATSAPP_ACCESS_TOKEN = 'tok-de-prueba';
+    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
+    getOpenViaje.mockResolvedValue('v1');
+    intentarLockViaje.mockResolvedValue('obtenido');
+    viajeAbiertoDesdeMs.mockResolvedValue(ABIERTO_MS);
+    runAgent.mockResolvedValue({ finalText: 'Listo', toolCalls: [], model: 'm', tokensIn: 1, tokensOut: 1, costUsd: 0 });
+  });
+
+  it('un "listo" anterior a la apertura del viaje NO corre el agente', async () => {
+    await processInbound(listoViejo);
+    expect(runAgent, 'cerrar el viaje de hoy con el "listo" de ayer es irreversible')
+      .not.toHaveBeenCalled();
+  });
+
+  it('y se le explica al chofer, en vez de dejarlo esperando', async () => {
+    await processInbound(listoViejo);
+    const texto = String((salientes[0].body.text as { body: string }).body);
+    expect(texto).toMatch(/viaje anterior/i);
+    expect(texto).toMatch(/viaje nuevo/i);
+  });
+
+  it('CONTROL — el "listo" posterior a la apertura sí cierra', async () => {
+    await processInbound(listoDeHoy);
+    expect(runAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it('FAIL-OPEN — sin poder leer la apertura, no se descarta nada', async () => {
+    // Tirar un "listo" bueno deja al chofer sin cerrar y sin entender por qué;
+    // dejar pasar uno viejo es rarísimo y la re-verificación tras el mutex
+    // todavía puede atraparlo.
+    viajeAbiertoDesdeMs.mockResolvedValue(null);
+    await processInbound(listoViejo);
+    expect(runAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin hora de Meta tampoco se adivina: ni se consulta', async () => {
+    await processInbound({ ...listo, waMessageId: 'wa-sin-hora' });
+    expect(viajeAbiertoDesdeMs, 'la consulta corre SÓLO cuando puede decidir algo')
+      .not.toHaveBeenCalled();
+    expect(runAgent).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -164,7 +275,8 @@ describe('processInbound — mutex del viaje', () => {
 describe('processInbound — el resultado que decide la fila durable', () => {
   beforeEach(() => {
     salientes.length = 0;
-    runAgent.mockReset(); acquireViajeLock.mockReset(); getOpenViaje.mockReset();
+    runAgent.mockReset(); intentarLockViaje.mockReset(); getOpenViaje.mockReset();
+    viajeAbiertoDesdeMs.mockReset(); viajeAbiertoDesdeMs.mockResolvedValue(null);
     claimMessage.mockReset(); claimMessage.mockResolvedValue('nuevo');
     completarMessageClaim.mockClear(); releaseMessageClaim.mockClear();
     vi.stubGlobal('fetch', fetchSpy);
@@ -175,13 +287,13 @@ describe('processInbound — el resultado que decide la fila durable', () => {
   });
 
   it('un turno que llega al final es "procesado" y SELLA el claim como completado', async () => {
-    acquireViajeLock.mockResolvedValue(true);
+    intentarLockViaje.mockResolvedValue('obtenido');
     expect(await processInbound(listo)).toBe('procesado');
     expect(completarMessageClaim).toHaveBeenCalledWith('wa1');
   });
 
   it('con el lock OCUPADO es "reintentable": el claim se soltó y NO se completa', async () => {
-    acquireViajeLock.mockResolvedValue(false);
+    intentarLockViaje.mockResolvedValue('ocupado');
     expect(await processInbound(listo)).toBe('reintentable');
     expect(releaseMessageClaim).toHaveBeenCalledWith('wa1');
     expect(completarMessageClaim).not.toHaveBeenCalled();
