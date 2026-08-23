@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { Inbox } from 'lucide-react';
 import { EstadoVacio, StatusPill, type Estado } from '../ui/kit';
+import { numero } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TABLERO KANBAN DEL PIPELINE — compartido entre /admin/vendedores (todo
@@ -213,7 +214,7 @@ export function TableroProspectos({
             style={{ background: 'var(--canvas2)', border: '1px solid var(--line2)' }}>
             <div className="flex items-center justify-between gap-2 px-1 pb-2">
               <StatusPill estado={PILL_COLUMNA[col.estado] ?? 'neutral'}>{col.rotulo}</StatusPill>
-              <span className="text-[11px] tabular font-medium" style={{ color: 'var(--muted)' }}>{col.total}</span>
+              <span className="text-[11px] tabular font-medium" style={{ color: 'var(--muted)' }}>{numero(col.total)}</span>
             </div>
             <div className="space-y-1.5">
               {col.tarjetas.length === 0 ? (
