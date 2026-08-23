@@ -40,6 +40,8 @@ export const ROTULO_DIFERENCIA: Record<TipoDiferencia, string> = {
   fecha_sospechosa: 'Fecha sospechosa',
   folio_verificar: 'Folio por verificar',
   monto_discrepante: 'Monto discrepante',
+  monto_implausible: 'Monto fuera de escala',
+  moneda_extranjera: 'Comprobante en moneda extranjera',
   texto_sospechoso: 'Texto sospechoso en el comprobante',
   alimentacion_sin_soporte: 'Alimentación sin soporte',
   alimentacion_transporte_sin_tarjeta_credito: 'Alimentación sin tarjeta de crédito',
