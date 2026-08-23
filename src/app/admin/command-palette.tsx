@@ -210,7 +210,7 @@ export default function CommandPalette() {
         etiqueta: f.nombre,
         detalle: 'ver como — firmado',
         Icono: Eye,
-        correr: () => ir(`/dashboard?tenant=${f.id}`),
+        correr: () => ir(`/dashboard?tenant=${f.id}&rol=flota_admin`),
       })));
     }
     if (modo === 'motivo') return [];

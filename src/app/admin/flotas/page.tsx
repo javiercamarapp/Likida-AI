@@ -258,7 +258,7 @@ export default async function FlotasPage() {
                               className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
                               Ficha 360
                             </Link>
-                            <Link href={`/dashboard?tenant=${f.id}`} target="_blank"
+                            <Link href={`/dashboard?tenant=${f.id}&rol=flota_admin`} target="_blank"
                               className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
                               <ExternalLink width={11} height={11} strokeWidth={1.75} /> Panel de dueño
                             </Link>

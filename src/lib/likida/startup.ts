@@ -230,22 +230,25 @@ export async function verificarMigracionesCriticas(): Promise<void> {
       async () => {
         const PROBE = '__likida_probe_624__';
         await acotada(admin.from('tenant').delete().eq('nombre', PROBE), 'startup.0172.cleanup');
-        const { data, error } = await acotada(
-          admin.from('tenant').insert({ nombre: PROBE, regimen_fiscal: '624' }).select('id'),
-          'startup.0172',
-        );
-        if (error) {
-          if (error.code === '23514' || /tenant_regimen_fiscal_dominio|regimen_fiscal/i.test(error.message ?? '')) {
-            reportarProbe(error, 'FALTA la migración 0172 (CHECK 624 Coordinados): el catálogo del código admite 624 y la base lo rechaza. Un coordinado no puede declararse. Corre `supabase db push`.');
-            return true;
+        try {
+          const { data, error } = await acotada(
+            admin.from('tenant').insert({ nombre: PROBE, regimen_fiscal: '624' }).select('id'),
+            'startup.0172',
+          );
+          if (error) {
+            if (error.code === '23514' || /tenant_regimen_fiscal_dominio|regimen_fiscal/i.test(error.message ?? '')) {
+              reportarProbe(error, 'FALTA la migración 0172 (CHECK 624 Coordinados): el catálogo del código admite 624 y la base lo rechaza. Un coordinado no puede declararse. Corre `supabase db push`.');
+              return true;
+            }
+            if (error.code) reportarProbe(error, `Sondeo 0172 (CHECK 624) contestó ${error.code}: ${error.message ?? ''}`);
+            return false;
           }
-          if (error.code) reportarProbe(error, `Sondeo 0172 (CHECK 624) contestó ${error.code}: ${error.message ?? ''}`);
+          const id = Array.isArray(data) ? data[0]?.id : undefined;
+          if (id) await acotada(admin.from('tenant').delete().eq('id', id), 'startup.0172.cleanup');
           return false;
+        } finally {
+          await acotada(admin.from('tenant').delete().eq('nombre', PROBE), 'startup.0172.cleanup');
         }
-        const id = Array.isArray(data) ? data[0]?.id : undefined;
-        if (id) await acotada(admin.from('tenant').delete().eq('id', id), 'startup.0172.cleanup');
-        else await acotada(admin.from('tenant').delete().eq('nombre', PROBE), 'startup.0172.cleanup');
-        return false;
       },
     ];
 

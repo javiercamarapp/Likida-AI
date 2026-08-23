@@ -7093,7 +7093,7 @@ declare
   pmf_una boolean; pmf_todas boolean; pmf_sin_mezcla boolean; demo_no_cuenta boolean;
   rastreo_n int; rastreo_max boolean;
   p95 numeric; consumo_ok boolean;
-  storage_borrados bigint;
+  storage_borrados bigint; storage_borrados_sql bigint;
   queda_viva boolean; queda_reciente boolean; queda_sin_viaje boolean;
   queda_espera boolean; queda_historico boolean; queda_informe_vivo boolean;
   anon_ok boolean;
@@ -7202,6 +7202,10 @@ begin
   -- `storage_borrado.ts` (que tiene sus propias pruebas).
   res := public.limpiar_storage_huerfano(7, 100000, now(), clock_timestamp() + interval '120 seconds');
   storage_borrados := (res->>'marcados')::bigint;
+  -- Se reporta TAMBIÉN `borrados`, que la 0165 fija en 0: así el mensaje deja
+  -- constancia explícita de que esta función ya no borra desde SQL, en vez de
+  -- que haya que acordárselo. (Idea de la rama fix/panel-dueno-onboarding.)
+  storage_borrados_sql := coalesce((res->>'borrados')::bigint, -1);
 
   select exists (select 1 from storage.objects where name = v_t::text || '/' || v_v::text || '/viva.jpg')
     into queda_viva;
@@ -7224,9 +7228,9 @@ begin
       or has_function_privilege('anon', 'public.limpiar_storage_huerfano(integer, integer, timestamptz, timestamptz)', 'EXECUTE')
     into anon_ok;
 
-  raise exception E'PMF_STORAGE_0162  pmf_una=%  pmf_todas=%  pmf_sin_mezcla=%  demo_no_cuenta=%  rastreo_n=%  rastreo_max=%  p95=%  consumo=%  storage_marcados=%  viva=%  reciente=%  sin_viaje=%  espera=%  historico=%  informe_vivo=%  anon=%   (esperado t / t / t / t / 2 / t / 19 / t / 4 / t / t / t / t / t / t / f)',
+  raise exception E'PMF_STORAGE_0162  pmf_una=%  pmf_todas=%  pmf_sin_mezcla=%  demo_no_cuenta=%  rastreo_n=%  rastreo_max=%  p95=%  consumo=%  storage_marcados=%  storage_borrados=%  viva=%  reciente=%  sin_viaje=%  espera=%  historico=%  informe_vivo=%  anon=%   (esperado t / t / t / t / 2 / t / 19 / t / 4 / 0 / t / t / t / t / t / t / f)',
     pmf_una, pmf_todas, pmf_sin_mezcla, demo_no_cuenta, rastreo_n, rastreo_max,
-    p95, consumo_ok, storage_borrados,
+    p95, consumo_ok, storage_borrados, storage_borrados_sql,
     queda_viva, queda_reciente, queda_sin_viaje, queda_espera, queda_historico, queda_informe_vivo,
     anon_ok;
 end $$;
