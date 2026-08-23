@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { Upload, Play, Trash2, Plus, Loader2 } from 'lucide-react';
 import { TituloSeccion } from '../../dashboard/resumen-visual';
 import { escenarioPorId, ESCENARIOS_QA } from '@/lib/admin/qa-escenarios';
+import { usd, usd4 } from '@/lib/formato';
 import {
   validarLanzar, MAX_FOTOS_CARRIL_RAPIDO,
   type EscenarioId, type FotoBanco,
@@ -129,7 +130,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
   const validacion = validarLanzar(cuerpoLanzar);
   const motivoBloqueo =
     gastoError !== null ? 'no se pudo leer el gasto del día — no se lanza a ciegas'
-    : gastoHoyUsd !== null && gastoHoyUsd >= topeDiaUsd ? `el gasto de hoy (US$${gastoHoyUsd.toFixed(4)}) ya tocó el tope diario (US$${topeDiaUsd.toFixed(2)})`
+    : gastoHoyUsd !== null && gastoHoyUsd >= topeDiaUsd ? `el gasto de hoy (${usd4(gastoHoyUsd)}) ya tocó el tope diario (${usd(topeDiaUsd)})`
     : bancoError !== null ? 'el banco de fotos no se pudo leer'
     : !validacion.ok ? validacion.error
     : null;
