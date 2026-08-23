@@ -15,7 +15,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const getSerieComparativa = vi.fn();
 vi.mock('@/lib/likida/analytics', () => ({ getSerieComparativa: (...a: unknown[]) => getSerieComparativa(...a) }));
 
-const { getViajesPorDia, sumarUltimos, DIAS_SERIE } = await import('./serie-diaria');
+const { sumarUltimos, DIAS_SERIE } = await import('./serie-diaria');
+// La LECTURA vive aparte: `serie-diaria.ts` lo importan dos Client Components
+// y no puede arrastrar `analytics.ts` (supabaseAdmin → sharp) al navegador.
+const { getViajesPorDia } = await import('./serie-diaria-servidor');
 
 /** Como la devuelve la RPC: paso 0 = el más reciente. */
 function paso(desde: string, totalViajes: number, viajesLiquidados: number) {

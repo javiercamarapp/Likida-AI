@@ -1,7 +1,13 @@
-import { getSerieComparativa } from '@/lib/likida/analytics';
-
 // ═══════════════════════════════════════════════════════════════════════════
-// LOS VIAJES POR DÍA, CONTADOS EN SQL (FE-5, 22-ago-2026)
+// LOS VIAJES POR DÍA, CONTADOS EN SQL (FE-5, 22-ago-2026) — LA PARTE PURA
+//
+// Este archivo NO importa nada: lo consumen `avance-cierre.tsx` y
+// `actividad.tsx`, que son Client Components. La LECTURA vive en
+// `serie-diaria-servidor.ts` a propósito — importar `analytics.ts` desde aquí
+// arrastraría `supabaseAdmin` (y con él `sharp`) al bundle del navegador, que
+// es exactamente lo que el encabezado de `supabase/admin.ts` prohíbe. El
+// build lo atrapó: "Reading from node:crypto is not handled by plugins",
+// vía avance-cierre → serie-diaria → analytics → engine → cfdi → sharp.
 //
 // "Actividad — últimos 7 días" y "Avance de cierre" se calculaban en el
 // navegador sobre `getViajes(tenantId, 100)`: las 100 filas MÁS RECIENTES.
@@ -33,28 +39,6 @@ export interface DiaViajes {
 /** Cuántos días trae la serie. 30 cubre las dos vistas del panel (semanal
  *  toma los últimos 7 de estos mismos 30) con UNA sola lectura. */
 export const DIAS_SERIE = 30;
-
-/**
- * Un bucket por día, del más viejo al más reciente (el orden en que se
- * dibuja la gráfica). `hoy` llega como `AAAA-MM-DD` en día de MÉXICO — el
- * mismo criterio de `hoyMx`: a las 6pm de CDMX, UTC ya dice mañana.
- *
- * LANZA si la lectura falla (`getSerieComparativa` ya lo hace, incluida la
- * comprobación de forma contra una 0112 sin aplicar). El llamador la envuelve
- * en su `safe()` y la tarjeta dice "no se pudo cargar" — nunca una gráfica en
- * ceros, que se lee como una flota parada.
- */
-export async function getViajesPorDia(
-  tenantId: string,
-  hoy: string,
-  dias: number = DIAS_SERIE,
-): Promise<DiaViajes[]> {
-  // `paso` 0 es el más reciente; la gráfica se lee al revés.
-  const serie = await getSerieComparativa(tenantId, 1, dias, hoy);
-  return serie
-    .map((p) => ({ dia: p.desde, viajes: p.totalViajes, liquidados: p.viajesLiquidados }))
-    .reverse();
-}
 
 /** Suma los últimos `n` días de la serie (la cola, que es la más reciente).
  *  Pura, para que las dos vistas del selector no cuesten una consulta cada
