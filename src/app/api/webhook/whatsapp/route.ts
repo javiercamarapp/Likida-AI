@@ -10,7 +10,7 @@ import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { flushObservabilidad, codigoDeError } from '@/lib/observability/sentry';
 import { estaApagado } from '@/lib/likida/interruptores';
-import { guardarEventosPendientes, reclamarPendiente, marcarPendienteProcesado, anotarFalloPendiente } from '@/lib/likida/wa_pendientes';
+import { guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente, marcarPendienteProcesado, anotarFalloPendiente } from '@/lib/likida/wa_pendientes';
 
 const MAX_BODY = 256 * 1024;   // 256 KB — un webhook de Meta es pequeño
 const MSGS_POR_MIN = 40;        // por teléfono (una ráfaga de 12 fotos cabe holgada)
@@ -154,9 +154,35 @@ export async function POST(req: NextRequest) {
   // LO QUE ESTO NO CIERRA: si Meta acaba dándose por vencido, el comprobante se
   // pierde y desde aquí no hay forma de enterarse. Por eso el log conserva el
   // `waMessageId` — es lo único que permite cruzarlo contra la base después.
+  //
+  // ── DAT-34 · DEDUPLICAR ANTES DE COBRAR EL CUPO ───────────────────────────
+  //
+  // El límite corría ANTES de cualquier deduplicación, y eso volvía trampa el
+  // arreglo de arriba. Meta reentrega el POST COMPLETO, no el resto: los
+  // mensajes que YA se guardaron en la bandeja durable en la entrega anterior
+  // vuelven a gastar sus cupos de la ventana, y los nuevos —que son los que
+  // traen el comprobante que falta— se vuelven a diferir. Cada reentrega repite
+  // el ciclo hasta que Meta se rinde, y ahí sí se pierden.
+  //
+  // Un mensaje que ya está en `wa_evento_pendiente` no cuesta trabajo nuevo: su
+  // fila existe, el cron la drena y `claimMessage` lo trata como duplicado.
+  // Cobrarle cupo es cobrarle dos veces por el mismo mensaje, y quien paga la
+  // cuenta es el comprobante nuevo. `pendientesYaConocidos` es FAIL-OPEN: si no
+  // se puede leer, el límite se aplica a todos, como antes.
+  const yaEnBandeja = await pendientesYaConocidos(
+    messages.map((m) => m.waMessageId ?? '').filter(Boolean),
+  );
   const permitidos: InboundMessage[] = [];
   const diferidos: InboundMessage[] = [];
   for (const m of messages) {
+    if (m.waMessageId && yaEnBandeja.has(m.waMessageId)) {
+      // Ya guardado en una entrega anterior: pasa sin cobrar cupo. Se procesa
+      // igual —es más rápido que esperar al cron— y el claim de su fila durable
+      // impide que se haga dos veces.
+      logger.info('wa.reentrega_ya_en_bandeja', { id: m.waMessageId });
+      permitidos.push(m);
+      continue;
+    }
     if (await rateLimit(`wa:${m.from}`, MSGS_POR_MIN, 60_000)) { permitidos.push(m); continue; }
     diferidos.push(m);
     // WARN y no ERROR: ya no es un comprobante perdido, es uno que vuelve. Con

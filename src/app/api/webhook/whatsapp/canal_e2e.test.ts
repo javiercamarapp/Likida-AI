@@ -137,6 +137,9 @@ vi.mock('@/lib/observability/sentry', () => ({
 // (su propio contrato vive en apagado.test.ts + wa-pendientes).
 const { bandejaInbox } = vi.hoisted(() => ({ bandejaInbox: new Map<string, unknown>() }));
 vi.mock('@/lib/likida/wa_pendientes', () => ({
+  // DAT-34: la deduplicación previa al rate limit. Vacío = ninguno de estos
+  // wamids estaba ya en la bandeja, que es el caso de una entrega normal.
+  pendientesYaConocidos: async () => new Set<string>(),
   // El inbox general (16-ago-2026): el E2E pasa por persistir → reclamar →
   // procesar, como producción.
   guardarEventosPendientes: vi.fn(async (ms: Array<{ waMessageId?: string }>) => {
