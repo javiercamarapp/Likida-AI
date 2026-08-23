@@ -551,11 +551,13 @@ export async function ConsolaAdmin({
                         <td className="px-4 py-2.5 text-right tabular">{usd(f.costoIaUsd)}</td>
                         <td className="px-4 py-2.5 text-right">
                           {/* Los TRES paneles del cliente, con la sesión del
-                              superadmin (`?tenant=`): dueño, jefe de tráfico
-                              y contador — el contador vive en su propia
-                              ruta, ver selector-vista.tsx. */}
+                              superadmin (`?tenant=`). El dueño LLEVA
+                              `?rol=flota_admin`: sin él el superadmin no entra
+                              al chat de perfil (dashboard/page.tsx solo
+                              redirige a onboarding si el rol efectivo es
+                              flota_admin). Jefe y contador ya traían `?rol=`. */}
                           <div className="inline-flex items-center gap-1.5">
-                            <Link href={`/dashboard?tenant=${f.id}`} target="_blank"
+                            <Link href={`/dashboard?tenant=${f.id}&rol=flota_admin`} target="_blank"
                               className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
                               <ExternalLink width={11} height={11} strokeWidth={1.75} /> Panel de dueño
                             </Link>

@@ -224,7 +224,7 @@ export default async function TrazaCorridaPage({
             <TituloSeccion>Seguir la pista</TituloSeccion>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 mt-2">
               {c.tenantId !== null && (
-                <Link href={`/dashboard?tenant=${c.tenantId}`}
+                <Link href={`/dashboard?tenant=${c.tenantId}&rol=flota_admin`}
                   className="hairline rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--canvas)]"
                   style={{ background: 'var(--surface)' }}>
                   <div className="text-[13px] font-medium inline-flex items-center gap-1.5">

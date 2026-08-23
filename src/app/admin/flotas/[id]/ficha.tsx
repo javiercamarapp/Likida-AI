@@ -33,7 +33,7 @@ export function Ficha360({ f }: { f: FichaCliente }) {
           icono={<Building2 {...ICONO} style={{ color: 'var(--muted)' }} />}
           titulo={`Ficha del cliente — ${f.tenant.nombre}`}
           derecha={
-            <Link href={`/dashboard?tenant=${f.tenant.id}`}
+            <Link href={`/dashboard?tenant=${f.tenant.id}&rol=flota_admin`}
               className="hairline text-[12px] font-medium px-3 py-1.5 rounded-full transition-colors hover:bg-[var(--canvas)]"
               style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
               Ver su panel →

@@ -13,30 +13,22 @@
 # una rama de trabajo en curso. Semanal además, por si algo nuevo en las
 # consultas de CodeQL encuentra algo en código que no cambió esta semana.
 #
-# ⚠️ 23-AGO-2026 — DESACTIVADO, y no por decisión de diseño: en este repo
-# CodeQL no puede correr. Falla con "Code scanning is not enabled for this
-# repository", y habilitarlo exige GitHub Advanced Security COMPRADA (la API
-# responde 422 "Advanced security has not been purchased"). Llevaba días en
-# rojo, y un check rojo permanente enseña al equipo a ignorar la pestaña
-# entera — así fue como pasó desapercibido que CI Postgres también lo estaba.
+# 23-AGO-2026 — REACTIVADO. Estuvo unas horas desactivado porque en repo
+# PRIVADO exige GitHub Advanced Security comprada (la API contesta 422). Al
+# volverse público el análisis de código es gratis, así que vuelve a correr en
+# cada push y en cada PR.
 #
-# MIENTRAS TANTO el análisis estático de seguridad vive en el lint, que sí
-# corre en cada push: `eslint-plugin-security` con las reglas elegidas una por
-# una en `eslint.config.mjs` (eval, require dinámico, child_process, ReDoS,
-# comparaciones de secretos sensibles al tiempo, aleatoriedad no criptográfica).
-# Y lo que CodeQL vigilaría de las regex lo mide `regex_sin_redos.test.ts`,
-# que en vez de adivinar por la forma prueba con entrada adversarial.
-#
-# PARA REACTIVARLO cuando se compre Advanced Security: habilitar Code scanning
-# en Settings → Code security, y devolver los disparadores `push`/`pull_request`
-# de abajo (hoy queda solo el manual, para poder probarlo sin ensuciar).
+# NO SUSTITUYE al análisis del lint, lo complementa: `eslint-plugin-security`
+# (reglas elegidas una por una en `eslint.config.mjs`) corre en cada push y es
+# lo que quedó cubriendo el hueco; y lo de las regex lo mide de verdad
+# `regex_sin_redos.test.ts`, con entrada adversarial en vez de por la forma.
 name: CodeQL
 
 on:
   workflow_dispatch:
-  # push:
-  #   branches: [master, main]
-  # pull_request:
+  push:
+    branches: [master, main]
+  pull_request:
     branches: [master, main]
   schedule:
     - cron: '17 4 * * 1' # lunes, hora de bajo tráfico — el minuto 17 evita la estampida de "en punto" que satura los runners compartidos de GitHub
