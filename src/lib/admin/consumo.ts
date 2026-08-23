@@ -49,28 +49,52 @@ export async function getConsumoPorAgente(ahoraMs: number): Promise<ConsumoPorAg
   const diaHoy = hoyMx(new Date(ahoraMs));
   const inicioHoy = new Date(`${diaHoy}T00:00:00-06:00`).toISOString();
 
-  const [{ data: defs, error: e1 }, { data: corridas, error: e2 }] = await Promise.all([
+  const [{ data: defs, error: e1 }, { data: consumo, error: e2 }] = await Promise.all([
     acotada(supabaseAdmin().from('agente_definicion')
       .select('id, nombre, estado, runner_habilitado, presupuesto_dia_usd')
       .order('id'), 'consumo.definiciones'),
-    acotada(supabaseAdmin().from('agente_corrida')
-      .select('agente, estado, inicio, costo_usd')
-      .gte('inicio', hace30d)
-      .limit(5000), 'consumo.corridas'),
+    // ── FE-8 · EL DINERO NO SE MUESTREA ──────────────────────────────────
+    //
+    // Esto era `.select(...).gte('inicio', hace30d).limit(5000)` y sumaba en
+    // JS. Dos cosas mal a la vez:
+    //   1. PostgREST recorta a `max_rows` = 1,000 EN SILENCIO, así que el
+    //      límite real nunca fue 5,000.
+    //   2. SIN `order`, esas 1,000 filas son las que la base devolvió
+    //      primero — un conjunto ARBITRARIO. El panel decía "gastó $X en 30
+    //      días" sobre una muestra que nadie eligió, y con el crecimiento la
+    //      cifra no se iba a poner imprecisa: se iba a congelar en la
+    //      primera página.
+    // `consumo_agentes()` (mig. 0162) agrupa en la base y cruza la red un
+    // arreglo del tamaño del CATÁLOGO de agentes (seis), no del historial.
+    acotada(supabaseAdmin().rpc('consumo_agentes', {
+      p_desde: hace30d,
+      p_inicio_hoy: inicioHoy,
+    }), 'consumo.corridas'),
   ]);
   if (e1) throw new Error(`getConsumoPorAgente.definiciones: ${e1.message}`);
   if (e2) throw new Error(`getConsumoPorAgente.corridas: ${e2.message}`);
 
-  const filas = (corridas ?? []) as Array<{ agente: string; estado: string; inicio: string; costo_usd: unknown }>;
+  // Fallar cerrado también ante la FORMA: si la 0162 no está aplicada, `data`
+  // llega como cualquier otra cosa y cada `?? 0` de abajo pintaría "gastó
+  // $0.00" — que en un panel de gasto se lee como "la IA salió gratis".
+  if (!Array.isArray(consumo)) {
+    throw new Error(
+      'getConsumoPorAgente.corridas: consumo_agentes devolvió otra forma (¿migración 0162 sin aplicar?). '
+      + 'No se pinta un panel de gasto a medias.',
+    );
+  }
   const porAgente = new Map<string, { g30: number; hoy: number; n: number; fallos: number }>();
-  for (const c of filas) {
-    const a = porAgente.get(c.agente) ?? { g30: 0, hoy: 0, n: 0, fallos: 0 };
-    const costo = Number(c.costo_usd ?? 0);
-    a.n += 1;
-    a.g30 += costo;
-    if (c.inicio >= inicioHoy) a.hoy += costo;
-    if (c.estado === 'fallo') a.fallos += 1;
-    porAgente.set(c.agente, a);
+  for (const f of consumo as Array<Record<string, unknown>>) {
+    const agente = typeof f.agente === 'string' ? f.agente : '';
+    if (!agente) continue;
+    porAgente.set(agente, {
+      // `n` y `fallos` son conteos; `g30`/`hoy` son `numeric` sumados en la
+      // base — `Number(...)` porque un numeric grande puede llegar como texto.
+      n: Number(f.n ?? 0),
+      fallos: Number(f.fallos ?? 0),
+      g30: Number(f.g30 ?? 0),
+      hoy: Number(f.hoy ?? 0),
+    });
   }
 
   const agentes: ConsumoAgente[] = ((defs ?? []) as Array<{ id: string; nombre: string; estado: string; runner_habilitado: boolean; presupuesto_dia_usd: number | null }>)

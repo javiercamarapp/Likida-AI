@@ -11,58 +11,83 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //   3. Fallar cerrado: un error de lectura LANZA; jamás se degrada a "cero".
 // ═══════════════════════════════════════════════════════════════════════════
 
-type Resp = { count: number | null; error: { message: string } | null };
+type Resp = { data: unknown; error: { message: string } | null };
 
-/** Responde por (tabla + filtros aplicados). Cada prueba lo programa. */
-let responder: (tabla: string, filtros: string[]) => Resp;
+/** Lo que devuelve `senales_pmf(p_tenant)`. Cada prueba lo programa. */
+let responder: (p_tenant: string | null) => Resp;
+/** Los argumentos con los que se llamó al RPC — para probar que va UNA vez. */
+let llamadas: Array<{ fn: string; args: unknown }>;
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
-    from(tabla: string) {
-      const filtros: string[] = [];
-      const cadena = {
-        select: () => cadena,
-        eq: (c: string, v: unknown) => { filtros.push(`eq:${c}=${String(v)}`); return cadena; },
-        neq: (c: string, v: unknown) => { filtros.push(`neq:${c}=${String(v)}`); return cadena; },
-        not: (c: string, op: string, v: unknown) => { filtros.push(`not:${c}:${op}:${String(v)}`); return cadena; },
-        is: (c: string, v: unknown) => { filtros.push(`is:${c}=${String(v)}`); return cadena; },
+    rpc(fn: string, args: { p_tenant: string | null }) {
+      llamadas.push({ fn, args });
+      return {
         then: (res: (r: Resp) => unknown, rej: (e: unknown) => unknown) =>
-          Promise.resolve().then(() => responder(tabla, filtros)).then(res, rej),
+          Promise.resolve().then(() => responder(args.p_tenant)).then(res, rej),
       };
-      return cadena;
     },
   }),
 }));
 
-const { getSenalesPmf, agregarSenalesPmf } = await import('./pmf');
+const { getSenalesPmf, getSenalesPmfTodas, agregarSenalesPmf } = await import('./pmf');
 
-/** Un respondedor con los conteos de una flota "normal", para partir de ahí. */
-function conteos(v: {
+/** Una fila de la RPC: los siete conteos de una flota, con ceros por default. */
+function fila(tenantId: string, v: {
   liquidaciones?: number; descargadas?: number; porCliente?: number;
   liquidados?: number; sinRecordatorio?: number;
   tickets?: number; delCliente?: number;
-}): (tabla: string, filtros: string[]) => Resp {
-  return (tabla, filtros) => {
-    const f = filtros.join('|');
-    if (tabla === 'liquidacion') {
-      if (f.includes('neq:primera_descarga_rol')) return { count: v.porCliente ?? 0, error: null };
-      if (f.includes('not:primera_descarga_en')) return { count: v.descargadas ?? 0, error: null };
-      return { count: v.liquidaciones ?? 0, error: null };
-    }
-    if (tabla === 'viaje') {
-      if (f.includes('is:recordatorio_comprobacion_en')) return { count: v.sinRecordatorio ?? 0, error: null };
-      return { count: v.liquidados ?? 0, error: null };
-    }
-    if (tabla === 'ticket_soporte') {
-      if (f.includes('not:abierto_por')) return { count: v.delCliente ?? 0, error: null };
-      return { count: v.tickets ?? 0, error: null };
-    }
-    throw new Error(`tabla inesperada: ${tabla}`);
+} = {}) {
+  return {
+    tenantId,
+    liquidaciones: v.liquidaciones ?? 0,
+    descargadas: v.descargadas ?? 0,
+    porCliente: v.porCliente ?? 0,
+    liquidados: v.liquidados ?? 0,
+    sinRecordatorio: v.sinRecordatorio ?? 0,
+    tickets: v.tickets ?? 0,
+    delCliente: v.delCliente ?? 0,
   };
 }
 
+/** El respondedor de una sola flota `t-1` con esos conteos. */
+function conteos(v: Parameters<typeof fila>[1]): (p: string | null) => Resp {
+  return () => ({ data: [fila('t-1', v)], error: null });
+}
+
 beforeEach(() => {
+  llamadas = [];
   responder = conteos({});
+});
+
+describe('ESC-9 · las siete lecturas son UNA sola consulta', () => {
+  it('una flota: un solo rpc, con su p_tenant — no siete count exact', async () => {
+    responder = conteos({ liquidaciones: 2 });
+    await getSenalesPmf('t-1');
+    expect(llamadas).toEqual([{ fn: 'senales_pmf', args: { p_tenant: 't-1' } }]);
+  });
+
+  it('todas las flotas: un solo rpc con p_tenant en null, no uno por flota', async () => {
+    responder = () => ({
+      data: [fila('t-1', { liquidaciones: 4, descargadas: 2, porCliente: 2 }), fila('t-2', { tickets: 1 })],
+      error: null,
+    });
+    const m = await getSenalesPmfTodas();
+    expect(llamadas).toEqual([{ fn: 'senales_pmf', args: { p_tenant: null } }]);
+    expect(m.get('t-1')!.descargas).toEqual({ medida: true, liquidaciones: 4, descargadas: 2, porCliente: 2, soloDemo: 0 });
+    expect(m.get('t-2')!.tickets).toEqual({ medida: true, delCliente: 0, deLikida: 1 });
+    // La flota que la RPC no devuelve NO está en el mapa: el llamador la lee
+    // como "sin datos", que es distinto de "no se pudo leer".
+    expect(m.has('t-3')).toBe(false);
+  });
+
+  it('una flota que la RPC no devuelve (ni una fila en las tres tablas) sale SIN DATOS, no en ceros', async () => {
+    responder = () => ({ data: [], error: null });
+    const s = await getSenalesPmf('t-1');
+    expect(s.descargas.medida).toBe(false);
+    expect(s.comprobacionSola.medida).toBe(false);
+    expect(s.tickets.medida).toBe(false);
+  });
 });
 
 describe('sin datos se dice "sin datos", nunca un cero con cara de medición', () => {
@@ -113,17 +138,19 @@ describe('las otras dos señales leen columnas que ya existían', () => {
 
 describe('fallar cerrado: un error de lectura LANZA, no pinta ceros', () => {
   it('con la base reportando error POR VALOR, la función revienta con la consulta en el mensaje', async () => {
-    responder = (tabla) => tabla === 'viaje'
-      ? { count: null, error: { message: 'fetch failed' } }
-      : { count: 0, error: null };
-    await expect(getSenalesPmf('t-1')).rejects.toThrow(/senalesPmf\..*fetch failed/);
+    responder = () => ({ data: null, error: { message: 'fetch failed' } });
+    await expect(getSenalesPmf('t-1')).rejects.toThrow(/senales_pmf: fetch failed/);
+    await expect(getSenalesPmfTodas()).rejects.toThrow(/senales_pmf: fetch failed/);
   });
 
-  it('un count nulo SIN error tampoco se lee como cero: PostgREST solo manda el conteo si pudo contar', async () => {
-    responder = (tabla, filtros) => tabla === 'liquidacion' && filtros.length === 1
-      ? { count: null, error: null }
-      : { count: 0, error: null };
-    await expect(getSenalesPmf('t-1')).rejects.toThrow(/no se inventa un 0/);
+  it('una respuesta que no es un arreglo (la 0162 sin aplicar) LANZA: un cero aquí diría "no lo usan"', async () => {
+    responder = () => ({ data: null, error: null });
+    await expect(getSenalesPmf('t-1')).rejects.toThrow(/0162 sin aplicar/);
+  });
+
+  it('una fila sin los siete conteos también LANZA — media señal no se pinta', async () => {
+    responder = () => ({ data: [{ tenantId: 't-1', liquidaciones: 3 }], error: null });
+    await expect(getSenalesPmf('t-1')).rejects.toThrow(/no trae los siete conteos/);
   });
 });
 

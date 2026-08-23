@@ -22,12 +22,6 @@ export interface Slo {
 
 const MUESTRA_MINIMA = 5;
 
-function p95(valores: number[]): number | null {
-  if (valores.length === 0) return null;
-  const orden = [...valores].sort((a, b) => a - b);
-  return orden[Math.min(orden.length - 1, Math.ceil(orden.length * 0.95) - 1)];
-}
-
 export async function getSLOs(): Promise<Slo[]> {
   const admin = supabaseAdmin();
   const hace30d = new Date(ahoraMs() - 30 * 86_400_000).toISOString();
@@ -35,27 +29,40 @@ export async function getSLOs(): Promise<Slo[]> {
   const hace24h = new Date(ahoraMs() - 86_400_000).toISOString();
   const out: Slo[] = [];
 
-  // ── 1. Corridas de agentes: tasa de éxito ≥95% (30d) ────────────────────
+  // ── 1 y 2. Corridas de agentes: tasa de éxito ≥95% y p95 ≤ 120 s (30d) ──
+  //
+  // FE-8: esto leía `agente_corrida` con `.limit(5000)` y SIN `order`, y
+  // calculaba los dos SLO en JS. PostgREST recorta a 1,000 filas EN SILENCIO,
+  // así que el límite real nunca fue 5,000; y sin `order`, esas 1,000 son las
+  // que la base devolvió primero — un conjunto ARBITRARIO. Un SLO medido
+  // sobre una muestra que nadie eligió no es una medición, y este panel se
+  // pinta verde o rojo con ella.
+  //
+  // `slo_agente_corrida()` (mig. 0162) cuenta y calcula el p95 en la base con
+  // `percentile_disc`, que es el MISMO estadístico que hacía el JS (rango más
+  // cercano: un valor que de verdad ocurrió, no una interpolación).
   try {
-    const { data, error } = await admin.from('agente_corrida')
-      .select('estado, inicio, fin').gte('inicio', hace30d).limit(5000);
+    const { data, error } = await admin.rpc('slo_agente_corrida', { p_desde: hace30d });
     if (error) throw new Error(error.message);
-    const total = (data ?? []).length;
-    const ok = (data ?? []).filter((f) => f.estado === 'ok').length;
+    const r = data as Record<string, unknown> | null;
+    const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    const total = num(r?.total);
+    const ok = num(r?.ok);
+    const medibles = num(r?.medibles);
+    // `p95Segundos` viene NULL cuando no hay ni una corrida medible — eso NO
+    // es un error de forma, es la ausencia de muestra, y se dice abajo.
+    const p = r?.p95Segundos === null || r?.p95Segundos === undefined ? null : Number(r.p95Segundos);
+    if (total === null || ok === null || medibles === null) {
+      throw new Error('slo_agente_corrida devolvió otra forma (¿migración 0162 sin aplicar?)');
+    }
     if (total < MUESTRA_MINIMA) {
       out.push({ clave: 'agentes_exito', nombre: 'Corridas de agentes exitosas', objetivo: '≥ 95%', medido: `${total} corridas — muestra insuficiente (mínimo ${MUESTRA_MINIMA})`, cumple: null, ventana: '30 días' });
     } else {
       const pct = Math.round((ok / total) * 1000) / 10;
       out.push({ clave: 'agentes_exito', nombre: 'Corridas de agentes exitosas', objetivo: '≥ 95%', medido: `${pct}% (${ok}/${total})`, cumple: pct >= 95, ventana: '30 días' });
     }
-    // ── 2. p95 de duración de corridas OK ≤ 120 s ─────────────────────────
-    const duraciones = (data ?? [])
-      .filter((f) => f.estado === 'ok' && f.fin)
-      .map((f) => (Date.parse(f.fin as string) - Date.parse(f.inicio as string)) / 1000)
-      .filter((s) => Number.isFinite(s) && s >= 0);
-    const p = p95(duraciones);
-    if (p === null || duraciones.length < MUESTRA_MINIMA) {
-      out.push({ clave: 'agentes_p95', nombre: 'p95 de duración de corrida', objetivo: '≤ 120 s', medido: `${duraciones.length} corridas medibles — muestra insuficiente`, cumple: null, ventana: '30 días' });
+    if (p === null || !Number.isFinite(p) || medibles < MUESTRA_MINIMA) {
+      out.push({ clave: 'agentes_p95', nombre: 'p95 de duración de corrida', objetivo: '≤ 120 s', medido: `${medibles} corridas medibles — muestra insuficiente`, cumple: null, ventana: '30 días' });
     } else {
       out.push({ clave: 'agentes_p95', nombre: 'p95 de duración de corrida', objetivo: '≤ 120 s', medido: `${Math.round(p)} s`, cumple: p <= 120, ventana: '30 días' });
     }

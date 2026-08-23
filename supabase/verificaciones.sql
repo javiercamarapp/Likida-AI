@@ -6994,3 +6994,192 @@ begin
   raise exception E'FECHAS_LOCALES_0161  mx_19=%  utc_19=%  difieren=%  vista_sin_current_date=%  vista_con_zona=%  vista_invoker=%  defaults_mx=%  vence_hoy_no_vencida=%  vencio_ayer_si=%   (esperado 2026-12-31 / 2027-01-01 / t / t / t / t / 4 / f / t)',
     mx_19, utc_19, difieren, sin_current_date, con_zona, invoker, defaults_mx, vencida_hoy, vencida_ayer;
 end $$;
+
+-- ── 134. La consola cuenta en la base y Storage se limpia sin llevarse la evidencia (mig. 0162) ──
+-- ESC-9 / ESC-11 / FE-8 / DAT-35. Cinco funciones nuevas, y de las cinco lo que
+-- solo Postgres puede demostrar:
+--
+--   A · `senales_pmf` agrega bien y NO MEZCLA FLOTAS, con `p_tenant` y sin él.
+--       El `<> 'superadmin'` es el que traduce el `.neq` de PostgREST: una
+--       descarga SIN rol no cuenta como "por cliente" (NULL <> x es NULL).
+--   B · `estado_rastreo_tenant` cuenta unidades DISTINTAS y toma el máximo,
+--       de UNA flota.
+--   C · `slo_agente_corrida` calcula el p95 por RANGO MÁS CERCANO
+--       (`percentile_disc`), que es el mismo estadístico que hacía el JS —
+--       `percentile_cont` habría movido la cifra del SLO. Con 20 duraciones
+--       1..20 s, el p95 es 19, no 19.05.
+--   D · `consumo_agentes` suma el gasto de 30 días y el subtotal de HOY por
+--       separado, y `costo_usd` NULL (corridas anteriores a la 0123) suma 0.
+--   E · `limpiar_storage_huerfano` — LA IMPORTANTE, porque un falso positivo
+--       aquí DESTRUYE EVIDENCIA FISCAL (CFF art. 30: cinco años). Se siembran
+--       diez objetos y se afirma cuáles cuatro se van y cuáles seis se quedan:
+--         se van   · la foto de un viaje BORRADO
+--                  · la foto de una flota BORRADA
+--                  · el PDF `-operador` de un viaje borrado (a ese no lo
+--                    nombra ninguna columna: es el que solo la estructura
+--                    puede juzgar)
+--                  · el informe de una flota borrada
+--         se quedan· la foto de un viaje VIVO
+--                  · una foto reciente (dentro de la gracia de 7 días) aunque
+--                    su viaje no exista: `subirComprobante` sube ANTES de que
+--                    exista la fila del gasto
+--                  · la foto en `sin-viaje` de la sala de espera
+--                  · la foto de un viaje borrado que `comprobante_huerfano`
+--                    todavía nombra (su `viaje_id` es `on delete set null`)
+--                  · el PDF que `liquidacion_historico` nombra (papel emitido)
+--                  · EL INFORME DE UNA FLOTA VIVA — `informes/{tenant}/...`
+--                    mete la flota en el SEGUNDO segmento, que es donde otras
+--                    rutas traen el VIAJE: leerlo como viaje habría borrado
+--                    todos los informes del producto de un golpe.
+--   F · Ninguna de las cinco es ejecutable por `anon`.
+--
+-- OJO AL CORRERLO: `limpiar_storage_huerfano` barre `storage.objects` ENTERO
+-- desde el cursor, así que en una base con muchos objetos tarda — y la tanda
+-- de abajo es deliberadamente grande para que una sola pasada cubra los diez
+-- sembrados. Todo revierte con el `raise` final.
+--
+-- Esperado:
+--   PMF_STORAGE_0162  pmf_una=t  pmf_todas=t  pmf_sin_mezcla=t  demo_no_cuenta=t
+--                     rastreo_n=2  rastreo_max=t  p95=19  consumo=t  storage_borrados=4
+--                     viva=t  reciente=t  sin_viaje=t  espera=t  historico=t
+--                     informe_vivo=t  anon=f
+do $$
+declare
+  v_t uuid; v_t2 uuid; v_o uuid; v_v uuid; v_v2 uuid; v_u1 uuid; v_u2 uuid; v_u3 uuid;
+  v_tf uuid := '00000000-0000-4000-8000-000000000162';   -- flota que NO existe
+  v_vf uuid := '00000000-0000-4000-8000-000000000163';   -- viaje que NO existe
+  v_liq uuid;
+  res jsonb; fila jsonb;
+  pmf_una boolean; pmf_todas boolean; pmf_sin_mezcla boolean; demo_no_cuenta boolean;
+  rastreo_n int; rastreo_max boolean;
+  p95 numeric; consumo_ok boolean;
+  storage_borrados bigint;
+  queda_viva boolean; queda_reciente boolean; queda_sin_viaje boolean;
+  queda_espera boolean; queda_historico boolean; queda_informe_vivo boolean;
+  anon_ok boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0162 A') returning id into v_t;
+  insert into tenant (nombre) values ('ZZZ VERIF 0162 B') returning id into v_t2;
+  insert into operador (tenant_id, nombre, telefono) values (v_t, 'ZZZ op 0162', '5215500000162') returning id into v_o;
+  insert into viaje (tenant_id, operador_id, estatus) values (v_t, v_o, 'liquidado') returning id into v_v;
+  insert into viaje (tenant_id, operador_id, estatus) values (v_t, v_o, 'liquidado') returning id into v_v2;
+
+  -- ═══ A · senales_pmf ═════════════════════════════════════════════════════
+  -- Dos liquidaciones de la flota A: una descargada por el CONTADOR (señal
+  -- real) y otra por SUPERADMIN (un demo de Javier: no es señal). Una tercera
+  -- de la flota B, para que mezclar flotas se note.
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia,
+                           primera_descarga_en, primera_descarga_rol)
+    values (v_t, v_v, 0, 0, 0, now(), 'contador');
+  insert into liquidacion (tenant_id, viaje_id, total_comprobado, total_anticipo, diferencia,
+                           primera_descarga_en, primera_descarga_rol)
+    values (v_t, v_v2, 0, 0, 0, now(), 'superadmin');
+  -- El viaje v_v cerró SIN recordatorio (el chofer comprobó solo); v_v2 con él.
+  update viaje set recordatorio_comprobacion_en = now() where id = v_v2;
+
+  fila := (select j from jsonb_array_elements(public.senales_pmf(v_t)) j
+            where j->>'tenantId' = v_t::text);
+  pmf_una := (fila->>'liquidaciones')::int = 2
+         and (fila->>'descargadas')::int = 2
+         and (fila->>'porCliente')::int = 1        -- el demo NO cuenta
+         and (fila->>'liquidados')::int = 2
+         and (fila->>'sinRecordatorio')::int = 1;
+  demo_no_cuenta := (fila->>'descargadas')::int - (fila->>'porCliente')::int = 1;
+
+  res := public.senales_pmf(null);
+  pmf_todas := exists (select 1 from jsonb_array_elements(res) j where j->>'tenantId' = v_t::text);
+  -- La flota B no tiene NI UNA fila en las tres tablas: no aparece. "No
+  -- aparece" se lee como SIN DATOS, y por eso no puede salir con ceros.
+  pmf_sin_mezcla := not exists (select 1 from jsonb_array_elements(res) j where j->>'tenantId' = v_t2::text);
+
+  -- ═══ B · estado_rastreo_tenant ═══════════════════════════════════════════
+  insert into unidad (tenant_id, numero_economico) values (v_t,  'ZZZ-0162-1') returning id into v_u1;
+  insert into unidad (tenant_id, numero_economico) values (v_t,  'ZZZ-0162-2') returning id into v_u2;
+  insert into unidad (tenant_id, numero_economico) values (v_t2, 'ZZZ-0162-3') returning id into v_u3;
+  insert into posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor) values
+    (v_t,  v_u1, 20, -100, now() - interval '2 hours', 'zzz'),
+    (v_t,  v_u1, 20, -100, now() - interval '1 hour',  'zzz'),  -- misma unidad: NO cuenta dos
+    (v_t,  v_u2, 20, -100, now() - interval '3 hours', 'zzz'),
+    (v_t2, v_u3, 20, -100, now(),                      'zzz');  -- otra flota: no se mezcla
+  res := public.estado_rastreo_tenant(v_t);
+  rastreo_n := (res->>'unidadesConPosicion')::int;
+  rastreo_max := (res->>'ultimaPosicion')::timestamptz < now() - interval '30 minutes';
+
+  -- ═══ C y D · slo_agente_corrida y consumo_agentes ════════════════════════
+  -- Veinte corridas de 1..20 segundos. p95 por rango más cercano = el valor
+  -- en la posición ceil(20 * 0.95) = 19 → 19 s. Una de ellas en `fallo` y una
+  -- con `costo_usd` NULL (corrida anterior a la 0123).
+  insert into agente_corrida (tenant_id, agente, inicio, fin, estado, costo_usd)
+  select v_t, 'liquidacion',
+         now() - interval '1 day',
+         now() - interval '1 day' + make_interval(secs => i),
+         case when i = 20 then 'fallo' else 'ok' end,
+         case when i = 1 then null else 0.01 end
+    from generate_series(1, 20) i;
+  res := public.slo_agente_corrida(now() - interval '30 days');
+  -- `round` solo para que el mensaje diga «19» y no «19.000000»: el runner de
+  -- CI compara el texto contra el `(esperado …)` de abajo, token por token.
+  p95 := round((res->>'p95Segundos')::numeric);
+
+  res := public.consumo_agentes(now() - interval '30 days', now() - interval '2 days');
+  fila := (select j from jsonb_array_elements(res) j where j->>'agente' = 'liquidacion');
+  consumo_ok := (fila->>'n')::int = 20
+            and (fila->>'fallos')::int = 1
+            -- 19 corridas × 0.01 (la primera trae NULL y suma 0)
+            and abs((fila->>'g30')::numeric - 0.19) < 0.000001
+            -- Todas empezaron hace 1 día, o sea DESPUÉS del corte de hace 2.
+            and abs((fila->>'hoy')::numeric - 0.19) < 0.000001;
+
+  -- ═══ E · limpiar_storage_huerfano ════════════════════════════════════════
+  insert into storage.objects (bucket_id, name, created_at) values
+    -- se QUEDAN
+    ('comprobantes',  v_t::text  || '/' || v_v::text  || '/viva.jpg',      now() - interval '30 days'),
+    ('comprobantes',  v_t::text  || '/' || v_vf::text || '/reciente.jpg',  now() - interval '1 day'),
+    ('comprobantes',  v_t::text  || '/sin-viaje/espera.jpg',               now() - interval '30 days'),
+    ('comprobantes',  v_t::text  || '/' || v_vf::text || '/en-espera.jpg', now() - interval '30 days'),
+    ('liquidaciones', v_t::text  || '/' || v_vf::text || '.pdf',           now() - interval '30 days'),
+    ('liquidaciones', 'informes/' || v_t::text || '/informe-vivo.pdf',     now() - interval '30 days'),
+    -- se VAN
+    ('comprobantes',  v_t::text  || '/' || v_vf::text || '/huerfana.jpg',  now() - interval '30 days'),
+    ('comprobantes',  v_tf::text || '/' || v_vf::text || '/de-flota-muerta.jpg', now() - interval '30 days'),
+    ('liquidaciones', v_t::text  || '/' || v_vf::text || '-operador.pdf',  now() - interval '30 days'),
+    ('liquidaciones', 'informes/' || v_tf::text || '/informe-muerto.pdf',  now() - interval '30 days');
+
+  -- Los dos cinturones: la sala de espera y el papel archivado.
+  insert into comprobante_huerfano (tenant_id, operador_id, ruta_imagen, gasto, motivo)
+    values (v_t, v_o, v_t::text || '/' || v_vf::text || '/en-espera.jpg', '{}'::jsonb, 'sin_viaje');
+  insert into comprobante_huerfano (tenant_id, operador_id, ruta_imagen, gasto, motivo)
+    values (v_t, v_o, v_t::text || '/sin-viaje/espera.jpg', '{}'::jsonb, 'sin_viaje');
+  insert into liquidacion_historico (liquidacion_id, tenant_id, viaje_id, pdf_url)
+    values (gen_random_uuid(), v_t, v_vf, v_t::text || '/' || v_vf::text || '.pdf');
+
+  res := public.limpiar_storage_huerfano(7, 100000, now(), clock_timestamp() + interval '120 seconds');
+  storage_borrados := (res->>'borrados')::bigint;
+
+  select exists (select 1 from storage.objects where name = v_t::text || '/' || v_v::text || '/viva.jpg')
+    into queda_viva;
+  select exists (select 1 from storage.objects where name = v_t::text || '/' || v_vf::text || '/reciente.jpg')
+    into queda_reciente;
+  select exists (select 1 from storage.objects where name = v_t::text || '/sin-viaje/espera.jpg')
+    into queda_sin_viaje;
+  select exists (select 1 from storage.objects where name = v_t::text || '/' || v_vf::text || '/en-espera.jpg')
+    into queda_espera;
+  select exists (select 1 from storage.objects where name = v_t::text || '/' || v_vf::text || '.pdf')
+    into queda_historico;
+  select exists (select 1 from storage.objects where name = 'informes/' || v_t::text || '/informe-vivo.pdf')
+    into queda_informe_vivo;
+
+  -- ═══ F · nada de esto se ejecuta desde internet ══════════════════════════
+  select has_function_privilege('anon', 'public.senales_pmf(uuid)', 'EXECUTE')
+      or has_function_privilege('anon', 'public.estado_rastreo_tenant(uuid)', 'EXECUTE')
+      or has_function_privilege('anon', 'public.consumo_agentes(timestamptz, timestamptz)', 'EXECUTE')
+      or has_function_privilege('anon', 'public.slo_agente_corrida(timestamptz)', 'EXECUTE')
+      or has_function_privilege('anon', 'public.limpiar_storage_huerfano(integer, integer, timestamptz, timestamptz)', 'EXECUTE')
+    into anon_ok;
+
+  raise exception E'PMF_STORAGE_0162  pmf_una=%  pmf_todas=%  pmf_sin_mezcla=%  demo_no_cuenta=%  rastreo_n=%  rastreo_max=%  p95=%  consumo=%  storage_borrados=%  viva=%  reciente=%  sin_viaje=%  espera=%  historico=%  informe_vivo=%  anon=%   (esperado t / t / t / t / 2 / t / 19 / t / 4 / t / t / t / t / t / t / f)',
+    pmf_una, pmf_todas, pmf_sin_mezcla, demo_no_cuenta, rastreo_n, rastreo_max,
+    p95, consumo_ok, storage_borrados,
+    queda_viva, queda_reciente, queda_sin_viaje, queda_espera, queda_historico, queda_informe_vivo,
+    anon_ok;
+end $$;

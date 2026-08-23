@@ -28,9 +28,29 @@
 //   · Fallar cerrado: cualquier error de lectura LANZA (patrón `contarFilas`
 //     de analytics.ts). La página atrapa por flota y dice "no se pudo leer",
 //     que no es lo mismo que "sin datos".
+//
+// ── AGREGADO EN SQL DESDE EL 22-AGO-2026 (mig. 0162, ESC-9) ────────────────
+//
+// Las siete lecturas eran siete `count exact`, y `/admin/flotas` las lanzaba
+// con un `Promise.all` sobre TODAS las flotas SIN pool: 7 × N consultas
+// simultáneas contra el mismo pooler para pintar una tabla. Con 50 flotas son
+// 350 — y cada `count exact` de `liquidacion`/`viaje` recorre el índice de esa
+// flota entero, no lee una fila.
+//
+// Ahora es UNA consulta: `senales_pmf(p_tenant)` agrupa con `count(*) filter`
+// por `tenant_id`. Con `p_tenant` en NULL trae todas las flotas de un golpe
+// (`getSenalesPmfTodas`, lo que usa la tabla de /admin/flotas); con un tenant
+// trae solo esa (`getSenalesPmf`, lo que usa la ficha de cliente), y también
+// ahorra seis idas y vueltas.
+//
+// LO QUE NO CAMBIÓ, Y ES LO IMPORTANTE: la distinción entre "sin datos" y
+// "cero" sigue viviendo aquí, en `deFila`. Una flota que la RPC no devuelve
+// (porque no tiene NI UNA fila en las tres tablas) se lee como las tres
+// señales `medida: false`, no como ceros.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from './presupuesto';
 
 /** Señal 1 — el PDF llegó a manos de alguien (mig. 0114). */
 export type SenalDescargas =
@@ -76,22 +96,88 @@ export interface SenalesPmf {
   tickets: SenalTickets;
 }
 
+/** Una fila de `senales_pmf()`: los siete conteos de UNA flota, ya agregados. */
+interface FilaSenalesPmf {
+  tenantId: string;
+  liquidaciones: number;
+  descargadas: number;
+  porCliente: number;
+  liquidados: number;
+  sinRecordatorio: number;
+  tickets: number;
+  delCliente: number;
+}
+
+const LLAVES_FILA = [
+  'liquidaciones', 'descargadas', 'porCliente',
+  'liquidados', 'sinRecordatorio', 'tickets', 'delCliente',
+] as const;
+
 /**
- * Cuenta filas sin traer ninguna (`head: true` + `count: 'exact'`, el mismo
- * patrón que `contarFilas` en analytics.ts). LANZA ante error Y ante un
- * `count` nulo: PostgREST solo manda el conteo si pudo contar, y devolver 0
- * ahí sería inventar una medición.
+ * Las tres señales de una flota SIN filas: nada que medir, y se dice.
+ *
+ * Se EXPORTA porque el llamador que pide todas las flotas de un golpe
+ * (`getSenalesPmfTodas`) recibe un `Map` en el que las flotas sin una sola
+ * fila NO aparecen — y "no aparece" tiene que leerse como "sin datos", nunca
+ * como "no se pudo leer", que es lo que significa el `null`.
  */
-async function contar(
-  armar: () => PromiseLike<{ count: number | null; error: { message: string } | null }>,
-  consulta: string,
-): Promise<number> {
-  const { count, error } = await armar();
-  if (error) throw new Error(`${consulta}: ${error.message}`);
-  if (typeof count !== 'number') {
-    throw new Error(`${consulta}: la base no devolvió el conteo; no se inventa un 0`);
+export const SENALES_SIN_DATOS: SenalesPmf = {
+  descargas: { medida: false },
+  comprobacionSola: { medida: false },
+  tickets: { medida: false },
+};
+
+/**
+ * Llama a `senales_pmf()` y **falla cerrado**, con las dos comprobaciones de
+ * siempre: el error POR VALOR (sin mirarlo, una base caída se leería como "esta
+ * flota no usa el producto") y la FORMA (si la 0162 no está aplicada, `data`
+ * llega como cualquier otra cosa y cada `?? 0` pintaría un cero que nadie midió).
+ */
+async function traerSenalesPmf(tenantId: string | null): Promise<FilaSenalesPmf[]> {
+  const { data, error } = await acotada(
+    supabaseAdmin().rpc('senales_pmf', { p_tenant: tenantId }),
+    'senales_pmf',
+  );
+  if (error) throw new Error(`senales_pmf: ${error.message}`);
+  if (!Array.isArray(data)) {
+    throw new Error(
+      'senales_pmf: la respuesta no tiene la forma esperada (¿migración 0162 sin aplicar?). '
+      + 'No se devuelven señales a medias: un cero aquí se lee como "el cliente no usa el producto".',
+    );
   }
-  return count;
+  return (data as unknown[]).map((f, i) => {
+    const r = f as Partial<FilaSenalesPmf> | null;
+    if (!r || typeof r.tenantId !== 'string' || LLAVES_FILA.some((k) => typeof r[k] !== 'number')) {
+      throw new Error(`senales_pmf: la fila ${i} no trae los siete conteos (¿migración 0162 sin aplicar?)`);
+    }
+    return r as FilaSenalesPmf;
+  });
+}
+
+/**
+ * Los siete conteos de una flota → las tres señales, con su discriminante.
+ * PURA: es aquí donde vive la regla de "cero no es sin datos".
+ */
+function deFila(f: FilaSenalesPmf): SenalesPmf {
+  return {
+    descargas: f.liquidaciones === 0
+      ? { medida: false }
+      : {
+        medida: true,
+        liquidaciones: f.liquidaciones,
+        descargadas: f.descargadas,
+        porCliente: f.porCliente,
+        // Derivado y no un octavo conteo: el RPC de la 0114 escribe fecha
+        // y rol juntos (coalesce), así que descargada sin rol no existe.
+        soloDemo: Math.max(0, f.descargadas - f.porCliente),
+      },
+    comprobacionSola: f.liquidados === 0
+      ? { medida: false }
+      : { medida: true, liquidados: f.liquidados, sinRecordatorio: f.sinRecordatorio },
+    tickets: f.tickets === 0
+      ? { medida: false }
+      : { medida: true, delCliente: f.delCliente, deLikida: Math.max(0, f.tickets - f.delCliente) },
+  };
 }
 
 /**
@@ -99,55 +185,33 @@ async function contar(
  * cruza flotas es la página de /admin (con su propio guard de superadmin);
  * este módulo solo sabe leer una.
  *
- * LANZA si cualquiera de las siete lecturas falla — media señal pintada
- * sobre una base caída afirmaría que la flota no usa el producto.
+ * LANZA si la lectura falla — media señal pintada sobre una base caída
+ * afirmaría que la flota no usa el producto.
  */
 export async function getSenalesPmf(tenantId: string): Promise<SenalesPmf> {
-  const admin = supabaseAdmin();
-  const cabeza = { count: 'exact' as const, head: true };
-  const [liquidaciones, descargadas, porCliente, liquidados, sinRecordatorio, tickets, delCliente] = await Promise.all([
-    contar(() => admin.from('liquidacion').select('id', cabeza)
-      .eq('tenant_id', tenantId), 'senalesPmf.liquidaciones'),
-    contar(() => admin.from('liquidacion').select('id', cabeza)
-      .eq('tenant_id', tenantId)
-      .not('primera_descarga_en', 'is', null), 'senalesPmf.descargadas'),
-    contar(() => admin.from('liquidacion').select('id', cabeza)
-      .eq('tenant_id', tenantId)
-      .not('primera_descarga_en', 'is', null)
-      .neq('primera_descarga_rol', 'superadmin'), 'senalesPmf.porCliente'),
-    contar(() => admin.from('viaje').select('id', cabeza)
-      .eq('tenant_id', tenantId)
-      .eq('estatus', 'liquidado'), 'senalesPmf.liquidados'),
-    contar(() => admin.from('viaje').select('id', cabeza)
-      .eq('tenant_id', tenantId)
-      .eq('estatus', 'liquidado')
-      .is('recordatorio_comprobacion_en', null), 'senalesPmf.sinRecordatorio'),
-    contar(() => admin.from('ticket_soporte').select('id', cabeza)
-      .eq('tenant_id', tenantId), 'senalesPmf.tickets'),
-    contar(() => admin.from('ticket_soporte').select('id', cabeza)
-      .eq('tenant_id', tenantId)
-      .not('abierto_por', 'is', null), 'senalesPmf.delCliente'),
-  ]);
+  if (!tenantId) throw new Error('getSenalesPmf: falta tenantId');
+  const filas = await traerSenalesPmf(tenantId);
+  const fila = filas.find((f) => f.tenantId === tenantId);
+  // Sin fila = la flota no tiene NI UNA liquidación, viaje liquidado ni ticket.
+  // Eso es "sin datos" en las tres señales, no tres ceros.
+  return fila ? deFila(fila) : SENALES_SIN_DATOS;
+}
 
-  return {
-    descargas: liquidaciones === 0
-      ? { medida: false }
-      : {
-        medida: true,
-        liquidaciones,
-        descargadas,
-        porCliente,
-        // Derivado y no una octava consulta: el RPC de la 0114 escribe fecha
-        // y rol juntos (coalesce), así que descargada sin rol no existe.
-        soloDemo: Math.max(0, descargadas - porCliente),
-      },
-    comprobacionSola: liquidados === 0
-      ? { medida: false }
-      : { medida: true, liquidados, sinRecordatorio },
-    tickets: tickets === 0
-      ? { medida: false }
-      : { medida: true, delCliente, deLikida: Math.max(0, tickets - delCliente) },
-  };
+/**
+ * Las tres señales de TODAS las flotas, en UNA consulta (ESC-9).
+ *
+ * Devuelve un `Map` para que el llamador pinte por flota; una flota que no
+ * aparece en el mapa no tiene datos todavía (y su ficha lo dice así). Igual que
+ * la de una flota: LANZA ante un error de lectura, para que la página pueda
+ * distinguir "no se pudo leer" de "sin datos".
+ *
+ * CRUZA TODAS LAS FLOTAS A PROPÓSITO: solo la llama /admin (la consola de
+ * superadmin). Ninguna pantalla de /dashboard puede usarla — la suya es
+ * `getSenalesPmf(tenantId)`.
+ */
+export async function getSenalesPmfTodas(): Promise<Map<string, SenalesPmf>> {
+  const filas = await traerSenalesPmf(null);
+  return new Map(filas.map((f) => [f.tenantId, deFila(f)] as const));
 }
 
 /**
