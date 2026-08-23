@@ -25,6 +25,29 @@ const caseta = (formaPago: string | undefined): Gasto => ({
 const peajeDe = (g: Gasto) =>
   cuadrarViaje({ viajeId: 'v1', anticipo: 1160, politica, estimulos: EST, gastos: [g] }).peajeAcreditable;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FASE 3 (perfil/preguntas.ts, calificaEstimuloPeaje) — el estímulo también
+// exige ingresos < $300M y no ser parte relacionada (LIF 2026 art. 20-A,
+// normas/lif-2026-20-A.yaml hallazgo H6). Antes de esta fase el motor no
+// conocía ninguno de los dos y lo aplicaba sin condición.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('FASE 3 — elegiblePeaje: el perfil puede apagar el estímulo, nunca inventarlo', () => {
+  const peajeConElegibilidad = (elegiblePeaje: boolean | undefined) =>
+    cuadrarViaje({ viajeId: 'v1', anticipo: 1160, politica, estimulos: EST, gastos: [caseta('03')], elegiblePeaje }).peajeAcreditable;
+
+  it('sin declarar (undefined) → se sigue acreditando, conducta de siempre (fail-open con aviso)', () => {
+    expect(peajeConElegibilidad(undefined)).toBe(500);
+  });
+
+  it('perfil confirma que SÍ califica (true) → se acredita igual', () => {
+    expect(peajeConElegibilidad(true)).toBe(500);
+  });
+
+  it('perfil confirma que NO califica (ingresos ≥ $300M o parte relacionada) → 0, no solo un aviso', () => {
+    expect(peajeConElegibilidad(false)).toBe(0);
+  });
+});
+
 describe('Estímulo de peaje exige pago electrónico', () => {
   it('forma de pago 99 (Por definir / no pagado) → 0 peaje acreditable', () => {
     expect(peajeDe(caseta('99'))).toBe(0);

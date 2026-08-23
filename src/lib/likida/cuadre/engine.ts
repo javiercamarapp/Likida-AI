@@ -81,6 +81,15 @@ export interface CuadreInput {
    *  califica (el efectivo en combustible NO se deduce). `undefined` = sin
    *  declarar (el efectivo sale a revisar, no se afirma nada). */
   facilidad15?: boolean;
+  /** FASE 3 (perfil/preguntas.ts, `calificaEstimuloPeaje`) — LIF 2026 art.
+   *  20-A exige ingresos < $300M y no ser parte relacionada (LISR art. 179)
+   *  para el estímulo de peaje; `config.ts:127` lo aplicaba sin condición.
+   *  `undefined` = el perfil no lo declaró todavía: se sigue acreditando con
+   *  el aviso de siempre (`CONDICIONES_ESTIMULO_PEAJE`, liquidacion/
+   *  acreditable.ts) — no se le quita el estímulo a nadie por default.
+   *  `false` = el perfil YA CONFIRMÓ que no califica: deja de acreditarse,
+   *  no solo de avisarse. */
+  elegiblePeaje?: boolean;
   /** Total pagado por combustible de la flota en el EJERCICIO (incluido este
    *  viaje) — la base del 15%. Lo calcula `desde_db.ts` (RFA 2.9). */
   totalCombustibleEjercicio?: number;
@@ -1153,7 +1162,12 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
     // AUDITORÍA 18, A7: y "electrónico" es la lista cerrada de la RMF 9.1.8
     // fr. III (`MEDIOS_ELECTRONICOS_PEAJE`), no "todo lo que no sea efectivo".
     const peajePagadoElectronicamente = !!g.formaPago && (MEDIOS_ELECTRONICOS_PEAJE as readonly string[]).includes(g.formaPago);
-    if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0 && peajePagadoElectronicamente) peajeAcreditable += (g.subTotal as number) * peajeFactor;
+    // FASE 3: `elegiblePeaje === false` es el perfil confirmando que esta
+    // flota no califica (ingresos ≥ $300M o parte relacionada) — ver el
+    // campo en la interfaz de arriba. `undefined`/`true` preservan la
+    // conducta de siempre.
+    const elegiblePeaje = input.elegiblePeaje ?? true;
+    if (g.concepto === 'caseta' && (g.subTotal ?? 0) > 0 && peajePagadoElectronicamente && elegiblePeaje) peajeAcreditable += (g.subTotal as number) * peajeFactor;
     // IEPS de DIÉSEL (7): el estímulo (LIF 2026 art. 20, ap. A) es SOLO diésel — NO
     // gasolina. Se identifica por la clave de producto del SAT (15101505).
     const clavesDiesel = input.estimulos?.clavesDieselIeps ?? [];
