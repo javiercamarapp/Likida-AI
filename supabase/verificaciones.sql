@@ -6901,6 +6901,8 @@ begin
     descuadre_rebota, tenant_ajeno_rebota, sin_delete, borrado_rebota,
     concepto_rebota, anticipo_rebota, uuid_mayus_rebota, pago_huerfano_rebota,
     fecha_imposible_rebota, diferencias_rebota, folio_mayus_rebota;
+end $$;
+
 -- ── 133. El día de la base es el día de MÉXICO, no el de Londres (mig. 0161) ──
 --
 -- DAT-23. Supabase corre en UTC y México va seis horas atrás: de las 18:00 a
