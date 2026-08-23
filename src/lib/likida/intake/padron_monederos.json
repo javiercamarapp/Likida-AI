@@ -1,0 +1,27 @@
+{
+  "fuente": {
+    "nota": "Extracto de los emisores relevantes para flotas de carga, no el padrón SAT completo (~30 emisores desde 2005). El SAT publica DOS listas en DOS URLs que NO coinciden — hay que leer las dos, más el padrón separado de no renovados — y este archivo todavía no las reconcilia. Por eso `estaEnPadronMonederos` es un SÍ afirmativo, nunca un NO autoritativo: ver el comentario de padron_monederos.ts.",
+    "urls": [
+      "https://wwwmat.sat.gob.mx/consultas/60450/padron-de-emisores-de-monederos-electronicos-de-combustibles-autorizados",
+      "https://www.sat.gob.mx/consultas/12869/padron-de-emisores-de-monederos-electronicos-de-combustibles-revocados",
+      "http://omawww.sat.gob.mx/terceros_autorizados/monederos_electronicos/Paginas/emisores_monelectro_combustibles_autorizados.aspx"
+    ],
+    "consultado_el": "2026-07-27",
+    "aviso_renovacion": "La autorización se renueva con aviso entre agosto y octubre de cada año (ficha 7/ISR). Estamos dentro de esa ventana en 2026 — un emisor de esta lista puede caer sin que este archivo se entere."
+  },
+  "emisores": [
+    { "rfc": "ASE930924SS7", "emisor": "Edenred México, S.A. de C.V.", "producto": "Ticket Car (Tarjeta Gasolina, Edenred, GAS CGI, Red Máxima)", "autorizadoDesde": "2005" },
+    { "rfc": "EFE8908015L3", "emisor": "Efectivale, S. de R.L. de C.V.", "producto": "Efecticard; Efecticard Corporativo Vale Combustible", "autorizadoDesde": "2005" },
+    { "rfc": "PUN9810229R0", "emisor": "Sí Vale México, S.A. de C.V.", "producto": "Magna Fleet, Premium Fleet, Diesel Fleet, Gas L.P. Fleet, Turbosina Fleet", "autorizadoDesde": "2014-11-28" },
+    { "rfc": "TIN090211JC9", "emisor": "Toka Internacional, S.A.P.I. de C.V.", "producto": "easygas", "autorizadoDesde": "2015-06-02" },
+    { "rfc": "SBR130327HU9", "emisor": "Servicios Broxel, S.A.P.I. de C.V.", "producto": "Broxel Gasoline Card", "autorizadoDesde": "2015-01-15" },
+    { "rfc": "PME811211B20", "emisor": "Sodexo Motivation Solutions México", "producto": "Gaso Pass Card Control, Gaso Pass Movilidad, Wizeo", "autorizadoDesde": "2005" },
+    { "rfc": "BGM141113GEA", "emisor": "Shell Solutions México, S.A. de C.V.", "producto": "Shell Fleet Navigator", "autorizadoDesde": "2020" },
+    { "rfc": "TFM191231NA7", "emisor": "Total Fleet México, S.A. de C.V.", "producto": "TOTAL CARD", "autorizadoDesde": "2022" },
+    { "rfc": "PET040903DH1", "emisor": "Petromax, S.A. de C.V.", "producto": "Petro-7", "autorizadoDesde": "2009-01-08" },
+    { "rfc": "GME080312617", "emisor": "Gasngo México, S.A. de C.V.", "producto": "GOSMO, TAG (anillo) GOSMO", "autorizadoDesde": "2010" },
+    { "rfc": "VTO1508246S6", "emisor": "Vale Total, S.A. de C.V.", "producto": "MINU Combustible (antes COMBUSTIBLE TOTAL)", "autorizadoDesde": "2018-06-29" },
+    { "rfc": "SIA030228F63", "emisor": "Sistema Inteligente de Administración del Sureste", "producto": "Go Tanque Lleno", "autorizadoDesde": "2025" },
+    { "rfc": "BFE150903SR1", "emisor": "Border Fuels and Energy, S.A. de C.V.", "producto": "Nexogaz", "autorizadoDesde": "2025" }
+  ]
+}

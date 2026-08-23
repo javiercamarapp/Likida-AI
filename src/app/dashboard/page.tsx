@@ -1,7 +1,10 @@
+import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { InicioContenido } from './inicio-contenido';
 import { InicioOperacion } from './inicio-operacion';
+import { getPerfilCrudo } from '@/lib/likida/repo';
+import { onboardingFiscalListo } from '@/lib/likida/perfil/preguntas';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +38,17 @@ export default async function DashboardInicio({
   // el ?tenant=/?vista= del superadmin; para roles reales queda vacío.
   const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
   const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
+
+  // El dueño declara el perfil ANTES de ver cifras. Sin el umbral de peaje
+  // el motor fail-open y el Resumen pintaría un 50% que quizá no le toca.
+  // Un bache leyendo el perfil NO atrapa: mejor el panel a medias que la
+  // puerta cerrada. El superadmin no se redirige — está viendo, no onboarding.
+  if (rol === 'flota_admin' && tenantExiste) {
+    try {
+      const perfil = await getPerfilCrudo(tenantId);
+      if (!onboardingFiscalListo(perfil)) redirect(`/dashboard/onboarding${sufijo}`);
+    } catch { /* sigue al resumen */ }
+  }
 
   if (!puedeVerArea(rol, 'dinero')) {
     return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} />;

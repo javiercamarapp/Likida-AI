@@ -89,6 +89,20 @@ export function rangoFechasLineas(lineas: CfdiLineaXml[]): { desde: string; hast
   };
 }
 
+// FASE 1 (docs/asistencia/PLAN-FASES.md): identifica diésel de una línea del
+// consolidado y su clave SAT. concepto_base trae `claveProdServ` nativo;
+// ecc12 NO (la ECC12 v1.2 no da ClaveProdServ por transacción) — solo
+// `tipoCombustible`, catálogo cerrado del SAT. Se traduce ÚNICAMENTE
+// "Diesel" a 15101505 (la clave que `config.ts:130` reconoce para el
+// estímulo LIF 2026 art. 20 ap. A): el estímulo es diésel, no "cualquier
+// combustible", así que Magna/Premium/Gas/Otros se quedan sin clave a
+// propósito, no por omisión.
+export function claveProdServDeLinea(l: Pick<CfdiLineaXml, 'claveProdServ' | 'tipoCombustible'>): string | undefined {
+  if (l.claveProdServ?.startsWith('15101')) return l.claveProdServ;
+  if (l.tipoCombustible === 'Diesel') return '15101505';
+  return undefined;
+}
+
 export type EstatusLineaConsolidado = 'conciliada' | 'por_conciliar';
 
 export interface CandidatoConciliacion { gastoId: string; monto: number; fecha: string | null }
@@ -170,10 +184,44 @@ export interface ResumenConciliacion {
  * el llamador decide qué hacer con eso (best-effort en el automático, un error
  * explícito para el humano en el manual).
  */
-async function ligarLineaAGasto(tenantId: string, cfdiUuid: string, orden: number, gastoId: string): Promise<boolean> {
+async function ligarLineaAGasto(
+  tenantId: string,
+  cfdiUuid: string,
+  orden: number,
+  gastoId: string,
+  // FASE 1: presente solo cuando la línea es diésel identificable (ver
+  // `claveProdServDeLinea`) y trae litros > 0 — cualquier otro concepto
+  // (caseta, gasolina, …) liga igual que siempre, sin tocar ocr_extra.
+  diesel?: { litros: number; claveProdServ: string },
+): Promise<boolean> {
+  const cambios: Record<string, unknown> = { cfdi_uuid: cfdiUuid, cfdi_orden: orden };
+  if (diesel) {
+    // Lectura + fusión + escritura sobre `ocr_extra` — mismo patrón que
+    // `updateGastoCfdiXml` en repo.ts (auditoría 12): el jsonb ya guarda
+    // producto/estación/fechaImpresa del OCR y una escritura a ciegas lo
+    // borraría.
+    //
+    // `acotada()` NO lanza al agotar el tope: resuelve `{ data: null, error }`.
+    // Sin mirar `error`, un SELECT mudo se lee como "sin ocr_extra" y el
+    // UPDATE posterior borra producto/estación/fechaImpresa, dejando solo
+    // `{ litros }`. La clave SAT es columna, no jsonb: se puede escribir
+    // igual. Los litros esperan a poder fusionar.
+    const leido = await acotada(supabaseAdmin().from('gasto')
+      .select('ocr_extra').eq('id', gastoId).eq('tenant_id', tenantId).maybeSingle(), 'consolidado.ligar_leer_ocr_extra') as {
+        data: { ocr_extra?: unknown } | null; error: { message: string } | null;
+      };
+    cambios.clave_prod_serv = diesel.claveProdServ;
+    if (leido.error) {
+      logger.warn('consolidado.ligar_ocr_extra_ilegible', { tenant: tenantId, gasto: gastoId, err: leido.error.message });
+    } else {
+      const ocrExtra = { ...((leido.data?.ocr_extra as Record<string, unknown> | null) ?? {}) };
+      ocrExtra.litros = diesel.litros;
+      cambios.ocr_extra = ocrExtra;
+    }
+  }
   const { data, error } = await acotada(supabaseAdmin()
     .from('gasto')
-    .update({ cfdi_uuid: cfdiUuid, cfdi_orden: orden })
+    .update(cambios)
     .eq('id', gastoId)
     .eq('tenant_id', tenantId)
     .is('cfdi_uuid', null)
@@ -183,6 +231,14 @@ async function ligarLineaAGasto(tenantId: string, cfdiUuid: string, orden: numbe
     return false;
   }
   return (data?.length ?? 0) > 0;
+}
+
+/** `cantidad`/`claveProdServ` de una `CfdiLineaXml` → el `diesel` que espera
+ *  `ligarLineaAGasto`, o `undefined` si la línea no es diésel identificable. */
+function datosDieselDeLinea(l: Pick<CfdiLineaXml, 'cantidad' | 'claveProdServ' | 'tipoCombustible'>): { litros: number; claveProdServ: string } | undefined {
+  if (l.cantidad == null || l.cantidad <= 0) return undefined;
+  const clave = claveProdServDeLinea(l);
+  return clave ? { litros: l.cantidad, claveProdServ: clave } : undefined;
 }
 
 /**
@@ -335,7 +391,7 @@ export async function guardarYConciliarConsolidado(
   const porLigar = resultados.filter((r) =>
     r.estatus === 'conciliada' && r.gastoId && !selladoPorIndice.has(r.linea.indice));
   const ligados = await enLotes(porLigar, 10, (r) =>
-    ligarLineaAGasto(tenantId, xml.uuid!, r.linea.indice, r.gastoId as string));
+    ligarLineaAGasto(tenantId, xml.uuid!, r.linea.indice, r.gastoId as string, datosDieselDeLinea(r.linea)));
   ligados.forEach((l, i) => {
     if ('error' in l) {
       logger.error('consolidado.ligar_lanzo', { tenant: tenantId, gasto: porLigar[i].gastoId, err: l.error instanceof Error ? l.error.message : String(l.error) });
@@ -358,6 +414,11 @@ export async function guardarYConciliarConsolidado(
     estatus: r.estatus,
     gasto_id: r.gastoId,
     candidatos: r.candidatos.length ? r.candidatos : null,
+    // FASE 1: se guarda para que la resolución a mano y el barrido —que
+    // vuelven a leer esta fila, nunca el XML— liguen con los mismos litros
+    // sin recalcular nada (`claveProdServDeLinea` corrió una sola vez, aquí).
+    litros: r.linea.cantidad ?? null,
+    clave_prod_serv: claveProdServDeLinea(r.linea) ?? null,
   }));
   const { error: errLineas } = await acotada(supabaseAdmin()
     .from('cfdi_consolidado_linea')
@@ -433,7 +494,7 @@ export async function resolverLineaAMano(
 ): Promise<ResultadoResolverLinea> {
   const { data: fila, error: errFila } = await acotada(supabaseAdmin()
     .from('cfdi_consolidado_linea')
-    .select('id, cfdi_xml_id, indice, estatus, candidatos')
+    .select('id, cfdi_xml_id, indice, estatus, candidatos, litros, clave_prod_serv')
     .eq('id', lineaId)
     .eq('tenant_id', tenantId)
     .maybeSingle(), 'consolidado.leer_linea');
@@ -465,7 +526,13 @@ export async function resolverLineaAMano(
     .maybeSingle(), 'consolidado.leer_cfdi_xml');
   if (errXml || !filaXml?.cfdi_uuid) return { ok: false, motivo: 'error_bd' };
 
-  const ligado = await ligarLineaAGasto(tenantId, filaXml.cfdi_uuid as string, fila.indice as number, resolucion.gastoId);
+  // FASE 1: litros/clave ya quedaron resueltos y guardados al persistir la
+  // línea (`guardarYConciliarConsolidado`) — se leen tal cual, no se
+  // recalculan aquí.
+  const litrosFila = fila.litros != null ? Number(fila.litros) : null;
+  const claveFila = (fila.clave_prod_serv as string | null) ?? null;
+  const diesel = litrosFila != null && litrosFila > 0 && claveFila ? { litros: litrosFila, claveProdServ: claveFila } : undefined;
+  const ligado = await ligarLineaAGasto(tenantId, filaXml.cfdi_uuid as string, fila.indice as number, resolucion.gastoId, diesel);
   if (!ligado) return { ok: false, motivo: 'gasto_ya_no_disponible' };
 
   const { data: actualizado, error: errUpdate } = await acotada(supabaseAdmin()
@@ -521,6 +588,7 @@ interface FilaPendiente {
   id: unknown; cfdi_xml_id: unknown; indice: unknown; fuente: unknown;
   fecha: unknown; monto: unknown; descripcion: unknown; estacion_rfc: unknown;
   estacion_clave: unknown; folio_operacion: unknown; candidatos: unknown;
+  litros: unknown; clave_prod_serv: unknown;
 }
 
 /** La fila de la base, de vuelta a la forma que `conciliarLineas` espera.
@@ -538,6 +606,10 @@ function lineaDesdeFila(f: FilaPendiente): CfdiLineaXml {
     estacionRfc: (f.estacion_rfc as string | null) ?? undefined,
     estacionClave: (f.estacion_clave as string | null) ?? undefined,
     folioOperacion: (f.folio_operacion as string | null) ?? undefined,
+    // FASE 1: ya resueltos al persistir la línea — se cargan tal cual, el
+    // barrido no vuelve a decidir qué es diésel.
+    cantidad: f.litros != null ? Number(f.litros) : undefined,
+    claveProdServ: (f.clave_prod_serv as string | null) ?? undefined,
   };
 }
 
@@ -578,7 +650,7 @@ export async function barrerPorConciliar(tenantId: string): Promise<ResumenBarri
   //    siguiente, y el acuse solo afirma lo que sí revisó.
   const { data: filas, error: errFilas } = await acotada(supabaseAdmin()
     .from('cfdi_consolidado_linea')
-    .select('id, cfdi_xml_id, indice, fuente, fecha, monto, descripcion, estacion_rfc, estacion_clave, folio_operacion, candidatos')
+    .select('id, cfdi_xml_id, indice, fuente, fecha, monto, descripcion, estacion_rfc, estacion_clave, folio_operacion, candidatos, litros, clave_prod_serv')
     .eq('tenant_id', tenantId)
     .eq('estatus', 'por_conciliar')
     .limit(1000), 'barrido.lineas_pendientes');
@@ -669,7 +741,7 @@ export async function barrerPorConciliar(tenantId: string): Promise<ResumenBarri
         // 4) El MISMO sello y el MISMO guardia de los otros dos caminos. Un
         //    `false` es que otro proceso reclamó ese gasto entre la lectura y
         //    aquí: la línea se queda por_conciliar y cuenta como pendiente.
-        const ligado = await ligarLineaAGasto(tenantId, uuid, r.linea.indice, r.gastoId);
+        const ligado = await ligarLineaAGasto(tenantId, uuid, r.linea.indice, r.gastoId, datosDieselDeLinea(r.linea));
         if (!ligado) {
           resumen.siguenPendientes++;
           continue;
