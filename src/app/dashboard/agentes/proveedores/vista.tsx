@@ -4,6 +4,11 @@ import type { BuzonDeFlota } from '@/lib/correo/buzon_escritura';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../../resumen-visual';
+
+/** El tope de `listarFacturasProveedor` que usa la página — declarado aquí
+ *  porque es la vista la que tiene que confesarlo (FE-13). Si la página
+ *  cambia su límite, este número cambia con él. */
+const TOPE_FACTURAS = 100;
 import {
   SubirFactura, SubirFotoFactura, BotonesDecision, DireccionBuzon, GenerarBuzon, RotarBuzon,
   type AccionProveedores,
@@ -44,6 +49,11 @@ export function VistaAgenteProveedores({
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
   notificaciones?: React.ReactNode;
 }) {
+  // FE-13: `listarFacturasProveedor` trae las `TOPE_FACTURAS` más recientes.
+  // Los cuatro KPIs de abajo se calculan sobre ESAS, así que cuando la lectura
+  // viene llena hay que decirlo — si no, "Esperan tu decisión: 100" se lee
+  // como el total del buzón y puede ser el tope tocado.
+  const topeTocado = facturas.length >= TOPE_FACTURAS;
   const pendientes = facturas.filter((f) => f.estado === 'pendiente');
   const aprobadas = facturas.filter((f) => f.estado === 'aprobada');
   const rechazadas = facturas.filter((f) => f.estado === 'rechazada');
@@ -70,6 +80,13 @@ export function VistaAgenteProveedores({
             <Kpi titulo="Con receptor ajeno" valor={numero(receptorAjeno)}
               nota="el CFDI no es a tu RFC" tono={receptorAjeno > 0 ? 'bad' : undefined} />
           </div>
+
+          {topeTocado && (
+            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+              Los cuatro conteos se calculan sobre las {numero(TOPE_FACTURAS)} facturas más recientes del
+              buzón, que es lo que esta pantalla lee — hay más atrás.
+            </p>
+          )}
 
           <section className="card p-4">
             <div className="flex items-start justify-between gap-3 flex-wrap">

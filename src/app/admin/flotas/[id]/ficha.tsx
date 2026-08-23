@@ -131,6 +131,9 @@ export function Ficha360({ f }: { f: FichaCliente }) {
                 ) : f.facturasSaas.length === 0 ? (
                   <p className="m-0" style={{ color: 'var(--faint)' }}>Cero facturas SaaS emitidas.</p>
                 ) : (
+                  // FE-19: scrollea dentro de la tarjeta — un periodo largo o
+                  // una cifra de muchos dígitos no puede estirar la página.
+                  <div className="overflow-x-auto">
                   <table className="w-full text-[12px]">
                     <tbody>
                       {f.facturasSaas.map((x) => (
@@ -142,6 +145,7 @@ export function Ficha360({ f }: { f: FichaCliente }) {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
             </div>
@@ -157,6 +161,9 @@ export function Ficha360({ f }: { f: FichaCliente }) {
                     <LifeBuoy {...ICONO} /> Cero tickets de esta flota.
                   </div>
                 ) : (
+                  // FE-19: mismo criterio — el asunto de un ticket es texto
+                  // libre y ya viene truncado, pero el pill puede desbordar.
+                  <div className="overflow-x-auto">
                   <table className="w-full text-[12px]">
                     <tbody>
                       {f.tickets.slice(0, 5).map((x) => (
@@ -169,6 +176,7 @@ export function Ficha360({ f }: { f: FichaCliente }) {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
             </div>

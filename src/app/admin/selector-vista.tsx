@@ -71,7 +71,13 @@ const VISTAS: Vista[] = [
  * cuatro vistas abren vacías y hay que decirlo AQUÍ, antes del clic: si no,
  * el primero que se prueba se lee como una pantalla rota.
  */
-export function SelectorVista({ tenants }: { tenants: number }) {
+export function SelectorVista({ tenants }: {
+  /** Cuántas flotas hay. `null` = NO SE PUDO CONTAR (FE-24): antes un fallo
+   *  de la consulta llegaba como 0 y la pantalla afirmaba "no hay ninguna
+   *  flota dada de alta", que con la base caída es falso — y manda a dar de
+   *  alta una flota que puede ya existir. */
+  tenants: number | null;
+}) {
   return (
     <section id="vistas" className="p-5 border-t scroll-mt-24" style={{ borderColor: 'var(--line)' }}>
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
@@ -104,7 +110,12 @@ export function SelectorVista({ tenants }: { tenants: number }) {
       </div>
 
       <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-        {tenants === 0 ? (
+        {tenants === null ? (
+          <>
+            No se pudo contar cuántas flotas hay, así que no se sabe si estas vistas van a abrir con
+            datos o vacías. Recarga en un momento — esto NO significa que no haya flotas.
+          </>
+        ) : tenants === 0 ? (
           <>
             No hay ninguna flota dada de alta, así que las tres vistas abren VACÍAS y lo dicen en pantalla —
             sirven para mirar el frontend, no para leer una cifra.{' '}

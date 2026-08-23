@@ -94,7 +94,19 @@ export function VistaAgenteLiquidacion({
                 una solo, la vas a ver aquí.
               </EstadoVacio>
             ) : (
-              <TablaLiqs filas={cola} sufijo={sufijo} conVer />
+              <>
+                <TablaLiqs filas={cola} sufijo={sufijo} conVer />
+                {/* FE-13: la cola sale de las 50 liquidaciones más recientes,
+                    pero `porRevisar` lo cuenta la base sobre TODAS. Cuando no
+                    cuadran, se dice: una tabla de 12 filas bajo un KPI que
+                    marca 340 se lee como que faltan 328 sin explicación. */}
+                {kpis.porRevisar > cola.length && (
+                  <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
+                    Se listan {numero(cola.length)} de {numero(kpis.porRevisar)} — las más recientes.
+                    El resto está en el registro de viajes.
+                  </p>
+                )}
+              </>
             )}
           </section>
 
