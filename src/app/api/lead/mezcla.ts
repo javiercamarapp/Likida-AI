@@ -6,6 +6,8 @@
 // Aquí, además, queda importable por las pruebas y por quien arme la UI.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { hoyMx } from '@/lib/formato';
+
 /** Vacío = no hay dato: nulo, ausente o cadena en blanco. */
 function sinDato(v: unknown): boolean {
   return v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
@@ -47,7 +49,9 @@ export function mezclaQueSoloRellena(
  * la razón por la que este archivo nunca escribía `notas` en un update.
  */
 export function notaConLoNoAplicado(notasPrevias: unknown, pisados: string[]): string {
-  const hoy = new Date().toISOString().slice(0, 10);
+  // El día de México, no el de UTC: la nota la lee un vendedor en Mérida, y
+  // un lead que entra a las 8 de la noche llevaba la fecha de mañana.
+  const hoy = hoyMx();
   const linea = `[${hoy}] /getdemo mandó datos DISTINTOS a los que ya había (sin verificar, no se aplicaron): ${pisados.join('; ')}`;
   const antes = typeof notasPrevias === 'string' && notasPrevias.trim() ? `\n${notasPrevias}` : '';
   return `${linea}${antes}`.slice(0, TOPE_NOTAS);
